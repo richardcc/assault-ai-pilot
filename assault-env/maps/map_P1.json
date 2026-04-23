@@ -1,0 +1,66 @@
+{
+  "map_id": "P1",
+
+  "image": {
+    "file": "P1.png"
+  },
+
+  "orientation": "NORTH_FIXED",
+
+  "grid": {
+    "cols": 7,
+    "rows": 8,
+    "grid_type": "HEX",
+    "hex_layout": "ODD_COLUMN_OFFSET"
+  },
+
+  "geometry": {
+    "variant": "normal",
+    "shape": "irregular_horizontal"
+  },
+
+  "edges": {
+    "top": "normal",
+    "bottom": "normal",
+    "left": "normal",
+    "right": "mirrored"
+  },
+
+  "hexes": {
+    "primary_terrain": [
+      ["Brush","Open","River","Olive & Vine Grove","Olive & Vine Grove","Olive & Vine Grove","Open"],
+      ["Open","Open","River","Olive & Vine Grove","Olive & Vine Grove","Open","Open"],
+      ["Open","Rocky","River","Open","Rocky","Open","Open"],
+      ["Open","Open","River","Open","Open","Open","Open"],
+      ["Brush","Open","River","Open","Open","Open","Open"],
+      ["Open","Open","River","Olive & Vine Grove","Rocky","Open","Brush"],
+      ["Open","Brush","Open","River","Olive & Vine Grove","Olive & Vine Grove","Open"],
+      ["Open","Open","River","Rocky","Olive & Vine Grove","Olive & Vine Grove","Open"]
+    ],
+
+    "secondary_features": {
+      "MainRoad": [
+        [false,false,false,false,false,false,false],
+        [false,false,false,false,false,false,false],
+        [false,false,false,false,false,false,false],
+        [true, true, true, true, true, true, true],
+        [false,false,false,false,false,false,false],
+        [false,false,false,false,false,false,false],
+        [false,false,false,false,false,false,false],
+        [false,false,false,false,false,false,false]
+      ],
+      "Bridge": [
+        [false,false,false,false,false,false,false],
+        [false,false,false,false,false,false,false],
+        [false,false,false,false,false,false,false],
+        [false,false,true ,false,false,false,false],
+        [false,false,false,false,false,false,false],
+        [false,false,false,false,false,false,false],
+        [false,false,false,false,false,false,false],
+        [false,false,false,false,false,false,false]
+      ]
+    },
+
+    "notes": "Primary terrain taken 1:1 from user-edited CSV. Main Road crosses row 4 west–east; Bridge located at C4 over the river."
+  }
+}
