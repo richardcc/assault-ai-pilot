@@ -6,7 +6,7 @@ from pathlib import Path
 from assault_runner.runner import Runner
 
 # ============================================================
-# TABLERO
+# GRID (THE GRID DEFINES THE WORLD)
 # ============================================================
 
 COLS = 9
@@ -21,8 +21,26 @@ GRID_COLOR = (200, 200, 200)
 TEXT_COLOR = (80, 120, 200)
 FONT_SIZE = 14
 
+# ------------------------------------------------------------
+# MAP SPLIT BY GRID ROWS
+# ------------------------------------------------------------
+
+ROWS_S3 = TOTAL_ROWS // 2           # top half
+ROWS_S2 = TOTAL_ROWS - ROWS_S3     # bottom half
+
+HEIGHT_S3 = (ROWS_S3 - 1) * HEX_ROW_STEP + 2 * HEX_R
+HEIGHT_S2 = (ROWS_S2 - 1) * HEX_ROW_STEP + 2 * HEX_R
+
+# ------------------------------------------------------------
+# WORLD WIDTH (pointy-top grid)
+# ------------------------------------------------------------
+
+WORLD_MIN_X = -HEX_W / 2
+WORLD_MAX_X = (COLS - 1) * HEX_W + HEX_W
+WORLD_WIDTH = WORLD_MAX_X - WORLD_MIN_X
+
 # ============================================================
-# CÁMARA (ratón + zoom)
+# CAMERA
 # ============================================================
 
 camera_x = 0.0
@@ -39,6 +57,17 @@ def world_to_screen(x, y):
 # ASSETS
 # ============================================================
 
+def load_maps():
+    base = Path(__file__).resolve().parent / "assets" / "maps"
+
+    # IMPORTANT:
+    # Both maps MUST use convert_alpha()
+    # because both PNGs contain transparency
+    s2 = pygame.image.load(base / "Map_S2.png").convert_alpha()
+    s3 = pygame.image.load(base / "Map_S3.png").convert_alpha()
+
+    return s2, s3
+
 def load_counters():
     base = Path(__file__).resolve().parent / "assets" / "counters"
     return {
@@ -46,33 +75,11 @@ def load_counters():
         "US_RANGERS_43": pygame.image.load(base / "US Rangers 43.png").convert_alpha(),
         "GE_RIFLES_43": pygame.image.load(base / "GE Rifles 43.png").convert_alpha(),
         "GE_FJ_RIFLES_43": pygame.image.load(base / "GE FJ Rifles 43.png").convert_alpha(),
-        "US_RIFLES_43b": pygame.image.load(base / "US Rifles 43b.png").convert_alpha(),
-        "GE_RIFLES_43b": pygame.image.load(base / "GE Rifles 43b.png").convert_alpha(),
     }
 
-def load_maps():
-    base = Path(__file__).resolve().parent / "assets" / "maps"
-    # IMPORTANTE: resolución nativa, sin escalar aquí
-    s2 = pygame.image.load(base / "Map_S2.png").convert()
-    s3 = pygame.image.load(base / "Map_S3.png").convert_alpha()
-    return s2, s3
-
 # ============================================================
-# GEOMETRÍA HEX
+# HEX GEOMETRY
 # ============================================================
-
-def hex_vertices(cx, cy, r):
-    angles = [30, 90, 150, 210, 270, 330]
-    return [
-        (
-            cx + r * math.cos(math.radians(a)),
-            cy + r * math.sin(math.radians(a)),
-        )
-        for a in angles
-    ]
-
-def draw_hex(surface, cx, cy, r):
-    pygame.draw.polygon(surface, GRID_COLOR, hex_vertices(cx, cy, r), 1)
 
 def parse_hex_id(hex_id):
     return LETTERS.index(hex_id[0]), int(hex_id[1:]) - 1
@@ -82,23 +89,48 @@ def hex_to_world(col, row):
     y = row * HEX_ROW_STEP
     return x, y
 
+def draw_hex(surface, cx, cy, r):
+    angles = [30, 90, 150, 210, 270, 330]
+    pts = [
+        (cx + r * math.cos(math.radians(a)),
+         cy + r * math.sin(math.radians(a)))
+        for a in angles
+    ]
+    pygame.draw.polygon(surface, GRID_COLOR, pts, 1)
+
 # ============================================================
-# DIBUJO
+# MAP DRAWING (ONLY OFFSET Y FOR S2)
 # ============================================================
 
 def draw_maps(surface, map_s2, map_s3):
-    # El mapa vive en WORLD (0,0)
-    sx, sy = world_to_screen(0, 0)
+    # Resize based on grid (unchanged)
+    scaled_w = int(WORLD_WIDTH * zoom)
+    scaled_h_s3 = int(HEIGHT_S3 * zoom)
+    scaled_h_s2 = int(HEIGHT_S2 * zoom)
 
-    # HACER ZOOM DEL MAPA (CLAVE QUE FALTABA)
-    scaled_w = int(map_s2.get_width() * zoom)
-    scaled_h = int(map_s2.get_height() * zoom)
+    s3_scaled = pygame.transform.smoothscale(
+        map_s3, (scaled_w, scaled_h_s3)
+    )
+    s2_scaled = pygame.transform.smoothscale(
+        map_s2, (scaled_w, scaled_h_s2)
+    )
 
-    map2 = pygame.transform.smoothscale(map_s2, (scaled_w, scaled_h))
-    map3 = pygame.transform.smoothscale(map_s3, (scaled_w, scaled_h))
+    # World origin at row 0 (top of A1)
+    sx = int((WORLD_MIN_X - camera_x) * zoom)
+    sy = int((-HEX_R - camera_y) * zoom)
 
-    surface.blit(map2, (sx, sy))
-    surface.blit(map3, (sx, sy))
+    # S3 starts at A1 (unchanged)
+    surface.blit(s3_scaled, (sx, sy))
+
+    # S2 starts at A9 (row 8), top edge of the hex
+    _, a9_y = hex_to_world(0, 8)
+    s2_y = int((a9_y - HEX_R - camera_y) * zoom)
+
+    surface.blit(s2_scaled, (sx, s2_y))
+
+# ============================================================
+# GRID DRAWING
+# ============================================================
 
 def draw_grid(surface, font):
     r = HEX_R * zoom
@@ -112,9 +144,13 @@ def draw_grid(surface, font):
 
             label = f"{LETTERS[col]}{row + 1}"
             txt = font.render(label, True, TEXT_COLOR)
-            surface.blit(txt, (sx + r * 0.25, sy - r * 0.6))
+            surface.blit(txt, (sx + r * 0.28, sy - r * 0.6))
 
-def draw_counter(surface, unit, counters, stack_index=0):
+# ============================================================
+# UNITS
+# ============================================================
+
+def draw_counter(surface, unit, counters):
     col, row = parse_hex_id(unit.hex)
     wx, wy = hex_to_world(col, row)
     sx, sy = world_to_screen(wx, wy)
@@ -124,23 +160,11 @@ def draw_counter(surface, unit, counters, stack_index=0):
         counters[unit.counter_id], (size, size)
     )
 
-    offset = stack_index * int(size * 0.12)
-    surface.blit(
-        img,
-        (
-            sx - size // 2 + offset,
-            sy - size // 2 - offset,
-        ),
-    )
+    surface.blit(img, (sx - size // 2, sy - size // 2))
 
 def draw_game_state(surface, state, counters):
-    stacks = {}
     for u in state.units:
-        stacks.setdefault(u.hex, []).append(u)
-
-    for units in stacks.values():
-        for i, u in enumerate(units):
-            draw_counter(surface, u, counters, i)
+        draw_counter(surface, u, counters)
 
 # ============================================================
 # MAIN
@@ -155,15 +179,14 @@ def main():
 
     font = pygame.font.SysFont("arial", FONT_SIZE)
 
-    counters = load_counters()
     map_s2, map_s3 = load_maps()
+    counters = load_counters()
 
     runner = Runner()
     replay = runner.run(["B10", "C10", "C11", "D11", "D10"])
 
     step = 0
     auto_play = False
-
     clock = pygame.time.Clock()
 
     while True:
@@ -193,13 +216,11 @@ def main():
                     zoom /= 1.1
 
             elif e.type == pygame.MOUSEBUTTONUP:
-                if e.button == 1:
-                    dragging = False
+                dragging = False
 
             elif e.type == pygame.MOUSEMOTION and dragging:
-                mx, my = e.pos
-                dx = mx - last_mouse[0]
-                dy = my - last_mouse[1]
+                dx = e.pos[0] - last_mouse[0]
+                dy = e.pos[1] - last_mouse[1]
                 camera_x -= dx / zoom
                 camera_y -= dy / zoom
                 last_mouse = e.pos
@@ -208,8 +229,6 @@ def main():
             step = min(step + 1, len(replay.states) - 1)
 
         screen.fill((0, 0, 0))
-
-        # ORDEN CORRECTO
         draw_maps(screen, map_s2, map_s3)
         draw_grid(screen, font)
         draw_game_state(screen, replay.states[step], counters)

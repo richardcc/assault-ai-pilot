@@ -1,0 +1,20 @@
+{
+  "_comment": "UI-only: used by visualizer, not by core logic",
+
+  "US_RIFLES_43": {
+    "full": "US Rifles 43.png",
+    "half": "US Rifles 43b.png"
+  },
+  "US_RANGERS_43": {
+    "full": "US Rangers 43.png",
+    "half": "US Rangers 43b.png"
+  },
+  "GE_RIFLES_43": {
+    "full": "GE Rifles 43.png",
+    "half": "GE Rifles 43b.png"
+  },
+  "GE_FJ_RIFLES_43": {
+    "full": "GE FJ Rifles 43.png",
+    "half": "GE FJ Rifles 43b.png"
+  }
+}

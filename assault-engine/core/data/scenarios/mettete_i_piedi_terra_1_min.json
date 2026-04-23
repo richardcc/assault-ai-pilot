@@ -1,0 +1,13 @@
+{
+  "id": "mettete_i_piedi_terra_1_min",
+  "map": "S3_S2",
+  "units": [
+    { "id": "US1", "side": "US", "type": "US_RIFLES_43", "hex": "B10" },
+    { "id": "US2", "side": "US", "type": "US_RANGERS_43", "hex": "D11" },
+    { "id": "GE1", "side": "GE", "type": "GE_RIFLES_43", "hex": "E5" },
+    { "id": "GE2", "side": "GE", "type": "GE_RIFLES_43", "hex": "G6" }
+  ],
+  "objectives": [
+    { "hex": "D7", "vp": 2 }
+  ]
+}
