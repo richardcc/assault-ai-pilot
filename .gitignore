@@ -1,22 +1,41 @@
+# ===============================
 # Python
+# ===============================
 __pycache__/
 *.pyc
 *.pyo
 *.pyd
+
+# Virtual environments (anywhere)
 .env
-.venv
+.venv/
+**/.venv/
 venv/
 
-# Sphinx
+# ===============================
+# Sphinx / Documentation
+# ===============================
 docs/_build/
 
-# Editors
+# ===============================
+# Personal / private material
+# ===============================
+notes_private/
+
+# ===============================
+# Editors / IDEs
+# ===============================
 .vscode/
 .idea/
 
-# OS
+# ===============================
+# OS generated files
+# ===============================
 .DS_Store
 Thumbs.db
 
+# ===============================
 # Packaging artifacts
+# ===============================
 *.egg-info/
+``
