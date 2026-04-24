@@ -1,0 +1,101 @@
+P1 – Single Unit Baseline
+========================
+
+This document reports the results of **P1**, the baseline scenario of
+the assault‑env reinforcement learning curriculum.
+
+P1 establishes the minimal tactical competence required for all
+subsequent stages.
+
+---
+
+Scenario Description
+--------------------
+
+P1 consists of a **single friendly unit versus a single enemy unit**
+under standard movement, combat and terrain rules.
+
+Key properties:
+
+- One unit per side
+- No unit rotation
+- No redundancy
+- No global force awareness
+- Fixed reward structure
+
+The scenario focuses on local tactical decisions only.
+
+---
+
+Training Behavior
+-----------------
+
+After convergence, the learned policy consistently exhibits:
+
+- Continuous movement without idle loops
+- Conservative distance management
+- Occasional attacks under favorable conditions
+- Avoidance of high‑risk engagements
+
+The behavior is stable and deterministic.
+
+---
+
+Policy Characteristics
+----------------------
+
+The P1 policy can be characterized as:
+
+- Risk‑averse
+- Positionally conservative
+- Locally optimal
+
+This behavior is appropriate given the lack of redundancy and the
+absence of strategic context.
+
+Aggressive actions are penalized when they fail, and no external
+information suggests that risk‑taking is advantageous.
+
+---
+
+Evaluation
+----------
+
+Deterministic evaluation shows:
+
+- High repeatability across episodes
+- Minimal variability of trajectories
+- No objective pressure beyond survival
+
+Stochastic evaluation does not introduce meaningful deviations, as the
+policy distribution itself is narrow.
+
+---
+
+Interpretation
+--------------
+
+The P1 policy is **not intended to be optimal or aggressive**.
+
+Instead, it serves as a **reference point** demonstrating:
+
+- Basic competence in movement and combat
+- Rational conservatism in isolated engagements
+- The limits of local information
+
+All subsequent curriculum stages deliberately build upon and challenge
+this baseline behavior.
+
+---
+
+Curriculum Role
+---------------
+
+P1 defines:
+
+- The initial value function shape
+- The default notion of safety
+- The conservative bias inherited by later stages
+
+Understanding P1 is essential to interpreting the behavioral transitions
+observed in P2–P4.

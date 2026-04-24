@@ -2,35 +2,59 @@ from assault_env.env import AssaultEnv
 from assault_env.renderer import AsciiRenderer
 from assault_env.agents.heuristic import HeuristicAgent
 
+from assault.replay.snapshot import snapshot
+from assault.replay.replay import Replay
+from assault.replay.serialization import save_replay_to_json
 
-env = AssaultEnv()
-renderer = AsciiRenderer()
-agent = HeuristicAgent()
 
-# Gym reset
-obs, info = env.reset()
+def run_episode():
+    env = AssaultEnv()
+    renderer = AsciiRenderer()
+    agent = HeuristicAgent()
 
-done = False
-turn = 0
+    replay_states = []
 
-print("Initial observation (player A starts):", obs)
-renderer.render(env.state, env.player_id, env.enemy_id, turn=turn)
+    # Gym reset
+    obs, info = env.reset()
+    turn = 0
+    done = False
 
-while not done:
-    # ✅ MISMO AGENTE PARA AMBOS BANDOS
-    action = agent.act(obs)
+    # Capture initial state
+    replay_states.append(snapshot(env.state))
 
-    obs, reward, terminated, truncated, info = env.step(action)
-    done = terminated or truncated
-    turn += 1
-
-    print(
-        f"\nTurn {turn} | "
-        f"Current player = {env.current_player_id} | "
-        f"Action = {action} | "
-        f"Reward = {reward}"
-    )
-
+    print("Initial observation (player A starts):", obs)
     renderer.render(env.state, env.player_id, env.enemy_id, turn=turn)
 
-print("\nEpisode finished")
+    while not done:
+        # Same agent for both sides (debug mode)
+        action = agent.act(obs)
+
+        obs, reward, terminated, truncated, info = env.step(action)
+        done = terminated or truncated
+        turn += 1
+
+        # Capture state after step
+        replay_states.append(snapshot(env.state))
+
+        print(
+            f"\nTurn {turn} | "
+            f"Current player = {env.current_player_id} | "
+            f"Action = {action} | "
+            f"Reward = {reward}"
+        )
+
+        renderer.render(env.state, env.player_id, env.enemy_id, turn=turn)
+
+    print("\nEpisode finished")
+
+    # Build replay object
+    replay = Replay(replay_states)
+
+    # Save replay to JSON
+    save_replay_to_json(replay, "replays/simple_duel_run_001.json")
+
+    print("Replay saved to replays/simple_duel_run_001.json")
+
+
+if __name__ == "__main__":
+    run_episode()

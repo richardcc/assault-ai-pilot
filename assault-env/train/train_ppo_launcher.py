@@ -10,13 +10,13 @@ from assault_env.env import AssaultEnv
 
 
 def make_env():
-    return AssaultEnv()
+    # ✅ EXPLICIT TRAINING MODE
+    return AssaultEnv(training=True)
 
 
 if __name__ == "__main__":
     RUN_ID = "current"
-    LOG_DIR = f"logs/ppo_level6/{RUN_ID}"
-
+    LOG_DIR = f"logs/ppo_level7/{RUN_ID}"
     os.makedirs(LOG_DIR, exist_ok=True)
 
     print("=== PPO TRAIN LAUNCHER ===", flush=True)
@@ -47,7 +47,6 @@ if __name__ == "__main__":
     TOTAL_STEPS = 200_000
 
     start_time = time.time()
-
     try:
         model.learn(total_timesteps=TOTAL_STEPS)
     except KeyboardInterrupt:
@@ -56,8 +55,7 @@ if __name__ == "__main__":
         elapsed = time.time() - start_time
         print(f"Training stopped after {elapsed:.1f}s", flush=True)
 
-        model_path = f"models/ppo_level6_{RUN_ID}"
         os.makedirs("models", exist_ok=True)
+        model_path = f"models/ppo_level7_{RUN_ID}"
         model.save(model_path)
-
         print("Model saved to:", model_path, flush=True)

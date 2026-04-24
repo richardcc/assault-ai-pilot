@@ -3,7 +3,7 @@ import math
 import pygame
 from pathlib import Path
 
-from assault_runner.runner import Runner
+from assault.replay.loader import load_replay_from_json
 
 # ============================================================
 # GRID (THE GRID DEFINES THE WORLD)
@@ -25,14 +25,14 @@ FONT_SIZE = 14
 # MAP SPLIT BY GRID ROWS
 # ------------------------------------------------------------
 
-ROWS_S3 = TOTAL_ROWS // 2           # top half
-ROWS_S2 = TOTAL_ROWS - ROWS_S3     # bottom half
+ROWS_S3 = TOTAL_ROWS // 2
+ROWS_S2 = TOTAL_ROWS - ROWS_S3
 
 HEIGHT_S3 = (ROWS_S3 - 1) * HEX_ROW_STEP + 2 * HEX_R
 HEIGHT_S2 = (ROWS_S2 - 1) * HEX_ROW_STEP + 2 * HEX_R
 
 # ------------------------------------------------------------
-# WORLD WIDTH (pointy-top grid)
+# WORLD WIDTH
 # ------------------------------------------------------------
 
 WORLD_MIN_X = -HEX_W / 2
@@ -58,31 +58,26 @@ def world_to_screen(x, y):
 # ============================================================
 
 def load_maps():
-    base = Path(__file__).resolve().parent / "assets" / "maps"
-
-    # IMPORTANT:
-    # Both maps MUST use convert_alpha()
-    # because both PNGs contain transparency
+    base = Path(__file__).resolve().parents[1] / "assets" / "maps"
     s2 = pygame.image.load(base / "Map_S2.png").convert_alpha()
     s3 = pygame.image.load(base / "Map_S3.png").convert_alpha()
-
     return s2, s3
 
 def load_counters():
-    base = Path(__file__).resolve().parent / "assets" / "counters"
+    base = Path(__file__).resolve().parents[1] / "assets" / "counters"
+
+    us = pygame.image.load(base / "US Rifles 43.png").convert_alpha()
+    ge = pygame.image.load(base / "GE Rifles 43.png").convert_alpha()
+
     return {
-        "US_RIFLES_43": pygame.image.load(base / "US Rifles 43.png").convert_alpha(),
-        "US_RANGERS_43": pygame.image.load(base / "US Rangers 43.png").convert_alpha(),
-        "GE_RIFLES_43": pygame.image.load(base / "GE Rifles 43.png").convert_alpha(),
-        "GE_FJ_RIFLES_43": pygame.image.load(base / "GE FJ Rifles 43.png").convert_alpha(),
+        "A": us,   # Aliados
+        "B": ge,   # Enemigos (alias del replay RL)
+        "D": ge,   # Enemigos (nombre histórico del viewer)
     }
 
 # ============================================================
 # HEX GEOMETRY
 # ============================================================
-
-def parse_hex_id(hex_id):
-    return LETTERS.index(hex_id[0]), int(hex_id[1:]) - 1
 
 def hex_to_world(col, row):
     x = col * HEX_W + (row % 2) * (HEX_W / 2)
@@ -99,37 +94,28 @@ def draw_hex(surface, cx, cy, r):
     pygame.draw.polygon(surface, GRID_COLOR, pts, 1)
 
 # ============================================================
-# MAP DRAWING (ONLY OFFSET Y FOR S2)
+# MAP DRAWING
 # ============================================================
 
 def draw_maps(surface, map_s2, map_s3):
-    # Resize based on grid (unchanged)
     scaled_w = int(WORLD_WIDTH * zoom)
     scaled_h_s3 = int(HEIGHT_S3 * zoom)
     scaled_h_s2 = int(HEIGHT_S2 * zoom)
 
-    s3_scaled = pygame.transform.smoothscale(
-        map_s3, (scaled_w, scaled_h_s3)
-    )
-    s2_scaled = pygame.transform.smoothscale(
-        map_s2, (scaled_w, scaled_h_s2)
-    )
+    s3_scaled = pygame.transform.smoothscale(map_s3, (scaled_w, scaled_h_s3))
+    s2_scaled = pygame.transform.smoothscale(map_s2, (scaled_w, scaled_h_s2))
 
-    # World origin at row 0 (top of A1)
     sx = int((WORLD_MIN_X - camera_x) * zoom)
     sy = int((-HEX_R - camera_y) * zoom)
 
-    # S3 starts at A1 (unchanged)
     surface.blit(s3_scaled, (sx, sy))
 
-    # S2 starts at A9 (row 8), top edge of the hex
     _, a9_y = hex_to_world(0, 8)
     s2_y = int((a9_y - HEX_R - camera_y) * zoom)
-
     surface.blit(s2_scaled, (sx, s2_y))
 
 # ============================================================
-# GRID DRAWING
+# GRID
 # ============================================================
 
 def draw_grid(surface, font):
@@ -144,20 +130,23 @@ def draw_grid(surface, font):
 
             label = f"{LETTERS[col]}{row + 1}"
             txt = font.render(label, True, TEXT_COLOR)
-            surface.blit(txt, (sx + r * 0.28, sy - r * 0.6))
+            surface.blit(txt, (sx + r * 0.25, sy - r * 0.6))
 
 # ============================================================
-# UNITS
+# UNITS  ✅ CORRECCIÓN AQUÍ (SOLO AQUÍ)
 # ============================================================
 
 def draw_counter(surface, unit, counters):
-    col, row = parse_hex_id(unit.hex)
+    # unit.hex is like "B10"
+    col = LETTERS.index(unit.hex[0])
+    row = int(unit.hex[1:]) - 1
+
     wx, wy = hex_to_world(col, row)
     sx, sy = world_to_screen(wx, wy)
 
     size = int(HEX_R * 1.3 * zoom)
     img = pygame.transform.smoothscale(
-        counters[unit.counter_id], (size, size)
+        counters[unit.side], (size, size)
     )
 
     surface.blit(img, (sx - size // 2, sy - size // 2))
@@ -173,6 +162,12 @@ def draw_game_state(surface, state, counters):
 def main():
     global camera_x, camera_y, zoom, dragging, last_mouse
 
+    if len(sys.argv) < 2:
+        print("Usage: replay_viewer.py <replay.json>")
+        sys.exit(1)
+
+    replay = load_replay_from_json(sys.argv[1])
+
     pygame.init()
     screen = pygame.display.set_mode((0, 0), pygame.FULLSCREEN)
     pygame.display.set_caption("Assault Replay Viewer")
@@ -181,9 +176,6 @@ def main():
 
     map_s2, map_s3 = load_maps()
     counters = load_counters()
-
-    runner = Runner()
-    replay = runner.run(["B10", "C10", "C11", "D11", "D10"])
 
     step = 0
     auto_play = False
@@ -229,9 +221,26 @@ def main():
             step = min(step + 1, len(replay.states) - 1)
 
         screen.fill((0, 0, 0))
+
+        state = replay.states[step]
+
+        turn_text = font.render(
+            f"Turn {state.turn} / {len(replay.states) - 1}",
+            True,
+            (255, 255, 255),
+        )
+        index_text = font.render(
+            f"Replay state index: {step}",
+            True,
+            (200, 200, 200),
+        )
+
+        screen.blit(turn_text, (20, 20))
+        screen.blit(index_text, (20, 45))
+
         draw_maps(screen, map_s2, map_s3)
         draw_grid(screen, font)
-        draw_game_state(screen, replay.states[step], counters)
+        draw_game_state(screen, state, counters)
 
         pygame.display.flip()
         clock.tick(60)

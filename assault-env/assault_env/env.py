@@ -1,8 +1,6 @@
 import gymnasium as gym
 from gymnasium import spaces
-import random
 
-from assault_env.scenario import simple_duel_level7_P1_from_json
 from assault_env.agents.heuristic import HeuristicAgent
 
 from assault.core.actions.movement_action import MovementAction
@@ -13,239 +11,371 @@ from assault.core.spatial.zone_of_control import ZoneOfControlService
 
 class AssaultEnv(gym.Env):
     """
-    Gymnasium-compatible environment.
+    Gymnasium environment for assault-engine.
 
-    Level 7:
-    - Real geometry loaded from JSON (P1)
-    - Full 2D movement (forward, backward, left, right)
-    - Relative enemy vector (dx, dy)
-    - Terrain-based cover
-    - Heuristic opponent (break self-play)
-    - Distance-based + directional reward shaping
+    Supports:
+    - P1: single controlled unit
+    - P2: multiple controlled units
+    - P3: global force awareness
+    - P4: symmetric engagement (2 vs 2)
+    - B: implicit role emergence
     """
 
     metadata = {"render_modes": ["ascii"]}
 
-    def __init__(self):
+    def __init__(
+        self,
+        scenario_builder,
+        training: bool = True,
+        max_turns: int = 200,
+    ):
         super().__init__()
 
-        # ------------------------------------------------------------
+        self.training = training
+        self.max_turns = max_turns
+
+        # --------------------------------------------------------
         # Action space
-        # 0 = WAIT
-        # 1 = MOVE_FORWARD
-        # 2 = ASSAULT
-        # 3 = RANGED_FIRE
-        # 4 = MOVE_LEFT
-        # 5 = MOVE_RIGHT
-        # 6 = MOVE_BACKWARD
-        # ------------------------------------------------------------
+        # --------------------------------------------------------
         self.action_space = spaces.Discrete(7)
 
+        # --------------------------------------------------------
+        # Observation space (P4 + Roles Implícitos)
+        # --------------------------------------------------------
         self.observation_space = spaces.Dict({
-            "my_strength": spaces.Box(low=0, high=10, shape=(1,), dtype=int),
-            "enemy_strength": spaces.Box(low=0, high=10, shape=(1,), dtype=int),
-            "enemy_distance": spaces.Box(low=0, high=20, shape=(1,), dtype=int),
-            "enemy_dx": spaces.Box(low=-10, high=10, shape=(1,), dtype=int),
-            "enemy_dy": spaces.Box(low=-10, high=10, shape=(1,), dtype=int),
-            "in_enemy_zoc": spaces.Box(low=0, high=1, shape=(1,), dtype=int),
-            "can_assault": spaces.Box(low=0, high=1, shape=(1,), dtype=int),
+            "my_strength": spaces.Box(0, 20, (1,), int),
+            "enemy_strength": spaces.Box(0, 20, (1,), int),
+            "enemy_distance": spaces.Box(0, 50, (1,), int),
+            "enemy_dx": spaces.Box(-50, 50, (1,), int),
+            "enemy_dy": spaces.Box(-50, 50, (1,), int),
+            "in_enemy_zoc": spaces.Box(0, 1, (1,), int),
+            "can_assault": spaces.Box(0, 1, (1,), int),
+
+            # Global force awareness (P3)
+            "my_total_strength": spaces.Box(0, 100, (1,), int),
+            "enemy_total_strength": spaces.Box(0, 100, (1,), int),
+
+            # ✅ Roles implícitos (B)
+            "ally_distance": spaces.Box(0, 50, (1,), int),
+            "ally_strength_diff": spaces.Box(-20, 20, (1,), int),
         })
 
+        self.scenario_builder = scenario_builder
+
+        self.heuristic = HeuristicAgent(
+            epsilon=0.3 if training else 0.0
+        )
+
         self.state = None
-        self.player_id = None
-        self.enemy_id = None
-        self.current_player_id = None
-        self.opponent_player_id = None
+        self.italy_ids = []
+        self.enemy_ids = []
+
+        self.current_side = "italy"
+        self.current_italy_index = 0
+
+        self.turn_count = 0
         self.done = False
 
-        # Heuristic opponent
-        self.heuristic = HeuristicAgent()
+        # Victory Points
+        self.VP_HEXES = {
+            (3, 4): 2,
+            (5, 5): 2,
+            (2, 8): 2,
+        }
+        self.vp_controlled = set()
 
-    # ------------------------------------------------------------------
-    # Gym API
-    # ------------------------------------------------------------------
+        # Metrics
+        self.metric_steps = 0
+        self.metric_moves = 0
+        self.metric_waits = 0
+        self.metric_assaults = 0
+        self.metric_distance_sum = 0.0
+        self.metric_vp_points = 0
+
+    # ------------------------------------------------------------
+    # RESET
+    # ------------------------------------------------------------
 
     def reset(self, *, seed=None, options=None):
         super().reset(seed=seed)
 
-        # ✅ LEVEL 7 SCENARIO (JSON geometry)
-        self.state, self.player_id, self.enemy_id = simple_duel_level7_P1_from_json()
-        self.current_player_id = self.player_id
-        self.opponent_player_id = self.enemy_id
+        self.state, self.italy_ids, self.enemy_ids = self.scenario_builder()
+
+        self.current_side = "italy"
+        self.current_italy_index = 0
+        self.turn_count = 0
         self.done = False
 
-        return self._get_obs(self.current_player_id), {}
+        self.vp_controlled.clear()
+
+        self.metric_steps = 0
+        self.metric_moves = 0
+        self.metric_waits = 0
+        self.metric_assaults = 0
+        self.metric_distance_sum = 0.0
+        self.metric_vp_points = 0
+
+        return self._get_obs(), {}
+
+    # ------------------------------------------------------------
+    # STEP
+    # ------------------------------------------------------------
 
     def step(self, action: int):
         if self.done:
             raise RuntimeError("Episode already finished")
 
-        # --------------------------------------------------------------
-        # Heuristic controls enemy turns
-        # --------------------------------------------------------------
-        if self.current_player_id == self.enemy_id:
-            obs = self._get_obs(self.current_player_id)
-            action = self.heuristic.act(obs)
+        self.metric_steps += 1
+
+        # Select active unit
+        if self.current_side == "italy":
+            actor_id = self._next_alive_italy()
+        else:
+            alive_enemies = [
+                eid for eid in self.enemy_ids if eid in self.state.units
+            ]
+            if not alive_enemies:
+                return self._get_obs(), 0.0, True, False, {}
+            actor_id = alive_enemies[0]
+
+        actor = self.state.units.get(actor_id)
+
+        # Enemy heuristic
+        if self.current_side == "enemy":
+            observation = self._get_obs()
+            alive_italians = [
+                uid for uid in self.italy_ids if uid in self.state.units
+            ]
+            player_pos = (
+                self.state.units[alive_italians[0]].position
+                if alive_italians else actor.position
+            )
+
+            action = self.heuristic.act(
+                observation,
+                enemy_pos=actor.position,
+                player_pos=player_pos,
+                vp_hexes=self.VP_HEXES.keys(),
+                vp_controlled_by_player=self.vp_controlled,
+            )
 
         reward = 0.0
         terminated = False
         truncated = False
 
-        player = self.state.get_unit(self.current_player_id)
-        enemy = self.state.units.get(self.opponent_player_id)
+        enemy_ids = (
+            self.enemy_ids if self.current_side == "italy"
+            else self.italy_ids
+        )
+        enemy = next(
+            (self.state.units[eid] for eid in enemy_ids if eid in self.state.units),
+            None
+        )
 
-        # --- Distance BEFORE action ---
-        if enemy:
-            prev_dx = enemy.position[0] - player.position[0]
-            prev_dy = enemy.position[1] - player.position[1]
-            prev_distance = abs(prev_dx) + abs(prev_dy)
-        else:
-            prev_dx = prev_dy = prev_distance = 0
+        prev_distance = (
+            abs(enemy.position[0] - actor.position[0]) +
+            abs(enemy.position[1] - actor.position[1])
+            if enemy else 0
+        )
+        self.metric_distance_sum += prev_distance
 
         executor = MovementExecutor(self.state)
 
-        # --------------------------------------------------------------
-        # Movement actions
-        # --------------------------------------------------------------
-        if action == 1:      # MOVE_FORWARD
-            target = (player.position[0] + 1, player.position[1])
-        elif action == 4:    # MOVE_LEFT
-            target = (player.position[0], player.position[1] + 1)
-        elif action == 5:    # MOVE_RIGHT
-            target = (player.position[0], player.position[1] - 1)
-        elif action == 6:    # MOVE_BACKWARD
-            target = (player.position[0] - 1, player.position[1])
-        else:
-            target = None
+        # WAIT
+        if action == 0:
+            self.metric_waits += 1
+            reward -= 0.05
+
+        # MOVEMENT
+        target = None
+        if action == 1:
+            target = (actor.position[0] + 1, actor.position[1])
+        elif action == 4:
+            target = (actor.position[0], actor.position[1] + 1)
+        elif action == 5:
+            target = (actor.position[0], actor.position[1] - 1)
+        elif action == 6:
+            target = (actor.position[0] - 1, actor.position[1])
 
         if target is not None:
             try:
-                executor.execute(MovementAction(player, target))
+                executor.execute(MovementAction(actor, target))
+                self.metric_moves += 1
+                reward += 0.01
             except ValueError:
                 reward -= 0.1
 
-        # --------------------------------------------------------------
         # ASSAULT
-        # --------------------------------------------------------------
-        elif action == 2 and enemy is not None:
+        if action == 2 and enemy:
+            self.metric_assaults += 1
             if prev_distance > 1:
-                reward -= 1.0
+                reward -= 0.2
             else:
-                player_before = player.strength
-                enemy_before = enemy.strength
-
+                eb = enemy.strength
+                pb = actor.strength
                 AssaultExecutor(
                     self.state,
-                    self.current_player_id,
-                    self.opponent_player_id,
+                    actor.unit_id,
+                    enemy.unit_id,
                 ).execute()
+                ea = enemy.strength if enemy.unit_id in self.state.units else 0
+                reward += (eb - ea) - (pb - actor.strength)
 
-                enemy_after_obj = self.state.units.get(self.opponent_player_id)
-                enemy_after = enemy_after_obj.strength if enemy_after_obj else 0
-                player_after = player.strength
+        # VP control
+        pos = actor.position
+        if pos in self.VP_HEXES:
+            if pos not in self.vp_controlled:
+                self.vp_controlled.add(pos)
+                reward += 0.4
+            reward += 0.2
+        else:
+            if self.vp_controlled:
+                reward -= 0.3
+                self.vp_controlled.clear()
 
-                reward += (enemy_before - enemy_after) - (player_before - player_after)
+        self.metric_vp_points = len(self.vp_controlled) * 2
 
-                if enemy_after_obj is None:
-                    reward += 5.0
-
-        # --------------------------------------------------------------
-        # RANGED_FIRE
-        # --------------------------------------------------------------
-        elif action == 3 and enemy is not None:
-            if prev_distance > 1:
-                hit_chance = 0.5
-                enemy_hex = self.state.hexes[enemy.position]
-                if enemy_hex.terrain.defense_bonus > 0:
-                    hit_chance *= 0.5
-
-                if random.random() < hit_chance:
-                    enemy.strength -= 1
-                    reward += 1
-                else:
-                    reward -= 0.05
-            else:
-                reward -= 0.2
-
-        # --------------------------------------------------------------
-        # ✅ Distance-based + directional shaping
-        # --------------------------------------------------------------
-        if enemy and not terminated:
-            new_dx = enemy.position[0] - player.position[0]
-            new_dy = enemy.position[1] - player.position[1]
-            new_distance = abs(new_dx) + abs(new_dy)
-
-            # Global distance shaping
-            if new_distance < prev_distance:
-                reward += 0.05
-            elif new_distance > prev_distance:
-                reward -= 0.02
-
-            # Directional shaping
-            if abs(prev_dx) > abs(prev_dy):
-                if abs(new_dx) < abs(prev_dx):
-                    reward += 0.03
-            else:
-                if abs(new_dy) < abs(prev_dy):
-                    reward += 0.03
-
-        # --------------------------------------------------------------
-        # Terminal conditions
-        # --------------------------------------------------------------
-        if self.state.units.get(self.opponent_player_id) is None:
+        # Termination
+        if not any(eid in self.state.units for eid in self.enemy_ids):
+            terminated = True
             reward += 5.0
-            terminated = True
-            self.done = True
 
-        if not player.is_alive():
+        if not any(uid in self.state.units for uid in self.italy_ids):
+            terminated = True
             reward -= 5.0
-            terminated = True
+
+        self._rotate_turn()
+
+        self.turn_count += 1
+        if self.turn_count >= self.max_turns and not terminated:
+            truncated = True
+            vp = self.metric_vp_points
+            reward += 10.0 if vp >= 4 else (2.0 if vp == 3 else -5.0)
             self.done = True
 
-        if not terminated:
-            self.current_player_id, self.opponent_player_id = (
-                self.opponent_player_id,
-                self.current_player_id,
-            )
-
-        return self._get_obs(self.current_player_id), reward, terminated, truncated, {}
-
-    # ------------------------------------------------------------------
-    # Observation helper
-    # ------------------------------------------------------------------
-
-    def _get_obs(self, player_id):
-        if player_id not in self.state.units:
-            return {
-                "my_strength": [0],
-                "enemy_strength": [0],
-                "enemy_distance": [0],
-                "enemy_dx": [0],
-                "enemy_dy": [0],
-                "in_enemy_zoc": [0],
-                "can_assault": [0],
+        info = {}
+        if terminated or truncated:
+            info["metrics"] = {
+                "steps": self.metric_steps,
+                "moves": self.metric_moves,
+                "waits": self.metric_waits,
+                "assaults": self.metric_assaults,
+                "avg_distance": (
+                    self.metric_distance_sum / self.metric_steps
+                    if self.metric_steps > 0 else 0.0
+                ),
+                "vp_points": self.metric_vp_points,
             }
 
-        player = self.state.get_unit(player_id)
-        enemy = self.state.units.get(
-            self.enemy_id if player_id == self.player_id else self.player_id
+        return self._get_obs(), reward, terminated, truncated, info
+
+    # ------------------------------------------------------------
+    # HELPERS
+    # ------------------------------------------------------------
+
+    def _next_alive_italy(self):
+        for _ in range(len(self.italy_ids)):
+            uid = self.italy_ids[self.current_italy_index]
+            self.current_italy_index = (
+                self.current_italy_index + 1
+            ) % len(self.italy_ids)
+            if uid in self.state.units:
+                return uid
+        return self.italy_ids[0]
+
+    def _rotate_turn(self):
+        self.current_side = (
+            "enemy" if self.current_side == "italy" else "italy"
         )
+
+    def _get_obs(self):
+        if self.current_side == "italy":
+            uid = self._next_alive_italy()
+        else:
+            alive_enemies = [
+                eid for eid in self.enemy_ids if eid in self.state.units
+            ]
+            if not alive_enemies:
+                return self._empty_obs()
+            uid = alive_enemies[0]
+
+        if uid not in self.state.units:
+            return self._empty_obs()
+
+        player = self.state.units[uid]
+
+        enemy_ids = (
+            self.enemy_ids if self.current_side == "italy"
+            else self.italy_ids
+        )
+        enemy = next(
+            (self.state.units[eid] for eid in enemy_ids if eid in self.state.units),
+            None
+        )
+
+        # Global force
+        my_total_strength = sum(
+            u.strength for uid, u in self.state.units.items()
+            if uid in self.italy_ids
+        )
+        enemy_total_strength = sum(
+            u.strength for uid, u in self.state.units.items()
+            if uid in self.enemy_ids
+        )
+
+        # --- Ally info (roles implícitos) ---
+        ally_units = [
+            u for uid, u in self.state.units.items()
+            if uid in self.italy_ids and uid != player.unit_id
+        ]
+
+        if ally_units:
+            ally = ally_units[0]
+            ally_dist = (
+                abs(ally.position[0] - player.position[0]) +
+                abs(ally.position[1] - player.position[1])
+            )
+            ally_strength_diff = player.strength - ally.strength
+        else:
+            ally_dist = 0
+            ally_strength_diff = 0
 
         zoc = ZoneOfControlService(self.state)
 
+        dx = dy = dist = 0
         if enemy:
             dx = enemy.position[0] - player.position[0]
             dy = enemy.position[1] - player.position[1]
-            distance = abs(dx) + abs(dy)
-        else:
-            dx = dy = distance = 0
+            dist = abs(dx) + abs(dy)
 
         return {
             "my_strength": [player.strength],
             "enemy_strength": [enemy.strength if enemy else 0],
-            "enemy_distance": [distance],
+            "enemy_distance": [dist],
             "enemy_dx": [dx],
             "enemy_dy": [dy],
-            "in_enemy_zoc": [int(zoc.is_hex_in_enemy_zoc(player, player.position))],
-            "can_assault": [int(enemy is not None and distance == 1)],
+            "in_enemy_zoc": [
+                int(zoc.is_hex_in_enemy_zoc(player, player.position))
+            ],
+            "can_assault": [int(enemy is not None and dist == 1)],
+            "my_total_strength": [my_total_strength],
+            "enemy_total_strength": [enemy_total_strength],
+            "ally_distance": [ally_dist],
+            "ally_strength_diff": [ally_strength_diff],
+        }
+
+    @staticmethod
+    def _empty_obs():
+        return {
+            "my_strength": [0],
+            "enemy_strength": [0],
+            "enemy_distance": [0],
+            "enemy_dx": [0],
+            "enemy_dy": [0],
+            "in_enemy_zoc": [0],
+            "can_assault": [0],
+            "my_total_strength": [0],
+            "enemy_total_strength": [0],
+            "ally_distance": [0],
+            "ally_strength_diff": [0],
         }
