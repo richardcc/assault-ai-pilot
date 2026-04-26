@@ -1,0 +1,208 @@
+Hex Grid Map Rendering – Design Notes
+====================================
+
+This document defines the **authoritative rules and design decisions**
+governing the rendering of the hex grid and terrain layers (S2 / S3).
+
+Its primary purpose is to **prevent regressions** by making explicit
+which parts of the rendering system are invariant and which aspects may
+change.
+
+------------------------------------------------------------
+
+1. Core Design Rule (Non-Negotiable)
+-----------------------------------
+
+**The hex grid defines the world.**
+
+All other systems (terrain maps, overlays, units, effects, camera
+transformations) must adapt strictly to the hex grid geometry.
+
+This implies:
+
+- The grid geometry is the single source of truth.
+- World coordinates are defined by hex mathematics, not by image
+  dimensions.
+- No screen-space or ad-hoc positional offsets are allowed.
+
+Any violation of this rule will inevitably introduce rendering bugs.
+
+------------------------------------------------------------
+
+2. Map Layers Overview
+---------------------
+
+Two terrain map layers are used:
+
+- **S3**: Upper (top half) terrain layer
+- **S2**: Lower (bottom half) terrain layer
+
+Both layers:
+
+- Are provided as PNG files
+- Contain alpha transparency
+- Encode the hex shape implicitly in the alpha channel
+
+**Important:**  
+S2 and S3 are *not* logical rectangles. The hex geometry is already
+encoded in the transparency mask of the images.
+
+------------------------------------------------------------
+
+3. Transparency Rules (Critical)
+--------------------------------
+
+This section documents the root cause of the primary rendering bug
+encountered during development.
+
+Correct Loading
+^^^^^^^^^^^^^^^
+
+All PNG terrain maps containing transparency **must** be loaded using
+``convert_alpha()``:
+
+::
+
+    s2 = pygame.image.load("Map_S2.png").convert_alpha()
+    s3 = pygame.image.load("Map_S3.png").convert_alpha()
+
+Incorrect Loading (Bug Source)
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+::
+
+    pygame.image.load("Map_S2.png").convert()
+
+Using ``convert()`` on PNG images with transparency:
+
+- Strips the alpha channel
+- Leaves undefined color data under transparent pixels
+- Produces rectangular artifacts after ``smoothscale``
+
+Although visually similar to a geometric error, this issue is **purely
+an alpha-handling fault**.
+
+------------------------------------------------------------
+
+4. Hex Grid Geometry Reference
+------------------------------
+
+The grid uses **pointy-top hexagons** with row-based horizontal offset.
+
+Constants
+^^^^^^^^^
+
+::
+
+    HEX_R = 52
+    HEX_W = sqrt(3) * HEX_R
+    HEX_ROW_STEP = 1.5 * HEX_R
+
+Hex to World Coordinates
+^^^^^^^^^^^^^^^^^^^^^^^
+
+::
+
+    def hex_to_world(col, row):
+        x = col * HEX_W + (row % 2) * (HEX_W / 2)
+        y = row * HEX_ROW_STEP
+        return x, y
+
+This function returns the **center** of the corresponding hex tile in
+world coordinates.
+
+------------------------------------------------------------
+
+5. Map Anchoring Rules
+---------------------
+
+Map placement is defined **exclusively** in hex-world terms.
+
+S3 (Upper Terrain Layer)
+^^^^^^^^^^^^^^^^^^^^^^^^
+
+- Anchored to **hex A1**
+- Uses the **top-left corner** of the A1 hex bounding box
+
+::
+
+    a1_x, a1_y = hex_to_world(0, 0)
+    origin_x = a1_x - HEX_W / 2
+    origin_y = a1_y - HEX_R
+
+S2 (Lower Terrain Layer)
+^^^^^^^^^^^^^^^^^^^^^^^^
+
+- Anchored to **hex A9** (row index 8)
+- Uses the **top-left corner** of the A9 hex bounding box
+
+::
+
+    a9_x, a9_y = hex_to_world(0, 8)
+    origin_x = a9_x - HEX_W / 2
+    origin_y = a9_y - HEX_R
+
+Only the **Y origin** differs between S3 and S2.
+
+**No X correction is ever applied.**
+
+------------------------------------------------------------
+
+6. Scaling Rules
+----------------
+
+- Map scaling must follow grid scaling.
+- PNG pixel dimensions must never be interpreted as world geometry.
+
+Scaling occurs *after* anchoring in world space:
+
+::
+
+    screen_x = (world_x - camera_x) * zoom
+    screen_y = (world_y - camera_y) * zoom
+
+------------------------------------------------------------
+
+7. Forbidden Fixes (Regression Traps)
+------------------------------------
+
+The following modifications are **explicitly forbidden**:
+
+- Manual X-offset adjustments
+- Parity-based special-case offsets
+- Screen-space anchoring
+- Replacing hex geometry with pixel arithmetic
+- Mixing ``convert()`` and ``convert_alpha()``
+
+Any such change indicates a violation of core rendering principles.
+
+------------------------------------------------------------
+
+8. Debugging Checklist
+---------------------
+
+If terrain rendering appears incorrect:
+
+1. Confirm that **both maps are loaded using ``convert_alpha()``**
+2. Verify that S3 is anchored at hex A1
+3. Verify that S2 is anchored at hex A9
+4. Ensure no additional offsets have been introduced
+5. Inspect PNG files for dirty or premultiplied alpha channels
+
+If all checks pass, the issue is **not** in the rendering geometry.
+
+------------------------------------------------------------
+
+9. Final Note
+-------------
+
+This rendering issue initially appeared to be geometric, but its true
+cause was a combination of:
+
+- Incorrect alpha handling
+- Incorrect anchoring assumptions
+
+This document must be consulted **before any modification** to the
+rendering pipeline.
+
+✅ **Status**: Stable and correct

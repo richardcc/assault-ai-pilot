@@ -1,0 +1,57 @@
+Assault Engine Documentation
+============================
+
+Technical documentation of the Assault engine, including its
+architecture, core systems, rendering model, combat logic,
+and execution interfaces.
+
+This section is **fully independent** from the reinforcement learning
+curriculum and defines the **authoritative engine behavior** used
+throughout all experiments.
+
+The Assault engine is **fully deterministic** and serves as the single
+source of truth for game rules, state transitions, and execution order.
+
+The engine:
+- defines game rules and state transitions
+- executes turn-based tactical interactions
+- records full execution traces
+- exposes structured state data for visualization and evaluation
+
+It does NOT:
+- learn
+- optimize
+- infer strategies
+- depend on reinforcement learning components
+
+
+Architecture
+------------
+
+.. toctree::
+   :maxdepth: 1
+
+   architecture
+   engine_design_notes
+   replay_format
+
+
+Core Systems
+------------
+
+.. toctree::
+   :maxdepth: 1
+
+   core
+   serializer
+   viewer
+   evaluator
+
+
+Combat Model
+------------
+
+.. toctree::
+   :maxdepth: 1
+
+   combat

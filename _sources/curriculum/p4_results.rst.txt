@@ -1,0 +1,102 @@
+P4 – Symmetric Strategic Engagement (2 vs 2)
+============================================
+
+This document reports the results of **P4**, the first fully symmetric
+scenario in the assault‑env curriculum.
+
+P4 marks the transition from localized tactical optimization to genuine
+**strategic interaction**, where no trivial or universally safe policy
+dominates.
+
+---
+
+Scenario Description
+--------------------
+
+P4 introduces a **2 vs 2 symmetric engagement** under identical rules,
+terrain, and rewards as previous stages.
+
+- Two friendly units vs two enemy units
+- Identical unit types and strength
+- No reward shaping
+- No hyperparameter changes
+
+All additional complexity arises from symmetry and interaction alone.
+
+---
+
+Training Configuration
+----------------------
+
+- Algorithm: PPO
+- Policy: MultiInputPolicy
+- Observation space: P3
+- Total steps: ~1,000,000
+- Deterministic environment
+
+---
+
+Training Dynamics
+-----------------
+
+Training proceeds through alternating phases of consolidation and
+exploration.
+
+The value function does not converge monotonically but stabilizes within
+a bounded range, reflecting strategic ambiguity rather than instability.
+
+---
+
+Final Training Metrics
+----------------------
+
+At full convergence (~1M steps):
+
+- Explained variance: fluctuates between ~0.3 and ~0.6
+- Entropy remains non‑zero
+- PPO updates remain stable (low KL, controlled clipping)
+
+These signals indicate **functional convergence** under symmetry.
+
+---
+
+Behavioral Evaluation
+---------------------
+
+Greedy execution produces:
+
+- Conservative, repeatable behavior
+- No trivial aggression
+- Risk‑aware positioning
+
+Stochastic execution reveals:
+
+- Selective assaults
+- Victory point pressure
+- Multiple viable strategies
+
+Aggression exists within the policy distribution but is not dominant.
+
+---
+
+Interpretation
+--------------
+
+In symmetric strategic environments, no single greedy policy is
+universally optimal.
+
+P4 demonstrates:
+
+- Risk‑balanced decision making
+- Adaptability to opponent behavior
+- Avoidance of degenerate evasion
+
+This coexistence is interpreted as **strategic maturity**.
+
+---
+
+Curriculum Conclusion
+---------------------
+
+P4 fulfills its objectives and is **frozen** as a canonical curriculum
+stage.

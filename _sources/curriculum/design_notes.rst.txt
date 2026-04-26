@@ -1,0 +1,116 @@
+Design Notes
+============
+
+This document records the design decisions taken during the development
+of the assault‑env reinforcement learning curriculum.
+
+The objective is to make explicit *why* certain approaches were chosen
+or rejected, particularly when simpler alternatives were intentionally
+avoided.
+
+---
+
+Why No Reward Shaping
+---------------------
+
+Reward shaping was intentionally avoided beyond the minimal task
+definition established in P1.
+
+Although reward shaping can accelerate convergence, it often obscures
+the origin of observed behaviors by embedding designer intent directly
+into the optimization target.
+
+Instead, the curriculum relies on:
+
+- Structural changes (number of units, symmetry)
+- Informational changes (observation space)
+- Fixed learning algorithm (PPO)
+
+This ensures that behavioral transitions can be attributed to scenario
+structure rather than handcrafted incentives.
+
+---
+
+Why PPO Was Not Tuned
+--------------------
+
+PPO hyperparameters were kept constant across all curriculum stages.
+
+This choice ensures:
+
+- Direct behavioral comparability across P1–P4
+- Diagnostic clarity when failures occur
+- Avoidance of optimized but opaque behavior
+
+Learning stability was favored over maximal task performance.
+
+---
+
+Deterministic vs Stochastic Evaluation
+--------------------------------------
+
+Throughout the curriculum, greedy and stochastic execution are treated
+as complementary evaluation modes.
+
+In later stages (P3, P4):
+
+- Risky or aggressive actions exist in the policy distribution
+- These actions are not always selected greedily
+
+This divergence is interpreted as **strategic maturity**, not failure.
+
+---
+
+Interpreting Failure as Information
+-----------------------------------
+
+Certain curriculum stages are intentionally designed to fail under
+controlled conditions.
+
+For example:
+
+- P2 exhibits permanent evasion
+- This behavior is rational under incomplete information
+- The failure exposes a structural limitation
+
+Failures are preserved and documented rather than corrected directly.
+
+---
+
+Symmetry and Strategy
+--------------------
+
+In symmetric strategic environments:
+
+- No single greedy policy dominates universally
+- Outcomes depend on interaction and coordination
+- Value estimation becomes inherently noisier
+
+Behavioral analysis becomes more informative than scalar metrics.
+
+---
+
+Implicit vs Explicit Roles
+--------------------------
+
+Role differentiation is explored through **implicit emergence**, not
+explicit assignment.
+
+Minimal relational signals allow specialization *if* structure demands
+it.
+
+P4‑B demonstrates that ally‑centric information alone is insufficient
+to induce persistent roles under symmetry.
+
+---
+
+Summary
+-------
+
+Across the curriculum:
+
+- Changes are minimal and isolated
+- Rewards and algorithms remain fixed
+- Structure and information drive behavior
+
+The curriculum prioritizes interpretability over performance.

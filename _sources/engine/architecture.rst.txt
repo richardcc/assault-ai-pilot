@@ -1,0 +1,150 @@
+Architecture Overview
+=====================
+
+This document describes the high-level architecture of the Assault
+Engine and the design principles governing its internal structure.
+
+The engine is built around a **strict separation of concerns** to ensure
+determinism, testability, and long-term extensibility.
+
+Core Design Principles
+----------------------
+
+The Assault Engine enforces a clear division of responsibilities across
+independent layers:
+
+- **Mechanics** resolve atomic combat effects.
+- **Rules** interpret mechanics and determine outcomes.
+- **State** stores all map and unit data.
+- **Execution** applies rule decisions to the game state.
+
+No layer is permitted to bypass another. This constraint is enforced to
+prevent implicit coupling, hidden side effects, and non-deterministic
+behavior.
+
+Layered Architecture
+--------------------
+
+Mechanics Layer
+^^^^^^^^^^^^^^^
+
+The mechanics layer implements **pure, stateless logic**.
+
+Typical responsibilities include:
+
+- Close-combat resolution (e.g. ``CloseCombatResolver``)
+- Dice rolls and probability resolution
+- Hit cancellation
+- Damage calculation
+
+This layer has **no awareness** of:
+
+- Map geometry
+- Turn structure
+- Unit positions
+
+Given identical inputs, the mechanics layer always produces identical
+outputs and is therefore trivially unit-testable.
+
+Rule Layer
+^^^^^^^^^^
+
+The rule layer encodes **high-level game logic**.
+
+Representative responsibilities include:
+
+- ``AssaultAction`` resolution
+- Multi-round close combat handling
+- Stalemate detection
+- Retreat and advance decisions
+
+The rule layer does **not** directly modify the map, unit locations, or
+global game state. Instead, it produces explicit decisions to be
+interpreted by the execution layer.
+
+State Layer
+^^^^^^^^^^^
+
+The state layer is the **single source of truth** for the engine.
+
+It includes entities such as:
+
+- ``GameState``
+- ``Hex``
+- ``Unit``
+
+This layer stores all persistent data but is intentionally passive. It
+contains **no rule logic** and performs no implicit state transitions.
+
+Execution Layer
+^^^^^^^^^^^^^^^
+
+The execution layer is responsible for **applying rule outcomes to the
+state**.
+
+Its responsibilities are strictly limited to:
+
+- Interpreting rule decisions
+- Moving units on the map
+- Removing units when required
+- Updating the game state deterministically
+
+The execution layer does **not** contain decision logic. It implements
+state mutation exactly as specified by the rule layer.
+
+The ``AssaultExecutor`` is the canonical example of this layer and is the
+only component permitted to mutate game state.
+
+Determinism and Randomness
+--------------------------
+
+All stochasticity within the engine is handled explicitly via
+``random.Random`` instances.
+
+Global or implicit sources of randomness are **forbidden**.
+
+This design ensures that:
+
+- Identical seeds produce identical outcomes
+- Engine replays are fully reproducible
+- Learning agents observe consistent dynamics
+- Engine behavior is debuggable and auditable
+
+Interaction with Learning Agents
+--------------------------------
+
+The engine architecture is intentionally agnostic to learning
+algorithms.
+
+Agents interact with the engine exclusively through:
+
+- Explicit actions
+- Explicit observations of ``GameState``
+
+The engine does **not** assume:
+
+- Full-turn execution
+- Simultaneous unit actions
+- Symmetric or asymmetric agents
+
+This architectural neutrality is essential for supporting **sequential
+activation**, multi-unit policies, and emergent behaviors such as soft
+role allocation (SRT) without architectural bias.
+
+Architectural Stability
+-----------------------
+
+The separation between mechanics, rules, state, and execution has
+remained stable throughout the curriculum.
+
+No architectural changes were required to support:
+
+- Multi-unit interaction (P2–P4)
+- Global force awareness (P3)
+- Symmetric strategic engagement (P4)
+- Emergent soft role allocation (P4-B)
+
+This confirms that observed behavioral changes arise from **learning and
+information structure**, not from architectural intervention.
+
+**Status**: Stable and complete

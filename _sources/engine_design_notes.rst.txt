@@ -1,0 +1,41 @@
+Engine Design Notes 
+===================
+
+Reward Shaping
+--------------
+
+Rewards were intentionally left unchanged after P1.
+All behavior changes are driven by information availability,
+not incentive manipulation.
+
+Deterministic Evaluation
+------------------------
+
+Greedy policy evaluation masks learned stochastic behaviors.
+This was expected and confirmed via stochastic rollouts.
+
+Algorithm Stability
+-------------------
+
+PPO hyperparameters were kept constant throughout the curriculum
+to ensure behavioral differences arise from task structure alone.
+
+Curriculum Principle
+--------------------
+
+Each stage introduces exactly one new difficulty dimension.
+Local optima are resolved structurally, not by force.
+
+Rendering Architecture Reference
+--------------------------------
+
+All rules governing hex grid geometry, terrain map anchoring (S2 / S3),
+alpha handling, and rendering invariants are defined in the authoritative
+rendering documentation.
+
+See:
+
+:doc:`rendering/hex_map_rendering`
+
+This document must be consulted before any modification to rendering code
+in any module (engine, web viewer, or future renderers).

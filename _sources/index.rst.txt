@@ -1,0 +1,20 @@
+Assault‑Env Documentation
+=========================
+
+This documentation provides the **authoritative technical reference**
+for the Assault‑Env project.
+
+It covers the **system architecture**, the **engine design**, and the
+**reinforcement learning curriculum** used to study emergent coordination
+and soft role allocation (SRT) in deterministic tactical environments.
+
+The documentation reflects the final and validated state of the project.
+Supplementary material and private notes are intentionally excluded.
+
+.. toctree::
+   :maxdepth: 2
+   :caption: Contents:
+
+   architecture/index
+   engine/index
+   curriculum/index

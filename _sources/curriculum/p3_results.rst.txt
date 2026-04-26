@@ -1,0 +1,117 @@
+P3 – Global Force Awareness
+==========================
+
+This document reports the results of **P3**, the third stage of the
+assault‑env curriculum.
+
+P3 introduces **global force awareness** as a corrective mechanism to
+resolve the degenerate conservative behavior observed in P2.
+
+---
+
+Motivation
+----------
+
+In P2 (2 vs 1 without global information), the agent reliably converged
+to a safe but ineffective policy characterized by:
+
+- Constant movement
+- Maximum distance from the enemy
+- Zero assaults
+- Zero victory point pressure
+
+This behavior was stable and fully reproducible, indicating a **local
+optimum induced by incomplete information**, rather than a failure of
+the training process.
+
+---
+
+P3 Modification
+---------------
+
+P3 introduces **no reward shaping** and **no changes to the learning
+algorithm**.
+
+The only modification consists of extending the observation space with
+aggregate force information:
+
+- Total friendly strength
+- Total enemy strength
+
+This addition provides global situational context while preserving local
+action selection and full policy symmetry.
+
+---
+
+Training Results
+----------------
+
+After approximately 200,000 training steps, the learning process
+exhibits:
+
+- Explained variance stabilizing around approximately 0.4
+- Stable PPO update dynamics (low KL divergence, controlled clipping)
+- Gradual entropy reduction without policy collapse
+
+These metrics indicate that the value function incorporates the new
+global information coherently and that learning remains well‑behaved.
+
+---
+
+Behavioral Evaluation
+---------------------
+
+Deterministic (greedy) evaluation remains conservative.
+
+However, stochastic (non‑greedy) evaluation reveals qualitatively new
+behavioral patterns:
+
+- Reduced average distance to enemy units
+- Selective assault behavior
+- Intermittent pressure on victory point control
+- Non‑identical trajectories across episodes
+
+This indicates that aggressive and risky behaviors have entered the
+**policy distribution**, even if they are not yet selected as dominant
+outcomes under greedy execution.
+
+---
+
+Interpretation
+--------------
+
+P3 successfully resolves the local optimum observed in P2 by enabling
+**situational risk assessment** based on aggregate force awareness.
+
+However, P3 does not yet produce stable coordination or dominance:
+
+- Aggression becomes available but is not consistently preferred
+- Conservative greedy behavior remains rational
+- No single strategy dominates across all situations
+
+This outcome is expected, given the remaining asymmetry (2 vs 1) and the
+absence of explicit multi‑unit strategic interaction.
+
+---
+
+Curriculum Role
+---------------
+
+P3 is considered:
+
+- ✅ A successful corrective to the P2 failure mode
+- ✅ Behaviorally meaningful and reproducible
+- ✅ Informationally minimal
+
+P3 is deliberately **frozen** after validation.
+
+It serves as a **structural bridge** toward fully symmetric multi‑unit
+settings, where risk‑taking can no longer be avoided through trivial
+evasion.
+
+Final Note
+----------
+
+Final training confirmed that P3 behavior remains stable at full PPO
+convergence and that global force awareness is sufficient to escape the
+P2 local optimum without reward intervention.

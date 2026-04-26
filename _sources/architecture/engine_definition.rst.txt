@@ -1,0 +1,132 @@
+Engine Definition: Units and Scenarios
+======================================
+
+This document describes how **units** and **scenarios** define a concrete
+implementation of the Assault game engine.
+
+The engine layer is responsible for **simulation semantics only**.
+Visualization and explainability are handled by separate layers that
+consume engine output.
+
+Overview
+--------
+
+The Assault engine operates on a clear separation of concerns:
+
+- the engine defines *what exists* and *what happens*
+- replays store *what actually happened*
+- the viewer defines *how it is shown*
+
+Units and scenarios together define a **specific realization of the engine**.
+
+Engine Scope
+------------
+
+The engine is responsible for:
+
+- defining unit types and attributes
+- enforcing movement and combat rules
+- resolving game state transitions
+- producing authoritative game states
+
+The engine is **not** responsible for:
+
+- visual representation
+- sprite selection
+- rendering decisions
+- user interface logic
+
+Unit Definition
+---------------
+
+Units are defined by an explicit data model in the engine.
+
+The canonical unit structure is implemented in ``unit.py`` and includes:
+
+- a unique identifier (``unit_id``)
+- a unit type
+- experience level
+- combat attributes
+- current strength
+- map position
+- status flags
+
+This definition represents **game logic**, not presentation.
+
+Unit Rules and Parameters
+-------------------------
+
+Unit behavior parameters are defined in external data files, such as
+``units.json``.
+
+These files specify numerical and categorical rules, for example:
+
+- movement allowance
+- attack strength
+- defense values
+
+These parameters determine how a unit behaves **inside the engine**.
+
+They do **not** define:
+
+- how the unit is drawn
+- which sprite is used
+- how the unit appears in the viewer
+
+Scenario Definition
+-------------------
+
+Scenarios are defined as data configurations combining:
+
+- a set of units
+- initial unit positions
+- map layout
+- objectives and constraints
+
+Each scenario represents a **concrete instantiation of the engine rules**.
+
+Different scenarios may use the same unit definitions while producing
+different gameplay dynamics.
+
+Scenario data belongs exclusively to the engine layer.
+
+Replay as Engine Output
+-----------------------
+
+During execution, the engine produces a sequence of game states.
+
+These states are recorded in replay files, which include:
+
+- the complete set of alive units
+- their positions on the hex grid
+- the decisions executed at each step
+
+Replay files represent **ground truth** and must not be modified for
+visualization purposes.
+
+Visualization Responsibility
+----------------------------
+
+The visualization layer (web replay viewer):
+
+- consumes replay data
+- interprets engine-defined coordinates
+- maps semantic unit types to visual assets
+
+The viewer must adapt to the engine output.
+
+It is explicitly forbidden to adapt engine data to accommodate rendering.
+
+Design Principle
+----------------
+
+Units and scenarios define the **semantics of the simulation**.
+
+Visualization defines the **appearance of the simulation**.
+
+These layers must remain strictly separated to ensure:
+
+- correctness
+- reproducibility
+- explainability
+- maintainability

@@ -1,0 +1,66 @@
+Reinforcement Learning Curriculum
+=================================
+
+This section documents the **reinforcement learning curriculum**
+developed on top of the Assault engine.
+
+The curriculum follows a staged design, where each phase introduces
+exactly one new source of complexity while keeping all other elements
+stable.
+
+The objective is to study how increasingly complex behavior emerges
+from **structural changes**, rather than from reward shaping or
+hand-crafted control logic.
+
+
+Curriculum Overview
+-------------------
+
+.. toctree::
+   :maxdepth: 2
+
+   curriculum_overview
+   design_notes
+
+
+Experimental Results
+--------------------
+
+.. toctree::
+   :maxdepth: 2
+
+   p1_results
+   p2_results
+   p3_results
+   p4_results
+
+
+Analysis
+--------
+
+.. toctree::
+   :maxdepth: 2
+
+   analysis_report
+   behavior_stats
+   explainability
+   rationale_stats
+   replay_format
+
+
+Extensions
+----------
+
+.. toctree::
+   :maxdepth: 2
+
+   p4_soft_role_allocation
+
+
+Conclusion
+----------
+
+.. toctree::
+   :maxdepth: 1
+
+   curriculum_conclusion
