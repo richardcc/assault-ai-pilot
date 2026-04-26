@@ -1,0 +1,226 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Heuristic Baseline &mdash; Assault-Env Documentation  documentation</title>
+      <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=9edc463e" />
+
+  
+    <link rel="canonical" href="https://richardcc.github.io/assault-ai-pilot/engine/heuristic.html" />
+      <script src="../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../_static/documentation_options.js?v=5929fcd5"></script>
+      <script src="../_static/doctools.js?v=9bcbadda"></script>
+      <script src="../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script src="../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../index.html" class="icon icon-home">
+            Assault-Env Documentation
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="index.html">Assault Engine Documentation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../curriculum/index.html">Reinforcement Learning Curriculum</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../index.html">Assault-Env Documentation</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../index.html" class="icon icon-home" aria-label="Home"></a></li>
+      <li class="breadcrumb-item active">Heuristic Baseline</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="../_sources/engine/heuristic.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="heuristic-baseline">
+<h1>Heuristic Baseline<a class="headerlink" href="#heuristic-baseline" title="Link to this heading"></a></h1>
+<p>The heuristic is a <strong>deterministic, rule‑based baseline policy</strong>.</p>
+<p>It represents a minimal, hand‑crafted strategy used for
+comparison, validation, and analysis.</p>
+<p>The heuristic is <strong>not</strong> an optimal policy and does not define
+desired or correct behavior.</p>
+<p>—</p>
+<section id="purpose">
+<h2>Purpose<a class="headerlink" href="#purpose" title="Link to this heading"></a></h2>
+<p>The heuristic serves as a <strong>reference point</strong> for evaluation.</p>
+<p>Its main purposes are:</p>
+<ul class="simple">
+<li><p>provide a baseline for comparison with learned policies</p></li>
+<li><p>validate that environments and scenarios are solvable</p></li>
+<li><p>support debugging and sanity checks</p></li>
+<li><p>enable qualitative comparisons during analysis</p></li>
+</ul>
+<p>The heuristic allows answering questions such as:</p>
+<ul class="simple">
+<li><p>Is the learned policy strictly better than simple rules?</p></li>
+<li><p>Does reinforcement learning outperform a naive strategy?</p></li>
+<li><p>Where does the learned policy diverge from intuitive tactics?</p></li>
+</ul>
+<p>—</p>
+</section>
+<section id="characteristics">
+<h2>Characteristics<a class="headerlink" href="#characteristics" title="Link to this heading"></a></h2>
+<p>The heuristic is:</p>
+<ul class="simple">
+<li><p>deterministic</p></li>
+<li><p>non‑adaptive</p></li>
+<li><p>non‑learning</p></li>
+<li><p>rule‑based</p></li>
+<li><p>explicit in its logic</p></li>
+</ul>
+<p>It depends only on:</p>
+<ul class="simple">
+<li><p>the observable game state</p></li>
+<li><p>simple tactical rules</p></li>
+<li><p>local information</p></li>
+</ul>
+<p>It does NOT depend on:</p>
+<ul class="simple">
+<li><p>reward signals</p></li>
+<li><p>training history</p></li>
+<li><p>long‑term planning</p></li>
+<li><p>neural networks</p></li>
+<li><p>past episodes</p></li>
+</ul>
+<p>—</p>
+</section>
+<section id="role-in-the-system">
+<h2>Role in the System<a class="headerlink" href="#role-in-the-system" title="Link to this heading"></a></h2>
+<p>The heuristic participates in the system only as a:</p>
+<ul class="simple">
+<li><p>baseline policy</p></li>
+<li><p>comparison reference</p></li>
+<li><p>diagnostic tool</p></li>
+</ul>
+<p>The heuristic:</p>
+<ul class="simple">
+<li><p>does NOT influence training</p></li>
+<li><p>does NOT participate in PPO optimization</p></li>
+<li><p>does NOT act as ground truth</p></li>
+<li><p>does NOT supervise the agent</p></li>
+</ul>
+<p>Reinforcement learning is never trained to imitate the heuristic.</p>
+<p>—</p>
+</section>
+<section id="heuristic-vs-reinforcement-learning">
+<h2>Heuristic vs Reinforcement Learning<a class="headerlink" href="#heuristic-vs-reinforcement-learning" title="Link to this heading"></a></h2>
+<div class="line-block">
+<div class="line">Aspect | Heuristic | RL Policy |</div>
+</div>
+<p><a href="#id1"><span class="problematic" id="id2">|-------|</span></a>———–<a href="#id3"><span class="problematic" id="id4">|-----------|</span></a>
+| Adaptation | None | Learned |
+| Planning | Local, myopic | Emergent |
+| Generalization | Limited | Learned |
+| Flexibility | Fixed rules | Policy‑driven |
+| Explainability | Explicit rules | Learned rationales |</p>
+<p>The heuristic provides <strong>interpretability by design</strong>,
+while the RL policy provides <strong>interpretability via learned rationales</strong>.</p>
+<p>—</p>
+</section>
+<section id="heuristics-and-explainability">
+<h2>Heuristics and Explainability<a class="headerlink" href="#heuristics-and-explainability" title="Link to this heading"></a></h2>
+<p>Heuristic rationales may be inferred <strong>post‑hoc</strong> from state transitions.</p>
+<p>These inferred rationales:</p>
+<ul class="simple">
+<li><p>are deterministic</p></li>
+<li><p>reflect predefined rules</p></li>
+<li><p>are used only for comparison</p></li>
+</ul>
+<p>Learned rationales produced by the policy:</p>
+<ul class="simple">
+<li><p>are part of the model</p></li>
+<li><p>are learned end‑to‑end</p></li>
+<li><p>may diverge from heuristic explanations</p></li>
+</ul>
+<p>Comparing heuristic rationales with learned rationales enables:</p>
+<ul class="simple">
+<li><p>analysis of strategic differences</p></li>
+<li><p>detection of emergent behaviors</p></li>
+<li><p>identification of non‑intuitive solutions</p></li>
+</ul>
+<p>—</p>
+</section>
+<section id="design-principle">
+<h2>Design Principle<a class="headerlink" href="#design-principle" title="Link to this heading"></a></h2>
+<p>The heuristic defines <strong>what a simple agent would do</strong>.</p>
+<p>It does not define:
+- optimal play
+- correct strategy
+- learning targets</p>
+<p>The learned policy is free to outperform, ignore,
+or contradict the heuristic.</p>
+<p>This separation ensures:
+- clean experimentation
+- unbiased learning
+- meaningful evaluation</p>
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2026, Ricardo David Alba Atencia.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

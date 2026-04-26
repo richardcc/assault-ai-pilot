@@ -1,0 +1,220 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Engine Definition: Units and Scenarios &mdash; Assault-Env Documentation  documentation</title>
+      <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=9edc463e" />
+
+  
+    <link rel="canonical" href="https://richardcc.github.io/assault-ai-pilot/architecture/engine_definition.html" />
+      <script src="../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../_static/documentation_options.js?v=5929fcd5"></script>
+      <script src="../_static/doctools.js?v=9bcbadda"></script>
+      <script src="../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script src="../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../index.html" class="icon icon-home">
+            Assault-Env Documentation
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../engine/index.html">Assault Engine Documentation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../curriculum/index.html">Reinforcement Learning Curriculum</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../index.html">Assault-Env Documentation</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../index.html" class="icon icon-home" aria-label="Home"></a></li>
+      <li class="breadcrumb-item active">Engine Definition: Units and Scenarios</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="../_sources/architecture/engine_definition.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="engine-definition-units-and-scenarios">
+<h1>Engine Definition: Units and Scenarios<a class="headerlink" href="#engine-definition-units-and-scenarios" title="Link to this heading"></a></h1>
+<p>This document describes how <strong>units</strong> and <strong>scenarios</strong> define a concrete
+implementation of the Assault game engine.</p>
+<p>The engine layer is responsible for <strong>simulation semantics only</strong>.
+Visualization and explainability are handled by separate layers that
+consume engine output.</p>
+<section id="overview">
+<h2>Overview<a class="headerlink" href="#overview" title="Link to this heading"></a></h2>
+<p>The Assault engine operates on a clear separation of concerns:</p>
+<ul class="simple">
+<li><p>the engine defines <em>what exists</em> and <em>what happens</em></p></li>
+<li><p>replays store <em>what actually happened</em></p></li>
+<li><p>the viewer defines <em>how it is shown</em></p></li>
+</ul>
+<p>Units and scenarios together define a <strong>specific realization of the engine</strong>.</p>
+</section>
+<section id="engine-scope">
+<h2>Engine Scope<a class="headerlink" href="#engine-scope" title="Link to this heading"></a></h2>
+<p>The engine is responsible for:</p>
+<ul class="simple">
+<li><p>defining unit types and attributes</p></li>
+<li><p>enforcing movement and combat rules</p></li>
+<li><p>resolving game state transitions</p></li>
+<li><p>producing authoritative game states</p></li>
+</ul>
+<p>The engine is <strong>not</strong> responsible for:</p>
+<ul class="simple">
+<li><p>visual representation</p></li>
+<li><p>sprite selection</p></li>
+<li><p>rendering decisions</p></li>
+<li><p>user interface logic</p></li>
+</ul>
+</section>
+<section id="unit-definition">
+<h2>Unit Definition<a class="headerlink" href="#unit-definition" title="Link to this heading"></a></h2>
+<p>Units are defined by an explicit data model in the engine.</p>
+<p>The canonical unit structure is implemented in <code class="docutils literal notranslate"><span class="pre">unit.py</span></code> and includes:</p>
+<ul class="simple">
+<li><p>a unique identifier (<code class="docutils literal notranslate"><span class="pre">unit_id</span></code>)</p></li>
+<li><p>a unit type</p></li>
+<li><p>experience level</p></li>
+<li><p>combat attributes</p></li>
+<li><p>current strength</p></li>
+<li><p>map position</p></li>
+<li><p>status flags</p></li>
+</ul>
+<p>This definition represents <strong>game logic</strong>, not presentation.</p>
+</section>
+<section id="unit-rules-and-parameters">
+<h2>Unit Rules and Parameters<a class="headerlink" href="#unit-rules-and-parameters" title="Link to this heading"></a></h2>
+<p>Unit behavior parameters are defined in external data files, such as
+<code class="docutils literal notranslate"><span class="pre">units.json</span></code>.</p>
+<p>These files specify numerical and categorical rules, for example:</p>
+<ul class="simple">
+<li><p>movement allowance</p></li>
+<li><p>attack strength</p></li>
+<li><p>defense values</p></li>
+</ul>
+<p>These parameters determine how a unit behaves <strong>inside the engine</strong>.</p>
+<p>They do <strong>not</strong> define:</p>
+<ul class="simple">
+<li><p>how the unit is drawn</p></li>
+<li><p>which sprite is used</p></li>
+<li><p>how the unit appears in the viewer</p></li>
+</ul>
+</section>
+<section id="scenario-definition">
+<h2>Scenario Definition<a class="headerlink" href="#scenario-definition" title="Link to this heading"></a></h2>
+<p>Scenarios are defined as data configurations combining:</p>
+<ul class="simple">
+<li><p>a set of units</p></li>
+<li><p>initial unit positions</p></li>
+<li><p>map layout</p></li>
+<li><p>objectives and constraints</p></li>
+</ul>
+<p>Each scenario represents a <strong>concrete instantiation of the engine rules</strong>.</p>
+<p>Different scenarios may use the same unit definitions while producing
+different gameplay dynamics.</p>
+<p>Scenario data belongs exclusively to the engine layer.</p>
+</section>
+<section id="replay-as-engine-output">
+<h2>Replay as Engine Output<a class="headerlink" href="#replay-as-engine-output" title="Link to this heading"></a></h2>
+<p>During execution, the engine produces a sequence of game states.</p>
+<p>These states are recorded in replay files, which include:</p>
+<ul class="simple">
+<li><p>the complete set of alive units</p></li>
+<li><p>their positions on the hex grid</p></li>
+<li><p>the decisions executed at each step</p></li>
+</ul>
+<p>Replay files represent <strong>ground truth</strong> and must not be modified for
+visualization purposes.</p>
+</section>
+<section id="visualization-responsibility">
+<h2>Visualization Responsibility<a class="headerlink" href="#visualization-responsibility" title="Link to this heading"></a></h2>
+<p>The visualization layer (web replay viewer):</p>
+<ul class="simple">
+<li><p>consumes replay data</p></li>
+<li><p>interprets engine-defined coordinates</p></li>
+<li><p>maps semantic unit types to visual assets</p></li>
+</ul>
+<p>The viewer must adapt to the engine output.</p>
+<p>It is explicitly forbidden to adapt engine data to accommodate rendering.</p>
+</section>
+<section id="design-principle">
+<h2>Design Principle<a class="headerlink" href="#design-principle" title="Link to this heading"></a></h2>
+<p>Units and scenarios define the <strong>semantics of the simulation</strong>.</p>
+<p>Visualization defines the <strong>appearance of the simulation</strong>.</p>
+<p>These layers must remain strictly separated to ensure:</p>
+<ul class="simple">
+<li><p>correctness</p></li>
+<li><p>reproducibility</p></li>
+<li><p>explainability</p></li>
+<li><p>maintainability</p></li>
+</ul>
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2026, Ricardo David Alba Atencia.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

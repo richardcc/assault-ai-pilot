@@ -1,0 +1,179 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Architecture Overview &mdash; Assault-Env Documentation  documentation</title>
+      <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=9edc463e" />
+
+  
+    <link rel="canonical" href="https://richardcc.github.io/assault-ai-pilot/architecture/index.html" />
+      <script src="../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../_static/documentation_options.js?v=5929fcd5"></script>
+      <script src="../_static/doctools.js?v=9bcbadda"></script>
+      <script src="../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script src="../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../index.html" class="icon icon-home">
+            Assault-Env Documentation
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../engine/index.html">Assault Engine Documentation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../curriculum/index.html">Reinforcement Learning Curriculum</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../index.html">Assault-Env Documentation</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../index.html" class="icon icon-home" aria-label="Home"></a></li>
+      <li class="breadcrumb-item active">Architecture Overview</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="../_sources/architecture/index.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="architecture-overview">
+<h1>Architecture Overview<a class="headerlink" href="#architecture-overview" title="Link to this heading"></a></h1>
+<p>This section documents the <strong>system-level architecture</strong> of the Assault AI
+project, describing how decisions are defined, executed, recorded, and later
+analyzed or visualized.</p>
+<p>The focus is not on individual algorithms, but on <strong>causal structure</strong>:
+where decisions originate, how they are applied, how ground-truth data is
+captured, and how all downstream analysis remains aligned with executed
+behavior.</p>
+<p>The primary goals of this documentation are to make explicit:</p>
+<ul class="simple">
+<li><p>where decisions are computed</p></li>
+<li><p>where acting units are selected</p></li>
+<li><p>where explanatory information is captured</p></li>
+<li><p>where data is persisted as ground truth</p></li>
+<li><p>where offline analysis and visualization occur</p></li>
+</ul>
+<p>The architecture emphasizes <strong>causal alignment</strong> between the acting unit,
+the executed action, and any associated explanation or rationale.</p>
+<section id="separation-of-concerns">
+<h2>Separation of Concerns<a class="headerlink" href="#separation-of-concerns" title="Link to this heading"></a></h2>
+<p>The system is structured into clearly separated layers with strictly defined
+responsibilities:</p>
+<ul class="simple">
+<li><p><strong>Engine layer</strong>
+Defines game semantics, rules, deterministic state transitions, and replay
+generation.</p></li>
+<li><p><strong>Runner layer</strong>
+Executes policies, selects acting units, applies actions, and records
+decision metadata.</p></li>
+<li><p><strong>Replay layer</strong>
+Stores immutable, state-based ground truth describing world evolution.</p></li>
+<li><p><strong>Analysis layer</strong>
+Interprets replay data offline to study behavior, coordination patterns,
+and soft role allocation (SRT).</p></li>
+<li><p><strong>Rendering layer</strong>
+Visualizes replay data without mutating or inferring state.</p></li>
+</ul>
+<p>No layer is permitted to infer, reconstruct, or modify information owned by
+another layer. All communication occurs through explicit data artifacts.</p>
+</section>
+<section id="architecture-documents">
+<h2>Architecture Documents<a class="headerlink" href="#architecture-documents" title="Link to this heading"></a></h2>
+<p>The following documents define the <strong>system-level architectural contracts</strong>
+and data flows used across all subsystems:</p>
+<div class="toctree-wrapper compound">
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="engine_definition.html">Engine Definition: Units and Scenarios</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="engine_definition.html#overview">Overview</a></li>
+<li class="toctree-l2"><a class="reference internal" href="engine_definition.html#engine-scope">Engine Scope</a></li>
+<li class="toctree-l2"><a class="reference internal" href="engine_definition.html#unit-definition">Unit Definition</a></li>
+<li class="toctree-l2"><a class="reference internal" href="engine_definition.html#unit-rules-and-parameters">Unit Rules and Parameters</a></li>
+<li class="toctree-l2"><a class="reference internal" href="engine_definition.html#scenario-definition">Scenario Definition</a></li>
+<li class="toctree-l2"><a class="reference internal" href="engine_definition.html#replay-as-engine-output">Replay as Engine Output</a></li>
+<li class="toctree-l2"><a class="reference internal" href="engine_definition.html#visualization-responsibility">Visualization Responsibility</a></li>
+<li class="toctree-l2"><a class="reference internal" href="engine_definition.html#design-principle">Design Principle</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="rationale_flow.html">Rationale Flow</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="rationale_flow.html#high-level-flow">High-Level Flow</a></li>
+<li class="toctree-l2"><a class="reference internal" href="rationale_flow.html#key-properties">Key Properties</a></li>
+<li class="toctree-l2"><a class="reference internal" href="rationale_flow.html#design-choice">Design Choice</a></li>
+<li class="toctree-l2"><a class="reference internal" href="rationale_flow.html#layer-responsibilities">Layer Responsibilities</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="generated_artifacts.html">Generated Architecture Artifacts</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="generated_artifacts.html#dependency-graph">Dependency Graph</a></li>
+<li class="toctree-l2"><a class="reference internal" href="generated_artifacts.html#call-graph">Call Graph</a></li>
+<li class="toctree-l2"><a class="reference internal" href="generated_artifacts.html#important-limitations">Important Limitations</a></li>
+<li class="toctree-l2"><a class="reference internal" href="generated_artifacts.html#design-principle">Design Principle</a></li>
+</ul>
+</li>
+</ul>
+</div>
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2026, Ricardo David Alba Atencia.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

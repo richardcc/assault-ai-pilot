@@ -1,0 +1,136 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="./">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Engine Design Notes &mdash; Assault-Env Documentation  documentation</title>
+      <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="_static/css/theme.css?v=9edc463e" />
+
+  
+      <script src="_static/jquery.js?v=5d32c60e"></script>
+      <script src="_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="_static/documentation_options.js?v=5929fcd5"></script>
+      <script src="_static/doctools.js?v=9bcbadda"></script>
+      <script src="_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script src="_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="index.html" class="icon icon-home">
+            Assault-Env Documentation
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="engine/index.html">Assault Engine Documentation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="curriculum/index.html">Reinforcement Learning Curriculum</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="index.html">Assault-Env Documentation</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="index.html" class="icon icon-home" aria-label="Home"></a></li>
+      <li class="breadcrumb-item active">Engine Design Notes</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="_sources/engine_design_notes.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="engine-design-notes">
+<h1>Engine Design Notes<a class="headerlink" href="#engine-design-notes" title="Link to this heading"></a></h1>
+<section id="reward-shaping">
+<h2>Reward Shaping<a class="headerlink" href="#reward-shaping" title="Link to this heading"></a></h2>
+<p>Rewards were intentionally left unchanged after P1.
+All behavior changes are driven by information availability,
+not incentive manipulation.</p>
+</section>
+<section id="deterministic-evaluation">
+<h2>Deterministic Evaluation<a class="headerlink" href="#deterministic-evaluation" title="Link to this heading"></a></h2>
+<p>Greedy policy evaluation masks learned stochastic behaviors.
+This was expected and confirmed via stochastic rollouts.</p>
+</section>
+<section id="algorithm-stability">
+<h2>Algorithm Stability<a class="headerlink" href="#algorithm-stability" title="Link to this heading"></a></h2>
+<p>PPO hyperparameters were kept constant throughout the curriculum
+to ensure behavioral differences arise from task structure alone.</p>
+</section>
+<section id="curriculum-principle">
+<h2>Curriculum Principle<a class="headerlink" href="#curriculum-principle" title="Link to this heading"></a></h2>
+<p>Each stage introduces exactly one new difficulty dimension.
+Local optima are resolved structurally, not by force.</p>
+</section>
+<section id="rendering-architecture-reference">
+<h2>Rendering Architecture Reference<a class="headerlink" href="#rendering-architecture-reference" title="Link to this heading"></a></h2>
+<p>All rules governing hex grid geometry, terrain map anchoring (S2 / S3),
+alpha handling, and rendering invariants are defined in the authoritative
+rendering documentation.</p>
+<p>See:</p>
+<p><a class="reference internal" href="rendering/hex_map_rendering.html"><span class="doc">Hex Grid Map Rendering – Design Notes</span></a></p>
+<p>This document must be consulted before any modification to rendering code
+in any module (engine, web viewer, or future renderers).</p>
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2026, Ricardo David Alba Atencia.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

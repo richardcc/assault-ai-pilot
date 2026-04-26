@@ -1,0 +1,201 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Rationale Flow &mdash; Assault-Env Documentation  documentation</title>
+      <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=9edc463e" />
+
+  
+    <link rel="canonical" href="https://richardcc.github.io/assault-ai-pilot/architecture/rationale_flow.html" />
+      <script src="../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../_static/documentation_options.js?v=5929fcd5"></script>
+      <script src="../_static/doctools.js?v=9bcbadda"></script>
+      <script src="../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script src="../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../index.html" class="icon icon-home">
+            Assault-Env Documentation
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../engine/index.html">Assault Engine Documentation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../curriculum/index.html">Reinforcement Learning Curriculum</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../index.html">Assault-Env Documentation</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../index.html" class="icon icon-home" aria-label="Home"></a></li>
+      <li class="breadcrumb-item active">Rationale Flow</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="../_sources/architecture/rationale_flow.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="rationale-flow">
+<h1>Rationale Flow<a class="headerlink" href="#rationale-flow" title="Link to this heading"></a></h1>
+<p>This document describes how <strong>rationales</strong> flow through the system,
+from neural computation to persistent replay data and offline analysis.</p>
+<p>The key design goal is to ensure <strong>causal alignment</strong> between:</p>
+<ul class="simple">
+<li><p>the acting unit</p></li>
+<li><p>the executed action</p></li>
+<li><p>the learned rationale</p></li>
+</ul>
+<section id="high-level-flow">
+<h2>High-Level Flow<a class="headerlink" href="#high-level-flow" title="Link to this heading"></a></h2>
+<p>The rationale flow for every decision step is:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>observation
+     ↓
+policy.forward(observation)
+     ↓
+rationale logits (tensor)
+     ↓
+argmax → rationale_id (int)
+     ↓
+env.step(action)
+     ↓
+info[&quot;unit_id&quot;]  (acting unit)
+     ↓
+snapshot(state, decision)
+     ↓
+Replay (json)
+     ↓
+Offline Analysis
+</pre></div>
+</div>
+</section>
+<section id="key-properties">
+<h2>Key Properties<a class="headerlink" href="#key-properties" title="Link to this heading"></a></h2>
+<ul class="simple">
+<li><p>Rationale logits exist <strong>only during policy.forward()</strong></p></li>
+<li><p>Stable-Baselines3 does NOT expose them via <code class="docutils literal notranslate"><span class="pre">model.predict()</span></code></p></li>
+<li><p>Rationales are extracted <strong>at decision time</strong></p></li>
+<li><p>Rationales are never inferred post-hoc</p></li>
+<li><p>The environment is the only component that knows which unit acted</p></li>
+</ul>
+</section>
+<section id="design-choice">
+<h2>Design Choice<a class="headerlink" href="#design-choice" title="Link to this heading"></a></h2>
+<p>Rationales are captured during <strong>manual step-by-step execution</strong>.
+The system deliberately avoids using <code class="docutils literal notranslate"><span class="pre">model.learn()</span></code> or callbacks.</p>
+<p>Reason:</p>
+<ul class="simple">
+<li><p>Training loops do not expose per-step decisions</p></li>
+<li><p>Callbacks do not provide reliable actor–action alignment</p></li>
+<li><p>Manual execution guarantees full control over decision capture</p></li>
+</ul>
+</section>
+<section id="layer-responsibilities">
+<h2>Layer Responsibilities<a class="headerlink" href="#layer-responsibilities" title="Link to this heading"></a></h2>
+<section id="policy">
+<h3>Policy<a class="headerlink" href="#policy" title="Link to this heading"></a></h3>
+<ul class="simple">
+<li><p>computes rationale logits during <code class="docutils literal notranslate"><span class="pre">forward()</span></code></p></li>
+<li><p>does not store or serialize them</p></li>
+<li><p>remains stateless with respect to explanation</p></li>
+</ul>
+</section>
+<section id="rl-runner">
+<h3>RL Runner<a class="headerlink" href="#rl-runner" title="Link to this heading"></a></h3>
+<ul class="simple">
+<li><p>executes the policy step by step</p></li>
+<li><p>calls <code class="docutils literal notranslate"><span class="pre">policy.forward()</span></code> for rationale logits</p></li>
+<li><p>calls <code class="docutils literal notranslate"><span class="pre">policy.predict()</span></code> for actions</p></li>
+<li><p>reads <code class="docutils literal notranslate"><span class="pre">info[&quot;unit_id&quot;]</span></code> from the environment</p></li>
+<li><p>assembles decision records</p></li>
+</ul>
+</section>
+<section id="environment">
+<h3>Environment<a class="headerlink" href="#environment" title="Link to this heading"></a></h3>
+<ul class="simple">
+<li><p>decides which unit acts each turn</p></li>
+<li><p>applies the chosen action</p></li>
+<li><p>emits the acting unit via <code class="docutils literal notranslate"><span class="pre">info[&quot;unit_id&quot;]</span></code></p></li>
+</ul>
+</section>
+<section id="replay-system">
+<h3>Replay System<a class="headerlink" href="#replay-system" title="Link to this heading"></a></h3>
+<ul class="simple">
+<li><p>stores decisions exactly as recorded</p></li>
+<li><p>does not interpret actions or rationales</p></li>
+<li><p>represents ground truth for analysis</p></li>
+</ul>
+</section>
+<section id="offline-analysis">
+<h3>Offline Analysis<a class="headerlink" href="#offline-analysis" title="Link to this heading"></a></h3>
+<ul class="simple">
+<li><p>reads stored rationale identifiers</p></li>
+</ul>
+</section>
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2026, Ricardo David Alba Atencia.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

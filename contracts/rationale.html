@@ -1,0 +1,220 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Rationale Contract &mdash; Assault-Env Documentation  documentation</title>
+      <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=9edc463e" />
+
+  
+      <script src="../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../_static/documentation_options.js?v=5929fcd5"></script>
+      <script src="../_static/doctools.js?v=9bcbadda"></script>
+      <script src="../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script src="../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../index.html" class="icon icon-home">
+            Assault-Env Documentation
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../engine/index.html">Assault Engine Documentation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../curriculum/index.html">Reinforcement Learning Curriculum</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../index.html">Assault-Env Documentation</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../index.html" class="icon icon-home" aria-label="Home"></a></li>
+      <li class="breadcrumb-item active">Rationale Contract</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="../_sources/contracts/rationale.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="rationale-contract">
+<h1>Rationale Contract<a class="headerlink" href="#rationale-contract" title="Link to this heading"></a></h1>
+<p>This document defines the <strong>contract for rationales</strong> used in the Assault
+explainable reinforcement learning system.</p>
+<p>A rationale is a symbolic explanation associated with a concrete decision
+executed by a specific unit at runtime.</p>
+<section id="definition">
+<h2>Definition<a class="headerlink" href="#definition" title="Link to this heading"></a></h2>
+<p>A <strong>rationale</strong> is a discrete semantic label representing
+the agent’s tactical intention <strong>at decision time</strong>.</p>
+<p>It is stored as an integer identifier that maps to the canonical
+<code class="docutils literal notranslate"><span class="pre">Rationale</span></code> enumeration.</p>
+<p>A rationale exists only in relation to:
+- a specific acting unit
+- a specific executed action
+- a specific environment step</p>
+</section>
+<section id="what-a-rationale-is">
+<h2>What a Rationale Is<a class="headerlink" href="#what-a-rationale-is" title="Link to this heading"></a></h2>
+<p>A rationale is:</p>
+<ul class="simple">
+<li><p>a symbolic category produced by the policy</p></li>
+<li><p>a discrete integer value</p></li>
+<li><p>aligned with an executed action</p></li>
+<li><p>aligned with the acting unit</p></li>
+<li><p>stable and serializable</p></li>
+<li><p>suitable for statistical analysis</p></li>
+</ul>
+</section>
+<section id="what-a-rationale-is-not">
+<h2>What a Rationale Is NOT<a class="headerlink" href="#what-a-rationale-is-not" title="Link to this heading"></a></h2>
+<p>A rationale is <strong>not</strong>:</p>
+<ul class="simple">
+<li><p>an internal thought or belief</p></li>
+<li><p>a long-term plan</p></li>
+<li><p>a post-hoc inferred explanation</p></li>
+<li><p>a value reconstructed later</p></li>
+<li><p>a value obtained from <code class="docutils literal notranslate"><span class="pre">model.predict()</span></code></p></li>
+</ul>
+<p>Rationales must never be guessed, inferred, or retroactively assigned.</p>
+</section>
+<section id="where-it-is-computed">
+<h2>Where It Is Computed<a class="headerlink" href="#where-it-is-computed" title="Link to this heading"></a></h2>
+<p>Rationales are computed by the policy during forward evaluation:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>policy.forward(observation)
+     → rationale logits
+     → argmax → rationale_id
+</pre></div>
+</div>
+<p>The rationale logits exist only transiently during this computation.</p>
+</section>
+<section id="where-it-is-captured">
+<h2>Where It Is Captured<a class="headerlink" href="#where-it-is-captured" title="Link to this heading"></a></h2>
+<p>Rationales are captured <strong>explicitly at decision time</strong> by the RL runner.</p>
+<p>The capture procedure is:</p>
+<ul class="simple">
+<li><p>call <code class="docutils literal notranslate"><span class="pre">policy.forward()</span></code> to obtain rationale logits</p></li>
+<li><p>convert logits to a discrete identifier</p></li>
+<li><p>associate the identifier with the chosen action</p></li>
+<li><p>associate the identifier with the acting unit</p></li>
+</ul>
+<p>The system does not rely on training callbacks or learning loops
+for rationale capture.</p>
+</section>
+<section id="where-it-is-stored">
+<h2>Where It Is Stored<a class="headerlink" href="#where-it-is-stored" title="Link to this heading"></a></h2>
+<p>Rationales are stored as part of the replay data.</p>
+<p>They appear inside the decision structure:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="p">{</span>
+  <span class="s2">&quot;unit_id&quot;</span><span class="p">:</span> <span class="s2">&quot;IT_1&quot;</span><span class="p">,</span>
+  <span class="s2">&quot;action&quot;</span><span class="p">:</span> <span class="mi">4</span><span class="p">,</span>
+  <span class="s2">&quot;learned_rationale&quot;</span><span class="p">:</span> <span class="mi">0</span><span class="p">,</span>
+  <span class="s2">&quot;heuristic_rationale&quot;</span><span class="p">:</span> <span class="n">null</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+<p>Only the integer identifier is stored.
+Semantic interpretation is deferred.</p>
+</section>
+<section id="where-it-is-interpreted">
+<h2>Where It Is Interpreted<a class="headerlink" href="#where-it-is-interpreted" title="Link to this heading"></a></h2>
+<p>Rationales are interpreted <strong>only during offline analysis</strong>.</p>
+<p>Interpretation may include:</p>
+<ul class="simple">
+<li><p>mapping identifiers to semantic labels</p></li>
+<li><p>computing distributions and statistics</p></li>
+<li><p>correlating actions and intentions</p></li>
+<li><p>generating reports and visualizations</p></li>
+</ul>
+<p>Offline analysis must never alter or recompute rationales.</p>
+</section>
+<section id="actor-alignment-requirement">
+<h2>Actor Alignment Requirement<a class="headerlink" href="#actor-alignment-requirement" title="Link to this heading"></a></h2>
+<p>Every rationale must be aligned with a concrete acting unit.</p>
+<p>The acting unit is defined as:
+- the unit selected by the environment to act
+- exposed via <code class="docutils literal notranslate"><span class="pre">info[&quot;unit_id&quot;]</span></code> in <code class="docutils literal notranslate"><span class="pre">env.step()</span></code></p>
+<p>A rationale without a known acting unit is considered invalid.</p>
+</section>
+<section id="anti-patterns">
+<h2>Anti-Patterns<a class="headerlink" href="#anti-patterns" title="Link to this heading"></a></h2>
+<p>The following practices are explicitly forbidden:</p>
+<ul class="simple">
+<li><p>inferring rationales from environment states</p></li>
+<li><p>reconstructing rationales after execution</p></li>
+<li><p>reading rationales from policy attributes</p></li>
+<li><p>computing rationales during offline analysis</p></li>
+<li><p>assigning rationales without an acting unit</p></li>
+</ul>
+<p>All rationales must be captured causally and recorded verbatim.</p>
+</section>
+<section id="canonical-rule">
+<h2>Canonical Rule<a class="headerlink" href="#canonical-rule" title="Link to this heading"></a></h2>
+<p><strong>If a rationale is not captured at the exact moment
+a decision is executed by a specific unit,
+it must be considered non-existent.</strong></p>
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2026, Ricardo David Alba Atencia.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

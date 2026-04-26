@@ -1,0 +1,207 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>P4-B – Soft Role Allocation under Minimal Relational Information &mdash; Assault-Env Documentation  documentation</title>
+      <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=9edc463e" />
+
+  
+    <link rel="canonical" href="https://richardcc.github.io/assault-ai-pilot/curriculum/p4_soft_role_allocation.html" />
+      <script src="../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../_static/documentation_options.js?v=5929fcd5"></script>
+      <script src="../_static/doctools.js?v=9bcbadda"></script>
+      <script src="../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script src="../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../index.html" class="icon icon-home">
+            Assault-Env Documentation
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../engine/index.html">Assault Engine Documentation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="index.html">Reinforcement Learning Curriculum</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../index.html">Assault-Env Documentation</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../index.html" class="icon icon-home" aria-label="Home"></a></li>
+      <li class="breadcrumb-item active">P4-B – Soft Role Allocation under Minimal Relational Information</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="../_sources/curriculum/p4_soft_role_allocation.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="p4-b-soft-role-allocation-under-minimal-relational-information">
+<h1>P4-B – Soft Role Allocation under Minimal Relational Information<a class="headerlink" href="#p4-b-soft-role-allocation-under-minimal-relational-information" title="Link to this heading"></a></h1>
+<p>This document reports the results of <strong>P4-B</strong>, an exploratory extension
+of the symmetric 2 vs 2 scenario (P4) designed to study <strong>soft role
+allocation</strong> (SRT) under minimal relational information.</p>
+<p>P4-B does not modify rewards, PPO hyperparameters, or environment
+dynamics. The only intervention consists of introducing limited
+ally-centric observations.</p>
+<p>—</p>
+<section id="motivation">
+<h2>Motivation<a class="headerlink" href="#motivation" title="Link to this heading"></a></h2>
+<p>In the baseline P4 setting (2 vs 2 symmetric), the learned policy
+exhibits strategic maturity without collapsing into trivial evasion
+or forced aggression.</p>
+<p>However, no persistent coordination roles emerge, and the deterministic
+(greedy) policy remains strongly conservative.</p>
+<p>P4-B investigates whether <strong>minimal relational information</strong> is
+sufficient to induce role-like differentiation <em>without</em> explicit role
+assignment, asymmetry, or reward shaping.</p>
+<p>—</p>
+</section>
+<section id="observation-extension">
+<h2>Observation Extension<a class="headerlink" href="#observation-extension" title="Link to this heading"></a></h2>
+<p>Two additional observation fields are added to the P4 state space:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">ally_distance</span></code>:
+Manhattan distance to the nearest friendly unit.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">ally_strength_diff</span></code>:
+Difference between the agent’s current strength and the ally’s
+strength.</p></li>
+</ul>
+<p>No explicit role labels, asymmetries, or incentive modifications are
+introduced.</p>
+<p>—</p>
+</section>
+<section id="training-results">
+<h2>Training Results<a class="headerlink" href="#training-results" title="Link to this heading"></a></h2>
+<p>P4-B is trained for approximately 200,000 steps using the same PPO
+configuration as P4.</p>
+<p>Training dynamics remain stable throughout:</p>
+<ul class="simple">
+<li><p>Low KL divergence</p></li>
+<li><p>No clipping saturation</p></li>
+<li><p>Moderate policy entropy</p></li>
+<li><p>No policy collapse or oscillatory behavior</p></li>
+</ul>
+<p>The value function does not converge to a stable explanatory regime,
+and explained variance remains low or negative, consistent with high
+return variability and weak state-value predictability.</p>
+<p>—</p>
+</section>
+<section id="greedy-vs-stochastic-evaluation">
+<h2>Greedy vs Stochastic Evaluation<a class="headerlink" href="#greedy-vs-stochastic-evaluation" title="Link to this heading"></a></h2>
+<p>Deterministic (greedy) evaluation yields:</p>
+<ul class="simple">
+<li><p>Fully reproducible behavior</p></li>
+<li><p>Zero assaults across episodes</p></li>
+<li><p>Stable control of minimal victory points</p></li>
+<li><p>Mean enemy distance of approximately 5.5 hexes</p></li>
+</ul>
+<p>Stochastic (non-greedy) evaluation reveals:</p>
+<ul class="simple">
+<li><p>Occasional assaults (0–3 per episode)</p></li>
+<li><p>Reduced mean enemy distance (approximately 3–4 hexes)</p></li>
+<li><p>Variable victory point outcomes</p></li>
+<li><p>High inter-episode variability</p></li>
+</ul>
+<p>This contrast indicates that aggressive and coordinating behaviors
+<em>exist within the policy distribution</em>, but are not selected as dominant
+actions by the greedy policy.</p>
+<p>—</p>
+</section>
+<section id="interpretation">
+<h2>Interpretation<a class="headerlink" href="#interpretation" title="Link to this heading"></a></h2>
+<p>The results indicate that:</p>
+<ul class="simple">
+<li><p>Minimal relational information enables <strong>flexible, situational
+coordination</strong></p></li>
+<li><p>Role-like behaviors remain transient and context-dependent</p></li>
+<li><p>No stable or persistent role specialization emerges</p></li>
+<li><p>Conservative greedy behavior remains rational under symmetric
+conditions</p></li>
+</ul>
+<p>These findings suggest that, in symmetric strategic environments,
+adaptive coordination is favored over rigid or persistent role
+allocation.</p>
+<p>—</p>
+</section>
+<section id="curriculum-conclusion">
+<h2>Curriculum Conclusion<a class="headerlink" href="#curriculum-conclusion" title="Link to this heading"></a></h2>
+<p>P4-B demonstrates that <strong>soft role allocation cannot be assumed</strong>
+from ally-centric information alone.</p>
+<p>The experiment is therefore considered:</p>
+<ul class="simple">
+<li><p>✅ Methodologically sound</p></li>
+<li><p>✅ Behaviorally informative</p></li>
+<li><p>✅ Negative in outcome, but conclusive</p></li>
+</ul>
+<p>P4-B is frozen as an exploratory curriculum extension.</p>
+<p>Inducing persistent role specialization would require additional
+asymmetry or task-level pressure, which lies outside the scope of the
+present curriculum.</p>
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2026, Ricardo David Alba Atencia.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

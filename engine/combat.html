@@ -1,0 +1,423 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Attack Types Overview &mdash; Assault-Env Documentation  documentation</title>
+      <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=9edc463e" />
+
+  
+    <link rel="canonical" href="https://richardcc.github.io/assault-ai-pilot/engine/combat.html" />
+      <script src="../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../_static/documentation_options.js?v=5929fcd5"></script>
+      <script src="../_static/doctools.js?v=9bcbadda"></script>
+      <script src="../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script src="../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="next" title="Reinforcement Learning Curriculum" href="../curriculum/index.html" />
+    <link rel="prev" title="Core Components" href="core.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../index.html" class="icon icon-home">
+            Assault-Env Documentation
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul class="current">
+<li class="toctree-l1 current"><a class="reference internal" href="index.html">Assault Engine Documentation</a><ul class="current">
+<li class="toctree-l2"><a class="reference internal" href="architecture.html">Architecture Overview</a></li>
+<li class="toctree-l2"><a class="reference internal" href="core.html">Core Components</a></li>
+<li class="toctree-l2 current"><a class="current reference internal" href="#">Attack Types Overview</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#close-combat-assault">Close Combat (Assault)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#direct-ranged-fire-drf">Direct Ranged Fire (DRF)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#reaction-opportunity-fire">Reaction / Opportunity Fire</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#reaction-fire-and-zoc-integration">Reaction Fire and ZOC Integration</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#indirect-fire-planned">Indirect Fire (Planned)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#design-notes">Design Notes</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#basic-movement">Basic Movement</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#definition">Definition</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#movement-rules">Movement Rules</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#interaction-with-other-systems">Interaction with Other Systems</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#design-rationale">Design Rationale</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#current-status">Current Status</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#assault-rules">Assault Rules</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#id1">Definition</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#assault-flow">Assault Flow</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#outcomes">Outcomes</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#defender-eliminated">Defender Eliminated</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#attacker-eliminated">Attacker Eliminated</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#both-eliminated">Both Eliminated</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#defender-retreats">Defender Retreats</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#stalemate">Stalemate</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="#design-rules">Design Rules</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#current-development-status">Current Development Status</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#next-steps">Next Steps</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#stopping-point">Stopping Point</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../curriculum/index.html">Reinforcement Learning Curriculum</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../index.html">Assault-Env Documentation</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="index.html">Assault Engine Documentation</a></li>
+      <li class="breadcrumb-item active">Attack Types Overview</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="../_sources/engine/combat.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="attack-types-overview">
+<h1>Attack Types Overview<a class="headerlink" href="#attack-types-overview" title="Link to this heading"></a></h1>
+<p>The combat system is composed of several distinct attack types.
+Each attack type represents a different tactical situation and is
+implemented using the same architectural pattern:</p>
+<ul class="simple">
+<li><p>Mechanics (resolver)</p></li>
+<li><p>Rules (action)</p></li>
+<li><p>Map effects (executor)</p></li>
+</ul>
+<p>This allows attack types to share core logic while remaining
+independent, testable, and extensible.</p>
+<section id="close-combat-assault">
+<h2>Close Combat (Assault)<a class="headerlink" href="#close-combat-assault" title="Link to this heading"></a></h2>
+<p>Close combat represents direct engagement between adjacent units.</p>
+<p>Characteristics:</p>
+<ul class="simple">
+<li><p>Units must be adjacent</p></li>
+<li><p>Combat is resolved in one or more rounds</p></li>
+<li><p>Outcomes may include retreat, advance, or stalemate</p></li>
+<li><p>Map position is modified as a result of the combat</p></li>
+</ul>
+<p>This attack type is fully implemented.</p>
+</section>
+<section id="direct-ranged-fire-drf">
+<h2>Direct Ranged Fire (DRF)<a class="headerlink" href="#direct-ranged-fire-drf" title="Link to this heading"></a></h2>
+<p>Direct ranged fire represents planned firing at a distance.</p>
+<p>Characteristics:</p>
+<ul class="simple">
+<li><p>Requires a target within weapon range</p></li>
+<li><p>Requires line of sight (currently minimal)</p></li>
+<li><p>Resolved in a single step (no rounds)</p></li>
+<li><p>May cause damage and suppression</p></li>
+<li><p>Does not move units on the map</p></li>
+</ul>
+<p>This attack type is implemented with a minimal visibility model.</p>
+</section>
+<section id="reaction-opportunity-fire">
+<h2>Reaction / Opportunity Fire<a class="headerlink" href="#reaction-opportunity-fire" title="Link to this heading"></a></h2>
+<p>Reaction fire represents automatic firing triggered by enemy actions,
+such as movement, retreat, or advance.</p>
+<p>Characteristics:</p>
+<ul class="simple">
+<li><p>Not initiated as a player action</p></li>
+<li><p>Triggered by other actions</p></li>
+<li><p>Uses Direct Ranged Fire mechanics</p></li>
+<li><p>May involve multiple reacting units</p></li>
+<li><p>Never allows self-targeting</p></li>
+</ul>
+<p>This attack type is implemented as a trigger system layered on top of
+Direct Ranged Fire.</p>
+</section>
+<section id="reaction-fire-and-zoc-integration">
+<h2>Reaction Fire and ZOC Integration<a class="headerlink" href="#reaction-fire-and-zoc-integration" title="Link to this heading"></a></h2>
+<p>Reaction Fire is spatially gated by Zones of Control (ZOC).</p>
+<p>A unit only triggers Reaction / Opportunity Fire if it is located
+inside an enemy Zone of Control.</p>
+<p>This means:</p>
+<ul class="simple">
+<li><p>Reaction Fire never occurs at arbitrary distance</p></li>
+<li><p>Reaction Fire represents close-range tactical threat</p></li>
+<li><p>Zones of Control act as the spatial condition for reaction triggers</p></li>
+</ul>
+<p>The actual firing resolution is still performed using Direct Ranged Fire
+mechanics.</p>
+<p>ZOC affects <em>when</em> reaction fire may occur, not <em>how</em> combat is resolved.</p>
+</section>
+<section id="indirect-fire-planned">
+<h2>Indirect Fire (Planned)<a class="headerlink" href="#indirect-fire-planned" title="Link to this heading"></a></h2>
+<p>Indirect fire represents artillery and mortar attacks.</p>
+<p>Characteristics:</p>
+<ul class="simple">
+<li><p>Does not require direct line of sight</p></li>
+<li><p>May affect an area rather than a single unit</p></li>
+<li><p>Typically does not cause unit movement</p></li>
+</ul>
+<p>This attack type is planned but not yet implemented.</p>
+</section>
+<section id="design-notes">
+<h2>Design Notes<a class="headerlink" href="#design-notes" title="Link to this heading"></a></h2>
+<p>Attack types do not implement movement directly.
+All positional effects are handled at the execution layer.</p>
+<p>Spatial rules such as Zones of Control (ZOC) influence when attacks
+may occur but do not constitute attack types themselves.</p>
+</section>
+</section>
+<section id="basic-movement">
+<h1>Basic Movement<a class="headerlink" href="#basic-movement" title="Link to this heading"></a></h1>
+<section id="definition">
+<h2>Definition<a class="headerlink" href="#definition" title="Link to this heading"></a></h2>
+<p>Basic movement allows a unit to move from its current hex to a single
+adjacent hex using one action.</p>
+<p>Movement is intentionally minimal at this stage of development and is
+designed to support simulation, testing, and AI training rather than
+full tactical realism.</p>
+</section>
+<section id="movement-rules">
+<h2>Movement Rules<a class="headerlink" href="#movement-rules" title="Link to this heading"></a></h2>
+<p>A unit may move to a target hex if all of the following conditions are met:</p>
+<ul class="simple">
+<li><p>The target hex exists on the map</p></li>
+<li><p>The target hex is adjacent to the unit’s current position</p></li>
+<li><p>The target hex is not occupied</p></li>
+<li><p>The terrain of the target hex is passable</p></li>
+</ul>
+<p>Terrain passability is determined by terrain properties rather than
+terrain names. Hexes with very high movement cost (for example, water)
+are considered non-passable.</p>
+<p>Movement is atomic: one action moves the unit exactly one hex.</p>
+</section>
+<section id="interaction-with-other-systems">
+<h2>Interaction with Other Systems<a class="headerlink" href="#interaction-with-other-systems" title="Link to this heading"></a></h2>
+<p>Basic movement interacts with other systems but does not implement their rules.</p>
+<ul class="simple">
+<li><p>Zones of Control (ZOC) are evaluated after movement</p></li>
+<li><p>Reaction / Opportunity Fire may be triggered if the unit ends its
+movement inside an enemy Zone of Control</p></li>
+<li><p>No direct combat resolution occurs as part of movement itself</p></li>
+</ul>
+<p>This separation ensures that movement remains deterministic and simple,
+while other systems react to movement through well-defined triggers.</p>
+</section>
+<section id="design-rationale">
+<h2>Design Rationale<a class="headerlink" href="#design-rationale" title="Link to this heading"></a></h2>
+<p>Movement is implemented as a minimal action in order to:</p>
+<ul class="simple">
+<li><p>Enable turn-based simulation</p></li>
+<li><p>Enable reinforcement learning environments</p></li>
+<li><p>Support perception-based agents (e.g. visual input via YOLO)</p></li>
+<li><p>Avoid premature complexity in pathfinding or cost calculation</p></li>
+</ul>
+<p>More advanced features such as movement points, accumulated terrain
+costs, forced stops inside ZOC, or pathfinding are explicitly out of
+scope for this stage and will be introduced incrementally.</p>
+</section>
+<section id="current-status">
+<h2>Current Status<a class="headerlink" href="#current-status" title="Link to this heading"></a></h2>
+<p>Basic movement is fully implemented with the following properties:</p>
+<ul class="simple">
+<li><p>One-hex movement per action</p></li>
+<li><p>Terrain-based passability</p></li>
+<li><p>Integration with ZOC and Reaction Fire</p></li>
+<li><p>Deterministic execution and test coverage</p></li>
+</ul>
+</section>
+</section>
+<section id="assault-rules">
+<h1>Assault Rules<a class="headerlink" href="#assault-rules" title="Link to this heading"></a></h1>
+<section id="id1">
+<h2>Definition<a class="headerlink" href="#id1" title="Link to this heading"></a></h2>
+<p>An assault represents close-quarters combat between two adjacent units.
+It is resolved through one or more close combat rounds.</p>
+</section>
+<section id="assault-flow">
+<h2>Assault Flow<a class="headerlink" href="#assault-flow" title="Link to this heading"></a></h2>
+<ol class="arabic simple">
+<li><p>Resolve close combat rounds.</p></li>
+<li><p>Stop when a unit is eliminated or when the maximum number of rounds is reached.</p></li>
+<li><p>Apply post-assault consequences.</p></li>
+</ol>
+</section>
+<section id="outcomes">
+<h2>Outcomes<a class="headerlink" href="#outcomes" title="Link to this heading"></a></h2>
+<section id="defender-eliminated">
+<h3>Defender Eliminated<a class="headerlink" href="#defender-eliminated" title="Link to this heading"></a></h3>
+<ul class="simple">
+<li><p>Defender is removed from the game.</p></li>
+<li><p>Attacker may advance into the defender’s original hex.</p></li>
+</ul>
+</section>
+<section id="attacker-eliminated">
+<h3>Attacker Eliminated<a class="headerlink" href="#attacker-eliminated" title="Link to this heading"></a></h3>
+<ul class="simple">
+<li><p>Attacker is removed.</p></li>
+<li><p>Defender holds position.</p></li>
+</ul>
+</section>
+<section id="both-eliminated">
+<h3>Both Eliminated<a class="headerlink" href="#both-eliminated" title="Link to this heading"></a></h3>
+<ul class="simple">
+<li><p>Both units are removed.</p></li>
+<li><p>The hex becomes empty.</p></li>
+</ul>
+</section>
+<section id="defender-retreats">
+<h3>Defender Retreats<a class="headerlink" href="#defender-retreats" title="Link to this heading"></a></h3>
+<p>Conditions:</p>
+<ul class="simple">
+<li><p>Both units survive the assault.</p></li>
+<li><p>At least one effective hit occurred during the assault.</p></li>
+</ul>
+<p>Effects:</p>
+<ul class="simple">
+<li><p>Defender must retreat to an adjacent free hex.</p></li>
+<li><p>If no retreat hex exists, the defender is eliminated.</p></li>
+<li><p>Attacker may advance.</p></li>
+</ul>
+</section>
+<section id="stalemate">
+<h3>Stalemate<a class="headerlink" href="#stalemate" title="Link to this heading"></a></h3>
+<p>Conditions:</p>
+<ul class="simple">
+<li><p>Both units survive.</p></li>
+<li><p>No effective hits occurred in any round.</p></li>
+</ul>
+<p>Effects:</p>
+<ul class="simple">
+<li><p>No retreat occurs.</p></li>
+<li><p>No advance occurs.</p></li>
+<li><p>Units remain in place.</p></li>
+</ul>
+</section>
+</section>
+<section id="design-rules">
+<h2>Design Rules<a class="headerlink" href="#design-rules" title="Link to this heading"></a></h2>
+<ul class="simple">
+<li><p>Retreat is never forced without combat pressure.</p></li>
+<li><p>Advance always targets the defender’s original position.</p></li>
+<li><p>Spatial movement is handled by the executor, not by combat logic.</p></li>
+</ul>
+</section>
+</section>
+<section id="current-development-status">
+<h1>Current Development Status<a class="headerlink" href="#current-development-status" title="Link to this heading"></a></h1>
+<p>Completed:</p>
+<ul class="simple">
+<li><p>Close combat mechanics with deterministic RNG</p></li>
+<li><p>Assault rules including retreat, advance, and stalemate</p></li>
+<li><p>AssaultExecutor applying results to the hex map</p></li>
+<li><p>Direct Ranged Fire (DRF)</p></li>
+<li><p>Reaction / Opportunity Fire</p></li>
+<li><p>Zone of Control (ZOC) minimal implementation</p></li>
+<li><p>ZOC-gated Reaction Fire</p></li>
+<li><p>Advanced retreat logic (direction, ZOC, terrain)</p></li>
+<li><p>Basic movement</p></li>
+<li><p>Full deterministic test coverage</p></li>
+<li><p>Sphinx documentation for architecture and combat rules</p></li>
+</ul>
+<p>Design Notes:</p>
+<ul class="simple">
+<li><p>Retreat occurs only if there is actual combat pressure</p></li>
+<li><p>Stalemate occurs when no effective hits happen</p></li>
+<li><p>Advance always targets the defender’s original hex</p></li>
+<li><p>Rules never move units directly; executors do</p></li>
+</ul>
+<section id="next-steps">
+<h2>Next Steps<a class="headerlink" href="#next-steps" title="Link to this heading"></a></h2>
+<ul class="simple">
+<li><p>Integrate movement and combat into a turn runner</p></li>
+<li><p>Create a minimal training environment (Gym / PettingZoo)</p></li>
+<li><p>Add minimal renderer for debugging and perception-based agents</p></li>
+<li><p>Introduce Line of Sight (LOS) once agents are active</p></li>
+<li><p>Refine ZOC rules (suppression, unit type modifiers)</p></li>
+</ul>
+</section>
+<section id="stopping-point">
+<h2>Stopping Point<a class="headerlink" href="#stopping-point" title="Link to this heading"></a></h2>
+<p>We are currently at <strong>D8‑B</strong>.</p>
+<p>The tactical core of the engine is complete and stable:</p>
+<ul class="simple">
+<li><p>All tests are green</p></li>
+<li><p>Movement, combat, reaction, ZOC and retreat are integrated</p></li>
+<li><p>Architecture cleanly separates rules, execution, and spatial queries</p></li>
+<li><p>The system is ready for simulation, visualization and learning environments</p></li>
+</ul>
+<p>Architecture recap:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">CloseCombatResolver</span></code> → combat mechanics</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">AssaultAction</span></code> → combat rules</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">MovementAction</span></code> → movement rules</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">Executors</span></code> → map application</p></li>
+</ul>
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="core.html" class="btn btn-neutral float-left" title="Core Components" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="../curriculum/index.html" class="btn btn-neutral float-right" title="Reinforcement Learning Curriculum" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2026, Ricardo David Alba Atencia.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

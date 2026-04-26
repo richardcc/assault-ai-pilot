@@ -1,0 +1,274 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Replay JSON Contract &mdash; Assault-Env Documentation  documentation</title>
+      <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=9edc463e" />
+
+  
+    <link rel="canonical" href="https://richardcc.github.io/assault-ai-pilot/curriculum/replay_format.html" />
+      <script src="../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../_static/documentation_options.js?v=5929fcd5"></script>
+      <script src="../_static/doctools.js?v=9bcbadda"></script>
+      <script src="../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script src="../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../index.html" class="icon icon-home">
+            Assault-Env Documentation
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../engine/index.html">Assault Engine Documentation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="index.html">Reinforcement Learning Curriculum</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../index.html">Assault-Env Documentation</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../index.html" class="icon icon-home" aria-label="Home"></a></li>
+      <li class="breadcrumb-item active">Replay JSON Contract</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="../_sources/curriculum/replay_format.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="replay-json-contract">
+<h1>Replay JSON Contract<a class="headerlink" href="#replay-json-contract" title="Link to this heading"></a></h1>
+<p>This document defines the <strong>logical JSON contract</strong> of a Replay file.</p>
+<p>The Replay format is a <strong>stable interface</strong> between:
+- execution (Runner / RLRunner)
+- visualization (web viewer)
+- evaluation
+- offline analysis</p>
+<p>The Replay format is <strong>not an internal runtime structure</strong>.
+It is a <strong>public, persistent contract</strong>.</p>
+<section id="design-principles">
+<h2>Design Principles<a class="headerlink" href="#design-principles" title="Link to this heading"></a></h2>
+<p>The Replay format is:</p>
+<ul class="simple">
+<li><p>deterministic</p></li>
+<li><p>immutable</p></li>
+<li><p>append-only</p></li>
+<li><p>replayable offline</p></li>
+<li><p>independent of RL algorithms</p></li>
+<li><p>independent of environment implementation</p></li>
+</ul>
+<p>It explicitly DOES NOT contain:</p>
+<ul class="simple">
+<li><p>rewards</p></li>
+<li><p>gradients</p></li>
+<li><p>neural network parameters</p></li>
+<li><p>logits</p></li>
+<li><p>tensors</p></li>
+<li><p>training metadata</p></li>
+</ul>
+<p>All values must be JSON-serializable.</p>
+</section>
+<section id="top-level-structure">
+<h2>Top-Level Structure<a class="headerlink" href="#top-level-structure" title="Link to this heading"></a></h2>
+<p>A Replay JSON document has the following top-level keys:</p>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>{
+  &quot;initial_state&quot;: { ... },
+  &quot;steps&quot;: [ ... ],
+  &quot;final_state&quot;: { ... }
+}
+</pre></div>
+</div>
+</section>
+<section id="initial-state">
+<h2>Initial State<a class="headerlink" href="#initial-state" title="Link to this heading"></a></h2>
+<p><code class="docutils literal notranslate"><span class="pre">initial_state</span></code> is a snapshot of the game before any action is taken.</p>
+<p>It has the same logical structure as a <code class="docutils literal notranslate"><span class="pre">GameState</span></code> and is duplicated
+for convenience and semantic clarity.</p>
+</section>
+<section id="steps">
+<h2>Steps<a class="headerlink" href="#steps" title="Link to this heading"></a></h2>
+<p><code class="docutils literal notranslate"><span class="pre">steps</span></code> is an ordered list of replay entries.</p>
+<p>Each element corresponds to <strong>one decision cycle</strong>.</p>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>{
+  &quot;state&quot;: { ... },
+  &quot;decision&quot;: { ... }   # optional
+}
+</pre></div>
+</div>
+<p>The order of steps defines the temporal progression of the game.</p>
+</section>
+<section id="gamestate">
+<h2>GameState<a class="headerlink" href="#gamestate" title="Link to this heading"></a></h2>
+<p>A <code class="docutils literal notranslate"><span class="pre">GameState</span></code> describes the entire board at one moment in time.</p>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>{
+  &quot;units&quot;: [ ... ]
+}
+</pre></div>
+</div>
+<p>It does not include:
+- current player
+- reward
+- hidden information
+- rules or dynamics</p>
+<p>It is a pure snapshot of world state.</p>
+</section>
+<section id="unitstate">
+<h2>UnitState<a class="headerlink" href="#unitstate" title="Link to this heading"></a></h2>
+<p>Each unit in the GameState is represented by a <code class="docutils literal notranslate"><span class="pre">UnitState</span></code>.</p>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>{
+  &quot;id&quot;: &quot;IT_1&quot;,
+  &quot;counter_id&quot;: &quot;US_RIFLES_43&quot;,
+  &quot;hex&quot;: &quot;C5&quot;,
+  &quot;strength&quot;: 8,
+  &quot;status&quot;: [&quot;pinned&quot;]
+}
+</pre></div>
+</div>
+<section id="field-definitions">
+<h3>Field definitions<a class="headerlink" href="#field-definitions" title="Link to this heading"></a></h3>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">id</span></code>: unique unit identifier</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">counter_id</span></code>: rendering / counter reference</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">hex</span></code>: board position (viewer convention)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">strength</span></code>: remaining strength points</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">status</span></code>: list of string flags (may be empty)</p></li>
+</ul>
+</section>
+</section>
+<section id="decision">
+<h2>Decision<a class="headerlink" href="#decision" title="Link to this heading"></a></h2>
+<p><code class="docutils literal notranslate"><span class="pre">decision</span></code> is OPTIONAL.</p>
+<p>It exists only if the step was driven by an agent action.</p>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>{
+  &quot;unit_id&quot;: &quot;IT_1&quot;,
+  &quot;action&quot;: 2,
+  &quot;learned_rationale&quot;: &quot;CAPTURE_OBJECTIVE&quot;,
+  &quot;heuristic_rationale&quot;: &quot;ADVANCE_TO_CONTACT&quot;
+}
+</pre></div>
+</div>
+<section id="decision-semantics">
+<h3>Decision semantics<a class="headerlink" href="#decision-semantics" title="Link to this heading"></a></h3>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">unit_id</span></code>: identifier of the acting unit</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">action</span></code>: discrete action executed (agent output)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">learned_rationale</span></code>:
+- produced by the policy
+- human-readable string
+- may be <code class="docutils literal notranslate"><span class="pre">null</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">heuristic_rationale</span></code>:
+- optional baseline explanation
+- used only for comparison
+- may be <code class="docutils literal notranslate"><span class="pre">null</span></code> or omitted</p></li>
+</ul>
+<p>The Replay NEVER interprets or validates decisions.</p>
+</section>
+</section>
+<section id="final-state">
+<h2>Final State<a class="headerlink" href="#final-state" title="Link to this heading"></a></h2>
+<p><code class="docutils literal notranslate"><span class="pre">final_state</span></code> is the last GameState of the replay.</p>
+<p>It enables:
+- quick inspection of outcomes
+- evaluation without replay traversal</p>
+<p>It MUST be consistent with the last replay step.</p>
+</section>
+<section id="backward-compatibility">
+<h2>Backward Compatibility<a class="headerlink" href="#backward-compatibility" title="Link to this heading"></a></h2>
+<p>Future Replay versions must:</p>
+<ul class="simple">
+<li><p>preserve existing fields</p></li>
+<li><p>only add optional fields</p></li>
+<li><p>never change semantic meaning</p></li>
+</ul>
+<p>Versioning (if required) is handled
+outside the Replay payload.</p>
+</section>
+<section id="consumer-responsibilities">
+<h2>Consumer Responsibilities<a class="headerlink" href="#consumer-responsibilities" title="Link to this heading"></a></h2>
+<p>Consumers of Replay JSON must:</p>
+<ul class="simple">
+<li><p>assume immutability</p></li>
+<li><p>not attempt to repair missing data</p></li>
+<li><p>treat Replay as the single source of truth</p></li>
+<li><p>avoid inferring data not explicitly stored</p></li>
+</ul>
+</section>
+<section id="replay-as-a-contract">
+<h2>Replay as a Contract<a class="headerlink" href="#replay-as-a-contract" title="Link to this heading"></a></h2>
+<p>The Replay format is the <strong>boundary of trust</strong> between systems.</p>
+<p>If information is not present in the Replay,
+it must not be assumed implicitly.</p>
+<p>This guarantees:</p>
+<ul class="simple">
+<li><p>reproducibility</p></li>
+<li><p>debuggability</p></li>
+<li><p>explainability</p></li>
+<li><p>long-term stability</p></li>
+</ul>
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2026, Ricardo David Alba Atencia.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

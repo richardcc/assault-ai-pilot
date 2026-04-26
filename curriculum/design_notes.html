@@ -1,0 +1,237 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Design Notes &mdash; Assault-Env Documentation  documentation</title>
+      <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=9edc463e" />
+
+  
+    <link rel="canonical" href="https://richardcc.github.io/assault-ai-pilot/curriculum/design_notes.html" />
+      <script src="../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../_static/documentation_options.js?v=5929fcd5"></script>
+      <script src="../_static/doctools.js?v=9bcbadda"></script>
+      <script src="../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script src="../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="next" title="P1 – Single Unit Baseline" href="p1_results.html" />
+    <link rel="prev" title="Curriculum Design Overview" href="curriculum_overview.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../index.html" class="icon icon-home">
+            Assault-Env Documentation
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="../engine/index.html">Assault Engine Documentation</a></li>
+<li class="toctree-l1 current"><a class="reference internal" href="index.html">Reinforcement Learning Curriculum</a><ul class="current">
+<li class="toctree-l2 current"><a class="reference internal" href="index.html#curriculum-overview">Curriculum Overview</a><ul class="current">
+<li class="toctree-l3"><a class="reference internal" href="curriculum_overview.html">Curriculum Design Overview</a></li>
+<li class="toctree-l3 current"><a class="current reference internal" href="#">Design Notes</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#why-no-reward-shaping">Why No Reward Shaping</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#why-ppo-was-not-tuned">Why PPO Was Not Tuned</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#deterministic-vs-stochastic-evaluation">Deterministic vs Stochastic Evaluation</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#interpreting-failure-as-information">Interpreting Failure as Information</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#symmetry-and-strategy">Symmetry and Strategy</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#implicit-roles-vs-explicit-roles">Implicit Roles vs Explicit Roles</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#summary">Summary</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="index.html#experimental-results">Experimental Results</a></li>
+<li class="toctree-l2"><a class="reference internal" href="index.html#extensions">Extensions</a></li>
+</ul>
+</li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../index.html">Assault-Env Documentation</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="index.html">Reinforcement Learning Curriculum</a></li>
+      <li class="breadcrumb-item active">Design Notes</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="../_sources/curriculum/design_notes.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="design-notes">
+<h1>Design Notes<a class="headerlink" href="#design-notes" title="Link to this heading"></a></h1>
+<p>This document records the <strong>design decisions</strong> taken during the
+development of the assault‑env reinforcement learning curriculum.</p>
+<p>The objective of these notes is to make explicit <em>why</em> certain choices
+were made, especially when alternative approaches were intentionally
+rejected.</p>
+<p>—</p>
+<section id="why-no-reward-shaping">
+<h2>Why No Reward Shaping<a class="headerlink" href="#why-no-reward-shaping" title="Link to this heading"></a></h2>
+<p>Reward shaping was intentionally avoided beyond the minimal task
+definition established in P1.</p>
+<p>Although reward shaping can accelerate convergence, it often obscures
+the origin of observed behaviors by embedding designer intent directly
+into the optimization target.</p>
+<p>Instead, the curriculum relies on:</p>
+<ul class="simple">
+<li><p>Structural changes (number of units, symmetry)</p></li>
+<li><p>Informational changes (observation space)</p></li>
+<li><p>Fixed learning algorithm (PPO)</p></li>
+</ul>
+<p>This ensures that behavioral transitions can be attributed to
+environmental structure rather than handcrafted incentives.</p>
+<p>—</p>
+</section>
+<section id="why-ppo-was-not-tuned">
+<h2>Why PPO Was Not Tuned<a class="headerlink" href="#why-ppo-was-not-tuned" title="Link to this heading"></a></h2>
+<p>Proximal Policy Optimization (PPO) hyperparameters were kept constant
+across all curriculum stages.</p>
+<p>This choice serves two purposes:</p>
+<ol class="arabic simple">
+<li><p>Comparability:
+Differences in behavior across P1–P4 can be compared directly.</p></li>
+<li><p>Diagnostic clarity:
+When failures occur (e.g., P2 evasion), they can be interpreted as
+meaningful signals rather than artifacts of poor tuning.</p></li>
+</ol>
+<p>The curriculum design assumes that a stable PPO configuration is
+preferable to optimized but opaque behavior.</p>
+<p>—</p>
+</section>
+<section id="deterministic-vs-stochastic-evaluation">
+<h2>Deterministic vs Stochastic Evaluation<a class="headerlink" href="#deterministic-vs-stochastic-evaluation" title="Link to this heading"></a></h2>
+<p>A key distinction throughout the curriculum is the separation between
+deterministic (greedy) and stochastic policy execution.</p>
+<p>Deterministic evaluation reflects the <strong>most conservative action</strong>
+preferred by the policy, while stochastic evaluation samples from the
+learned action distribution.</p>
+<p>In later stages (P3, P4):</p>
+<ul class="simple">
+<li><p>Aggressive or risky behaviors often exist in the distribution</p></li>
+<li><p>These behaviors are not always selected by the greedy policy</p></li>
+</ul>
+<p>This divergence is interpreted as <strong>strategic maturity</strong>, not failure.</p>
+<p>Greedy evaluation alone is therefore insufficient to assess learning
+progress in symmetric or strategic environments.</p>
+<p>—</p>
+</section>
+<section id="interpreting-failure-as-information">
+<h2>Interpreting Failure as Information<a class="headerlink" href="#interpreting-failure-as-information" title="Link to this heading"></a></h2>
+<p>Certain stages of the curriculum are explicitly designed to <em>fail</em> in a
+controlled way.</p>
+<p>For example:</p>
+<ul class="simple">
+<li><p>In P2, permanent evasion emerges naturally</p></li>
+<li><p>This behavior is rational given asymmetric information</p></li>
+<li><p>The failure reveals a structural limitation of the scenario</p></li>
+</ul>
+<p>Such failures are used diagnostically to motivate the next curriculum
+stage rather than corrected directly.</p>
+<p>—</p>
+</section>
+<section id="symmetry-and-strategy">
+<h2>Symmetry and Strategy<a class="headerlink" href="#symmetry-and-strategy" title="Link to this heading"></a></h2>
+<p>The transition from asymmetric (P2, P3) to symmetric (P4) scenarios
+marks the shift from tactical optimization to strategic interaction.</p>
+<p>In symmetric settings:</p>
+<ul class="simple">
+<li><p>No single policy dominates universally</p></li>
+<li><p>Outcomes are more sensitive to coordination patterns</p></li>
+<li><p>Value estimation becomes inherently noisier</p></li>
+</ul>
+<p>As a result, classical convergence indicators (e.g. explained variance)
+must be interpreted differently.</p>
+<p>Behavioral analysis becomes more informative than scalar metrics.</p>
+<p>—</p>
+</section>
+<section id="implicit-roles-vs-explicit-roles">
+<h2>Implicit Roles vs Explicit Roles<a class="headerlink" href="#implicit-roles-vs-explicit-roles" title="Link to this heading"></a></h2>
+<p>Role differentiation is explored through <strong>implicit role emergence</strong>
+rather than explicit assignment.</p>
+<p>By providing limited relational information (e.g., ally distance),
+the agent can learn to differentiate behavior without any predefined
+labels such as “attacker” or “support”.</p>
+<p>This approach preserves generality and avoids enforcing brittle role
+schemas.</p>
+<p>—</p>
+</section>
+<section id="summary">
+<h2>Summary<a class="headerlink" href="#summary" title="Link to this heading"></a></h2>
+<p>Across the entire curriculum:</p>
+<ul class="simple">
+<li><p>Changes are minimal and incremental</p></li>
+<li><p>Rewards and algorithms remain fixed</p></li>
+<li><p>Structural and informational shifts drive behavior</p></li>
+</ul>
+<p>This design allows the curriculum to function as a controlled study of
+emergent coordination and strategy.</p>
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="curriculum_overview.html" class="btn btn-neutral float-left" title="Curriculum Design Overview" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="p1_results.html" class="btn btn-neutral float-right" title="P1 – Single Unit Baseline" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2026, Ricardo David Alba Atencia.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

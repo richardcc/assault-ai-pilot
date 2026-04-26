@@ -1,0 +1,195 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Architecture Overview &mdash; Assault-Env Documentation  documentation</title>
+      <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=9edc463e" />
+
+  
+    <link rel="canonical" href="https://richardcc.github.io/assault-ai-pilot/engine/architecture.html" />
+      <script src="../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../_static/documentation_options.js?v=5929fcd5"></script>
+      <script src="../_static/doctools.js?v=9bcbadda"></script>
+      <script src="../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script src="../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="next" title="Core Components" href="core.html" />
+    <link rel="prev" title="Assault Engine Documentation" href="index.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../index.html" class="icon icon-home">
+            Assault-Env Documentation
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul class="current">
+<li class="toctree-l1 current"><a class="reference internal" href="index.html">Assault Engine Documentation</a><ul class="current">
+<li class="toctree-l2 current"><a class="current reference internal" href="#">Architecture Overview</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#core-design-principles">Core Design Principles</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#layered-architecture">Layered Architecture</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#mechanics-layer">Mechanics Layer</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#rule-layer">Rule Layer</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#state-layer">State Layer</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#execution-layer">Execution Layer</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="#determinism">Determinism</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="core.html">Core Components</a></li>
+<li class="toctree-l2"><a class="reference internal" href="combat.html">Attack Types Overview</a></li>
+<li class="toctree-l2"><a class="reference internal" href="combat.html#basic-movement">Basic Movement</a></li>
+<li class="toctree-l2"><a class="reference internal" href="combat.html#assault-rules">Assault Rules</a></li>
+<li class="toctree-l2"><a class="reference internal" href="combat.html#current-development-status">Current Development Status</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../curriculum/index.html">Reinforcement Learning Curriculum</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../index.html">Assault-Env Documentation</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="index.html">Assault Engine Documentation</a></li>
+      <li class="breadcrumb-item active">Architecture Overview</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="../_sources/engine/architecture.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="architecture-overview">
+<h1>Architecture Overview<a class="headerlink" href="#architecture-overview" title="Link to this heading"></a></h1>
+<section id="core-design-principles">
+<h2>Core Design Principles<a class="headerlink" href="#core-design-principles" title="Link to this heading"></a></h2>
+<p>The Assault Engine is built around a strict separation of concerns.</p>
+<ul class="simple">
+<li><p>Mechanics resolve combat effects.</p></li>
+<li><p>Rules interpret combat and decide outcomes.</p></li>
+<li><p>State stores map and unit data.</p></li>
+<li><p>Executors apply rules to the map.</p></li>
+</ul>
+<p>This separation ensures determinism, testability, and clean extensibility.</p>
+<p>—</p>
+</section>
+<section id="layered-architecture">
+<h2>Layered Architecture<a class="headerlink" href="#layered-architecture" title="Link to this heading"></a></h2>
+<section id="mechanics-layer">
+<h3>Mechanics Layer<a class="headerlink" href="#mechanics-layer" title="Link to this heading"></a></h3>
+<p>Pure, stateless logic.</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">CloseCombatResolver</span></code></p></li>
+<li><p>Dice resolution</p></li>
+<li><p>Hit cancellation</p></li>
+<li><p>Damage application</p></li>
+</ul>
+<p>This layer has no knowledge of map, turns, or unit positions.</p>
+<p>—</p>
+</section>
+<section id="rule-layer">
+<h3>Rule Layer<a class="headerlink" href="#rule-layer" title="Link to this heading"></a></h3>
+<p>High-level game rules.</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">AssaultAction</span></code></p></li>
+<li><p>Multiple close combat rounds</p></li>
+<li><p>Stalemate detection</p></li>
+<li><p>Retreat and advance decisions</p></li>
+</ul>
+<p>This layer does not move units on the map.</p>
+<p>—</p>
+</section>
+<section id="state-layer">
+<h3>State Layer<a class="headerlink" href="#state-layer" title="Link to this heading"></a></h3>
+<p>The single source of truth.</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">GameState</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">Hex</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">Unit</span></code></p></li>
+</ul>
+<p>This layer stores data but does not implement rules.</p>
+<p>—</p>
+</section>
+<section id="execution-layer">
+<h3>Execution Layer<a class="headerlink" href="#execution-layer" title="Link to this heading"></a></h3>
+<p>Applies rules to the map.</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">AssaultExecutor</span></code></p></li>
+</ul>
+<p>This is the only layer allowed to move or remove units.</p>
+<p>—</p>
+</section>
+</section>
+<section id="determinism">
+<h2>Determinism<a class="headerlink" href="#determinism" title="Link to this heading"></a></h2>
+<p>All randomness is injected via <code class="docutils literal notranslate"><span class="pre">random.Random</span></code>.
+Global randomness is forbidden in the engine.</p>
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="index.html" class="btn btn-neutral float-left" title="Assault Engine Documentation" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="core.html" class="btn btn-neutral float-right" title="Core Components" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2026, Ricardo David Alba Atencia.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

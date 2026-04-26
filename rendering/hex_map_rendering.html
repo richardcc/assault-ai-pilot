@@ -1,0 +1,279 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Hex Grid Map Rendering – Design Notes &mdash; Assault-Env Documentation  documentation</title>
+      <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=9edc463e" />
+
+  
+      <script src="../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../_static/documentation_options.js?v=5929fcd5"></script>
+      <script src="../_static/doctools.js?v=9bcbadda"></script>
+      <script src="../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script src="../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../index.html" class="icon icon-home">
+            Assault-Env Documentation
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../engine/index.html">Assault Engine Documentation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../curriculum/index.html">Reinforcement Learning Curriculum</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../index.html">Assault-Env Documentation</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../index.html" class="icon icon-home" aria-label="Home"></a></li>
+      <li class="breadcrumb-item active">Hex Grid Map Rendering – Design Notes</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="../_sources/rendering/hex_map_rendering.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="hex-grid-map-rendering-design-notes">
+<h1>Hex Grid Map Rendering – Design Notes<a class="headerlink" href="#hex-grid-map-rendering-design-notes" title="Link to this heading"></a></h1>
+<p>This document defines the <strong>authoritative rules and design decisions</strong>
+governing the rendering of the hex grid and terrain layers (S2 / S3).</p>
+<p>Its primary purpose is to <strong>prevent regressions</strong> by making explicit
+which parts of the rendering system are invariant and which aspects may
+change.</p>
+<hr class="docutils" />
+<section id="core-design-rule-non-negotiable">
+<h2>1. Core Design Rule (Non-Negotiable)<a class="headerlink" href="#core-design-rule-non-negotiable" title="Link to this heading"></a></h2>
+<p><strong>The hex grid defines the world.</strong></p>
+<p>All other systems (terrain maps, overlays, units, effects, camera
+transformations) must adapt strictly to the hex grid geometry.</p>
+<p>This implies:</p>
+<ul class="simple">
+<li><p>The grid geometry is the single source of truth.</p></li>
+<li><p>World coordinates are defined by hex mathematics, not by image
+dimensions.</p></li>
+<li><p>No screen-space or ad-hoc positional offsets are allowed.</p></li>
+</ul>
+<p>Any violation of this rule will inevitably introduce rendering bugs.</p>
+</section>
+<hr class="docutils" />
+<section id="map-layers-overview">
+<h2>2. Map Layers Overview<a class="headerlink" href="#map-layers-overview" title="Link to this heading"></a></h2>
+<p>Two terrain map layers are used:</p>
+<ul class="simple">
+<li><p><strong>S3</strong>: Upper (top half) terrain layer</p></li>
+<li><p><strong>S2</strong>: Lower (bottom half) terrain layer</p></li>
+</ul>
+<p>Both layers:</p>
+<ul class="simple">
+<li><p>Are provided as PNG files</p></li>
+<li><p>Contain alpha transparency</p></li>
+<li><p>Encode the hex shape implicitly in the alpha channel</p></li>
+</ul>
+<p><strong>Important:</strong>
+S2 and S3 are <em>not</em> logical rectangles. The hex geometry is already
+encoded in the transparency mask of the images.</p>
+</section>
+<hr class="docutils" />
+<section id="transparency-rules-critical">
+<h2>3. Transparency Rules (Critical)<a class="headerlink" href="#transparency-rules-critical" title="Link to this heading"></a></h2>
+<p>This section documents the root cause of the primary rendering bug
+encountered during development.</p>
+<section id="correct-loading">
+<h3>Correct Loading<a class="headerlink" href="#correct-loading" title="Link to this heading"></a></h3>
+<p>All PNG terrain maps containing transparency <strong>must</strong> be loaded using
+<code class="docutils literal notranslate"><span class="pre">convert_alpha()</span></code>:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">s2</span> <span class="o">=</span> <span class="n">pygame</span><span class="o">.</span><span class="n">image</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="s2">&quot;Map_S2.png&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">convert_alpha</span><span class="p">()</span>
+<span class="n">s3</span> <span class="o">=</span> <span class="n">pygame</span><span class="o">.</span><span class="n">image</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="s2">&quot;Map_S3.png&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">convert_alpha</span><span class="p">()</span>
+</pre></div>
+</div>
+</section>
+<section id="incorrect-loading-bug-source">
+<h3>Incorrect Loading (Bug Source)<a class="headerlink" href="#incorrect-loading-bug-source" title="Link to this heading"></a></h3>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">pygame</span><span class="o">.</span><span class="n">image</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="s2">&quot;Map_S2.png&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">convert</span><span class="p">()</span>
+</pre></div>
+</div>
+<p>Using <code class="docutils literal notranslate"><span class="pre">convert()</span></code> on PNG images with transparency:</p>
+<ul class="simple">
+<li><p>Strips the alpha channel</p></li>
+<li><p>Leaves undefined color data under transparent pixels</p></li>
+<li><p>Produces rectangular artifacts after <code class="docutils literal notranslate"><span class="pre">smoothscale</span></code></p></li>
+</ul>
+<p>Although visually similar to a geometric error, this issue is <strong>purely
+an alpha-handling fault</strong>.</p>
+</section>
+</section>
+<hr class="docutils" />
+<section id="hex-grid-geometry-reference">
+<h2>4. Hex Grid Geometry Reference<a class="headerlink" href="#hex-grid-geometry-reference" title="Link to this heading"></a></h2>
+<p>The grid uses <strong>pointy-top hexagons</strong> with row-based horizontal offset.</p>
+<section id="constants">
+<h3>Constants<a class="headerlink" href="#constants" title="Link to this heading"></a></h3>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">HEX_R</span> <span class="o">=</span> <span class="mi">52</span>
+<span class="n">HEX_W</span> <span class="o">=</span> <span class="n">sqrt</span><span class="p">(</span><span class="mi">3</span><span class="p">)</span> <span class="o">*</span> <span class="n">HEX_R</span>
+<span class="n">HEX_ROW_STEP</span> <span class="o">=</span> <span class="mf">1.5</span> <span class="o">*</span> <span class="n">HEX_R</span>
+</pre></div>
+</div>
+</section>
+<section id="hex-to-world-coordinates">
+<h3>Hex to World Coordinates<a class="headerlink" href="#hex-to-world-coordinates" title="Link to this heading"></a></h3>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="k">def</span><span class="w"> </span><span class="nf">hex_to_world</span><span class="p">(</span><span class="n">col</span><span class="p">,</span> <span class="n">row</span><span class="p">):</span>
+    <span class="n">x</span> <span class="o">=</span> <span class="n">col</span> <span class="o">*</span> <span class="n">HEX_W</span> <span class="o">+</span> <span class="p">(</span><span class="n">row</span> <span class="o">%</span> <span class="mi">2</span><span class="p">)</span> <span class="o">*</span> <span class="p">(</span><span class="n">HEX_W</span> <span class="o">/</span> <span class="mi">2</span><span class="p">)</span>
+    <span class="n">y</span> <span class="o">=</span> <span class="n">row</span> <span class="o">*</span> <span class="n">HEX_ROW_STEP</span>
+    <span class="k">return</span> <span class="n">x</span><span class="p">,</span> <span class="n">y</span>
+</pre></div>
+</div>
+<p>This function returns the <strong>center</strong> of the corresponding hex tile in
+world coordinates.</p>
+</section>
+</section>
+<hr class="docutils" />
+<section id="map-anchoring-rules">
+<h2>5. Map Anchoring Rules<a class="headerlink" href="#map-anchoring-rules" title="Link to this heading"></a></h2>
+<p>Map placement is defined <strong>exclusively</strong> in hex-world terms.</p>
+<section id="s3-upper-terrain-layer">
+<h3>S3 (Upper Terrain Layer)<a class="headerlink" href="#s3-upper-terrain-layer" title="Link to this heading"></a></h3>
+<ul class="simple">
+<li><p>Anchored to <strong>hex A1</strong></p></li>
+<li><p>Uses the <strong>top-left corner</strong> of the A1 hex bounding box</p></li>
+</ul>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">a1_x</span><span class="p">,</span> <span class="n">a1_y</span> <span class="o">=</span> <span class="n">hex_to_world</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span>
+<span class="n">origin_x</span> <span class="o">=</span> <span class="n">a1_x</span> <span class="o">-</span> <span class="n">HEX_W</span> <span class="o">/</span> <span class="mi">2</span>
+<span class="n">origin_y</span> <span class="o">=</span> <span class="n">a1_y</span> <span class="o">-</span> <span class="n">HEX_R</span>
+</pre></div>
+</div>
+</section>
+<section id="s2-lower-terrain-layer">
+<h3>S2 (Lower Terrain Layer)<a class="headerlink" href="#s2-lower-terrain-layer" title="Link to this heading"></a></h3>
+<ul class="simple">
+<li><p>Anchored to <strong>hex A9</strong> (row index 8)</p></li>
+<li><p>Uses the <strong>top-left corner</strong> of the A9 hex bounding box</p></li>
+</ul>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">a9_x</span><span class="p">,</span> <span class="n">a9_y</span> <span class="o">=</span> <span class="n">hex_to_world</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">8</span><span class="p">)</span>
+<span class="n">origin_x</span> <span class="o">=</span> <span class="n">a9_x</span> <span class="o">-</span> <span class="n">HEX_W</span> <span class="o">/</span> <span class="mi">2</span>
+<span class="n">origin_y</span> <span class="o">=</span> <span class="n">a9_y</span> <span class="o">-</span> <span class="n">HEX_R</span>
+</pre></div>
+</div>
+<p>Only the <strong>Y origin</strong> differs between S3 and S2.</p>
+<p><strong>No X correction is ever applied.</strong></p>
+</section>
+</section>
+<hr class="docutils" />
+<section id="scaling-rules">
+<h2>6. Scaling Rules<a class="headerlink" href="#scaling-rules" title="Link to this heading"></a></h2>
+<ul class="simple">
+<li><p>Map scaling must follow grid scaling.</p></li>
+<li><p>PNG pixel dimensions must never be interpreted as world geometry.</p></li>
+</ul>
+<p>Scaling occurs <em>after</em> anchoring in world space:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">screen_x</span> <span class="o">=</span> <span class="p">(</span><span class="n">world_x</span> <span class="o">-</span> <span class="n">camera_x</span><span class="p">)</span> <span class="o">*</span> <span class="n">zoom</span>
+<span class="n">screen_y</span> <span class="o">=</span> <span class="p">(</span><span class="n">world_y</span> <span class="o">-</span> <span class="n">camera_y</span><span class="p">)</span> <span class="o">*</span> <span class="n">zoom</span>
+</pre></div>
+</div>
+</section>
+<hr class="docutils" />
+<section id="forbidden-fixes-regression-traps">
+<h2>7. Forbidden Fixes (Regression Traps)<a class="headerlink" href="#forbidden-fixes-regression-traps" title="Link to this heading"></a></h2>
+<p>The following modifications are <strong>explicitly forbidden</strong>:</p>
+<ul class="simple">
+<li><p>Manual X-offset adjustments</p></li>
+<li><p>Parity-based special-case offsets</p></li>
+<li><p>Screen-space anchoring</p></li>
+<li><p>Replacing hex geometry with pixel arithmetic</p></li>
+<li><p>Mixing <code class="docutils literal notranslate"><span class="pre">convert()</span></code> and <code class="docutils literal notranslate"><span class="pre">convert_alpha()</span></code></p></li>
+</ul>
+<p>Any such change indicates a violation of core rendering principles.</p>
+</section>
+<hr class="docutils" />
+<section id="debugging-checklist">
+<h2>8. Debugging Checklist<a class="headerlink" href="#debugging-checklist" title="Link to this heading"></a></h2>
+<p>If terrain rendering appears incorrect:</p>
+<ol class="arabic simple">
+<li><p>Confirm that <strong>both maps are loaded using ``convert_alpha()``</strong></p></li>
+<li><p>Verify that S3 is anchored at hex A1</p></li>
+<li><p>Verify that S2 is anchored at hex A9</p></li>
+<li><p>Ensure no additional offsets have been introduced</p></li>
+<li><p>Inspect PNG files for dirty or premultiplied alpha channels</p></li>
+</ol>
+<p>If all checks pass, the issue is <strong>not</strong> in the rendering geometry.</p>
+</section>
+<hr class="docutils" />
+<section id="final-note">
+<h2>9. Final Note<a class="headerlink" href="#final-note" title="Link to this heading"></a></h2>
+<p>This rendering issue initially appeared to be geometric, but its true
+cause was a combination of:</p>
+<ul class="simple">
+<li><p>Incorrect alpha handling</p></li>
+<li><p>Incorrect anchoring assumptions</p></li>
+</ul>
+<p>This document must be consulted <strong>before any modification</strong> to the
+rendering pipeline.</p>
+<p>✅ <strong>Status</strong>: Stable and correct</p>
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2026, Ricardo David Alba Atencia.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

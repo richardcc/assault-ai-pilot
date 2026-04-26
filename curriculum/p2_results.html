@@ -1,0 +1,243 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>P2 – Multi‑Unit VP Pressure &mdash; Assault-Env Documentation  documentation</title>
+      <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=9edc463e" />
+
+  
+    <link rel="canonical" href="https://richardcc.github.io/assault-ai-pilot/curriculum/p2_results.html" />
+      <script src="../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../_static/documentation_options.js?v=5929fcd5"></script>
+      <script src="../_static/doctools.js?v=9bcbadda"></script>
+      <script src="../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script src="../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="next" title="P3 – Global Force Awareness" href="p3_results.html" />
+    <link rel="prev" title="P1 – Single Unit Baseline" href="p1_results.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../index.html" class="icon icon-home">
+            Assault-Env Documentation
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="../engine/index.html">Assault Engine Documentation</a></li>
+<li class="toctree-l1 current"><a class="reference internal" href="index.html">Reinforcement Learning Curriculum</a><ul class="current">
+<li class="toctree-l2"><a class="reference internal" href="index.html#curriculum-overview">Curriculum Overview</a></li>
+<li class="toctree-l2 current"><a class="reference internal" href="index.html#experimental-results">Experimental Results</a><ul class="current">
+<li class="toctree-l3"><a class="reference internal" href="p1_results.html">P1 – Single Unit Baseline</a></li>
+<li class="toctree-l3 current"><a class="current reference internal" href="#">P2 – Multi‑Unit VP Pressure</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#scenario-overview">Scenario Overview</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#training-configuration">Training Configuration</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#observed-converged-behavior">Observed Converged Behavior</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#interpretation">Interpretation</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#rotation-without-coordination">Rotation Without Coordination</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#comparison-with-p1">Comparison with P1</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#curriculum-role">Curriculum Role</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#next-curriculum-direction">Next Curriculum Direction</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="p3_results.html">P3 – Global Force Awareness</a></li>
+<li class="toctree-l3"><a class="reference internal" href="p4_results.html">P4 – Symmetric Engagement (2 vs 2)</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="index.html#extensions">Extensions</a></li>
+</ul>
+</li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../index.html">Assault-Env Documentation</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="index.html">Reinforcement Learning Curriculum</a></li>
+      <li class="breadcrumb-item active">P2 – Multi‑Unit VP Pressure</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="../_sources/curriculum/p2_results.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="p2-multiunit-vp-pressure">
+<h1>P2 – Multi‑Unit VP Pressure<a class="headerlink" href="#p2-multiunit-vp-pressure" title="Link to this heading"></a></h1>
+<p>This document records the training results and behavioral analysis of
+<strong>P2 – Multi‑Unit VP Pressure</strong>, the second stage of the assault‑env
+reinforcement learning curriculum.</p>
+<p>P2 introduces <strong>multiple friendly units</strong> while keeping all other
+dimensions identical to the frozen P1 baseline.</p>
+<p>—</p>
+<section id="scenario-overview">
+<h2>Scenario Overview<a class="headerlink" href="#scenario-overview" title="Link to this heading"></a></h2>
+<ul class="simple">
+<li><p>Friendly units (learning agent): 2</p></li>
+<li><p>Enemy units: 1 (heuristic)</p></li>
+<li><p>Victory Points: 3 (2 points each)</p></li>
+<li><p>Turn structure: alternating, sequential unit activation</p></li>
+<li><p>Episode length: fixed turn limit</p></li>
+<li><p>Mission resolution: Victory Points evaluated at episode end</p></li>
+</ul>
+<p>The scenario is designed to represent a <strong>pressure‑based defensive
+mission</strong>, where numerical redundancy <em>should</em> enable risk reduction.</p>
+<p>—</p>
+</section>
+<section id="training-configuration">
+<h2>Training Configuration<a class="headerlink" href="#training-configuration" title="Link to this heading"></a></h2>
+<ul class="simple">
+<li><p>Algorithm: Proximal Policy Optimization (PPO)</p></li>
+<li><p>Policy: <code class="docutils literal notranslate"><span class="pre">MultiInputPolicy</span></code></p></li>
+<li><p>Total training steps: ~200,000</p></li>
+<li><p>Hyperparameters: identical to P1</p></li>
+<li><p>Reward function: unchanged from P1</p></li>
+<li><p>Engine: deterministic, unchanged</p></li>
+</ul>
+<p>No curriculum shortcuts, rule changes, or hyperparameter tuning
+were introduced for P2.</p>
+<p>—</p>
+</section>
+<section id="observed-converged-behavior">
+<h2>Observed Converged Behavior<a class="headerlink" href="#observed-converged-behavior" title="Link to this heading"></a></h2>
+<p>After convergence, the learned policy consistently exhibits:</p>
+<ul class="simple">
+<li><p>Continuous movement activity (no WAIT loops)</p></li>
+<li><p>Sequential activation of both friendly units</p></li>
+<li><p>Persistent avoidance of the enemy</p></li>
+<li><p>No sustained control of victory points</p></li>
+<li><p>No assaults in deterministic or stochastic evaluation</p></li>
+</ul>
+<p>This behavior is highly stable, reproducible, and insensitive to
+extended training.</p>
+<p>—</p>
+</section>
+<section id="interpretation">
+<h2>Interpretation<a class="headerlink" href="#interpretation" title="Link to this heading"></a></h2>
+<p>The converged P2 policy represents <strong>rational permanent evasion</strong>.</p>
+<p>Despite having two units, the agent:</p>
+<ul class="simple">
+<li><p>Possesses no explicit awareness of aggregate friendly force</p></li>
+<li><p>Evaluates engagement risk locally and conservatively</p></li>
+<li><p>Prefers survival over contestation under uncertainty</p></li>
+</ul>
+<p>Given the available information, this behavior is optimal.</p>
+<p>—</p>
+</section>
+<section id="rotation-without-coordination">
+<h2>Rotation Without Coordination<a class="headerlink" href="#rotation-without-coordination" title="Link to this heading"></a></h2>
+<p>Although the environment supports multiple friendly units,
+the policy does <strong>not</strong> coordinate them strategically.</p>
+<p>Unit rotation occurs mechanically due to turn structure, but:</p>
+<ul class="simple">
+<li><p>No unit commits to holding victory points</p></li>
+<li><p>No unit assumes a protective or aggressive role</p></li>
+<li><p>Units behave as independent tactical actors</p></li>
+</ul>
+<p>Redundancy exists structurally, but not informationally.</p>
+<p>—</p>
+</section>
+<section id="comparison-with-p1">
+<h2>Comparison with P1<a class="headerlink" href="#comparison-with-p1" title="Link to this heading"></a></h2>
+<p>Relative to P1, P2 demonstrates:</p>
+<ul class="simple">
+<li><p>Greater movement diversity</p></li>
+<li><p>Reduced immediate retreat</p></li>
+<li><p>Slightly increased positional tolerance</p></li>
+</ul>
+<p>However, the fundamental conservative bias remains unchanged.</p>
+<p>The presence of a second unit alone is insufficient to
+produce strategic pressure.</p>
+<p>—</p>
+</section>
+<section id="curriculum-role">
+<h2>Curriculum Role<a class="headerlink" href="#curriculum-role" title="Link to this heading"></a></h2>
+<p>P2 is considered:</p>
+<ul class="simple">
+<li><p>✅ Structurally well‑designed</p></li>
+<li><p>✅ Deterministic and reproducible</p></li>
+<li><p>✅ A controlled failure</p></li>
+<li><p>✅ A diagnostic curriculum stage</p></li>
+</ul>
+<p>The failure of P2 is <strong>intentionally preserved</strong> rather than corrected.</p>
+<p>It directly motivates the introduction of global force awareness
+in the next curriculum stage.</p>
+<p>—</p>
+</section>
+<section id="next-curriculum-direction">
+<h2>Next Curriculum Direction<a class="headerlink" href="#next-curriculum-direction" title="Link to this heading"></a></h2>
+<p>P2 reveals that <strong>multi‑unit interaction without aggregate context</strong>
+is insufficient to escape conservative local optima.</p>
+<p>This insight motivates:</p>
+<ul class="simple">
+<li><p>P3: global force awareness</p></li>
+<li><p>P4: symmetric strategic interaction</p></li>
+</ul>
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="p1_results.html" class="btn btn-neutral float-left" title="P1 – Single Unit Baseline" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="p3_results.html" class="btn btn-neutral float-right" title="P3 – Global Force Awareness" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2026, Ricardo David Alba Atencia.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

@@ -1,44 +1,55 @@
-Curriculum Overview
-===================
+Curriculum Design Overview
+==========================
 
-This document summarizes the staged curriculum used to train agents in
-the assault‑env environment.
+This document summarizes the staged curriculum used to train
+agents in assault‑env.
 
-The curriculum is designed to introduce **exactly one new source of
-complexity per stage**, while avoiding reward shaping and algorithmic
-changes whenever possible. This incremental design isolates causal
-factors and facilitates interpretable learning dynamics.
-
----
-
-Curriculum Structure
---------------------
-
-P1 – Single Unit Baseline
-  Establishes basic tactical competence under purely local information.
-
-P2 – Multi‑Unit VP Pressure (2 vs 1)
-  Introduces redundancy without aggregate context, revealing a stable
-  conservative failure mode.
-
-P3 – Global Force Awareness
-  Resolves the P2 failure through minimal informational augmentation.
-
-P4 – Symmetric Strategic Engagement (2 vs 2)
-  Introduces full symmetry and genuine strategic interaction.
-
-P4‑B – Soft Role Allocation (Exploratory)
-  Tests whether role‑like differentiation emerges from minimal
-  ally‑centric observations.
+The curriculum is designed to introduce **exactly one new
+source of complexity per stage**, avoiding reward shaping and
+algorithmic changes whenever possible.
 
 ---
 
-Curriculum Status
------------------
+P1 – Single Unit Duel
+---------------------
 
-- P1–P4 are considered **canonical and frozen**
-- P4‑B is **exploratory**, negative, and conclusive
-- No reward shaping or PPO tuning was used at any stage
+Goal:
+- Learn basic movement, distance control and assault timing.
 
-The curriculum is complete and serves as a controlled study of emergent
-strategy and coordination under increasing structural complexity.
+Outcome:
+- Conservative but functional policy.
+
+---
+
+P2 – Multi‑Unit without Global Context
+--------------------------------------
+
+Goal:
+- Introduce unit rotation and redundancy.
+
+Observed Failure:
+- Agent converges to permanent evasion.
+- No assaults, no objective pressure.
+
+Interpretation:
+- Rational behavior given incomplete information.
+- Local optimum revealed by structural asymmetry.
+
+---
+
+P3 – Multi‑Unit with Global Force Awareness
+-------------------------------------------
+
+Goal:
+- Enable the agent to recognize numerical advantage.
+
+Change:
+- Observation space only (no rewards, no PPO changes).
+
+Outcome:
+- Degenerate behavior resolved.
+- Selective aggression appears.
+- Value function stabilizes.
+
+---
+

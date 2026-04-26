@@ -1,0 +1,164 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Generated Architecture Artifacts &mdash; Assault-Env Documentation  documentation</title>
+      <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=9edc463e" />
+
+  
+    <link rel="canonical" href="https://richardcc.github.io/assault-ai-pilot/architecture/generated_artifacts.html" />
+      <script src="../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../_static/documentation_options.js?v=5929fcd5"></script>
+      <script src="../_static/doctools.js?v=9bcbadda"></script>
+      <script src="../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script src="../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../index.html" class="icon icon-home">
+            Assault-Env Documentation
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../engine/index.html">Assault Engine Documentation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../curriculum/index.html">Reinforcement Learning Curriculum</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../index.html">Assault-Env Documentation</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../index.html" class="icon icon-home" aria-label="Home"></a></li>
+      <li class="breadcrumb-item active">Generated Architecture Artifacts</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="../_sources/architecture/generated_artifacts.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="generated-architecture-artifacts">
+<h1>Generated Architecture Artifacts<a class="headerlink" href="#generated-architecture-artifacts" title="Link to this heading"></a></h1>
+<p>This project uses automatic tools to generate <em>structural views</em>
+of the codebase.</p>
+<p>These artifacts describe <strong>what depends on what</strong>, but they do <strong>not</strong>
+capture the <em>semantic intent</em> of the system.</p>
+<p>They are complementary to the manually written architecture documents.</p>
+<section id="dependency-graph">
+<h2>Dependency Graph<a class="headerlink" href="#dependency-graph" title="Link to this heading"></a></h2>
+<p>Generated with <code class="docutils literal notranslate"><span class="pre">pydeps</span></code>.</p>
+<p>Purpose:</p>
+<ul class="simple">
+<li><p>show module-level dependencies</p></li>
+<li><p>highlight layer boundaries (engine, runner, analysis)</p></li>
+<li><p>identify unwanted coupling</p></li>
+<li><p>support refactoring and cleanup</p></li>
+</ul>
+<p>Notes:</p>
+<ul class="simple">
+<li><p>regenerated automatically</p></li>
+<li><p>purely structural (import-based)</p></li>
+<li><p>does not represent runtime control flow</p></li>
+</ul>
+</section>
+<section id="call-graph">
+<h2>Call Graph<a class="headerlink" href="#call-graph" title="Link to this heading"></a></h2>
+<p>Generated with <code class="docutils literal notranslate"><span class="pre">code2flow</span></code>.</p>
+<p>Purpose:</p>
+<ul class="simple">
+<li><p>show function-level call relationships</p></li>
+<li><p>visualize execution paths across modules</p></li>
+<li><p>support debugging and reasoning about control flow</p></li>
+</ul>
+<p>Notes:</p>
+<ul class="simple">
+<li><p>regenerated automatically</p></li>
+<li><p>approximates call relationships</p></li>
+<li><p>does not represent data flow or decision semantics</p></li>
+</ul>
+</section>
+<section id="important-limitations">
+<h2>Important Limitations<a class="headerlink" href="#important-limitations" title="Link to this heading"></a></h2>
+<p>Generated artifacts <strong>do not describe semantic intent</strong>.</p>
+<p>In particular, they cannot explain:</p>
+<ul class="simple">
+<li><p>why a callback must (or must not) exist</p></li>
+<li><p>where rationales must be captured</p></li>
+<li><p>how actor, action, and rationale are causally aligned</p></li>
+<li><p>which component owns a responsibility</p></li>
+</ul>
+<p>These questions are answered exclusively by the
+manually written architecture and contract documents
+(e.g. decision flow, environment contract, replay format).</p>
+</section>
+<section id="design-principle">
+<h2>Design Principle<a class="headerlink" href="#design-principle" title="Link to this heading"></a></h2>
+<p>Automatic artifacts describe <strong>structure</strong>.</p>
+<p>Manual documentation describes <strong>meaning</strong>.</p>
+<p>Both are required for a complete and maintainable system.</p>
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2026, Ricardo David Alba Atencia.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

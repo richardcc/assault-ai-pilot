@@ -1,0 +1,163 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Hex Grid Map Rendering – Web Viewer Compliance &mdash; Assault-Env Documentation  documentation</title>
+      <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=9edc463e" />
+
+  
+      <script src="../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../_static/documentation_options.js?v=5929fcd5"></script>
+      <script src="../_static/doctools.js?v=9bcbadda"></script>
+      <script src="../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script src="../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../index.html" class="icon icon-home">
+            Assault-Env Documentation
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../engine/index.html">Assault Engine Documentation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../curriculum/index.html">Reinforcement Learning Curriculum</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../index.html">Assault-Env Documentation</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../index.html" class="icon icon-home" aria-label="Home"></a></li>
+      <li class="breadcrumb-item active">Hex Grid Map Rendering – Web Viewer Compliance</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="../_sources/rendering/web_viewer_compliance.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="hex-grid-map-rendering-web-viewer-compliance">
+<h1>Hex Grid Map Rendering – Web Viewer Compliance<a class="headerlink" href="#hex-grid-map-rendering-web-viewer-compliance" title="Link to this heading"></a></h1>
+<p>This document defines the <strong>binding compliance requirements</strong> for the
+web-based hex map viewer.</p>
+<p>The web viewer does not define geometry.
+It must strictly comply with the authoritative rendering rules.</p>
+<hr class="docutils" />
+<section id="authoritative-reference">
+<h2>Authoritative Reference<a class="headerlink" href="#authoritative-reference" title="Link to this heading"></a></h2>
+<p>All hex grid geometry, terrain anchoring (S2 / S3), scaling rules, and
+alpha-handling semantics are defined in the following authoritative
+document:</p>
+<p><a class="reference internal" href="hex_map_rendering.html"><span class="doc">Hex Grid Map Rendering – Design Notes</span></a></p>
+<p>This reference is <strong>normative</strong>.
+Any discrepancy is considered a regression.</p>
+</section>
+<hr class="docutils" />
+<section id="terrain-layers-s2-s3">
+<h2>Terrain Layers (S2 / S3)<a class="headerlink" href="#terrain-layers-s2-s3" title="Link to this heading"></a></h2>
+<p>The web viewer MUST:</p>
+<ul class="simple">
+<li><p>Anchor the S3 terrain layer to <strong>hex A1</strong>, exactly as defined in the
+authoritative rendering document</p></li>
+<li><p>Anchor the S2 terrain layer to <strong>hex A9</strong>, exactly as defined in the
+authoritative rendering document</p></li>
+<li><p>Use the same <code class="docutils literal notranslate"><span class="pre">hex_to_world</span></code> mathematics as the canonical renderer</p></li>
+<li><p>Apply <strong>no positional offsets or corrections</strong></p></li>
+<li><p>Preserve alpha transparency semantics exactly</p></li>
+</ul>
+<p>The web viewer MUST NOT:</p>
+<ul class="simple">
+<li><p>Recenter terrain images</p></li>
+<li><p>Apply screen-space anchoring</p></li>
+<li><p>Introduce parity-based or row-dependent corrections</p></li>
+<li><p>Infer geometry from PNG pixel dimensions</p></li>
+<li><p>Compensate visually for malformed assets</p></li>
+</ul>
+<p>Any visual misalignment must be treated as an <strong>asset or contract
+violation</strong>, not as a geometry problem.</p>
+</section>
+<hr class="docutils" />
+<section id="rendering-responsibility">
+<h2>Rendering Responsibility<a class="headerlink" href="#rendering-responsibility" title="Link to this heading"></a></h2>
+<p>The web viewer is responsible only for:</p>
+<ul class="simple">
+<li><p>World-to-screen coordinate transformation</p></li>
+<li><p>Camera translation</p></li>
+<li><p>Zoom scaling</p></li>
+<li><p>Correct compositing order</p></li>
+</ul>
+<p>The web viewer is <strong>not</strong> responsible for redefining world geometry,
+grid structure, or terrain anchoring rules.</p>
+</section>
+<hr class="docutils" />
+<section id="status">
+<h2>Status<a class="headerlink" href="#status" title="Link to this heading"></a></h2>
+<p>✅ Geometry: defined elsewhere
+✅ Authority: external and binding
+✅ Compliance: mandatory</p>
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2026, Ricardo David Alba Atencia.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

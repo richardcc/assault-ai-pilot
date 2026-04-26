@@ -1,0 +1,283 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Replay Format – Engine to Viewer Contract &mdash; Assault-Env Documentation  documentation</title>
+      <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=9edc463e" />
+
+  
+    <link rel="canonical" href="https://richardcc.github.io/assault-ai-pilot/architecture/replay_format.html" />
+      <script src="../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../_static/documentation_options.js?v=5929fcd5"></script>
+      <script src="../_static/doctools.js?v=9bcbadda"></script>
+      <script src="../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script src="../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../index.html" class="icon icon-home">
+            Assault-Env Documentation
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../engine/index.html">Assault Engine Documentation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../curriculum/index.html">Reinforcement Learning Curriculum</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../index.html">Assault-Env Documentation</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../index.html" class="icon icon-home" aria-label="Home"></a></li>
+      <li class="breadcrumb-item active">Replay Format – Engine to Viewer Contract</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="../_sources/architecture/replay_format.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="replay-format-engine-to-viewer-contract">
+<h1>Replay Format – Engine to Viewer Contract<a class="headerlink" href="#replay-format-engine-to-viewer-contract" title="Link to this heading"></a></h1>
+<p>This document defines the <strong>Replay format</strong> used to represent a fully resolved
+game simulation produced by an agent and executed by the engine.</p>
+<p>The Replay acts as a <strong>read‑only, immutable description of world evolution</strong>.
+It is the only structure consumed by the viewer for visualization and debugging.</p>
+<hr class="docutils" />
+<section id="purpose-of-the-replay">
+<h2>1. Purpose of the Replay<a class="headerlink" href="#purpose-of-the-replay" title="Link to this heading"></a></h2>
+<p>The Replay exists to:</p>
+<ul class="simple">
+<li><p>Visualize a game already solved by an agent</p></li>
+<li><p>Debug decisions made by the agent</p></li>
+<li><p>Inspect engine behavior step by step</p></li>
+<li><p>Enable deterministic reproduction of simulations</p></li>
+</ul>
+<p>The Replay <strong>does not</strong>:</p>
+<ul class="simple">
+<li><p>Contain game logic</p></li>
+<li><p>Validate rules</p></li>
+<li><p>Execute actions</p></li>
+<li><p>Provide interactivity</p></li>
+</ul>
+</section>
+<hr class="docutils" />
+<section id="architectural-principle">
+<h2>2. Architectural Principle<a class="headerlink" href="#architectural-principle" title="Link to this heading"></a></h2>
+<p><strong>Three strict roles are enforced:</strong></p>
+<ul class="simple">
+<li><p>The <strong>Engine</strong> decides and mutates live state</p></li>
+<li><p>The <strong>Replay</strong> describes immutable snapshots</p></li>
+<li><p>The <strong>Viewer</strong> renders snapshots without logic</p></li>
+</ul>
+<p>Violating this separation leads to fragile systems and coupled bugs.</p>
+</section>
+<hr class="docutils" />
+<section id="replay-structure-overview">
+<h2>3. Replay Structure Overview<a class="headerlink" href="#replay-structure-overview" title="Link to this heading"></a></h2>
+<p>A Replay is defined as an <strong>ordered sequence of immutable states</strong>.</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>Replay
+    └── states: List[ReplayState]
+</pre></div>
+</div>
+<p>Each element represents the full world state at a given simulation step.</p>
+</section>
+<hr class="docutils" />
+<section id="replaystate-world-snapshot">
+<h2>4. ReplayState (World Snapshot)<a class="headerlink" href="#replaystate-world-snapshot" title="Link to this heading"></a></h2>
+<p>A ReplayState is a frozen, self‑contained description of the game world.</p>
+<p>It must not reference engine objects or mutable state.</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="nd">@dataclass</span><span class="p">(</span><span class="n">frozen</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">ReplayState</span><span class="p">:</span>
+    <span class="n">turn</span><span class="p">:</span> <span class="nb">int</span>
+    <span class="n">active_player</span><span class="p">:</span> <span class="nb">str</span>
+    <span class="n">units</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">UnitState</span><span class="p">,</span> <span class="o">...</span><span class="p">]</span>
+</pre></div>
+</div>
+</section>
+<hr class="docutils" />
+<section id="unitstate">
+<h2>5. UnitState<a class="headerlink" href="#unitstate" title="Link to this heading"></a></h2>
+<p>Each unit visible in the world is represented by a UnitState.</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="nd">@dataclass</span><span class="p">(</span><span class="n">frozen</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">UnitState</span><span class="p">:</span>
+    <span class="n">unit_id</span><span class="p">:</span> <span class="nb">str</span>
+    <span class="n">side</span><span class="p">:</span> <span class="nb">str</span>
+    <span class="nb">hex</span><span class="p">:</span> <span class="nb">str</span>
+    <span class="n">strength</span><span class="p">:</span> <span class="nb">int</span>
+    <span class="n">status</span><span class="p">:</span> <span class="nb">str</span>
+</pre></div>
+</div>
+<p>Notes:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">hex</span></code> is stored as a string (e.g. “A9”)</p></li>
+<li><p>World‑to‑grid mapping is handled by the viewer</p></li>
+<li><p>No engine references are allowed</p></li>
+</ul>
+</section>
+<hr class="docutils" />
+<section id="snapshot-creation">
+<h2>6. Snapshot Creation<a class="headerlink" href="#snapshot-creation" title="Link to this heading"></a></h2>
+<p>Snapshots are created by <strong>extracting data from the engine state</strong> after each
+simulation step.</p>
+<p>This process must:</p>
+<ul class="simple">
+<li><p>Allocate new objects</p></li>
+<li><p>Avoid sharing references</p></li>
+<li><p>Preserve chronological order</p></li>
+</ul>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="k">def</span><span class="w"> </span><span class="nf">snapshot</span><span class="p">(</span><span class="n">engine_state</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ReplayState</span><span class="p">:</span>
+    <span class="k">return</span> <span class="n">ReplayState</span><span class="p">(</span>
+        <span class="n">turn</span><span class="o">=</span><span class="n">engine_state</span><span class="o">.</span><span class="n">turn</span><span class="p">,</span>
+        <span class="n">active_player</span><span class="o">=</span><span class="n">engine_state</span><span class="o">.</span><span class="n">active_player</span><span class="p">,</span>
+        <span class="n">units</span><span class="o">=</span><span class="nb">tuple</span><span class="p">(</span>
+            <span class="n">UnitState</span><span class="p">(</span>
+                <span class="n">unit_id</span><span class="o">=</span><span class="nb">str</span><span class="p">(</span><span class="n">unit</span><span class="o">.</span><span class="n">id</span><span class="p">),</span>
+                <span class="n">side</span><span class="o">=</span><span class="n">unit</span><span class="o">.</span><span class="n">side</span><span class="p">,</span>
+                <span class="nb">hex</span><span class="o">=</span><span class="nb">str</span><span class="p">(</span><span class="n">unit</span><span class="o">.</span><span class="n">hex</span><span class="p">),</span>
+                <span class="n">strength</span><span class="o">=</span><span class="n">unit</span><span class="o">.</span><span class="n">strength</span><span class="p">,</span>
+                <span class="n">status</span><span class="o">=</span><span class="n">unit</span><span class="o">.</span><span class="n">status</span><span class="o">.</span><span class="n">name</span><span class="p">,</span>
+            <span class="p">)</span>
+            <span class="k">for</span> <span class="n">unit</span> <span class="ow">in</span> <span class="n">engine_state</span><span class="o">.</span><span class="n">units</span>
+        <span class="p">),</span>
+    <span class="p">)</span>
+</pre></div>
+</div>
+<p>Snapshots must be created:</p>
+<ul class="simple">
+<li><p>After reset (initial state)</p></li>
+<li><p>After each engine step</p></li>
+<li><p>Never mutated afterward</p></li>
+</ul>
+</section>
+<hr class="docutils" />
+<section id="responsibilities-and-restrictions">
+<h2>7. Responsibilities and Restrictions<a class="headerlink" href="#responsibilities-and-restrictions" title="Link to this heading"></a></h2>
+<section id="engine">
+<h3>Engine<a class="headerlink" href="#engine" title="Link to this heading"></a></h3>
+<ul class="simple">
+<li><p>Owns mutable game state</p></li>
+<li><p>Applies actions</p></li>
+<li><p>Advances turns</p></li>
+<li><p>Produces snapshots</p></li>
+</ul>
+</section>
+<section id="replay">
+<h3>Replay<a class="headerlink" href="#replay" title="Link to this heading"></a></h3>
+<ul class="simple">
+<li><p>Stores immutable state history</p></li>
+<li><p>Contains no behavior</p></li>
+<li><p>Contains no logic</p></li>
+<li><p>Is safe to serialize</p></li>
+</ul>
+</section>
+<section id="viewer">
+<h3>Viewer<a class="headerlink" href="#viewer" title="Link to this heading"></a></h3>
+<ul class="simple">
+<li><p>Reads ReplayState objects</p></li>
+<li><p>Renders grid, terrain, and units</p></li>
+<li><p>Never mutates state</p></li>
+<li><p>Never infers rules</p></li>
+</ul>
+</section>
+</section>
+<hr class="docutils" />
+<section id="determinism-and-debugging">
+<h2>8. Determinism and Debugging<a class="headerlink" href="#determinism-and-debugging" title="Link to this heading"></a></h2>
+<p>Because ReplayStates are immutable and ordered:</p>
+<ul class="simple">
+<li><p>Any visual bug can be reproduced exactly</p></li>
+<li><p>Agent decisions can be inspected in context</p></li>
+<li><p>Different agents can be compared turn by turn</p></li>
+</ul>
+<p>If a rendered state is incorrect, the bug is:</p>
+<ul class="simple">
+<li><p>In the engine (if data is wrong)</p></li>
+<li><p>Or in the viewer (if data is rendered wrong)</p></li>
+</ul>
+<p>Never assume both.</p>
+</section>
+<hr class="docutils" />
+<section id="forbidden-practices">
+<h2>9. Forbidden Practices<a class="headerlink" href="#forbidden-practices" title="Link to this heading"></a></h2>
+<p>The following practices are explicitly forbidden:</p>
+<ul class="simple">
+<li><p>Mutating ReplayState after creation</p></li>
+<li><p>Storing engine objects inside replay</p></li>
+<li><p>Computing logic inside the viewer</p></li>
+<li><p>Allowing the viewer to modify game state</p></li>
+<li><p>Treating Replay as authoritative for rules</p></li>
+</ul>
+</section>
+<hr class="docutils" />
+<section id="final-note">
+<h2>10. Final Note<a class="headerlink" href="#final-note" title="Link to this heading"></a></h2>
+<p>The Replay format is a <strong>debugging and inspection tool</strong>, not a gameplay system.</p>
+<p>All gameplay decisions must happen <strong>before</strong> the Replay is produced.</p>
+<p>✅ Status: Accepted and stable</p>
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2026, Ricardo David Alba Atencia.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

@@ -1,0 +1,217 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Curriculum Conclusion &mdash; Assault-Env Documentation  documentation</title>
+      <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=9edc463e" />
+
+  
+    <link rel="canonical" href="https://richardcc.github.io/assault-ai-pilot/curriculum/curriculum_conclusion.html" />
+      <script src="../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../_static/documentation_options.js?v=5929fcd5"></script>
+      <script src="../_static/doctools.js?v=9bcbadda"></script>
+      <script src="../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script src="../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../index.html" class="icon icon-home">
+            Assault-Env Documentation
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../engine/index.html">Assault Engine Documentation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="index.html">Reinforcement Learning Curriculum</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../index.html">Assault-Env Documentation</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../index.html" class="icon icon-home" aria-label="Home"></a></li>
+      <li class="breadcrumb-item active">Curriculum Conclusion</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="../_sources/curriculum/curriculum_conclusion.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="curriculum-conclusion">
+<h1>Curriculum Conclusion<a class="headerlink" href="#curriculum-conclusion" title="Link to this heading"></a></h1>
+<p>This document summarizes the findings of the assault‑env reinforcement
+learning curriculum (P1–P4), including the exploratory extension P4‑B.</p>
+<p>The objective of the curriculum was not to maximize task performance,
+but to <strong>understand which forms of tactical and strategic behavior
+emerge naturally under controlled structural and informational
+conditions</strong>.</p>
+<p>—</p>
+<section id="overview-of-curriculum-findings">
+<h2>Overview of Curriculum Findings<a class="headerlink" href="#overview-of-curriculum-findings" title="Link to this heading"></a></h2>
+<p>Across stages P1 through P4, the curriculum incrementally increased
+environmental complexity while maintaining:</p>
+<ul class="simple">
+<li><p>A fixed reward function</p></li>
+<li><p>A fixed learning algorithm (PPO)</p></li>
+<li><p>Deterministic environment dynamics</p></li>
+<li><p>Minimal and isolated changes per stage</p></li>
+</ul>
+<p>This design enabled direct attribution of behavioral transitions to
+specific structural or informational modifications.</p>
+<p>—</p>
+</section>
+<section id="what-emerges">
+<h2>What Emerges<a class="headerlink" href="#what-emerges" title="Link to this heading"></a></h2>
+<p>The curriculum demonstrates that the following behaviors <strong>do emerge</strong>
+under appropriate conditions:</p>
+<ul class="simple">
+<li><p>Basic tactical competence under purely local information (P1)</p></li>
+<li><p>Stable multi‑unit control without catastrophic failure (P2)</p></li>
+<li><p>Situation‑dependent risk assessment enabled by aggregate context (P3)</p></li>
+<li><p>Adaptive coordination in fully symmetric strategic settings (P4)</p></li>
+<li><p>Selective aggression present within stochastic policy distributions</p></li>
+<li><p>Flexible, context‑dependent coordination without rigid specialization</p></li>
+</ul>
+<p>These behaviors arise <strong>without reward shaping or role assignment</strong>,
+indicating that PPO can learn tactically and strategically meaningful
+policies when sufficient information is provided.</p>
+<p>—</p>
+</section>
+<section id="what-does-not-emerge">
+<h2>What Does Not Emerge<a class="headerlink" href="#what-does-not-emerge" title="Link to this heading"></a></h2>
+<p>Equally important, the curriculum identifies behaviors that <strong>do not
+emerge naturally</strong> under the tested conditions:</p>
+<ul class="simple">
+<li><p>Persistent or explicit role specialization in symmetric scenarios</p></li>
+<li><p>Dominant greedy policies in strategic multi‑agent environments</p></li>
+<li><p>Stable unit‑level task allocation without structural asymmetry</p></li>
+<li><p>Guaranteed aggression under numerical parity</p></li>
+</ul>
+<p>The absence of these behaviors is not interpreted as failure, but as a
+property of the underlying problem structure.</p>
+<p>P4‑B explicitly demonstrates that <strong>ally‑centric relational information
+alone is insufficient</strong> to induce stable role differentiation under
+symmetry.</p>
+<p>—</p>
+</section>
+<section id="key-interpretive-insights">
+<h2>Key Interpretive Insights<a class="headerlink" href="#key-interpretive-insights" title="Link to this heading"></a></h2>
+<p>Several general insights emerge from the curriculum:</p>
+<ol class="arabic simple">
+<li><p>Conservative behavior is a rational baseline under uncertainty.</p></li>
+<li><p>Structural redundancy without aggregate awareness induces stable
+evasion rather than coordination.</p></li>
+<li><p>Minimal informational augmentation can resolve structural failure
+modes without altering incentives.</p></li>
+<li><p>Symmetry eliminates trivial solutions and necessitates strategic
+adaptation.</p></li>
+<li><p>Stochastic evaluation is essential for revealing the full policy
+distribution in strategic environments.</p></li>
+<li><p>Oscillatory or variable value estimates in symmetric games reflect
+inherent strategic ambiguity, not learning instability.</p></li>
+</ol>
+<p>—</p>
+</section>
+<section id="methodological-implications">
+<h2>Methodological Implications<a class="headerlink" href="#methodological-implications" title="Link to this heading"></a></h2>
+<p>The curriculum reinforces several methodological principles:</p>
+<ul class="simple">
+<li><p>Reward shaping is not required to induce complex behavior, but can
+obscure causal interpretation.</p></li>
+<li><p>Fixing algorithmic parameters across stages enhances interpretability.</p></li>
+<li><p>Controlled failure modes provide valuable diagnostic information.</p></li>
+<li><p>Strategy emergence should be evaluated behaviorally, not solely via
+scalar metrics.</p></li>
+</ul>
+<p>These principles guided all design decisions and are reflected
+consistently across stages.</p>
+<p>—</p>
+</section>
+<section id="curriculum-status">
+<h2>Curriculum Status<a class="headerlink" href="#curriculum-status" title="Link to this heading"></a></h2>
+<p>The curriculum is considered <strong>complete and frozen</strong> with respect to
+stages P1–P4.</p>
+<p>P4‑B is retained as an exploratory extension documenting a negative but
+informative result.</p>
+<p>No further curriculum stages are introduced in this work.</p>
+<p>Future extensions (e.g., explicit asymmetry, task differentiation, or
+long‑horizon incentives) are considered <strong>separate research questions</strong>
+rather than continuations of the present curriculum.</p>
+<p>—</p>
+</section>
+<section id="final-remark">
+<h2>Final Remark<a class="headerlink" href="#final-remark" title="Link to this heading"></a></h2>
+<p>The assault‑env curriculum demonstrates that meaningful coordination
+and strategic behavior can emerge from minimal assumptions, provided
+that structural and informational conditions are made explicit.</p>
+<p>Equally, it shows that not all desirable behaviors—such as persistent
+role allocation—should be expected to arise in the absence of explicit
+pressure.</p>
+<p>Understanding <strong>why behaviors do or do not emerge</strong> is the central
+contribution of this curriculum.</p>
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2026, Ricardo David Alba Atencia.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>
