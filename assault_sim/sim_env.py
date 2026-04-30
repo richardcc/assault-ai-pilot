@@ -13,6 +13,8 @@ from assault_model.map.map_piece_loader import load_map_piece_catalog
 from assault_model.core.scenario_loader import load_scenario
 from assault_model.core.game_state import GameState
 from assault_model.core.game_state_runtime import RuntimeGameState
+from assault_model.actions.action_catalog import ActionCatalog
+from assault_model.actions.status import WaitAction
 from assault_sim.debug.debug_config import DebugConfig
 from assault_sim.debug.event_bus import EventBus
 
@@ -25,14 +27,13 @@ class SimEnv:
     - Load catalogs and scenario
     - Create GameState and RuntimeGameState
     - Emit structured events
-    - Decide END-MATCH and WINNER
+    - Decide TURN_END and MATCH_END
     """
 
     def __init__(self, config: SimConfig, debug_config: DebugConfig | None = None):
         self.config = config
         self.debug_config = debug_config or DebugConfig(enabled=False)
 
-        # EventBus only if observability is enabled
         self.event_bus = EventBus() if self.debug_config.enabled else None
 
         self.scenario = None
@@ -46,7 +47,6 @@ class SimEnv:
     def reset(self):
         root = self.config.data_root
 
-        # Load catalogs
         unit_catalog = load_unit_catalog(root / self.config.unit_catalog)
         map_catalog = load_map_piece_catalog(root / self.config.map_piece_catalog)
 
@@ -56,12 +56,10 @@ class SimEnv:
             / f"{self.config.scenario_name}.json"
         )
 
-        # Load scenario and initial state
         self.scenario = load_scenario(scenario_path, unit_catalog, map_catalog)
         self.game_state = GameState.from_scenario(self.scenario)
         self.runtime = RuntimeGameState(self.game_state)
 
-        # Optional environment config
         env_config_path = root / "env_config.json"
         if env_config_path.exists():
             with open(env_config_path, "r", encoding="utf-8") as f:
@@ -70,11 +68,10 @@ class SimEnv:
         else:
             self.player_config = {}
 
-        # Attach EventBus
         if self.event_bus:
             self.game_state.event_bus = self.event_bus
 
-            # RESET event (includes map for initial render)
+            # RESET
             self.event_bus.emit(
                 {
                     "type": "RESET",
@@ -86,7 +83,6 @@ class SimEnv:
                 }
             )
 
-            # UNIT_LOADED events
             for unit in self.game_state.units:
                 side_cfg = self.player_config.get(unit.side, {})
                 self.event_bus.emit(
@@ -97,26 +93,18 @@ class SimEnv:
                             "side": unit.side,
                             "position": unit.position,
                             "controller": side_cfg.get("controller", "heuristic"),
-                            "heuristic": side_cfg.get(
-                                "heuristic", "HeuristicBase"
-                            ),
+                            "heuristic": side_cfg.get("heuristic", "HeuristicBase"),
                         },
                     }
                 )
 
-            # Initial map state render (TURN 1)
-            self._emit_map_state()
-
-        # Start first turn
+        # -------------------------------------------------
+        # START FIRST TURN
+        # -------------------------------------------------
         self.runtime.start_turn()
         self.game_state = self.runtime.base_state
 
-        return self.game_state
-
-    # -------------------------------------------------
-    # MAP STATE EVENT (DEBUG ONLY)
-    # -------------------------------------------------
-    def _emit_map_state(self):
+        # ✅ MAP AT START OF TURN 1
         if self.event_bus:
             self.event_bus.emit(
                 {
@@ -129,28 +117,17 @@ class SimEnv:
                 }
             )
 
+        return self.game_state
+
     # -------------------------------------------------
     # STEP
     # -------------------------------------------------
     def step(self, action):
         """
-        Apply one action and decide END-MATCH + WINNER.
+        Apply one action and decide TURN_END and MATCH_END.
         """
 
-        # -------------------------------------------------
-        # ✅ EARLY END-MATCH: no active unit
-        # -------------------------------------------------
-        if self.game_state.active_unit is None:
-            reward = (
-                self.game_state.vp_tracker.total_points
-                if self.game_state.vp_tracker
-                else 0
-            )
-            return self.game_state, reward, True, {}
-
-        # -------------------------------------------------
         # ACTION event
-        # -------------------------------------------------
         if self.event_bus and self.debug_config.log_actions:
             self.event_bus.emit(
                 {
@@ -167,21 +144,11 @@ class SimEnv:
                 }
             )
 
-        # -------------------------------------------------
         # Apply action
-        # -------------------------------------------------
         self.runtime.apply_action(action)
         self.game_state = self.runtime.base_state
 
-        # -------------------------------------------------
-        # MAP STATE AFTER ACTION (EVERY ITERATION)
-        # -------------------------------------------------
-        if self.event_bus:
-            self._emit_map_state()
-
-        # -------------------------------------------------
-        # ✅ END-MATCH: last side standing
-        # -------------------------------------------------
+        # END-MATCH: last side standing
         alive_units = [u for u in self.game_state.units if u.alive]
         alive_sides = {u.side for u in alive_units}
 
@@ -207,9 +174,7 @@ class SimEnv:
 
             return self.game_state, reward, True, {}
 
-        # -------------------------------------------------
-        # TURN_STATE event
-        # -------------------------------------------------
+        # END OF ACTIVATION (NOT TURN)
         if self.event_bus and self.debug_config.log_turns:
             self.event_bus.emit(
                 {
@@ -226,8 +191,37 @@ class SimEnv:
             )
 
         # -------------------------------------------------
-        # Turn-limit termination
+        # ✅ TURN_END (FORMAL CRITERION)
         # -------------------------------------------------
+        if self._turn_has_ended():
+            if self.event_bus:
+                # FIN DE TURNO
+                self.event_bus.emit(
+                    {
+                        "type": "TURN_END",
+                        "payload": {
+                            "turn": self.game_state.turn,
+                            "reason": "no_activable_units",
+                        },
+                    }
+                )
+
+                # ✅ MAP AT END OF TURN
+                self.event_bus.emit(
+                    {
+                        "type": "MAP_STATE",
+                        "payload": {
+                            "turn": self.game_state.turn,
+                            "game_map": self.game_state.game_map,
+                            "units": self.game_state.units,
+                        },
+                    }
+                )
+
+            # START NEXT TURN
+            self.runtime.start_turn()
+            self.game_state = self.runtime.base_state
+
         done = (
             self.scenario.max_turns is not None
             and self.game_state.turn > self.scenario.max_turns
@@ -240,3 +234,41 @@ class SimEnv:
         )
 
         return self.game_state, reward, done, {}
+
+    # =================================================
+    # TURN-END CRITERION
+    # =================================================
+    def _turn_has_ended(self) -> bool:
+        return len(self._activable_units()) == 0
+
+    def _activable_units(self):
+        gs = self.game_state
+        catalog = ActionCatalog(gs)
+
+        return [
+            u
+            for u in gs.units
+            if self._is_unit_activable(u, gs, catalog)
+        ]
+
+    def _is_unit_activable(self, unit, gs, catalog) -> bool:
+        if not unit.alive:
+            return False
+
+        if unit in gs.activation_state.activated:
+            return False
+
+        if getattr(unit, "suppressed", False):
+            return False
+        if getattr(unit, "fallback", False):
+            return False
+
+        prev_active = gs.activation_state.active_unit
+        gs.activation_state.active_unit = unit
+        try:
+            actions = catalog.actions()
+        finally:
+            gs.activation_state.active_unit = prev_active
+
+        real_actions = [a for a in actions if not isinstance(a, WaitAction)]
+        return len(real_actions) > 0

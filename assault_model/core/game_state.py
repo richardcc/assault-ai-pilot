@@ -15,6 +15,9 @@ from assault_model.actions.combat_mode import CombatMode
 from assault_model.combat.close_combat_context import CloseCombatContext
 from assault_model.map.combat_geometry import determine_attack_sector
 
+# --- REACTION IMPORT ---
+from assault_model.combat.reaction_context import ReactionContext
+
 
 DEBUG_TRACE = os.getenv("ASSAULT_DEBUG_TRACE", "0") == "1"
 
@@ -54,6 +57,10 @@ class GameState:
         # === VICTORY CONDITIONS ===
         self.victory = victory
         self.vp_tracker = VictoryPointTracker(victory) if victory else None
+
+        # === REACTION STATE ===
+        # When not None, the game is paused waiting for a reaction decision
+        self.reaction_context: Optional[ReactionContext] = None
 
     @classmethod
     def from_scenario(cls, scenario) -> "GameState":
@@ -134,7 +141,6 @@ class GameState:
             defender_facing=defender_facing,
         )
 
-        # ✅ TRACE: geometry + context init
         _trace(
             "ATTACK_SECTOR",
             attacker_pos=attacker.position,
@@ -158,3 +164,27 @@ class GameState:
             combat_mode=action.combat_mode,
             attack_sector=attack_sector,
         )
+
+    # =================================================
+    # REACTION STATE MANAGEMENT
+    # =================================================
+    def enter_reaction(self, context: ReactionContext) -> None:
+        """
+        Enter a reaction window.
+        The game is paused until the reaction is resolved.
+        """
+        _trace(
+            "REACTION_ENTER",
+            trigger=context.trigger,
+            reactor=context.reactor.unit_id,
+            target=context.moving_unit.unit_id,
+        )
+        self.reaction_context = context
+
+    def clear_reaction(self) -> None:
+        """
+        Exit the reaction window and resume normal play.
+        """
+        if self.reaction_context is not None:
+            _trace("REACTION_CLEAR")
+        self.reaction_context = None

@@ -17,11 +17,18 @@ def _trace(tag: str, **data):
 
 
 class RuntimeGameState:
+    """
+    Runtime orchestrator for the game.
+    Applies actions atomically, emits events, and advances activations/turns.
+    """
+
     def __init__(self, base_state: GameState):
         self.base_state = base_state
+        # REVIEW: Runtime keeps its own TurnState mirror for sequencing/logging
         self.turn = TurnState(turn_number=base_state.turn)
 
     def start_turn(self) -> None:
+        # REVIEW: Resets activation ordering at the start of each turn
         self.base_state.activation_state.reset(self.base_state.units)
         self.base_state.activation_state.next_unit()
 
@@ -29,6 +36,7 @@ class RuntimeGameState:
     # Movement helpers
     # -------------------------------------------------
     def _movement_vector(self, before, after):
+        # REVIEW: Pure helper for event narration / debugging
         dx = after[0] - before[0]
         dy = after[1] - before[1]
         direction_map = {
@@ -51,12 +59,14 @@ class RuntimeGameState:
         action: Action,
         combat_result: CombatResolutionResult | None = None,
     ):
+        # REVIEW: Runtime only orchestrates, never decides strategy
         event_bus = getattr(self.base_state, "event_bus", None)
 
         attacker_id = getattr(action, "unit_id", None)
         defender_id = getattr(action, "target_id", None)
 
         def find_unit(state, uid):
+            # REVIEW: Local helper avoids repeated list scans
             return next((u for u in state.units if u.unit_id == uid), None)
 
         attacker = find_unit(self.base_state, attacker_id)
@@ -65,6 +75,7 @@ class RuntimeGameState:
         # DEAD OR INVALID ATTACKER
         # -------------------------------------------------
         if attacker is None or not attacker.alive:
+            # REVIEW: Guards against stale actions and delayed agents
             _trace("INVALID_ATTACKER", attacker_id=attacker_id)
 
             if event_bus:
@@ -77,6 +88,8 @@ class RuntimeGameState:
                         },
                     }
                 )
+
+            # REVIEW: Even invalid actions consume the activation
             self._advance_activation()
             return None
 
@@ -89,6 +102,7 @@ class RuntimeGameState:
         # -------------------------------------------------
         # BEFORE snapshot
         # -------------------------------------------------
+        # REVIEW: Snapshot is taken explicitly for explainability & replay
         before = {
             "unit_id": attacker.unit_id,
             "position": attacker.position,
@@ -96,13 +110,16 @@ class RuntimeGameState:
         }
 
         # -------------------------------------------------
-        # Resolve action
+        # Resolve action (ATOMIC)
         # -------------------------------------------------
+        # REVIEW: All rule enforcement happens inside resolve_action
         result = resolve_action(
             state=self.base_state,
             action=action,
             combat_result=combat_result,
         )
+
+        # REVIEW: Runtime swaps in the new canonical state
         self.base_state = result.new_state
 
         _trace(
@@ -129,6 +146,7 @@ class RuntimeGameState:
         # -------------------------------------------------
         # ACTION EFFECT
         # -------------------------------------------------
+        # REVIEW: These events are observational only (no feedback loop)
         if event_bus and after:
             moved = before["position"] != after["position"]
             dx = dy = direction = None
@@ -159,6 +177,7 @@ class RuntimeGameState:
         # -------------------------------------------------
         # CLOSE COMBAT EVENTS
         # -------------------------------------------------
+        # REVIEW: Combat narration is fully driven by combat_result
         if event_bus and result.combat_result:
             _trace(
                 "COMBAT_START",
@@ -208,8 +227,9 @@ class RuntimeGameState:
             )
 
             # -------------------------------------------------
-            # ✅ REMOVE DEAD UNITS (AFTER COMBAT END)
+            # REMOVE DEAD UNITS (AFTER COMBAT END)
             # -------------------------------------------------
+            # REVIEW: Dead units are removed only after narration completes
             dead_units = [u for u in self.base_state.units if not u.alive]
             if dead_units:
                 dead_ids = [u.unit_id for u in dead_units]
@@ -219,6 +239,7 @@ class RuntimeGameState:
                     dead_units=dead_ids,
                 )
 
+                # REVIEW: State mutation is explicit and centralized
                 self.base_state.units = [
                     u for u in self.base_state.units if u.alive
                 ]
@@ -237,8 +258,9 @@ class RuntimeGameState:
                     )
 
         # -------------------------------------------------
-        # ✅ ACTIVATION ALWAYS ENDS HERE
+        # ACTIVATION ALWAYS ENDS HERE
         # -------------------------------------------------
+        # REVIEW: Guarantees one activation per action
         self._advance_activation()
         return result
 
@@ -252,5 +274,6 @@ class RuntimeGameState:
             self.start_turn()
 
     def end_turn(self) -> None:
+        # REVIEW: Turn end is delegated to GameState
         self.base_state.end_turn()
         self.turn = TurnState(turn_number=self.base_state.turn)
