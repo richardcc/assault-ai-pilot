@@ -1,0 +1,41 @@
+# assault_sim/config/sim_config.yaml
+#
+# Main simulation configuration file.
+# This file controls assets, scenario selection, and observability.
+# It does NOT control low-level tracing (ASSAULT_DEBUG_TRACE).
+# All visibility here is high-level, structured, and event-based.
+
+data_root: assault_sim/assets   # Root directory for all game data
+
+catalogs:
+  unit_catalog: catalogs/unit_catalog.json        # Unit definitions
+  map_piece_catalog: catalogs/map_piece_catalog.json  # Map tiles / pieces
+  scenario_folder: scenarios                      # Scenario JSON folder
+
+scenario:
+  name: mettete_i_piedi_terra_1_min               # Scenario to load
+
+# -------------------------------------------------
+# OBSERVABILITY (high-level, structured events)
+# -------------------------------------------------
+# If disabled, no EventBus is created and no events
+# are emitted, regardless of other flags.
+observability:
+  enabled: true
+
+  # Generic simulation events
+  events:
+    lifecycle: true    # RESET, UNIT_LOADED
+    actions: true      # ACTION (what action was taken)
+    movement: true     # DEBUG_MOVE_PATH (from -> to)
+    effects: true      # ACTION_EFFECT (hp before/after, moved)
+    turns: true        # TURN_STATE (turn number, active unit)
+    victory: true      # VP updates
+
+  # Combat-specific observability
+  combat:
+    close_combat:
+      rounds: true     # One event per close combat round
+      damage: true     # Damage / suppression / critical effects
+      hp_delta: true   # HP before -> after per round
+      winner: true     # Winner of the close combat

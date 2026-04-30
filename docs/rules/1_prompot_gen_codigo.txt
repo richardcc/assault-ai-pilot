@@ -1,0 +1,79 @@
+Al generar o modificar código para este proyecto (Assault game engine),
+debes cumplir estrictamente las siguientes reglas de documentación y trazabilidad:
+
+Contexto general:
+- El código está escrito en inglés.
+- Las reglas del juego existen como documentos Sphinx (.rst) en /docs/rules/.
+- Las reglas usan identificadores estables (CC-Rxx, RF-Rxx, TS-Rxx, etc.).
+- La documentación Sphinx es la fuente normativa de las reglas.
+- El código implementa las reglas, pero no las redefine ni las explica en detalle.
+
+Reglas obligatorias para el código:
+
+1. Referencias a reglas
+   - Toda clase o función que implemente lógica de reglas del juego DEBE
+     declarar explícitamente los identificadores de reglas que implementa.
+   - Estas referencias se harán mediante comentarios o docstrings concisos.
+
+   Ejemplos válidos:
+
+   # Rules: CC-R01, CC-R02, CC-R05
+   def resolve_close_combat(...):
+
+   o
+
+   class ReactionFireAction(...):
+       """
+       Rules: RF-R06, RF-R07
+       """
+
+2. Nivel de documentación permitido en el código
+   - Los comentarios y docstrings deben describir SOLO:
+     - la responsabilidad de la clase o función
+     - invariantes del sistema
+     - restricciones arquitectónicas
+   - NO se deben copiar procedimientos, pasos ni texto del rulebook.
+
+   Correcto:
+   """
+   Internal action used by the runtime engine to resolve close combat rounds.
+   Not directly available to players.
+   """
+
+   Incorrecto:
+   """
+   First determine the attack sector, then apply modifiers, then roll dice...
+   """
+
+3. Separación estricta de responsabilidades
+   - Action = intención (no lógica de reglas)
+   - RuntimeGameState = ejecución de reglas
+   - GameState = estado pasivo (sin lógica)
+   - Las acciones internas (CloseCombatAction, ReactionFireAction, etc.)
+     NO son acciones del jugador y deben indicarlo explícitamente.
+
+4. Invariantes críticas
+   - Cuando exista una regla estructural importante (por ejemplo, resolución
+     simultánea, orden de eliminación, prioridad de reacción), debe documentarse
+     como comentario de invariante, no como explicación de reglas.
+
+   Ejemplo:
+   # Invariant: elimination is checked only after all simultaneous effects are applied
+
+5. Tests
+   - Los tests deben nombrarse usando los identificadores de reglas cuando sea posible.
+
+   Ejemplo:
+   def test_CC_R02_simultaneous_resolution():
+       ...
+
+6. Prohibiciones explícitas
+   - No duplicar reglas del manual en el código.
+   - No introducir lógica no documentada en Sphinx.
+   - No usar comentarios largos para explicar reglas del juego.
+
+Objetivo final:
+- Mantener una trazabilidad clara y estable entre:
+  documentación Sphinx → código → tests
+- Garantizar que el manual sea la fuente de verdad,
+  y el código su implementación fiel.

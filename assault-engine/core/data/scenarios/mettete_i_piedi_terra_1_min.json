@@ -1,0 +1,51 @@
+{
+  "id": "mettete_i_piedi_terra_1_min",
+  "max_turns": 12,
+
+  "map": {
+    "size": {
+      "q_min": 1,
+      "q_max": 9,
+      "r_min": 1,
+      "r_max": 16
+    }
+  },
+
+  "units": [
+    {
+      "unit_id": "GE_1",
+      "side": "GE",
+      "unit_key": "GE_RIFLES_43",
+      "position": [3, 4],
+      "experience": "REGULAR"
+    },
+    {
+      "unit_id": "GE_2",
+      "side": "GE",
+      "unit_key": "GE_RIFLES_43",
+      "position": [4, 4],
+      "experience": "REGULAR"
+    },
+    {
+      "unit_id": "US_1",
+      "side": "US",
+      "unit_key": "US_RIFLES_43",
+      "position": [5, 5],
+      "experience": "REGULAR"
+    },
+    {
+      "unit_id": "US_2",
+      "side": "US",
+      "unit_key": "US_RIFLES_43",
+      "position": [6, 5],
+      "experience": "REGULAR"
+    }
+  ],
+
+  "vp": {
+    "value_per_hex": 4,
+    "hexes": [
+      [4, 5]
+    ]
+  }
+}

@@ -1,0 +1,16 @@
+STOPPING POINT
+--------------
+
+Last completed:
+- D8-A: AssaultExecutor integrated with GameState
+- All tests green
+- Sphinx docs generated
+
+Important design notes:
+- Retreat requires actual combat pressure
+- Advance always targets defender original hex
+- Executor applies map changes, rules never do
+
+Next steps:
+- D8-B: advanced retreat logic (direction opposite attacker, ZOC)
+- Then integrate with GameState movement rules

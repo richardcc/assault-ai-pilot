@@ -1,0 +1,174 @@
+Replay Data Format
+==================
+
+This document defines the **authoritative format** of replay files
+produced by the Assault AI system.
+
+Replay files are the **single source of truth** for:
+
+- executed actions
+- acting units
+- learned rationales
+- world state evolution
+
+All analysis and visualization components must treat replay data
+as immutable ground truth.
+
+Overview
+--------
+
+A replay is a JSON file containing a sequence of **states**.
+Each state represents the complete world configuration after a decision
+has been executed.
+
+High-level structure:
+
+::
+
+  {
+    "version": 1,
+    "states": [ ... ]
+  }
+
+States are ordered chronologically.
+
+Replay Versioning
+-----------------
+
+Replay files include an explicit version number.
+
+::
+
+  "version": 1
+
+Versioning guarantees forward compatibility for:
+- analysis tools
+- visualization components
+- research reproducibility
+
+State Structure
+---------------
+
+Each entry in ``states`` has the following structure:
+
+::
+
+  {
+    "turn": <int>,
+    "units": [ ... ],
+    "decision": { ... }   # optional
+  }
+
+Fields:
+
+- ``turn``: global turn counter
+- ``units``: list of all alive units at this turn
+- ``decision``: decision executed to reach this state (if applicable)
+
+Units
+-----
+
+The ``units`` field is a list of unit descriptors.
+
+Each unit has the following schema:
+
+::
+
+  {
+    "unit_id": "IT_1",
+    "side": "IT",
+    "counter": "RIFLES",
+    "hex": "(1, 2)",
+    "strength": 10,
+    "max_strength": 10,
+    "status": []
+  }
+
+Field semantics:
+
+- ``unit_id``: unique identifier of the unit
+- ``side``: faction identifier (e.g. IT, EN)
+- ``counter``: unit type or counter graphic identifier
+- ``hex``: hex grid coordinate as a string ``"(col, row)"``
+- ``strength``: current combat strength
+- ``max_strength``: maximum strength
+- ``status``: list of active status effects
+
+Important:
+~~~~~~~~~~
+
+The ``hex`` field is a **string**, not a numeric tuple.
+
+Rendering systems MUST parse this value explicitly.
+Replay data must never be altered to accommodate rendering.
+
+Decision
+--------
+
+The ``decision`` field describes the action that led to this state.
+It is optional for the initial state.
+
+Decision schema:
+
+::
+
+  {
+    "unit_id": "IT_1",
+    "action": 4,
+    "learned_rationale": 0,
+    "heuristic_rationale": null
+  }
+
+Field semantics:
+
+- ``unit_id``: acting unit that executed the decision
+- ``action``: discrete action identifier
+- ``learned_rationale``: rationale identifier produced by the policy
+- ``heuristic_rationale``: optional baseline rationale (if present)
+
+Actor Alignment Rule
+--------------------
+
+Every decision MUST be associated with a concrete acting unit.
+
+The acting unit is:
+
+- selected by the environment
+- exposed via ``info["unit_id"]`` during ``env.step()``
+- recorded verbatim in the replay
+
+If ``unit_id`` is missing, the decision is considered invalid.
+
+Rationale Semantics
+-------------------
+
+Rationales are stored as **integer identifiers only**.
+
+They represent:
+
+- the policy’s intention at decision time
+- not post-hoc interpretation
+- not internal hidden state
+
+Semantic labels are applied exclusively during offline analysis.
+
+Immutability Contract
+---------------------
+
+Replay files MUST be treated as immutable.
+
+The following actions are forbidden:
+
+- altering unit positions
+- recalculating rationales
+- inferring missing data
+- correcting replay content for visualization
+
+If visualization fails, the viewer must be fixed.
+Replay data must never be modified.
+
+Canonical Rule
+--------------
+
+**Replay data records what actually happened.
+All other components must adapt to it, never the other way around.**

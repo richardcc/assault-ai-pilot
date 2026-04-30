@@ -1,0 +1,192 @@
+{
+  "_comment": "Core unit definitions (no render, derived strictly from unit cards)",
+
+  "GE_FJ_RIFLES_43": {
+    "side": "GE",
+    "category": "INFANTRY",
+    "subtype": "FALLSCHIRMJAGER",
+    "classification": "SPECIALIZED_INFANTRY",
+
+    "card_id": "Pr43",
+
+    "cost": 8,
+    "movement": 2,
+
+    "max_strength": 4,
+    "has_counter_flip": true,
+
+    "base_defense": {
+      "FRONT": ["YELLOW"],
+      "FLANK_LEFT": ["YELLOW"],
+      "FLANK_RIGHT": ["YELLOW"],
+      "REAR": ["YELLOW"]
+    },
+
+    "attack": {
+      "VEHICLE": {
+        "0":    { "dice": [] },
+        "1":    { "dice": ["GREEN", "GREEN"] },
+        "2":    { "dice": ["GREEN"] },
+        "3":    { "dice": [] },
+        "4-7":  { "dice": [] },
+        "8-10": { "dice": [] }
+      },
+      "INFANTRY": {
+        "0":    { "dice": ["RED","YELLOW","YELLOW","BLUE"] },
+        "1-3":    { "dice": ["RED","YELLOW","YELLOW","GREEN"] },
+        "4-7":    { "dice": ["RED","YELLOW","YELLOW","BLUE"] },
+        "8-10":    { "dice": ["YELLOW","YELLOW","BLUE"] }
+      }
+    },
+
+    "traits": [
+      "PARATROOPS",
+      "ELITE",
+      "TOUGH",
+      "RIFLE_GRENADES",
+      "INDIRECT_FIRE",
+      "ATTACK_DIE_REROLL",
+      "IGNORE_FIRST_CC_DAMAGE",
+      "REMOVE_WEAKEST_TERRAIN_DEFENSE"
+    ]
+  },
+
+  "GE_RIFLES_43": {
+    "side": "GE",
+    "category": "INFANTRY",
+    "subtype": "STANDARD_INFANTRY",
+    "classification": "STANDARD_INFANTRY",
+
+    "card_id": "S43",
+
+    "cost": 6,
+    "movement": 2,
+
+    "max_strength": 3,
+    "has_counter_flip": true,
+
+    "base_defense": {
+      "FRONT": ["YELLOW"],
+      "FLANK_LEFT": ["YELLOW"],
+      "FLANK_RIGHT": ["YELLOW"],
+      "REAR": ["YELLOW"]
+    },
+
+
+    "attack": {
+      "VEHICLE": {
+        "0":   { "dice": [] },
+        "1":   { "dice": ["YELLOW", "BLUE"] },
+        "2":   { "dice": ["GREEN", "BLUE"] },
+        "3":   { "dice": [] },
+        "4-7": { "dice": [] },
+        "8-10":{ "dice": [] }
+      },
+      "INFANTRY": {
+        "0":    { "dice": ["RED","YELLOW","GREEN"] },
+        "1-3":    { "dice": ["RED","YELLOW","BLUE"] },
+        "4-6":    { "dice": ["GREEN", "GREEN", "YELLOW"] },
+        "7-10":    { "dice": ["YELLOW","YELLOW","BLUE","BLUE"] }
+      }
+    },
+
+    "traits": [
+      "RIFLE_GRENADES",
+      "INDIRECT_FIRE",
+      "ATTACK_DIE_REROLL",
+      "REMOVE_WEAKEST_TERRAIN_DEFENSE"
+    ]
+  },
+
+  "US_RANGERS_43": {
+    "side": "US",
+    "category": "INFANTRY",
+    "subtype": "RANGERS",
+    "classification": "SPECIALIZED_INFANTRY",
+
+    "card_id": "S43",
+
+    "cost": 6,
+    "movement": 2,
+
+    "max_strength": 4,
+    "has_counter_flip": true,
+
+    "base_defense": {
+      "FRONT": ["YELLOW"],
+      "FLANK_LEFT": ["YELLOW"],
+      "FLANK_RIGHT": ["YELLOW"],
+      "REAR": ["YELLOW"]
+    },
+
+    "attack": {
+      "VEHICLE": {
+        "0":   { "dice": [] },
+        "1":   { "dice": ["YELLOW", "BLUE"] },
+        "2":   { "dice": ["YELLOW", "BLUE"] },
+        "3":   { "dice": [] },
+        "4-6": { "dice": [] },
+        "7-10":{ "dice": [] }
+      },
+      "INFANTRY": {
+        "0":   { "dice": ["RED","RED"] },
+        "1-3":   { "dice": ["RED", "YELLOW"] },
+        "4-6": { "dice": ["RED", "BLUE"] },
+        "7-9": { "dice": ["GREEN", "GREEN"] }
+      }
+    },
+
+    "traits": [
+      "ELITE",
+      "SCOUT",
+      "RECON_PATROL"
+    ]
+  },
+
+  "US_RIFLES_43": {
+    "side": "US",
+    "category": "INFANTRY",
+    "subtype": "STANDARD_INFANTRY",
+    "classification": "STANDARD_INFANTRY",
+
+    "card_id": "S43",
+
+    "cost": 7,
+    "movement": 2,
+
+    "max_strength": 4,
+    "has_counter_flip": true,
+
+    "base_defense": {
+      "FRONT": ["YELLOW"],
+      "FLANK_LEFT": ["YELLOW"],
+      "FLANK_RIGHT": ["YELLOW"],
+      "REAR": ["YELLOW"]
+    },
+
+    "attack": {
+      "VEHICLE": {
+        "0":    { "dice": [] },
+        "1":    { "dice": ["YELLOW", "BLUE"] },
+        "2":    { "dice": ["GREEN", "BLUE"] },
+        "3":    { "dice": [] },
+        "4-7":  { "dice": [] },
+        "8-10": { "dice": [] }
+      },
+      "INFANTRY": {
+        "0":    { "dice": [] },
+        "1":    { "dice": ["RED", "RED"] },
+        "2":    { "dice": ["RED", "RED", "RED"] },
+        "3-6":  { "dice": ["RED", "RED"] },
+        "7-10": { "dice": ["GREEN", "GREEN"] }
+      }
+    },
+
+    "traits": [
+      "RIFLE_GRENADES",
+      "INDIRECT_FIRE",
+      "ATTACK_DIE_REROLL",
+      "REMOVE_WEAKEST_TERRAIN_DEFENSE"
+    ]
+  }
+}

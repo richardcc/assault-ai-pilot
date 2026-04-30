@@ -1,0 +1,30 @@
+digraph "packages_assault_model" {
+rankdir=BT
+charset="utf-8"
+"assault_model" [color="black", label=<assault_model>, shape="box", style="solid"];
+"assault_model.actions" [color="black", label=<assault_model.actions>, shape="box", style="solid"];
+"assault_model.actions.action" [color="black", label=<assault_model.actions.action>, shape="box", style="solid"];
+"assault_model.actions.combat" [color="black", label=<assault_model.actions.combat>, shape="box", style="solid"];
+"assault_model.actions.movement" [color="black", label=<assault_model.actions.movement>, shape="box", style="solid"];
+"assault_model.actions.resolution" [color="black", label=<assault_model.actions.resolution>, shape="box", style="solid"];
+"assault_model.core" [color="black", label=<assault_model.core>, shape="box", style="solid"];
+"assault_model.core.game_state" [color="black", label=<assault_model.core.game_state>, shape="box", style="solid"];
+"assault_model.core.replay" [color="black", label=<assault_model.core.replay>, shape="box", style="solid"];
+"assault_model.core.scenario" [color="black", label=<assault_model.core.scenario>, shape="box", style="solid"];
+"assault_model.map" [color="black", label=<assault_model.map>, shape="box", style="solid"];
+"assault_model.map.hex" [color="black", label=<assault_model.map.hex>, shape="box", style="solid"];
+"assault_model.map.map" [color="black", label=<assault_model.map.map>, shape="box", style="solid"];
+"assault_model.map.map_piece" [color="black", label=<assault_model.map.map_piece>, shape="box", style="solid"];
+"assault_model.map.terrain" [color="black", label=<assault_model.map.terrain>, shape="box", style="solid"];
+"assault_model.rulesets" [color="black", label=<assault_model.rulesets>, shape="box", style="solid"];
+"assault_model.rulesets.ruleset" [color="black", label=<assault_model.rulesets.ruleset>, shape="box", style="solid"];
+"assault_model.units" [color="black", label=<assault_model.units>, shape="box", style="solid"];
+"assault_model.units.attributes" [color="black", label=<assault_model.units.attributes>, shape="box", style="solid"];
+"assault_model.units.unit_instance" [color="black", label=<assault_model.units.unit_instance>, shape="box", style="solid"];
+"assault_model.units.unit_type" [color="black", label=<assault_model.units.unit_type>, shape="box", style="solid"];
+"assault_model.core.scenario" -> "assault_model.map.map" [arrowhead="open", arrowtail="none"];
+"assault_model.core.scenario" -> "assault_model.units.unit_instance" [arrowhead="open", arrowtail="none"];
+"assault_model.map.hex" -> "assault_model.map.terrain" [arrowhead="open", arrowtail="none"];
+"assault_model.map.map" -> "assault_model.map.map_piece" [arrowhead="open", arrowtail="none"];
+"assault_model.map.map_piece" -> "assault_model.map.hex" [arrowhead="open", arrowtail="none"];
+}

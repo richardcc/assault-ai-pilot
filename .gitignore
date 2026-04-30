@@ -1,0 +1,80 @@
+# ===============================
+# Python
+# ===============================
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# ===============================
+# Virtual environments
+# ===============================
+.env
+.venv/
+**/.venv/
+venv/
+
+# ===============================
+# Sphinx / Documentation
+# ===============================
+docs/_build/
+*.buildinfo
+genindex.html
+search.html
+
+# ===============================
+# Generated HTML artifacts
+# ===============================
+*.html
+
+# ===============================
+# ML / Experiment outputs
+# ===============================
+logs/
+analysis_outputs/
+results/
+debug_out/
+replays/
+models/
+
+# ===============================
+# Data / temporary work folders
+# ===============================
+_data_hold/
+_hold/
+_hold_files/
+_scripts_hold/
+
+# ===============================
+# Web generated assets
+# ===============================
+assault-web/assets/
+assault-web/data/
+
+# ===============================
+# Personal / private material
+# ===============================
+notes_private/
+notes/
+*.docx
+*.pdf
+resume_work.md
+files.txt
+documentation_files.txt
+
+# ===============================
+# Editors / IDEs
+# ===============================
+.vscode/
+.idea/
+
+# ===============================
+# OS generated files
+# ===============================
+.DS_Store
+Thumbs.db
+
+# ===============================
+# Packaging artifacts
+# ===============================
+*.egg-info/

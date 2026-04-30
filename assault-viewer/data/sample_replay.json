@@ -1,0 +1,6605 @@
+{
+  "version": 1,
+  "states": [
+    {
+      "turn": 1,
+      "units": [
+        {
+          "unit_id": "IT_1",
+          "side": "A",
+          "hex": "B3",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "IT_2",
+          "side": "A",
+          "hex": "B5",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_1",
+          "side": "B",
+          "hex": "G5",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_2",
+          "side": "B",
+          "hex": "G7",
+          "strength": 5,
+          "status": []
+        }
+      ]
+    },
+    {
+      "turn": 2,
+      "units": [
+        {
+          "unit_id": "IT_1",
+          "side": "A",
+          "hex": "B3",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "IT_2",
+          "side": "A",
+          "hex": "B5",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_1",
+          "side": "B",
+          "hex": "G5",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_2",
+          "side": "B",
+          "hex": "G7",
+          "strength": 5,
+          "status": []
+        }
+      ]
+    },
+    {
+      "turn": 3,
+      "units": [
+        {
+          "unit_id": "IT_1",
+          "side": "A",
+          "hex": "B3",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "IT_2",
+          "side": "A",
+          "hex": "B5",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_1",
+          "side": "B",
+          "hex": "G6",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_2",
+          "side": "B",
+          "hex": "G7",
+          "strength": 5,
+          "status": []
+        }
+      ]
+    },
+    {
+      "turn": 4,
+      "units": [
+        {
+          "unit_id": "IT_1",
+          "side": "A",
+          "hex": "B3",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "IT_2",
+          "side": "A",
+          "hex": "B5",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_1",
+          "side": "B",
+          "hex": "G6",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_2",
+          "side": "B",
+          "hex": "G7",
+          "strength": 5,
+          "status": []
+        }
+      ]
+    },
+    {
+      "turn": 5,
+      "units": [
+        {
+          "unit_id": "IT_1",
+          "side": "A",
+          "hex": "B3",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "IT_2",
+          "side": "A",
+          "hex": "B5",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_1",
+          "side": "B",
+          "hex": "F6",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_2",
+          "side": "B",
+          "hex": "G7",
+          "strength": 5,
+          "status": []
+        }
+      ]
+    },
+    {
+      "turn": 6,
+      "units": [
+        {
+          "unit_id": "IT_1",
+          "side": "A",
+          "hex": "B3",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "IT_2",
+          "side": "A",
+          "hex": "B5",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_1",
+          "side": "B",
+          "hex": "F6",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_2",
+          "side": "B",
+          "hex": "G7",
+          "strength": 5,
+          "status": []
+        }
+      ]
+    },
+    {
+      "turn": 7,
+      "units": [
+        {
+          "unit_id": "IT_1",
+          "side": "A",
+          "hex": "B3",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "IT_2",
+          "side": "A",
+          "hex": "B5",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_1",
+          "side": "B",
+          "hex": "F5",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_2",
+          "side": "B",
+          "hex": "G7",
+          "strength": 5,
+          "status": []
+        }
+      ]
+    },
+    {
+      "turn": 8,
+      "units": [
+        {
+          "unit_id": "IT_1",
+          "side": "A",
+          "hex": "B3",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "IT_2",
+          "side": "A",
+          "hex": "C5",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_1",
+          "side": "B",
+          "hex": "F5",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_2",
+          "side": "B",
+          "hex": "G7",
+          "strength": 5,
+          "status": []
+        }
+      ]
+    },
+    {
+      "turn": 9,
+      "units": [
+        {
+          "unit_id": "IT_1",
+          "side": "A",
+          "hex": "B3",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "IT_2",
+          "side": "A",
+          "hex": "C5",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_1",
+          "side": "B",
+          "hex": "F6",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_2",
+          "side": "B",
+          "hex": "G7",
+          "strength": 5,
+          "status": []
+        }
+      ]
+    },
+    {
+      "turn": 10,
+      "units": [
+        {
+          "unit_id": "IT_1",
+          "side": "A",
+          "hex": "B3",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "IT_2",
+          "side": "A",
+          "hex": "D5",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_1",
+          "side": "B",
+          "hex": "F6",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_2",
+          "side": "B",
+          "hex": "G7",
+          "strength": 5,
+          "status": []
+        }
+      ]
+    },
+    {
+      "turn": 11,
+      "units": [
+        {
+          "unit_id": "IT_1",
+          "side": "A",
+          "hex": "B3",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "IT_2",
+          "side": "A",
+          "hex": "D5",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_1",
+          "side": "B",
+          "hex": "F5",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_2",
+          "side": "B",
+          "hex": "G7",
+          "strength": 5,
+          "status": []
+        }
+      ]
+    },
+    {
+      "turn": 12,
+      "units": [
+        {
+          "unit_id": "IT_1",
+          "side": "A",
+          "hex": "B3",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "IT_2",
+          "side": "A",
+          "hex": "D5",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_1",
+          "side": "B",
+          "hex": "F5",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_2",
+          "side": "B",
+          "hex": "G7",
+          "strength": 5,
+          "status": []
+        }
+      ]
+    },
+    {
+      "turn": 13,
+      "units": [
+        {
+          "unit_id": "IT_1",
+          "side": "A",
+          "hex": "B3",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "IT_2",
+          "side": "A",
+          "hex": "D5",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_1",
+          "side": "B",
+          "hex": "E5",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_2",
+          "side": "B",
+          "hex": "G7",
+          "strength": 5,
+          "status": []
+        }
+      ]
+    },
+    {
+      "turn": 14,
+      "units": [
+        {
+          "unit_id": "IT_1",
+          "side": "A",
+          "hex": "B3",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "IT_2",
+          "side": "A",
+          "hex": "D4",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_1",
+          "side": "B",
+          "hex": "E5",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_2",
+          "side": "B",
+          "hex": "G7",
+          "strength": 5,
+          "status": []
+        }
+      ]
+    },
+    {
+      "turn": 15,
+      "units": [
+        {
+          "unit_id": "IT_1",
+          "side": "A",
+          "hex": "B3",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "IT_2",
+          "side": "A",
+          "hex": "D4",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_1",
+          "side": "B",
+          "hex": "D5",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_2",
+          "side": "B",
+          "hex": "G7",
+          "strength": 5,
+          "status": []
+        }
+      ]
+    },
+    {
+      "turn": 16,
+      "units": [
+        {
+          "unit_id": "IT_1",
+          "side": "A",
+          "hex": "B3",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "IT_2",
+          "side": "A",
+          "hex": "D4",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_1",
+          "side": "B",
+          "hex": "D5",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_2",
+          "side": "B",
+          "hex": "G7",
+          "strength": 5,
+          "status": []
+        }
+      ]
+    },
+    {
+      "turn": 17,
+      "units": [
+        {
+          "unit_id": "IT_1",
+          "side": "A",
+          "hex": "B3",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "IT_2",
+          "side": "A",
+          "hex": "D4",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_1",
+          "side": "B",
+          "hex": "D5",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_2",
+          "side": "B",
+          "hex": "G7",
+          "strength": 5,
+          "status": []
+        }
+      ]
+    },
+    {
+      "turn": 18,
+      "units": [
+        {
+          "unit_id": "IT_1",
+          "side": "A",
+          "hex": "B3",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "IT_2",
+          "side": "A",
+          "hex": "D4",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_1",
+          "side": "B",
+          "hex": "D5",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_2",
+          "side": "B",
+          "hex": "G7",
+          "strength": 5,
+          "status": []
+        }
+      ]
+    },
+    {
+      "turn": 19,
+      "units": [
+        {
+          "unit_id": "IT_1",
+          "side": "A",
+          "hex": "B3",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "IT_2",
+          "side": "A",
+          "hex": "D4",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_1",
+          "side": "B",
+          "hex": "D5",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_2",
+          "side": "B",
+          "hex": "G7",
+          "strength": 5,
+          "status": []
+        }
+      ]
+    },
+    {
+      "turn": 20,
+      "units": [
+        {
+          "unit_id": "IT_1",
+          "side": "A",
+          "hex": "B3",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "IT_2",
+          "side": "A",
+          "hex": "E4",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_1",
+          "side": "B",
+          "hex": "D5",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_2",
+          "side": "B",
+          "hex": "G7",
+          "strength": 5,
+          "status": []
+        }
+      ]
+    },
+    {
+      "turn": 21,
+      "units": [
+        {
+          "unit_id": "IT_1",
+          "side": "A",
+          "hex": "B3",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "IT_2",
+          "side": "A",
+          "hex": "E4",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_1",
+          "side": "B",
+          "hex": "D4",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_2",
+          "side": "B",
+          "hex": "G7",
+          "strength": 5,
+          "status": []
+        }
+      ]
+    },
+    {
+      "turn": 22,
+      "units": [
+        {
+          "unit_id": "IT_1",
+          "side": "A",
+          "hex": "B3",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "IT_2",
+          "side": "A",
+          "hex": "E4",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_1",
+          "side": "B",
+          "hex": "D4",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_2",
+          "side": "B",
+          "hex": "G7",
+          "strength": 5,
+          "status": []
+        }
+      ]
+    },
+    {
+      "turn": 23,
+      "units": [
+        {
+          "unit_id": "IT_1",
+          "side": "A",
+          "hex": "B3",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "IT_2",
+          "side": "A",
+          "hex": "E4",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_1",
+          "side": "B",
+          "hex": "D5",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_2",
+          "side": "B",
+          "hex": "G7",
+          "strength": 5,
+          "status": []
+        }
+      ]
+    },
+    {
+      "turn": 24,
+      "units": [
+        {
+          "unit_id": "IT_1",
+          "side": "A",
+          "hex": "B3",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "IT_2",
+          "side": "A",
+          "hex": "E4",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_1",
+          "side": "B",
+          "hex": "D5",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_2",
+          "side": "B",
+          "hex": "G7",
+          "strength": 5,
+          "status": []
+        }
+      ]
+    },
+    {
+      "turn": 25,
+      "units": [
+        {
+          "unit_id": "IT_1",
+          "side": "A",
+          "hex": "B3",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "IT_2",
+          "side": "A",
+          "hex": "E4",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_1",
+          "side": "B",
+          "hex": "D4",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_2",
+          "side": "B",
+          "hex": "G7",
+          "strength": 5,
+          "status": []
+        }
+      ]
+    },
+    {
+      "turn": 26,
+      "units": [
+        {
+          "unit_id": "IT_1",
+          "side": "A",
+          "hex": "B3",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "IT_2",
+          "side": "A",
+          "hex": "E4",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_1",
+          "side": "B",
+          "hex": "D4",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_2",
+          "side": "B",
+          "hex": "G7",
+          "strength": 5,
+          "status": []
+        }
+      ]
+    },
+    {
+      "turn": 27,
+      "units": [
+        {
+          "unit_id": "IT_1",
+          "side": "A",
+          "hex": "B3",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "IT_2",
+          "side": "A",
+          "hex": "E4",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_1",
+          "side": "B",
+          "hex": "D5",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_2",
+          "side": "B",
+          "hex": "G7",
+          "strength": 5,
+          "status": []
+        }
+      ]
+    },
+    {
+      "turn": 28,
+      "units": [
+        {
+          "unit_id": "IT_1",
+          "side": "A",
+          "hex": "B3",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "IT_2",
+          "side": "A",
+          "hex": "F4",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_1",
+          "side": "B",
+          "hex": "D5",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_2",
+          "side": "B",
+          "hex": "G7",
+          "strength": 5,
+          "status": []
+        }
+      ]
+    },
+    {
+      "turn": 29,
+      "units": [
+        {
+          "unit_id": "IT_1",
+          "side": "A",
+          "hex": "B3",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "IT_2",
+          "side": "A",
+          "hex": "F4",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_1",
+          "side": "B",
+          "hex": "D4",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_2",
+          "side": "B",
+          "hex": "G7",
+          "strength": 5,
+          "status": []
+        }
+      ]
+    },
+    {
+      "turn": 30,
+      "units": [
+        {
+          "unit_id": "IT_1",
+          "side": "A",
+          "hex": "B3",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "IT_2",
+          "side": "A",
+          "hex": "F4",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_1",
+          "side": "B",
+          "hex": "D4",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_2",
+          "side": "B",
+          "hex": "G7",
+          "strength": 5,
+          "status": []
+        }
+      ]
+    },
+    {
+      "turn": 31,
+      "units": [
+        {
+          "unit_id": "IT_1",
+          "side": "A",
+          "hex": "B3",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "IT_2",
+          "side": "A",
+          "hex": "F4",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_1",
+          "side": "B",
+          "hex": "D5",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_2",
+          "side": "B",
+          "hex": "G7",
+          "strength": 5,
+          "status": []
+        }
+      ]
+    },
+    {
+      "turn": 32,
+      "units": [
+        {
+          "unit_id": "IT_1",
+          "side": "A",
+          "hex": "B3",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "IT_2",
+          "side": "A",
+          "hex": "G4",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_1",
+          "side": "B",
+          "hex": "D5",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_2",
+          "side": "B",
+          "hex": "G7",
+          "strength": 5,
+          "status": []
+        }
+      ]
+    },
+    {
+      "turn": 33,
+      "units": [
+        {
+          "unit_id": "IT_1",
+          "side": "A",
+          "hex": "B3",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "IT_2",
+          "side": "A",
+          "hex": "G4",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_1",
+          "side": "B",
+          "hex": "D4",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_2",
+          "side": "B",
+          "hex": "G7",
+          "strength": 5,
+          "status": []
+        }
+      ]
+    },
+    {
+      "turn": 34,
+      "units": [
+        {
+          "unit_id": "IT_1",
+          "side": "A",
+          "hex": "B3",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "IT_2",
+          "side": "A",
+          "hex": "G4",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_1",
+          "side": "B",
+          "hex": "D4",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_2",
+          "side": "B",
+          "hex": "G7",
+          "strength": 5,
+          "status": []
+        }
+      ]
+    },
+    {
+      "turn": 35,
+      "units": [
+        {
+          "unit_id": "IT_1",
+          "side": "A",
+          "hex": "B3",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "IT_2",
+          "side": "A",
+          "hex": "G4",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_1",
+          "side": "B",
+          "hex": "D5",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_2",
+          "side": "B",
+          "hex": "G7",
+          "strength": 5,
+          "status": []
+        }
+      ]
+    },
+    {
+      "turn": 36,
+      "units": [
+        {
+          "unit_id": "IT_1",
+          "side": "A",
+          "hex": "B3",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "IT_2",
+          "side": "A",
+          "hex": "G4",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_1",
+          "side": "B",
+          "hex": "D5",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_2",
+          "side": "B",
+          "hex": "G7",
+          "strength": 5,
+          "status": []
+        }
+      ]
+    },
+    {
+      "turn": 37,
+      "units": [
+        {
+          "unit_id": "IT_1",
+          "side": "A",
+          "hex": "B3",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "IT_2",
+          "side": "A",
+          "hex": "G4",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_1",
+          "side": "B",
+          "hex": "D4",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_2",
+          "side": "B",
+          "hex": "G7",
+          "strength": 5,
+          "status": []
+        }
+      ]
+    },
+    {
+      "turn": 38,
+      "units": [
+        {
+          "unit_id": "IT_1",
+          "side": "A",
+          "hex": "B3",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "IT_2",
+          "side": "A",
+          "hex": "G5",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_1",
+          "side": "B",
+          "hex": "D4",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_2",
+          "side": "B",
+          "hex": "G7",
+          "strength": 5,
+          "status": []
+        }
+      ]
+    },
+    {
+      "turn": 39,
+      "units": [
+        {
+          "unit_id": "IT_1",
+          "side": "A",
+          "hex": "B3",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "IT_2",
+          "side": "A",
+          "hex": "G5",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_1",
+          "side": "B",
+          "hex": "D5",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_2",
+          "side": "B",
+          "hex": "G7",
+          "strength": 5,
+          "status": []
+        }
+      ]
+    },
+    {
+      "turn": 40,
+      "units": [
+        {
+          "unit_id": "IT_1",
+          "side": "A",
+          "hex": "B3",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "IT_2",
+          "side": "A",
+          "hex": "G5",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_1",
+          "side": "B",
+          "hex": "D5",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_2",
+          "side": "B",
+          "hex": "G7",
+          "strength": 5,
+          "status": []
+        }
+      ]
+    },
+    {
+      "turn": 41,
+      "units": [
+        {
+          "unit_id": "IT_1",
+          "side": "A",
+          "hex": "B3",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "IT_2",
+          "side": "A",
+          "hex": "G5",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_1",
+          "side": "B",
+          "hex": "D4",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_2",
+          "side": "B",
+          "hex": "G7",
+          "strength": 5,
+          "status": []
+        }
+      ]
+    },
+    {
+      "turn": 42,
+      "units": [
+        {
+          "unit_id": "IT_1",
+          "side": "A",
+          "hex": "B3",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "IT_2",
+          "side": "A",
+          "hex": "G5",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_1",
+          "side": "B",
+          "hex": "D4",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_2",
+          "side": "B",
+          "hex": "G7",
+          "strength": 5,
+          "status": []
+        }
+      ]
+    },
+    {
+      "turn": 43,
+      "units": [
+        {
+          "unit_id": "IT_1",
+          "side": "A",
+          "hex": "B3",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "IT_2",
+          "side": "A",
+          "hex": "G5",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_1",
+          "side": "B",
+          "hex": "D5",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_2",
+          "side": "B",
+          "hex": "G7",
+          "strength": 5,
+          "status": []
+        }
+      ]
+    },
+    {
+      "turn": 44,
+      "units": [
+        {
+          "unit_id": "IT_1",
+          "side": "A",
+          "hex": "B3",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "IT_2",
+          "side": "A",
+          "hex": "F5",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_1",
+          "side": "B",
+          "hex": "D5",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_2",
+          "side": "B",
+          "hex": "G7",
+          "strength": 5,
+          "status": []
+        }
+      ]
+    },
+    {
+      "turn": 45,
+      "units": [
+        {
+          "unit_id": "IT_1",
+          "side": "A",
+          "hex": "B3",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "IT_2",
+          "side": "A",
+          "hex": "F5",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_1",
+          "side": "B",
+          "hex": "D4",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_2",
+          "side": "B",
+          "hex": "G7",
+          "strength": 5,
+          "status": []
+        }
+      ]
+    },
+    {
+      "turn": 46,
+      "units": [
+        {
+          "unit_id": "IT_1",
+          "side": "A",
+          "hex": "B3",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "IT_2",
+          "side": "A",
+          "hex": "F5",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_1",
+          "side": "B",
+          "hex": "D4",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_2",
+          "side": "B",
+          "hex": "G7",
+          "strength": 5,
+          "status": []
+        }
+      ]
+    },
+    {
+      "turn": 47,
+      "units": [
+        {
+          "unit_id": "IT_1",
+          "side": "A",
+          "hex": "B3",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "IT_2",
+          "side": "A",
+          "hex": "F5",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_1",
+          "side": "B",
+          "hex": "D5",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_2",
+          "side": "B",
+          "hex": "G7",
+          "strength": 5,
+          "status": []
+        }
+      ]
+    },
+    {
+      "turn": 48,
+      "units": [
+        {
+          "unit_id": "IT_1",
+          "side": "A",
+          "hex": "B3",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "IT_2",
+          "side": "A",
+          "hex": "F5",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_1",
+          "side": "B",
+          "hex": "D5",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_2",
+          "side": "B",
+          "hex": "G7",
+          "strength": 5,
+          "status": []
+        }
+      ]
+    },
+    {
+      "turn": 49,
+      "units": [
+        {
+          "unit_id": "IT_1",
+          "side": "A",
+          "hex": "B3",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "IT_2",
+          "side": "A",
+          "hex": "F5",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_1",
+          "side": "B",
+          "hex": "D4",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_2",
+          "side": "B",
+          "hex": "G7",
+          "strength": 5,
+          "status": []
+        }
+      ]
+    },
+    {
+      "turn": 50,
+      "units": [
+        {
+          "unit_id": "IT_1",
+          "side": "A",
+          "hex": "B3",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "IT_2",
+          "side": "A",
+          "hex": "F4",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_1",
+          "side": "B",
+          "hex": "D4",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_2",
+          "side": "B",
+          "hex": "G7",
+          "strength": 5,
+          "status": []
+        }
+      ]
+    },
+    {
+      "turn": 51,
+      "units": [
+        {
+          "unit_id": "IT_1",
+          "side": "A",
+          "hex": "B3",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "IT_2",
+          "side": "A",
+          "hex": "F4",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_1",
+          "side": "B",
+          "hex": "D5",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_2",
+          "side": "B",
+          "hex": "G7",
+          "strength": 5,
+          "status": []
+        }
+      ]
+    },
+    {
+      "turn": 52,
+      "units": [
+        {
+          "unit_id": "IT_1",
+          "side": "A",
+          "hex": "B3",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "IT_2",
+          "side": "A",
+          "hex": "F4",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_1",
+          "side": "B",
+          "hex": "D5",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_2",
+          "side": "B",
+          "hex": "G7",
+          "strength": 5,
+          "status": []
+        }
+      ]
+    },
+    {
+      "turn": 53,
+      "units": [
+        {
+          "unit_id": "IT_1",
+          "side": "A",
+          "hex": "B3",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "IT_2",
+          "side": "A",
+          "hex": "F4",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_1",
+          "side": "B",
+          "hex": "D4",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_2",
+          "side": "B",
+          "hex": "G7",
+          "strength": 5,
+          "status": []
+        }
+      ]
+    },
+    {
+      "turn": 54,
+      "units": [
+        {
+          "unit_id": "IT_1",
+          "side": "A",
+          "hex": "B3",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "IT_2",
+          "side": "A",
+          "hex": "E4",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_1",
+          "side": "B",
+          "hex": "D4",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_2",
+          "side": "B",
+          "hex": "G7",
+          "strength": 5,
+          "status": []
+        }
+      ]
+    },
+    {
+      "turn": 55,
+      "units": [
+        {
+          "unit_id": "IT_1",
+          "side": "A",
+          "hex": "B3",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "IT_2",
+          "side": "A",
+          "hex": "E4",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_1",
+          "side": "B",
+          "hex": "D5",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_2",
+          "side": "B",
+          "hex": "G7",
+          "strength": 5,
+          "status": []
+        }
+      ]
+    },
+    {
+      "turn": 56,
+      "units": [
+        {
+          "unit_id": "IT_1",
+          "side": "A",
+          "hex": "B3",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "IT_2",
+          "side": "A",
+          "hex": "E4",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_1",
+          "side": "B",
+          "hex": "D5",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_2",
+          "side": "B",
+          "hex": "G7",
+          "strength": 5,
+          "status": []
+        }
+      ]
+    },
+    {
+      "turn": 57,
+      "units": [
+        {
+          "unit_id": "IT_1",
+          "side": "A",
+          "hex": "B3",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "IT_2",
+          "side": "A",
+          "hex": "E4",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_1",
+          "side": "B",
+          "hex": "D4",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_2",
+          "side": "B",
+          "hex": "G7",
+          "strength": 5,
+          "status": []
+        }
+      ]
+    },
+    {
+      "turn": 58,
+      "units": [
+        {
+          "unit_id": "IT_1",
+          "side": "A",
+          "hex": "B3",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "IT_2",
+          "side": "A",
+          "hex": "E4",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_1",
+          "side": "B",
+          "hex": "D4",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_2",
+          "side": "B",
+          "hex": "G7",
+          "strength": 5,
+          "status": []
+        }
+      ]
+    },
+    {
+      "turn": 59,
+      "units": [
+        {
+          "unit_id": "IT_1",
+          "side": "A",
+          "hex": "B3",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "IT_2",
+          "side": "A",
+          "hex": "E4",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_1",
+          "side": "B",
+          "hex": "D5",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_2",
+          "side": "B",
+          "hex": "G7",
+          "strength": 5,
+          "status": []
+        }
+      ]
+    },
+    {
+      "turn": 60,
+      "units": [
+        {
+          "unit_id": "IT_1",
+          "side": "A",
+          "hex": "B3",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "IT_2",
+          "side": "A",
+          "hex": "E4",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_1",
+          "side": "B",
+          "hex": "D5",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_2",
+          "side": "B",
+          "hex": "G7",
+          "strength": 5,
+          "status": []
+        }
+      ]
+    },
+    {
+      "turn": 61,
+      "units": [
+        {
+          "unit_id": "IT_1",
+          "side": "A",
+          "hex": "B3",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "IT_2",
+          "side": "A",
+          "hex": "E4",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_1",
+          "side": "B",
+          "hex": "D4",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_2",
+          "side": "B",
+          "hex": "G7",
+          "strength": 5,
+          "status": []
+        }
+      ]
+    },
+    {
+      "turn": 62,
+      "units": [
+        {
+          "unit_id": "IT_1",
+          "side": "A",
+          "hex": "B3",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "IT_2",
+          "side": "A",
+          "hex": "E3",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_1",
+          "side": "B",
+          "hex": "D4",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_2",
+          "side": "B",
+          "hex": "G7",
+          "strength": 5,
+          "status": []
+        }
+      ]
+    },
+    {
+      "turn": 63,
+      "units": [
+        {
+          "unit_id": "IT_1",
+          "side": "A",
+          "hex": "B3",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "IT_2",
+          "side": "A",
+          "hex": "E3",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_1",
+          "side": "B",
+          "hex": "D5",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_2",
+          "side": "B",
+          "hex": "G7",
+          "strength": 5,
+          "status": []
+        }
+      ]
+    },
+    {
+      "turn": 64,
+      "units": [
+        {
+          "unit_id": "IT_1",
+          "side": "A",
+          "hex": "B3",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "IT_2",
+          "side": "A",
+          "hex": "E3",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_1",
+          "side": "B",
+          "hex": "D5",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_2",
+          "side": "B",
+          "hex": "G7",
+          "strength": 5,
+          "status": []
+        }
+      ]
+    },
+    {
+      "turn": 65,
+      "units": [
+        {
+          "unit_id": "IT_1",
+          "side": "A",
+          "hex": "B3",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "IT_2",
+          "side": "A",
+          "hex": "E3",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_1",
+          "side": "B",
+          "hex": "D4",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_2",
+          "side": "B",
+          "hex": "G7",
+          "strength": 5,
+          "status": []
+        }
+      ]
+    },
+    {
+      "turn": 66,
+      "units": [
+        {
+          "unit_id": "IT_1",
+          "side": "A",
+          "hex": "B3",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "IT_2",
+          "side": "A",
+          "hex": "E3",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_1",
+          "side": "B",
+          "hex": "D4",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_2",
+          "side": "B",
+          "hex": "G7",
+          "strength": 5,
+          "status": []
+        }
+      ]
+    },
+    {
+      "turn": 67,
+      "units": [
+        {
+          "unit_id": "IT_1",
+          "side": "A",
+          "hex": "B3",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "IT_2",
+          "side": "A",
+          "hex": "E3",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_1",
+          "side": "B",
+          "hex": "D5",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_2",
+          "side": "B",
+          "hex": "G7",
+          "strength": 5,
+          "status": []
+        }
+      ]
+    },
+    {
+      "turn": 68,
+      "units": [
+        {
+          "unit_id": "IT_1",
+          "side": "A",
+          "hex": "B3",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "IT_2",
+          "side": "A",
+          "hex": "E3",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_1",
+          "side": "B",
+          "hex": "D5",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_2",
+          "side": "B",
+          "hex": "G7",
+          "strength": 5,
+          "status": []
+        }
+      ]
+    },
+    {
+      "turn": 69,
+      "units": [
+        {
+          "unit_id": "IT_1",
+          "side": "A",
+          "hex": "B3",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "IT_2",
+          "side": "A",
+          "hex": "E3",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_1",
+          "side": "B",
+          "hex": "D4",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_2",
+          "side": "B",
+          "hex": "G7",
+          "strength": 5,
+          "status": []
+        }
+      ]
+    },
+    {
+      "turn": 70,
+      "units": [
+        {
+          "unit_id": "IT_1",
+          "side": "A",
+          "hex": "B3",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "IT_2",
+          "side": "A",
+          "hex": "F3",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_1",
+          "side": "B",
+          "hex": "D4",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_2",
+          "side": "B",
+          "hex": "G7",
+          "strength": 5,
+          "status": []
+        }
+      ]
+    },
+    {
+      "turn": 71,
+      "units": [
+        {
+          "unit_id": "IT_1",
+          "side": "A",
+          "hex": "B3",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "IT_2",
+          "side": "A",
+          "hex": "F3",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_1",
+          "side": "B",
+          "hex": "D5",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_2",
+          "side": "B",
+          "hex": "G7",
+          "strength": 5,
+          "status": []
+        }
+      ]
+    },
+    {
+      "turn": 72,
+      "units": [
+        {
+          "unit_id": "IT_1",
+          "side": "A",
+          "hex": "B3",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "IT_2",
+          "side": "A",
+          "hex": "F3",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_1",
+          "side": "B",
+          "hex": "D5",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_2",
+          "side": "B",
+          "hex": "G7",
+          "strength": 5,
+          "status": []
+        }
+      ]
+    },
+    {
+      "turn": 73,
+      "units": [
+        {
+          "unit_id": "IT_1",
+          "side": "A",
+          "hex": "B3",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "IT_2",
+          "side": "A",
+          "hex": "F3",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_1",
+          "side": "B",
+          "hex": "D4",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_2",
+          "side": "B",
+          "hex": "G7",
+          "strength": 5,
+          "status": []
+        }
+      ]
+    },
+    {
+      "turn": 74,
+      "units": [
+        {
+          "unit_id": "IT_1",
+          "side": "A",
+          "hex": "B3",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "IT_2",
+          "side": "A",
+          "hex": "G3",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_1",
+          "side": "B",
+          "hex": "D4",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_2",
+          "side": "B",
+          "hex": "G7",
+          "strength": 5,
+          "status": []
+        }
+      ]
+    },
+    {
+      "turn": 75,
+      "units": [
+        {
+          "unit_id": "IT_1",
+          "side": "A",
+          "hex": "B3",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "IT_2",
+          "side": "A",
+          "hex": "G3",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_1",
+          "side": "B",
+          "hex": "D5",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_2",
+          "side": "B",
+          "hex": "G7",
+          "strength": 5,
+          "status": []
+        }
+      ]
+    },
+    {
+      "turn": 76,
+      "units": [
+        {
+          "unit_id": "IT_1",
+          "side": "A",
+          "hex": "B3",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "IT_2",
+          "side": "A",
+          "hex": "F3",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_1",
+          "side": "B",
+          "hex": "D5",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_2",
+          "side": "B",
+          "hex": "G7",
+          "strength": 5,
+          "status": []
+        }
+      ]
+    },
+    {
+      "turn": 77,
+      "units": [
+        {
+          "unit_id": "IT_1",
+          "side": "A",
+          "hex": "B3",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "IT_2",
+          "side": "A",
+          "hex": "F3",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_1",
+          "side": "B",
+          "hex": "D4",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_2",
+          "side": "B",
+          "hex": "G7",
+          "strength": 5,
+          "status": []
+        }
+      ]
+    },
+    {
+      "turn": 78,
+      "units": [
+        {
+          "unit_id": "IT_1",
+          "side": "A",
+          "hex": "B3",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "IT_2",
+          "side": "A",
+          "hex": "F3",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_1",
+          "side": "B",
+          "hex": "D4",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_2",
+          "side": "B",
+          "hex": "G7",
+          "strength": 5,
+          "status": []
+        }
+      ]
+    },
+    {
+      "turn": 79,
+      "units": [
+        {
+          "unit_id": "IT_1",
+          "side": "A",
+          "hex": "B3",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "IT_2",
+          "side": "A",
+          "hex": "F3",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_1",
+          "side": "B",
+          "hex": "D5",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_2",
+          "side": "B",
+          "hex": "G7",
+          "strength": 5,
+          "status": []
+        }
+      ]
+    },
+    {
+      "turn": 80,
+      "units": [
+        {
+          "unit_id": "IT_1",
+          "side": "A",
+          "hex": "B3",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "IT_2",
+          "side": "A",
+          "hex": "F3",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_1",
+          "side": "B",
+          "hex": "D5",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_2",
+          "side": "B",
+          "hex": "G7",
+          "strength": 5,
+          "status": []
+        }
+      ]
+    },
+    {
+      "turn": 81,
+      "units": [
+        {
+          "unit_id": "IT_1",
+          "side": "A",
+          "hex": "B3",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "IT_2",
+          "side": "A",
+          "hex": "F3",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_1",
+          "side": "B",
+          "hex": "D4",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_2",
+          "side": "B",
+          "hex": "G7",
+          "strength": 5,
+          "status": []
+        }
+      ]
+    },
+    {
+      "turn": 82,
+      "units": [
+        {
+          "unit_id": "IT_1",
+          "side": "A",
+          "hex": "B3",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "IT_2",
+          "side": "A",
+          "hex": "G3",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_1",
+          "side": "B",
+          "hex": "D4",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_2",
+          "side": "B",
+          "hex": "G7",
+          "strength": 5,
+          "status": []
+        }
+      ]
+    },
+    {
+      "turn": 83,
+      "units": [
+        {
+          "unit_id": "IT_1",
+          "side": "A",
+          "hex": "B3",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "IT_2",
+          "side": "A",
+          "hex": "G3",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_1",
+          "side": "B",
+          "hex": "D5",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_2",
+          "side": "B",
+          "hex": "G7",
+          "strength": 5,
+          "status": []
+        }
+      ]
+    },
+    {
+      "turn": 84,
+      "units": [
+        {
+          "unit_id": "IT_1",
+          "side": "A",
+          "hex": "B3",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "IT_2",
+          "side": "A",
+          "hex": "H3",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_1",
+          "side": "B",
+          "hex": "D5",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_2",
+          "side": "B",
+          "hex": "G7",
+          "strength": 5,
+          "status": []
+        }
+      ]
+    },
+    {
+      "turn": 85,
+      "units": [
+        {
+          "unit_id": "IT_1",
+          "side": "A",
+          "hex": "B3",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "IT_2",
+          "side": "A",
+          "hex": "H3",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_1",
+          "side": "B",
+          "hex": "D4",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_2",
+          "side": "B",
+          "hex": "G7",
+          "strength": 5,
+          "status": []
+        }
+      ]
+    },
+    {
+      "turn": 86,
+      "units": [
+        {
+          "unit_id": "IT_1",
+          "side": "A",
+          "hex": "B3",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "IT_2",
+          "side": "A",
+          "hex": "H3",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_1",
+          "side": "B",
+          "hex": "D4",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_2",
+          "side": "B",
+          "hex": "G7",
+          "strength": 5,
+          "status": []
+        }
+      ]
+    },
+    {
+      "turn": 87,
+      "units": [
+        {
+          "unit_id": "IT_1",
+          "side": "A",
+          "hex": "B3",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "IT_2",
+          "side": "A",
+          "hex": "H3",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_1",
+          "side": "B",
+          "hex": "D5",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_2",
+          "side": "B",
+          "hex": "G7",
+          "strength": 5,
+          "status": []
+        }
+      ]
+    },
+    {
+      "turn": 88,
+      "units": [
+        {
+          "unit_id": "IT_1",
+          "side": "A",
+          "hex": "B3",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "IT_2",
+          "side": "A",
+          "hex": "H3",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_1",
+          "side": "B",
+          "hex": "D5",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_2",
+          "side": "B",
+          "hex": "G7",
+          "strength": 5,
+          "status": []
+        }
+      ]
+    },
+    {
+      "turn": 89,
+      "units": [
+        {
+          "unit_id": "IT_1",
+          "side": "A",
+          "hex": "B3",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "IT_2",
+          "side": "A",
+          "hex": "H3",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_1",
+          "side": "B",
+          "hex": "D4",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_2",
+          "side": "B",
+          "hex": "G7",
+          "strength": 5,
+          "status": []
+        }
+      ]
+    },
+    {
+      "turn": 90,
+      "units": [
+        {
+          "unit_id": "IT_1",
+          "side": "A",
+          "hex": "B3",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "IT_2",
+          "side": "A",
+          "hex": "H3",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_1",
+          "side": "B",
+          "hex": "D4",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_2",
+          "side": "B",
+          "hex": "G7",
+          "strength": 5,
+          "status": []
+        }
+      ]
+    },
+    {
+      "turn": 91,
+      "units": [
+        {
+          "unit_id": "IT_1",
+          "side": "A",
+          "hex": "B3",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "IT_2",
+          "side": "A",
+          "hex": "H3",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_1",
+          "side": "B",
+          "hex": "D5",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_2",
+          "side": "B",
+          "hex": "G7",
+          "strength": 5,
+          "status": []
+        }
+      ]
+    },
+    {
+      "turn": 92,
+      "units": [
+        {
+          "unit_id": "IT_1",
+          "side": "A",
+          "hex": "B3",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "IT_2",
+          "side": "A",
+          "hex": "H3",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_1",
+          "side": "B",
+          "hex": "D5",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_2",
+          "side": "B",
+          "hex": "G7",
+          "strength": 5,
+          "status": []
+        }
+      ]
+    },
+    {
+      "turn": 93,
+      "units": [
+        {
+          "unit_id": "IT_1",
+          "side": "A",
+          "hex": "B3",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "IT_2",
+          "side": "A",
+          "hex": "H3",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_1",
+          "side": "B",
+          "hex": "D4",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_2",
+          "side": "B",
+          "hex": "G7",
+          "strength": 5,
+          "status": []
+        }
+      ]
+    },
+    {
+      "turn": 94,
+      "units": [
+        {
+          "unit_id": "IT_1",
+          "side": "A",
+          "hex": "B3",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "IT_2",
+          "side": "A",
+          "hex": "H2",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_1",
+          "side": "B",
+          "hex": "D4",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_2",
+          "side": "B",
+          "hex": "G7",
+          "strength": 5,
+          "status": []
+        }
+      ]
+    },
+    {
+      "turn": 95,
+      "units": [
+        {
+          "unit_id": "IT_1",
+          "side": "A",
+          "hex": "B3",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "IT_2",
+          "side": "A",
+          "hex": "H2",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_1",
+          "side": "B",
+          "hex": "D5",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_2",
+          "side": "B",
+          "hex": "G7",
+          "strength": 5,
+          "status": []
+        }
+      ]
+    },
+    {
+      "turn": 96,
+      "units": [
+        {
+          "unit_id": "IT_1",
+          "side": "A",
+          "hex": "B3",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "IT_2",
+          "side": "A",
+          "hex": "G2",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_1",
+          "side": "B",
+          "hex": "D5",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_2",
+          "side": "B",
+          "hex": "G7",
+          "strength": 5,
+          "status": []
+        }
+      ]
+    },
+    {
+      "turn": 97,
+      "units": [
+        {
+          "unit_id": "IT_1",
+          "side": "A",
+          "hex": "B3",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "IT_2",
+          "side": "A",
+          "hex": "G2",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_1",
+          "side": "B",
+          "hex": "D4",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_2",
+          "side": "B",
+          "hex": "G7",
+          "strength": 5,
+          "status": []
+        }
+      ]
+    },
+    {
+      "turn": 98,
+      "units": [
+        {
+          "unit_id": "IT_1",
+          "side": "A",
+          "hex": "B3",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "IT_2",
+          "side": "A",
+          "hex": "H2",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_1",
+          "side": "B",
+          "hex": "D4",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_2",
+          "side": "B",
+          "hex": "G7",
+          "strength": 5,
+          "status": []
+        }
+      ]
+    },
+    {
+      "turn": 99,
+      "units": [
+        {
+          "unit_id": "IT_1",
+          "side": "A",
+          "hex": "B3",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "IT_2",
+          "side": "A",
+          "hex": "H2",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_1",
+          "side": "B",
+          "hex": "D5",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_2",
+          "side": "B",
+          "hex": "G7",
+          "strength": 5,
+          "status": []
+        }
+      ]
+    },
+    {
+      "turn": 100,
+      "units": [
+        {
+          "unit_id": "IT_1",
+          "side": "A",
+          "hex": "B3",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "IT_2",
+          "side": "A",
+          "hex": "H2",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_1",
+          "side": "B",
+          "hex": "D5",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_2",
+          "side": "B",
+          "hex": "G7",
+          "strength": 5,
+          "status": []
+        }
+      ]
+    },
+    {
+      "turn": 101,
+      "units": [
+        {
+          "unit_id": "IT_1",
+          "side": "A",
+          "hex": "B3",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "IT_2",
+          "side": "A",
+          "hex": "H2",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_1",
+          "side": "B",
+          "hex": "D4",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_2",
+          "side": "B",
+          "hex": "G7",
+          "strength": 5,
+          "status": []
+        }
+      ]
+    },
+    {
+      "turn": 102,
+      "units": [
+        {
+          "unit_id": "IT_1",
+          "side": "A",
+          "hex": "B3",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "IT_2",
+          "side": "A",
+          "hex": "H2",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_1",
+          "side": "B",
+          "hex": "D4",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_2",
+          "side": "B",
+          "hex": "G7",
+          "strength": 5,
+          "status": []
+        }
+      ]
+    },
+    {
+      "turn": 103,
+      "units": [
+        {
+          "unit_id": "IT_1",
+          "side": "A",
+          "hex": "B3",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "IT_2",
+          "side": "A",
+          "hex": "H2",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_1",
+          "side": "B",
+          "hex": "D5",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_2",
+          "side": "B",
+          "hex": "G7",
+          "strength": 5,
+          "status": []
+        }
+      ]
+    },
+    {
+      "turn": 104,
+      "units": [
+        {
+          "unit_id": "IT_1",
+          "side": "A",
+          "hex": "B3",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "IT_2",
+          "side": "A",
+          "hex": "H2",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_1",
+          "side": "B",
+          "hex": "D5",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_2",
+          "side": "B",
+          "hex": "G7",
+          "strength": 5,
+          "status": []
+        }
+      ]
+    },
+    {
+      "turn": 105,
+      "units": [
+        {
+          "unit_id": "IT_1",
+          "side": "A",
+          "hex": "B3",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "IT_2",
+          "side": "A",
+          "hex": "H2",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_1",
+          "side": "B",
+          "hex": "D4",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_2",
+          "side": "B",
+          "hex": "G7",
+          "strength": 5,
+          "status": []
+        }
+      ]
+    },
+    {
+      "turn": 106,
+      "units": [
+        {
+          "unit_id": "IT_1",
+          "side": "A",
+          "hex": "B3",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "IT_2",
+          "side": "A",
+          "hex": "H2",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_1",
+          "side": "B",
+          "hex": "D4",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_2",
+          "side": "B",
+          "hex": "G7",
+          "strength": 5,
+          "status": []
+        }
+      ]
+    },
+    {
+      "turn": 107,
+      "units": [
+        {
+          "unit_id": "IT_1",
+          "side": "A",
+          "hex": "B3",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "IT_2",
+          "side": "A",
+          "hex": "H2",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_1",
+          "side": "B",
+          "hex": "D5",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_2",
+          "side": "B",
+          "hex": "G7",
+          "strength": 5,
+          "status": []
+        }
+      ]
+    },
+    {
+      "turn": 108,
+      "units": [
+        {
+          "unit_id": "IT_1",
+          "side": "A",
+          "hex": "B3",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "IT_2",
+          "side": "A",
+          "hex": "H2",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_1",
+          "side": "B",
+          "hex": "D5",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_2",
+          "side": "B",
+          "hex": "G7",
+          "strength": 5,
+          "status": []
+        }
+      ]
+    },
+    {
+      "turn": 109,
+      "units": [
+        {
+          "unit_id": "IT_1",
+          "side": "A",
+          "hex": "B3",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "IT_2",
+          "side": "A",
+          "hex": "H2",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_1",
+          "side": "B",
+          "hex": "D4",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_2",
+          "side": "B",
+          "hex": "G7",
+          "strength": 5,
+          "status": []
+        }
+      ]
+    },
+    {
+      "turn": 110,
+      "units": [
+        {
+          "unit_id": "IT_1",
+          "side": "A",
+          "hex": "B3",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "IT_2",
+          "side": "A",
+          "hex": "G2",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_1",
+          "side": "B",
+          "hex": "D4",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_2",
+          "side": "B",
+          "hex": "G7",
+          "strength": 5,
+          "status": []
+        }
+      ]
+    },
+    {
+      "turn": 111,
+      "units": [
+        {
+          "unit_id": "IT_1",
+          "side": "A",
+          "hex": "B3",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "IT_2",
+          "side": "A",
+          "hex": "G2",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_1",
+          "side": "B",
+          "hex": "D5",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_2",
+          "side": "B",
+          "hex": "G7",
+          "strength": 5,
+          "status": []
+        }
+      ]
+    },
+    {
+      "turn": 112,
+      "units": [
+        {
+          "unit_id": "IT_1",
+          "side": "A",
+          "hex": "B3",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "IT_2",
+          "side": "A",
+          "hex": "G2",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_1",
+          "side": "B",
+          "hex": "D5",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_2",
+          "side": "B",
+          "hex": "G7",
+          "strength": 5,
+          "status": []
+        }
+      ]
+    },
+    {
+      "turn": 113,
+      "units": [
+        {
+          "unit_id": "IT_1",
+          "side": "A",
+          "hex": "B3",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "IT_2",
+          "side": "A",
+          "hex": "G2",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_1",
+          "side": "B",
+          "hex": "D4",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_2",
+          "side": "B",
+          "hex": "G7",
+          "strength": 5,
+          "status": []
+        }
+      ]
+    },
+    {
+      "turn": 114,
+      "units": [
+        {
+          "unit_id": "IT_1",
+          "side": "A",
+          "hex": "B3",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "IT_2",
+          "side": "A",
+          "hex": "G2",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_1",
+          "side": "B",
+          "hex": "D4",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_2",
+          "side": "B",
+          "hex": "G7",
+          "strength": 5,
+          "status": []
+        }
+      ]
+    },
+    {
+      "turn": 115,
+      "units": [
+        {
+          "unit_id": "IT_1",
+          "side": "A",
+          "hex": "B3",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "IT_2",
+          "side": "A",
+          "hex": "G2",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_1",
+          "side": "B",
+          "hex": "D5",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_2",
+          "side": "B",
+          "hex": "G7",
+          "strength": 5,
+          "status": []
+        }
+      ]
+    },
+    {
+      "turn": 116,
+      "units": [
+        {
+          "unit_id": "IT_1",
+          "side": "A",
+          "hex": "B3",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "IT_2",
+          "side": "A",
+          "hex": "H2",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_1",
+          "side": "B",
+          "hex": "D5",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_2",
+          "side": "B",
+          "hex": "G7",
+          "strength": 5,
+          "status": []
+        }
+      ]
+    },
+    {
+      "turn": 117,
+      "units": [
+        {
+          "unit_id": "IT_1",
+          "side": "A",
+          "hex": "B3",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "IT_2",
+          "side": "A",
+          "hex": "H2",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_1",
+          "side": "B",
+          "hex": "D4",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_2",
+          "side": "B",
+          "hex": "G7",
+          "strength": 5,
+          "status": []
+        }
+      ]
+    },
+    {
+      "turn": 118,
+      "units": [
+        {
+          "unit_id": "IT_1",
+          "side": "A",
+          "hex": "B3",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "IT_2",
+          "side": "A",
+          "hex": "H1",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_1",
+          "side": "B",
+          "hex": "D4",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_2",
+          "side": "B",
+          "hex": "G7",
+          "strength": 5,
+          "status": []
+        }
+      ]
+    },
+    {
+      "turn": 119,
+      "units": [
+        {
+          "unit_id": "IT_1",
+          "side": "A",
+          "hex": "B3",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "IT_2",
+          "side": "A",
+          "hex": "H1",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_1",
+          "side": "B",
+          "hex": "D5",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_2",
+          "side": "B",
+          "hex": "G7",
+          "strength": 5,
+          "status": []
+        }
+      ]
+    },
+    {
+      "turn": 120,
+      "units": [
+        {
+          "unit_id": "IT_1",
+          "side": "A",
+          "hex": "B3",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "IT_2",
+          "side": "A",
+          "hex": "H1",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_1",
+          "side": "B",
+          "hex": "D5",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_2",
+          "side": "B",
+          "hex": "G7",
+          "strength": 5,
+          "status": []
+        }
+      ]
+    },
+    {
+      "turn": 121,
+      "units": [
+        {
+          "unit_id": "IT_1",
+          "side": "A",
+          "hex": "B3",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "IT_2",
+          "side": "A",
+          "hex": "H1",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_1",
+          "side": "B",
+          "hex": "D4",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_2",
+          "side": "B",
+          "hex": "G7",
+          "strength": 5,
+          "status": []
+        }
+      ]
+    },
+    {
+      "turn": 122,
+      "units": [
+        {
+          "unit_id": "IT_1",
+          "side": "A",
+          "hex": "B3",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "IT_2",
+          "side": "A",
+          "hex": "H1",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_1",
+          "side": "B",
+          "hex": "D4",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_2",
+          "side": "B",
+          "hex": "G7",
+          "strength": 5,
+          "status": []
+        }
+      ]
+    },
+    {
+      "turn": 123,
+      "units": [
+        {
+          "unit_id": "IT_1",
+          "side": "A",
+          "hex": "B3",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "IT_2",
+          "side": "A",
+          "hex": "H1",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_1",
+          "side": "B",
+          "hex": "D5",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_2",
+          "side": "B",
+          "hex": "G7",
+          "strength": 5,
+          "status": []
+        }
+      ]
+    },
+    {
+      "turn": 124,
+      "units": [
+        {
+          "unit_id": "IT_1",
+          "side": "A",
+          "hex": "B3",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "IT_2",
+          "side": "A",
+          "hex": "G1",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_1",
+          "side": "B",
+          "hex": "D5",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_2",
+          "side": "B",
+          "hex": "G7",
+          "strength": 5,
+          "status": []
+        }
+      ]
+    },
+    {
+      "turn": 125,
+      "units": [
+        {
+          "unit_id": "IT_1",
+          "side": "A",
+          "hex": "B3",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "IT_2",
+          "side": "A",
+          "hex": "G1",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_1",
+          "side": "B",
+          "hex": "D4",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_2",
+          "side": "B",
+          "hex": "G7",
+          "strength": 5,
+          "status": []
+        }
+      ]
+    },
+    {
+      "turn": 126,
+      "units": [
+        {
+          "unit_id": "IT_1",
+          "side": "A",
+          "hex": "B3",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "IT_2",
+          "side": "A",
+          "hex": "G1",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_1",
+          "side": "B",
+          "hex": "D4",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_2",
+          "side": "B",
+          "hex": "G7",
+          "strength": 5,
+          "status": []
+        }
+      ]
+    },
+    {
+      "turn": 127,
+      "units": [
+        {
+          "unit_id": "IT_1",
+          "side": "A",
+          "hex": "B3",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "IT_2",
+          "side": "A",
+          "hex": "G1",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_1",
+          "side": "B",
+          "hex": "D5",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_2",
+          "side": "B",
+          "hex": "G7",
+          "strength": 5,
+          "status": []
+        }
+      ]
+    },
+    {
+      "turn": 128,
+      "units": [
+        {
+          "unit_id": "IT_1",
+          "side": "A",
+          "hex": "B3",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "IT_2",
+          "side": "A",
+          "hex": "G1",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_1",
+          "side": "B",
+          "hex": "D5",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_2",
+          "side": "B",
+          "hex": "G7",
+          "strength": 5,
+          "status": []
+        }
+      ]
+    },
+    {
+      "turn": 129,
+      "units": [
+        {
+          "unit_id": "IT_1",
+          "side": "A",
+          "hex": "B3",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "IT_2",
+          "side": "A",
+          "hex": "G1",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_1",
+          "side": "B",
+          "hex": "D4",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_2",
+          "side": "B",
+          "hex": "G7",
+          "strength": 5,
+          "status": []
+        }
+      ]
+    },
+    {
+      "turn": 130,
+      "units": [
+        {
+          "unit_id": "IT_1",
+          "side": "A",
+          "hex": "B3",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "IT_2",
+          "side": "A",
+          "hex": "F1",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_1",
+          "side": "B",
+          "hex": "D4",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_2",
+          "side": "B",
+          "hex": "G7",
+          "strength": 5,
+          "status": []
+        }
+      ]
+    },
+    {
+      "turn": 131,
+      "units": [
+        {
+          "unit_id": "IT_1",
+          "side": "A",
+          "hex": "B3",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "IT_2",
+          "side": "A",
+          "hex": "F1",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_1",
+          "side": "B",
+          "hex": "D5",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_2",
+          "side": "B",
+          "hex": "G7",
+          "strength": 5,
+          "status": []
+        }
+      ]
+    },
+    {
+      "turn": 132,
+      "units": [
+        {
+          "unit_id": "IT_1",
+          "side": "A",
+          "hex": "B3",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "IT_2",
+          "side": "A",
+          "hex": "E1",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_1",
+          "side": "B",
+          "hex": "D5",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_2",
+          "side": "B",
+          "hex": "G7",
+          "strength": 5,
+          "status": []
+        }
+      ]
+    },
+    {
+      "turn": 133,
+      "units": [
+        {
+          "unit_id": "IT_1",
+          "side": "A",
+          "hex": "B3",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "IT_2",
+          "side": "A",
+          "hex": "E1",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_1",
+          "side": "B",
+          "hex": "D4",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_2",
+          "side": "B",
+          "hex": "G7",
+          "strength": 5,
+          "status": []
+        }
+      ]
+    },
+    {
+      "turn": 134,
+      "units": [
+        {
+          "unit_id": "IT_1",
+          "side": "A",
+          "hex": "B3",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "IT_2",
+          "side": "A",
+          "hex": "E1",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_1",
+          "side": "B",
+          "hex": "D4",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_2",
+          "side": "B",
+          "hex": "G7",
+          "strength": 5,
+          "status": []
+        }
+      ]
+    },
+    {
+      "turn": 135,
+      "units": [
+        {
+          "unit_id": "IT_1",
+          "side": "A",
+          "hex": "B3",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "IT_2",
+          "side": "A",
+          "hex": "E1",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_1",
+          "side": "B",
+          "hex": "D5",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_2",
+          "side": "B",
+          "hex": "G7",
+          "strength": 5,
+          "status": []
+        }
+      ]
+    },
+    {
+      "turn": 136,
+      "units": [
+        {
+          "unit_id": "IT_1",
+          "side": "A",
+          "hex": "B3",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "IT_2",
+          "side": "A",
+          "hex": "F1",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_1",
+          "side": "B",
+          "hex": "D5",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_2",
+          "side": "B",
+          "hex": "G7",
+          "strength": 5,
+          "status": []
+        }
+      ]
+    },
+    {
+      "turn": 137,
+      "units": [
+        {
+          "unit_id": "IT_1",
+          "side": "A",
+          "hex": "B3",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "IT_2",
+          "side": "A",
+          "hex": "F1",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_1",
+          "side": "B",
+          "hex": "D4",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_2",
+          "side": "B",
+          "hex": "G7",
+          "strength": 5,
+          "status": []
+        }
+      ]
+    },
+    {
+      "turn": 138,
+      "units": [
+        {
+          "unit_id": "IT_1",
+          "side": "A",
+          "hex": "B3",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "IT_2",
+          "side": "A",
+          "hex": "E1",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_1",
+          "side": "B",
+          "hex": "D4",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_2",
+          "side": "B",
+          "hex": "G7",
+          "strength": 5,
+          "status": []
+        }
+      ]
+    },
+    {
+      "turn": 139,
+      "units": [
+        {
+          "unit_id": "IT_1",
+          "side": "A",
+          "hex": "B3",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "IT_2",
+          "side": "A",
+          "hex": "E1",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_1",
+          "side": "B",
+          "hex": "D5",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_2",
+          "side": "B",
+          "hex": "G7",
+          "strength": 5,
+          "status": []
+        }
+      ]
+    },
+    {
+      "turn": 140,
+      "units": [
+        {
+          "unit_id": "IT_1",
+          "side": "A",
+          "hex": "B3",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "IT_2",
+          "side": "A",
+          "hex": "E1",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_1",
+          "side": "B",
+          "hex": "D5",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_2",
+          "side": "B",
+          "hex": "G7",
+          "strength": 5,
+          "status": []
+        }
+      ]
+    },
+    {
+      "turn": 141,
+      "units": [
+        {
+          "unit_id": "IT_1",
+          "side": "A",
+          "hex": "B3",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "IT_2",
+          "side": "A",
+          "hex": "E1",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_1",
+          "side": "B",
+          "hex": "D4",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_2",
+          "side": "B",
+          "hex": "G7",
+          "strength": 5,
+          "status": []
+        }
+      ]
+    },
+    {
+      "turn": 142,
+      "units": [
+        {
+          "unit_id": "IT_1",
+          "side": "A",
+          "hex": "B3",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "IT_2",
+          "side": "A",
+          "hex": "E1",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_1",
+          "side": "B",
+          "hex": "D4",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_2",
+          "side": "B",
+          "hex": "G7",
+          "strength": 5,
+          "status": []
+        }
+      ]
+    },
+    {
+      "turn": 143,
+      "units": [
+        {
+          "unit_id": "IT_1",
+          "side": "A",
+          "hex": "B3",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "IT_2",
+          "side": "A",
+          "hex": "E1",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_1",
+          "side": "B",
+          "hex": "D5",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_2",
+          "side": "B",
+          "hex": "G7",
+          "strength": 5,
+          "status": []
+        }
+      ]
+    },
+    {
+      "turn": 144,
+      "units": [
+        {
+          "unit_id": "IT_1",
+          "side": "A",
+          "hex": "B3",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "IT_2",
+          "side": "A",
+          "hex": "E1",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_1",
+          "side": "B",
+          "hex": "D5",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_2",
+          "side": "B",
+          "hex": "G7",
+          "strength": 5,
+          "status": []
+        }
+      ]
+    },
+    {
+      "turn": 145,
+      "units": [
+        {
+          "unit_id": "IT_1",
+          "side": "A",
+          "hex": "B3",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "IT_2",
+          "side": "A",
+          "hex": "E1",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_1",
+          "side": "B",
+          "hex": "D4",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_2",
+          "side": "B",
+          "hex": "G7",
+          "strength": 5,
+          "status": []
+        }
+      ]
+    },
+    {
+      "turn": 146,
+      "units": [
+        {
+          "unit_id": "IT_1",
+          "side": "A",
+          "hex": "B3",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "IT_2",
+          "side": "A",
+          "hex": "F1",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_1",
+          "side": "B",
+          "hex": "D4",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_2",
+          "side": "B",
+          "hex": "G7",
+          "strength": 5,
+          "status": []
+        }
+      ]
+    },
+    {
+      "turn": 147,
+      "units": [
+        {
+          "unit_id": "IT_1",
+          "side": "A",
+          "hex": "B3",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "IT_2",
+          "side": "A",
+          "hex": "F1",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_1",
+          "side": "B",
+          "hex": "D5",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_2",
+          "side": "B",
+          "hex": "G7",
+          "strength": 5,
+          "status": []
+        }
+      ]
+    },
+    {
+      "turn": 148,
+      "units": [
+        {
+          "unit_id": "IT_1",
+          "side": "A",
+          "hex": "B3",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "IT_2",
+          "side": "A",
+          "hex": "F1",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_1",
+          "side": "B",
+          "hex": "D5",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_2",
+          "side": "B",
+          "hex": "G7",
+          "strength": 5,
+          "status": []
+        }
+      ]
+    },
+    {
+      "turn": 149,
+      "units": [
+        {
+          "unit_id": "IT_1",
+          "side": "A",
+          "hex": "B3",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "IT_2",
+          "side": "A",
+          "hex": "F1",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_1",
+          "side": "B",
+          "hex": "D4",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_2",
+          "side": "B",
+          "hex": "G7",
+          "strength": 5,
+          "status": []
+        }
+      ]
+    },
+    {
+      "turn": 150,
+      "units": [
+        {
+          "unit_id": "IT_1",
+          "side": "A",
+          "hex": "B3",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "IT_2",
+          "side": "A",
+          "hex": "F1",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_1",
+          "side": "B",
+          "hex": "D4",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_2",
+          "side": "B",
+          "hex": "G7",
+          "strength": 5,
+          "status": []
+        }
+      ]
+    },
+    {
+      "turn": 151,
+      "units": [
+        {
+          "unit_id": "IT_1",
+          "side": "A",
+          "hex": "B3",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "IT_2",
+          "side": "A",
+          "hex": "F1",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_1",
+          "side": "B",
+          "hex": "D5",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_2",
+          "side": "B",
+          "hex": "G7",
+          "strength": 5,
+          "status": []
+        }
+      ]
+    },
+    {
+      "turn": 152,
+      "units": [
+        {
+          "unit_id": "IT_1",
+          "side": "A",
+          "hex": "B3",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "IT_2",
+          "side": "A",
+          "hex": "G1",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_1",
+          "side": "B",
+          "hex": "D5",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_2",
+          "side": "B",
+          "hex": "G7",
+          "strength": 5,
+          "status": []
+        }
+      ]
+    },
+    {
+      "turn": 153,
+      "units": [
+        {
+          "unit_id": "IT_1",
+          "side": "A",
+          "hex": "B3",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "IT_2",
+          "side": "A",
+          "hex": "G1",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_1",
+          "side": "B",
+          "hex": "D4",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_2",
+          "side": "B",
+          "hex": "G7",
+          "strength": 5,
+          "status": []
+        }
+      ]
+    },
+    {
+      "turn": 154,
+      "units": [
+        {
+          "unit_id": "IT_1",
+          "side": "A",
+          "hex": "B3",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "IT_2",
+          "side": "A",
+          "hex": "G1",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_1",
+          "side": "B",
+          "hex": "D4",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_2",
+          "side": "B",
+          "hex": "G7",
+          "strength": 5,
+          "status": []
+        }
+      ]
+    },
+    {
+      "turn": 155,
+      "units": [
+        {
+          "unit_id": "IT_1",
+          "side": "A",
+          "hex": "B3",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "IT_2",
+          "side": "A",
+          "hex": "G1",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_1",
+          "side": "B",
+          "hex": "D5",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_2",
+          "side": "B",
+          "hex": "G7",
+          "strength": 5,
+          "status": []
+        }
+      ]
+    },
+    {
+      "turn": 156,
+      "units": [
+        {
+          "unit_id": "IT_1",
+          "side": "A",
+          "hex": "B3",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "IT_2",
+          "side": "A",
+          "hex": "G1",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_1",
+          "side": "B",
+          "hex": "D5",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_2",
+          "side": "B",
+          "hex": "G7",
+          "strength": 5,
+          "status": []
+        }
+      ]
+    },
+    {
+      "turn": 157,
+      "units": [
+        {
+          "unit_id": "IT_1",
+          "side": "A",
+          "hex": "B3",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "IT_2",
+          "side": "A",
+          "hex": "G1",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_1",
+          "side": "B",
+          "hex": "D4",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_2",
+          "side": "B",
+          "hex": "G7",
+          "strength": 5,
+          "status": []
+        }
+      ]
+    },
+    {
+      "turn": 158,
+      "units": [
+        {
+          "unit_id": "IT_1",
+          "side": "A",
+          "hex": "B3",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "IT_2",
+          "side": "A",
+          "hex": "F1",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_1",
+          "side": "B",
+          "hex": "D4",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_2",
+          "side": "B",
+          "hex": "G7",
+          "strength": 5,
+          "status": []
+        }
+      ]
+    },
+    {
+      "turn": 159,
+      "units": [
+        {
+          "unit_id": "IT_1",
+          "side": "A",
+          "hex": "B3",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "IT_2",
+          "side": "A",
+          "hex": "F1",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_1",
+          "side": "B",
+          "hex": "D5",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_2",
+          "side": "B",
+          "hex": "G7",
+          "strength": 5,
+          "status": []
+        }
+      ]
+    },
+    {
+      "turn": 160,
+      "units": [
+        {
+          "unit_id": "IT_1",
+          "side": "A",
+          "hex": "B3",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "IT_2",
+          "side": "A",
+          "hex": "F1",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_1",
+          "side": "B",
+          "hex": "D5",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_2",
+          "side": "B",
+          "hex": "G7",
+          "strength": 5,
+          "status": []
+        }
+      ]
+    },
+    {
+      "turn": 161,
+      "units": [
+        {
+          "unit_id": "IT_1",
+          "side": "A",
+          "hex": "B3",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "IT_2",
+          "side": "A",
+          "hex": "F1",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_1",
+          "side": "B",
+          "hex": "D4",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_2",
+          "side": "B",
+          "hex": "G7",
+          "strength": 5,
+          "status": []
+        }
+      ]
+    },
+    {
+      "turn": 162,
+      "units": [
+        {
+          "unit_id": "IT_1",
+          "side": "A",
+          "hex": "B3",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "IT_2",
+          "side": "A",
+          "hex": "F1",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_1",
+          "side": "B",
+          "hex": "D4",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_2",
+          "side": "B",
+          "hex": "G7",
+          "strength": 5,
+          "status": []
+        }
+      ]
+    },
+    {
+      "turn": 163,
+      "units": [
+        {
+          "unit_id": "IT_1",
+          "side": "A",
+          "hex": "B3",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "IT_2",
+          "side": "A",
+          "hex": "F1",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_1",
+          "side": "B",
+          "hex": "D5",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_2",
+          "side": "B",
+          "hex": "G7",
+          "strength": 5,
+          "status": []
+        }
+      ]
+    },
+    {
+      "turn": 164,
+      "units": [
+        {
+          "unit_id": "IT_1",
+          "side": "A",
+          "hex": "B3",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "IT_2",
+          "side": "A",
+          "hex": "F1",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_1",
+          "side": "B",
+          "hex": "D5",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_2",
+          "side": "B",
+          "hex": "G7",
+          "strength": 5,
+          "status": []
+        }
+      ]
+    },
+    {
+      "turn": 165,
+      "units": [
+        {
+          "unit_id": "IT_1",
+          "side": "A",
+          "hex": "B3",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "IT_2",
+          "side": "A",
+          "hex": "F1",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_1",
+          "side": "B",
+          "hex": "D4",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_2",
+          "side": "B",
+          "hex": "G7",
+          "strength": 5,
+          "status": []
+        }
+      ]
+    },
+    {
+      "turn": 166,
+      "units": [
+        {
+          "unit_id": "IT_1",
+          "side": "A",
+          "hex": "B3",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "IT_2",
+          "side": "A",
+          "hex": "F1",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_1",
+          "side": "B",
+          "hex": "D4",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_2",
+          "side": "B",
+          "hex": "G7",
+          "strength": 5,
+          "status": []
+        }
+      ]
+    },
+    {
+      "turn": 167,
+      "units": [
+        {
+          "unit_id": "IT_1",
+          "side": "A",
+          "hex": "B3",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "IT_2",
+          "side": "A",
+          "hex": "F1",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_1",
+          "side": "B",
+          "hex": "D5",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_2",
+          "side": "B",
+          "hex": "G7",
+          "strength": 5,
+          "status": []
+        }
+      ]
+    },
+    {
+      "turn": 168,
+      "units": [
+        {
+          "unit_id": "IT_1",
+          "side": "A",
+          "hex": "B3",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "IT_2",
+          "side": "A",
+          "hex": "F1",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_1",
+          "side": "B",
+          "hex": "D5",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_2",
+          "side": "B",
+          "hex": "G7",
+          "strength": 5,
+          "status": []
+        }
+      ]
+    },
+    {
+      "turn": 169,
+      "units": [
+        {
+          "unit_id": "IT_1",
+          "side": "A",
+          "hex": "B3",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "IT_2",
+          "side": "A",
+          "hex": "F1",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_1",
+          "side": "B",
+          "hex": "D4",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_2",
+          "side": "B",
+          "hex": "G7",
+          "strength": 5,
+          "status": []
+        }
+      ]
+    },
+    {
+      "turn": 170,
+      "units": [
+        {
+          "unit_id": "IT_1",
+          "side": "A",
+          "hex": "B3",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "IT_2",
+          "side": "A",
+          "hex": "F1",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_1",
+          "side": "B",
+          "hex": "D4",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_2",
+          "side": "B",
+          "hex": "G7",
+          "strength": 5,
+          "status": []
+        }
+      ]
+    },
+    {
+      "turn": 171,
+      "units": [
+        {
+          "unit_id": "IT_1",
+          "side": "A",
+          "hex": "B3",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "IT_2",
+          "side": "A",
+          "hex": "F1",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_1",
+          "side": "B",
+          "hex": "D5",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_2",
+          "side": "B",
+          "hex": "G7",
+          "strength": 5,
+          "status": []
+        }
+      ]
+    },
+    {
+      "turn": 172,
+      "units": [
+        {
+          "unit_id": "IT_1",
+          "side": "A",
+          "hex": "B3",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "IT_2",
+          "side": "A",
+          "hex": "F1",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_1",
+          "side": "B",
+          "hex": "D5",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_2",
+          "side": "B",
+          "hex": "G7",
+          "strength": 5,
+          "status": []
+        }
+      ]
+    },
+    {
+      "turn": 173,
+      "units": [
+        {
+          "unit_id": "IT_1",
+          "side": "A",
+          "hex": "B3",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "IT_2",
+          "side": "A",
+          "hex": "F1",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_1",
+          "side": "B",
+          "hex": "D4",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_2",
+          "side": "B",
+          "hex": "G7",
+          "strength": 5,
+          "status": []
+        }
+      ]
+    },
+    {
+      "turn": 174,
+      "units": [
+        {
+          "unit_id": "IT_1",
+          "side": "A",
+          "hex": "B3",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "IT_2",
+          "side": "A",
+          "hex": "E1",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_1",
+          "side": "B",
+          "hex": "D4",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_2",
+          "side": "B",
+          "hex": "G7",
+          "strength": 5,
+          "status": []
+        }
+      ]
+    },
+    {
+      "turn": 175,
+      "units": [
+        {
+          "unit_id": "IT_1",
+          "side": "A",
+          "hex": "B3",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "IT_2",
+          "side": "A",
+          "hex": "E1",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_1",
+          "side": "B",
+          "hex": "D5",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_2",
+          "side": "B",
+          "hex": "G7",
+          "strength": 5,
+          "status": []
+        }
+      ]
+    },
+    {
+      "turn": 176,
+      "units": [
+        {
+          "unit_id": "IT_1",
+          "side": "A",
+          "hex": "B3",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "IT_2",
+          "side": "A",
+          "hex": "F1",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_1",
+          "side": "B",
+          "hex": "D5",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_2",
+          "side": "B",
+          "hex": "G7",
+          "strength": 5,
+          "status": []
+        }
+      ]
+    },
+    {
+      "turn": 177,
+      "units": [
+        {
+          "unit_id": "IT_1",
+          "side": "A",
+          "hex": "B3",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "IT_2",
+          "side": "A",
+          "hex": "F1",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_1",
+          "side": "B",
+          "hex": "D4",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_2",
+          "side": "B",
+          "hex": "G7",
+          "strength": 5,
+          "status": []
+        }
+      ]
+    },
+    {
+      "turn": 178,
+      "units": [
+        {
+          "unit_id": "IT_1",
+          "side": "A",
+          "hex": "B3",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "IT_2",
+          "side": "A",
+          "hex": "F1",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_1",
+          "side": "B",
+          "hex": "D4",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_2",
+          "side": "B",
+          "hex": "G7",
+          "strength": 5,
+          "status": []
+        }
+      ]
+    },
+    {
+      "turn": 179,
+      "units": [
+        {
+          "unit_id": "IT_1",
+          "side": "A",
+          "hex": "B3",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "IT_2",
+          "side": "A",
+          "hex": "F1",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_1",
+          "side": "B",
+          "hex": "D5",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_2",
+          "side": "B",
+          "hex": "G7",
+          "strength": 5,
+          "status": []
+        }
+      ]
+    },
+    {
+      "turn": 180,
+      "units": [
+        {
+          "unit_id": "IT_1",
+          "side": "A",
+          "hex": "B3",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "IT_2",
+          "side": "A",
+          "hex": "F1",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_1",
+          "side": "B",
+          "hex": "D5",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_2",
+          "side": "B",
+          "hex": "G7",
+          "strength": 5,
+          "status": []
+        }
+      ]
+    },
+    {
+      "turn": 181,
+      "units": [
+        {
+          "unit_id": "IT_1",
+          "side": "A",
+          "hex": "B3",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "IT_2",
+          "side": "A",
+          "hex": "F1",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_1",
+          "side": "B",
+          "hex": "D4",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_2",
+          "side": "B",
+          "hex": "G7",
+          "strength": 5,
+          "status": []
+        }
+      ]
+    },
+    {
+      "turn": 182,
+      "units": [
+        {
+          "unit_id": "IT_1",
+          "side": "A",
+          "hex": "B3",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "IT_2",
+          "side": "A",
+          "hex": "F1",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_1",
+          "side": "B",
+          "hex": "D4",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_2",
+          "side": "B",
+          "hex": "G7",
+          "strength": 5,
+          "status": []
+        }
+      ]
+    },
+    {
+      "turn": 183,
+      "units": [
+        {
+          "unit_id": "IT_1",
+          "side": "A",
+          "hex": "B3",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "IT_2",
+          "side": "A",
+          "hex": "F1",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_1",
+          "side": "B",
+          "hex": "D5",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_2",
+          "side": "B",
+          "hex": "G7",
+          "strength": 5,
+          "status": []
+        }
+      ]
+    },
+    {
+      "turn": 184,
+      "units": [
+        {
+          "unit_id": "IT_1",
+          "side": "A",
+          "hex": "B3",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "IT_2",
+          "side": "A",
+          "hex": "G1",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_1",
+          "side": "B",
+          "hex": "D5",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_2",
+          "side": "B",
+          "hex": "G7",
+          "strength": 5,
+          "status": []
+        }
+      ]
+    },
+    {
+      "turn": 185,
+      "units": [
+        {
+          "unit_id": "IT_1",
+          "side": "A",
+          "hex": "B3",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "IT_2",
+          "side": "A",
+          "hex": "G1",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_1",
+          "side": "B",
+          "hex": "D4",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_2",
+          "side": "B",
+          "hex": "G7",
+          "strength": 5,
+          "status": []
+        }
+      ]
+    },
+    {
+      "turn": 186,
+      "units": [
+        {
+          "unit_id": "IT_1",
+          "side": "A",
+          "hex": "B3",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "IT_2",
+          "side": "A",
+          "hex": "G1",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_1",
+          "side": "B",
+          "hex": "D4",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_2",
+          "side": "B",
+          "hex": "G7",
+          "strength": 5,
+          "status": []
+        }
+      ]
+    },
+    {
+      "turn": 187,
+      "units": [
+        {
+          "unit_id": "IT_1",
+          "side": "A",
+          "hex": "B3",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "IT_2",
+          "side": "A",
+          "hex": "G1",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_1",
+          "side": "B",
+          "hex": "D5",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_2",
+          "side": "B",
+          "hex": "G7",
+          "strength": 5,
+          "status": []
+        }
+      ]
+    },
+    {
+      "turn": 188,
+      "units": [
+        {
+          "unit_id": "IT_1",
+          "side": "A",
+          "hex": "B3",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "IT_2",
+          "side": "A",
+          "hex": "F1",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_1",
+          "side": "B",
+          "hex": "D5",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_2",
+          "side": "B",
+          "hex": "G7",
+          "strength": 5,
+          "status": []
+        }
+      ]
+    },
+    {
+      "turn": 189,
+      "units": [
+        {
+          "unit_id": "IT_1",
+          "side": "A",
+          "hex": "B3",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "IT_2",
+          "side": "A",
+          "hex": "F1",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_1",
+          "side": "B",
+          "hex": "D4",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_2",
+          "side": "B",
+          "hex": "G7",
+          "strength": 5,
+          "status": []
+        }
+      ]
+    },
+    {
+      "turn": 190,
+      "units": [
+        {
+          "unit_id": "IT_1",
+          "side": "A",
+          "hex": "B3",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "IT_2",
+          "side": "A",
+          "hex": "G1",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_1",
+          "side": "B",
+          "hex": "D4",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_2",
+          "side": "B",
+          "hex": "G7",
+          "strength": 5,
+          "status": []
+        }
+      ]
+    },
+    {
+      "turn": 191,
+      "units": [
+        {
+          "unit_id": "IT_1",
+          "side": "A",
+          "hex": "B3",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "IT_2",
+          "side": "A",
+          "hex": "G1",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_1",
+          "side": "B",
+          "hex": "D5",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_2",
+          "side": "B",
+          "hex": "G7",
+          "strength": 5,
+          "status": []
+        }
+      ]
+    },
+    {
+      "turn": 192,
+      "units": [
+        {
+          "unit_id": "IT_1",
+          "side": "A",
+          "hex": "B3",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "IT_2",
+          "side": "A",
+          "hex": "G1",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_1",
+          "side": "B",
+          "hex": "D5",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_2",
+          "side": "B",
+          "hex": "G7",
+          "strength": 5,
+          "status": []
+        }
+      ]
+    },
+    {
+      "turn": 193,
+      "units": [
+        {
+          "unit_id": "IT_1",
+          "side": "A",
+          "hex": "B3",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "IT_2",
+          "side": "A",
+          "hex": "G1",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_1",
+          "side": "B",
+          "hex": "D4",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_2",
+          "side": "B",
+          "hex": "G7",
+          "strength": 5,
+          "status": []
+        }
+      ]
+    },
+    {
+      "turn": 194,
+      "units": [
+        {
+          "unit_id": "IT_1",
+          "side": "A",
+          "hex": "B3",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "IT_2",
+          "side": "A",
+          "hex": "G1",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_1",
+          "side": "B",
+          "hex": "D4",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_2",
+          "side": "B",
+          "hex": "G7",
+          "strength": 5,
+          "status": []
+        }
+      ]
+    },
+    {
+      "turn": 195,
+      "units": [
+        {
+          "unit_id": "IT_1",
+          "side": "A",
+          "hex": "B3",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "IT_2",
+          "side": "A",
+          "hex": "G1",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_1",
+          "side": "B",
+          "hex": "D5",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_2",
+          "side": "B",
+          "hex": "G7",
+          "strength": 5,
+          "status": []
+        }
+      ]
+    },
+    {
+      "turn": 196,
+      "units": [
+        {
+          "unit_id": "IT_1",
+          "side": "A",
+          "hex": "B3",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "IT_2",
+          "side": "A",
+          "hex": "G1",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_1",
+          "side": "B",
+          "hex": "D5",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_2",
+          "side": "B",
+          "hex": "G7",
+          "strength": 5,
+          "status": []
+        }
+      ]
+    },
+    {
+      "turn": 197,
+      "units": [
+        {
+          "unit_id": "IT_1",
+          "side": "A",
+          "hex": "B3",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "IT_2",
+          "side": "A",
+          "hex": "G1",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_1",
+          "side": "B",
+          "hex": "D4",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_2",
+          "side": "B",
+          "hex": "G7",
+          "strength": 5,
+          "status": []
+        }
+      ]
+    },
+    {
+      "turn": 198,
+      "units": [
+        {
+          "unit_id": "IT_1",
+          "side": "A",
+          "hex": "B3",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "IT_2",
+          "side": "A",
+          "hex": "G1",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_1",
+          "side": "B",
+          "hex": "D4",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_2",
+          "side": "B",
+          "hex": "G7",
+          "strength": 5,
+          "status": []
+        }
+      ]
+    },
+    {
+      "turn": 199,
+      "units": [
+        {
+          "unit_id": "IT_1",
+          "side": "A",
+          "hex": "B3",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "IT_2",
+          "side": "A",
+          "hex": "G1",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_1",
+          "side": "B",
+          "hex": "D5",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_2",
+          "side": "B",
+          "hex": "G7",
+          "strength": 5,
+          "status": []
+        }
+      ]
+    },
+    {
+      "turn": 200,
+      "units": [
+        {
+          "unit_id": "IT_1",
+          "side": "A",
+          "hex": "B3",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "IT_2",
+          "side": "A",
+          "hex": "G1",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_1",
+          "side": "B",
+          "hex": "D5",
+          "strength": 5,
+          "status": []
+        },
+        {
+          "unit_id": "EN_2",
+          "side": "B",
+          "hex": "G7",
+          "strength": 5,
+          "status": []
+        }
+      ]
+    }
+  ]
+}

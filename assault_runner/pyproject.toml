@@ -1,0 +1,11 @@
+[build-system]
+requires = ["setuptools"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "assault-runner"
+version = "0.1.0"
+
+[tool.setuptools]
+packages = ["assault_runner"]
+package-dir = { "assault_runner" = "." }

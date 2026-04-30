@@ -1,0 +1,50 @@
+Estamos documentando un game engine llamado "Assault" a partir de su rulebook
+oficial, convirtiendo las reglas en documentación técnica formal para Sphinx.
+
+Contexto del trabajo:
+- El código está en inglés.
+- La documentación se escribe en inglés.
+- Yo (usuario) hablo español y quiero que las explicaciones me las des en español.
+- El formato de documentación es Sphinx (.rst), NO Markdown.
+- Cada subsistema se documenta fichero por fichero, sin pausas intermedias.
+- Las reglas tienen identificadores estables (CC-Rxx, RF-Rxx, TS-Rxx, etc.).
+- Cada regla debe ser trazable a clases y ficheros concretos del código.
+- Las rutas a ficheros deben indicarse siempre completas.
+- La documentación distingue entre:
+  - ficheros de índice (estructurales)
+  - ficheros de overview (conceptuales)
+  - ficheros de reglas (normativos)
+
+Estado actual:
+- Close Combat está completamente documentado en Sphinx (.rst):
+  - index.rst
+  - cc_resolution.rst
+  - cc_attack_sectors.rst
+  - cc_special_cases.rst
+  - cc_retreat_and_elimination.rst
+- Ranged Fire también está documentado en Sphinx (.rst):
+  - index.rst
+  - rf_resolution.rst
+  - rf_reaction_fire.rst
+  - rf_special_cases.rst
+
+Arquitectura conocida:
+- UML de paquetes y UML de clases están disponibles y actualizados.
+- Arquitectura basada en:
+  - Action (intención)
+  - RuntimeGameState (ejecutor de reglas)
+  - GameState (estado pasivo)
+- CloseCombatAction y ReactionFireAction son acciones internas, no del jugador.
+
+Forma de trabajo:
+- Dame los ficheros completos en .rst
+- Dámelos todos seguidos cuando te diga “siguiente”
+- No pares entre ficheros
+- No preguntes confirmaciones intermedias
+- Mantén el mismo estilo y nivel de formalidad
+
+Objetivo:
+Continuar la digitalización del rulebook en documentación Sphinx,
+manteniendo coherencia estricta entre reglas, arquitectura y código.
+
+Empecemos desde el siguiente subsistema pendiente.

@@ -1,0 +1,13 @@
+digraph "classes_assault_model" {
+rankdir=BT
+charset="utf-8"
+"assault_model.map.hex.Hex" [color="black", fontcolor="black", label=<{Hex|q : int<br ALIGN="LEFT"/>r : int<br ALIGN="LEFT"/>terrain<br ALIGN="LEFT"/>|}>, shape="record", style="solid"];
+"assault_model.map.map.Map" [color="black", fontcolor="black", label=<{Map|pieces : List[MapPiece]<br ALIGN="LEFT"/>|}>, shape="record", style="solid"];
+"assault_model.map.map_piece.MapPiece" [color="black", fontcolor="black", label=<{MapPiece|hexes : List[Hex]<br ALIGN="LEFT"/>|}>, shape="record", style="solid"];
+"assault_model.core.scenario.Scenario" [color="black", fontcolor="black", label=<{Scenario|game_map<br ALIGN="LEFT"/>name : str<br ALIGN="LEFT"/>units : List[UnitInstance]<br ALIGN="LEFT"/>|}>, shape="record", style="solid"];
+"assault_model.map.terrain.Terrain" [color="black", fontcolor="black", label=<{Terrain|name<br ALIGN="LEFT"/>|}>, shape="record", style="solid"];
+"assault_model.map.hex.Hex" -> "assault_model.map.map_piece.MapPiece" [arrowhead="odiamond", arrowtail="none", fontcolor="green", label="hexes", style="solid"];
+"assault_model.map.map.Map" -> "assault_model.core.scenario.Scenario" [arrowhead="odiamond", arrowtail="none", fontcolor="green", label="game_map", style="solid"];
+"assault_model.map.map_piece.MapPiece" -> "assault_model.map.map.Map" [arrowhead="odiamond", arrowtail="none", fontcolor="green", label="pieces", style="solid"];
+"assault_model.map.terrain.Terrain" -> "assault_model.map.hex.Hex" [arrowhead="odiamond", arrowtail="none", fontcolor="green", label="terrain", style="solid"];
+}

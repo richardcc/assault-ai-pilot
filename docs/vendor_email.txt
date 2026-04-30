@@ -1,0 +1,30 @@
+Subject: Request for permission to use a tactical AI pilot for educational and research purposes
+
+Dear [Company / Team name],
+
+My name is [Your name]. I am currently working on a personal educational and research project focused on artificial intelligence and decision-making under uncertainty.
+
+The project consists of a small technical pilot that explores how an AI agent can play a single, basic tactical mission (capturing a strategic point on a map) in a turn-based environment. The focus of the work is on AI behaviour, reasoning, and decision processes — not on game production or commercialization.
+
+I chose your tactical system as inspiration because it is an excellent example of clear, well-designed tactical decision spaces and has strong educational value. The pilot deliberately uses a very limited scope:
+
+- One mission
+- One map
+- Infantry units only
+- No full ruleset reproduction
+- No commercial distribution
+
+The prototype is used strictly for educational and research purposes, including potential studies in artificial intelligence and the psychology of decision-making. It is not intended for sale, public distribution, or competition with existing products.
+
+Before moving further, I wanted to explicitly request your permission to continue using this pilot in academic and educational contexts, always with clear attribution and full respect for your intellectual property. I would, of course, be open to any limitations, conditions, or changes you consider appropriate.
+
+If you are interested, I would be happy to explain the pilot in more detail or show a short demonstration of how the system works.
+
+Thank you very much for your time and for creating such a meaningful tactical design that inspires research and learning.
+
+Kind regards,
+
+[Your full name]
+[Optional: affiliation / studies / background]
+[Optional: contact information]
+``

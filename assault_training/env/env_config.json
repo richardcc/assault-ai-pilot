@@ -1,0 +1,24 @@
+{
+  "environment": {
+    "id": "train_mettete_v1",
+    "seed": 42,
+    "max_steps": 200,
+    "simultaneous": false
+  },
+  "scenario": {
+    "name": "mettete_i_piedi_terra_1_min"
+  },
+  "sides": {
+    "GE": { "role": "learning_agent", "policy": "ppo_v1" },
+    "US": { "role": "heuristic", "policy": "hold_objective" }
+  },
+  "rewards": {
+    "default": { "type": "vp_difference", "normalize": true }
+  },
+  "debug": {
+    "enabled": true,
+    "log_actions": true,
+    "log_turns": true,
+    "log_vp": true
+  }
+}

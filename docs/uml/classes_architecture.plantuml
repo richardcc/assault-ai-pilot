@@ -1,0 +1,141 @@
+@startuml classes_architecture
+set namespaceSeparator none
+class "Action" as assault_model.actions.action.Action {
+}
+class "ActionCatalog" as assault_sim.action_catalog.ActionCatalog {
+}
+class "ActionCategory" as assault_model.actions.action_category.ActionCategory {
+}
+class "ActionResolutionResult" as assault_model.actions.resolution.ActionResolutionResult {
+}
+class "ActionType" as assault_model.actions.action_type.ActionType {
+}
+class "ActivationState" as assault_model.core.activation.ActivationState {
+}
+class "AdvanceAction" as assault_model.actions.movement.AdvanceAction {
+}
+class "AssaultAction" as assault_model.actions.assault.AssaultAction {
+}
+class "CloseCombatAction" as assault_model.actions.combat.CloseCombatAction {
+}
+class "CombatAction" as assault_model.actions.base.CombatAction {
+}
+class "CombatMode" as assault_model.actions.combat_mode.CombatMode {
+}
+class "EndTurnAction" as assault_model.actions.status.EndTurnAction {
+}
+class "FastMoveAction" as assault_model.actions.movement.FastMoveAction {
+}
+class "GameState" as assault_model.core.game_state.GameState {
+}
+class "GameStateReactions" as assault_model.core.game_state_reactions.GameStateReactions {
+}
+class "Hex" as assault_model.map.hex.Hex {
+}
+class "HexCoord" as assault_model.map.hex_coord.HexCoord {
+}
+class "HexDirection" as assault_model.map.hex_direction.HexDirection {
+}
+class "HexOwnership" as assault_model.map.hex_ownership.HexOwnership {
+}
+class "HexState" as assault_model.map.hex_state.HexState {
+}
+class "Map" as assault_model.map.map.Map {
+}
+class "<color:red>MapPieceCatalogError</color>" as assault_model.map.map_piece_loader.MapPieceCatalogError {
+}
+class "MapPieceDefinition" as assault_model.map.map_piece.MapPieceDefinition {
+}
+class "MoveAction" as assault_model.actions.movement.MoveAction {
+}
+class "MovementAction" as assault_model.actions.base.MovementAction {
+}
+class "RangedAttackAction" as assault_model.actions.combat.RangedAttackAction {
+}
+class "RangedDirectAttack" as assault_model.actions.ranged_direct.RangedDirectAttack {
+}
+class "RangedIndirectAttack" as assault_model.actions.ranged_indirect.RangedIndirectAttack {
+}
+class "ReactionFireAction" as assault_model.actions.reaction_fire.ReactionFireAction {
+}
+class "ReactionRegistry" as assault_model.core.reaction_registry.ReactionRegistry {
+}
+class "RuntimeGameState" as assault_model.core.game_state_runtime.RuntimeGameState {
+}
+class "Scenario" as assault_model.core.scenario.Scenario {
+}
+class "<color:red>ScenarioLoaderError</color>" as assault_model.core.scenario_loader.ScenarioLoaderError {
+}
+class "SimEnv" as assault_sim.sim_env.SimEnv {
+}
+class "Terrain" as assault_model.map.terrain.Terrain {
+}
+class "TurnPhase" as assault_model.core.turn.TurnPhase {
+}
+class "TurnState" as assault_model.core.turn.TurnState {
+}
+class "<color:red>UnitCatalogError</color>" as assault_model.units.catalog_loader.UnitCatalogError {
+}
+class "UnitCategory" as assault_model.units.unit_type.UnitCategory {
+}
+class "UnitInstance" as assault_model.units.unit_instance.UnitInstance {
+}
+class "UnitSide" as assault_model.units.unit_type.UnitSide {
+}
+class "UnitType" as assault_model.units.unit_type.UnitType {
+}
+class "VictoryConditions" as assault_model.core.victory_conditions.VictoryConditions {
+}
+class "VictoryPoint" as assault_model.core.victory_point.VictoryPoint {
+}
+class "VictoryPointTracker" as assault_model.core.vp_tracker.VictoryPointTracker {
+}
+class "WaitAction" as assault_model.actions.status.WaitAction {
+}
+assault_model.actions.assault.AssaultAction --|> assault_model.actions.base.CombatAction
+assault_model.actions.base.CombatAction --|> assault_model.actions.action.Action
+assault_model.actions.base.MovementAction --|> assault_model.actions.action.Action
+assault_model.actions.combat.CloseCombatAction --|> assault_model.actions.action.Action
+assault_model.actions.combat.RangedAttackAction --|> assault_model.actions.action.Action
+assault_model.actions.movement.AdvanceAction --|> assault_model.actions.base.MovementAction
+assault_model.actions.movement.FastMoveAction --|> assault_model.actions.base.MovementAction
+assault_model.actions.movement.MoveAction --|> assault_model.actions.base.MovementAction
+assault_model.actions.ranged_direct.RangedDirectAttack --|> assault_model.actions.base.CombatAction
+assault_model.actions.ranged_indirect.RangedIndirectAttack --|> assault_model.actions.base.CombatAction
+assault_model.actions.reaction_fire.ReactionFireAction --|> assault_model.actions.base.CombatAction
+assault_model.actions.status.EndTurnAction --|> assault_model.actions.action.Action
+assault_model.actions.status.WaitAction --|> assault_model.actions.action.Action
+assault_model.core.game_state.GameState --> assault_model.core.vp_tracker.VictoryPointTracker : vp_tracker
+assault_model.map.hex_state.HexState --> assault_model.map.hex_ownership.HexOwnership : ownership
+assault_model.core.activation.ActivationState --> assault_model.units.unit_instance.UnitInstance : activated
+assault_model.core.activation.ActivationState --* assault_model.core.game_state_runtime.RuntimeGameState : activation
+assault_model.core.game_state.GameState --* assault_sim.sim_env.SimEnv : game_state
+assault_model.core.game_state_runtime.RuntimeGameState --* assault_sim.sim_env.SimEnv : runtime
+assault_model.core.reaction_registry.ReactionRegistry --* assault_model.core.game_state_reactions.GameStateReactions : registry
+assault_model.core.scenario.Scenario --* assault_sim.sim_env.SimEnv : scenario
+assault_model.core.turn.TurnState --* assault_model.core.game_state_runtime.RuntimeGameState : turn
+assault_model.map.hex_state.HexState --* assault_model.core.game_state.GameState : hex_states
+assault_model.units.unit_instance.UnitInstance --* assault_model.core.activation.ActivationState : remaining
+assault_model.actions.action_category.ActionCategory --o assault_model.actions.action_type.ActionType : category
+assault_model.actions.action_type.ActionType --o assault_model.actions.action.Action : action_type
+assault_model.core.game_state.GameState --o assault_model.actions.resolution.ActionResolutionResult : new_state
+assault_model.core.game_state.GameState --o assault_model.core.game_state_runtime.RuntimeGameState : base_state
+assault_model.core.turn.TurnPhase --o assault_model.core.turn.TurnState : phase
+assault_model.core.victory_conditions.VictoryConditions --o assault_model.core.game_state.GameState : victory
+assault_model.core.victory_conditions.VictoryConditions --o assault_model.core.vp_tracker.VictoryPointTracker : conditions
+assault_model.core.victory_point.VictoryPoint --o assault_model.core.victory_conditions.VictoryConditions : points
+assault_model.map.hex.Hex --o assault_model.map.hex_state.HexState : hex
+assault_model.map.hex.Hex --o assault_model.map.map.Map : hexes
+assault_model.map.hex.Hex --o assault_model.map.map_piece.MapPieceDefinition : hexes
+assault_model.map.hex_coord.HexCoord --o assault_model.actions.movement.AdvanceAction : path
+assault_model.map.hex_coord.HexCoord --o assault_model.actions.movement.FastMoveAction : path
+assault_model.map.hex_coord.HexCoord --o assault_model.actions.movement.MoveAction : path
+assault_model.map.map.Map --o assault_model.core.game_state.GameState : game_map
+assault_model.map.map.Map --o assault_model.core.scenario.Scenario : game_map
+assault_model.map.terrain.Terrain --o assault_model.map.hex.Hex : terrain
+assault_model.units.unit_instance.UnitInstance --o assault_model.core.game_state.GameState : units
+assault_model.units.unit_instance.UnitInstance --o assault_model.core.scenario.Scenario : units
+assault_model.units.unit_type.UnitCategory --o assault_model.units.unit_type.UnitType : category
+assault_model.units.unit_type.UnitSide --o assault_model.units.unit_type.UnitType : side
+assault_model.units.unit_type.UnitType --o assault_model.units.unit_instance.UnitInstance : unit_type
+@enduml

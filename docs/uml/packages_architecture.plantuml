@@ -1,0 +1,195 @@
+@startuml packages_architecture
+set namespaceSeparator none
+package "assault_model" as assault_model {
+}
+package "assault_model.actions" as assault_model.actions {
+}
+package "assault_model.actions.action" as assault_model.actions.action {
+}
+package "assault_model.actions.action_category" as assault_model.actions.action_category {
+}
+package "assault_model.actions.action_type" as assault_model.actions.action_type {
+}
+package "assault_model.actions.assault" as assault_model.actions.assault {
+}
+package "assault_model.actions.base" as assault_model.actions.base {
+}
+package "assault_model.actions.combat" as assault_model.actions.combat {
+}
+package "assault_model.actions.combat_mode" as assault_model.actions.combat_mode {
+}
+package "assault_model.actions.movement" as assault_model.actions.movement {
+}
+package "assault_model.actions.ranged_direct" as assault_model.actions.ranged_direct {
+}
+package "assault_model.actions.ranged_indirect" as assault_model.actions.ranged_indirect {
+}
+package "assault_model.actions.reaction_fire" as assault_model.actions.reaction_fire {
+}
+package "assault_model.actions.resolution" as assault_model.actions.resolution {
+}
+package "assault_model.actions.status" as assault_model.actions.status {
+}
+package "assault_model.core" as assault_model.core {
+}
+package "assault_model.core.activation" as assault_model.core.activation {
+}
+package "assault_model.core.game_state" as assault_model.core.game_state {
+}
+package "assault_model.core.game_state_reactions" as assault_model.core.game_state_reactions {
+}
+package "assault_model.core.game_state_runtime" as assault_model.core.game_state_runtime {
+}
+package "assault_model.core.model_adapter" as assault_model.core.model_adapter {
+}
+package "assault_model.core.reaction_registry" as assault_model.core.reaction_registry {
+}
+package "assault_model.core.replay" as assault_model.core.replay {
+}
+package "assault_model.core.scenario" as assault_model.core.scenario {
+}
+package "assault_model.core.scenario_loader" as assault_model.core.scenario_loader {
+}
+package "assault_model.core.turn" as assault_model.core.turn {
+}
+package "assault_model.core.victory_conditions" as assault_model.core.victory_conditions {
+}
+package "assault_model.core.victory_point" as assault_model.core.victory_point {
+}
+package "assault_model.core.vp_tracker" as assault_model.core.vp_tracker {
+}
+package "assault_model.map" as assault_model.map {
+}
+package "assault_model.map.hex" as assault_model.map.hex {
+}
+package "assault_model.map.hex_coord" as assault_model.map.hex_coord {
+}
+package "assault_model.map.hex_direction" as assault_model.map.hex_direction {
+}
+package "assault_model.map.hex_ownership" as assault_model.map.hex_ownership {
+}
+package "assault_model.map.hex_state" as assault_model.map.hex_state {
+}
+package "assault_model.map.map" as assault_model.map.map {
+}
+package "assault_model.map.map_piece" as assault_model.map.map_piece {
+}
+package "assault_model.map.map_piece_loader" as assault_model.map.map_piece_loader {
+}
+package "assault_model.map.terrain" as assault_model.map.terrain {
+}
+package "assault_model.rulesets" as assault_model.rulesets {
+}
+package "assault_model.rulesets.ruleset" as assault_model.rulesets.ruleset {
+}
+package "assault_model.units" as assault_model.units {
+}
+package "assault_model.units.attributes" as assault_model.units.attributes {
+}
+package "assault_model.units.catalog_loader" as assault_model.units.catalog_loader {
+}
+package "assault_model.units.unit_instance" as assault_model.units.unit_instance {
+}
+package "assault_model.units.unit_type" as assault_model.units.unit_type {
+}
+package "assault_sim" as assault_sim {
+}
+package "assault_sim.action_catalog" as assault_sim.action_catalog {
+}
+package "assault_sim.adapters" as assault_sim.adapters {
+}
+package "assault_sim.adapters.model_adapter" as assault_sim.adapters.model_adapter {
+}
+package "assault_sim.adapters.observation_adapter" as assault_sim.adapters.observation_adapter {
+}
+package "assault_sim.analysis" as assault_sim.analysis {
+}
+package "assault_sim.explanation" as assault_sim.explanation {
+}
+package "assault_sim.heuristics" as assault_sim.heuristics {
+}
+package "assault_sim.observation" as assault_sim.observation {
+}
+package "assault_sim.rewards" as assault_sim.rewards {
+}
+package "assault_sim.runners" as assault_sim.runners {
+}
+package "assault_sim.runners.sim_runner" as assault_sim.runners.sim_runner {
+}
+package "assault_sim.series" as assault_sim.series {
+}
+package "assault_sim.session" as assault_sim.session {
+}
+package "assault_sim.sim_env" as assault_sim.sim_env {
+}
+package "assault_training" as assault_training {
+}
+assault_model.actions.action --> assault_model.actions.action_type
+assault_model.actions.action_type --> assault_model.actions.action_category
+assault_model.actions.assault --> assault_model.actions.action_type
+assault_model.actions.assault --> assault_model.actions.base
+assault_model.actions.assault --> assault_model.actions.combat_mode
+assault_model.actions.base --> assault_model.actions.action
+assault_model.actions.combat --> assault_model.actions.action
+assault_model.actions.combat --> assault_model.actions.action_type
+assault_model.actions.movement --> assault_model.actions.action_type
+assault_model.actions.movement --> assault_model.actions.base
+assault_model.actions.movement --> assault_model.map.hex_coord
+assault_model.actions.ranged_direct --> assault_model.actions.action_type
+assault_model.actions.ranged_direct --> assault_model.actions.base
+assault_model.actions.ranged_direct --> assault_model.actions.combat_mode
+assault_model.actions.ranged_indirect --> assault_model.actions.action_type
+assault_model.actions.ranged_indirect --> assault_model.actions.base
+assault_model.actions.ranged_indirect --> assault_model.actions.combat_mode
+assault_model.actions.reaction_fire --> assault_model.actions.action_type
+assault_model.actions.reaction_fire --> assault_model.actions.base
+assault_model.actions.resolution --> assault_model.actions.action
+assault_model.actions.resolution --> assault_model.core.game_state
+assault_model.actions.status --> assault_model.actions.action
+assault_model.actions.status --> assault_model.actions.action_type
+assault_model.core.activation --> assault_model.units.unit_instance
+assault_model.core.game_state --> assault_model.core.victory_conditions
+assault_model.core.game_state --> assault_model.core.vp_tracker
+assault_model.core.game_state --> assault_model.map.hex_ownership
+assault_model.core.game_state --> assault_model.map.hex_state
+assault_model.core.game_state --> assault_model.map.map
+assault_model.core.game_state --> assault_model.units.unit_instance
+assault_model.core.game_state_reactions --> assault_model.core.reaction_registry
+assault_model.core.game_state_runtime --> assault_model.actions.action
+assault_model.core.game_state_runtime --> assault_model.actions.resolution
+assault_model.core.game_state_runtime --> assault_model.core.activation
+assault_model.core.game_state_runtime --> assault_model.core.game_state
+assault_model.core.game_state_runtime --> assault_model.core.turn
+assault_model.core.model_adapter --> assault_model.core.game_state
+assault_model.core.model_adapter --> assault_model.core.game_state_runtime
+assault_model.core.scenario --> assault_model.map.map
+assault_model.core.scenario --> assault_model.units.unit_instance
+assault_model.core.scenario_loader --> assault_model.core.scenario
+assault_model.core.scenario_loader --> assault_model.core.victory_conditions
+assault_model.core.scenario_loader --> assault_model.map.hex
+assault_model.core.scenario_loader --> assault_model.map.map
+assault_model.core.scenario_loader --> assault_model.map.map_piece
+assault_model.core.scenario_loader --> assault_model.units.unit_instance
+assault_model.core.scenario_loader --> assault_model.units.unit_type
+assault_model.core.victory_conditions --> assault_model.core.victory_point
+assault_model.core.vp_tracker --> assault_model.core.victory_conditions
+assault_model.core.vp_tracker --> assault_model.map.hex_ownership
+assault_model.map.hex --> assault_model.map.hex_direction
+assault_model.map.hex --> assault_model.map.terrain
+assault_model.map.hex_coord --> assault_model.map.hex_direction
+assault_model.map.hex_state --> assault_model.map.hex
+assault_model.map.hex_state --> assault_model.map.hex_ownership
+assault_model.map.map --> assault_model.map.hex
+assault_model.map.map_piece --> assault_model.map.hex
+assault_model.map.map_piece_loader --> assault_model.map.hex
+assault_model.map.map_piece_loader --> assault_model.map.map_piece
+assault_model.map.map_piece_loader --> assault_model.map.terrain
+assault_model.units.catalog_loader --> assault_model.units.unit_type
+assault_model.units.unit_instance --> assault_model.units.unit_type
+assault_sim.action_catalog --> assault_model.actions.status
+assault_sim.sim_env --> assault_model.core.game_state
+assault_sim.sim_env --> assault_model.core.game_state_runtime
+assault_sim.sim_env --> assault_model.core.scenario_loader
+assault_sim.sim_env --> assault_model.map.map_piece_loader
+assault_sim.sim_env --> assault_model.units.catalog_loader
+@enduml

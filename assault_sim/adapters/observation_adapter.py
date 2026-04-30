@@ -1,0 +1,2 @@
+# Model state -> observation adapter
+

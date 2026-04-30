@@ -1,0 +1,33 @@
+{
+  "environment": {
+    "id": "train_base_v1",
+    "seed": 42,
+    "max_steps": 200
+  },
+
+  "scenario": {
+    "name": "mettete_i_piedi_terra_1_min"
+  },
+
+  "sides": {
+    "GE": {
+      "role": "heuristic",
+      "policy": "random"
+    },
+    "US": {
+      "role": "heuristic",
+      "policy": "random"
+    }
+  },
+
+  "rewards": {
+    "default": {
+      "type": "vp_difference",
+      "normalize": false
+    }
+  },
+
+  "debug": {
+    "enabled": true
+  }
+}

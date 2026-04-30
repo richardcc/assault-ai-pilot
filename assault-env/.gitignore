@@ -1,0 +1,27 @@
+# Virtual environments
+.venv/
+
+# Python cache
+__pycache__/
+*.pyc
+
+# Sphinx build output
+docs/_build/
+
+# OS
+Thumbs.db
+.DS_Store
+
+# =========================
+# Reinforcement Learning
+# =========================
+
+# Trained models (PPO, etc.)
+models/**/*.zip
+
+# Training logs
+logs/
+tensorboard/
+
+# Stable-Baselines3
+*.monitor.csv
