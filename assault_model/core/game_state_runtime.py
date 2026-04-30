@@ -1,8 +1,12 @@
 from assault_model.core.game_state import GameState
 from assault_model.core.turn import TurnState
 from assault_model.actions.action import Action
+from assault_model.actions.movement import MoveAction
 from assault_model.actions.resolution import resolve_action
 from assault_model.combat.combat_resolution import CombatResolutionResult
+from assault_model.combat.reaction_context import ReactionContext
+from assault_model.combat.reaction_trigger import ReactionTrigger
+from assault_model.combat.line_of_sight import has_line_of_sight
 
 import os
 
@@ -19,142 +23,159 @@ def _trace(tag: str, **data):
 class RuntimeGameState:
     """
     Runtime orchestrator for the game.
-    Applies actions atomically, emits events, and advances activations/turns.
+
+    Guarantees:
+    - every executed action consumes exactly one activation
+    - turns always advance when activations are exhausted
+    - movement can be interrupted by reaction fire
     """
 
     def __init__(self, base_state: GameState):
         self.base_state = base_state
-        # REVIEW: Runtime keeps its own TurnState mirror for sequencing/logging
         self.turn = TurnState(turn_number=base_state.turn)
 
+    # -------------------------------------------------
+    # TURN CONTROL
+    # -------------------------------------------------
     def start_turn(self) -> None:
-        # REVIEW: Resets activation ordering at the start of each turn
         self.base_state.activation_state.reset(self.base_state.units)
         self.base_state.activation_state.next_unit()
 
-    # -------------------------------------------------
-    # Movement helpers
-    # -------------------------------------------------
-    def _movement_vector(self, before, after):
-        # REVIEW: Pure helper for event narration / debugging
-        dx = after[0] - before[0]
-        dy = after[1] - before[1]
-        direction_map = {
-            (0, -1): "NORTH",
-            (0, 1): "SOUTH",
-            (1, 0): "EAST",
-            (-1, 0): "WEST",
-            (1, -1): "NORTHEAST",
-            (-1, -1): "NORTHWEST",
-            (1, 1): "SOUTHEAST",
-            (-1, 1): "SOUTHWEST",
-        }
-        return dx, dy, direction_map.get((dx, dy), "UNKNOWN")
+    def end_turn(self) -> None:
+        self.base_state.end_turn()
+        self.turn = TurnState(turn_number=self.base_state.turn)
 
     # -------------------------------------------------
-    # Main action application
+    # MAIN ACTION APPLICATION
     # -------------------------------------------------
     def apply_action(
         self,
         action: Action,
         combat_result: CombatResolutionResult | None = None,
     ):
-        # REVIEW: Runtime only orchestrates, never decides strategy
         event_bus = getattr(self.base_state, "event_bus", None)
 
-        attacker_id = getattr(action, "unit_id", None)
-        defender_id = getattr(action, "target_id", None)
-
-        def find_unit(state, uid):
-            # REVIEW: Local helper avoids repeated list scans
-            return next((u for u in state.units if u.unit_id == uid), None)
-
-        attacker = find_unit(self.base_state, attacker_id)
-
         # -------------------------------------------------
-        # DEAD OR INVALID ATTACKER
+        # REACTION RESOLUTION WINDOW
         # -------------------------------------------------
-        if attacker is None or not attacker.alive:
-            # REVIEW: Guards against stale actions and delayed agents
-            _trace("INVALID_ATTACKER", attacker_id=attacker_id)
+        if self.base_state.reaction_context is not None:
+            _trace(
+                "REACTION_RESOLVE",
+                action=action.__class__.__name__,
+                unit=getattr(action, "unit_id", None),
+            )
 
-            if event_bus:
-                event_bus.emit(
-                    {
-                        "type": "INVALID_ACTION",
-                        "payload": {
-                            "unit_id": attacker_id,
-                            "reason": "unit_dead",
-                        },
-                    }
-                )
+            # cerrar ventana de reacción
+            self.base_state.clear_reaction()
 
-            # REVIEW: Even invalid actions consume the activation
+            # ✅ clave: la reacción CONSUME activación
             self._advance_activation()
             return None
 
-        _trace(
-            "APPLY_ACTION_START",
-            attacker_id=attacker_id,
-            defender_id=defender_id,
+        attacker_id = getattr(action, "unit_id", None)
+        attacker = next(
+            (u for u in self.base_state.units if u.unit_id == attacker_id),
+            None,
         )
 
         # -------------------------------------------------
-        # BEFORE snapshot
+        # INVALID ATTACKER
         # -------------------------------------------------
-        # REVIEW: Snapshot is taken explicitly for explainability & replay
+        if attacker is None or not attacker.alive:
+            _trace("INVALID_ATTACKER", attacker_id=attacker_id)
+            self._advance_activation()
+            return None
+
+        # -------------------------------------------------
+        # INTERRUPTIBLE MOVE ACTION
+        # -------------------------------------------------
+        if isinstance(action, MoveAction):
+            _trace("MOVE_START", unit=attacker.unit_id)
+
+            for hex_coord in action.path:
+                before_pos = attacker.position
+                attacker.position = (hex_coord.q, hex_coord.r)
+
+                if event_bus:
+                    event_bus.emit(
+                        {
+                            "type": "ACTION_EFFECT",
+                            "payload": {
+                                "action": "MoveAction",
+                                "unit_id": attacker.unit_id,
+                                "from": before_pos,
+                                "to": attacker.position,
+                                "dx": attacker.position[0] - before_pos[0],
+                                "dy": attacker.position[1] - before_pos[1],
+                                "direction": None,
+                                "hp_before": attacker.hp,
+                                "hp_after": attacker.hp,
+                                "moved": True,
+                                "hp_delta": 0,
+                            },
+                        }
+                    )
+
+                # -----------------------------------------
+                # REACTION CHECK
+                # -----------------------------------------
+                for enemy in self.base_state.units:
+                    if not enemy.alive:
+                        continue
+                    if enemy.side == attacker.side:
+                        continue
+
+                    if has_line_of_sight(
+                        enemy,
+                        attacker,
+                        self.base_state.game_map,
+                    ):
+                        _trace(
+                            "REACTION_TRIGGER",
+                            reactor=enemy.unit_id,
+                            target=attacker.unit_id,
+                        )
+
+                        self.base_state.enter_reaction(
+                            ReactionContext(
+                                trigger=ReactionTrigger.ENEMY_ENTERS_HEX,
+                                reactor=enemy,
+                                moving_unit=attacker,
+                                entered_hex=attacker.position,
+                            )
+                        )
+
+                        # ⛔ pausa el movimiento
+                        return None
+
+            # Movimiento finalizado sin reacción
+            self._advance_activation()
+            return None
+
+        # -------------------------------------------------
+        # ALL OTHER ACTIONS (ATOMIC)
+        # -------------------------------------------------
         before = {
             "unit_id": attacker.unit_id,
             "position": attacker.position,
             "hp": attacker.hp,
         }
 
-        # -------------------------------------------------
-        # Resolve action (ATOMIC)
-        # -------------------------------------------------
-        # REVIEW: All rule enforcement happens inside resolve_action
         result = resolve_action(
             state=self.base_state,
             action=action,
             combat_result=combat_result,
         )
 
-        # REVIEW: Runtime swaps in the new canonical state
         self.base_state = result.new_state
 
-        _trace(
-            "ACTION_RESOLVED",
-            attacker_alive=find_unit(self.base_state, attacker_id).alive
-            if find_unit(self.base_state, attacker_id)
-            else False,
+        after_unit = next(
+            (u for u in self.base_state.units if u.unit_id == attacker_id),
+            None,
         )
 
-        # -------------------------------------------------
-        # AFTER snapshot (attacker may be gone)
-        # -------------------------------------------------
-        after_unit = find_unit(self.base_state, attacker_id)
-        after = (
-            {
-                "unit_id": after_unit.unit_id,
-                "position": after_unit.position,
-                "hp": after_unit.hp,
-            }
-            if after_unit
-            else None
-        )
-
-        # -------------------------------------------------
-        # ACTION EFFECT
-        # -------------------------------------------------
-        # REVIEW: These events are observational only (no feedback loop)
-        if event_bus and after:
-            moved = before["position"] != after["position"]
-            dx = dy = direction = None
-            if moved:
-                dx, dy, direction = self._movement_vector(
-                    before["position"], after["position"]
-                )
-
+        if event_bus and after_unit:
+            moved = before["position"] != after_unit.position
             event_bus.emit(
                 {
                     "type": "ACTION_EFFECT",
@@ -162,50 +183,27 @@ class RuntimeGameState:
                         "action": action.__class__.__name__,
                         "unit_id": attacker_id,
                         "from": before["position"],
-                        "to": after["position"],
-                        "dx": dx,
-                        "dy": dy,
-                        "direction": direction,
+                        "to": after_unit.position,
+                        "dx": None,
+                        "dy": None,
+                        "direction": None,
                         "hp_before": before["hp"],
-                        "hp_after": after["hp"],
+                        "hp_after": after_unit.hp,
                         "moved": moved,
-                        "hp_delta": after["hp"] - before["hp"],
+                        "hp_delta": after_unit.hp - before["hp"],
                     },
                 }
             )
 
         # -------------------------------------------------
-        # CLOSE COMBAT EVENTS
+        # COMBAT NARRATION
         # -------------------------------------------------
-        # REVIEW: Combat narration is fully driven by combat_result
         if event_bus and result.combat_result:
-            _trace(
-                "COMBAT_START",
-                attacker_id=attacker_id,
-                defender_id=defender_id,
-            )
-
-            rounds = result.combat_result.rounds
-
-            for rr in rounds:
+            for rr in result.combat_result.rounds:
                 event_bus.emit(
                     {
                         "type": "CLOSE_COMBAT_ROUND",
-                        "payload": {
-                            "round": rr.round_number,
-                            "attacker_id": attacker_id,
-                            "defender_id": defender_id,
-                            "attacker_attack_dice": rr.attacker_attack_dice,
-                            "attacker_defense_dice": rr.attacker_defense_dice,
-                            "defender_attack_dice": rr.defender_attack_dice,
-                            "defender_defense_dice": rr.defender_defense_dice,
-                            "attacker_hp_before": rr.attacker_hp_before,
-                            "attacker_hp_after": rr.attacker_hp_after,
-                            "defender_hp_before": rr.defender_hp_before,
-                            "defender_hp_after": rr.defender_hp_after,
-                            "attacker_effects": rr.attacker_effects,
-                            "defender_effects": rr.defender_effects,
-                        },
+                        "payload": rr.__dict__,
                     }
                 )
 
@@ -214,66 +212,42 @@ class RuntimeGameState:
                     "type": "CLOSE_COMBAT_END",
                     "payload": {
                         "attacker_id": attacker_id,
-                        "defender_id": defender_id,
+                        "defender_id": getattr(action, "target_id", None),
                         "winner": result.combat_result.winner,
                         "outcome": result.combat_result.outcome,
                     },
                 }
             )
 
-            _trace(
-                "COMBAT_END",
-                outcome=result.combat_result.outcome,
-            )
-
-            # -------------------------------------------------
-            # REMOVE DEAD UNITS (AFTER COMBAT END)
-            # -------------------------------------------------
-            # REVIEW: Dead units are removed only after narration completes
             dead_units = [u for u in self.base_state.units if not u.alive]
             if dead_units:
-                dead_ids = [u.unit_id for u in dead_units]
-
-                _trace(
-                    "REMOVE_DEAD_UNITS",
-                    dead_units=dead_ids,
-                )
-
-                # REVIEW: State mutation is explicit and centralized
-                self.base_state.units = [
-                    u for u in self.base_state.units if u.alive
-                ]
-
-                self.base_state.activation_state.reset(self.base_state.units)
-
-                for uid in dead_ids:
+                for u in dead_units:
                     event_bus.emit(
                         {
                             "type": "UNIT_REMOVED",
                             "payload": {
-                                "unit_id": uid,
+                                "unit_id": u.unit_id,
                                 "reason": "killed_in_combat",
                             },
                         }
                     )
 
+                self.base_state.units = [
+                    u for u in self.base_state.units if u.alive
+                ]
+                self.base_state.activation_state.reset(self.base_state.units)
+
         # -------------------------------------------------
-        # ACTIVATION ALWAYS ENDS HERE
+        # END ACTIVATION (SIEMPRE)
         # -------------------------------------------------
-        # REVIEW: Guarantees one activation per action
         self._advance_activation()
         return result
 
     # -------------------------------------------------
-    # Activation / turn advance
+    # ACTIVATION ADVANCE
     # -------------------------------------------------
     def _advance_activation(self):
         next_unit = self.base_state.activation_state.next_unit()
         if next_unit is None:
             self.end_turn()
             self.start_turn()
-
-    def end_turn(self) -> None:
-        # REVIEW: Turn end is delegated to GameState
-        self.base_state.end_turn()
-        self.turn = TurnState(turn_number=self.base_state.turn)

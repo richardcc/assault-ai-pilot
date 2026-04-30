@@ -1,38 +1,34 @@
 # assault_sim/debug/console_observer.py
 #
 # Rich console observer.
-# ✅ Fancy as hell (colors, dice, emojis)
-# ✅ Correct turn semantics
-# ✅ MAP rendered ONLY:
-#    - at RESET (start of turn 1)
-#    - at TURN_END (end of real turn)
-# ❌ NEVER at TURN_STATE (activation end)
+# - MAP rendered ONLY:
+#   - at MAP_STATE of TURN 1 (start)
+#   - at TURN_END (end of real turn)
+# - NEVER at TURN_STATE (activation end)
+# - Full combat narration with colors and icons
 
 class ConsoleObserver:
     def __init__(self):
         self.current_turn = None
         self._last_game_map = None
         self._last_units = []
+        self._initial_turn_rendered = False
 
     # -------------------------------------------------
-    # Callable interface (EventBus contract)
+    # Callable interface (EventBus)
     # -------------------------------------------------
     def __call__(self, event: dict):
         event_type = event.get("type")
         payload = event.get("payload", {})
 
         # -------------------------------------------------
-        # RESET — MAP AT START
+        # RESET
         # -------------------------------------------------
         if event_type == "RESET":
             print("\n=== SIMULATION RESET ===")
             print(f"Scenario: {payload.get('scenario')}")
             print(f"Starting turn: {payload.get('turn')}")
             print("========================\n")
-
-            game_map = payload.get("game_map")
-            if game_map:
-                self._render_map(game_map, [], "INITIAL MAP LAYOUT")
 
         # -------------------------------------------------
         # UNIT LOADED
@@ -43,6 +39,23 @@ class ConsoleObserver:
                 f"side={payload.get('side')} "
                 f"pos={payload.get('position')}"
             )
+
+        # -------------------------------------------------
+        # MAP STATE
+        # -------------------------------------------------
+        elif event_type == "MAP_STATE":
+            self._last_game_map = payload.get("game_map")
+            self._last_units = payload.get("units", [])
+            turn = payload.get("turn")
+
+            # ✅ Render ONLY at the start of Turn 1
+            if not self._initial_turn_rendered and turn == 1:
+                self._render_map(
+                    self._last_game_map,
+                    self._last_units,
+                    title="MAP STATE — TURN 1 (START)",
+                )
+                self._initial_turn_rendered = True
 
         # -------------------------------------------------
         # ACTION START
@@ -56,7 +69,7 @@ class ConsoleObserver:
             )
 
         # -------------------------------------------------
-        # ACTION EFFECT (movement / HP)
+        # ACTION EFFECT
         # -------------------------------------------------
         elif event_type == "ACTION_EFFECT":
             uid = payload.get("unit_id")
@@ -72,21 +85,21 @@ class ConsoleObserver:
                 print(
                     f"  ❤️ HP {uid}: "
                     f"{payload.get('hp_before')} → "
-                    f"{payload.get('hp_after')} {self._hearts(payload.get('hp_after'))}"
+                    f"{payload.get('hp_after')} "
+                    f"{self._hearts(payload.get('hp_after'))}"
                 )
 
         # -------------------------------------------------
-        # ACTIVATION END (INFO ONLY)
+        # END OF ACTIVATION (INFO ONLY)
         # -------------------------------------------------
         elif event_type == "TURN_STATE":
             print(
                 f"[END TURN {payload.get('turn')}] "
                 f"next active={payload.get('active_unit')}"
             )
-            # ❌ NO MAP HERE
 
         # -------------------------------------------------
-        # ✅ REAL TURN END → MAP
+        # ✅ END OF REAL TURN → MAP
         # -------------------------------------------------
         elif event_type == "TURN_END":
             print(f"\n=== END OF TURN {payload.get('turn')} ===")
@@ -94,18 +107,11 @@ class ConsoleObserver:
                 self._render_map(
                     self._last_game_map,
                     self._last_units,
-                    f"MAP STATE — TURN {payload.get('turn')}",
+                    title=f"MAP STATE — TURN {payload.get('turn')}",
                 )
 
         # -------------------------------------------------
-        # MAP STATE (CACHE ONLY)
-        # -------------------------------------------------
-        elif event_type == "MAP_STATE":
-            self._last_game_map = payload.get("game_map")
-            self._last_units = payload.get("units", [])
-
-        # -------------------------------------------------
-        # ✅ FULL COMBAT NARRATION
+        # CLOSE COMBAT
         # -------------------------------------------------
         elif event_type == "CLOSE_COMBAT_ROUND":
             atk = payload.get("attacker_id")
@@ -115,7 +121,6 @@ class ConsoleObserver:
                 f"  ⚔️  CC ROUND {payload.get('round')} "
                 f"[{atk} vs {dfn}]"
             )
-
             print(
                 f"    ATK dice: {self._format_dice(payload.get('attacker_attack_dice'))}"
             )
@@ -128,7 +133,6 @@ class ConsoleObserver:
             print(
                 f"    DEF def : {self._format_dice(payload.get('defender_defense_dice'))}"
             )
-
             print(
                 f"    ATK {self._unit_label(atk, payload.get('attacker_hp_after'))}"
             )
@@ -171,7 +175,7 @@ class ConsoleObserver:
             print("=" * 40 + "\n")
 
     # -------------------------------------------------
-    # Helpers (the fancy stuff)
+    # Helpers (pijadas)
     # -------------------------------------------------
     def _hearts(self, hp):
         if hp is None or hp <= 0:
@@ -190,13 +194,13 @@ class ConsoleObserver:
             return "—"
         name = str(die)
         if "CRITICAL" in name:
-            return f"\033[91m{name}\033[0m"   # red
+            return f"\033[91m{name}\033[0m"
         if "DAMAGE" in name:
-            return f"\033[93m{name}\033[0m"   # yellow
+            return f"\033[93m{name}\033[0m"
         if "SUPPRESS" in name:
-            return f"\033[94m{name}\033[0m"   # blue
+            return f"\033[94m{name}\033[0m"
         if "BLANK" in name:
-            return f"\033[90m{name}\033[0m"   # gray
+            return f"\033[90m{name}\033[0m"
         return name
 
     def _format_dice(self, dice):

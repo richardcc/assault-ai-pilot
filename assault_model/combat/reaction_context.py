@@ -1,5 +1,3 @@
-# assault_model/combat/reaction_context.py
-
 from dataclasses import dataclass
 from assault_model.combat.reaction_trigger import ReactionTrigger
 from assault_model.units.unit_instance import UnitInstance
@@ -11,6 +9,7 @@ class ReactionContext:
     Runtime reaction window.
     The game is paused until the reacting player chooses an action.
     """
+
     trigger: ReactionTrigger
     reactor: UnitInstance
     moving_unit: UnitInstance

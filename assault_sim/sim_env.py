@@ -71,7 +71,6 @@ class SimEnv:
         if self.event_bus:
             self.game_state.event_bus = self.event_bus
 
-            # RESET
             self.event_bus.emit(
                 {
                     "type": "RESET",
@@ -98,13 +97,10 @@ class SimEnv:
                     }
                 )
 
-        # -------------------------------------------------
-        # START FIRST TURN
-        # -------------------------------------------------
+        # START FIRST TURN (TURN = 1)
         self.runtime.start_turn()
         self.game_state = self.runtime.base_state
 
-        # ✅ MAP AT START OF TURN 1
         if self.event_bus:
             self.event_bus.emit(
                 {
@@ -195,7 +191,6 @@ class SimEnv:
         # -------------------------------------------------
         if self._turn_has_ended():
             if self.event_bus:
-                # FIN DE TURNO
                 self.event_bus.emit(
                     {
                         "type": "TURN_END",
@@ -206,7 +201,6 @@ class SimEnv:
                     }
                 )
 
-                # ✅ MAP AT END OF TURN
                 self.event_bus.emit(
                     {
                         "type": "MAP_STATE",
@@ -218,8 +212,9 @@ class SimEnv:
                     }
                 )
 
-            # START NEXT TURN
-            self.runtime.start_turn()
+            # ✅ ADVANCE TURN CORRECTLY
+            self.runtime.end_turn()     # incrementa turn
+            self.runtime.start_turn()   # resetea activaciones
             self.game_state = self.runtime.base_state
 
         done = (
