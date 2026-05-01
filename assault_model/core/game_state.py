@@ -1,4 +1,6 @@
-from typing import Dict, List, Optional
+# assault_model/core/game_state.py
+
+from typing import Dict, List, Optional, TYPE_CHECKING
 import os
 
 from assault_model.map.map import Map
@@ -15,8 +17,9 @@ from assault_model.actions.combat_mode import CombatMode
 from assault_model.combat.close_combat_context import CloseCombatContext
 from assault_model.map.combat_geometry import determine_attack_sector
 
-# --- REACTION IMPORT ---
-from assault_model.combat.reaction_context import ReactionContext
+# --- TYPING-ONLY (BREAK IMPORT CYCLE) ---
+if TYPE_CHECKING:
+    from assault_model.combat.reaction_context import ReactionContext
 
 
 DEBUG_TRACE = os.getenv("ASSAULT_DEBUG_TRACE", "0") == "1"
@@ -32,6 +35,16 @@ def _trace(tag: str, **data):
 class GameState:
     """
     Canonical runtime game state.
+
+    Role:
+    - Holds ALL mutable state of the game.
+    - Owns units, map, hex states, VP tracker, and turn state.
+    - Computes derived state such as persistent hex control.
+
+    Does NOT:
+    - Decide which actions are legal.
+    - Render anything.
+    - Execute transitions (handled by RuntimeGameState).
     """
 
     def __init__(
@@ -59,8 +72,10 @@ class GameState:
         self.vp_tracker = VictoryPointTracker(victory) if victory else None
 
         # === REACTION STATE ===
-        # When not None, the game is paused waiting for a reaction decision
-        self.reaction_context: Optional[ReactionContext] = None
+        self.reaction_context: Optional["ReactionContext"] = None
+
+        # Initial ownership calculation
+        self.recalculate_hex_control()
 
     @classmethod
     def from_scenario(cls, scenario) -> "GameState":
@@ -71,7 +86,9 @@ class GameState:
             victory=scenario.vp_conditions,
         )
 
-    # ---------- ACTIVATION ----------
+    # =================================================
+    # ACTIVATION
+    # =================================================
     @property
     def active_unit(self) -> Optional[UnitInstance]:
         return self.activation_state.active_unit
@@ -81,25 +98,38 @@ class GameState:
         self.activation_state.reset(self.units)
         self.activation_state.next_unit()
 
-    def end_active_unit(self) -> None:
-        next_unit = self.activation_state.next_unit()
-        if next_unit is None:
-            self.end_turn()
-            self.start_action_phase()
+    # =================================================
+    # HEX CONTROL
+    # =================================================
+    def recalculate_hex_control(self) -> None:
+        units_by_hex: Dict[tuple[int, int], set[str]] = {}
 
-    # ---------- HEX CONTROL ----------
-    def set_hex_owner(self, q: int, r: int, owner: HexOwnership) -> None:
-        self.hex_states[(q, r)].ownership = owner
-        self.hex_states[(q, r)].contested = False
+        for unit in self.units:
+            if not unit.alive or not unit.position:
+                continue
+            units_by_hex.setdefault(unit.position, set()).add(unit.side)
 
-    def set_hex_contested(self, q: int, r: int) -> None:
-        self.hex_states[(q, r)].contested = True
+        for coords, hex_state in self.hex_states.items():
+            present_sides = units_by_hex.get(coords, set())
 
-    def get_hex_state(self, q: int, r: int) -> HexState:
-        return self.hex_states[(q, r)]
+            if len(present_sides) == 1:
+                side = next(iter(present_sides))
+                hex_state.ownership = (
+                    HexOwnership.SIDE_A if side == "GE"
+                    else HexOwnership.SIDE_B
+                )
+                hex_state.contested = False
 
-    # ---------- TURN END ----------
+            elif len(present_sides) > 1:
+                hex_state.ownership = HexOwnership.NONE
+                hex_state.contested = True
+
+    # =================================================
+    # TURN END
+    # =================================================
     def end_turn(self) -> None:
+        self.recalculate_hex_control()
+
         if self.vp_tracker:
             ownership_map = {
                 coords: hs.ownership
@@ -111,51 +141,25 @@ class GameState:
         self.turn_state.advance_turn()
 
     # =================================================
-    # COMBAT CONTEXT CREATION
+    # COMBAT CONTEXT
     # =================================================
     def create_combat_context(self, action):
         attacker = next(
             (u for u in self.units if u.unit_id == action.unit_id),
             None,
         )
-        if attacker is None:
-            raise ValueError(f"Attacker unit {action.unit_id} not found")
-
         defender = next(
             (u for u in self.units if u.unit_id == action.target_id),
             None,
         )
-        if defender is None:
-            raise ValueError(f"Defender unit {action.target_id} not found")
 
-        if action.combat_mode != CombatMode.ASSAULT:
-            raise NotImplementedError(
-                f"Combat mode {action.combat_mode} not supported"
-            )
-
-        defender_facing = getattr(defender, "facing", "N")
+        if attacker is None or defender is None:
+            raise ValueError("Combat units not found")
 
         attack_sector = determine_attack_sector(
             attacker_pos=attacker.position,
             defender_pos=defender.position,
-            defender_facing=defender_facing,
-        )
-
-        _trace(
-            "ATTACK_SECTOR",
-            attacker_pos=attacker.position,
-            defender_pos=defender.position,
-            defender_facing=defender_facing,
-            sector=attack_sector,
-        )
-
-        _trace(
-            "CC_CONTEXT_INIT",
-            attacker_id=attacker.unit_id,
-            attacker_code=attacker.unit_type.code,
-            defender_id=defender.unit_id,
-            defender_code=defender.unit_type.code,
-            sector=attack_sector,
+            defender_facing=getattr(defender, "facing", "N"),
         )
 
         return CloseCombatContext(
@@ -166,25 +170,10 @@ class GameState:
         )
 
     # =================================================
-    # REACTION STATE MANAGEMENT
+    # REACTION STATE
     # =================================================
-    def enter_reaction(self, context: ReactionContext) -> None:
-        """
-        Enter a reaction window.
-        The game is paused until the reaction is resolved.
-        """
-        _trace(
-            "REACTION_ENTER",
-            trigger=context.trigger,
-            reactor=context.reactor.unit_id,
-            target=context.moving_unit.unit_id,
-        )
+    def enter_reaction(self, context: "ReactionContext") -> None:
         self.reaction_context = context
 
     def clear_reaction(self) -> None:
-        """
-        Exit the reaction window and resume normal play.
-        """
-        if self.reaction_context is not None:
-            _trace("REACTION_CLEAR")
         self.reaction_context = None

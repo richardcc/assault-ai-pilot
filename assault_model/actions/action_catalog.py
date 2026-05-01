@@ -2,81 +2,117 @@ from assault_model.actions.movement import MoveAction
 from assault_model.actions.status import WaitAction
 from assault_model.actions.assault import AssaultAction
 from assault_model.rules.movement_rules import MovementRules
-from assault_model.map.hex_coord import HexCoord
-from assault_model.map.hex_utils import hex_distance
+from assault_model.rules.movement_outcome import MovementOutcome
+import os
+
+DEBUG_TRACE = os.getenv("ASSAULT_DEBUG_TRACE", "0") == "1"
+
+
+def _trace(tag: str, **data):
+    if not DEBUG_TRACE:
+        return
+    payload = " ".join(f"{k}={v}" for k, v in data.items())
+    print(f"[TRACE][{tag}] {payload}")
 
 
 class ActionCatalog:
     """
     Canonical ActionCatalog of the MODEL.
-    Returns CONCRETE actions understood by the runtime.
-    
-    REVIEW:
-    - This class is the single source of truth for the action space.
-    - It enumerates legal actions but never applies or evaluates them.
-    - It is intentionally ignorant of execution order, events, or combat resolution.
+
+    SOLO SOLDADOS (vehículos desactivados por ahora).
+
+    Invariants:
+    - Every MoveAction represents a REAL movement.
+    - Close Combat is triggered by movement into an enemy hex.
+    - No empty or no-op actions are ever generated.
     """
 
     def __init__(self, game_state):
-        # REVIEW: ActionCatalog holds a read-only reference to the current GameState
         self.gs = game_state
 
     def actions(self):
-        # REVIEW: Actions are always generated relative to the CURRENT active unit
+        # Actions are always relative to the CURRENT active unit
         active = self.gs.active_unit
 
-        # REVIEW: Defensive fallback – if no active unit exists,
-        # the game still exposes a valid action to avoid dead states
+        # Defensive fallback
         if active is None:
             return [WaitAction(None)]
 
         actions = []
-        q, r = active.position
+
+        _trace(
+            "ACTION_CATALOG_START",
+            active_unit=getattr(active, "unit_id", None),
+        )
 
         # ----------------------------------
-        # CLOSE COMBAT (adjacent enemy)
+        # MOVEMENT-DRIVEN ACTIONS
         # ----------------------------------
-        # REVIEW:
-        # - Close combat is offered only when an enemy is adjacent.
-        # - This checks legality only; outcome is resolved by the runtime.
-        for enemy in self.gs.units:
-            if enemy.side == active.side:
-                continue
+        # MovementRules returns semantic movement paths
+        movement_paths = MovementRules.get_legal_paths(self.gs, active)
 
-            if hex_distance(active.position, enemy.position) == 1:
+        for mp in movement_paths:
+
+            _trace(
+                "MOVEMENT_PATH_EVAL",
+                unit=getattr(active, "unit_id", None),
+                outcome=str(mp.outcome),
+                target=getattr(mp, "target_unit_id", None),
+            )
+
+            # ------------------------------
+            # Normal movement (empty hex)
+            # ------------------------------
+            if mp.outcome == MovementOutcome.END_IN_EMPTY_HEX:
+                _trace(
+                    "ACTION_ADD",
+                    action="MoveAction",
+                    unit=active.unit_id,
+                )
+
                 actions.append(
-                    AssaultAction(
+                    MoveAction(
                         unit_id=active.unit_id,
-                        target_id=enemy.unit_id,
+                        path=mp.path,
                     )
                 )
 
-        # ----------------------------------
-        # MOVEMENT
-        # ----------------------------------
-        # REVIEW:
-        # - Legal destination hexes are delegated to MovementRules.
-        # - The catalog materializes each legal move as a concrete MoveAction.
-        legal_moves = MovementRules.get_legal_moves(self.gs, active)
-        for nq, nr in legal_moves:
-            # REVIEW: Ignore no-op moves (stay-in-place)
-            if (nq, nr) == (q, r):
-                continue
-
-            actions.append(
-                MoveAction(
-                    active.unit_id,
-                    [HexCoord(nq, nr)],
+            # ------------------------------
+            # Enemy hex → Close Combat (ASSAULT)
+            # ------------------------------
+            elif mp.outcome == MovementOutcome.END_IN_ENEMY_HEX:
+                _trace(
+                    "ACTION_ADD",
+                    action="AssaultAction",
+                    unit=active.unit_id,
+                    target=mp.target_unit_id,
                 )
-            )
+
+                actions.append(
+                    AssaultAction(
+                        unit_id=active.unit_id,
+                        target_id=mp.target_unit_id,
+                    )
+                )
+
+            # Friendly vehicle outcome is ignored on purpose
+            # (vehicles not enabled yet)
 
         # ----------------------------------
-        # WAIT
+        # WAIT (always valid)
         # ----------------------------------
-        # REVIEW:
-        # - WaitAction guarantees that the action space is never empty.
-        # - Strategic meaning is interpreted entirely by higher layers.
+        _trace(
+            "ACTION_ADD",
+            action="WaitAction",
+            unit=active.unit_id,
+        )
+
         actions.append(WaitAction(active.unit_id))
 
-        # REVIEW: Returned list is purely declarative; no side effects occur here
+        _trace(
+            "ACTION_CATALOG_END",
+            unit=active.unit_id,
+            action_count=len(actions),
+        )
+
         return actions

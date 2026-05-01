@@ -1,14 +1,4 @@
 # assault_sim/train/train.py
-#
-# Training entry point.
-# Wires together:
-# - simulation config (YAML)
-# - observability (DebugConfig)
-# - SimEnv + TrainingEnv
-# - ConsoleObserver
-#
-# Produces rich, structured output per turn and per action
-# when observability is enabled in sim_config.yaml.
 
 from pathlib import Path
 
@@ -16,66 +6,66 @@ from assault_sim.config.config_loader import load_sim_config
 from assault_sim.sim_env import SimEnv
 from assault_sim.training_env import TrainingEnv
 from assault_sim.debug.console_observer import ConsoleObserver
-from assault_sim.heuristics.heuristic_base import HeuristicBase
+
+from assault_sim.heuristics.tactical_path_heuristic import TacticalPathHeuristic
 
 
 def main():
     # -----------------------------------------------------
-    # 1. Load simulation configuration (YAML)
+    # 1. Load simulation configuration
     # -----------------------------------------------------
     sim_config = load_sim_config(
         Path("assault_sim/config/sim_config.yaml")
     )
 
-    # Debug / observability configuration (high-level)
-    print("DEBUG CONFIG:", sim_config.debug)
-
     # -----------------------------------------------------
-    # 2. Create SimEnv with DebugConfig
+    # 2. Create simulation environment
     # -----------------------------------------------------
-    env = SimEnv(
-        sim_config,
-        debug_config=sim_config.debug
-    )
-
-    # -----------------------------------------------------
-    # 3. Attach console observer (structured observability)
-    # -----------------------------------------------------
-    if env.event_bus:
-        env.event_bus.subscribe(ConsoleObserver())
-
-    # -----------------------------------------------------
-    # 4. Wrap SimEnv with TrainingEnv (controllers, env_config)
-    # -----------------------------------------------------
+    sim_env = SimEnv(sim_config, debug_config=sim_config.debug)
     training_env = TrainingEnv(
-        env,
-        Path("assault_sim/config/env_config.json")
+        sim_env,
+        env_config_path=Path("assault_sim/config/env_config.json"),
     )
 
-    print("Resetting environment...")
-    state = training_env.reset()
+    # -----------------------------------------------------
+    # 3. Observers
+    # -----------------------------------------------------
+    observer = ConsoleObserver()
+    if sim_env.event_bus:
+        sim_env.event_bus.subscribe(observer)
 
-    step = 0
+    # -----------------------------------------------------
+    # 4. Controllers (heuristics)
+    # -----------------------------------------------------
+    # 👉 MISMO heurístico para ambos bandos (por ahora)
+    controllers = {
+        "GE": TacticalPathHeuristic(),
+        "US": TacticalPathHeuristic(),
+    }
+
+    # -----------------------------------------------------
+    # 5. Reset
+    # -----------------------------------------------------
+    state = training_env.reset()
     done = False
 
     # -----------------------------------------------------
-    # 5. Main simulation loop
+    # 6. Main loop
     # -----------------------------------------------------
     while not done:
-        # Select action from heuristic (deterministic baseline)
-        action = HeuristicBase.choose_action(state)
+        active = state.active_unit
 
-        state, reward, done, _ = training_env.step(action)
+        if active is None:
+            action = None
+        else:
+            controller = controllers.get(active.side)
+            action = controller.choose_action(state)
 
-        step += 1
-        print(f"Step {step} | Turn {state.turn} | Reward {reward}")
+        state, reward, done, info = training_env.step(action)
 
-    # -----------------------------------------------------
-    # 6. End of simulation summary
-    # -----------------------------------------------------
     print("Simulation finished.")
-    print(f"Final VP: {state.vp_tracker.total_points}")
-    print(f"Total steps: {step}")
+    if state.vp_tracker:
+        print(f"Final VP: {state.vp_tracker.total_points}")
 
 
 if __name__ == "__main__":

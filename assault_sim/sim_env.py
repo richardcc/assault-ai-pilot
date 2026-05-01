@@ -1,11 +1,25 @@
 # assault_sim/sim_env.py
 #
 # Simulation environment.
-# Core logic only.
-# NO direct printing.
-# ALL visualization handled by observers.
+#
+# RESPONSABILIDADES:
+# - Cargar catálogos y escenario
+# - Crear GameState y RuntimeGameState
+# - Emitir EVENTOS DE OBSERVABILIDAD mediante EventBus
+# - Decidir TURN_END y MATCH_END
+#
+# NO HACE:
+# - No imprime gameplay directamente
+# - No renderiza
+# - No mezcla observabilidad con trazas
+#
+# NOTAS IMPORTANTES:
+# - Observabilidad = EventBus + Observers
+# - Trazas de desarrollo = _trace() + ASSAULT_DEBUG_TRACE
+# - Son DOS SALIDAS distintas y no se mezclan
 
 import json
+import os
 
 from assault_sim.config.config_loader import SimConfig
 from assault_model.units.catalog_loader import load_unit_catalog
@@ -19,21 +33,55 @@ from assault_sim.debug.debug_config import DebugConfig
 from assault_sim.debug.event_bus import EventBus
 
 
+# -------------------------------------------------
+# DESARROLLO / DEBUG (NO OBSERVABILIDAD)
+# -------------------------------------------------
+# Esta variable SOLO controla trazas internas para desarrollador.
+# NO controla EventBus.
+# NO afecta a observers.
+# NO afecta al gameplay.
+DEBUG_TRACE = os.getenv("ASSAULT_DEBUG_TRACE", "0") == "1"
+
+
+def _trace(tag: str, **data):
+    """
+    Trazas de desarrollo.
+    - Se imprimen SOLO si ASSAULT_DEBUG_TRACE=1
+    - NO usan EventBus
+    - NO forman parte de la observabilidad
+    """
+    if not DEBUG_TRACE:
+        return
+    payload = " ".join(f"{k}={v}" for k, v in data.items())
+    print(f"[TRACE][{tag}] {payload}")
+
+
 class SimEnv:
     """
     High-level simulation environment.
 
-    Responsibilities:
-    - Load catalogs and scenario
-    - Create GameState and RuntimeGameState
-    - Emit structured events
-    - Decide TURN_END and MATCH_END
+    ESTA CLASE ES PURO CONTROL.
+
+    - Coordina runtime
+    - Emite eventos de observabilidad
+    - NO imprime gameplay
+    - NO renderiza mapas
+    - NO decide acciones
     """
 
     def __init__(self, config: SimConfig, debug_config: DebugConfig | None = None):
         self.config = config
         self.debug_config = debug_config or DebugConfig(enabled=False)
 
+        # ------------------------------
+        # EVENT BUS (OBSERVABILIDAD)
+        # ------------------------------
+        # El EventBus EXISTE o NO existe únicamente según debug_config.enabled,
+        # exactamente como estaba antes.
+        #
+        # Importante:
+        # - Si no hay EventBus, NO hay observabilidad.
+        # - Esto NO tiene relación con ASSAULT_DEBUG_TRACE.
         self.event_bus = EventBus() if self.debug_config.enabled else None
 
         self.scenario = None
@@ -45,6 +93,14 @@ class SimEnv:
     # RESET
     # -------------------------------------------------
     def reset(self):
+        """
+        Reinicia completamente la simulación:
+        - Carga catálogos
+        - Carga escenario
+        - Crea GameState y Runtime
+        - Emite eventos RESET / UNIT_LOADED / MAP_STATE
+        """
+
         root = self.config.data_root
 
         unit_catalog = load_unit_catalog(root / self.config.unit_catalog)
@@ -60,6 +116,7 @@ class SimEnv:
         self.game_state = GameState.from_scenario(self.scenario)
         self.runtime = RuntimeGameState(self.game_state)
 
+        # Configuración de controladores (si existe)
         env_config_path = root / "env_config.json"
         if env_config_path.exists():
             with open(env_config_path, "r", encoding="utf-8") as f:
@@ -68,9 +125,12 @@ class SimEnv:
         else:
             self.player_config = {}
 
+        # ---------------- OBSERVABILIDAD ----------------
+        # Aquí EMPEZAMOS a emitir eventos de juego
         if self.event_bus:
             self.game_state.event_bus = self.event_bus
 
+            # Evento RESET
             self.event_bus.emit(
                 {
                     "type": "RESET",
@@ -82,6 +142,7 @@ class SimEnv:
                 }
             )
 
+            # Evento UNIT_LOADED por cada unidad
             for unit in self.game_state.units:
                 side_cfg = self.player_config.get(unit.side, {})
                 self.event_bus.emit(
@@ -97,10 +158,11 @@ class SimEnv:
                     }
                 )
 
-        # START FIRST TURN (TURN = 1)
+        # Iniciar el primer turno
         self.runtime.start_turn()
         self.game_state = self.runtime.base_state
 
+        # Estado inicial del mapa
         if self.event_bus:
             self.event_bus.emit(
                 {
@@ -109,6 +171,8 @@ class SimEnv:
                         "turn": self.game_state.turn,
                         "game_map": self.game_state.game_map,
                         "units": self.game_state.units,
+                        "vp_tracker": self.game_state.vp_tracker,
+                        "game_state": self.game_state,
                     },
                 }
             )
@@ -120,17 +184,21 @@ class SimEnv:
     # -------------------------------------------------
     def step(self, action):
         """
-        Apply one action and decide TURN_END and MATCH_END.
+        Aplica UNA acción externa (intención del agente).
+
+        Regla clave:
+        - ACTION se emite SOLO cuando hay una acción explícita.
         """
 
-        # ACTION event
-        if self.event_bus and self.debug_config.log_actions:
+        # ---------------- ACTION (INTENCIÓN) ----------------
+        # Esto es OBSERVABILIDAD (no debug)
+        if self.event_bus and action is not None:
             self.event_bus.emit(
                 {
                     "type": "ACTION",
                     "payload": {
                         "turn": self.game_state.turn,
-                        "action": action.__class__.__name__ if action else None,
+                        "action": action.__class__.__name__,
                         "active_unit": (
                             self.game_state.active_unit.unit_id
                             if self.game_state.active_unit
@@ -140,17 +208,25 @@ class SimEnv:
                 }
             )
 
-        # Apply action
+        # ---------------- EJECUCIÓN REAL ----------------
         self.runtime.apply_action(action)
         self.game_state = self.runtime.base_state
 
-        # END-MATCH: last side standing
+        # ---------------- TRAZA DE DESARROLLO ----------------
+        # Esto NO es observabilidad
+        _trace(
+            "ACTIVE_UNIT",
+            unit=self.game_state.active_unit.unit_id
+            if self.game_state.active_unit
+            else None,
+        )
+
+        # ---------------- FIN DE PARTIDA ----------------
         alive_units = [u for u in self.game_state.units if u.alive]
         alive_sides = {u.side for u in alive_units}
 
         if len(alive_sides) == 1:
             winner = next(iter(alive_sides))
-
             if self.event_bus:
                 self.event_bus.emit(
                     {
@@ -167,28 +243,9 @@ class SimEnv:
                 if self.game_state.vp_tracker
                 else 0
             )
-
             return self.game_state, reward, True, {}
 
-        # END OF ACTIVATION (NOT TURN)
-        if self.event_bus and self.debug_config.log_turns:
-            self.event_bus.emit(
-                {
-                    "type": "TURN_STATE",
-                    "payload": {
-                        "turn": self.game_state.turn,
-                        "active_unit": (
-                            self.game_state.active_unit.unit_id
-                            if self.game_state.active_unit
-                            else None
-                        ),
-                    },
-                }
-            )
-
-        # -------------------------------------------------
-        # ✅ TURN_END (FORMAL CRITERION)
-        # -------------------------------------------------
+        # ---------------- FIN DE TURNO ----------------
         if self._turn_has_ended():
             if self.event_bus:
                 self.event_bus.emit(
@@ -208,13 +265,14 @@ class SimEnv:
                             "turn": self.game_state.turn,
                             "game_map": self.game_state.game_map,
                             "units": self.game_state.units,
+                            "vp_tracker": self.game_state.vp_tracker,
+                            "game_state": self.game_state,
                         },
                     }
                 )
 
-            # ✅ ADVANCE TURN CORRECTLY
-            self.runtime.end_turn()     # incrementa turn
-            self.runtime.start_turn()   # resetea activaciones
+            self.runtime.end_turn()
+            self.runtime.start_turn()
             self.game_state = self.runtime.base_state
 
         done = (
@@ -247,15 +305,21 @@ class SimEnv:
         ]
 
     def _is_unit_activable(self, unit, gs, catalog) -> bool:
+        # Todo esto son REGLAS INTERNAS (con traza opcional)
         if not unit.alive:
+            _trace("INACTIVABLE", unit=unit.unit_id, reason="dead")
             return False
 
         if unit in gs.activation_state.activated:
+            _trace("INACTIVABLE", unit=unit.unit_id, reason="already_activated")
             return False
 
         if getattr(unit, "suppressed", False):
+            _trace("INACTIVABLE", unit=unit.unit_id, reason="suppressed")
             return False
+
         if getattr(unit, "fallback", False):
+            _trace("INACTIVABLE", unit=unit.unit_id, reason="fallback")
             return False
 
         prev_active = gs.activation_state.active_unit
@@ -266,4 +330,7 @@ class SimEnv:
             gs.activation_state.active_unit = prev_active
 
         real_actions = [a for a in actions if not isinstance(a, WaitAction)]
+
+        _trace("ACTIONS", unit=unit.unit_id, real=len(real_actions))
+
         return len(real_actions) > 0

@@ -4,15 +4,17 @@ from assault_model.actions.movement import MoveAction
 from assault_model.actions.status import WaitAction
 from assault_model.map.hex_coord import HexCoord
 
+from assault_sim.heuristics.pathfinding import bfs_hex_path
+
 
 class TacticalPathHeuristic:
     """
-    TacticalPathHeuristic
+    TacticalPathHeuristic (VP-seeking)
 
     Behaviour:
-    - Move one hex at a time towards the Victory Point
-    - If moving into an enemy hex, the motor converts it into Assault
-    - Reaction Fire is OPTIONAL and handled by the motor
+    - Compute a real hex-path to the Victory Point
+    - Move ONE hex per activation (tactical scale)
+    - Let the motor handle reactions and combat
     """
 
     def __init__(self, debug: bool = False):
@@ -21,41 +23,31 @@ class TacticalPathHeuristic:
     def choose_action(self, state):
         unit = state.active_unit
 
-        if unit is None or not unit.alive:
-            return WaitAction()
-
-        next_step = self._step_towards_objective(unit, state)
-        if next_step:
-            return MoveAction(
-                unit.unit_id,
-                [HexCoord(*next_step)],
-            )
-
-        return WaitAction()
-
-    # -------------------------------------------------
-    # Helpers
-    # -------------------------------------------------
-    def _step_towards_objective(self, unit, state):
-        """
-        Simple greedy step towards the closest Victory Point.
-        No global pathfinding required.
-        """
-        if not state.victory:
+        # ✔️ No active unit
+        if unit is None:
             return None
 
-        uq, ur = unit.position
+        # ✔️ Dead unit explicitly waits
+        if not unit.alive:
+            return WaitAction(unit.unit_id)
 
-        for vq, vr in state.victory.get_positions():
-            dq = vq - uq
-            dr = vr - ur
+        # ✔️ No Victory Conditions
+        if not state.victory or not state.victory.points:
+            return WaitAction(unit.unit_id)
 
-            # simple axial step (greedy)
-            step_q = uq + (1 if dq > 0 else -1 if dq < 0 else 0)
-            step_r = ur + (1 if dr > 0 else -1 if dr < 0 else 0)
+        start = unit.position
 
-            # check map bounds
-            if state.game_map.get_hex(step_q, step_r):
-                return (step_q, step_r)
+        # Use first VP (you can extend later)
+        goal = state.victory.points[0].hex_coords
 
-        return None
+        path = bfs_hex_path(start, goal, state)
+
+        if path and len(path) > 0:
+            next_hex = path[0]
+            return MoveAction(
+                unit.unit_id,
+                [HexCoord(*next_hex)],
+            )
+
+        # No path available
+        return WaitAction(unit.unit_id)

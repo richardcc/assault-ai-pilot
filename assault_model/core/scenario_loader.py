@@ -1,4 +1,16 @@
 # assault_model/core/scenario_loader.py
+#
+# Scenario loader.
+# Responsible for constructing a Scenario object from a scenario JSON file.
+# This includes:
+# - Map construction from map pieces
+# - Unit instantiation from the unit catalog
+# - Victory condition parsing
+# - Initial GameState creation
+#
+# NOTE:
+# - This module defines WHAT exists at the start of the game,
+#   not how the game runs.
 
 import json
 import os
@@ -15,22 +27,35 @@ from assault_model.core.victory_conditions import VictoryConditions
 from assault_model.core.game_state import GameState
 
 
-# DEBUG TRACE (configurable by environment)
+# -------------------------------------------------
+# DEBUG TRACE (configurable by environment variable)
+# -------------------------------------------------
 DEBUG_TRACE = os.getenv("ASSAULT_DEBUG_TRACE", "0") == "1"
 
 
 def _trace(tag: str, **data):
+    """Internal debug helper for scenario loading."""
     if not DEBUG_TRACE:
         return
     payload = " ".join(f"{k}={v}" for k, v in data.items())
     print(f"[TRACE][{tag}] {payload}")
 
 
+# -------------------------------------------------
+# Errors
+# -------------------------------------------------
 class ScenarioLoaderError(Exception):
     """Raised when a scenario file cannot be loaded or is invalid."""
+    pass
 
 
+# -------------------------------------------------
+# Helpers
+# -------------------------------------------------
 def _offset_hex(hex_: Hex, origin: Tuple[int, int]) -> Hex:
+    """
+    Returns a new Hex translated by an origin offset.
+    """
     return Hex(
         q=hex_.q + origin[0],
         r=hex_.r + origin[1],
@@ -38,31 +63,42 @@ def _offset_hex(hex_: Hex, origin: Tuple[int, int]) -> Hex:
     )
 
 
+# -------------------------------------------------
+# Main loader
+# -------------------------------------------------
 def load_scenario(
     scenario_path: Path,
     unit_catalog: Dict[str, UnitType],
     map_piece_catalog: Dict[str, MapPieceDefinition],
 ) -> Scenario:
+    """
+    Load a Scenario from a JSON file.
+    """
+
+    # ---------------------------------------------
+    # Load and parse scenario JSON
+    # ---------------------------------------------
     if not scenario_path.exists():
         raise ScenarioLoaderError(f"Scenario not found: {scenario_path}")
 
     raw = json.loads(scenario_path.read_text(encoding="utf-8"))
 
     # =================================================
-    # Map construction from map pieces
+    # MAP CONSTRUCTION (FROM MAP PIECES)
     # =================================================
     pieces_def = raw.get("map", {}).get("pieces", [])
     if not pieces_def:
         raise ScenarioLoaderError("Scenario map has no pieces")
 
     global_hexes: List[Hex] = []
-
-    # Temporary containers for offset state
     pending_hex_states: List[Tuple[Tuple[int, int], object]] = []
-    pending_hex_edges: List[Tuple[Tuple[int, int], Tuple[int, int], object]] = []
+    pending_hex_edges: List[
+        Tuple[Tuple[int, int], Tuple[int, int], object]
+    ] = []
 
     for entry in pieces_def:
         piece_id = entry["id"]
+
         if piece_id not in map_piece_catalog:
             raise ScenarioLoaderError(
                 f"Map piece '{piece_id}' not found in catalog"
@@ -71,16 +107,13 @@ def load_scenario(
         piece = map_piece_catalog[piece_id]
         origin = tuple(entry["origin"])
 
-        # ---- Offset hexes ----
         for h in piece.hexes:
             global_hexes.append(_offset_hex(h, origin))
 
-        # ---- Offset hex states ----
         for (q, r), state in piece.hex_states.items():
             global_coord = (q + origin[0], r + origin[1])
             pending_hex_states.append((global_coord, state))
 
-        # ---- Offset hex edge features ----
         for (a, b), feature in piece.hex_edges.items():
             aq, ar = a
             bq, br = b
@@ -92,7 +125,6 @@ def load_scenario(
                 )
             )
 
-    # ---- Sanity check: no overlapping hexes ----
     coords = [(h.q, h.r) for h in global_hexes]
     if len(coords) != len(set(coords)):
         raise ScenarioLoaderError("Overlapping hexes detected")
@@ -100,7 +132,7 @@ def load_scenario(
     game_map = Map(hexes=global_hexes)
 
     # =================================================
-    # Attach hex states and edge features to the map
+    # ATTACH HEX STATES AND EDGE FEATURES
     # =================================================
     for (q, r), state in pending_hex_states:
         state.hex = game_map.get_hex(q, r)
@@ -110,7 +142,7 @@ def load_scenario(
         game_map.add_hex_edge_feature(a, b, feature)
 
     # =================================================
-    # Unit instantiation (FROM CATALOG)
+    # UNIT INSTANTIATION
     # =================================================
     units: List[UnitInstance] = []
 
@@ -149,7 +181,7 @@ def load_scenario(
         )
 
     # =================================================
-    # Scenario object
+    # SCENARIO OBJECT
     # =================================================
     scenario = Scenario(
         name=raw["id"],
@@ -164,20 +196,28 @@ def load_scenario(
     )
 
     # =================================================
-    # Initial game state for simulation
+    # INITIAL GAME STATE
     # =================================================
     game_state = GameState(
         game_map=game_map,
         units=units,
         turn=1,
     )
+
     game_state.start_action_phase()
     scenario.initial_game_state = game_state
 
     # =================================================
-    # Emit UNIT_LOADED events (unchanged behavior)
+    # ✅ INJECT EVENT BUS INTO UNIT INSTANCES
     # =================================================
     event_bus = getattr(game_state, "event_bus", None)
+    if event_bus:
+        for unit in game_state.units:
+            unit._event_bus = event_bus
+
+    # =================================================
+    # OPTIONAL: emit UNIT_LOADED events
+    # =================================================
     if event_bus:
         for unit in game_state.units:
             event_bus.emit(

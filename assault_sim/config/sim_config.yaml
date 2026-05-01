@@ -25,6 +25,7 @@ observability:
 
   # Generic simulation events
   events:
+    payload: false
     lifecycle: true    # RESET, UNIT_LOADED
     actions: true      # ACTION (what action was taken)
     movement: true     # DEBUG_MOVE_PATH (from -> to)

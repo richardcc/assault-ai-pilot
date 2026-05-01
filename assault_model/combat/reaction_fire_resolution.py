@@ -13,6 +13,8 @@ def resolve_reaction_fire(
     attack_profile,
     defense_profile,
     band,
+    *,
+    event_bus=None,
 ):
     """
     Resolve Reaction Fire as a standard ranged fire action,
@@ -32,8 +34,11 @@ def resolve_reaction_fire(
         return None
 
     # LOS check
-    los = game_map.get_los(reactor.position, target.position) \
-        if hasattr(game_map, "get_los") else LineOfSight.CLEAR
+    los = (
+        game_map.get_los(reactor.position, target.position)
+        if hasattr(game_map, "get_los")
+        else LineOfSight.CLEAR
+    )
 
     if los == LineOfSight.BLOCKED:
         return None
@@ -41,7 +46,7 @@ def resolve_reaction_fire(
     # Consume reaction usage
     reaction_state.consume()
 
-    # ✅ Reaction fire consumes activation by default
+    # Reaction fire consumes activation by default
     # (Runtime should ALSO mark unit as activated)
     reactor.activated = True
 
@@ -50,7 +55,9 @@ def resolve_reaction_fire(
         attacker_profile=attack_profile,
         defender_profile=defense_profile,
         band=band,
-        los=los,
+        attacker_id=reactor.unit_id,
+        defender_id=target.unit_id,
+        event_bus=event_bus,
     )
 
     return result
