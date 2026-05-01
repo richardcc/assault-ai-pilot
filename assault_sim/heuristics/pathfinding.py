@@ -2,6 +2,15 @@ from collections import deque
 
 
 def bfs_hex_path(start, goal, state):
+    """
+    BFS pathfinding over a hex grid.
+
+    - Considers ONLY fixed obstacles (terrain, map bounds)
+    - Ignores ALL units (dynamic objects)
+    - Returns a full path to the goal if it exists
+    - Returns None if no route exists due to fixed blockers
+    """
+
     if start == goal:
         return []
 
@@ -9,30 +18,31 @@ def bfs_hex_path(start, goal, state):
     queue = deque([(start, [])])
 
     game_map = state.game_map
-    unit_side = state.active_unit.side
-
-    occupied = {
-        u.position
-        for u in state.units
-        if u.alive and u.side == unit_side and u.position != goal
-    }
 
     while queue:
         (q, r), path = queue.popleft()
 
-        # ✅ CONTRATO REAL DEL MAPA
         hex_obj = game_map.get_hex(q, r)
         if hex_obj is None:
             continue
 
         for neigh in hex_obj.neighbors():
-            nq, nr = neigh.q, neigh.r
-            nxt = (nq, nr)
+            nxt = (neigh.q, neigh.r)
 
             if nxt in visited:
                 continue
-            if nxt in occupied:
+
+            hex_nxt = game_map.get_hex(*nxt)
+            if hex_nxt is None:
                 continue
+
+            # ✅ SOLO BLOQUEOS FIJOS DEL MAPA
+            if hex_nxt.terrain.value == "water":
+                continue
+
+            # (si tienes más terrenos impasables, añádelos aquí)
+            # if hex_nxt.terrain.value in {"water", "lava", "mountain"}:
+            #     continue
 
             new_path = path + [nxt]
 
@@ -42,4 +52,5 @@ def bfs_hex_path(start, goal, state):
             visited.add(nxt)
             queue.append((nxt, new_path))
 
+    # ❌ No existe ruta debido a bloqueos fijos
     return None
