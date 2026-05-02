@@ -23,7 +23,9 @@ from assault_model.actions.action import Action
 from assault_model.actions.movement import MoveAction
 from assault_model.actions.base import CombatAction
 from assault_model.actions.combat_mode import CombatMode
-from assault_model.core.game_state import GameState
+
+from assault_model.state.game_state import GameState
+
 from assault_model.combat.close_combat_resolver import resolve_close_combat
 from assault_model.combat.combat_resolution import CombatResolutionResult
 

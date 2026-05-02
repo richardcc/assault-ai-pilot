@@ -1,4 +1,16 @@
 # assault_model/core/turn.py
+"""
+TurnState represents the authoritative turn lifecycle state of the game.
+
+This class does NOT control turn flow.
+It only describes the current phase and number.
+
+The turn lifecycle is governed by RuntimeGameState.
+
+Rules:
+- Phase transitions are decided by the engine.
+- External coordinators must NOT change turn phase directly.
+"""
 
 from enum import Enum
 

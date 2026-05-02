@@ -1,5 +1,34 @@
 # assault_model/core/game_state.py
+"""
+GameState represents the canonical, observable state of the game.
 
+This class contains NO execution logic.
+
+Responsibilities:
+- Hold all persistent game data:
+  - Units and their attributes
+  - Map and hex states
+  - Turn counters and phases
+  - Activation flags
+  - Victory point trackers
+  - Combat contexts
+- Be safely consumable by:
+  - AI / heuristics
+  - Observers / renderers
+  - Reward systems
+
+Non-responsibilities:
+- Does NOT apply actions
+- Does NOT decide turn flow
+- Does NOT manage activation logic
+- Does NOT execute combat
+
+Design rule:
+- GameState describes WHAT IS.
+- GameState never decides WHAT HAPPENS.
+
+All state mutations must occur through RuntimeGameState.
+"""
 from typing import Dict, List, Optional, TYPE_CHECKING
 import os
 
@@ -9,7 +38,7 @@ from assault_model.map.hex_state import HexState
 from assault_model.units.unit_instance import UnitInstance
 from assault_model.core.victory_conditions import VictoryConditions
 from assault_model.core.vp_tracker import VictoryPointTracker
-from assault_model.core.turn import TurnState, TurnPhase
+from assault_model.state.turn import TurnState, TurnPhase
 from assault_model.core.activation import ActivationState
 
 # --- COMBAT IMPORTS ---

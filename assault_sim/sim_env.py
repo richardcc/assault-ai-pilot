@@ -25,8 +25,8 @@ from assault_sim.config.config_loader import SimConfig
 from assault_model.units.catalog_loader import load_unit_catalog
 from assault_model.map.map_piece_loader import load_map_piece_catalog
 from assault_model.core.scenario_loader import load_scenario
-from assault_model.core.game_state import GameState
-from assault_model.core.game_state_runtime import RuntimeGameState
+from assault_model.state.game_state import GameState
+from assault_model.runtime.game_state_runtime import RuntimeGameState
 from assault_model.actions.action_catalog import ActionCatalog
 from assault_model.actions.status import WaitAction
 from assault_sim.debug.debug_config import DebugConfig

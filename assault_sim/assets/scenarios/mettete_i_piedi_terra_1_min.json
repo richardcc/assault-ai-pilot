@@ -31,6 +31,13 @@
       "experience": "REGULAR"
     },
     {
+      "unit_id": "GE_3",
+      "side": "GE",
+      "unit_key": "GE_RIFLES_43",
+      "position": [4, 4],
+      "experience": "REGULAR"
+    },
+    {
       "unit_id": "US_1",
       "side": "US",
       "unit_key": "US_RIFLES_43",
@@ -39,6 +46,13 @@
     },
     {
       "unit_id": "US_2",
+      "side": "US",
+      "unit_key": "US_RIFLES_43",
+      "position": [6, 12],
+      "experience": "REGULAR"
+    },
+    {
+      "unit_id": "US_3",
       "side": "US",
       "unit_key": "US_RIFLES_43",
       "position": [6, 12],

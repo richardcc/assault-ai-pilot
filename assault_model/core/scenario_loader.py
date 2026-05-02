@@ -24,7 +24,7 @@ from assault_model.map.hex import Hex
 from assault_model.units.unit_instance import UnitInstance
 from assault_model.units.unit_type import UnitType
 from assault_model.core.victory_conditions import VictoryConditions
-from assault_model.core.game_state import GameState
+from assault_model.state.game_state import GameState
 
 
 # -------------------------------------------------

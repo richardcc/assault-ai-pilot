@@ -1,12 +1,40 @@
 # assault_model/core/game_state_runtime.py
+"""
+RuntimeGameState is the authoritative execution engine of the game.
 
-from assault_model.core.game_state import GameState
-from assault_model.core.turn import TurnState
+This class is responsible for ALL game evolution.
+
+Responsibilities:
+- Apply player / AI actions
+- Resolve movement, combat, and reactions
+- Manage turn lifecycle (start / end)
+- Maintain activation state
+- Trigger close combat and reactions
+- Update GameState in a valid way
+
+Non-responsibilities:
+- Does NOT decide player intent
+- Does NOT choose actions
+- Does NOT rank or score moves
+- Does NOT interact with UI or observers
+
+Design rule:
+- RuntimeGameState decides WHAT HAPPENS when an action is applied.
+- RuntimeGameState is the single source of truth for game rules.
+
+Contract guarantee:
+- Any change to GameState MUST pass through RuntimeGameState.
+"""
+
+from assault_model.state.game_state import GameState
+from assault_model.state.turn import TurnState
+
 from assault_model.actions.action import Action
 from assault_model.actions.movement import MoveAction
 from assault_model.actions.status import WaitAction
 from assault_model.actions.assault import AssaultAction
 from assault_model.actions.resolution import resolve_action
+
 from assault_model.combat.combat_resolution import CombatResolutionResult
 from assault_model.combat.reaction_context import ReactionContext
 from assault_model.combat.reaction_trigger import ReactionTrigger
