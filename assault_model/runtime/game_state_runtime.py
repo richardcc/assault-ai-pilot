@@ -1,4 +1,3 @@
-# assault_model/core/game_state_runtime.py
 """
 RuntimeGameState is the authoritative execution engine of the game.
 
@@ -34,6 +33,7 @@ from assault_model.actions.movement import MoveAction
 from assault_model.actions.status import WaitAction
 from assault_model.actions.assault import AssaultAction
 from assault_model.actions.resolution import resolve_action
+from assault_model.actions.action_catalog import ActionCatalog
 
 from assault_model.combat.combat_resolution import CombatResolutionResult
 from assault_model.combat.reaction_context import ReactionContext
@@ -53,37 +53,113 @@ def _trace(tag: str, **data):
 
 
 class RuntimeGameState:
+    """
+    Authoritative engine implementation.
+
+    IMPORTANT:
+    This engine does NOT drive execution by itself.
+    It exposes a consumable contract for coordinators (e.g. SimEnv).
+    """
+
     def __init__(self, base_state: GameState):
         self.base_state = base_state
         self.turn = TurnState(turn_number=base_state.turn)
 
-    # -------------------------------------------------
-    # TURN CONTROL
-    # -------------------------------------------------
+    # =================================================
+    # TURN CONTROL (ENGINE AUTHORITY)
+    # =================================================
     def start_turn(self) -> None:
+        """
+        Initialize a new turn.
+
+        - Reset activation state
+        - Select first active unit
+        """
         self.base_state.activation_state.reset(self.base_state.units)
         self.base_state.activation_state.next_unit()
 
     def end_turn(self) -> None:
+        """
+        Finalize current turn and advance turn counter.
+        """
         self.base_state.end_turn()
         self.turn = TurnState(turn_number=self.base_state.turn)
 
-    # -------------------------------------------------
-    # ACTIVATION CONSUMPTION
-    # -------------------------------------------------
+    # =================================================
+    # ACTIVATION CONTRACT (NEW ENGINE API)
+    # =================================================
+    def get_activable_units(self):
+        """
+        Return all units that may still act in the current turn.
+
+        This method defines the authoritative activation rules.
+        """
+        gs = self.base_state
+        catalog = ActionCatalog(gs)
+
+        activable = []
+        for unit in gs.units:
+            if not unit.alive:
+                continue
+            if unit in gs.activation_state.activated:
+                continue
+            if getattr(unit, "suppressed", False):
+                continue
+            if getattr(unit, "fallback", False):
+                continue
+
+            prev_active = gs.activation_state.active_unit
+            gs.activation_state.active_unit = unit
+            try:
+                actions = catalog.actions()
+            finally:
+                gs.activation_state.active_unit = prev_active
+
+            real_actions = [a for a in actions if not isinstance(a, WaitAction)]
+            if real_actions:
+                activable.append(unit)
+
+        return activable
+
+    def turn_has_ended(self) -> bool:
+        """
+        Return True if no further units can act in this turn.
+        """
+        return len(self.get_activable_units()) == 0
+
+    # =================================================
+    # INTERNAL ACTIVATION CONSUMPTION
+    # =================================================
     def _consume_activation(self, unit):
         activated = self.base_state.activation_state.activated
         if unit not in activated:
             activated.append(unit)
 
-    # -------------------------------------------------
+    def _advance_activation(self):
+        """
+        Advance to the next active unit.
+
+        If no unit remains, the engine ends and restarts the turn.
+        """
+        next_unit = self.base_state.activation_state.next_unit()
+        if next_unit is None:
+            self.end_turn()
+            self.start_turn()
+
+    # =================================================
     # MAIN EXECUTION ENTRY POINT
-    # -------------------------------------------------
+    # =================================================
     def apply_action(
         self,
         action: Action,
         combat_result: CombatResolutionResult | None = None,
     ):
+        """
+        Apply an already-chosen action and update the game state.
+
+        This method is the ONLY valid way to mutate GameState.
+        """
+
         event_bus = getattr(self.base_state, "event_bus", None)
 
         attacker_id = getattr(action, "unit_id", None)
@@ -137,7 +213,7 @@ class RuntimeGameState:
             return None
 
         # -------------------------------------------------
-        # MOVE (⚠️ Close Combat triggers HERE)
+        # MOVE (Close Combat triggers here)
         # -------------------------------------------------
         if isinstance(action, MoveAction):
             _trace("MOVE_START", unit=attacker.unit_id)
@@ -163,7 +239,6 @@ class RuntimeGameState:
                         }
                     )
 
-                # ✅ DETECCIÓN DE HEX ENEMIGO → CLOSE COMBAT INMEDIATO
                 enemy_in_hex = next(
                     (
                         u for u in self.base_state.units
@@ -206,7 +281,6 @@ class RuntimeGameState:
                     self._advance_activation()
                     return result
 
-                # ❌ SOLO AQUÍ puede haber reaction (no en hex de asalto)
                 for enemy in self.base_state.units:
                     if not enemy.alive or enemy.side == attacker.side:
                         continue
@@ -231,7 +305,7 @@ class RuntimeGameState:
             return None
 
         # -------------------------------------------------
-        # OTHER ACTIONS (incl. Assault called directly)
+        # OTHER ACTIONS
         # -------------------------------------------------
         result = resolve_action(
             state=self.base_state,
@@ -254,12 +328,3 @@ class RuntimeGameState:
         self._consume_activation(attacker)
         self._advance_activation()
         return result
-
-    # -------------------------------------------------
-    # ACTIVATION ADVANCE
-    # -------------------------------------------------
-    def _advance_activation(self):
-        next_unit = self.base_state.activation_state.next_unit()
-        if next_unit is None:
-            self.end_turn()
-            self.start_turn()
