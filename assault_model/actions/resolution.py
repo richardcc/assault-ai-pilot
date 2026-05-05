@@ -8,9 +8,15 @@
 # - Return detailed combat results (if any)
 #
 # IMPORTANT:
-# - This module does NOT store infrastructure in GameState
-# - All observability goes through ExecutionContext
-# - GameState remains deepcopy-safe
+# - This module does NOT own combat rules
+# - This module does NOT emit rich domain events
+# - All combat-specific events are emitted by resolvers
+# - Observability flows ONLY via ExecutionContext passed to resolvers
+#
+# DESIGN NOTE:
+# - For Close Combat, this module delegates resolution
+#   and passes ExecutionContext so the resolver can emit ACTION_EFFECT
+# - This module must NEVER re-emit COMBAT_RESULT
 #
 # DEBUG TRACES:
 # - Optional, controlled by ASSAULT_DEBUG_TRACE
@@ -65,6 +71,11 @@ class ActionResolutionResult:
     combat_result:
         A CombatResolutionResult if combat happened,
         None otherwise.
+
+    NOTE:
+    - combat_result is returned for internal consistency
+    - Close Combat observability is handled exclusively
+      by the combat resolver via ACTION_EFFECT
     """
 
     def __init__(
@@ -91,12 +102,12 @@ def resolve_action(
     This function:
     - Does NOT consume activations
     - Does NOT advance turns
-    - Does NOT store infrastructure in state
+    - Does NOT emit rich domain events
 
-    Observability (if any) is emitted via ExecutionContext.
+    IMPORTANT:
+    - For Close Combat, ExecutionContext MUST be passed
+      to the resolver so it can emit ACTION_EFFECT
     """
-
-    event_bus = context.event_bus if context else None
 
     new_state = state
     result_combat = None
@@ -117,7 +128,8 @@ def resolve_action(
 
             if unit:
                 dest = action.path[-1]
-                unit.position = dest  # ✅ keep HexCoord, do not convert to tuple
+                # Keep HexCoord object intact
+                unit.position = dest
 
         result_combat = None
 
@@ -132,23 +144,16 @@ def resolve_action(
                 f"Combat mode {action.combat_mode} not supported"
             )
 
+        # Work on a copy of the state
         new_state = deepcopy(state)
 
+        # Create combat context from the copied state
         ctx = new_state.create_combat_context(action)
-        result_combat = resolve_close_combat(ctx)
 
-        # -------------------------------------------------
-        # OBSERVABILITY: COMBAT DETAILS
-        # -------------------------------------------------
-        if event_bus and result_combat:
-            event_bus.emit(
-                {
-                    "type": "COMBAT_RESULT",
-                    "payload": {
-                        "combat": result_combat,
-                    },
-                }
-            )
+        # ✅ CRITICAL DESIGN POINT
+        # Pass ExecutionContext so the resolver can emit ACTION_EFFECT.
+        # This module MUST NOT emit COMBAT_RESULT.
+        result_combat = resolve_close_combat(ctx, context)
 
     # ----------------------------------
     # RETURN FINAL RESULT

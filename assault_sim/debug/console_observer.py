@@ -19,34 +19,20 @@ class ConsoleObserver:
 
     Design rules:
     - Presentation only (NO domain logic).
-    - Listens to the *real* domain events.
+    - Listens to the real domain events.
     """
 
     def __init__(self):
-        # -------------------------------------------------
-        # Unit formatter (single source of truth for unit UI)
-        # -------------------------------------------------
         self.unit_formatter = UnitFormatter()
-
-        # -------------------------------------------------
-        # Turn buffer (needs unit formatter)
-        # -------------------------------------------------
         self.turns = TurnBuffer(self.unit_formatter)
 
-        # -------------------------------------------------
-        # Renderers
-        # -------------------------------------------------
         self.move = MovementRenderer(self.turns)
         self.combat = CombatRenderer(self.turns)
         self.map = MapRenderer()
         self.deploy = DeploymentRenderer()
 
-        # Initial map/deployment printed once
         self._map_rendered_once = False
 
-    # =================================================
-    # EVENT BUS ENTRY POINT
-    # =================================================
     def __call__(self, event: dict):
         event_type = event.get("type")
         payload = event.get("payload", {})
@@ -64,14 +50,11 @@ class ConsoleObserver:
         # ---------------- MAP STATE ----------------
         elif event_type == "MAP_STATE":
             self.map.update_state(payload)
-
-            # Keep unit formatter in sync with game state
             self.unit_formatter.update_units(payload.get("units", []))
 
-            # Initial deployment + initial map (printed once)
+            # Initial deployment printed once
             if not self._map_rendered_once:
                 self.deploy.maybe_print()
-                self.map.render(payload.get("turn", 0))
                 self._map_rendered_once = True
 
         # ---------------- ACTION ----------------
@@ -84,11 +67,13 @@ class ConsoleObserver:
 
         # ---------------- ACTION EFFECT ----------------
         elif event_type == "ACTION_EFFECT":
-            # Close combat resolution (rich domain event)
             if payload.get("action") == "CloseCombat":
                 self.combat.on_close_combat_effect(payload)
 
         # ---------------- TURN END ----------------
         elif event_type == "TURN_END":
-            self.turns.flush()
+            # ✅ Correct, encapsulated turn closure
+            self.turns.close_turn()
+
+            # Render map AFTER the turn is fully closed
             self.map.render(payload.get("turn"))

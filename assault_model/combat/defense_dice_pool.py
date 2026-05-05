@@ -2,10 +2,10 @@
 
 import random
 import os
-from typing import List
+from typing import List, Tuple
 
-from assault_model.combat.defense_die import DefenseDie
 from assault_model.combat.dice_face import DiceFace
+from assault_model.combat.dice_color import DiceColor
 
 
 # DEBUG TRACE (configurable por entorno)
@@ -22,24 +22,34 @@ def _trace(tag: str, **data):
 class DefenseDicePool:
     """
     Pool of defense dice.
+
+    The pool contains DiceColor values directly.
+    Rolling preserves (color, face).
     """
 
-    def __init__(self, dice: List[DefenseDie]):
+    def __init__(self, dice: List[DiceColor]):
         self.dice = dice
 
         _trace(
             "DEFENSE_DICE_POOL_INIT",
             dice_count=len(dice),
-            dice=dice,
+            dice=[d.name for d in dice],  # ✅ CORRECTO
         )
 
-    def roll(self) -> List[DiceFace]:
-        results = [random.choice(list(DiceFace)) for _ in self.dice]
+    def roll(self) -> List[Tuple[DiceColor, DiceFace]]:
+        """
+        Roll all defense dice and return (color, face) tuples.
+        """
+        results = []
 
-        _trace(
-            "DEFENSE_DICE_POOL_ROLL",
-            dice_count=len(self.dice),
-            results=[r.name for r in results],
-        )
+        for color in self.dice:
+            face = random.choice(list(DiceFace))
+            results.append((color, face))
+
+            _trace(
+                "DEFENSE_DIE_ROLL",
+                color=color.name,
+                face=face.name,
+            )
 
         return results

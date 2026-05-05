@@ -1,23 +1,33 @@
 # assault_sim/debug/combat_renderer.py
 
-from assault_model.combat.dice_face import DiceFace
-
-
 class CombatRenderer:
     """
     CombatRenderer
 
     Responsibility:
     - Render Close Combat ACTION_EFFECT events in a human-readable way.
-    - Display attacker and defender with color and current HP.
-    - Display combat dice with correct faces and colors.
+    - Display all combat rounds.
+    - Display dice and HP changes per round.
     - Display final outcome.
 
     Design rules:
     - Presentation only (NO game logic).
-    - Trusts resolver-emitted payloads (flat, explicit).
-    - Uses TurnBuffer for consistent unit formatting.
+    - Payload-driven.
     """
+
+    DICE_FACE_ICON = {
+        "CRITICAL": "💥",
+        "DAMAGE": "❤️",
+        "SUPPRESS": "😵",
+        "BLANK": "⚪",
+    }
+
+    DICE_COLOR_ICON = {
+        "BLUE": "🔵",
+        "GREEN": "🟢",
+        "YELLOW": "🟡",
+        "RED": "🔴",
+    }
 
     def __init__(self, turn_buffer):
         self.turn_buffer = turn_buffer
@@ -26,28 +36,13 @@ class CombatRenderer:
     # EVENT HANDLER
     # -------------------------------------------------
     def on_close_combat_effect(self, payload: dict) -> None:
-        """
-        Handle ACTION_EFFECT with action == 'CloseCombat'.
 
-        Expected payload (subset):
-        {
-            "attacker": str,
-            "defender": str,
-            "attacker_attack_dice": [str],
-            "attacker_defense_dice": [str],
-            "defender_attack_dice": [str],
-            "defender_defense_dice": [str],
-            "outcome": str,
-            "winner": str | None,
-        }
-        """
-
-        # Header
         self.turn_buffer.add_line("         💥 COMBAT")
 
         attacker_id = payload.get("attacker")
         defender_id = payload.get("defender")
 
+        # Header
         if attacker_id and defender_id:
             atk_label = self.turn_buffer.unit_label(attacker_id)
             def_label = self.turn_buffer.unit_label(defender_id)
@@ -55,35 +50,61 @@ class CombatRenderer:
                 f"             {atk_label} vs {def_label}"
             )
 
-        # -------------------------------------------------
-        # Attacker dice
-        # -------------------------------------------------
-        atk_attack = payload.get("attacker_attack_dice", [])
-        if atk_attack:
-            dice = " ".join(
-                self._die(DiceFace[d], attacker_id)
-                for d in atk_attack
-            )
+        rounds = payload.get("rounds", [])
+
+        for r in rounds:
             self.turn_buffer.add_line(
-                f"             Attack:  {dice}"
+                f"             Round {r['round']}"
             )
 
-        # -------------------------------------------------
-        # Defender dice
-        # -------------------------------------------------
-        def_defense = payload.get("defender_defense_dice", [])
-        if def_defense:
-            dice = " ".join(
-                self._die(DiceFace[d], defender_id)
-                for d in def_defense
+            # Dice blocks
+            self._render_dice_line(
+                "Attacker attack",
+                r.get("attacker_attack_dice", [])
             )
-            self.turn_buffer.add_line(
-                f"             Defense: {dice}"
+            self._render_dice_line(
+                "Attacker defense",
+                r.get("attacker_defense_dice", [])
+            )
+            self._render_dice_line(
+                "Defender attack",
+                r.get("defender_attack_dice", [])
+            )
+            self._render_dice_line(
+                "Defender defense",
+                r.get("defender_defense_dice", [])
             )
 
-        # -------------------------------------------------
-        # Outcome
-        # -------------------------------------------------
+            # Damage block
+            atk_before = r.get("attacker_hp_before")
+            atk_after = r.get("attacker_hp_after")
+            def_before = r.get("defender_hp_before")
+            def_after = r.get("defender_hp_after")
+
+            if None not in (atk_before, atk_after, def_before, def_after):
+                atk_delta = atk_before - atk_after
+                def_delta = def_before - def_after
+
+                self.turn_buffer.add_line("                 Damage this round:")
+
+                if atk_delta > 0:
+                    self.turn_buffer.add_line(
+                        f"                     {self.turn_buffer.unit_label(attacker_id)}: "
+                        f"-{atk_delta} HP ({atk_before} → {atk_after})"
+                    )
+
+                if def_delta > 0:
+                    self.turn_buffer.add_line(
+                        f"                     {self.turn_buffer.unit_label(defender_id)}: "
+                        f"-{def_delta} HP ({def_before} → {def_after})"
+                    )
+
+                if atk_delta == 0 and def_delta == 0:
+                    self.turn_buffer.add_line(
+                        "                     No damage applied"
+                    )
+
+        # Final outcome
         outcome = payload.get("outcome")
         if outcome:
             self.turn_buffer.add_line(
@@ -93,16 +114,34 @@ class CombatRenderer:
     # -------------------------------------------------
     # INTERNAL HELPERS
     # -------------------------------------------------
-    def _die(self, face: DiceFace, unit_id: str) -> str:
-        """
-        Render a die face with the color of the owning unit.
-        """
-        color = "🔵" if unit_id.startswith("GE") else "🔴"
-        icon = {
-            DiceFace.CRITICAL: "💥",
-            DiceFace.DAMAGE: "❤️",
-            DiceFace.SUPPRESS: "😵",
-            DiceFace.BLANK: "⚪",
-        }.get(face, "?")
+    def _render_dice_line(self, label: str, dice):
+        if not dice:
+            return
 
-        return f"{color}{icon}"
+        rendered = " ".join(self._render_die(d) for d in dice)
+        self.turn_buffer.add_line(
+            f"                 {label}:  {rendered}"
+        )
+
+    def _render_die(self, die) -> str:
+        """
+        Render a die safely.
+
+        Supported formats:
+        - ("RED", "CRITICAL")
+        - {"color": "RED", "face": "CRITICAL"}
+        """
+        if isinstance(die, (tuple, list)) and len(die) == 2:
+            color, face = die
+            return (
+                self.DICE_COLOR_ICON.get(color, "❓")
+                + self.DICE_FACE_ICON.get(face, "❓")
+            )
+
+        if isinstance(die, dict):
+            return (
+                self.DICE_COLOR_ICON.get(die.get("color"), "❓")
+                + self.DICE_FACE_ICON.get(die.get("face"), "❓")
+            )
+
+        return "❓"

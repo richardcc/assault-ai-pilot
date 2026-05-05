@@ -11,17 +11,13 @@
 # IMPORTANT:
 # - PURE combat computation
 # - NO formatting
-# - Emits ACTION_EFFECT (same pattern as movement)
+# - Emits ACTION_EFFECT
 
-from assault_model.actions.combat_mode import CombatMode
-from assault_model.combat.attack_sector import AttackSector
 from assault_model.combat.attack_dice_pool import AttackDicePool
 from assault_model.combat.defense_dice_pool import DefenseDicePool
 from assault_model.combat.dice_face import DiceFace
-from assault_model.units.unit_type import UnitCategory
 from assault_model.runtime.execution_context import ExecutionContext
 
-import random
 import os
 
 DEBUG_TRACE = os.getenv("ASSAULT_DEBUG_TRACE", "0") == "1"
@@ -70,7 +66,7 @@ class CloseCombatResult:
 
 def resolve_close_combat(
     ctx,
-    context: ExecutionContext | None = None,   # ✅ ÚNICA ADICIÓN
+    context: ExecutionContext | None = None,
 ) -> CloseCombatResult:
 
     _trace(
@@ -83,17 +79,9 @@ def resolve_close_combat(
     result = CloseCombatResult()
     ctx.round_number = 1
     MAX_ROUNDS = 10
-    any_damage = False
 
     while ctx.attacker.alive and ctx.defender.alive:
         rr = CloseCombatRoundResult(ctx.round_number)
-
-        _trace(
-            "CLOSE_COMBAT_ROUND",
-            round=ctx.round_number,
-            attacker_hp=ctx.attacker.hp,
-            defender_hp=ctx.defender.hp,
-        )
 
         rr.attacker_hp_before = ctx.attacker.hp
         rr.defender_hp_before = ctx.defender.hp
@@ -105,7 +93,9 @@ def resolve_close_combat(
                 )
             ),
             "attacker_defense": DefenseDicePool(
-                ctx.attacker.unit_type.get_close_combat_defense_dice(ctx.attack_sector)
+                ctx.attacker.unit_type.get_close_combat_defense_dice(
+                    ctx.attack_sector
+                )
             ),
             "defender_attack": AttackDicePool(
                 ctx.defender.unit_type.get_close_combat_attack_dice(
@@ -113,7 +103,9 @@ def resolve_close_combat(
                 )
             ),
             "defender_defense": DefenseDicePool(
-                ctx.defender.unit_type.get_close_combat_defense_dice(ctx.attack_sector)
+                ctx.defender.unit_type.get_close_combat_defense_dice(
+                    ctx.attack_sector
+                )
             ),
         }
 
@@ -124,26 +116,25 @@ def resolve_close_combat(
         rr.defender_attack_dice = dice_results["defender_attack"]
         rr.defender_defense_dice = dice_results["defender_defense"]
 
-        attacker_effects = {
-            "damage": sum(1 for d in rr.attacker_attack_dice if d == DiceFace.DAMAGE),
-        }
-        defender_effects = {
-            "damage": sum(1 for d in rr.defender_attack_dice if d == DiceFace.DAMAGE),
-        }
+        attacker_damage = sum(
+            1 for _, face in rr.attacker_attack_dice
+            if face == DiceFace.DAMAGE
+        )
+        defender_damage = sum(
+            1 for _, face in rr.defender_attack_dice
+            if face == DiceFace.DAMAGE
+        )
 
-        if attacker_effects["damage"] or defender_effects["damage"]:
-            any_damage = True
+        rr.attacker_effects = {"damage": attacker_damage}
+        rr.defender_effects = {"damage": defender_damage}
 
-        if attacker_effects["damage"]:
-            ctx.defender.apply_damage(attacker_effects["damage"])
-        if defender_effects["damage"]:
-            ctx.attacker.apply_damage(defender_effects["damage"])
+        if attacker_damage:
+            ctx.defender.apply_damage(attacker_damage)
+        if defender_damage:
+            ctx.attacker.apply_damage(defender_damage)
 
         rr.attacker_hp_after = ctx.attacker.hp
         rr.defender_hp_after = ctx.defender.hp
-
-        rr.attacker_effects = attacker_effects
-        rr.defender_effects = defender_effects
 
         result.rounds.append(rr)
 
@@ -160,16 +151,19 @@ def resolve_close_combat(
         result.winner = ctx.defender.unit_id
         result.outcome = "attacker_eliminated"
     else:
+        any_hp_lost = any(
+            r.attacker_hp_after < r.attacker_hp_before
+            or r.defender_hp_after < r.defender_hp_before
+            for r in result.rounds
+        )
         result.winner = None
-        result.outcome = "no_decision" if any_damage else "all_hits_cancelled"
+        result.outcome = "no_decision" if any_hp_lost else "all_hits_cancelled"
 
     # -------------------------------------------------
-    # ✅ EMIT COMBAT AS ACTION_EFFECT (FLAT PAYLOAD)
+    # Emit ALL rounds as ACTION_EFFECT
     # -------------------------------------------------
-    event_bus = context.event_bus if context else None   # ✅ ÚNICO CAMBIO REAL
+    event_bus = context.event_bus if context else None
     if event_bus and result.rounds:
-        last = result.rounds[-1]
-
         event_bus.emit(
             {
                 "type": "ACTION_EFFECT",
@@ -178,14 +172,32 @@ def resolve_close_combat(
                     "attacker": ctx.attacker.unit_id,
                     "defender": ctx.defender.unit_id,
                     "sector": ctx.attack_sector.name,
-                    "attacker_attack_dice": [d.name for d in last.attacker_attack_dice],
-                    "attacker_defense_dice": [d.name for d in last.attacker_defense_dice],
-                    "defender_attack_dice": [d.name for d in last.defender_attack_dice],
-                    "defender_defense_dice": [d.name for d in last.defender_defense_dice],
-                    "attacker_hp_before": last.attacker_hp_before,
-                    "attacker_hp_after": last.attacker_hp_after,
-                    "defender_hp_before": last.defender_hp_before,
-                    "defender_hp_after": last.defender_hp_after,
+                    "rounds": [
+                        {
+                            "round": r.round_number,
+                            "attacker_attack_dice": [
+                                (color.name, face.name)
+                                for color, face in r.attacker_attack_dice
+                            ],
+                            "attacker_defense_dice": [
+                                (color.name, face.name)
+                                for color, face in r.attacker_defense_dice
+                            ],
+                            "defender_attack_dice": [
+                                (color.name, face.name)
+                                for color, face in r.defender_attack_dice
+                            ],
+                            "defender_defense_dice": [
+                                (color.name, face.name)
+                                for color, face in r.defender_defense_dice
+                            ],
+                            "attacker_hp_before": r.attacker_hp_before,
+                            "attacker_hp_after": r.attacker_hp_after,
+                            "defender_hp_before": r.defender_hp_before,
+                            "defender_hp_after": r.defender_hp_after,
+                        }
+                        for r in result.rounds
+                    ],
                     "outcome": result.outcome,
                     "winner": result.winner,
                 },

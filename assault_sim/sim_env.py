@@ -61,11 +61,11 @@ class SimEnv:
         self,
         config: SimConfig,
         debug_config: DebugConfig | None = None,
-        controller=None,   # ✅ AÑADIDO: controlador / heurística
+        controller=None,
     ):
         self.config = config
         self.debug_config = debug_config or DebugConfig(enabled=False)
-        self.controller = controller   # ✅ guardamos el controlador
+        self.controller = controller
 
         self.event_bus = EventBus() if self.debug_config.enabled else None
 
@@ -131,11 +131,11 @@ class SimEnv:
     # STEP
     # -------------------------------------------------
     def step(self, action):
-        # ✅ CAMBIO CLAVE:
-        # Si no nos pasan una acción, pedimos una al controller (heurística)
+        # If no action is provided, ask the controller (heuristic / AI)
         if action is None and self.controller is not None:
             action = self.controller.choose_action(self.game_state)
 
+        # Emit ACTION intent
         if self.event_bus and action is not None:
             self.event_bus.emit(
                 {
@@ -193,6 +193,16 @@ class SimEnv:
                     }
                 )
 
+            # ✅ CRITICAL FIX:
+            # Stop the step here. No more ACTIONS are allowed after TURN_END.
+            reward = (
+                self.game_state.vp_tracker.total_points
+                if self.game_state.vp_tracker
+                else 0
+            )
+            return self.game_state, reward, False, {}
+
+        # ---- CONTINUE MATCH ----
         reward = (
             self.game_state.vp_tracker.total_points
             if self.game_state.vp_tracker

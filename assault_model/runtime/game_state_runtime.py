@@ -248,6 +248,7 @@ class RuntimeGameState:
             state=self.base_state,
             action=action,
             combat_result=combat_result,
+            context=context,  # ✅ FIX: pass ExecutionContext to allow combat resolver to emit ACTION_EFFECT
         )
 
         self.base_state = result.new_state
@@ -284,7 +285,6 @@ class RuntimeGameState:
                         }
                     )
 
-        # ❌ COMBAT_RESULT EMISSION REMOVED
-        # Close combat is emitted by the resolver as ACTION_EFFECT
+        # Close Combat events are emitted exclusively by the resolver (ACTION_EFFECT)
 
         return result

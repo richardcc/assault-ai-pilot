@@ -13,7 +13,8 @@ In Close Combat, the relative position and facing of the attacking unit
 determines the **attack sector**. The sector influences attack and defense
 values and may enable special modifiers or restrictions.
 
-Attack sectors are determined **at the start of each Close Combat round**.
+Attack sectors are determined **at the start of each Close Combat round** and
+remain fixed for the duration of that round.
 
 ---
 
@@ -59,7 +60,7 @@ A Close Combat round is about to be resolved.
 ### Procedure
 
 1. Identify the facing of the defending unit.
-2. Identify the hex from which the attacking unit enters or attacks.
+2. Identify the hex from which the attacking unit engages the defender.
 3. Determine the relative direction between attacker and defender.
 4. Map the relative direction to one of the valid attack sectors.
 
@@ -71,7 +72,13 @@ A Close Combat round is about to be resolved.
 ### Constraints
 
 - Sector determination is purely geometric.
-- Unit status, strength, or combat results do not influence sector selection.
+- Unit status, strength, morale, or combat results do not influence sector
+  selection.
+
+### Implementation
+
+- ``/assault_model/map/combat_geometry.py``
+- Invoked by ``close_combat_resolver`` at the start of each combat round.
 
 ---
 
@@ -107,7 +114,7 @@ if the relative facing or position of the units has changed.
 ### Notes
 
 - If no facing or positional change occurred, the sector remains unchanged.
-- Rules governing facing changes are defined elsewhere.
+- Rules governing when a unit’s facing may change are defined elsewhere.
 
 ---
 
@@ -124,12 +131,28 @@ The attack sector is determined to be **REAR**.
 ### Effect
 
 - Rear attack modifiers are applied as defined in the relevant combat rules.
-- Certain defensive bonuses may be ignored.
+- Certain defensive bonuses may be ignored or reduced.
 
 ### Implementation Note
 
-Exact modifiers are defined in the Close Combat modifiers section
-(see ``cc_special_cases.rst``).
+Exact modifiers and exceptions are defined in the Close Combat modifiers
+section (see ``cc_special_cases.rst``).
+
+---
+
+Execution Model Clarification
+-----------------------------
+
+Attack sector determination is a **pure geometric calculation** and is
+executed by the combat resolver at the start of each Close Combat round.
+
+Responsibilities are split as follows:
+
+- ``AssaultAction`` declares the intent to engage in Close Combat.
+- ``close_combat_resolver`` requests attack sector determination for each
+  round and applies sector-dependent combat rules.
+- ``RuntimeGameState`` does not determine attack sectors and does not
+  influence sector logic.
 
 ---
 
@@ -138,13 +161,14 @@ Constraints and Invariants
 
 - Attack sector determination does not modify game state.
 - Sector logic is deterministic and side-effect free.
-- The same inputs must always produce the same sector.
+- The same inputs must always produce the same attack sector.
 
-Attack sector logic must not:
+Attack sector logic MUST NOT:
 
 - Apply combat modifiers directly
 - Remove or modify units
 - Trigger reactions
+- Emit domain events
 
 ---
 

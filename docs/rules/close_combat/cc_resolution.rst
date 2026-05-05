@@ -3,7 +3,7 @@ Close Combat Resolution
 
 This document specifies how Close Combat is resolved once it has been initiated.
 The rules in this section are normative and define the exact procedure used
-by the game engine to resolve close combat rounds.
+by the game engine to resolve Close Combat rounds.
 
 All rules are derived from *Assault Rulebook v2.0* §11.1.
 
@@ -50,8 +50,8 @@ hex.
 
 ### Implementation
 
-- ``/assault_model/actions/combat/CloseCombatAction.py``
-- ``/assault_model/core/game_state_runtime/RuntimeGameState.py``
+- ``/assault_model/actions/assault/AssaultAction.py``  
+- ``/assault_model/combat/close_combat_resolver.py``  
 
 ---
 
@@ -73,7 +73,7 @@ All combat effects in Close Combat are applied **simultaneously**.
 
 ### Implementation
 
-- ``/assault_model/actions/combat/CloseCombatAction.py``
+- ``/assault_model/combat/close_combat_resolver.py``  
 
 ---
 
@@ -93,6 +93,10 @@ Close Combat round, another Close Combat round may be resolved.
 - Close Combat may span multiple rounds within the same action.
 - The exact continuation or termination conditions are defined by subsequent
   rules (see CC-R05, CC-R06).
+
+### Implementation
+
+- ``/assault_model/combat/close_combat_resolver.py``  
 
 ---
 
@@ -114,7 +118,7 @@ effects of the round have been applied.
 
 ### Implementation
 
-- ``/assault_model/core/game_state_runtime/RuntimeGameState.py``
+- ``/assault_model/combat/close_combat_resolver.py``  
 
 ---
 
@@ -135,7 +139,7 @@ Both units meet the elimination criteria after a Close Combat round.
 
 ### Implementation
 
-- ``/assault_model/actions/resolution/ActionResolutionResult.py``
+- ``/assault_model/combat/close_combat_resolver.py``  
 
 ---
 
@@ -160,13 +164,50 @@ A Close Combat ends when:
 
 ---
 
+Execution Model Clarification
+-----------------------------
+
+Close Combat resolution is executed exclusively by the combat resolver.
+
+Responsibilities are split as follows:
+
+- ``AssaultAction`` declares the intent to initiate Close Combat.
+- ``close_combat_resolver`` executes all combat rounds, rolls dice, applies
+  simultaneous effects, determines elimination and outcome.
+- ``RuntimeGameState`` orchestrates action sequencing and turn progression
+  but does **not** resolve Close Combat logic and does **not** emit combat results.
+
+---
+
+Domain Event Contract
+---------------------
+
+Each resolved Close Combat produces a domain event of type ``ACTION_EFFECT``
+with ``action == "CloseCombat"``.
+
+This event is the single authoritative representation of the resolved
+Close Combat round and includes:
+
+- Attacker and defender unit identifiers
+- Final round attack and defense dice results
+- Hit points before and after the round
+- Combat outcome and winner
+
+The runtime engine MUST NOT emit a ``COMBAT_RESULT`` event for Close Combat.
+All presentation layers and observers MUST consume the ``ACTION_EFFECT`` event
+when rendering Close Combat.
+
+---
+
 Notes and Constraints
 ---------------------
 
-- Close Combat resolution is owned exclusively by the runtime rule engine.
-- Player actions do not directly resolve combat effects.
-- ``GameState`` remains immutable during a Close Combat round and is updated
-  only through resolution results.
+- Close Combat resolution is owned exclusively by the combat resolver.
+- Player actions declare intent but do not directly resolve combat effects.
+- ``GameState`` is not mutated during effect calculation within a round; state
+  updates are applied only after the round is fully resolved.
+- Runtime orchestration code must not reconstruct or duplicate Close Combat
+  results.
 
 ---
 
