@@ -27,7 +27,10 @@ class ConsoleObserver:
         self.turns = TurnBuffer(self.unit_formatter)
 
         self.move = MovementRenderer(self.turns)
-        self.combat = CombatRenderer(self.turns)
+
+        # ✅ FIX: inject UnitFormatter into CombatRenderer
+        self.combat = CombatRenderer(self.turns, self.unit_formatter)
+
         self.map = MapRenderer()
         self.deploy = DeploymentRenderer()
 
@@ -49,6 +52,7 @@ class ConsoleObserver:
 
         # ---------------- MAP STATE ----------------
         elif event_type == "MAP_STATE":
+            # Snapshot of the consolidated game state (end of turn)
             self.map.update_state(payload)
             self.unit_formatter.update_units(payload.get("units", []))
 
@@ -68,11 +72,12 @@ class ConsoleObserver:
         # ---------------- ACTION EFFECT ----------------
         elif event_type == "ACTION_EFFECT":
             if payload.get("action") == "CloseCombat":
+                # ✅ CombatRenderer now handles HP refresh per ROUND
                 self.combat.on_close_combat_effect(payload)
 
         # ---------------- TURN END ----------------
         elif event_type == "TURN_END":
-            # ✅ Correct, encapsulated turn closure
+            # Close and print the turn
             self.turns.close_turn()
 
             # Render map AFTER the turn is fully closed

@@ -81,6 +81,23 @@ class ActionCatalog:
             # Enemy hex → Close Combat (ASSAULT)
             # ------------------------------
             elif mp.outcome == MovementOutcome.END_IN_ENEMY_HEX:
+
+                # ✅ FIX: resolver el target REAL y comprobar que está vivo
+                target = next(
+                    (u for u in self.gs.units if u.unit_id == mp.target_unit_id),
+                    None,
+                )
+
+                # ✅ FIX: si no existe o está muerto, SE IGNORA COMPLETAMENTE
+                if target is None or not target.alive:
+                    _trace(
+                        "ASSAULT_IGNORED",
+                        attacker=active.unit_id,
+                        target=mp.target_unit_id,
+                        reason="enemy_not_alive",
+                    )
+                    continue
+
                 _trace(
                     "ACTION_ADD",
                     action="AssaultAction",

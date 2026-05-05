@@ -23,7 +23,6 @@ class MovementRules:
         """
         paths: list[MovementPath] = []
 
-        # ✅ unit.position is a HexCoord
         pos: HexCoord = unit.position
         q = pos.q
         r = pos.r
@@ -41,8 +40,13 @@ class MovementRules:
 
             dest_hex = HexCoord(target_q, target_r)
 
+            # ✅ FIX: only alive units block hexes
             occupant = next(
-                (u for u in game_state.units if u.position == dest_hex),
+                (
+                    u
+                    for u in game_state.units
+                    if u.alive and u.position == dest_hex
+                ),
                 None,
             )
 

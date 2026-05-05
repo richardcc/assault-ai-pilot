@@ -5,49 +5,29 @@ class MovementRenderer:
     MovementRenderer
 
     Responsibility:
-    - Render UNIT_MOVED domain events in a human-readable form.
-    - Attach movement details to the corresponding MoveAction line when possible.
-    - Fall back to a standalone movement line if attachment is not possible.
+    - Render UNIT_MOVED domain events.
+    - Attach movement INLINE to the corresponding action line.
+    - Fall back to a standalone line only if attachment is impossible.
 
     Design rules:
     - Presentation only (NO game logic).
-    - Does NOT decide or validate movement.
     - Reflects exactly what the engine reports.
     """
 
     def __init__(self, turn_buffer):
-        """
-        Parameters
-        ----------
-        turn_buffer : TurnBuffer
-            Buffer that accumulates and prints per-turn output lines.
-        """
         self.turn_buffer = turn_buffer
 
     # -------------------------------------------------
     # EVENT HANDLER
     # -------------------------------------------------
     def on_unit_moved(self, payload: dict) -> None:
-        """
-        Handle a UNIT_MOVED event.
-
-        Expected payload:
-        {
-            "unit_id": str,
-            "from": HexCoord,
-            "to": HexCoord,
-        }
-        """
-
         unit_id = payload.get("unit_id")
         from_hex = payload.get("from")
         to_hex = payload.get("to")
 
-        # Defensive validation
         if not unit_id or not from_hex or not to_hex:
             return
 
-        # Ignore non-movements (engine already filters, this is just safety)
         if from_hex.q == to_hex.q and from_hex.r == to_hex.r:
             return
 
@@ -58,7 +38,7 @@ class MovementRenderer:
         )
 
         # -------------------------------------------------
-        # Attach movement to the last action line if possible
+        # Try to attach INLINE to last action line
         # -------------------------------------------------
         attached = self.turn_buffer.append_to_last(
             unit_id,
@@ -66,8 +46,7 @@ class MovementRenderer:
         )
 
         # -------------------------------------------------
-        # Fallback: standalone movement line
-        # (always use formatted unit label)
+        # Fallback (should be rare)
         # -------------------------------------------------
         if not attached:
             label = self.turn_buffer.unit_label(unit_id)
@@ -79,14 +58,6 @@ class MovementRenderer:
     # INTERNAL HELPERS
     # -------------------------------------------------
     def _arrow(self, from_hex, to_hex) -> str:
-        """
-        Return a directional arrow based on axial delta.
-
-        Note:
-        - This intentionally supports only the most common directions.
-        - Any other delta falls back to a neutral dot (•).
-        """
-
         dq = to_hex.q - from_hex.q
         dr = to_hex.r - from_hex.r
 

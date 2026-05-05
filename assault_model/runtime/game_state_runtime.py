@@ -1,29 +1,6 @@
 """
 RuntimeGameState is the authoritative execution engine of the game.
-
 This class is responsible for ALL game evolution.
-
-Responsibilities:
-- Apply player / AI actions
-- Resolve movement, combat, and reactions
-- Manage turn lifecycle (start / end)
-- Maintain activation state
-- Trigger close combat and reactions
-- Update GameState in a valid way
-- Evaluate MATCH END conditions
-
-Non-responsibilities:
-- Does NOT decide player intent
-- Does NOT choose actions
-- Does NOT rank or score moves
-- Does NOT interact with UI or observers directly
-
-Design rule:
-- RuntimeGameState decides WHAT HAPPENS when an action is applied.
-- RuntimeGameState is the single source of truth for game rules evaluation.
-
-Contract guarantee:
-- Any change to GameState MUST pass through RuntimeGameState.
 """
 
 from assault_model.state.game_state import GameState
@@ -38,8 +15,6 @@ from assault_model.actions.action_catalog import ActionCatalog
 
 from assault_model.combat.combat_resolution import CombatResolutionResult
 from assault_model.combat.reaction_context import ReactionContext
-from assault_model.combat.reaction_trigger import ReactionTrigger
-from assault_model.combat.line_of_sight import has_line_of_sight
 
 from assault_model.runtime.execution_context import ExecutionContext
 from assault_model.map.hex_coord import HexCoord
@@ -59,10 +34,6 @@ def _trace(tag: str, **data):
 class RuntimeGameState:
     """
     Authoritative engine implementation.
-
-    IMPORTANT:
-    - This engine does NOT drive execution by itself.
-    - It evaluates rules over world state.
     """
 
     def __init__(self, base_state: GameState, scenario):
@@ -70,82 +41,65 @@ class RuntimeGameState:
         self.scenario = scenario
         self.turn = TurnState(turn_number=base_state.turn)
 
-        # --- MATCH STATE ---
         self._match_over = False
         self._winner = None
         self._end_reason = None
 
     # =================================================
-    # TURN CONTROL (ENGINE AUTHORITY)
+    # TURN CONTROL
     # =================================================
     def start_turn(self) -> None:
         self.base_state.activation_state.reset(self.base_state.units)
         self.base_state.activation_state.next_unit()
+
+        _trace(
+            "TURN_START_UNITS",
+            units=[
+                {
+                    "id": u.unit_id,
+                    "alive": u.alive,
+                    "suppressed": getattr(u, "suppressed", False),
+                    "fallback": getattr(u, "fallback", False),
+                }
+                for u in self.base_state.units
+            ],
+        )
 
     def end_turn(self) -> None:
         self.base_state.end_turn()
         self.turn = TurnState(turn_number=self.base_state.turn)
 
     # =================================================
-    # MATCH END CONTRACT (ENGINE AUTHORITY)
+    # MATCH END
     # =================================================
     def is_match_over(self) -> bool:
         return self._match_over
 
-    def get_match_result(self) -> dict | None:
-        if not self._match_over:
-            return None
-
-        return {
-            "winner": self._winner,
-            "reason": self._end_reason,
-        }
-
     def _check_match_end(self):
-        """
-        Evaluate ALL match end conditions defined by the scenario.
-        """
-
-        # --- Rule 1: Last side standing ---
         alive_units = [u for u in self.base_state.units if u.alive]
         alive_sides = {u.side for u in alive_units}
 
         if len(alive_sides) == 1:
             self._match_over = True
             self._winner = next(iter(alive_sides))
-            self._end_reason = "last_side_standing"
+            _trace("MATCH_END", winner=self._winner)
 
-            _trace(
-                "MATCH_END_DECIDED",
-                reason=self._end_reason,
-                winner=self._winner,
-            )
-            return
-
-        # --- Rule 2: Max turns reached (scenario rule) ---
         if (
             self.scenario.max_turns is not None
             and self.base_state.turn >= self.scenario.max_turns
         ):
             self._match_over = True
             self._winner = None
-            self._end_reason = "max_turns_reached"
-
-            _trace(
-                "MATCH_END_DECIDED",
-                reason=self._end_reason,
-                turn=self.base_state.turn,
-            )
-            return
+            _trace("MATCH_END", reason="max_turns")
 
     # =================================================
-    # ACTIVATION CONTRACT
+    # ACTIVATION
     # =================================================
     def get_activable_units(self):
         gs = self.base_state
         catalog = ActionCatalog(gs)
-
         activable = []
+
         for unit in gs.units:
             if not unit.alive:
                 continue
@@ -163,31 +117,34 @@ class RuntimeGameState:
             finally:
                 gs.activation_state.active_unit = prev_active
 
-            real_actions = [a for a in actions if not isinstance(a, WaitAction)]
-            if real_actions:
+            if any(not isinstance(a, WaitAction) for a in actions):
                 activable.append(unit)
 
         return activable
 
     def turn_has_ended(self) -> bool:
-        return len(self.get_activable_units()) == 0
+        return not self.base_state.activation_state.remaining
 
     # =================================================
     # INTERNAL ACTIVATION
     # =================================================
     def _consume_activation(self, unit):
-        activated = self.base_state.activation_state.activated
-        if unit not in activated:
-            activated.append(unit)
+        if unit is None:
+            return
+        _trace("ACTIVATION_CONSUME", unit=unit.unit_id)
+        self.base_state.activation_state.consume(unit)
 
     def _advance_activation(self):
-        next_unit = self.base_state.activation_state.next_unit()
-        if next_unit is None:
-            self.end_turn()
-            self.start_turn()
+        self.base_state.activation_state.next_unit()
+        active = (
+            self.base_state.activation_state.active_unit.unit_id
+            if self.base_state.activation_state.active_unit
+            else None
+        )
+        _trace("ACTIVATION_ADVANCE", active=active)
 
     # =================================================
-    # MAIN EXECUTION ENTRY POINT
+    # MAIN EXECUTION
     # =================================================
     def apply_action(
         self,
@@ -197,40 +154,62 @@ class RuntimeGameState:
     ):
         event_bus = context.event_bus if context else None
 
-        attacker_id = getattr(action, "unit_id", None)
         attacker = next(
-            (u for u in self.base_state.units if u.unit_id == attacker_id),
+            (u for u in self.base_state.units if u.unit_id == getattr(action, "unit_id", None)),
             None,
         )
 
+        _trace(
+            "APPLY_ACTION_START",
+            action=action.__class__.__name__,
+            attacker=attacker.unit_id if attacker else None,
+        )
+
         # -------------------------------------------------
-        # CAPTURE PRE-MOVE POSITION (IMMUTABLE SNAPSHOT)
+        # CAPTURE PRE-MOVE POSITION
         # -------------------------------------------------
-        prev_position: HexCoord | None = None
-        if isinstance(action, MoveAction) and attacker and attacker.position:
+        prev_position = None
+        assault_target_position = None
+
+        if attacker and attacker.position:
             prev_position = HexCoord(attacker.position.q, attacker.position.r)
 
         # -------------------------------------------------
-        # REACTION RESOLUTION
+        # ASSAULT MOVE → EMIT BEFORE COMBAT (KEY POINT)
         # -------------------------------------------------
-        if self.base_state.reaction_context is not None:
-            self.base_state.clear_reaction()
-            if attacker:
-                self._consume_activation(attacker)
-            self._advance_activation()
-            self._check_match_end()
-            return None
+        if (
+            isinstance(action, AssaultAction)
+            and prev_position
+            and event_bus
+        ):
+            target = next(
+                (u for u in self.base_state.units if u.unit_id == action.target_id),
+                None,
+            )
+            if target and target.position:
+                assault_target_position = HexCoord(
+                    target.position.q,
+                    target.position.r,
+                )
 
-        # -------------------------------------------------
-        # INVALID ATTACKER
-        # -------------------------------------------------
-        if attacker is None or not attacker.alive:
-            active = self.base_state.activation_state.active_unit
-            if active:
-                self._consume_activation(active)
-            self._advance_activation()
-            self._check_match_end()
-            return None
+                _trace(
+                    "UNIT_MOVED_EMIT",
+                    unit=action.unit_id,
+                    frm=(prev_position.q, prev_position.r),
+                    to=(assault_target_position.q, assault_target_position.r),
+                )
+
+                # ✅ MOVEMENT SHOWN BEFORE COMBAT
+                event_bus.emit(
+                    {
+                        "type": "UNIT_MOVED",
+                        "payload": {
+                            "unit_id": action.unit_id,
+                            "from": prev_position,
+                            "to": assault_target_position,
+                        },
+                    }
+                )
 
         # -------------------------------------------------
         # WAIT
@@ -242,24 +221,25 @@ class RuntimeGameState:
             return None
 
         # -------------------------------------------------
-        # MOVE / COMBAT (delegated to resolver)
+        # RESOLVE ACTION (COMBAT OR MOVE)
         # -------------------------------------------------
         result = resolve_action(
             state=self.base_state,
             action=action,
             combat_result=combat_result,
-            context=context,  # ✅ FIX: pass ExecutionContext to allow combat resolver to emit ACTION_EFFECT
+            context=context,
         )
 
         self.base_state = result.new_state
+
         self._consume_activation(attacker)
         self._advance_activation()
         self._check_match_end()
 
         # -------------------------------------------------
-        # DOMAIN EVENT: UNIT MOVED (TRANSITION EVENT)
+        # MOVEACTION → EMIT AFTER RESOLUTION
         # -------------------------------------------------
-        if event_bus and isinstance(action, MoveAction) and prev_position is not None:
+        if event_bus and prev_position and isinstance(action, MoveAction):
             unit_after = next(
                 (u for u in self.base_state.units if u.unit_id == action.unit_id),
                 None,
@@ -270,21 +250,22 @@ class RuntimeGameState:
                     unit_after.position.r,
                 )
 
-                if (
-                    prev_position.q != new_position.q
-                    or prev_position.r != new_position.r
-                ):
-                    event_bus.emit(
-                        {
-                            "type": "UNIT_MOVED",
-                            "payload": {
-                                "unit_id": unit_after.unit_id,
-                                "from": prev_position,
-                                "to": new_position,
-                            },
-                        }
-                    )
+                _trace(
+                    "UNIT_MOVED_EMIT",
+                    unit=action.unit_id,
+                    frm=(prev_position.q, prev_position.r),
+                    to=(new_position.q, new_position.r),
+                )
 
-        # Close Combat events are emitted exclusively by the resolver (ACTION_EFFECT)
+                event_bus.emit(
+                    {
+                        "type": "UNIT_MOVED",
+                        "payload": {
+                            "unit_id": action.unit_id,
+                            "from": prev_position,
+                            "to": new_position,
+                        },
+                    }
+                )
 
         return result

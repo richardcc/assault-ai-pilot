@@ -12,11 +12,12 @@ class UnitFormatter:
     Design rules:
     - Presentation-only (NO game logic).
     - Reads unit state from the current unit list (GameState snapshot).
-    - If unit is unknown (e.g., early events), falls back gracefully.
+    - Supports temporary HP overrides for accurate per-round combat rendering.
     """
 
     def __init__(self):
         self._units = []
+        self._hp_override = {}  # ✅ temporary visual overrides
 
     # -------------------------------------------------
     # STATE UPDATE
@@ -25,12 +26,20 @@ class UnitFormatter:
         """
         Update the current unit list (typically on MAP_STATE).
 
-        Expected unit attributes:
-        - unit_id: str
-        - side: str ("GE" / "US")
-        - hp: int
+        This resets any temporary HP overrides.
         """
         self._units = units or []
+        self._hp_override.clear()
+
+    # -------------------------------------------------
+    # HP OVERRIDE (VISUAL ONLY)
+    # -------------------------------------------------
+    def override_hp(self, unit_id: str, hp: int):
+        """
+        Temporarily override HP displayed for a unit.
+        Used during combat rounds ONLY.
+        """
+        self._hp_override[unit_id] = max(0, hp)
 
     # -------------------------------------------------
     # PUBLIC API
@@ -39,17 +48,23 @@ class UnitFormatter:
         """
         Return the formatted label for a unit.
 
-        Format:
-        - 🔵GE_1 ❤️❤️❤️
-        - 🔴US_2 ❤️❤️
+        Examples:
+        - 🔵GE_1 ❤️❤️
+        - 🔴US_2 ❤️
         """
 
         for u in self._units:
             if u.unit_id == unit_id:
                 icon = "🔵" if u.side == "GE" else "🔴"
-                hp = max(0, getattr(u, "hp", 0))
-                hearts = "❤️" * hp
+
+                # ✅ Use override if present, otherwise real unit.hp
+                hp = self._hp_override.get(
+                    unit_id,
+                    getattr(u, "hp", 0)
+                )
+
+                hearts = "❤️" * max(0, hp)
                 return f"{icon}{u.unit_id} {hearts}".strip()
 
-        # Fallback (unit not yet known to the formatter)
+        # Fallback if unit is unknown
         return unit_id

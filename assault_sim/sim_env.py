@@ -1,30 +1,7 @@
 """
 Simulation Environment (SimEnv)
-
-ROLE:
-- High-level coordinator of the simulation loop.
-- Bridges the engine (RuntimeGameState), AI/controllers, and observability.
-
-RESPONSIBILITIES:
-- Load catalogs and scenario data.
-- Create the initial GameState and RuntimeGameState.
-- Orchestrate reset and step cycles.
-- Dispatch chosen actions to the engine.
-- Emit observability events through EventBus.
-- Terminate the episode when the engine reports a terminal state.
-
-NON-RESPONSIBILITIES:
-- Does NOT define gameplay rules.
-- Does NOT decide unit activation rules.
-- Does NOT decide turn lifecycle semantics.
-- Does NOT decide match end conditions.
-
-DESIGN RULE:
-- SimEnv orchestrates WHEN things happen.
-- The engine decides WHAT happens.
 """
 
-import json
 import os
 
 from assault_sim.config.config_loader import SimConfig
@@ -51,12 +28,6 @@ def _trace(tag: str, **data):
 
 
 class SimEnv:
-    """
-    High-level simulation environment.
-
-    Pure orchestration layer.
-    """
-
     def __init__(
         self,
         config: SimConfig,
@@ -72,7 +43,6 @@ class SimEnv:
         self.scenario = None
         self.game_state: GameState | None = None
         self.runtime: RuntimeGameState | None = None
-        self.player_config: dict[str, dict] = {}
 
     # -------------------------------------------------
     # RESET
@@ -92,15 +62,11 @@ class SimEnv:
         self.scenario = load_scenario(scenario_path, unit_catalog, map_catalog)
         self.game_state = GameState.from_scenario(self.scenario)
 
-        # Engine
         self.runtime = RuntimeGameState(self.game_state, self.scenario)
 
         self.runtime.start_turn()
         self.game_state = self.runtime.base_state
 
-        # -------------------------------------------------
-        # OBSERVABILITY
-        # -------------------------------------------------
         if self.event_bus:
             self.event_bus.emit(
                 {
@@ -131,11 +97,10 @@ class SimEnv:
     # STEP
     # -------------------------------------------------
     def step(self, action):
-        # If no action is provided, ask the controller (heuristic / AI)
+
         if action is None and self.controller is not None:
             action = self.controller.choose_action(self.game_state)
 
-        # Emit ACTION intent
         if self.event_bus and action is not None:
             self.event_bus.emit(
                 {
@@ -152,13 +117,11 @@ class SimEnv:
                 }
             )
 
-        # ---- EXECUTION CONTEXT ----
         context = ExecutionContext(event_bus=self.event_bus)
-
         self.runtime.apply_action(action, context=context)
         self.game_state = self.runtime.base_state
 
-        # ---- MATCH END ----
+        # ----- MATCH END -----
         if self.runtime.is_match_over():
             reward = (
                 self.game_state.vp_tracker.total_points
@@ -167,8 +130,11 @@ class SimEnv:
             )
             return self.game_state, reward, True, {}
 
-        # ---- TURN END ----
-        if self.runtime.turn_has_ended():
+        # ----- TURN END (✅ FIX) -----
+        if (
+            self.runtime.turn_has_ended()
+            and self.game_state.active_unit is None
+        ):
             if self.event_bus:
                 self.event_bus.emit(
                     {
@@ -193,8 +159,10 @@ class SimEnv:
                     }
                 )
 
-            # ✅ CRITICAL FIX:
-            # Stop the step here. No more ACTIONS are allowed after TURN_END.
+            self.runtime.end_turn()
+            self.runtime.start_turn()
+            self.game_state = self.runtime.base_state
+
             reward = (
                 self.game_state.vp_tracker.total_points
                 if self.game_state.vp_tracker
@@ -202,7 +170,7 @@ class SimEnv:
             )
             return self.game_state, reward, False, {}
 
-        # ---- CONTINUE MATCH ----
+        # ----- CONTINUE TURN -----
         reward = (
             self.game_state.vp_tracker.total_points
             if self.game_state.vp_tracker

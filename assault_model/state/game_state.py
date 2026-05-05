@@ -14,7 +14,7 @@ from assault_model.core.victory_conditions import VictoryConditions
 from assault_model.core.vp_tracker import VictoryPointTracker
 from assault_model.state.turn import TurnState, TurnPhase
 from assault_model.core.activation import ActivationState
-from assault_model.map.hex_coord import HexCoord  # ✅ needed
+from assault_model.map.hex_coord import HexCoord
 
 # --- COMBAT IMPORTS ---
 from assault_model.actions.combat_mode import CombatMode
@@ -34,6 +34,15 @@ def _trace(tag: str, **data):
         return
     payload = " ".join(f"{k}={v}" for k, v in data.items())
     print(f"[TRACE][{tag}] {payload}")
+
+
+# =================================================
+# SIDE → HEX OWNERSHIP MAPPING (DECLARATIVE)
+# =================================================
+SIDE_TO_HEX_OWNERSHIP: Dict[str, HexOwnership] = {
+    "GE": HexOwnership.SIDE_A,
+    "US": HexOwnership.SIDE_B,
+}
 
 
 class GameState:
@@ -98,7 +107,6 @@ class GameState:
             if not unit.alive or not unit.position:
                 continue
 
-            # ✅ unit.position is HexCoord
             pos: HexCoord = unit.position
             coords = (pos.q, pos.r)
 
@@ -109,15 +117,19 @@ class GameState:
 
             if len(present_sides) == 1:
                 side = next(iter(present_sides))
-                hex_state.ownership = (
-                    HexOwnership.SIDE_A if side == "GE"
-                    else HexOwnership.SIDE_B
+                hex_state.ownership = SIDE_TO_HEX_OWNERSHIP.get(
+                    side,
+                    HexOwnership.NONE,
                 )
                 hex_state.contested = False
 
             elif len(present_sides) > 1:
                 hex_state.ownership = HexOwnership.NONE
                 hex_state.contested = True
+
+            else:
+                hex_state.ownership = HexOwnership.NONE
+                hex_state.contested = False
 
     # =================================================
     # TURN END

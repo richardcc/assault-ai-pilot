@@ -8,7 +8,7 @@ class CombatRenderer:
     - Render Close Combat ACTION_EFFECT events in a human-readable way.
     - Display all combat rounds.
     - Display dice and HP changes per round.
-    - Display final outcome.
+    - Keep HP visually correct BETWEEN rounds using formatter overrides.
 
     Design rules:
     - Presentation only (NO game logic).
@@ -29,8 +29,9 @@ class CombatRenderer:
         "RED": "🔴",
     }
 
-    def __init__(self, turn_buffer):
+    def __init__(self, turn_buffer, unit_formatter):
         self.turn_buffer = turn_buffer
+        self.unit_formatter = unit_formatter
 
     # -------------------------------------------------
     # EVENT HANDLER
@@ -53,58 +54,71 @@ class CombatRenderer:
         rounds = payload.get("rounds", [])
 
         for r in rounds:
+            # ---------------- ROUND HEADER ----------------
             self.turn_buffer.add_line(
                 f"             Round {r['round']}"
             )
 
-            # Dice blocks
+            # ---------------- DICE ----------------
             self._render_dice_line(
                 "Attacker attack",
-                r.get("attacker_attack_dice", [])
+                r.get("attacker_attack_dice", []),
             )
             self._render_dice_line(
                 "Attacker defense",
-                r.get("attacker_defense_dice", [])
+                r.get("attacker_defense_dice", []),
             )
             self._render_dice_line(
                 "Defender attack",
-                r.get("defender_attack_dice", [])
+                r.get("defender_attack_dice", []),
             )
             self._render_dice_line(
                 "Defender defense",
-                r.get("defender_defense_dice", [])
+                r.get("defender_defense_dice", []),
             )
 
-            # Damage block
+            # ---------------- DAMAGE ----------------
             atk_before = r.get("attacker_hp_before")
             atk_after = r.get("attacker_hp_after")
             def_before = r.get("defender_hp_before")
             def_after = r.get("defender_hp_after")
 
-            if None not in (atk_before, atk_after, def_before, def_after):
-                atk_delta = atk_before - atk_after
-                def_delta = def_before - def_after
+            self.turn_buffer.add_line("                 Damage this round:")
 
-                self.turn_buffer.add_line("                 Damage this round:")
+            damage_printed = False
 
-                if atk_delta > 0:
+            if atk_before is not None and atk_after is not None:
+                delta = atk_before - atk_after
+                if delta > 0:
                     self.turn_buffer.add_line(
                         f"                     {self.turn_buffer.unit_label(attacker_id)}: "
-                        f"-{atk_delta} HP ({atk_before} → {atk_after})"
+                        f"-{delta} HP ({atk_before} → {atk_after})"
                     )
+                    damage_printed = True
 
-                if def_delta > 0:
+            if def_before is not None and def_after is not None:
+                delta = def_before - def_after
+                if delta > 0:
                     self.turn_buffer.add_line(
                         f"                     {self.turn_buffer.unit_label(defender_id)}: "
-                        f"-{def_delta} HP ({def_before} → {def_after})"
+                        f"-{delta} HP ({def_before} → {def_after})"
                     )
+                    damage_printed = True
 
-                if atk_delta == 0 and def_delta == 0:
-                    self.turn_buffer.add_line(
-                        "                     No damage applied"
-                    )
+            if not damage_printed:
+                self.turn_buffer.add_line(
+                    "                     No damage applied"
+                )
 
-        # Final outcome
+            # ✅ CRITICAL FIX:
+            # Update visual HP for NEXT round using overrides
+            if attacker_id is not None and atk_after is not None:
+                self.unit_formatter.override_hp(attacker_id, atk_after)
+
+            if defender_id is not None and def_after is not None:
+                self.unit_formatter.override_hp(defender_id, def_after)
+
+        # ---------------- FINAL OUTCOME ----------------
         outcome = payload.get("outcome")
         if outcome:
             self.turn_buffer.add_line(
@@ -124,13 +138,6 @@ class CombatRenderer:
         )
 
     def _render_die(self, die) -> str:
-        """
-        Render a die safely.
-
-        Supported formats:
-        - ("RED", "CRITICAL")
-        - {"color": "RED", "face": "CRITICAL"}
-        """
         if isinstance(die, (tuple, list)) and len(die) == 2:
             color, face = die
             return (
