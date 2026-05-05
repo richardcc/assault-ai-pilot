@@ -11,13 +11,13 @@ RESPONSIBILITIES:
 - Orchestrate reset and step cycles.
 - Dispatch chosen actions to the engine.
 - Emit observability events through EventBus.
-- Decide episode termination (MATCH_END, max_turns).
+- Terminate the episode when the engine reports a terminal state.
 
 NON-RESPONSIBILITIES:
 - Does NOT define gameplay rules.
 - Does NOT decide unit activation rules.
 - Does NOT decide turn lifecycle semantics.
-- Does NOT inspect ActionCatalog for rule inference.
+- Does NOT decide match end conditions.
 
 DESIGN RULE:
 - SimEnv orchestrates WHEN things happen.
@@ -34,14 +34,12 @@ from assault_model.core.scenario_loader import load_scenario
 
 from assault_model.state.game_state import GameState
 from assault_model.runtime.game_state_runtime import RuntimeGameState
+from assault_model.runtime.execution_context import ExecutionContext
 
 from assault_sim.debug.debug_config import DebugConfig
 from assault_sim.debug.event_bus import EventBus
 
 
-# -------------------------------------------------
-# DEVELOPMENT TRACE (NOT OBSERVABILITY)
-# -------------------------------------------------
 DEBUG_TRACE = os.getenv("ASSAULT_DEBUG_TRACE", "0") == "1"
 
 
@@ -56,12 +54,18 @@ class SimEnv:
     """
     High-level simulation environment.
 
-    This class is pure orchestration.
+    Pure orchestration layer.
     """
 
-    def __init__(self, config: SimConfig, debug_config: DebugConfig | None = None):
+    def __init__(
+        self,
+        config: SimConfig,
+        debug_config: DebugConfig | None = None,
+        controller=None,   # ✅ AÑADIDO: controlador / heurística
+    ):
         self.config = config
         self.debug_config = debug_config or DebugConfig(enabled=False)
+        self.controller = controller   # ✅ guardamos el controlador
 
         self.event_bus = EventBus() if self.debug_config.enabled else None
 
@@ -74,14 +78,6 @@ class SimEnv:
     # RESET
     # -------------------------------------------------
     def reset(self):
-        """
-        Fully reset the simulation.
-
-        - Load catalogs and scenario.
-        - Create GameState and RuntimeGameState.
-        - Emit RESET / UNIT_LOADED / MAP_STATE events.
-        """
-
         root = self.config.data_root
 
         unit_catalog = load_unit_catalog(root / self.config.unit_catalog)
@@ -95,54 +91,27 @@ class SimEnv:
 
         self.scenario = load_scenario(scenario_path, unit_catalog, map_catalog)
         self.game_state = GameState.from_scenario(self.scenario)
-        self.runtime = RuntimeGameState(self.game_state)
 
-        # Controller configuration (optional)
-        env_config_path = root / "env_config.json"
-        if env_config_path.exists():
-            with open(env_config_path, "r", encoding="utf-8") as f:
-                env_config = json.load(f)
-                self.player_config = env_config.get("players", {})
-        else:
-            self.player_config = {}
+        # Engine
+        self.runtime = RuntimeGameState(self.game_state, self.scenario)
+
+        self.runtime.start_turn()
+        self.game_state = self.runtime.base_state
 
         # -------------------------------------------------
         # OBSERVABILITY
         # -------------------------------------------------
         if self.event_bus:
-            self.game_state.event_bus = self.event_bus
-
             self.event_bus.emit(
                 {
                     "type": "RESET",
                     "payload": {
                         "scenario": self.scenario.name,
                         "turn": self.game_state.turn,
-                        "game_map": self.game_state.game_map,
                     },
                 }
             )
 
-            for unit in self.game_state.units:
-                side_cfg = self.player_config.get(unit.side, {})
-                self.event_bus.emit(
-                    {
-                        "type": "UNIT_LOADED",
-                        "payload": {
-                            "unit_id": unit.unit_id,
-                            "side": unit.side,
-                            "position": unit.position,
-                            "controller": side_cfg.get("controller", "heuristic"),
-                            "heuristic": side_cfg.get("heuristic", "HeuristicBase"),
-                        },
-                    }
-                )
-
-        # Start first turn
-        self.runtime.start_turn()
-        self.game_state = self.runtime.base_state
-
-        if self.event_bus:
             self.event_bus.emit(
                 {
                     "type": "MAP_STATE",
@@ -162,11 +131,11 @@ class SimEnv:
     # STEP
     # -------------------------------------------------
     def step(self, action):
-        """
-        Apply a single external action (agent intent).
-        """
+        # ✅ CAMBIO CLAVE:
+        # Si no nos pasan una acción, pedimos una al controller (heurística)
+        if action is None and self.controller is not None:
+            action = self.controller.choose_action(self.game_state)
 
-        # ---- OBSERVABILITY: ACTION INTENT ----
         if self.event_bus and action is not None:
             self.event_bus.emit(
                 {
@@ -183,35 +152,14 @@ class SimEnv:
                 }
             )
 
-        # ---- ENGINE EXECUTION ----
-        self.runtime.apply_action(action)
+        # ---- EXECUTION CONTEXT ----
+        context = ExecutionContext(event_bus=self.event_bus)
+
+        self.runtime.apply_action(action, context=context)
         self.game_state = self.runtime.base_state
 
-        _trace(
-            "ACTIVE_UNIT",
-            unit=self.game_state.active_unit.unit_id
-            if self.game_state.active_unit
-            else None,
-        )
-
-        # ---- MATCH END (single side remaining) ----
-        alive_units = [u for u in self.game_state.units if u.alive]
-        alive_sides = {u.side for u in alive_units}
-
-        if len(alive_sides) == 1:
-            winner = next(iter(alive_sides))
-
-            if self.event_bus:
-                self.event_bus.emit(
-                    {
-                        "type": "MATCH_END",
-                        "payload": {
-                            "winner": winner,
-                            "reason": "last_side_standing",
-                        },
-                    }
-                )
-
+        # ---- MATCH END ----
+        if self.runtime.is_match_over():
             reward = (
                 self.game_state.vp_tracker.total_points
                 if self.game_state.vp_tracker
@@ -219,7 +167,7 @@ class SimEnv:
             )
             return self.game_state, reward, True, {}
 
-        # ---- TURN END (ENGINE DECIDES) ----
+        # ---- TURN END ----
         if self.runtime.turn_has_ended():
             if self.event_bus:
                 self.event_bus.emit(
@@ -245,20 +193,10 @@ class SimEnv:
                     }
                 )
 
-            self.runtime.end_turn()
-            self.runtime.start_turn()
-            self.game_state = self.runtime.base_state
-
-        # ---- EPISODE END (max turns) ----
-        done = (
-            self.scenario.max_turns is not None
-            and self.game_state.turn > self.scenario.max_turns
-        )
-
         reward = (
             self.game_state.vp_tracker.total_points
             if self.game_state.vp_tracker
             else 0
         )
 
-        return self.game_state, reward, done, {}
+        return self.game_state, reward, False, {}

@@ -19,6 +19,7 @@ from assault_model.combat.attack_dice_pool import AttackDicePool
 from assault_model.combat.defense_dice_pool import DefenseDicePool
 from assault_model.combat.dice_face import DiceFace
 from assault_model.units.unit_type import UnitCategory
+from assault_model.runtime.execution_context import ExecutionContext
 
 import random
 import os
@@ -67,8 +68,11 @@ class CloseCombatResult:
 # Resolver
 # =================================================
 
-def resolve_close_combat(ctx) -> CloseCombatResult:
-    # ✅ TRACE: entering close combat
+def resolve_close_combat(
+    ctx,
+    context: ExecutionContext | None = None,   # ✅ ÚNICA ADICIÓN
+) -> CloseCombatResult:
+
     _trace(
         "CLOSE_COMBAT_START",
         attacker=ctx.attacker.unit_id,
@@ -84,7 +88,6 @@ def resolve_close_combat(ctx) -> CloseCombatResult:
     while ctx.attacker.alive and ctx.defender.alive:
         rr = CloseCombatRoundResult(ctx.round_number)
 
-        # ✅ TRACE: each round
         _trace(
             "CLOSE_COMBAT_ROUND",
             round=ctx.round_number,
@@ -163,7 +166,7 @@ def resolve_close_combat(ctx) -> CloseCombatResult:
     # -------------------------------------------------
     # ✅ EMIT COMBAT AS ACTION_EFFECT (FLAT PAYLOAD)
     # -------------------------------------------------
-    event_bus = getattr(ctx, "event_bus", None)
+    event_bus = context.event_bus if context else None   # ✅ ÚNICO CAMBIO REAL
     if event_bus and result.rounds:
         last = result.rounds[-1]
 

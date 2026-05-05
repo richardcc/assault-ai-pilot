@@ -19,29 +19,32 @@ def main():
     )
 
     # -----------------------------------------------------
-    # 2. Create simulation environment
+    # 2. Controllers (heuristics)
     # -----------------------------------------------------
-    sim_env = SimEnv(sim_config, debug_config=sim_config.debug)
+    # 👉 SAME heuristic for both sides (new architecture)
+    controller = TacticalPathHeuristic()
+
+    # -----------------------------------------------------
+    # 3. Create simulation environment
+    #    (heuristic injected here)
+    # -----------------------------------------------------
+    sim_env = SimEnv(
+        sim_config,
+        debug_config=sim_config.debug,
+        controller=controller,   # ✅ CLAVE
+    )
+
     training_env = TrainingEnv(
         sim_env,
         env_config_path=Path("assault_sim/config/env_config.json"),
     )
 
     # -----------------------------------------------------
-    # 3. Observers
+    # 4. Observers
     # -----------------------------------------------------
     observer = ConsoleObserver()
     if sim_env.event_bus:
         sim_env.event_bus.subscribe(observer)
-
-    # -----------------------------------------------------
-    # 4. Controllers (heuristics)
-    # -----------------------------------------------------
-    # 👉 MISMO heurístico para ambos bandos (por ahora)
-    controllers = {
-        "GE": TacticalPathHeuristic(),
-        "US": TacticalPathHeuristic(),
-    }
 
     # -----------------------------------------------------
     # 5. Reset
@@ -52,16 +55,10 @@ def main():
     # -----------------------------------------------------
     # 6. Main loop
     # -----------------------------------------------------
+    # ✅ NO decision logic here
+    # ✅ SimEnv + controller own decision making
     while not done:
-        active = state.active_unit
-
-        if active is None:
-            action = None
-        else:
-            controller = controllers.get(active.side)
-            action = controller.choose_action(state)
-
-        state, reward, done, info = training_env.step(action)
+        state, reward, done, info = training_env.step(None)
 
     print("Simulation finished.")
     if state.vp_tracker:

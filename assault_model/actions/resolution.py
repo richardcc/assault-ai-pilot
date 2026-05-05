@@ -8,9 +8,9 @@
 # - Return detailed combat results (if any)
 #
 # IMPORTANT:
-# - This module does NOT print anything
-# - This module does NOT render anything
-# - All visible output MUST go through the EventBus (observability)
+# - This module does NOT store infrastructure in GameState
+# - All observability goes through ExecutionContext
+# - GameState remains deepcopy-safe
 #
 # DEBUG TRACES:
 # - Optional, controlled by ASSAULT_DEBUG_TRACE
@@ -25,6 +25,7 @@ from assault_model.actions.base import CombatAction
 from assault_model.actions.combat_mode import CombatMode
 
 from assault_model.state.game_state import GameState
+from assault_model.runtime.execution_context import ExecutionContext
 
 from assault_model.combat.close_combat_resolver import resolve_close_combat
 from assault_model.combat.combat_resolution import CombatResolutionResult
@@ -82,21 +83,21 @@ def resolve_action(
     state: GameState,
     action: Action,
     combat_result: CombatResolutionResult | None = None,
+    context: ExecutionContext | None = None,
 ) -> ActionResolutionResult:
     """
     Resolve a single action into a new GameState.
 
     This function:
-    - Does NOT emit events
     - Does NOT consume activations
-    - Does NOT print gameplay output
+    - Does NOT advance turns
+    - Does NOT store infrastructure in state
 
-    It ONLY:
-    - Computes the new state
-    - Computes combat details (if any)
+    Observability (if any) is emitted via ExecutionContext.
     """
 
-    # Default: no state change
+    event_bus = context.event_bus if context else None
+
     new_state = state
     result_combat = None
 
@@ -107,21 +108,17 @@ def resolve_action(
         _trace("RESOLVE_MOVE", unit=action.unit_id)
 
         if action.path:
-            # Movement produces a new state
             new_state = deepcopy(state)
 
-            # Find the unit being moved
             unit = next(
                 (u for u in new_state.units if u.unit_id == action.unit_id),
                 None,
             )
 
             if unit:
-                # Move to the last hex in the path
                 dest = action.path[-1]
-                unit.position = (dest.q, dest.r)
+                unit.position = dest  # ✅ keep HexCoord, do not convert to tuple
 
-        # Movement never produces combat
         result_combat = None
 
     # ----------------------------------
@@ -130,44 +127,24 @@ def resolve_action(
     elif isinstance(action, CombatAction):
         _trace("RESOLVE_COMBAT", unit=action.unit_id, mode=action.combat_mode)
 
-        # Only ASSAULT mode supported for now
         if action.combat_mode != CombatMode.ASSAULT:
             raise NotImplementedError(
                 f"Combat mode {action.combat_mode} not supported"
             )
 
-        # -------------------------------------------------
-        # IMPORTANT:
-        # EventBus is NOT deepcopy-safe.
-        # Detach it before copying the GameState.
-        # -------------------------------------------------
-        event_bus = getattr(state, "event_bus", None)
-        state.event_bus = None
-
-        # Combat always produces a new state
         new_state = deepcopy(state)
 
-        # Restore EventBus on the new state
-        new_state.event_bus = event_bus
-
-        # Create a combat context from the new state
         ctx = new_state.create_combat_context(action)
-
-        # Resolve close combat
-        # IMPORTANT:
-        # - All dice, rounds, hits, HP changes are computed here
         result_combat = resolve_close_combat(ctx)
 
         # -------------------------------------------------
-        # OBSERVABILITY: COMBAT DETAILS BACK TO EVENT BUS
+        # OBSERVABILITY: COMBAT DETAILS
         # -------------------------------------------------
         if event_bus and result_combat:
             event_bus.emit(
                 {
                     "type": "COMBAT_RESULT",
                     "payload": {
-                        # We do NOT reinterpret combat_result
-                        # We expose it exactly as computed
                         "combat": result_combat,
                     },
                 }

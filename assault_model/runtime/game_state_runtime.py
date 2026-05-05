@@ -10,16 +10,17 @@ Responsibilities:
 - Maintain activation state
 - Trigger close combat and reactions
 - Update GameState in a valid way
+- Evaluate MATCH END conditions
 
 Non-responsibilities:
 - Does NOT decide player intent
 - Does NOT choose actions
 - Does NOT rank or score moves
-- Does NOT interact with UI or observers
+- Does NOT interact with UI or observers directly
 
 Design rule:
 - RuntimeGameState decides WHAT HAPPENS when an action is applied.
-- RuntimeGameState is the single source of truth for game rules.
+- RuntimeGameState is the single source of truth for game rules evaluation.
 
 Contract guarantee:
 - Any change to GameState MUST pass through RuntimeGameState.
@@ -40,6 +41,9 @@ from assault_model.combat.reaction_context import ReactionContext
 from assault_model.combat.reaction_trigger import ReactionTrigger
 from assault_model.combat.line_of_sight import has_line_of_sight
 
+from assault_model.runtime.execution_context import ExecutionContext
+from assault_model.map.hex_coord import HexCoord
+
 import os
 
 DEBUG_TRACE = os.getenv("ASSAULT_DEBUG_TRACE", "0") == "1"
@@ -57,43 +61,87 @@ class RuntimeGameState:
     Authoritative engine implementation.
 
     IMPORTANT:
-    This engine does NOT drive execution by itself.
-    It exposes a consumable contract for coordinators (e.g. SimEnv).
+    - This engine does NOT drive execution by itself.
+    - It evaluates rules over world state.
     """
 
-    def __init__(self, base_state: GameState):
+    def __init__(self, base_state: GameState, scenario):
         self.base_state = base_state
+        self.scenario = scenario
         self.turn = TurnState(turn_number=base_state.turn)
+
+        # --- MATCH STATE ---
+        self._match_over = False
+        self._winner = None
+        self._end_reason = None
 
     # =================================================
     # TURN CONTROL (ENGINE AUTHORITY)
     # =================================================
     def start_turn(self) -> None:
-        """
-        Initialize a new turn.
-
-        - Reset activation state
-        - Select first active unit
-        """
         self.base_state.activation_state.reset(self.base_state.units)
         self.base_state.activation_state.next_unit()
 
     def end_turn(self) -> None:
-        """
-        Finalize current turn and advance turn counter.
-        """
         self.base_state.end_turn()
         self.turn = TurnState(turn_number=self.base_state.turn)
 
     # =================================================
-    # ACTIVATION CONTRACT (NEW ENGINE API)
+    # MATCH END CONTRACT (ENGINE AUTHORITY)
+    # =================================================
+    def is_match_over(self) -> bool:
+        return self._match_over
+
+    def get_match_result(self) -> dict | None:
+        if not self._match_over:
+            return None
+
+        return {
+            "winner": self._winner,
+            "reason": self._end_reason,
+        }
+
+    def _check_match_end(self):
+        """
+        Evaluate ALL match end conditions defined by the scenario.
+        """
+
+        # --- Rule 1: Last side standing ---
+        alive_units = [u for u in self.base_state.units if u.alive]
+        alive_sides = {u.side for u in alive_units}
+
+        if len(alive_sides) == 1:
+            self._match_over = True
+            self._winner = next(iter(alive_sides))
+            self._end_reason = "last_side_standing"
+
+            _trace(
+                "MATCH_END_DECIDED",
+                reason=self._end_reason,
+                winner=self._winner,
+            )
+            return
+
+        # --- Rule 2: Max turns reached (scenario rule) ---
+        if (
+            self.scenario.max_turns is not None
+            and self.base_state.turn >= self.scenario.max_turns
+        ):
+            self._match_over = True
+            self._winner = None
+            self._end_reason = "max_turns_reached"
+
+            _trace(
+                "MATCH_END_DECIDED",
+                reason=self._end_reason,
+                turn=self.base_state.turn,
+            )
+            return
+
+    # =================================================
+    # ACTIVATION CONTRACT
     # =================================================
     def get_activable_units(self):
-        """
-        Return all units that may still act in the current turn.
-
-        This method defines the authoritative activation rules.
-        """
         gs = self.base_state
         catalog = ActionCatalog(gs)
 
@@ -122,13 +170,10 @@ class RuntimeGameState:
         return activable
 
     def turn_has_ended(self) -> bool:
-        """
-        Return True if no further units can act in this turn.
-        """
         return len(self.get_activable_units()) == 0
 
     # =================================================
-    # INTERNAL ACTIVATION CONSUMPTION
+    # INTERNAL ACTIVATION
     # =================================================
     def _consume_activation(self, unit):
         activated = self.base_state.activation_state.activated
@@ -136,11 +181,6 @@ class RuntimeGameState:
             activated.append(unit)
 
     def _advance_activation(self):
-        """
-        Advance to the next active unit.
-
-        If no unit remains, the engine ends and restarts the turn.
-        """
         next_unit = self.base_state.activation_state.next_unit()
         if next_unit is None:
             self.end_turn()
@@ -153,14 +193,9 @@ class RuntimeGameState:
         self,
         action: Action,
         combat_result: CombatResolutionResult | None = None,
+        context: ExecutionContext | None = None,
     ):
-        """
-        Apply an already-chosen action and update the game state.
-
-        This method is the ONLY valid way to mutate GameState.
-        """
-
-        event_bus = getattr(self.base_state, "event_bus", None)
+        event_bus = context.event_bus if context else None
 
         attacker_id = getattr(action, "unit_id", None)
         attacker = next(
@@ -169,28 +204,21 @@ class RuntimeGameState:
         )
 
         # -------------------------------------------------
+        # CAPTURE PRE-MOVE POSITION (IMMUTABLE SNAPSHOT)
+        # -------------------------------------------------
+        prev_position: HexCoord | None = None
+        if isinstance(action, MoveAction) and attacker and attacker.position:
+            prev_position = HexCoord(attacker.position.q, attacker.position.r)
+
+        # -------------------------------------------------
         # REACTION RESOLUTION
         # -------------------------------------------------
         if self.base_state.reaction_context is not None:
-            ctx = self.base_state.reaction_context
-            _trace(
-                "REACTION_STATE_BEFORE",
-                reactor=ctx.reactor.unit_id,
-                moving_unit=ctx.moving_unit.unit_id,
-            )
-
             self.base_state.clear_reaction()
-
-            _trace(
-                "REACTION_STATE_AFTER",
-                reactor_alive=ctx.reactor.alive,
-                moving_alive=ctx.moving_unit.alive,
-            )
-
             if attacker:
                 self._consume_activation(attacker)
-
             self._advance_activation()
+            self._check_match_end()
             return None
 
         # -------------------------------------------------
@@ -200,8 +228,8 @@ class RuntimeGameState:
             active = self.base_state.activation_state.active_unit
             if active:
                 self._consume_activation(active)
-
             self._advance_activation()
+            self._check_match_end()
             return None
 
         # -------------------------------------------------
@@ -210,102 +238,11 @@ class RuntimeGameState:
         if isinstance(action, WaitAction):
             self._consume_activation(attacker)
             self._advance_activation()
+            self._check_match_end()
             return None
 
         # -------------------------------------------------
-        # MOVE (Close Combat triggers here)
-        # -------------------------------------------------
-        if isinstance(action, MoveAction):
-            _trace("MOVE_START", unit=attacker.unit_id)
-
-            for hex_coord in action.path:
-                before_pos = attacker.position
-                attacker.position = (hex_coord.q, hex_coord.r)
-
-                if event_bus:
-                    event_bus.emit(
-                        {
-                            "type": "ACTION_EFFECT",
-                            "payload": {
-                                "action": "MoveAction",
-                                "unit_id": attacker.unit_id,
-                                "from": before_pos,
-                                "to": attacker.position,
-                                "moved": True,
-                                "hp_before": attacker.hp,
-                                "hp_after": attacker.hp,
-                                "hp_delta": 0,
-                            },
-                        }
-                    )
-
-                enemy_in_hex = next(
-                    (
-                        u for u in self.base_state.units
-                        if u.alive
-                        and u.side != attacker.side
-                        and u.position == attacker.position
-                    ),
-                    None,
-                )
-
-                if enemy_in_hex:
-                    _trace(
-                        "CLOSE_COMBAT_TRIGGER",
-                        attacker=attacker.unit_id,
-                        defender=enemy_in_hex.unit_id,
-                    )
-
-                    result = resolve_action(
-                        state=self.base_state,
-                        action=AssaultAction(
-                            attacker.unit_id,
-                            enemy_in_hex.unit_id,
-                        ),
-                        combat_result=None,
-                    )
-
-                    self.base_state = result.new_state
-
-                    if event_bus and result.combat_result:
-                        event_bus.emit(
-                            {
-                                "type": "COMBAT_RESULT",
-                                "payload": {
-                                    "combat": result.combat_result
-                                },
-                            }
-                        )
-
-                    self._consume_activation(attacker)
-                    self._advance_activation()
-                    return result
-
-                for enemy in self.base_state.units:
-                    if not enemy.alive or enemy.side == attacker.side:
-                        continue
-
-                    if has_line_of_sight(
-                        enemy,
-                        attacker,
-                        self.base_state.game_map,
-                    ):
-                        self.base_state.enter_reaction(
-                            ReactionContext(
-                                trigger=ReactionTrigger.ENEMY_ENTERS_HEX,
-                                reactor=enemy,
-                                moving_unit=attacker,
-                                entered_hex=attacker.position,
-                            )
-                        )
-                        return None
-
-            self._consume_activation(attacker)
-            self._advance_activation()
-            return None
-
-        # -------------------------------------------------
-        # OTHER ACTIONS
+        # MOVE / COMBAT (delegated to resolver)
         # -------------------------------------------------
         result = resolve_action(
             state=self.base_state,
@@ -314,17 +251,40 @@ class RuntimeGameState:
         )
 
         self.base_state = result.new_state
-
-        if event_bus and result.combat_result:
-            event_bus.emit(
-                {
-                    "type": "COMBAT_RESULT",
-                    "payload": {
-                        "combat": result.combat_result
-                    },
-                }
-            )
-
         self._consume_activation(attacker)
         self._advance_activation()
+        self._check_match_end()
+
+        # -------------------------------------------------
+        # DOMAIN EVENT: UNIT MOVED (TRANSITION EVENT)
+        # -------------------------------------------------
+        if event_bus and isinstance(action, MoveAction) and prev_position is not None:
+            unit_after = next(
+                (u for u in self.base_state.units if u.unit_id == action.unit_id),
+                None,
+            )
+            if unit_after and unit_after.position:
+                new_position = HexCoord(
+                    unit_after.position.q,
+                    unit_after.position.r,
+                )
+
+                if (
+                    prev_position.q != new_position.q
+                    or prev_position.r != new_position.r
+                ):
+                    event_bus.emit(
+                        {
+                            "type": "UNIT_MOVED",
+                            "payload": {
+                                "unit_id": unit_after.unit_id,
+                                "from": prev_position,
+                                "to": new_position,
+                            },
+                        }
+                    )
+
+        # ❌ COMBAT_RESULT EMISSION REMOVED
+        # Close combat is emitted by the resolver as ACTION_EFFECT
+
         return result

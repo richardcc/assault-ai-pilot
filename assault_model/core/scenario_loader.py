@@ -21,6 +21,7 @@ from assault_model.core.scenario import Scenario
 from assault_model.map.map import Map
 from assault_model.map.map_piece import MapPieceDefinition
 from assault_model.map.hex import Hex
+from assault_model.map.hex_coord import HexCoord
 from assault_model.units.unit_instance import UnitInstance
 from assault_model.units.unit_type import UnitType
 from assault_model.core.victory_conditions import VictoryConditions
@@ -154,12 +155,13 @@ def load_scenario(
                 f"UnitType '{unit_key}' not found in unit catalog"
             )
 
-        pos = tuple(u["position"])
-        if game_map.get_hex(*pos) is None:
+        pos_tuple = tuple(u["position"])
+        if game_map.get_hex(*pos_tuple) is None:
             raise ScenarioLoaderError(
-                f"Unit {u['unit_id']} outside map at {pos}"
+                f"Unit {u['unit_id']} outside map at {pos_tuple}"
             )
 
+        pos = HexCoord(*pos_tuple)
         unit_type = unit_catalog[unit_key]
 
         _trace(
@@ -206,30 +208,5 @@ def load_scenario(
 
     game_state.start_action_phase()
     scenario.initial_game_state = game_state
-
-    # =================================================
-    # ✅ INJECT EVENT BUS INTO UNIT INSTANCES
-    # =================================================
-    event_bus = getattr(game_state, "event_bus", None)
-    if event_bus:
-        for unit in game_state.units:
-            unit._event_bus = event_bus
-
-    # =================================================
-    # OPTIONAL: emit UNIT_LOADED events
-    # =================================================
-    if event_bus:
-        for unit in game_state.units:
-            event_bus.emit(
-                {
-                    "type": "UNIT_LOADED",
-                    "payload": {
-                        "unit_id": unit.unit_id,
-                        "side": unit.side,
-                        "position": unit.position,
-                        "hp": unit.hp,
-                    },
-                }
-            )
 
     return scenario

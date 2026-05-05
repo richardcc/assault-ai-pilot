@@ -23,22 +23,26 @@ class MovementRules:
         """
         paths: list[MovementPath] = []
 
-        q, r = unit.position
+        # ✅ unit.position is a HexCoord
+        pos: HexCoord = unit.position
+        q = pos.q
+        r = pos.r
 
         for direction in HexDirection:
             dq, dr = direction.value
-            target = (q + dq, r + dr)
+            target_q = q + dq
+            target_r = r + dr
 
             # -------------------------
             # Hex outside map
             # -------------------------
-            if game_state.game_map.get_hex(*target) is None:
+            if game_state.game_map.get_hex(target_q, target_r) is None:
                 continue
 
-            dest_hex = HexCoord(target[0], target[1])
+            dest_hex = HexCoord(target_q, target_r)
 
             occupant = next(
-                (u for u in game_state.units if u.position == target),
+                (u for u in game_state.units if u.position == dest_hex),
                 None,
             )
 

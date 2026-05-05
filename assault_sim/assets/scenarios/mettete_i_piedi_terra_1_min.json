@@ -34,7 +34,7 @@
       "unit_id": "GE_3",
       "side": "GE",
       "unit_key": "GE_RIFLES_43",
-      "position": [4, 4],
+      "position": [5, 1],
       "experience": "REGULAR"
     },
     {
@@ -55,7 +55,7 @@
       "unit_id": "US_3",
       "side": "US",
       "unit_key": "US_RIFLES_43",
-      "position": [6, 12],
+      "position": [7, 12],
       "experience": "REGULAR"
     }
   ],

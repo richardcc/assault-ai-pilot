@@ -1,33 +1,7 @@
 # assault_model/core/game_state.py
 """
 GameState represents the canonical, observable state of the game.
-
-This class contains NO execution logic.
-
-Responsibilities:
-- Hold all persistent game data:
-  - Units and their attributes
-  - Map and hex states
-  - Turn counters and phases
-  - Activation flags
-  - Victory point trackers
-  - Combat contexts
-- Be safely consumable by:
-  - AI / heuristics
-  - Observers / renderers
-  - Reward systems
-
-Non-responsibilities:
-- Does NOT apply actions
-- Does NOT decide turn flow
-- Does NOT manage activation logic
-- Does NOT execute combat
-
-Design rule:
-- GameState describes WHAT IS.
-- GameState never decides WHAT HAPPENS.
-
-All state mutations must occur through RuntimeGameState.
+...
 """
 from typing import Dict, List, Optional, TYPE_CHECKING
 import os
@@ -40,6 +14,7 @@ from assault_model.core.victory_conditions import VictoryConditions
 from assault_model.core.vp_tracker import VictoryPointTracker
 from assault_model.state.turn import TurnState, TurnPhase
 from assault_model.core.activation import ActivationState
+from assault_model.map.hex_coord import HexCoord  # ✅ needed
 
 # --- COMBAT IMPORTS ---
 from assault_model.actions.combat_mode import CombatMode
@@ -64,16 +39,7 @@ def _trace(tag: str, **data):
 class GameState:
     """
     Canonical runtime game state.
-
-    Role:
-    - Holds ALL mutable state of the game.
-    - Owns units, map, hex states, VP tracker, and turn state.
-    - Computes derived state such as persistent hex control.
-
-    Does NOT:
-    - Decide which actions are legal.
-    - Render anything.
-    - Execute transitions (handled by RuntimeGameState).
+    ...
     """
 
     def __init__(
@@ -87,23 +53,18 @@ class GameState:
         self.units = units
         self.turn = turn
 
-        # === TURN / ACTIVATION STATE ===
         self.turn_state = TurnState(turn_number=turn)
         self.activation_state = ActivationState(units)
 
-        # === HEX STATE STORAGE ===
         self.hex_states: Dict[tuple[int, int], HexState] = {
             (h.q, h.r): HexState(h) for h in game_map.hexes
         }
 
-        # === VICTORY CONDITIONS ===
         self.victory = victory
         self.vp_tracker = VictoryPointTracker(victory) if victory else None
 
-        # === REACTION STATE ===
         self.reaction_context: Optional["ReactionContext"] = None
 
-        # Initial ownership calculation
         self.recalculate_hex_control()
 
     @classmethod
@@ -136,7 +97,12 @@ class GameState:
         for unit in self.units:
             if not unit.alive or not unit.position:
                 continue
-            units_by_hex.setdefault(unit.position, set()).add(unit.side)
+
+            # ✅ unit.position is HexCoord
+            pos: HexCoord = unit.position
+            coords = (pos.q, pos.r)
+
+            units_by_hex.setdefault(coords, set()).add(unit.side)
 
         for coords, hex_state in self.hex_states.items():
             present_sides = units_by_hex.get(coords, set())
