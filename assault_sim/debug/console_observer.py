@@ -28,7 +28,7 @@ class ConsoleObserver:
 
         self.move = MovementRenderer(self.turns)
 
-        # ✅ FIX: inject UnitFormatter into CombatRenderer
+        # ✅ CombatRenderer with UnitFormatter injected
         self.combat = CombatRenderer(self.turns, self.unit_formatter)
 
         self.map = MapRenderer()
@@ -52,11 +52,10 @@ class ConsoleObserver:
 
         # ---------------- MAP STATE ----------------
         elif event_type == "MAP_STATE":
-            # Snapshot of the consolidated game state (end of turn)
+            # Snapshot of consolidated game state (end of turn)
             self.map.update_state(payload)
             self.unit_formatter.update_units(payload.get("units", []))
 
-            # Initial deployment printed once
             if not self._map_rendered_once:
                 self.deploy.maybe_print()
                 self._map_rendered_once = True
@@ -72,13 +71,35 @@ class ConsoleObserver:
         # ---------------- ACTION EFFECT ----------------
         elif event_type == "ACTION_EFFECT":
             if payload.get("action") == "CloseCombat":
-                # ✅ CombatRenderer now handles HP refresh per ROUND
                 self.combat.on_close_combat_effect(payload)
 
         # ---------------- TURN END ----------------
         elif event_type == "TURN_END":
-            # Close and print the turn
             self.turns.close_turn()
-
-            # Render map AFTER the turn is fully closed
             self.map.render(payload.get("turn"))
+
+        # ---------------- MATCH END ---------------- ✅ NUEVO
+        elif event_type == "MATCH_END":
+            result = payload.get("result")
+            winner = payload.get("winner")
+            reason = payload.get("reason")
+            turn = payload.get("turn")
+
+            self.turns.add_line("")
+
+            if result == "victory" and winner:
+                self.turns.add_line(
+                    f"🏆 MATCH END — WINNER: {winner}  (turn {turn})"
+                )
+            else:
+                self.turns.add_line(
+                    f"🤝 MATCH END — DRAW  (turn {turn})"
+                )
+
+            if reason:
+                self.turns.add_line(
+                    f"    Reason: {reason}"
+                )
+
+            # ✅ CRÍTICO: forzar impresión inmediata
+            self.turns.close_turn()

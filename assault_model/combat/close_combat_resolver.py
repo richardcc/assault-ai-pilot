@@ -144,10 +144,17 @@ def resolve_close_combat(
 
     result.finished = True
 
-    if not ctx.defender.alive:
+
+    attacker_dead = not ctx.attacker.alive
+    defender_dead = not ctx.defender.alive
+
+    if attacker_dead and defender_dead:
+        result.winner = None
+        result.outcome = "both_eliminated"
+    elif defender_dead:
         result.winner = ctx.attacker.unit_id
         result.outcome = "defender_eliminated"
-    elif not ctx.attacker.alive:
+    elif attacker_dead:
         result.winner = ctx.defender.unit_id
         result.outcome = "attacker_eliminated"
     else:
@@ -158,7 +165,7 @@ def resolve_close_combat(
         )
         result.winner = None
         result.outcome = "no_decision" if any_hp_lost else "all_hits_cancelled"
-
+        
     # -------------------------------------------------
     # Emit ALL rounds as ACTION_EFFECT
     # -------------------------------------------------

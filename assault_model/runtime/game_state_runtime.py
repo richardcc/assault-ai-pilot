@@ -49,6 +49,10 @@ class RuntimeGameState:
     # TURN CONTROL
     # =================================================
     def start_turn(self) -> None:
+        """
+        Initialize a new turn.
+        Resets activation state and selects the first active unit.
+        """
         self.base_state.activation_state.reset(self.base_state.units)
         self.base_state.activation_state.next_unit()
 
@@ -66,6 +70,9 @@ class RuntimeGameState:
         )
 
     def end_turn(self) -> None:
+        """
+        Finalize the current turn and advance the turn counter.
+        """
         self.base_state.end_turn()
         self.turn = TurnState(turn_number=self.base_state.turn)
 
@@ -75,27 +82,99 @@ class RuntimeGameState:
     def is_match_over(self) -> bool:
         return self._match_over
 
-    def _check_match_end(self):
+    def _check_match_end(self, context: ExecutionContext | None = None):
+        """
+        Check whether the match has ended and emit MATCH_END if so.
+        """
+        if self._match_over:
+            return
+
         alive_units = [u for u in self.base_state.units if u.alive]
         alive_sides = {u.side for u in alive_units}
 
+        event_bus = context.event_bus if context else None
+
+        # -------------------------------------------------
+        # No units alive -> immediate draw
+        # -------------------------------------------------
+        if len(alive_units) == 0:
+            self._match_over = True
+            self._winner = None
+            self._end_reason = "all_units_destroyed"
+
+            _trace("MATCH_END", reason=self._end_reason)
+
+            if event_bus:
+                event_bus.emit(
+                    {
+                        "type": "MATCH_END",
+                        "payload": {
+                            "result": "draw",
+                            "winner": None,
+                            "reason": self._end_reason,
+                            "turn": self.base_state.turn,
+                        },
+                    }
+                )
+            return
+
+        # -------------------------------------------------
+        # Single side remaining -> victory
+        # -------------------------------------------------
         if len(alive_sides) == 1:
             self._match_over = True
             self._winner = next(iter(alive_sides))
+            self._end_reason = "last_side_standing"
+
             _trace("MATCH_END", winner=self._winner)
 
+            if event_bus:
+                event_bus.emit(
+                    {
+                        "type": "MATCH_END",
+                        "payload": {
+                            "result": "victory",
+                            "winner": self._winner,
+                            "reason": self._end_reason,
+                            "turn": self.base_state.turn,
+                        },
+                    }
+                )
+            return
+
+        # -------------------------------------------------
+        # Max turns reached -> draw
+        # -------------------------------------------------
         if (
             self.scenario.max_turns is not None
             and self.base_state.turn >= self.scenario.max_turns
         ):
             self._match_over = True
             self._winner = None
-            _trace("MATCH_END", reason="max_turns")
+            self._end_reason = "max_turns"
+
+            _trace("MATCH_END", reason=self._end_reason)
+
+            if event_bus:
+                event_bus.emit(
+                    {
+                        "type": "MATCH_END",
+                        "payload": {
+                            "result": "draw",
+                            "winner": None,
+                            "reason": self._end_reason,
+                            "turn": self.base_state.turn,
+                        },
+                    }
+                )
 
     # =================================================
     # ACTIVATION
     # =================================================
     def get_activable_units(self):
+        """
+        Return units that can still activate this turn.
+        """
         gs = self.base_state
         catalog = ActionCatalog(gs)
         activable = []
@@ -123,6 +202,9 @@ class RuntimeGameState:
         return activable
 
     def turn_has_ended(self) -> bool:
+        """
+        Return True if no activations remain this turn.
+        """
         return not self.base_state.activation_state.remaining
 
     # =================================================
@@ -152,10 +234,17 @@ class RuntimeGameState:
         combat_result: CombatResolutionResult | None = None,
         context: ExecutionContext | None = None,
     ):
+        """
+        Apply a single action to the game state.
+        """
         event_bus = context.event_bus if context else None
 
         attacker = next(
-            (u for u in self.base_state.units if u.unit_id == getattr(action, "unit_id", None)),
+            (
+                u
+                for u in self.base_state.units
+                if u.unit_id == getattr(action, "unit_id", None)
+            ),
             None,
         )
 
@@ -165,23 +254,15 @@ class RuntimeGameState:
             attacker=attacker.unit_id if attacker else None,
         )
 
-        # -------------------------------------------------
-        # CAPTURE PRE-MOVE POSITION
-        # -------------------------------------------------
+        # Capture pre-move position
         prev_position = None
         assault_target_position = None
 
         if attacker and attacker.position:
             prev_position = HexCoord(attacker.position.q, attacker.position.r)
 
-        # -------------------------------------------------
-        # ASSAULT MOVE → EMIT BEFORE COMBAT (KEY POINT)
-        # -------------------------------------------------
-        if (
-            isinstance(action, AssaultAction)
-            and prev_position
-            and event_bus
-        ):
+        # Emit assault movement before combat resolution
+        if isinstance(action, AssaultAction) and prev_position and event_bus:
             target = next(
                 (u for u in self.base_state.units if u.unit_id == action.target_id),
                 None,
@@ -191,15 +272,6 @@ class RuntimeGameState:
                     target.position.q,
                     target.position.r,
                 )
-
-                _trace(
-                    "UNIT_MOVED_EMIT",
-                    unit=action.unit_id,
-                    frm=(prev_position.q, prev_position.r),
-                    to=(assault_target_position.q, assault_target_position.r),
-                )
-
-                # ✅ MOVEMENT SHOWN BEFORE COMBAT
                 event_bus.emit(
                     {
                         "type": "UNIT_MOVED",
@@ -211,18 +283,14 @@ class RuntimeGameState:
                     }
                 )
 
-        # -------------------------------------------------
-        # WAIT
-        # -------------------------------------------------
+        # Wait action
         if isinstance(action, WaitAction):
             self._consume_activation(attacker)
             self._advance_activation()
-            self._check_match_end()
+            self._check_match_end(context)
             return None
 
-        # -------------------------------------------------
-        # RESOLVE ACTION (COMBAT OR MOVE)
-        # -------------------------------------------------
+        # Resolve the action
         result = resolve_action(
             state=self.base_state,
             action=action,
@@ -234,11 +302,9 @@ class RuntimeGameState:
 
         self._consume_activation(attacker)
         self._advance_activation()
-        self._check_match_end()
+        self._check_match_end(context)
 
-        # -------------------------------------------------
-        # MOVEACTION → EMIT AFTER RESOLUTION
-        # -------------------------------------------------
+        # Emit normal movement after resolution
         if event_bus and prev_position and isinstance(action, MoveAction):
             unit_after = next(
                 (u for u in self.base_state.units if u.unit_id == action.unit_id),
@@ -249,14 +315,6 @@ class RuntimeGameState:
                     unit_after.position.q,
                     unit_after.position.r,
                 )
-
-                _trace(
-                    "UNIT_MOVED_EMIT",
-                    unit=action.unit_id,
-                    frm=(prev_position.q, prev_position.r),
-                    to=(new_position.q, new_position.r),
-                )
-
                 event_bus.emit(
                     {
                         "type": "UNIT_MOVED",
