@@ -94,15 +94,10 @@ class RuntimeGameState:
 
         event_bus = context.event_bus if context else None
 
-        # -------------------------------------------------
-        # No units alive -> immediate draw
-        # -------------------------------------------------
         if len(alive_units) == 0:
             self._match_over = True
             self._winner = None
             self._end_reason = "all_units_destroyed"
-
-            _trace("MATCH_END", reason=self._end_reason)
 
             if event_bus:
                 event_bus.emit(
@@ -118,15 +113,10 @@ class RuntimeGameState:
                 )
             return
 
-        # -------------------------------------------------
-        # Single side remaining -> victory
-        # -------------------------------------------------
         if len(alive_sides) == 1:
             self._match_over = True
             self._winner = next(iter(alive_sides))
             self._end_reason = "last_side_standing"
-
-            _trace("MATCH_END", winner=self._winner)
 
             if event_bus:
                 event_bus.emit(
@@ -142,9 +132,6 @@ class RuntimeGameState:
                 )
             return
 
-        # -------------------------------------------------
-        # Max turns reached -> draw
-        # -------------------------------------------------
         if (
             self.scenario.max_turns is not None
             and self.base_state.turn >= self.scenario.max_turns
@@ -152,8 +139,6 @@ class RuntimeGameState:
             self._match_over = True
             self._winner = None
             self._end_reason = "max_turns"
-
-            _trace("MATCH_END", reason=self._end_reason)
 
             if event_bus:
                 event_bus.emit(
@@ -213,17 +198,10 @@ class RuntimeGameState:
     def _consume_activation(self, unit):
         if unit is None:
             return
-        _trace("ACTIVATION_CONSUME", unit=unit.unit_id)
         self.base_state.activation_state.consume(unit)
 
     def _advance_activation(self):
         self.base_state.activation_state.next_unit()
-        active = (
-            self.base_state.activation_state.active_unit.unit_id
-            if self.base_state.activation_state.active_unit
-            else None
-        )
-        _trace("ACTIVATION_ADVANCE", active=active)
 
     # =================================================
     # MAIN EXECUTION
@@ -236,6 +214,10 @@ class RuntimeGameState:
     ):
         """
         Apply a single action to the game state.
+
+        IMPORTANT:
+        This class does NOT compute combat damage.
+        It only adopts the mutated GameState returned by resolvers.
         """
         event_bus = context.event_bus if context else None
 
@@ -254,14 +236,10 @@ class RuntimeGameState:
             attacker=attacker.unit_id if attacker else None,
         )
 
-        # Capture pre-move position
         prev_position = None
-        assault_target_position = None
-
         if attacker and attacker.position:
             prev_position = HexCoord(attacker.position.q, attacker.position.r)
 
-        # Emit assault movement before combat resolution
         if isinstance(action, AssaultAction) and prev_position and event_bus:
             target = next(
                 (u for u in self.base_state.units if u.unit_id == action.target_id),
@@ -269,8 +247,7 @@ class RuntimeGameState:
             )
             if target and target.position:
                 assault_target_position = HexCoord(
-                    target.position.q,
-                    target.position.r,
+                    target.position.q, target.position.r
                 )
                 event_bus.emit(
                     {
@@ -283,14 +260,12 @@ class RuntimeGameState:
                     }
                 )
 
-        # Wait action
         if isinstance(action, WaitAction):
             self._consume_activation(attacker)
             self._advance_activation()
             self._check_match_end(context)
             return None
 
-        # Resolve the action
         result = resolve_action(
             state=self.base_state,
             action=action,
@@ -304,7 +279,6 @@ class RuntimeGameState:
         self._advance_activation()
         self._check_match_end(context)
 
-        # Emit normal movement after resolution
         if event_bus and prev_position and isinstance(action, MoveAction):
             unit_after = next(
                 (u for u in self.base_state.units if u.unit_id == action.unit_id),

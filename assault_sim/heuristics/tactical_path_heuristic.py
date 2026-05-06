@@ -1,6 +1,7 @@
 from assault_model.actions.action_catalog import ActionCatalog
 from assault_model.actions.action_category import ActionCategory
 from assault_model.actions.assault import AssaultAction
+from assault_model.actions.ranged_direct import RangedDirectAttack
 from assault_model.map.hex_utils import hex_distance
 
 
@@ -8,9 +9,10 @@ class TacticalPathHeuristic:
     """
     Tactical heuristic adapted to the new architecture.
 
-    - Movement is 1 hex (MovementRules).
-    - ActionCatalog provides all legal actions.
-    - This heuristic only chooses, never invents actions.
+    DEBUG VERSION:
+    - Prioritizes ASSAULT
+    - Then forces RANGED_DIRECT if available (for debugging)
+    - Then movement toward VP
     """
 
     def choose_action(self, state):
@@ -21,20 +23,26 @@ class TacticalPathHeuristic:
         actions = ActionCatalog(state).actions()
 
         # -------------------------------------------------
-        # 1. PRIORITY: ASSAULT
+        # 1. PRIORITY: ASSAULT (DO NOT BREAK CC)
         # -------------------------------------------------
         for action in actions:
             if isinstance(action, AssaultAction):
                 return action
 
         # -------------------------------------------------
-        # 2. VICTORY POINTS (FIXED)
+        # 2. DEBUG: FORCE RANGED FIRE
+        # -------------------------------------------------
+        for action in actions:
+            if isinstance(action, RangedDirectAttack):
+                return action
+
+        # -------------------------------------------------
+        # 3. VICTORY POINTS (EXISTING LOGIC)
         # -------------------------------------------------
         vp_tracker = state.vp_tracker
         if not vp_tracker or not vp_tracker.conditions:
             return self._wait(actions)
 
-        # ✅ FIX: extract VP positions correctly
         vp_positions = [
             vp.hex_coords for vp in vp_tracker.conditions.points
         ]
@@ -51,7 +59,7 @@ class TacticalPathHeuristic:
         best_dist = hex_distance(current_pos, target_vp)
 
         # -------------------------------------------------
-        # 3. CHOOSE BEST MOVE ACTION
+        # 4. CHOOSE BEST MOVE ACTION
         # -------------------------------------------------
         for action in actions:
             if action.action_type.category != ActionCategory.MOVEMENT:
@@ -61,7 +69,7 @@ class TacticalPathHeuristic:
             if not path:
                 continue
 
-            dest = path[-1]  # HexCoord
+            dest = path[-1]
             d = hex_distance(dest, target_vp)
 
             if d < best_dist:

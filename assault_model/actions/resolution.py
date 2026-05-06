@@ -14,7 +14,7 @@
 # - Observability flows ONLY via ExecutionContext passed to resolvers
 #
 # DESIGN NOTE:
-# - For Close Combat, this module delegates resolution
+# - For Close Combat and Ranged Combat, this module delegates resolution
 #   and passes ExecutionContext so the resolver can emit ACTION_EFFECT
 # - This module must NEVER re-emit COMBAT_RESULT
 #
@@ -34,7 +34,9 @@ from assault_model.state.game_state import GameState
 from assault_model.runtime.execution_context import ExecutionContext
 
 from assault_model.combat.close_combat_resolver import resolve_close_combat
-from assault_model.combat.combat_resolution import CombatResolutionResult
+from assault_model.combat.ranged_combat_resolver import resolve_ranged_combat
+
+from assault_model.map.hex_utils import hex_distance
 
 
 # -------------------------------------------------
@@ -69,20 +71,11 @@ class ActionResolutionResult:
         The GameState after the action has been applied.
 
     combat_result:
-        A CombatResolutionResult if combat happened,
+        A combat result object if combat happened,
         None otherwise.
-
-    NOTE:
-    - combat_result is returned for internal consistency
-    - Close Combat observability is handled exclusively
-      by the combat resolver via ACTION_EFFECT
     """
 
-    def __init__(
-        self,
-        new_state: GameState,
-        combat_result: CombatResolutionResult | None = None,
-    ):
+    def __init__(self, new_state: GameState, combat_result=None):
         self.new_state = new_state
         self.combat_result = combat_result
 
@@ -93,7 +86,7 @@ class ActionResolutionResult:
 def resolve_action(
     state: GameState,
     action: Action,
-    combat_result: CombatResolutionResult | None = None,
+    combat_result=None,
     context: ExecutionContext | None = None,
 ) -> ActionResolutionResult:
     """
@@ -105,7 +98,7 @@ def resolve_action(
     - Does NOT emit rich domain events
 
     IMPORTANT:
-    - For Close Combat, ExecutionContext MUST be passed
+    - For any combat, ExecutionContext MUST be passed
       to the resolver so it can emit ACTION_EFFECT
     """
 
@@ -127,33 +120,62 @@ def resolve_action(
             )
 
             if unit:
-                dest = action.path[-1]
                 # Keep HexCoord object intact
-                unit.position = dest
-
-        result_combat = None
+                unit.position = action.path[-1]
 
     # ----------------------------------
-    # CLOSE COMBAT (ASSAULT)
+    # COMBAT ACTIONS
     # ----------------------------------
     elif isinstance(action, CombatAction):
         _trace("RESOLVE_COMBAT", unit=action.unit_id, mode=action.combat_mode)
 
-        if action.combat_mode != CombatMode.ASSAULT:
+        # Always work on a copy of the state
+        new_state = deepcopy(state)
+
+        # ------------------------------
+        # CLOSE COMBAT (ASSAULT)
+        # ------------------------------
+        if action.combat_mode == CombatMode.ASSAULT:
+            ctx = new_state.create_combat_context(action)
+            result_combat = resolve_close_combat(ctx, context)
+
+        # ------------------------------
+        # RANGED DIRECT FIRE
+        # ------------------------------
+        elif action.combat_mode == CombatMode.RANGED_DIRECT:
+
+            attacker = next(
+                (u for u in new_state.units if u.unit_id == action.unit_id),
+                None,
+            )
+            target = next(
+                (u for u in new_state.units if u.unit_id == action.target_id),
+                None,
+            )
+
+            if attacker is None or target is None:
+                raise RuntimeError(
+                    f"Invalid attacker or target for ranged combat "
+                    f"(attacker={action.unit_id}, target={action.target_id})"
+                )
+
+            # Geometry only
+            distance = hex_distance(attacker.position, target.position)
+
+            result_combat = resolve_ranged_combat(
+                attacker=attacker,
+                target=target,
+                distance=distance,
+                context=context,
+            )
+
+        # ------------------------------
+        # UNKNOWN COMBAT MODE
+        # ------------------------------
+        else:
             raise NotImplementedError(
                 f"Combat mode {action.combat_mode} not supported"
             )
-
-        # Work on a copy of the state
-        new_state = deepcopy(state)
-
-        # Create combat context from the copied state
-        ctx = new_state.create_combat_context(action)
-
-        # ✅ CRITICAL DESIGN POINT
-        # Pass ExecutionContext so the resolver can emit ACTION_EFFECT.
-        # This module MUST NOT emit COMBAT_RESULT.
-        result_combat = resolve_close_combat(ctx, context)
 
     # ----------------------------------
     # RETURN FINAL RESULT

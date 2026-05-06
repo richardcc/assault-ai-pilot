@@ -6,8 +6,8 @@ class CombatRenderer:
 
     Responsibility:
     - Render Close Combat ACTION_EFFECT events in a human-readable way.
-    - Render Ranged Combat ACTION_EFFECT events in a human-readable way.
-    - Display dice and HP changes.
+    - Display all combat rounds.
+    - Display dice and HP changes per round.
     - Keep HP visually correct BETWEEN rounds using formatter overrides.
 
     Design rules:
@@ -34,21 +34,7 @@ class CombatRenderer:
         self.unit_formatter = unit_formatter
 
     # -------------------------------------------------
-    # GENERIC ENTRY POINT
-    # -------------------------------------------------
-    def on_action_effect(self, payload: dict) -> None:
-        action = payload.get("action")
-
-        if action == "CloseCombat":
-            self.on_close_combat_effect(payload)
-            return
-
-        if action == "RangedCombat":
-            self.on_ranged_combat_effect(payload)
-            return
-
-    # -------------------------------------------------
-    # CLOSE COMBAT (UNCHANGED)
+    # EVENT HANDLER
     # -------------------------------------------------
     def on_close_combat_effect(self, payload: dict) -> None:
 
@@ -57,6 +43,7 @@ class CombatRenderer:
         attacker_id = payload.get("attacker")
         defender_id = payload.get("defender")
 
+        # Header
         if attacker_id and defender_id:
             atk_label = self.turn_buffer.unit_label(attacker_id)
             def_label = self.turn_buffer.unit_label(defender_id)
@@ -67,10 +54,12 @@ class CombatRenderer:
         rounds = payload.get("rounds", [])
 
         for r in rounds:
+            # ---------------- ROUND HEADER ----------------
             self.turn_buffer.add_line(
                 f"             Round {r['round']}"
             )
 
+            # ---------------- DICE ----------------
             self._render_dice_line(
                 "Attacker attack",
                 r.get("attacker_attack_dice", []),
@@ -88,6 +77,7 @@ class CombatRenderer:
                 r.get("defender_defense_dice", []),
             )
 
+            # ---------------- DAMAGE ----------------
             atk_before = r.get("attacker_hp_before")
             atk_after = r.get("attacker_hp_after")
             def_before = r.get("defender_hp_before")
@@ -120,83 +110,20 @@ class CombatRenderer:
                     "                     No damage applied"
                 )
 
+            # ✅ CRITICAL FIX:
+            # Update visual HP for NEXT round using overrides
             if attacker_id is not None and atk_after is not None:
                 self.unit_formatter.override_hp(attacker_id, atk_after)
 
             if defender_id is not None and def_after is not None:
                 self.unit_formatter.override_hp(defender_id, def_after)
 
+        # ---------------- FINAL OUTCOME ----------------
         outcome = payload.get("outcome")
         if outcome:
             self.turn_buffer.add_line(
                 f"             Result: {outcome}"
             )
-
-    # -------------------------------------------------
-    # RANGED COMBAT (IMPROVED, NO LOGIC CHANGES)
-    # -------------------------------------------------
-    def on_ranged_combat_effect(self, payload: dict) -> None:
-        attacker_id = payload.get("attacker")
-        defender_id = payload.get("defender")
-        distance = payload.get("distance")
-        sector = payload.get("attack_sector")
-
-        atk_label = (
-            self.turn_buffer.unit_label(attacker_id)
-            if attacker_id else "?"
-        )
-        def_label = (
-            self.turn_buffer.unit_label(defender_id)
-            if defender_id else "?"
-        )
-
-        self.turn_buffer.add_line("         🎯 RANGED COMBAT")
-        self.turn_buffer.add_line(
-            f"             {atk_label} → {def_label} "
-            f"(dist {distance}, sector {sector})"
-        )
-
-        self._render_dice_line(
-            "Attacker attack",
-            payload.get("attacker_attack_dice", []),
-        )
-        self._render_dice_line(
-            "Defender defense",
-            payload.get("defender_defense_dice", []),
-        )
-
-        # ---- DAMAGE (PER ATTACK, EXPLICIT) ----
-        hp_before = payload.get("defender_hp_before")
-        hp_after = payload.get("defender_hp_after")
-        if (
-            defender_id
-            and hp_before is not None
-            and hp_after is not None
-        ):
-            delta = hp_before - hp_after
-            if delta > 0:
-                self.turn_buffer.add_line(
-                    f"                 {self.turn_buffer.unit_label(defender_id)}: "
-                    f"-{delta} HP ({hp_before} → {hp_after})"
-                )
-
-        # ---- CRITICALS ----
-        criticals = payload.get("attacker_effects", {}).get("criticals", [])
-        if criticals:
-            self.turn_buffer.add_line(
-                f"                 💥 Critical hits: {len(criticals)}"
-            )
-
-        # ---- KILL INDICATION ----
-        defender_killed = payload.get("defender_killed", False)
-        if defender_killed and defender_id:
-            self.turn_buffer.add_line(
-                f"                 ☠️ {self.turn_buffer.unit_label(defender_id)} DESTROYED"
-            )
-
-        # Keep visual HP in sync after ranged combat
-        if defender_id is not None and hp_after is not None:
-            self.unit_formatter.override_hp(defender_id, hp_after)
 
     # -------------------------------------------------
     # INTERNAL HELPERS
@@ -223,8 +150,5 @@ class CombatRenderer:
                 self.DICE_COLOR_ICON.get(die.get("color"), "❓")
                 + self.DICE_FACE_ICON.get(die.get("face"), "❓")
             )
-
-        if isinstance(die, str):
-            return self.DICE_FACE_ICON.get(die, "❓")
 
         return "❓"

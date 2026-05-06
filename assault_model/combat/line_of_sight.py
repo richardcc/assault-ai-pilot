@@ -1,5 +1,8 @@
 from enum import Enum
 
+# Canonical hex distance utility (supports HexCoord)
+from assault_model.map.hex_utils import hex_distance
+
 
 class LineOfSight(Enum):
     CLEAR = "CLEAR"
@@ -8,30 +11,25 @@ class LineOfSight(Enum):
 
 
 # -------------------------------------------------
-# Hex distance helper (axial coordinates)
-# -------------------------------------------------
-def hex_distance(a: tuple[int, int], b: tuple[int, int]) -> int:
-    """
-    Compute axial hex distance between two hexes (q, r).
-    """
-    dq = a[0] - b[0]
-    dr = a[1] - b[1]
-    return (abs(dq) + abs(dr) + abs(dq + dr)) // 2
-
-
-# -------------------------------------------------
-# LOS computation (RANGE-BASED, SIMPLE)
+# LOS computation (RANGE-BASED, TEMPORARY)
 # -------------------------------------------------
 def check_line_of_sight(attacker, target, game_map) -> LineOfSight:
     """
-    LOS rule (temporary):
-    - CLEAR if distance <= 3 hexes
+    Temporary Line of Sight rule (Phase 01.5).
+
+    This implementation is intentionally simple and is only
+    used to validate ranged fire legality (RF-R02).
+
+    Rules:
+    - CLEAR if hex distance <= 3
     - BLOCKED otherwise
+
+    Terrain, elevation, and obstruction modifiers are handled
+    later during combat resolution.
     """
+    distance = hex_distance(attacker.position, target.position)
 
-    dist = hex_distance(attacker.position, target.position)
-
-    if dist <= 3:
+    if distance <= 3:
         return LineOfSight.CLEAR
 
     return LineOfSight.BLOCKED
@@ -39,6 +37,11 @@ def check_line_of_sight(attacker, target, game_map) -> LineOfSight:
 
 def has_line_of_sight(attacker, target, game_map) -> bool:
     """
-    Convenience helper used by RuntimeGameState.
+    Convenience helper for direct ranged fire validation.
+
+    Returns True only if LOS is CLEAR.
     """
-    return check_line_of_sight(attacker, target, game_map) == LineOfSight.CLEAR
+    return (
+        check_line_of_sight(attacker, target, game_map)
+        == LineOfSight.CLEAR
+    )

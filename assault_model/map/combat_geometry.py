@@ -1,5 +1,3 @@
-# assault_model/map/combat_geometry.py
-
 from typing import Tuple, Union
 import os
 
@@ -26,25 +24,30 @@ def _trace(tag: str, **data):
 CoordLike = Union[Tuple[int, int], HexCoord]
 
 
-def _as_xy(pos: CoordLike) -> Tuple[int, int]:
+def _as_axial(pos: CoordLike) -> Tuple[int, int]:
     """
-    Normalize a coordinate input to (x, y).
+    Normalize a coordinate input to axial (q, r).
 
     Accepts:
-    - (q, r) tuple              [legacy code]
-    - HexCoord object           [new architecture]
+    - (q, r) tuple
+    - HexCoord
 
     Returns:
-    - (x, y) tuple
-
-    Design note:
-    - Domain code should always use HexCoord.
-    - Geometry utilities remain permissive to avoid
-      forcing conversions at call sites.
+    - (q, r)
     """
     if isinstance(pos, HexCoord):
         return pos.q, pos.r
     return pos
+
+
+def _hex_direction(dq: int, dr: int) -> Tuple[int, int]:
+    """
+    Reduce a vector to its dominant hex direction.
+    """
+    if abs(dq) >= abs(dr):
+        return (1 if dq > 0 else -1 if dq < 0 else 0, 0)
+    else:
+        return (0, 1 if dr > 0 else -1 if dr < 0 else 0)
 
 
 # -------------------------------------------------
@@ -56,54 +59,53 @@ def determine_attack_sector(
     defender_facing: str,
 ) -> AttackSector:
     """
-    Determine the attack sector based on relative positions
+    Determine the attack sector based on hex-relative direction
     and defender facing.
 
-    Parameters:
-    - attacker_pos:
-        HexCoord or (q, r)
-    - defender_pos:
-        HexCoord or (q, r)
-    - defender_facing:
-        Facing direction of the defender ("N", "S", "E", "W")
-
-    Returns:
-    - AttackSector enum value
+    Facing values:
+    - "N", "S", "E", "W"
     """
 
-    ax, ay = _as_xy(attacker_pos)
-    dx, dy = _as_xy(defender_pos)
+    aq, ar = _as_axial(attacker_pos)
+    dq, dr = _as_axial(defender_pos)
 
-    vx = ax - dx
-    vy = ay - dy
+    # Vector from defender to attacker
+    vq = aq - dq
+    vr = ar - dr
 
-    facing_vectors = {
+    dir_v = _hex_direction(vq, vr)
+
+    facing_dirs = {
         "N": (0, -1),
         "S": (0, 1),
         "E": (1, 0),
         "W": (-1, 0),
     }
 
-    fx, fy = facing_vectors[defender_facing]
+    facing = facing_dirs[defender_facing]
 
-    dot = vx * fx + vy * fy
+    # Dot product in axial space (good enough for hex sectoring)
+    dot = dir_v[0] * facing[0] + dir_v[1] * facing[1]
 
     if dot > 0:
         sector = AttackSector.FRONT
     elif dot < 0:
         sector = AttackSector.REAR
     else:
-        cross = fx * vy - fy * vx
-        if cross > 0:
-            sector = AttackSector.FLANK_LEFT
-        else:
-            sector = AttackSector.FLANK_RIGHT
+        # Left / right flank determined by perpendicularity sign
+        cross = facing[0] * dir_v[1] - facing[1] * dir_v[0]
+        sector = (
+            AttackSector.FLANK_LEFT
+            if cross > 0
+            else AttackSector.FLANK_RIGHT
+        )
 
     _trace(
         "ATTACK_SECTOR",
-        attacker_pos=(ax, ay),
-        defender_pos=(dx, dy),
+        attacker_pos=(aq, ar),
+        defender_pos=(dq, dr),
         defender_facing=defender_facing,
+        relative_dir=dir_v,
         sector=sector.name,
     )
 

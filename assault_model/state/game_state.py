@@ -18,7 +18,7 @@ from assault_model.map.hex_coord import HexCoord
 
 # --- COMBAT IMPORTS ---
 from assault_model.actions.combat_mode import CombatMode
-from assault_model.combat.close_combat_context import CloseCombatContext
+from assault_model.combat.close_combat_context import CombatResolutionContext
 from assault_model.map.combat_geometry import determine_attack_sector
 
 # --- TYPING-ONLY (BREAK IMPORT CYCLE) ---
@@ -169,7 +169,7 @@ class GameState:
             defender_facing=getattr(defender, "facing", "N"),
         )
 
-        return CloseCombatContext(
+        return CombatResolutionContext(
             attacker=attacker,
             defender=defender,
             combat_mode=action.combat_mode,

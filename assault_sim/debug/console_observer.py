@@ -70,15 +70,16 @@ class ConsoleObserver:
 
         # ---------------- ACTION EFFECT ----------------
         elif event_type == "ACTION_EFFECT":
-            if payload.get("action") == "CloseCombat":
-                self.combat.on_close_combat_effect(payload)
+            # ✅ Delegate combat effects to CombatRenderer
+            # ✅ Supports BOTH CloseCombat and RangedCombat
+            self.combat.on_action_effect(payload)
 
         # ---------------- TURN END ----------------
         elif event_type == "TURN_END":
             self.turns.close_turn()
             self.map.render(payload.get("turn"))
 
-        # ---------------- MATCH END ---------------- ✅ NUEVO
+        # ---------------- MATCH END ----------------
         elif event_type == "MATCH_END":
             result = payload.get("result")
             winner = payload.get("winner")
@@ -101,5 +102,5 @@ class ConsoleObserver:
                     f"    Reason: {reason}"
                 )
 
-            # ✅ CRÍTICO: forzar impresión inmediata
+            # ✅ CRITICAL: force immediate print
             self.turns.close_turn()

@@ -1,0 +1,78 @@
+{
+  "id": "phase01_seq001_initial_contact",
+  "alias": "mettete_i_piedi_terra_1_min",
+
+  "curriculum": {
+    "phase": 1,
+    "sequence": 1,
+    "goal": "initial_contact"
+  },
+
+  "max_turns": 12,
+
+  "map": {
+    "pieces": [
+      {
+        "id": "S3",
+        "origin": [0, 0]
+      },
+      {
+        "id": "S2",
+        "origin": [0, 8]
+      }
+    ]
+  },
+
+  "units": [
+    {
+      "unit_id": "GE_1",
+      "side": "GE",
+      "unit_key": "GE_RIFLES_43",
+      "position": [3, 4],
+      "experience": "REGULAR"
+    },
+    {
+      "unit_id": "GE_2",
+      "side": "GE",
+      "unit_key": "GE_RIFLES_43",
+      "position": [4, 4],
+      "experience": "REGULAR"
+    },
+    {
+      "unit_id": "GE_3",
+      "side": "GE",
+      "unit_key": "GE_RIFLES_43",
+      "position": [5, 1],
+      "experience": "REGULAR"
+    },
+
+    {
+      "unit_id": "US_1",
+      "side": "US",
+      "unit_key": "US_RIFLES_43",
+      "position": [5, 12],
+      "experience": "REGULAR"
+    },
+    {
+      "unit_id": "US_2",
+      "side": "US",
+      "unit_key": "US_RIFLES_43",
+      "position": [6, 12],
+      "experience": "REGULAR"
+    },
+    {
+      "unit_id": "US_3",
+      "side": "US",
+      "unit_key": "US_RIFLES_43",
+      "position": [7, 12],
+      "experience": "REGULAR"
+    }
+  ],
+
+  "vp": {
+    "value_per_hex": 4,
+    "hexes": [
+      [4, 8]
+    ]
+  }
+}

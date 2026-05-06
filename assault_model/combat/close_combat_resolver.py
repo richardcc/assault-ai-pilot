@@ -93,7 +93,7 @@ def resolve_close_combat(
                 )
             ),
             "attacker_defense": DefenseDicePool(
-                ctx.attacker.unit_type.get_close_combat_defense_dice(
+                ctx.attacker.unit_type.get_defense_dice(
                     ctx.attack_sector
                 )
             ),
@@ -103,7 +103,7 @@ def resolve_close_combat(
                 )
             ),
             "defender_defense": DefenseDicePool(
-                ctx.defender.unit_type.get_close_combat_defense_dice(
+                ctx.defender.unit_type.get_defense_dice(
                     ctx.attack_sector
                 )
             ),

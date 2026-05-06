@@ -12,12 +12,18 @@ def _trace(tag: str, **data):
     print(f"[TRACE][{tag}] {payload}")
 
 
-class CloseCombatContext:
+class CombatResolutionContext:
     """
-    Context specific to close combat (ASSAULT).
+    Context for resolving CLOSE COMBAT (ASSAULT).
 
-    This context is round-based and mutable.
-    It must NOT be used for ranged or reaction combat.
+    This context is:
+    - round-based
+    - mutable
+    - owned by the close combat resolver
+
+    IMPORTANT:
+    - This context is ONLY valid for ASSAULT resolution.
+    - It must NOT be reused for ranged or reaction combat.
     """
 
     def __init__(
@@ -48,3 +54,4 @@ class CloseCombatContext:
             defender_code=getattr(getattr(defender, "unit_type", None), "code", None),
             sector=attack_sector.name if attack_sector else None,
         )
+

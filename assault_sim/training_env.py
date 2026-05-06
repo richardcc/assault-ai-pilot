@@ -29,26 +29,19 @@ class TrainingEnv:
     - Delegates ALL gameplay logic and action execution to SimEnv.
     - Computes rewards and enforces optional episode limits.
 
-    Responsibilities:
-    - Forward reset() and step() calls to SimEnv.
-    - Track episode progress (step count, VP delta rewards).
-    - Validate coherence between an explicit action and the active unit.
-    - NEVER decide gameplay actions.
-
-    IMPORTANT (New Architecture Semantics):
-    - action=None DOES NOT mean "wait".
-      It means: "delegate action selection to SimEnv and its controller".
-    - TrainingEnv MUST NOT replace action=None with WaitAction.
-    - Action decision authority belongs exclusively to the controller
-      (heuristic or policy) wired into SimEnv.
-
-    Design Rule:
-    - SimEnv decides WHEN an action is required.
-    - Controller decides WHICH action to take.
-    - TrainingEnv only coordinates execution and evaluates outcomes.
+    IMPORTANT:
+    - This class does NOT select gameplay actions.
+    - This class does NOT modify SimEnv logic.
+    - Observability / EventBus lifecycle is owned by SimEnv.
+      TrainingEnv is intentionally agnostic to observability state.
     """
 
-    def __init__(self, sim_env, env_config_path: Path):
+    def __init__(
+        self,
+        sim_env,
+        env_config_path: Path,
+        scenario_override: str | None = None,   # optional, not used yet
+    ):
         self.sim = sim_env  # The real SimEnv instance
 
         with open(env_config_path, "r", encoding="utf-8") as f:
@@ -56,6 +49,9 @@ class TrainingEnv:
 
         env_cfg = self.env_config.get("environment", {})
         self.max_steps = env_cfg.get("max_steps", None)
+
+        # Stored for future use (curriculum / scenario selection)
+        self.scenario_override = scenario_override
 
         self.current_step = 0
         self.prev_vp = 0
@@ -86,20 +82,8 @@ class TrainingEnv:
 
         Parameters:
         - action:
-            * None      → delegate decision to SimEnv (controller-driven).
-            * Action    → must belong to the currently active unit.
-
-        Behavior:
-        - If there is no active unit, the action is ignored.
-        - If an explicit action targets a non-active unit,
-          it is safely replaced with WaitAction for the active unit.
-        - If action is None, it is passed through unchanged so
-          SimEnv can request an action from its controller.
-
-        Notes:
-        - This method does NOT select actions.
-        - This method does NOT apply gameplay rules.
-        - It only enforces action ↔ active_unit coherence and computes rewards.
+            * None   → delegate decision to SimEnv (controller-driven).
+            * Action → must belong to the currently active unit.
         """
 
         state = self.sim.game_state
@@ -114,10 +98,8 @@ class TrainingEnv:
         # -------------------------------------------------
         # ACTION COHERENCE GUARD
         # -------------------------------------------------
-        # IMPORTANT:
-        # action=None is intentional and means:
-        #   "Let SimEnv ask its controller (heuristic/policy) for the action."
-        # TrainingEnv must NOT convert action=None into WaitAction.
+        # action=None MUST be passed through unchanged:
+        # it means "let SimEnv ask its controller".
         if active is None:
             _trace("ACTION_BIND", result="no_active_unit")
             action = None
