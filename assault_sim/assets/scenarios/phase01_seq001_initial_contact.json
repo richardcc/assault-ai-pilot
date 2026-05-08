@@ -8,7 +8,7 @@
     "goal": "initial_contact"
   },
 
-  "max_turns": 12,
+  "max_turns": 13,
 
   "map": {
     "pieces": [

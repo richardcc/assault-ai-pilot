@@ -9,10 +9,17 @@ class TacticalPathHeuristic:
     """
     Tactical heuristic adapted to the new architecture.
 
-    DEBUG VERSION:
-    - Prioritizes ASSAULT
-    - Then forces RANGED_DIRECT if available (for debugging)
-    - Then movement toward VP
+    PURPOSE:
+    - Act as a stable, non-learning opponent
+    - PRIORITIZE REAL COMBAT when possible
+    - AVOID passive VP blocking that prevents interaction
+
+    PRIORITY ORDER:
+    1. ASSAULT (if in contact)
+    2. RANGED FIRE (if line of sight exists)
+    3. MOVE TO CREATE CONTACT (anti-VP camping)
+    4. MOVE TOWARD VP
+    5. WAIT (last resort)
     """
 
     def choose_action(self, state):
@@ -21,31 +28,55 @@ class TacticalPathHeuristic:
             return None
 
         actions = ActionCatalog(state).actions()
+        if not actions:
+            return None
 
         # -------------------------------------------------
-        # 1. PRIORITY: ASSAULT (DO NOT BREAK CC)
+        # 1. ABSOLUTE PRIORITY: ASSAULT
         # -------------------------------------------------
         for action in actions:
             if isinstance(action, AssaultAction):
                 return action
 
         # -------------------------------------------------
-        # 2. DEBUG: FORCE RANGED FIRE
+        # 2. PRIORITY: RANGED FIRE (REAL COMBAT)
         # -------------------------------------------------
         for action in actions:
             if isinstance(action, RangedDirectAttack):
                 return action
 
         # -------------------------------------------------
-        # 3. VICTORY POINTS (EXISTING LOGIC)
+        # 3. ANTI-PASSIVE VP CAMPING
+        #    If holding VP and enemy is nearby,
+        #    MOVE to seek line of sight instead of WAIT
         # -------------------------------------------------
         vp_tracker = state.vp_tracker
-        if not vp_tracker or not vp_tracker.conditions:
-            return self._wait(actions)
+        vp_positions = []
 
-        vp_positions = [
-            vp.hex_coords for vp in vp_tracker.conditions.points
-        ]
+        if vp_tracker and vp_tracker.conditions:
+            vp_positions = [vp.hex_coords for vp in vp_tracker.conditions.points]
+
+        if unit.position in vp_positions:
+            enemies = [
+                u for u in state.units
+                if u.side != unit.side and u.alive
+            ]
+
+            if enemies:
+                closest_enemy = min(
+                    enemies,
+                    key=lambda e: hex_distance(unit.position, e.position)
+                )
+
+                # Enemy nearby → move to create interaction
+                if hex_distance(unit.position, closest_enemy.position) <= 3:
+                    for action in actions:
+                        if action.action_type.category == ActionCategory.MOVEMENT:
+                            return action
+
+        # -------------------------------------------------
+        # 4. MOVE TOWARD VP (STANDARD LOGIC)
+        # -------------------------------------------------
         if not vp_positions:
             return self._wait(actions)
 
@@ -58,9 +89,6 @@ class TacticalPathHeuristic:
         best_action = None
         best_dist = hex_distance(current_pos, target_vp)
 
-        # -------------------------------------------------
-        # 4. CHOOSE BEST MOVE ACTION
-        # -------------------------------------------------
         for action in actions:
             if action.action_type.category != ActionCategory.MOVEMENT:
                 continue
@@ -79,6 +107,9 @@ class TacticalPathHeuristic:
         if best_action:
             return best_action
 
+        # -------------------------------------------------
+        # 5. FALLBACK: WAIT
+        # -------------------------------------------------
         return self._wait(actions)
 
     def _wait(self, actions):

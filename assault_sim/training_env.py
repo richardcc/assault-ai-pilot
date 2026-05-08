@@ -1,10 +1,10 @@
-# assault_sim/training_env.py
-
 import json
 import os
 from pathlib import Path
 
 from assault_model.actions.status import WaitAction
+from assault_model.map.hex_utils import hex_distance
+from assault_sim.rl.state_encoder import encode_state
 
 
 # -------------------------------------------------
@@ -24,25 +24,21 @@ class TrainingEnv:
     """
     Non-intrusive wrapper around SimEnv.
 
-    Purpose:
-    - Acts as a thin coordination layer for training loops (RL or scripted).
-    - Delegates ALL gameplay logic and action execution to SimEnv.
-    - Computes rewards and enforces optional episode limits.
+    Reward logic ONLY.
+    No rules, no mechanics, no action selection.
 
-    IMPORTANT:
-    - This class does NOT select gameplay actions.
-    - This class does NOT modify SimEnv logic.
-    - Observability / EventBus lifecycle is owned by SimEnv.
-      TrainingEnv is intentionally agnostic to observability state.
+    ✅ Includes:
+    - directional movement reward
+    - combat metrics
     """
 
     def __init__(
         self,
         sim_env,
         env_config_path: Path,
-        scenario_override: str | None = None,   # optional, not used yet
+        scenario_override: str | None = None,
     ):
-        self.sim = sim_env  # The real SimEnv instance
+        self.sim = sim_env
 
         with open(env_config_path, "r", encoding="utf-8") as f:
             self.env_config = json.load(f)
@@ -50,96 +46,149 @@ class TrainingEnv:
         env_cfg = self.env_config.get("environment", {})
         self.max_steps = env_cfg.get("max_steps", None)
 
-        # Stored for future use (curriculum / scenario selection)
         self.scenario_override = scenario_override
-
         self.current_step = 0
+
+        # ---- reward memory ----
         self.prev_vp = 0
+        self.prev_enemy_dist = None
+
+        # ---- 📊 COMBAT METRICS ----
+        self.rl_attacks = 0
+        self.rl_damage = 0
+        self.rl_kills = 0
+
+        self.heuristic_attacks = 0
+        self.heuristic_damage = 0
+        self.heuristic_kills = 0
 
     # -------------------------------------------------
     # RESET
     # -------------------------------------------------
     def reset(self):
-        """
-        Reset the environment and internal training state.
-
-        Returns:
-        - Initial observable GameState produced by SimEnv.
-        """
-        obs = self.sim.reset()
+        state = self.sim.reset()
 
         self.current_step = 0
-        self.prev_vp = obs.vp_tracker.total_points if obs.vp_tracker else 0
+        self.prev_vp = state.vp_tracker.total_points if state.vp_tracker else 0
+        self.prev_enemy_dist = None
 
-        return obs
+        return encode_state(
+            state,
+            rl_side="US",
+            max_turns=self.sim.scenario.max_turns,
+        )
 
     # -------------------------------------------------
     # STEP
     # -------------------------------------------------
     def step(self, action):
-        """
-        Execute one simulation step.
-
-        Parameters:
-        - action:
-            * None   → delegate decision to SimEnv (controller-driven).
-            * Action → must belong to the currently active unit.
-        """
-
         state = self.sim.game_state
         active = state.active_unit
 
-        _trace(
-            "ACTION_IN",
-            active=active.unit_id if active else None,
-            action=getattr(action, "unit_id", None),
-        )
-
-        # -------------------------------------------------
-        # ACTION COHERENCE GUARD
-        # -------------------------------------------------
-        # action=None MUST be passed through unchanged:
-        # it means "let SimEnv ask its controller".
+        # Guard coherencia
         if active is None:
-            _trace("ACTION_BIND", result="no_active_unit")
             action = None
-
         elif action is not None and action.unit_id != active.unit_id:
-            _trace(
-                "ACTION_BIND",
-                active=active.unit_id,
-                action=action.unit_id,
-                result="fixed_wait",
-            )
             action = WaitAction(active.unit_id)
 
-        else:
-            _trace(
-                "ACTION_BIND",
-                active=active.unit_id if active else None,
-                action=getattr(action, "unit_id", None),
-                result="ok_or_delegated",
+        # -------------------------------------------------
+        # 🔴 PRE-ACTION DISTANCE (KEY FIX)
+        # -------------------------------------------------
+        own_units = [u for u in state.units if u.alive and u.side == "US"]
+        enemy_units = [u for u in state.units if u.alive and u.side != "US"]
+
+        pre_dist = None
+        if own_units and enemy_units:
+            pre_dist = min(
+                hex_distance(us.position, ge.position)
+                for us in own_units
+                for ge in enemy_units
             )
 
         # -------------------------------------------------
-        # EXECUTION (DELEGATED TO SimEnv)
+        # EXECUTION
         # -------------------------------------------------
-        obs, _, sim_done, info = self.sim.step(action)
+        next_state, _, sim_done, info = self.sim.step(action)
 
         # -------------------------------------------------
-        # REWARD COMPUTATION (VP DELTA)
+        # COMBAT METRICS
         # -------------------------------------------------
-        current_vp = obs.vp_tracker.total_points if obs.vp_tracker else 0
+        if isinstance(info, dict):
+            dmg = info.get("damage", 0)
+            killed = info.get("defender_killed", False)
+
+            if dmg > 0:
+                if active and active.side == "US":
+                    self.rl_attacks += 1
+                    self.rl_damage += dmg
+                else:
+                    self.heuristic_attacks += 1
+                    self.heuristic_damage += dmg
+
+            if killed:
+                if active and active.side == "US":
+                    self.rl_kills += 1
+                else:
+                    self.heuristic_kills += 1
+
+        # -------------------------------------------------
+        # BASE REWARD — VP DELTA
+        # -------------------------------------------------
+        current_vp = (
+            next_state.vp_tracker.total_points
+            if next_state.vp_tracker else 0
+        )
         reward = current_vp - self.prev_vp
         self.prev_vp = current_vp
+
+        # -------------------------------------------------
+        # COMBAT REWARD
+        # -------------------------------------------------
+        if isinstance(info, dict):
+            reward += 0.5 * info.get("damage", 0)
+            if info.get("defender_killed"):
+                reward += 3.0
+
+        # -------------------------------------------------
+        # 🔴 DIRECTIONAL MOVEMENT REWARD (CRITICAL FIX)
+        # -------------------------------------------------
+        next_own_units = [u for u in next_state.units if u.alive and u.side == "US"]
+        next_enemy_units = [u for u in next_state.units if u.alive and u.side != "US"]
+
+        if pre_dist is not None and next_own_units and next_enemy_units:
+            post_dist = min(
+                hex_distance(us.position, ge.position)
+                for us in next_own_units
+                for ge in next_enemy_units
+            )
+
+            delta = pre_dist - post_dist
+            reward += 0.1 * delta   # ✅ local gradient
+
+            self.prev_enemy_dist = post_dist
+
+        # -------------------------------------------------
+        # WAIT PENALTY
+        # -------------------------------------------------
+        if isinstance(action, WaitAction) and enemy_units:
+            reward -= 0.05
 
         # -------------------------------------------------
         # EPISODE CONTROL
         # -------------------------------------------------
         self.current_step += 1
-
         done = sim_done
+
         if self.max_steps is not None and self.current_step >= self.max_steps:
             done = True
 
-        return obs, reward, done, info
+        return (
+            encode_state(
+                next_state,
+                rl_side="US",
+                max_turns=self.sim.scenario.max_turns,
+            ),
+            reward,
+            done,
+            info,
+        )

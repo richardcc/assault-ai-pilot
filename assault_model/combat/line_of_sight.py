@@ -21,7 +21,7 @@ def check_line_of_sight(attacker, target, game_map) -> LineOfSight:
     used to validate ranged fire legality (RF-R02).
 
     Rules:
-    - CLEAR if hex distance <= 3
+    - CLEAR if hex distance <= 6
     - BLOCKED otherwise
 
     Terrain, elevation, and obstruction modifiers are handled

@@ -16,13 +16,13 @@ class PolicyNet(nn.Module):
     def __init__(self, input_dim, max_actions):
         super().__init__()
 
+        # ✅ DEBUG prints (solo temporales)
         self.shared = nn.Sequential(
             nn.Linear(input_dim, 64),
             nn.ReLU(),
             nn.Linear(64, 64),
             nn.ReLU(),
         )
-
         # Actor head
         self.policy_head = nn.Linear(64, max_actions)
 

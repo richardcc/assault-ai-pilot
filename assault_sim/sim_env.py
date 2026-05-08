@@ -64,6 +64,7 @@ class SimEnv:
 
         self.runtime = RuntimeGameState(self.game_state, self.scenario)
 
+        # ✅ First turn always starts here
         self.runtime.start_turn()
         self.game_state = self.runtime.base_state
 
@@ -97,6 +98,14 @@ class SimEnv:
     # STEP
     # -------------------------------------------------
     def step(self, action):
+        """
+        Execute one simulation step.
+
+        Semantics:
+        - Apply exactly one action
+        - Close the turn if no activations remain
+        - Evaluate match end ONLY after full turn resolution
+        """
 
         if action is None and self.controller is not None:
             action = self.controller.choose_action(self.game_state)
@@ -117,20 +126,14 @@ class SimEnv:
                 }
             )
 
+        # --- Apply action ---
         context = ExecutionContext(event_bus=self.event_bus)
         self.runtime.apply_action(action, context=context)
         self.game_state = self.runtime.base_state
 
-        # ----- MATCH END -----
-        if self.runtime.is_match_over():
-            reward = (
-                self.game_state.vp_tracker.total_points
-                if self.game_state.vp_tracker
-                else 0
-            )
-            return self.game_state, reward, True, {}
-
-        # ----- TURN END (✅ FIX) -----
+        # -------------------------------------------------
+        # TURN END
+        # -------------------------------------------------
         if (
             self.runtime.turn_has_ended()
             and self.game_state.active_unit is None
@@ -159,7 +162,20 @@ class SimEnv:
                     }
                 )
 
+            # ✅ Close turn first
             self.runtime.end_turn()
+            self.game_state = self.runtime.base_state
+
+            # ✅ NOW check match end
+            if self.runtime.is_match_over():
+                reward = (
+                    self.game_state.vp_tracker.total_points
+                    if self.game_state.vp_tracker
+                    else 0
+                )
+                return self.game_state, reward, True, {}
+
+            # ✅ Start next turn only if match continues
             self.runtime.start_turn()
             self.game_state = self.runtime.base_state
 
@@ -170,7 +186,9 @@ class SimEnv:
             )
             return self.game_state, reward, False, {}
 
-        # ----- CONTINUE TURN -----
+        # -------------------------------------------------
+        # CONTINUE TURN
+        # -------------------------------------------------
         reward = (
             self.game_state.vp_tracker.total_points
             if self.game_state.vp_tracker

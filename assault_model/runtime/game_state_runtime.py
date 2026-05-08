@@ -72,9 +72,15 @@ class RuntimeGameState:
     def end_turn(self) -> None:
         """
         Finalize the current turn and advance the turn counter.
+
+        Invariant (TM-R06):
+        Match end conditions are evaluated only after full turn resolution.
         """
         self.base_state.end_turn()
         self.turn = TurnState(turn_number=self.base_state.turn)
+
+        # ✅ Match end is checked ONLY after full turn completion
+        self._check_match_end()
 
     # =================================================
     # MATCH END
@@ -247,7 +253,8 @@ class RuntimeGameState:
             )
             if target and target.position:
                 assault_target_position = HexCoord(
-                    target.position.q, target.position.r
+                    target.position.q,
+                    target.position.r,
                 )
                 event_bus.emit(
                     {
@@ -263,7 +270,6 @@ class RuntimeGameState:
         if isinstance(action, WaitAction):
             self._consume_activation(attacker)
             self._advance_activation()
-            self._check_match_end(context)
             return None
 
         result = resolve_action(
@@ -277,7 +283,6 @@ class RuntimeGameState:
 
         self._consume_activation(attacker)
         self._advance_activation()
-        self._check_match_end(context)
 
         if event_bus and prev_position and isinstance(action, MoveAction):
             unit_after = next(

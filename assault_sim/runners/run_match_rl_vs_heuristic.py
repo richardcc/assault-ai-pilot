@@ -11,42 +11,57 @@ from assault_sim.rl.policy_net import PolicyNet
 from assault_sim.rl.controller import RLPolicyController
 from assault_sim.rl.side_controller import SideAwareController
 from assault_sim.heuristics.tactical_path_heuristic import TacticalPathHeuristic
+from assault_sim.rl.state_encoder import encode_state
 
 from assault_sim.debug.console_observer import ConsoleObserver
 
 
 def main():
-    print(">>> Replaying: RL (GE) vs Heuristic (US)")
+    # =================================================
+    # ✅ DEFINE RL SIDE HERE (MUST MATCH TRAINING)
+    # =================================================
+    rl_side = "US"   # "GE" or "US"
+    enemy_side = "GE" if rl_side == "US" else "US"
+
+    print(f">>> Replaying: RL ({rl_side}) vs Heuristic ({enemy_side})")
 
     # -------------------------------------------------
     # Load trained PPO checkpoint
     # -------------------------------------------------
     checkpoint_path = (
         Path(__file__).resolve()
-        .parent.parent / "checkpoints" / "ppo_phase01.pt"
+        .parent.parent
+        / "checkpoints"
+        / f"ppo_{rl_side}_phase01.pt"
     )
 
-    checkpoint = torch.load(checkpoint_path)
+    checkpoint = torch.load(checkpoint_path, map_location="cpu")
 
     policy = PolicyNet(
-        input_dim=checkpoint["input_dim"],
+        input_dim=checkpoint["input_dim"],     # ✅ must be 9
         max_actions=checkpoint["max_actions"],
     )
     policy.load_state_dict(checkpoint["model_state_dict"])
-    policy.eval()   # 🔑 inference mode
+    policy.eval()
 
-    print("✅ PPO model loaded")
+    print(">>> PPO model loaded")
 
     # -------------------------------------------------
     # Controllers
     # -------------------------------------------------
-    rl_controller = RLPolicyController(policy)
+    max_turns = None  # will be known after reset
+
+    rl_controller = RLPolicyController(
+        policy_net=policy,
+        rl_side=rl_side,
+        max_turns=None,   # filled later
+    )
     heuristic_controller = TacticalPathHeuristic()
 
     controller = SideAwareController(
         rl_controller=rl_controller,
         heuristic_controller=heuristic_controller,
-        rl_side="GE",     # RL plays GE
+        rl_side=rl_side,
     )
 
     # -------------------------------------------------
@@ -56,11 +71,11 @@ def main():
         Path("assault_sim/config/sim_config.yaml")
     )
     sim_config.scenario_name = "phase01_seq001_initial_contact"
-    sim_config.seed = 42     # 🔑 reproducible match
+    sim_config.seed = 42   # ✅ reproducible
 
     sim_env = SimEnv(
         sim_config,
-        controller=controller,
+        controller=None,
         debug_config=sim_config.debug,
     )
 
@@ -70,24 +85,42 @@ def main():
     )
 
     # -------------------------------------------------
-    # Observer (prints actions & turns)
+    # Observer (prints turns & actions)
     # -------------------------------------------------
     observer = ConsoleObserver()
     if sim_env.event_bus:
         sim_env.event_bus.subscribe(observer)
 
     # -------------------------------------------------
-    # Run one full match
+    # Reset environment
     # -------------------------------------------------
-    state = env.reset()
+    obs = env.reset()                      # ✅ RL observation vector (9)
+    max_turns = sim_env.scenario.max_turns
+    rl_controller.max_turns = max_turns   # ✅ update controller now
+
     done = False
     step = 0
 
+    # -------------------------------------------------
+    # Run one full match
+    # -------------------------------------------------
     while not done:
-        state, reward, done, _ = env.step(None)
+        game_state = sim_env.game_state
+
+        action = controller.choose_action(
+            game_state,
+            obs
+        )
+
+        obs, _, done, _ = env.step(action)
         step += 1
 
-    vp = state.vp_tracker.total_points if state.vp_tracker else 0
+    # Final score from REAL game state
+    final_state = sim_env.game_state
+    vp = (
+        final_state.vp_tracker.total_points
+        if final_state.vp_tracker else 0
+    )
 
     print("\n=== MATCH FINISHED ===")
     print(f"Total steps: {step}")

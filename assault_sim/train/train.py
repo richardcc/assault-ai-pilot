@@ -30,7 +30,7 @@ def parse_args():
     parser.add_argument(
         "--scenario",
         type=str,
-        help="Override scenario name (e.g. phase01_seq001_initial_contact)"
+        help="Override scenario name"
     )
 
     parser.add_argument(
@@ -48,7 +48,7 @@ def parse_args():
     parser.add_argument(
         "--no-observability",
         action="store_true",
-        help="Disable EventBus (same as debug OFF)"
+        help="Disable EventBus"
     )
 
     return parser.parse_args()
@@ -65,43 +65,37 @@ def main():
     # -----------------------------------------------------
     sim_config = load_sim_config(args.config)
 
-    # -----------------------------------------------------
-    # 1.1 Apply CLI overrides
-    # -----------------------------------------------------
-
-    # ✅ Scenario override (THIS was missing before)
     if args.scenario:
         sim_config.scenario_name = args.scenario
 
     if args.seed is not None:
         sim_config.seed = args.seed
 
-    # ✅ EventBus is controlled ONLY via DebugConfig
     debug_enabled = args.debug and not args.no_observability
     debug_cfg = DebugConfig(enabled=debug_enabled)
 
     # -----------------------------------------------------
-    # 2. Controller (heuristic)
+    # 2. Controller (heuristic ONLY)
     # -----------------------------------------------------
     controller = TacticalPathHeuristic()
 
     # -----------------------------------------------------
-    # 3. Create simulation environment (ORIGINAL SIGNATURE)
+    # 3. Create simulation environment
     # -----------------------------------------------------
     sim_env = SimEnv(
         sim_config,
-        debug_config=debug_cfg,
         controller=controller,
+        debug_config=debug_cfg,
     )
 
     training_env = TrainingEnv(
         sim_env,
         env_config_path=Path("assault_sim/config/env_config.json"),
-        scenario_override=args.scenario,  # kept for future curriculum logic
+        scenario_override=args.scenario,
     )
 
     # -----------------------------------------------------
-    # 4. Observers (only if EventBus exists)
+    # 4. Observers
     # -----------------------------------------------------
     observer = ConsoleObserver()
     if sim_env.event_bus:
@@ -110,18 +104,24 @@ def main():
     # -----------------------------------------------------
     # 5. Reset
     # -----------------------------------------------------
-    state = training_env.reset()
+    obs = training_env.reset()              # ✅ RL observation (np.ndarray)
+    game_state = sim_env.game_state         # ✅ REAL GameState
     done = False
 
     # -----------------------------------------------------
     # 6. Main loop
     # -----------------------------------------------------
     while not done:
-        state, reward, done, info = training_env.step(None)
+        obs, reward, done, info = training_env.step(None)
+        game_state = sim_env.game_state     # ✅ always refresh GameState
 
+    # -----------------------------------------------------
+    # 7. Final output
+    # -----------------------------------------------------
     print("Simulation finished.")
-    if state.vp_tracker:
-        print(f"Final VP: {state.vp_tracker.total_points}")
+
+    if game_state.vp_tracker:
+        print(f"Final VP: {game_state.vp_tracker.total_points}")
 
 
 if __name__ == "__main__":
