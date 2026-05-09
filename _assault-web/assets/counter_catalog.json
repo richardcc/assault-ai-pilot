@@ -1,0 +1,23 @@
+{
+  "_comment": "UI-only: hex counter art. Double-sided counters (full / half strength).",
+
+  "IT_RIFLES_43": {
+    "full": "IT Rifles 43.png",
+    "half": "IT Rifles 43b.png"
+  },
+
+  "US_RIFLES_43": {
+    "full": "US Rifles 43.png",
+    "half": "US Rifles 43b.png"
+  },
+
+  "GE_RIFLES_43": {
+    "full": "GE Rifles 43.png",
+    "half": "GE Rifles 43b.png"
+  },
+
+  "GE_FJ_RIFLES_43": {
+    "full": "GE FJ Rifles 43.png",
+    "half": "GE FJ Rifles 43b.png"
+  }
+}
