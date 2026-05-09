@@ -1,6 +1,6 @@
 // -------------------------------------------------
 // PixiJS bootstrap – Phase 2
-// FASE FINAL (CONNECTED EVENT LOG)
+// FASE FINAL (CONNECTED EVENT LOG + COMBAT PANEL)
 // -------------------------------------------------
 
 // ---------------- ROOT ----------------
@@ -30,6 +30,29 @@ let REPLAY = null;
 let replayUnits = {};
 let CURRENT_TURN = 0;
 let CURRENT_STEP = -1;
+
+// ---------------- COMBAT PANEL ----------------
+const combatPanelEl = document.querySelector(".combat .box");
+
+function clearCombatPanel() {
+  combatPanelEl.innerHTML = "COMBAT PANEL";
+}
+
+function renderCombatPanel(event) {
+  clearCombatPanel();
+
+  if (!event || event.type !== "ACTION_EFFECT") return;
+
+  const payload = event.payload;
+  if (!payload || !payload.action) return;
+
+  if (payload.action === "RangedCombat") {
+    combatPanelEl.innerHTML = renderRangedCombat(
+      payload,
+      unitId => unitId
+    );
+  }
+}
 
 // ---------------- HEADER ----------------
 function updateHeaderTurnStep() {
@@ -114,10 +137,11 @@ function applyReplayEvent(event) {
   }
 }
 
-// ---------------- REBUILD (FOR PREV / INIT) ----------------
+// ---------------- REBUILD ----------------
 function rebuildState(turnIndex, stepIndex) {
   buildUnitsFromReplay();
   clearEventLog();
+  clearCombatPanel();
 
   for (let t = 0; t < turnIndex; t++) {
     REPLAY.turns[t].events.forEach(e => {
@@ -166,6 +190,7 @@ function nextStep() {
   renderReplayUnits();
   updateSidebarFromReplay();
   updateHeaderTurnStep();
+  renderCombatPanel(event);
 }
 
 // ---------------- TURN NAVIGATION ----------------
@@ -174,6 +199,7 @@ function nextTurn() {
 
   CURRENT_TURN++;
   CURRENT_STEP = -1;
+  clearCombatPanel();
 
   const turn = REPLAY.turns[CURRENT_TURN];
 

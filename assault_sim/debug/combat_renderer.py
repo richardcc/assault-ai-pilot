@@ -13,13 +13,13 @@ class CombatRenderer:
     Design rules:
     - Presentation only (NO game logic).
     - Payload-driven.
+    - NO legacy support.
     """
 
     DICE_FACE_ICON = {
         "CRITICAL": "💥",
         "DAMAGE": "❤️",
         "SUPPRESS": "😵",
-        "BLANK": "⚪",
     }
 
     DICE_COLOR_ICON = {
@@ -28,6 +28,8 @@ class CombatRenderer:
         "YELLOW": "🟡",
         "RED": "🔴",
     }
+
+    BLANK_ICON = "⚪"
 
     def __init__(self, turn_buffer, unit_formatter):
         self.turn_buffer = turn_buffer
@@ -48,10 +50,9 @@ class CombatRenderer:
             return
 
     # -------------------------------------------------
-    # CLOSE COMBAT (UNCHANGED)
+    # CLOSE COMBAT (UNCHANGED LOGIC, NEW RENDERING)
     # -------------------------------------------------
     def on_close_combat_effect(self, payload: dict) -> None:
-
         self.turn_buffer.add_line("         💥 COMBAT")
 
         attacker_id = payload.get("attacker")
@@ -133,7 +134,7 @@ class CombatRenderer:
             )
 
     # -------------------------------------------------
-    # RANGED COMBAT (IMPROVED, NO LOGIC CHANGES)
+    # RANGED COMBAT (NEW RENDERING)
     # -------------------------------------------------
     def on_ranged_combat_effect(self, payload: dict) -> None:
         attacker_id = payload.get("attacker")
@@ -165,7 +166,6 @@ class CombatRenderer:
             payload.get("defender_defense_dice", []),
         )
 
-        # ---- DAMAGE (PER ATTACK, EXPLICIT) ----
         hp_before = payload.get("defender_hp_before")
         hp_after = payload.get("defender_hp_after")
         if (
@@ -180,28 +180,25 @@ class CombatRenderer:
                     f"-{delta} HP ({hp_before} → {hp_after})"
                 )
 
-        # ---- CRITICALS ----
         criticals = payload.get("attacker_effects", {}).get("criticals", [])
         if criticals:
             self.turn_buffer.add_line(
                 f"                 💥 Critical hits: {len(criticals)}"
             )
 
-        # ---- KILL INDICATION ----
         defender_killed = payload.get("defender_killed", False)
         if defender_killed and defender_id:
             self.turn_buffer.add_line(
                 f"                 ☠️ {self.turn_buffer.unit_label(defender_id)} DESTROYED"
             )
 
-        # Keep visual HP in sync after ranged combat
         if defender_id is not None and hp_after is not None:
             self.unit_formatter.override_hp(defender_id, hp_after)
 
     # -------------------------------------------------
-    # INTERNAL HELPERS
+    # INTERNAL HELPERS (NEW, NO LEGACY)
     # -------------------------------------------------
-    def _render_dice_line(self, label: str, dice):
+    def _render_dice_line(self, label: str, dice: list) -> None:
         if not dice:
             return
 
@@ -210,21 +207,25 @@ class CombatRenderer:
             f"                 {label}:  {rendered}"
         )
 
-    def _render_die(self, die) -> str:
-        if isinstance(die, (tuple, list)) and len(die) == 2:
-            color, face = die
-            return (
-                self.DICE_COLOR_ICON.get(color, "❓")
-                + self.DICE_FACE_ICON.get(face, "❓")
-            )
+    def _render_die(self, die: dict) -> str:
+        """
+        Render a single die.
 
-        if isinstance(die, dict):
-            return (
-                self.DICE_COLOR_ICON.get(die.get("color"), "❓")
-                + self.DICE_FACE_ICON.get(die.get("face"), "❓")
-            )
+        Expected format:
+        {
+            "color": "RED",
+            "faces": ["CRITICAL", "DAMAGE"]
+        }
+        """
+        color_icon = self.DICE_COLOR_ICON.get(die["color"], "❓")
 
-        if isinstance(die, str):
-            return self.DICE_FACE_ICON.get(die, "❓")
+        faces = die.get("faces", [])
+        if not faces:
+            return color_icon + self.BLANK_ICON
 
-        return "❓"
+        face_icons = "".join(
+            self.DICE_FACE_ICON.get(face, "❓")
+            for face in faces
+        )
+
+        return color_icon + face_icons

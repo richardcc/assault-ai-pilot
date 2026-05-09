@@ -5,20 +5,22 @@
 # RESPONSIBILITY:
 # - Resolve direct ranged combat
 # - Roll dice
-# - Apply damage (same pattern as close combat)
+# - Apply damage and suppression (Rulebook 10.7.2 / 10.7.3)
 # - Emit ACTION_EFFECT
 #
 # IMPORTANT:
 # - Mutates unit HP via target.apply_damage(...)
+# - Mutates unit morale via target.apply_suppression(...)
 # - RuntimeGameState must NOT apply damage
 
 from assault_model.combat.attack_dice_pool import AttackDicePool
 from assault_model.combat.defense_dice_pool import DefenseDicePool
 from assault_model.combat.unit_class import UnitClass
 from assault_model.combat.dice_face import DiceFace
-from assault_model.combat.attack_sector import AttackSector
 from assault_model.map.combat_geometry import determine_attack_sector
 from assault_model.runtime.execution_context import ExecutionContext
+from assault_model.combat.battle_die import DiceResult
+from assault_model.combat.dice_comparison import compare_dice
 
 import os
 
@@ -43,9 +45,13 @@ class CombatResolutionResult:
 
 
 # =================================================
-# Critical resolution
+# Primary critical registration (10.7.3)
 # =================================================
 def resolve_critical(face: DiceFace, target_class: UnitClass):
+    """
+    Primary critical registration only.
+    Secondary effects (10.7.5 / 10.7.6) handled later.
+    """
     return {
         "face": face.name,
         "target_class": target_class.name,
@@ -65,8 +71,12 @@ def resolve_ranged_combat(
     """
     Ranged combat resolver.
 
-    SAME mutation and dice contract as close combat.
-    Damage is applied HERE via target.apply_damage(...).
+    Implements:
+    - 10.7.2 Dice comparison
+    - 10.7.3 Assigning damage & suppression
+
+    ASSUMES:
+    - Dice pools return DiceResult only
     """
 
     # ---------------- ATTACK DICE ----------------
@@ -76,7 +86,7 @@ def resolve_ranged_combat(
     )
 
     attack_pool = AttackDicePool(attack_colors)
-    attack_results = attack_pool.roll()      # [(color, face)]
+    attack_results: list[DiceResult] = attack_pool.roll()
 
     # ---------------- ATTACK SECTOR ----------------
     attack_sector = determine_attack_sector(
@@ -91,27 +101,29 @@ def resolve_ranged_combat(
     )
 
     defense_pool = DefenseDicePool(defense_colors)
-    defense_results = defense_pool.roll()    # [(color, face)]
+    defense_results: list[DiceResult] = defense_pool.roll()
 
-    # ---------------- CRITICALS ----------------
+    # ---------------- DICE COMPARISON (10.7.2) ----------------
+    comparison = compare_dice(
+        attacker_dice=attack_results,
+        defender_dice=defense_results,
+    )
+
+    remaining_damage = comparison["remaining_damage"]
+    remaining_criticals = comparison["remaining_criticals"]
+    remaining_suppress = comparison["remaining_suppress"]
+
+    # ---------------- PRIMARY CRITICAL REGISTRATION ----------------
     criticals = [
-        resolve_critical(face, UnitClass[target.unit_type.category.value])
-        for _, face in attack_results
-        if face == DiceFace.CRITICAL
+        resolve_critical(
+            DiceFace.CRITICAL,
+            UnitClass[target.unit_type.category.value],
+        )
+        for _ in range(remaining_criticals)
     ]
 
-    # ---------------- DAMAGE ----------------
-    hits = sum(
-        1 for _, face in attack_results
-        if face in (DiceFace.DAMAGE, DiceFace.CRITICAL)
-    )
-
-    blocks = sum(
-        1 for _, face in defense_results
-        if face == DiceFace.DAMAGE
-    )
-
-    damage = max(0, hits - blocks)
+    # ---------------- DAMAGE APPLICATION (10.7.3) ----------------
+    damage = remaining_damage + remaining_criticals
 
     hp_before = target.hp
     if damage > 0:
@@ -120,16 +132,24 @@ def resolve_ranged_combat(
 
     defender_killed = hp_before > 0 and hp_after == 0
 
+    # ---------------- SUPPRESSION (10.7.3) ----------------
+    suppressed = False
+    if remaining_suppress > 0 and target.alive:
+        target.apply_suppression()
+        suppressed = True
+
     _trace(
-        "RANGED_DAMAGE",
+        "RANGED_RESOLUTION",
         attacker=attacker.unit_id,
         defender=target.unit_id,
-        hits=hits,
-        blocks=blocks,
         damage=damage,
+        remaining_damage=remaining_damage,
+        remaining_criticals=remaining_criticals,
+        remaining_suppress=remaining_suppress,
         hp_before=hp_before,
         hp_after=hp_after,
         defender_killed=defender_killed,
+        suppressed=suppressed,
     )
 
     result = CombatResolutionResult(
@@ -151,22 +171,33 @@ def resolve_ranged_combat(
                     "attack_sector": attack_sector.name,
 
                     "attacker_attack_dice": [
-                        (color.name, face.name)
-                        for color, face in attack_results
+                        {
+                            "color": d.color.name,
+                            "faces": [f.name for f in d.faces],
+                        }
+                        for d in attack_results
                     ],
                     "defender_defense_dice": [
-                        (color.name, face.name)
-                        for color, face in defense_results
+                        {
+                            "color": d.color.name,
+                            "faces": [f.name for f in d.faces],
+                        }
+                        for d in defense_results
                     ],
 
                     "attacker_effects": {
-                        "criticals": criticals,
                         "damage": damage,
+                        "criticals": criticals,
+                        "suppress": remaining_suppress,
                     },
 
                     "defender_hp_before": hp_before,
                     "defender_hp_after": hp_after,
                     "defender_killed": defender_killed,
+                    "defender_suppressed": suppressed,
+
+                    # Extra traceability (non-breaking)
+                    "resolution": comparison,
 
                     "outcome": "resolved",
                     "winner": None,

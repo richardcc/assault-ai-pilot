@@ -1,0 +1,27 @@
+.ranged-combat-panel {
+  border-left: 3px solid #555;
+  padding: 8px 12px;
+  margin: 8px 0;
+}
+
+.combat-header {
+  font-weight: bold;
+  margin-bottom: 4px;
+}
+
+.combat-subheader {
+  font-size: 0.9rem;
+  margin-bottom: 6px;
+}
+
+.combat-meta {
+  color: #aaa;
+  font-size: 0.8rem;
+}
+
+.combat-damage,
+.combat-criticals,
+.combat-suppress,
+.combat-kill {
+  margin-top: 4px;
+}

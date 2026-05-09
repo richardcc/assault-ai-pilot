@@ -12,8 +12,8 @@ function renderUnitSidebar(units) {
   sidebar.innerHTML = "";
 
   const sides = [
-    { id: "US", label: "Allies" },
-    { id: "GE", label: "Axis" }
+    { id: "US", label: "Allies", icon: "🔴" },
+    { id: "GE", label: "Axis", icon: "🔵" }
   ];
 
   sides.forEach(side => {
@@ -27,7 +27,7 @@ function renderUnitSidebar(units) {
     units
       .filter(u => u.side === side.id)
       .forEach(unit => {
-        block.appendChild(renderUnitCard(unit));
+        block.appendChild(renderUnitCard(unit, side.icon));
       });
 
     sidebar.appendChild(block);
@@ -47,7 +47,12 @@ function hexToBoardCoord(q, r) {
 // -------------------------------------------------
 // Unit card renderer
 // -------------------------------------------------
-function renderUnitCard(unit) {
+function renderUnitCard(unit, sideIcon) {
+  // No renderizar unidades eliminadas
+  if (unit.status && unit.status.includes("KIA")) {
+    return document.createDocumentFragment();
+  }
+
   const card = document.createElement("div");
   card.className = "unit-card";
 
@@ -55,27 +60,43 @@ function renderUnitCard(unit) {
   const img = document.createElement("img");
   img.src = unit.image;
   img.className = "unit-counter";
+  card.appendChild(img);
 
-  // Info
+  // Info container
   const info = document.createElement("div");
   info.className = "unit-info";
 
-  const positionText =
+  // Name + ID
+  const name = document.createElement("div");
+  name.className = "unit-name";
+  name.textContent = `${sideIcon} ${unit.id}`;
+  info.appendChild(name);
+
+  // HP as hearts
+  const hpRow = document.createElement("div");
+  hpRow.className = "unit-hp";
+  const hp = Math.max(0, unit.hp ?? 0);
+  hpRow.textContent = "❤️".repeat(hp);
+  info.appendChild(hpRow);
+
+  // Position
+  const posRow = document.createElement("div");
+  posRow.className = "unit-pos";
+  posRow.textContent =
     typeof unit.q === "number" && typeof unit.r === "number"
       ? `Pos: ${hexToBoardCoord(unit.q, unit.r)}`
       : "Pos: OFF MAP";
+  info.appendChild(posRow);
 
-  info.innerHTML = `
-    <strong>${unit.name}</strong><br>
-    <small>ID: ${unit.id}</small><br>
-    HP: ${unit.hp} · Steps: ${unit.steps}<br>
-    ${positionText}<br>
-    <em>${unit.status.join(", ")}</em>
-  `;
+  // Status
+  if (unit.status && unit.status.length > 0) {
+    const statusRow = document.createElement("div");
+    statusRow.className = "unit-status";
+    statusRow.textContent = unit.status.join(", ");
+    info.appendChild(statusRow);
+  }
 
-  card.appendChild(img);
   card.appendChild(info);
-
   return card;
 }
 

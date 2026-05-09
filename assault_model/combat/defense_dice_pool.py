@@ -1,14 +1,25 @@
 # assault_model/combat/defense_dice_pool.py
+#
+# Defense dice pool.
+#
+# RESPONSIBILITY:
+# - Hold a list of defense dice colors
+# - Roll all dice using BattleDie
+# - Return DiceResult objects ONLY
+#
+# IMPORTANT:
+# - NO legacy tuple support
+# - NO random logic here
+# - BattleDie is the single authority for dice rolling
 
-import random
 import os
-from typing import List, Tuple
+from typing import List
 
-from assault_model.combat.dice_face import DiceFace
 from assault_model.combat.dice_color import DiceColor
+from assault_model.combat.battle_die import BattleDie, DiceResult
 
 
-# DEBUG TRACE (configurable por entorno)
+# DEBUG TRACE (configurable via environment)
 DEBUG_TRACE = os.getenv("ASSAULT_DEBUG_TRACE", "0") == "1"
 
 
@@ -23,33 +34,38 @@ class DefenseDicePool:
     """
     Pool of defense dice.
 
-    The pool contains DiceColor values directly.
-    Rolling preserves (color, face).
+    The pool stores DiceColor values and rolls them using BattleDie.
+    The result of a roll is ALWAYS a list of DiceResult objects.
     """
 
     def __init__(self, dice: List[DiceColor]):
-        self.dice = dice
+        self.dice: List[BattleDie] = [
+            BattleDie(color) for color in dice
+        ]
 
         _trace(
             "DEFENSE_DICE_POOL_INIT",
-            dice_count=len(dice),
-            dice=[d.name for d in dice],  # ✅ CORRECTO
+            dice_count=len(self.dice),
+            dice=[d.color.name for d in self.dice],
         )
 
-    def roll(self) -> List[Tuple[DiceColor, DiceFace]]:
+    def roll(self) -> List[DiceResult]:
         """
-        Roll all defense dice and return (color, face) tuples.
-        """
-        results = []
+        Roll all defense dice.
 
-        for color in self.dice:
-            face = random.choice(list(DiceFace))
-            results.append((color, face))
+        Returns:
+            List[DiceResult]
+        """
+        results: List[DiceResult] = []
+
+        for die in self.dice:
+            result = die.roll()
+            results.append(result)
 
             _trace(
                 "DEFENSE_DIE_ROLL",
-                color=color.name,
-                face=face.name,
+                color=result.color.name,
+                faces=[f.name for f in result.faces],
             )
 
         return results
