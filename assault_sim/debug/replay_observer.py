@@ -1,16 +1,10 @@
+import copy
 from assault_sim.debug.replay import Replay
 
-
 class ReplayObserver:
-    """
-    EventBus observer that records replay data.
-
-    Mirrors ConsoleObserver event handling,
-    but stores data instead of printing it.
-    """
-
     def __init__(self):
         self.replay = Replay()
+        self.replay.replay_version = 2  # ✅ FIX
         self._current_turn = None
         self._current_events = []
 
@@ -27,20 +21,18 @@ class ReplayObserver:
         # ---------------- ACTION ----------------
         elif event_type == "ACTION":
             turn = payload.get("turn")
-
             if self._current_turn != turn:
                 self._flush_turn()
                 self._current_turn = turn
-
-            self._current_events.append(event)
+            self._current_events.append(copy.deepcopy(event))
 
         # ---------------- ACTION EFFECT ----------------
         elif event_type == "ACTION_EFFECT":
-            self._current_events.append(event)
+            self._current_events.append(copy.deepcopy(event))
 
         # ---------------- UNIT MOVED ----------------
         elif event_type == "UNIT_MOVED":
-            self._current_events.append(event)
+            self._current_events.append(copy.deepcopy(event))
 
         # ---------------- TURN END ----------------
         elif event_type == "TURN_END":
