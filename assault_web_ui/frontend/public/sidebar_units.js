@@ -1,5 +1,14 @@
+// -------------------------------------------------
+// Sidebar Units Renderer
+// -------------------------------------------------
+// Renders unit cards in the left sidebar
+// Uses data provided by app_pixi.js
+// -------------------------------------------------
+
 function renderUnitSidebar(units) {
   const sidebar = document.getElementById("sidebar-units");
+  if (!sidebar) return;
+
   sidebar.innerHTML = "";
 
   const sides = [
@@ -25,20 +34,43 @@ function renderUnitSidebar(units) {
   });
 }
 
+// -------------------------------------------------
+// Helpers
+// -------------------------------------------------
+function hexToBoardCoord(q, r) {
+  const letters = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+  const col = letters[q] || "?";
+  const row = typeof r === "number" ? r + 1 : "?";
+  return `${col}${row}`;
+}
+
+// -------------------------------------------------
+// Unit card renderer
+// -------------------------------------------------
 function renderUnitCard(unit) {
   const card = document.createElement("div");
   card.className = "unit-card";
 
+  // Counter image
   const img = document.createElement("img");
   img.src = unit.image;
   img.className = "unit-counter";
 
+  // Info
   const info = document.createElement("div");
   info.className = "unit-info";
+
+  const positionText =
+    typeof unit.q === "number" && typeof unit.r === "number"
+      ? `Pos: ${hexToBoardCoord(unit.q, unit.r)}`
+      : "Pos: OFF MAP";
+
   info.innerHTML = `
-    <strong>${unit.name}</strong><br/>
-    STR ${unit.strength} · Steps ${unit.steps}<br/>
-    ${unit.status.join(", ")}
+    <strong>${unit.name}</strong><br>
+    <small>ID: ${unit.id}</small><br>
+    HP: ${unit.hp} · Steps: ${unit.steps}<br>
+    ${positionText}<br>
+    <em>${unit.status.join(", ")}</em>
   `;
 
   card.appendChild(img);
@@ -46,3 +78,8 @@ function renderUnitCard(unit) {
 
   return card;
 }
+
+// -------------------------------------------------
+// ✅ EXPOSE GLOBALLY
+// -------------------------------------------------
+window.renderUnitSidebar = renderUnitSidebar;

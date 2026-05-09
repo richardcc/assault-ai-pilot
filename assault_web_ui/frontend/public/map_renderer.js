@@ -33,11 +33,9 @@ function computeGridBounds(hexes, grid) {
 function drawDashedHex(g, cx, cy, r) {
   const start = -Math.PI / 2;
 
-  // Dash pattern (world units)
   const dash = 10;
   const gap  = 6;
 
-  // Hex vertices
   const pts = [];
   for (let i = 0; i < 6; i++) {
     const a = start + (Math.PI / 3) * i;
@@ -47,7 +45,6 @@ function drawDashedHex(g, cx, cy, r) {
     });
   }
 
-  // Draw each side dashed
   for (let i = 0; i < 6; i++) {
     const p0 = pts[i];
     const p1 = pts[(i + 1) % 6];
@@ -103,7 +100,7 @@ function renderGrid(app, scenario) {
   const rowsPerSection = scenario.map.height / 2;
   const sectionHeight = (rowsPerSection - 1) * ROW + 2 * R;
 
-  // ---- S3 (TOP) → (grid.minX , grid.minY)
+  // ---- S3 (TOP)
   {
     const tex = PIXI.Texture.from(scenario.pieces.S3.render.image);
     const spr = new PIXI.Sprite(tex);
@@ -116,7 +113,7 @@ function renderGrid(app, scenario) {
     mapLayer.addChild(spr);
   }
 
-  // ---- S2 (BOTTOM) → (grid.minX , grid.maxY - sectionHeight)
+  // ---- S2 (BOTTOM)
   {
     const tex = PIXI.Texture.from(scenario.pieces.S2.render.image);
     const spr = new PIXI.Sprite(tex);
@@ -141,6 +138,37 @@ function renderGrid(app, scenario) {
   });
 
   camera.addChild(g);
+
+  // =================================================
+  // ✅ HEX COORDINATES OVERLAY (ONLY SAFE ADDITION)
+  // =================================================
+  const coordLayer = new PIXI.Container();
+  camera.addChild(coordLayer);
+
+  scenario.map.hexes.forEach(h => {
+    const p = hexToWorld(h.q, h.r, grid);
+
+    const col = String.fromCharCode(65 + h.q); // A, B, C…
+    const row = h.r + 1;                       // 1, 2, 3…
+    const label = `${col}${row}`;
+
+    const txt = new PIXI.Text(label, {
+      fontFamily: "monospace",
+      fontSize: 12,          // 🔼 slightly larger
+      fill: 0xff0000,        // 🔴 stronger red
+      stroke: 0x000000,      // ⬛ black outline
+      strokeThickness: 2
+    });
+
+    // 🔽 moved slightly down & inward
+    txt.x = p.x - R * 0.45;
+    txt.y = p.y - R * 0.45;
+    txt.alpha = 0.9;
+    txt.eventMode = "none";
+
+    coordLayer.addChild(txt);
+  });
+  // =================================================
 
   // -------------------------------
   // CAMERA FIT (unchanged)

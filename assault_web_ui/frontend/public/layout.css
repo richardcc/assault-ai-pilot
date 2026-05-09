@@ -1,4 +1,7 @@
-* { box-sizing: border-box; font-family: sans-serif; }
+* {
+  box-sizing: border-box;
+  font-family: sans-serif;
+}
 
 html, body {
   margin: 0;
@@ -7,11 +10,20 @@ html, body {
   color: #e0e0e0;
 }
 
+/* ============================= */
+/* MAIN LAYOUT GRID              */
+/* ============================= */
+
 .layout {
   display: grid;
-  grid-template-rows: 60px 1fr 200px;
+  grid-template-rows: auto 1fr 200px;
   height: 100%;
+  overflow: hidden;
 }
+
+/* ============================= */
+/* HEADER                        */
+/* ============================= */
 
 .header {
   background: #2a2a2a;
@@ -19,19 +31,66 @@ html, body {
   padding: 10px;
 }
 
+.header .box {
+  border: 2px dashed #666;
+  padding: 10px;
+  text-align: center;
+  color: #aaa;
+  font-size: 14px;
+
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+
+/* Buttons */
+#btn-prev-turn,
+#btn-next-turn,
+#btn-prev-step,
+#btn-next-step {
+  padding: 6px 12px;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+/* ============================= */
+/* MAIN CONTENT                  */
+/* ============================= */
+
 .main {
   display: grid;
   grid-template-columns: 300px 1fr 300px;
+  height: 100%;
+  overflow: hidden;
 }
 
-.sidebar-left, .sidebar-right {
+/* ============================= */
+/* SIDEBARS                      */
+/* ============================= */
+
+.sidebar-left,
+.sidebar-right {
   background: #242424;
   padding: 10px;
-  overflow: auto;
+  overflow: hidden;
 }
 
-.sidebar-left { border-right: 2px solid #444; }
-.sidebar-right { border-left: 2px solid #444; }
+.sidebar-left {
+  border-right: 2px solid #444;
+  display: flex;
+  flex-direction: column;
+}
+
+.sidebar-right {
+  border-left: 2px solid #444;
+  display: flex;
+  flex-direction: column;
+}
+
+/* ============================= */
+/* MAP                           */
+/* ============================= */
 
 .map {
   background: #333;
@@ -40,6 +99,7 @@ html, body {
   justify-content: center;
   border-left: 2px solid #444;
   border-right: 2px solid #444;
+  overflow: hidden;
 }
 
 .map-container {
@@ -53,56 +113,99 @@ html, body {
   height: 100%;
 }
 
+/* ============================= */
+/* FOOTER                        */
+/* ============================= */
+
 .footer {
   display: grid;
   grid-template-columns: 1fr 1fr;
+  height: 200px;
   border-top: 2px solid #444;
 }
 
-.combat, .hrl {
+.combat,
+.hrl {
   background: #222;
   padding: 10px;
 }
 
-.combat { border-right: 2px solid #444; }
+.combat {
+  border-right: 2px solid #444;
+}
+
+/* ============================= */
+/* SHARED BOX STYLE              */
+/* ============================= */
 
 .box {
   border: 2px dashed #666;
-  height: 100%;
   padding: 10px;
   text-align: center;
   color: #aaa;
   font-size: 14px;
 }
 
+/* ============================= */
+/* SIDEBAR LEFT: UNITS           */
+/* ============================= */
+
+.sidebar-left .box {
+  flex: 1;
+  overflow: hidden;
+}
+
 #sidebar-units {
+  flex: 1;
+  overflow-y: auto;
+  scrollbar-gutter: stable;
   padding: 6px;
-}
-
-.side-block {
-  margin-bottom: 12px;
-}
-
-.side-block h3 {
-  margin: 6px 0;
-  font-size: 13px;
-  border-bottom: 1px solid #444;
-  text-transform: uppercase;
 }
 
 .unit-card {
   display: flex;
-  gap: 6px;
-  align-items: center;
-  margin: 6px 0;
+  gap: 8px;
+  align-items: flex-start;
+  margin: 8px 0;
 }
 
 .unit-counter {
-  width: 48px;
+  width: 56px;
+  max-width: 56px;
   height: auto;
+  flex-shrink: 0;
 }
 
 .unit-info {
   font-size: 11px;
-  line-height: 1.2;
+  line-height: 1.3;
+  text-align: left;
+}
+
+/* ============================= */
+/* SIDEBAR RIGHT: EVENT LOG      */
+/* ============================= */
+
+/* ✅ THIS IS THE KEY */
+.sidebar-right .box {
+  flex: 1;
+  height: 100%;       /* ✅ ALTURA REAL */
+  overflow: hidden;
+}
+
+/* ✅ REAL SCROLL */
+#event-log {
+  max-height: 100%;   /* ✅ NO height:100% */
+  overflow-y: scroll;
+  scrollbar-gutter: stable;
+  padding-right: 6px;
+}
+
+#event-log div {
+  font-size: 12px;
+  line-height: 1.4;
+  border-bottom: 1px solid #333;
+  padding-bottom: 4px;
+  margin-bottom: 4px;
+  text-align: left;
 }

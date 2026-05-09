@@ -5,6 +5,9 @@
 // Does NOT touch grid, camera, pan or zoom
 // -------------------------------------------------
 
+let unitLayer = null;
+let hostContainer = null;
+
 function renderUnitsOnMap(app, scenario) {
 
   if (!scenario || !Array.isArray(scenario.units)) {
@@ -12,14 +15,34 @@ function renderUnitsOnMap(app, scenario) {
     return;
   }
 
-  // Get camera (created by map_renderer)
-  const camera = app.stage.children[0];
-  if (!camera) {
-    console.error("renderUnitsOnMap: camera not found");
-    return;
+  // -------------------------------------------------
+  // ✅ ROBUST HOST CONTAINER DETECTION
+  // -------------------------------------------------
+  if (!hostContainer) {
+    // Use the first PIXI.Container created by map_renderer
+    hostContainer = app.stage.children.find(c => c instanceof PIXI.Container);
+
+    if (!hostContainer) {
+      console.error("renderUnitsOnMap: no container found on stage");
+      return;
+    }
   }
 
-  // Grid geometry (must match map)
+  // -------------------------------------------------
+  // ✅ CREATE UNIT LAYER ONCE
+  // -------------------------------------------------
+  if (!unitLayer) {
+    unitLayer = new PIXI.Container();
+    unitLayer.name = "unitLayer";
+    hostContainer.addChild(unitLayer);
+  }
+
+  // ✅ CLEAR PREVIOUS UNITS (CRITICAL)
+  unitLayer.removeChildren();
+
+  // -------------------------------------------------
+  // Grid geometry (must match map_renderer)
+  // -------------------------------------------------
   const R   = scenario.grid.hexRadius;
   const W   = Math.sqrt(3) * R;
   const ROW = 1.5 * R;
@@ -31,15 +54,14 @@ function renderUnitsOnMap(app, scenario) {
     };
   }
 
-  // Dedicated layer for units
-  const unitLayer = new PIXI.Container();
-  unitLayer.name = "unitLayer";
-  camera.addChild(unitLayer);
-
+  // -------------------------------------------------
+  // Render units
+  // -------------------------------------------------
   scenario.units.forEach(unit => {
 
+    // Skip units not on map (dead / not deployed)
     if (typeof unit.q !== "number" || typeof unit.r !== "number") {
-      return; // unit not on map yet
+      return;
     }
 
     if (!unit.image) {
@@ -55,8 +77,9 @@ function renderUnitsOnMap(app, scenario) {
     spr.anchor.set(0.5);
     spr.x = pos.x;
     spr.y = pos.y;
-    spr.scale.set(0.5); // adjust if needed
+    spr.scale.set(0.5);
 
+    // Metadata (future use: selection, highlight, etc.)
     spr.unitId = unit.id;
     spr.side = unit.side;
 
@@ -64,5 +87,7 @@ function renderUnitsOnMap(app, scenario) {
   });
 }
 
-// ✅ EXPOSE FUNCTION GLOBALLY (THIS IS THE KEY FIX)
+// -------------------------------------------------
+// ✅ EXPOSE FUNCTION GLOBALLY
+// -------------------------------------------------
 window.renderUnitsOnMap = renderUnitsOnMap;
