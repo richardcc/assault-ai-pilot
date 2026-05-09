@@ -21,6 +21,10 @@ from assault_sim.heuristics.tactical_path_heuristic import TacticalPathHeuristic
 from assault_sim.debug.console_observer import ConsoleObserver
 from assault_sim.debug.debug_config import DebugConfig
 
+from assault_sim.debug.replay_observer import ReplayObserver
+from assault_sim.debug.replay_writer import ReplayWriter
+from assault_sim.debug.replay_utils import extract_initial_state
+
 
 def main():
     # =================================================
@@ -75,7 +79,6 @@ def main():
     sim_config.scenario_name = "phase01_seq001_initial_contact"
     sim_config.seed = 42   # reproducible
 
-    # ✅ IMPORTANT: enable event bus for replay & winner output
     sim_env = SimEnv(
         sim_config,
         controller=None,
@@ -89,17 +92,32 @@ def main():
     )
 
     # -------------------------------------------------
-    # Observer (pretty console output)
+    # Observers (CALLABLE OBJECTS)
     # -------------------------------------------------
-    # ✅ Pass rl_side so observer can say HRL vs Heuristic
     observer = ConsoleObserver(rl_side=rl_side)
+    replay_observer = ReplayObserver()
+
     if sim_env.event_bus:
         sim_env.event_bus.subscribe(observer)
+        sim_env.event_bus.subscribe(replay_observer)
 
     # -------------------------------------------------
     # Reset environment
     # -------------------------------------------------
     obs = env.reset()
+
+    # Capture initial state for replay
+    replay_observer.replay.initial_state = extract_initial_state(
+        sim_env.game_state
+    )
+
+    replay_observer.replay.meta = {
+        "scenario_id": sim_config.scenario_name,
+        "sides": {
+            rl_side: "RL",
+            enemy_side: "HEURISTIC",
+        },
+    }
 
     done = False
     step = 0
@@ -131,6 +149,21 @@ def main():
     print("\n=== MATCH FINISHED ===")
     print(f"Total steps: {step}")
     print(f"Final VP:    {vp}")
+
+    # -------------------------------------------------
+    # Write replay to disk
+    # -------------------------------------------------
+    replay_dir = Path("assault_sim/session/replays")
+    replay_dir.mkdir(parents=True, exist_ok=True)
+
+    replay_path = replay_dir / (
+        f"{sim_config.scenario_name}__"
+        f"{rl_side}_RL_vs_{enemy_side}_HEURISTIC.json"
+    )
+
+    ReplayWriter.write(replay_observer.replay, replay_path)
+
+    print(f"Replay saved to: {replay_path}")
 
 
 if __name__ == "__main__":

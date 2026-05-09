@@ -38,24 +38,6 @@ window.SCENARIO = {
         [{q:0,r:5,terrain:"clear"},{q:1,r:5,terrain:"clear"},{q:2,r:5,terrain:"clear"},{q:3,r:5,terrain:"clear"},{q:4,r:5,terrain:"clear"},{q:5,r:5,terrain:"clear"},{q:6,r:5,terrain:"clear"},{q:7,r:5,terrain:"clear"},{q:8,r:5,terrain:"clear"}],
         [{q:0,r:6,terrain:"clear"},{q:1,r:6,terrain:"clear"},{q:2,r:6,terrain:"clear"},{q:3,r:6,terrain:"clear"},{q:4,r:6,terrain:"clear"},{q:5,r:6,terrain:"clear"},{q:6,r:6,terrain:"clear"},{q:7,r:6,terrain:"clear"},{q:8,r:6,terrain:"clear"}],
         [{q:0,r:7,terrain:"clear"},{q:1,r:7,terrain:"clear"},{q:2,r:7,terrain:"clear"},{q:3,r:7,terrain:"clear"},{q:4,r:7,terrain:"clear"},{q:5,r:7,terrain:"clear"},{q:6,r:7,terrain:"clear"},{q:7,r:7,terrain:"clear"},{q:8,r:7,terrain:"clear"}]
-      ],
-      hex_states: {
-        "3,3": { building: true },
-        "4,3": { building: true },
-        "5,3": { building: true },
-        "2,5": { building: true },
-        "6,5": { building: true },
-        "1,6": { woods: true },
-        "2,6": { woods: true },
-        "6,6": { woods: true },
-        "7,6": { woods: true }
-      },
-      hex_edges: [
-        { from: "2,3", to: "3,3", feature: "wall" },
-        { from: "3,3", to: "4,3", feature: "wall" },
-        { from: "4,3", to: "5,3", feature: "wall" },
-        { from: "2,6", to: "3,6", feature: "wall" },
-        { from: "5,6", to: "6,6", feature: "wall" }
       ]
     },
 
@@ -77,7 +59,36 @@ window.SCENARIO = {
         [{q:0,r:7,terrain:"water"},{q:1,r:7,terrain:"water"},{q:2,r:7,terrain:"water"},{q:3,r:7,terrain:"water"},{q:4,r:7,terrain:"water"},{q:5,r:7,terrain:"water"},{q:6,r:7,terrain:"water"},{q:7,r:7,terrain:"water"},{q:8,r:7,terrain:"water"}]
       ]
     }
-  }
+  },
+
+  // --------------------------------------------------
+  // ✅ UNITS (para el SIDEBAR)
+  // --------------------------------------------------
+  units: [
+    {
+      id: "GE_FJ_43",
+      side: "GE",
+      name: "FJ Rifles 43",
+      image: "/public/assets/counters/GE FJ Rifles 43.png",
+      strength: 5,
+      steps: 3,
+      status: ["READY"],
+      q: 3,
+      r: 5
+
+    },
+    {
+      id: "US_RIF_43",
+      side: "US",
+      name: "US Rifles 43",
+      image: "/public/assets/counters/US Rifles 43.png",
+      strength: 4,
+      steps: 2,
+      status: ["MOVED"],
+      q: 4,
+      r: 6
+    }
+  ]
 };
 
 // --------------------------------------------------
@@ -89,14 +100,12 @@ window.SCENARIO = {
   const s2 = window.SCENARIO.pieces.S2.hexes;
   const offset = s3.length;
 
-  // S3 rows 0..7
   s3.forEach(row =>
     row.forEach(h =>
       hexes.push({ q: h.q, r: h.r, terrain: h.terrain })
     )
   );
 
-  // S2 rows 8..15
   s2.forEach(row =>
     row.forEach(h =>
       hexes.push({ q: h.q, r: h.r + offset, terrain: h.terrain })

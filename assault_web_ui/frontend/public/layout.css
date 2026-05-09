@@ -74,3 +74,35 @@ html, body {
   color: #aaa;
   font-size: 14px;
 }
+
+#sidebar-units {
+  padding: 6px;
+}
+
+.side-block {
+  margin-bottom: 12px;
+}
+
+.side-block h3 {
+  margin: 6px 0;
+  font-size: 13px;
+  border-bottom: 1px solid #444;
+  text-transform: uppercase;
+}
+
+.unit-card {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  margin: 6px 0;
+}
+
+.unit-counter {
+  width: 48px;
+  height: auto;
+}
+
+.unit-info {
+  font-size: 11px;
+  line-height: 1.2;
+}
