@@ -1,10 +1,12 @@
 import json
 import os
 from pathlib import Path
+from typing import Dict
 
 from assault_model.actions.status import WaitAction
 from assault_model.map.hex_utils import hex_distance
 from assault_sim.rl.state_encoder import encode_state
+from assault_sim.rewards.aggressive_reward import AggressiveReward
 
 
 # -------------------------------------------------
@@ -22,23 +24,29 @@ def _trace(tag: str, **data):
 
 class TrainingEnv:
     """
-    Non-intrusive wrapper around SimEnv.
+    Training environment wrapper.
 
-    Reward logic ONLY.
-    No rules, no mechanics, no action selection.
+    Responsibilities:
+    - Execute actions
+    - Track combat metrics (INCLUDING real damage / kills)
+    - Compute distances (pre/post)
+    - Delegate ALL reward logic to reward module
 
-    ✅ Includes:
-    - directional movement reward
-    - combat metrics
+    Explicitly does NOT:
+    - Choose actions
+    - Apply tactics
+    - Contain reward logic
     """
 
     def __init__(
         self,
         sim_env,
         env_config_path: Path,
+        rl_side: str,
         scenario_override: str | None = None,
     ):
         self.sim = sim_env
+        self.rl_side = rl_side
 
         with open(env_config_path, "r", encoding="utf-8") as f:
             self.env_config = json.load(f)
@@ -49,11 +57,10 @@ class TrainingEnv:
         self.scenario_override = scenario_override
         self.current_step = 0
 
-        # ---- reward memory ----
-        self.prev_vp = 0
-        self.prev_enemy_dist = None
+        # Reward function (pluggable, HRL-compatible)
+        self.reward_fn = AggressiveReward(rl_side)
 
-        # ---- 📊 COMBAT METRICS ----
+        # ---- Combat metrics (ACCUMULATED) ----
         self.rl_attacks = 0
         self.rl_damage = 0
         self.rl_kills = 0
@@ -69,12 +76,11 @@ class TrainingEnv:
         state = self.sim.reset()
 
         self.current_step = 0
-        self.prev_vp = state.vp_tracker.total_points if state.vp_tracker else 0
-        self.prev_enemy_dist = None
+        self.reward_fn.reset(state)
 
         return encode_state(
             state,
-            rl_side="US",
+            rl_side=self.rl_side,
             max_turns=self.sim.scenario.max_turns,
         )
 
@@ -82,21 +88,35 @@ class TrainingEnv:
     # STEP
     # -------------------------------------------------
     def step(self, action):
+        """
+        Execute one step and compute damage/kills
+        by comparing HP pre/post engine step.
+        """
         state = self.sim.game_state
         active = state.active_unit
 
-        # Guard coherencia
+        # -------- Coherence guard --------
         if active is None:
             action = None
         elif action is not None and action.unit_id != active.unit_id:
             action = WaitAction(active.unit_id)
 
         # -------------------------------------------------
-        # 🔴 PRE-ACTION DISTANCE (KEY FIX)
+        # SNAPSHOT HP / ALIVE BEFORE STEP
         # -------------------------------------------------
-        own_units = [u for u in state.units if u.alive and u.side == "US"]
-        enemy_units = [u for u in state.units if u.alive and u.side != "US"]
+        hp_before: Dict[str, int] = {}
+        alive_before: Dict[str, bool] = {}
 
+        for u in state.units:
+            hp_before[u.unit_id] = getattr(u, "hp", 0)
+            alive_before[u.unit_id] = bool(u.alive)
+
+        own_units = [u for u in state.units if u.alive and u.side == self.rl_side]
+        enemy_units = [u for u in state.units if u.alive and u.side != self.rl_side]
+
+        # -------------------------------------------------
+        # PRE-ACTION DISTANCE
+        # -------------------------------------------------
         pre_dist = None
         if own_units and enemy_units:
             pre_dist = min(
@@ -106,72 +126,86 @@ class TrainingEnv:
             )
 
         # -------------------------------------------------
-        # EXECUTION
+        # EXECUTE ACTION IN ENGINE
         # -------------------------------------------------
         next_state, _, sim_done, info = self.sim.step(action)
 
-        # -------------------------------------------------
-        # COMBAT METRICS
-        # -------------------------------------------------
-        if isinstance(info, dict):
-            dmg = info.get("damage", 0)
-            killed = info.get("defender_killed", False)
+        action_name = action.__class__.__name__ if action else ""
+        is_attack_action = ("Ranged" in action_name) or ("Close" in action_name)
 
-            if dmg > 0:
-                if active and active.side == "US":
-                    self.rl_attacks += 1
-                    self.rl_damage += dmg
+        # -------------------------------------------------
+        # COUNT ATTACK ACTIONS (UNCHANGED)
+        # -------------------------------------------------
+        if active and is_attack_action:
+            if active.side == self.rl_side:
+                self.rl_attacks += 1
+            else:
+                self.heuristic_attacks += 1
+
+        # -------------------------------------------------
+        # SNAPSHOT HP / ALIVE AFTER STEP
+        # -------------------------------------------------
+        hp_after: Dict[str, int] = {}
+        alive_after: Dict[str, bool] = {}
+
+        for u in next_state.units:
+            hp_after[u.unit_id] = getattr(u, "hp", 0)
+            alive_after[u.unit_id] = bool(u.alive)
+
+        # -------------------------------------------------
+        # COMPUTE DAMAGE AND KILLS (SOURCE OF TRUTH)
+        # -------------------------------------------------
+        for unit_id, before_hp in hp_before.items():
+            after_hp = hp_after.get(unit_id, before_hp)
+            damage = max(0, before_hp - after_hp)
+
+            if damage > 0:
+                if active and active.side == self.rl_side:
+                    self.rl_damage += damage
                 else:
-                    self.heuristic_attacks += 1
-                    self.heuristic_damage += dmg
+                    self.heuristic_damage += damage
 
-            if killed:
-                if active and active.side == "US":
+            if alive_before.get(unit_id, False) and not alive_after.get(unit_id, True):
+                if active and active.side == self.rl_side:
                     self.rl_kills += 1
                 else:
                     self.heuristic_kills += 1
 
-        # -------------------------------------------------
-        # BASE REWARD — VP DELTA
-        # -------------------------------------------------
-        current_vp = (
-            next_state.vp_tracker.total_points
-            if next_state.vp_tracker else 0
+        _trace(
+            "COMBAT_SNAPSHOT",
+            action=action_name,
+            rl_damage=self.rl_damage,
+            heuristic_damage=self.heuristic_damage,
+            rl_kills=self.rl_kills,
+            heuristic_kills=self.heuristic_kills,
         )
-        reward = current_vp - self.prev_vp
-        self.prev_vp = current_vp
 
         # -------------------------------------------------
-        # COMBAT REWARD
+        # POST-ACTION DISTANCE
         # -------------------------------------------------
-        if isinstance(info, dict):
-            reward += 0.5 * info.get("damage", 0)
-            if info.get("defender_killed"):
-                reward += 3.0
+        next_own = [u for u in next_state.units if u.alive and u.side == self.rl_side]
+        next_enemy = [u for u in next_state.units if u.alive and u.side != self.rl_side]
 
-        # -------------------------------------------------
-        # 🔴 DIRECTIONAL MOVEMENT REWARD (CRITICAL FIX)
-        # -------------------------------------------------
-        next_own_units = [u for u in next_state.units if u.alive and u.side == "US"]
-        next_enemy_units = [u for u in next_state.units if u.alive and u.side != "US"]
-
-        if pre_dist is not None and next_own_units and next_enemy_units:
+        post_dist = None
+        if next_own and next_enemy:
             post_dist = min(
                 hex_distance(us.position, ge.position)
-                for us in next_own_units
-                for ge in next_enemy_units
+                for us in next_own
+                for ge in next_enemy
             )
 
-            delta = pre_dist - post_dist
-            reward += 0.1 * delta   # ✅ local gradient
-
-            self.prev_enemy_dist = post_dist
-
         # -------------------------------------------------
-        # WAIT PENALTY
+        # REWARD (DELEGATED)
         # -------------------------------------------------
-        if isinstance(action, WaitAction) and enemy_units:
-            reward -= 0.05
+        reward = self.reward_fn.compute(
+            state=state,
+            next_state=next_state,
+            action=action,
+            active=active,
+            info={},  # damage is now computed via snapshots
+            pre_dist=pre_dist,
+            post_dist=post_dist,
+        )
 
         # -------------------------------------------------
         # EPISODE CONTROL
@@ -185,7 +219,7 @@ class TrainingEnv:
         return (
             encode_state(
                 next_state,
-                rl_side="US",
+                rl_side=self.rl_side,
                 max_turns=self.sim.scenario.max_turns,
             ),
             reward,

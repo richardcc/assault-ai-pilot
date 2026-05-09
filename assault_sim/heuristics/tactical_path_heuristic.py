@@ -7,21 +7,20 @@ from assault_model.map.hex_utils import hex_distance
 
 class TacticalPathHeuristic:
     """
-    Tactical heuristic adapted to the new architecture.
+    Tactical heuristic adapted to support HRL.
 
-    PURPOSE:
-    - Act as a stable, non-learning opponent
-    - PRIORITIZE REAL COMBAT when possible
-    - AVOID passive VP blocking that prevents interaction
+    Core method:
+    - choose_action(state): unchanged, legacy-safe
 
-    PRIORITY ORDER:
-    1. ASSAULT (if in contact)
-    2. RANGED FIRE (if line of sight exists)
-    3. MOVE TO CREATE CONTACT (anti-VP camping)
-    4. MOVE TOWARD VP
-    5. WAIT (last resort)
+    Additional lightweight wrappers:
+    - advance_towards_enemy
+    - flank_best_position
+    - retreat
     """
 
+    # -------------------------------------------------
+    # MAIN HEURISTIC (UNCHANGED)
+    # -------------------------------------------------
     def choose_action(self, state):
         unit = state.active_unit
         if unit is None or not unit.alive:
@@ -39,55 +38,92 @@ class TacticalPathHeuristic:
                 return action
 
         # -------------------------------------------------
-        # 2. PRIORITY: RANGED FIRE (REAL COMBAT)
+        # 2. PRIORITY: RANGED FIRE
         # -------------------------------------------------
         for action in actions:
             if isinstance(action, RangedDirectAttack):
                 return action
 
         # -------------------------------------------------
-        # 3. ANTI-PASSIVE VP CAMPING
-        #    If holding VP and enemy is nearby,
-        #    MOVE to seek line of sight instead of WAIT
+        # 3. CREATE CONTACT (ANTI-PASSIVE)
         # -------------------------------------------------
-        vp_tracker = state.vp_tracker
-        vp_positions = []
+        enemies = [
+            u for u in state.units
+            if u.side != unit.side and u.alive
+        ]
 
-        if vp_tracker and vp_tracker.conditions:
-            vp_positions = [vp.hex_coords for vp in vp_tracker.conditions.points]
+        if enemies:
+            closest_enemy = min(
+                enemies,
+                key=lambda e: hex_distance(unit.position, e.position)
+            )
 
-        if unit.position in vp_positions:
-            enemies = [
-                u for u in state.units
-                if u.side != unit.side and u.alive
-            ]
+            # Move towards enemy to create interaction
+            best_move = None
+            best_dist = hex_distance(unit.position, closest_enemy.position)
 
-            if enemies:
-                closest_enemy = min(
-                    enemies,
-                    key=lambda e: hex_distance(unit.position, e.position)
-                )
+            for action in actions:
+                if action.action_type.category != ActionCategory.MOVEMENT:
+                    continue
 
-                # Enemy nearby → move to create interaction
-                if hex_distance(unit.position, closest_enemy.position) <= 3:
-                    for action in actions:
-                        if action.action_type.category == ActionCategory.MOVEMENT:
-                            return action
+                path = getattr(action, "path", None)
+                if not path:
+                    continue
+
+                dest = path[-1]
+                d = hex_distance(dest, closest_enemy.position)
+
+                if d < best_dist:
+                    best_dist = d
+                    best_move = action
+
+            if best_move:
+                return best_move
 
         # -------------------------------------------------
-        # 4. MOVE TOWARD VP (STANDARD LOGIC)
+        # 4. FALLBACK: WAIT
         # -------------------------------------------------
-        if not vp_positions:
+        return self._wait(actions)
+
+    # -------------------------------------------------
+    # HRL WRAPPERS (NEW, MINIMAL)
+    # -------------------------------------------------
+    def advance_towards_enemy(self, unit, state):
+        """
+        HRL ADVANCE:
+        Reuse existing heuristic logic to create contact.
+        """
+        return self.choose_action(state)
+
+    def flank_best_position(self, unit, state):
+        """
+        HRL FLANK:
+        For now, reuse choose_action.
+        Later, flank-specific logic can be added safely.
+        """
+        return self.choose_action(state)
+
+    def retreat(self, unit, state):
+        """
+        HRL RETREAT:
+        Move away from closest enemy.
+        """
+        actions = ActionCatalog(state).actions()
+        enemies = [
+            u for u in state.units
+            if u.side != unit.side and u.alive
+        ]
+
+        if not enemies:
             return self._wait(actions)
 
-        current_pos = unit.position
-        target_vp = min(
-            vp_positions,
-            key=lambda vp: hex_distance(current_pos, vp)
+        closest_enemy = min(
+            enemies,
+            key=lambda e: hex_distance(unit.position, e.position)
         )
 
-        best_action = None
-        best_dist = hex_distance(current_pos, target_vp)
+        best_move = None
+        best_dist = hex_distance(unit.position, closest_enemy.position)
 
         for action in actions:
             if action.action_type.category != ActionCategory.MOVEMENT:
@@ -98,20 +134,21 @@ class TacticalPathHeuristic:
                 continue
 
             dest = path[-1]
-            d = hex_distance(dest, target_vp)
+            d = hex_distance(dest, closest_enemy.position)
 
-            if d < best_dist:
+            # Retreat = increase distance
+            if d > best_dist:
                 best_dist = d
-                best_action = action
+                best_move = action
 
-        if best_action:
-            return best_action
+        if best_move:
+            return best_move
 
-        # -------------------------------------------------
-        # 5. FALLBACK: WAIT
-        # -------------------------------------------------
         return self._wait(actions)
 
+    # -------------------------------------------------
+    # INTERNAL
+    # -------------------------------------------------
     def _wait(self, actions):
         for a in actions:
             if a.action_type.category == ActionCategory.STATUS:

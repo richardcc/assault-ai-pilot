@@ -1,5 +1,21 @@
 """
 Simulation Environment (SimEnv)
+
+This class is the authoritative simulation driver.
+It is responsible for:
+- loading scenarios
+- advancing turns
+- executing actions in the engine
+- emitting events through the event bus
+
+IMPORTANT:
+- SimEnv MUST remain domain-agnostic
+- It must NOT compute rewards
+- It must NOT collect statistics
+- It must NOT interpret combat results
+
+Combat stats must be collected by listeners (e.g. TrainingEnv),
+subscribed to the event_bus.
 """
 
 import os
@@ -28,6 +44,12 @@ def _trace(tag: str, **data):
 
 
 class SimEnv:
+    """
+    Low-level simulation environment.
+
+    This is the SINGLE source of truth for game progression.
+    """
+
     def __init__(
         self,
         config: SimConfig,
@@ -38,6 +60,7 @@ class SimEnv:
         self.debug_config = debug_config or DebugConfig(enabled=False)
         self.controller = controller
 
+        # Event bus is the authoritative source of combat events
         self.event_bus = EventBus() if self.debug_config.enabled else None
 
         self.scenario = None
@@ -48,6 +71,9 @@ class SimEnv:
     # RESET
     # -------------------------------------------------
     def reset(self):
+        """
+        Reset the simulation and load the scenario.
+        """
         root = self.config.data_root
 
         unit_catalog = load_unit_catalog(root / self.config.unit_catalog)
@@ -64,7 +90,7 @@ class SimEnv:
 
         self.runtime = RuntimeGameState(self.game_state, self.scenario)
 
-        # ✅ First turn always starts here
+        # First turn always starts here
         self.runtime.start_turn()
         self.game_state = self.runtime.base_state
 
@@ -99,12 +125,13 @@ class SimEnv:
     # -------------------------------------------------
     def step(self, action):
         """
-        Execute one simulation step.
+        Execute exactly one engine action.
 
         Semantics:
-        - Apply exactly one action
-        - Close the turn if no activations remain
-        - Evaluate match end ONLY after full turn resolution
+        - Apply one action
+        - Close the turn if necessary
+        - Emit events
+        - Only decide match end AFTER turn resolution
         """
 
         if action is None and self.controller is not None:
@@ -162,11 +189,11 @@ class SimEnv:
                     }
                 )
 
-            # ✅ Close turn first
+            # Close turn first
             self.runtime.end_turn()
             self.game_state = self.runtime.base_state
 
-            # ✅ NOW check match end
+            # NOW check match end
             if self.runtime.is_match_over():
                 reward = (
                     self.game_state.vp_tracker.total_points
@@ -175,7 +202,7 @@ class SimEnv:
                 )
                 return self.game_state, reward, True, {}
 
-            # ✅ Start next turn only if match continues
+            # Start next turn only if match continues
             self.runtime.start_turn()
             self.game_state = self.runtime.base_state
 

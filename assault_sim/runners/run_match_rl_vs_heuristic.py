@@ -1,4 +1,9 @@
-# assault_sim/train/run_match_rl_vs_heuristic.py
+# assault_sim/runners/run_match_rl_vs_heuristic.py
+#
+# HRL-enabled replay:
+# - RL chooses tactical OPTIONS (not engine actions)
+# - Heuristics execute those options
+# - TrainingEnv remains untouched
 
 import torch
 from pathlib import Path
@@ -8,22 +13,22 @@ from assault_sim.sim_env import SimEnv
 from assault_sim.training_env import TrainingEnv
 
 from assault_sim.rl.policy_net import PolicyNet
-from assault_sim.rl.controller import RLPolicyController
-from assault_sim.rl.side_controller import SideAwareController
+from assault_sim.rl.option_policy import OptionPolicy
+from assault_sim.decision.hrl_controller import HRLController
+from assault_sim.decision.option_executor import OptionExecutor
 from assault_sim.heuristics.tactical_path_heuristic import TacticalPathHeuristic
-from assault_sim.rl.state_encoder import encode_state
 
 from assault_sim.debug.console_observer import ConsoleObserver
 
 
 def main():
     # =================================================
-    # ✅ DEFINE RL SIDE HERE (MUST MATCH TRAINING)
+    # DEFINE RL SIDE (MUST MATCH TRAINING)
     # =================================================
-    rl_side = "US"   # "GE" or "US"
+    rl_side = "US"        # "GE" or "US"
     enemy_side = "GE" if rl_side == "US" else "US"
 
-    print(f">>> Replaying: RL ({rl_side}) vs Heuristic ({enemy_side})")
+    print(f">>> Replaying HRL: RL ({rl_side}) vs Heuristic ({enemy_side})")
 
     # -------------------------------------------------
     # Load trained PPO checkpoint
@@ -37,30 +42,32 @@ def main():
 
     checkpoint = torch.load(checkpoint_path, map_location="cpu")
 
+    # NOTE:
+    # PolicyNet now represents a POLICY OVER OPTIONS,
+    # not over low-level engine actions.
     policy = PolicyNet(
-        input_dim=checkpoint["input_dim"],     # ✅ must be 9
-        max_actions=checkpoint["max_actions"],
+        input_dim=checkpoint["input_dim"],
+        max_actions=checkpoint["max_actions"],  # must match number of TacticalOptions
     )
     policy.load_state_dict(checkpoint["model_state_dict"])
     policy.eval()
 
-    print(">>> PPO model loaded")
+    print(">>> PPO model loaded (option-level policy)")
 
     # -------------------------------------------------
-    # Controllers
+    # HRL Controllers
     # -------------------------------------------------
-    max_turns = None  # will be known after reset
+    # High-level option policy (RL)
+    option_policy = OptionPolicy(policy)
 
-    rl_controller = RLPolicyController(
-        policy_net=policy,
-        rl_side=rl_side,
-        max_turns=None,   # filled later
-    )
+    # Low-level executor (heuristics)
     heuristic_controller = TacticalPathHeuristic()
+    option_executor = OptionExecutor(heuristic_controller)
 
-    controller = SideAwareController(
-        rl_controller=rl_controller,
-        heuristic_controller=heuristic_controller,
+    # HRL controller (decides WHEN to change option)
+    hrl_controller = HRLController(
+        option_policy=option_policy,
+        option_executor=option_executor,
         rl_side=rl_side,
     )
 
@@ -71,17 +78,18 @@ def main():
         Path("assault_sim/config/sim_config.yaml")
     )
     sim_config.scenario_name = "phase01_seq001_initial_contact"
-    sim_config.seed = 42   # ✅ reproducible
+    sim_config.seed = 42   # reproducible
 
     sim_env = SimEnv(
         sim_config,
-        controller=None,
+        controller=None,    # decisions handled externally (HRL)
         debug_config=sim_config.debug,
     )
 
     env = TrainingEnv(
         sim_env,
         env_config_path=Path("assault_sim/config/env_config.json"),
+        rl_side=rl_side,
     )
 
     # -------------------------------------------------
@@ -94,28 +102,31 @@ def main():
     # -------------------------------------------------
     # Reset environment
     # -------------------------------------------------
-    obs = env.reset()                      # ✅ RL observation vector (9)
-    max_turns = sim_env.scenario.max_turns
-    rl_controller.max_turns = max_turns   # ✅ update controller now
+    obs = env.reset()
 
     done = False
     step = 0
 
     # -------------------------------------------------
-    # Run one full match
+    # Run one full match (HRL loop)
     # -------------------------------------------------
     while not done:
-        game_state = sim_env.game_state
+        state = sim_env.game_state
+        active = state.active_unit
 
-        action = controller.choose_action(
-            game_state,
-            obs
-        )
+        if active is not None and active.side == rl_side:
+            # HRL path: RL selects OPTION, heuristics execute
+            action = hrl_controller.choose_action(state, obs)
+        else:
+            # Enemy remains fully heuristic-controlled
+            action = heuristic_controller.choose_action(state)
 
         obs, _, done, _ = env.step(action)
         step += 1
 
-    # Final score from REAL game state
+    # -------------------------------------------------
+    # Final score
+    # -------------------------------------------------
     final_state = sim_env.game_state
     vp = (
         final_state.vp_tracker.total_points
