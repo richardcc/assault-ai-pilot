@@ -60,7 +60,7 @@ class SimEnv:
         self.debug_config = debug_config or DebugConfig(enabled=False)
         self.controller = controller
 
-        # Event bus is the authoritative source of combat events
+        # Event bus is strictly for observability (replay / debug / UI)
         self.event_bus = EventBus() if self.debug_config.enabled else None
 
         self.scenario = None
@@ -131,7 +131,7 @@ class SimEnv:
         - Apply one action
         - Close the turn if necessary
         - Emit events
-        - Only decide match end AFTER turn resolution
+        - Decide match end ONLY after full turn resolution
         """
 
         if action is None and self.controller is not None:
@@ -189,20 +189,57 @@ class SimEnv:
                     }
                 )
 
-            # Close turn first
+            # Close the turn
             self.runtime.end_turn()
             self.game_state = self.runtime.base_state
 
-            # NOW check match end
+            # -------------------------------------------------
+            # MATCH END (DEFENSIVE, DOMAIN-AGNOSTIC)
+            # -------------------------------------------------
             if self.runtime.is_match_over():
+                turn = self.game_state.turn
+
+                winner = None
+                result = "draw"
+                reason = "scenario_end"
+
+                if self.game_state.vp_tracker:
+                    raw = getattr(self.game_state.vp_tracker, "points_by_side", None)
+
+                    # Defensive: supports method() or dict
+                    if callable(raw):
+                        points_by_side = raw()
+                    else:
+                        points_by_side = raw
+
+                    if isinstance(points_by_side, dict) and points_by_side:
+                        winner = max(points_by_side, key=points_by_side.get)
+                        result = "victory"
+
+                if self.event_bus:
+                    self.event_bus.emit(
+                        {
+                            "type": "MATCH_END",
+                            "payload": {
+                                "result": result,
+                                "winner": winner,
+                                "reason": reason,
+                                "turn": turn,
+                            },
+                        }
+                    )
+
                 reward = (
                     self.game_state.vp_tracker.total_points
                     if self.game_state.vp_tracker
                     else 0
                 )
+
                 return self.game_state, reward, True, {}
 
-            # Start next turn only if match continues
+            # -------------------------------------------------
+            # START NEXT TURN
+            # -------------------------------------------------
             self.runtime.start_turn()
             self.game_state = self.runtime.base_state
 

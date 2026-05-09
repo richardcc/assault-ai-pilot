@@ -19,6 +19,7 @@ from assault_sim.decision.option_executor import OptionExecutor
 from assault_sim.heuristics.tactical_path_heuristic import TacticalPathHeuristic
 
 from assault_sim.debug.console_observer import ConsoleObserver
+from assault_sim.debug.debug_config import DebugConfig
 
 
 def main():
@@ -37,17 +38,14 @@ def main():
         Path(__file__).resolve()
         .parent.parent
         / "checkpoints"
-        / f"ppo_{rl_side}_phase01.pt"
+        / f"ppo_{rl_side}_phase01_HRL.pt"
     )
 
     checkpoint = torch.load(checkpoint_path, map_location="cpu")
 
-    # NOTE:
-    # PolicyNet now represents a POLICY OVER OPTIONS,
-    # not over low-level engine actions.
     policy = PolicyNet(
         input_dim=checkpoint["input_dim"],
-        max_actions=checkpoint["max_actions"],  # must match number of TacticalOptions
+        max_actions=checkpoint["max_actions"],
     )
     policy.load_state_dict(checkpoint["model_state_dict"])
     policy.eval()
@@ -57,14 +55,11 @@ def main():
     # -------------------------------------------------
     # HRL Controllers
     # -------------------------------------------------
-    # High-level option policy (RL)
     option_policy = OptionPolicy(policy)
 
-    # Low-level executor (heuristics)
     heuristic_controller = TacticalPathHeuristic()
     option_executor = OptionExecutor(heuristic_controller)
 
-    # HRL controller (decides WHEN to change option)
     hrl_controller = HRLController(
         option_policy=option_policy,
         option_executor=option_executor,
@@ -80,10 +75,11 @@ def main():
     sim_config.scenario_name = "phase01_seq001_initial_contact"
     sim_config.seed = 42   # reproducible
 
+    # ✅ IMPORTANT: enable event bus for replay & winner output
     sim_env = SimEnv(
         sim_config,
-        controller=None,    # decisions handled externally (HRL)
-        debug_config=sim_config.debug,
+        controller=None,
+        debug_config=DebugConfig(enabled=True),
     )
 
     env = TrainingEnv(
@@ -93,9 +89,10 @@ def main():
     )
 
     # -------------------------------------------------
-    # Observer (prints turns & actions)
+    # Observer (pretty console output)
     # -------------------------------------------------
-    observer = ConsoleObserver()
+    # ✅ Pass rl_side so observer can say HRL vs Heuristic
+    observer = ConsoleObserver(rl_side=rl_side)
     if sim_env.event_bus:
         sim_env.event_bus.subscribe(observer)
 
@@ -115,17 +112,15 @@ def main():
         active = state.active_unit
 
         if active is not None and active.side == rl_side:
-            # HRL path: RL selects OPTION, heuristics execute
             action = hrl_controller.choose_action(state, obs)
         else:
-            # Enemy remains fully heuristic-controlled
             action = heuristic_controller.choose_action(state)
 
         obs, _, done, _ = env.step(action)
         step += 1
 
     # -------------------------------------------------
-    # Final score
+    # Final score (machine-level summary)
     # -------------------------------------------------
     final_state = sim_env.game_state
     vp = (

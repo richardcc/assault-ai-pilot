@@ -1,5 +1,3 @@
-# assault_sim/debug/console_observer.py
-
 from .turn_buffer import TurnBuffer
 from .movement_renderer import MovementRenderer
 from .combat_renderer import CombatRenderer
@@ -17,18 +15,19 @@ class ConsoleObserver:
     - Delegate presentation to specialized renderers.
     - Maintain a coherent, human-readable console output.
 
-    Design rules:
-    - Presentation only (NO domain logic).
-    - Listens to the real domain events.
+    Presentation ONLY:
+    - No game logic
+    - No training logic
+    - No interpretation of combat mechanics
     """
 
-    def __init__(self):
+    def __init__(self, rl_side: str | None = None):
+        self.rl_side = rl_side
+
         self.unit_formatter = UnitFormatter()
         self.turns = TurnBuffer(self.unit_formatter)
 
         self.move = MovementRenderer(self.turns)
-
-        # ✅ CombatRenderer with UnitFormatter injected
         self.combat = CombatRenderer(self.turns, self.unit_formatter)
 
         self.map = MapRenderer()
@@ -52,7 +51,6 @@ class ConsoleObserver:
 
         # ---------------- MAP STATE ----------------
         elif event_type == "MAP_STATE":
-            # Snapshot of consolidated game state (end of turn)
             self.map.update_state(payload)
             self.unit_formatter.update_units(payload.get("units", []))
 
@@ -70,8 +68,6 @@ class ConsoleObserver:
 
         # ---------------- ACTION EFFECT ----------------
         elif event_type == "ACTION_EFFECT":
-            # ✅ Delegate combat effects to CombatRenderer
-            # ✅ Supports BOTH CloseCombat and RangedCombat
             self.combat.on_action_effect(payload)
 
         # ---------------- TURN END ----------------
@@ -83,24 +79,42 @@ class ConsoleObserver:
         elif event_type == "MATCH_END":
             result = payload.get("result")
             winner = payload.get("winner")
-            reason = payload.get("reason")
+            reason = payload.get("reason", "scenario_end")
             turn = payload.get("turn")
 
             self.turns.add_line("")
 
-            if result == "victory" and winner:
-                self.turns.add_line(
-                    f"🏆 MATCH END — WINNER: {winner}  (turn {turn})"
-                )
+            # -------- DRAW --------
+            if result != "victory" or not winner:
+                self.turns.add_line("🤝 MATCH FINISHED — DRAW")
+                self.turns.add_line(f"    Ended at turn: {turn}")
+
+            # -------- VICTORY --------
             else:
+                is_hrl = self.rl_side is not None and winner == self.rl_side
+                winner_type = "HRL" if is_hrl else "HEURISTIC"
+
                 self.turns.add_line(
-                    f"🤝 MATCH END — DRAW  (turn {turn})"
+                    f"🏆 MATCH FINISHED — {winner_type} VICTORY ({winner})"
                 )
 
+                self.turns.add_line(
+                    f"    Winner: {winner} ({winner_type.lower()}-controlled)"
+                )
+
+                if self.rl_side:
+                    loser = "GE" if winner == "US" else "US"
+                    loser_type = "heuristic" if is_hrl else "hrl-controlled"
+                    self.turns.add_line(
+                        f"    Loser:  {loser} ({loser_type})"
+                    )
+
+                self.turns.add_line(f"    Ended at turn: {turn}")
+
+            # -------- REASON --------
             if reason:
-                self.turns.add_line(
-                    f"    Reason: {reason}"
-                )
+                pretty_reason = reason.replace("_", " ").capitalize()
+                self.turns.add_line(f"    Reason: {pretty_reason}")
 
-            # ✅ CRITICAL: force immediate print
+            # Force final print
             self.turns.close_turn()
