@@ -18,14 +18,12 @@ html, body {
 /* MAIN LAYOUT GRID              */
 /* ============================= */
 
-
 .layout {
   display: grid;
-  grid-template-rows: 180px 1fr 260px; /* ✅ EVEN MORE HEADER */
+  grid-template-rows: 150px 1fr 260px; /* compact header */
   height: 100vh;
   overflow: hidden;
 }
-
 
 /* ============================= */
 /* HEADER                        */
@@ -34,21 +32,75 @@ html, body {
 .header {
   background: #2a2a2a;
   border-bottom: 2px solid #444;
-  padding: 10px;
-  height: 100%;
-}
-
-.header .box {
-  height: 100%;
-  border: 2px dashed #666;
+  padding: 8px 12px;
   display: flex;
   flex-direction: column;
-  align-items: center;
-  justify-content: space-between; /* ✅ USE FULL HEIGHT */
+  justify-content: space-between;
+}
+
+/* Header renderer root */
+#header-root {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+}
+
+/* Top row (scenario + turn) */
+.header-layout {
+  display: flex;
+  gap: 12px;
+  align-items: stretch;
+}
+
+/* Generic header boxes */
+.header-layout .box {
+  border: 2px dashed #666;
   padding: 8px 12px;
-  gap: 6px;
-  font-size: 14px;
-  color: #aaa;
+}
+
+/* Left side: scenario + sides */
+.header-left {
+  min-width: 240px;
+  text-align: left;
+}
+
+.scenario-name {
+  font-weight: bold;
+  font-size: 17px;
+  margin-bottom: 6px;
+}
+
+.scenario-sides {
+  font-size: 15px;
+  color: #ccc;
+}
+
+.scenario-sides .side {
+  display: flex;
+  justify-content: space-between;
+}
+
+.scenario-sides .vs {
+  text-align: center;
+  margin: 4px 0;
+  font-size: 13px;
+  opacity: 0.7;
+}
+
+/* Center: turn / step */
+.header-center {
+  flex: 1;
+  text-align: center;
+  font-weight: bold;
+  font-size: 16px;
+}
+
+/* Bottom row: buttons */
+.header-controls {
+  display: flex;
+  justify-content: center;
+  gap: 12px;
+  margin-top: 10px;
 }
 
 /* Buttons */
@@ -56,8 +108,8 @@ html, body {
 #btn-next-turn,
 #btn-prev-step,
 #btn-next-step {
-  padding: 6px 12px;
-  font-size: 13px;
+  padding: 6px 14px;
+  font-size: 14px;
   cursor: pointer;
 }
 
@@ -74,74 +126,78 @@ html, body {
   min-height: 0;
   overflow: hidden;
 }
-/* ============================= */
-/* SIDEBARS                      */
-/* ============================= */
 
 /* ============================= */
-/* LEFT SIDEBAR – READABILITY    */
+/* LEFT SIDEBAR – UNITS          */
 /* ============================= */
 
-/* Overall sidebar text scale */
 .sidebar-left .box {
-  font-size: 15px;
-  line-height: 1.5;
+  font-size: 18px;
+  line-height: 1.6;
 }
 
 /* Container padding */
 #sidebar-units {
-  padding: 14px;
+  padding: 16px;
 }
 
 /* Unit card layout */
 .unit-card {
   display: flex;
   align-items: flex-start;
-  gap: 14px;
-  margin: 14px 0;
+  gap: 16px;
+  margin: 16px 0;
 }
 
 /* Unit counter image */
 .unit-counter {
-  width: 72px;          /* ✅ bigger counter */
+  width: 96px;           /* bigger and readable */
   height: auto;
   flex-shrink: 0;
 }
 
 /* Unit text block */
 .unit-info {
-  font-size: 14px;      /* ✅ readable base size */
-  line-height: 1.5;
+  font-size: 16px;
+  line-height: 1.6;
 }
 
-/* Emphasized lines (ID, name, etc.) */
+/* Emphasized lines */
 .unit-info strong {
-  font-size: 15px;
+  font-size: 17px;
 }
 
-/* Status / secondary info */
+/* Secondary info */
 .unit-info small {
-  font-size: 13px;
+  font-size: 14px;
   opacity: 0.9;
 }
 
 /* ============================= */
-/* SIDEBAR RIGHT: EVENT LOG      */
+/* SIDEBAR RIGHT – EVENT LOG     */
 /* ============================= */
 
 #event-log {
   overflow-y: auto;
   scrollbar-gutter: stable;
-  padding-right: 6px;
+  padding: 14px;
+  font-size: 18px;
+  line-height: 1.6;
 }
 
 #event-log div {
-  font-size: 12px;
-  line-height: 1.4;
+  font-size: 17px;
+  line-height: 1.6;
   border-bottom: 1px solid #333;
-  margin-bottom: 4px;
-  padding-bottom: 4px;
+  margin-bottom: 6px;
+  padding-bottom: 6px;
   text-align: left;
+}
+
+/* Emphasized entries */
+#event-log div strong,
+#event-log div b {
+  font-size: 18px;
 }
 
 /* ============================= */
@@ -170,13 +226,13 @@ html, body {
   display: grid;
   grid-template-columns: 1fr 1fr;
   border-top: 2px solid #444;
-  height: 200px;
+  height: 260px;
 }
 
 .combat,
 .hrl {
   background: #222;
-  padding: 10px;
+  padding: 12px;
 }
 
 .combat {
@@ -187,7 +243,7 @@ html, body {
 .hrl .box {
   height: 100%;
   border: 2px dashed #666;
-  padding: 10px;
+  padding: 12px;
 }
 
 /* ============================= */
@@ -200,41 +256,42 @@ html, body {
   justify-content: flex-start;
   align-items: stretch;
   text-align: left;
-  gap: 6px;
+  gap: 8px;
   overflow-y: auto;
+  font-size: 17px;
 }
 
 /* Headers */
 .combat-header {
   font-weight: bold;
-  font-size: 15px;
+  font-size: 18px;
   margin-bottom: 2px;
 }
 
 .combat-subheader {
-  font-size: 13px;
+  font-size: 16px;
   margin-bottom: 8px;
 }
 
 .combat-meta {
   color: #aaa;
-  font-size: 12px;
+  font-size: 14px;
 }
 
 /* Row: label + dice */
 .combat-row {
   display: flex;
   align-items: center;
-  gap: 12px;
-  margin: 6px 0;
+  gap: 14px;
+  margin: 8px 0;
 }
 
 /* Left label */
 .combat-row-label {
-  width: 160px;
+  width: 180px;
   flex-shrink: 0;
   color: #ccc;
-  font-size: 13px;
+  font-size: 16px;
 }
 
 /* Dice container */
@@ -242,13 +299,13 @@ html, body {
   display: flex;
   flex-direction: row;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
 }
 
 /* Dice sprite */
 .combat-die {
-  width: 36px;
-  height: 36px;
+  width: 42px;
+  height: 42px;
   object-fit: contain;
   image-rendering: crisp-edges;
 }
@@ -257,7 +314,7 @@ html, body {
 .combat-damage,
 .combat-crit,
 .combat-kill {
-  font-size: 13px;
+  font-size: 16px;
   margin-top: 4px;
 }
 
@@ -265,139 +322,30 @@ html, body {
   color: #ff5555;
   font-weight: bold;
 }
+
 /* ============================= */
 /* COMBAT PANEL – TWO SIDES      */
 /* ============================= */
 
 .combat-sides {
   display: grid;
-  grid-template-columns: 1fr 1fr; /* ✅ two horizontal areas */
+  grid-template-columns: 1fr 1fr;
   gap: 12px;
   width: 100%;
 }
 
 .combat-side {
   border: 1px solid #444;
-  padding: 8px;
+  padding: 10px;
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 8px;
 }
 
 .combat-side-title {
   text-align: center;
   font-weight: bold;
-  font-size: 13px;
+  font-size: 15px;
   border-bottom: 1px solid #444;
-  padding-bottom: 4px;
-}
-
-/* ============================= */
-/* EVENT LOG – READABILITY       */
-/* ============================= */
-
-#event-log {
-  font-size: 20px;        /* ✅ bigger base text */
-  line-height: 1.5;
-  padding: 12px;
-}
-
-#event-log div {
-  font-size: 14px;        /* ✅ each log line */
-  line-height: 1.5;
-  padding: 6px 0;         /* ✅ vertical spacing */
-}
-
-/* Optional: emphasize action lines */
-#event-log div strong,
-#event-log div b {
-  font-size: 15px;
-}
-
-/* ============================= */
-/* DYNAMIC HEADER (renderHeader) */
-/* ============================= */
-
-#header-root {
-  display: flex;
-  flex-direction: column;
-  width: 100%;
-}
-
-.header-layout {
-  display: flex;
-  gap: 12px;
-  align-items: stretch;
-}
-
-.header-layout .box {
-  border: 2px dashed #666;
-  padding: 8px 12px;
-}
-
-/* Left side: scenario + sides */
-.header-left {
-  min-width: 240px;
-  text-align: left;
-}
-
-.scenario-name {
-  font-weight: bold;
-  font-size: 15px;
-  margin-bottom: 6px;
-}
-
-.scenario-sides {
-  font-size: 13px;
-  color: #ccc;
-}
-
-.scenario-sides .side {
-  display: flex;
-  justify-content: space-between;
-}
-
-.scenario-sides .vs {
-  text-align: center;
-  margin: 4px 0;
-  font-size: 11px;
-  opacity: 0.7;
-}
-
-/* Center: turn / step */
-.header-center {
-  flex: 1;
-  text-align: center;
-  font-weight: bold;
-  font-size: 14px;
-}
-
-/* ============================= */
-/* HEADER STRUCTURE FIX          */
-/* ============================= */
-
-.header {
-  display: flex;
-  flex-direction: column;
-  justify-content: space-between;
-  padding: 8px 12px;
-}
-
-/* Top row: scenario + turn/step */
-.header-top {
-  display: flex;
-  align-items: stretch;
-}
-
-/* Bottom row: buttons */
-.header-controls {
-  display: flex;
-  justify-content: center;
-  gap: 12px;
-  margin-top: 10px;
-}
-
-/* Prevent header from growing too tall */
-.layout {
-  grid-template-rows: 150px 1fr 260px;
+  padding-bottom: 6px;
 }

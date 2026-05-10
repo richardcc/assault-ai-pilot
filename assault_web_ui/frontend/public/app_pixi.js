@@ -127,7 +127,6 @@ function bindHeaderControls() {
 
 // ---------------- STATE REBUILD (DETERMINISTIC) ----------------
 function rebuildState(targetTurn, targetStep) {
-  // Reset to initial state
   buildUnitsFromReplay();
 
   CURRENT_TURN = 0;
@@ -136,7 +135,6 @@ function rebuildState(targetTurn, targetStep) {
   clearCombatPanel();
   document.getElementById("event-log").innerHTML = "";
 
-  // Replay state up to target position
   for (let t = 0; t <= targetTurn; t++) {
     const turn = REPLAY.turns[t];
     const events = turn.events;
@@ -180,7 +178,6 @@ function nextStep() {
 
   while (CURRENT_STEP < events.length) {
     const event = events[CURRENT_STEP];
-
     applyReplayEvent(event);
 
     const text = formatReplayEvent(event);
@@ -197,6 +194,7 @@ function nextStep() {
 
   renderHeader({
     scenario: SCENARIO,
+    replay: REPLAY, // ✅ CLAVE
     turn: CURRENT_TURN + 1,
     step: CURRENT_STEP + 1,
     totalTurns: REPLAY.turns.length,
@@ -207,7 +205,7 @@ function nextStep() {
   renderCombatPanel(events[CURRENT_STEP]);
 }
 
-// ---------------- PREVIOUS STEP (ACTION-BASED) ----------------
+// ---------------- PREVIOUS STEP ----------------
 function findPreviousAction(events, fromIndex) {
   for (let i = fromIndex - 1; i >= 0; i--) {
     if (events[i].type === "ACTION") return i;
@@ -241,6 +239,7 @@ function prevStep() {
 
   renderHeader({
     scenario: SCENARIO,
+    replay: REPLAY,
     turn: CURRENT_TURN + 1,
     step: CURRENT_STEP + 1,
     totalTurns: REPLAY.turns.length,
@@ -269,6 +268,7 @@ function nextTurn() {
 
   renderHeader({
     scenario: SCENARIO,
+    replay: REPLAY,
     turn: CURRENT_TURN + 1,
     step: 0,
     totalTurns: REPLAY.turns.length,
@@ -287,6 +287,7 @@ function prevTurn() {
 
   renderHeader({
     scenario: SCENARIO,
+    replay: REPLAY,
     turn: CURRENT_TURN + 1,
     step: 0,
     totalTurns: REPLAY.turns.length,
@@ -309,6 +310,7 @@ async function bootstrapReplay() {
 
   renderHeader({
     scenario: SCENARIO,
+    replay: REPLAY, // ✅ CLAVE
     turn: 1,
     step: 0,
     totalTurns: REPLAY.turns.length,

@@ -2,7 +2,7 @@
 // Unit Renderer
 // -------------------------------------------------
 // Renders unit counters on the map using hex (q,r)
-// Animates movement visually (no pending, no state delay)
+// Animates movement visually (supports path highlight)
 // -------------------------------------------------
 
 let unitLayer = null;
@@ -67,9 +67,7 @@ function renderUnitsOnMap(app, scenario) {
   // -------------------------------------------------
   scenario.units.forEach(unit => {
 
-    if (typeof unit.q !== "number" || typeof unit.r !== "number") {
-      return;
-    }
+    if (typeof unit.q !== "number" || typeof unit.r !== "number") return;
 
     const pos = hexToWorld(unit.q, unit.r);
     let sprite = unitSprites.get(unit.id);
@@ -87,21 +85,37 @@ function renderUnitsOnMap(app, scenario) {
       sprite.y = pos.y;
 
       sprite.unitId = unit.id;
-      sprite.side = unit.side;
+      sprite.side   = unit.side;
+
+      // ✅ INITIALISE LOGICAL BASELINE (CRITICAL FIX)
+      // Esto evita que el primer Next Step pinte mal
+      sprite.__lastQ = unit.q;
+      sprite.__lastR = unit.r;
 
       unitLayer.addChild(sprite);
       unitSprites.set(unit.id, sprite);
 
     } else {
       // ---------------- EXISTING UNIT ----------------
-      // Animate from current sprite position to new hex
-      animateUnitMove(
-        sprite,
-        unit,     // uses q/r
-        { R, W, ROW },
-        app,
-        700       // stepDuration (visual only)
-      );
+
+      if (Array.isArray(unit.path) && unit.path.length > 1) {
+        animateUnitPath(
+          sprite,
+          unit.path,
+          { R, W, ROW },
+          app,
+          700,
+          200
+        );
+      } else {
+        animateUnitMove(
+          sprite,
+          { q: unit.q, r: unit.r },
+          { R, W, ROW },
+          app,
+          700
+        );
+      }
     }
 
     sprite.__usedThisFrame = true;
