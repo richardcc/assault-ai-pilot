@@ -2,11 +2,14 @@
 // Unit Renderer
 // -------------------------------------------------
 // Renders unit counters on the map using hex (q,r)
-// Does NOT touch grid, camera, pan or zoom
+// Animates movement visually (no pending, no state delay)
 // -------------------------------------------------
 
 let unitLayer = null;
 let hostContainer = null;
+
+// Store sprites by unitId
+const unitSprites = new Map();
 
 function renderUnitsOnMap(app, scenario) {
 
@@ -16,20 +19,21 @@ function renderUnitsOnMap(app, scenario) {
   }
 
   // -------------------------------------------------
-  // ✅ ROBUST HOST CONTAINER DETECTION
+  // Get camera container (created by map_renderer)
   // -------------------------------------------------
   if (!hostContainer) {
-    // Use the first PIXI.Container created by map_renderer
-    hostContainer = app.stage.children.find(c => c instanceof PIXI.Container);
+    hostContainer = app.stage.children.find(
+      c => c instanceof PIXI.Container
+    );
 
     if (!hostContainer) {
-      console.error("renderUnitsOnMap: no container found on stage");
+      console.error("renderUnitsOnMap: no camera container found");
       return;
     }
   }
 
   // -------------------------------------------------
-  // ✅ CREATE UNIT LAYER ONCE
+  // Create unit layer once
   // -------------------------------------------------
   if (!unitLayer) {
     unitLayer = new PIXI.Container();
@@ -37,11 +41,8 @@ function renderUnitsOnMap(app, scenario) {
     hostContainer.addChild(unitLayer);
   }
 
-  // ✅ CLEAR PREVIOUS UNITS (CRITICAL)
-  unitLayer.removeChildren();
-
   // -------------------------------------------------
-  // Grid geometry (must match map_renderer)
+  // Grid geometry (MUST MATCH map_renderer)
   // -------------------------------------------------
   const R   = scenario.grid.hexRadius;
   const W   = Math.sqrt(3) * R;
@@ -55,39 +56,69 @@ function renderUnitsOnMap(app, scenario) {
   }
 
   // -------------------------------------------------
-  // Render units
+  // Mark all sprites as unused this frame
+  // -------------------------------------------------
+  unitSprites.forEach(sprite => {
+    sprite.__usedThisFrame = false;
+  });
+
+  // -------------------------------------------------
+  // Render or update units
   // -------------------------------------------------
   scenario.units.forEach(unit => {
 
-    // Skip units not on map (dead / not deployed)
     if (typeof unit.q !== "number" || typeof unit.r !== "number") {
       return;
     }
 
-    if (!unit.image) {
-      console.warn("Unit without image:", unit);
-      return;
+    const pos = hexToWorld(unit.q, unit.r);
+    let sprite = unitSprites.get(unit.id);
+
+    if (!sprite) {
+      // ---------------- NEW UNIT ----------------
+      if (!unit.image) return;
+
+      const tex = PIXI.Texture.from(unit.image);
+      sprite = new PIXI.Sprite(tex);
+
+      sprite.anchor.set(0.5);
+      sprite.scale.set(0.5);
+      sprite.x = pos.x;
+      sprite.y = pos.y;
+
+      sprite.unitId = unit.id;
+      sprite.side = unit.side;
+
+      unitLayer.addChild(sprite);
+      unitSprites.set(unit.id, sprite);
+
+    } else {
+      // ---------------- EXISTING UNIT ----------------
+      // Animate from current sprite position to new hex
+      animateUnitMove(
+        sprite,
+        unit,     // uses q/r
+        { R, W, ROW },
+        app,
+        700       // stepDuration (visual only)
+      );
     }
 
-    const tex = PIXI.Texture.from(unit.image);
-    const spr = new PIXI.Sprite(tex);
+    sprite.__usedThisFrame = true;
+  });
 
-    const pos = hexToWorld(unit.q, unit.r);
-
-    spr.anchor.set(0.5);
-    spr.x = pos.x;
-    spr.y = pos.y;
-    spr.scale.set(0.5);
-
-    // Metadata (future use: selection, highlight, etc.)
-    spr.unitId = unit.id;
-    spr.side = unit.side;
-
-    unitLayer.addChild(spr);
+  // -------------------------------------------------
+  // Remove sprites for units no longer present
+  // -------------------------------------------------
+  unitSprites.forEach((sprite, id) => {
+    if (!sprite.__usedThisFrame) {
+      unitLayer.removeChild(sprite);
+      unitSprites.delete(id);
+    }
   });
 }
 
 // -------------------------------------------------
-// ✅ EXPOSE FUNCTION GLOBALLY
+// Public API
 // -------------------------------------------------
 window.renderUnitsOnMap = renderUnitsOnMap;

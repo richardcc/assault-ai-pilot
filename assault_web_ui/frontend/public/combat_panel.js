@@ -10,17 +10,19 @@ function renderRangedCombat(payload, unitLabel) {
         (dist ${payload.distance}, sector ${payload.attack_sector})
       </span>
     </div>
+
+    <div class="combat-sides">
+      <div class="combat-side attacker">
+        <div class="combat-side-title">ATTACKER</div>
+        ${renderDiceRow("Attack", payload.attacker_attack_dice)}
+      </div>
+
+      <div class="combat-side defender">
+        <div class="combat-side-title">DEFENDER</div>
+        ${renderDiceRow("Defense", payload.defender_defense_dice)}
+      </div>
+    </div>
   `;
-
-  html += renderDiceRow(
-    "Attacker attack",
-    payload.attacker_attack_dice
-  );
-
-  html += renderDiceRow(
-    "Defender defense",
-    payload.defender_defense_dice
-  );
 
   if (
     payload.defender_hp_before !== undefined &&

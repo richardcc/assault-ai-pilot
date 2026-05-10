@@ -1,3 +1,7 @@
+/* ============================= */
+/* GLOBAL RESET                  */
+/* ============================= */
+
 * {
   box-sizing: border-box;
   font-family: sans-serif;
@@ -14,12 +18,14 @@ html, body {
 /* MAIN LAYOUT GRID              */
 /* ============================= */
 
+
 .layout {
   display: grid;
-  grid-template-rows: auto 1fr 200px;
-  height: 100%;
+  grid-template-rows: 180px 1fr 260px; /* ✅ EVEN MORE HEADER */
+  height: 100vh;
   overflow: hidden;
 }
+
 
 /* ============================= */
 /* HEADER                        */
@@ -29,19 +35,20 @@ html, body {
   background: #2a2a2a;
   border-bottom: 2px solid #444;
   padding: 10px;
+  height: 100%;
 }
 
 .header .box {
+  height: 100%;
   border: 2px dashed #666;
-  padding: 10px;
-  text-align: center;
-  color: #aaa;
-  font-size: 14px;
-
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 8px;
+  justify-content: space-between; /* ✅ USE FULL HEIGHT */
+  padding: 8px 12px;
+  gap: 6px;
+  font-size: 14px;
+  color: #aaa;
 }
 
 /* Buttons */
@@ -55,59 +62,101 @@ html, body {
 }
 
 /* ============================= */
-/* MAIN CONTENT                  */
+/* MAIN CONTENT (3 COLUMNS)      */
 /* ============================= */
 
 .main {
   display: grid;
-  grid-template-columns: 300px 1fr 300px;
-  height: 100%;
+  grid-template-columns:
+    minmax(360px, 380px)
+    minmax(55%, 1fr)
+    minmax(360px, 380px);
+  min-height: 0;
   overflow: hidden;
 }
-
 /* ============================= */
 /* SIDEBARS                      */
 /* ============================= */
 
-.sidebar-left,
-.sidebar-right {
-  background: #242424;
-  padding: 10px;
-  overflow: hidden;
+/* ============================= */
+/* LEFT SIDEBAR – READABILITY    */
+/* ============================= */
+
+/* Overall sidebar text scale */
+.sidebar-left .box {
+  font-size: 15px;
+  line-height: 1.5;
 }
 
-.sidebar-left {
-  border-right: 2px solid #444;
-  display: flex;
-  flex-direction: column;
+/* Container padding */
+#sidebar-units {
+  padding: 14px;
 }
 
-.sidebar-right {
-  border-left: 2px solid #444;
+/* Unit card layout */
+.unit-card {
   display: flex;
-  flex-direction: column;
+  align-items: flex-start;
+  gap: 14px;
+  margin: 14px 0;
+}
+
+/* Unit counter image */
+.unit-counter {
+  width: 72px;          /* ✅ bigger counter */
+  height: auto;
+  flex-shrink: 0;
+}
+
+/* Unit text block */
+.unit-info {
+  font-size: 14px;      /* ✅ readable base size */
+  line-height: 1.5;
+}
+
+/* Emphasized lines (ID, name, etc.) */
+.unit-info strong {
+  font-size: 15px;
+}
+
+/* Status / secondary info */
+.unit-info small {
+  font-size: 13px;
+  opacity: 0.9;
 }
 
 /* ============================= */
-/* MAP                           */
+/* SIDEBAR RIGHT: EVENT LOG      */
+/* ============================= */
+
+#event-log {
+  overflow-y: auto;
+  scrollbar-gutter: stable;
+  padding-right: 6px;
+}
+
+#event-log div {
+  font-size: 12px;
+  line-height: 1.4;
+  border-bottom: 1px solid #333;
+  margin-bottom: 4px;
+  padding-bottom: 4px;
+  text-align: left;
+}
+
+/* ============================= */
+/* MAP / PIXI                    */
 /* ============================= */
 
 .map {
   background: #333;
-  display: flex;
-  align-items: center;
-  justify-content: center;
   border-left: 2px solid #444;
   border-right: 2px solid #444;
+  position: relative;
   overflow: hidden;
 }
 
-.map-container {
-  width: 100%;
-  height: 100%;
-  position: relative;
-}
-
+.map-container,
 #pixi-root {
   width: 100%;
   height: 100%;
@@ -120,8 +169,8 @@ html, body {
 .footer {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  height: 200px;
   border-top: 2px solid #444;
+  height: 200px;
 }
 
 .combat,
@@ -134,78 +183,221 @@ html, body {
   border-right: 2px solid #444;
 }
 
-/* ============================= */
-/* SHARED BOX STYLE              */
-/* ============================= */
-
-.box {
+.combat .box,
+.hrl .box {
+  height: 100%;
   border: 2px dashed #666;
   padding: 10px;
-  text-align: center;
+}
+
+/* ============================= */
+/* COMBAT PANEL                  */
+/* ============================= */
+
+.combat .box {
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-start;
+  align-items: stretch;
+  text-align: left;
+  gap: 6px;
+  overflow-y: auto;
+}
+
+/* Headers */
+.combat-header {
+  font-weight: bold;
+  font-size: 15px;
+  margin-bottom: 2px;
+}
+
+.combat-subheader {
+  font-size: 13px;
+  margin-bottom: 8px;
+}
+
+.combat-meta {
   color: #aaa;
+  font-size: 12px;
+}
+
+/* Row: label + dice */
+.combat-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 6px 0;
+}
+
+/* Left label */
+.combat-row-label {
+  width: 160px;
+  flex-shrink: 0;
+  color: #ccc;
+  font-size: 13px;
+}
+
+/* Dice container */
+.combat-row-dice {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+}
+
+/* Dice sprite */
+.combat-die {
+  width: 36px;
+  height: 36px;
+  object-fit: contain;
+  image-rendering: crisp-edges;
+}
+
+/* Results */
+.combat-damage,
+.combat-crit,
+.combat-kill {
+  font-size: 13px;
+  margin-top: 4px;
+}
+
+.combat-kill {
+  color: #ff5555;
+  font-weight: bold;
+}
+/* ============================= */
+/* COMBAT PANEL – TWO SIDES      */
+/* ============================= */
+
+.combat-sides {
+  display: grid;
+  grid-template-columns: 1fr 1fr; /* ✅ two horizontal areas */
+  gap: 12px;
+  width: 100%;
+}
+
+.combat-side {
+  border: 1px solid #444;
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.combat-side-title {
+  text-align: center;
+  font-weight: bold;
+  font-size: 13px;
+  border-bottom: 1px solid #444;
+  padding-bottom: 4px;
+}
+
+/* ============================= */
+/* EVENT LOG – READABILITY       */
+/* ============================= */
+
+#event-log {
+  font-size: 20px;        /* ✅ bigger base text */
+  line-height: 1.5;
+  padding: 12px;
+}
+
+#event-log div {
+  font-size: 14px;        /* ✅ each log line */
+  line-height: 1.5;
+  padding: 6px 0;         /* ✅ vertical spacing */
+}
+
+/* Optional: emphasize action lines */
+#event-log div strong,
+#event-log div b {
+  font-size: 15px;
+}
+
+/* ============================= */
+/* DYNAMIC HEADER (renderHeader) */
+/* ============================= */
+
+#header-root {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+}
+
+.header-layout {
+  display: flex;
+  gap: 12px;
+  align-items: stretch;
+}
+
+.header-layout .box {
+  border: 2px dashed #666;
+  padding: 8px 12px;
+}
+
+/* Left side: scenario + sides */
+.header-left {
+  min-width: 240px;
+  text-align: left;
+}
+
+.scenario-name {
+  font-weight: bold;
+  font-size: 15px;
+  margin-bottom: 6px;
+}
+
+.scenario-sides {
+  font-size: 13px;
+  color: #ccc;
+}
+
+.scenario-sides .side {
+  display: flex;
+  justify-content: space-between;
+}
+
+.scenario-sides .vs {
+  text-align: center;
+  margin: 4px 0;
+  font-size: 11px;
+  opacity: 0.7;
+}
+
+/* Center: turn / step */
+.header-center {
+  flex: 1;
+  text-align: center;
+  font-weight: bold;
   font-size: 14px;
 }
 
 /* ============================= */
-/* SIDEBAR LEFT: UNITS           */
+/* HEADER STRUCTURE FIX          */
 /* ============================= */
 
-.sidebar-left .box {
-  flex: 1;
-  overflow: hidden;
-}
-
-#sidebar-units {
-  flex: 1;
-  overflow-y: auto;
-  scrollbar-gutter: stable;
-  padding: 6px;
-}
-
-.unit-card {
+.header {
   display: flex;
-  gap: 8px;
-  align-items: flex-start;
-  margin: 8px 0;
+  flex-direction: column;
+  justify-content: space-between;
+  padding: 8px 12px;
 }
 
-.unit-counter {
-  width: 56px;
-  max-width: 56px;
-  height: auto;
-  flex-shrink: 0;
+/* Top row: scenario + turn/step */
+.header-top {
+  display: flex;
+  align-items: stretch;
 }
 
-.unit-info {
-  font-size: 11px;
-  line-height: 1.3;
-  text-align: left;
+/* Bottom row: buttons */
+.header-controls {
+  display: flex;
+  justify-content: center;
+  gap: 12px;
+  margin-top: 10px;
 }
 
-/* ============================= */
-/* SIDEBAR RIGHT: EVENT LOG      */
-/* ============================= */
-
-/* ✅ THIS IS THE KEY */
-.sidebar-right .box {
-  flex: 1;
-  height: 100%;       /* ✅ ALTURA REAL */
-  overflow: hidden;
-}
-
-/* ✅ REAL SCROLL */
-#event-log {
-  max-height: 100%;   /* ✅ NO height:100% */
-  overflow-y: scroll;
-  scrollbar-gutter: stable;
-  padding-right: 6px;
-}
-
-#event-log div {
-  font-size: 12px;
-  line-height: 1.4;
-  border-bottom: 1px solid #333;
-  padding-bottom: 4px;
-  margin-bottom: 4px;
-  text-align: left;
+/* Prevent header from growing too tall */
+.layout {
+  grid-template-rows: 150px 1fr 260px;
 }

@@ -17,39 +17,39 @@ from assault_model.combat.dice_face import DiceFace
 
 DICE_FACE_TABLE = {
     DiceColor.RED: [
-        (DiceFace.DAMAGE, DiceFace.DAMAGE),
-        (DiceFace.DAMAGE, DiceFace.SUPPRESS),
-        (DiceFace.DAMAGE, DiceFace.DAMAGE),
-        (DiceFace.DAMAGE, DiceFace.DAMAGE),
-        (DiceFace.CRITICAL, DiceFace.DAMAGE),
-        (),
+        (),  # Miss
+        (DiceFace.DAMAGE,),  # Damage
+        (DiceFace.DAMAGE, DiceFace.SUPPRESS),  # Damage + Suppression
+        (DiceFace.DAMAGE, DiceFace.DAMAGE),  # Double Damage
+        (DiceFace.DAMAGE, DiceFace.DAMAGE),  # Double Damage
+        (DiceFace.CRITICAL, DiceFace.DAMAGE),  # Critical + Damage
     ],
 
     DiceColor.YELLOW: [
-        (DiceFace.SUPPRESS,),
-        (DiceFace.DAMAGE,),
-        (DiceFace.DAMAGE,),
-        (DiceFace.DAMAGE, DiceFace.DAMAGE),
-        (DiceFace.CRITICAL, DiceFace.DAMAGE),
-        (DiceFace.SUPPRESS, DiceFace.DAMAGE),
+        (),  # Miss
+        (DiceFace.DAMAGE,),  # Damage
+        (DiceFace.DAMAGE,),  # Damage
+        (DiceFace.DAMAGE, DiceFace.DAMAGE),  # Double Damage
+        (DiceFace.CRITICAL, DiceFace.DAMAGE),  # Critical + Damage
+        (DiceFace.CRITICAL, DiceFace.DAMAGE),  # Critical + Damage
     ],
 
     DiceColor.GREEN: [
-        (DiceFace.SUPPRESS,),
-        (DiceFace.DAMAGE,),
-        (DiceFace.DAMAGE,),
-        (DiceFace.CRITICAL, DiceFace.DAMAGE),
-        (DiceFace.DAMAGE,),
-        (),
+        (),  # Miss
+        (DiceFace.DAMAGE,),  # Damage
+        (DiceFace.DAMAGE,),  # Damage
+        (DiceFace.DAMAGE,),  # Damage
+        (DiceFace.CRITICAL, DiceFace.DAMAGE),  # Critical + Damage
+        (),  # Miss
     ],
 
     DiceColor.BLUE: [
-        (DiceFace.SUPPRESS,),
-        (DiceFace.DAMAGE,),
-        (DiceFace.DAMAGE,),
-        (),
-        (),
-        (),
+        (),  # Miss
+        (),  # Miss
+        (DiceFace.DAMAGE,),  # Damage
+        (DiceFace.DAMAGE,),  # Damage
+        (),  # Miss
+        (),  # Miss
     ],
 }
 
