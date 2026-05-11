@@ -1,0 +1,47 @@
+[
+  {
+    "id": "ATTACK_UNDER_HIGH_PRESSURE",
+    "tags": ["ATTACK", "PRESSURE_HIGH"],
+    "text": "When enemy pressure is high, maintaining initiative through direct engagement can prevent further positional disadvantage and force the opponent to react."
+  },
+  {
+    "id": "ATTACK_WITH_SUFFICIENT_FORCE",
+    "tags": ["ATTACK", "STRENGTH_EVEN", "STRENGTH_HIGH"],
+    "text": "Direct engagement is a viable option when friendly strength is not inferior, as expected combat exchanges are unlikely to be decisively unfavorable."
+  },
+  {
+    "id": "VALUE_BASED_SELECTION",
+    "tags": ["ATTACK", "FLANK", "HOLD", "VALUE_ESTIMATE"],
+    "text": "Strategic options with higher estimated value indicate a favorable expected outcome under the observed conditions."
+  },
+  {
+    "id": "FLANK_UNDER_HIGH_PRESSURE",
+    "tags": ["FLANK", "PRESSURE_HIGH"],
+    "text": "Under high enemy pressure, flanking can be used to gain positional advantage and disrupt enemy focus, while still allowing limited or opportunistic engagements."
+  },
+  {
+    "id": "FLANK_WHEN_PRESSURE_LOW",
+    "tags": ["FLANK", "PRESSURE_LOW", "PRESSURE_MODERATE"],
+    "text": "When enemy pressure is limited, flanking maneuvers allow time and space to improve positioning before broader engagement."
+  },
+  {
+    "id": "HOLD_WHEN_INFERIOR",
+    "tags": ["HOLD", "STRENGTH_LOW"],
+    "text": "Maintaining a defensive posture is preferred when friendly strength is inferior, reducing losses and delaying engagement until conditions improve."
+  },
+  {
+    "id": "ENGAGE_TO_SHAPE_BATTLE",
+    "tags": ["ATTACK", "ENGAGEMENT"],
+    "text": "Engaging the enemy can be used strategically to shape the battlefield by weakening key units and creating opportunities for subsequent actions."
+  },
+  {
+    "id": "MANEUVER_BEFORE_COMMITMENT",
+    "tags": ["FLANK", "MANEUVER"],
+    "text": "Maneuver-oriented actions are used to gain positional advantage and set favorable conditions for subsequent tactical actions."
+  },
+  {
+    "id": "RISK_MANAGEMENT",
+    "tags": ["ATTACK", "HOLD", "FLANK"],
+    "text": "Strategic decisions aim to preserve force effectiveness by avoiding actions that would expose units to clearly unfavorable exchanges under uncertainty."
+  }
+]

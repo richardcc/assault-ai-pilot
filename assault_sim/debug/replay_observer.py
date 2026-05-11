@@ -1,10 +1,11 @@
 import copy
 from assault_sim.debug.replay import Replay
 
+
 class ReplayObserver:
     def __init__(self):
         self.replay = Replay()
-        self.replay.replay_version = 2  # ✅ FIX
+        self.replay.replay_version = 2  # ✅ OK
         self._current_turn = None
         self._current_events = []
 
@@ -32,6 +33,10 @@ class ReplayObserver:
 
         # ---------------- UNIT MOVED ----------------
         elif event_type == "UNIT_MOVED":
+            self._current_events.append(copy.deepcopy(event))
+
+        # ✅ ---------------- HRL DECISION ----------------
+        elif event_type == "HRL_DECISION":
             self._current_events.append(copy.deepcopy(event))
 
         # ---------------- TURN END ----------------

@@ -1,0 +1,58 @@
+/* ================================================= */
+/* HEADER VIEW                                       */
+/* ================================================= */
+
+/* Scenario header */
+.header-scenario-id {
+  font-weight: bold;
+  margin-bottom: 10px;
+}
+
+/* Horizontal VS layout */
+.header-vs-row {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 24px;
+}
+
+/* Player block */
+.header-player {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+/* Smaller flags */
+.header-marker {
+  width: 28px;
+  height: 28px;
+}
+
+/* Text block under player */
+.header-player-text {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  text-align: left;
+}
+
+/* Side name */
+.header-player-side {
+  font-weight: bold;
+  line-height: 1.1;
+}
+
+/* Controller type */
+.header-player-controller {
+  font-size: 0.85em;
+  opacity: 0.75;
+}
+
+/* VS text */
+.header-vs-text {
+  font-weight: bold;
+  opacity: 0.7;
+  font-size: 1.1em;
+}
+``

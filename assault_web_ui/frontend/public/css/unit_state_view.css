@@ -1,0 +1,85 @@
+/* ================================================= */
+/* UNIT STATE VIEW – COLUMNS BY SIDE + H SCROLL      */
+/* ================================================= */
+
+/* Root panel: one column per side */
+#slot-footer-left {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 8px;
+  height: 100%;
+}
+
+/* One side column (GE / US) */
+.unit-state-side {
+  display: flex;
+  flex-direction: column;
+  background: #1f1f1f;
+  border: 1px solid #333;
+}
+
+/* Side header */
+.unit-state-side-header {
+  padding: 6px;
+  font-weight: bold;
+  text-align: center;
+  background: #252525;
+  border-bottom: 1px solid #333;
+  font-size: 13px;
+}
+
+/* Horizontal scroll PER SIDE */
+.unit-state-scroll {
+  display: flex;
+  flex-direction: row;      /* ✅ HORIZONTAL */
+  gap: 12px;
+  padding: 6px;
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+
+/* Individual unit card */
+.unit-card {
+  min-width: 100px;         /* ✅ needed for horizontal scroll */
+  min-height: 100px;
+  background: #222;
+  border: 1px solid #333;
+  padding: 6px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  color: #e0e0e0;
+}
+
+/* Counter image */
+.unit-card-counter img {
+  width: 48px;
+  height: 48px;
+  display: block;
+}
+
+/* Unit name */
+.unit-card-name {
+  font-size: 12px;
+  font-weight: bold;
+  text-align: center;
+  margin-top: 4px;
+}
+
+/* ================================================= */
+/* HP HEARTS (UNIT CARD)                             */
+/* ================================================= */
+
+.unit-card-hp {
+  display: flex;
+  justify-content: center;
+  gap: 2px;
+  margin-top: 4px;
+  margin-bottom: 2px;
+}
+
+.unit-heart {
+  font-size: 12px;
+  line-height: 1;
+  user-select: none;
+}

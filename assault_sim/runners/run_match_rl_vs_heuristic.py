@@ -57,21 +57,14 @@ def main():
     print(">>> PPO model loaded (option-level policy)")
 
     # -------------------------------------------------
-    # HRL Controllers
+    # HRL / Heuristic components (NO env dependency)
     # -------------------------------------------------
     option_policy = OptionPolicy(policy)
-
     heuristic_controller = TacticalPathHeuristic()
     option_executor = OptionExecutor(heuristic_controller)
 
-    hrl_controller = HRLController(
-        option_policy=option_policy,
-        option_executor=option_executor,
-        rl_side=rl_side,
-    )
-
     # -------------------------------------------------
-    # Environment
+    # Environment (MUST be created BEFORE HRLController)
     # -------------------------------------------------
     sim_config = load_sim_config(
         Path("assault_sim/config/sim_config.yaml")
@@ -89,6 +82,16 @@ def main():
         sim_env,
         env_config_path=Path("assault_sim/config/env_config.json"),
         rl_side=rl_side,
+    )
+
+    # -------------------------------------------------
+    # HRL Controller (NOW event_bus exists)
+    # -------------------------------------------------
+    hrl_controller = HRLController(
+        option_policy=option_policy,
+        option_executor=option_executor,
+        rl_side=rl_side,
+        event_bus=sim_env.event_bus,   # ✅ CRITICAL
     )
 
     # -------------------------------------------------

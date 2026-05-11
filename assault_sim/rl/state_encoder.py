@@ -4,6 +4,9 @@ import numpy as np
 from assault_model.map.hex_utils import hex_distance
 
 
+# =================================================
+# NUMERIC STATE (USED BY RL) — DO NOT MODIFY
+# =================================================
 def encode_state(state, rl_side=None, max_turns=None):
     """
     SAFE and minimal state encoder for Phase 01+.
@@ -62,7 +65,7 @@ def encode_state(state, rl_side=None, max_turns=None):
         time_progress = 0.0
 
     # -------------------------
-    # ✅ Egocentric direction to closest enemy (KEY FIX)
+    # Egocentric direction to closest enemy
     # -------------------------
     dq = 0.0
     dr = 0.0
@@ -76,23 +79,85 @@ def encode_state(state, rl_side=None, max_turns=None):
         dq = closest_enemy.position.q - active.position.q
         dr = closest_enemy.position.r - active.position.r
 
-        # normalize + clamp
         dq = np.clip(dq / 10.0, -1.0, 1.0)
         dr = np.clip(dr / 10.0, -1.0, 1.0)
 
     return np.array(
         [
-            state.turn,        # current turn
-            active_hp,         # HP of active unit
-            n_units,           # total units
-            vp,                # victory points
+            state.turn,
+            active_hp,
+            n_units,
+            vp,
 
-            unit_balance,      # [-1, +1]
-            hp_balance,        # [-1, +1]
-            time_progress,     # [0, 1]
+            unit_balance,
+            hp_balance,
+            time_progress,
 
-            dq,                # egocentric enemy direction (q)
-            dr,                # egocentric enemy direction (r)
+            dq,
+            dr,
         ],
         dtype=np.float32,
     )
+
+
+# =================================================
+# SYMBOLIC / EXPLAINABLE CONTEXT (FOR UI + RAG)
+# =================================================
+def explainable_context(state, rl_side=None, max_turns=None):
+    """
+    Human-readable tactical context derived from game state.
+
+    This is NOT used by the RL agent.
+    It is safe to store in replays and use for explanations.
+    """
+
+    units = state.units or []
+
+    own_units = [
+        u for u in units
+        if u.alive and rl_side is not None and u.side == rl_side
+    ]
+    enemy_units = [
+        u for u in units
+        if u.alive and rl_side is not None and u.side != rl_side
+    ]
+
+    # -------------------------
+    # Friendly strength
+    # -------------------------
+    if len(own_units) > len(enemy_units):
+        friendly_strength = "HIGH"
+    elif len(own_units) < len(enemy_units):
+        friendly_strength = "LOW"
+    else:
+        friendly_strength = "EVEN"
+
+    # -------------------------
+    # Enemy pressure
+    # -------------------------
+    if not enemy_units:
+        enemy_pressure = "NONE"
+    elif len(enemy_units) >= len(own_units):
+        enemy_pressure = "HIGH"
+    else:
+        enemy_pressure = "LOW"
+
+    # -------------------------
+    # Objective / time pressure
+    # -------------------------
+    if max_turns and max_turns > 0:
+        progress = state.turn / max_turns
+        if progress < 0.33:
+            objective_distance = "FAR"
+        elif progress < 0.66:
+            objective_distance = "MEDIUM"
+        else:
+            objective_distance = "CLOSE"
+    else:
+        objective_distance = "UNKNOWN"
+
+    return {
+        "friendly_strength": friendly_strength,
+        "enemy_pressure": enemy_pressure,
+        "objective_distance": objective_distance,
+    }

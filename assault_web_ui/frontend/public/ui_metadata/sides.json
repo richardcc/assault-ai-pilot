@@ -1,0 +1,26 @@
+{
+  "US": {
+    "id": "US",
+    "label": "United States",
+    "short_label": "US",
+    "marker": "/public/art/markers/Markers USA.png"
+  },
+  "GE": {
+    "id": "GE",
+    "label": "Germany",
+    "short_label": "GE",
+    "marker": "/public/art/markers/Markers Germany.png"
+  },
+  "UK": {
+    "id": "UK",
+    "label": "United Kingdom",
+    "short_label": "UK",
+    "marker": "/public/art/markers/Markers UK.png"
+  },
+  "IT": {
+    "id": "IT",
+    "label": "Italy",
+    "short_label": "IT",
+    "marker": "/public/art/markers/Markers Italy.png"
+  }
+}

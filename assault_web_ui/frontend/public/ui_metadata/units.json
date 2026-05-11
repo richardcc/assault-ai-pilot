@@ -1,0 +1,29 @@
+{
+  "GE_RIFLES_43": {
+    "label": "GE Rifles 43",
+    "full": "GE Rifles 43.png",
+    "half": "GE Rifles 43b.png",
+    "card": "GE Unit Rifles 43.jpg",
+    "card_half": "GE Unit Rifles 43b.jpg"
+  },
+  "GE_FJ_RIFLES_43": {
+    "label": "GE FJ Rifles 43",
+    "full": "GE FJ Rifles 43.png",
+    "half": "GE FJ Rifles 43b.png"
+  },
+  "US_RIFLES_43": {
+    "label": "US Rifles 43",
+    "full": "US Rifles 43.png",
+    "half": "US Rifles 43b.png",
+    "card": "US Unit Rifles 43.jpg",
+    "card_half": "US Unit Rifles 43b.jpg"
+  },
+  "US_RANGERS_43": {
+    "label": "US Rangers 43",
+    "full": "US Rangers 43.png",
+    "half": "US Rangers 43b.png",
+    "card": "US Unit Rangers 43.jpg",
+    "card_half": "US Unit Rangers 43b.jpg"
+  }
+}
+

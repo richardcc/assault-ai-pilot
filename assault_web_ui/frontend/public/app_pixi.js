@@ -1,6 +1,6 @@
 // -------------------------------------------------
 // PixiJS bootstrap – Phase 2
-// FINAL PHASE (CONNECTED EVENT LOG + COMBAT PANEL)
+// FINAL PHASE (CONNECTED EVENT LOG + COMBAT PANEL + RAG)
 // -------------------------------------------------
 
 // ---------------- ROOT ----------------
@@ -10,7 +10,7 @@ const root = document.getElementById("pixi-root");
 const app = new PIXI.Application({
   resizeTo: window,
   backgroundColor: 0x1e1e1e,
-  antialias: true
+  antialias: true,
 });
 
 root.appendChild(app.view);
@@ -20,7 +20,7 @@ const UNIT_IMAGE_MAP = {
   GE_RIFLES_43: "/public/assets/counters/GE Rifles 43.png",
   US_RIFLES_43: "/public/assets/counters/US Rifles 43.png",
   GE_FJ_RIFLES_43: "/public/assets/counters/GE FJ Rifles 43.png",
-  US_RANGERS_43: "/public/assets/counters/US Rangers 43.png"
+  US_RANGERS_43: "/public/assets/counters/US Rangers 43.png",
 };
 
 // ---------------- REPLAY STATE ----------------
@@ -48,6 +48,32 @@ function renderCombatPanel(event) {
   }
 }
 
+// =================================================
+// Backend RAG explanation
+// =================================================
+async function requestActivationExplanation(activationPayload) {
+  try {
+    const response = await fetch(
+      "http://127.0.0.1:8000/api/explain/activation",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ activation: activationPayload }),
+      }
+    );
+
+    if (!response.ok) {
+      console.error("Backend explanation request failed");
+      return null;
+    }
+
+    return await response.json();
+  } catch (err) {
+    console.error("Explanation request error", err);
+    return null;
+  }
+}
+
 // ---------------- LOAD REPLAY ----------------
 async function loadReplay(url) {
   const res = await fetch(url);
@@ -70,7 +96,7 @@ function buildUnitsFromReplay() {
       name: u.type.replaceAll("_", " "),
       status: ["READY"],
       type: u.type,
-      image: UNIT_IMAGE_MAP[u.type] || null
+      image: UNIT_IMAGE_MAP[u.type] || null,
     };
   });
 }
@@ -79,7 +105,7 @@ function buildUnitsFromReplay() {
 function renderReplayUnits() {
   renderUnitsOnMap(app, {
     ...SCENARIO,
-    units: Object.values(replayUnits)
+    units: Object.values(replayUnits),
   });
 }
 
@@ -112,7 +138,7 @@ function applyReplayEvent(event) {
   }
 }
 
-// ---------------- HEADER CONTROLS BINDING ----------------
+// ---------------- HEADER CONTROLS ----------------
 function bindHeaderControls() {
   const btnNextStep = document.getElementById("btn-next-step");
   const btnPrevStep = document.getElementById("btn-prev-step");
@@ -125,7 +151,7 @@ function bindHeaderControls() {
   if (btnPrevTurn) btnPrevTurn.onclick = prevTurn;
 }
 
-// ---------------- STATE REBUILD (DETERMINISTIC) ----------------
+// ---------------- STATE REBUILD ----------------
 function rebuildState(targetTurn, targetStep) {
   buildUnitsFromReplay();
 
@@ -133,6 +159,8 @@ function rebuildState(targetTurn, targetStep) {
   CURRENT_STEP = -1;
 
   clearCombatPanel();
+  if (typeof clearHRLExplanation === "function") clearHRLExplanation();
+  if (typeof clearTacticalExplanation === "function") clearTacticalExplanation();
   document.getElementById("event-log").innerHTML = "";
 
   for (let t = 0; t <= targetTurn; t++) {
@@ -158,8 +186,10 @@ function rebuildState(targetTurn, targetStep) {
   updateSidebarFromReplay();
 }
 
-// ---------------- STEP NAVIGATION ----------------
-function nextStep() {
+// =================================================
+// STEP NAVIGATION
+// =================================================
+async function nextStep() {
   if (!REPLAY) return;
   if (CURRENT_TURN >= REPLAY.turns.length) return;
 
@@ -176,8 +206,11 @@ function nextStep() {
   turn = REPLAY.turns[CURRENT_TURN];
   const events = turn.events;
 
+  const activationEvents = [];
+
   while (CURRENT_STEP < events.length) {
     const event = events[CURRENT_STEP];
+    activationEvents.push(event);
     applyReplayEvent(event);
 
     const text = formatReplayEvent(event);
@@ -194,15 +227,68 @@ function nextStep() {
 
   renderHeader({
     scenario: SCENARIO,
-    replay: REPLAY, // ✅ CLAVE
+    replay: REPLAY,
     turn: CURRENT_TURN + 1,
     step: CURRENT_STEP + 1,
     totalTurns: REPLAY.turns.length,
-    totalSteps: REPLAY.turns[CURRENT_TURN]?.events.length ?? 0
+    totalSteps: REPLAY.turns[CURRENT_TURN]?.events.length ?? 0,
   });
+
   bindHeaderControls();
 
-  renderCombatPanel(events[CURRENT_STEP]);
+  // ---------------- COMBAT PANEL + MAP HIGHLIGHT ----------------
+  const combatEvent = activationEvents.find(
+    e =>
+      e.type === "ACTION_EFFECT" &&
+      e.payload?.action === "RangedCombat"
+  );
+
+  if (combatEvent) {
+    renderCombatPanel(combatEvent);
+
+    requestAnimationFrame(() => {
+      if (
+        typeof getUnitHexPosition === "function" &&
+        typeof highlightHexPair === "function"
+      ) {
+        const attackerPos = getUnitHexPosition(combatEvent.payload.attacker);
+        const defenderPos = getUnitHexPosition(combatEvent.payload.defender);
+
+        if (attackerPos && defenderPos) {
+          highlightHexPair(
+            attackerPos.q,
+            attackerPos.r,
+            defenderPos.q,
+            defenderPos.r,
+            app,
+            { duration: 1500 }
+          );
+        }
+      }
+    });
+  } else {
+    clearCombatPanel();
+  }
+
+  // ---------------- BACKEND RAG ----------------
+  const actionEvent = activationEvents[0];
+
+  const activationPayload = {
+    unit_id: actionEvent.payload?.active_unit ?? "",
+    action: actionEvent.payload?.action ?? "",
+    events: activationEvents,
+    strategic_state: {
+      friendly_strength: "EVEN",
+      enemy_pressure: "HIGH",
+      objective_distance: "UNKNOWN",
+    },
+  };
+
+  const explanation = await requestActivationExplanation(activationPayload);
+  if (explanation) {
+    renderHRLExplanation(explanation);
+    renderTacticalExplanation(explanation);
+  }
 }
 
 // ---------------- PREVIOUS STEP ----------------
@@ -243,8 +329,9 @@ function prevStep() {
     turn: CURRENT_TURN + 1,
     step: CURRENT_STEP + 1,
     totalTurns: REPLAY.turns.length,
-    totalSteps: REPLAY.turns[CURRENT_TURN]?.events.length ?? 0
+    totalSteps: REPLAY.turns[CURRENT_TURN]?.events.length ?? 0,
   });
+
   bindHeaderControls();
 }
 
@@ -255,6 +342,8 @@ function nextTurn() {
   CURRENT_TURN++;
   CURRENT_STEP = -1;
   clearCombatPanel();
+  if (typeof clearHRLExplanation === "function") clearHRLExplanation();
+  if (typeof clearTacticalExplanation === "function") clearTacticalExplanation();
 
   const turn = REPLAY.turns[CURRENT_TURN];
   turn.events.forEach(e => {
@@ -272,8 +361,9 @@ function nextTurn() {
     turn: CURRENT_TURN + 1,
     step: 0,
     totalTurns: REPLAY.turns.length,
-    totalSteps: REPLAY.turns[CURRENT_TURN]?.events.length ?? 0
+    totalSteps: REPLAY.turns[CURRENT_TURN]?.events.length ?? 0,
   });
+
   bindHeaderControls();
 }
 
@@ -291,8 +381,9 @@ function prevTurn() {
     turn: CURRENT_TURN + 1,
     step: 0,
     totalTurns: REPLAY.turns.length,
-    totalSteps: REPLAY.turns[CURRENT_TURN]?.events.length ?? 0
+    totalSteps: REPLAY.turns[CURRENT_TURN]?.events.length ?? 0,
   });
+
   bindHeaderControls();
 }
 
@@ -310,12 +401,13 @@ async function bootstrapReplay() {
 
   renderHeader({
     scenario: SCENARIO,
-    replay: REPLAY, // ✅ CLAVE
+    replay: REPLAY,
     turn: 1,
     step: 0,
     totalTurns: REPLAY.turns.length,
-    totalSteps: REPLAY.turns[0]?.events.length ?? 0
+    totalSteps: REPLAY.turns[0]?.events.length ?? 0,
   });
+
   bindHeaderControls();
 }
 

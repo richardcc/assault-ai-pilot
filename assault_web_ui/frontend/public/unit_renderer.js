@@ -10,7 +10,7 @@ let hostContainer = null;
 
 // Store sprites by unitId
 const unitSprites = new Map();
-
+window.unitSprites = unitSprites;
 function renderUnitsOnMap(app, scenario) {
 
   if (!scenario || !Array.isArray(scenario.units)) {
@@ -40,6 +40,17 @@ function renderUnitsOnMap(app, scenario) {
     unitLayer.name = "unitLayer";
     hostContainer.addChild(unitLayer);
   }
+
+  // -------------------------------------------------
+  // Create overlay layer once (for combat & effects)
+  // -------------------------------------------------
+  let overlayLayer = hostContainer.children.find(c => c.name === "overlayLayer");
+  if (!overlayLayer) {
+    overlayLayer = new PIXI.Container();
+    overlayLayer.name = "overlayLayer";
+    hostContainer.addChild(overlayLayer);
+  }
+
 
   // -------------------------------------------------
   // Grid geometry (MUST MATCH map_renderer)

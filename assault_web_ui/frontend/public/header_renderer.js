@@ -7,7 +7,7 @@
 
 function renderHeader({
   scenario,
-  replay,          // ✅ NUEVO (opcional)
+  replay,          // optional
   turn,
   step,
   totalTurns,
@@ -26,9 +26,6 @@ function renderHeader({
 
   // -------------------------------------------------
   // Resolve side controllers
-  // Priority:
-  // 1) replay.meta.sides (grabado)
-  // 2) scenario.sides   (legacy)
   // -------------------------------------------------
   const sidesFromReplay = replay?.meta?.sides;
   const sidesFromScenario = scenario?.sides;
@@ -43,8 +40,7 @@ function renderHeader({
 
   // US
   const usLabel =
-    sidesFromScenario?.US?.label ??
-    "US";
+    sidesFromScenario?.US?.label ?? "US";
 
   const usController =
     sidesFromReplay?.US ??
@@ -53,8 +49,7 @@ function renderHeader({
 
   // GE
   const geLabel =
-    sidesFromScenario?.GE?.label ??
-    "GE";
+    sidesFromScenario?.GE?.label ?? "GE";
 
   const geController =
     sidesFromReplay?.GE ??
@@ -67,6 +62,7 @@ function renderHeader({
   root.innerHTML = `
     <div class="header-content">
 
+      <!-- TOP BAR: SCENARIO + SIDES + TURN/STEP -->
       <div class="header-top header-layout">
         <div class="header-left box">
           <div class="scenario-name">${scenarioName}</div>
@@ -86,19 +82,21 @@ function renderHeader({
           </div>
         </div>
 
+        <!-- TURN / STEP STATUS (SINGLE SOURCE OF TRUTH) -->
         <div class="header-center box">
           TURN ${turn} / ${totalTurns}
-          &nbsp;·&nbsp;
+          <span class="sep">·</span>
           STEP ${step} / ${totalSteps}
+        </div>
+        <!-- CONTROLS: ONLY BUTTONS, BELOW TURN/STEP -->
+        <div class="header-controls">
+          <button id="btn-prev-turn" title="Previous Turn">⏮</button>
+          <button id="btn-prev-step" title="Previous Step">◀</button>
+          <button id="btn-next-step" title="Next Step">▶</button>
+          <button id="btn-next-turn" title="Next Turn">⏭</button>
         </div>
       </div>
 
-      <div class="header-controls">
-        <button id="btn-prev-turn">⏮ Prev Turn</button>
-        <button id="btn-prev-step">◀ Prev Step</button>
-        <button id="btn-next-step">Next Step ▶</button>
-        <button id="btn-next-turn">Next Turn ⏭</button>
-      </div>
 
     </div>
   `;
