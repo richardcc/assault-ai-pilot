@@ -36,6 +36,7 @@ function toggleSlotVisibility(slotId, visible) {
 // -------------------------------------------------
 
 let mapView = null;
+let mapEntityLayerMounted = false;
 
 function mountMap(gameState) {
   const container = document.getElementById("slot-map-center");
@@ -52,7 +53,21 @@ function mountMap(gameState) {
   mapView.mount(container);
 
   console.log("MAP VIEW MOUNTED (self-rendering)");
-}
+
+  // -------------------------------------------------
+  // INIT ENTITY LAYER ONCE MAP EXISTS
+  // -------------------------------------------------
+  if (!mapEntityLayerMounted && window.mapEntityLayer) {
+    console.log("[ORCHESTRATOR] init map_entity_layer");
+
+    mapEntityLayer.init(
+      mapView,
+      container
+    );
+
+    mapEntityLayerMounted = true;
+  }
+} // ✅ ← ESTA LLAVE FALTABA
 
 
 // -------------------------------------------------
@@ -68,7 +83,8 @@ window.renderFrame = function renderFrame(gameState, uiState) {
   renderOverlaySlots(gameState, uiState);
 
   // Persistent renderers
-  mountMap(gameState); // ✅ mount once, then leave it alone
+  mountMap(gameState);
+
 };
 
 

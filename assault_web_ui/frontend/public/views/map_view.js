@@ -14,6 +14,12 @@ window.renderMapView = function renderMapView() {
   let rafId = null;
   let detachMouse = null;
 
+  // =================================================
+  // ✅ WORLD TRANSFORM (SHARED WITH ENTITY LAYERS)
+  // =================================================
+  let worldXMin = 0;
+  let worldYOffset = 0;
+
   // -------------------------------------------------
   // MAP IMAGES (OFFSET TEST MODE)
   // -------------------------------------------------
@@ -118,6 +124,10 @@ window.renderMapView = function renderMapView() {
       const start = HexGeometry.hexToPixel(0, piece.startRow, 0, 0);
       const yOffset = start.y - R;
 
+      // ✅ STORE WORLD OFFSETS FOR ENTITY LAYERS
+      worldXMin = xmin;
+      worldYOffset = yOffset;
+
       ctx.save();
       ctx.translate(xmin, yOffset);
       ctx.scale(scaleX, scaleY);
@@ -193,6 +203,19 @@ window.renderMapView = function renderMapView() {
     dispose() {
       if (detachMouse) detachMouse();
       if (rafId) cancelAnimationFrame(rafId);
+    },
+
+    // =================================================
+    // ✅ EXPOSED FOR ENTITY / EFFECT LAYERS
+    // =================================================
+
+    getCanvas() {
+      return canvas;
+    },
+
+    // ✅ SAFE: uses closure-scoped variables
+    hexToWorld(q, r) {
+      return HexGeometry.hexToPixel(q, r, 0, 0);
     }
   };
 };

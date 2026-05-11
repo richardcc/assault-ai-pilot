@@ -1,0 +1,33 @@
+/* ================================================= */
+/* MAP VIEW CONTAINER                               */
+/* Required for canvas overlays (entities, smoke)  */
+/* ================================================= */
+
+#slot-map-center {
+  position: relative;   /* REQUIRED for overlay canvases */
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: #111;
+}
+
+/* ================================================= */
+/* MAP CANVAS (BASE MAP)                            */
+/* ================================================= */
+
+#slot-map-center canvas {
+  display: block;
+}
+
+/* ================================================= */
+/* ENTITY / OVERLAY CANVAS                          */
+/* (mounted dynamically by map_entity_layer)       */
+/* ================================================= */
+
+#slot-map-center canvas.map-entity-layer {
+  position: absolute;
+  top: 0;
+  left: 0;
+  pointer-events: none; /* clicks go to map canvas */
+  z-index: 10;          /* above map, below UI */
+}
