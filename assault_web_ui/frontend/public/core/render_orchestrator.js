@@ -1,24 +1,14 @@
 // =================================================
 // RENDER ORCHESTRATOR
-// Central place that coordinates ALL rendering:
-//
-// - HTML panels (header, footer, sidebars)
-// - Persistent renderers (map, future timelines, etc.)
-//
-// IMPORTANT:
-// Persistent renderers (like map) manage their own
-// render loops and must NOT be re-rendered here.
 // =================================================
 
-
 // -------------------------------------------------
-// HELPERS (MUST BE DEFINED FIRST)
+// HELPERS
 // -------------------------------------------------
 
 function mountRenderer(slotId, renderFn) {
   const slot = document.getElementById(slotId);
   if (!slot) return;
-
   slot.innerHTML = "";
   renderFn(slot);
 }
@@ -26,10 +16,8 @@ function mountRenderer(slotId, renderFn) {
 function toggleSlotVisibility(slotId, visible) {
   const slot = document.getElementById(slotId);
   if (!slot) return;
-
   slot.style.display = visible ? "" : "none";
 }
-
 
 // -------------------------------------------------
 // MAP VIEW (PERSISTENT – SELF-RENDERING)
@@ -37,69 +25,84 @@ function toggleSlotVisibility(slotId, visible) {
 
 let mapView = null;
 let mapEntityLayerMounted = false;
+let mapEntityLayerSpritesMounted = false;
+let PIXI_APP = null;
 
 function mountMap(gameState) {
   const container = document.getElementById("slot-map-center");
   if (!container) return;
 
-  if (mapView) return; // ✅ already mounted
-
-  if (!window.renderMapView) {
-    console.error("renderMapView is not defined");
-    return;
-  }
+  if (mapView) return;
 
   mapView = window.renderMapView(gameState);
   mapView.mount(container);
 
   console.log("MAP VIEW MOUNTED (self-rendering)");
 
-  // -------------------------------------------------
-  // INIT ENTITY LAYER ONCE MAP EXISTS
-  // -------------------------------------------------
+  // Disable old canvas entity layer
   if (!mapEntityLayerMounted && window.mapEntityLayer) {
-    console.log("[ORCHESTRATOR] init map_entity_layer");
-
-    mapEntityLayer.init(
-      mapView,
-      container
-    );
-
+    console.log("[ORCHESTRATOR] canvas entity layer DISABLED");
     mapEntityLayerMounted = true;
   }
-} // ✅ ← ESTA LLAVE FALTABA
 
+  // Init PIXI overlay
+  if (!PIXI_APP) {
+    PIXI_APP = new PIXI.Application({
+      resizeTo: container,
+      backgroundAlpha: 0,
+      antialias: true
+    });
+
+    PIXI_APP.view.style.position = "absolute";
+    PIXI_APP.view.style.top = "0";
+    PIXI_APP.view.style.left = "0";
+    PIXI_APP.view.style.pointerEvents = "none";
+    PIXI_APP.view.style.zIndex = "20";
+
+    container.appendChild(PIXI_APP.view);
+  }
+
+  if (!mapEntityLayerSpritesMounted && window.mapEntityLayerSprites) {
+    mapEntityLayerSprites.init(mapView, PIXI_APP);
+    mapEntityLayerSpritesMounted = true;
+  }
+}
 
 // -------------------------------------------------
 // PUBLIC ENTRY POINT
 // -------------------------------------------------
 
 window.renderFrame = function renderFrame(gameState, uiState) {
-
-  // Structural UI
   renderHeaderSlots(gameState, uiState);
   renderMainSlots(gameState, uiState);
   renderFooterSlots(gameState, uiState);
   renderOverlaySlots(gameState, uiState);
 
-  // Persistent renderers
   mountMap(gameState);
 
+  // ✅ JUST sync sprites
+  if (window.mapEntityLayerSprites) {
+    mapEntityLayerSprites.sync(GAME_STATE.units);
+  }
 };
 
+// -------------------------------------------------
+// HEADER / MAIN / FOOTER / OVERLAYS (igual que antes)
+// -------------------------------------------------
 
 // -------------------------------------------------
 // HEADER
 // -------------------------------------------------
 
 function renderHeaderSlots(gameState, uiState) {
-  const headerVisible = uiState.panels.header.visible;
+  if (!uiState.panels.header.visible) {
+    toggleSlotVisibility("app-header", false);
+    return;
+  }
 
-  toggleSlotVisibility("app-header", headerVisible);
-  if (!headerVisible) return;
+  toggleSlotVisibility("app-header", true);
 
   const headerView = renderHeaderView(gameState);
-
   mountRenderer("slot-header-left", headerView.left);
   mountRenderer("slot-header-center", headerView.center);
   mountRenderer("slot-header-right", headerView.right);
@@ -107,24 +110,16 @@ function renderHeaderSlots(gameState, uiState) {
 
 
 // -------------------------------------------------
-// MAIN (HTML PANELS ONLY – NO MAP HERE)
+// MAIN
 // -------------------------------------------------
 
 function renderMainSlots(gameState, uiState) {
 
-  mountRenderer("slot-rag-left", () => {
-    // RAG panels renderer will be mounted here
-  });
+  mountRenderer("slot-rag-left", () => {});
 
-  toggleSlotVisibility(
-    "slot-log-right",
-    uiState.panels.log.visible
-  );
-
+  toggleSlotVisibility("slot-log-right", uiState.panels.log.visible);
   if (uiState.panels.log.visible) {
-    mountRenderer("slot-log-right", () => {
-      // event log renderer will be mounted here
-    });
+    mountRenderer("slot-log-right", () => {});
   }
 }
 
@@ -141,29 +136,17 @@ function renderFooterSlots(gameState, uiState) {
   );
 
   if (uiState.panels.footer.unitState.visible) {
-    mountRenderer("slot-footer-left", (container) => {
+    mountRenderer("slot-footer-left", container => {
       if (window.renderUnitStateView) {
         window.renderUnitStateView(gameState).render(container);
       }
     });
   }
 
-  if (uiState.panels.footer.combat.popup) {
-    mountRenderer("overlay-root", () => {
-      // combat popup renderer
-    });
-  } else {
-    toggleSlotVisibility(
-      "slot-footer-right",
-      uiState.panels.footer.combat.visible
-    );
-
-    if (uiState.panels.footer.combat.visible) {
-      mountRenderer("slot-footer-right", () => {
-        // combat panel renderer
-      });
-    }
-  }
+  toggleSlotVisibility(
+    "slot-footer-right",
+    uiState.panels.footer.combat.visible
+  );
 }
 
 
@@ -173,8 +156,6 @@ function renderFooterSlots(gameState, uiState) {
 
 function renderOverlaySlots(gameState, uiState) {
   if (uiState.overlays.popup) {
-    mountRenderer("overlay-root", () => {
-      // generic popup renderer
-    });
+    mountRenderer("overlay-root", () => {});
   }
 }

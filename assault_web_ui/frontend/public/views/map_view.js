@@ -213,9 +213,15 @@ window.renderMapView = function renderMapView() {
       return canvas;
     },
 
-    // ✅ SAFE: uses closure-scoped variables
+
     hexToWorld(q, r) {
-      return HexGeometry.hexToPixel(q, r, 0, 0);
+      const { x, y } = HexGeometry.hexToPixel(q, r, 0, 0);
+
+      return {
+        x: x + worldXMin,
+        y: y + worldYOffset
+      };
     }
+
   };
 };
