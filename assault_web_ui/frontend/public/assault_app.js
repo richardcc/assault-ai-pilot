@@ -47,12 +47,26 @@ async function bootstrapApplication() {
     GAME_STATE.scenario = scenario;
     GAME_STATE.uiMetadata = uiMetadata;
 
+
     // ---------------------------------------------
-    // Initialize units into GAME_STATE (minimal, safe)
+    // Initialize units FROM REPLAY (reusing scenario initializer)
     // ---------------------------------------------
+    const replayScenarioView =
+      adaptReplayInitialStateToScenario(GAME_STATE.replay);
+
     GAME_STATE.units = await initializeUnitsFromScenario(
-      GAME_STATE.scenario
+      replayScenarioView
     );
+
+    // Override HP from replay (replay is the authority)
+    for (const unit of Object.values(GAME_STATE.units)) {
+      const replayUnit =
+        GAME_STATE.replay.initial_state.units.find(u => u.id === unit.unit_id);
+      if (replayUnit) {
+        unit.hp = replayUnit.hp;
+      }
+    }
+
 
     // ---------------------------------------------
     // Initialize replay cursor
@@ -86,6 +100,8 @@ async function bootstrapApplication() {
     // ---------------------------------------------
     // First render
     // ---------------------------------------------
+    // Sync turn / step counters
+    updateTurnStepFromCursor(GAME_STATE);
     renderFrame(GAME_STATE, UI_STATE);
 
   } catch (err) {
