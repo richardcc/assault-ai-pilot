@@ -1,2 +1,0 @@
-# Map and hex rendering
-
