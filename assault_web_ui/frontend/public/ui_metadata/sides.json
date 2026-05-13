@@ -3,24 +3,28 @@
     "id": "US",
     "label": "United States",
     "short_label": "US",
-    "marker": "/public/art/markers/Markers USA.png"
+    "marker": "/public/art/markers/Markers USA.png",
+    "dead_marker": "/public/art/markers/Markers USA Dead.png"
   },
   "GE": {
     "id": "GE",
     "label": "Germany",
     "short_label": "GE",
-    "marker": "/public/art/markers/Markers Germany.png"
+    "marker": "/public/art/markers/Markers Germany.png",
+    "dead_marker": "/public/art/markers/Markers Germany Dead.png"
   },
   "UK": {
     "id": "UK",
     "label": "United Kingdom",
     "short_label": "UK",
-    "marker": "/public/art/markers/Markers UK.png"
+    "marker": "/public/art/markers/Markers UK.png",
+    "dead_marker": "/public/art/markers/Markers UK Dead.png"
   },
   "IT": {
     "id": "IT",
     "label": "Italy",
     "short_label": "IT",
-    "marker": "/public/art/markers/Markers Italy.png"
+    "marker": "/public/art/markers/Markers Italy.png",
+    "dead_marker": "/public/art/markers/Markers Italy Dead.png"
   }
 }

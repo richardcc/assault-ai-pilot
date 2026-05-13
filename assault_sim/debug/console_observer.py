@@ -91,30 +91,40 @@ class ConsoleObserver:
 
             # -------- VICTORY --------
             else:
-                is_hrl = self.rl_side is not None and winner == self.rl_side
-                winner_type = "HRL" if is_hrl else "HEURISTIC"
+                is_rl = self.rl_side is not None and winner == self.rl_side
+
+                # ✅ Who controls the winner
+                controller_type = "RL" if is_rl else "HEURISTIC"
+
+                # ✅ How the victory happened
+                if reason == "last_side_standing":
+                    victory_type = "ELIMINATION"
+                elif reason == "max_turns":
+                    victory_type = "SCENARIO"
+                else:
+                    victory_type = "UNKNOWN"
 
                 self.turns.add_line(
-                    f"🏆 MATCH FINISHED — {winner_type} VICTORY ({winner})"
+                    f"🏆 MATCH FINISHED — {controller_type} {victory_type} VICTORY ({winner})"
                 )
 
                 self.turns.add_line(
-                    f"    Winner: {winner} ({winner_type.lower()}-controlled)"
+                    f"    Winner: {winner} ({controller_type.lower()}-controlled)"
                 )
 
                 if self.rl_side:
                     loser = "GE" if winner == "US" else "US"
-                    loser_type = "heuristic" if is_hrl else "hrl-controlled"
+                    loser_type = "heuristic-controlled" if is_rl else "rl-controlled"
                     self.turns.add_line(
                         f"    Loser:  {loser} ({loser_type})"
                     )
 
                 self.turns.add_line(f"    Ended at turn: {turn}")
 
-            # -------- REASON --------
-            if reason:
-                pretty_reason = reason.replace("_", " ").capitalize()
-                self.turns.add_line(f"    Reason: {pretty_reason}")
+                # -------- REASON --------
+                if reason:
+                    pretty_reason = reason.replace("_", " ").capitalize()
+                    self.turns.add_line(f"    Reason: {pretty_reason}")
 
-            # Force final print
-            self.turns.close_turn()
+                # Force final print
+                self.turns.close_turn()

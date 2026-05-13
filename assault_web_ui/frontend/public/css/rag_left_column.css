@@ -1,0 +1,63 @@
+/* =================================================
+   LEFT RAG COLUMN (Chat + Strategic + Tactical)
+   ================================================= */
+
+#slot-rag-left {
+  display: flex;
+  flex-direction: column;
+
+  height: 100vh;          /* 🔥 clave: altura real */
+  width: 360px;
+
+  background: #111;
+  border-right: 1px solid #333;
+
+  overflow: hidden;
+}
+
+/* contenedor interno */
+.rag-left-column {
+  display: flex;
+  flex-direction: column;
+
+  height: 100%;
+  min-height: 0;          /* 🔥 evita overflow roto */
+}
+
+/* ---------------------------------
+   Chat (ARRIBA)
+---------------------------------- */
+.rag-pane {
+  flex: 0 0 200px;
+
+  border-bottom: 1px solid #333;
+  padding: 8px;
+
+  background: #0f0f0f;
+  overflow: hidden;       /* no scroll aquí */
+}
+
+/* ---------------------------------
+   Strategic (HRL)
+---------------------------------- */
+.hrl-pane {
+  flex: 0 0 auto;
+
+  padding: 8px;
+  border-bottom: 1px solid #222;
+
+  background: #121212;
+}
+
+/* ---------------------------------
+   Tactical (scroll real)
+---------------------------------- */
+.tactical-pane {
+  flex: 1 1 auto;
+
+  padding: 8px;
+  background: #141414;
+
+  overflow-y: auto;
+  min-height: 0;          /* 🔥 crítico */
+}

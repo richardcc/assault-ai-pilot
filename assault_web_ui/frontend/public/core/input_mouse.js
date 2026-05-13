@@ -1,141 +1,83 @@
 // =================================================
-// INPUT MOUSE
-// Pan / Zoom / Rotate centered on mouse pointer
+// INPUT POINTER
+// Pan (left) / Rotate (right) / Zoom (wheel)
 // =================================================
 
-const MouseInput = (function () {
+window.attachPixiMouseInput = function (canvas, camera) {
 
-  function attach(canvas, camera, options = {}) {
+  const zoomFactor = 1.1;
+  const minZoom = 0.3;
+  const maxZoom = 5.0;
+  const rotateSensitivity = 0.005;
 
-    const {
-      panButton = 0,            // Left mouse
-      rotateButton = 2,         // Right mouse
-      zoomFactor = 1.1,
-      minZoom = 0.3,
-      maxZoom = 4.0,
-      rotateSensitivity = 0.005
-    } = options;
+  let lastX = 0;
+  let lastY = 0;
+  let activePointerId = null;
 
-    let isPanning = false;
-    let isRotating = false;
-    let lastX = 0;
-    let lastY = 0;
+  // Prevent browser gestures & context menu
+  canvas.style.touchAction = "none";
+  canvas.addEventListener("contextmenu", e => e.preventDefault());
 
-    // -------------------------------------------------
-    // Screen → World conversion (inverse camera transform)
-    // -------------------------------------------------
-    function getMouseWorldPos(e) {
-      const rect = canvas.getBoundingClientRect();
-      const sx = e.clientX - rect.left;
-      const sy = e.clientY - rect.top;
+  // -------------------------------------------------
+  // POINTER DOWN
+  // -------------------------------------------------
+  canvas.addEventListener("pointerdown", e => {
+    activePointerId = e.pointerId;
+    canvas.setPointerCapture(e.pointerId);
+    lastX = e.clientX;
+    lastY = e.clientY;
+  });
 
-      const cx = canvas.width / 2;
-      const cy = canvas.height / 2;
+  // -------------------------------------------------
+  // POINTER MOVE
+  // -------------------------------------------------
+  canvas.addEventListener("pointermove", e => {
+    if (e.pointerId !== activePointerId) return;
 
-      let x = (sx - cx) / camera.zoom;
-      let y = (sy - cy) / camera.zoom;
+    const dx = e.clientX - lastX;
+    const dy = e.clientY - lastY;
 
-      const cos = Math.cos(-camera.rotation);
-      const sin = Math.sin(-camera.rotation);
+    lastX = e.clientX;
+    lastY = e.clientY;
 
-      const rx = x * cos - y * sin;
-      const ry = x * sin + y * cos;
-
-      return {
-        x: rx + cx - camera.panX,
-        y: ry + cy - camera.panY
-      };
+    // LEFT BUTTON → PAN
+    if (e.buttons & 1) {
+      camera.x -= dx / camera.zoom;
+      camera.y -= dy / camera.zoom;
     }
 
-    // -------------------------------------------------
-    // Mouse handlers
-    // -------------------------------------------------
-    function onMouseDown(e) {
-      lastX = e.clientX;
-      lastY = e.clientY;
-
-      if (e.button === panButton) isPanning = true;
-      if (e.button === rotateButton) isRotating = true;
+    // RIGHT BUTTON → ROTATE IN PLACE
+    if (e.buttons & 2) {
+      camera.rotation += dx * rotateSensitivity;
     }
+  });
 
-    function onMouseUp() {
-      isPanning = false;
-      isRotating = false;
+  // -------------------------------------------------
+  // POINTER UP
+  // -------------------------------------------------
+  canvas.addEventListener("pointerup", e => {
+    if (e.pointerId === activePointerId) {
+      canvas.releasePointerCapture(e.pointerId);
+      activePointerId = null;
     }
+  });
 
-    function onMouseMove(e) {
-      const dx = e.clientX - lastX;
-      const dy = e.clientY - lastY;
-
-      lastX = e.clientX;
-      lastY = e.clientY;
-
-      // -------------------------------------------------
-      // PAN
-      // -------------------------------------------------
-      if (isPanning) {
-        camera.panX += dx / camera.zoom;
-        camera.panY += dy / camera.zoom;
-      }
-
-      // -------------------------------------------------
-      // ROTATE (centered on mouse)
-      // -------------------------------------------------
-      if (isRotating) {
-        const before = getMouseWorldPos(e);
-
-        camera.rotation += dx * rotateSensitivity;
-
-        const after = getMouseWorldPos(e);
-
-        camera.panX += after.x - before.x;
-        camera.panY += after.y - before.y;
-      }
-    }
-
-    // -------------------------------------------------
-    // ZOOM (centered on mouse)
-    // -------------------------------------------------
-    function onWheel(e) {
+  // -------------------------------------------------
+  // ZOOM (centered on canvas)
+  // -------------------------------------------------
+  canvas.addEventListener(
+    "wheel",
+    e => {
       e.preventDefault();
 
-      const before = getMouseWorldPos(e);
-
-      const factor = (e.deltaY < 0) ? zoomFactor : 1 / zoomFactor;
-      camera.zoom = Math.min(
-        maxZoom,
-        Math.max(minZoom, camera.zoom * factor)
+      const factor = e.deltaY < 0 ? zoomFactor : 1 / zoomFactor;
+      camera.zoom = Math.max(
+        minZoom,
+        Math.min(maxZoom, camera.zoom * factor)
       );
+    },
+    { passive: false }
+  );
 
-      const after = getMouseWorldPos(e);
-
-      camera.panX += after.x - before.x;
-      camera.panY += after.y - before.y;
-    }
-
-    // -------------------------------------------------
-    // Attach listeners
-    // -------------------------------------------------
-    canvas.oncontextmenu = e => e.preventDefault();
-
-    canvas.addEventListener("mousedown", onMouseDown);
-    window.addEventListener("mouseup", onMouseUp);
-    window.addEventListener("mousemove", onMouseMove);
-    canvas.addEventListener("wheel", onWheel, { passive: false });
-
-    // -------------------------------------------------
-    // Cleanup
-    // -------------------------------------------------
-    return function detach() {
-      canvas.removeEventListener("mousedown", onMouseDown);
-      window.removeEventListener("mouseup", onMouseUp);
-      window.removeEventListener("mousemove", onMouseMove);
-      canvas.removeEventListener("wheel", onWheel);
-    };
-  }
-
-  return {
-    attach
-  };
-
-})();
+  console.log("[INPUT] pan (left), rotate (right), zoom");
+};

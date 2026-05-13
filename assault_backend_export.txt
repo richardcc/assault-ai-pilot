@@ -1,0 +1,617 @@
+
+================================================================================
+FILE: C:\repos\python\assault\assault_backend\cache_hrl.py
+================================================================================
+
+class HRLCache:
+    """
+    Cache for strategic (HRL) explanations.
+
+    Keyed by semantic strategic state, NOT by object stringification.
+    Safe to reuse across units only when state truly matches.
+    """
+
+    def __init__(self):
+        self._cache = {}
+
+    def make_key(self, unit_id, action, strategic_state):
+        """
+        Build a stable semantic cache key for HRL.
+        """
+        return (
+            unit_id,
+            action,
+            strategic_state.friendly_strength,
+            strategic_state.enemy_pressure,
+            strategic_state.objective_distance,
+        )
+
+    def get(self, key):
+        return self._cache.get(key)
+
+    def set(self, key, value):
+        self._cache[key] = value
+
+    def clear(self):
+        self._cache.clear()
+
+
+================================================================================
+FILE: C:\repos\python\assault\assault_backend\cache_tactical.py
+================================================================================
+
+import json
+import hashlib
+
+
+class TacticalCache:
+    """
+    Cache for tactical explanations.
+
+    Keyed by a stable hash of activation events.
+    """
+
+    def __init__(self):
+        self._cache = {}
+
+    def _hash_events(self, events):
+        """
+        Create a deterministic hash from activation events.
+        """
+        serialized = json.dumps(events, sort_keys=True)
+        return hashlib.sha256(serialized.encode("utf-8")).hexdigest()
+
+    def make_key(self, unit_id, events):
+        """
+        Tactical identity = unit + exact events.
+        """
+        return (
+            unit_id,
+            self._hash_events(events),
+        )
+
+    def get(self, key):
+        return self._cache.get(key)
+
+    def set(self, key, value):
+        self._cache[key] = value
+
+    def clear(self):
+        self._cache.clear()
+
+
+================================================================================
+FILE: C:\repos\python\assault\assault_backend\engine.py
+================================================================================
+
+from cache_hrl import HRLCache
+from cache_tactical import TacticalCache
+
+
+class ExplainableEngine:
+    """
+    Engine that orchestrates strategic (HRL) and tactical explanations
+    using two independent caches.
+    """
+
+    def __init__(self, hrl_service, tactical_service):
+        self.hrl_service = hrl_service
+        self.tactical_service = tactical_service
+
+        self.hrl_cache = HRLCache()
+        self.tactical_cache = TacticalCache()
+
+    def explain_activation(self, activation):
+        """
+        Explain a single activation with coherent HRL + Tactical layers.
+        """
+
+        # -------------------------------------------------
+        # STRATEGIC (HRL) — CACHED BY SEMANTIC STATE
+        # -------------------------------------------------
+        hrl_key = self.hrl_cache.make_key(
+            unit_id=activation.unit_id,
+            action=activation.action,
+            strategic_state=activation.strategic_state,
+        )
+
+        strategic_intent = self.hrl_cache.get(hrl_key)
+        if strategic_intent is None:
+            strategic_intent = self.hrl_service.explain(
+                strategic_state=activation.strategic_state,
+                unit_id=activation.unit_id,
+                action=activation.action,
+            )
+            self.hrl_cache.set(hrl_key, strategic_intent)
+
+        # ✅ FORZAR coherencia del payload
+        strategic_intent["unit_id"] = activation.unit_id
+
+        # -------------------------------------------------
+        # TACTICAL — CACHED BY EVENTS
+        # -------------------------------------------------
+        tactical_key = self.tactical_cache.make_key(
+            unit_id=activation.unit_id,
+            events=activation.events,
+        )
+
+        tactical_execution = self.tactical_cache.get(tactical_key)
+        if tactical_execution is None:
+            tactical_execution = self.tactical_service.explain(
+                activation.events
+            )
+            self.tactical_cache.set(tactical_key, tactical_execution)
+
+        return {
+            "strategic_intent": strategic_intent,
+            "tactical_execution": tactical_execution,
+        }
+
+
+================================================================================
+FILE: C:\repos\python\assault\assault_backend\hrl_service.py
+================================================================================
+
+from assault_rag.hrl.explain import explain_hrl_decision
+
+
+class HRLService:
+    def explain(self, strategic_state, unit_id, action):
+        """
+        Explain the strategic decision using real HRL RAG logic
+        provided by assault_rag.
+        """
+
+        # Build context for HRL RAG
+        context = {
+            "friendly_strength": strategic_state.friendly_strength,
+            "enemy_pressure": strategic_state.enemy_pressure,
+            "objective_distance": strategic_state.objective_distance,
+            "unit_id": unit_id,
+            "action": action,
+        }
+
+        # Delegate explanation to assault_rag
+        hrl_result = explain_hrl_decision(context)
+
+        return {
+            "option": hrl_result["option"],
+            "category": hrl_result["category"],
+            "explanation": hrl_result["explanation"],
+        }
+
+
+================================================================================
+FILE: C:\repos\python\assault\assault_backend\main.py
+================================================================================
+
+import json
+from pathlib import Path
+
+from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
+
+# =====================================================
+# LOADERS (RAW JSON, NO INFERENCE)
+# =====================================================
+
+from services.scenario_service import load_scenario_raw
+from services.map_piece_service import (
+    load_map_piece_catalog_raw,
+    load_map_piece_raw,
+)
+
+from services.unit_service import (
+    load_unit_catalog_raw,
+    load_unit_raw,
+)
+
+# =====================================================
+# RAG schemas (separated by responsibility)
+# =====================================================
+
+from schemas.rag import (
+    ExplainActivationRequest,
+    ExplainActivationResponse,
+)
+
+from engine import ExplainableEngine
+from hrl_service import HRLService
+from tactical_service import TacticalService
+
+# =====================================================
+# FastAPI Application
+# =====================================================
+
+app = FastAPI(
+    title="Assault RAG Backend",
+    version="1.0",
+)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# =====================================================
+# LOAD TACTICAL RULEBOOK (ONCE AT STARTUP)
+# =====================================================
+
+RULEBOOK_PATH = (
+    Path(__file__).resolve().parent.parent
+    / "assault_rag"
+    / "data"
+    / "rulebook"
+    / "typed"
+    / "rulebook_typed.json"
+)
+
+with open(RULEBOOK_PATH, "r", encoding="utf-8") as f:
+    TYPED_RULEBOOK = json.load(f)
+
+# =====================================================
+# ENGINE (WARM SINGLETON)
+# =====================================================
+
+engine = ExplainableEngine(
+    hrl_service=HRLService(),
+    tactical_service=TacticalService(
+        typed_rules=TYPED_RULEBOOK
+    ),
+)
+
+# =====================================================
+# ENDPOINTS
+# =====================================================
+
+@app.get("/api/engine/status")
+def engine_status():
+    """
+    Returns engine readiness and capability information.
+    """
+    return {
+        "status": "ready",
+        "engine": "assault-rag-backend",
+        "rag_enabled": True,
+        "layers": {
+            "strategic": "assault_rag",
+            "tactical": "rules_and_dice",
+        },
+    }
+
+
+@app.post(
+    "/api/explain/activation",
+    response_model=ExplainActivationResponse,
+)
+def explain_activation(request: ExplainActivationRequest):
+    """
+    Explain one activation using the warm Explainable Engine.
+    """
+    return engine.explain_activation(request.activation)
+
+# =====================================================
+# SCENARIO (RAW JSON)
+# =====================================================
+
+@app.get("/api/scenarios/{scenario_id}")
+def get_scenario_raw(scenario_id: str):
+    """
+    Return the scenario JSON exactly as stored on disk.
+    No transformation, no inference.
+    """
+    try:
+        return load_scenario_raw(scenario_id)
+    except FileNotFoundError:
+        raise HTTPException(
+            status_code=404,
+            detail="Scenario not found"
+        )
+
+# =====================================================
+# MAP PIECES (RAW JSON)
+# =====================================================
+
+@app.get("/api/map_pieces")
+def list_map_pieces_raw():
+    """
+    Return list of available map piece IDs.
+    Raw catalog keys, no transformation.
+    """
+    try:
+        catalog = load_map_piece_catalog_raw()
+        pieces = catalog.get("pieces", {})
+        return sorted(pieces.keys())
+    except FileNotFoundError:
+        raise HTTPException(
+            status_code=500,
+            detail="Map piece catalog not found"
+        )
+
+
+@app.get("/api/map_pieces/{piece_id}")
+def get_map_piece_raw(piece_id: str):
+    """
+    Return a map piece JSON exactly as stored in catalog.
+    No transformation, no inference.
+    """
+    try:
+        return load_map_piece_raw(piece_id)
+    except FileNotFoundError:
+        raise HTTPException(
+            status_code=404,
+            detail="Map piece not found"
+        )
+# =====================================================
+# UNITS (RAW JSON)
+# =====================================================
+
+@app.get("/api/units")
+def list_units_raw():
+    """
+    Return list of available unit keys.
+    Raw catalog keys, no transformation.
+    """
+    try:
+        catalog = load_unit_catalog_raw()
+        units = catalog.get("units", {})
+        return sorted(units.keys())
+    except FileNotFoundError:
+        raise HTTPException(
+            status_code=500,
+            detail="Unit catalog not found"
+        )
+
+
+@app.get("/api/units/{unit_key}")
+def get_unit_raw(unit_key: str):
+    """
+    Return a unit definition exactly as stored in unit_catalog.json.
+    No transformation, no inference.
+    """
+    try:
+        return load_unit_raw(unit_key)
+    except KeyError:
+        raise HTTPException(
+            status_code=404,
+            detail="Unit not found"
+        )
+
+
+================================================================================
+FILE: C:\repos\python\assault\assault_backend\tactical_service.py
+================================================================================
+
+from assault_rag.explanation.activation_tactical_explainer import (
+    explain_activation_events,
+)
+from assault_rag.explanation.tactical_rules_explainer import (
+    explain_tactical_execution_with_rules,
+)
+
+
+class TacticalService:
+    """
+    Backend-driven tactical explanation service.
+
+    Responsibilities:
+    - Explain WHAT happened (deterministic facts).
+    - Explain WHY it happened (rulebook-based reasoning).
+    """
+
+    def __init__(self, typed_rules):
+        """
+        Initialize the tactical service with a preloaded rulebook.
+
+        :param typed_rules: Parsed rulebook (list of typed rule dicts).
+        """
+        self.typed_rules = typed_rules
+
+    def explain(self, activation_events):
+        """
+        Explain the tactical resolution of a single activation.
+
+        :param activation_events: List of events produced by the UI
+                                  during the activation.
+        :return: Dict with 'facts' and 'rules'.
+        """
+
+        # -------------------------------------------------
+        # Guard: no events at all
+        # -------------------------------------------------
+        if not activation_events:
+            return {
+                "facts": "The unit performed the action without any tactical resolution.",
+                "rules": "No tactical rules were applied.",
+            }
+
+        # -------------------------------------------------
+        # 1. Deterministic factual explanation (WHAT happened)
+        # -------------------------------------------------
+        facts = explain_activation_events(activation_events)
+
+        # -------------------------------------------------
+        # 2. Rule-based explanation (WHY it happened)
+        #    - Standard dice rules
+        #    - Or special rules via RAG + LLM
+        # -------------------------------------------------
+        rules = explain_tactical_execution_with_rules(
+            activation_events=activation_events,
+            typed_rules=self.typed_rules,
+        )
+
+        return {
+            "facts": facts,
+            "rules": rules,
+        }
+
+
+================================================================================
+FILE: C:\repos\python\assault\assault_backend\schemas\rag.py
+================================================================================
+
+from pydantic import BaseModel
+from typing import List, Dict, Any
+
+
+class StrategicState(BaseModel):
+    friendly_strength: str
+    enemy_pressure: str
+    objective_distance: str
+
+
+class ActivationPayload(BaseModel):
+    unit_id: str
+    action: str
+    events: List[Dict[str, Any]]
+    strategic_state: StrategicState
+
+
+class ExplainActivationRequest(BaseModel):
+    activation: ActivationPayload
+
+
+class ExplainActivationResponse(BaseModel):
+    strategic_intent: Dict[str, Any]
+    tactical_execution: Dict[str, Any]
+
+
+================================================================================
+FILE: C:\repos\python\assault\assault_backend\schemas\scenario.py
+================================================================================
+
+from pydantic import BaseModel
+from typing import List
+
+
+class ScenarioSide(BaseModel):
+    id: str
+    label: str
+
+
+class ScenarioResponse(BaseModel):
+    id: str
+    alias: str
+    phase: int
+    sequence: int
+    goal: str
+    max_turns: int
+    sides: List[ScenarioSide]
+
+
+================================================================================
+FILE: C:\repos\python\assault\assault_backend\services\map_piece_service.py
+================================================================================
+
+# services/map_piece_service.py
+
+import json
+from pathlib import Path
+
+MAP_PIECE_CATALOG_PATH = (
+    Path(__file__).resolve()
+    .parents[2]
+    / "assault_sim"
+    / "assets"
+    / "catalogs"
+    / "map_piece_catalog.json"
+)
+
+def load_map_piece_catalog_raw() -> dict:
+    if not MAP_PIECE_CATALOG_PATH.exists():
+        raise FileNotFoundError("map_piece_catalog.json")
+
+    with open(MAP_PIECE_CATALOG_PATH, "r", encoding="utf-8") as f:
+        return json.load(f)
+
+def load_map_piece_raw(piece_id: str) -> dict:
+    catalog = load_map_piece_catalog_raw()
+    pieces = catalog.get("pieces", {})
+
+    if piece_id not in pieces:
+        raise FileNotFoundError(piece_id)
+
+    return {
+        "id": piece_id,
+        **pieces[piece_id]
+    }
+
+
+
+================================================================================
+FILE: C:\repos\python\assault\assault_backend\services\scenario_service.py
+================================================================================
+
+import json
+from pathlib import Path
+
+SCENARIOS_PATH = (
+    Path(__file__).resolve()
+    .parents[2]
+    / "assault_sim"
+    / "assets"
+    / "scenarios"
+)
+
+def load_scenario_raw(scenario_id: str) -> dict:
+    """
+    Load scenario JSON and return it AS-IS.
+    No transformation, no inference.
+    """
+    path = SCENARIOS_PATH / f"{scenario_id}.json"
+
+    if not path.exists():
+        raise FileNotFoundError(scenario_id)
+
+    with open(path, "r", encoding="utf-8") as f:
+        return json.load(f)
+
+
+
+================================================================================
+FILE: C:\repos\python\assault\assault_backend\services\unit_service.py
+================================================================================
+
+# =================================================
+# services/unit_service.py
+# Equivalent to map_piece_service.py
+# =================================================
+
+import json
+from pathlib import Path
+
+UNIT_CATALOG_PATH = (
+    Path(__file__)
+    .resolve()
+    .parents[2]
+    / "assault_sim"
+    / "assets"
+    / "catalogs"
+    / "unit_catalog.json"
+)
+
+# -------------------------------------------------
+# Load full unit catalog
+# -------------------------------------------------
+def load_unit_catalog_raw() -> dict:
+    if not UNIT_CATALOG_PATH.exists():
+        raise FileNotFoundError("unit_catalog.json")
+
+    with UNIT_CATALOG_PATH.open("r", encoding="utf-8") as f:
+        return json.load(f)
+
+# -------------------------------------------------
+# Load single unit definition
+# -------------------------------------------------
+def load_unit_raw(unit_key: str) -> dict:
+    catalog = load_unit_catalog_raw()
+    units = catalog.get("units", {})
+
+    if unit_key not in units:
+        raise KeyError(f"Unknown unit_key: {unit_key}")
+
+    return units[unit_key]
+

@@ -11,7 +11,7 @@ from assault_sim.debug.debug_config import DebugConfig
 
 from assault_sim.heuristics.tactical_path_heuristic import TacticalPathHeuristic
 
-
+RL_SIDE = "US"
 # -----------------------------------------------------
 # CLI argument parsing (NO game logic here)
 # -----------------------------------------------------
@@ -92,12 +92,13 @@ def main():
         sim_env,
         env_config_path=Path("assault_sim/config/env_config.json"),
         scenario_override=args.scenario,
+        rl_side=RL_SIDE,
     )
 
     # -----------------------------------------------------
     # 4. Observers
     # -----------------------------------------------------
-    observer = ConsoleObserver()
+    observer = ConsoleObserver(rl_side=RL_SIDE)
     if sim_env.event_bus:
         sim_env.event_bus.subscribe(observer)
 

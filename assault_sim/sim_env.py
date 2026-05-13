@@ -158,6 +158,18 @@ class SimEnv:
         self.runtime.apply_action(action, context=context)
         self.game_state = self.runtime.base_state
 
+
+        # ✅ EARLY EXIT if match already ended
+        if self.runtime.is_match_over():
+            reward = (
+                self.game_state.vp_tracker.total_points
+                if self.game_state.vp_tracker
+                else 0
+            )
+
+            return self.game_state, reward, True, {}
+
+
         # -------------------------------------------------
         # TURN END
         # -------------------------------------------------

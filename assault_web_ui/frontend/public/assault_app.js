@@ -8,7 +8,10 @@
 window.GAME_STATE = {
   scenario: null,
   replay: null,
-  units: [],
+
+  // IMPORTANT: units must be an object keyed by unit_id
+  units: {},
+
   turn: 0,
   step: 0,
 
@@ -32,54 +35,46 @@ async function bootstrapApplication() {
 
   try {
     // ---------------------------------------------
-    // SINGLE application load (replay + scenario + UI)
+    // Load replay + scenario + UI metadata
     // ---------------------------------------------
     const {
       replay,
       scenario,
       uiMetadata
     } = await loadApplicationData(replayId);
-    
-    // ---------------------------------------------
-    // Store loaded data in GAME_STATE
-    // ---------------------------------------------
+
     GAME_STATE.replay = replay;
     GAME_STATE.scenario = scenario;
     GAME_STATE.uiMetadata = uiMetadata;
 
-
     // ---------------------------------------------
-    // Initialize units FROM REPLAY (reusing scenario initializer)
+    // Build MAP UI data
     // ---------------------------------------------
-    const replayScenarioView =
-      adaptReplayInitialStateToScenario(GAME_STATE.replay);
+    GAME_STATE.uiMetadata.mapUi = buildMapUi(GAME_STATE);
 
-    GAME_STATE.units = await initializeUnitsFromScenario(
-      replayScenarioView
-    );
-
-    // Override HP from replay (replay is the authority)
-    for (const unit of Object.values(GAME_STATE.units)) {
-      const replayUnit =
-        GAME_STATE.replay.initial_state.units.find(u => u.id === unit.unit_id);
-      if (replayUnit) {
-        unit.hp = replayUnit.hp;
-      }
+    if (!GAME_STATE.uiMetadata.mapUi) {
+      console.error("[BOOTSTRAP] Failed to build mapUi");
+    } else {
+      console.log("[BOOTSTRAP] mapUi built");
     }
 
-
     // ---------------------------------------------
-    // Initialize replay cursor
+    // Initialize replay cursor (START OF REPLAY)
     // ---------------------------------------------
     GAME_STATE.replayCursor.turnIndex = 0;
     GAME_STATE.replayCursor.eventIndex = 0;
 
-    // Expose basic turn/step for UI (read-only)
     GAME_STATE.turn = replay.initial_state?.turn ?? 1;
     GAME_STATE.step = 0;
 
     // ---------------------------------------------
-    // Extract players from replay metadata
+    // ✅ BUILD INITIAL REPLAY STATE (CRITICAL)
+    // This fills GAME_STATE.units deterministically
+    // ---------------------------------------------
+    rebuildStateUpToCursor(GAME_STATE);
+
+    // ---------------------------------------------
+    // Extract players
     // ---------------------------------------------
     const replaySides = replay.meta?.sides ?? {};
 
@@ -91,17 +86,37 @@ async function bootstrapApplication() {
     );
 
     console.log("Replay loaded:", replay.id);
-    console.log(
-      "Scenario loaded:",
-      scenario ? scenario.id : "(none)"
-    );
+    console.log("Scenario loaded:", scenario?.id);
     console.log("Players:", GAME_STATE.players);
 
     // ---------------------------------------------
-    // First render
+    // INIT WORLD + FIRST UI RENDER
     // ---------------------------------------------
-    // Sync turn / step counters
-    updateTurnStepFromCursor(GAME_STATE);
+    const dom = document.getElementById("slot-map-center");
+
+    if (!window.worldRenderer) {
+      console.error("[BOOTSTRAP] worldRenderer not found");
+      return;
+    }
+
+    if (!window.renderFrame) {
+      console.error("[BOOTSTRAP] renderFrame (UI orchestrator) not found");
+      return;
+    }
+
+    // ---------------------------------------------
+    // ✅ INIT PIXI WORLD (map + grid + unit layer)
+    // ---------------------------------------------
+    await worldRenderer.init(dom, GAME_STATE);
+
+    // ---------------------------------------------
+    // ✅ RENDER INITIAL UNITS (THIS WAS MISSING)
+    // ---------------------------------------------
+    worldRenderer.updateUnits(GAME_STATE);
+
+    // ---------------------------------------------
+    // First UI render (DOM panels, header, footer, etc.)
+    // ---------------------------------------------
     renderFrame(GAME_STATE, UI_STATE);
 
   } catch (err) {

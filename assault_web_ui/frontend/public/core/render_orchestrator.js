@@ -1,11 +1,11 @@
 // =================================================
 // RENDER ORCHESTRATOR
+// UI only – world logic lives in world_renderer
 // =================================================
 
 // -------------------------------------------------
 // HELPERS
 // -------------------------------------------------
-
 function mountRenderer(slotId, renderFn) {
   const slot = document.getElementById(slotId);
   if (!slot) return;
@@ -20,80 +20,18 @@ function toggleSlotVisibility(slotId, visible) {
 }
 
 // -------------------------------------------------
-// MAP VIEW (PERSISTENT – SELF-RENDERING)
-// -------------------------------------------------
-
-let mapView = null;
-let mapEntityLayerMounted = false;
-let mapEntityLayerSpritesMounted = false;
-let PIXI_APP = null;
-
-function mountMap(gameState) {
-  const container = document.getElementById("slot-map-center");
-  if (!container) return;
-
-  if (mapView) return;
-
-  mapView = window.renderMapView(gameState);
-  mapView.mount(container);
-
-  console.log("MAP VIEW MOUNTED (self-rendering)");
-
-  // Disable old canvas entity layer
-  if (!mapEntityLayerMounted && window.mapEntityLayer) {
-    console.log("[ORCHESTRATOR] canvas entity layer DISABLED");
-    mapEntityLayerMounted = true;
-  }
-
-  // Init PIXI overlay
-  if (!PIXI_APP) {
-    PIXI_APP = new PIXI.Application({
-      resizeTo: container,
-      backgroundAlpha: 0,
-      antialias: true
-    });
-
-    PIXI_APP.view.style.position = "absolute";
-    PIXI_APP.view.style.top = "0";
-    PIXI_APP.view.style.left = "0";
-    PIXI_APP.view.style.pointerEvents = "none";
-    PIXI_APP.view.style.zIndex = "20";
-
-    container.appendChild(PIXI_APP.view);
-  }
-
-  if (!mapEntityLayerSpritesMounted && window.mapEntityLayerSprites) {
-    mapEntityLayerSprites.init(mapView, PIXI_APP);
-    mapEntityLayerSpritesMounted = true;
-  }
-}
-
-// -------------------------------------------------
 // PUBLIC ENTRY POINT
 // -------------------------------------------------
-
 window.renderFrame = function renderFrame(gameState, uiState) {
   renderHeaderSlots(gameState, uiState);
   renderMainSlots(gameState, uiState);
   renderFooterSlots(gameState, uiState);
   renderOverlaySlots(gameState, uiState);
-
-  mountMap(gameState);
-
-  // ✅ JUST sync sprites
-  if (window.mapEntityLayerSprites) {
-    mapEntityLayerSprites.sync(GAME_STATE.units);
-  }
 };
-
-// -------------------------------------------------
-// HEADER / MAIN / FOOTER / OVERLAYS (igual que antes)
-// -------------------------------------------------
 
 // -------------------------------------------------
 // HEADER
 // -------------------------------------------------
-
 function renderHeaderSlots(gameState, uiState) {
   if (!uiState.panels.header.visible) {
     toggleSlotVisibility("app-header", false);
@@ -108,26 +46,73 @@ function renderHeaderSlots(gameState, uiState) {
   mountRenderer("slot-header-right", headerView.right);
 }
 
-
 // -------------------------------------------------
 // MAIN
 // -------------------------------------------------
-
 function renderMainSlots(gameState, uiState) {
 
-  mountRenderer("slot-rag-left", () => {});
+  // ✅ LEFT COLUMN (🔥 CREAR SOLO UNA VEZ)
+  const container = document.getElementById("slot-rag-left");
+  if (!container) return;
 
+  if (!container.__ragInitialized) {
+
+    const column = document.createElement("div");
+    column.id = "rag-left-column";
+    column.className = "rag-left-column";
+
+    // Chat
+    const chatDiv = document.createElement("div");
+    chatDiv.id = "rag-chat";
+    chatDiv.className = "rag-pane";
+    column.appendChild(chatDiv);
+
+    // Strategic
+    const hrlDiv = document.createElement("div");
+    hrlDiv.id = "hrl-explanation";
+    hrlDiv.className = "hrl-pane";
+    column.appendChild(hrlDiv);
+
+    // Tactical
+    const tacticalDiv = document.createElement("div");
+    tacticalDiv.id = "tactical-explanation";
+    tacticalDiv.className = "tactical-pane";
+    column.appendChild(tacticalDiv);
+
+    container.innerHTML = "";
+    container.appendChild(column);
+
+    container.__ragInitialized = true;
+
+    // ✅ solo al inicio
+    clearHRLExplanation?.();
+    clearTacticalExplanation?.();
+  }
+
+  // -------------------------------------------------
+  // RIGHT LOG PANEL
+  // -------------------------------------------------
   toggleSlotVisibility("slot-log-right", uiState.panels.log.visible);
+
   if (uiState.panels.log.visible) {
-    mountRenderer("slot-log-right", () => {});
+    mountRenderer("slot-log-right", container => {
+
+      const logDiv = document.createElement("div");
+      logDiv.id = "event-log";
+      logDiv.className = "event-log";
+
+      container.appendChild(logDiv);
+
+      if (window.rebuildEventLogFromState) {
+        rebuildEventLogFromState(gameState);
+      }
+    });
   }
 }
-
 
 // -------------------------------------------------
 // FOOTER
 // -------------------------------------------------
-
 function renderFooterSlots(gameState, uiState) {
 
   toggleSlotVisibility(
@@ -147,15 +132,22 @@ function renderFooterSlots(gameState, uiState) {
     "slot-footer-right",
     uiState.panels.footer.combat.visible
   );
-}
 
+  if (uiState.panels.footer.combat.visible) {
+    const slot = document.getElementById("slot-footer-right");
+
+    if (slot && !slot.__combatMounted) {
+      if (window.renderCombatHostView) {
+        window.renderCombatHostView(slot);
+        slot.__combatMounted = true;
+      }
+    }
+  }
+}
 
 // -------------------------------------------------
 // OVERLAYS
 // -------------------------------------------------
-
 function renderOverlaySlots(gameState, uiState) {
-  if (uiState.overlays.popup) {
-    mountRenderer("overlay-root", () => {});
-  }
+  // Future overlays
 }

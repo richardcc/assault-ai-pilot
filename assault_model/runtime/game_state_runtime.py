@@ -280,6 +280,11 @@ class RuntimeGameState:
         )
 
         self.base_state = result.new_state
+        self._check_match_end(context)
+
+        if self._match_over:
+            return result
+
 
         self._consume_activation(attacker)
         self._advance_activation()

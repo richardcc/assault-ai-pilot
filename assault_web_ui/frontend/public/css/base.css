@@ -44,13 +44,27 @@ html, body {
 /* ================================================= */
 #app-main {
   display: grid;
-  grid-template-columns: 300px 1fr 300px;
+
+  /* ✅ CORREGIDO: ancho correcto */
+  grid-template-columns: 360px 1fr 300px;
+
   gap: 8px;
   padding: 8px;
   overflow: hidden;
 }
 
-#slot-rag-left,
+/* ✅ LEFT RAG COLUMN (fix clave) */
+#slot-rag-left {
+  border: 1px dashed #666;
+
+  display: flex;              /* 🔥 necesario */
+  flex-direction: column;
+  height: 100%;
+
+  overflow: hidden;           /* 🔥 no scroll aquí */
+}
+
+/* ✅ SOLO LOG tiene scroll */
 #slot-log-right {
   border: 1px dashed #666;
   overflow-y: auto;
@@ -91,4 +105,3 @@ html, body {
   height: 100%;
   pointer-events: none;
 }
-``
