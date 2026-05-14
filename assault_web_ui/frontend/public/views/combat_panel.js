@@ -1,3 +1,7 @@
+// =================================================
+// COMBAT PANEL
+// =================================================
+
 function renderRangedCombat(payload, unitLabel) {
   console.log("⚔️ renderRangedCombat called", payload);
 
@@ -27,7 +31,7 @@ function renderRangedCombat(payload, unitLabel) {
   }
 
   // ---------------------------
-  // Build combat HTML (REAL HTML)
+  // Build combat HTML
   // ---------------------------
   let html = `
     <div class="combat-header">
@@ -41,7 +45,6 @@ function renderRangedCombat(payload, unitLabel) {
       </div>
     </div>
 
-    <!-- ✅ TWO COLUMN GRID -->
     <div class="combat-dice-grid">
 
       <div class="combat-dice-col">
@@ -59,6 +62,9 @@ function renderRangedCombat(payload, unitLabel) {
     <div class="combat-body">
   `;
 
+  // ---------------------------
+  // DAMAGE
+  // ---------------------------
   if (
     payload.defender_hp_before !== undefined &&
     payload.defender_hp_after !== undefined
@@ -76,7 +82,11 @@ function renderRangedCombat(payload, unitLabel) {
     }
   }
 
+  // ---------------------------
+  // CRITICALS
+  // ---------------------------
   const crits = payload.attacker_effects?.criticals ?? [];
+
   if (crits.length > 0) {
     html += `
       <div class="combat-crit">
@@ -85,6 +95,9 @@ function renderRangedCombat(payload, unitLabel) {
     `;
   }
 
+  // ---------------------------
+  // KILL
+  // ---------------------------
   if (payload.defender_killed) {
     html += `
       <div class="combat-kill">
@@ -93,10 +106,52 @@ function renderRangedCombat(payload, unitLabel) {
     `;
   }
 
-  html += `</div>`; // combat-body
+  html += `</div>`; // cerrar combat-body
+
+  // -------------------------------------------------
+  // 🔥 TRIGGER FX (FINAL CORRECTO)
+  // -------------------------------------------------
+  try {
+    if (
+      payload.attacker &&
+      payload.defender &&
+      window.playCombatFX
+    ) {
+
+      // ✅ construir dados completos (ATTACK + DEFENSE)
+      const dice = [
+
+        // atacante
+        ...(payload.attacker_attack_dice || []).map(d => ({
+          ...d,
+          side: "attacker"
+        })),
+
+        // defensor
+        ...(payload.defender_defense_dice || []).map(d => ({
+          ...d,
+          side: "defender"
+        }))
+
+      ];
+
+      console.log("🎲 FINAL DICE:", dice);
+
+      // ✅ lanzar FX
+      window.playCombatFX(
+        payload.attacker,
+        payload.defender,
+        dice
+      );
+    }
+  } catch (err) {
+    console.warn("Combat FX error", err);
+  }
 
   return html;
 }
 
-// Expose globally
+// -------------------------------------------------
+// ✅ EXPORT GLOBAL
+// -------------------------------------------------
 window.renderRangedCombat = renderRangedCombat;

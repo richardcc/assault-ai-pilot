@@ -1,6 +1,6 @@
 // =================================================
 // MAP ENTITY LAYER (PIXI)
-// ✅ FINAL VERSION: labels + markers + animation + ux
+// ✅ FINAL VERSION: labels + markers + animation + ux + FX FIX
 // =================================================
 
 window.mapEntityLayerSprites = (function () {
@@ -45,30 +45,22 @@ window.mapEntityLayerSprites = (function () {
   }
 
   // -------------------------------------------------
-  // ✅ LABEL PRO (DINÁMICO + COLOR + ZOOM)
-  // -------------------------------------------------
   function addUnitLabel(sprite, unit) {
 
     const unitName = unit.unit_id;
 
-    // ✅ color por facción
     let color = "#ffffff";
     if (unit.side === "US") color = "#4da6ff";
     if (unit.side === "GE") color = "#ff4d4d";
 
-    // ✅ ocultar en zoom out
     const zoom = window.UI_STATE?.camera?.zoom || 1;
     if (zoom < 0.6) return;
 
-    // --------------------------
-    // ✅ SOLO ID
-    // --------------------------
     const idText = new PIXI.Text(unitName, {
-      fontSize: 14,               // un poco más grande
+      fontSize: 14,
       fill: color,
       stroke: "#000000",
       strokeThickness: 4,
-
       dropShadow: true,
       dropShadowColor: "#000000",
       dropShadowDistance: 2,
@@ -76,18 +68,12 @@ window.mapEntityLayerSprites = (function () {
     });
 
     idText.anchor.set(0.5);
-
-    // ✅ POSICIÓN PERFECTA (debajo de la unidad)
     idText.y = 65;
-
     idText.__label = true;
 
     sprite.addChild(idText);
   }
 
-
-  // -------------------------------------------------
-  // ✅ MARKER ARRIBA DERECHA
   // -------------------------------------------------
   function addMarker(sprite, texturePath, scale = 0.65) {
     if (!texturePath) return;
@@ -96,11 +82,8 @@ window.mapEntityLayerSprites = (function () {
     const marker = new PIXI.Sprite(tex);
 
     marker.anchor.set(0.5);
-
-    // ✅ posición UX correcta
     marker.x = -15;
     marker.y = -25;
-
     marker.scale.set(scale);
     marker.__marker = true;
 
@@ -115,13 +98,11 @@ window.mapEntityLayerSprites = (function () {
 
     const side = unit.side;
 
-    // DEAD (prioridad)
     if (unit.hp <= 0) {
       addMarker(sprite, markers.DEAD?.[side], 0.7);
       return;
     }
 
-    // SUPPRESSED
     if (unit.status?.includes("SUPPRESSED")) {
       addMarker(sprite, markers.SUPPRESSED?.[side], 0.7);
     }
@@ -174,7 +155,6 @@ window.mapEntityLayerSprites = (function () {
 
       let sprite = sprites[unit.unit_id];
 
-      // CREATE
       if (!sprite) {
         sprite = createSprite(unit);
         if (!sprite) return;
@@ -185,11 +165,7 @@ window.mapEntityLayerSprites = (function () {
 
       applyScaleOnce(sprite);
 
-      // POSITION
       const { q, r } = unit.position || {};
-      const prevQ = sprite.__lastQ;
-      const prevR = sprite.__lastR;
-    
       if (q === undefined) return;
 
       const pos = hexToWorld(q, r, grid);
@@ -200,15 +176,8 @@ window.mapEntityLayerSprites = (function () {
         sprite.__initialized = true;
       }
 
-      const dx = Math.abs(sprite.x - pos.x);
-      const dy = Math.abs(sprite.y - pos.y);
-      const moved = dx > 1 || dy > 1;
-
-      // ✅ animación movimiento
       if ((sprite.__lastQ !== q || sprite.__lastR !== r) && !sprite.__moving) {
-
         if (typeof animateUnitMove === "function") {
-
           sprite.__moving = true;
 
           animateUnitMove(
@@ -226,8 +195,6 @@ window.mapEntityLayerSprites = (function () {
         }
       }
 
-
-      // visuals
       clearMarkers(sprite);
       clearLabel(sprite);
 
@@ -240,7 +207,6 @@ window.mapEntityLayerSprites = (function () {
       seen.add(unit.unit_id);
     });
 
-    // cleanup
     Object.keys(sprites).forEach(id => {
       if (!seen.has(id)) {
         container.removeChild(sprites[id]);
@@ -253,6 +219,26 @@ window.mapEntityLayerSprites = (function () {
   function getUnitSprite(id) {
     return sprites[id] || null;
   }
+
+  // =================================================
+  // 🔥 ✅ FIX FINAL: EXPONER POSICIÓN GLOBAL
+  // =================================================
+  function getUnitHexPosition(unitId) {
+
+    const units =
+      window.GAME_STATE?.units ||
+      window.UI_STATE?.units;
+
+    if (!units) return null;
+
+    const unit = units[unitId];
+    if (!unit) return null;
+
+    return unit.position || null;
+  }
+
+  // ✅ ESTA ES LA LÍNEA QUE LO ARREGLA TODO
+  window.getUnitHexPosition = getUnitHexPosition;
 
   return { init, sync, getUnitSprite };
 

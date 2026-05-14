@@ -11,15 +11,16 @@ const HexGeometry = (function () {
   // -------------------------------------------------
   const R = 30;                               // hex radius
   const WIDTH = Math.sqrt(3) * R;             // hex width
-  const HEIGHT = 2 * R;                      // hex height
+  const HEIGHT = 2 * R;                       // hex height
 
   const STEP_X = WIDTH;                      // horizontal spacing
   const STEP_Y = 1.5 * R;                    // vertical spacing
 
   // -------------------------------------------------
-  // Convert axial hex (q, r) -> pixel center
+  // Convert hex (q, r) → pixel center
   // -------------------------------------------------
-  function hexToPixel(q, r, originX, originY) {
+  function hexToPixel(q, r, originX = 0, originY = 0) {
+
     const x =
       originX +
       q * STEP_X +
@@ -33,9 +34,33 @@ const HexGeometry = (function () {
   }
 
   // -------------------------------------------------
-  // Compute world bounds of a grid
+  // ✅ SAFE helper (used by FX directly)
+  // -------------------------------------------------
+  function hexToWorld(hex, origin) {
+
+    if (!hex || hex.q === undefined || hex.r === undefined) {
+      console.warn("⚠️ invalid hex → fallback");
+      return { x: 300, y: 300 };
+    }
+
+    const originX = origin?.x ?? 0;
+    const originY = origin?.y ?? 0;
+
+    const p = hexToPixel(hex.q, hex.r, originX, originY);
+
+    if (isNaN(p.x) || isNaN(p.y)) {
+      console.warn("⚠️ NaN detected → fallback");
+      return { x: 300, y: 300 };
+    }
+
+    return p;
+  }
+
+  // -------------------------------------------------
+  // Compute world bounds of grid
   // -------------------------------------------------
   function computeGridBounds(cols, rows, originX, originY) {
+
     let minX = Infinity;
     let minY = Infinity;
     let maxX = -Infinity;
@@ -43,10 +68,12 @@ const HexGeometry = (function () {
 
     for (let r = 0; r < rows; r++) {
       for (let q = 0; q < cols; q++) {
+
         const { x, y } = hexToPixel(q, r, originX, originY);
 
         minX = Math.min(minX, x - WIDTH / 2);
         maxX = Math.max(maxX, x + WIDTH / 2);
+
         minY = Math.min(minY, y - R);
         maxY = Math.max(maxY, y + R);
       }
@@ -56,20 +83,21 @@ const HexGeometry = (function () {
   }
 
   // -------------------------------------------------
-  // Compute geometric center of the grid
+  // Compute grid center
   // -------------------------------------------------
   function computeGridCenter(cols, rows, originX, originY) {
-    const last = hexToPixel(cols - 1, rows - 1, originX, originY);
+
     const first = hexToPixel(0, 0, originX, originY);
+    const last = hexToPixel(cols - 1, rows - 1, originX, originY);
 
-    const centerX = (first.x + last.x) / 2;
-    const centerY = (first.y + last.y) / 2;
-
-    return { x: centerX, y: centerY };
+    return {
+      x: (first.x + last.x) / 2,
+      y: (first.y + last.y) / 2
+    };
   }
 
   // -------------------------------------------------
-  // Exports
+  // ✅ GLOBAL EXPORT (IMPORTANTE)
   // -------------------------------------------------
   return {
     R,
@@ -77,9 +105,15 @@ const HexGeometry = (function () {
     HEIGHT,
     STEP_X,
     STEP_Y,
+
     hexToPixel,
+    hexToWorld,          // 🔥 NUEVO helper clave
+
     computeGridBounds,
     computeGridCenter
   };
 
 })();
+
+// ✅ exposición global (clave para FX)
+window.HexGeometry = HexGeometry;

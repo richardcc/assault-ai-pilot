@@ -40,6 +40,10 @@ window.worldRenderer = (function () {
     // Root world container
     // ---------------------------------------------
     world = new PIXI.Container();
+
+    // 🔥 IMPORTANTE
+    world.sortableChildren = true;
+
     app.stage.addChild(world);
 
     // ---------------------------------------------
@@ -54,7 +58,7 @@ window.worldRenderer = (function () {
     }
 
     // ---------------------------------------------
-    // 2️⃣ MAP ART (needs gridBounds)
+    // 2️⃣ MAP ART
     // ---------------------------------------------
     await mapLayerPixi.init(
       world,
@@ -63,8 +67,11 @@ window.worldRenderer = (function () {
       gameState.scenario.map.grid
     );
 
+    // ✅ EXPORT GLOBAL
+    window.getWorld = () => world;
+
     // ---------------------------------------------
-    // 3️⃣ ENTITY LAYER (UNITS) — MUST BE LAST
+    // 3️⃣ ENTITY LAYER (UNITS)
     // ---------------------------------------------
     if (window.mapEntityLayerSprites) {
       mapEntityLayerSprites.init(world);
@@ -73,18 +80,30 @@ window.worldRenderer = (function () {
     }
 
     // ---------------------------------------------
-    // Center camera on grid
+    // 🔥 FX LAYER (AL FINAL → SOBRE TODO)
+    // ---------------------------------------------
+    window.fxLayer = new PIXI.Container();
+
+    // 🔥 CLAVE: siempre encima
+    window.fxLayer.zIndex = 9999;
+
+    world.addChild(window.fxLayer);
+
+    console.log("✅ fxLayer añadido CORRECTAMENTE arriba");
+
+    // ---------------------------------------------
+    // Center camera
     // ---------------------------------------------
     camera.x = gridBounds.x + gridBounds.width / 2;
     camera.y = gridBounds.y + gridBounds.height / 2;
 
     // ---------------------------------------------
-    // Mouse / Pointer input
+    // Input
     // ---------------------------------------------
     attachPixiMouseInput(app.view, camera);
 
     // ---------------------------------------------
-    // Apply camera every frame
+    // Frame loop
     // ---------------------------------------------
     app.ticker.add(() => {
       applyCamera();
@@ -94,7 +113,7 @@ window.worldRenderer = (function () {
   }
 
   // -------------------------------------------------
-  // APPLY CAMERA TRANSFORM
+  // APPLY CAMERA
   // -------------------------------------------------
   function applyCamera() {
     if (!app || !world) return;
@@ -126,4 +145,4 @@ window.worldRenderer = (function () {
     updateUnits
   };
 
-})(); 
+})();
