@@ -195,6 +195,18 @@ class CombatRenderer:
         if defender_id is not None and hp_after is not None:
             self.unit_formatter.override_hp(defender_id, hp_after)
 
+        # -------------------------------------------------
+        # ✅ SUPPRESSION VISUALIZATION
+        # -------------------------------------------------
+        # Shows suppression effect clearly in console output
+
+        suppression = payload.get("suppression", {})
+
+        if suppression.get("applied"):
+            self.turn_buffer.add_line(
+                f"                 😵 {self.turn_buffer.unit_label(defender_id)} SUPPRESSED"
+            )
+
     # -------------------------------------------------
     # INTERNAL HELPERS (NEW, NO LEGACY)
     # -------------------------------------------------

@@ -41,58 +41,79 @@ class RuntimeGameState:
         self.scenario = scenario
         self.turn = TurnState(turn_number=base_state.turn)
 
-        self._match_over = False
-        self._winner = None
-        self._end_reason = None
-
     # =================================================
     # TURN CONTROL
     # =================================================
     def start_turn(self) -> None:
-        """
-        Initialize a new turn.
-        Resets activation state and selects the first active unit.
-        """
+        # =================================================
+        # ✅ CLEAR SUPPRESSION AT TURN START
+        # =================================================
+        # At the beginning of each turn, all units remove
+        # suppression state.
+        #
+        # Design:
+        # - Simple and global
+        # - Matches boardgame behavior
+        # - Keeps system predictable
+        #
+        # IMPORTANT:
+        # - Does not affect dead units
+        # - Safe if unit has no suppression attribute
+
+        for unit in self.base_state.units:
+            if getattr(unit, "suppressed", False):
+                unit.clear_suppression()
+
+
         self.base_state.activation_state.reset(self.base_state.units)
         self.base_state.activation_state.next_unit()
 
         _trace(
             "TURN_START_UNITS",
+            turn=getattr(self.base_state, "turn", None),
+
             units=[
                 {
                     "id": u.unit_id,
+                    "side": u.side,
                     "alive": u.alive,
+
+                    # ✅ Combat state
+                    "hp": getattr(u, "hp", None),
+
+                    # ✅ Suppression (core feature)
                     "suppressed": getattr(u, "suppressed", False),
+
+                    # ✅ Future-proof (optional states)
                     "fallback": getattr(u, "fallback", False),
                 }
                 for u in self.base_state.units
             ],
         )
 
+ 
+ 
     def end_turn(self) -> None:
         """
         Finalize the current turn and advance the turn counter.
-
-        Invariant (TM-R06):
-        Match end conditions are evaluated only after full turn resolution.
         """
         self.base_state.end_turn()
         self.turn = TurnState(turn_number=self.base_state.turn)
 
-        # ✅ Match end is checked ONLY after full turn completion
+        # ✅ ahora el estado vive en GameState
         self._check_match_end()
 
     # =================================================
     # MATCH END
     # =================================================
     def is_match_over(self) -> bool:
-        return self._match_over
+        return self.base_state.done
 
     def _check_match_end(self, context: ExecutionContext | None = None):
         """
-        Check whether the match has ended and emit MATCH_END if so.
+        Check whether the match has ended and update GameState.
         """
-        if self._match_over:
+        if self.base_state.done:
             return
 
         alive_units = [u for u in self.base_state.units if u.alive]
@@ -100,10 +121,13 @@ class RuntimeGameState:
 
         event_bus = context.event_bus if context else None
 
+        # ---------------------------------------------
+        # DRAW: no units alive
+        # ---------------------------------------------
         if len(alive_units) == 0:
-            self._match_over = True
-            self._winner = None
-            self._end_reason = "all_units_destroyed"
+            self.base_state.done = True
+            self.base_state.winner = None
+            self.base_state.end_reason = "all_units_destroyed"
 
             if event_bus:
                 event_bus.emit(
@@ -112,17 +136,22 @@ class RuntimeGameState:
                         "payload": {
                             "result": "draw",
                             "winner": None,
-                            "reason": self._end_reason,
+                            "reason": self.base_state.end_reason,
                             "turn": self.base_state.turn,
                         },
                     }
                 )
             return
 
+        # ---------------------------------------------
+        # VICTORY: one side alive
+        # ---------------------------------------------
         if len(alive_sides) == 1:
-            self._match_over = True
-            self._winner = next(iter(alive_sides))
-            self._end_reason = "last_side_standing"
+            winner = next(iter(alive_sides))
+
+            self.base_state.done = True
+            self.base_state.winner = winner
+            self.base_state.end_reason = "last_side_standing"
 
             if event_bus:
                 event_bus.emit(
@@ -130,21 +159,24 @@ class RuntimeGameState:
                         "type": "MATCH_END",
                         "payload": {
                             "result": "victory",
-                            "winner": self._winner,
-                            "reason": self._end_reason,
+                            "winner": winner,
+                            "reason": self.base_state.end_reason,
                             "turn": self.base_state.turn,
                         },
                     }
                 )
             return
 
+        # ---------------------------------------------
+        # DRAW: max turns
+        # ---------------------------------------------
         if (
             self.scenario.max_turns is not None
             and self.base_state.turn >= self.scenario.max_turns
         ):
-            self._match_over = True
-            self._winner = None
-            self._end_reason = "max_turns"
+            self.base_state.done = True
+            self.base_state.winner = None
+            self.base_state.end_reason = "max_turns"
 
             if event_bus:
                 event_bus.emit(
@@ -153,7 +185,7 @@ class RuntimeGameState:
                         "payload": {
                             "result": "draw",
                             "winner": None,
-                            "reason": self._end_reason,
+                            "reason": self.base_state.end_reason,
                             "turn": self.base_state.turn,
                         },
                     }
@@ -163,9 +195,6 @@ class RuntimeGameState:
     # ACTIVATION
     # =================================================
     def get_activable_units(self):
-        """
-        Return units that can still activate this turn.
-        """
         gs = self.base_state
         catalog = ActionCatalog(gs)
         activable = []
@@ -193,9 +222,6 @@ class RuntimeGameState:
         return activable
 
     def turn_has_ended(self) -> bool:
-        """
-        Return True if no activations remain this turn.
-        """
         return not self.base_state.activation_state.remaining
 
     # =================================================
@@ -218,13 +244,6 @@ class RuntimeGameState:
         combat_result: CombatResolutionResult | None = None,
         context: ExecutionContext | None = None,
     ):
-        """
-        Apply a single action to the game state.
-
-        IMPORTANT:
-        This class does NOT compute combat damage.
-        It only adopts the mutated GameState returned by resolvers.
-        """
         event_bus = context.event_bus if context else None
 
         attacker = next(
@@ -246,32 +265,17 @@ class RuntimeGameState:
         if attacker and attacker.position:
             prev_position = HexCoord(attacker.position.q, attacker.position.r)
 
-        if isinstance(action, AssaultAction) and prev_position and event_bus:
-            target = next(
-                (u for u in self.base_state.units if u.unit_id == action.target_id),
-                None,
-            )
-            if target and target.position:
-                assault_target_position = HexCoord(
-                    target.position.q,
-                    target.position.r,
-                )
-                event_bus.emit(
-                    {
-                        "type": "UNIT_MOVED",
-                        "payload": {
-                            "unit_id": action.unit_id,
-                            "from": prev_position,
-                            "to": assault_target_position,
-                        },
-                    }
-                )
-
+        # -------------------------------------------------
+        # WAIT
+        # -------------------------------------------------
         if isinstance(action, WaitAction):
             self._consume_activation(attacker)
             self._advance_activation()
             return None
 
+        # -------------------------------------------------
+        # APPLY ACTION
+        # -------------------------------------------------
         result = resolve_action(
             state=self.base_state,
             action=action,
@@ -280,12 +284,17 @@ class RuntimeGameState:
         )
 
         self.base_state = result.new_state
+
+        # ✅ comprobar fin tras cada acción
         self._check_match_end(context)
 
-        if self._match_over:
+        # ✅ si termina la partida → salir limpio
+        if self.base_state.done:
             return result
 
-
+        # -------------------------------------------------
+        # CONTINUE TURN
+        # -------------------------------------------------
         self._consume_activation(attacker)
         self._advance_activation()
 

@@ -1,18 +1,6 @@
 # assault_model/combat/ranged_combat_resolver.py
-#
-# Ranged combat resolver.
-#
-# RESPONSIBILITY:
-# - Resolve direct ranged combat
-# - Roll dice
-# - Apply damage and suppression (Rulebook 10.7.2 / 10.7.3)
-# - Emit ACTION_EFFECT
-#
-# IMPORTANT:
-# - Mutates unit HP via target.apply_damage(...)
-# - Mutates unit morale via target.apply_suppression(...)
-# - RuntimeGameState must NOT apply damage
 
+from assault_model.combat.modifiers.terrain_modifier import TerrainModifier
 from assault_model.combat.attack_dice_pool import AttackDicePool
 from assault_model.combat.defense_dice_pool import DefenseDicePool
 from assault_model.combat.unit_class import UnitClass
@@ -21,6 +9,12 @@ from assault_model.map.combat_geometry import determine_attack_sector
 from assault_model.runtime.execution_context import ExecutionContext
 from assault_model.combat.battle_die import DiceResult
 from assault_model.combat.dice_comparison import compare_dice
+
+# ✅ NUEVO (SIN ROMPER NADA)
+from assault_model.combat.line_of_sight import (
+    check_line_of_sight,
+    LineOfSight,
+)
 
 import os
 
@@ -48,10 +42,6 @@ class CombatResolutionResult:
 # Primary critical registration (10.7.3)
 # =================================================
 def resolve_critical(face: DiceFace, target_class: UnitClass):
-    """
-    Primary critical registration only.
-    Secondary effects (10.7.5 / 10.7.6) handled later.
-    """
     return {
         "face": face.name,
         "target_class": target_class.name,
@@ -68,22 +58,76 @@ def resolve_ranged_combat(
     distance: int,
     context: ExecutionContext | None = None,
 ) -> CombatResolutionResult:
-    """
-    Ranged combat resolver.
 
-    Implements:
-    - 10.7.2 Dice comparison
-    - 10.7.3 Assigning damage & suppression
+    # =================================================
+    # CONTEXT (NO CAMBIA NADA EXISTENTE)
+    # =================================================
+    game_map = context.game_map if context and context.game_map else None
 
-    ASSUMES:
-    - Dice pools return DiceResult only
-    """
+    # =================================================
+    # ✅ NUEVO: LINE OF SIGHT (NO INVASIVO)
+    # =================================================
+    los = LineOfSight.CLEAR
+
+    if game_map:
+        los = check_line_of_sight(attacker, target, game_map)
+
+    # 🔹 Observabilidad extra SIN romper nada
+    _trace(
+        "LOS_CHECK",
+        attacker=attacker.unit_id,
+        defender=target.unit_id,
+        los=los.name,
+    )
+
+    # ✅ BLOQUEO SOLO AÑADE EARLY EXIT (no rompe nada existente)
+    if los == LineOfSight.BLOCKED:
+        _trace(
+            "RANGED_BLOCKED",
+            attacker=attacker.unit_id,
+            defender=target.unit_id,
+        )
+
+        # ✅ devolvemos estructura válida (no rompemos callers)
+        return CombatResolutionResult([], [], [])
 
     # ---------------- ATTACK DICE ----------------
     attack_colors = attacker.unit_type.get_attack_dice(
         distance=distance,
         target_category=target.unit_type.category,
     )
+
+    attack_colors = list(attack_colors)  # ✅ seguridad
+
+    # =================================================
+    # ✅ SUPPRESSION EFFECT ON ATTACKER
+    # =================================================
+    # If attacker is suppressed, reduce attack effectiveness by removing
+    # one attack die (if available).
+    #
+    # Design goals:
+    # - Minimal impact (no structural changes)
+    # - Safe (no crash if dice list is empty)
+    # - Compatible with existing resolution flow
+    #
+    # Tactical meaning:
+    # - Suppressed units have reduced combat efficiency
+
+    if getattr(attacker, "suppressed", False):
+        if len(attack_colors) > 0:
+            attack_colors = attack_colors[:-1]
+
+            _trace(
+                "SUPPRESSION_ATTACK_PENALTY",
+                attacker=attacker.unit_id,
+                removed_die=True,
+                remaining_dice=len(attack_colors),
+            )
+
+
+    # ✅ PARTIAL LOS = solo modificador leve (NO rompe sistema)
+    if los == LineOfSight.PARTIAL and len(attack_colors) > 0:
+        attack_colors = attack_colors[:-1]
 
     attack_pool = AttackDicePool(attack_colors)
     attack_results: list[DiceResult] = attack_pool.roll()
@@ -96,14 +140,30 @@ def resolve_ranged_combat(
     )
 
     # ---------------- DEFENSE DICE ----------------
-    defense_colors = target.unit_type.get_defense_dice(
-        sector=attack_sector
+    defense_colors = list(
+        target.unit_type.get_defense_dice(sector=attack_sector)
     )
 
+    # ✅ TERRAIN (idéntico a tu versión original)
+    if game_map:
+        hex_ = game_map.get_hex(target.position)
+        if hex_ is not None:
+            terrain_mod = TerrainModifier.from_hex(hex_)
+            defense_colors = terrain_mod.modify_defense(defense_colors)
+
+            # ✅ observabilidad extra opcional
+            _trace(
+                "TERRAIN_APPLIED",
+                defender=target.unit_id,
+                hex=target.position,
+                defense_dice=len(defense_colors),
+            )
+
+    # ✅ BUILD POOL (igual que antes)
     defense_pool = DefenseDicePool(defense_colors)
     defense_results: list[DiceResult] = defense_pool.roll()
 
-    # ---------------- DICE COMPARISON (10.7.2) ----------------
+    # ---------------- DICE COMPARISON ----------------
     comparison = compare_dice(
         attacker_dice=attack_results,
         defender_dice=defense_results,
@@ -113,7 +173,7 @@ def resolve_ranged_combat(
     remaining_criticals = comparison["remaining_criticals"]
     remaining_suppress = comparison["remaining_suppress"]
 
-    # ---------------- PRIMARY CRITICAL REGISTRATION ----------------
+    # ---------------- CRITICALS ----------------
     criticals = [
         resolve_critical(
             DiceFace.CRITICAL,
@@ -122,7 +182,7 @@ def resolve_ranged_combat(
         for _ in range(remaining_criticals)
     ]
 
-    # ---------------- DAMAGE APPLICATION (10.7.3) ----------------
+    # ---------------- DAMAGE ----------------
     damage = remaining_damage + remaining_criticals
 
     hp_before = target.hp
@@ -132,16 +192,18 @@ def resolve_ranged_combat(
 
     defender_killed = hp_before > 0 and hp_after == 0
 
-    # ---------------- SUPPRESSION (10.7.3) ----------------
+    # ---------------- SUPPRESSION ----------------
     suppressed = False
     if remaining_suppress > 0 and target.alive:
         target.apply_suppression()
         suppressed = True
 
+    # ✅ TRACE ORIGINAL + LOS AÑADIDO
     _trace(
         "RANGED_RESOLUTION",
         attacker=attacker.unit_id,
         defender=target.unit_id,
+        los=los.name,
         damage=damage,
         remaining_damage=remaining_damage,
         remaining_criticals=remaining_criticals,
@@ -169,6 +231,7 @@ def resolve_ranged_combat(
                     "defender": target.unit_id,
                     "distance": distance,
                     "attack_sector": attack_sector.name,
+                    "los": los.name,  # ✅ añadido SIN romper nada
 
                     "attacker_attack_dice": [
                         {
@@ -185,10 +248,37 @@ def resolve_ranged_combat(
                         for d in defense_results
                     ],
 
+
+
+                    # =================================================
+                    # ✅ ENRICHED EFFECTS FOR REPLAY / UI
+                    # =================================================
+                    # We expose both raw dice outcome (attempts) and
+                    # actual gameplay effect (applied).
+                    #
+                    # This is essential for:
+                    # - replay fidelity
+                    # - UI rendering
+                    # - RL analysis
+                    #
+                    # DO NOT REMOVE existing fields (backward compatibility)
+
                     "attacker_effects": {
                         "damage": damage,
                         "criticals": criticals,
+
+                        # ✅ legacy (keep for compatibility)
                         "suppress": remaining_suppress,
+
+                        # ✅ NEW (explicit semantics)
+                        "suppress_attempts": remaining_suppress,
+                        "suppression_applied": suppressed,
+                    },
+
+                    # ✅ NEW structured block (recommended for UI)
+                    "suppression": {
+                        "attempts": remaining_suppress,
+                        "applied": suppressed,
                     },
 
                     "defender_hp_before": hp_before,
@@ -196,9 +286,7 @@ def resolve_ranged_combat(
                     "defender_killed": defender_killed,
                     "defender_suppressed": suppressed,
 
-                    # Extra traceability (non-breaking)
                     "resolution": comparison,
-
                     "outcome": "resolved",
                     "winner": None,
                 },

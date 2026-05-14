@@ -1,8 +1,7 @@
-# assault_model/core/game_state.py
 """
 GameState represents the canonical, observable state of the game.
-...
 """
+
 from typing import Dict, List, Optional, TYPE_CHECKING
 import os
 
@@ -21,7 +20,7 @@ from assault_model.actions.combat_mode import CombatMode
 from assault_model.combat.close_combat_context import CombatResolutionContext
 from assault_model.map.combat_geometry import determine_attack_sector
 
-# --- TYPING-ONLY (BREAK IMPORT CYCLE) ---
+# --- TYPING-ONLY ---
 if TYPE_CHECKING:
     from assault_model.combat.reaction_context import ReactionContext
 
@@ -37,7 +36,7 @@ def _trace(tag: str, **data):
 
 
 # =================================================
-# SIDE → HEX OWNERSHIP MAPPING (DECLARATIVE)
+# SIDE → HEX OWNERSHIP MAPPING
 # =================================================
 SIDE_TO_HEX_OWNERSHIP: Dict[str, HexOwnership] = {
     "GE": HexOwnership.SIDE_A,
@@ -48,7 +47,6 @@ SIDE_TO_HEX_OWNERSHIP: Dict[str, HexOwnership] = {
 class GameState:
     """
     Canonical runtime game state.
-    ...
     """
 
     def __init__(
@@ -58,6 +56,10 @@ class GameState:
         turn: int = 1,
         victory: Optional[VictoryConditions] = None,
     ) -> None:
+
+        # -----------------------------
+        # CORE STATE
+        # -----------------------------
         self.game_map = game_map
         self.units = units
         self.turn = turn
@@ -65,17 +67,37 @@ class GameState:
         self.turn_state = TurnState(turn_number=turn)
         self.activation_state = ActivationState(units)
 
+        # -----------------------------
+        # MAP STATE
+        # -----------------------------
         self.hex_states: Dict[tuple[int, int], HexState] = {
             (h.q, h.r): HexState(h) for h in game_map.hexes
         }
 
+        # -----------------------------
+        # VICTORY SYSTEM
+        # -----------------------------
         self.victory = victory
         self.vp_tracker = VictoryPointTracker(victory) if victory else None
 
+        # -----------------------------
+        # REACTION
+        # -----------------------------
         self.reaction_context: Optional["ReactionContext"] = None
 
+        # -----------------------------
+        # ✅ NUEVO: TERMINAL STATE
+        # -----------------------------
+        self.done: bool = False
+        self.winner: Optional[str] = None
+        self.end_reason: Optional[str] = None
+
+        # inicialización
         self.recalculate_hex_control()
 
+    # =================================================
+    # FACTORY
+    # =================================================
     @classmethod
     def from_scenario(cls, scenario) -> "GameState":
         return cls(

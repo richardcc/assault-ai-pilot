@@ -14,6 +14,11 @@ def _trace(tag: str, **data):
 class UnitInstance:
     """
     Runtime instance of a unit on the battlefield.
+
+    ✅ Includes:
+    - health / alive state
+    - suppression system
+    - embark / transport logic
     """
 
     def __init__(
@@ -23,7 +28,7 @@ class UnitInstance:
         side: str,
         position: tuple[int, int] | None,
         experience: str = "REGULAR",
-        event_bus=None,   # ✅ optional, injected from GameState/Runtime
+        event_bus=None,
     ):
         self.unit_id = unit_id
         self.unit_type = unit_type
@@ -31,7 +36,7 @@ class UnitInstance:
         self.position = position
         self.experience = experience
 
-        # Event bus (may be None)
+        # Event bus (optional)
         self._event_bus = event_bus
 
         # ============================
@@ -40,6 +45,9 @@ class UnitInstance:
         self.max_strength = unit_type.max_strength
         self.strength = self.max_strength
         self.alive = True
+
+        # ✅ Suppression state
+        self.suppressed: bool = False
 
         # ============================
         # Transport / embark state
@@ -73,6 +81,9 @@ class UnitInstance:
     def is_embarked(self) -> bool:
         return self.embarked
 
+    def is_suppressed(self) -> bool:
+        return self.suppressed
+
     # ----------------------------
     # Movement
     # ----------------------------
@@ -84,7 +95,7 @@ class UnitInstance:
         self.position = (q, r)
 
     # ----------------------------
-    # Embark / disembark hooks
+    # Embark / disembark
     # ----------------------------
     def embark_into(self, vehicle: "UnitInstance"):
         if self.embarked:
@@ -99,12 +110,16 @@ class UnitInstance:
 
     def disembark_from(self, vehicle: "UnitInstance", q: int, r: int):
         if not self.embarked or self.carrier_id != vehicle.unit_id:
-            raise RuntimeError(f"{self.unit_id} not embarked in {vehicle.unit_id}")
+            raise RuntimeError(
+                f"{self.unit_id} not embarked in {vehicle.unit_id}"
+            )
 
         self.embarked = False
         self.carrier_id = None
         self.position = (q, r)
-        vehicle.passengers.remove(self.unit_id)
+
+        if hasattr(vehicle, "passengers") and self.unit_id in vehicle.passengers:
+            vehicle.passengers.remove(self.unit_id)
 
         _trace("DISEMBARK", unit=self.unit_id, vehicle=vehicle.unit_id)
 
@@ -112,6 +127,14 @@ class UnitInstance:
     # Combat hooks
     # ----------------------------
     def apply_damage(self, dmg: int):
+        """
+        Apply direct HP damage.
+
+        ✅ Safe:
+        - ignores negative/zero damage
+        - ignores dead units
+        """
+
         if dmg <= 0 or not self.alive:
             return
 
@@ -135,7 +158,7 @@ class UnitInstance:
             killed=killed,
         )
 
-        # ✅ EMIT RAW EVENT TO BUS
+        # Optional event emission
         if self._event_bus:
             self._event_bus.emit(
                 {
@@ -148,11 +171,39 @@ class UnitInstance:
                         "hp_after": hp_after,
                         "killed": killed,
                         "position": self.position,
-                        "reason": "direct_damage",
                     },
                 }
             )
 
+    # ----------------------------
+    # Suppression system
+    # ----------------------------
     def apply_suppression(self):
-        # Placeholder – suppression state handled elsewhere
-        pass
+        """
+        Apply suppression effect.
+        """
+
+        if not self.alive:
+            return
+
+        self.suppressed = True
+
+        _trace(
+            "SUPPRESSION_APPLIED",
+            unit=self.unit_id,
+        )
+
+    def clear_suppression(self):
+        """
+        Clear suppression (typically at turn start).
+        """
+
+        if not self.suppressed:
+            return
+
+        self.suppressed = False
+
+        _trace(
+            "SUPPRESSION_CLEARED",
+            unit=self.unit_id,
+        )

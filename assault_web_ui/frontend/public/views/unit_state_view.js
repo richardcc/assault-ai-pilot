@@ -55,9 +55,7 @@ window.renderUnitStateView = function renderUnitStateView(gameState) {
           card.dataset.unitId = unit.unit_id;
 
           // ---------------------------------------------
-          // IMAGE:
-          // Alive  -> unit counter
-          // Dead   -> side dead_marker
+          // IMAGE
           // ---------------------------------------------
           const counter = document.createElement("div");
           counter.className = "unit-card-counter";
@@ -65,10 +63,8 @@ window.renderUnitStateView = function renderUnitStateView(gameState) {
           let imgSrc = null;
 
           if (unit.alive === false) {
-            // ☠️ Dead → side dead marker
             imgSrc = sideMeta?.[unit.side]?.dead_marker;
           } else {
-            // ✅ Alive → unit counter
             const def = unitDefs?.[unit.unit_key];
             if (def?.full) {
               imgSrc = "/public/art/counters/" + def.full;
@@ -83,7 +79,7 @@ window.renderUnitStateView = function renderUnitStateView(gameState) {
           }
 
           // ---------------------------------------------
-          // ❤️ HP hearts (current HP only)
+          // ❤️ HP
           // ---------------------------------------------
           const hpBar = document.createElement("div");
           hpBar.className = "unit-card-hp";
@@ -97,6 +93,19 @@ window.renderUnitStateView = function renderUnitStateView(gameState) {
           }
 
           // ---------------------------------------------
+          // 📍 POSITION
+          // ---------------------------------------------
+          const pos = document.createElement("div");
+          pos.className = "unit-card-pos";
+
+          const q = unit.position?.q;
+          const r = unit.position?.r;
+
+          pos.textContent = (q !== undefined && r !== undefined)
+            ? `(${q},${r})`
+            : "-";
+
+          // ---------------------------------------------
           // Label
           // ---------------------------------------------
           const name = document.createElement("div");
@@ -108,7 +117,9 @@ window.renderUnitStateView = function renderUnitStateView(gameState) {
           // ---------------------------------------------
           card.appendChild(counter);
           card.appendChild(hpBar);
+          card.appendChild(pos);   // ✅ CLAVE
           card.appendChild(name);
+
           scroll.appendChild(card);
         });
 

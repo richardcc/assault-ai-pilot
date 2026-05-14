@@ -1,5 +1,3 @@
-# assault_sim/train/eval_ppo.py
-
 import torch
 from pathlib import Path
 import statistics
@@ -9,25 +7,34 @@ from assault_sim.sim_env import SimEnv
 from assault_sim.training_env import TrainingEnv
 
 from assault_sim.rl.policy_net import PolicyNet
-from assault_sim.rl.controller import RLPolicyController
-from assault_sim.rl.side_controller import SideAwareController
+from assault_sim.decision.hrl_controller import HRLController
+from assault_sim.decision.option_executor import OptionExecutor
+from assault_sim.rl.option_policy import OptionPolicy
+from assault_sim.rl.tactical_options import TacticalOption
+
 from assault_sim.heuristics.tactical_path_heuristic import TacticalPathHeuristic
 
 
 # -------------------------------------------------
-# Evaluation config
+# CONFIG
 # -------------------------------------------------
 EPISODES = 50
-MAX_STEPS = 50
+MAX_STEPS = 200
+RL_SIDE = "US"
 
 
 def main():
     print(">>> PPO evaluation started")
 
     # -------------------------------------------------
-    # Load checkpoint
+    # LOAD MODEL
     # -------------------------------------------------
-    checkpoint = torch.load("assault_sim/checkpoints/ppo_phase01.pt")
+    checkpoint_path = Path("assault_sim/checkpoints/ppo_US.pt")
+
+    if not checkpoint_path.exists():
+        raise FileNotFoundError(checkpoint_path)
+
+    checkpoint = torch.load(checkpoint_path)
 
     policy = PolicyNet(
         input_dim=checkpoint["input_dim"],
@@ -36,73 +43,100 @@ def main():
     policy.load_state_dict(checkpoint["model_state_dict"])
     policy.eval()
 
-    print("✅ Loaded PPO checkpoint")
+    print("✅ Model loaded")
 
-    rl_controller = RLPolicyController(policy)
-    heuristic_controller = TacticalPathHeuristic()
+    option_policy = OptionPolicy(policy)
+    heuristic = TacticalPathHeuristic()
+    option_executor = OptionExecutor(heuristic)
 
-    controller = SideAwareController(
-        rl_controller=rl_controller,
-        heuristic_controller=heuristic_controller,
-        rl_side="GE",
+    hrl_controller = HRLController(
+        option_policy=option_policy,
+        option_executor=option_executor,
+        rl_side=RL_SIDE,
     )
 
     # -------------------------------------------------
-    # Environment
+    # ENV
     # -------------------------------------------------
     sim_config = load_sim_config(
         Path("assault_sim/config/sim_config.yaml")
     )
     sim_config.scenario_name = "phase01_seq001_initial_contact"
 
-    sim_env = SimEnv(sim_config, controller=controller)
+    sim_env = SimEnv(sim_config, controller=None)
+
     env = TrainingEnv(
         sim_env,
         env_config_path=Path("assault_sim/config/env_config.json"),
+        rl_side=RL_SIDE,
     )
 
-    vp_scores = []
-    steps_taken = []
+    # -------------------------------------------------
+    # STATS
+    # -------------------------------------------------
     wins = 0
+    vp_scores = []
+    steps_list = []
 
     # -------------------------------------------------
-    # Evaluation loop
+    # EPISODES
     # -------------------------------------------------
     for ep in range(EPISODES):
-        state = env.reset()
+        obs = env.reset()
+
         done = False
         steps = 0
 
-        while not done and steps < MAX_STEPS:
-            action = controller.choose_action(state)
-            if action is None:
-                break
+        while not done:
+            state = env.state
+            active = state.active_unit
 
-            state, _, done, _ = env.step(action)
+            if active is None:
+                action = None
+            elif active.side == RL_SIDE:
+                action = hrl_controller.choose_action(state, obs)
+            else:
+                action = heuristic.choose_action(state)
+
+            obs, reward, done, info = env.step(action)
+
             steps += 1
 
+            if steps >= MAX_STEPS:
+                print(f"⚠️ Forced stop ep={ep}")
+                break
+
+        # -------------------------------------------------
+        # RESULTADOS (CORRECTOS)
+        # -------------------------------------------------
+        state = env.state
+
+        winner = state.winner
+        reason = state.end_reason
         vp = state.vp_tracker.total_points if state.vp_tracker else 0
 
-        vp_scores.append(vp)
-        steps_taken.append(steps)
-
-        if vp > 0:
+        if winner == RL_SIDE:
             wins += 1
 
-        print(f"[EVAL {ep}] VP={vp} steps={steps}")
+        vp_scores.append(vp)
+        steps_list.append(steps)
+
+        print(
+            f"[EP {ep}] winner={winner} reason={reason} "
+            f"VP={vp} steps={steps}"
+        )
 
     # -------------------------------------------------
-    # Metrics
+    # SUMMARY
     # -------------------------------------------------
-    print("\n=== EVALUATION SUMMARY ===")
-    print(f"Episodes:       {EPISODES}")
-    print(f"Win rate:       {wins / EPISODES:.2%}")
-    print(f"Avg VP:         {statistics.mean(vp_scores):.2f}")
-    print(f"Avg steps:      {statistics.mean(steps_taken):.1f}")
-    print(f"Median steps:   {statistics.median(steps_taken)}")
-    print("==========================")
+    print("\n=== RESULTS ===")
+    print(f"Episodes:   {EPISODES}")
+    print(f"Win rate:   {wins / EPISODES:.2%}")
+    print(f"Avg VP:     {statistics.mean(vp_scores):.2f}")
+    print(f"Avg steps:  {statistics.mean(steps_list):.1f}")
+    print("================")
 
-    print("\n>>> PPO evaluation finished")
+    print("\n>>> Evaluation finished")
 
 
 if __name__ == "__main__":

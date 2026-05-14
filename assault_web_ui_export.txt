@@ -4193,6 +4193,7 @@ window.applyEventRange = function applyEventRange(
     const event = turn.events[i];
     if (!event) continue;
 
+    // ✅ Apply state changes
     applySingleEvent(gameState, event);
 
     const unitId =
@@ -4203,8 +4204,7 @@ window.applyEventRange = function applyEventRange(
     if (!unitId) continue;
 
     // ✅ acción REAL (no genérica)
-    const action =
-      event.payload?.action || event.type;
+    const action = event.payload?.action || event.type;
 
     const state = buildStrategicState(gameState, unitId);
     const friendly = Number(state.friendly_strength);
@@ -4304,8 +4304,22 @@ window.applyEventRange = function applyEventRange(
 
     }, 0);
   }
-};
 
+  // -------------------------------------------------
+  // ✅ 🔥 FIX CLAVE: REFRESH UI
+  // -------------------------------------------------
+  // Garantiza que la vista (cards, posiciones, etc.)
+  // se actualice tras cambiar el estado
+  if (typeof renderFrame === "function") {
+    requestAnimationFrame(() => {
+      try {
+        renderFrame(gameState, window.UI_STATE);
+      } catch (e) {
+        console.warn("[UI REFRESH] Failed:", e);
+      }
+    });
+  }
+};
 
 
 ================================================================================
@@ -5519,6 +5533,18 @@ FILE: C:\repos\python\assault\assault_web_ui\frontend\public\css\unit_state_view
   user-select: none;
 }
 
+.unit-card {
+  min-width: 100px;
+  min-height: 130px;   /* 🔥 necesario */
+}
+
+.unit-card-pos {
+  font-size: 11px;
+  color: #cccccc;
+  text-align: center;
+  margin-top: 2px;
+  margin-bottom: 2px;
+}
 
 
 ================================================================================
@@ -6875,7 +6901,7 @@ window.snapUnitToHex     = snapUnitToHex;
 
 
 ================================================================================
-FILE: C:\repos\python\assault\assault_web_ui\frontend\public\replays\phase01_seq001_initial_contact__US_RL_vs_GE_HEURISTIC.json
+FILE: C:\repos\python\assault\assault_web_ui\frontend\public\replays\01_phase01_seq001_initial_contact__US_RL_vs_GE_HEURISTIC.json
 ================================================================================
 
 {
@@ -7963,6 +7989,6382 @@ FILE: C:\repos\python\assault\assault_web_ui\frontend\public\replays\phase01_seq
           "type": "ACTION",
           "payload": {
             "turn": 6,
+            "action": "WaitAction",
+            "active_unit": "US_3"
+          }
+        }
+      ]
+    }
+  ]
+}
+
+
+================================================================================
+FILE: C:\repos\python\assault\assault_web_ui\frontend\public\replays\02_phase01_seq001_initial_contact__US_RL_vs_GE_HEURISTIC.json
+================================================================================
+
+{
+  "meta": {
+    "scenario_id": "phase01_seq001_initial_contact",
+    "sides": {
+      "US": "RL",
+      "GE": "HEURISTIC"
+    }
+  },
+  "initial_state": {
+    "turn": 1,
+    "units": [
+      {
+        "id": "GE_1",
+        "q": 3,
+        "r": 4,
+        "hp": 3,
+        "side": "GE",
+        "type": "GE_RIFLES_43"
+      },
+      {
+        "id": "GE_2",
+        "q": 4,
+        "r": 4,
+        "hp": 3,
+        "side": "GE",
+        "type": "GE_RIFLES_43"
+      },
+      {
+        "id": "GE_3",
+        "q": 5,
+        "r": 1,
+        "hp": 3,
+        "side": "GE",
+        "type": "GE_RIFLES_43"
+      },
+      {
+        "id": "US_1",
+        "q": 5,
+        "r": 12,
+        "hp": 4,
+        "side": "US",
+        "type": "US_RIFLES_43"
+      },
+      {
+        "id": "US_2",
+        "q": 6,
+        "r": 12,
+        "hp": 4,
+        "side": "US",
+        "type": "US_RIFLES_43"
+      },
+      {
+        "id": "US_3",
+        "q": 7,
+        "r": 12,
+        "hp": 4,
+        "side": "US",
+        "type": "US_RIFLES_43"
+      }
+    ]
+  },
+  "turns": [
+    {
+      "turn": 1,
+      "events": [
+        {
+          "type": "ACTION",
+          "payload": {
+            "turn": 1,
+            "action": "MoveAction",
+            "active_unit": "GE_1"
+          }
+        },
+        {
+          "type": "UNIT_MOVED",
+          "payload": {
+            "unit_id": "GE_1",
+            "from": {
+              "q": 3,
+              "r": 4
+            },
+            "to": {
+              "q": 3,
+              "r": 5
+            }
+          }
+        },
+        {
+          "type": "ACTION",
+          "payload": {
+            "turn": 1,
+            "action": "MoveAction",
+            "active_unit": "GE_2"
+          }
+        },
+        {
+          "type": "UNIT_MOVED",
+          "payload": {
+            "unit_id": "GE_2",
+            "from": {
+              "q": 4,
+              "r": 4
+            },
+            "to": {
+              "q": 5,
+              "r": 4
+            }
+          }
+        },
+        {
+          "type": "ACTION",
+          "payload": {
+            "turn": 1,
+            "action": "MoveAction",
+            "active_unit": "GE_3"
+          }
+        },
+        {
+          "type": "UNIT_MOVED",
+          "payload": {
+            "unit_id": "GE_3",
+            "from": {
+              "q": 5,
+              "r": 1
+            },
+            "to": {
+              "q": 5,
+              "r": 2
+            }
+          }
+        },
+        {
+          "type": "HRL_DECISION",
+          "payload": {
+            "side": "US",
+            "option": "HOLD",
+            "description": "hold the current position",
+            "category": "DEFENSIVE",
+            "turn": 1,
+            "context": {
+              "friendly_strength": "EVEN",
+              "enemy_pressure": "HIGH",
+              "objective_distance": "UNKNOWN"
+            },
+            "policy_info": {
+              "option": "HOLD",
+              "confidence": 0.23264095187187195,
+              "value_estimate": 0.5525926351547241
+            }
+          }
+        },
+        {
+          "type": "ACTION",
+          "payload": {
+            "turn": 1,
+            "action": "WaitAction",
+            "active_unit": "US_1"
+          }
+        },
+        {
+          "type": "HRL_DECISION",
+          "payload": {
+            "side": "US",
+            "option": "FLANK",
+            "description": "attempt to outflank the enemy",
+            "category": "MANEUVER",
+            "turn": 1,
+            "context": {
+              "friendly_strength": "EVEN",
+              "enemy_pressure": "HIGH",
+              "objective_distance": "UNKNOWN"
+            },
+            "policy_info": {
+              "option": "FLANK",
+              "confidence": 0.25088873505592346,
+              "value_estimate": 0.5510413646697998
+            }
+          }
+        },
+        {
+          "type": "ACTION",
+          "payload": {
+            "turn": 1,
+            "action": "MoveAction",
+            "active_unit": "US_2"
+          }
+        },
+        {
+          "type": "UNIT_MOVED",
+          "payload": {
+            "unit_id": "US_2",
+            "from": {
+              "q": 6,
+              "r": 12
+            },
+            "to": {
+              "q": 6,
+              "r": 11
+            }
+          }
+        },
+        {
+          "type": "ACTION",
+          "payload": {
+            "turn": 1,
+            "action": "MoveAction",
+            "active_unit": "US_3"
+          }
+        },
+        {
+          "type": "UNIT_MOVED",
+          "payload": {
+            "unit_id": "US_3",
+            "from": {
+              "q": 7,
+              "r": 12
+            },
+            "to": {
+              "q": 6,
+              "r": 12
+            }
+          }
+        }
+      ]
+    },
+    {
+      "turn": 2,
+      "events": [
+        {
+          "type": "ACTION",
+          "payload": {
+            "turn": 2,
+            "action": "MoveAction",
+            "active_unit": "GE_1"
+          }
+        },
+        {
+          "type": "UNIT_MOVED",
+          "payload": {
+            "unit_id": "GE_1",
+            "from": {
+              "q": 3,
+              "r": 5
+            },
+            "to": {
+              "q": 4,
+              "r": 5
+            }
+          }
+        },
+        {
+          "type": "ACTION",
+          "payload": {
+            "turn": 2,
+            "action": "MoveAction",
+            "active_unit": "GE_2"
+          }
+        },
+        {
+          "type": "UNIT_MOVED",
+          "payload": {
+            "unit_id": "GE_2",
+            "from": {
+              "q": 5,
+              "r": 4
+            },
+            "to": {
+              "q": 5,
+              "r": 5
+            }
+          }
+        },
+        {
+          "type": "ACTION",
+          "payload": {
+            "turn": 2,
+            "action": "MoveAction",
+            "active_unit": "GE_3"
+          }
+        },
+        {
+          "type": "UNIT_MOVED",
+          "payload": {
+            "unit_id": "GE_3",
+            "from": {
+              "q": 5,
+              "r": 2
+            },
+            "to": {
+              "q": 5,
+              "r": 3
+            }
+          }
+        },
+        {
+          "type": "ACTION",
+          "payload": {
+            "turn": 2,
+            "action": "MoveAction",
+            "active_unit": "US_1"
+          }
+        },
+        {
+          "type": "UNIT_MOVED",
+          "payload": {
+            "unit_id": "US_1",
+            "from": {
+              "q": 5,
+              "r": 12
+            },
+            "to": {
+              "q": 5,
+              "r": 11
+            }
+          }
+        },
+        {
+          "type": "ACTION",
+          "payload": {
+            "turn": 2,
+            "action": "MoveAction",
+            "active_unit": "US_2"
+          }
+        },
+        {
+          "type": "UNIT_MOVED",
+          "payload": {
+            "unit_id": "US_2",
+            "from": {
+              "q": 6,
+              "r": 11
+            },
+            "to": {
+              "q": 6,
+              "r": 10
+            }
+          }
+        },
+        {
+          "type": "ACTION",
+          "payload": {
+            "turn": 2,
+            "action": "MoveAction",
+            "active_unit": "US_3"
+          }
+        },
+        {
+          "type": "UNIT_MOVED",
+          "payload": {
+            "unit_id": "US_3",
+            "from": {
+              "q": 6,
+              "r": 12
+            },
+            "to": {
+              "q": 5,
+              "r": 12
+            }
+          }
+        }
+      ]
+    },
+    {
+      "turn": 3,
+      "events": [
+        {
+          "type": "ACTION",
+          "payload": {
+            "turn": 3,
+            "action": "MoveAction",
+            "active_unit": "GE_1"
+          }
+        },
+        {
+          "type": "UNIT_MOVED",
+          "payload": {
+            "unit_id": "GE_1",
+            "from": {
+              "q": 4,
+              "r": 5
+            },
+            "to": {
+              "q": 4,
+              "r": 6
+            }
+          }
+        },
+        {
+          "type": "ACTION",
+          "payload": {
+            "turn": 3,
+            "action": "MoveAction",
+            "active_unit": "GE_2"
+          }
+        },
+        {
+          "type": "UNIT_MOVED",
+          "payload": {
+            "unit_id": "GE_2",
+            "from": {
+              "q": 5,
+              "r": 5
+            },
+            "to": {
+              "q": 5,
+              "r": 6
+            }
+          }
+        },
+        {
+          "type": "ACTION",
+          "payload": {
+            "turn": 3,
+            "action": "MoveAction",
+            "active_unit": "GE_3"
+          }
+        },
+        {
+          "type": "UNIT_MOVED",
+          "payload": {
+            "unit_id": "GE_3",
+            "from": {
+              "q": 5,
+              "r": 3
+            },
+            "to": {
+              "q": 5,
+              "r": 4
+            }
+          }
+        },
+        {
+          "type": "ACTION",
+          "payload": {
+            "turn": 3,
+            "action": "MoveAction",
+            "active_unit": "US_1"
+          }
+        },
+        {
+          "type": "UNIT_MOVED",
+          "payload": {
+            "unit_id": "US_1",
+            "from": {
+              "q": 5,
+              "r": 11
+            },
+            "to": {
+              "q": 5,
+              "r": 10
+            }
+          }
+        },
+        {
+          "type": "HRL_DECISION",
+          "payload": {
+            "side": "US",
+            "option": "ATTACK",
+            "description": "engage the enemy directly",
+            "category": "ENGAGEMENT",
+            "turn": 3,
+            "context": {
+              "friendly_strength": "EVEN",
+              "enemy_pressure": "HIGH",
+              "objective_distance": "UNKNOWN"
+            },
+            "policy_info": {
+              "option": "ATTACK",
+              "confidence": 0.35593271255493164,
+              "value_estimate": 0.6979042291641235
+            }
+          }
+        },
+        {
+          "type": "ACTION",
+          "payload": {
+            "turn": 3,
+            "action": "MoveAction",
+            "active_unit": "US_2"
+          }
+        },
+        {
+          "type": "UNIT_MOVED",
+          "payload": {
+            "unit_id": "US_2",
+            "from": {
+              "q": 6,
+              "r": 10
+            },
+            "to": {
+              "q": 6,
+              "r": 9
+            }
+          }
+        },
+        {
+          "type": "ACTION",
+          "payload": {
+            "turn": 3,
+            "action": "MoveAction",
+            "active_unit": "US_3"
+          }
+        },
+        {
+          "type": "UNIT_MOVED",
+          "payload": {
+            "unit_id": "US_3",
+            "from": {
+              "q": 5,
+              "r": 12
+            },
+            "to": {
+              "q": 5,
+              "r": 11
+            }
+          }
+        }
+      ]
+    },
+    {
+      "turn": 4,
+      "events": [
+        {
+          "type": "ACTION",
+          "payload": {
+            "turn": 4,
+            "action": "MoveAction",
+            "active_unit": "GE_1"
+          }
+        },
+        {
+          "type": "UNIT_MOVED",
+          "payload": {
+            "unit_id": "GE_1",
+            "from": {
+              "q": 4,
+              "r": 6
+            },
+            "to": {
+              "q": 4,
+              "r": 7
+            }
+          }
+        },
+        {
+          "type": "ACTION",
+          "payload": {
+            "turn": 4,
+            "action": "MoveAction",
+            "active_unit": "GE_2"
+          }
+        },
+        {
+          "type": "UNIT_MOVED",
+          "payload": {
+            "unit_id": "GE_2",
+            "from": {
+              "q": 5,
+              "r": 6
+            },
+            "to": {
+              "q": 5,
+              "r": 7
+            }
+          }
+        },
+        {
+          "type": "ACTION",
+          "payload": {
+            "turn": 4,
+            "action": "MoveAction",
+            "active_unit": "GE_3"
+          }
+        },
+        {
+          "type": "UNIT_MOVED",
+          "payload": {
+            "unit_id": "GE_3",
+            "from": {
+              "q": 5,
+              "r": 4
+            },
+            "to": {
+              "q": 5,
+              "r": 5
+            }
+          }
+        },
+        {
+          "type": "HRL_DECISION",
+          "payload": {
+            "side": "US",
+            "option": "HOLD",
+            "description": "hold the current position",
+            "category": "DEFENSIVE",
+            "turn": 4,
+            "context": {
+              "friendly_strength": "EVEN",
+              "enemy_pressure": "HIGH",
+              "objective_distance": "UNKNOWN"
+            },
+            "policy_info": {
+              "option": "HOLD",
+              "confidence": 0.23841673135757446,
+              "value_estimate": 0.7778540849685669
+            }
+          }
+        },
+        {
+          "type": "ACTION",
+          "payload": {
+            "turn": 4,
+            "action": "WaitAction",
+            "active_unit": "US_1"
+          }
+        },
+        {
+          "type": "HRL_DECISION",
+          "payload": {
+            "side": "US",
+            "option": "FLANK",
+            "description": "attempt to outflank the enemy",
+            "category": "MANEUVER",
+            "turn": 4,
+            "context": {
+              "friendly_strength": "EVEN",
+              "enemy_pressure": "HIGH",
+              "objective_distance": "UNKNOWN"
+            },
+            "policy_info": {
+              "option": "FLANK",
+              "confidence": 0.2881130874156952,
+              "value_estimate": 0.7765054702758789
+            }
+          }
+        },
+        {
+          "type": "ACTION",
+          "payload": {
+            "turn": 4,
+            "action": "RangedDirectAttack",
+            "active_unit": "US_2"
+          }
+        },
+        {
+          "type": "ACTION_EFFECT",
+          "payload": {
+            "action": "RangedCombat",
+            "attacker": "US_2",
+            "defender": "GE_2",
+            "distance": 3,
+            "attack_sector": "REAR",
+            "attacker_attack_dice": [
+              {
+                "color": "RED",
+                "faces": [
+                  "CRITICAL",
+                  "DAMAGE"
+                ]
+              },
+              {
+                "color": "RED",
+                "faces": []
+              },
+              {
+                "color": "YELLOW",
+                "faces": [
+                  "DAMAGE",
+                  "DAMAGE"
+                ]
+              }
+            ],
+            "defender_defense_dice": [
+              {
+                "color": "YELLOW",
+                "faces": [
+                  "DAMAGE",
+                  "DAMAGE"
+                ]
+              }
+            ],
+            "attacker_effects": {
+              "damage": 2,
+              "criticals": [
+                {
+                  "face": "CRITICAL",
+                  "target_class": "INFANTRY"
+                }
+              ],
+              "suppress": 0
+            },
+            "defender_hp_before": 3,
+            "defender_hp_after": 1,
+            "defender_killed": false,
+            "defender_suppressed": false,
+            "resolution": {
+              "remaining_damage": 1,
+              "remaining_criticals": 1,
+              "remaining_suppress": 0
+            },
+            "outcome": "resolved",
+            "winner": null
+          }
+        },
+        {
+          "type": "ACTION",
+          "payload": {
+            "turn": 4,
+            "action": "WaitAction",
+            "active_unit": "US_3"
+          }
+        }
+      ]
+    },
+    {
+      "turn": 5,
+      "events": [
+        {
+          "type": "ACTION",
+          "payload": {
+            "turn": 5,
+            "action": "MoveAction",
+            "active_unit": "GE_1"
+          }
+        },
+        {
+          "type": "UNIT_MOVED",
+          "payload": {
+            "unit_id": "GE_1",
+            "from": {
+              "q": 4,
+              "r": 7
+            },
+            "to": {
+              "q": 4,
+              "r": 8
+            }
+          }
+        },
+        {
+          "type": "ACTION",
+          "payload": {
+            "turn": 5,
+            "action": "RangedDirectAttack",
+            "active_unit": "GE_2"
+          }
+        },
+        {
+          "type": "ACTION_EFFECT",
+          "payload": {
+            "action": "RangedCombat",
+            "attacker": "GE_2",
+            "defender": "US_1",
+            "distance": 3,
+            "attack_sector": "FRONT",
+            "attacker_attack_dice": [
+              {
+                "color": "RED",
+                "faces": []
+              },
+              {
+                "color": "YELLOW",
+                "faces": [
+                  "CRITICAL",
+                  "DAMAGE"
+                ]
+              },
+              {
+                "color": "BLUE",
+                "faces": [
+                  "DAMAGE"
+                ]
+              }
+            ],
+            "defender_defense_dice": [
+              {
+                "color": "YELLOW",
+                "faces": [
+                  "DAMAGE",
+                  "DAMAGE"
+                ]
+              }
+            ],
+            "attacker_effects": {
+              "damage": 1,
+              "criticals": [
+                {
+                  "face": "CRITICAL",
+                  "target_class": "INFANTRY"
+                }
+              ],
+              "suppress": 0
+            },
+            "defender_hp_before": 4,
+            "defender_hp_after": 3,
+            "defender_killed": false,
+            "defender_suppressed": false,
+            "resolution": {
+              "remaining_damage": 0,
+              "remaining_criticals": 1,
+              "remaining_suppress": 0
+            },
+            "outcome": "resolved",
+            "winner": null
+          }
+        },
+        {
+          "type": "ACTION",
+          "payload": {
+            "turn": 5,
+            "action": "MoveAction",
+            "active_unit": "GE_3"
+          }
+        },
+        {
+          "type": "UNIT_MOVED",
+          "payload": {
+            "unit_id": "GE_3",
+            "from": {
+              "q": 5,
+              "r": 5
+            },
+            "to": {
+              "q": 5,
+              "r": 6
+            }
+          }
+        },
+        {
+          "type": "ACTION",
+          "payload": {
+            "turn": 5,
+            "action": "RangedDirectAttack",
+            "active_unit": "US_1"
+          }
+        },
+        {
+          "type": "ACTION_EFFECT",
+          "payload": {
+            "action": "RangedCombat",
+            "attacker": "US_1",
+            "defender": "GE_1",
+            "distance": 3,
+            "attack_sector": "REAR",
+            "attacker_attack_dice": [
+              {
+                "color": "RED",
+                "faces": [
+                  "DAMAGE"
+                ]
+              },
+              {
+                "color": "RED",
+                "faces": [
+                  "DAMAGE",
+                  "SUPPRESS"
+                ]
+              },
+              {
+                "color": "YELLOW",
+                "faces": []
+              }
+            ],
+            "defender_defense_dice": [
+              {
+                "color": "YELLOW",
+                "faces": []
+              }
+            ],
+            "attacker_effects": {
+              "damage": 2,
+              "criticals": [],
+              "suppress": 1
+            },
+            "defender_hp_before": 3,
+            "defender_hp_after": 1,
+            "defender_killed": false,
+            "defender_suppressed": true,
+            "resolution": {
+              "remaining_damage": 2,
+              "remaining_criticals": 0,
+              "remaining_suppress": 1
+            },
+            "outcome": "resolved",
+            "winner": null
+          }
+        },
+        {
+          "type": "ACTION",
+          "payload": {
+            "turn": 5,
+            "action": "RangedDirectAttack",
+            "active_unit": "US_2"
+          }
+        },
+        {
+          "type": "ACTION_EFFECT",
+          "payload": {
+            "action": "RangedCombat",
+            "attacker": "US_2",
+            "defender": "GE_1",
+            "distance": 3,
+            "attack_sector": "FLANK_LEFT",
+            "attacker_attack_dice": [
+              {
+                "color": "RED",
+                "faces": []
+              },
+              {
+                "color": "RED",
+                "faces": [
+                  "CRITICAL",
+                  "DAMAGE"
+                ]
+              },
+              {
+                "color": "YELLOW",
+                "faces": [
+                  "DAMAGE"
+                ]
+              }
+            ],
+            "defender_defense_dice": [
+              {
+                "color": "YELLOW",
+                "faces": [
+                  "CRITICAL",
+                  "DAMAGE"
+                ]
+              }
+            ],
+            "attacker_effects": {
+              "damage": 1,
+              "criticals": [],
+              "suppress": 0
+            },
+            "defender_hp_before": 1,
+            "defender_hp_after": 0,
+            "defender_killed": true,
+            "defender_suppressed": false,
+            "resolution": {
+              "remaining_damage": 1,
+              "remaining_criticals": 0,
+              "remaining_suppress": 0
+            },
+            "outcome": "resolved",
+            "winner": null
+          }
+        },
+        {
+          "type": "ACTION",
+          "payload": {
+            "turn": 5,
+            "action": "WaitAction",
+            "active_unit": "US_3"
+          }
+        }
+      ]
+    },
+    {
+      "turn": 6,
+      "events": [
+        {
+          "type": "ACTION",
+          "payload": {
+            "turn": 6,
+            "action": "RangedDirectAttack",
+            "active_unit": "GE_2"
+          }
+        },
+        {
+          "type": "ACTION_EFFECT",
+          "payload": {
+            "action": "RangedCombat",
+            "attacker": "GE_2",
+            "defender": "US_1",
+            "distance": 3,
+            "attack_sector": "FRONT",
+            "attacker_attack_dice": [
+              {
+                "color": "RED",
+                "faces": [
+                  "DAMAGE",
+                  "SUPPRESS"
+                ]
+              },
+              {
+                "color": "YELLOW",
+                "faces": []
+              },
+              {
+                "color": "BLUE",
+                "faces": [
+                  "DAMAGE"
+                ]
+              }
+            ],
+            "defender_defense_dice": [
+              {
+                "color": "YELLOW",
+                "faces": [
+                  "CRITICAL",
+                  "DAMAGE"
+                ]
+              }
+            ],
+            "attacker_effects": {
+              "damage": 0,
+              "criticals": [],
+              "suppress": 1
+            },
+            "defender_hp_before": 3,
+            "defender_hp_after": 3,
+            "defender_killed": false,
+            "defender_suppressed": true,
+            "resolution": {
+              "remaining_damage": 0,
+              "remaining_criticals": 0,
+              "remaining_suppress": 1
+            },
+            "outcome": "resolved",
+            "winner": null
+          }
+        },
+        {
+          "type": "ACTION",
+          "payload": {
+            "turn": 6,
+            "action": "WaitAction",
+            "active_unit": "GE_3"
+          }
+        },
+        {
+          "type": "ACTION",
+          "payload": {
+            "turn": 6,
+            "action": "RangedDirectAttack",
+            "active_unit": "US_1"
+          }
+        },
+        {
+          "type": "ACTION_EFFECT",
+          "payload": {
+            "action": "RangedCombat",
+            "attacker": "US_1",
+            "defender": "GE_2",
+            "distance": 3,
+            "attack_sector": "REAR",
+            "attacker_attack_dice": [
+              {
+                "color": "RED",
+                "faces": [
+                  "DAMAGE",
+                  "DAMAGE"
+                ]
+              },
+              {
+                "color": "RED",
+                "faces": [
+                  "DAMAGE",
+                  "DAMAGE"
+                ]
+              },
+              {
+                "color": "YELLOW",
+                "faces": [
+                  "DAMAGE",
+                  "DAMAGE"
+                ]
+              }
+            ],
+            "defender_defense_dice": [
+              {
+                "color": "YELLOW",
+                "faces": []
+              }
+            ],
+            "attacker_effects": {
+              "damage": 6,
+              "criticals": [],
+              "suppress": 0
+            },
+            "defender_hp_before": 1,
+            "defender_hp_after": 0,
+            "defender_killed": true,
+            "defender_suppressed": false,
+            "resolution": {
+              "remaining_damage": 6,
+              "remaining_criticals": 0,
+              "remaining_suppress": 0
+            },
+            "outcome": "resolved",
+            "winner": null
+          }
+        },
+        {
+          "type": "HRL_DECISION",
+          "payload": {
+            "side": "US",
+            "option": "ATTACK",
+            "description": "engage the enemy directly",
+            "category": "ENGAGEMENT",
+            "turn": 6,
+            "context": {
+              "friendly_strength": "HIGH",
+              "enemy_pressure": "LOW",
+              "objective_distance": "UNKNOWN"
+            },
+            "policy_info": {
+              "option": "ATTACK",
+              "confidence": 0.35826751589775085,
+              "value_estimate": 0.9060051441192627
+            }
+          }
+        },
+        {
+          "type": "ACTION",
+          "payload": {
+            "turn": 6,
+            "action": "MoveAction",
+            "active_unit": "US_2"
+          }
+        },
+        {
+          "type": "UNIT_MOVED",
+          "payload": {
+            "unit_id": "US_2",
+            "from": {
+              "q": 6,
+              "r": 9
+            },
+            "to": {
+              "q": 5,
+              "r": 9
+            }
+          }
+        },
+        {
+          "type": "ACTION",
+          "payload": {
+            "turn": 6,
+            "action": "WaitAction",
+            "active_unit": "US_3"
+          }
+        }
+      ]
+    },
+    {
+      "turn": 7,
+      "events": [
+        {
+          "type": "ACTION",
+          "payload": {
+            "turn": 7,
+            "action": "RangedDirectAttack",
+            "active_unit": "GE_3"
+          }
+        },
+        {
+          "type": "ACTION_EFFECT",
+          "payload": {
+            "action": "RangedCombat",
+            "attacker": "GE_3",
+            "defender": "US_2",
+            "distance": 3,
+            "attack_sector": "FRONT",
+            "attacker_attack_dice": [
+              {
+                "color": "RED",
+                "faces": [
+                  "DAMAGE"
+                ]
+              },
+              {
+                "color": "YELLOW",
+                "faces": [
+                  "CRITICAL",
+                  "DAMAGE"
+                ]
+              },
+              {
+                "color": "BLUE",
+                "faces": []
+              }
+            ],
+            "defender_defense_dice": [
+              {
+                "color": "YELLOW",
+                "faces": [
+                  "DAMAGE"
+                ]
+              }
+            ],
+            "attacker_effects": {
+              "damage": 2,
+              "criticals": [
+                {
+                  "face": "CRITICAL",
+                  "target_class": "INFANTRY"
+                }
+              ],
+              "suppress": 0
+            },
+            "defender_hp_before": 4,
+            "defender_hp_after": 2,
+            "defender_killed": false,
+            "defender_suppressed": false,
+            "resolution": {
+              "remaining_damage": 1,
+              "remaining_criticals": 1,
+              "remaining_suppress": 0
+            },
+            "outcome": "resolved",
+            "winner": null
+          }
+        },
+        {
+          "type": "HRL_DECISION",
+          "payload": {
+            "side": "US",
+            "option": "FLANK",
+            "description": "attempt to outflank the enemy",
+            "category": "MANEUVER",
+            "turn": 7,
+            "context": {
+              "friendly_strength": "HIGH",
+              "enemy_pressure": "LOW",
+              "objective_distance": "UNKNOWN"
+            },
+            "policy_info": {
+              "option": "FLANK",
+              "confidence": 0.3067381978034973,
+              "value_estimate": 0.9128314256668091
+            }
+          }
+        },
+        {
+          "type": "ACTION",
+          "payload": {
+            "turn": 7,
+            "action": "WaitAction",
+            "active_unit": "US_1"
+          }
+        },
+        {
+          "type": "ACTION",
+          "payload": {
+            "turn": 7,
+            "action": "RangedDirectAttack",
+            "active_unit": "US_2"
+          }
+        },
+        {
+          "type": "ACTION_EFFECT",
+          "payload": {
+            "action": "RangedCombat",
+            "attacker": "US_2",
+            "defender": "GE_3",
+            "distance": 3,
+            "attack_sector": "REAR",
+            "attacker_attack_dice": [
+              {
+                "color": "RED",
+                "faces": [
+                  "DAMAGE",
+                  "SUPPRESS"
+                ]
+              },
+              {
+                "color": "RED",
+                "faces": [
+                  "DAMAGE",
+                  "SUPPRESS"
+                ]
+              },
+              {
+                "color": "YELLOW",
+                "faces": [
+                  "CRITICAL",
+                  "DAMAGE"
+                ]
+              }
+            ],
+            "defender_defense_dice": [
+              {
+                "color": "YELLOW",
+                "faces": [
+                  "CRITICAL",
+                  "DAMAGE"
+                ]
+              }
+            ],
+            "attacker_effects": {
+              "damage": 2,
+              "criticals": [],
+              "suppress": 2
+            },
+            "defender_hp_before": 3,
+            "defender_hp_after": 1,
+            "defender_killed": false,
+            "defender_suppressed": true,
+            "resolution": {
+              "remaining_damage": 2,
+              "remaining_criticals": 0,
+              "remaining_suppress": 2
+            },
+            "outcome": "resolved",
+            "winner": null
+          }
+        },
+        {
+          "type": "ACTION",
+          "payload": {
+            "turn": 7,
+            "action": "WaitAction",
+            "active_unit": "US_3"
+          }
+        }
+      ]
+    },
+    {
+      "turn": 8,
+      "events": [
+        {
+          "type": "ACTION",
+          "payload": {
+            "turn": 8,
+            "action": "RangedDirectAttack",
+            "active_unit": "GE_3"
+          }
+        },
+        {
+          "type": "ACTION_EFFECT",
+          "payload": {
+            "action": "RangedCombat",
+            "attacker": "GE_3",
+            "defender": "US_2",
+            "distance": 3,
+            "attack_sector": "FRONT",
+            "attacker_attack_dice": [
+              {
+                "color": "RED",
+                "faces": [
+                  "DAMAGE"
+                ]
+              },
+              {
+                "color": "YELLOW",
+                "faces": [
+                  "DAMAGE"
+                ]
+              },
+              {
+                "color": "BLUE",
+                "faces": [
+                  "DAMAGE"
+                ]
+              }
+            ],
+            "defender_defense_dice": [
+              {
+                "color": "YELLOW",
+                "faces": [
+                  "DAMAGE"
+                ]
+              }
+            ],
+            "attacker_effects": {
+              "damage": 2,
+              "criticals": [],
+              "suppress": 0
+            },
+            "defender_hp_before": 2,
+            "defender_hp_after": 0,
+            "defender_killed": true,
+            "defender_suppressed": false,
+            "resolution": {
+              "remaining_damage": 2,
+              "remaining_criticals": 0,
+              "remaining_suppress": 0
+            },
+            "outcome": "resolved",
+            "winner": null
+          }
+        },
+        {
+          "type": "ACTION",
+          "payload": {
+            "turn": 8,
+            "action": "MoveAction",
+            "active_unit": "US_1"
+          }
+        },
+        {
+          "type": "UNIT_MOVED",
+          "payload": {
+            "unit_id": "US_1",
+            "from": {
+              "q": 5,
+              "r": 10
+            },
+            "to": {
+              "q": 5,
+              "r": 9
+            }
+          }
+        },
+        {
+          "type": "ACTION",
+          "payload": {
+            "turn": 8,
+            "action": "MoveAction",
+            "active_unit": "US_3"
+          }
+        },
+        {
+          "type": "UNIT_MOVED",
+          "payload": {
+            "unit_id": "US_3",
+            "from": {
+              "q": 5,
+              "r": 11
+            },
+            "to": {
+              "q": 5,
+              "r": 10
+            }
+          }
+        }
+      ]
+    },
+    {
+      "turn": 9,
+      "events": [
+        {
+          "type": "ACTION",
+          "payload": {
+            "turn": 9,
+            "action": "RangedDirectAttack",
+            "active_unit": "GE_3"
+          }
+        },
+        {
+          "type": "ACTION_EFFECT",
+          "payload": {
+            "action": "RangedCombat",
+            "attacker": "GE_3",
+            "defender": "US_1",
+            "distance": 3,
+            "attack_sector": "FRONT",
+            "attacker_attack_dice": [
+              {
+                "color": "RED",
+                "faces": [
+                  "DAMAGE",
+                  "SUPPRESS"
+                ]
+              },
+              {
+                "color": "YELLOW",
+                "faces": []
+              },
+              {
+                "color": "BLUE",
+                "faces": []
+              }
+            ],
+            "defender_defense_dice": [
+              {
+                "color": "YELLOW",
+                "faces": []
+              }
+            ],
+            "attacker_effects": {
+              "damage": 1,
+              "criticals": [],
+              "suppress": 1
+            },
+            "defender_hp_before": 3,
+            "defender_hp_after": 2,
+            "defender_killed": false,
+            "defender_suppressed": true,
+            "resolution": {
+              "remaining_damage": 1,
+              "remaining_criticals": 0,
+              "remaining_suppress": 1
+            },
+            "outcome": "resolved",
+            "winner": null
+          }
+        },
+        {
+          "type": "HRL_DECISION",
+          "payload": {
+            "side": "US",
+            "option": "FLANK",
+            "description": "attempt to outflank the enemy",
+            "category": "MANEUVER",
+            "turn": 9,
+            "context": {
+              "friendly_strength": "HIGH",
+              "enemy_pressure": "LOW",
+              "objective_distance": "UNKNOWN"
+            },
+            "policy_info": {
+              "option": "FLANK",
+              "confidence": 0.31016698479652405,
+              "value_estimate": 0.9518766403198242
+            }
+          }
+        },
+        {
+          "type": "ACTION",
+          "payload": {
+            "turn": 9,
+            "action": "RangedDirectAttack",
+            "active_unit": "US_1"
+          }
+        },
+        {
+          "type": "ACTION_EFFECT",
+          "payload": {
+            "action": "RangedCombat",
+            "attacker": "US_1",
+            "defender": "GE_3",
+            "distance": 3,
+            "attack_sector": "REAR",
+            "attacker_attack_dice": [
+              {
+                "color": "RED",
+                "faces": [
+                  "DAMAGE",
+                  "DAMAGE"
+                ]
+              },
+              {
+                "color": "RED",
+                "faces": [
+                  "CRITICAL",
+                  "DAMAGE"
+                ]
+              },
+              {
+                "color": "YELLOW",
+                "faces": [
+                  "DAMAGE"
+                ]
+              }
+            ],
+            "defender_defense_dice": [
+              {
+                "color": "YELLOW",
+                "faces": [
+                  "CRITICAL",
+                  "DAMAGE"
+                ]
+              }
+            ],
+            "attacker_effects": {
+              "damage": 3,
+              "criticals": [],
+              "suppress": 0
+            },
+            "defender_hp_before": 1,
+            "defender_hp_after": 0,
+            "defender_killed": true,
+            "defender_suppressed": false,
+            "resolution": {
+              "remaining_damage": 3,
+              "remaining_criticals": 0,
+              "remaining_suppress": 0
+            },
+            "outcome": "resolved",
+            "winner": null
+          }
+        },
+        {
+          "type": "ACTION",
+          "payload": {
+            "turn": 9,
+            "action": "WaitAction",
+            "active_unit": "US_3"
+          }
+        }
+      ]
+    }
+  ]
+}
+
+
+================================================================================
+FILE: C:\repos\python\assault\assault_web_ui\frontend\public\replays\phase01_seq001_initial_contact__US_RL_vs_GE_HEURISTIC.json
+================================================================================
+
+{
+  "meta": {
+    "scenario_id": "phase01_seq001_initial_contact",
+    "sides": {
+      "US": "RL",
+      "GE": "HEURISTIC"
+    }
+  },
+  "initial_state": {
+    "turn": 1,
+    "units": [
+      {
+        "id": "GE_1",
+        "q": 3,
+        "r": 4,
+        "hp": 3,
+        "side": "GE",
+        "type": "GE_RIFLES_43"
+      },
+      {
+        "id": "GE_2",
+        "q": 4,
+        "r": 4,
+        "hp": 3,
+        "side": "GE",
+        "type": "GE_RIFLES_43"
+      },
+      {
+        "id": "GE_3",
+        "q": 5,
+        "r": 1,
+        "hp": 3,
+        "side": "GE",
+        "type": "GE_RIFLES_43"
+      },
+      {
+        "id": "US_1",
+        "q": 5,
+        "r": 12,
+        "hp": 4,
+        "side": "US",
+        "type": "US_RIFLES_43"
+      },
+      {
+        "id": "US_2",
+        "q": 6,
+        "r": 12,
+        "hp": 4,
+        "side": "US",
+        "type": "US_RIFLES_43"
+      },
+      {
+        "id": "US_3",
+        "q": 7,
+        "r": 12,
+        "hp": 4,
+        "side": "US",
+        "type": "US_RIFLES_43"
+      }
+    ]
+  },
+  "turns": [
+    {
+      "turn": 1,
+      "events": [
+        {
+          "type": "ACTION",
+          "payload": {
+            "turn": 1,
+            "action": "MoveAction",
+            "active_unit": "GE_1"
+          }
+        },
+        {
+          "type": "UNIT_MOVED",
+          "payload": {
+            "unit_id": "GE_1",
+            "from": {
+              "q": 3,
+              "r": 4
+            },
+            "to": {
+              "q": 3,
+              "r": 5
+            }
+          }
+        },
+        {
+          "type": "ACTION",
+          "payload": {
+            "turn": 1,
+            "action": "MoveAction",
+            "active_unit": "GE_2"
+          }
+        },
+        {
+          "type": "UNIT_MOVED",
+          "payload": {
+            "unit_id": "GE_2",
+            "from": {
+              "q": 4,
+              "r": 4
+            },
+            "to": {
+              "q": 5,
+              "r": 4
+            }
+          }
+        },
+        {
+          "type": "ACTION",
+          "payload": {
+            "turn": 1,
+            "action": "MoveAction",
+            "active_unit": "GE_3"
+          }
+        },
+        {
+          "type": "UNIT_MOVED",
+          "payload": {
+            "unit_id": "GE_3",
+            "from": {
+              "q": 5,
+              "r": 1
+            },
+            "to": {
+              "q": 5,
+              "r": 2
+            }
+          }
+        },
+        {
+          "type": "HRL_DECISION",
+          "payload": {
+            "side": "US",
+            "option": "HOLD",
+            "description": "hold the current position",
+            "category": "DEFENSIVE",
+            "turn": 1,
+            "context": {
+              "friendly_strength": "EVEN",
+              "enemy_pressure": "HIGH",
+              "objective_distance": "UNKNOWN"
+            },
+            "policy_info": {
+              "option": "HOLD",
+              "confidence": 0.23264095187187195,
+              "value_estimate": 0.5525926351547241
+            }
+          }
+        },
+        {
+          "type": "ACTION",
+          "payload": {
+            "turn": 1,
+            "action": "WaitAction",
+            "active_unit": "US_1"
+          }
+        },
+        {
+          "type": "HRL_DECISION",
+          "payload": {
+            "side": "US",
+            "option": "FLANK",
+            "description": "attempt to outflank the enemy",
+            "category": "MANEUVER",
+            "turn": 1,
+            "context": {
+              "friendly_strength": "EVEN",
+              "enemy_pressure": "HIGH",
+              "objective_distance": "UNKNOWN"
+            },
+            "policy_info": {
+              "option": "FLANK",
+              "confidence": 0.25088873505592346,
+              "value_estimate": 0.5510413646697998
+            }
+          }
+        },
+        {
+          "type": "ACTION",
+          "payload": {
+            "turn": 1,
+            "action": "MoveAction",
+            "active_unit": "US_2"
+          }
+        },
+        {
+          "type": "UNIT_MOVED",
+          "payload": {
+            "unit_id": "US_2",
+            "from": {
+              "q": 6,
+              "r": 12
+            },
+            "to": {
+              "q": 6,
+              "r": 11
+            }
+          }
+        },
+        {
+          "type": "ACTION",
+          "payload": {
+            "turn": 1,
+            "action": "MoveAction",
+            "active_unit": "US_3"
+          }
+        },
+        {
+          "type": "UNIT_MOVED",
+          "payload": {
+            "unit_id": "US_3",
+            "from": {
+              "q": 7,
+              "r": 12
+            },
+            "to": {
+              "q": 6,
+              "r": 12
+            }
+          }
+        }
+      ]
+    },
+    {
+      "turn": 2,
+      "events": [
+        {
+          "type": "ACTION",
+          "payload": {
+            "turn": 2,
+            "action": "MoveAction",
+            "active_unit": "GE_1"
+          }
+        },
+        {
+          "type": "UNIT_MOVED",
+          "payload": {
+            "unit_id": "GE_1",
+            "from": {
+              "q": 3,
+              "r": 5
+            },
+            "to": {
+              "q": 4,
+              "r": 5
+            }
+          }
+        },
+        {
+          "type": "ACTION",
+          "payload": {
+            "turn": 2,
+            "action": "MoveAction",
+            "active_unit": "GE_2"
+          }
+        },
+        {
+          "type": "UNIT_MOVED",
+          "payload": {
+            "unit_id": "GE_2",
+            "from": {
+              "q": 5,
+              "r": 4
+            },
+            "to": {
+              "q": 5,
+              "r": 5
+            }
+          }
+        },
+        {
+          "type": "ACTION",
+          "payload": {
+            "turn": 2,
+            "action": "MoveAction",
+            "active_unit": "GE_3"
+          }
+        },
+        {
+          "type": "UNIT_MOVED",
+          "payload": {
+            "unit_id": "GE_3",
+            "from": {
+              "q": 5,
+              "r": 2
+            },
+            "to": {
+              "q": 5,
+              "r": 3
+            }
+          }
+        },
+        {
+          "type": "ACTION",
+          "payload": {
+            "turn": 2,
+            "action": "MoveAction",
+            "active_unit": "US_1"
+          }
+        },
+        {
+          "type": "UNIT_MOVED",
+          "payload": {
+            "unit_id": "US_1",
+            "from": {
+              "q": 5,
+              "r": 12
+            },
+            "to": {
+              "q": 5,
+              "r": 11
+            }
+          }
+        },
+        {
+          "type": "ACTION",
+          "payload": {
+            "turn": 2,
+            "action": "MoveAction",
+            "active_unit": "US_2"
+          }
+        },
+        {
+          "type": "UNIT_MOVED",
+          "payload": {
+            "unit_id": "US_2",
+            "from": {
+              "q": 6,
+              "r": 11
+            },
+            "to": {
+              "q": 6,
+              "r": 10
+            }
+          }
+        },
+        {
+          "type": "ACTION",
+          "payload": {
+            "turn": 2,
+            "action": "MoveAction",
+            "active_unit": "US_3"
+          }
+        },
+        {
+          "type": "UNIT_MOVED",
+          "payload": {
+            "unit_id": "US_3",
+            "from": {
+              "q": 6,
+              "r": 12
+            },
+            "to": {
+              "q": 5,
+              "r": 12
+            }
+          }
+        }
+      ]
+    },
+    {
+      "turn": 3,
+      "events": [
+        {
+          "type": "ACTION",
+          "payload": {
+            "turn": 3,
+            "action": "MoveAction",
+            "active_unit": "GE_1"
+          }
+        },
+        {
+          "type": "UNIT_MOVED",
+          "payload": {
+            "unit_id": "GE_1",
+            "from": {
+              "q": 4,
+              "r": 5
+            },
+            "to": {
+              "q": 4,
+              "r": 6
+            }
+          }
+        },
+        {
+          "type": "ACTION",
+          "payload": {
+            "turn": 3,
+            "action": "MoveAction",
+            "active_unit": "GE_2"
+          }
+        },
+        {
+          "type": "UNIT_MOVED",
+          "payload": {
+            "unit_id": "GE_2",
+            "from": {
+              "q": 5,
+              "r": 5
+            },
+            "to": {
+              "q": 5,
+              "r": 6
+            }
+          }
+        },
+        {
+          "type": "ACTION",
+          "payload": {
+            "turn": 3,
+            "action": "MoveAction",
+            "active_unit": "GE_3"
+          }
+        },
+        {
+          "type": "UNIT_MOVED",
+          "payload": {
+            "unit_id": "GE_3",
+            "from": {
+              "q": 5,
+              "r": 3
+            },
+            "to": {
+              "q": 5,
+              "r": 4
+            }
+          }
+        },
+        {
+          "type": "ACTION",
+          "payload": {
+            "turn": 3,
+            "action": "MoveAction",
+            "active_unit": "US_1"
+          }
+        },
+        {
+          "type": "UNIT_MOVED",
+          "payload": {
+            "unit_id": "US_1",
+            "from": {
+              "q": 5,
+              "r": 11
+            },
+            "to": {
+              "q": 5,
+              "r": 10
+            }
+          }
+        },
+        {
+          "type": "HRL_DECISION",
+          "payload": {
+            "side": "US",
+            "option": "ATTACK",
+            "description": "engage the enemy directly",
+            "category": "ENGAGEMENT",
+            "turn": 3,
+            "context": {
+              "friendly_strength": "EVEN",
+              "enemy_pressure": "HIGH",
+              "objective_distance": "UNKNOWN"
+            },
+            "policy_info": {
+              "option": "ATTACK",
+              "confidence": 0.35593271255493164,
+              "value_estimate": 0.6979042291641235
+            }
+          }
+        },
+        {
+          "type": "ACTION",
+          "payload": {
+            "turn": 3,
+            "action": "MoveAction",
+            "active_unit": "US_2"
+          }
+        },
+        {
+          "type": "UNIT_MOVED",
+          "payload": {
+            "unit_id": "US_2",
+            "from": {
+              "q": 6,
+              "r": 10
+            },
+            "to": {
+              "q": 6,
+              "r": 9
+            }
+          }
+        },
+        {
+          "type": "ACTION",
+          "payload": {
+            "turn": 3,
+            "action": "MoveAction",
+            "active_unit": "US_3"
+          }
+        },
+        {
+          "type": "UNIT_MOVED",
+          "payload": {
+            "unit_id": "US_3",
+            "from": {
+              "q": 5,
+              "r": 12
+            },
+            "to": {
+              "q": 5,
+              "r": 11
+            }
+          }
+        }
+      ]
+    },
+    {
+      "turn": 4,
+      "events": [
+        {
+          "type": "ACTION",
+          "payload": {
+            "turn": 4,
+            "action": "MoveAction",
+            "active_unit": "GE_1"
+          }
+        },
+        {
+          "type": "UNIT_MOVED",
+          "payload": {
+            "unit_id": "GE_1",
+            "from": {
+              "q": 4,
+              "r": 6
+            },
+            "to": {
+              "q": 4,
+              "r": 7
+            }
+          }
+        },
+        {
+          "type": "ACTION",
+          "payload": {
+            "turn": 4,
+            "action": "MoveAction",
+            "active_unit": "GE_2"
+          }
+        },
+        {
+          "type": "UNIT_MOVED",
+          "payload": {
+            "unit_id": "GE_2",
+            "from": {
+              "q": 5,
+              "r": 6
+            },
+            "to": {
+              "q": 5,
+              "r": 7
+            }
+          }
+        },
+        {
+          "type": "ACTION",
+          "payload": {
+            "turn": 4,
+            "action": "MoveAction",
+            "active_unit": "GE_3"
+          }
+        },
+        {
+          "type": "UNIT_MOVED",
+          "payload": {
+            "unit_id": "GE_3",
+            "from": {
+              "q": 5,
+              "r": 4
+            },
+            "to": {
+              "q": 5,
+              "r": 5
+            }
+          }
+        },
+        {
+          "type": "HRL_DECISION",
+          "payload": {
+            "side": "US",
+            "option": "HOLD",
+            "description": "hold the current position",
+            "category": "DEFENSIVE",
+            "turn": 4,
+            "context": {
+              "friendly_strength": "EVEN",
+              "enemy_pressure": "HIGH",
+              "objective_distance": "UNKNOWN"
+            },
+            "policy_info": {
+              "option": "HOLD",
+              "confidence": 0.23841673135757446,
+              "value_estimate": 0.7778540849685669
+            }
+          }
+        },
+        {
+          "type": "ACTION",
+          "payload": {
+            "turn": 4,
+            "action": "WaitAction",
+            "active_unit": "US_1"
+          }
+        },
+        {
+          "type": "HRL_DECISION",
+          "payload": {
+            "side": "US",
+            "option": "FLANK",
+            "description": "attempt to outflank the enemy",
+            "category": "MANEUVER",
+            "turn": 4,
+            "context": {
+              "friendly_strength": "EVEN",
+              "enemy_pressure": "HIGH",
+              "objective_distance": "UNKNOWN"
+            },
+            "policy_info": {
+              "option": "FLANK",
+              "confidence": 0.2881130874156952,
+              "value_estimate": 0.7765054702758789
+            }
+          }
+        },
+        {
+          "type": "ACTION",
+          "payload": {
+            "turn": 4,
+            "action": "RangedDirectAttack",
+            "active_unit": "US_2"
+          }
+        },
+        {
+          "type": "ACTION_EFFECT",
+          "payload": {
+            "action": "RangedCombat",
+            "attacker": "US_2",
+            "defender": "GE_2",
+            "distance": 3,
+            "attack_sector": "REAR",
+            "attacker_attack_dice": [
+              {
+                "color": "RED",
+                "faces": [
+                  "CRITICAL",
+                  "DAMAGE"
+                ]
+              },
+              {
+                "color": "RED",
+                "faces": []
+              },
+              {
+                "color": "YELLOW",
+                "faces": [
+                  "DAMAGE",
+                  "DAMAGE"
+                ]
+              }
+            ],
+            "defender_defense_dice": [
+              {
+                "color": "YELLOW",
+                "faces": [
+                  "DAMAGE",
+                  "DAMAGE"
+                ]
+              }
+            ],
+            "attacker_effects": {
+              "damage": 2,
+              "criticals": [
+                {
+                  "face": "CRITICAL",
+                  "target_class": "INFANTRY"
+                }
+              ],
+              "suppress": 0
+            },
+            "defender_hp_before": 3,
+            "defender_hp_after": 1,
+            "defender_killed": false,
+            "defender_suppressed": false,
+            "resolution": {
+              "remaining_damage": 1,
+              "remaining_criticals": 1,
+              "remaining_suppress": 0
+            },
+            "outcome": "resolved",
+            "winner": null
+          }
+        },
+        {
+          "type": "ACTION",
+          "payload": {
+            "turn": 4,
+            "action": "WaitAction",
+            "active_unit": "US_3"
+          }
+        }
+      ]
+    },
+    {
+      "turn": 5,
+      "events": [
+        {
+          "type": "ACTION",
+          "payload": {
+            "turn": 5,
+            "action": "MoveAction",
+            "active_unit": "GE_1"
+          }
+        },
+        {
+          "type": "UNIT_MOVED",
+          "payload": {
+            "unit_id": "GE_1",
+            "from": {
+              "q": 4,
+              "r": 7
+            },
+            "to": {
+              "q": 4,
+              "r": 8
+            }
+          }
+        },
+        {
+          "type": "ACTION",
+          "payload": {
+            "turn": 5,
+            "action": "RangedDirectAttack",
+            "active_unit": "GE_2"
+          }
+        },
+        {
+          "type": "ACTION_EFFECT",
+          "payload": {
+            "action": "RangedCombat",
+            "attacker": "GE_2",
+            "defender": "US_1",
+            "distance": 3,
+            "attack_sector": "FRONT",
+            "attacker_attack_dice": [
+              {
+                "color": "RED",
+                "faces": []
+              },
+              {
+                "color": "YELLOW",
+                "faces": [
+                  "CRITICAL",
+                  "DAMAGE"
+                ]
+              },
+              {
+                "color": "BLUE",
+                "faces": [
+                  "DAMAGE"
+                ]
+              }
+            ],
+            "defender_defense_dice": [
+              {
+                "color": "YELLOW",
+                "faces": [
+                  "DAMAGE",
+                  "DAMAGE"
+                ]
+              }
+            ],
+            "attacker_effects": {
+              "damage": 1,
+              "criticals": [
+                {
+                  "face": "CRITICAL",
+                  "target_class": "INFANTRY"
+                }
+              ],
+              "suppress": 0
+            },
+            "defender_hp_before": 4,
+            "defender_hp_after": 3,
+            "defender_killed": false,
+            "defender_suppressed": false,
+            "resolution": {
+              "remaining_damage": 0,
+              "remaining_criticals": 1,
+              "remaining_suppress": 0
+            },
+            "outcome": "resolved",
+            "winner": null
+          }
+        },
+        {
+          "type": "ACTION",
+          "payload": {
+            "turn": 5,
+            "action": "MoveAction",
+            "active_unit": "GE_3"
+          }
+        },
+        {
+          "type": "UNIT_MOVED",
+          "payload": {
+            "unit_id": "GE_3",
+            "from": {
+              "q": 5,
+              "r": 5
+            },
+            "to": {
+              "q": 5,
+              "r": 6
+            }
+          }
+        },
+        {
+          "type": "ACTION",
+          "payload": {
+            "turn": 5,
+            "action": "RangedDirectAttack",
+            "active_unit": "US_1"
+          }
+        },
+        {
+          "type": "ACTION_EFFECT",
+          "payload": {
+            "action": "RangedCombat",
+            "attacker": "US_1",
+            "defender": "GE_1",
+            "distance": 3,
+            "attack_sector": "REAR",
+            "attacker_attack_dice": [
+              {
+                "color": "RED",
+                "faces": [
+                  "DAMAGE"
+                ]
+              },
+              {
+                "color": "RED",
+                "faces": [
+                  "DAMAGE",
+                  "SUPPRESS"
+                ]
+              },
+              {
+                "color": "YELLOW",
+                "faces": []
+              }
+            ],
+            "defender_defense_dice": [
+              {
+                "color": "YELLOW",
+                "faces": []
+              }
+            ],
+            "attacker_effects": {
+              "damage": 2,
+              "criticals": [],
+              "suppress": 1
+            },
+            "defender_hp_before": 3,
+            "defender_hp_after": 1,
+            "defender_killed": false,
+            "defender_suppressed": true,
+            "resolution": {
+              "remaining_damage": 2,
+              "remaining_criticals": 0,
+              "remaining_suppress": 1
+            },
+            "outcome": "resolved",
+            "winner": null
+          }
+        },
+        {
+          "type": "ACTION",
+          "payload": {
+            "turn": 5,
+            "action": "RangedDirectAttack",
+            "active_unit": "US_2"
+          }
+        },
+        {
+          "type": "ACTION_EFFECT",
+          "payload": {
+            "action": "RangedCombat",
+            "attacker": "US_2",
+            "defender": "GE_1",
+            "distance": 3,
+            "attack_sector": "FLANK_LEFT",
+            "attacker_attack_dice": [
+              {
+                "color": "RED",
+                "faces": []
+              },
+              {
+                "color": "RED",
+                "faces": [
+                  "CRITICAL",
+                  "DAMAGE"
+                ]
+              },
+              {
+                "color": "YELLOW",
+                "faces": [
+                  "DAMAGE"
+                ]
+              }
+            ],
+            "defender_defense_dice": [
+              {
+                "color": "YELLOW",
+                "faces": [
+                  "CRITICAL",
+                  "DAMAGE"
+                ]
+              }
+            ],
+            "attacker_effects": {
+              "damage": 1,
+              "criticals": [],
+              "suppress": 0
+            },
+            "defender_hp_before": 1,
+            "defender_hp_after": 0,
+            "defender_killed": true,
+            "defender_suppressed": false,
+            "resolution": {
+              "remaining_damage": 1,
+              "remaining_criticals": 0,
+              "remaining_suppress": 0
+            },
+            "outcome": "resolved",
+            "winner": null
+          }
+        },
+        {
+          "type": "ACTION",
+          "payload": {
+            "turn": 5,
+            "action": "WaitAction",
+            "active_unit": "US_3"
+          }
+        }
+      ]
+    },
+    {
+      "turn": 6,
+      "events": [
+        {
+          "type": "ACTION",
+          "payload": {
+            "turn": 6,
+            "action": "RangedDirectAttack",
+            "active_unit": "GE_2"
+          }
+        },
+        {
+          "type": "ACTION_EFFECT",
+          "payload": {
+            "action": "RangedCombat",
+            "attacker": "GE_2",
+            "defender": "US_1",
+            "distance": 3,
+            "attack_sector": "FRONT",
+            "attacker_attack_dice": [
+              {
+                "color": "RED",
+                "faces": [
+                  "DAMAGE",
+                  "SUPPRESS"
+                ]
+              },
+              {
+                "color": "YELLOW",
+                "faces": []
+              },
+              {
+                "color": "BLUE",
+                "faces": [
+                  "DAMAGE"
+                ]
+              }
+            ],
+            "defender_defense_dice": [
+              {
+                "color": "YELLOW",
+                "faces": [
+                  "CRITICAL",
+                  "DAMAGE"
+                ]
+              }
+            ],
+            "attacker_effects": {
+              "damage": 0,
+              "criticals": [],
+              "suppress": 1
+            },
+            "defender_hp_before": 3,
+            "defender_hp_after": 3,
+            "defender_killed": false,
+            "defender_suppressed": true,
+            "resolution": {
+              "remaining_damage": 0,
+              "remaining_criticals": 0,
+              "remaining_suppress": 1
+            },
+            "outcome": "resolved",
+            "winner": null
+          }
+        },
+        {
+          "type": "ACTION",
+          "payload": {
+            "turn": 6,
+            "action": "WaitAction",
+            "active_unit": "GE_3"
+          }
+        },
+        {
+          "type": "ACTION",
+          "payload": {
+            "turn": 6,
+            "action": "RangedDirectAttack",
+            "active_unit": "US_1"
+          }
+        },
+        {
+          "type": "ACTION_EFFECT",
+          "payload": {
+            "action": "RangedCombat",
+            "attacker": "US_1",
+            "defender": "GE_2",
+            "distance": 3,
+            "attack_sector": "REAR",
+            "attacker_attack_dice": [
+              {
+                "color": "RED",
+                "faces": [
+                  "DAMAGE",
+                  "DAMAGE"
+                ]
+              },
+              {
+                "color": "RED",
+                "faces": [
+                  "DAMAGE",
+                  "DAMAGE"
+                ]
+              },
+              {
+                "color": "YELLOW",
+                "faces": [
+                  "DAMAGE",
+                  "DAMAGE"
+                ]
+              }
+            ],
+            "defender_defense_dice": [
+              {
+                "color": "YELLOW",
+                "faces": []
+              }
+            ],
+            "attacker_effects": {
+              "damage": 6,
+              "criticals": [],
+              "suppress": 0
+            },
+            "defender_hp_before": 1,
+            "defender_hp_after": 0,
+            "defender_killed": true,
+            "defender_suppressed": false,
+            "resolution": {
+              "remaining_damage": 6,
+              "remaining_criticals": 0,
+              "remaining_suppress": 0
+            },
+            "outcome": "resolved",
+            "winner": null
+          }
+        },
+        {
+          "type": "HRL_DECISION",
+          "payload": {
+            "side": "US",
+            "option": "ATTACK",
+            "description": "engage the enemy directly",
+            "category": "ENGAGEMENT",
+            "turn": 6,
+            "context": {
+              "friendly_strength": "HIGH",
+              "enemy_pressure": "LOW",
+              "objective_distance": "UNKNOWN"
+            },
+            "policy_info": {
+              "option": "ATTACK",
+              "confidence": 0.35826751589775085,
+              "value_estimate": 0.9060051441192627
+            }
+          }
+        },
+        {
+          "type": "ACTION",
+          "payload": {
+            "turn": 6,
+            "action": "MoveAction",
+            "active_unit": "US_2"
+          }
+        },
+        {
+          "type": "UNIT_MOVED",
+          "payload": {
+            "unit_id": "US_2",
+            "from": {
+              "q": 6,
+              "r": 9
+            },
+            "to": {
+              "q": 5,
+              "r": 9
+            }
+          }
+        },
+        {
+          "type": "ACTION",
+          "payload": {
+            "turn": 6,
+            "action": "WaitAction",
+            "active_unit": "US_3"
+          }
+        }
+      ]
+    },
+    {
+      "turn": 7,
+      "events": [
+        {
+          "type": "ACTION",
+          "payload": {
+            "turn": 7,
+            "action": "RangedDirectAttack",
+            "active_unit": "GE_3"
+          }
+        },
+        {
+          "type": "ACTION_EFFECT",
+          "payload": {
+            "action": "RangedCombat",
+            "attacker": "GE_3",
+            "defender": "US_2",
+            "distance": 3,
+            "attack_sector": "FRONT",
+            "attacker_attack_dice": [
+              {
+                "color": "RED",
+                "faces": [
+                  "DAMAGE"
+                ]
+              },
+              {
+                "color": "YELLOW",
+                "faces": [
+                  "CRITICAL",
+                  "DAMAGE"
+                ]
+              },
+              {
+                "color": "BLUE",
+                "faces": []
+              }
+            ],
+            "defender_defense_dice": [
+              {
+                "color": "YELLOW",
+                "faces": [
+                  "DAMAGE"
+                ]
+              }
+            ],
+            "attacker_effects": {
+              "damage": 2,
+              "criticals": [
+                {
+                  "face": "CRITICAL",
+                  "target_class": "INFANTRY"
+                }
+              ],
+              "suppress": 0
+            },
+            "defender_hp_before": 4,
+            "defender_hp_after": 2,
+            "defender_killed": false,
+            "defender_suppressed": false,
+            "resolution": {
+              "remaining_damage": 1,
+              "remaining_criticals": 1,
+              "remaining_suppress": 0
+            },
+            "outcome": "resolved",
+            "winner": null
+          }
+        },
+        {
+          "type": "HRL_DECISION",
+          "payload": {
+            "side": "US",
+            "option": "FLANK",
+            "description": "attempt to outflank the enemy",
+            "category": "MANEUVER",
+            "turn": 7,
+            "context": {
+              "friendly_strength": "HIGH",
+              "enemy_pressure": "LOW",
+              "objective_distance": "UNKNOWN"
+            },
+            "policy_info": {
+              "option": "FLANK",
+              "confidence": 0.3067381978034973,
+              "value_estimate": 0.9128314256668091
+            }
+          }
+        },
+        {
+          "type": "ACTION",
+          "payload": {
+            "turn": 7,
+            "action": "WaitAction",
+            "active_unit": "US_1"
+          }
+        },
+        {
+          "type": "ACTION",
+          "payload": {
+            "turn": 7,
+            "action": "RangedDirectAttack",
+            "active_unit": "US_2"
+          }
+        },
+        {
+          "type": "ACTION_EFFECT",
+          "payload": {
+            "action": "RangedCombat",
+            "attacker": "US_2",
+            "defender": "GE_3",
+            "distance": 3,
+            "attack_sector": "REAR",
+            "attacker_attack_dice": [
+              {
+                "color": "RED",
+                "faces": [
+                  "DAMAGE",
+                  "SUPPRESS"
+                ]
+              },
+              {
+                "color": "RED",
+                "faces": [
+                  "DAMAGE",
+                  "SUPPRESS"
+                ]
+              },
+              {
+                "color": "YELLOW",
+                "faces": [
+                  "CRITICAL",
+                  "DAMAGE"
+                ]
+              }
+            ],
+            "defender_defense_dice": [
+              {
+                "color": "YELLOW",
+                "faces": [
+                  "CRITICAL",
+                  "DAMAGE"
+                ]
+              }
+            ],
+            "attacker_effects": {
+              "damage": 2,
+              "criticals": [],
+              "suppress": 2
+            },
+            "defender_hp_before": 3,
+            "defender_hp_after": 1,
+            "defender_killed": false,
+            "defender_suppressed": true,
+            "resolution": {
+              "remaining_damage": 2,
+              "remaining_criticals": 0,
+              "remaining_suppress": 2
+            },
+            "outcome": "resolved",
+            "winner": null
+          }
+        },
+        {
+          "type": "ACTION",
+          "payload": {
+            "turn": 7,
+            "action": "WaitAction",
+            "active_unit": "US_3"
+          }
+        }
+      ]
+    },
+    {
+      "turn": 8,
+      "events": [
+        {
+          "type": "ACTION",
+          "payload": {
+            "turn": 8,
+            "action": "RangedDirectAttack",
+            "active_unit": "GE_3"
+          }
+        },
+        {
+          "type": "ACTION_EFFECT",
+          "payload": {
+            "action": "RangedCombat",
+            "attacker": "GE_3",
+            "defender": "US_2",
+            "distance": 3,
+            "attack_sector": "FRONT",
+            "attacker_attack_dice": [
+              {
+                "color": "RED",
+                "faces": [
+                  "DAMAGE"
+                ]
+              },
+              {
+                "color": "YELLOW",
+                "faces": [
+                  "DAMAGE"
+                ]
+              },
+              {
+                "color": "BLUE",
+                "faces": [
+                  "DAMAGE"
+                ]
+              }
+            ],
+            "defender_defense_dice": [
+              {
+                "color": "YELLOW",
+                "faces": [
+                  "DAMAGE"
+                ]
+              }
+            ],
+            "attacker_effects": {
+              "damage": 2,
+              "criticals": [],
+              "suppress": 0
+            },
+            "defender_hp_before": 2,
+            "defender_hp_after": 0,
+            "defender_killed": true,
+            "defender_suppressed": false,
+            "resolution": {
+              "remaining_damage": 2,
+              "remaining_criticals": 0,
+              "remaining_suppress": 0
+            },
+            "outcome": "resolved",
+            "winner": null
+          }
+        },
+        {
+          "type": "ACTION",
+          "payload": {
+            "turn": 8,
+            "action": "MoveAction",
+            "active_unit": "US_1"
+          }
+        },
+        {
+          "type": "UNIT_MOVED",
+          "payload": {
+            "unit_id": "US_1",
+            "from": {
+              "q": 5,
+              "r": 10
+            },
+            "to": {
+              "q": 5,
+              "r": 9
+            }
+          }
+        },
+        {
+          "type": "ACTION",
+          "payload": {
+            "turn": 8,
+            "action": "MoveAction",
+            "active_unit": "US_3"
+          }
+        },
+        {
+          "type": "UNIT_MOVED",
+          "payload": {
+            "unit_id": "US_3",
+            "from": {
+              "q": 5,
+              "r": 11
+            },
+            "to": {
+              "q": 5,
+              "r": 10
+            }
+          }
+        }
+      ]
+    },
+    {
+      "turn": 9,
+      "events": [
+        {
+          "type": "ACTION",
+          "payload": {
+            "turn": 9,
+            "action": "RangedDirectAttack",
+            "active_unit": "GE_3"
+          }
+        },
+        {
+          "type": "ACTION_EFFECT",
+          "payload": {
+            "action": "RangedCombat",
+            "attacker": "GE_3",
+            "defender": "US_1",
+            "distance": 3,
+            "attack_sector": "FRONT",
+            "attacker_attack_dice": [
+              {
+                "color": "RED",
+                "faces": [
+                  "DAMAGE",
+                  "SUPPRESS"
+                ]
+              },
+              {
+                "color": "YELLOW",
+                "faces": []
+              },
+              {
+                "color": "BLUE",
+                "faces": []
+              }
+            ],
+            "defender_defense_dice": [
+              {
+                "color": "YELLOW",
+                "faces": []
+              }
+            ],
+            "attacker_effects": {
+              "damage": 1,
+              "criticals": [],
+              "suppress": 1
+            },
+            "defender_hp_before": 3,
+            "defender_hp_after": 2,
+            "defender_killed": false,
+            "defender_suppressed": true,
+            "resolution": {
+              "remaining_damage": 1,
+              "remaining_criticals": 0,
+              "remaining_suppress": 1
+            },
+            "outcome": "resolved",
+            "winner": null
+          }
+        },
+        {
+          "type": "HRL_DECISION",
+          "payload": {
+            "side": "US",
+            "option": "FLANK",
+            "description": "attempt to outflank the enemy",
+            "category": "MANEUVER",
+            "turn": 9,
+            "context": {
+              "friendly_strength": "HIGH",
+              "enemy_pressure": "LOW",
+              "objective_distance": "UNKNOWN"
+            },
+            "policy_info": {
+              "option": "FLANK",
+              "confidence": 0.31016698479652405,
+              "value_estimate": 0.9518766403198242
+            }
+          }
+        },
+        {
+          "type": "ACTION",
+          "payload": {
+            "turn": 9,
+            "action": "RangedDirectAttack",
+            "active_unit": "US_1"
+          }
+        },
+        {
+          "type": "ACTION_EFFECT",
+          "payload": {
+            "action": "RangedCombat",
+            "attacker": "US_1",
+            "defender": "GE_3",
+            "distance": 3,
+            "attack_sector": "REAR",
+            "attacker_attack_dice": [
+              {
+                "color": "RED",
+                "faces": [
+                  "DAMAGE",
+                  "DAMAGE"
+                ]
+              },
+              {
+                "color": "RED",
+                "faces": [
+                  "CRITICAL",
+                  "DAMAGE"
+                ]
+              },
+              {
+                "color": "YELLOW",
+                "faces": [
+                  "DAMAGE"
+                ]
+              }
+            ],
+            "defender_defense_dice": [
+              {
+                "color": "YELLOW",
+                "faces": [
+                  "CRITICAL",
+                  "DAMAGE"
+                ]
+              }
+            ],
+            "attacker_effects": {
+              "damage": 3,
+              "criticals": [],
+              "suppress": 0
+            },
+            "defender_hp_before": 1,
+            "defender_hp_after": 0,
+            "defender_killed": true,
+            "defender_suppressed": false,
+            "resolution": {
+              "remaining_damage": 3,
+              "remaining_criticals": 0,
+              "remaining_suppress": 0
+            },
+            "outcome": "resolved",
+            "winner": null
+          }
+        },
+        {
+          "type": "ACTION",
+          "payload": {
+            "turn": 9,
+            "action": "WaitAction",
+            "active_unit": "US_3"
+          }
+        }
+      ]
+    }
+  ]
+}
+
+
+================================================================================
+FILE: C:\repos\python\assault\assault_web_ui\frontend\public\replays\to_rewiview\coordendas_mal_phase01_seq001_initial_contact__US_RL_vs_GE_HEURISTIC.json
+================================================================================
+
+{
+  "meta": {
+    "scenario_id": "phase01_seq001_initial_contact",
+    "sides": {
+      "US": "RL",
+      "GE": "HEURISTIC"
+    }
+  },
+  "initial_state": {
+    "turn": 1,
+    "units": [
+      {
+        "id": "GE_1",
+        "q": 3,
+        "r": 4,
+        "hp": 3,
+        "side": "GE",
+        "type": "GE_RIFLES_43"
+      },
+      {
+        "id": "GE_2",
+        "q": 4,
+        "r": 4,
+        "hp": 3,
+        "side": "GE",
+        "type": "GE_RIFLES_43"
+      },
+      {
+        "id": "GE_3",
+        "q": 5,
+        "r": 1,
+        "hp": 3,
+        "side": "GE",
+        "type": "GE_RIFLES_43"
+      },
+      {
+        "id": "US_1",
+        "q": 5,
+        "r": 12,
+        "hp": 4,
+        "side": "US",
+        "type": "US_RIFLES_43"
+      },
+      {
+        "id": "US_2",
+        "q": 6,
+        "r": 12,
+        "hp": 4,
+        "side": "US",
+        "type": "US_RIFLES_43"
+      },
+      {
+        "id": "US_3",
+        "q": 7,
+        "r": 12,
+        "hp": 4,
+        "side": "US",
+        "type": "US_RIFLES_43"
+      }
+    ]
+  },
+  "turns": [
+    {
+      "turn": 1,
+      "events": [
+        {
+          "type": "ACTION",
+          "payload": {
+            "turn": 1,
+            "action": "MoveAction",
+            "active_unit": "GE_1"
+          }
+        },
+        {
+          "type": "UNIT_MOVED",
+          "payload": {
+            "unit_id": "GE_1",
+            "from": {
+              "q": 3,
+              "r": 4
+            },
+            "to": {
+              "q": 3,
+              "r": 5
+            }
+          }
+        },
+        {
+          "type": "ACTION",
+          "payload": {
+            "turn": 1,
+            "action": "MoveAction",
+            "active_unit": "GE_2"
+          }
+        },
+        {
+          "type": "UNIT_MOVED",
+          "payload": {
+            "unit_id": "GE_2",
+            "from": {
+              "q": 4,
+              "r": 4
+            },
+            "to": {
+              "q": 5,
+              "r": 4
+            }
+          }
+        },
+        {
+          "type": "ACTION",
+          "payload": {
+            "turn": 1,
+            "action": "MoveAction",
+            "active_unit": "GE_3"
+          }
+        },
+        {
+          "type": "UNIT_MOVED",
+          "payload": {
+            "unit_id": "GE_3",
+            "from": {
+              "q": 5,
+              "r": 1
+            },
+            "to": {
+              "q": 5,
+              "r": 2
+            }
+          }
+        },
+        {
+          "type": "HRL_DECISION",
+          "payload": {
+            "side": "US",
+            "option": "HOLD",
+            "description": "hold the current position",
+            "category": "DEFENSIVE",
+            "turn": 1,
+            "context": {
+              "friendly_strength": "EVEN",
+              "enemy_pressure": "HIGH",
+              "objective_distance": "UNKNOWN"
+            },
+            "policy_info": {
+              "option": "HOLD",
+              "confidence": 0.23264095187187195,
+              "value_estimate": 0.5525926351547241
+            }
+          }
+        },
+        {
+          "type": "ACTION",
+          "payload": {
+            "turn": 1,
+            "action": "WaitAction",
+            "active_unit": "US_1"
+          }
+        },
+        {
+          "type": "HRL_DECISION",
+          "payload": {
+            "side": "US",
+            "option": "FLANK",
+            "description": "attempt to outflank the enemy",
+            "category": "MANEUVER",
+            "turn": 1,
+            "context": {
+              "friendly_strength": "EVEN",
+              "enemy_pressure": "HIGH",
+              "objective_distance": "UNKNOWN"
+            },
+            "policy_info": {
+              "option": "FLANK",
+              "confidence": 0.25088873505592346,
+              "value_estimate": 0.5510413646697998
+            }
+          }
+        },
+        {
+          "type": "ACTION",
+          "payload": {
+            "turn": 1,
+            "action": "MoveAction",
+            "active_unit": "US_2"
+          }
+        },
+        {
+          "type": "UNIT_MOVED",
+          "payload": {
+            "unit_id": "US_2",
+            "from": {
+              "q": 6,
+              "r": 12
+            },
+            "to": {
+              "q": 6,
+              "r": 11
+            }
+          }
+        },
+        {
+          "type": "ACTION",
+          "payload": {
+            "turn": 1,
+            "action": "MoveAction",
+            "active_unit": "US_3"
+          }
+        },
+        {
+          "type": "UNIT_MOVED",
+          "payload": {
+            "unit_id": "US_3",
+            "from": {
+              "q": 7,
+              "r": 12
+            },
+            "to": {
+              "q": 6,
+              "r": 12
+            }
+          }
+        }
+      ]
+    },
+    {
+      "turn": 2,
+      "events": [
+        {
+          "type": "ACTION",
+          "payload": {
+            "turn": 2,
+            "action": "MoveAction",
+            "active_unit": "GE_1"
+          }
+        },
+        {
+          "type": "UNIT_MOVED",
+          "payload": {
+            "unit_id": "GE_1",
+            "from": {
+              "q": 3,
+              "r": 5
+            },
+            "to": {
+              "q": 4,
+              "r": 5
+            }
+          }
+        },
+        {
+          "type": "ACTION",
+          "payload": {
+            "turn": 2,
+            "action": "MoveAction",
+            "active_unit": "GE_2"
+          }
+        },
+        {
+          "type": "UNIT_MOVED",
+          "payload": {
+            "unit_id": "GE_2",
+            "from": {
+              "q": 5,
+              "r": 4
+            },
+            "to": {
+              "q": 5,
+              "r": 5
+            }
+          }
+        },
+        {
+          "type": "ACTION",
+          "payload": {
+            "turn": 2,
+            "action": "MoveAction",
+            "active_unit": "GE_3"
+          }
+        },
+        {
+          "type": "UNIT_MOVED",
+          "payload": {
+            "unit_id": "GE_3",
+            "from": {
+              "q": 5,
+              "r": 2
+            },
+            "to": {
+              "q": 5,
+              "r": 3
+            }
+          }
+        },
+        {
+          "type": "ACTION",
+          "payload": {
+            "turn": 2,
+            "action": "MoveAction",
+            "active_unit": "US_1"
+          }
+        },
+        {
+          "type": "UNIT_MOVED",
+          "payload": {
+            "unit_id": "US_1",
+            "from": {
+              "q": 5,
+              "r": 12
+            },
+            "to": {
+              "q": 5,
+              "r": 11
+            }
+          }
+        },
+        {
+          "type": "ACTION",
+          "payload": {
+            "turn": 2,
+            "action": "MoveAction",
+            "active_unit": "US_2"
+          }
+        },
+        {
+          "type": "UNIT_MOVED",
+          "payload": {
+            "unit_id": "US_2",
+            "from": {
+              "q": 6,
+              "r": 11
+            },
+            "to": {
+              "q": 6,
+              "r": 10
+            }
+          }
+        },
+        {
+          "type": "ACTION",
+          "payload": {
+            "turn": 2,
+            "action": "MoveAction",
+            "active_unit": "US_3"
+          }
+        },
+        {
+          "type": "UNIT_MOVED",
+          "payload": {
+            "unit_id": "US_3",
+            "from": {
+              "q": 6,
+              "r": 12
+            },
+            "to": {
+              "q": 5,
+              "r": 12
+            }
+          }
+        }
+      ]
+    },
+    {
+      "turn": 3,
+      "events": [
+        {
+          "type": "ACTION",
+          "payload": {
+            "turn": 3,
+            "action": "MoveAction",
+            "active_unit": "GE_1"
+          }
+        },
+        {
+          "type": "UNIT_MOVED",
+          "payload": {
+            "unit_id": "GE_1",
+            "from": {
+              "q": 4,
+              "r": 5
+            },
+            "to": {
+              "q": 4,
+              "r": 6
+            }
+          }
+        },
+        {
+          "type": "ACTION",
+          "payload": {
+            "turn": 3,
+            "action": "MoveAction",
+            "active_unit": "GE_2"
+          }
+        },
+        {
+          "type": "UNIT_MOVED",
+          "payload": {
+            "unit_id": "GE_2",
+            "from": {
+              "q": 5,
+              "r": 5
+            },
+            "to": {
+              "q": 5,
+              "r": 6
+            }
+          }
+        },
+        {
+          "type": "ACTION",
+          "payload": {
+            "turn": 3,
+            "action": "MoveAction",
+            "active_unit": "GE_3"
+          }
+        },
+        {
+          "type": "UNIT_MOVED",
+          "payload": {
+            "unit_id": "GE_3",
+            "from": {
+              "q": 5,
+              "r": 3
+            },
+            "to": {
+              "q": 5,
+              "r": 4
+            }
+          }
+        },
+        {
+          "type": "ACTION",
+          "payload": {
+            "turn": 3,
+            "action": "MoveAction",
+            "active_unit": "US_1"
+          }
+        },
+        {
+          "type": "UNIT_MOVED",
+          "payload": {
+            "unit_id": "US_1",
+            "from": {
+              "q": 5,
+              "r": 11
+            },
+            "to": {
+              "q": 5,
+              "r": 10
+            }
+          }
+        },
+        {
+          "type": "HRL_DECISION",
+          "payload": {
+            "side": "US",
+            "option": "ATTACK",
+            "description": "engage the enemy directly",
+            "category": "ENGAGEMENT",
+            "turn": 3,
+            "context": {
+              "friendly_strength": "EVEN",
+              "enemy_pressure": "HIGH",
+              "objective_distance": "UNKNOWN"
+            },
+            "policy_info": {
+              "option": "ATTACK",
+              "confidence": 0.35593271255493164,
+              "value_estimate": 0.6979042291641235
+            }
+          }
+        },
+        {
+          "type": "ACTION",
+          "payload": {
+            "turn": 3,
+            "action": "MoveAction",
+            "active_unit": "US_2"
+          }
+        },
+        {
+          "type": "UNIT_MOVED",
+          "payload": {
+            "unit_id": "US_2",
+            "from": {
+              "q": 6,
+              "r": 10
+            },
+            "to": {
+              "q": 6,
+              "r": 9
+            }
+          }
+        },
+        {
+          "type": "ACTION",
+          "payload": {
+            "turn": 3,
+            "action": "MoveAction",
+            "active_unit": "US_3"
+          }
+        },
+        {
+          "type": "UNIT_MOVED",
+          "payload": {
+            "unit_id": "US_3",
+            "from": {
+              "q": 5,
+              "r": 12
+            },
+            "to": {
+              "q": 5,
+              "r": 11
+            }
+          }
+        }
+      ]
+    },
+    {
+      "turn": 4,
+      "events": [
+        {
+          "type": "ACTION",
+          "payload": {
+            "turn": 4,
+            "action": "MoveAction",
+            "active_unit": "GE_1"
+          }
+        },
+        {
+          "type": "UNIT_MOVED",
+          "payload": {
+            "unit_id": "GE_1",
+            "from": {
+              "q": 4,
+              "r": 6
+            },
+            "to": {
+              "q": 4,
+              "r": 7
+            }
+          }
+        },
+        {
+          "type": "ACTION",
+          "payload": {
+            "turn": 4,
+            "action": "MoveAction",
+            "active_unit": "GE_2"
+          }
+        },
+        {
+          "type": "UNIT_MOVED",
+          "payload": {
+            "unit_id": "GE_2",
+            "from": {
+              "q": 5,
+              "r": 6
+            },
+            "to": {
+              "q": 5,
+              "r": 7
+            }
+          }
+        },
+        {
+          "type": "ACTION",
+          "payload": {
+            "turn": 4,
+            "action": "MoveAction",
+            "active_unit": "GE_3"
+          }
+        },
+        {
+          "type": "UNIT_MOVED",
+          "payload": {
+            "unit_id": "GE_3",
+            "from": {
+              "q": 5,
+              "r": 4
+            },
+            "to": {
+              "q": 5,
+              "r": 5
+            }
+          }
+        },
+        {
+          "type": "HRL_DECISION",
+          "payload": {
+            "side": "US",
+            "option": "HOLD",
+            "description": "hold the current position",
+            "category": "DEFENSIVE",
+            "turn": 4,
+            "context": {
+              "friendly_strength": "EVEN",
+              "enemy_pressure": "HIGH",
+              "objective_distance": "UNKNOWN"
+            },
+            "policy_info": {
+              "option": "HOLD",
+              "confidence": 0.23841673135757446,
+              "value_estimate": 0.7778540849685669
+            }
+          }
+        },
+        {
+          "type": "ACTION",
+          "payload": {
+            "turn": 4,
+            "action": "WaitAction",
+            "active_unit": "US_1"
+          }
+        },
+        {
+          "type": "HRL_DECISION",
+          "payload": {
+            "side": "US",
+            "option": "FLANK",
+            "description": "attempt to outflank the enemy",
+            "category": "MANEUVER",
+            "turn": 4,
+            "context": {
+              "friendly_strength": "EVEN",
+              "enemy_pressure": "HIGH",
+              "objective_distance": "UNKNOWN"
+            },
+            "policy_info": {
+              "option": "FLANK",
+              "confidence": 0.2881130874156952,
+              "value_estimate": 0.7765054702758789
+            }
+          }
+        },
+        {
+          "type": "ACTION",
+          "payload": {
+            "turn": 4,
+            "action": "RangedDirectAttack",
+            "active_unit": "US_2"
+          }
+        },
+        {
+          "type": "ACTION_EFFECT",
+          "payload": {
+            "action": "RangedCombat",
+            "attacker": "US_2",
+            "defender": "GE_2",
+            "distance": 3,
+            "attack_sector": "REAR",
+            "attacker_attack_dice": [
+              {
+                "color": "RED",
+                "faces": [
+                  "CRITICAL",
+                  "DAMAGE"
+                ]
+              },
+              {
+                "color": "RED",
+                "faces": []
+              },
+              {
+                "color": "YELLOW",
+                "faces": [
+                  "DAMAGE",
+                  "DAMAGE"
+                ]
+              }
+            ],
+            "defender_defense_dice": [
+              {
+                "color": "YELLOW",
+                "faces": [
+                  "DAMAGE",
+                  "DAMAGE"
+                ]
+              }
+            ],
+            "attacker_effects": {
+              "damage": 2,
+              "criticals": [
+                {
+                  "face": "CRITICAL",
+                  "target_class": "INFANTRY"
+                }
+              ],
+              "suppress": 0
+            },
+            "defender_hp_before": 3,
+            "defender_hp_after": 1,
+            "defender_killed": false,
+            "defender_suppressed": false,
+            "resolution": {
+              "remaining_damage": 1,
+              "remaining_criticals": 1,
+              "remaining_suppress": 0
+            },
+            "outcome": "resolved",
+            "winner": null
+          }
+        },
+        {
+          "type": "ACTION",
+          "payload": {
+            "turn": 4,
+            "action": "WaitAction",
+            "active_unit": "US_3"
+          }
+        }
+      ]
+    },
+    {
+      "turn": 5,
+      "events": [
+        {
+          "type": "ACTION",
+          "payload": {
+            "turn": 5,
+            "action": "MoveAction",
+            "active_unit": "GE_1"
+          }
+        },
+        {
+          "type": "UNIT_MOVED",
+          "payload": {
+            "unit_id": "GE_1",
+            "from": {
+              "q": 4,
+              "r": 7
+            },
+            "to": {
+              "q": 4,
+              "r": 8
+            }
+          }
+        },
+        {
+          "type": "ACTION",
+          "payload": {
+            "turn": 5,
+            "action": "RangedDirectAttack",
+            "active_unit": "GE_2"
+          }
+        },
+        {
+          "type": "ACTION_EFFECT",
+          "payload": {
+            "action": "RangedCombat",
+            "attacker": "GE_2",
+            "defender": "US_1",
+            "distance": 3,
+            "attack_sector": "FRONT",
+            "attacker_attack_dice": [
+              {
+                "color": "RED",
+                "faces": []
+              },
+              {
+                "color": "YELLOW",
+                "faces": [
+                  "CRITICAL",
+                  "DAMAGE"
+                ]
+              },
+              {
+                "color": "BLUE",
+                "faces": [
+                  "DAMAGE"
+                ]
+              }
+            ],
+            "defender_defense_dice": [
+              {
+                "color": "YELLOW",
+                "faces": [
+                  "DAMAGE",
+                  "DAMAGE"
+                ]
+              }
+            ],
+            "attacker_effects": {
+              "damage": 1,
+              "criticals": [
+                {
+                  "face": "CRITICAL",
+                  "target_class": "INFANTRY"
+                }
+              ],
+              "suppress": 0
+            },
+            "defender_hp_before": 4,
+            "defender_hp_after": 3,
+            "defender_killed": false,
+            "defender_suppressed": false,
+            "resolution": {
+              "remaining_damage": 0,
+              "remaining_criticals": 1,
+              "remaining_suppress": 0
+            },
+            "outcome": "resolved",
+            "winner": null
+          }
+        },
+        {
+          "type": "ACTION",
+          "payload": {
+            "turn": 5,
+            "action": "MoveAction",
+            "active_unit": "GE_3"
+          }
+        },
+        {
+          "type": "UNIT_MOVED",
+          "payload": {
+            "unit_id": "GE_3",
+            "from": {
+              "q": 5,
+              "r": 5
+            },
+            "to": {
+              "q": 5,
+              "r": 6
+            }
+          }
+        },
+        {
+          "type": "ACTION",
+          "payload": {
+            "turn": 5,
+            "action": "RangedDirectAttack",
+            "active_unit": "US_1"
+          }
+        },
+        {
+          "type": "ACTION_EFFECT",
+          "payload": {
+            "action": "RangedCombat",
+            "attacker": "US_1",
+            "defender": "GE_1",
+            "distance": 3,
+            "attack_sector": "REAR",
+            "attacker_attack_dice": [
+              {
+                "color": "RED",
+                "faces": [
+                  "DAMAGE"
+                ]
+              },
+              {
+                "color": "RED",
+                "faces": [
+                  "DAMAGE",
+                  "SUPPRESS"
+                ]
+              },
+              {
+                "color": "YELLOW",
+                "faces": []
+              }
+            ],
+            "defender_defense_dice": [
+              {
+                "color": "YELLOW",
+                "faces": []
+              }
+            ],
+            "attacker_effects": {
+              "damage": 2,
+              "criticals": [],
+              "suppress": 1
+            },
+            "defender_hp_before": 3,
+            "defender_hp_after": 1,
+            "defender_killed": false,
+            "defender_suppressed": true,
+            "resolution": {
+              "remaining_damage": 2,
+              "remaining_criticals": 0,
+              "remaining_suppress": 1
+            },
+            "outcome": "resolved",
+            "winner": null
+          }
+        },
+        {
+          "type": "ACTION",
+          "payload": {
+            "turn": 5,
+            "action": "RangedDirectAttack",
+            "active_unit": "US_2"
+          }
+        },
+        {
+          "type": "ACTION_EFFECT",
+          "payload": {
+            "action": "RangedCombat",
+            "attacker": "US_2",
+            "defender": "GE_1",
+            "distance": 3,
+            "attack_sector": "FLANK_LEFT",
+            "attacker_attack_dice": [
+              {
+                "color": "RED",
+                "faces": []
+              },
+              {
+                "color": "RED",
+                "faces": [
+                  "CRITICAL",
+                  "DAMAGE"
+                ]
+              },
+              {
+                "color": "YELLOW",
+                "faces": [
+                  "DAMAGE"
+                ]
+              }
+            ],
+            "defender_defense_dice": [
+              {
+                "color": "YELLOW",
+                "faces": [
+                  "CRITICAL",
+                  "DAMAGE"
+                ]
+              }
+            ],
+            "attacker_effects": {
+              "damage": 1,
+              "criticals": [],
+              "suppress": 0
+            },
+            "defender_hp_before": 1,
+            "defender_hp_after": 0,
+            "defender_killed": true,
+            "defender_suppressed": false,
+            "resolution": {
+              "remaining_damage": 1,
+              "remaining_criticals": 0,
+              "remaining_suppress": 0
+            },
+            "outcome": "resolved",
+            "winner": null
+          }
+        },
+        {
+          "type": "ACTION",
+          "payload": {
+            "turn": 5,
+            "action": "WaitAction",
+            "active_unit": "US_3"
+          }
+        }
+      ]
+    },
+    {
+      "turn": 6,
+      "events": [
+        {
+          "type": "ACTION",
+          "payload": {
+            "turn": 6,
+            "action": "RangedDirectAttack",
+            "active_unit": "GE_2"
+          }
+        },
+        {
+          "type": "ACTION_EFFECT",
+          "payload": {
+            "action": "RangedCombat",
+            "attacker": "GE_2",
+            "defender": "US_1",
+            "distance": 3,
+            "attack_sector": "FRONT",
+            "attacker_attack_dice": [
+              {
+                "color": "RED",
+                "faces": [
+                  "DAMAGE",
+                  "SUPPRESS"
+                ]
+              },
+              {
+                "color": "YELLOW",
+                "faces": []
+              },
+              {
+                "color": "BLUE",
+                "faces": [
+                  "DAMAGE"
+                ]
+              }
+            ],
+            "defender_defense_dice": [
+              {
+                "color": "YELLOW",
+                "faces": [
+                  "CRITICAL",
+                  "DAMAGE"
+                ]
+              }
+            ],
+            "attacker_effects": {
+              "damage": 0,
+              "criticals": [],
+              "suppress": 1
+            },
+            "defender_hp_before": 3,
+            "defender_hp_after": 3,
+            "defender_killed": false,
+            "defender_suppressed": true,
+            "resolution": {
+              "remaining_damage": 0,
+              "remaining_criticals": 0,
+              "remaining_suppress": 1
+            },
+            "outcome": "resolved",
+            "winner": null
+          }
+        },
+        {
+          "type": "ACTION",
+          "payload": {
+            "turn": 6,
+            "action": "WaitAction",
+            "active_unit": "GE_3"
+          }
+        },
+        {
+          "type": "ACTION",
+          "payload": {
+            "turn": 6,
+            "action": "RangedDirectAttack",
+            "active_unit": "US_1"
+          }
+        },
+        {
+          "type": "ACTION_EFFECT",
+          "payload": {
+            "action": "RangedCombat",
+            "attacker": "US_1",
+            "defender": "GE_2",
+            "distance": 3,
+            "attack_sector": "REAR",
+            "attacker_attack_dice": [
+              {
+                "color": "RED",
+                "faces": [
+                  "DAMAGE",
+                  "DAMAGE"
+                ]
+              },
+              {
+                "color": "RED",
+                "faces": [
+                  "DAMAGE",
+                  "DAMAGE"
+                ]
+              },
+              {
+                "color": "YELLOW",
+                "faces": [
+                  "DAMAGE",
+                  "DAMAGE"
+                ]
+              }
+            ],
+            "defender_defense_dice": [
+              {
+                "color": "YELLOW",
+                "faces": []
+              }
+            ],
+            "attacker_effects": {
+              "damage": 6,
+              "criticals": [],
+              "suppress": 0
+            },
+            "defender_hp_before": 1,
+            "defender_hp_after": 0,
+            "defender_killed": true,
+            "defender_suppressed": false,
+            "resolution": {
+              "remaining_damage": 6,
+              "remaining_criticals": 0,
+              "remaining_suppress": 0
+            },
+            "outcome": "resolved",
+            "winner": null
+          }
+        },
+        {
+          "type": "HRL_DECISION",
+          "payload": {
+            "side": "US",
+            "option": "ATTACK",
+            "description": "engage the enemy directly",
+            "category": "ENGAGEMENT",
+            "turn": 6,
+            "context": {
+              "friendly_strength": "HIGH",
+              "enemy_pressure": "LOW",
+              "objective_distance": "UNKNOWN"
+            },
+            "policy_info": {
+              "option": "ATTACK",
+              "confidence": 0.35826751589775085,
+              "value_estimate": 0.9060051441192627
+            }
+          }
+        },
+        {
+          "type": "ACTION",
+          "payload": {
+            "turn": 6,
+            "action": "MoveAction",
+            "active_unit": "US_2"
+          }
+        },
+        {
+          "type": "UNIT_MOVED",
+          "payload": {
+            "unit_id": "US_2",
+            "from": {
+              "q": 6,
+              "r": 9
+            },
+            "to": {
+              "q": 5,
+              "r": 9
+            }
+          }
+        },
+        {
+          "type": "ACTION",
+          "payload": {
+            "turn": 6,
+            "action": "WaitAction",
+            "active_unit": "US_3"
+          }
+        }
+      ]
+    },
+    {
+      "turn": 7,
+      "events": [
+        {
+          "type": "ACTION",
+          "payload": {
+            "turn": 7,
+            "action": "RangedDirectAttack",
+            "active_unit": "GE_3"
+          }
+        },
+        {
+          "type": "ACTION_EFFECT",
+          "payload": {
+            "action": "RangedCombat",
+            "attacker": "GE_3",
+            "defender": "US_2",
+            "distance": 3,
+            "attack_sector": "FRONT",
+            "attacker_attack_dice": [
+              {
+                "color": "RED",
+                "faces": [
+                  "DAMAGE"
+                ]
+              },
+              {
+                "color": "YELLOW",
+                "faces": [
+                  "CRITICAL",
+                  "DAMAGE"
+                ]
+              },
+              {
+                "color": "BLUE",
+                "faces": []
+              }
+            ],
+            "defender_defense_dice": [
+              {
+                "color": "YELLOW",
+                "faces": [
+                  "DAMAGE"
+                ]
+              }
+            ],
+            "attacker_effects": {
+              "damage": 2,
+              "criticals": [
+                {
+                  "face": "CRITICAL",
+                  "target_class": "INFANTRY"
+                }
+              ],
+              "suppress": 0
+            },
+            "defender_hp_before": 4,
+            "defender_hp_after": 2,
+            "defender_killed": false,
+            "defender_suppressed": false,
+            "resolution": {
+              "remaining_damage": 1,
+              "remaining_criticals": 1,
+              "remaining_suppress": 0
+            },
+            "outcome": "resolved",
+            "winner": null
+          }
+        },
+        {
+          "type": "HRL_DECISION",
+          "payload": {
+            "side": "US",
+            "option": "FLANK",
+            "description": "attempt to outflank the enemy",
+            "category": "MANEUVER",
+            "turn": 7,
+            "context": {
+              "friendly_strength": "HIGH",
+              "enemy_pressure": "LOW",
+              "objective_distance": "UNKNOWN"
+            },
+            "policy_info": {
+              "option": "FLANK",
+              "confidence": 0.3067381978034973,
+              "value_estimate": 0.9128314256668091
+            }
+          }
+        },
+        {
+          "type": "ACTION",
+          "payload": {
+            "turn": 7,
+            "action": "WaitAction",
+            "active_unit": "US_1"
+          }
+        },
+        {
+          "type": "ACTION",
+          "payload": {
+            "turn": 7,
+            "action": "RangedDirectAttack",
+            "active_unit": "US_2"
+          }
+        },
+        {
+          "type": "ACTION_EFFECT",
+          "payload": {
+            "action": "RangedCombat",
+            "attacker": "US_2",
+            "defender": "GE_3",
+            "distance": 3,
+            "attack_sector": "REAR",
+            "attacker_attack_dice": [
+              {
+                "color": "RED",
+                "faces": [
+                  "DAMAGE",
+                  "SUPPRESS"
+                ]
+              },
+              {
+                "color": "RED",
+                "faces": [
+                  "DAMAGE",
+                  "SUPPRESS"
+                ]
+              },
+              {
+                "color": "YELLOW",
+                "faces": [
+                  "CRITICAL",
+                  "DAMAGE"
+                ]
+              }
+            ],
+            "defender_defense_dice": [
+              {
+                "color": "YELLOW",
+                "faces": [
+                  "CRITICAL",
+                  "DAMAGE"
+                ]
+              }
+            ],
+            "attacker_effects": {
+              "damage": 2,
+              "criticals": [],
+              "suppress": 2
+            },
+            "defender_hp_before": 3,
+            "defender_hp_after": 1,
+            "defender_killed": false,
+            "defender_suppressed": true,
+            "resolution": {
+              "remaining_damage": 2,
+              "remaining_criticals": 0,
+              "remaining_suppress": 2
+            },
+            "outcome": "resolved",
+            "winner": null
+          }
+        },
+        {
+          "type": "ACTION",
+          "payload": {
+            "turn": 7,
+            "action": "WaitAction",
+            "active_unit": "US_3"
+          }
+        }
+      ]
+    },
+    {
+      "turn": 8,
+      "events": [
+        {
+          "type": "ACTION",
+          "payload": {
+            "turn": 8,
+            "action": "RangedDirectAttack",
+            "active_unit": "GE_3"
+          }
+        },
+        {
+          "type": "ACTION_EFFECT",
+          "payload": {
+            "action": "RangedCombat",
+            "attacker": "GE_3",
+            "defender": "US_2",
+            "distance": 3,
+            "attack_sector": "FRONT",
+            "attacker_attack_dice": [
+              {
+                "color": "RED",
+                "faces": [
+                  "DAMAGE"
+                ]
+              },
+              {
+                "color": "YELLOW",
+                "faces": [
+                  "DAMAGE"
+                ]
+              },
+              {
+                "color": "BLUE",
+                "faces": [
+                  "DAMAGE"
+                ]
+              }
+            ],
+            "defender_defense_dice": [
+              {
+                "color": "YELLOW",
+                "faces": [
+                  "DAMAGE"
+                ]
+              }
+            ],
+            "attacker_effects": {
+              "damage": 2,
+              "criticals": [],
+              "suppress": 0
+            },
+            "defender_hp_before": 2,
+            "defender_hp_after": 0,
+            "defender_killed": true,
+            "defender_suppressed": false,
+            "resolution": {
+              "remaining_damage": 2,
+              "remaining_criticals": 0,
+              "remaining_suppress": 0
+            },
+            "outcome": "resolved",
+            "winner": null
+          }
+        },
+        {
+          "type": "ACTION",
+          "payload": {
+            "turn": 8,
+            "action": "MoveAction",
+            "active_unit": "US_1"
+          }
+        },
+        {
+          "type": "UNIT_MOVED",
+          "payload": {
+            "unit_id": "US_1",
+            "from": {
+              "q": 5,
+              "r": 10
+            },
+            "to": {
+              "q": 5,
+              "r": 9
+            }
+          }
+        },
+        {
+          "type": "ACTION",
+          "payload": {
+            "turn": 8,
+            "action": "MoveAction",
+            "active_unit": "US_3"
+          }
+        },
+        {
+          "type": "UNIT_MOVED",
+          "payload": {
+            "unit_id": "US_3",
+            "from": {
+              "q": 5,
+              "r": 11
+            },
+            "to": {
+              "q": 5,
+              "r": 10
+            }
+          }
+        }
+      ]
+    },
+    {
+      "turn": 9,
+      "events": [
+        {
+          "type": "ACTION",
+          "payload": {
+            "turn": 9,
+            "action": "RangedDirectAttack",
+            "active_unit": "GE_3"
+          }
+        },
+        {
+          "type": "ACTION_EFFECT",
+          "payload": {
+            "action": "RangedCombat",
+            "attacker": "GE_3",
+            "defender": "US_1",
+            "distance": 3,
+            "attack_sector": "FRONT",
+            "attacker_attack_dice": [
+              {
+                "color": "RED",
+                "faces": [
+                  "DAMAGE",
+                  "SUPPRESS"
+                ]
+              },
+              {
+                "color": "YELLOW",
+                "faces": []
+              },
+              {
+                "color": "BLUE",
+                "faces": []
+              }
+            ],
+            "defender_defense_dice": [
+              {
+                "color": "YELLOW",
+                "faces": []
+              }
+            ],
+            "attacker_effects": {
+              "damage": 1,
+              "criticals": [],
+              "suppress": 1
+            },
+            "defender_hp_before": 3,
+            "defender_hp_after": 2,
+            "defender_killed": false,
+            "defender_suppressed": true,
+            "resolution": {
+              "remaining_damage": 1,
+              "remaining_criticals": 0,
+              "remaining_suppress": 1
+            },
+            "outcome": "resolved",
+            "winner": null
+          }
+        },
+        {
+          "type": "HRL_DECISION",
+          "payload": {
+            "side": "US",
+            "option": "FLANK",
+            "description": "attempt to outflank the enemy",
+            "category": "MANEUVER",
+            "turn": 9,
+            "context": {
+              "friendly_strength": "HIGH",
+              "enemy_pressure": "LOW",
+              "objective_distance": "UNKNOWN"
+            },
+            "policy_info": {
+              "option": "FLANK",
+              "confidence": 0.31016698479652405,
+              "value_estimate": 0.9518766403198242
+            }
+          }
+        },
+        {
+          "type": "ACTION",
+          "payload": {
+            "turn": 9,
+            "action": "RangedDirectAttack",
+            "active_unit": "US_1"
+          }
+        },
+        {
+          "type": "ACTION_EFFECT",
+          "payload": {
+            "action": "RangedCombat",
+            "attacker": "US_1",
+            "defender": "GE_3",
+            "distance": 3,
+            "attack_sector": "REAR",
+            "attacker_attack_dice": [
+              {
+                "color": "RED",
+                "faces": [
+                  "DAMAGE",
+                  "DAMAGE"
+                ]
+              },
+              {
+                "color": "RED",
+                "faces": [
+                  "CRITICAL",
+                  "DAMAGE"
+                ]
+              },
+              {
+                "color": "YELLOW",
+                "faces": [
+                  "DAMAGE"
+                ]
+              }
+            ],
+            "defender_defense_dice": [
+              {
+                "color": "YELLOW",
+                "faces": [
+                  "CRITICAL",
+                  "DAMAGE"
+                ]
+              }
+            ],
+            "attacker_effects": {
+              "damage": 3,
+              "criticals": [],
+              "suppress": 0
+            },
+            "defender_hp_before": 1,
+            "defender_hp_after": 0,
+            "defender_killed": true,
+            "defender_suppressed": false,
+            "resolution": {
+              "remaining_damage": 3,
+              "remaining_criticals": 0,
+              "remaining_suppress": 0
+            },
+            "outcome": "resolved",
+            "winner": null
+          }
+        },
+        {
+          "type": "ACTION",
+          "payload": {
+            "turn": 9,
+            "action": "WaitAction",
+            "active_unit": "US_3"
+          }
+        }
+      ]
+    }
+  ]
+}
+
+
+================================================================================
+FILE: C:\repos\python\assault\assault_web_ui\frontend\public\replays\to_rewiview\suppress_phase01_seq001_initial_contact__US_RL_vs_GE_HEURISTIC.json
+================================================================================
+
+{
+  "meta": {
+    "scenario_id": "phase01_seq001_initial_contact",
+    "sides": {
+      "US": "RL",
+      "GE": "HEURISTIC"
+    }
+  },
+  "initial_state": {
+    "turn": 1,
+    "units": [
+      {
+        "id": "GE_1",
+        "q": 3,
+        "r": 4,
+        "hp": 3,
+        "side": "GE",
+        "type": "GE_RIFLES_43"
+      },
+      {
+        "id": "GE_2",
+        "q": 4,
+        "r": 4,
+        "hp": 3,
+        "side": "GE",
+        "type": "GE_RIFLES_43"
+      },
+      {
+        "id": "GE_3",
+        "q": 5,
+        "r": 1,
+        "hp": 3,
+        "side": "GE",
+        "type": "GE_RIFLES_43"
+      },
+      {
+        "id": "US_1",
+        "q": 5,
+        "r": 12,
+        "hp": 4,
+        "side": "US",
+        "type": "US_RIFLES_43"
+      },
+      {
+        "id": "US_2",
+        "q": 6,
+        "r": 12,
+        "hp": 4,
+        "side": "US",
+        "type": "US_RIFLES_43"
+      },
+      {
+        "id": "US_3",
+        "q": 7,
+        "r": 12,
+        "hp": 4,
+        "side": "US",
+        "type": "US_RIFLES_43"
+      }
+    ]
+  },
+  "turns": [
+    {
+      "turn": 1,
+      "events": [
+        {
+          "type": "ACTION",
+          "payload": {
+            "turn": 1,
+            "action": "MoveAction",
+            "active_unit": "GE_1"
+          }
+        },
+        {
+          "type": "UNIT_MOVED",
+          "payload": {
+            "unit_id": "GE_1",
+            "from": {
+              "q": 3,
+              "r": 4
+            },
+            "to": {
+              "q": 3,
+              "r": 5
+            }
+          }
+        },
+        {
+          "type": "ACTION",
+          "payload": {
+            "turn": 1,
+            "action": "MoveAction",
+            "active_unit": "GE_2"
+          }
+        },
+        {
+          "type": "UNIT_MOVED",
+          "payload": {
+            "unit_id": "GE_2",
+            "from": {
+              "q": 4,
+              "r": 4
+            },
+            "to": {
+              "q": 5,
+              "r": 4
+            }
+          }
+        },
+        {
+          "type": "ACTION",
+          "payload": {
+            "turn": 1,
+            "action": "MoveAction",
+            "active_unit": "GE_3"
+          }
+        },
+        {
+          "type": "UNIT_MOVED",
+          "payload": {
+            "unit_id": "GE_3",
+            "from": {
+              "q": 5,
+              "r": 1
+            },
+            "to": {
+              "q": 5,
+              "r": 2
+            }
+          }
+        },
+        {
+          "type": "HRL_DECISION",
+          "payload": {
+            "side": "US",
+            "option": "HOLD",
+            "description": "hold the current position",
+            "category": "DEFENSIVE",
+            "turn": 1,
+            "context": {
+              "friendly_strength": "EVEN",
+              "enemy_pressure": "HIGH",
+              "objective_distance": "UNKNOWN"
+            },
+            "policy_info": {
+              "option": "HOLD",
+              "confidence": 0.23264095187187195,
+              "value_estimate": 0.5525926351547241
+            }
+          }
+        },
+        {
+          "type": "ACTION",
+          "payload": {
+            "turn": 1,
+            "action": "WaitAction",
+            "active_unit": "US_1"
+          }
+        },
+        {
+          "type": "HRL_DECISION",
+          "payload": {
+            "side": "US",
+            "option": "FLANK",
+            "description": "attempt to outflank the enemy",
+            "category": "MANEUVER",
+            "turn": 1,
+            "context": {
+              "friendly_strength": "EVEN",
+              "enemy_pressure": "HIGH",
+              "objective_distance": "UNKNOWN"
+            },
+            "policy_info": {
+              "option": "FLANK",
+              "confidence": 0.25088873505592346,
+              "value_estimate": 0.5510413646697998
+            }
+          }
+        },
+        {
+          "type": "ACTION",
+          "payload": {
+            "turn": 1,
+            "action": "MoveAction",
+            "active_unit": "US_2"
+          }
+        },
+        {
+          "type": "UNIT_MOVED",
+          "payload": {
+            "unit_id": "US_2",
+            "from": {
+              "q": 6,
+              "r": 12
+            },
+            "to": {
+              "q": 6,
+              "r": 11
+            }
+          }
+        },
+        {
+          "type": "ACTION",
+          "payload": {
+            "turn": 1,
+            "action": "MoveAction",
+            "active_unit": "US_3"
+          }
+        },
+        {
+          "type": "UNIT_MOVED",
+          "payload": {
+            "unit_id": "US_3",
+            "from": {
+              "q": 7,
+              "r": 12
+            },
+            "to": {
+              "q": 6,
+              "r": 12
+            }
+          }
+        }
+      ]
+    },
+    {
+      "turn": 2,
+      "events": [
+        {
+          "type": "ACTION",
+          "payload": {
+            "turn": 2,
+            "action": "MoveAction",
+            "active_unit": "GE_1"
+          }
+        },
+        {
+          "type": "UNIT_MOVED",
+          "payload": {
+            "unit_id": "GE_1",
+            "from": {
+              "q": 3,
+              "r": 5
+            },
+            "to": {
+              "q": 4,
+              "r": 5
+            }
+          }
+        },
+        {
+          "type": "ACTION",
+          "payload": {
+            "turn": 2,
+            "action": "MoveAction",
+            "active_unit": "GE_2"
+          }
+        },
+        {
+          "type": "UNIT_MOVED",
+          "payload": {
+            "unit_id": "GE_2",
+            "from": {
+              "q": 5,
+              "r": 4
+            },
+            "to": {
+              "q": 5,
+              "r": 5
+            }
+          }
+        },
+        {
+          "type": "ACTION",
+          "payload": {
+            "turn": 2,
+            "action": "MoveAction",
+            "active_unit": "GE_3"
+          }
+        },
+        {
+          "type": "UNIT_MOVED",
+          "payload": {
+            "unit_id": "GE_3",
+            "from": {
+              "q": 5,
+              "r": 2
+            },
+            "to": {
+              "q": 5,
+              "r": 3
+            }
+          }
+        },
+        {
+          "type": "ACTION",
+          "payload": {
+            "turn": 2,
+            "action": "MoveAction",
+            "active_unit": "US_1"
+          }
+        },
+        {
+          "type": "UNIT_MOVED",
+          "payload": {
+            "unit_id": "US_1",
+            "from": {
+              "q": 5,
+              "r": 12
+            },
+            "to": {
+              "q": 5,
+              "r": 11
+            }
+          }
+        },
+        {
+          "type": "ACTION",
+          "payload": {
+            "turn": 2,
+            "action": "MoveAction",
+            "active_unit": "US_2"
+          }
+        },
+        {
+          "type": "UNIT_MOVED",
+          "payload": {
+            "unit_id": "US_2",
+            "from": {
+              "q": 6,
+              "r": 11
+            },
+            "to": {
+              "q": 6,
+              "r": 10
+            }
+          }
+        },
+        {
+          "type": "ACTION",
+          "payload": {
+            "turn": 2,
+            "action": "MoveAction",
+            "active_unit": "US_3"
+          }
+        },
+        {
+          "type": "UNIT_MOVED",
+          "payload": {
+            "unit_id": "US_3",
+            "from": {
+              "q": 6,
+              "r": 12
+            },
+            "to": {
+              "q": 5,
+              "r": 12
+            }
+          }
+        }
+      ]
+    },
+    {
+      "turn": 3,
+      "events": [
+        {
+          "type": "ACTION",
+          "payload": {
+            "turn": 3,
+            "action": "MoveAction",
+            "active_unit": "GE_1"
+          }
+        },
+        {
+          "type": "UNIT_MOVED",
+          "payload": {
+            "unit_id": "GE_1",
+            "from": {
+              "q": 4,
+              "r": 5
+            },
+            "to": {
+              "q": 4,
+              "r": 6
+            }
+          }
+        },
+        {
+          "type": "ACTION",
+          "payload": {
+            "turn": 3,
+            "action": "MoveAction",
+            "active_unit": "GE_2"
+          }
+        },
+        {
+          "type": "UNIT_MOVED",
+          "payload": {
+            "unit_id": "GE_2",
+            "from": {
+              "q": 5,
+              "r": 5
+            },
+            "to": {
+              "q": 5,
+              "r": 6
+            }
+          }
+        },
+        {
+          "type": "ACTION",
+          "payload": {
+            "turn": 3,
+            "action": "MoveAction",
+            "active_unit": "GE_3"
+          }
+        },
+        {
+          "type": "UNIT_MOVED",
+          "payload": {
+            "unit_id": "GE_3",
+            "from": {
+              "q": 5,
+              "r": 3
+            },
+            "to": {
+              "q": 5,
+              "r": 4
+            }
+          }
+        },
+        {
+          "type": "ACTION",
+          "payload": {
+            "turn": 3,
+            "action": "MoveAction",
+            "active_unit": "US_1"
+          }
+        },
+        {
+          "type": "UNIT_MOVED",
+          "payload": {
+            "unit_id": "US_1",
+            "from": {
+              "q": 5,
+              "r": 11
+            },
+            "to": {
+              "q": 5,
+              "r": 10
+            }
+          }
+        },
+        {
+          "type": "HRL_DECISION",
+          "payload": {
+            "side": "US",
+            "option": "ATTACK",
+            "description": "engage the enemy directly",
+            "category": "ENGAGEMENT",
+            "turn": 3,
+            "context": {
+              "friendly_strength": "EVEN",
+              "enemy_pressure": "HIGH",
+              "objective_distance": "UNKNOWN"
+            },
+            "policy_info": {
+              "option": "ATTACK",
+              "confidence": 0.35593271255493164,
+              "value_estimate": 0.6979042291641235
+            }
+          }
+        },
+        {
+          "type": "ACTION",
+          "payload": {
+            "turn": 3,
+            "action": "MoveAction",
+            "active_unit": "US_2"
+          }
+        },
+        {
+          "type": "UNIT_MOVED",
+          "payload": {
+            "unit_id": "US_2",
+            "from": {
+              "q": 6,
+              "r": 10
+            },
+            "to": {
+              "q": 6,
+              "r": 9
+            }
+          }
+        },
+        {
+          "type": "ACTION",
+          "payload": {
+            "turn": 3,
+            "action": "MoveAction",
+            "active_unit": "US_3"
+          }
+        },
+        {
+          "type": "UNIT_MOVED",
+          "payload": {
+            "unit_id": "US_3",
+            "from": {
+              "q": 5,
+              "r": 12
+            },
+            "to": {
+              "q": 5,
+              "r": 11
+            }
+          }
+        }
+      ]
+    },
+    {
+      "turn": 4,
+      "events": [
+        {
+          "type": "ACTION",
+          "payload": {
+            "turn": 4,
+            "action": "MoveAction",
+            "active_unit": "GE_1"
+          }
+        },
+        {
+          "type": "UNIT_MOVED",
+          "payload": {
+            "unit_id": "GE_1",
+            "from": {
+              "q": 4,
+              "r": 6
+            },
+            "to": {
+              "q": 4,
+              "r": 7
+            }
+          }
+        },
+        {
+          "type": "ACTION",
+          "payload": {
+            "turn": 4,
+            "action": "MoveAction",
+            "active_unit": "GE_2"
+          }
+        },
+        {
+          "type": "UNIT_MOVED",
+          "payload": {
+            "unit_id": "GE_2",
+            "from": {
+              "q": 5,
+              "r": 6
+            },
+            "to": {
+              "q": 5,
+              "r": 7
+            }
+          }
+        },
+        {
+          "type": "ACTION",
+          "payload": {
+            "turn": 4,
+            "action": "MoveAction",
+            "active_unit": "GE_3"
+          }
+        },
+        {
+          "type": "UNIT_MOVED",
+          "payload": {
+            "unit_id": "GE_3",
+            "from": {
+              "q": 5,
+              "r": 4
+            },
+            "to": {
+              "q": 5,
+              "r": 5
+            }
+          }
+        },
+        {
+          "type": "HRL_DECISION",
+          "payload": {
+            "side": "US",
+            "option": "HOLD",
+            "description": "hold the current position",
+            "category": "DEFENSIVE",
+            "turn": 4,
+            "context": {
+              "friendly_strength": "EVEN",
+              "enemy_pressure": "HIGH",
+              "objective_distance": "UNKNOWN"
+            },
+            "policy_info": {
+              "option": "HOLD",
+              "confidence": 0.23841673135757446,
+              "value_estimate": 0.7778540849685669
+            }
+          }
+        },
+        {
+          "type": "ACTION",
+          "payload": {
+            "turn": 4,
+            "action": "WaitAction",
+            "active_unit": "US_1"
+          }
+        },
+        {
+          "type": "HRL_DECISION",
+          "payload": {
+            "side": "US",
+            "option": "FLANK",
+            "description": "attempt to outflank the enemy",
+            "category": "MANEUVER",
+            "turn": 4,
+            "context": {
+              "friendly_strength": "EVEN",
+              "enemy_pressure": "HIGH",
+              "objective_distance": "UNKNOWN"
+            },
+            "policy_info": {
+              "option": "FLANK",
+              "confidence": 0.2881130874156952,
+              "value_estimate": 0.7765054702758789
+            }
+          }
+        },
+        {
+          "type": "ACTION",
+          "payload": {
+            "turn": 4,
+            "action": "RangedDirectAttack",
+            "active_unit": "US_2"
+          }
+        },
+        {
+          "type": "ACTION_EFFECT",
+          "payload": {
+            "action": "RangedCombat",
+            "attacker": "US_2",
+            "defender": "GE_2",
+            "distance": 3,
+            "attack_sector": "REAR",
+            "attacker_attack_dice": [
+              {
+                "color": "RED",
+                "faces": [
+                  "CRITICAL",
+                  "DAMAGE"
+                ]
+              },
+              {
+                "color": "RED",
+                "faces": []
+              },
+              {
+                "color": "YELLOW",
+                "faces": [
+                  "DAMAGE",
+                  "DAMAGE"
+                ]
+              }
+            ],
+            "defender_defense_dice": [
+              {
+                "color": "YELLOW",
+                "faces": [
+                  "DAMAGE",
+                  "DAMAGE"
+                ]
+              }
+            ],
+            "attacker_effects": {
+              "damage": 2,
+              "criticals": [
+                {
+                  "face": "CRITICAL",
+                  "target_class": "INFANTRY"
+                }
+              ],
+              "suppress": 0
+            },
+            "defender_hp_before": 3,
+            "defender_hp_after": 1,
+            "defender_killed": false,
+            "defender_suppressed": false,
+            "resolution": {
+              "remaining_damage": 1,
+              "remaining_criticals": 1,
+              "remaining_suppress": 0
+            },
+            "outcome": "resolved",
+            "winner": null
+          }
+        },
+        {
+          "type": "ACTION",
+          "payload": {
+            "turn": 4,
+            "action": "WaitAction",
+            "active_unit": "US_3"
+          }
+        }
+      ]
+    },
+    {
+      "turn": 5,
+      "events": [
+        {
+          "type": "ACTION",
+          "payload": {
+            "turn": 5,
+            "action": "MoveAction",
+            "active_unit": "GE_1"
+          }
+        },
+        {
+          "type": "UNIT_MOVED",
+          "payload": {
+            "unit_id": "GE_1",
+            "from": {
+              "q": 4,
+              "r": 7
+            },
+            "to": {
+              "q": 4,
+              "r": 8
+            }
+          }
+        },
+        {
+          "type": "ACTION",
+          "payload": {
+            "turn": 5,
+            "action": "RangedDirectAttack",
+            "active_unit": "GE_2"
+          }
+        },
+        {
+          "type": "ACTION_EFFECT",
+          "payload": {
+            "action": "RangedCombat",
+            "attacker": "GE_2",
+            "defender": "US_1",
+            "distance": 3,
+            "attack_sector": "FRONT",
+            "attacker_attack_dice": [
+              {
+                "color": "RED",
+                "faces": []
+              },
+              {
+                "color": "YELLOW",
+                "faces": [
+                  "CRITICAL",
+                  "DAMAGE"
+                ]
+              },
+              {
+                "color": "BLUE",
+                "faces": [
+                  "DAMAGE"
+                ]
+              }
+            ],
+            "defender_defense_dice": [
+              {
+                "color": "YELLOW",
+                "faces": [
+                  "DAMAGE",
+                  "DAMAGE"
+                ]
+              }
+            ],
+            "attacker_effects": {
+              "damage": 1,
+              "criticals": [
+                {
+                  "face": "CRITICAL",
+                  "target_class": "INFANTRY"
+                }
+              ],
+              "suppress": 0
+            },
+            "defender_hp_before": 4,
+            "defender_hp_after": 3,
+            "defender_killed": false,
+            "defender_suppressed": false,
+            "resolution": {
+              "remaining_damage": 0,
+              "remaining_criticals": 1,
+              "remaining_suppress": 0
+            },
+            "outcome": "resolved",
+            "winner": null
+          }
+        },
+        {
+          "type": "ACTION",
+          "payload": {
+            "turn": 5,
+            "action": "MoveAction",
+            "active_unit": "GE_3"
+          }
+        },
+        {
+          "type": "UNIT_MOVED",
+          "payload": {
+            "unit_id": "GE_3",
+            "from": {
+              "q": 5,
+              "r": 5
+            },
+            "to": {
+              "q": 5,
+              "r": 6
+            }
+          }
+        },
+        {
+          "type": "ACTION",
+          "payload": {
+            "turn": 5,
+            "action": "RangedDirectAttack",
+            "active_unit": "US_1"
+          }
+        },
+        {
+          "type": "ACTION_EFFECT",
+          "payload": {
+            "action": "RangedCombat",
+            "attacker": "US_1",
+            "defender": "GE_1",
+            "distance": 3,
+            "attack_sector": "REAR",
+            "attacker_attack_dice": [
+              {
+                "color": "RED",
+                "faces": [
+                  "DAMAGE"
+                ]
+              },
+              {
+                "color": "RED",
+                "faces": [
+                  "DAMAGE",
+                  "SUPPRESS"
+                ]
+              },
+              {
+                "color": "YELLOW",
+                "faces": []
+              }
+            ],
+            "defender_defense_dice": [
+              {
+                "color": "YELLOW",
+                "faces": []
+              }
+            ],
+            "attacker_effects": {
+              "damage": 2,
+              "criticals": [],
+              "suppress": 1
+            },
+            "defender_hp_before": 3,
+            "defender_hp_after": 1,
+            "defender_killed": false,
+            "defender_suppressed": true,
+            "resolution": {
+              "remaining_damage": 2,
+              "remaining_criticals": 0,
+              "remaining_suppress": 1
+            },
+            "outcome": "resolved",
+            "winner": null
+          }
+        },
+        {
+          "type": "ACTION",
+          "payload": {
+            "turn": 5,
+            "action": "RangedDirectAttack",
+            "active_unit": "US_2"
+          }
+        },
+        {
+          "type": "ACTION_EFFECT",
+          "payload": {
+            "action": "RangedCombat",
+            "attacker": "US_2",
+            "defender": "GE_1",
+            "distance": 3,
+            "attack_sector": "FLANK_LEFT",
+            "attacker_attack_dice": [
+              {
+                "color": "RED",
+                "faces": []
+              },
+              {
+                "color": "RED",
+                "faces": [
+                  "CRITICAL",
+                  "DAMAGE"
+                ]
+              },
+              {
+                "color": "YELLOW",
+                "faces": [
+                  "DAMAGE"
+                ]
+              }
+            ],
+            "defender_defense_dice": [
+              {
+                "color": "YELLOW",
+                "faces": [
+                  "CRITICAL",
+                  "DAMAGE"
+                ]
+              }
+            ],
+            "attacker_effects": {
+              "damage": 1,
+              "criticals": [],
+              "suppress": 0
+            },
+            "defender_hp_before": 1,
+            "defender_hp_after": 0,
+            "defender_killed": true,
+            "defender_suppressed": false,
+            "resolution": {
+              "remaining_damage": 1,
+              "remaining_criticals": 0,
+              "remaining_suppress": 0
+            },
+            "outcome": "resolved",
+            "winner": null
+          }
+        },
+        {
+          "type": "ACTION",
+          "payload": {
+            "turn": 5,
+            "action": "WaitAction",
+            "active_unit": "US_3"
+          }
+        }
+      ]
+    },
+    {
+      "turn": 6,
+      "events": [
+        {
+          "type": "ACTION",
+          "payload": {
+            "turn": 6,
+            "action": "RangedDirectAttack",
+            "active_unit": "GE_2"
+          }
+        },
+        {
+          "type": "ACTION_EFFECT",
+          "payload": {
+            "action": "RangedCombat",
+            "attacker": "GE_2",
+            "defender": "US_1",
+            "distance": 3,
+            "attack_sector": "FRONT",
+            "attacker_attack_dice": [
+              {
+                "color": "RED",
+                "faces": [
+                  "DAMAGE",
+                  "SUPPRESS"
+                ]
+              },
+              {
+                "color": "YELLOW",
+                "faces": []
+              },
+              {
+                "color": "BLUE",
+                "faces": [
+                  "DAMAGE"
+                ]
+              }
+            ],
+            "defender_defense_dice": [
+              {
+                "color": "YELLOW",
+                "faces": [
+                  "CRITICAL",
+                  "DAMAGE"
+                ]
+              }
+            ],
+            "attacker_effects": {
+              "damage": 0,
+              "criticals": [],
+              "suppress": 1
+            },
+            "defender_hp_before": 3,
+            "defender_hp_after": 3,
+            "defender_killed": false,
+            "defender_suppressed": true,
+            "resolution": {
+              "remaining_damage": 0,
+              "remaining_criticals": 0,
+              "remaining_suppress": 1
+            },
+            "outcome": "resolved",
+            "winner": null
+          }
+        },
+        {
+          "type": "ACTION",
+          "payload": {
+            "turn": 6,
+            "action": "WaitAction",
+            "active_unit": "GE_3"
+          }
+        },
+        {
+          "type": "ACTION",
+          "payload": {
+            "turn": 6,
+            "action": "RangedDirectAttack",
+            "active_unit": "US_1"
+          }
+        },
+        {
+          "type": "ACTION_EFFECT",
+          "payload": {
+            "action": "RangedCombat",
+            "attacker": "US_1",
+            "defender": "GE_2",
+            "distance": 3,
+            "attack_sector": "REAR",
+            "attacker_attack_dice": [
+              {
+                "color": "RED",
+                "faces": [
+                  "DAMAGE",
+                  "DAMAGE"
+                ]
+              },
+              {
+                "color": "RED",
+                "faces": [
+                  "DAMAGE",
+                  "DAMAGE"
+                ]
+              },
+              {
+                "color": "YELLOW",
+                "faces": [
+                  "DAMAGE",
+                  "DAMAGE"
+                ]
+              }
+            ],
+            "defender_defense_dice": [
+              {
+                "color": "YELLOW",
+                "faces": []
+              }
+            ],
+            "attacker_effects": {
+              "damage": 6,
+              "criticals": [],
+              "suppress": 0
+            },
+            "defender_hp_before": 1,
+            "defender_hp_after": 0,
+            "defender_killed": true,
+            "defender_suppressed": false,
+            "resolution": {
+              "remaining_damage": 6,
+              "remaining_criticals": 0,
+              "remaining_suppress": 0
+            },
+            "outcome": "resolved",
+            "winner": null
+          }
+        },
+        {
+          "type": "HRL_DECISION",
+          "payload": {
+            "side": "US",
+            "option": "ATTACK",
+            "description": "engage the enemy directly",
+            "category": "ENGAGEMENT",
+            "turn": 6,
+            "context": {
+              "friendly_strength": "HIGH",
+              "enemy_pressure": "LOW",
+              "objective_distance": "UNKNOWN"
+            },
+            "policy_info": {
+              "option": "ATTACK",
+              "confidence": 0.35826751589775085,
+              "value_estimate": 0.9060051441192627
+            }
+          }
+        },
+        {
+          "type": "ACTION",
+          "payload": {
+            "turn": 6,
+            "action": "MoveAction",
+            "active_unit": "US_2"
+          }
+        },
+        {
+          "type": "UNIT_MOVED",
+          "payload": {
+            "unit_id": "US_2",
+            "from": {
+              "q": 6,
+              "r": 9
+            },
+            "to": {
+              "q": 5,
+              "r": 9
+            }
+          }
+        },
+        {
+          "type": "ACTION",
+          "payload": {
+            "turn": 6,
+            "action": "WaitAction",
+            "active_unit": "US_3"
+          }
+        }
+      ]
+    },
+    {
+      "turn": 7,
+      "events": [
+        {
+          "type": "ACTION",
+          "payload": {
+            "turn": 7,
+            "action": "RangedDirectAttack",
+            "active_unit": "GE_3"
+          }
+        },
+        {
+          "type": "ACTION_EFFECT",
+          "payload": {
+            "action": "RangedCombat",
+            "attacker": "GE_3",
+            "defender": "US_2",
+            "distance": 3,
+            "attack_sector": "FRONT",
+            "attacker_attack_dice": [
+              {
+                "color": "RED",
+                "faces": [
+                  "DAMAGE"
+                ]
+              },
+              {
+                "color": "YELLOW",
+                "faces": [
+                  "CRITICAL",
+                  "DAMAGE"
+                ]
+              },
+              {
+                "color": "BLUE",
+                "faces": []
+              }
+            ],
+            "defender_defense_dice": [
+              {
+                "color": "YELLOW",
+                "faces": [
+                  "DAMAGE"
+                ]
+              }
+            ],
+            "attacker_effects": {
+              "damage": 2,
+              "criticals": [
+                {
+                  "face": "CRITICAL",
+                  "target_class": "INFANTRY"
+                }
+              ],
+              "suppress": 0
+            },
+            "defender_hp_before": 4,
+            "defender_hp_after": 2,
+            "defender_killed": false,
+            "defender_suppressed": false,
+            "resolution": {
+              "remaining_damage": 1,
+              "remaining_criticals": 1,
+              "remaining_suppress": 0
+            },
+            "outcome": "resolved",
+            "winner": null
+          }
+        },
+        {
+          "type": "HRL_DECISION",
+          "payload": {
+            "side": "US",
+            "option": "FLANK",
+            "description": "attempt to outflank the enemy",
+            "category": "MANEUVER",
+            "turn": 7,
+            "context": {
+              "friendly_strength": "HIGH",
+              "enemy_pressure": "LOW",
+              "objective_distance": "UNKNOWN"
+            },
+            "policy_info": {
+              "option": "FLANK",
+              "confidence": 0.3067381978034973,
+              "value_estimate": 0.9128314256668091
+            }
+          }
+        },
+        {
+          "type": "ACTION",
+          "payload": {
+            "turn": 7,
+            "action": "WaitAction",
+            "active_unit": "US_1"
+          }
+        },
+        {
+          "type": "ACTION",
+          "payload": {
+            "turn": 7,
+            "action": "RangedDirectAttack",
+            "active_unit": "US_2"
+          }
+        },
+        {
+          "type": "ACTION_EFFECT",
+          "payload": {
+            "action": "RangedCombat",
+            "attacker": "US_2",
+            "defender": "GE_3",
+            "distance": 3,
+            "attack_sector": "REAR",
+            "attacker_attack_dice": [
+              {
+                "color": "RED",
+                "faces": [
+                  "DAMAGE",
+                  "SUPPRESS"
+                ]
+              },
+              {
+                "color": "RED",
+                "faces": [
+                  "DAMAGE",
+                  "SUPPRESS"
+                ]
+              },
+              {
+                "color": "YELLOW",
+                "faces": [
+                  "CRITICAL",
+                  "DAMAGE"
+                ]
+              }
+            ],
+            "defender_defense_dice": [
+              {
+                "color": "YELLOW",
+                "faces": [
+                  "CRITICAL",
+                  "DAMAGE"
+                ]
+              }
+            ],
+            "attacker_effects": {
+              "damage": 2,
+              "criticals": [],
+              "suppress": 2
+            },
+            "defender_hp_before": 3,
+            "defender_hp_after": 1,
+            "defender_killed": false,
+            "defender_suppressed": true,
+            "resolution": {
+              "remaining_damage": 2,
+              "remaining_criticals": 0,
+              "remaining_suppress": 2
+            },
+            "outcome": "resolved",
+            "winner": null
+          }
+        },
+        {
+          "type": "ACTION",
+          "payload": {
+            "turn": 7,
+            "action": "WaitAction",
+            "active_unit": "US_3"
+          }
+        }
+      ]
+    },
+    {
+      "turn": 8,
+      "events": [
+        {
+          "type": "ACTION",
+          "payload": {
+            "turn": 8,
+            "action": "RangedDirectAttack",
+            "active_unit": "GE_3"
+          }
+        },
+        {
+          "type": "ACTION_EFFECT",
+          "payload": {
+            "action": "RangedCombat",
+            "attacker": "GE_3",
+            "defender": "US_2",
+            "distance": 3,
+            "attack_sector": "FRONT",
+            "attacker_attack_dice": [
+              {
+                "color": "RED",
+                "faces": [
+                  "DAMAGE"
+                ]
+              },
+              {
+                "color": "YELLOW",
+                "faces": [
+                  "DAMAGE"
+                ]
+              },
+              {
+                "color": "BLUE",
+                "faces": [
+                  "DAMAGE"
+                ]
+              }
+            ],
+            "defender_defense_dice": [
+              {
+                "color": "YELLOW",
+                "faces": [
+                  "DAMAGE"
+                ]
+              }
+            ],
+            "attacker_effects": {
+              "damage": 2,
+              "criticals": [],
+              "suppress": 0
+            },
+            "defender_hp_before": 2,
+            "defender_hp_after": 0,
+            "defender_killed": true,
+            "defender_suppressed": false,
+            "resolution": {
+              "remaining_damage": 2,
+              "remaining_criticals": 0,
+              "remaining_suppress": 0
+            },
+            "outcome": "resolved",
+            "winner": null
+          }
+        },
+        {
+          "type": "ACTION",
+          "payload": {
+            "turn": 8,
+            "action": "MoveAction",
+            "active_unit": "US_1"
+          }
+        },
+        {
+          "type": "UNIT_MOVED",
+          "payload": {
+            "unit_id": "US_1",
+            "from": {
+              "q": 5,
+              "r": 10
+            },
+            "to": {
+              "q": 5,
+              "r": 9
+            }
+          }
+        },
+        {
+          "type": "ACTION",
+          "payload": {
+            "turn": 8,
+            "action": "MoveAction",
+            "active_unit": "US_3"
+          }
+        },
+        {
+          "type": "UNIT_MOVED",
+          "payload": {
+            "unit_id": "US_3",
+            "from": {
+              "q": 5,
+              "r": 11
+            },
+            "to": {
+              "q": 5,
+              "r": 10
+            }
+          }
+        }
+      ]
+    },
+    {
+      "turn": 9,
+      "events": [
+        {
+          "type": "ACTION",
+          "payload": {
+            "turn": 9,
+            "action": "RangedDirectAttack",
+            "active_unit": "GE_3"
+          }
+        },
+        {
+          "type": "ACTION_EFFECT",
+          "payload": {
+            "action": "RangedCombat",
+            "attacker": "GE_3",
+            "defender": "US_1",
+            "distance": 3,
+            "attack_sector": "FRONT",
+            "attacker_attack_dice": [
+              {
+                "color": "RED",
+                "faces": [
+                  "DAMAGE",
+                  "SUPPRESS"
+                ]
+              },
+              {
+                "color": "YELLOW",
+                "faces": []
+              },
+              {
+                "color": "BLUE",
+                "faces": []
+              }
+            ],
+            "defender_defense_dice": [
+              {
+                "color": "YELLOW",
+                "faces": []
+              }
+            ],
+            "attacker_effects": {
+              "damage": 1,
+              "criticals": [],
+              "suppress": 1
+            },
+            "defender_hp_before": 3,
+            "defender_hp_after": 2,
+            "defender_killed": false,
+            "defender_suppressed": true,
+            "resolution": {
+              "remaining_damage": 1,
+              "remaining_criticals": 0,
+              "remaining_suppress": 1
+            },
+            "outcome": "resolved",
+            "winner": null
+          }
+        },
+        {
+          "type": "HRL_DECISION",
+          "payload": {
+            "side": "US",
+            "option": "FLANK",
+            "description": "attempt to outflank the enemy",
+            "category": "MANEUVER",
+            "turn": 9,
+            "context": {
+              "friendly_strength": "HIGH",
+              "enemy_pressure": "LOW",
+              "objective_distance": "UNKNOWN"
+            },
+            "policy_info": {
+              "option": "FLANK",
+              "confidence": 0.31016698479652405,
+              "value_estimate": 0.9518766403198242
+            }
+          }
+        },
+        {
+          "type": "ACTION",
+          "payload": {
+            "turn": 9,
+            "action": "RangedDirectAttack",
+            "active_unit": "US_1"
+          }
+        },
+        {
+          "type": "ACTION_EFFECT",
+          "payload": {
+            "action": "RangedCombat",
+            "attacker": "US_1",
+            "defender": "GE_3",
+            "distance": 3,
+            "attack_sector": "REAR",
+            "attacker_attack_dice": [
+              {
+                "color": "RED",
+                "faces": [
+                  "DAMAGE",
+                  "DAMAGE"
+                ]
+              },
+              {
+                "color": "RED",
+                "faces": [
+                  "CRITICAL",
+                  "DAMAGE"
+                ]
+              },
+              {
+                "color": "YELLOW",
+                "faces": [
+                  "DAMAGE"
+                ]
+              }
+            ],
+            "defender_defense_dice": [
+              {
+                "color": "YELLOW",
+                "faces": [
+                  "CRITICAL",
+                  "DAMAGE"
+                ]
+              }
+            ],
+            "attacker_effects": {
+              "damage": 3,
+              "criticals": [],
+              "suppress": 0
+            },
+            "defender_hp_before": 1,
+            "defender_hp_after": 0,
+            "defender_killed": true,
+            "defender_suppressed": false,
+            "resolution": {
+              "remaining_damage": 3,
+              "remaining_criticals": 0,
+              "remaining_suppress": 0
+            },
+            "outcome": "resolved",
+            "winner": null
+          }
+        },
+        {
+          "type": "ACTION",
+          "payload": {
+            "turn": 9,
             "action": "WaitAction",
             "active_unit": "US_3"
           }
@@ -10336,9 +16738,7 @@ window.renderUnitStateView = function renderUnitStateView(gameState) {
           card.dataset.unitId = unit.unit_id;
 
           // ---------------------------------------------
-          // IMAGE:
-          // Alive  -> unit counter
-          // Dead   -> side dead_marker
+          // IMAGE
           // ---------------------------------------------
           const counter = document.createElement("div");
           counter.className = "unit-card-counter";
@@ -10346,10 +16746,8 @@ window.renderUnitStateView = function renderUnitStateView(gameState) {
           let imgSrc = null;
 
           if (unit.alive === false) {
-            // ☠️ Dead → side dead marker
             imgSrc = sideMeta?.[unit.side]?.dead_marker;
           } else {
-            // ✅ Alive → unit counter
             const def = unitDefs?.[unit.unit_key];
             if (def?.full) {
               imgSrc = "/public/art/counters/" + def.full;
@@ -10364,7 +16762,7 @@ window.renderUnitStateView = function renderUnitStateView(gameState) {
           }
 
           // ---------------------------------------------
-          // ❤️ HP hearts (current HP only)
+          // ❤️ HP
           // ---------------------------------------------
           const hpBar = document.createElement("div");
           hpBar.className = "unit-card-hp";
@@ -10378,6 +16776,19 @@ window.renderUnitStateView = function renderUnitStateView(gameState) {
           }
 
           // ---------------------------------------------
+          // 📍 POSITION
+          // ---------------------------------------------
+          const pos = document.createElement("div");
+          pos.className = "unit-card-pos";
+
+          const q = unit.position?.q;
+          const r = unit.position?.r;
+
+          pos.textContent = (q !== undefined && r !== undefined)
+            ? `(${q},${r})`
+            : "-";
+
+          // ---------------------------------------------
           // Label
           // ---------------------------------------------
           const name = document.createElement("div");
@@ -10389,7 +16800,9 @@ window.renderUnitStateView = function renderUnitStateView(gameState) {
           // ---------------------------------------------
           card.appendChild(counter);
           card.appendChild(hpBar);
+          card.appendChild(pos);   // ✅ CLAVE
           card.appendChild(name);
+
           scroll.appendChild(card);
         });
 

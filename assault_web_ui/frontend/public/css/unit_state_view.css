@@ -83,3 +83,16 @@
   line-height: 1;
   user-select: none;
 }
+
+.unit-card {
+  min-width: 100px;
+  min-height: 130px;   /* 🔥 necesario */
+}
+
+.unit-card-pos {
+  font-size: 11px;
+  color: #cccccc;
+  text-align: center;
+  margin-top: 2px;
+  margin-bottom: 2px;
+}

@@ -88,6 +88,7 @@ window.applyEventRange = function applyEventRange(
     const event = turn.events[i];
     if (!event) continue;
 
+    // ✅ Apply state changes
     applySingleEvent(gameState, event);
 
     const unitId =
@@ -98,8 +99,7 @@ window.applyEventRange = function applyEventRange(
     if (!unitId) continue;
 
     // ✅ acción REAL (no genérica)
-    const action =
-      event.payload?.action || event.type;
+    const action = event.payload?.action || event.type;
 
     const state = buildStrategicState(gameState, unitId);
     const friendly = Number(state.friendly_strength);
@@ -198,5 +198,20 @@ window.applyEventRange = function applyEventRange(
       playCombatGunshot?.();
 
     }, 0);
+  }
+
+  // -------------------------------------------------
+  // ✅ 🔥 FIX CLAVE: REFRESH UI
+  // -------------------------------------------------
+  // Garantiza que la vista (cards, posiciones, etc.)
+  // se actualice tras cambiar el estado
+  if (typeof renderFrame === "function") {
+    requestAnimationFrame(() => {
+      try {
+        renderFrame(gameState, window.UI_STATE);
+      } catch (e) {
+        console.warn("[UI REFRESH] Failed:", e);
+      }
+    });
   }
 };

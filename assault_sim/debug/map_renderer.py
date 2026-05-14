@@ -69,18 +69,21 @@ class MapRenderer:
                         symbol = "🏠"
                     elif getattr(hs, "woods", False):
                         symbol = "🌳"
-
+ 
                 # Unit overlay
                 if (q, r) in unit_at:
                     u = unit_at[(q, r)]
                     icon = "🔵" if u.side == "GE" else "🔴"
+
+                    # ✅ ADD suppression indicator
+                    if getattr(u, "suppressed", False):
+                        icon += "😵"
+
                     symbol = f"{icon}{symbol.strip()}"
 
-                # VP overlay (top priority)
-                if (q, r) in self.vps:
-                    symbol = f"{symbol.strip()}🚩"
-
                 print(f"{symbol:>4}", end=" ")
+
+ 
             print()
 
         print(

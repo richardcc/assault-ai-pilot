@@ -1,0 +1,6341 @@
+
+================================================================================
+FILE: C:\repos\python\assault\assault_sim\sim_env.py
+================================================================================
+
+"""
+Simulation Environment (SimEnv)
+Low-level simulation driver.
+"""
+
+import os
+
+from assault_sim.config.config_loader import SimConfig
+from assault_model.units.catalog_loader import load_unit_catalog
+from assault_model.map.map_piece_loader import load_map_piece_catalog
+from assault_model.core.scenario_loader import load_scenario
+
+from assault_model.state.game_state import GameState
+from assault_model.runtime.game_state_runtime import RuntimeGameState
+from assault_model.runtime.execution_context import ExecutionContext
+
+from assault_sim.debug.debug_config import DebugConfig
+from assault_sim.debug.event_bus import EventBus
+
+
+DEBUG_TRACE = os.getenv("ASSAULT_DEBUG_TRACE", "0") == "1"
+
+
+class SimEnv:
+    def __init__(self, config: SimConfig, debug_config=None, controller=None):
+        self.config = config
+        self.debug_config = debug_config or DebugConfig(enabled=False)
+        self.controller = controller
+
+        self.event_bus = EventBus() if self.debug_config.enabled else None
+
+        self.scenario = None
+        self.game_state = None
+        self.runtime = None
+
+    # -------------------------------------------------
+    # RESET
+    # -------------------------------------------------
+    def reset(self):
+        root = self.config.data_root
+
+        unit_catalog = load_unit_catalog(root / self.config.unit_catalog)
+        map_catalog = load_map_piece_catalog(root / self.config.map_piece_catalog)
+
+        scenario_path = (
+            root
+            / self.config.scenario_folder
+            / f"{self.config.scenario_name}.json"
+        )
+
+        self.scenario = load_scenario(scenario_path, unit_catalog, map_catalog)
+        self.game_state = GameState.from_scenario(self.scenario)
+
+        self.runtime = RuntimeGameState(self.game_state, self.scenario)
+        self.runtime.start_turn()
+        self.game_state = self.runtime.base_state
+
+        if self.event_bus:
+            # ✅ RESET EVENT
+            self.event_bus.emit({
+                "type": "RESET",
+                "payload": {
+                    "scenario": self.scenario.name,
+                    "turn": self.game_state.turn,
+                },
+            })
+
+            # ✅ 🔥 MAPA INICIAL (CLAVE)
+            self._emit_map_state()
+
+        return self.game_state
+
+    # -------------------------------------------------
+    # STEP
+    # -------------------------------------------------
+    def step(self, action):
+        # controlador opcional
+        if action is None and self.controller is not None:
+            action = self.controller.choose_action(self.game_state)
+
+        # ✅ ACTION EVENT
+        if self.event_bus and action is not None:
+            self.event_bus.emit({
+                "type": "ACTION",
+                "payload": {
+                    "turn": self.game_state.turn,
+                    "action": action.__class__.__name__,
+                    "active_unit": (
+                        self.game_state.active_unit.unit_id
+                        if self.game_state.active_unit else None
+                    ),
+                },
+            })
+
+        # -------------------------------------------------
+        # APPLY ACTION
+        # -------------------------------------------------
+        context = ExecutionContext(event_bus=self.event_bus)
+        self.runtime.apply_action(action, context=context)
+
+        self.game_state = self.runtime.base_state
+
+        # ✅ 🔥 MAPA TRAS CADA ACCIÓN
+        self._emit_map_state()
+
+        # ✅ FIN PARTIDA (acción)
+        if self.game_state.done:
+            self._emit_match_end()
+            return self.game_state, 0.0, True, {}
+
+        # -------------------------------------------------
+        # TURN END
+        # -------------------------------------------------
+        if self.runtime.turn_has_ended() and self.game_state.active_unit is None:
+            self.runtime.end_turn()
+            self.game_state = self.runtime.base_state
+
+            # ✅ TURN EVENT
+            if self.event_bus:
+                self.event_bus.emit({
+                    "type": "TURN_END",
+                    "payload": {
+                        "turn": self.game_state.turn,
+                    },
+                })
+
+            # ✅ 🔥 MAPA TRAS TURNO
+            self._emit_map_state()
+
+            if self.game_state.done:
+                self._emit_match_end()
+                return self.game_state, 0.0, True, {}
+
+            # siguiente turno
+            self.runtime.start_turn()
+            self.game_state = self.runtime.base_state
+
+            # ✅ mapa nuevo turno
+            self._emit_map_state()
+
+        return self.game_state, 0.0, False, {}
+
+    # -------------------------------------------------
+    # MAP STATE (CLAVE PARA EL OBSERVER)
+    # -------------------------------------------------
+    def _emit_map_state(self):
+        if not self.event_bus:
+            return
+
+        self.event_bus.emit({
+            "type": "MAP_STATE",
+            "payload": {
+                "turn": self.game_state.turn,
+                "game_map": self.game_state.game_map,
+                "units": self.game_state.units,
+                "vp_tracker": self.game_state.vp_tracker,
+                "game_state": self.game_state,
+            },
+        })
+
+    # -------------------------------------------------
+    # MATCH END
+    # -------------------------------------------------
+    def _emit_match_end(self):
+        if not self.event_bus:
+            return
+
+        self.event_bus.emit({
+            "type": "MATCH_END",
+            "payload": {
+                "winner": self.game_state.winner,
+                "reason": self.game_state.end_reason,
+                "turn": self.game_state.turn,
+            },
+        })
+
+
+================================================================================
+FILE: C:\repos\python\assault\assault_sim\training_env.py
+================================================================================
+
+import json
+import os
+from pathlib import Path
+from typing import Dict
+
+from assault_model.actions.status import WaitAction
+from assault_model.map.hex_utils import hex_distance
+from assault_sim.rl.state_encoder import encode_state
+from assault_sim.rewards.aggressive_reward import AggressiveReward
+
+
+DEBUG_TRACE = os.getenv("ASSAULT_DEBUG_TRACE", "0") == "1"
+
+
+def _trace(tag: str, **data):
+    if not DEBUG_TRACE:
+        return
+    payload = " ".join(f"{k}={v}" for k, v in data.items())
+    print(f"[TRACE][{tag}] {payload}")
+
+
+class TrainingEnv:
+
+    def __init__(
+        self,
+        sim_env,
+        env_config_path: Path,
+        rl_side: str,
+        scenario_override: str | None = None,
+    ):
+        self.sim = sim_env
+        self.rl_side = rl_side
+
+        with open(env_config_path, "r", encoding="utf-8") as f:
+            self.env_config = json.load(f)
+
+        env_cfg = self.env_config.get("environment", {})
+        self.max_steps = env_cfg.get("max_steps", None)
+
+        self.scenario_override = scenario_override
+        self.current_step = 0
+
+        self.reward_fn = AggressiveReward(rl_side)
+
+        self.rl_attacks = 0
+        self.rl_damage = 0
+        self.rl_kills = 0
+
+        self.heuristic_attacks = 0
+        self.heuristic_damage = 0
+        self.heuristic_kills = 0
+
+    # -------------------------------------------------
+    # API LIMPIA (IMPORTANTE)
+    # -------------------------------------------------
+    @property
+    def state(self):
+        return self.sim.game_state
+
+    # -------------------------------------------------
+    # RESET
+    # -------------------------------------------------
+    def reset(self):
+        state = self.sim.reset()
+
+        self.current_step = 0
+        self.reward_fn.reset(state)
+
+        return encode_state(
+            state,
+            rl_side=self.rl_side,
+            max_turns=self.sim.scenario.max_turns,
+        )
+
+    # -------------------------------------------------
+    # STEP
+    # -------------------------------------------------
+    def step(self, action):
+        state = self.sim.game_state
+
+        if state is None:
+            raise RuntimeError("GameState is None")
+
+        active = state.active_unit
+
+        actor_side = active.side if active else None
+
+        # -----------------------------
+        # COHERENCE
+        # -----------------------------
+        if active is None:
+            action = None
+        elif action is not None and action.unit_id != active.unit_id:
+            action = WaitAction(active.unit_id)
+
+        # -----------------------------
+        # SNAPSHOT BEFORE
+        # -----------------------------
+        hp_before: Dict[str, int] = {}
+        alive_before: Dict[str, bool] = {}
+
+        for u in state.units:
+            hp_before[u.unit_id] = getattr(u, "hp", 0)
+            alive_before[u.unit_id] = bool(u.alive)
+
+        own_units = [u for u in state.units if u.alive and u.side == self.rl_side]
+        enemy_units = [u for u in state.units if u.alive and u.side != self.rl_side]
+
+        pre_dist = None
+        if own_units and enemy_units:
+            pre_dist = min(
+                hex_distance(us.position, ge.position)
+                for us in own_units for ge in enemy_units
+            )
+
+        # -----------------------------
+        # STEP
+        # -----------------------------
+        next_state, _, sim_done, _ = self.sim.step(action)
+
+        action_name = action.__class__.__name__ if action else ""
+        is_attack = ("Ranged" in action_name) or ("Close" in action_name)
+
+        if actor_side and is_attack:
+            if actor_side == self.rl_side:
+                self.rl_attacks += 1
+            else:
+                self.heuristic_attacks += 1
+
+        # -----------------------------
+        # SNAPSHOT AFTER
+        # -----------------------------
+        hp_after: Dict[str, int] = {}
+        alive_after: Dict[str, bool] = {}
+
+        for u in next_state.units:
+            hp_after[u.unit_id] = getattr(u, "hp", 0)
+            alive_after[u.unit_id] = bool(u.alive)
+
+        # -----------------------------
+        # DAMAGE & KILLS
+        # -----------------------------
+        for unit_id, before_hp in hp_before.items():
+            after_hp = hp_after.get(unit_id, before_hp)
+            damage = max(0, before_hp - after_hp)
+
+            if damage > 0:
+                if actor_side == self.rl_side:
+                    self.rl_damage += damage
+                else:
+                    self.heuristic_damage += damage
+
+            if alive_before.get(unit_id, False) and not alive_after.get(unit_id, True):
+                if actor_side == self.rl_side:
+                    self.rl_kills += 1
+                else:
+                    self.heuristic_kills += 1
+
+        _trace(
+            "COMBAT_SNAPSHOT",
+            action=action_name,
+            rl_damage=self.rl_damage,
+            heuristic_damage=self.heuristic_damage,
+            rl_kills=self.rl_kills,
+            heuristic_kills=self.heuristic_kills,
+        )
+
+        # -----------------------------
+        # DIST POST
+        # -----------------------------
+        next_own = [u for u in next_state.units if u.alive and u.side == self.rl_side]
+        next_enemy = [u for u in next_state.units if u.alive and u.side != self.rl_side]
+
+        post_dist = None
+        if next_own and next_enemy:
+            post_dist = min(
+                hex_distance(us.position, ge.position)
+                for us in next_own for ge in next_enemy
+            )
+
+        # -----------------------------
+        # REWARD
+        # -----------------------------
+        reward = self.reward_fn.compute(
+            state=state,
+            next_state=next_state,
+            action=action,
+            active=active,
+            info={},
+            pre_dist=pre_dist,
+            post_dist=post_dist,
+        )
+
+        # -----------------------------
+        # DONE
+        # -----------------------------
+        self.current_step += 1
+        done = sim_done
+
+        if self.max_steps is not None and self.current_step >= self.max_steps:
+            done = True
+
+        info = {
+            "rl_damage": self.rl_damage,
+            "heuristic_damage": self.heuristic_damage,
+            "rl_kills": self.rl_kills,
+            "heuristic_kills": self.heuristic_kills,
+            "done": done,
+        }
+
+        return (
+            encode_state(
+                next_state,
+                rl_side=self.rl_side,
+                max_turns=self.sim.scenario.max_turns,
+            ),
+            reward,
+            done,
+            info,
+        )
+
+
+================================================================================
+FILE: C:\repos\python\assault\assault_sim\__init__.py
+================================================================================
+
+
+
+
+================================================================================
+FILE: C:\repos\python\assault\assault_sim\adapters\model_adapter.py
+================================================================================
+
+# Bridges assault_model <-> simulation
+
+
+
+
+================================================================================
+FILE: C:\repos\python\assault\assault_sim\adapters\observation_adapter.py
+================================================================================
+
+# Model state -> observation adapter
+
+
+
+
+================================================================================
+FILE: C:\repos\python\assault\assault_sim\adapters\__init__.py
+================================================================================
+
+
+
+
+================================================================================
+FILE: C:\repos\python\assault\assault_sim\analysis\__init__.py
+================================================================================
+
+
+
+
+================================================================================
+FILE: C:\repos\python\assault\assault_sim\assets\catalogs\map_piece_catalog.json
+================================================================================
+
+{
+  "pieces": {
+    "S2": {
+      "description": "Lower map section 9x8",
+      "hexes": [
+        [{"q":0,"r":0,"terrain":"clear"},{"q":1,"r":0,"terrain":"clear"},{"q":2,"r":0,"terrain":"clear"},{"q":3,"r":0,"terrain":"clear"},{"q":4,"r":0,"terrain":"clear"},{"q":5,"r":0,"terrain":"clear"},{"q":6,"r":0,"terrain":"clear"},{"q":7,"r":0,"terrain":"clear"},{"q":8,"r":0,"terrain":"clear"}],
+        [{"q":0,"r":1,"terrain":"clear"},{"q":1,"r":1,"terrain":"clear"},{"q":2,"r":1,"terrain":"clear"},{"q":3,"r":1,"terrain":"clear"},{"q":4,"r":1,"terrain":"clear"},{"q":5,"r":1,"terrain":"clear"},{"q":6,"r":1,"terrain":"clear"},{"q":7,"r":1,"terrain":"clear"},{"q":8,"r":1,"terrain":"clear"}],
+        [{"q":0,"r":2,"terrain":"clear"},{"q":1,"r":2,"terrain":"clear"},{"q":2,"r":2,"terrain":"clear"},{"q":3,"r":2,"terrain":"clear"},{"q":4,"r":2,"terrain":"clear"},{"q":5,"r":2,"terrain":"clear"},{"q":6,"r":2,"terrain":"clear"},{"q":7,"r":2,"terrain":"clear"},{"q":8,"r":2,"terrain":"clear"}],
+        [{"q":0,"r":3,"terrain":"clear"},{"q":1,"r":3,"terrain":"clear"},{"q":2,"r":3,"terrain":"clear"},{"q":3,"r":3,"terrain":"clear"},{"q":4,"r":3,"terrain":"clear"},{"q":5,"r":3,"terrain":"clear"},{"q":6,"r":3,"terrain":"clear"},{"q":7,"r":3,"terrain":"clear"},{"q":8,"r":3,"terrain":"clear"}],
+        [{"q":0,"r":4,"terrain":"clear"},{"q":1,"r":4,"terrain":"clear"},{"q":2,"r":4,"terrain":"clear"},{"q":3,"r":4,"terrain":"clear"},{"q":4,"r":4,"terrain":"clear"},{"q":5,"r":4,"terrain":"clear"},{"q":6,"r":4,"terrain":"clear"},{"q":7,"r":4,"terrain":"clear"},{"q":8,"r":4,"terrain":"clear"}],
+        [{"q":0,"r":5,"terrain":"water"},{"q":1,"r":5,"terrain":"water"},{"q":2,"r":5,"terrain":"water"},{"q":3,"r":5,"terrain":"water"},{"q":4,"r":5,"terrain":"water"},{"q":5,"r":5,"terrain":"water"},{"q":6,"r":5,"terrain":"water"},{"q":7,"r":5,"terrain":"water"},{"q":8,"r":5,"terrain":"water"}],
+        [{"q":0,"r":6,"terrain":"water"},{"q":1,"r":6,"terrain":"water"},{"q":2,"r":6,"terrain":"water"},{"q":3,"r":6,"terrain":"water"},{"q":4,"r":6,"terrain":"water"},{"q":5,"r":6,"terrain":"water"},{"q":6,"r":6,"terrain":"water"},{"q":7,"r":6,"terrain":"water"},{"q":8,"r":6,"terrain":"water"}],
+        [{"q":0,"r":7,"terrain":"water"},{"q":1,"r":7,"terrain":"water"},{"q":2,"r":7,"terrain":"water"},{"q":3,"r":7,"terrain":"water"},{"q":4,"r":7,"terrain":"water"},{"q":5,"r":7,"terrain":"water"},{"q":6,"r":7,"terrain":"water"},{"q":7,"r":7,"terrain":"water"},{"q":8,"r":7,"terrain":"water"}]
+      ]
+    },
+
+    "S3": {
+      "description": "Upper map section 9x8",
+      "hexes": [
+        [{"q":0,"r":0,"terrain":"clear"},{"q":1,"r":0,"terrain":"clear"},{"q":2,"r":0,"terrain":"clear"},{"q":3,"r":0,"terrain":"clear"},{"q":4,"r":0,"terrain":"clear"},{"q":5,"r":0,"terrain":"clear"},{"q":6,"r":0,"terrain":"clear"},{"q":7,"r":0,"terrain":"clear"},{"q":8,"r":0,"terrain":"clear"}],
+        [{"q":0,"r":1,"terrain":"clear"},{"q":1,"r":1,"terrain":"clear"},{"q":2,"r":1,"terrain":"clear"},{"q":3,"r":1,"terrain":"clear"},{"q":4,"r":1,"terrain":"clear"},{"q":5,"r":1,"terrain":"clear"},{"q":6,"r":1,"terrain":"clear"},{"q":7,"r":1,"terrain":"clear"},{"q":8,"r":1,"terrain":"clear"}],
+        [{"q":0,"r":2,"terrain":"clear"},{"q":1,"r":2,"terrain":"clear"},{"q":2,"r":2,"terrain":"clear"},{"q":3,"r":2,"terrain":"clear"},{"q":4,"r":2,"terrain":"clear"},{"q":5,"r":2,"terrain":"clear"},{"q":6,"r":2,"terrain":"clear"},{"q":7,"r":2,"terrain":"clear"},{"q":8,"r":2,"terrain":"clear"}],
+        [{"q":0,"r":3,"terrain":"clear"},{"q":1,"r":3,"terrain":"clear"},{"q":2,"r":3,"terrain":"clear"},{"q":3,"r":3,"terrain":"clear"},{"q":4,"r":3,"terrain":"clear"},{"q":5,"r":3,"terrain":"clear"},{"q":6,"r":3,"terrain":"clear"},{"q":7,"r":3,"terrain":"clear"},{"q":8,"r":3,"terrain":"clear"}],
+        [{"q":0,"r":4,"terrain":"clear"},{"q":1,"r":4,"terrain":"clear"},{"q":2,"r":4,"terrain":"clear"},{"q":3,"r":4,"terrain":"clear"},{"q":4,"r":4,"terrain":"clear"},{"q":5,"r":4,"terrain":"clear"},{"q":6,"r":4,"terrain":"clear"},{"q":7,"r":4,"terrain":"clear"},{"q":8,"r":4,"terrain":"clear"}],
+        [{"q":0,"r":5,"terrain":"clear"},{"q":1,"r":5,"terrain":"clear"},{"q":2,"r":5,"terrain":"clear"},{"q":3,"r":5,"terrain":"clear"},{"q":4,"r":5,"terrain":"clear"},{"q":5,"r":5,"terrain":"clear"},{"q":6,"r":5,"terrain":"clear"},{"q":7,"r":5,"terrain":"clear"},{"q":8,"r":5,"terrain":"clear"}],
+        [{"q":0,"r":6,"terrain":"clear"},{"q":1,"r":6,"terrain":"clear"},{"q":2,"r":6,"terrain":"clear"},{"q":3,"r":6,"terrain":"clear"},{"q":4,"r":6,"terrain":"clear"},{"q":5,"r":6,"terrain":"clear"},{"q":6,"r":6,"terrain":"clear"},{"q":7,"r":6,"terrain":"clear"},{"q":8,"r":6,"terrain":"clear"}],
+        [{"q":0,"r":7,"terrain":"clear"},{"q":1,"r":7,"terrain":"clear"},{"q":2,"r":7,"terrain":"clear"},{"q":3,"r":7,"terrain":"clear"},{"q":4,"r":7,"terrain":"clear"},{"q":5,"r":7,"terrain":"clear"},{"q":6,"r":7,"terrain":"clear"},{"q":7,"r":7,"terrain":"clear"},{"q":8,"r":7,"terrain":"clear"}]
+      ],
+      "hex_states": {
+        "3,3": { "building": true },
+        "4,3": { "building": true },
+        "5,3": { "building": true },
+        "2,5": { "building": true },
+        "6,5": { "building": true },
+        "1,6": { "woods": true },
+        "2,6": { "woods": true },
+        "6,6": { "woods": true },
+        "7,6": { "woods": true }
+      },
+      "hex_edges": [
+        { "from": "2,3", "to": "3,3", "feature": "wall" },
+        { "from": "3,3", "to": "4,3", "feature": "wall" },
+        { "from": "4,3", "to": "5,3", "feature": "wall" },
+        { "from": "2,6", "to": "3,6", "feature": "wall" },
+        { "from": "5,6", "to": "6,6", "feature": "wall" }
+      ]
+    }
+  }
+}
+
+
+================================================================================
+FILE: C:\repos\python\assault\assault_sim\assets\catalogs\unit_catalog.json
+================================================================================
+
+{
+  "_comment": "Core unit definitions (no render, derived strictly from unit cards)",
+
+  "units": {
+
+    "GE_FJ_RIFLES_43": {
+      "side": "GE",
+      "category": "INFANTRY",
+      "subtype": "FALLSCHIRMJAGER",
+      "classification": "SPECIALIZED_INFANTRY",
+
+      "card_id": "Pr43",
+
+      "cost": 8,
+      "movement": 2,
+
+      "max_strength": 4,
+      "has_counter_flip": true,
+
+      "base_defense": {
+        "FRONT": ["YELLOW"],
+        "FLANK_LEFT": ["YELLOW"],
+        "FLANK_RIGHT": ["YELLOW"],
+        "REAR": ["YELLOW"]
+      },
+
+      "attack": {
+        "VEHICLE": {
+          "0":    { "dice": [] },
+          "1":    { "dice": ["GREEN", "GREEN"] },
+          "2":    { "dice": ["GREEN"] },
+          "3":    { "dice": [] },
+          "4-7":  { "dice": [] },
+          "8-10": { "dice": [] }
+        },
+        "INFANTRY": {
+          "0":      { "dice": ["RED","YELLOW","YELLOW","BLUE"] },
+          "1-3":    { "dice": ["RED","YELLOW","YELLOW","GREEN"] },
+          "4-7":    { "dice": ["RED","YELLOW","YELLOW","BLUE"] },
+          "8-10":   { "dice": ["YELLOW","YELLOW","BLUE"] }
+        }
+      },
+
+      "traits": [
+        "PARATROOPS",
+        "ELITE",
+        "TOUGH",
+        "RIFLE_GRENADES",
+        "INDIRECT_FIRE",
+        "ATTACK_DIE_REROLL",
+        "IGNORE_FIRST_CC_DAMAGE",
+        "REMOVE_WEAKEST_TERRAIN_DEFENSE"
+      ]
+    },
+
+    "GE_RIFLES_43": {
+      "side": "GE",
+      "category": "INFANTRY",
+      "subtype": "STANDARD_INFANTRY",
+      "classification": "STANDARD_INFANTRY",
+
+      "card_id": "S43",
+
+      "cost": 6,
+      "movement": 2,
+
+      "max_strength": 3,
+      "has_counter_flip": true,
+
+      "base_defense": {
+        "FRONT": ["YELLOW"],
+        "FLANK_LEFT": ["YELLOW"],
+        "FLANK_RIGHT": ["YELLOW"],
+        "REAR": ["YELLOW"]
+      },
+
+      "attack": {
+        "VEHICLE": {
+          "0":    { "dice": [] },
+          "1":    { "dice": ["YELLOW", "BLUE"] },
+          "2":    { "dice": ["GREEN", "BLUE"] },
+          "3":    { "dice": [] },
+          "4-7":  { "dice": [] },
+          "8-10": { "dice": [] }
+        },
+        "INFANTRY": {
+          "0":      { "dice": ["RED","YELLOW","GREEN"] },
+          "1-3":    { "dice": ["RED","YELLOW","BLUE"] },
+          "4-6":    { "dice": ["GREEN","GREEN","YELLOW"] },
+          "7-10":   { "dice": ["YELLOW","YELLOW","BLUE","BLUE"] }
+        }
+      },
+
+      "traits": [
+        "RIFLE_GRENADES",
+        "INDIRECT_FIRE",
+        "ATTACK_DIE_REROLL",
+        "REMOVE_WEAKEST_TERRAIN_DEFENSE"
+      ]
+    },
+
+    "US_RANGERS_43": {
+      "side": "US",
+      "category": "INFANTRY",
+      "subtype": "RANGERS",
+      "classification": "SPECIALIZED_INFANTRY",
+
+      "card_id": "S43",
+
+      "cost": 6,
+      "movement": 2,
+
+      "max_strength": 4,
+      "has_counter_flip": true,
+
+      "base_defense": {
+        "FRONT": ["YELLOW"],
+        "FLANK_LEFT": ["YELLOW"],
+        "FLANK_RIGHT": ["YELLOW"],
+        "REAR": ["YELLOW"]
+      },
+
+      "attack": {
+        "VEHICLE": {
+          "0":    { "dice": [] },
+          "1":    { "dice": ["YELLOW", "BLUE"] },
+          "2":    { "dice": ["YELLOW", "BLUE"] },
+          "3":    { "dice": [] },
+          "4-6":  { "dice": [] },
+          "7-10": { "dice": [] }
+        },
+        "INFANTRY": {
+          "0":    { "dice": ["RED","RED"] },
+          "1-3":  { "dice": ["RED","YELLOW"] },
+          "4-6":  { "dice": ["RED","BLUE"] },
+          "7-9":  { "dice": ["GREEN","GREEN"] }
+        }
+      },
+
+      "traits": [
+        "ELITE",
+        "SCOUT",
+        "RECON_PATROL"
+      ]
+    },
+
+    "US_RIFLES_43": {
+      "side": "US",
+      "category": "INFANTRY",
+      "subtype": "STANDARD_INFANTRY",
+      "classification": "STANDARD_INFANTRY",
+
+      "card_id": "S43",
+
+      "cost": 7,
+      "movement": 2,
+
+      "max_strength": 4,
+      "has_counter_flip": true,
+
+      "base_defense": {
+        "FRONT": ["YELLOW"],
+        "FLANK_LEFT": ["YELLOW"],
+        "FLANK_RIGHT": ["YELLOW"],
+        "REAR": ["YELLOW"]
+      },
+
+      "attack": {
+        "VEHICLE": {
+          "0":    { "dice": [] },
+          "1":    { "dice": ["YELLOW", "BLUE"] },
+          "2":    { "dice": ["GREEN", "BLUE"] },
+          "3":    { "dice": [] },
+          "4-7":  { "dice": [] },
+          "8-10": { "dice": [] }
+        },
+        "INFANTRY": {
+          "0":    { "dice": ["RED", "RED","GREEN"] },
+          "1-3":    { "dice": ["RED", "RED","YELLOW"] },
+          "4-6":  { "dice": ["RED", "RED"] },
+          "7-10": { "dice": ["YELLOW", "GREEN"] }
+        }
+      },
+
+      "traits": [
+        "RIFLE_GRENADES",
+        "INDIRECT_FIRE",
+        "ATTACK_DIE_REROLL",
+        "REMOVE_WEAKEST_TERRAIN_DEFENSE"
+      ]
+    }
+
+  }
+}
+
+
+
+================================================================================
+FILE: C:\repos\python\assault\assault_sim\assets\scenarios\mettete_i_piedi_terra_1_min.json
+================================================================================
+
+{
+  "id": "mettete_i_piedi_terra_1_min",
+  "max_turns": 12,
+
+  "map": {
+    "pieces": [
+      {
+        "id": "S3",
+        "origin": [0, 0]
+      },
+      {
+        "id": "S2",
+        "origin": [0, 8]
+      }
+    ]
+  },
+
+  "units": [
+    {
+      "unit_id": "GE_1",
+      "side": "GE",
+      "unit_key": "GE_RIFLES_43",
+      "position": [3, 4],
+      "experience": "REGULAR"
+    },
+    {
+      "unit_id": "GE_2",
+      "side": "GE",
+      "unit_key": "GE_RIFLES_43",
+      "position": [4, 4],
+      "experience": "REGULAR"
+    },
+    {
+      "unit_id": "GE_3",
+      "side": "GE",
+      "unit_key": "GE_RIFLES_43",
+      "position": [5, 1],
+      "experience": "REGULAR"
+    },
+    {
+      "unit_id": "US_1",
+      "side": "US",
+      "unit_key": "US_RIFLES_43",
+      "position": [5, 12],
+      "experience": "REGULAR"
+    },
+    {
+      "unit_id": "US_2",
+      "side": "US",
+      "unit_key": "US_RIFLES_43",
+      "position": [6, 12],
+      "experience": "REGULAR"
+    },
+    {
+      "unit_id": "US_3",
+      "side": "US",
+      "unit_key": "US_RIFLES_43",
+      "position": [7, 12],
+      "experience": "REGULAR"
+    }
+  ],
+
+  "vp": {
+    "value_per_hex": 4,
+    "hexes": [
+      [4, 8]
+    ]
+  }
+}
+
+
+================================================================================
+FILE: C:\repos\python\assault\assault_sim\assets\scenarios\phase01_seq001_initial_contact.json
+================================================================================
+
+{
+  "id": "phase01_seq001_initial_contact",
+  "alias": "mettete_i_piedi_terra_1_min",
+
+  "curriculum": {
+    "phase": 1,
+    "sequence": 1,
+    "goal": "initial_contact"
+  },
+
+  "max_turns": 13,
+
+  "map": {
+    "pieces": [
+      {
+        "id": "S3",
+        "origin": [0, 0]
+      },
+      {
+        "id": "S2",
+        "origin": [0, 8]
+      }
+    ]
+  },
+
+  "units": [
+    {
+      "unit_id": "GE_1",
+      "side": "GE",
+      "unit_key": "GE_RIFLES_43",
+      "position": [3, 4],
+      "experience": "REGULAR"
+    },
+    {
+      "unit_id": "GE_2",
+      "side": "GE",
+      "unit_key": "GE_RIFLES_43",
+      "position": [4, 4],
+      "experience": "REGULAR"
+    },
+    {
+      "unit_id": "GE_3",
+      "side": "GE",
+      "unit_key": "GE_RIFLES_43",
+      "position": [5, 1],
+      "experience": "REGULAR"
+    },
+
+    {
+      "unit_id": "US_1",
+      "side": "US",
+      "unit_key": "US_RIFLES_43",
+      "position": [5, 12],
+      "experience": "REGULAR"
+    },
+    {
+      "unit_id": "US_2",
+      "side": "US",
+      "unit_key": "US_RIFLES_43",
+      "position": [6, 12],
+      "experience": "REGULAR"
+    },
+    {
+      "unit_id": "US_3",
+      "side": "US",
+      "unit_key": "US_RIFLES_43",
+      "position": [7, 12],
+      "experience": "REGULAR"
+    }
+  ],
+
+  "vp": {
+    "value_per_hex": 4,
+    "hexes": [
+      [4, 8]
+    ]
+  }
+}
+
+
+================================================================================
+FILE: C:\repos\python\assault\assault_sim\checkpoints\ppo_US.pt
+================================================================================
+
+
+ERROR leyendo C:\repos\python\assault\assault_sim\checkpoints\ppo_US.pt: 'utf-8' codec can't decode byte 0x80 in position 64: invalid start byte
+
+
+================================================================================
+FILE: C:\repos\python\assault\assault_sim\checkpoints\ppo_US_phase01.pt
+================================================================================
+
+
+ERROR leyendo C:\repos\python\assault\assault_sim\checkpoints\ppo_US_phase01.pt: 'utf-8' codec can't decode byte 0x80 in position 64: invalid start byte
+
+
+================================================================================
+FILE: C:\repos\python\assault\assault_sim\checkpoints\ppo_US_phase01_HRL.pt
+================================================================================
+
+
+ERROR leyendo C:\repos\python\assault\assault_sim\checkpoints\ppo_US_phase01_HRL.pt: 'utf-8' codec can't decode byte 0x80 in position 64: invalid start byte
+
+
+================================================================================
+FILE: C:\repos\python\assault\assault_sim\config\config_loader.py
+================================================================================
+
+# assault_sim/config/config_loader.py
+#
+# Simulation configuration loader.
+#
+# Responsibilities:
+# - load the YAML file
+# - keep configuration sections separated
+# - build DebugConfig OUTSIDE of DebugConfig itself
+#
+# DebugConfig is intentionally a simple dataclass.
+# Mapping from YAML -> DebugConfig happens ONLY here.
+
+from pathlib import Path
+import yaml
+
+from assault_sim.debug.debug_config import DebugConfig
+
+
+class SimConfig:
+    """
+    High-level simulation configuration container.
+
+    Responsibilities:
+    - store raw YAML
+    - expose paths and scenario selection
+    - expose DebugConfig built from YAML
+    """
+
+    def __init__(self, raw: dict):
+        # Keep raw config
+        self.raw = raw
+
+        # -------------------------------
+        # Data paths
+        # -------------------------------
+        self.data_root = Path(raw["data_root"])
+        self.unit_catalog = raw["catalogs"]["unit_catalog"]
+        self.map_piece_catalog = raw["catalogs"]["map_piece_catalog"]
+        self.scenario_folder = raw["catalogs"]["scenario_folder"]
+
+        # -------------------------------
+        # Scenario
+        # -------------------------------
+        self.scenario_name = raw["scenario"]["name"]
+
+        # -------------------------------
+        # Observability -> DebugConfig
+        # -------------------------------
+        self.debug = build_debug_config(
+            raw.get("observability", {})
+        )
+
+
+def build_debug_config(obs: dict) -> DebugConfig:
+    """
+    Build DebugConfig from 'observability' YAML section.
+
+    IMPORTANT:
+    DebugConfig only supports:
+      - enabled
+      - log_actions
+      - log_turns
+      - log_vp
+
+    Anything else stays outside DebugConfig
+    (movement, effects, close combat, etc.).
+    """
+
+    if not obs or not obs.get("enabled", False):
+        return DebugConfig(enabled=False)
+
+    events = obs.get("events", {})
+
+    return DebugConfig(
+        enabled=True,
+        log_actions=events.get("actions", False),
+        log_turns=events.get("turns", False),
+        log_vp=events.get("victory", False),
+    )
+
+
+def load_sim_config(path: Path) -> SimConfig:
+    """
+    Load simulation configuration from YAML file.
+    """
+    with open(path, "r", encoding="utf-8") as f:
+        raw = yaml.safe_load(f)
+
+    return SimConfig(raw)
+
+
+================================================================================
+FILE: C:\repos\python\assault\assault_sim\config\env_config.json
+================================================================================
+
+{
+  "environment": {
+    "id": "train_base_v1",
+    "seed": 42,
+    "max_steps": 200
+  },
+
+  "scenario": {
+    "name": "mettete_i_piedi_terra_1_min"
+  },
+
+  "sides": {
+    "GE": {
+      "role": "heuristic",
+      "policy": "random"
+    },
+    "US": {
+      "role": "heuristic",
+      "policy": "random"
+    }
+  },
+
+  "rewards": {
+    "default": {
+      "type": "vp_difference",
+      "normalize": false
+    }
+  },
+
+  "debug": {
+    "enabled": true
+  }
+}
+
+
+================================================================================
+FILE: C:\repos\python\assault\assault_sim\config\sim_config.yaml
+================================================================================
+
+# assault_sim/config/sim_config.yaml
+#
+# Main simulation configuration file.
+# This file controls assets, scenario selection, and observability.
+# It does NOT control low-level tracing (ASSAULT_DEBUG_TRACE).
+# All visibility here is high-level, structured, and event-based.
+
+data_root: assault_sim/assets   # Root directory for all game data
+
+catalogs:
+  unit_catalog: catalogs/unit_catalog.json        # Unit definitions
+  map_piece_catalog: catalogs/map_piece_catalog.json  # Map tiles / pieces
+  scenario_folder: scenarios                      # Scenario JSON folder
+
+scenario:
+  name: mettete_i_piedi_terra_1_min               # Scenario to load
+
+# -------------------------------------------------
+# OBSERVABILITY (high-level, structured events)
+# -------------------------------------------------
+# If disabled, no EventBus is created and no events
+# are emitted, regardless of other flags.
+observability:
+  enabled: true
+
+  # Generic simulation events
+  events:
+    payload: false
+    lifecycle: true    # RESET, UNIT_LOADED
+    actions: true      # ACTION (what action was taken)
+    movement: true     # DEBUG_MOVE_PATH (from -> to)
+    effects: true      # ACTION_EFFECT (hp before/after, moved)
+    turns: true        # TURN_STATE (turn number, active unit)
+    victory: true      # VP updates
+
+  # Combat-specific observability
+  combat:
+    close_combat:
+      rounds: true     # One event per close combat round
+      damage: true     # Damage / suppression / critical effects
+      hp_delta: true   # HP before -> after per round
+      winner: true     # Winner of the close combat
+
+
+================================================================================
+FILE: C:\repos\python\assault\assault_sim\debug\combat_renderer.py
+================================================================================
+
+# assault_sim/debug/combat_renderer.py
+
+class CombatRenderer:
+    """
+    CombatRenderer
+
+    Responsibility:
+    - Render Close Combat ACTION_EFFECT events in a human-readable way.
+    - Render Ranged Combat ACTION_EFFECT events in a human-readable way.
+    - Display dice and HP changes.
+    - Keep HP visually correct BETWEEN rounds using formatter overrides.
+
+    Design rules:
+    - Presentation only (NO game logic).
+    - Payload-driven.
+    - NO legacy support.
+    """
+
+    DICE_FACE_ICON = {
+        "CRITICAL": "💥",
+        "DAMAGE": "❤️",
+        "SUPPRESS": "😵",
+    }
+
+    DICE_COLOR_ICON = {
+        "BLUE": "🔵",
+        "GREEN": "🟢",
+        "YELLOW": "🟡",
+        "RED": "🔴",
+    }
+
+    BLANK_ICON = "⚪"
+
+    def __init__(self, turn_buffer, unit_formatter):
+        self.turn_buffer = turn_buffer
+        self.unit_formatter = unit_formatter
+
+    # -------------------------------------------------
+    # GENERIC ENTRY POINT
+    # -------------------------------------------------
+    def on_action_effect(self, payload: dict) -> None:
+        action = payload.get("action")
+
+        if action == "CloseCombat":
+            self.on_close_combat_effect(payload)
+            return
+
+        if action == "RangedCombat":
+            self.on_ranged_combat_effect(payload)
+            return
+
+    # -------------------------------------------------
+    # CLOSE COMBAT (UNCHANGED LOGIC, NEW RENDERING)
+    # -------------------------------------------------
+    def on_close_combat_effect(self, payload: dict) -> None:
+        self.turn_buffer.add_line("         💥 COMBAT")
+
+        attacker_id = payload.get("attacker")
+        defender_id = payload.get("defender")
+
+        if attacker_id and defender_id:
+            atk_label = self.turn_buffer.unit_label(attacker_id)
+            def_label = self.turn_buffer.unit_label(defender_id)
+            self.turn_buffer.add_line(
+                f"             {atk_label} vs {def_label}"
+            )
+
+        rounds = payload.get("rounds", [])
+
+        for r in rounds:
+            self.turn_buffer.add_line(
+                f"             Round {r['round']}"
+            )
+
+            self._render_dice_line(
+                "Attacker attack",
+                r.get("attacker_attack_dice", []),
+            )
+            self._render_dice_line(
+                "Attacker defense",
+                r.get("attacker_defense_dice", []),
+            )
+            self._render_dice_line(
+                "Defender attack",
+                r.get("defender_attack_dice", []),
+            )
+            self._render_dice_line(
+                "Defender defense",
+                r.get("defender_defense_dice", []),
+            )
+
+            atk_before = r.get("attacker_hp_before")
+            atk_after = r.get("attacker_hp_after")
+            def_before = r.get("defender_hp_before")
+            def_after = r.get("defender_hp_after")
+
+            self.turn_buffer.add_line("                 Damage this round:")
+
+            damage_printed = False
+
+            if atk_before is not None and atk_after is not None:
+                delta = atk_before - atk_after
+                if delta > 0:
+                    self.turn_buffer.add_line(
+                        f"                     {self.turn_buffer.unit_label(attacker_id)}: "
+                        f"-{delta} HP ({atk_before} → {atk_after})"
+                    )
+                    damage_printed = True
+
+            if def_before is not None and def_after is not None:
+                delta = def_before - def_after
+                if delta > 0:
+                    self.turn_buffer.add_line(
+                        f"                     {self.turn_buffer.unit_label(defender_id)}: "
+                        f"-{delta} HP ({def_before} → {def_after})"
+                    )
+                    damage_printed = True
+
+            if not damage_printed:
+                self.turn_buffer.add_line(
+                    "                     No damage applied"
+                )
+
+            if attacker_id is not None and atk_after is not None:
+                self.unit_formatter.override_hp(attacker_id, atk_after)
+
+            if defender_id is not None and def_after is not None:
+                self.unit_formatter.override_hp(defender_id, def_after)
+
+        outcome = payload.get("outcome")
+        if outcome:
+            self.turn_buffer.add_line(
+                f"             Result: {outcome}"
+            )
+
+    # -------------------------------------------------
+    # RANGED COMBAT (NEW RENDERING)
+    # -------------------------------------------------
+    def on_ranged_combat_effect(self, payload: dict) -> None:
+        attacker_id = payload.get("attacker")
+        defender_id = payload.get("defender")
+        distance = payload.get("distance")
+        sector = payload.get("attack_sector")
+
+        atk_label = (
+            self.turn_buffer.unit_label(attacker_id)
+            if attacker_id else "?"
+        )
+        def_label = (
+            self.turn_buffer.unit_label(defender_id)
+            if defender_id else "?"
+        )
+
+        self.turn_buffer.add_line("         🎯 RANGED COMBAT")
+        self.turn_buffer.add_line(
+            f"             {atk_label} → {def_label} "
+            f"(dist {distance}, sector {sector})"
+        )
+
+        self._render_dice_line(
+            "Attacker attack",
+            payload.get("attacker_attack_dice", []),
+        )
+        self._render_dice_line(
+            "Defender defense",
+            payload.get("defender_defense_dice", []),
+        )
+
+        hp_before = payload.get("defender_hp_before")
+        hp_after = payload.get("defender_hp_after")
+        if (
+            defender_id
+            and hp_before is not None
+            and hp_after is not None
+        ):
+            delta = hp_before - hp_after
+            if delta > 0:
+                self.turn_buffer.add_line(
+                    f"                 {self.turn_buffer.unit_label(defender_id)}: "
+                    f"-{delta} HP ({hp_before} → {hp_after})"
+                )
+
+        criticals = payload.get("attacker_effects", {}).get("criticals", [])
+        if criticals:
+            self.turn_buffer.add_line(
+                f"                 💥 Critical hits: {len(criticals)}"
+            )
+
+        defender_killed = payload.get("defender_killed", False)
+        if defender_killed and defender_id:
+            self.turn_buffer.add_line(
+                f"                 ☠️ {self.turn_buffer.unit_label(defender_id)} DESTROYED"
+            )
+
+        if defender_id is not None and hp_after is not None:
+            self.unit_formatter.override_hp(defender_id, hp_after)
+
+    # -------------------------------------------------
+    # INTERNAL HELPERS (NEW, NO LEGACY)
+    # -------------------------------------------------
+    def _render_dice_line(self, label: str, dice: list) -> None:
+        if not dice:
+            return
+
+        rendered = " ".join(self._render_die(d) for d in dice)
+        self.turn_buffer.add_line(
+            f"                 {label}:  {rendered}"
+        )
+
+    def _render_die(self, die: dict) -> str:
+        """
+        Render a single die.
+
+        Expected format:
+        {
+            "color": "RED",
+            "faces": ["CRITICAL", "DAMAGE"]
+        }
+        """
+        color_icon = self.DICE_COLOR_ICON.get(die["color"], "❓")
+
+        faces = die.get("faces", [])
+        if not faces:
+            return color_icon + self.BLANK_ICON
+
+        face_icons = "".join(
+            self.DICE_FACE_ICON.get(face, "❓")
+            for face in faces
+        )
+
+        return color_icon + face_icons
+
+
+
+================================================================================
+FILE: C:\repos\python\assault\assault_sim\debug\console_listener.py
+================================================================================
+
+# assault_sim/debug/console_listener.py
+#
+# Console event listener.
+# This listener subscribes to the EventBus and prints
+# human-readable, high-level simulation information.
+#
+# It respects DebugConfig flags and does NOT rely on
+# low-level tracing or environment variables.
+
+from assault_sim.debug.debug_config import DebugConfig
+
+
+class ConsoleListener:
+    """
+    Human-readable console listener for simulation events.
+
+    This listener converts structured EventBus events into
+    readable console output such as:
+    - unit movements (from -> to)
+    - hp changes per action
+    - turn progression
+    - close combat rounds and outcomes
+    """
+
+    def __init__(self, debug_config: DebugConfig):
+        self.cfg = debug_config
+
+    def __call__(self, event: dict):
+        event_type = event.get("type")
+        payload = event.get("payload", {})
+
+        # -------------------------------------------------
+        # Lifecycle events
+        # -------------------------------------------------
+        if event_type == "RESET" and self.cfg.enabled:
+            print(
+                f"[RESET] Scenario={payload.get('scenario')} "
+                f"Turn={payload.get('turn')}"
+            )
+
+        elif event_type == "UNIT_LOADED" and self.cfg.enabled:
+            print(
+                f"[UNIT] {payload.get('unit_id')} "
+                f"side={payload.get('side')} "
+                f"pos={payload.get('position')}"
+            )
+
+        # -------------------------------------------------
+        # Action-level events
+        # -------------------------------------------------
+        elif event_type == "ACTION" and self.cfg.log_actions:
+            print(
+                f"[ACTION] Turn {payload.get('turn')} "
+                f"{payload.get('active_unit')} -> "
+                f"{payload.get('action')}"
+            )
+
+        elif event_type == "DEBUG_MOVE_PATH" and self.cfg.log_movement:
+            print(
+                f"[MOVE] {payload.get('unit_id')} "
+                f"path={payload.get('path')}"
+            )
+
+        elif event_type == "ACTION_EFFECT" and self.cfg.log_effects:
+            before = payload.get("before", {})
+            after = payload.get("after", {})
+            hp_delta = payload.get("hp_delta")
+
+            if hp_delta is not None:
+                print(
+                    f"[EFFECT] {payload.get('action')} "
+                    f"{before.get('unit_id')} "
+                    f"hp {before.get('hp')} -> {after.get('hp')}"
+                )
+
+        # -------------------------------------------------
+        # Turn progression
+        # -------------------------------------------------
+        elif event_type == "TURN_STATE" and self.cfg.log_turns:
+            print(
+                f"[TURN] {payload.get('turn')} "
+                f"active={payload.get('active_unit')}"
+            )
+
+        # -------------------------------------------------
+        # Victory points
+        # -------------------------------------------------
+        elif event_type == "VP_UPDATE" and self.cfg.log_vp:
+            print(
+                f"[VP] total={payload.get('total')}"
+            )
+
+        # -------------------------------------------------
+        # Close combat observability
+        # -------------------------------------------------
+        elif event_type == "CLOSE_COMBAT_ROUND" and self.cfg.log_close_combat:
+            print(
+                f"[CC] Round {payload.get('round')} "
+                f"{payload.get('attacker')} hp "
+                f"{payload.get('attacker_hp_before')} -> "
+                f"{payload.get('attacker_hp_after')} | "
+                f"{payload.get('defender')} hp "
+                f"{payload.get('defender_hp_before')} -> "
+                f"{payload.get('defender_hp_after')}"
+            )
+
+        elif event_type == "CLOSE_COMBAT_END" and self.cfg.log_close_combat:
+            print(
+                f"[CC END] winner={payload.get('winner')}"
+            )
+
+
+================================================================================
+FILE: C:\repos\python\assault\assault_sim\debug\console_observer.py
+================================================================================
+
+from .turn_buffer import TurnBuffer
+from .movement_renderer import MovementRenderer
+from .combat_renderer import CombatRenderer
+from .map_renderer import MapRenderer
+from .deployment_renderer import DeploymentRenderer
+from .unit_formatter import UnitFormatter
+
+
+class ConsoleObserver:
+    """
+    EventBus observer.
+
+    Responsibilities:
+    - React to domain events emitted by the engine.
+    - Delegate presentation to specialized renderers.
+    - Maintain a coherent, human-readable console output.
+
+    Presentation ONLY:
+    - No game logic
+    - No training logic
+    - No interpretation of combat mechanics
+    """
+
+    def __init__(self, rl_side: str | None = None):
+        self.rl_side = rl_side
+
+        self.unit_formatter = UnitFormatter()
+        self.turns = TurnBuffer(self.unit_formatter)
+
+        self.move = MovementRenderer(self.turns)
+        self.combat = CombatRenderer(self.turns, self.unit_formatter)
+
+        self.map = MapRenderer()
+        self.deploy = DeploymentRenderer()
+
+        self._map_rendered_once = False
+
+    def __call__(self, event: dict):
+        event_type = event.get("type")
+        payload = event.get("payload", {})
+
+        # ---------------- RESET ----------------
+        if event_type == "RESET":
+            self.turns.reset()
+            self.deploy.reset(payload)
+            self._map_rendered_once = False
+
+        # ---------------- UNIT LOADED ----------------
+        elif event_type == "UNIT_LOADED":
+            self.deploy.on_unit_loaded(payload)
+
+        # ---------------- MAP STATE ----------------
+        elif event_type == "MAP_STATE":
+            self.map.update_state(payload)
+            self.unit_formatter.update_units(payload.get("units", []))
+
+            if not self._map_rendered_once:
+                self.deploy.maybe_print()
+                self._map_rendered_once = True
+
+        # ---------------- ACTION ----------------
+        elif event_type == "ACTION":
+            self.turns.on_action(payload)
+
+        # ---------------- UNIT MOVED ----------------
+        elif event_type == "UNIT_MOVED":
+            self.move.on_unit_moved(payload)
+
+        # ---------------- ACTION EFFECT ----------------
+        elif event_type == "ACTION_EFFECT":
+            self.combat.on_action_effect(payload)
+
+        # ---------------- TURN END ----------------
+        elif event_type == "TURN_END":
+            self.turns.close_turn()
+            self.map.render(payload.get("turn"))
+
+        # ---------------- MATCH END ----------------
+        elif event_type == "MATCH_END":
+            result = payload.get("result")
+            winner = payload.get("winner")
+            reason = payload.get("reason", "scenario_end")
+            turn = payload.get("turn")
+
+            self.turns.add_line("")
+
+            # -------- DRAW --------
+            if result != "victory" or not winner:
+                self.turns.add_line("🤝 MATCH FINISHED — DRAW")
+                self.turns.add_line(f"    Ended at turn: {turn}")
+
+            # -------- VICTORY --------
+            else:
+                is_rl = self.rl_side is not None and winner == self.rl_side
+
+                # ✅ Who controls the winner
+                controller_type = "RL" if is_rl else "HEURISTIC"
+
+                # ✅ How the victory happened
+                if reason == "last_side_standing":
+                    victory_type = "ELIMINATION"
+                elif reason == "max_turns":
+                    victory_type = "SCENARIO"
+                else:
+                    victory_type = "UNKNOWN"
+
+                self.turns.add_line(
+                    f"🏆 MATCH FINISHED — {controller_type} {victory_type} VICTORY ({winner})"
+                )
+
+                self.turns.add_line(
+                    f"    Winner: {winner} ({controller_type.lower()}-controlled)"
+                )
+
+                if self.rl_side:
+                    loser = "GE" if winner == "US" else "US"
+                    loser_type = "heuristic-controlled" if is_rl else "rl-controlled"
+                    self.turns.add_line(
+                        f"    Loser:  {loser} ({loser_type})"
+                    )
+
+                self.turns.add_line(f"    Ended at turn: {turn}")
+
+                # -------- REASON --------
+                if reason:
+                    pretty_reason = reason.replace("_", " ").capitalize()
+                    self.turns.add_line(f"    Reason: {pretty_reason}")
+
+                # Force final print
+                self.turns.close_turn()
+
+
+================================================================================
+FILE: C:\repos\python\assault\assault_sim\debug\debug_config.py
+================================================================================
+
+from dataclasses import dataclass
+@dataclass
+class DebugConfig:
+    enabled: bool = False
+    log_actions: bool = False
+    log_turns: bool = False
+    log_vp: bool = False
+
+
+
+================================================================================
+FILE: C:\repos\python\assault\assault_sim\debug\deployment_renderer.py
+================================================================================
+
+# assault_sim/debug/deployment_renderer.py
+
+class DeploymentRenderer:
+    """
+    DeploymentRenderer
+
+    Responsibility:
+    - Collect UNIT_LOADED events during scenario initialization.
+    - Render the initial deployment ONCE before the first turn.
+    - Display unit color, life (HP), and starting position.
+
+    Design rules:
+    - Uses only payload data from UNIT_LOADED.
+    - Does NOT depend on GameState.
+    - Does NOT render map or turns.
+    """
+
+    def __init__(self):
+        self.units = []
+        self.printed = False
+
+    # -------------------------------------------------
+    # RESET
+    # -------------------------------------------------
+    def reset(self, payload: dict):
+        """
+        Reset deployment state and print scenario header.
+        """
+        print("\n=== SIMULATION RESET ===")
+        scenario = payload.get("scenario")
+        turn = payload.get("turn")
+
+        if scenario:
+            print(f"Scenario: {scenario}")
+        if turn is not None:
+            print(f"Starting turn: {turn}")
+
+        print("========================\n")
+
+        self.units.clear()
+        self.printed = False
+
+    # -------------------------------------------------
+    # UNIT LOADED
+    # -------------------------------------------------
+    def on_unit_loaded(self, p: dict):
+        """
+        Store a loaded unit from UNIT_LOADED event.
+
+        Expected payload:
+        {
+            "unit_id": str,
+            "side": str,         # "GE" or "US"
+            "position": HexCoord,
+            "hp": int
+        }
+        """
+        self.units.append(p)
+
+    # -------------------------------------------------
+    # PRINT DEPLOYMENT (ONCE)
+    # -------------------------------------------------
+    def maybe_print(self):
+        """
+        Print initial deployment once, just before TURN 1.
+        """
+        if self.printed or not self.units:
+            return
+
+        print("=== INITIAL DEPLOYMENT ===")
+        for u in self.units:
+            uid = u.get("unit_id")
+            side = u.get("side")
+            pos = u.get("position")
+            hp = u.get("hp", 0)
+
+            icon = "🔵" if side == "GE" else "🔴"
+            hearts = "❤️" * max(0, hp)
+            pos_text = f"({pos.q},{pos.r})" if pos else "?"
+
+            print(f"{icon}{uid} {hearts} at {pos_text}")
+
+        print("==========================\n")
+        self.printed = True
+
+
+================================================================================
+FILE: C:\repos\python\assault\assault_sim\debug\event_bus.py
+================================================================================
+
+# assault_model/core/event_bus.py
+
+
+class EventBus:
+    def __init__(self, config=None):
+        """
+        EventBus with optional observability filtering.
+
+        CURRENT STATUS:
+        - Passthrough mode: ALL events are emitted.
+        - Filtering logic is temporarily disabled to guarantee full observability
+          while the system architecture is still evolving.
+
+        FUTURE INTENT:
+        - Re-enable semantic filtering once the event taxonomy and observer
+          contracts are stable.
+        """
+        self.subscribers = []
+        self.config = config or {}
+
+    def subscribe(self, fn):
+        self.subscribers.append(fn)
+
+    def emit(self, event: dict):
+        # PASSTHROUGH:
+        # Always emit events to subscribers.
+        for fn in self.subscribers:
+            fn(event)
+
+    # -------------------------------------------------
+    # OBSERVABILITY FILTER (DOCUMENTED, CURRENTLY DISABLED)
+    # -------------------------------------------------
+    def _is_enabled(self, event: dict) -> bool:
+        """
+        PASSTHROUGH FILTER
+
+        This method currently allows ALL events to pass.
+
+        RATIONALE:
+        - The event model is not finalized.
+        - Observers (console, debug, tests) rely on full causal visibility.
+        - Premature filtering causes silent loss of critical information.
+
+        FUTURE BEHAVIOR (TO BE RE-ENABLED):
+        - Semantic filtering based on event categories:
+          lifecycle, actions, movement, combat, state synchronization.
+        - Filtering will be opt-out, never opt-in.
+        - Structural events (movement, state changes, combat resolution)
+          must NEVER be filtered by default.
+        """
+
+        return True
+
+
+================================================================================
+FILE: C:\repos\python\assault\assault_sim\debug\map_renderer.py
+================================================================================
+
+# assault_sim/debug/map_renderer.py
+
+class MapRenderer:
+    """
+    Renders the full game map with:
+    - terrain (water / clear),
+    - hex state (building 🏠 / woods 🌳),
+    - units (🔵 GE / 🔴 US),
+    - victory points 🚩.
+    """
+
+    def __init__(self):
+        self.game_map = None
+        self.units = []
+        self.vps = set()
+
+    def update_state(self, payload: dict):
+        self.game_map = payload.get("game_map")
+        self.units = payload.get("units", [])
+
+        self.vps.clear()
+        vp_tracker = payload.get("vp_tracker")
+        if vp_tracker and getattr(vp_tracker, "conditions", None):
+            for vp in vp_tracker.conditions.points:
+                self.vps.add(vp.hex_coords)
+
+    def render(self, turn):
+        print(f"\n=== MAP STATE — TURN {turn} ===\n")
+
+        if not self.game_map:
+            print("(map unavailable)")
+            return
+
+        # Build quick lookup for units
+        unit_at = {
+            (u.position.q, u.position.r): u
+            for u in self.units
+            if getattr(u, "alive", True) and u.position
+        }
+
+        max_q = max(h.q for h in self.game_map.hexes)
+        max_r = max(h.r for h in self.game_map.hexes)
+
+        print("   q→ ", end="")
+        for q in range(max_q + 1):
+            print(f"{q:>3}", end=" ")
+        print("\nr↓")
+
+        for r in range(max_r + 1):
+            indent = "  " if r % 2 else ""
+            print(f"{r:<2} {indent}", end="")
+
+            for q in range(max_q + 1):
+                hex_ = self.game_map.get_hex(q, r)
+                if not hex_:
+                    print("     ", end="")
+                    continue
+
+                # Terrain
+                if hex_.terrain.value == "water":
+                    symbol = "~~~"
+                else:
+                    symbol = " . "
+
+                # Hex state overlays
+                hs = self.game_map.get_hex_state(q, r)
+                if hs:
+                    if getattr(hs, "building", False):
+                        symbol = "🏠"
+                    elif getattr(hs, "woods", False):
+                        symbol = "🌳"
+
+                # Unit overlay
+                if (q, r) in unit_at:
+                    u = unit_at[(q, r)]
+                    icon = "🔵" if u.side == "GE" else "🔴"
+                    symbol = f"{icon}{symbol.strip()}"
+
+                # VP overlay (top priority)
+                if (q, r) in self.vps:
+                    symbol = f"{symbol.strip()}🚩"
+
+                print(f"{symbol:>4}", end=" ")
+            print()
+
+        print(
+            "\nLegend: . CLEAR | ~~~ WATER | 🏠 BUILDING | 🌳 WOODS "
+            "| 🔵 GE | 🔴 US | 🚩 VP\n"
+        )
+
+
+
+================================================================================
+FILE: C:\repos\python\assault\assault_sim\debug\movement_renderer.py
+================================================================================
+
+# assault_sim/debug/movement_renderer.py
+
+class MovementRenderer:
+    """
+    MovementRenderer
+
+    Responsibility:
+    - Render UNIT_MOVED domain events.
+    - Attach movement INLINE to the corresponding action line.
+    - Fall back to a standalone line only if attachment is impossible.
+
+    Design rules:
+    - Presentation only (NO game logic).
+    - Reflects exactly what the engine reports.
+    """
+
+    def __init__(self, turn_buffer):
+        self.turn_buffer = turn_buffer
+
+    # -------------------------------------------------
+    # EVENT HANDLER
+    # -------------------------------------------------
+    def on_unit_moved(self, payload: dict) -> None:
+        unit_id = payload.get("unit_id")
+        from_hex = payload.get("from")
+        to_hex = payload.get("to")
+
+        if not unit_id or not from_hex or not to_hex:
+            return
+
+        if from_hex.q == to_hex.q and from_hex.r == to_hex.r:
+            return
+
+        arrow = self._arrow(from_hex, to_hex)
+
+        movement_text = (
+            f" 🧭 ({from_hex.q},{from_hex.r} → {to_hex.q},{to_hex.r}) {arrow}"
+        )
+
+        # -------------------------------------------------
+        # Try to attach INLINE to last action line
+        # -------------------------------------------------
+        attached = self.turn_buffer.append_to_last(
+            unit_id,
+            movement_text,
+        )
+
+        # -------------------------------------------------
+        # Fallback (should be rare)
+        # -------------------------------------------------
+        if not attached:
+            label = self.turn_buffer.unit_label(unit_id)
+            self.turn_buffer.add_line(
+                f"         {label}{movement_text}"
+            )
+
+    # -------------------------------------------------
+    # INTERNAL HELPERS
+    # -------------------------------------------------
+    def _arrow(self, from_hex, to_hex) -> str:
+        dq = to_hex.q - from_hex.q
+        dr = to_hex.r - from_hex.r
+
+        if dq == 1 and dr == 0:
+            return "➡️"
+        if dq == -1 and dr == 0:
+            return "⬅️"
+        if dq == 0 and dr == 1:
+            return "⬇️"
+        if dq == 0 and dr == -1:
+            return "⬆️"
+
+        return "•"
+
+
+================================================================================
+FILE: C:\repos\python\assault\assault_sim\debug\replay.py
+================================================================================
+
+class Replay:
+    """
+    Minimal replay container.
+    Pure data object.
+    No logic, no IO, no dependencies.
+    """
+
+    def __init__(self):
+        # General context of the replay
+        self.meta = {}
+
+        # State before Turn 1
+        self.initial_state = {}
+
+        # List of turns:
+        # [{ "turn": int, "events": [...] }]
+        self.turns = []
+
+    def to_dict(self):
+        """
+        Convert replay to plain dict for serialization.
+        """
+        return {
+            "meta": self.meta,
+            "initial_state": self.initial_state,
+            "turns": self.turns,
+        }
+
+
+================================================================================
+FILE: C:\repos\python\assault\assault_sim\debug\replay_observer.py
+================================================================================
+
+import copy
+from assault_sim.debug.replay import Replay
+
+
+class ReplayObserver:
+    def __init__(self):
+        self.replay = Replay()
+        self.replay.replay_version = 2  # ✅ OK
+        self._current_turn = None
+        self._current_events = []
+
+    def __call__(self, event: dict):
+        event_type = event.get("type")
+        payload = event.get("payload", {})
+
+        # ---------------- RESET ----------------
+        if event_type == "RESET":
+            self._current_turn = None
+            self._current_events = []
+            self.replay.turns.clear()
+
+        # ---------------- ACTION ----------------
+        elif event_type == "ACTION":
+            turn = payload.get("turn")
+            if self._current_turn != turn:
+                self._flush_turn()
+                self._current_turn = turn
+            self._current_events.append(copy.deepcopy(event))
+
+        # ---------------- ACTION EFFECT ----------------
+        elif event_type == "ACTION_EFFECT":
+            self._current_events.append(copy.deepcopy(event))
+
+        # ---------------- UNIT MOVED ----------------
+        elif event_type == "UNIT_MOVED":
+            self._current_events.append(copy.deepcopy(event))
+
+        # ✅ ---------------- HRL DECISION ----------------
+        elif event_type == "HRL_DECISION":
+            self._current_events.append(copy.deepcopy(event))
+
+        # ---------------- TURN END ----------------
+        elif event_type == "TURN_END":
+            self._flush_turn()
+            self._current_turn = None
+
+        # ---------------- MATCH END ----------------
+        elif event_type == "MATCH_END":
+            self._flush_turn()
+
+    def _flush_turn(self):
+        """
+        Store buffered events as a completed turn.
+        """
+        if self._current_turn is None or not self._current_events:
+            return
+
+        self.replay.turns.append({
+            "turn": self._current_turn,
+            "events": list(self._current_events),
+        })
+
+        self._current_events.clear()
+
+
+
+================================================================================
+FILE: C:\repos\python\assault\assault_sim\debug\replay_utils.py
+================================================================================
+
+def extract_initial_state(game_state):
+    """
+    Extract minimal initial state for replay purposes.
+
+    Uses the real UnitInstance + UnitType API.
+    """
+
+    units = []
+
+    for unit in game_state.units:
+        if unit.position is None:
+            q = None
+            r = None
+        else:
+            q = unit.position.q
+            r = unit.position.r
+
+        units.append({
+            "id": unit.unit_id,
+            "q": q,
+            "r": r,
+            "hp": unit.hp,
+            "side": unit.side,
+            "type": unit.unit_type.code,
+        })
+
+    return {
+        "turn": game_state.turn,
+        "units": units,
+    }
+
+
+================================================================================
+FILE: C:\repos\python\assault\assault_sim\debug\replay_writer.py
+================================================================================
+
+import json
+
+
+def _json_default(obj):
+    """
+    Fallback JSON serializer for non-serializable objects.
+    """
+    # HexCoord -> {q, r}
+    if hasattr(obj, "q") and hasattr(obj, "r"):
+        return {"q": obj.q, "r": obj.r}
+
+    # Enum -> value
+    if hasattr(obj, "value"):
+        return obj.value
+
+    # Fallback to string
+    return str(obj)
+
+
+class ReplayWriter:
+    """
+    Responsible only for persisting a Replay to disk.
+    """
+
+    @staticmethod
+    def write(replay, path):
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump(
+                replay.to_dict(),
+                f,
+                indent=2,
+                default=_json_default,
+            )
+
+
+================================================================================
+FILE: C:\repos\python\assault\assault_sim\debug\turn_buffer.py
+================================================================================
+
+# assault_sim/debug/turn_buffer.py
+
+from assault_sim.debug.unit_formatter import UnitFormatter
+
+
+class TurnBuffer:
+    """
+    TurnBuffer
+
+    Responsibility:
+    - Accumulate per-turn output lines.
+    - Ensure consistent formatting of unit identifiers.
+    - Attach action details (movement, combat, etc.) to existing lines.
+    - Guarantee correct visual ordering of turns.
+
+    Design notes:
+    - A turn is opened by the first ACTION event of that turn.
+    - A turn is explicitly closed when a TURN_END event is received.
+    - Once a turn is closed, it must never be reopened.
+    """
+
+    def __init__(self, unit_formatter: UnitFormatter | None = None):
+        self.turn = None
+        self.lines = []
+
+        # Formatter responsible for coloring units and showing HP
+        self._unit_formatter = unit_formatter
+
+        # Track the last visually closed turn to prevent reopening
+        self._closed_turn = None
+
+    # -------------------------------------------------
+    # TURN CONTROL
+    # -------------------------------------------------
+    def reset(self):
+        """
+        Fully reset the buffer (used on RESET event).
+        """
+        self.turn = None
+        self._closed_turn = None
+        self.lines.clear()
+
+    def close_turn(self):
+        """
+        Explicitly close the current turn.
+
+        Called when TURN_END is received. This ensures:
+        - All accumulated lines are flushed.
+        - No further ACTION belonging to this turn
+          can reopen the [TURN X] header.
+        """
+        self.flush()
+        self._closed_turn = self.turn
+        self.turn = None
+
+    def on_action(self, payload: dict):
+        """
+        Handle an ACTION event.
+
+        Opens a new turn header if needed and appends the action line.
+        """
+
+        turn = payload["turn"]
+
+        # ✅ Do not reopen a turn that has already been closed
+        if self._closed_turn == turn:
+            return
+
+        # Open a new turn if needed
+        if self.turn != turn:
+            self.flush()
+            self.turn = turn
+            print(f"[TURN {turn}]")
+
+        uid = payload["active_unit"]
+        action = payload["action"]
+
+        label = self.unit_label(uid)
+
+        self.lines.append(
+            f"         {label} -> {action}"
+        )
+
+    # -------------------------------------------------
+    # LINE MANAGEMENT
+    # -------------------------------------------------
+    def append_to_last(self, unit_id: str, extra_text: str) -> bool:
+        """
+        Append extra text to the last line containing the given unit_id.
+        Used to attach movement or combat details to an action line.
+        """
+        for i in range(len(self.lines) - 1, -1, -1):
+            if unit_id in self.lines[i]:
+                self.lines[i] += extra_text
+                return True
+        return False
+
+    def add_line(self, line: str):
+        """
+        Add a standalone line (used for combat blocks, fallback messages, etc.).
+        """
+        self.lines.append(line)
+
+    def flush(self):
+        """
+        Print all accumulated lines and clear the buffer.
+        """
+        for l in self.lines:
+            print(l)
+        self.lines.clear()
+
+    # -------------------------------------------------
+    # UNIT FORMATTING API
+    # -------------------------------------------------
+    def unit_label(self, unit_id: str) -> str:
+        """
+        Return a formatted unit label using UnitFormatter.
+        Falls back to raw unit_id if formatter is unavailable.
+        """
+        if self._unit_formatter:
+            return self._unit_formatter.label(unit_id)
+        return unit_id
+
+
+
+================================================================================
+FILE: C:\repos\python\assault\assault_sim\debug\unit_formatter.py
+================================================================================
+
+# assault_sim/debug/unit_formatter.py
+
+class UnitFormatter:
+    """
+    UnitFormatter
+
+    Responsibility:
+    - Render a unit consistently everywhere in the console output.
+    - Apply side color (🔵 GE / 🔴 US).
+    - Append hearts (❤️) representing current HP.
+
+    Design rules:
+    - Presentation-only (NO game logic).
+    - Reads unit state from the current unit list (GameState snapshot).
+    - Supports temporary HP overrides for accurate per-round combat rendering.
+    """
+
+    def __init__(self):
+        self._units = []
+        self._hp_override = {}  # ✅ temporary visual overrides
+
+    # -------------------------------------------------
+    # STATE UPDATE
+    # -------------------------------------------------
+    def update_units(self, units: list):
+        """
+        Update the current unit list (typically on MAP_STATE).
+
+        This resets any temporary HP overrides.
+        """
+        self._units = units or []
+        self._hp_override.clear()
+
+    # -------------------------------------------------
+    # HP OVERRIDE (VISUAL ONLY)
+    # -------------------------------------------------
+    def override_hp(self, unit_id: str, hp: int):
+        """
+        Temporarily override HP displayed for a unit.
+        Used during combat rounds ONLY.
+        """
+        self._hp_override[unit_id] = max(0, hp)
+
+    # -------------------------------------------------
+    # PUBLIC API
+    # -------------------------------------------------
+    def label(self, unit_id: str) -> str:
+        """
+        Return the formatted label for a unit.
+
+        Examples:
+        - 🔵GE_1 ❤️❤️
+        - 🔴US_2 ❤️
+        """
+
+        for u in self._units:
+            if u.unit_id == unit_id:
+                icon = "🔵" if u.side == "GE" else "🔴"
+
+                # ✅ Use override if present, otherwise real unit.hp
+                hp = self._hp_override.get(
+                    unit_id,
+                    getattr(u, "hp", 0)
+                )
+
+                hearts = "❤️" * max(0, hp)
+                return f"{icon}{u.unit_id} {hearts}".strip()
+
+        # Fallback if unit is unknown
+        return unit_id
+
+
+================================================================================
+FILE: C:\repos\python\assault\assault_sim\decision\hrl_controller.py
+================================================================================
+
+from assault_sim.rl.tactical_options import TacticalOption
+from assault_sim.rl.state_encoder import explainable_context
+
+
+class HRLController:
+    """
+    Hierarchical RL controller.
+
+    Decides WHEN to select a new tactical option and
+    delegates execution to heuristics.
+    """
+
+    OPTION_HORIZON = {
+        TacticalOption.ADVANCE: 5,
+        TacticalOption.FLANK: 6,
+        TacticalOption.ATTACK: 2,
+        TacticalOption.HOLD: 1,
+        TacticalOption.RETREAT: 3,
+    }
+
+    def __init__(self, option_policy, option_executor, rl_side, event_bus=None):
+        self.policy = option_policy
+        self.executor = option_executor
+        self.rl_side = rl_side
+        self.event_bus = event_bus
+
+        self.current_option = None
+        self.steps_remaining = -1  # force first decision
+
+    def choose_action(self, state, obs):
+        active = state.active_unit
+        if active is None or active.side != self.rl_side:
+            return None
+
+        is_new_selection = (
+            self.current_option is None or self.steps_remaining <= 0
+        )
+
+        if is_new_selection:
+            self.current_option = self.policy.choose_option(obs)
+            self.steps_remaining = self.OPTION_HORIZON[self.current_option]
+
+            if self.event_bus:
+                context = explainable_context(
+                    state,
+                    rl_side=self.rl_side,
+                    max_turns=getattr(state, "max_turns", None),
+                )
+
+                self.event_bus.emit({
+                    "type": "HRL_DECISION",
+                    "payload": {
+                        "side": self.rl_side,
+                        "option": self.current_option.name,
+                        "description": self.current_option.description(),
+                        "category": self.current_option.category(),
+                        "turn": state.turn,
+                        "context": context,
+                        "policy_info": self.policy.last_decision_info,
+                    }
+                })
+
+        self.steps_remaining -= 1
+
+        return self.executor.execute(
+            self.current_option,
+            state,
+            active
+        )
+
+
+================================================================================
+FILE: C:\repos\python\assault\assault_sim\decision\option_executor.py
+================================================================================
+
+from assault_model.actions.status import WaitAction
+from assault_sim.rl.tactical_options import TacticalOption
+
+
+class OptionExecutor:
+    """
+    Executes a TacticalOption using existing heuristics.
+
+    This class ADAPTS HRL intentions to the real heuristic API.
+    It must NOT assume methods that do not exist.
+    """
+
+    def __init__(self, heuristic_controller):
+        self.heuristic = heuristic_controller
+
+    def execute(self, option: TacticalOption, state, unit):
+        """
+        Execute ONE step of the given tactical option.
+        """
+
+        # -------------------------------------------------
+        # ADVANCE: create contact / move forward
+        # -------------------------------------------------
+        if option == TacticalOption.ADVANCE:
+            return self.heuristic.advance_towards_enemy(unit, state)
+
+        # -------------------------------------------------
+        # FLANK: currently reuse heuristic logic
+        # (can be specialized later)
+        # -------------------------------------------------
+        if option == TacticalOption.FLANK:
+            return self.heuristic.flank_best_position(unit, state)
+
+        # -------------------------------------------------
+        # ATTACK: defer to existing heuristic attack logic
+        # (choose_action already prioritizes assault/ranged)
+        # -------------------------------------------------
+        if option == TacticalOption.ATTACK:
+            return self.heuristic.choose_action(state)
+
+        # -------------------------------------------------
+        # HOLD: explicit wait
+        # -------------------------------------------------
+        if option == TacticalOption.HOLD:
+            return WaitAction(unit.unit_id)
+
+        # -------------------------------------------------
+        # RETREAT: move away from closest enemy
+        # -------------------------------------------------
+        if option == TacticalOption.RETREAT:
+            return self.heuristic.retreat(unit, state)
+
+        # -------------------------------------------------
+        # SAFETY FALLBACK
+        # -------------------------------------------------
+        return WaitAction(unit.unit_id)
+
+
+================================================================================
+FILE: C:\repos\python\assault\assault_sim\decision\side_controller.py
+================================================================================
+
+# assault_sim/decision/side_controller.py
+
+class SideController:
+    """
+    Per-side decision controller.
+    Delegates the decision to the assigned policy.
+    """
+
+    def __init__(self, policy):
+        self.policy = policy
+
+    def choose_action(self, state):
+        return self.policy.choose_action(state)
+
+
+================================================================================
+FILE: C:\repos\python\assault\assault_sim\explanation\__init__.py
+================================================================================
+
+
+
+
+================================================================================
+FILE: C:\repos\python\assault\assault_sim\heuristics\base.py
+================================================================================
+
+class BasicHeuristic:
+    """
+    Phase 1 heuristic.
+    Minimal functional decision logic.
+    """
+
+    def choose_action(self, state, knowledge=None, strategy=None):
+        actions = state.available_actions()
+        if not actions:
+            return None
+
+        # 1) Prefer combat
+        for action in actions:
+            if action.action_type.category.name == "COMBAT":
+                return action
+
+        # 2) Otherwise move
+        for action in actions:
+            if action.action_type.category.name == "MOVEMENT":
+                return action
+
+        # 3) Otherwise wait/status
+        for action in actions:
+            if action.action_type.category.name == "STATUS":
+                return action
+
+        return actions[0]
+
+
+================================================================================
+FILE: C:\repos\python\assault\assault_sim\heuristics\debug.py
+================================================================================
+
+class HeuristicTracer:
+    def __init__(self, enabled: bool):
+        self.enabled = enabled
+
+    def trace(self, tag: str, **data):
+        if not self.enabled:
+            return
+        payload = " ".join(f"{k}={v}" for k, v in data.items())
+        print(f"[H-TRACE][{tag}] {payload}")
+
+
+================================================================================
+FILE: C:\repos\python\assault\assault_sim\heuristics\heuristic_base.py
+================================================================================
+
+from assault_model.actions.action_catalog import ActionCatalog
+from assault_model.actions.action_category import ActionCategory
+from assault_model.map.hex_utils import hex_distance
+
+
+class HeuristicBase:
+    """
+    Heuristic that moves units TOWARDS the nearest enemy.
+    """
+
+    # unit_id -> previous position (written by runtime)
+    previous_position = {}
+
+    @staticmethod
+    def choose_action(game_state):
+        actions = ActionCatalog(game_state).actions()
+        unit = game_state.active_unit
+
+        # Safety
+        if unit is None or not actions:
+            return None
+
+        unit_id = unit.unit_id
+        current_pos = unit.position
+        prev_pos = HeuristicBase.previous_position.get(unit_id)
+
+        # ---------------------------------
+        # 1️⃣ Find enemies
+        # ---------------------------------
+        enemies = [u for u in game_state.units if u.side != unit.side]
+
+        if not enemies:
+            for action in actions:
+                if action.action_type.category == ActionCategory.STATUS:
+                    return action
+            return actions[0]
+
+        # ---------------------------------
+        # 2️⃣ Nearest enemy
+        # ---------------------------------
+        nearest_enemy = min(
+            enemies,
+            key=lambda e: hex_distance(current_pos, e.position),
+        )
+
+        # ---------------------------------
+        # 3️⃣ Prefer combat if available
+        # ---------------------------------
+        for action in actions:
+            if action.action_type.category == ActionCategory.COMBAT:
+                return action
+
+        # ---------------------------------
+        # 4️⃣ Move closer
+        # ---------------------------------
+        best_action = None
+        best_dist = hex_distance(current_pos, nearest_enemy.position)
+
+        for action in actions:
+            if action.action_type.category != ActionCategory.MOVEMENT:
+                continue
+
+            # ✅ MoveAction uses `path`, not `payload`
+            path = getattr(action, "path", None)
+            if not path:
+                continue
+
+            dest = path[-1]
+            dest_pos = (dest.q, dest.r)
+
+            # Avoid immediate return
+            if prev_pos is not None and dest_pos == prev_pos:
+                continue
+
+            d = hex_distance(dest_pos, nearest_enemy.position)
+            if d < best_dist:
+                best_dist = d
+                best_action = action
+
+        if best_action:
+            return best_action
+
+        # ---------------------------------
+        # 5️⃣ Wait
+        # ---------------------------------
+        for action in actions:
+            if action.action_type.category == ActionCategory.STATUS:
+                return action
+
+        return actions[0]
+
+
+================================================================================
+FILE: C:\repos\python\assault\assault_sim\heuristics\move_to_vp.py
+================================================================================
+
+from assault_model.actions.action_catalog import ActionCatalog
+from assault_model.actions.action_category import ActionCategory
+from assault_model.actions.assault import AssaultAction
+from assault_model.map.hex_utils import hex_distance
+
+
+class MoveToVictoryPointHeuristic:
+    """
+    Moves units towards Victory Points defined by vp_tracker.conditions.
+
+    Key architectural assumptions:
+    - MovementRules allow ONLY 1-hex movement per action.
+    - ActionCatalog already generates all legal 1-step MoveActions.
+    - This heuristic DOES NOT compute paths itself.
+      Instead, it picks the best existing movement action.
+
+    Priority:
+    1. Close combat (AssaultAction)
+    2. Movement action that reduces distance to nearest VP
+    3. Wait action as fallback
+    """
+
+    def choose_action(self, state):
+        unit = state.active_unit
+        actions = ActionCatalog(state).actions()
+
+        print(
+            f"[TRACE][HEURISTIC] active_unit="
+            f"{unit.unit_id if unit else None}"
+        )
+
+        if unit is None or not actions:
+            print("[TRACE][HEURISTIC] no unit or no actions -> WAIT")
+            return None
+
+        print("[TRACE][HEURISTIC] available actions:")
+        for a in actions:
+            path = getattr(a, "path", None)
+            if path:
+                dest = path[-1]
+                print(
+                    f"  - {a.action_type.name} "
+                    f"-> ({dest.q},{dest.r})"
+                )
+            else:
+                print(f"  - {a.action_type.name}")
+
+        # -------------------------------------------------
+        # ✅ PRIORITY: CLOSE COMBAT
+        # -------------------------------------------------
+        for action in actions:
+            if isinstance(action, AssaultAction):
+                print("[TRACE][HEURISTIC] chose ASSAULT")
+                return action
+
+        vp_tracker = getattr(state, "vp_tracker", None)
+        if not vp_tracker or not vp_tracker.conditions:
+            print("[TRACE][HEURISTIC] no VP info -> WAIT")
+            return self._wait(actions)
+
+        vp_positions = vp_tracker.conditions.get_positions()
+        if not vp_positions:
+            print("[TRACE][HEURISTIC] VP list empty -> WAIT")
+            return self._wait(actions)
+
+        current_pos = unit.position
+        target_vp = min(
+            vp_positions,
+            key=lambda p: hex_distance(current_pos, p)
+        )
+
+        best_dist = hex_distance(current_pos, target_vp)
+        best_action = None
+
+        print(
+            f"[TRACE][HEURISTIC] target_vp="
+            f"({target_vp.q},{target_vp.r}) "
+            f"current_dist={best_dist}"
+        )
+
+        # -------------------------------------------------
+        # ✅ Choose movement action that improves distance
+        # -------------------------------------------------
+        for action in actions:
+            if action.action_type.category != ActionCategory.MOVEMENT:
+                continue
+
+            path = getattr(action, "path", None)
+            if not path:
+                continue
+
+            dest = path[-1]
+            d = hex_distance(dest, target_vp)
+
+            print(
+                f"[TRACE][HEURISTIC] check MOVE -> "
+                f"({dest.q},{dest.r}) "
+                f"dist={d}"
+            )
+
+            if d < best_dist:
+                best_dist = d
+                best_action = action
+
+        if best_action:
+            dest = best_action.path[-1]
+            print(
+                f"[TRACE][HEURISTIC] CHOSE MOVE -> "
+                f"({dest.q},{dest.r})"
+            )
+            return best_action
+
+        print("[TRACE][HEURISTIC] no improving move -> WAIT")
+        return self._wait(actions)
+
+    def _wait(self, actions):
+        for a in actions:
+            if a.action_type.category == ActionCategory.STATUS:
+                return a
+        return actions[0]
+
+
+
+================================================================================
+FILE: C:\repos\python\assault\assault_sim\heuristics\noop.py
+================================================================================
+
+from assault_model.actions.action_catalog import ActionCatalog
+
+
+class NoOpHeuristic:
+    """
+    NO-OP policy: always returns STATUS / WAIT.
+    """
+
+    def choose_action(self, state):
+        actions = ActionCatalog(state).actions()
+
+        for a in actions:
+            if a.action_type.category.name == "STATUS":
+                return a
+
+        return actions[0] if actions else None
+
+
+================================================================================
+FILE: C:\repos\python\assault\assault_sim\heuristics\pathfinding.py
+================================================================================
+
+from collections import deque
+from assault_model.map.hex_coord import HexCoord
+
+
+def bfs_hex_path(start: HexCoord, goal: HexCoord, state):
+    if start == goal:
+        return []
+
+    visited = {(start.q, start.r)}
+    queue = deque([(start, [])])
+
+    game_map = state.game_map
+
+    while queue:
+        pos, path = queue.popleft()
+        key = (pos.q, pos.r)
+
+        hex_obj = game_map.get_hex(pos.q, pos.r)
+        if hex_obj is None:
+            continue
+
+        for neigh in hex_obj.neighbors():
+            nxt = neigh
+            nxt_key = (nxt.q, nxt.r)
+
+            if nxt_key in visited:
+                continue
+
+            hex_nxt = game_map.get_hex(nxt.q, nxt.r)
+            if hex_nxt is None:
+                continue
+
+            if hex_nxt.terrain.value == "water":
+                continue
+
+            new_path = path + [nxt]
+
+            if nxt == goal:
+                return new_path
+
+            visited.add(nxt_key)
+            queue.append((nxt, new_path))
+
+    return None
+
+
+================================================================================
+FILE: C:\repos\python\assault\assault_sim\heuristics\Phase01_InitialContactPolicy.py
+================================================================================
+
+from assault_model.actions.action_catalog import ActionCatalog
+from assault_model.actions.action_category import ActionCategory
+from assault_model.actions.assault import AssaultAction
+from assault_model.map.hex_utils import hex_distance
+
+
+class Phase01_InitialContactPolicy:
+    """
+    Phase 01 — Initial Contact Policy
+
+    Purpose:
+    - Guarantee activity (avoid WAIT)
+    - Guarantee inevitable contact
+    - Teach only: action → consequence → VP
+
+    This policy is deliberately non-tactical.
+    """
+
+    def choose_action(self, state):
+        unit = state.active_unit
+
+        # Safety guard
+        if unit is None or not unit.alive:
+            return None
+
+        # Get all legal actions
+        actions = ActionCatalog(state).actions()
+
+        if not actions:
+            return None
+
+        # -------------------------------------------------
+        # 1. ABSOLUTE PRIORITY: ASSAULT IF POSSIBLE
+        # -------------------------------------------------
+        for action in actions:
+            if isinstance(action, AssaultAction):
+                return action
+
+        # -------------------------------------------------
+        # 2. SELECT TARGET (VP FIRST, ENEMY AS FALLBACK)
+        # -------------------------------------------------
+        target_hex = self._select_target_hex(state, unit)
+
+        if target_hex is None:
+            return self._wait_action(actions)
+
+        # -------------------------------------------------
+        # 3. MOVE TOWARDS TARGET (GREEDY DISTANCE REDUCTION)
+        # -------------------------------------------------
+        best_action = None
+        best_distance = hex_distance(unit.position, target_hex)
+
+        for action in actions:
+            if action.action_type.category != ActionCategory.MOVEMENT:
+                continue
+
+            path = getattr(action, "path", None)
+            if not path:
+                continue
+
+            destination = path[-1]
+            distance = hex_distance(destination, target_hex)
+
+            if distance < best_distance:
+                best_distance = distance
+                best_action = action
+
+        if best_action is not None:
+            return best_action
+
+        # -------------------------------------------------
+        # 4. FALLBACK: WAIT (ONLY IF NO BETTER OPTION EXISTS)
+        # -------------------------------------------------
+        return self._wait_action(actions)
+
+    # =====================================================
+    # Helpers
+    # =====================================================
+
+    def _select_target_hex(self, state, unit):
+        """
+        Target selection logic for Phase 01.
+
+        Priority:
+        1. Victory Point hex
+        2. Closest enemy unit
+        """
+
+        # --- 1. Victory Points ---
+        vp_tracker = getattr(state, "vp_tracker", None)
+        if vp_tracker and vp_tracker.conditions:
+            vp_positions = vp_tracker.conditions.get_positions()
+            if vp_positions:
+                return min(
+                    vp_positions,
+                    key=lambda vp: hex_distance(unit.position, vp)
+                )
+
+        # --- 2. Closest enemy unit ---
+        enemies = [
+            u for u in state.units
+            if u.side != unit.side and u.alive
+        ]
+
+        if enemies:
+            closest_enemy = min(
+                enemies,
+                key=lambda e: hex_distance(unit.position, e.position)
+            )
+            return closest_enemy.position
+
+        return None
+
+    def _wait_action(self, actions):
+        """
+        Return a WAIT / STATUS action if available.
+        Used only as a last resort.
+        """
+        for action in actions:
+            if action.action_type.category == ActionCategory.STATUS:
+                return action
+
+        # Absolute fallback (should rarely happen)
+        return actions[0]
+
+
+================================================================================
+FILE: C:\repos\python\assault\assault_sim\heuristics\tactical_path_heuristic.py
+================================================================================
+
+from assault_model.actions.action_catalog import ActionCatalog
+from assault_model.actions.action_category import ActionCategory
+from assault_model.actions.assault import AssaultAction
+from assault_model.actions.ranged_direct import RangedDirectAttack
+from assault_model.map.hex_utils import hex_distance
+
+
+class TacticalPathHeuristic:
+    """
+    Tactical heuristic adapted to support HRL.
+
+    Core method:
+    - choose_action(state): unchanged, legacy-safe
+
+    Additional lightweight wrappers:
+    - advance_towards_enemy
+    - flank_best_position
+    - retreat
+    """
+
+    # -------------------------------------------------
+    # MAIN HEURISTIC (UNCHANGED)
+    # -------------------------------------------------
+    def choose_action(self, state):
+        unit = state.active_unit
+        if unit is None or not unit.alive:
+            return None
+
+        actions = ActionCatalog(state).actions()
+        if not actions:
+            return None
+
+        # -------------------------------------------------
+        # 1. ABSOLUTE PRIORITY: ASSAULT
+        # -------------------------------------------------
+        for action in actions:
+            if isinstance(action, AssaultAction):
+                return action
+
+        # -------------------------------------------------
+        # 2. PRIORITY: RANGED FIRE
+        # -------------------------------------------------
+        for action in actions:
+            if isinstance(action, RangedDirectAttack):
+                return action
+
+        # -------------------------------------------------
+        # 3. CREATE CONTACT (ANTI-PASSIVE)
+        # -------------------------------------------------
+        enemies = [
+            u for u in state.units
+            if u.side != unit.side and u.alive
+        ]
+
+        if enemies:
+            closest_enemy = min(
+                enemies,
+                key=lambda e: hex_distance(unit.position, e.position)
+            )
+
+            # Move towards enemy to create interaction
+            best_move = None
+            best_dist = hex_distance(unit.position, closest_enemy.position)
+
+            for action in actions:
+                if action.action_type.category != ActionCategory.MOVEMENT:
+                    continue
+
+                path = getattr(action, "path", None)
+                if not path:
+                    continue
+
+                dest = path[-1]
+                d = hex_distance(dest, closest_enemy.position)
+
+                if d < best_dist:
+                    best_dist = d
+                    best_move = action
+
+            if best_move:
+                return best_move
+
+        # -------------------------------------------------
+        # 4. FALLBACK: WAIT
+        # -------------------------------------------------
+        return self._wait(actions)
+
+    # -------------------------------------------------
+    # HRL WRAPPERS (NEW, MINIMAL)
+    # -------------------------------------------------
+    def advance_towards_enemy(self, unit, state):
+        """
+        HRL ADVANCE:
+        Reuse existing heuristic logic to create contact.
+        """
+        return self.choose_action(state)
+
+    def flank_best_position(self, unit, state):
+        """
+        HRL FLANK:
+        For now, reuse choose_action.
+        Later, flank-specific logic can be added safely.
+        """
+        return self.choose_action(state)
+
+    def retreat(self, unit, state):
+        """
+        HRL RETREAT:
+        Move away from closest enemy.
+        """
+        actions = ActionCatalog(state).actions()
+        enemies = [
+            u for u in state.units
+            if u.side != unit.side and u.alive
+        ]
+
+        if not enemies:
+            return self._wait(actions)
+
+        closest_enemy = min(
+            enemies,
+            key=lambda e: hex_distance(unit.position, e.position)
+        )
+
+        best_move = None
+        best_dist = hex_distance(unit.position, closest_enemy.position)
+
+        for action in actions:
+            if action.action_type.category != ActionCategory.MOVEMENT:
+                continue
+
+            path = getattr(action, "path", None)
+            if not path:
+                continue
+
+            dest = path[-1]
+            d = hex_distance(dest, closest_enemy.position)
+
+            # Retreat = increase distance
+            if d > best_dist:
+                best_dist = d
+                best_move = action
+
+        if best_move:
+            return best_move
+
+        return self._wait(actions)
+
+    # -------------------------------------------------
+    # INTERNAL
+    # -------------------------------------------------
+    def _wait(self, actions):
+        for a in actions:
+            if a.action_type.category == ActionCategory.STATUS:
+                return a
+        return actions[0]
+
+
+
+================================================================================
+FILE: C:\repos\python\assault\assault_sim\heuristics\__init__.py
+================================================================================
+
+
+
+
+================================================================================
+FILE: C:\repos\python\assault\assault_sim\heuristics\bricks\victory_point_brick.py
+================================================================================
+
+from dataclasses import dataclass
+
+
+@dataclass
+class Target:
+    q: int
+    r: int
+    score: float
+
+
+class VictoryPointBrick:
+    def score_targets(self, state, unit) -> list:
+        targets = []
+
+        vp_tracker = getattr(state, "vp_tracker", None)
+        if not vp_tracker or not vp_tracker.conditions:
+            return targets
+
+        # API pública ya validada por tu código existente
+        for q, r in vp_tracker.conditions.get_positions():
+            targets.append(Target(q=q, r=r, score=100.0))
+
+        return targets
+
+
+================================================================================
+FILE: C:\repos\python\assault\assault_sim\knowledge\area.py
+================================================================================
+
+class KnowledgeArea:
+    """
+    Groups multiple KnowledgeBricks into a semantic area.
+    Contract:
+    - evaluate_all(...) -> dict[str, dict]
+    """
+    def __init__(self, bricks: list):
+        self.bricks = bricks
+
+    def evaluate_all(self, state, unit_id, context=None) -> dict:
+        raise NotImplementedError
+
+
+
+================================================================================
+FILE: C:\repos\python\assault\assault_sim\knowledge\base.py
+================================================================================
+
+class KnowledgeBrick:
+    """
+    Atomic knowledge unit.
+    Contract:
+    - evaluate(state, unit_id, context=None) -> dict
+    - pure (no state, no side effects)
+    """
+    def evaluate(self, state, unit_id, context=None) -> dict:
+        raise NotImplementedError
+
+
+
+================================================================================
+FILE: C:\repos\python\assault\assault_sim\knowledge\enemy_proximity.py
+================================================================================
+
+# assault_sim/knowledge/bricks/enemy_proximity.py
+
+from assault_model.map.hex_utils import hex_distance
+
+
+class EnemyProximityBrick:
+    """
+    Knowledge Brick:
+    Describes proximity of enemy units.
+    """
+
+    def evaluate(self, state, unit_id):
+        unit = next(
+            (u for u in state.units if u.unit_id == unit_id),
+            None
+        )
+
+        if unit is None:
+            return {}
+
+        enemies = [u for u in state.units if u.side != unit.side]
+
+        if not enemies:
+            return {
+                "enemy_count": 0,
+                "nearest_enemy_distance": None,
+            }
+
+        distances = [
+            hex_distance(unit.position, e.position)
+            for e in enemies
+        ]
+
+        return {
+            "enemy_count": len(enemies),
+            "nearest_enemy_distance": min(distances),
+        }
+
+
+================================================================================
+FILE: C:\repos\python\assault\assault_sim\observers\console_observer..py
+================================================================================
+
+class ConsoleObserver:
+    def __call__(self, event: dict) -> None:
+        etype = event.get("type")
+        payload = event.get("payload", {})
+        print(f"[DEBUG] {etype}: {payload}")
+
+
+================================================================================
+FILE: C:\repos\python\assault\assault_sim\policies\bootstrap.py
+================================================================================
+
+from assault_sim.policies.registry import PolicyRegistry
+from assault_sim.heuristics.noop import NoOpHeuristic
+from assault_sim.heuristics.basic import BasicHeuristic
+
+def build_policy_registry() -> PolicyRegistry:
+    registry = PolicyRegistry()
+    registry.register("noop", NoOpHeuristic())
+    registry.register("heuristic_basic", BasicHeuristic())
+    return registry
+
+
+================================================================================
+FILE: C:\repos\python\assault\assault_sim\policies\registry.py
+================================================================================
+
+class PolicyRegistry:
+    def __init__(self):
+        self._policies = {}
+
+    def register(self, name: str, policy):
+        self._policies[name] = policy
+
+    def resolve(self, name: str):
+        return self._policies[name]
+
+
+================================================================================
+FILE: C:\repos\python\assault\assault_sim\rewards\aggressive_reward.py
+================================================================================
+
+from assault_model.actions.status import WaitAction
+from assault_model.map.hex_utils import hex_distance
+from .base_reward import BaseReward
+
+
+class AggressiveReward(BaseReward):
+    def compute(
+        self,
+        *,
+        state,
+        next_state,
+        action,
+        active,
+        info,
+        pre_dist,
+        post_dist
+    ) -> float:
+
+        reward = 0.0
+
+        # --- VP delta ---
+        current_vp = next_state.vp_tracker.total_points if next_state.vp_tracker else 0
+        reward += current_vp - self.prev_vp
+        self.prev_vp = current_vp
+
+        # --- detect attack ---
+        action_name = action.__class__.__name__ if action else ""
+        is_attack = "Ranged" in action_name or "Close" in action_name
+
+        if is_attack:
+            reward += 0.3
+
+        dmg = info.get("damage", 0) if isinstance(info, dict) else 0
+        killed = info.get("defender_killed", False) if isinstance(info, dict) else False
+        sector = info.get("sector") if isinstance(info, dict) else None
+
+        reward += 0.6 * dmg
+        if killed:
+            reward += 4.0
+
+        if sector in ("FLANK", "FLANK_LEFT", "FLANK_RIGHT"):
+            reward += 0.4
+        if sector == "REAR":
+            reward += 0.7
+
+        if pre_dist is not None and post_dist is not None:
+            delta = pre_dist - post_dist
+            reward += 0.15 * delta
+            if delta < 0:
+                reward -= 0.15
+            self.prev_enemy_dist = post_dist
+
+        if isinstance(action, WaitAction) and pre_dist is not None:
+            reward -= 0.1
+
+        return reward
+
+
+================================================================================
+FILE: C:\repos\python\assault\assault_sim\rewards\base_reward.py
+================================================================================
+
+from abc import ABC, abstractmethod
+
+
+class BaseReward(ABC):
+    """
+    Base class for all reward functions.
+    """
+
+    def __init__(self, rl_side: str):
+        self.rl_side = rl_side
+        self.prev_vp = 0
+        self.prev_enemy_dist = None
+
+    def reset(self, state):
+        self.prev_vp = (
+            state.vp_tracker.total_points
+            if state.vp_tracker else 0
+        )
+        self.prev_enemy_dist = None
+
+    @abstractmethod
+    def compute(
+        self,
+        *,
+        state,
+        next_state,
+        action,
+        active,
+        info,
+        pre_dist,
+        post_dist,
+    ) -> float:
+        pass
+
+
+================================================================================
+FILE: C:\repos\python\assault\assault_sim\rewards\vp_difference.py
+================================================================================
+
+class VPDifferenceReward:
+    def __init__(self, normalize: bool = False):
+        self.normalize = normalize
+
+    def __call__(self, prev_vp: int, current_vp: int) -> float:
+        r = current_vp - prev_vp
+        if self.normalize:
+            return max(-1.0, min(1.0, r / 10.0))
+        return float(r)
+
+
+================================================================================
+FILE: C:\repos\python\assault\assault_sim\rewards\__init__.py
+================================================================================
+
+
+
+
+================================================================================
+FILE: C:\repos\python\assault\assault_sim\rl\controller.py
+================================================================================
+
+# assault_sim/rl/controller.py
+
+import torch
+import torch.distributions as dist
+
+from assault_model.actions.action_catalog import ActionCatalog
+
+
+class RLPolicyController:
+    """
+    RL Controller for actor-critic / PPO.
+
+    Responsibilities:
+    - Use RL observation vector (obs) to sample actions
+    - Use GameState ONLY to query legal actions
+    - Store PPO-related tensors for training
+    """
+
+    def __init__(self, policy_net, rl_side=None, max_turns=None):
+        self.policy = policy_net
+        self.rl_side = rl_side
+        self.max_turns = max_turns
+
+        # PPO bookkeeping
+        self.last_rl_action = False
+        self.last_action_index = None
+        self.last_log_prob = None
+        self.last_value = None
+
+    def choose_action(self, game_state, obs):
+        """
+        Parameters
+        ----------
+        game_state : GameState
+            Full simulator state (used to get legal actions)
+
+        obs : np.ndarray
+            RL observation vector (already encoded)
+        """
+
+        # Reset flag
+        self.last_rl_action = False
+
+        # Fetch legal actions from simulator
+        actions = ActionCatalog(game_state).actions()
+        if not actions:
+            self.last_action_index = None
+            self.last_log_prob = None
+            self.last_value = None
+            return None
+
+        # Forward pass through policy
+        obs_t = torch.tensor(obs, dtype=torch.float32).unsqueeze(0)
+        logits, value = self.policy(obs_t)
+
+        # Restrict logits to legal actions only
+        logits = logits[0][: len(actions)]
+        value = value.squeeze(0)
+
+        dist_action = dist.Categorical(logits=logits)
+        action_idx = dist_action.sample()
+
+        # Store PPO data
+        self.last_action_index = action_idx.item()
+        self.last_log_prob = dist_action.log_prob(action_idx)
+        self.last_value = value
+        self.last_rl_action = True
+
+        return actions[self.last_action_index]
+
+
+================================================================================
+FILE: C:\repos\python\assault\assault_sim\rl\option_policy.py
+================================================================================
+
+# assault_sim/rl/option_policy.py
+
+import torch
+import torch.distributions as dist
+from assault_sim.rl.tactical_options import TacticalOption
+
+
+class OptionPolicy:
+    """
+    High-level RL policy.
+
+    Chooses a TacticalOption based on the observation.
+    """
+
+    def __init__(self, policy_net: torch.nn.Module):
+        self.policy_net = policy_net
+
+        # Stored for PPO
+        self.last_option = None
+        self.last_log_prob = None
+        self.last_value = None
+
+        # ✅ NEW: Stored for explanation / replay
+        self.last_decision_info = None
+
+    def choose_option(self, obs) -> TacticalOption:
+        """
+        Sample a tactical option from the policy network.
+
+        This is the ONLY place where HRL decisions are made.
+        """
+
+        # ✅ ensure obs is a torch.Tensor
+        if not isinstance(obs, torch.Tensor):
+            obs = torch.tensor(obs, dtype=torch.float32)
+
+        logits, value = self.policy_net(obs)
+
+        option_dist = dist.Categorical(logits=logits)
+        option_index = option_dist.sample()
+
+        self.last_option = TacticalOption(option_index.item())
+        self.last_log_prob = option_dist.log_prob(option_index)
+        self.last_value = value
+
+        # --------------------------------------------
+        # ✅ CAPTURE EXPLAINABLE DECISION METADATA
+        # --------------------------------------------
+        with torch.no_grad():
+            probs = torch.softmax(logits, dim=-1)
+
+        self.last_decision_info = {
+            "option": self.last_option.name,          # semantic, stable
+            "confidence": float(probs[option_index]), # human-usable
+            "value_estimate": float(value.item()),    # strategic value
+        }
+
+        return self.last_option
+
+
+
+================================================================================
+FILE: C:\repos\python\assault\assault_sim\rl\policy_net.py
+================================================================================
+
+# assault_sim/rl/policy_net.py
+
+import torch
+import torch.nn as nn
+
+
+class PolicyNet(nn.Module):
+    """
+    Actor-Critic network.
+
+    Outputs:
+    - policy logits (for action selection)
+    - state value (for critic)
+    """
+
+    def __init__(self, input_dim, max_actions):
+        super().__init__()
+
+        # ✅ DEBUG prints (solo temporales)
+        self.shared = nn.Sequential(
+            nn.Linear(input_dim, 64),
+            nn.ReLU(),
+            nn.Linear(64, 64),
+            nn.ReLU(),
+        )
+        # Actor head
+        self.policy_head = nn.Linear(64, max_actions)
+
+        # Critic head
+        self.value_head = nn.Linear(64, 1)
+
+    def forward(self, x):
+        features = self.shared(x)
+
+        logits = self.policy_head(features)
+        value = self.value_head(features).squeeze(-1)
+
+        return logits, value
+
+
+
+================================================================================
+FILE: C:\repos\python\assault\assault_sim\rl\random_controller.py
+================================================================================
+
+# assault_sim/rl/random_controller.py
+import random
+from assault_model.actions.action_catalog import ActionCatalog
+
+class RandomPolicyController:
+    def choose_action(self, state):
+        actions = ActionCatalog(state).actions()
+        return random.choice(actions) if actions else None
+
+
+
+================================================================================
+FILE: C:\repos\python\assault\assault_sim\rl\replay_buffer.py
+================================================================================
+
+# assault_sim/rl/replay_buffer.py
+
+from collections import deque
+import random
+
+
+class ReplayBuffer:
+    def __init__(self, capacity=10000):
+        self.buffer = deque(maxlen=capacity)
+
+    def push(self, transition):
+        self.buffer.append(transition)
+
+    def sample(self, batch_size):
+        return random.sample(self.buffer, batch_size)
+
+    def __len__(self):
+        return len(self.buffer)
+
+
+================================================================================
+FILE: C:\repos\python\assault\assault_sim\rl\side_controller.py
+================================================================================
+
+# assault_sim/rl/side_controller.py
+
+class SideAwareController:
+    """
+    Dispatches control based on unit side.
+
+    RL side -> RL policy
+    Other side -> heuristic
+    """
+
+    def __init__(self, rl_controller, heuristic_controller, rl_side):
+        self.rl_controller = rl_controller
+        self.heuristic_controller = heuristic_controller
+        self.rl_side = rl_side
+
+    def choose_action(self, game_state, obs):
+        """
+        Parameters
+        ----------
+        game_state : GameState
+            Full simulator state (active unit, rules, legal actions)
+
+        obs : np.ndarray
+            RL observation vector (input for policy net)
+        """
+        unit = game_state.active_unit
+        if unit is None:
+            return None
+
+        if unit.side == self.rl_side:
+            # ✅ RL controller needs BOTH game_state and obs
+            return self.rl_controller.choose_action(game_state, obs)
+        else:
+            # ✅ Heuristic works directly on the game state
+            return self.heuristic_controller.choose_action(game_state)
+
+
+================================================================================
+FILE: C:\repos\python\assault\assault_sim\rl\state_encoder.py
+================================================================================
+
+# assault_sim/rl/state_encoder.py
+
+import numpy as np
+from assault_model.map.hex_utils import hex_distance
+
+
+# =================================================
+# NUMERIC STATE (USED BY RL) — DO NOT MODIFY
+# =================================================
+def encode_state(state, rl_side=None, max_turns=None):
+    """
+    SAFE and minimal state encoder for Phase 01+.
+
+    Adds global force-balance, time pressure,
+    AND egocentric enemy direction awareness.
+    """
+
+    active = state.active_unit
+
+    # -------------------------
+    # Original features
+    # -------------------------
+    active_hp = active.hp if active is not None else 0
+    n_units = len(state.units) if state.units is not None else 0
+    vp = state.vp_tracker.total_points if state.vp_tracker else 0
+
+    # -------------------------
+    # Global force balance
+    # -------------------------
+    if rl_side is not None and state.units is not None:
+        own_units = [
+            u for u in state.units
+            if u.alive and u.side == rl_side
+        ]
+        enemy_units = [
+            u for u in state.units
+            if u.alive and u.side != rl_side
+        ]
+
+        own_units_alive = len(own_units)
+        enemy_units_alive = len(enemy_units)
+
+        own_total_hp = sum(u.hp for u in own_units)
+        enemy_total_hp = sum(u.hp for u in enemy_units)
+    else:
+        own_units_alive = 0
+        enemy_units_alive = 0
+        own_total_hp = 0
+        enemy_total_hp = 0
+        own_units = []
+        enemy_units = []
+
+    max_units = max(1, n_units)
+    max_hp = max(1, own_total_hp + enemy_total_hp)
+
+    unit_balance = (own_units_alive - enemy_units_alive) / max_units
+    hp_balance = (own_total_hp - enemy_total_hp) / max_hp
+
+    # -------------------------
+    # Time pressure (SAFE)
+    # -------------------------
+    if max_turns and max_turns > 0:
+        time_progress = state.turn / max_turns
+    else:
+        time_progress = 0.0
+
+    # -------------------------
+    # Egocentric direction to closest enemy
+    # -------------------------
+    dq = 0.0
+    dr = 0.0
+
+    if active is not None and enemy_units:
+        closest_enemy = min(
+            enemy_units,
+            key=lambda e: hex_distance(active.position, e.position),
+        )
+
+        dq = closest_enemy.position.q - active.position.q
+        dr = closest_enemy.position.r - active.position.r
+
+        dq = np.clip(dq / 10.0, -1.0, 1.0)
+        dr = np.clip(dr / 10.0, -1.0, 1.0)
+
+    return np.array(
+        [
+            state.turn,
+            active_hp,
+            n_units,
+            vp,
+
+            unit_balance,
+            hp_balance,
+            time_progress,
+
+            dq,
+            dr,
+        ],
+        dtype=np.float32,
+    )
+
+
+# =================================================
+# SYMBOLIC / EXPLAINABLE CONTEXT (FOR UI + RAG)
+# =================================================
+def explainable_context(state, rl_side=None, max_turns=None):
+    """
+    Human-readable tactical context derived from game state.
+
+    This is NOT used by the RL agent.
+    It is safe to store in replays and use for explanations.
+    """
+
+    units = state.units or []
+
+    own_units = [
+        u for u in units
+        if u.alive and rl_side is not None and u.side == rl_side
+    ]
+    enemy_units = [
+        u for u in units
+        if u.alive and rl_side is not None and u.side != rl_side
+    ]
+
+    # -------------------------
+    # Friendly strength
+    # -------------------------
+    if len(own_units) > len(enemy_units):
+        friendly_strength = "HIGH"
+    elif len(own_units) < len(enemy_units):
+        friendly_strength = "LOW"
+    else:
+        friendly_strength = "EVEN"
+
+    # -------------------------
+    # Enemy pressure
+    # -------------------------
+    if not enemy_units:
+        enemy_pressure = "NONE"
+    elif len(enemy_units) >= len(own_units):
+        enemy_pressure = "HIGH"
+    else:
+        enemy_pressure = "LOW"
+
+    # -------------------------
+    # Objective / time pressure
+    # -------------------------
+    if max_turns and max_turns > 0:
+        progress = state.turn / max_turns
+        if progress < 0.33:
+            objective_distance = "FAR"
+        elif progress < 0.66:
+            objective_distance = "MEDIUM"
+        else:
+            objective_distance = "CLOSE"
+    else:
+        objective_distance = "UNKNOWN"
+
+    return {
+        "friendly_strength": friendly_strength,
+        "enemy_pressure": enemy_pressure,
+        "objective_distance": objective_distance,
+    }
+
+
+================================================================================
+FILE: C:\repos\python\assault\assault_sim\rl\tactical_options.py
+================================================================================
+
+# assault_sim/rl/tactical_options.py
+
+from enum import Enum
+
+
+class TacticalOption(Enum):
+    """
+    High-level tactical intentions.
+
+    These are the ONLY actions the RL policy is allowed to choose.
+    They are semantic, human-level decisions.
+
+    IMPORTANT:
+    - These options define the HRL action space.
+    - They MUST remain stable across time for replay + explanation + RAG.
+    """
+
+    ADVANCE = 0     # Move towards combat / objective
+    FLANK = 1       # Seek a flank or rear position
+    ATTACK = 2      # Engage the enemy directly
+    HOLD = 3        # Hold position / wait
+    RETREAT = 4     # Disengage or reposition defensively
+
+    # -------------------------------------------------
+    # Human-readable canonical description
+    # -------------------------------------------------
+    def description(self) -> str:
+        """
+        Canonical human-readable explanation fragment.
+
+        This text is safe to use in:
+        - UI
+        - Logs
+        - Replay explanation
+        - RAG prompts
+
+        DO NOT change lightly once replays exist.
+        """
+        return {
+            TacticalOption.ADVANCE: "advance towards the objective",
+            TacticalOption.FLANK: "attempt to outflank the enemy",
+            TacticalOption.ATTACK: "engage the enemy directly",
+            TacticalOption.HOLD: "hold the current position",
+            TacticalOption.RETREAT: "disengage and reposition defensively",
+        }[self]
+
+    # -------------------------------------------------
+    # Tactical category (for structured explanation)
+    # -------------------------------------------------
+    def category(self) -> str:
+        """
+        High-level tactical category.
+
+        Useful for:
+        - Explanation grouping
+        - Doctrine comparison
+        - RAG conditioning
+        """
+        return {
+            TacticalOption.ADVANCE: "MANEUVER",
+            TacticalOption.FLANK: "MANEUVER",
+            TacticalOption.ATTACK: "ENGAGEMENT",
+            TacticalOption.HOLD: "DEFENSIVE",
+            TacticalOption.RETREAT: "DEFENSIVE",
+        }[self]
+
+
+================================================================================
+FILE: C:\repos\python\assault\assault_sim\runners\run_match_rl_vs_heuristic.py
+================================================================================
+
+# assault_sim/runners/run_match_rl_vs_heuristic.py
+#
+# HRL-enabled replay:
+# - RL chooses tactical OPTIONS (not engine actions)
+# - Heuristics execute those options
+# - TrainingEnv remains untouched
+
+import torch
+from pathlib import Path
+
+from assault_sim.config.config_loader import load_sim_config
+from assault_sim.sim_env import SimEnv
+from assault_sim.training_env import TrainingEnv
+
+from assault_sim.rl.policy_net import PolicyNet
+from assault_sim.rl.option_policy import OptionPolicy
+from assault_sim.decision.hrl_controller import HRLController
+from assault_sim.decision.option_executor import OptionExecutor
+from assault_sim.heuristics.tactical_path_heuristic import TacticalPathHeuristic
+
+from assault_sim.debug.console_observer import ConsoleObserver
+from assault_sim.debug.debug_config import DebugConfig
+
+from assault_sim.debug.replay_observer import ReplayObserver
+from assault_sim.debug.replay_writer import ReplayWriter
+from assault_sim.debug.replay_utils import extract_initial_state
+
+
+def main():
+    # =================================================
+    # DEFINE RL SIDE (MUST MATCH TRAINING)
+    # =================================================
+    rl_side = "US"        # "GE" or "US"
+    enemy_side = "GE" if rl_side == "US" else "US"
+
+    print(f">>> Replaying HRL: RL ({rl_side}) vs Heuristic ({enemy_side})")
+
+    # -------------------------------------------------
+    # Load trained PPO checkpoint
+    # -------------------------------------------------
+    checkpoint_path = (
+        Path(__file__).resolve()
+        .parent.parent
+        / "checkpoints"
+        / f"ppo_{rl_side}_phase01_HRL.pt"
+    )
+
+    checkpoint = torch.load(checkpoint_path, map_location="cpu")
+
+    policy = PolicyNet(
+        input_dim=checkpoint["input_dim"],
+        max_actions=checkpoint["max_actions"],
+    )
+    policy.load_state_dict(checkpoint["model_state_dict"])
+    policy.eval()
+
+    print(">>> PPO model loaded (option-level policy)")
+
+    # -------------------------------------------------
+    # HRL / Heuristic components (NO env dependency)
+    # -------------------------------------------------
+    option_policy = OptionPolicy(policy)
+    heuristic_controller = TacticalPathHeuristic()
+    option_executor = OptionExecutor(heuristic_controller)
+
+    # -------------------------------------------------
+    # Environment (MUST be created BEFORE HRLController)
+    # -------------------------------------------------
+    sim_config = load_sim_config(
+        Path("assault_sim/config/sim_config.yaml")
+    )
+    sim_config.scenario_name = "phase01_seq001_initial_contact"
+    sim_config.seed = 42   # reproducible
+
+    sim_env = SimEnv(
+        sim_config,
+        controller=None,
+        debug_config=DebugConfig(enabled=True),
+    )
+
+    env = TrainingEnv(
+        sim_env,
+        env_config_path=Path("assault_sim/config/env_config.json"),
+        rl_side=rl_side,
+    )
+
+    # -------------------------------------------------
+    # HRL Controller (NOW event_bus exists)
+    # -------------------------------------------------
+    hrl_controller = HRLController(
+        option_policy=option_policy,
+        option_executor=option_executor,
+        rl_side=rl_side,
+        event_bus=sim_env.event_bus,   # ✅ CRITICAL
+    )
+
+    # -------------------------------------------------
+    # Observers (CALLABLE OBJECTS)
+    # -------------------------------------------------
+    observer = ConsoleObserver(rl_side=rl_side)
+    replay_observer = ReplayObserver()
+
+    if sim_env.event_bus:
+        sim_env.event_bus.subscribe(observer)
+        sim_env.event_bus.subscribe(replay_observer)
+
+    # -------------------------------------------------
+    # Reset environment
+    # -------------------------------------------------
+    obs = env.reset()
+
+    # Capture initial state for replay
+    replay_observer.replay.initial_state = extract_initial_state(
+        sim_env.game_state
+    )
+
+    replay_observer.replay.meta = {
+        "scenario_id": sim_config.scenario_name,
+        "sides": {
+            rl_side: "RL",
+            enemy_side: "HEURISTIC",
+        },
+    }
+
+    done = False
+    step = 0
+
+    # -------------------------------------------------
+    # Run one full match (HRL loop)
+    # -------------------------------------------------
+    while not done:
+        state = sim_env.game_state
+        active = state.active_unit
+
+        if active is not None and active.side == rl_side:
+            action = hrl_controller.choose_action(state, obs)
+        else:
+            action = heuristic_controller.choose_action(state)
+
+        obs, _, done, _ = env.step(action)
+        step += 1
+
+    # -------------------------------------------------
+    # Final score (machine-level summary)
+    # -------------------------------------------------
+    final_state = sim_env.game_state
+    vp = (
+        final_state.vp_tracker.total_points
+        if final_state.vp_tracker else 0
+    )
+
+    print("\n=== MATCH FINISHED ===")
+    print(f"Total steps: {step}")
+    print(f"Final VP:    {vp}")
+
+    # -------------------------------------------------
+    # Write replay to disk
+    # -------------------------------------------------
+    replay_dir = Path("assault_sim/session/replays")
+    replay_dir.mkdir(parents=True, exist_ok=True)
+
+    replay_path = replay_dir / (
+        f"{sim_config.scenario_name}__"
+        f"{rl_side}_RL_vs_{enemy_side}_HEURISTIC.json"
+    )
+
+    ReplayWriter.write(replay_observer.replay, replay_path)
+
+    print(f"Replay saved to: {replay_path}")
+
+
+if __name__ == "__main__":
+    main()
+
+
+================================================================================
+FILE: C:\repos\python\assault\assault_sim\runners\sim_runner.py
+================================================================================
+
+# Batch / episode runner
+
+
+
+
+================================================================================
+FILE: C:\repos\python\assault\assault_sim\runners\__init__.py
+================================================================================
+
+
+
+
+================================================================================
+FILE: C:\repos\python\assault\assault_sim\series\__init__.py
+================================================================================
+
+
+
+
+================================================================================
+FILE: C:\repos\python\assault\assault_sim\session\__init__.py
+================================================================================
+
+
+
+
+================================================================================
+FILE: C:\repos\python\assault\assault_sim\session\replays\phase01_seq001_initial_contact__US_RL_vs_GE_HEURISTIC.json
+================================================================================
+
+{
+  "meta": {
+    "scenario_id": "phase01_seq001_initial_contact",
+    "sides": {
+      "US": "RL",
+      "GE": "HEURISTIC"
+    }
+  },
+  "initial_state": {
+    "turn": 1,
+    "units": [
+      {
+        "id": "GE_1",
+        "q": 3,
+        "r": 4,
+        "hp": 3,
+        "side": "GE",
+        "type": "GE_RIFLES_43"
+      },
+      {
+        "id": "GE_2",
+        "q": 4,
+        "r": 4,
+        "hp": 3,
+        "side": "GE",
+        "type": "GE_RIFLES_43"
+      },
+      {
+        "id": "GE_3",
+        "q": 5,
+        "r": 1,
+        "hp": 3,
+        "side": "GE",
+        "type": "GE_RIFLES_43"
+      },
+      {
+        "id": "US_1",
+        "q": 5,
+        "r": 12,
+        "hp": 4,
+        "side": "US",
+        "type": "US_RIFLES_43"
+      },
+      {
+        "id": "US_2",
+        "q": 6,
+        "r": 12,
+        "hp": 4,
+        "side": "US",
+        "type": "US_RIFLES_43"
+      },
+      {
+        "id": "US_3",
+        "q": 7,
+        "r": 12,
+        "hp": 4,
+        "side": "US",
+        "type": "US_RIFLES_43"
+      }
+    ]
+  },
+  "turns": [
+    {
+      "turn": 1,
+      "events": [
+        {
+          "type": "ACTION",
+          "payload": {
+            "turn": 1,
+            "action": "MoveAction",
+            "active_unit": "GE_1"
+          }
+        },
+        {
+          "type": "UNIT_MOVED",
+          "payload": {
+            "unit_id": "GE_1",
+            "from": {
+              "q": 3,
+              "r": 4
+            },
+            "to": {
+              "q": 3,
+              "r": 5
+            }
+          }
+        },
+        {
+          "type": "ACTION",
+          "payload": {
+            "turn": 1,
+            "action": "MoveAction",
+            "active_unit": "GE_2"
+          }
+        },
+        {
+          "type": "UNIT_MOVED",
+          "payload": {
+            "unit_id": "GE_2",
+            "from": {
+              "q": 4,
+              "r": 4
+            },
+            "to": {
+              "q": 5,
+              "r": 4
+            }
+          }
+        },
+        {
+          "type": "ACTION",
+          "payload": {
+            "turn": 1,
+            "action": "MoveAction",
+            "active_unit": "GE_3"
+          }
+        },
+        {
+          "type": "UNIT_MOVED",
+          "payload": {
+            "unit_id": "GE_3",
+            "from": {
+              "q": 5,
+              "r": 1
+            },
+            "to": {
+              "q": 5,
+              "r": 2
+            }
+          }
+        },
+        {
+          "type": "HRL_DECISION",
+          "payload": {
+            "side": "US",
+            "option": "HOLD",
+            "description": "hold the current position",
+            "category": "DEFENSIVE",
+            "turn": 1,
+            "context": {
+              "friendly_strength": "EVEN",
+              "enemy_pressure": "HIGH",
+              "objective_distance": "UNKNOWN"
+            },
+            "policy_info": {
+              "option": "HOLD",
+              "confidence": 0.23264095187187195,
+              "value_estimate": 0.5525926351547241
+            }
+          }
+        },
+        {
+          "type": "ACTION",
+          "payload": {
+            "turn": 1,
+            "action": "WaitAction",
+            "active_unit": "US_1"
+          }
+        },
+        {
+          "type": "HRL_DECISION",
+          "payload": {
+            "side": "US",
+            "option": "FLANK",
+            "description": "attempt to outflank the enemy",
+            "category": "MANEUVER",
+            "turn": 1,
+            "context": {
+              "friendly_strength": "EVEN",
+              "enemy_pressure": "HIGH",
+              "objective_distance": "UNKNOWN"
+            },
+            "policy_info": {
+              "option": "FLANK",
+              "confidence": 0.25088873505592346,
+              "value_estimate": 0.5510413646697998
+            }
+          }
+        },
+        {
+          "type": "ACTION",
+          "payload": {
+            "turn": 1,
+            "action": "MoveAction",
+            "active_unit": "US_2"
+          }
+        },
+        {
+          "type": "UNIT_MOVED",
+          "payload": {
+            "unit_id": "US_2",
+            "from": {
+              "q": 6,
+              "r": 12
+            },
+            "to": {
+              "q": 6,
+              "r": 11
+            }
+          }
+        },
+        {
+          "type": "ACTION",
+          "payload": {
+            "turn": 1,
+            "action": "MoveAction",
+            "active_unit": "US_3"
+          }
+        },
+        {
+          "type": "UNIT_MOVED",
+          "payload": {
+            "unit_id": "US_3",
+            "from": {
+              "q": 7,
+              "r": 12
+            },
+            "to": {
+              "q": 6,
+              "r": 12
+            }
+          }
+        }
+      ]
+    },
+    {
+      "turn": 2,
+      "events": [
+        {
+          "type": "ACTION",
+          "payload": {
+            "turn": 2,
+            "action": "MoveAction",
+            "active_unit": "GE_1"
+          }
+        },
+        {
+          "type": "UNIT_MOVED",
+          "payload": {
+            "unit_id": "GE_1",
+            "from": {
+              "q": 3,
+              "r": 5
+            },
+            "to": {
+              "q": 4,
+              "r": 5
+            }
+          }
+        },
+        {
+          "type": "ACTION",
+          "payload": {
+            "turn": 2,
+            "action": "MoveAction",
+            "active_unit": "GE_2"
+          }
+        },
+        {
+          "type": "UNIT_MOVED",
+          "payload": {
+            "unit_id": "GE_2",
+            "from": {
+              "q": 5,
+              "r": 4
+            },
+            "to": {
+              "q": 5,
+              "r": 5
+            }
+          }
+        },
+        {
+          "type": "ACTION",
+          "payload": {
+            "turn": 2,
+            "action": "MoveAction",
+            "active_unit": "GE_3"
+          }
+        },
+        {
+          "type": "UNIT_MOVED",
+          "payload": {
+            "unit_id": "GE_3",
+            "from": {
+              "q": 5,
+              "r": 2
+            },
+            "to": {
+              "q": 5,
+              "r": 3
+            }
+          }
+        },
+        {
+          "type": "ACTION",
+          "payload": {
+            "turn": 2,
+            "action": "MoveAction",
+            "active_unit": "US_1"
+          }
+        },
+        {
+          "type": "UNIT_MOVED",
+          "payload": {
+            "unit_id": "US_1",
+            "from": {
+              "q": 5,
+              "r": 12
+            },
+            "to": {
+              "q": 5,
+              "r": 11
+            }
+          }
+        },
+        {
+          "type": "ACTION",
+          "payload": {
+            "turn": 2,
+            "action": "MoveAction",
+            "active_unit": "US_2"
+          }
+        },
+        {
+          "type": "UNIT_MOVED",
+          "payload": {
+            "unit_id": "US_2",
+            "from": {
+              "q": 6,
+              "r": 11
+            },
+            "to": {
+              "q": 6,
+              "r": 10
+            }
+          }
+        },
+        {
+          "type": "ACTION",
+          "payload": {
+            "turn": 2,
+            "action": "MoveAction",
+            "active_unit": "US_3"
+          }
+        },
+        {
+          "type": "UNIT_MOVED",
+          "payload": {
+            "unit_id": "US_3",
+            "from": {
+              "q": 6,
+              "r": 12
+            },
+            "to": {
+              "q": 5,
+              "r": 12
+            }
+          }
+        }
+      ]
+    },
+    {
+      "turn": 3,
+      "events": [
+        {
+          "type": "ACTION",
+          "payload": {
+            "turn": 3,
+            "action": "MoveAction",
+            "active_unit": "GE_1"
+          }
+        },
+        {
+          "type": "UNIT_MOVED",
+          "payload": {
+            "unit_id": "GE_1",
+            "from": {
+              "q": 4,
+              "r": 5
+            },
+            "to": {
+              "q": 4,
+              "r": 6
+            }
+          }
+        },
+        {
+          "type": "ACTION",
+          "payload": {
+            "turn": 3,
+            "action": "MoveAction",
+            "active_unit": "GE_2"
+          }
+        },
+        {
+          "type": "UNIT_MOVED",
+          "payload": {
+            "unit_id": "GE_2",
+            "from": {
+              "q": 5,
+              "r": 5
+            },
+            "to": {
+              "q": 5,
+              "r": 6
+            }
+          }
+        },
+        {
+          "type": "ACTION",
+          "payload": {
+            "turn": 3,
+            "action": "MoveAction",
+            "active_unit": "GE_3"
+          }
+        },
+        {
+          "type": "UNIT_MOVED",
+          "payload": {
+            "unit_id": "GE_3",
+            "from": {
+              "q": 5,
+              "r": 3
+            },
+            "to": {
+              "q": 5,
+              "r": 4
+            }
+          }
+        },
+        {
+          "type": "ACTION",
+          "payload": {
+            "turn": 3,
+            "action": "MoveAction",
+            "active_unit": "US_1"
+          }
+        },
+        {
+          "type": "UNIT_MOVED",
+          "payload": {
+            "unit_id": "US_1",
+            "from": {
+              "q": 5,
+              "r": 11
+            },
+            "to": {
+              "q": 5,
+              "r": 10
+            }
+          }
+        },
+        {
+          "type": "HRL_DECISION",
+          "payload": {
+            "side": "US",
+            "option": "ATTACK",
+            "description": "engage the enemy directly",
+            "category": "ENGAGEMENT",
+            "turn": 3,
+            "context": {
+              "friendly_strength": "EVEN",
+              "enemy_pressure": "HIGH",
+              "objective_distance": "UNKNOWN"
+            },
+            "policy_info": {
+              "option": "ATTACK",
+              "confidence": 0.35593271255493164,
+              "value_estimate": 0.6979042291641235
+            }
+          }
+        },
+        {
+          "type": "ACTION",
+          "payload": {
+            "turn": 3,
+            "action": "MoveAction",
+            "active_unit": "US_2"
+          }
+        },
+        {
+          "type": "UNIT_MOVED",
+          "payload": {
+            "unit_id": "US_2",
+            "from": {
+              "q": 6,
+              "r": 10
+            },
+            "to": {
+              "q": 6,
+              "r": 9
+            }
+          }
+        },
+        {
+          "type": "ACTION",
+          "payload": {
+            "turn": 3,
+            "action": "MoveAction",
+            "active_unit": "US_3"
+          }
+        },
+        {
+          "type": "UNIT_MOVED",
+          "payload": {
+            "unit_id": "US_3",
+            "from": {
+              "q": 5,
+              "r": 12
+            },
+            "to": {
+              "q": 5,
+              "r": 11
+            }
+          }
+        }
+      ]
+    },
+    {
+      "turn": 4,
+      "events": [
+        {
+          "type": "ACTION",
+          "payload": {
+            "turn": 4,
+            "action": "MoveAction",
+            "active_unit": "GE_1"
+          }
+        },
+        {
+          "type": "UNIT_MOVED",
+          "payload": {
+            "unit_id": "GE_1",
+            "from": {
+              "q": 4,
+              "r": 6
+            },
+            "to": {
+              "q": 4,
+              "r": 7
+            }
+          }
+        },
+        {
+          "type": "ACTION",
+          "payload": {
+            "turn": 4,
+            "action": "MoveAction",
+            "active_unit": "GE_2"
+          }
+        },
+        {
+          "type": "UNIT_MOVED",
+          "payload": {
+            "unit_id": "GE_2",
+            "from": {
+              "q": 5,
+              "r": 6
+            },
+            "to": {
+              "q": 5,
+              "r": 7
+            }
+          }
+        },
+        {
+          "type": "ACTION",
+          "payload": {
+            "turn": 4,
+            "action": "MoveAction",
+            "active_unit": "GE_3"
+          }
+        },
+        {
+          "type": "UNIT_MOVED",
+          "payload": {
+            "unit_id": "GE_3",
+            "from": {
+              "q": 5,
+              "r": 4
+            },
+            "to": {
+              "q": 5,
+              "r": 5
+            }
+          }
+        },
+        {
+          "type": "HRL_DECISION",
+          "payload": {
+            "side": "US",
+            "option": "HOLD",
+            "description": "hold the current position",
+            "category": "DEFENSIVE",
+            "turn": 4,
+            "context": {
+              "friendly_strength": "EVEN",
+              "enemy_pressure": "HIGH",
+              "objective_distance": "UNKNOWN"
+            },
+            "policy_info": {
+              "option": "HOLD",
+              "confidence": 0.23841673135757446,
+              "value_estimate": 0.7778540849685669
+            }
+          }
+        },
+        {
+          "type": "ACTION",
+          "payload": {
+            "turn": 4,
+            "action": "WaitAction",
+            "active_unit": "US_1"
+          }
+        },
+        {
+          "type": "HRL_DECISION",
+          "payload": {
+            "side": "US",
+            "option": "FLANK",
+            "description": "attempt to outflank the enemy",
+            "category": "MANEUVER",
+            "turn": 4,
+            "context": {
+              "friendly_strength": "EVEN",
+              "enemy_pressure": "HIGH",
+              "objective_distance": "UNKNOWN"
+            },
+            "policy_info": {
+              "option": "FLANK",
+              "confidence": 0.2881130874156952,
+              "value_estimate": 0.7765054702758789
+            }
+          }
+        },
+        {
+          "type": "ACTION",
+          "payload": {
+            "turn": 4,
+            "action": "RangedDirectAttack",
+            "active_unit": "US_2"
+          }
+        },
+        {
+          "type": "ACTION_EFFECT",
+          "payload": {
+            "action": "RangedCombat",
+            "attacker": "US_2",
+            "defender": "GE_2",
+            "distance": 3,
+            "attack_sector": "REAR",
+            "attacker_attack_dice": [
+              {
+                "color": "RED",
+                "faces": [
+                  "CRITICAL",
+                  "DAMAGE"
+                ]
+              },
+              {
+                "color": "RED",
+                "faces": []
+              },
+              {
+                "color": "YELLOW",
+                "faces": [
+                  "DAMAGE",
+                  "DAMAGE"
+                ]
+              }
+            ],
+            "defender_defense_dice": [
+              {
+                "color": "YELLOW",
+                "faces": [
+                  "DAMAGE",
+                  "DAMAGE"
+                ]
+              }
+            ],
+            "attacker_effects": {
+              "damage": 2,
+              "criticals": [
+                {
+                  "face": "CRITICAL",
+                  "target_class": "INFANTRY"
+                }
+              ],
+              "suppress": 0
+            },
+            "defender_hp_before": 3,
+            "defender_hp_after": 1,
+            "defender_killed": false,
+            "defender_suppressed": false,
+            "resolution": {
+              "remaining_damage": 1,
+              "remaining_criticals": 1,
+              "remaining_suppress": 0
+            },
+            "outcome": "resolved",
+            "winner": null
+          }
+        },
+        {
+          "type": "ACTION",
+          "payload": {
+            "turn": 4,
+            "action": "WaitAction",
+            "active_unit": "US_3"
+          }
+        }
+      ]
+    },
+    {
+      "turn": 5,
+      "events": [
+        {
+          "type": "ACTION",
+          "payload": {
+            "turn": 5,
+            "action": "MoveAction",
+            "active_unit": "GE_1"
+          }
+        },
+        {
+          "type": "UNIT_MOVED",
+          "payload": {
+            "unit_id": "GE_1",
+            "from": {
+              "q": 4,
+              "r": 7
+            },
+            "to": {
+              "q": 4,
+              "r": 8
+            }
+          }
+        },
+        {
+          "type": "ACTION",
+          "payload": {
+            "turn": 5,
+            "action": "RangedDirectAttack",
+            "active_unit": "GE_2"
+          }
+        },
+        {
+          "type": "ACTION_EFFECT",
+          "payload": {
+            "action": "RangedCombat",
+            "attacker": "GE_2",
+            "defender": "US_1",
+            "distance": 3,
+            "attack_sector": "FRONT",
+            "attacker_attack_dice": [
+              {
+                "color": "RED",
+                "faces": []
+              },
+              {
+                "color": "YELLOW",
+                "faces": [
+                  "CRITICAL",
+                  "DAMAGE"
+                ]
+              },
+              {
+                "color": "BLUE",
+                "faces": [
+                  "DAMAGE"
+                ]
+              }
+            ],
+            "defender_defense_dice": [
+              {
+                "color": "YELLOW",
+                "faces": [
+                  "DAMAGE",
+                  "DAMAGE"
+                ]
+              }
+            ],
+            "attacker_effects": {
+              "damage": 1,
+              "criticals": [
+                {
+                  "face": "CRITICAL",
+                  "target_class": "INFANTRY"
+                }
+              ],
+              "suppress": 0
+            },
+            "defender_hp_before": 4,
+            "defender_hp_after": 3,
+            "defender_killed": false,
+            "defender_suppressed": false,
+            "resolution": {
+              "remaining_damage": 0,
+              "remaining_criticals": 1,
+              "remaining_suppress": 0
+            },
+            "outcome": "resolved",
+            "winner": null
+          }
+        },
+        {
+          "type": "ACTION",
+          "payload": {
+            "turn": 5,
+            "action": "MoveAction",
+            "active_unit": "GE_3"
+          }
+        },
+        {
+          "type": "UNIT_MOVED",
+          "payload": {
+            "unit_id": "GE_3",
+            "from": {
+              "q": 5,
+              "r": 5
+            },
+            "to": {
+              "q": 5,
+              "r": 6
+            }
+          }
+        },
+        {
+          "type": "ACTION",
+          "payload": {
+            "turn": 5,
+            "action": "RangedDirectAttack",
+            "active_unit": "US_1"
+          }
+        },
+        {
+          "type": "ACTION_EFFECT",
+          "payload": {
+            "action": "RangedCombat",
+            "attacker": "US_1",
+            "defender": "GE_1",
+            "distance": 3,
+            "attack_sector": "REAR",
+            "attacker_attack_dice": [
+              {
+                "color": "RED",
+                "faces": [
+                  "DAMAGE"
+                ]
+              },
+              {
+                "color": "RED",
+                "faces": [
+                  "DAMAGE",
+                  "SUPPRESS"
+                ]
+              },
+              {
+                "color": "YELLOW",
+                "faces": []
+              }
+            ],
+            "defender_defense_dice": [
+              {
+                "color": "YELLOW",
+                "faces": []
+              }
+            ],
+            "attacker_effects": {
+              "damage": 2,
+              "criticals": [],
+              "suppress": 1
+            },
+            "defender_hp_before": 3,
+            "defender_hp_after": 1,
+            "defender_killed": false,
+            "defender_suppressed": true,
+            "resolution": {
+              "remaining_damage": 2,
+              "remaining_criticals": 0,
+              "remaining_suppress": 1
+            },
+            "outcome": "resolved",
+            "winner": null
+          }
+        },
+        {
+          "type": "ACTION",
+          "payload": {
+            "turn": 5,
+            "action": "RangedDirectAttack",
+            "active_unit": "US_2"
+          }
+        },
+        {
+          "type": "ACTION_EFFECT",
+          "payload": {
+            "action": "RangedCombat",
+            "attacker": "US_2",
+            "defender": "GE_1",
+            "distance": 3,
+            "attack_sector": "FLANK_LEFT",
+            "attacker_attack_dice": [
+              {
+                "color": "RED",
+                "faces": []
+              },
+              {
+                "color": "RED",
+                "faces": [
+                  "CRITICAL",
+                  "DAMAGE"
+                ]
+              },
+              {
+                "color": "YELLOW",
+                "faces": [
+                  "DAMAGE"
+                ]
+              }
+            ],
+            "defender_defense_dice": [
+              {
+                "color": "YELLOW",
+                "faces": [
+                  "CRITICAL",
+                  "DAMAGE"
+                ]
+              }
+            ],
+            "attacker_effects": {
+              "damage": 1,
+              "criticals": [],
+              "suppress": 0
+            },
+            "defender_hp_before": 1,
+            "defender_hp_after": 0,
+            "defender_killed": true,
+            "defender_suppressed": false,
+            "resolution": {
+              "remaining_damage": 1,
+              "remaining_criticals": 0,
+              "remaining_suppress": 0
+            },
+            "outcome": "resolved",
+            "winner": null
+          }
+        },
+        {
+          "type": "ACTION",
+          "payload": {
+            "turn": 5,
+            "action": "WaitAction",
+            "active_unit": "US_3"
+          }
+        }
+      ]
+    },
+    {
+      "turn": 6,
+      "events": [
+        {
+          "type": "ACTION",
+          "payload": {
+            "turn": 6,
+            "action": "RangedDirectAttack",
+            "active_unit": "GE_2"
+          }
+        },
+        {
+          "type": "ACTION_EFFECT",
+          "payload": {
+            "action": "RangedCombat",
+            "attacker": "GE_2",
+            "defender": "US_1",
+            "distance": 3,
+            "attack_sector": "FRONT",
+            "attacker_attack_dice": [
+              {
+                "color": "RED",
+                "faces": [
+                  "DAMAGE",
+                  "SUPPRESS"
+                ]
+              },
+              {
+                "color": "YELLOW",
+                "faces": []
+              },
+              {
+                "color": "BLUE",
+                "faces": [
+                  "DAMAGE"
+                ]
+              }
+            ],
+            "defender_defense_dice": [
+              {
+                "color": "YELLOW",
+                "faces": [
+                  "CRITICAL",
+                  "DAMAGE"
+                ]
+              }
+            ],
+            "attacker_effects": {
+              "damage": 0,
+              "criticals": [],
+              "suppress": 1
+            },
+            "defender_hp_before": 3,
+            "defender_hp_after": 3,
+            "defender_killed": false,
+            "defender_suppressed": true,
+            "resolution": {
+              "remaining_damage": 0,
+              "remaining_criticals": 0,
+              "remaining_suppress": 1
+            },
+            "outcome": "resolved",
+            "winner": null
+          }
+        },
+        {
+          "type": "ACTION",
+          "payload": {
+            "turn": 6,
+            "action": "WaitAction",
+            "active_unit": "GE_3"
+          }
+        },
+        {
+          "type": "ACTION",
+          "payload": {
+            "turn": 6,
+            "action": "RangedDirectAttack",
+            "active_unit": "US_1"
+          }
+        },
+        {
+          "type": "ACTION_EFFECT",
+          "payload": {
+            "action": "RangedCombat",
+            "attacker": "US_1",
+            "defender": "GE_2",
+            "distance": 3,
+            "attack_sector": "REAR",
+            "attacker_attack_dice": [
+              {
+                "color": "RED",
+                "faces": [
+                  "DAMAGE",
+                  "DAMAGE"
+                ]
+              },
+              {
+                "color": "RED",
+                "faces": [
+                  "DAMAGE",
+                  "DAMAGE"
+                ]
+              },
+              {
+                "color": "YELLOW",
+                "faces": [
+                  "DAMAGE",
+                  "DAMAGE"
+                ]
+              }
+            ],
+            "defender_defense_dice": [
+              {
+                "color": "YELLOW",
+                "faces": []
+              }
+            ],
+            "attacker_effects": {
+              "damage": 6,
+              "criticals": [],
+              "suppress": 0
+            },
+            "defender_hp_before": 1,
+            "defender_hp_after": 0,
+            "defender_killed": true,
+            "defender_suppressed": false,
+            "resolution": {
+              "remaining_damage": 6,
+              "remaining_criticals": 0,
+              "remaining_suppress": 0
+            },
+            "outcome": "resolved",
+            "winner": null
+          }
+        },
+        {
+          "type": "HRL_DECISION",
+          "payload": {
+            "side": "US",
+            "option": "ATTACK",
+            "description": "engage the enemy directly",
+            "category": "ENGAGEMENT",
+            "turn": 6,
+            "context": {
+              "friendly_strength": "HIGH",
+              "enemy_pressure": "LOW",
+              "objective_distance": "UNKNOWN"
+            },
+            "policy_info": {
+              "option": "ATTACK",
+              "confidence": 0.35826751589775085,
+              "value_estimate": 0.9060051441192627
+            }
+          }
+        },
+        {
+          "type": "ACTION",
+          "payload": {
+            "turn": 6,
+            "action": "MoveAction",
+            "active_unit": "US_2"
+          }
+        },
+        {
+          "type": "UNIT_MOVED",
+          "payload": {
+            "unit_id": "US_2",
+            "from": {
+              "q": 6,
+              "r": 9
+            },
+            "to": {
+              "q": 5,
+              "r": 9
+            }
+          }
+        },
+        {
+          "type": "ACTION",
+          "payload": {
+            "turn": 6,
+            "action": "WaitAction",
+            "active_unit": "US_3"
+          }
+        }
+      ]
+    },
+    {
+      "turn": 7,
+      "events": [
+        {
+          "type": "ACTION",
+          "payload": {
+            "turn": 7,
+            "action": "RangedDirectAttack",
+            "active_unit": "GE_3"
+          }
+        },
+        {
+          "type": "ACTION_EFFECT",
+          "payload": {
+            "action": "RangedCombat",
+            "attacker": "GE_3",
+            "defender": "US_2",
+            "distance": 3,
+            "attack_sector": "FRONT",
+            "attacker_attack_dice": [
+              {
+                "color": "RED",
+                "faces": [
+                  "DAMAGE"
+                ]
+              },
+              {
+                "color": "YELLOW",
+                "faces": [
+                  "CRITICAL",
+                  "DAMAGE"
+                ]
+              },
+              {
+                "color": "BLUE",
+                "faces": []
+              }
+            ],
+            "defender_defense_dice": [
+              {
+                "color": "YELLOW",
+                "faces": [
+                  "DAMAGE"
+                ]
+              }
+            ],
+            "attacker_effects": {
+              "damage": 2,
+              "criticals": [
+                {
+                  "face": "CRITICAL",
+                  "target_class": "INFANTRY"
+                }
+              ],
+              "suppress": 0
+            },
+            "defender_hp_before": 4,
+            "defender_hp_after": 2,
+            "defender_killed": false,
+            "defender_suppressed": false,
+            "resolution": {
+              "remaining_damage": 1,
+              "remaining_criticals": 1,
+              "remaining_suppress": 0
+            },
+            "outcome": "resolved",
+            "winner": null
+          }
+        },
+        {
+          "type": "HRL_DECISION",
+          "payload": {
+            "side": "US",
+            "option": "FLANK",
+            "description": "attempt to outflank the enemy",
+            "category": "MANEUVER",
+            "turn": 7,
+            "context": {
+              "friendly_strength": "HIGH",
+              "enemy_pressure": "LOW",
+              "objective_distance": "UNKNOWN"
+            },
+            "policy_info": {
+              "option": "FLANK",
+              "confidence": 0.3067381978034973,
+              "value_estimate": 0.9128314256668091
+            }
+          }
+        },
+        {
+          "type": "ACTION",
+          "payload": {
+            "turn": 7,
+            "action": "WaitAction",
+            "active_unit": "US_1"
+          }
+        },
+        {
+          "type": "ACTION",
+          "payload": {
+            "turn": 7,
+            "action": "RangedDirectAttack",
+            "active_unit": "US_2"
+          }
+        },
+        {
+          "type": "ACTION_EFFECT",
+          "payload": {
+            "action": "RangedCombat",
+            "attacker": "US_2",
+            "defender": "GE_3",
+            "distance": 3,
+            "attack_sector": "REAR",
+            "attacker_attack_dice": [
+              {
+                "color": "RED",
+                "faces": [
+                  "DAMAGE",
+                  "SUPPRESS"
+                ]
+              },
+              {
+                "color": "RED",
+                "faces": [
+                  "DAMAGE",
+                  "SUPPRESS"
+                ]
+              },
+              {
+                "color": "YELLOW",
+                "faces": [
+                  "CRITICAL",
+                  "DAMAGE"
+                ]
+              }
+            ],
+            "defender_defense_dice": [
+              {
+                "color": "YELLOW",
+                "faces": [
+                  "CRITICAL",
+                  "DAMAGE"
+                ]
+              }
+            ],
+            "attacker_effects": {
+              "damage": 2,
+              "criticals": [],
+              "suppress": 2
+            },
+            "defender_hp_before": 3,
+            "defender_hp_after": 1,
+            "defender_killed": false,
+            "defender_suppressed": true,
+            "resolution": {
+              "remaining_damage": 2,
+              "remaining_criticals": 0,
+              "remaining_suppress": 2
+            },
+            "outcome": "resolved",
+            "winner": null
+          }
+        },
+        {
+          "type": "ACTION",
+          "payload": {
+            "turn": 7,
+            "action": "WaitAction",
+            "active_unit": "US_3"
+          }
+        }
+      ]
+    },
+    {
+      "turn": 8,
+      "events": [
+        {
+          "type": "ACTION",
+          "payload": {
+            "turn": 8,
+            "action": "RangedDirectAttack",
+            "active_unit": "GE_3"
+          }
+        },
+        {
+          "type": "ACTION_EFFECT",
+          "payload": {
+            "action": "RangedCombat",
+            "attacker": "GE_3",
+            "defender": "US_2",
+            "distance": 3,
+            "attack_sector": "FRONT",
+            "attacker_attack_dice": [
+              {
+                "color": "RED",
+                "faces": [
+                  "DAMAGE"
+                ]
+              },
+              {
+                "color": "YELLOW",
+                "faces": [
+                  "DAMAGE"
+                ]
+              },
+              {
+                "color": "BLUE",
+                "faces": [
+                  "DAMAGE"
+                ]
+              }
+            ],
+            "defender_defense_dice": [
+              {
+                "color": "YELLOW",
+                "faces": [
+                  "DAMAGE"
+                ]
+              }
+            ],
+            "attacker_effects": {
+              "damage": 2,
+              "criticals": [],
+              "suppress": 0
+            },
+            "defender_hp_before": 2,
+            "defender_hp_after": 0,
+            "defender_killed": true,
+            "defender_suppressed": false,
+            "resolution": {
+              "remaining_damage": 2,
+              "remaining_criticals": 0,
+              "remaining_suppress": 0
+            },
+            "outcome": "resolved",
+            "winner": null
+          }
+        },
+        {
+          "type": "ACTION",
+          "payload": {
+            "turn": 8,
+            "action": "MoveAction",
+            "active_unit": "US_1"
+          }
+        },
+        {
+          "type": "UNIT_MOVED",
+          "payload": {
+            "unit_id": "US_1",
+            "from": {
+              "q": 5,
+              "r": 10
+            },
+            "to": {
+              "q": 5,
+              "r": 9
+            }
+          }
+        },
+        {
+          "type": "ACTION",
+          "payload": {
+            "turn": 8,
+            "action": "MoveAction",
+            "active_unit": "US_3"
+          }
+        },
+        {
+          "type": "UNIT_MOVED",
+          "payload": {
+            "unit_id": "US_3",
+            "from": {
+              "q": 5,
+              "r": 11
+            },
+            "to": {
+              "q": 5,
+              "r": 10
+            }
+          }
+        }
+      ]
+    },
+    {
+      "turn": 9,
+      "events": [
+        {
+          "type": "ACTION",
+          "payload": {
+            "turn": 9,
+            "action": "RangedDirectAttack",
+            "active_unit": "GE_3"
+          }
+        },
+        {
+          "type": "ACTION_EFFECT",
+          "payload": {
+            "action": "RangedCombat",
+            "attacker": "GE_3",
+            "defender": "US_1",
+            "distance": 3,
+            "attack_sector": "FRONT",
+            "attacker_attack_dice": [
+              {
+                "color": "RED",
+                "faces": [
+                  "DAMAGE",
+                  "SUPPRESS"
+                ]
+              },
+              {
+                "color": "YELLOW",
+                "faces": []
+              },
+              {
+                "color": "BLUE",
+                "faces": []
+              }
+            ],
+            "defender_defense_dice": [
+              {
+                "color": "YELLOW",
+                "faces": []
+              }
+            ],
+            "attacker_effects": {
+              "damage": 1,
+              "criticals": [],
+              "suppress": 1
+            },
+            "defender_hp_before": 3,
+            "defender_hp_after": 2,
+            "defender_killed": false,
+            "defender_suppressed": true,
+            "resolution": {
+              "remaining_damage": 1,
+              "remaining_criticals": 0,
+              "remaining_suppress": 1
+            },
+            "outcome": "resolved",
+            "winner": null
+          }
+        },
+        {
+          "type": "HRL_DECISION",
+          "payload": {
+            "side": "US",
+            "option": "FLANK",
+            "description": "attempt to outflank the enemy",
+            "category": "MANEUVER",
+            "turn": 9,
+            "context": {
+              "friendly_strength": "HIGH",
+              "enemy_pressure": "LOW",
+              "objective_distance": "UNKNOWN"
+            },
+            "policy_info": {
+              "option": "FLANK",
+              "confidence": 0.31016698479652405,
+              "value_estimate": 0.9518766403198242
+            }
+          }
+        },
+        {
+          "type": "ACTION",
+          "payload": {
+            "turn": 9,
+            "action": "RangedDirectAttack",
+            "active_unit": "US_1"
+          }
+        },
+        {
+          "type": "ACTION_EFFECT",
+          "payload": {
+            "action": "RangedCombat",
+            "attacker": "US_1",
+            "defender": "GE_3",
+            "distance": 3,
+            "attack_sector": "REAR",
+            "attacker_attack_dice": [
+              {
+                "color": "RED",
+                "faces": [
+                  "DAMAGE",
+                  "DAMAGE"
+                ]
+              },
+              {
+                "color": "RED",
+                "faces": [
+                  "CRITICAL",
+                  "DAMAGE"
+                ]
+              },
+              {
+                "color": "YELLOW",
+                "faces": [
+                  "DAMAGE"
+                ]
+              }
+            ],
+            "defender_defense_dice": [
+              {
+                "color": "YELLOW",
+                "faces": [
+                  "CRITICAL",
+                  "DAMAGE"
+                ]
+              }
+            ],
+            "attacker_effects": {
+              "damage": 3,
+              "criticals": [],
+              "suppress": 0
+            },
+            "defender_hp_before": 1,
+            "defender_hp_after": 0,
+            "defender_killed": true,
+            "defender_suppressed": false,
+            "resolution": {
+              "remaining_damage": 3,
+              "remaining_criticals": 0,
+              "remaining_suppress": 0
+            },
+            "outcome": "resolved",
+            "winner": null
+          }
+        },
+        {
+          "type": "ACTION",
+          "payload": {
+            "turn": 9,
+            "action": "WaitAction",
+            "active_unit": "US_3"
+          }
+        }
+      ]
+    }
+  ]
+}
+
+
+================================================================================
+FILE: C:\repos\python\assault\assault_sim\strategy\base.py
+================================================================================
+
+class Strategy:
+    """
+    Declarative preference profile.
+    Contract:
+    - weigh(areas: dict) -> dict[str, float]
+    """
+    def weigh(self, areas: dict) -> dict:
+        raise NotImplementedError
+
+
+
+================================================================================
+FILE: C:\repos\python\assault\assault_sim\strategy\registry.py
+================================================================================
+
+class StrategyRegistry:
+    def __init__(self):
+        self._strategies = {}
+
+    def register(self, name: str, strategy):
+        self._strategies[name] = strategy
+
+    def get(self, name: str):
+        return self._strategies[name]
+
+
+
+================================================================================
+FILE: C:\repos\python\assault\assault_sim\strategy\substrategy.py
+================================================================================
+
+class SubStrategy(Strategy):
+    """
+    Conditional strategy variant.
+    Contract:
+    - is_active(state, context) -> bool
+    """
+    def is_active(self, state, context=None) -> bool:
+        raise NotImplementedError
+
+
+
+================================================================================
+FILE: C:\repos\python\assault\assault_sim\train\eval_ppo.py
+================================================================================
+
+import torch
+from pathlib import Path
+import statistics
+
+from assault_sim.config.config_loader import load_sim_config
+from assault_sim.sim_env import SimEnv
+from assault_sim.training_env import TrainingEnv
+
+from assault_sim.rl.policy_net import PolicyNet
+from assault_sim.decision.hrl_controller import HRLController
+from assault_sim.decision.option_executor import OptionExecutor
+from assault_sim.rl.option_policy import OptionPolicy
+from assault_sim.rl.tactical_options import TacticalOption
+
+from assault_sim.heuristics.tactical_path_heuristic import TacticalPathHeuristic
+
+
+# -------------------------------------------------
+# CONFIG
+# -------------------------------------------------
+EPISODES = 50
+MAX_STEPS = 200
+RL_SIDE = "US"
+
+
+def main():
+    print(">>> PPO evaluation started")
+
+    # -------------------------------------------------
+    # LOAD MODEL
+    # -------------------------------------------------
+    checkpoint_path = Path("assault_sim/checkpoints/ppo_US.pt")
+
+    if not checkpoint_path.exists():
+        raise FileNotFoundError(checkpoint_path)
+
+    checkpoint = torch.load(checkpoint_path)
+
+    policy = PolicyNet(
+        input_dim=checkpoint["input_dim"],
+        max_actions=checkpoint["max_actions"],
+    )
+    policy.load_state_dict(checkpoint["model_state_dict"])
+    policy.eval()
+
+    print("✅ Model loaded")
+
+    option_policy = OptionPolicy(policy)
+    heuristic = TacticalPathHeuristic()
+    option_executor = OptionExecutor(heuristic)
+
+    hrl_controller = HRLController(
+        option_policy=option_policy,
+        option_executor=option_executor,
+        rl_side=RL_SIDE,
+    )
+
+    # -------------------------------------------------
+    # ENV
+    # -------------------------------------------------
+    sim_config = load_sim_config(
+        Path("assault_sim/config/sim_config.yaml")
+    )
+    sim_config.scenario_name = "phase01_seq001_initial_contact"
+
+    sim_env = SimEnv(sim_config, controller=None)
+
+    env = TrainingEnv(
+        sim_env,
+        env_config_path=Path("assault_sim/config/env_config.json"),
+        rl_side=RL_SIDE,
+    )
+
+    # -------------------------------------------------
+    # STATS
+    # -------------------------------------------------
+    wins = 0
+    vp_scores = []
+    steps_list = []
+
+    # -------------------------------------------------
+    # EPISODES
+    # -------------------------------------------------
+    for ep in range(EPISODES):
+        obs = env.reset()
+
+        done = False
+        steps = 0
+
+        while not done:
+            state = env.state
+            active = state.active_unit
+
+            if active is None:
+                action = None
+            elif active.side == RL_SIDE:
+                action = hrl_controller.choose_action(state, obs)
+            else:
+                action = heuristic.choose_action(state)
+
+            obs, reward, done, info = env.step(action)
+
+            steps += 1
+
+            if steps >= MAX_STEPS:
+                print(f"⚠️ Forced stop ep={ep}")
+                break
+
+        # -------------------------------------------------
+        # RESULTADOS (CORRECTOS)
+        # -------------------------------------------------
+        state = env.state
+
+        winner = state.winner
+        reason = state.end_reason
+        vp = state.vp_tracker.total_points if state.vp_tracker else 0
+
+        if winner == RL_SIDE:
+            wins += 1
+
+        vp_scores.append(vp)
+        steps_list.append(steps)
+
+        print(
+            f"[EP {ep}] winner={winner} reason={reason} "
+            f"VP={vp} steps={steps}"
+        )
+
+    # -------------------------------------------------
+    # SUMMARY
+    # -------------------------------------------------
+    print("\n=== RESULTS ===")
+    print(f"Episodes:   {EPISODES}")
+    print(f"Win rate:   {wins / EPISODES:.2%}")
+    print(f"Avg VP:     {statistics.mean(vp_scores):.2f}")
+    print(f"Avg steps:  {statistics.mean(steps_list):.1f}")
+    print("================")
+
+    print("\n>>> Evaluation finished")
+
+
+if __name__ == "__main__":
+    main()
+
+
+================================================================================
+FILE: C:\repos\python\assault\assault_sim\train\train.py
+================================================================================
+
+# assault_sim/train/train.py
+
+from pathlib import Path
+import argparse
+
+from assault_sim.config.config_loader import load_sim_config
+from assault_sim.sim_env import SimEnv
+from assault_sim.training_env import TrainingEnv
+from assault_sim.debug.console_observer import ConsoleObserver
+from assault_sim.debug.debug_config import DebugConfig
+
+from assault_sim.heuristics.tactical_path_heuristic import TacticalPathHeuristic
+
+RL_SIDE = "US"
+
+
+# -----------------------------------------------------
+# CLI
+# -----------------------------------------------------
+def parse_args():
+    parser = argparse.ArgumentParser(description="Assault runner")
+
+    parser.add_argument(
+        "--config",
+        type=Path,
+        default=Path("assault_sim/config/sim_config.yaml"),
+    )
+    parser.add_argument("--scenario", type=str)
+    parser.add_argument("--seed", type=int)
+    parser.add_argument("--debug", action="store_true")
+    parser.add_argument("--no-observability", action="store_true")
+
+    return parser.parse_args()
+
+
+# -----------------------------------------------------
+# MAIN
+# -----------------------------------------------------
+def main():
+    args = parse_args()
+
+    sim_config = load_sim_config(args.config)
+
+    if args.scenario:
+        sim_config.scenario_name = args.scenario
+
+    if args.seed is not None:
+        sim_config.seed = args.seed
+
+    debug_cfg = DebugConfig(enabled=args.debug and not args.no_observability)
+
+    controller = TacticalPathHeuristic()
+
+    sim_env = SimEnv(
+        sim_config,
+        debug_config=debug_cfg,
+        controller=None,   # control manual
+    )
+
+    training_env = TrainingEnv(
+        sim_env,
+        env_config_path=Path("assault_sim/config/env_config.json"),
+        rl_side=RL_SIDE,
+    )
+
+    observer = ConsoleObserver(rl_side=RL_SIDE)
+
+    if sim_env.event_bus:
+        sim_env.event_bus.subscribe(observer)
+
+    obs = training_env.reset()
+    done = False
+
+    print("\n=== SIMULATION START ===")
+    print(f"Scenario: {sim_config.scenario_name}")
+    print("========================\n")
+
+    step_count = 0
+
+    while not done:
+        state = sim_env.game_state
+        active = state.active_unit
+
+        if active:
+            action = controller.choose_action(state)
+        else:
+            action = None
+
+        obs, reward, done, _ = training_env.step(action)
+
+        step_count += 1
+
+        if step_count > 500:
+            print("⚠️ Forced stop")
+            break
+
+    state = sim_env.game_state
+
+    print("\n=== SIMULATION FINISHED ===")
+    print(f"Winner: {state.winner}")
+    print(f"Reason: {state.end_reason}")
+    print(f"Turns:  {state.turn}")
+
+    if state.vp_tracker:
+        print(f"Final VP: {state.vp_tracker.total_points}")
+
+
+if __name__ == "__main__":
+    main()
+
+
+================================================================================
+FILE: C:\repos\python\assault\assault_sim\train\train_ppo.py
+================================================================================
+
+import torch
+import torch.optim as optim
+import torch.distributions as dist
+import numpy as np
+from pathlib import Path
+
+from assault_sim.config.config_loader import load_sim_config
+from assault_sim.sim_env import SimEnv
+from assault_sim.training_env import TrainingEnv
+
+from assault_sim.rl.policy_net import PolicyNet
+from assault_sim.rl.option_policy import OptionPolicy
+from assault_sim.rl.tactical_options import TacticalOption
+
+from assault_sim.decision.hrl_controller import HRLController
+from assault_sim.decision.option_executor import OptionExecutor
+from assault_sim.heuristics.tactical_path_heuristic import TacticalPathHeuristic
+
+
+# -------------------------------------------------
+# CONFIG
+# -------------------------------------------------
+RL_SIDE = "US"
+
+TOTAL_EPISODES = 300
+ROLLOUT_STEPS = 64
+PPO_EPOCHS = 4
+
+CLIP_EPS = 0.2
+GAMMA = 0.99
+VALUE_COEF = 0.25
+ENTROPY_COEF = 0.01
+
+
+def main():
+    print(">>> PPO HRL training started")
+    print(f">>> RL SIDE: {RL_SIDE}")
+
+    # -------------------------------------------------
+    # CONFIG
+    # -------------------------------------------------
+    sim_config = load_sim_config(
+        Path("assault_sim/config/sim_config.yaml")
+    )
+    sim_config.scenario_name = "phase01_seq001_initial_contact"
+
+    sim_env = SimEnv(sim_config, controller=None)
+    env = TrainingEnv(
+        sim_env,
+        env_config_path=Path("assault_sim/config/env_config.json"),
+        rl_side=RL_SIDE,
+    )
+
+    obs = env.reset()
+    input_dim = obs.shape[0]
+
+    print(f">>> OBS DIM: {input_dim}")
+
+    # -------------------------------------------------
+    # POLICY
+    # -------------------------------------------------
+    num_options = len(TacticalOption)
+    policy = PolicyNet(input_dim=input_dim, max_actions=num_options)
+    optimizer = optim.Adam(policy.parameters(), lr=3e-4)
+
+    option_policy = OptionPolicy(policy)
+    heuristic_controller = TacticalPathHeuristic()
+    option_executor = OptionExecutor(heuristic_controller)
+
+    hrl_controller = HRLController(
+        option_policy=option_policy,
+        option_executor=option_executor,
+        rl_side=RL_SIDE,
+    )
+
+    rollout_idx = 0
+
+    # -------------------------------------------------
+    # PPO LOOP
+    # -------------------------------------------------
+    while rollout_idx < TOTAL_EPISODES:
+        print(f"\n[ROLLOUT {rollout_idx}]")
+
+        obs_buf = []
+        act_buf = []
+        old_logp_buf = []
+        value_buf = []
+        reward_buf = []
+        done_buf = []
+
+        steps = 0
+
+        while steps < ROLLOUT_STEPS:
+            state = env.state
+            active = state.active_unit if state else None
+
+            # -------------------------------------------------
+            # avanzar simulación si no hay unidad activa
+            # -------------------------------------------------
+            if active is None:
+                obs, _, done, _ = env.step(None)
+                steps += 1
+
+                if done:
+                    obs = env.reset()
+                continue
+
+            # -------------------------------------------------
+            # DECISIÓN
+            # -------------------------------------------------
+            if active.side == RL_SIDE:
+                action = hrl_controller.choose_action(state, obs)
+
+                obs_buf.append(obs)
+                act_buf.append(option_policy.last_option.value)
+                old_logp_buf.append(option_policy.last_log_prob.detach())
+                value_buf.append(option_policy.last_value.detach())
+
+                reward_for_rl = True
+            else:
+                action = heuristic_controller.choose_action(state)
+                reward_for_rl = False
+
+            # seguridad
+            if action is None:
+                obs, _, done, _ = env.step(None)
+                steps += 1
+                continue
+
+            # -------------------------------------------------
+            # STEP
+            # -------------------------------------------------
+            next_obs, reward, done, _ = env.step(action)
+
+            if reward_for_rl:
+                reward_buf.append(reward)
+                done_buf.append(done)
+
+            obs = next_obs
+            steps += 1
+
+            if done:
+                obs = env.reset()
+                break
+
+        # -------------------------------------------------
+        # SKIP si no hubo decisiones RL
+        # -------------------------------------------------
+        if len(value_buf) == 0 or len(reward_buf) == 0:
+            rollout_idx += 1
+            continue
+
+        # -------------------------------------------------
+        # ALIGN
+        # -------------------------------------------------
+        n = min(len(value_buf), len(reward_buf))
+
+        obs_buf = obs_buf[:n]
+        act_buf = act_buf[:n]
+        old_logp_buf = old_logp_buf[:n]
+        value_buf = value_buf[:n]
+        reward_buf = reward_buf[:n]
+        done_buf = done_buf[:n]
+
+        # -------------------------------------------------
+        # RETURNS
+        # -------------------------------------------------
+        returns = []
+        G = 0.0
+
+        for r, d in zip(reversed(reward_buf), reversed(done_buf)):
+            G = r + GAMMA * G * (1 - int(d))
+            returns.insert(0, G)
+
+        returns = torch.tensor(returns, dtype=torch.float32)
+        values = torch.stack(value_buf)
+
+        advantages = returns - values
+
+        if advantages.numel() > 1:
+            advantages = (advantages - advantages.mean()) / (
+                advantages.std() + 1e-8
+            )
+
+        obs_t = torch.tensor(np.array(obs_buf), dtype=torch.float32)
+        act_t = torch.tensor(act_buf, dtype=torch.long)
+        old_logp_t = torch.stack(old_logp_buf)
+
+        # -------------------------------------------------
+        # PPO UPDATE
+        # -------------------------------------------------
+        for _ in range(PPO_EPOCHS):
+            logits, new_values = policy(obs_t)
+            dist_opt = dist.Categorical(logits=logits)
+
+            ratio = torch.exp(dist_opt.log_prob(act_t) - old_logp_t)
+            clipped = torch.clamp(ratio, 1 - CLIP_EPS, 1 + CLIP_EPS)
+
+            policy_loss = -torch.min(
+                ratio * advantages,
+                clipped * advantages
+            ).mean()
+
+            value_loss = (returns - new_values.squeeze()).pow(2).mean()
+            entropy = dist_opt.entropy().mean()
+
+            loss = policy_loss + VALUE_COEF * value_loss - ENTROPY_COEF * entropy
+
+            optimizer.zero_grad()
+            loss.backward()
+            optimizer.step()
+
+        print(f"[DONE] rollout {rollout_idx}")
+        rollout_idx += 1
+
+    # -------------------------------------------------
+    # SAVE
+    # -------------------------------------------------
+    ckpt_path = Path("assault_sim/checkpoints") / f"ppo_{RL_SIDE}.pt"
+    ckpt_path.parent.mkdir(parents=True, exist_ok=True)
+
+    torch.save(
+        {
+            "model_state_dict": policy.state_dict(),
+            "input_dim": input_dim,
+            "max_actions": num_options,
+        },
+        ckpt_path,
+    )
+
+    print(f">>> TRAINING FINISHED: {ckpt_path}")
+
+
+# ✅ ✅ MAIN CORRECTO (ESTO ERA TU BUG)
+if __name__ == "__main__":
+    main()
+
+
+================================================================================
+FILE: C:\repos\python\assault\assault_sim\train\train_rl.py
+================================================================================
+
+# assault_sim/train/train_rl.py
+
+import torch
+import torch.optim as optim
+from pathlib import Path
+
+from assault_sim.config.config_loader import load_sim_config
+from assault_sim.sim_env import SimEnv
+from assault_sim.training_env import TrainingEnv
+
+from assault_sim.rl.policy_net import PolicyNet
+from assault_sim.rl.controller import RLPolicyController
+from assault_sim.rl.side_controller import SideAwareController
+from assault_sim.heuristics.tactical_path_heuristic import TacticalPathHeuristic
+
+
+# -------------------------------
+# Hyperparameters
+# -------------------------------
+EPISODES = 300
+MAX_STEPS = 50
+STEP_PENALTY = -0.01
+FAIL_PENALTY = -1.0
+VALUE_COEF = 0.5
+ENTROPY_COEF = 0.01
+
+
+def main():
+    print(">>> Actor-Critic training started (A2C minimal)")
+
+    sim_config = load_sim_config(
+        Path("assault_sim/config/sim_config.yaml")
+    )
+    sim_config.scenario_name = "phase01_seq001_initial_contact"
+
+    policy = PolicyNet(input_dim=4, max_actions=64)
+    optimizer = optim.Adam(policy.parameters(), lr=3e-4)
+
+    rl_controller = RLPolicyController(policy)
+    heuristic_controller = TacticalPathHeuristic()
+
+    controller = SideAwareController(
+        rl_controller=rl_controller,
+        heuristic_controller=heuristic_controller,
+        rl_side="GE",
+    )
+
+    sim_env = SimEnv(sim_config, controller=controller)
+    env = TrainingEnv(
+        sim_env,
+        env_config_path=Path("assault_sim/config/env_config.json"),
+    )
+
+    for episode in range(EPISODES):
+        print(f"\n[EP {episode}] reset")
+
+        state = env.reset()
+        done = False
+
+        log_probs = []
+        values = []
+        rewards = []
+
+        steps = 0
+
+        while not done and steps < MAX_STEPS:
+            action = controller.choose_action(state)
+            if action is None:
+                break
+
+            if state.active_unit and state.active_unit.side == "GE":
+                log_probs.append(rl_controller.last_log_prob)
+                values.append(rl_controller.last_value)
+
+            try:
+                state, _, done, _ = env.step(action)
+                reward = STEP_PENALTY
+            except Exception as e:
+                print(f"  ❌ env.step failed: {e}")
+                reward = FAIL_PENALTY
+                done = True
+
+            rewards.append(reward)
+            print(f"  step={steps} reward={reward:.2f}")
+            steps += 1
+
+        final_vp = (
+            state.vp_tracker.total_points
+            if state.vp_tracker else 0
+        )
+
+        returns = sum(rewards) + final_vp
+
+        if log_probs:
+            advantages = returns - torch.stack(values)
+
+            policy_loss = -(torch.stack(log_probs) * advantages.detach()).mean()
+            value_loss = advantages.pow(2).mean()
+
+            loss = policy_loss + VALUE_COEF * value_loss
+
+            optimizer.zero_grad()
+            loss.backward()
+            optimizer.step()
+
+            loss_value = loss.item()
+        else:
+            loss_value = 0.0
+
+        print(
+            f"[EP {episode} DONE] "
+            f"steps={steps} "
+            f"return={returns:.2f} "
+            f"VP={final_vp} "
+            f"loss={loss_value:.4f}"
+        )
+
+    print("\n>>> A2C training finished")
+
+
+if __name__ == "__main__":
+    main()
+
