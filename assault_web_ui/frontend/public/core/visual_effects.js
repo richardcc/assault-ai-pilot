@@ -37,7 +37,7 @@ function animateDiceProjectile(attackerId, defenderId, dice) {
   dice.forEach((die, i) => {
 
     // ✅ decide origin (attacker / defender)
-    const isAttackerDie = (die.color || "").toLowerCase() !== "white";
+    const isAttackerDie = die.side === "attacker";
 
     const originHex = isAttackerDie ? attackerHex : defenderHex;
     const targetHex = isAttackerDie ? defenderHex : attackerHex;
