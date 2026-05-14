@@ -1,27 +1,16 @@
 from assault_model.actions.action_catalog import ActionCatalog
 from assault_model.actions.action_category import ActionCategory
-from assault_model.actions.assault import AssaultAction
 from assault_model.actions.ranged_direct import RangedDirectAttack
 from assault_model.map.hex_utils import hex_distance
 
 
 class TacticalPathHeuristic:
-    """
-    Tactical heuristic adapted to support HRL.
-
-    Core method:
-    - choose_action(state): unchanged, legacy-safe
-
-    Additional lightweight wrappers:
-    - advance_towards_enemy
-    - flank_best_position
-    - retreat
-    """
 
     # -------------------------------------------------
-    # MAIN HEURISTIC (UNCHANGED)
+    # MAIN HEURISTIC (FINAL VERSION)
     # -------------------------------------------------
     def choose_action(self, state):
+
         unit = state.active_unit
         if unit is None or not unit.alive:
             return None
@@ -30,85 +19,92 @@ class TacticalPathHeuristic:
         if not actions:
             return None
 
-        # -------------------------------------------------
-        # 1. ABSOLUTE PRIORITY: ASSAULT
-        # -------------------------------------------------
-        for action in actions:
-            if isinstance(action, AssaultAction):
-                return action
-
-        # -------------------------------------------------
-        # 2. PRIORITY: RANGED FIRE
-        # -------------------------------------------------
-        for action in actions:
-            if isinstance(action, RangedDirectAttack):
-                return action
-
-        # -------------------------------------------------
-        # 3. CREATE CONTACT (ANTI-PASSIVE)
-        # -------------------------------------------------
         enemies = [
             u for u in state.units
             if u.side != unit.side and u.alive
         ]
 
-        if enemies:
-            closest_enemy = min(
-                enemies,
-                key=lambda e: hex_distance(unit.position, e.position)
-            )
+        if not enemies:
+            return self._wait(actions)
 
-            # Move towards enemy to create interaction
-            best_move = None
-            best_dist = hex_distance(unit.position, closest_enemy.position)
+        # objetivo principal
+        closest_enemy = min(
+            enemies,
+            key=lambda e: hex_distance(unit.position, e.position)
+        )
 
-            for action in actions:
-                if action.action_type.category != ActionCategory.MOVEMENT:
-                    continue
-
-                path = getattr(action, "path", None)
-                if not path:
-                    continue
-
-                dest = path[-1]
-                d = hex_distance(dest, closest_enemy.position)
-
-                if d < best_dist:
-                    best_dist = d
-                    best_move = action
-
-            if best_move:
-                return best_move
+        dist_to_enemy = hex_distance(unit.position, closest_enemy.position)
 
         # -------------------------------------------------
-        # 4. FALLBACK: WAIT
+        # 1. RANGED (si puede disparar → hazlo)
+        # -------------------------------------------------
+        ranged_action = None
+
+        for action in actions:
+            if isinstance(action, RangedDirectAttack):
+                ranged_action = action
+                break
+
+        if ranged_action:
+            return ranged_action
+
+        # -------------------------------------------------
+        # 2. MOVIMIENTO INTELIGENTE (CLAVE)
+        # -------------------------------------------------
+        best_move = None
+        best_dist = dist_to_enemy
+
+        for action in actions:
+
+            if action.action_type.category != ActionCategory.MOVEMENT:
+                continue
+
+            path = getattr(action, "path", None)
+            if not path:
+                continue
+
+            dest = path[-1]
+
+            # distancia desde destino a enemigo
+            d = hex_distance(dest, closest_enemy.position)
+
+            # ✅ PRIORIDAD 1: entrar en el mismo hex → provoca assault
+            if dest == closest_enemy.position:
+
+                # opcional: solo si conviene (ejemplo básico)
+                if unit.hp >= closest_enemy.hp or closest_enemy.hp <= 1:
+                    return action
+
+            # ✅ PRIORIDAD 2: acercarse
+            if d < best_dist:
+                best_dist = d
+                best_move = action
+
+            # ✅ PRIORIDAD 3: movimiento lateral (ANTI-FREEZE)
+            elif best_move is None:
+                best_move = action
+
+        if best_move:
+            return best_move
+
+        # -------------------------------------------------
+        # 3. FALLBACK
         # -------------------------------------------------
         return self._wait(actions)
 
     # -------------------------------------------------
-    # HRL WRAPPERS (NEW, MINIMAL)
+    # HRL WRAPPERS
     # -------------------------------------------------
     def advance_towards_enemy(self, unit, state):
-        """
-        HRL ADVANCE:
-        Reuse existing heuristic logic to create contact.
-        """
         return self.choose_action(state)
 
     def flank_best_position(self, unit, state):
-        """
-        HRL FLANK:
-        For now, reuse choose_action.
-        Later, flank-specific logic can be added safely.
-        """
         return self.choose_action(state)
 
     def retreat(self, unit, state):
-        """
-        HRL RETREAT:
-        Move away from closest enemy.
-        """
+
         actions = ActionCatalog(state).actions()
+
         enemies = [
             u for u in state.units
             if u.side != unit.side and u.alive
@@ -126,6 +122,7 @@ class TacticalPathHeuristic:
         best_dist = hex_distance(unit.position, closest_enemy.position)
 
         for action in actions:
+
             if action.action_type.category != ActionCategory.MOVEMENT:
                 continue
 
@@ -136,7 +133,7 @@ class TacticalPathHeuristic:
             dest = path[-1]
             d = hex_distance(dest, closest_enemy.position)
 
-            # Retreat = increase distance
+            # alejarse
             if d > best_dist:
                 best_dist = d
                 best_move = action

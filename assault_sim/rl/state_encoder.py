@@ -5,15 +5,10 @@ from assault_model.map.hex_utils import hex_distance
 
 
 # =================================================
-# NUMERIC STATE (USED BY RL) — DO NOT MODIFY
+# NUMERIC STATE (USED BY RL)
+# ✅ MEJORADO: incluye objetivo (VP)
 # =================================================
 def encode_state(state, rl_side=None, max_turns=None):
-    """
-    SAFE and minimal state encoder for Phase 01+.
-
-    Adds global force-balance, time pressure,
-    AND egocentric enemy direction awareness.
-    """
 
     active = state.active_unit
 
@@ -57,7 +52,7 @@ def encode_state(state, rl_side=None, max_turns=None):
     hp_balance = (own_total_hp - enemy_total_hp) / max_hp
 
     # -------------------------
-    # Time pressure (SAFE)
+    # Time pressure
     # -------------------------
     if max_turns and max_turns > 0:
         time_progress = state.turn / max_turns
@@ -65,7 +60,7 @@ def encode_state(state, rl_side=None, max_turns=None):
         time_progress = 0.0
 
     # -------------------------
-    # Egocentric direction to closest enemy
+    # Dirección a enemigo
     # -------------------------
     dq = 0.0
     dr = 0.0
@@ -82,6 +77,32 @@ def encode_state(state, rl_side=None, max_turns=None):
         dq = np.clip(dq / 10.0, -1.0, 1.0)
         dr = np.clip(dr / 10.0, -1.0, 1.0)
 
+    # -------------------------
+    # ✅ DISTANCIA A OBJETIVO (VP)
+    # -------------------------
+    vp_dist = 0.0
+
+    if active is not None and state.vp_tracker:
+
+        vp_tracker = state.vp_tracker
+        conditions = vp_tracker.conditions
+
+        vp_points = getattr(conditions, "points", [])
+
+        if vp_points:
+
+            # cada VictoryPoint tiene hex_coords = (q, r)
+            target_vp = min(
+                vp_points,
+                key=lambda p: hex_distance(active.position, p.hex_coords)
+            )
+
+            dist = hex_distance(active.position, target_vp.hex_coords)
+
+            vp_dist = np.clip(dist / 10.0, 0.0, 1.0)
+    # -------------------------
+    # FINAL VECTOR
+    # -------------------------
     return np.array(
         [
             state.turn,
@@ -95,21 +116,17 @@ def encode_state(state, rl_side=None, max_turns=None):
 
             dq,
             dr,
+
+            vp_dist   # 🔥 NUEVO (CLAVE)
         ],
         dtype=np.float32,
     )
 
 
 # =================================================
-# SYMBOLIC / EXPLAINABLE CONTEXT (FOR UI + RAG)
+# SYMBOLIC / EXPLAINABLE CONTEXT
 # =================================================
 def explainable_context(state, rl_side=None, max_turns=None):
-    """
-    Human-readable tactical context derived from game state.
-
-    This is NOT used by the RL agent.
-    It is safe to store in replays and use for explanations.
-    """
 
     units = state.units or []
 

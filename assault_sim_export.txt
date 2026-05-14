@@ -237,7 +237,7 @@ class TrainingEnv:
         self.heuristic_kills = 0
 
     # -------------------------------------------------
-    # API LIMPIA (IMPORTANTE)
+    # API LIMPIA
     # -------------------------------------------------
     @property
     def state(self):
@@ -262,13 +262,13 @@ class TrainingEnv:
     # STEP
     # -------------------------------------------------
     def step(self, action):
+
         state = self.sim.game_state
 
         if state is None:
             raise RuntimeError("GameState is None")
 
         active = state.active_unit
-
         actor_side = active.side if active else None
 
         # -----------------------------
@@ -324,9 +324,10 @@ class TrainingEnv:
             alive_after[u.unit_id] = bool(u.alive)
 
         # -----------------------------
-        # DAMAGE & KILLS
+        # DAMAGE & KILLS (tracking global)
         # -----------------------------
         for unit_id, before_hp in hp_before.items():
+
             after_hp = hp_after.get(unit_id, before_hp)
             damage = max(0, before_hp - after_hp)
 
@@ -341,6 +342,26 @@ class TrainingEnv:
                     self.rl_kills += 1
                 else:
                     self.heuristic_kills += 1
+
+        # -----------------------------
+        # ✅ BUILD RL INFO (CRÍTICO)
+        # -----------------------------
+        rl_info = {
+            "damage": 0,
+            "defender_killed": False
+        }
+
+        for unit_id, before_hp in hp_before.items():
+
+            after_hp = hp_after.get(unit_id, before_hp)
+            damage = max(0, before_hp - after_hp)
+
+            if actor_side == self.rl_side:
+                rl_info["damage"] += damage
+
+            if alive_before.get(unit_id, False) and not alive_after.get(unit_id, True):
+                if actor_side == self.rl_side:
+                    rl_info["defender_killed"] = True
 
         _trace(
             "COMBAT_SNAPSHOT",
@@ -365,17 +386,21 @@ class TrainingEnv:
             )
 
         # -----------------------------
-        # REWARD
+        # REWARD (FIX REAL)
         # -----------------------------
         reward = self.reward_fn.compute(
             state=state,
             next_state=next_state,
             action=action,
             active=active,
-            info={},
+            info=rl_info,   # ✅ CLAVE
             pre_dist=pre_dist,
             post_dist=post_dist,
         )
+
+        # ✅ penalización extra si WAIT sin efecto
+        if isinstance(action, WaitAction) and rl_info["damage"] == 0:
+            reward -= 0.1
 
         # -----------------------------
         # DONE
@@ -1267,6 +1292,18 @@ class CombatRenderer:
         if defender_id is not None and hp_after is not None:
             self.unit_formatter.override_hp(defender_id, hp_after)
 
+        # -------------------------------------------------
+        # ✅ SUPPRESSION VISUALIZATION
+        # -------------------------------------------------
+        # Shows suppression effect clearly in console output
+
+        suppression = payload.get("suppression", {})
+
+        if suppression.get("applied"):
+            self.turn_buffer.add_line(
+                f"                 😵 {self.turn_buffer.unit_label(defender_id)} SUPPRESSED"
+            )
+
     # -------------------------------------------------
     # INTERNAL HELPERS (NEW, NO LEGACY)
     # -------------------------------------------------
@@ -1793,18 +1830,21 @@ class MapRenderer:
                         symbol = "🏠"
                     elif getattr(hs, "woods", False):
                         symbol = "🌳"
-
+ 
                 # Unit overlay
                 if (q, r) in unit_at:
                     u = unit_at[(q, r)]
                     icon = "🔵" if u.side == "GE" else "🔴"
+
+                    # ✅ ADD suppression indicator
+                    if getattr(u, "suppressed", False):
+                        icon += "😵"
+
                     symbol = f"{icon}{symbol.strip()}"
 
-                # VP overlay (top priority)
-                if (q, r) in self.vps:
-                    symbol = f"{symbol.strip()}🚩"
-
                 print(f"{symbol:>4}", end=" ")
+
+ 
             print()
 
         print(
@@ -3239,6 +3279,7 @@ from .base_reward import BaseReward
 
 
 class AggressiveReward(BaseReward):
+
     def compute(
         self,
         *,
@@ -3253,40 +3294,80 @@ class AggressiveReward(BaseReward):
 
         reward = 0.0
 
-        # --- VP delta ---
+        # -------------------------------------------------
+        # ✅ 1. VP (MUY IMPORTANTE)
+        # -------------------------------------------------
         current_vp = next_state.vp_tracker.total_points if next_state.vp_tracker else 0
-        reward += current_vp - self.prev_vp
+        reward += 6.0 * (current_vp - self.prev_vp)
         self.prev_vp = current_vp
 
-        # --- detect attack ---
+        # -------------------------------------------------
+        # ✅ BONUS por ocupar VP (🔥 CLAVE)
+        # -------------------------------------------------
+        if active is not None and next_state.vp_tracker:
+            vp_points = next_state.vp_tracker.conditions.points
+
+            for vp in vp_points:
+                if active.position == vp.hex_coords:
+                    reward += 2.0   # 🔥 subir
+
+        # -------------------------------------------------
+        # ✅ ATAQUE
+        # -------------------------------------------------
         action_name = action.__class__.__name__ if action else ""
         is_attack = "Ranged" in action_name or "Close" in action_name
 
         if is_attack:
             reward += 0.3
 
-        dmg = info.get("damage", 0) if isinstance(info, dict) else 0
-        killed = info.get("defender_killed", False) if isinstance(info, dict) else False
-        sector = info.get("sector") if isinstance(info, dict) else None
+        info = info or {}
 
-        reward += 0.6 * dmg
+        dmg = info.get("damage", 0)
+        killed = info.get("defender_killed", False)
+
+        reward += 0.4 * dmg
+
         if killed:
-            reward += 4.0
+            reward += 2.0
 
-        if sector in ("FLANK", "FLANK_LEFT", "FLANK_RIGHT"):
-            reward += 0.4
-        if sector == "REAR":
-            reward += 0.7
-
+        # -------------------------------------------------
+        # ✅ MOVIMIENTO
+        # -------------------------------------------------
         if pre_dist is not None and post_dist is not None:
             delta = pre_dist - post_dist
-            reward += 0.15 * delta
-            if delta < 0:
-                reward -= 0.15
-            self.prev_enemy_dist = post_dist
 
-        if isinstance(action, WaitAction) and pre_dist is not None:
-            reward -= 0.1
+            reward += 0.5 * delta
+
+            if delta < 0:
+                reward -= 0.5
+
+        # -------------------------------------------------
+        # ✅ WAIT (más duro)
+        # -------------------------------------------------
+        if isinstance(action, WaitAction):
+            reward -= 0.5
+
+        if getattr(self, "last_action_was_wait", False) and isinstance(action, WaitAction):
+            reward -= 0.2
+
+        self.last_action_was_wait = isinstance(action, WaitAction)
+
+        # -------------------------------------------------
+        # ✅ CONSISTENCIA
+        # -------------------------------------------------
+        if action_name == "MoveAction" and pre_dist is not None and post_dist is not None:
+            if post_dist < pre_dist:
+                reward += 0.2
+
+        # -------------------------------------------------
+        # ✅ COSTE TIEMPO
+        # -------------------------------------------------
+        reward -= 0.02
+
+        # -------------------------------------------------
+        # ✅ CLIPPING (AL FINAL)
+        # -------------------------------------------------
+        reward = max(min(reward, 5.0), -5.0)
 
         return reward
 
@@ -3628,15 +3709,10 @@ from assault_model.map.hex_utils import hex_distance
 
 
 # =================================================
-# NUMERIC STATE (USED BY RL) — DO NOT MODIFY
+# NUMERIC STATE (USED BY RL)
+# ✅ MEJORADO: incluye objetivo (VP)
 # =================================================
 def encode_state(state, rl_side=None, max_turns=None):
-    """
-    SAFE and minimal state encoder for Phase 01+.
-
-    Adds global force-balance, time pressure,
-    AND egocentric enemy direction awareness.
-    """
 
     active = state.active_unit
 
@@ -3680,7 +3756,7 @@ def encode_state(state, rl_side=None, max_turns=None):
     hp_balance = (own_total_hp - enemy_total_hp) / max_hp
 
     # -------------------------
-    # Time pressure (SAFE)
+    # Time pressure
     # -------------------------
     if max_turns and max_turns > 0:
         time_progress = state.turn / max_turns
@@ -3688,7 +3764,7 @@ def encode_state(state, rl_side=None, max_turns=None):
         time_progress = 0.0
 
     # -------------------------
-    # Egocentric direction to closest enemy
+    # Dirección a enemigo
     # -------------------------
     dq = 0.0
     dr = 0.0
@@ -3705,6 +3781,32 @@ def encode_state(state, rl_side=None, max_turns=None):
         dq = np.clip(dq / 10.0, -1.0, 1.0)
         dr = np.clip(dr / 10.0, -1.0, 1.0)
 
+    # -------------------------
+    # ✅ DISTANCIA A OBJETIVO (VP)
+    # -------------------------
+    vp_dist = 0.0
+
+    if active is not None and state.vp_tracker:
+
+        vp_tracker = state.vp_tracker
+        conditions = vp_tracker.conditions
+
+        vp_points = getattr(conditions, "points", [])
+
+        if vp_points:
+
+            # cada VictoryPoint tiene hex_coords = (q, r)
+            target_vp = min(
+                vp_points,
+                key=lambda p: hex_distance(active.position, p.hex_coords)
+            )
+
+            dist = hex_distance(active.position, target_vp.hex_coords)
+
+            vp_dist = np.clip(dist / 10.0, 0.0, 1.0)
+    # -------------------------
+    # FINAL VECTOR
+    # -------------------------
     return np.array(
         [
             state.turn,
@@ -3718,21 +3820,17 @@ def encode_state(state, rl_side=None, max_turns=None):
 
             dq,
             dr,
+
+            vp_dist   # 🔥 NUEVO (CLAVE)
         ],
         dtype=np.float32,
     )
 
 
 # =================================================
-# SYMBOLIC / EXPLAINABLE CONTEXT (FOR UI + RAG)
+# SYMBOLIC / EXPLAINABLE CONTEXT
 # =================================================
 def explainable_context(state, rl_side=None, max_turns=None):
-    """
-    Human-readable tactical context derived from game state.
-
-    This is NOT used by the RL agent.
-    It is safe to store in replays and use for explanations.
-    """
 
     units = state.units or []
 
@@ -5998,14 +6096,32 @@ from assault_sim.heuristics.tactical_path_heuristic import TacticalPathHeuristic
 # -------------------------------------------------
 RL_SIDE = "US"
 
-TOTAL_EPISODES = 300
+TOTAL_EPISODES = 1000
 ROLLOUT_STEPS = 64
 PPO_EPOCHS = 4
 
 CLIP_EPS = 0.2
 GAMMA = 0.99
-VALUE_COEF = 0.25
-ENTROPY_COEF = 0.01
+LAMBDA = 0.95
+VALUE_COEF = 0.5
+ENTROPY_COEF = 0.03
+
+
+# -------------------------------------------------
+# GAE
+# -------------------------------------------------
+def compute_gae(rewards, values, dones, gamma, lam):
+    advantages = []
+    gae = 0.0
+
+    values = values + [0.0]  # bootstrap
+
+    for t in reversed(range(len(rewards))):
+        delta = rewards[t] + gamma * values[t + 1] * (1 - dones[t]) - values[t]
+        gae = delta + gamma * lam * (1 - dones[t]) * gae
+        advantages.insert(0, gae)
+
+    return advantages
 
 
 def main():
@@ -6013,11 +6129,9 @@ def main():
     print(f">>> RL SIDE: {RL_SIDE}")
 
     # -------------------------------------------------
-    # CONFIG
+    # ENV
     # -------------------------------------------------
-    sim_config = load_sim_config(
-        Path("assault_sim/config/sim_config.yaml")
-    )
+    sim_config = load_sim_config(Path("assault_sim/config/sim_config.yaml"))
     sim_config.scenario_name = "phase01_seq001_initial_contact"
 
     sim_env = SimEnv(sim_config, controller=None)
@@ -6036,6 +6150,7 @@ def main():
     # POLICY
     # -------------------------------------------------
     num_options = len(TacticalOption)
+
     policy = PolicyNet(input_dim=input_dim, max_actions=num_options)
     optimizer = optim.Adam(policy.parameters(), lr=3e-4)
 
@@ -6055,6 +6170,7 @@ def main():
     # PPO LOOP
     # -------------------------------------------------
     while rollout_idx < TOTAL_EPISODES:
+
         print(f"\n[ROLLOUT {rollout_idx}]")
 
         obs_buf = []
@@ -6067,48 +6183,53 @@ def main():
         steps = 0
 
         while steps < ROLLOUT_STEPS:
+
             state = env.state
             active = state.active_unit if state else None
 
-            # -------------------------------------------------
-            # avanzar simulación si no hay unidad activa
-            # -------------------------------------------------
+            # avanzar si no hay unidad
             if active is None:
                 obs, _, done, _ = env.step(None)
                 steps += 1
-
-                if done:
-                    obs = env.reset()
                 continue
 
-            # -------------------------------------------------
-            # DECISIÓN
-            # -------------------------------------------------
+            # -------------------------
+            # DECISION
+            # -------------------------
             if active.side == RL_SIDE:
+
                 action = hrl_controller.choose_action(state, obs)
 
-                obs_buf.append(obs)
-                act_buf.append(option_policy.last_option.value)
-                old_logp_buf.append(option_policy.last_log_prob.detach())
-                value_buf.append(option_policy.last_value.detach())
+                # ✅ GUARDAMOS TEMPORALMENTE (NO EN BUFFER)
+                last_obs = obs
+                last_action = option_policy.last_option.value
+                last_logp = option_policy.last_log_prob.detach()
+                last_value = option_policy.last_value.item()
 
                 reward_for_rl = True
+
             else:
                 action = heuristic_controller.choose_action(state)
                 reward_for_rl = False
 
-            # seguridad
             if action is None:
                 obs, _, done, _ = env.step(None)
                 steps += 1
                 continue
 
-            # -------------------------------------------------
+            # -------------------------
             # STEP
-            # -------------------------------------------------
+            # -------------------------
             next_obs, reward, done, _ = env.step(action)
 
+            # ✅ SOLO AQUÍ GUARDAMOS TODO (FIX CRÍTICO)
             if reward_for_rl:
+
+                obs_buf.append(last_obs)
+                act_buf.append(last_action)
+                old_logp_buf.append(last_logp)
+                value_buf.append(last_value)
+
                 reward_buf.append(reward)
                 done_buf.append(done)
 
@@ -6117,59 +6238,50 @@ def main():
 
             if done:
                 obs = env.reset()
-                break
 
-        # -------------------------------------------------
-        # SKIP si no hubo decisiones RL
-        # -------------------------------------------------
-        if len(value_buf) == 0 or len(reward_buf) == 0:
+        # -------------------------
+        # VALIDACIÓN
+        # -------------------------
+        if len(reward_buf) == 0:
             rollout_idx += 1
             continue
 
-        # -------------------------------------------------
-        # ALIGN
-        # -------------------------------------------------
-        n = min(len(value_buf), len(reward_buf))
+        assert len(obs_buf) == len(reward_buf), "Buffer mismatch"
 
-        obs_buf = obs_buf[:n]
-        act_buf = act_buf[:n]
-        old_logp_buf = old_logp_buf[:n]
-        value_buf = value_buf[:n]
-        reward_buf = reward_buf[:n]
-        done_buf = done_buf[:n]
+        # -------------------------
+        # GAE
+        # -------------------------
+        advantages = compute_gae(
+            reward_buf,
+            value_buf,
+            done_buf,
+            GAMMA,
+            LAMBDA
+        )
 
-        # -------------------------------------------------
-        # RETURNS
-        # -------------------------------------------------
-        returns = []
-        G = 0.0
+        returns = [a + v for a, v in zip(advantages, value_buf)]
 
-        for r, d in zip(reversed(reward_buf), reversed(done_buf)):
-            G = r + GAMMA * G * (1 - int(d))
-            returns.insert(0, G)
-
+        advantages = torch.tensor(advantages, dtype=torch.float32)
         returns = torch.tensor(returns, dtype=torch.float32)
-        values = torch.stack(value_buf)
-
-        advantages = returns - values
 
         if advantages.numel() > 1:
-            advantages = (advantages - advantages.mean()) / (
-                advantages.std() + 1e-8
-            )
+            advantages = (advantages - advantages.mean()) / (advantages.std() + 1e-8)
 
         obs_t = torch.tensor(np.array(obs_buf), dtype=torch.float32)
         act_t = torch.tensor(act_buf, dtype=torch.long)
         old_logp_t = torch.stack(old_logp_buf)
 
-        # -------------------------------------------------
+        # -------------------------
         # PPO UPDATE
-        # -------------------------------------------------
+        # -------------------------
         for _ in range(PPO_EPOCHS):
-            logits, new_values = policy(obs_t)
+
+            logits, values = policy(obs_t)
             dist_opt = dist.Categorical(logits=logits)
 
-            ratio = torch.exp(dist_opt.log_prob(act_t) - old_logp_t)
+            logp = dist_opt.log_prob(act_t)
+            ratio = torch.exp(logp - old_logp_t)
+
             clipped = torch.clamp(ratio, 1 - CLIP_EPS, 1 + CLIP_EPS)
 
             policy_loss = -torch.min(
@@ -6177,7 +6289,7 @@ def main():
                 clipped * advantages
             ).mean()
 
-            value_loss = (returns - new_values.squeeze()).pow(2).mean()
+            value_loss = (returns - values.squeeze()).pow(2).mean()
             entropy = dist_opt.entropy().mean()
 
             loss = policy_loss + VALUE_COEF * value_loss - ENTROPY_COEF * entropy
@@ -6186,7 +6298,10 @@ def main():
             loss.backward()
             optimizer.step()
 
-        print(f"[DONE] rollout {rollout_idx}")
+        avg_reward = sum(reward_buf) / len(reward_buf) if reward_buf else 0.0
+        print(f"[ROLLOUT {rollout_idx}] avg_reward={avg_reward:.2f} steps={len(reward_buf)}")
+      
+        
         rollout_idx += 1
 
     # -------------------------------------------------
@@ -6207,7 +6322,6 @@ def main():
     print(f">>> TRAINING FINISHED: {ckpt_path}")
 
 
-# ✅ ✅ MAIN CORRECTO (ESTO ERA TU BUG)
 if __name__ == "__main__":
     main()
 

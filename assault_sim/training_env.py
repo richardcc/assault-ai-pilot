@@ -50,8 +50,11 @@ class TrainingEnv:
         self.heuristic_damage = 0
         self.heuristic_kills = 0
 
+        # ✅ NUEVO: cache VP hexes
+        self._vp_hexes = set()
+
     # -------------------------------------------------
-    # API LIMPIA (IMPORTANTE)
+    # API LIMPIA
     # -------------------------------------------------
     @property
     def state(self):
@@ -66,6 +69,12 @@ class TrainingEnv:
         self.current_step = 0
         self.reward_fn.reset(state)
 
+        # ✅ cache VP positions
+        self._vp_hexes.clear()
+        if state.vp_tracker and getattr(state.vp_tracker, "conditions", None):
+            for vp in state.vp_tracker.conditions.points:
+                self._vp_hexes.add(vp.hex_coords)
+
         return encode_state(
             state,
             rl_side=self.rl_side,
@@ -76,13 +85,13 @@ class TrainingEnv:
     # STEP
     # -------------------------------------------------
     def step(self, action):
+
         state = self.sim.game_state
 
         if state is None:
             raise RuntimeError("GameState is None")
 
         active = state.active_unit
-
         actor_side = active.side if active else None
 
         # -----------------------------
@@ -141,6 +150,7 @@ class TrainingEnv:
         # DAMAGE & KILLS
         # -----------------------------
         for unit_id, before_hp in hp_before.items():
+
             after_hp = hp_after.get(unit_id, before_hp)
             damage = max(0, before_hp - after_hp)
 
@@ -155,6 +165,26 @@ class TrainingEnv:
                     self.rl_kills += 1
                 else:
                     self.heuristic_kills += 1
+
+        # -----------------------------
+        # RL INFO
+        # -----------------------------
+        rl_info = {
+            "damage": 0,
+            "defender_killed": False
+        }
+
+        for unit_id, before_hp in hp_before.items():
+
+            after_hp = hp_after.get(unit_id, before_hp)
+            damage = max(0, before_hp - after_hp)
+
+            if actor_side == self.rl_side:
+                rl_info["damage"] += damage
+
+            if alive_before.get(unit_id, False) and not alive_after.get(unit_id, True):
+                if actor_side == self.rl_side:
+                    rl_info["defender_killed"] = True
 
         _trace(
             "COMBAT_SNAPSHOT",
@@ -179,17 +209,39 @@ class TrainingEnv:
             )
 
         # -----------------------------
-        # REWARD
+        # BASE REWARD
         # -----------------------------
         reward = self.reward_fn.compute(
             state=state,
             next_state=next_state,
             action=action,
             active=active,
-            info={},
+            info=rl_info,
             pre_dist=pre_dist,
             post_dist=post_dist,
         )
+
+        # -----------------------------
+        # ✅ VP SHAPING (CLAVE)
+        # -----------------------------
+        rl_units_on_vp = False
+
+        for u in next_state.units:
+            if u.side == self.rl_side and u.alive:
+                pos = (u.position.q, u.position.r)
+
+                if pos in self._vp_hexes:
+                    reward += 1.5
+                    rl_units_on_vp = True
+
+        if not rl_units_on_vp:
+            reward -= 0.3
+
+        # -----------------------------
+        # WAIT PENALTY
+        # -----------------------------
+        if isinstance(action, WaitAction) and rl_info["damage"] == 0:
+            reward -= 0.1
 
         # -----------------------------
         # DONE
@@ -217,4 +269,4 @@ class TrainingEnv:
             reward,
             done,
             info,
-        )
+        )   

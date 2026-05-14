@@ -10,9 +10,12 @@ from assault_sim.rl.policy_net import PolicyNet
 from assault_sim.decision.hrl_controller import HRLController
 from assault_sim.decision.option_executor import OptionExecutor
 from assault_sim.rl.option_policy import OptionPolicy
-from assault_sim.rl.tactical_options import TacticalOption
 
 from assault_sim.heuristics.tactical_path_heuristic import TacticalPathHeuristic
+
+# combate
+from assault_model.actions.movement import MoveAction
+from assault_model.actions.ranged_direct import RangedDirectAttack
 
 
 # -------------------------------------------------
@@ -78,6 +81,10 @@ def main():
     vp_scores = []
     steps_list = []
 
+    # ✅ tipos de combate
+    ranged_count = 0
+    melee_attempts = 0
+
     # -------------------------------------------------
     # EPISODES
     # -------------------------------------------------
@@ -98,7 +105,33 @@ def main():
             else:
                 action = heuristic.choose_action(state)
 
+            # ✅ guardamos state antes de step (clave)
+            prev_state = state
+
             obs, reward, done, info = env.step(action)
+
+            # -------------------------------------------------
+            # ✅ DETECCIÓN TIPOS COMBATE (CORRECTA)
+            # -------------------------------------------------
+            if action is not None:
+
+                # ---------- RANGED ----------
+                if isinstance(action, RangedDirectAttack):
+                    ranged_count += 1
+
+                # ---------- MELEE ----------
+                elif isinstance(action, MoveAction):
+
+                    path = getattr(action, "path", None)
+                    if path:
+                        dest = path[-1]
+
+                        # comprobar si destino tenía enemigo
+                        for u in prev_state.units:
+                            if u.side != active.side and u.alive:
+                                if u.position == dest:
+                                    melee_attempts += 1
+                                    break
 
             steps += 1
 
@@ -107,7 +140,7 @@ def main():
                 break
 
         # -------------------------------------------------
-        # RESULTADOS (CORRECTOS)
+        # RESULTADOS
         # -------------------------------------------------
         state = env.state
 
@@ -134,6 +167,19 @@ def main():
     print(f"Win rate:   {wins / EPISODES:.2%}")
     print(f"Avg VP:     {statistics.mean(vp_scores):.2f}")
     print(f"Avg steps:  {statistics.mean(steps_list):.1f}")
+
+    # -------------------------------------------------
+    # ✅ TIPOS DE COMBATE
+    # -------------------------------------------------
+    print("\n=== COMBAT TYPES ===")
+    print(f"Ranged attacks: {ranged_count}")
+    print(f"Melee attempts: {melee_attempts}")
+
+    total = ranged_count + melee_attempts
+    if total > 0:
+        ratio = melee_attempts / total
+        print(f"Melee ratio: {ratio:.2%}")
+
     print("================")
 
     print("\n>>> Evaluation finished")
