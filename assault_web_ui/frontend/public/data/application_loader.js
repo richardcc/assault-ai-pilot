@@ -5,32 +5,57 @@
 window.loadApplicationData = async function loadApplicationData(replayId) {
 
   // -----------------------------------------------
-  // Load replay (using existing loader)
+  // Load replay
   // -----------------------------------------------
   const replay = await loadReplay(replayId);
+
+  // ✅ FIX CRÍTICO: validar replay
+  if (!replay) {
+    console.error("❌ loadReplay() devolvió undefined");
+    console.error("❌ replayId:", replayId);
+
+    return {
+      replay: null,
+      scenario: null,
+      uiMetadata: null
+    };
+  }
+
+  console.log("✅ Replay RAW:", replay);
 
   // -----------------------------------------------
   // Load scenario referenced by replay
   // -----------------------------------------------
   let scenario = null;
+
   const scenarioId = replay.meta?.scenario_id;
 
-  if (scenarioId) {
+  if (!scenarioId) {
+    console.error("❌ replay.meta.scenario_id missing");
+  } else {
     scenario = await loadScenario(scenarioId);
 
-    // ---------------------------------------------
-    // TEMP: Inject GLOBAL map grid (replay-only)
-    // ---------------------------------------------
-    injectTemporaryMapGrid(scenario);
+    if (!scenario) {
+      console.error("❌ Scenario NOT loaded:", scenarioId);
+    } else {
+      // ---------------------------------------------
+      // TEMP: Inject GLOBAL map grid
+      // ---------------------------------------------
+      injectTemporaryMapGrid(scenario);
+    }
   }
 
   // -----------------------------------------------
-  // Load ALL UI metadata (units + map art, same type)
+  // Load UI metadata
   // -----------------------------------------------
   const uiMetadata = await loadUiMetadata();
 
+  if (!uiMetadata) {
+    console.error("❌ uiMetadata NOT loaded");
+  }
+
   // -----------------------------------------------
-  // Unified application payload
+  // FINAL PAYLOAD
   // -----------------------------------------------
   return {
     replay,
@@ -45,6 +70,8 @@ window.loadApplicationData = async function loadApplicationData(replayId) {
 // =================================================
 
 function injectTemporaryMapGrid(scenario) {
+
+  if (!scenario) return;
 
   scenario.map = scenario.map || {};
 

@@ -8,8 +8,6 @@
 window.GAME_STATE = {
   scenario: null,
   replay: null,
-
-  // IMPORTANT: units must be an object keyed by unit_id
   units: {},
 
   turn: 0,
@@ -37,11 +35,18 @@ async function bootstrapApplication() {
     // ---------------------------------------------
     // Load replay + scenario + UI metadata
     // ---------------------------------------------
-    const {
-      replay,
-      scenario,
-      uiMetadata
-    } = await loadApplicationData(replayId);
+    const data = await loadApplicationData(replayId);
+
+    if (!data) {
+      throw new Error("❌ loadApplicationData devolvió null");
+    }
+
+    const { replay, scenario, uiMetadata } = data;
+
+    if (!replay) {
+      console.error("❌ Replay NOT loaded");
+      return;
+    }
 
     GAME_STATE.replay = replay;
     GAME_STATE.scenario = scenario;
@@ -59,7 +64,7 @@ async function bootstrapApplication() {
     }
 
     // ---------------------------------------------
-    // Initialize replay cursor (START OF REPLAY)
+    // Initialize replay cursor
     // ---------------------------------------------
     GAME_STATE.replayCursor.turnIndex = 0;
     GAME_STATE.replayCursor.eventIndex = 0;
@@ -68,8 +73,7 @@ async function bootstrapApplication() {
     GAME_STATE.step = 0;
 
     // ---------------------------------------------
-    // ✅ BUILD INITIAL REPLAY STATE (CRITICAL)
-    // This fills GAME_STATE.units deterministically
+    // ✅ BUILD INITIAL STATE (CRITICAL)
     // ---------------------------------------------
     rebuildStateUpToCursor(GAME_STATE);
 
@@ -85,12 +89,12 @@ async function bootstrapApplication() {
       })
     );
 
-    console.log("Replay loaded:", replay.id);
+    console.log("Replay loaded:", replay);
     console.log("Scenario loaded:", scenario?.id);
     console.log("Players:", GAME_STATE.players);
 
     // ---------------------------------------------
-    // INIT WORLD + FIRST UI RENDER
+    // INIT WORLD
     // ---------------------------------------------
     const dom = document.getElementById("slot-map-center");
 
@@ -100,22 +104,14 @@ async function bootstrapApplication() {
     }
 
     if (!window.renderFrame) {
-      console.error("[BOOTSTRAP] renderFrame (UI orchestrator) not found");
+      console.error("[BOOTSTRAP] renderFrame not found");
       return;
     }
 
-    // ---------------------------------------------
-    // ✅ INIT PIXI WORLD (map + grid + unit layer)
-    // ---------------------------------------------
     await worldRenderer.init(dom, GAME_STATE);
 
     // ---------------------------------------------
-    // ✅ RENDER INITIAL UNITS (THIS WAS MISSING)
-    // ---------------------------------------------
-    worldRenderer.updateUnits(GAME_STATE);
-
-    // ---------------------------------------------
-    // First UI render (DOM panels, header, footer, etc.)
+    // ✅ FIRST RENDER (UI + MAP SYNC INSIDE)
     // ---------------------------------------------
     renderFrame(GAME_STATE, UI_STATE);
 

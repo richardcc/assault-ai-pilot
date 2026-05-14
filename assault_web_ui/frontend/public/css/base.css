@@ -64,10 +64,14 @@ html, body {
   overflow: hidden;           /* 🔥 no scroll aquí */
 }
 
-/* ✅ SOLO LOG tiene scroll */
 #slot-log-right {
   border: 1px dashed #666;
-  overflow-y: auto;
+
+  display: flex;
+  flex-direction: column;
+
+  height: 100%;
+  overflow: hidden; /* ✅ clave */
 }
 
 #slot-map-center {
@@ -105,3 +109,20 @@ html, body {
   height: 100%;
   pointer-events: none;
 }
+
+#event-log {
+  flex: 1;
+  overflow-y: auto;
+
+  padding: 6px;
+}
+
+.event-log-entry {
+  border-bottom: 1px solid #333;
+  margin-bottom: 6px;
+  padding: 4px;
+
+  white-space: pre-line; /* ✅ multiline */
+  font-size: 12px;
+}
+``

@@ -57,7 +57,7 @@ window.renderHeaderView = function renderHeaderView(gameState) {
     },
 
     // ---------------------------------------------
-    // CENTER: Turn / Step
+    // CENTER
     // ---------------------------------------------
     center(container) {
       container.innerHTML = `
@@ -69,10 +69,7 @@ window.renderHeaderView = function renderHeaderView(gameState) {
     },
 
     // ---------------------------------------------
-    // RIGHT: Replay controls
-    // ---------------------------------------------
-    // ---------------------------------------------
-    // RIGHT: Replay controls
+    // RIGHT: Replay controls (FIXED)
     // ---------------------------------------------
     right(container) {
       container.innerHTML = `
@@ -85,7 +82,6 @@ window.renderHeaderView = function renderHeaderView(gameState) {
               delete GAME_STATE.__renderMode;
               prevTurn(GAME_STATE);
               rebuildStateUpToCursor(GAME_STATE);
-              worldRenderer.updateUnits(GAME_STATE);
               renderFrame(GAME_STATE, UI_STATE);
             ">
             ⏮
@@ -97,13 +93,12 @@ window.renderHeaderView = function renderHeaderView(gameState) {
             onclick="
               delete GAME_STATE.__renderMode;
               prevStep(GAME_STATE);
-              worldRenderer.updateUnits(GAME_STATE);
               renderFrame(GAME_STATE, UI_STATE);
             ">
             ◀
           </button>
 
-          <!-- NEXT STEP (ACTION-BASED, ANIMATED) -->
+          <!-- NEXT STEP -->
           <button class="replay-btn primary"
             title="Next Step"
             onclick="
@@ -119,7 +114,6 @@ window.renderHeaderView = function renderHeaderView(gameState) {
                 );
               }
 
-              worldRenderer.updateUnits(GAME_STATE);
               renderFrame(GAME_STATE, UI_STATE);
             ">
             ▶
@@ -132,7 +126,6 @@ window.renderHeaderView = function renderHeaderView(gameState) {
               delete GAME_STATE.__renderMode;
               nextTurn(GAME_STATE);
               rebuildStateUpToCursor(GAME_STATE);
-              worldRenderer.updateUnits(GAME_STATE);
               renderFrame(GAME_STATE, UI_STATE);
             ">
             ⏭

@@ -115,7 +115,7 @@ window.worldRenderer = (function () {
     if (!gameState?.units) return;
     if (!window.mapEntityLayerSprites) return;
 
-    mapEntityLayerSprites.sync(gameState.units);
+    mapEntityLayerSprites.sync(gameState);
   }
 
   // -------------------------------------------------

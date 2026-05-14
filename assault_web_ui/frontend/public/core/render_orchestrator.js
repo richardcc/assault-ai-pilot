@@ -23,16 +23,49 @@ function toggleSlotVisibility(slotId, visible) {
 // PUBLIC ENTRY POINT
 // -------------------------------------------------
 window.renderFrame = function renderFrame(gameState, uiState) {
-  renderHeaderSlots(gameState, uiState);
-  renderMainSlots(gameState, uiState);
-  renderFooterSlots(gameState, uiState);
-  renderOverlaySlots(gameState, uiState);
+
+  console.log("=================================================");
+  console.log("[RENDER FRAME] START");
+  console.log("[RENDER FRAME] units keys:", Object.keys(gameState.units || {}));
+  console.log("[RENDER FRAME] units:", gameState.units);
+  console.log("[RENDER FRAME] scenario:", gameState.scenario);
+
+  // -------------------------------------------------
+  // CORE RENDER
+  // -------------------------------------------------
+  try {
+    renderHeaderSlots(gameState, uiState);
+    renderMainSlots(gameState, uiState);
+    renderFooterSlots(gameState, uiState);
+    renderOverlaySlots(gameState, uiState);
+  } catch (e) {
+    console.error("[RENDER FRAME] UI ERROR:", e);
+  }
+
+  // -------------------------------------------------
+  // ✅ CRITICAL: UPDATE WORLD MAP
+  // -------------------------------------------------
+  if (window.worldRenderer) {
+    console.log("[RENDER FRAME] calling worldRenderer.updateUnits()");
+
+    try {
+      worldRenderer.updateUnits(gameState);
+    } catch (e) {
+      console.error("[RENDER FRAME] ERROR updateUnits:", e);
+    }
+
+  } else {
+    console.warn("[RENDER FRAME] worldRenderer NOT FOUND");
+  }
+
+  console.log("[RENDER FRAME] END");
 };
 
 // -------------------------------------------------
 // HEADER
 // -------------------------------------------------
 function renderHeaderSlots(gameState, uiState) {
+
   if (!uiState.panels.header.visible) {
     toggleSlotVisibility("app-header", false);
     return;
@@ -40,10 +73,16 @@ function renderHeaderSlots(gameState, uiState) {
 
   toggleSlotVisibility("app-header", true);
 
-  const headerView = renderHeaderView(gameState);
-  mountRenderer("slot-header-left", headerView.left);
-  mountRenderer("slot-header-center", headerView.center);
-  mountRenderer("slot-header-right", headerView.right);
+  try {
+    const headerView = renderHeaderView(gameState);
+
+    mountRenderer("slot-header-left", headerView.left);
+    mountRenderer("slot-header-center", headerView.center);
+    mountRenderer("slot-header-right", headerView.right);
+
+  } catch (e) {
+    console.error("[HEADER] render error:", e);
+  }
 }
 
 // -------------------------------------------------
@@ -51,29 +90,33 @@ function renderHeaderSlots(gameState, uiState) {
 // -------------------------------------------------
 function renderMainSlots(gameState, uiState) {
 
-  // ✅ LEFT COLUMN (🔥 CREAR SOLO UNA VEZ)
   const container = document.getElementById("slot-rag-left");
-  if (!container) return;
+  if (!container) {
+    console.warn("[MAIN] slot-rag-left missing");
+    return;
+  }
 
+  // ---------------------------------------------
+  // INIT LEFT COLUMN ONCE
+  // ---------------------------------------------
   if (!container.__ragInitialized) {
+
+    console.log("[MAIN] Initializing left column");
 
     const column = document.createElement("div");
     column.id = "rag-left-column";
     column.className = "rag-left-column";
 
-    // Chat
     const chatDiv = document.createElement("div");
     chatDiv.id = "rag-chat";
     chatDiv.className = "rag-pane";
     column.appendChild(chatDiv);
 
-    // Strategic
     const hrlDiv = document.createElement("div");
     hrlDiv.id = "hrl-explanation";
     hrlDiv.className = "hrl-pane";
     column.appendChild(hrlDiv);
 
-    // Tactical
     const tacticalDiv = document.createElement("div");
     tacticalDiv.id = "tactical-explanation";
     tacticalDiv.className = "tactical-pane";
@@ -84,14 +127,13 @@ function renderMainSlots(gameState, uiState) {
 
     container.__ragInitialized = true;
 
-    // ✅ solo al inicio
     clearHRLExplanation?.();
     clearTacticalExplanation?.();
   }
 
-  // -------------------------------------------------
+  // ---------------------------------------------
   // RIGHT LOG PANEL
-  // -------------------------------------------------
+  // ---------------------------------------------
   toggleSlotVisibility("slot-log-right", uiState.panels.log.visible);
 
   if (uiState.panels.log.visible) {
@@ -149,5 +191,5 @@ function renderFooterSlots(gameState, uiState) {
 // OVERLAYS
 // -------------------------------------------------
 function renderOverlaySlots(gameState, uiState) {
-  // Future overlays
+  // Future extensions
 }

@@ -1,35 +1,62 @@
 // ---------------------------------------------
-// ✅ APPLY ONE EVENT
+// ✅ APPLY ONE EVENT (DETERMINISTIC STATE UPDATE)
 // ---------------------------------------------
 function applySingleEvent(gameState, event) {
   if (!event) return;
 
   switch (event.type) {
 
+    // -------------------------------------------------
+    // ✅ UNIT MOVEMENT (FIX)
+    // -------------------------------------------------
     case "UNIT_MOVED": {
       const { unit_id, to } = event.payload;
       const unit = gameState.units[unit_id];
-      if (!unit || !unit.position) return;
+      if (!unit) return;
 
-      unit.position.q = to.q;
-      unit.position.r = to.r;
+      // ✅ mantener coords planas (no rompe nada)
+      unit.q = to.q;
+      unit.r = to.r;
+
+      // ✅ 🔥 FIX CRÍTICO → ACTUALIZA POSITION
+      unit.position = {
+        q: to.q,
+        r: to.r
+      };
+
       break;
     }
 
+    // -------------------------------------------------
+    // ✅ COMBAT RESULT (DAMAGE + STATUS)
+    // -------------------------------------------------
     case "ACTION_EFFECT": {
       const p = event.payload;
       const unit = gameState.units[p.defender];
       if (!unit) return;
 
+      // ✅ HP update
       if (typeof p.defender_hp_after === "number") {
         unit.hp = p.defender_hp_after;
       }
 
-      unit.alive = !p.defender_killed;
+      // ✅ Alive
+      unit.alive = unit.hp > 0;
+
+      // ✅ Suppression
+      if (p.resolution?.remaining_suppress > 0) {
+        unit.status = unit.status || [];
+
+        if (!unit.status.includes("SUPPRESSED")) {
+          unit.status.push("SUPPRESSED");
+        }
+      }
+
       break;
     }
   }
 }
+
 
 // ---------------------------------------------
 // ✅ BUILD STRATEGIC STATE
@@ -53,8 +80,8 @@ function buildStrategicState(gameState, unitId) {
   const unit = gameState.units[unitId];
 
   let distance = 0;
-  if (unit?.position) {
-    distance = Math.abs(unit.position.q) + Math.abs(unit.position.r);
+  if (unit) {
+    distance = Math.abs(unit.q || 0) + Math.abs(unit.r || 0);
   }
 
   return {
@@ -64,8 +91,9 @@ function buildStrategicState(gameState, unitId) {
   };
 }
 
+
 // -------------------------------------------------
-// ✅ APPLY RANGE
+// ✅ APPLY RANGE OF EVENTS (MAIN DRIVER)
 // -------------------------------------------------
 window.applyEventRange = function applyEventRange(
   gameState,
@@ -77,18 +105,18 @@ window.applyEventRange = function applyEventRange(
   if (!turn) return;
 
   hideCombatPanel?.();
-
   clearHRLExplanation?.();
   clearTacticalExplanation?.();
 
   let combatPayload = null;
   let lastPayload = null;
+  let lastUnitId = null;
 
   for (let i = fromEventIndex; i < toEventIndex; i++) {
     const event = turn.events[i];
     if (!event) continue;
 
-    // ✅ Apply state changes
+    // ✅ APPLY EVENT
     applySingleEvent(gameState, event);
 
     const unitId =
@@ -98,17 +126,16 @@ window.applyEventRange = function applyEventRange(
 
     if (!unitId) continue;
 
-    // ✅ acción REAL (no genérica)
+    lastUnitId = unitId;
+
     const action = event.payload?.action || event.type;
 
     const state = buildStrategicState(gameState, unitId);
     const friendly = Number(state.friendly_strength);
     const enemy = Number(state.enemy_pressure);
 
-    // ✅ FIX CRÍTICO: guardar texto real SIEMPRE
     window.lastRealText = `${unitId} performs ${action} (${friendly} vs ${enemy})`;
 
-    // ✅ payload correcto para backend
     lastPayload = {
       activation: {
         unit_id: unitId,
@@ -119,7 +146,6 @@ window.applyEventRange = function applyEventRange(
       }
     };
 
-    // ✅ UI rápida (sin inventar)
     renderHRLExplanation({
       strategic_intent: {
         explanation: window.lastRealText
@@ -131,22 +157,20 @@ window.applyEventRange = function applyEventRange(
     }
   }
 
-  // ✅ guardar solo UNA vez (para botón)
   if (lastPayload) {
     window.lastExplainPayload = lastPayload;
   }
 
-  // -------------------------------------------------
-  // ✅ Combat visuals
-  // -------------------------------------------------
+  // ✅ COMBAT VISUALS (SIN CAMBIOS)
   if (
     combatPayload &&
+    lastUnitId &&
     typeof renderRangedCombat === "function" &&
     typeof showCombatPanel === "function"
   ) {
     const html = renderRangedCombat(
       combatPayload,
-      unitId => unitId
+      id => id
     );
 
     setTimeout(() => {
@@ -174,10 +198,10 @@ window.applyEventRange = function applyEventRange(
           };
 
           animateUnitAttack(
-            attackerUnit.position.q,
-            attackerUnit.position.r,
-            defenderUnit.position.q,
-            defenderUnit.position.r,
+            attackerUnit.q,
+            attackerUnit.r,
+            defenderUnit.q,
+            defenderUnit.r,
             grid,
             layer,
             PIXI.Ticker.shared,
@@ -200,11 +224,7 @@ window.applyEventRange = function applyEventRange(
     }, 0);
   }
 
-  // -------------------------------------------------
-  // ✅ 🔥 FIX CLAVE: REFRESH UI
-  // -------------------------------------------------
-  // Garantiza que la vista (cards, posiciones, etc.)
-  // se actualice tras cambiar el estado
+  // ✅ REFRESH
   if (typeof renderFrame === "function") {
     requestAnimationFrame(() => {
       try {
