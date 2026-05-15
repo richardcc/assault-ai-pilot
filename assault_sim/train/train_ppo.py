@@ -14,6 +14,13 @@ from assault_sim.engine.rollout import collect_rollout
 
 
 # -------------------------------------------------
+# ✅ DEVICE
+# -------------------------------------------------
+DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+print(">>> Using device:", DEVICE)
+
+
+# -------------------------------------------------
 # CONFIG
 # -------------------------------------------------
 RL_SIDE = "US"
@@ -71,7 +78,11 @@ def main():
     # -------------------------------------------------
     num_options = len(TacticalOption)
 
-    policy = PolicyNet(input_dim=input_dim, max_actions=num_options)
+    policy = PolicyNet(
+        input_dim=input_dim,
+        max_actions=num_options
+    ).to(DEVICE)  # ✅ GPU
+
     optimizer = optim.Adam(policy.parameters(), lr=3e-4)
 
     controller = create_hrl_controller(policy, RL_SIDE)
@@ -97,11 +108,12 @@ def main():
             continue
 
         # -------------------------------------------------
-        # TENSORS
+        # ✅ TENSORS → GPU
         # -------------------------------------------------
-        obs_t = torch.tensor(np.array(rollout["obs"]), dtype=torch.float32)
-        act_t = torch.tensor(rollout["actions"], dtype=torch.long)
-        old_logp_t = torch.stack(rollout["logp"])
+        obs_t = torch.tensor(np.array(rollout["obs"]), dtype=torch.float32).to(DEVICE)
+        act_t = torch.tensor(rollout["actions"], dtype=torch.long).to(DEVICE)
+        old_logp_t = torch.stack(rollout["logp"]).to(DEVICE)
+
         value_buf = rollout["values"]
 
         # -------------------------------------------------
@@ -117,8 +129,8 @@ def main():
 
         returns = [a + v for a, v in zip(advantages, value_buf)]
 
-        advantages = torch.tensor(advantages, dtype=torch.float32)
-        returns = torch.tensor(returns, dtype=torch.float32)
+        advantages = torch.tensor(advantages, dtype=torch.float32).to(DEVICE)
+        returns = torch.tensor(returns, dtype=torch.float32).to(DEVICE)
 
         if advantages.numel() > 1:
             advantages = (advantages - advantages.mean()) / (
@@ -131,6 +143,7 @@ def main():
         for _ in range(PPO_EPOCHS):
 
             logits, values = policy(obs_t)
+
             dist = torch_dist.Categorical(logits=logits)
 
             logp = dist.log_prob(act_t)
@@ -161,7 +174,6 @@ def main():
             optimizer.step()
 
         avg_reward = sum(rollout["rewards"]) / len(rollout["rewards"])
-
         print(f"[ROLLOUT {rollout_idx}] reward={avg_reward:.3f}")
 
         rollout_idx += 1

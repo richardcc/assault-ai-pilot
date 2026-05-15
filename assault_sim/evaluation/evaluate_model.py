@@ -24,7 +24,7 @@ from assault_sim.evaluation.eval_dashboard import EvalDashboard
 # CONFIG
 # -------------------------------------------------
 RL_SIDE = "US"
-EPISODES = 100
+EPISODES = 500
 MAX_STEPS = 200
 
 CONFIG_PATH = Path("assault_sim/config/sim_config.yaml")

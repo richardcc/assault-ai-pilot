@@ -8,11 +8,11 @@ class HRLController:
     # ✅ HORIZON AJUSTADO
     # -------------------------------------------------
     OPTION_HORIZON = {
-        TacticalOption.ADVANCE: 5,
-        TacticalOption.FLANK: 6,
-        TacticalOption.ATTACK: 4,
-        TacticalOption.HOLD: 2,
-        TacticalOption.RETREAT: 3,
+        TacticalOption.ADVANCE: 6,
+        TacticalOption.FLANK: 8,
+        TacticalOption.ATTACK: 10,
+        TacticalOption.HOLD: 3,
+        TacticalOption.RETREAT: 4,
     }
 
     def __init__(self, option_policy, option_executor, rl_side, event_bus=None):
