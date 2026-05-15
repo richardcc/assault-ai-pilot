@@ -3,18 +3,15 @@ from assault_sim.rl.state_encoder import explainable_context
 
 
 class HRLController:
-    """
-    Hierarchical RL controller.
 
-    Decides WHEN to select a new tactical option and
-    delegates execution to heuristics.
-    """
-
+    # -------------------------------------------------
+    # ✅ HORIZON AJUSTADO
+    # -------------------------------------------------
     OPTION_HORIZON = {
         TacticalOption.ADVANCE: 5,
         TacticalOption.FLANK: 6,
-        TacticalOption.ATTACK: 2,
-        TacticalOption.HOLD: 1,
+        TacticalOption.ATTACK: 4,
+        TacticalOption.HOLD: 2,
         TacticalOption.RETREAT: 3,
     }
 
@@ -25,21 +22,67 @@ class HRLController:
         self.event_bus = event_bus
 
         self.current_option = None
-        self.steps_remaining = -1  # force first decision
+        self.steps_remaining = -1
 
+    # -------------------------------------------------
+    # MAIN
+    # -------------------------------------------------
     def choose_action(self, state, obs):
+
         active = state.active_unit
+
+        # -------------------------------------------------
+        # No control → salir
+        # -------------------------------------------------
         if active is None or active.side != self.rl_side:
             return None
 
+        # -------------------------------------------------
+        # 🔥 NUEVO: detectar combate cercano
+        # -------------------------------------------------
+        in_close_combat = False
+        for u in state.units:
+            if u.side != active.side and u.alive:
+                if hasattr(active, "position") and hasattr(u, "position"):
+                    dx = abs(active.position.q - u.position.q)
+                    dy = abs(active.position.r - u.position.r)
+                    if dx <= 1 and dy <= 1:
+                        in_close_combat = True
+                        break
+
+        # -------------------------------------------------
+        # ¿nueva opción?
+        # -------------------------------------------------
         is_new_selection = (
             self.current_option is None or self.steps_remaining <= 0
         )
 
-        if is_new_selection:
+        # -------------------------------------------------
+        # ✅ FIX 1: mantener ATTACK
+        # -------------------------------------------------
+        if not is_new_selection:
+            if self.current_option == TacticalOption.ATTACK:
+                self.steps_remaining -= 1
+                return self.executor.execute(state, self.current_option)
+
+        # -------------------------------------------------
+        # ✅ FIX 2: forzar ATTACK si hay combate cercano
+        # -------------------------------------------------
+        if in_close_combat:
+            self.current_option = TacticalOption.ATTACK
+            self.steps_remaining = 2  # corto pero decisivo
+
+        # -------------------------------------------------
+        # Selección nueva (normal)
+        # -------------------------------------------------
+        elif is_new_selection:
+
             self.current_option = self.policy.choose_option(obs)
             self.steps_remaining = self.OPTION_HORIZON[self.current_option]
 
+            # -------------------------------------------------
+            # EVENT LOG (opcional)
+            # -------------------------------------------------
             if self.event_bus:
                 context = explainable_context(
                     state,
@@ -60,10 +103,15 @@ class HRLController:
                     }
                 })
 
+        # -------------------------------------------------
+        # decrementar contador
+        # -------------------------------------------------
         self.steps_remaining -= 1
 
+        # -------------------------------------------------
+        # ejecutar
+        # -------------------------------------------------
         return self.executor.execute(
-            self.current_option,
             state,
-            active
+            self.current_option
         )

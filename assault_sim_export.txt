@@ -38,6 +38,10 @@ class SimEnv:
         self.game_state = None
         self.runtime = None
 
+        # ✅ protección contra loops infinitos
+        self._step_counter = 0
+        self._max_steps = 10000
+
     # -------------------------------------------------
     # RESET
     # -------------------------------------------------
@@ -60,8 +64,9 @@ class SimEnv:
         self.runtime.start_turn()
         self.game_state = self.runtime.base_state
 
+        self._step_counter = 0  # reset loop guard
+
         if self.event_bus:
-            # ✅ RESET EVENT
             self.event_bus.emit({
                 "type": "RESET",
                 "payload": {
@@ -70,7 +75,6 @@ class SimEnv:
                 },
             })
 
-            # ✅ 🔥 MAPA INICIAL (CLAVE)
             self._emit_map_state()
 
         return self.game_state
@@ -79,9 +83,31 @@ class SimEnv:
     # STEP
     # -------------------------------------------------
     def step(self, action):
+
+        # ✅ loop protection
+        self._step_counter += 1
+        if self._step_counter > self._max_steps:
+            raise RuntimeError("Simulation overflow (infinite loop protection)")
+
         # controlador opcional
         if action is None and self.controller is not None:
             action = self.controller.choose_action(self.game_state)
+
+        # -------------------------------------------------
+        # DEBUG: NO ACTION
+        # -------------------------------------------------
+        if action is None and DEBUG_TRACE:
+            blocked = [
+                {
+                    "unit": u.unit_id,
+                    "suppressed": u.is_suppressed(),
+                    "fallback": u.is_in_fallback(),
+                }
+                for u in self.game_state.units
+                if not self.runtime._can_unit_act(u)
+            ]
+
+            print("[TRACE][NO_ACTION_AVAILABLE]", blocked)
 
         # ✅ ACTION EVENT
         if self.event_bus and action is not None:
@@ -97,30 +123,63 @@ class SimEnv:
                 },
             })
 
+        # =================================================
+        # ✅ AUTO-SKIP INVALID ACTIVE UNIT
+        # =================================================
+        active = self.game_state.active_unit
+
+        if active and not self.runtime._can_unit_act(active):
+
+            if DEBUG_TRACE:
+                print(f"[TRACE][AUTO_SKIP] {active.unit_id}")
+
+            if self.event_bus:
+                self.event_bus.emit({
+                    "type": "AUTO_SKIP",
+                    "payload": {
+                        "unit": active.unit_id,
+                        "reason": (
+                            "FALLBACK"
+                            if active.is_in_fallback()
+                            else "SUPPRESSED"
+                        ),
+                    },
+                })
+
+            self.runtime._consume_activation(active)
+            self.runtime._advance_activation()
+
+            self.game_state = self.runtime.base_state
+
+            return self.game_state, 0.0, False, {}
+
         # -------------------------------------------------
         # APPLY ACTION
         # -------------------------------------------------
         context = ExecutionContext(event_bus=self.event_bus)
-        self.runtime.apply_action(action, context=context)
 
+        self.runtime.apply_action(action, context=context)
         self.game_state = self.runtime.base_state
 
-        # ✅ 🔥 MAPA TRAS CADA ACCIÓN
+        # ✅ MAP AFTER ACTION
         self._emit_map_state()
 
-        # ✅ FIN PARTIDA (acción)
+        # ✅ MATCH END
         if self.game_state.done:
             self._emit_match_end()
             return self.game_state, 0.0, True, {}
 
         # -------------------------------------------------
-        # TURN END
+        # TURN END (FIXED ✅)
         # -------------------------------------------------
-        if self.runtime.turn_has_ended() and self.game_state.active_unit is None:
+        if self.runtime.turn_has_ended():
+
+            if DEBUG_TRACE:
+                print("[TRACE][TURN_EMPTY] advancing turn")
+
             self.runtime.end_turn()
             self.game_state = self.runtime.base_state
 
-            # ✅ TURN EVENT
             if self.event_bus:
                 self.event_bus.emit({
                     "type": "TURN_END",
@@ -129,24 +188,24 @@ class SimEnv:
                     },
                 })
 
-            # ✅ 🔥 MAPA TRAS TURNO
             self._emit_map_state()
 
             if self.game_state.done:
                 self._emit_match_end()
                 return self.game_state, 0.0, True, {}
 
-            # siguiente turno
+            # ✅ siguiente turno
             self.runtime.start_turn()
             self.game_state = self.runtime.base_state
 
-            # ✅ mapa nuevo turno
             self._emit_map_state()
+
+            return self.game_state, 0.0, False, {}
 
         return self.game_state, 0.0, False, {}
 
     # -------------------------------------------------
-    # MAP STATE (CLAVE PARA EL OBSERVER)
+    # MAP STATE
     # -------------------------------------------------
     def _emit_map_state(self):
         if not self.event_bus:
@@ -180,6 +239,7 @@ class SimEnv:
         })
 
 
+
 ================================================================================
 FILE: C:\repos\python\assault\assault_sim\training_env.py
 ================================================================================
@@ -191,6 +251,7 @@ from typing import Dict
 
 from assault_model.actions.status import WaitAction
 from assault_model.map.hex_utils import hex_distance
+
 from assault_sim.rl.state_encoder import encode_state
 from assault_sim.rewards.aggressive_reward import AggressiveReward
 
@@ -228,16 +289,19 @@ class TrainingEnv:
 
         self.reward_fn = AggressiveReward(rl_side)
 
+        # stats RL
         self.rl_attacks = 0
         self.rl_damage = 0
         self.rl_kills = 0
 
+        # ✅ reducimos ruido (heuristic opcional)
         self.heuristic_attacks = 0
-        self.heuristic_damage = 0
-        self.heuristic_kills = 0
+
+        # ✅ cache VP hexes
+        self._vp_hexes = set()
 
     # -------------------------------------------------
-    # API LIMPIA
+    # STATE
     # -------------------------------------------------
     @property
     def state(self):
@@ -252,6 +316,17 @@ class TrainingEnv:
         self.current_step = 0
         self.reward_fn.reset(state)
 
+        self.rl_attacks = 0
+        self.rl_damage = 0
+        self.rl_kills = 0
+        self.heuristic_attacks = 0
+
+        # ✅ cache VP positions
+        self._vp_hexes.clear()
+        if state.vp_tracker and getattr(state.vp_tracker, "conditions", None):
+            for vp in state.vp_tracker.conditions.points:
+                self._vp_hexes.add(vp.hex_coords)
+
         return encode_state(
             state,
             rl_side=self.rl_side,
@@ -261,6 +336,8 @@ class TrainingEnv:
     # -------------------------------------------------
     # STEP
     # -------------------------------------------------
+    # ... (todo tu código inicial igual hasta STEP)
+
     def step(self, action):
 
         state = self.sim.game_state
@@ -271,6 +348,9 @@ class TrainingEnv:
         active = state.active_unit
         actor_side = active.side if active else None
 
+        # ✅ detectar auto-skip potencial
+        was_skipped = active and not self.sim.runtime._can_unit_act(active)
+
         # -----------------------------
         # COHERENCE
         # -----------------------------
@@ -278,6 +358,11 @@ class TrainingEnv:
             action = None
         elif action is not None and action.unit_id != active.unit_id:
             action = WaitAction(active.unit_id)
+
+        # -----------------------------
+        # WAIT COUNT (nuevo)
+        # -----------------------------
+        is_wait = isinstance(action, WaitAction)
 
         # -----------------------------
         # SNAPSHOT BEFORE
@@ -294,10 +379,13 @@ class TrainingEnv:
 
         pre_dist = None
         if own_units and enemy_units:
-            pre_dist = min(
-                hex_distance(us.position, ge.position)
-                for us in own_units for ge in enemy_units
-            )
+            try:
+                pre_dist = min(
+                    hex_distance(us.position, ge.position)
+                    for us in own_units for ge in enemy_units
+                )
+            except Exception:
+                pre_dist = None
 
         # -----------------------------
         # STEP
@@ -307,11 +395,8 @@ class TrainingEnv:
         action_name = action.__class__.__name__ if action else ""
         is_attack = ("Ranged" in action_name) or ("Close" in action_name)
 
-        if actor_side and is_attack:
-            if actor_side == self.rl_side:
-                self.rl_attacks += 1
-            else:
-                self.heuristic_attacks += 1
+        if actor_side and is_attack and actor_side == self.rl_side:
+            self.rl_attacks += 1
 
         # -----------------------------
         # SNAPSHOT AFTER
@@ -324,27 +409,7 @@ class TrainingEnv:
             alive_after[u.unit_id] = bool(u.alive)
 
         # -----------------------------
-        # DAMAGE & KILLS (tracking global)
-        # -----------------------------
-        for unit_id, before_hp in hp_before.items():
-
-            after_hp = hp_after.get(unit_id, before_hp)
-            damage = max(0, before_hp - after_hp)
-
-            if damage > 0:
-                if actor_side == self.rl_side:
-                    self.rl_damage += damage
-                else:
-                    self.heuristic_damage += damage
-
-            if alive_before.get(unit_id, False) and not alive_after.get(unit_id, True):
-                if actor_side == self.rl_side:
-                    self.rl_kills += 1
-                else:
-                    self.heuristic_kills += 1
-
-        # -----------------------------
-        # ✅ BUILD RL INFO (CRÍTICO)
+        # DAMAGE & KILLS
         # -----------------------------
         rl_info = {
             "damage": 0,
@@ -357,50 +422,86 @@ class TrainingEnv:
             damage = max(0, before_hp - after_hp)
 
             if actor_side == self.rl_side:
+                self.rl_damage += damage
                 rl_info["damage"] += damage
 
             if alive_before.get(unit_id, False) and not alive_after.get(unit_id, True):
                 if actor_side == self.rl_side:
+                    self.rl_kills += 1
                     rl_info["defender_killed"] = True
 
         _trace(
             "COMBAT_SNAPSHOT",
             action=action_name,
             rl_damage=self.rl_damage,
-            heuristic_damage=self.heuristic_damage,
             rl_kills=self.rl_kills,
-            heuristic_kills=self.heuristic_kills,
         )
 
         # -----------------------------
-        # DIST POST
+        # DIST AFTER
         # -----------------------------
-        next_own = [u for u in next_state.units if u.alive and u.side == self.rl_side]
-        next_enemy = [u for u in next_state.units if u.alive and u.side != self.rl_side]
-
         post_dist = None
-        if next_own and next_enemy:
-            post_dist = min(
-                hex_distance(us.position, ge.position)
-                for us in next_own for ge in next_enemy
-            )
+
+        if own_units and enemy_units:
+            next_own = [u for u in next_state.units if u.alive and u.side == self.rl_side]
+            next_enemy = [u for u in next_state.units if u.alive and u.side != self.rl_side]
+
+            if next_own and next_enemy:
+                try:
+                    post_dist = min(
+                        hex_distance(us.position, ge.position)
+                        for us in next_own for ge in next_enemy
+                    )
+                except Exception:
+                    post_dist = None
 
         # -----------------------------
-        # REWARD (FIX REAL)
+        # BASE REWARD
         # -----------------------------
         reward = self.reward_fn.compute(
             state=state,
             next_state=next_state,
             action=action,
             active=active,
-            info=rl_info,   # ✅ CLAVE
+            info=rl_info,
             pre_dist=pre_dist,
             post_dist=post_dist,
         )
 
-        # ✅ penalización extra si WAIT sin efecto
-        if isinstance(action, WaitAction) and rl_info["damage"] == 0:
+        # -----------------------------
+        # VP SHAPING
+        # -----------------------------
+        rl_units_on_vp = False
+
+        for u in next_state.units:
+            if u.side == self.rl_side and u.alive and u.position:
+
+                pos = (u.position.q, u.position.r)
+
+                if pos in self._vp_hexes:
+                    reward += 0.8
+                    rl_units_on_vp = True
+
+        if not rl_units_on_vp:
             reward -= 0.1
+
+        # -----------------------------
+        # WAIT PENALTY
+        # -----------------------------
+        if (
+            is_wait
+            and active
+            and active.side == self.rl_side
+            and self.sim.runtime._can_unit_act(active)
+            and rl_info["damage"] == 0
+        ):
+            reward -= 0.1
+
+        # -----------------------------
+        # AUTO-SKIP PENALTY
+        # -----------------------------
+        if was_skipped:
+            reward -= 0.05
 
         # -----------------------------
         # DONE
@@ -411,11 +512,34 @@ class TrainingEnv:
         if self.max_steps is not None and self.current_step >= self.max_steps:
             done = True
 
+        # -----------------------------
+        # ✅ NUEVO INFO DE MÉTRICAS 🔥
+        # -----------------------------
+        avg_dist = post_dist if post_dist is not None else -1.0
+
         info = {
             "rl_damage": self.rl_damage,
-            "heuristic_damage": self.heuristic_damage,
             "rl_kills": self.rl_kills,
-            "heuristic_kills": self.heuristic_kills,
+            "rl_attacks": self.rl_attacks,
+
+            "was_skipped": bool(was_skipped),
+            "is_wait": bool(is_wait),
+
+            "avg_dist": avg_dist,
+
+            "vp": (
+                next_state.vp_tracker.total_points
+                if next_state.vp_tracker else 0
+            ),
+
+            "turn": next_state.turn,
+
+            "active_unit": (
+                next_state.active_unit.unit_id
+                if next_state.active_unit
+                else None
+            ),
+
             "done": done,
         }
 
@@ -458,13 +582,6 @@ FILE: C:\repos\python\assault\assault_sim\adapters\observation_adapter.py
 
 ================================================================================
 FILE: C:\repos\python\assault\assault_sim\adapters\__init__.py
-================================================================================
-
-
-
-
-================================================================================
-FILE: C:\repos\python\assault\assault_sim\analysis\__init__.py
 ================================================================================
 
 
@@ -835,21 +952,21 @@ FILE: C:\repos\python\assault\assault_sim\assets\scenarios\phase01_seq001_initia
       "unit_id": "GE_1",
       "side": "GE",
       "unit_key": "GE_RIFLES_43",
-      "position": [3, 4],
+      "position": [3, 6],
       "experience": "REGULAR"
     },
     {
       "unit_id": "GE_2",
       "side": "GE",
       "unit_key": "GE_RIFLES_43",
-      "position": [4, 4],
+      "position": [4, 7],
       "experience": "REGULAR"
     },
     {
       "unit_id": "GE_3",
       "side": "GE",
       "unit_key": "GE_RIFLES_43",
-      "position": [5, 1],
+      "position": [5, 7],
       "experience": "REGULAR"
     },
 
@@ -1781,6 +1898,7 @@ class MapRenderer:
 
         self.vps.clear()
         vp_tracker = payload.get("vp_tracker")
+
         if vp_tracker and getattr(vp_tracker, "conditions", None):
             for vp in vp_tracker.conditions.points:
                 self.vps.add(vp.hex_coords)
@@ -1792,7 +1910,9 @@ class MapRenderer:
             print("(map unavailable)")
             return
 
-        # Build quick lookup for units
+        # -------------------------------------------------
+        # UNIT LOOKUP
+        # -------------------------------------------------
         unit_at = {
             (u.position.q, u.position.r): u
             for u in self.units
@@ -1802,56 +1922,81 @@ class MapRenderer:
         max_q = max(h.q for h in self.game_map.hexes)
         max_r = max(h.r for h in self.game_map.hexes)
 
+        # -------------------------------------------------
+        # HEADER
+        # -------------------------------------------------
         print("   q→ ", end="")
         for q in range(max_q + 1):
             print(f"{q:>3}", end=" ")
         print("\nr↓")
 
+        # -------------------------------------------------
+        # MAP LOOP
+        # -------------------------------------------------
         for r in range(max_r + 1):
             indent = "  " if r % 2 else ""
             print(f"{r:<2} {indent}", end="")
 
             for q in range(max_q + 1):
                 hex_ = self.game_map.get_hex(q, r)
+
                 if not hex_:
                     print("     ", end="")
                     continue
 
-                # Terrain
+                # -------------------------------------------------
+                # BASE TERRAIN
+                # -------------------------------------------------
                 if hex_.terrain.value == "water":
                     symbol = "~~~"
                 else:
                     symbol = " . "
 
-                # Hex state overlays
+                # -------------------------------------------------
+                # HEX STATE (terrain features)
+                # -------------------------------------------------
                 hs = self.game_map.get_hex_state(q, r)
                 if hs:
                     if getattr(hs, "building", False):
                         symbol = "🏠"
                     elif getattr(hs, "woods", False):
                         symbol = "🌳"
- 
-                # Unit overlay
+
+                # -------------------------------------------------
+                # VICTORY POINT (overlay base)
+                # -------------------------------------------------
+                if (q, r) in self.vps:
+                    symbol = "🚩"
+
+                # -------------------------------------------------
+                # UNIT OVERLAY (priority)
+                # -------------------------------------------------
                 if (q, r) in unit_at:
                     u = unit_at[(q, r)]
                     icon = "🔵" if u.side == "GE" else "🔴"
 
-                    # ✅ ADD suppression indicator
+                    # suppression indicator
                     if getattr(u, "suppressed", False):
                         icon += "😵"
 
-                    symbol = f"{icon}{symbol.strip()}"
+                    # keep VP visible if present
+                    if (q, r) in self.vps:
+                        symbol = f"{icon}🚩"
+                    else:
+                        symbol = f"{icon}{symbol.strip()}"
 
+                # print
                 print(f"{symbol:>4}", end=" ")
 
- 
             print()
 
+        # -------------------------------------------------
+        # LEGEND
+        # -------------------------------------------------
         print(
             "\nLegend: . CLEAR | ~~~ WATER | 🏠 BUILDING | 🌳 WOODS "
             "| 🔵 GE | 🔴 US | 🚩 VP\n"
         )
-
 
 
 ================================================================================
@@ -2325,18 +2470,15 @@ from assault_sim.rl.state_encoder import explainable_context
 
 
 class HRLController:
-    """
-    Hierarchical RL controller.
 
-    Decides WHEN to select a new tactical option and
-    delegates execution to heuristics.
-    """
-
+    # -------------------------------------------------
+    # ✅ HORIZON AJUSTADO
+    # -------------------------------------------------
     OPTION_HORIZON = {
         TacticalOption.ADVANCE: 5,
         TacticalOption.FLANK: 6,
-        TacticalOption.ATTACK: 2,
-        TacticalOption.HOLD: 1,
+        TacticalOption.ATTACK: 4,
+        TacticalOption.HOLD: 2,
         TacticalOption.RETREAT: 3,
     }
 
@@ -2347,21 +2489,67 @@ class HRLController:
         self.event_bus = event_bus
 
         self.current_option = None
-        self.steps_remaining = -1  # force first decision
+        self.steps_remaining = -1
 
+    # -------------------------------------------------
+    # MAIN
+    # -------------------------------------------------
     def choose_action(self, state, obs):
+
         active = state.active_unit
+
+        # -------------------------------------------------
+        # No control → salir
+        # -------------------------------------------------
         if active is None or active.side != self.rl_side:
             return None
 
+        # -------------------------------------------------
+        # 🔥 NUEVO: detectar combate cercano
+        # -------------------------------------------------
+        in_close_combat = False
+        for u in state.units:
+            if u.side != active.side and u.alive:
+                if hasattr(active, "position") and hasattr(u, "position"):
+                    dx = abs(active.position.q - u.position.q)
+                    dy = abs(active.position.r - u.position.r)
+                    if dx <= 1 and dy <= 1:
+                        in_close_combat = True
+                        break
+
+        # -------------------------------------------------
+        # ¿nueva opción?
+        # -------------------------------------------------
         is_new_selection = (
             self.current_option is None or self.steps_remaining <= 0
         )
 
-        if is_new_selection:
+        # -------------------------------------------------
+        # ✅ FIX 1: mantener ATTACK
+        # -------------------------------------------------
+        if not is_new_selection:
+            if self.current_option == TacticalOption.ATTACK:
+                self.steps_remaining -= 1
+                return self.executor.execute(state, self.current_option)
+
+        # -------------------------------------------------
+        # ✅ FIX 2: forzar ATTACK si hay combate cercano
+        # -------------------------------------------------
+        if in_close_combat:
+            self.current_option = TacticalOption.ATTACK
+            self.steps_remaining = 2  # corto pero decisivo
+
+        # -------------------------------------------------
+        # Selección nueva (normal)
+        # -------------------------------------------------
+        elif is_new_selection:
+
             self.current_option = self.policy.choose_option(obs)
             self.steps_remaining = self.OPTION_HORIZON[self.current_option]
 
+            # -------------------------------------------------
+            # EVENT LOG (opcional)
+            # -------------------------------------------------
             if self.event_bus:
                 context = explainable_context(
                     state,
@@ -2382,12 +2570,17 @@ class HRLController:
                     }
                 })
 
+        # -------------------------------------------------
+        # decrementar contador
+        # -------------------------------------------------
         self.steps_remaining -= 1
 
+        # -------------------------------------------------
+        # ejecutar
+        # -------------------------------------------------
         return self.executor.execute(
-            self.current_option,
             state,
-            active
+            self.current_option
         )
 
 
@@ -2401,54 +2594,50 @@ from assault_sim.rl.tactical_options import TacticalOption
 
 class OptionExecutor:
     """
-    Executes a TacticalOption using existing heuristics.
+    Executes a TacticalOption using heuristics.
 
-    This class ADAPTS HRL intentions to the real heuristic API.
-    It must NOT assume methods that do not exist.
+    ✅ RESPONSABILIDAD:
+    - traducir intención → acción
+    - SIEMPRE pasar option a la heurística
     """
 
     def __init__(self, heuristic_controller):
         self.heuristic = heuristic_controller
 
-    def execute(self, option: TacticalOption, state, unit):
+    def execute(self, state, option: TacticalOption):
         """
         Execute ONE step of the given tactical option.
         """
 
-        # -------------------------------------------------
-        # ADVANCE: create contact / move forward
-        # -------------------------------------------------
-        if option == TacticalOption.ADVANCE:
-            return self.heuristic.advance_towards_enemy(unit, state)
+        unit = state.active_unit
+
+        if unit is None:
+            return None
 
         # -------------------------------------------------
-        # FLANK: currently reuse heuristic logic
-        # (can be specialized later)
+        # ✅ TODAS LAS OPCIONES VAN POR choose_action
         # -------------------------------------------------
-        if option == TacticalOption.FLANK:
-            return self.heuristic.flank_best_position(unit, state)
+        if option in (
+            TacticalOption.ADVANCE,
+            TacticalOption.FLANK,
+            TacticalOption.ATTACK,
+        ):
+            return self.heuristic.choose_action(state, option)
 
         # -------------------------------------------------
-        # ATTACK: defer to existing heuristic attack logic
-        # (choose_action already prioritizes assault/ranged)
-        # -------------------------------------------------
-        if option == TacticalOption.ATTACK:
-            return self.heuristic.choose_action(state)
-
-        # -------------------------------------------------
-        # HOLD: explicit wait
+        # HOLD
         # -------------------------------------------------
         if option == TacticalOption.HOLD:
             return WaitAction(unit.unit_id)
 
         # -------------------------------------------------
-        # RETREAT: move away from closest enemy
+        # RETREAT
         # -------------------------------------------------
         if option == TacticalOption.RETREAT:
-            return self.heuristic.retreat(unit, state)
+            return self.heuristic.choose_action(state, option)
 
         # -------------------------------------------------
-        # SAFETY FALLBACK
+        # SAFETY
         # -------------------------------------------------
         return WaitAction(unit.unit_id)
 
@@ -2470,6 +2659,940 @@ class SideController:
 
     def choose_action(self, state):
         return self.policy.choose_action(state)
+
+
+================================================================================
+FILE: C:\repos\python\assault\assault_sim\engine\config.py
+================================================================================
+
+class PPOConfig:
+    TOTAL_EPISODES = 1000
+    ROLLOUT_STEPS = 256
+    PPO_EPOCHS = 6
+    CLIP_EPS = 0.2
+    GAMMA = 0.99
+    LAMBDA = 0.95
+    VALUE_COEF = 0.5
+    ENTROPY_COEF = 0.08
+
+
+================================================================================
+FILE: C:\repos\python\assault\assault_sim\engine\env_factory.py
+================================================================================
+
+from pathlib import Path
+
+from assault_sim.sim_env import SimEnv
+from assault_sim.training_env import TrainingEnv
+from assault_sim.config.config_loader import load_sim_config
+
+
+def make_env(
+    config_path: Path,
+    rl_side: str,
+    scenario: str,
+    controller=None,
+) -> TrainingEnv:
+
+    config = load_sim_config(config_path)
+    config.scenario_name = scenario
+
+    sim = SimEnv(config, controller=controller)
+
+    env = TrainingEnv(
+        sim,
+        env_config_path=Path("assault_sim/config/env_config.json"),
+        rl_side=rl_side,
+    )
+
+    return env
+
+
+# ✅ ALIAS PROFESIONAL
+create_env = make_env
+
+
+
+================================================================================
+FILE: C:\repos\python\assault\assault_sim\engine\hrl_factory.py
+================================================================================
+
+from assault_sim.decision.hrl_controller import HRLController
+from assault_sim.decision.option_executor import OptionExecutor
+from assault_sim.rl.option_policy import OptionPolicy
+from assault_sim.heuristics.tactical_path_heuristic import TacticalPathHeuristic
+
+
+def make_hrl(policy_net, rl_side, event_bus=None):
+
+    option_policy = OptionPolicy(policy_net)
+
+    # ✅ CLAVE: crear heuristic
+    heuristic = TacticalPathHeuristic()
+
+    # ✅ CLAVE: pasarla al executor
+    executor = OptionExecutor(heuristic)
+
+    controller = HRLController(
+        option_policy=option_policy,
+        option_executor=executor,
+        rl_side=rl_side,
+        event_bus=event_bus,
+    )
+
+    return controller
+create_hrl_controller = make_hrl
+
+
+
+================================================================================
+FILE: C:\repos\python\assault\assault_sim\engine\metrics.py
+================================================================================
+
+class MetricsTracker:
+
+    def __init__(self):
+        self.reset()
+
+    def reset(self):
+        self.kills = 0
+        self.damage = 0
+        self.attacks = 0
+        self.wins = 0
+
+    def update(self, info):
+        self.kills = info.get("rl_kills", self.kills)
+        self.damage = info.get("rl_damage", self.damage)
+        self.attacks = info.get("rl_attacks", self.attacks)
+
+    def summary(self):
+        return {
+            "kills": self.kills,
+            "damage": self.damage,
+            "attacks": self.attacks,
+        }
+
+
+================================================================================
+FILE: C:\repos\python\assault\assault_sim\engine\rollout.py
+================================================================================
+
+from assault_model.actions.status import WaitAction
+from assault_sim.rl.tactical_options import TacticalOption
+
+
+def collect_rollout(env, controller, steps):
+
+    obs = env.reset()
+
+    trajectory = {
+        "obs": [],
+        "actions": [],
+        "logp": [],
+        "values": [],
+        "rewards": [],
+        "dones": [],
+    }
+
+    step_count = 0
+
+    while step_count < steps:
+
+        state = env.state
+        active = state.active_unit if state else None
+
+        # -------------------------------------------------
+        # NO ACTIVE → avanzar turno
+        # -------------------------------------------------
+        if active is None:
+            action = WaitAction("SYSTEM")
+            store = False
+
+        else:
+
+            # -------------------------------------------------
+            # RL SIDE
+            # -------------------------------------------------
+            if active.side == controller.rl_side:
+
+                action = controller.choose_action(state, obs)
+
+                # ✅ datos PPO
+                last_obs = obs
+                last_action = controller.policy.last_option.value
+                last_logp = controller.policy.last_log_prob.detach()
+                last_value = controller.policy.last_value.item()
+
+                store = True
+
+            # -------------------------------------------------
+            # ENEMY SIDE
+            # -------------------------------------------------
+            else:
+
+                action = controller.executor.execute(
+                    state,
+                    TacticalOption.ATTACK
+                )
+
+                store = False
+
+            # -------------------------------------------------
+            # NUNCA permitir None
+            # -------------------------------------------------
+            if action is None:
+                action = WaitAction(active.unit_id)
+
+        # -------------------------------------------------
+        # STEP
+        # -------------------------------------------------
+        next_obs, reward, done, info = env.step(action)
+
+        # -------------------------------------------------
+        # STORE SOLO RL
+        # -------------------------------------------------
+        if store:
+
+            # penalizar WAIT
+            if isinstance(action, WaitAction):
+                reward -= 0.05
+
+            trajectory["obs"].append(last_obs)
+            trajectory["actions"].append(last_action)
+            trajectory["logp"].append(last_logp)
+            trajectory["values"].append(last_value)
+            trajectory["rewards"].append(reward)
+            trajectory["dones"].append(done)
+
+        obs = next_obs
+        step_count += 1
+
+        # -------------------------------------------------
+        # RESET EPISODIO
+        # -------------------------------------------------
+        if done:
+            obs = env.reset()
+
+    return trajectory
+
+
+# ✅ compatibilidad opcional
+run_episode = collect_rollout
+
+
+================================================================================
+FILE: C:\repos\python\assault\assault_sim\evaluation\evaluate_model.py
+================================================================================
+
+# assault_sim/evaluation/evaluate_model.py
+
+import torch
+from pathlib import Path
+
+from assault_sim.config.config_loader import load_sim_config
+from assault_sim.sim_env import SimEnv
+from assault_sim.training_env import TrainingEnv
+
+from assault_sim.rl.policy_net import PolicyNet
+from assault_sim.rl.option_policy import OptionPolicy
+from assault_sim.decision.hrl_controller import HRLController
+from assault_sim.decision.option_executor import OptionExecutor
+from assault_sim.rl.tactical_options import TacticalOption
+
+from assault_sim.heuristics.tactical_path_heuristic import TacticalPathHeuristic
+
+from assault_sim.evaluation.evaluator import Evaluator
+from assault_sim.evaluation.results import ResultsAnalyzer
+from assault_sim.evaluation.eval_dashboard import EvalDashboard
+
+
+# -------------------------------------------------
+# CONFIG
+# -------------------------------------------------
+RL_SIDE = "US"
+EPISODES = 100
+MAX_STEPS = 200
+
+CONFIG_PATH = Path("assault_sim/config/sim_config.yaml")
+ENV_CONFIG = Path("assault_sim/config/env_config.json")
+CHECKPOINT = Path("assault_sim/checkpoints/ppo_US.pt")
+
+
+# -------------------------------------------------
+# BUILD MODEL
+# -------------------------------------------------
+def load_model():
+
+    checkpoint = torch.load(CHECKPOINT)
+
+    policy = PolicyNet(
+        input_dim=checkpoint["input_dim"],
+        max_actions=checkpoint["max_actions"],
+    )
+
+    policy.load_state_dict(checkpoint["model_state_dict"])
+    policy.eval()
+
+    return policy
+
+
+# -------------------------------------------------
+# BUILD CONTROLLERS
+# -------------------------------------------------
+def build_controllers(policy):
+
+    heuristic = TacticalPathHeuristic()
+
+    # RL
+    option_policy = OptionPolicy(policy)
+    executor_rl = OptionExecutor(heuristic)
+
+    rl_controller = HRLController(
+        option_policy=option_policy,
+        option_executor=executor_rl,
+        rl_side=RL_SIDE,
+    )
+
+    # ENEMY (baseline simple)
+    executor_enemy = OptionExecutor(heuristic)
+
+    class EnemyController:
+        def choose_action(self, state, obs):
+            return executor_enemy.execute(
+                state,
+                TacticalOption.ATTACK
+            )
+
+    enemy_controller = EnemyController()
+
+    return rl_controller, enemy_controller
+
+
+# -------------------------------------------------
+# BUILD ENV
+# -------------------------------------------------
+def build_env():
+
+    sim_config = load_sim_config(CONFIG_PATH)
+    sim_config.scenario_name = "phase01_seq001_initial_contact"
+
+    sim_env = SimEnv(sim_config)
+
+    env = TrainingEnv(
+        sim_env,
+        env_config_path=ENV_CONFIG,
+        rl_side=RL_SIDE,
+    )
+
+    return env
+
+
+# -------------------------------------------------
+# MAIN
+# -------------------------------------------------
+def main():
+
+    print(">>> EVALUATION PIPELINE START")
+
+    # model
+    policy = load_model()
+    print("✅ Model loaded")
+
+    # controllers
+    rl_controller, enemy_controller = build_controllers(policy)
+
+    # env
+    env = build_env()
+
+    # evaluator
+    evaluator = Evaluator(
+        env,
+        rl_controller,
+        enemy_controller,
+        RL_SIDE,
+        max_steps=MAX_STEPS
+    )
+
+    # dashboard
+    dashboard = EvalDashboard()
+
+    # -------------------------------------------------
+    # RUN
+    # -------------------------------------------------
+    results = evaluator.evaluate(EPISODES)
+
+    for r in results:
+        dashboard.add_episode(r)
+
+    # -------------------------------------------------
+    # ANALYSIS
+    # -------------------------------------------------
+    analyzer = ResultsAnalyzer(results, RL_SIDE)
+
+    analyzer.print_report()
+
+    # -------------------------------------------------
+    # DASHBOARD
+    # -------------------------------------------------
+    dashboard.save_csv("metrics.csv")
+    dashboard.plot()
+
+    print("\n>>> EVALUATION FINISHED")
+
+
+# -------------------------------------------------
+# ENTRY POINT
+# -------------------------------------------------
+if __name__ == "__main__":
+    main()
+
+
+================================================================================
+FILE: C:\repos\python\assault\assault_sim\evaluation\evaluator.py
+================================================================================
+
+from assault_sim.evaluation.metrics_tracker import MetricsTracker
+from assault_model.actions.status import WaitAction
+
+
+class Evaluator:
+
+    def __init__(
+        self,
+        env,
+        rl_controller,
+        enemy_controller,
+        rl_side: str,
+        max_steps: int = 300,
+    ):
+        self.env = env
+        self.rl_controller = rl_controller
+        self.enemy_controller = enemy_controller
+        self.rl_side = rl_side
+        self.max_steps = max_steps
+
+    # -------------------------------------------------
+    # RUN SINGLE EPISODE
+    # -------------------------------------------------
+    def run_episode(self):
+
+        tracker = MetricsTracker(self.rl_side)
+
+        obs = self.env.reset()
+        done = False
+
+        prev_state = self.env.state
+
+        while not done:
+
+            state = self.env.state
+            active = state.active_unit if state else None
+
+            # -----------------------------------------
+            # SELECT ACTION
+            # -----------------------------------------
+            if active is None:
+                action = WaitAction("SYSTEM")
+
+            elif active.side == self.rl_side:
+                action = self.rl_controller.choose_action(state, obs)
+
+            else:
+                action = self.enemy_controller.choose_action(state, obs)
+
+            # ✅ FIX: nunca permitir None
+            if action is None and active is not None:
+                action = WaitAction(active.unit_id)
+
+            # -----------------------------------------
+            # TRACK BEFORE STEP
+            # -----------------------------------------
+            current_state = state
+            tracker.track_action(current_state, action)
+
+            # -----------------------------------------
+            # STEP
+            # -----------------------------------------
+            obs, reward, done, info = self.env.step(action)
+
+            next_state = self.env.state
+
+            # -----------------------------------------
+            # TRACK AFTER STEP
+            # -----------------------------------------
+            if prev_state is not None and next_state is not None:
+                tracker.track_damage(info, next_state, prev_state)
+                tracker.track_kills(next_state, prev_state)
+
+            tracker.track_state(next_state)
+            tracker.step()
+
+            prev_state = next_state
+
+            # -----------------------------------------
+            # SAFETY LIMIT
+            # -----------------------------------------
+            if tracker.steps >= self.max_steps:
+                done = True
+                break
+
+        return tracker.build_result(self.env.state)
+
+    # -------------------------------------------------
+    # MULTI EPISODE
+    # -------------------------------------------------
+    def evaluate(self, episodes: int):
+
+        results = []
+
+        for ep in range(episodes):
+            result = self.run_episode()
+            results.append(result)
+
+            winner = result["winner"]
+            vp = result["vp"]
+            steps = result["steps"]
+
+            print(f"[EP {ep}] winner={winner} vp={vp} steps={steps}")
+
+        return results
+
+
+
+================================================================================
+FILE: C:\repos\python\assault\assault_sim\evaluation\eval_dashboard.py
+================================================================================
+
+import pandas as pd
+import matplotlib.pyplot as plt
+
+
+class EvalDashboard:
+    def __init__(self):
+        self.records = []
+
+    def add_episode(self, result):
+
+        rl_damage = result["side"]["RL"].get("damage", 0)
+        rl_attacks = result["side"]["RL"].get("attacks", 0)
+
+        enemy_damage = result["side"]["ENEMY"].get("damage", 0)
+        enemy_attacks = result["side"]["ENEMY"].get("attacks", 0)
+
+        row = {
+            "winner": str(result.get("winner")),
+            "vp": float(result.get("vp") or 0),
+            "steps": float(result.get("steps") or 0),
+
+            "rl_damage": float(rl_damage),
+            "enemy_damage": float(enemy_damage),
+
+            "rl_attacks": float(rl_attacks),
+            "enemy_attacks": float(enemy_attacks),
+
+            "rl_kills": float(result["side"]["RL"].get("kills", 0)),
+            "enemy_kills": float(result["side"]["ENEMY"].get("kills", 0)),
+
+            "rl_efficiency": rl_damage / max(1, rl_attacks),
+            "enemy_efficiency": enemy_damage / max(1, enemy_attacks),
+        }
+
+        self.records.append(row)
+
+    def to_dataframe(self):
+        return pd.DataFrame(self.records)
+
+    def save_csv(self, path="metrics.csv"):
+        df = self.to_dataframe()
+        df.to_csv(path, index=False)
+
+    def plot(self):
+
+        df = self.to_dataframe()
+
+        # ✅ UNA SOLA FIGURA con subplots
+        fig, axs = plt.subplots(2, 2, figsize=(12, 8))
+
+        # ---------------------------
+        # VP
+        # ---------------------------
+        axs[0, 0].plot(df["vp"])
+        axs[0, 0].set_title("VP over episodes")
+        axs[0, 0].set_xlabel("Episode")
+        axs[0, 0].set_ylabel("VP")
+
+        # ---------------------------
+        # Steps
+        # ---------------------------
+        axs[0, 1].plot(df["steps"])
+        axs[0, 1].set_title("Steps per episode")
+        axs[0, 1].set_xlabel("Episode")
+        axs[0, 1].set_ylabel("Steps")
+
+        # ---------------------------
+        # Damage comparison
+        # ---------------------------
+        axs[1, 0].plot(df["rl_damage"], label="RL")
+        axs[1, 0].plot(df["enemy_damage"], label="ENEMY")
+        axs[1, 0].set_title("Damage")
+        axs[1, 0].legend()
+
+        # ---------------------------
+        # Efficiency
+        # ---------------------------
+        axs[1, 1].plot(df["rl_efficiency"], label="RL")
+        axs[1, 1].plot(df["enemy_efficiency"], label="ENEMY")
+        axs[1, 1].set_title("Efficiency (damage per attack)")
+        axs[1, 1].legend()
+
+        plt.tight_layout()
+        plt.show()
+
+
+if __name__ == "__main__":
+    print("Dashboard module ready")
+
+
+
+================================================================================
+FILE: C:\repos\python\assault\assault_sim\evaluation\metrics_tracker.py
+================================================================================
+
+from collections import defaultdict
+
+
+# -------------------------------------------------
+# PER-UNIT STATS
+# -------------------------------------------------
+class UnitStats:
+    def __init__(self):
+        self.attacks = 0
+        self.ranged = 0
+        self.melee = 0
+
+        self.damage_done = 0
+        self.damage_taken = 0
+
+        self.kills = 0
+        self.alive = True
+
+
+# -------------------------------------------------
+# MAIN TRACKER
+# -------------------------------------------------
+class MetricsTracker:
+
+    def __init__(self, rl_side: str):
+        self.rl_side = rl_side
+        self.reset()
+
+    # -------------------------------------------------
+    # RESET
+    # -------------------------------------------------
+    def reset(self):
+        self.units = defaultdict(UnitStats)
+
+        self.side = {
+            "RL": defaultdict(int),
+            "ENEMY": defaultdict(int),
+        }
+
+        self.vp_progression = []
+        self.steps = 0
+
+    # -------------------------------------------------
+    # IDENTIFICAR LADO
+    # -------------------------------------------------
+    def _side(self, unit_side):
+        return "RL" if unit_side == self.rl_side else "ENEMY"
+
+    # -------------------------------------------------
+    # TRACK ACTION
+    # -------------------------------------------------
+    def track_action(self, state, action):
+        active = state.active_unit
+
+        if active is None or action is None:
+            return
+
+        unit_id = active.unit_id
+        side = self._side(active.side)
+
+        name = action.__class__.__name__
+
+        is_ranged = "Ranged" in name
+        is_melee = "Assault" in name or "Close" in name
+        is_attack = is_ranged or is_melee
+
+        if is_attack:
+            self.units[unit_id].attacks += 1
+            self.side[side]["attacks"] += 1
+
+            if is_ranged:
+                self.units[unit_id].ranged += 1
+                self.side[side]["ranged"] += 1
+
+            if is_melee:
+                self.units[unit_id].melee += 1
+                self.side[side]["melee"] += 1
+
+    # -------------------------------------------------
+    # TRACK DAMAGE (FIXED)
+    # -------------------------------------------------
+    def track_damage(self, info, state, prev_state):
+        before = {u.unit_id: u.hp for u in prev_state.units}
+        after = {u.unit_id: u.hp for u in state.units}
+
+        attacker = prev_state.active_unit
+
+        for unit_id, hp_before in before.items():
+            hp_after = after.get(unit_id, hp_before)
+
+            dmg = max(0, hp_before - hp_after)
+
+            if dmg <= 0:
+                continue
+
+            # detectar lado receptor
+            target_unit = next((u for u in state.units if u.unit_id == unit_id), None)
+            if target_unit is None:
+                continue
+
+            target_side = self._side(target_unit.side)
+            attacker_side = "RL" if target_side == "ENEMY" else "ENEMY"
+
+            # ✅ daño global
+            self.side[attacker_side]["damage"] += dmg
+
+            # ✅ daño recibido
+            self.units[unit_id].damage_taken += dmg
+
+            # ✅ FIX: daño hecho por atacante
+            if attacker is not None:
+                self.units[attacker.unit_id].damage_done += dmg
+
+    # -------------------------------------------------
+    # TRACK KILLS (FIXED)
+    # -------------------------------------------------
+    def track_kills(self, state, prev_state):
+        prev_alive = {u.unit_id: u.alive for u in prev_state.units}
+        attacker = prev_state.active_unit
+
+        for u in state.units:
+
+            # murió en este step
+            if prev_alive.get(u.unit_id, True) and not u.alive:
+
+                # ✅ evitar doble conteo
+                if not self.units[u.unit_id].alive:
+                    continue
+
+                side = self._side(u.side)
+                killer_side = "RL" if side == "ENEMY" else "ENEMY"
+
+                # ✅ kill global
+                self.side[killer_side]["kills"] += 1
+
+                # ✅ FIX: kill al atacante
+                if attacker is not None:
+                    self.units[attacker.unit_id].kills += 1
+
+                # marcar muerto
+                self.units[u.unit_id].alive = False
+
+    # -------------------------------------------------
+    # TRACK STATE
+    # -------------------------------------------------
+    def track_state(self, state):
+        vp = state.vp_tracker.total_points if state.vp_tracker else 0
+        self.vp_progression.append(vp)
+
+    # -------------------------------------------------
+    # STEP COUNT
+    # -------------------------------------------------
+    def step(self):
+        self.steps += 1
+
+    # -------------------------------------------------
+    # FINAL OUTPUT
+    # -------------------------------------------------
+    def build_result(self, final_state):
+
+        def efficiency(side):
+            attacks = self.side[side]["attacks"]
+            damage = self.side[side]["damage"]
+            kills = self.side[side]["kills"]
+
+            return {
+                "damage_per_attack": damage / attacks if attacks else 0,
+                "kills_per_attack": kills / attacks if attacks else 0,
+            }
+
+        return {
+            "winner": final_state.winner,
+            "vp": final_state.vp_tracker.total_points if final_state.vp_tracker else 0,
+            "steps": self.steps,
+
+            "efficiency": {
+                "RL": efficiency("RL"),
+                "ENEMY": efficiency("ENEMY"),
+            },
+
+            "side": self.side,
+            "units": self.units,
+            "vp_progression": self.vp_progression,
+        }
+
+
+================================================================================
+FILE: C:\repos\python\assault\assault_sim\evaluation\results.py
+================================================================================
+
+# assault_sim/evaluation/results.py
+
+import statistics
+from collections import defaultdict
+
+
+class ResultsAnalyzer:
+
+    def __init__(self, results, rl_side):
+        self.results = results
+        self.rl_side = rl_side
+
+    # -------------------------------------------------
+    # GLOBAL SUMMARY
+    # -------------------------------------------------
+    def summary(self):
+
+        wins = 0.0
+        draws = 0
+
+        vp_list = []
+        steps_list = []
+
+        for r in self.results:
+            winner = r["winner"]
+
+            if winner == self.rl_side:
+                wins += 1
+            elif winner is None:
+                wins += 0.5
+                draws += 1
+
+            vp_list.append(r["vp"])
+            steps_list.append(r["steps"])
+
+        return {
+            "episodes": len(self.results),
+            "win_rate": wins / len(self.results),
+            "draws": draws,
+            "avg_vp": statistics.mean(vp_list) if vp_list else 0,
+            "avg_steps": statistics.mean(steps_list) if steps_list else 0,
+        }
+
+    # -------------------------------------------------
+    # SIDE AGGREGATION
+    # -------------------------------------------------
+    def aggregate_side_stats(self):
+
+        agg = {
+            "RL": defaultdict(int),
+            "ENEMY": defaultdict(int),
+        }
+
+        for r in self.results:
+            side = r["side"]
+
+            for s in ["RL", "ENEMY"]:
+                for k, v in side[s].items():
+                    agg[s][k] += v
+
+        return agg
+
+    # -------------------------------------------------
+    # EFFICIENCY (GLOBAL)
+    # -------------------------------------------------
+    def efficiency(self):
+
+        agg = self.aggregate_side_stats()
+
+        def compute(side):
+            attacks = agg[side]["attacks"]
+            damage = agg[side]["damage"]
+            kills = agg[side]["kills"]
+
+            return {
+                "damage_per_attack": damage / attacks if attacks else 0,
+                "kills_per_attack": kills / attacks if attacks else 0,
+            }
+
+        return {
+            "RL": compute("RL"),
+            "ENEMY": compute("ENEMY"),
+        }
+
+    # -------------------------------------------------
+    # UNIT AGGREGATION
+    # -------------------------------------------------
+    def aggregate_units(self):
+
+        units = defaultdict(lambda: {
+            "attacks": 0,
+            "damage": 0,
+            "kills": 0,
+            "alive_count": 0,
+        })
+
+        for r in self.results:
+            for uid, stats in r["units"].items():
+
+                units[uid]["attacks"] += stats.attacks
+                units[uid]["damage"] += stats.damage_done
+                units[uid]["kills"] += stats.kills
+
+                if stats.alive:
+                    units[uid]["alive_count"] += 1
+
+        return units
+
+    # -------------------------------------------------
+    # TOP UNITS
+    # -------------------------------------------------
+    def top_units(self, key="damage", top_n=10):
+
+        units = self.aggregate_units()
+
+        return sorted(
+            units.items(),
+            key=lambda x: x[1][key],
+            reverse=True
+        )[:top_n]
+
+    # -------------------------------------------------
+    # PRINT REPORT
+    # -------------------------------------------------
+    def print_report(self):
+
+        summary = self.summary()
+        efficiency = self.efficiency()
+        sides = self.aggregate_side_stats()
+        top_units = self.top_units()
+
+        print("\n=== GLOBAL ===")
+        print(summary)
+
+        print("\n=== EFFICIENCY ===")
+        print(efficiency)
+
+        print("\n=== SIDE TOTALS ===")
+        print(dict(sides["RL"]))
+        print(dict(sides["ENEMY"]))
+
+        print("\n=== TOP UNITS (damage) ===")
+        for uid, data in top_units:
+            print(uid, data)
+
 
 
 ================================================================================
@@ -2958,28 +4081,14 @@ FILE: C:\repos\python\assault\assault_sim\heuristics\tactical_path_heuristic.py
 
 from assault_model.actions.action_catalog import ActionCatalog
 from assault_model.actions.action_category import ActionCategory
-from assault_model.actions.assault import AssaultAction
-from assault_model.actions.ranged_direct import RangedDirectAttack
 from assault_model.map.hex_utils import hex_distance
+from assault_sim.rl.tactical_options import TacticalOption
 
 
 class TacticalPathHeuristic:
-    """
-    Tactical heuristic adapted to support HRL.
 
-    Core method:
-    - choose_action(state): unchanged, legacy-safe
+    def choose_action(self, state, option: TacticalOption):
 
-    Additional lightweight wrappers:
-    - advance_towards_enemy
-    - flank_best_position
-    - retreat
-    """
-
-    # -------------------------------------------------
-    # MAIN HEURISTIC (UNCHANGED)
-    # -------------------------------------------------
-    def choose_action(self, state):
         unit = state.active_unit
         if unit is None or not unit.alive:
             return None
@@ -2988,85 +4097,6 @@ class TacticalPathHeuristic:
         if not actions:
             return None
 
-        # -------------------------------------------------
-        # 1. ABSOLUTE PRIORITY: ASSAULT
-        # -------------------------------------------------
-        for action in actions:
-            if isinstance(action, AssaultAction):
-                return action
-
-        # -------------------------------------------------
-        # 2. PRIORITY: RANGED FIRE
-        # -------------------------------------------------
-        for action in actions:
-            if isinstance(action, RangedDirectAttack):
-                return action
-
-        # -------------------------------------------------
-        # 3. CREATE CONTACT (ANTI-PASSIVE)
-        # -------------------------------------------------
-        enemies = [
-            u for u in state.units
-            if u.side != unit.side and u.alive
-        ]
-
-        if enemies:
-            closest_enemy = min(
-                enemies,
-                key=lambda e: hex_distance(unit.position, e.position)
-            )
-
-            # Move towards enemy to create interaction
-            best_move = None
-            best_dist = hex_distance(unit.position, closest_enemy.position)
-
-            for action in actions:
-                if action.action_type.category != ActionCategory.MOVEMENT:
-                    continue
-
-                path = getattr(action, "path", None)
-                if not path:
-                    continue
-
-                dest = path[-1]
-                d = hex_distance(dest, closest_enemy.position)
-
-                if d < best_dist:
-                    best_dist = d
-                    best_move = action
-
-            if best_move:
-                return best_move
-
-        # -------------------------------------------------
-        # 4. FALLBACK: WAIT
-        # -------------------------------------------------
-        return self._wait(actions)
-
-    # -------------------------------------------------
-    # HRL WRAPPERS (NEW, MINIMAL)
-    # -------------------------------------------------
-    def advance_towards_enemy(self, unit, state):
-        """
-        HRL ADVANCE:
-        Reuse existing heuristic logic to create contact.
-        """
-        return self.choose_action(state)
-
-    def flank_best_position(self, unit, state):
-        """
-        HRL FLANK:
-        For now, reuse choose_action.
-        Later, flank-specific logic can be added safely.
-        """
-        return self.choose_action(state)
-
-    def retreat(self, unit, state):
-        """
-        HRL RETREAT:
-        Move away from closest enemy.
-        """
-        actions = ActionCatalog(state).actions()
         enemies = [
             u for u in state.units
             if u.side != unit.side and u.alive
@@ -3075,44 +4105,178 @@ class TacticalPathHeuristic:
         if not enemies:
             return self._wait(actions)
 
-        closest_enemy = min(
+        target = min(
             enemies,
             key=lambda e: hex_distance(unit.position, e.position)
         )
 
-        best_move = None
-        best_dist = hex_distance(unit.position, closest_enemy.position)
+        dist = hex_distance(unit.position, target.position)
 
-        for action in actions:
-            if action.action_type.category != ActionCategory.MOVEMENT:
-                continue
+        # -------------------------------------------------
+        # ✅ ✅ ✅ ATTACK (FIX REAL)
+        # -------------------------------------------------
+        if option == TacticalOption.ATTACK:
 
-            path = getattr(action, "path", None)
-            if not path:
-                continue
+            # 🔴 1. SI ESTÁ ADYACENTE → MELEE SIEMPRE
+            if dist <= 1:
+                return self._attack_close(actions, target)
 
-            dest = path[-1]
-            d = hex_distance(dest, closest_enemy.position)
+            # 🟡 2. DISTANCIA MEDIA → RANGED
+            if dist <= 3:
+                ranged = self._attack_ranged(actions)
+                if ranged:
+                    return ranged
 
-            # Retreat = increase distance
-            if d > best_dist:
-                best_dist = d
-                best_move = action
+            # 🟢 3. LEJOS → MOVER
+            return self._move_closer(actions, unit, target)
 
-        if best_move:
-            return best_move
+        # -------------------------------------------------
+        # ADVANCE
+        # -------------------------------------------------
+        if option == TacticalOption.ADVANCE:
+            return self._move_closer(actions, unit, target)
+
+        # -------------------------------------------------
+        # HOLD
+        # -------------------------------------------------
+        if option == TacticalOption.HOLD:
+            if dist <= 3:
+                ranged = self._attack_ranged(actions)
+                if ranged:
+                    return ranged
+            return self._wait(actions)
+
+        # -------------------------------------------------
+        # RETREAT
+        # -------------------------------------------------
+        if option == TacticalOption.RETREAT:
+            return self._move_away(actions, unit, target)
+
+        # -------------------------------------------------
+        # FLANK
+        # -------------------------------------------------
+        if option == TacticalOption.FLANK:
+            return self._move_closer_force(actions, unit, target)
 
         return self._wait(actions)
 
     # -------------------------------------------------
-    # INTERNAL
+    # ✅ ATAQUE RANGED
+    # -------------------------------------------------
+    def _attack_ranged(self, actions):
+        for a in actions:
+            if a.action_type.category != ActionCategory.MOVEMENT \
+               and a.action_type.category != ActionCategory.STATUS:
+
+                name = a.__class__.__name__
+
+                if "Ranged" in name or "Shoot" in name:
+                    return a
+
+        return None
+
+    # -------------------------------------------------
+    # MOVIMIENTO
+    # -------------------------------------------------
+    def _move_closer(self, actions, unit, enemy):
+
+        best = None
+        best_dist = hex_distance(unit.position, enemy.position)
+
+        for a in actions:
+            if a.action_type.category != ActionCategory.MOVEMENT:
+                continue
+
+            path = getattr(a, "path", None)
+            if not path:
+                continue
+
+            d = hex_distance(path[-1], enemy.position)
+
+            if d < best_dist:
+                best_dist = d
+                best = a
+
+        return best or self._wait(actions)
+
+    def _move_closer_force(self, actions, unit, enemy):
+
+        best = None
+        best_dist = hex_distance(unit.position, enemy.position)
+
+        for a in actions:
+            if a.action_type.category != ActionCategory.MOVEMENT:
+                continue
+
+            path = getattr(a, "path", None)
+            if not path:
+                continue
+
+            d = hex_distance(path[-1], enemy.position)
+
+            if d < best_dist:
+                best_dist = d
+                best = a
+            elif best is None and d <= best_dist:
+                best = a
+
+        return best or self._wait(actions)
+
+    # -------------------------------------------------
+    # ✅ ✅ ✅ MELEE REAL (FIX IMPORTANTE)
+    # -------------------------------------------------
+    def _attack_close(self, actions, enemy):
+
+        # ✅ PRIORIDAD → acciones melee explícitas
+        for a in actions:
+            name = a.__class__.__name__
+
+            if "Assault" in name or "Close" in name:
+                return a
+
+        # ✅ fallback ofensivo (evitar ranged si hay otra cosa)
+        for a in actions:
+            if a.action_type.category != ActionCategory.MOVEMENT \
+               and a.action_type.category != ActionCategory.STATUS:
+
+                name = a.__class__.__name__
+                if not ("Ranged" in name):
+                    return a
+
+        return self._wait(actions)
+
+    # -------------------------------------------------
+    # RETREAT
+    # -------------------------------------------------
+    def _move_away(self, actions, unit, enemy):
+
+        best = None
+        best_dist = hex_distance(unit.position, enemy.position)
+
+        for a in actions:
+            if a.action_type.category != ActionCategory.MOVEMENT:
+                continue
+
+            path = getattr(a, "path", None)
+            if not path:
+                continue
+
+            d = hex_distance(path[-1], enemy.position)
+
+            if d > best_dist:
+                best_dist = d
+                best = a
+
+        return best or self._wait(actions)
+
+    # -------------------------------------------------
+    # WAIT
     # -------------------------------------------------
     def _wait(self, actions):
         for a in actions:
             if a.action_type.category == ActionCategory.STATUS:
                 return a
         return actions[0]
-
 
 
 ================================================================================
@@ -3293,79 +4457,118 @@ class AggressiveReward(BaseReward):
     ) -> float:
 
         reward = 0.0
+        info = info or {}
 
         # -------------------------------------------------
-        # ✅ 1. VP (MUY IMPORTANTE)
+        # 1. VP (reducido para no dominar comportamiento)
         # -------------------------------------------------
         current_vp = next_state.vp_tracker.total_points if next_state.vp_tracker else 0
-        reward += 6.0 * (current_vp - self.prev_vp)
+        reward += 4.0 * (current_vp - self.prev_vp)   # 🔥 bajado (antes 6)
         self.prev_vp = current_vp
 
         # -------------------------------------------------
-        # ✅ BONUS por ocupar VP (🔥 CLAVE)
+        # 2. OCUPACIÓN VP (suave)
         # -------------------------------------------------
-        if active is not None and next_state.vp_tracker:
-            vp_points = next_state.vp_tracker.conditions.points
-
-            for vp in vp_points:
-                if active.position == vp.hex_coords:
-                    reward += 2.0   # 🔥 subir
+        if active and active.position and next_state.vp_tracker:
+            for vp in next_state.vp_tracker.conditions.points:
+                if (active.position.q, active.position.r) == vp.hex_coords:
+                    reward += 0.8
+                    reward += 0.3
 
         # -------------------------------------------------
-        # ✅ ATAQUE
+        # 3. ATAQUE
         # -------------------------------------------------
         action_name = action.__class__.__name__ if action else ""
-        is_attack = "Ranged" in action_name or "Close" in action_name
+
+        is_attack = (
+            "Ranged" in action_name or
+            "Assault" in action_name or
+            "Close" in action_name
+        )
 
         if is_attack:
-            reward += 0.3
+            reward += 1.5
 
-        info = info or {}
+        dmg = info.get("rl_damage", 0)
+        killed = info.get("rl_kills", 0)
 
-        dmg = info.get("damage", 0)
-        killed = info.get("defender_killed", False)
-
-        reward += 0.4 * dmg
+        reward += 1.0 * dmg
 
         if killed:
-            reward += 2.0
+            reward += 4.0   # 🔥 rematar vale mucho
 
         # -------------------------------------------------
-        # ✅ MOVIMIENTO
+        # 4. MOVIMIENTO HACIA ENEMIGO
         # -------------------------------------------------
         if pre_dist is not None and post_dist is not None:
             delta = pre_dist - post_dist
 
-            reward += 0.5 * delta
+            reward += 1.2 * delta
 
             if delta < 0:
-                reward -= 0.5
+                reward -= 0.6   # 🔥 castigar alejarse
 
         # -------------------------------------------------
-        # ✅ WAIT (más duro)
+        # ✅ 5. NO ATACAR EN RANGO (MUY IMPORTANTE)
         # -------------------------------------------------
-        if isinstance(action, WaitAction):
-            reward -= 0.5
+        if not is_attack and pre_dist is not None:
 
-        if getattr(self, "last_action_was_wait", False) and isinstance(action, WaitAction):
-            reward -= 0.2
+            if pre_dist <= 3:
+                reward -= 1.5   # 🔥 fuerza combate real
 
-        self.last_action_was_wait = isinstance(action, WaitAction)
-
-        # -------------------------------------------------
-        # ✅ CONSISTENCIA
-        # -------------------------------------------------
-        if action_name == "MoveAction" and pre_dist is not None and post_dist is not None:
-            if post_dist < pre_dist:
-                reward += 0.2
+            if pre_dist <= 1:
+                reward -= 2.5   # 🔥 castigo duro en melee
 
         # -------------------------------------------------
-        # ✅ COSTE TIEMPO
+        # 6. DISTANCIA A VP
+        # -------------------------------------------------
+        if next_state.vp_tracker:
+
+            vp_points = next_state.vp_tracker.conditions.points
+
+            if vp_points:
+
+                def min_dist(units, vp_points):
+                    return min(
+                        hex_distance(u.position, vp.hex_coords)
+                        for u in units
+                        if u.position and u.alive
+                        for vp in vp_points
+                    )
+
+                try:
+                    pre_vp_dist = min_dist(state.units, vp_points)
+                    post_vp_dist = min_dist(next_state.units, vp_points)
+
+                    delta_vp = pre_vp_dist - post_vp_dist
+                    reward += 0.4 * delta_vp   # 🔥 más suave
+
+                except ValueError:
+                    pass
+
+        # -------------------------------------------------
+        # ✅ 7. WAIT FUERTE (elimina pasividad)
+        # -------------------------------------------------
+        is_wait = isinstance(action, WaitAction)
+
+        if is_wait:
+            reward -= 0.8   # 🔥 fuerte directamente
+
+        if is_wait:
+            self.wait_streak = getattr(self, "wait_streak", 0) + 1
+        else:
+            self.wait_streak = 0
+
+        if self.wait_streak >= 1:
+            reward -= 0.4 * self.wait_streak  # 🔥 escalada agresiva
+
+        # -------------------------------------------------
+        # 8. COSTE TIEMPO
         # -------------------------------------------------
         reward -= 0.02
 
         # -------------------------------------------------
-        # ✅ CLIPPING (AL FINAL)
+        # 9. CLIPPING
         # -------------------------------------------------
         reward = max(min(reward, 5.0), -5.0)
 
@@ -3544,18 +4747,24 @@ class OptionPolicy:
         This is the ONLY place where HRL decisions are made.
         """
 
-        # ✅ ensure obs is a torch.Tensor
-        if not isinstance(obs, torch.Tensor):
-            obs = torch.tensor(obs, dtype=torch.float32)
+        # ✅ robust tensor conversion (NO rompe grad / device)
+        obs = torch.as_tensor(obs, dtype=torch.float32)
+
+        # ✅ asegurar dimensión batch (CRÍTICO para redes)
+        if obs.dim() == 1:
+            obs = obs.unsqueeze(0)
 
         logits, value = self.policy_net(obs)
 
         option_dist = dist.Categorical(logits=logits)
         option_index = option_dist.sample()
 
+        # ✅ guardar opción como enum
         self.last_option = TacticalOption(option_index.item())
+
+        # ✅ PPO data
         self.last_log_prob = option_dist.log_prob(option_index)
-        self.last_value = value
+        self.last_value = value.squeeze()
 
         # --------------------------------------------
         # ✅ CAPTURE EXPLAINABLE DECISION METADATA
@@ -3564,13 +4773,12 @@ class OptionPolicy:
             probs = torch.softmax(logits, dim=-1)
 
         self.last_decision_info = {
-            "option": self.last_option.name,          # semantic, stable
-            "confidence": float(probs[option_index]), # human-usable
-            "value_estimate": float(value.item()),    # strategic value
+            "option": self.last_option.name,            # semantic, stable
+            "confidence": float(probs[0, option_index]),  # ✅ FIX batch-safe
+            "value_estimate": float(value.item()),      # strategic value
         }
 
         return self.last_option
-
 
 
 ================================================================================
@@ -3953,6 +5161,111 @@ class TacticalOption(Enum):
             TacticalOption.HOLD: "DEFENSIVE",
             TacticalOption.RETREAT: "DEFENSIVE",
         }[self]
+
+
+================================================================================
+FILE: C:\repos\python\assault\assault_sim\roadmap\assault_rl_report.md
+================================================================================
+
+# ASSAULT SIM — RL / PPO / HRL ENGINEERING REPORT
+
+## CONTEXTO
+Simulador táctico hexagonal con activaciones alternas por unidad y entrenamiento mediante PPO + HRL.
+
+---
+
+## PROBLEMA FUNDAMENTAL
+El entorno es multi-agente secuencial (GE ↔ US), pero PPO asume single-agent.
+
+Consecuencia:
+- Reward contaminado
+- Credit assignment incorrecto
+- Inestabilidad en el aprendizaje
+
+---
+
+## PROBLEMAS PRINCIPALES
+
+1. Reward mezcla acciones de ambos jugadores
+2. Control parcial del agente
+3. Reward demasiado local
+4. Escalas desbalanceadas
+5. Reward discontinuo (VP)
+6. Penalización WAIT excesiva
+7. Horizonte HRL incorrecto
+8. Executor desacoplado
+9. Overrides rompen policy
+
+---
+
+## SOLUCIONES
+
+### NIVEL 1 (CRÍTICO)
+- Reward solo cuando actúa RL
+- Reducir magnitudes
+- Reward continuo para VP
+- Movimiento basado en delta
+- WAIT suave
+
+### NIVEL 2 (ALTA CALIDAD)
+- Reward por bloque de turno
+- Horizonte por acciones propias
+- Eliminar overrides rígidos
+
+### NIVEL 3 (PRO)
+- PPO opera sobre opciones
+- Reward por opción
+- Mejorar executor
+
+---
+
+## PPO SETTINGS RECOMENDADOS
+
+ROLLOUT_STEPS = 256
+ENTROPY_COEF = 0.08
+CLIP_EPS = 0.2
+
+---
+
+## MÉTRICAS
+
+Añadir:
+- win_rate
+- avg_turns
+- vp_control_time
+- units_alive_ratio
+
+---
+
+## ROADMAP
+
+FASE 1 (1–2 días)
+- Filtrado reward
+- Normalización
+
+FASE 2 (3–5 días)
+- Reward por turno
+- Métricas
+
+FASE 3 (1–2 semanas)
+- HRL completo
+- PPO sobre opciones
+
+FASE 4
+- Self-play
+- Curriculum
+
+---
+
+## CONCLUSIÓN
+
+El problema principal NO es el modelo,
+sino la desalineación entre entorno y agente.
+
+Corregido esto:
+- mejora masiva de estabilidad
+- aparición de estrategia real
+
 
 
 ================================================================================
@@ -5805,159 +7118,8 @@ class SubStrategy(Strategy):
 
 
 ================================================================================
-FILE: C:\repos\python\assault\assault_sim\train\eval_ppo.py
+FILE: C:\repos\python\assault\assault_sim\train\train - copia.py
 ================================================================================
-
-import torch
-from pathlib import Path
-import statistics
-
-from assault_sim.config.config_loader import load_sim_config
-from assault_sim.sim_env import SimEnv
-from assault_sim.training_env import TrainingEnv
-
-from assault_sim.rl.policy_net import PolicyNet
-from assault_sim.decision.hrl_controller import HRLController
-from assault_sim.decision.option_executor import OptionExecutor
-from assault_sim.rl.option_policy import OptionPolicy
-from assault_sim.rl.tactical_options import TacticalOption
-
-from assault_sim.heuristics.tactical_path_heuristic import TacticalPathHeuristic
-
-
-# -------------------------------------------------
-# CONFIG
-# -------------------------------------------------
-EPISODES = 50
-MAX_STEPS = 200
-RL_SIDE = "US"
-
-
-def main():
-    print(">>> PPO evaluation started")
-
-    # -------------------------------------------------
-    # LOAD MODEL
-    # -------------------------------------------------
-    checkpoint_path = Path("assault_sim/checkpoints/ppo_US.pt")
-
-    if not checkpoint_path.exists():
-        raise FileNotFoundError(checkpoint_path)
-
-    checkpoint = torch.load(checkpoint_path)
-
-    policy = PolicyNet(
-        input_dim=checkpoint["input_dim"],
-        max_actions=checkpoint["max_actions"],
-    )
-    policy.load_state_dict(checkpoint["model_state_dict"])
-    policy.eval()
-
-    print("✅ Model loaded")
-
-    option_policy = OptionPolicy(policy)
-    heuristic = TacticalPathHeuristic()
-    option_executor = OptionExecutor(heuristic)
-
-    hrl_controller = HRLController(
-        option_policy=option_policy,
-        option_executor=option_executor,
-        rl_side=RL_SIDE,
-    )
-
-    # -------------------------------------------------
-    # ENV
-    # -------------------------------------------------
-    sim_config = load_sim_config(
-        Path("assault_sim/config/sim_config.yaml")
-    )
-    sim_config.scenario_name = "phase01_seq001_initial_contact"
-
-    sim_env = SimEnv(sim_config, controller=None)
-
-    env = TrainingEnv(
-        sim_env,
-        env_config_path=Path("assault_sim/config/env_config.json"),
-        rl_side=RL_SIDE,
-    )
-
-    # -------------------------------------------------
-    # STATS
-    # -------------------------------------------------
-    wins = 0
-    vp_scores = []
-    steps_list = []
-
-    # -------------------------------------------------
-    # EPISODES
-    # -------------------------------------------------
-    for ep in range(EPISODES):
-        obs = env.reset()
-
-        done = False
-        steps = 0
-
-        while not done:
-            state = env.state
-            active = state.active_unit
-
-            if active is None:
-                action = None
-            elif active.side == RL_SIDE:
-                action = hrl_controller.choose_action(state, obs)
-            else:
-                action = heuristic.choose_action(state)
-
-            obs, reward, done, info = env.step(action)
-
-            steps += 1
-
-            if steps >= MAX_STEPS:
-                print(f"⚠️ Forced stop ep={ep}")
-                break
-
-        # -------------------------------------------------
-        # RESULTADOS (CORRECTOS)
-        # -------------------------------------------------
-        state = env.state
-
-        winner = state.winner
-        reason = state.end_reason
-        vp = state.vp_tracker.total_points if state.vp_tracker else 0
-
-        if winner == RL_SIDE:
-            wins += 1
-
-        vp_scores.append(vp)
-        steps_list.append(steps)
-
-        print(
-            f"[EP {ep}] winner={winner} reason={reason} "
-            f"VP={vp} steps={steps}"
-        )
-
-    # -------------------------------------------------
-    # SUMMARY
-    # -------------------------------------------------
-    print("\n=== RESULTS ===")
-    print(f"Episodes:   {EPISODES}")
-    print(f"Win rate:   {wins / EPISODES:.2%}")
-    print(f"Avg VP:     {statistics.mean(vp_scores):.2f}")
-    print(f"Avg steps:  {statistics.mean(steps_list):.1f}")
-    print("================")
-
-    print("\n>>> Evaluation finished")
-
-
-if __name__ == "__main__":
-    main()
-
-
-================================================================================
-FILE: C:\repos\python\assault\assault_sim\train\train.py
-================================================================================
-
-# assault_sim/train/train.py
 
 from pathlib import Path
 import argparse
@@ -5969,6 +7131,7 @@ from assault_sim.debug.console_observer import ConsoleObserver
 from assault_sim.debug.debug_config import DebugConfig
 
 from assault_sim.heuristics.tactical_path_heuristic import TacticalPathHeuristic
+from assault_sim.rl.tactical_options import TacticalOption
 
 RL_SIDE = "US"
 
@@ -6008,12 +7171,13 @@ def main():
 
     debug_cfg = DebugConfig(enabled=args.debug and not args.no_observability)
 
+    # ✅ heurística con opción obligatoria
     controller = TacticalPathHeuristic()
 
     sim_env = SimEnv(
         sim_config,
         debug_config=debug_cfg,
-        controller=None,   # control manual
+        controller=None,
     )
 
     training_env = TrainingEnv(
@@ -6038,10 +7202,14 @@ def main():
 
     while not done:
         state = sim_env.game_state
-        active = state.active_unit
+        active = state.active_unit if state else None
 
         if active:
-            action = controller.choose_action(state)
+            # 🔥 FIX CLAVE: pasar TacticalOption explícito
+            action = controller.choose_action(
+                state,
+                TacticalOption.ATTACK
+            )
         else:
             action = None
 
@@ -6049,11 +7217,183 @@ def main():
 
         step_count += 1
 
-        if step_count > 500:
+        if step_count >= 500:
             print("⚠️ Forced stop")
             break
 
     state = sim_env.game_state
+
+    print("\n=== SIMULATION FINISHED ===")
+    print(f"Winner: {state.winner}")
+    print(f"Reason: {state.end_reason}")
+    print(f"Turns:  {state.turn}")
+
+    if state.vp_tracker:
+        print(f"Final VP: {state.vp_tracker.total_points}")
+
+
+if __name__ == "__main__":
+    main()
+
+
+================================================================================
+FILE: C:\repos\python\assault\assault_sim\train\train.py
+================================================================================
+
+from pathlib import Path
+import argparse
+
+from assault_sim.config.config_loader import load_sim_config
+from assault_sim.sim_env import SimEnv
+from assault_sim.training_env import TrainingEnv
+
+from assault_sim.debug.console_observer import ConsoleObserver
+from assault_sim.debug.debug_config import DebugConfig
+
+# ✅ HRL stack
+from assault_sim.rl.option_policy import OptionPolicy
+from assault_sim.decision.hrl_controller import HRLController
+from assault_sim.decision.option_executor import OptionExecutor
+from assault_sim.rl.tactical_options import TacticalOption
+
+# ✅ heuristic
+from assault_sim.heuristics.tactical_path_heuristic import TacticalPathHeuristic
+
+# ✅ IMPORTANTE
+from assault_model.actions.status import WaitAction
+
+
+RL_SIDE = "US"
+
+
+# -----------------------------------------------------
+# CLI
+# -----------------------------------------------------
+def parse_args():
+    parser = argparse.ArgumentParser(description="Assault runner")
+
+    parser.add_argument(
+        "--config",
+        type=Path,
+        default=Path("assault_sim/config/sim_config.yaml"),
+    )
+    parser.add_argument("--scenario", type=str)
+    parser.add_argument("--debug", action="store_true")
+
+    return parser.parse_args()
+
+
+# -----------------------------------------------------
+# BUILD CONTROLLERS
+# -----------------------------------------------------
+def build_controllers(policy=None):
+
+    heuristic = TacticalPathHeuristic()
+
+    # ✅ RL controller
+    if policy:
+        option_policy = OptionPolicy(policy)
+        executor_rl = OptionExecutor(heuristic)
+
+        rl_controller = HRLController(
+            option_policy=option_policy,
+            option_executor=executor_rl,
+            rl_side=RL_SIDE,
+        )
+    else:
+        class HeuristicRL:
+            def choose_action(self, state, obs):
+                return heuristic.choose_action(
+                    state,
+                    TacticalOption.ATTACK
+                )
+
+        rl_controller = HeuristicRL()
+
+    # ✅ enemy
+    executor_enemy = OptionExecutor(heuristic)
+
+    class EnemyController:
+        def choose_action(self, state, obs):
+            return executor_enemy.execute(
+                state,
+                TacticalOption.ATTACK
+            )
+
+    return rl_controller, EnemyController()
+
+
+# -----------------------------------------------------
+# MAIN
+# -----------------------------------------------------
+def main():
+    args = parse_args()
+
+    sim_config = load_sim_config(args.config)
+
+    if args.scenario:
+        sim_config.scenario_name = args.scenario
+
+    debug_cfg = DebugConfig(enabled=args.debug)
+
+    sim_env = SimEnv(
+        sim_config,
+        debug_config=debug_cfg,
+        controller=None,
+    )
+
+    env = TrainingEnv(
+        sim_env,
+        env_config_path=Path("assault_sim/config/env_config.json"),
+        rl_side=RL_SIDE,
+    )
+
+    observer = ConsoleObserver(rl_side=RL_SIDE)
+
+    if sim_env.event_bus:
+        sim_env.event_bus.subscribe(observer)
+
+    rl_controller, enemy_controller = build_controllers(policy=None)
+
+    obs = env.reset()
+    done = False
+    step_count = 0
+
+    while not done:
+
+        state = env.state
+        active = state.active_unit if state else None
+
+        # -----------------------------------------
+        # SELECT ACTION
+        # -----------------------------------------
+        if active is None:
+            action = None
+
+        elif active.side == RL_SIDE:
+
+
+            action = rl_controller.choose_action(state, obs)
+
+            if action is None:
+                action = WaitAction(active.unit_id)
+               
+        else:
+            action = enemy_controller.choose_action(state, obs)
+
+        # -----------------------------------------
+        # STEP
+        # -----------------------------------------
+        obs, reward, done, info = env.step(action)
+
+        new_active = env.state.active_unit if env.state else None
+        step_count += 1
+
+        if step_count >= 500:
+            print("⚠️ Forced stop")
+            break
+
+    state = env.state
 
     print("\n=== SIMULATION FINISHED ===")
     print(f"Winner: {state.winner}")
@@ -6074,21 +7414,17 @@ FILE: C:\repos\python\assault\assault_sim\train\train_ppo.py
 
 import torch
 import torch.optim as optim
-import torch.distributions as dist
+import torch.distributions as torch_dist
+
 import numpy as np
 from pathlib import Path
 
-from assault_sim.config.config_loader import load_sim_config
-from assault_sim.sim_env import SimEnv
-from assault_sim.training_env import TrainingEnv
-
 from assault_sim.rl.policy_net import PolicyNet
-from assault_sim.rl.option_policy import OptionPolicy
 from assault_sim.rl.tactical_options import TacticalOption
 
-from assault_sim.decision.hrl_controller import HRLController
-from assault_sim.decision.option_executor import OptionExecutor
-from assault_sim.heuristics.tactical_path_heuristic import TacticalPathHeuristic
+from assault_sim.engine.env_factory import create_env
+from assault_sim.engine.hrl_factory import create_hrl_controller
+from assault_sim.engine.rollout import collect_rollout
 
 
 # -------------------------------------------------
@@ -6098,13 +7434,13 @@ RL_SIDE = "US"
 
 TOTAL_EPISODES = 1000
 ROLLOUT_STEPS = 64
-PPO_EPOCHS = 4
+PPO_EPOCHS = 6
 
-CLIP_EPS = 0.2
+CLIP_EPS = 0.15
 GAMMA = 0.99
 LAMBDA = 0.95
 VALUE_COEF = 0.5
-ENTROPY_COEF = 0.03
+ENTROPY_COEF = 0.05
 
 
 # -------------------------------------------------
@@ -6114,7 +7450,7 @@ def compute_gae(rewards, values, dones, gamma, lam):
     advantages = []
     gae = 0.0
 
-    values = values + [0.0]  # bootstrap
+    values = values + [0.0]
 
     for t in reversed(range(len(rewards))):
         delta = rewards[t] + gamma * values[t + 1] * (1 - dones[t]) - values[t]
@@ -6124,27 +7460,25 @@ def compute_gae(rewards, values, dones, gamma, lam):
     return advantages
 
 
+# -------------------------------------------------
+# MAIN
+# -------------------------------------------------
 def main():
-    print(">>> PPO HRL training started")
+
+    print(">>> PPO HRL (ENGINE MODE)")
     print(f">>> RL SIDE: {RL_SIDE}")
 
     # -------------------------------------------------
     # ENV
     # -------------------------------------------------
-    sim_config = load_sim_config(Path("assault_sim/config/sim_config.yaml"))
-    sim_config.scenario_name = "phase01_seq001_initial_contact"
-
-    sim_env = SimEnv(sim_config, controller=None)
-    env = TrainingEnv(
-        sim_env,
-        env_config_path=Path("assault_sim/config/env_config.json"),
+    env = create_env(
+        config_path=Path("assault_sim/config/sim_config.yaml"),
+        scenario="phase01_seq001_initial_contact",
         rl_side=RL_SIDE,
     )
 
     obs = env.reset()
     input_dim = obs.shape[0]
-
-    print(f">>> OBS DIM: {input_dim}")
 
     # -------------------------------------------------
     # POLICY
@@ -6154,109 +7488,45 @@ def main():
     policy = PolicyNet(input_dim=input_dim, max_actions=num_options)
     optimizer = optim.Adam(policy.parameters(), lr=3e-4)
 
-    option_policy = OptionPolicy(policy)
-    heuristic_controller = TacticalPathHeuristic()
-    option_executor = OptionExecutor(heuristic_controller)
-
-    hrl_controller = HRLController(
-        option_policy=option_policy,
-        option_executor=option_executor,
-        rl_side=RL_SIDE,
-    )
+    controller = create_hrl_controller(policy, RL_SIDE)
 
     rollout_idx = 0
 
     # -------------------------------------------------
-    # PPO LOOP
+    # TRAIN LOOP
     # -------------------------------------------------
     while rollout_idx < TOTAL_EPISODES:
 
         print(f"\n[ROLLOUT {rollout_idx}]")
 
-        obs_buf = []
-        act_buf = []
-        old_logp_buf = []
-        value_buf = []
-        reward_buf = []
-        done_buf = []
+        rollout = collect_rollout(
+            env=env,
+            controller=controller,
+            steps=ROLLOUT_STEPS,
+        )
 
-        steps = 0
-
-        while steps < ROLLOUT_STEPS:
-
-            state = env.state
-            active = state.active_unit if state else None
-
-            # avanzar si no hay unidad
-            if active is None:
-                obs, _, done, _ = env.step(None)
-                steps += 1
-                continue
-
-            # -------------------------
-            # DECISION
-            # -------------------------
-            if active.side == RL_SIDE:
-
-                action = hrl_controller.choose_action(state, obs)
-
-                # ✅ GUARDAMOS TEMPORALMENTE (NO EN BUFFER)
-                last_obs = obs
-                last_action = option_policy.last_option.value
-                last_logp = option_policy.last_log_prob.detach()
-                last_value = option_policy.last_value.item()
-
-                reward_for_rl = True
-
-            else:
-                action = heuristic_controller.choose_action(state)
-                reward_for_rl = False
-
-            if action is None:
-                obs, _, done, _ = env.step(None)
-                steps += 1
-                continue
-
-            # -------------------------
-            # STEP
-            # -------------------------
-            next_obs, reward, done, _ = env.step(action)
-
-            # ✅ SOLO AQUÍ GUARDAMOS TODO (FIX CRÍTICO)
-            if reward_for_rl:
-
-                obs_buf.append(last_obs)
-                act_buf.append(last_action)
-                old_logp_buf.append(last_logp)
-                value_buf.append(last_value)
-
-                reward_buf.append(reward)
-                done_buf.append(done)
-
-            obs = next_obs
-            steps += 1
-
-            if done:
-                obs = env.reset()
-
-        # -------------------------
-        # VALIDACIÓN
-        # -------------------------
-        if len(reward_buf) == 0:
+        if len(rollout["rewards"]) == 0:
+            print("⚠️ empty rollout")
             rollout_idx += 1
             continue
 
-        assert len(obs_buf) == len(reward_buf), "Buffer mismatch"
+        # -------------------------------------------------
+        # TENSORS
+        # -------------------------------------------------
+        obs_t = torch.tensor(np.array(rollout["obs"]), dtype=torch.float32)
+        act_t = torch.tensor(rollout["actions"], dtype=torch.long)
+        old_logp_t = torch.stack(rollout["logp"])
+        value_buf = rollout["values"]
 
-        # -------------------------
+        # -------------------------------------------------
         # GAE
-        # -------------------------
+        # -------------------------------------------------
         advantages = compute_gae(
-            reward_buf,
+            rollout["rewards"],
             value_buf,
-            done_buf,
+            rollout["dones"],
             GAMMA,
-            LAMBDA
+            LAMBDA,
         )
 
         returns = [a + v for a, v in zip(advantages, value_buf)]
@@ -6265,24 +7535,26 @@ def main():
         returns = torch.tensor(returns, dtype=torch.float32)
 
         if advantages.numel() > 1:
-            advantages = (advantages - advantages.mean()) / (advantages.std() + 1e-8)
+            advantages = (advantages - advantages.mean()) / (
+                advantages.std() + 1e-8
+            )
 
-        obs_t = torch.tensor(np.array(obs_buf), dtype=torch.float32)
-        act_t = torch.tensor(act_buf, dtype=torch.long)
-        old_logp_t = torch.stack(old_logp_buf)
-
-        # -------------------------
+        # -------------------------------------------------
         # PPO UPDATE
-        # -------------------------
+        # -------------------------------------------------
         for _ in range(PPO_EPOCHS):
 
             logits, values = policy(obs_t)
-            dist_opt = dist.Categorical(logits=logits)
+            dist = torch_dist.Categorical(logits=logits)
 
-            logp = dist_opt.log_prob(act_t)
+            logp = dist.log_prob(act_t)
             ratio = torch.exp(logp - old_logp_t)
 
-            clipped = torch.clamp(ratio, 1 - CLIP_EPS, 1 + CLIP_EPS)
+            clipped = torch.clamp(
+                ratio,
+                1 - CLIP_EPS,
+                1 + CLIP_EPS,
+            )
 
             policy_loss = -torch.min(
                 ratio * advantages,
@@ -6290,25 +7562,29 @@ def main():
             ).mean()
 
             value_loss = (returns - values.squeeze()).pow(2).mean()
-            entropy = dist_opt.entropy().mean()
+            entropy = dist.entropy().mean()
 
-            loss = policy_loss + VALUE_COEF * value_loss - ENTROPY_COEF * entropy
+            loss = (
+                policy_loss
+                + VALUE_COEF * value_loss
+                - ENTROPY_COEF * entropy
+            )
 
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
 
-        avg_reward = sum(reward_buf) / len(reward_buf) if reward_buf else 0.0
-        print(f"[ROLLOUT {rollout_idx}] avg_reward={avg_reward:.2f} steps={len(reward_buf)}")
-      
-        
+        avg_reward = sum(rollout["rewards"]) / len(rollout["rewards"])
+
+        print(f"[ROLLOUT {rollout_idx}] reward={avg_reward:.3f}")
+
         rollout_idx += 1
 
     # -------------------------------------------------
     # SAVE
     # -------------------------------------------------
-    ckpt_path = Path("assault_sim/checkpoints") / f"ppo_{RL_SIDE}.pt"
-    ckpt_path.parent.mkdir(parents=True, exist_ok=True)
+    ckpt = Path("assault_sim/checkpoints/ppo_us.pt")
+    ckpt.parent.mkdir(parents=True, exist_ok=True)
 
     torch.save(
         {
@@ -6316,18 +7592,245 @@ def main():
             "input_dim": input_dim,
             "max_actions": num_options,
         },
-        ckpt_path,
+        ckpt,
     )
 
-    print(f">>> TRAINING FINISHED: {ckpt_path}")
+    print(f">>> SAVED: {ckpt}")
 
 
 if __name__ == "__main__":
     main()
 
 
+
 ================================================================================
-FILE: C:\repos\python\assault\assault_sim\train\train_rl.py
+FILE: C:\repos\python\assault\assault_sim\train\_eval_ppo.py
+================================================================================
+
+import torch
+from pathlib import Path
+import statistics
+
+from assault_sim.config.config_loader import load_sim_config
+from assault_sim.sim_env import SimEnv
+from assault_sim.training_env import TrainingEnv
+
+from assault_sim.rl.policy_net import PolicyNet
+from assault_sim.decision.hrl_controller import HRLController
+from assault_sim.decision.option_executor import OptionExecutor
+from assault_sim.rl.option_policy import OptionPolicy
+from assault_sim.rl.tactical_options import TacticalOption
+
+from assault_sim.heuristics.tactical_path_heuristic import TacticalPathHeuristic
+
+
+# -------------------------------------------------
+# CONFIG
+# -------------------------------------------------
+EPISODES = 100
+MAX_STEPS = 200
+RL_SIDE = "US"
+
+
+# -------------------------------------------------
+# MAIN
+# -------------------------------------------------
+def main():
+    print(">>> PPO evaluation (aligned + split stats)")
+
+    checkpoint_path = Path("assault_sim/checkpoints/ppo_US.pt")
+
+    if not checkpoint_path.exists():
+        raise FileNotFoundError(checkpoint_path)
+
+    checkpoint = torch.load(checkpoint_path)
+
+    policy = PolicyNet(
+        input_dim=checkpoint["input_dim"],
+        max_actions=checkpoint["max_actions"],
+    )
+    policy.load_state_dict(checkpoint["model_state_dict"])
+    policy.eval()
+
+    print("✅ Model loaded")
+
+    # -------------------------------------------------
+    # PIPELINE (igual que train)
+    # -------------------------------------------------
+    heuristic = TacticalPathHeuristic()
+
+    option_policy = OptionPolicy(policy)
+    option_executor_rl = OptionExecutor(heuristic)
+
+    hrl_controller_rl = HRLController(
+        option_policy=option_policy,
+        option_executor=option_executor_rl,
+        rl_side=RL_SIDE,
+    )
+
+    option_executor_enemy = OptionExecutor(heuristic)
+
+    class EnemyController:
+        def choose_action(self, state, obs):
+            return option_executor_enemy.execute(
+                state,
+                TacticalOption.ATTACK
+            )
+
+    enemy_controller = EnemyController()
+
+    # -------------------------------------------------
+    # ENV
+    # -------------------------------------------------
+    sim_config = load_sim_config(
+        Path("assault_sim/config/sim_config.yaml")
+    )
+    sim_config.scenario_name = "phase01_seq001_initial_contact"
+
+    sim_env = SimEnv(sim_config, controller=None)
+
+    env = TrainingEnv(
+        sim_env,
+        env_config_path=Path("assault_sim/config/env_config.json"),
+        rl_side=RL_SIDE,
+    )
+
+    # -------------------------------------------------
+    # STATS
+    # -------------------------------------------------
+    wins = 0.0
+    draws = 0
+
+    vp_scores = []
+    steps_list = []
+
+    # RL stats
+    rl_ranged = 0
+    rl_melee = 0
+    rl_attacks = 0
+
+    # ENEMY stats
+    enemy_ranged = 0
+    enemy_melee = 0
+    enemy_attacks = 0
+
+    # -------------------------------------------------
+    # RUN
+    # -------------------------------------------------
+    for ep in range(EPISODES):
+        obs = env.reset()
+        done = False
+        step = 0
+
+        while not done:
+            state = env.state
+            active = state.active_unit if state else None
+
+            if active is None:
+                action = None
+
+            elif active.side == RL_SIDE:
+                action = hrl_controller_rl.choose_action(state, obs)
+
+            else:
+                action = enemy_controller.choose_action(state, obs)
+
+            obs, reward, done, info = env.step(action)
+
+            # -------------------------------------------------
+            # ✅ STATS SEPARADAS
+            # -------------------------------------------------
+            if action is not None and active is not None:
+
+                name = action.__class__.__name__
+                is_ranged = "Ranged" in name
+                is_melee = "Assault" in name or "Close" in name
+                is_attack = is_ranged or is_melee
+
+                if active.side == RL_SIDE:
+                    if is_attack:
+                        rl_attacks += 1
+                    if is_ranged:
+                        rl_ranged += 1
+                    if is_melee:
+                        rl_melee += 1
+
+                else:
+                    if is_attack:
+                        enemy_attacks += 1
+                    if is_ranged:
+                        enemy_ranged += 1
+                    if is_melee:
+                        enemy_melee += 1
+
+            step += 1
+
+            if step >= MAX_STEPS:
+                done = True
+                break
+
+        # -------------------------------------------------
+        # RESULT
+        # -------------------------------------------------
+        state = env.state
+        vp = state.vp_tracker.total_points if state.vp_tracker else 0
+
+        winner = state.winner
+
+        if winner == RL_SIDE:
+            wins += 1
+        elif winner is None:
+            draws += 1
+            wins += 0.5
+
+        vp_scores.append(vp)
+        steps_list.append(step)
+
+        print(
+            f"[EP {ep}] winner={winner} "
+            f"VP={vp} steps={step}"
+        )
+
+    # -------------------------------------------------
+    # SUMMARY
+    # -------------------------------------------------
+    print("\n=== RESULTS ===")
+    print(f"Episodes:   {EPISODES}")
+    print(f"Win rate:   {wins / EPISODES:.2%}")
+    print(f"Draws:      {draws}")
+    print(f"Avg VP:     {statistics.mean(vp_scores):.2f}")
+    print(f"Avg steps:  {statistics.mean(steps_list):.1f}")
+
+    # -------------------------------------------------
+    # COMBAT (SEPARADO)
+    # -------------------------------------------------
+    print("\n=== RL COMBAT ===")
+    print(f"Attacks: {rl_attacks}")
+    print(f"Ranged:  {rl_ranged}")
+    print(f"Melee:   {rl_melee}")
+
+    if rl_attacks > 0:
+        print(f"Melee ratio: {rl_melee / rl_attacks:.2%}")
+
+    print("\n=== ENEMY COMBAT ===")
+    print(f"Attacks: {enemy_attacks}")
+    print(f"Ranged:  {enemy_ranged}")
+    print(f"Melee:   {enemy_melee}")
+
+    if enemy_attacks > 0:
+        print(f"Melee ratio: {enemy_melee / enemy_attacks:.2%}")
+
+    print("\n================")
+    print("\n>>> Evaluation finished")
+
+
+if __name__ == "__main__":
+    main()
+
+
+
+================================================================================
+FILE: C:\repos\python\assault\assault_sim\train\_train_rl.py
 ================================================================================
 
 # assault_sim/train/train_rl.py

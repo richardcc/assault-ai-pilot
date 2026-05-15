@@ -30,18 +30,24 @@ class OptionPolicy:
         This is the ONLY place where HRL decisions are made.
         """
 
-        # ✅ ensure obs is a torch.Tensor
-        if not isinstance(obs, torch.Tensor):
-            obs = torch.tensor(obs, dtype=torch.float32)
+        # ✅ robust tensor conversion (NO rompe grad / device)
+        obs = torch.as_tensor(obs, dtype=torch.float32)
+
+        # ✅ asegurar dimensión batch (CRÍTICO para redes)
+        if obs.dim() == 1:
+            obs = obs.unsqueeze(0)
 
         logits, value = self.policy_net(obs)
 
         option_dist = dist.Categorical(logits=logits)
         option_index = option_dist.sample()
 
+        # ✅ guardar opción como enum
         self.last_option = TacticalOption(option_index.item())
+
+        # ✅ PPO data
         self.last_log_prob = option_dist.log_prob(option_index)
-        self.last_value = value
+        self.last_value = value.squeeze()
 
         # --------------------------------------------
         # ✅ CAPTURE EXPLAINABLE DECISION METADATA
@@ -50,9 +56,9 @@ class OptionPolicy:
             probs = torch.softmax(logits, dim=-1)
 
         self.last_decision_info = {
-            "option": self.last_option.name,          # semantic, stable
-            "confidence": float(probs[option_index]), # human-usable
-            "value_estimate": float(value.item()),    # strategic value
+            "option": self.last_option.name,            # semantic, stable
+            "confidence": float(probs[0, option_index]),  # ✅ FIX batch-safe
+            "value_estimate": float(value.item()),      # strategic value
         }
 
         return self.last_option

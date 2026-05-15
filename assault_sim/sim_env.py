@@ -33,6 +33,10 @@ class SimEnv:
         self.game_state = None
         self.runtime = None
 
+        # ✅ protección contra loops infinitos
+        self._step_counter = 0
+        self._max_steps = 10000
+
     # -------------------------------------------------
     # RESET
     # -------------------------------------------------
@@ -55,8 +59,9 @@ class SimEnv:
         self.runtime.start_turn()
         self.game_state = self.runtime.base_state
 
+        self._step_counter = 0  # reset loop guard
+
         if self.event_bus:
-            # ✅ RESET EVENT
             self.event_bus.emit({
                 "type": "RESET",
                 "payload": {
@@ -65,7 +70,6 @@ class SimEnv:
                 },
             })
 
-            # ✅ 🔥 MAPA INICIAL (CLAVE)
             self._emit_map_state()
 
         return self.game_state
@@ -74,9 +78,31 @@ class SimEnv:
     # STEP
     # -------------------------------------------------
     def step(self, action):
+
+        # ✅ loop protection
+        self._step_counter += 1
+        if self._step_counter > self._max_steps:
+            raise RuntimeError("Simulation overflow (infinite loop protection)")
+
         # controlador opcional
         if action is None and self.controller is not None:
             action = self.controller.choose_action(self.game_state)
+
+        # -------------------------------------------------
+        # DEBUG: NO ACTION
+        # -------------------------------------------------
+        if action is None and DEBUG_TRACE:
+            blocked = [
+                {
+                    "unit": u.unit_id,
+                    "suppressed": u.is_suppressed(),
+                    "fallback": u.is_in_fallback(),
+                }
+                for u in self.game_state.units
+                if not self.runtime._can_unit_act(u)
+            ]
+
+            print("[TRACE][NO_ACTION_AVAILABLE]", blocked)
 
         # ✅ ACTION EVENT
         if self.event_bus and action is not None:
@@ -92,30 +118,63 @@ class SimEnv:
                 },
             })
 
+        # =================================================
+        # ✅ AUTO-SKIP INVALID ACTIVE UNIT
+        # =================================================
+        active = self.game_state.active_unit
+
+        if active and not self.runtime._can_unit_act(active):
+
+            if DEBUG_TRACE:
+                print(f"[TRACE][AUTO_SKIP] {active.unit_id}")
+
+            if self.event_bus:
+                self.event_bus.emit({
+                    "type": "AUTO_SKIP",
+                    "payload": {
+                        "unit": active.unit_id,
+                        "reason": (
+                            "FALLBACK"
+                            if active.is_in_fallback()
+                            else "SUPPRESSED"
+                        ),
+                    },
+                })
+
+            self.runtime._consume_activation(active)
+            self.runtime._advance_activation()
+
+            self.game_state = self.runtime.base_state
+
+            return self.game_state, 0.0, False, {}
+
         # -------------------------------------------------
         # APPLY ACTION
         # -------------------------------------------------
         context = ExecutionContext(event_bus=self.event_bus)
-        self.runtime.apply_action(action, context=context)
 
+        self.runtime.apply_action(action, context=context)
         self.game_state = self.runtime.base_state
 
-        # ✅ 🔥 MAPA TRAS CADA ACCIÓN
+        # ✅ MAP AFTER ACTION
         self._emit_map_state()
 
-        # ✅ FIN PARTIDA (acción)
+        # ✅ MATCH END
         if self.game_state.done:
             self._emit_match_end()
             return self.game_state, 0.0, True, {}
 
         # -------------------------------------------------
-        # TURN END
+        # TURN END (FIXED ✅)
         # -------------------------------------------------
-        if self.runtime.turn_has_ended() and self.game_state.active_unit is None:
+        if self.runtime.turn_has_ended():
+
+            if DEBUG_TRACE:
+                print("[TRACE][TURN_EMPTY] advancing turn")
+
             self.runtime.end_turn()
             self.game_state = self.runtime.base_state
 
-            # ✅ TURN EVENT
             if self.event_bus:
                 self.event_bus.emit({
                     "type": "TURN_END",
@@ -124,24 +183,24 @@ class SimEnv:
                     },
                 })
 
-            # ✅ 🔥 MAPA TRAS TURNO
             self._emit_map_state()
 
             if self.game_state.done:
                 self._emit_match_end()
                 return self.game_state, 0.0, True, {}
 
-            # siguiente turno
+            # ✅ siguiente turno
             self.runtime.start_turn()
             self.game_state = self.runtime.base_state
 
-            # ✅ mapa nuevo turno
             self._emit_map_state()
+
+            return self.game_state, 0.0, False, {}
 
         return self.game_state, 0.0, False, {}
 
     # -------------------------------------------------
-    # MAP STATE (CLAVE PARA EL OBSERVER)
+    # MAP STATE
     # -------------------------------------------------
     def _emit_map_state(self):
         if not self.event_bus:

@@ -18,6 +18,7 @@ class UnitInstance:
     ✅ Includes:
     - health / alive state
     - suppression system
+    - fallback system  ✅ NEW
     - embark / transport logic
     """
 
@@ -46,8 +47,11 @@ class UnitInstance:
         self.strength = self.max_strength
         self.alive = True
 
-        # ✅ Suppression state
+        # ============================
+        # Morale state ✅ FIXED
+        # ============================
         self.suppressed: bool = False
+        self.fallback: bool = False
 
         # ============================
         # Transport / embark state
@@ -83,6 +87,9 @@ class UnitInstance:
 
     def is_suppressed(self) -> bool:
         return self.suppressed
+
+    def is_in_fallback(self) -> bool:
+        return self.fallback
 
     # ----------------------------
     # Movement
@@ -176,14 +183,22 @@ class UnitInstance:
             )
 
     # ----------------------------
-    # Suppression system
+    # Suppression system ✅ FIXED
     # ----------------------------
     def apply_suppression(self):
         """
         Apply suppression effect.
+
+        RULE:
+        - If already suppressed → triggers fallback
         """
 
         if not self.alive:
+            return
+
+        # 🔴 ya suprimido → fallback
+        if self.suppressed:
+            self.trigger_fallback()
             return
 
         self.suppressed = True
@@ -192,6 +207,17 @@ class UnitInstance:
             "SUPPRESSION_APPLIED",
             unit=self.unit_id,
         )
+
+        if self._event_bus:
+            self._event_bus.emit(
+                {
+                    "type": "SUPPRESSED",
+                    "payload": {
+                        "unit": self.unit_id,
+                        "position": self.position,
+                    },
+                }
+            )
 
     def clear_suppression(self):
         """
@@ -205,5 +231,54 @@ class UnitInstance:
 
         _trace(
             "SUPPRESSION_CLEARED",
+            unit=self.unit_id,
+        )
+
+    # ----------------------------
+    # Fallback system ✅ NEW
+    # ----------------------------
+    def trigger_fallback(self):
+        """
+        Trigger fallback (retreat / morale break).
+        """
+
+        if not self.alive:
+            return
+
+        self.suppressed = False
+        self.fallback = True
+
+        _trace(
+            "FALLBACK_TRIGGERED",
+            unit=self.unit_id,
+        )
+
+        if self._event_bus:
+            self._event_bus.emit(
+                {
+                    "type": "FALLBACK",
+                    "payload": {
+                        "unit": self.unit_id,
+                        "position": self.position,
+                    },
+                }
+            )
+
+        # 🔴 regla simplificada del juego
+        if self.unit_type.category.name == "ARTILLERY":
+            self.alive = False
+
+    def clear_fallback(self):
+        """
+        Clear fallback state (future: recovery phase)
+        """
+
+        if not self.fallback:
+            return
+
+        self.fallback = False
+
+        _trace(
+            "FALLBACK_CLEARED",
             unit=self.unit_id,
         )

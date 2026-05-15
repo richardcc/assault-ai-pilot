@@ -10,28 +10,25 @@ from assault_sim.rl.policy_net import PolicyNet
 from assault_sim.decision.hrl_controller import HRLController
 from assault_sim.decision.option_executor import OptionExecutor
 from assault_sim.rl.option_policy import OptionPolicy
+from assault_sim.rl.tactical_options import TacticalOption
 
 from assault_sim.heuristics.tactical_path_heuristic import TacticalPathHeuristic
-
-# combate
-from assault_model.actions.movement import MoveAction
-from assault_model.actions.ranged_direct import RangedDirectAttack
 
 
 # -------------------------------------------------
 # CONFIG
 # -------------------------------------------------
-EPISODES = 50
+EPISODES = 100
 MAX_STEPS = 200
 RL_SIDE = "US"
 
 
+# -------------------------------------------------
+# MAIN
+# -------------------------------------------------
 def main():
-    print(">>> PPO evaluation started")
+    print(">>> PPO evaluation (aligned + split stats)")
 
-    # -------------------------------------------------
-    # LOAD MODEL
-    # -------------------------------------------------
     checkpoint_path = Path("assault_sim/checkpoints/ppo_US.pt")
 
     if not checkpoint_path.exists():
@@ -48,15 +45,30 @@ def main():
 
     print("✅ Model loaded")
 
-    option_policy = OptionPolicy(policy)
+    # -------------------------------------------------
+    # PIPELINE (igual que train)
+    # -------------------------------------------------
     heuristic = TacticalPathHeuristic()
-    option_executor = OptionExecutor(heuristic)
 
-    hrl_controller = HRLController(
+    option_policy = OptionPolicy(policy)
+    option_executor_rl = OptionExecutor(heuristic)
+
+    hrl_controller_rl = HRLController(
         option_policy=option_policy,
-        option_executor=option_executor,
+        option_executor=option_executor_rl,
         rl_side=RL_SIDE,
     )
+
+    option_executor_enemy = OptionExecutor(heuristic)
+
+    class EnemyController:
+        def choose_action(self, state, obs):
+            return option_executor_enemy.execute(
+                state,
+                TacticalOption.ATTACK
+            )
+
+    enemy_controller = EnemyController()
 
     # -------------------------------------------------
     # ENV
@@ -77,86 +89,97 @@ def main():
     # -------------------------------------------------
     # STATS
     # -------------------------------------------------
-    wins = 0
+    wins = 0.0
+    draws = 0
+
     vp_scores = []
     steps_list = []
 
-    # ✅ tipos de combate
-    ranged_count = 0
-    melee_attempts = 0
+    # RL stats
+    rl_ranged = 0
+    rl_melee = 0
+    rl_attacks = 0
+
+    # ENEMY stats
+    enemy_ranged = 0
+    enemy_melee = 0
+    enemy_attacks = 0
 
     # -------------------------------------------------
-    # EPISODES
+    # RUN
     # -------------------------------------------------
     for ep in range(EPISODES):
         obs = env.reset()
-
         done = False
-        steps = 0
+        step = 0
 
         while not done:
             state = env.state
-            active = state.active_unit
+            active = state.active_unit if state else None
 
             if active is None:
                 action = None
-            elif active.side == RL_SIDE:
-                action = hrl_controller.choose_action(state, obs)
-            else:
-                action = heuristic.choose_action(state)
 
-            # ✅ guardamos state antes de step (clave)
-            prev_state = state
+            elif active.side == RL_SIDE:
+                action = hrl_controller_rl.choose_action(state, obs)
+
+            else:
+                action = enemy_controller.choose_action(state, obs)
 
             obs, reward, done, info = env.step(action)
 
             # -------------------------------------------------
-            # ✅ DETECCIÓN TIPOS COMBATE (CORRECTA)
+            # ✅ STATS SEPARADAS
             # -------------------------------------------------
-            if action is not None:
+            if action is not None and active is not None:
 
-                # ---------- RANGED ----------
-                if isinstance(action, RangedDirectAttack):
-                    ranged_count += 1
+                name = action.__class__.__name__
+                is_ranged = "Ranged" in name
+                is_melee = "Assault" in name or "Close" in name
+                is_attack = is_ranged or is_melee
 
-                # ---------- MELEE ----------
-                elif isinstance(action, MoveAction):
+                if active.side == RL_SIDE:
+                    if is_attack:
+                        rl_attacks += 1
+                    if is_ranged:
+                        rl_ranged += 1
+                    if is_melee:
+                        rl_melee += 1
 
-                    path = getattr(action, "path", None)
-                    if path:
-                        dest = path[-1]
+                else:
+                    if is_attack:
+                        enemy_attacks += 1
+                    if is_ranged:
+                        enemy_ranged += 1
+                    if is_melee:
+                        enemy_melee += 1
 
-                        # comprobar si destino tenía enemigo
-                        for u in prev_state.units:
-                            if u.side != active.side and u.alive:
-                                if u.position == dest:
-                                    melee_attempts += 1
-                                    break
+            step += 1
 
-            steps += 1
-
-            if steps >= MAX_STEPS:
-                print(f"⚠️ Forced stop ep={ep}")
+            if step >= MAX_STEPS:
+                done = True
                 break
 
         # -------------------------------------------------
-        # RESULTADOS
+        # RESULT
         # -------------------------------------------------
         state = env.state
+        vp = state.vp_tracker.total_points if state.vp_tracker else 0
 
         winner = state.winner
-        reason = state.end_reason
-        vp = state.vp_tracker.total_points if state.vp_tracker else 0
 
         if winner == RL_SIDE:
             wins += 1
+        elif winner is None:
+            draws += 1
+            wins += 0.5
 
         vp_scores.append(vp)
-        steps_list.append(steps)
+        steps_list.append(step)
 
         print(
-            f"[EP {ep}] winner={winner} reason={reason} "
-            f"VP={vp} steps={steps}"
+            f"[EP {ep}] winner={winner} "
+            f"VP={vp} steps={step}"
         )
 
     # -------------------------------------------------
@@ -165,23 +188,30 @@ def main():
     print("\n=== RESULTS ===")
     print(f"Episodes:   {EPISODES}")
     print(f"Win rate:   {wins / EPISODES:.2%}")
+    print(f"Draws:      {draws}")
     print(f"Avg VP:     {statistics.mean(vp_scores):.2f}")
     print(f"Avg steps:  {statistics.mean(steps_list):.1f}")
 
     # -------------------------------------------------
-    # ✅ TIPOS DE COMBATE
+    # COMBAT (SEPARADO)
     # -------------------------------------------------
-    print("\n=== COMBAT TYPES ===")
-    print(f"Ranged attacks: {ranged_count}")
-    print(f"Melee attempts: {melee_attempts}")
+    print("\n=== RL COMBAT ===")
+    print(f"Attacks: {rl_attacks}")
+    print(f"Ranged:  {rl_ranged}")
+    print(f"Melee:   {rl_melee}")
 
-    total = ranged_count + melee_attempts
-    if total > 0:
-        ratio = melee_attempts / total
-        print(f"Melee ratio: {ratio:.2%}")
+    if rl_attacks > 0:
+        print(f"Melee ratio: {rl_melee / rl_attacks:.2%}")
 
-    print("================")
+    print("\n=== ENEMY COMBAT ===")
+    print(f"Attacks: {enemy_attacks}")
+    print(f"Ranged:  {enemy_ranged}")
+    print(f"Melee:   {enemy_melee}")
 
+    if enemy_attacks > 0:
+        print(f"Melee ratio: {enemy_melee / enemy_attacks:.2%}")
+
+    print("\n================")
     print("\n>>> Evaluation finished")
 
 

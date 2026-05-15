@@ -1,15 +1,12 @@
 from assault_model.actions.action_catalog import ActionCatalog
 from assault_model.actions.action_category import ActionCategory
-from assault_model.actions.ranged_direct import RangedDirectAttack
 from assault_model.map.hex_utils import hex_distance
+from assault_sim.rl.tactical_options import TacticalOption
 
 
 class TacticalPathHeuristic:
 
-    # -------------------------------------------------
-    # MAIN HEURISTIC (FINAL VERSION)
-    # -------------------------------------------------
-    def choose_action(self, state):
+    def choose_action(self, state, option: TacticalOption):
 
         unit = state.active_unit
         if unit is None or not unit.alive:
@@ -27,124 +24,172 @@ class TacticalPathHeuristic:
         if not enemies:
             return self._wait(actions)
 
-        # objetivo principal
-        closest_enemy = min(
+        target = min(
             enemies,
             key=lambda e: hex_distance(unit.position, e.position)
         )
 
-        dist_to_enemy = hex_distance(unit.position, closest_enemy.position)
+        dist = hex_distance(unit.position, target.position)
 
         # -------------------------------------------------
-        # 1. RANGED (si puede disparar → hazlo)
+        # ✅ ✅ ✅ ATTACK (FIX REAL)
         # -------------------------------------------------
-        ranged_action = None
+        if option == TacticalOption.ATTACK:
 
-        for action in actions:
-            if isinstance(action, RangedDirectAttack):
-                ranged_action = action
-                break
+            # 🔴 1. SI ESTÁ ADYACENTE → MELEE SIEMPRE
+            if dist <= 1:
+                return self._attack_close(actions, target)
 
-        if ranged_action:
-            return ranged_action
+            # 🟡 2. DISTANCIA MEDIA → RANGED
+            if dist <= 3:
+                ranged = self._attack_ranged(actions)
+                if ranged:
+                    return ranged
 
-        # -------------------------------------------------
-        # 2. MOVIMIENTO INTELIGENTE (CLAVE)
-        # -------------------------------------------------
-        best_move = None
-        best_dist = dist_to_enemy
-
-        for action in actions:
-
-            if action.action_type.category != ActionCategory.MOVEMENT:
-                continue
-
-            path = getattr(action, "path", None)
-            if not path:
-                continue
-
-            dest = path[-1]
-
-            # distancia desde destino a enemigo
-            d = hex_distance(dest, closest_enemy.position)
-
-            # ✅ PRIORIDAD 1: entrar en el mismo hex → provoca assault
-            if dest == closest_enemy.position:
-
-                # opcional: solo si conviene (ejemplo básico)
-                if unit.hp >= closest_enemy.hp or closest_enemy.hp <= 1:
-                    return action
-
-            # ✅ PRIORIDAD 2: acercarse
-            if d < best_dist:
-                best_dist = d
-                best_move = action
-
-            # ✅ PRIORIDAD 3: movimiento lateral (ANTI-FREEZE)
-            elif best_move is None:
-                best_move = action
-
-        if best_move:
-            return best_move
+            # 🟢 3. LEJOS → MOVER
+            return self._move_closer(actions, unit, target)
 
         # -------------------------------------------------
-        # 3. FALLBACK
+        # ADVANCE
         # -------------------------------------------------
-        return self._wait(actions)
+        if option == TacticalOption.ADVANCE:
+            return self._move_closer(actions, unit, target)
 
-    # -------------------------------------------------
-    # HRL WRAPPERS
-    # -------------------------------------------------
-    def advance_towards_enemy(self, unit, state):
-        return self.choose_action(state)
-
-    def flank_best_position(self, unit, state):
-        return self.choose_action(state)
-
-    def retreat(self, unit, state):
-
-        actions = ActionCatalog(state).actions()
-
-        enemies = [
-            u for u in state.units
-            if u.side != unit.side and u.alive
-        ]
-
-        if not enemies:
+        # -------------------------------------------------
+        # HOLD
+        # -------------------------------------------------
+        if option == TacticalOption.HOLD:
+            if dist <= 3:
+                ranged = self._attack_ranged(actions)
+                if ranged:
+                    return ranged
             return self._wait(actions)
 
-        closest_enemy = min(
-            enemies,
-            key=lambda e: hex_distance(unit.position, e.position)
-        )
+        # -------------------------------------------------
+        # RETREAT
+        # -------------------------------------------------
+        if option == TacticalOption.RETREAT:
+            return self._move_away(actions, unit, target)
 
-        best_move = None
-        best_dist = hex_distance(unit.position, closest_enemy.position)
-
-        for action in actions:
-
-            if action.action_type.category != ActionCategory.MOVEMENT:
-                continue
-
-            path = getattr(action, "path", None)
-            if not path:
-                continue
-
-            dest = path[-1]
-            d = hex_distance(dest, closest_enemy.position)
-
-            # alejarse
-            if d > best_dist:
-                best_dist = d
-                best_move = action
-
-        if best_move:
-            return best_move
+        # -------------------------------------------------
+        # FLANK
+        # -------------------------------------------------
+        if option == TacticalOption.FLANK:
+            return self._move_closer_force(actions, unit, target)
 
         return self._wait(actions)
 
     # -------------------------------------------------
-    # INTERNAL
+    # ✅ ATAQUE RANGED
+    # -------------------------------------------------
+    def _attack_ranged(self, actions):
+        for a in actions:
+            if a.action_type.category != ActionCategory.MOVEMENT \
+               and a.action_type.category != ActionCategory.STATUS:
+
+                name = a.__class__.__name__
+
+                if "Ranged" in name or "Shoot" in name:
+                    return a
+
+        return None
+
+    # -------------------------------------------------
+    # MOVIMIENTO
+    # -------------------------------------------------
+    def _move_closer(self, actions, unit, enemy):
+
+        best = None
+        best_dist = hex_distance(unit.position, enemy.position)
+
+        for a in actions:
+            if a.action_type.category != ActionCategory.MOVEMENT:
+                continue
+
+            path = getattr(a, "path", None)
+            if not path:
+                continue
+
+            d = hex_distance(path[-1], enemy.position)
+
+            if d < best_dist:
+                best_dist = d
+                best = a
+
+        return best or self._wait(actions)
+
+    def _move_closer_force(self, actions, unit, enemy):
+
+        best = None
+        best_dist = hex_distance(unit.position, enemy.position)
+
+        for a in actions:
+            if a.action_type.category != ActionCategory.MOVEMENT:
+                continue
+
+            path = getattr(a, "path", None)
+            if not path:
+                continue
+
+            d = hex_distance(path[-1], enemy.position)
+
+            if d < best_dist:
+                best_dist = d
+                best = a
+            elif best is None and d <= best_dist:
+                best = a
+
+        return best or self._wait(actions)
+
+    # -------------------------------------------------
+    # ✅ ✅ ✅ MELEE REAL (FIX IMPORTANTE)
+    # -------------------------------------------------
+    def _attack_close(self, actions, enemy):
+
+        # ✅ PRIORIDAD → acciones melee explícitas
+        for a in actions:
+            name = a.__class__.__name__
+
+            if "Assault" in name or "Close" in name:
+                return a
+
+        # ✅ fallback ofensivo (evitar ranged si hay otra cosa)
+        for a in actions:
+            if a.action_type.category != ActionCategory.MOVEMENT \
+               and a.action_type.category != ActionCategory.STATUS:
+
+                name = a.__class__.__name__
+                if not ("Ranged" in name):
+                    return a
+
+        return self._wait(actions)
+
+    # -------------------------------------------------
+    # RETREAT
+    # -------------------------------------------------
+    def _move_away(self, actions, unit, enemy):
+
+        best = None
+        best_dist = hex_distance(unit.position, enemy.position)
+
+        for a in actions:
+            if a.action_type.category != ActionCategory.MOVEMENT:
+                continue
+
+            path = getattr(a, "path", None)
+            if not path:
+                continue
+
+            d = hex_distance(path[-1], enemy.position)
+
+            if d > best_dist:
+                best_dist = d
+                best = a
+
+        return best or self._wait(actions)
+
+    # -------------------------------------------------
+    # WAIT
     # -------------------------------------------------
     def _wait(self, actions):
         for a in actions:

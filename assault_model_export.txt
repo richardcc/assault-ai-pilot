@@ -1085,19 +1085,6 @@ FILE: C:\repos\python\assault\assault_model\combat\close_combat_resolver.py
 ================================================================================
 
 # assault_model/combat/close_combat_resolver.py
-#
-# Close combat resolver.
-#
-# RESPONSIBILITY:
-# - Compute close combat rounds
-# - Roll dice
-# - Apply effects (damage + suppression)
-# - Determine winner
-#
-# IMPORTANT:
-# - PURE combat computation
-# - NO formatting
-# - Emits ACTION_EFFECT
 
 from assault_model.combat.attack_dice_pool import AttackDicePool
 from assault_model.combat.defense_dice_pool import DefenseDicePool
@@ -1134,7 +1121,6 @@ class CloseCombatRoundResult:
         self.attacker_effects = {}
         self.defender_effects = {}
 
-        # NEW – resolution detail (non-breaking)
         self.attacker_resolution = {}
         self.defender_resolution = {}
 
@@ -1210,9 +1196,9 @@ def resolve_close_combat(
         rr.defender_defense_dice = dice_results["defender_defense"]
 
         # =================================================
-        # ATTACKER → DEFENDER (10.7.2)
+        # ATTACKER → DEFENDER
         # =================================================
-        atk_vs_def = compare_dice_10_7_2(
+        atk_vs_def = compare_dice(
             attacker_dice=rr.attacker_attack_dice,
             defender_dice=rr.defender_defense_dice,
         )
@@ -1224,9 +1210,9 @@ def resolve_close_combat(
         attacker_suppress = atk_vs_def["remaining_suppress"]
 
         # =================================================
-        # DEFENDER → ATTACKER (10.7.2)
+        # DEFENDER → ATTACKER
         # =================================================
-        def_vs_atk = compare_dice_10_7_2(
+        def_vs_atk = compare_dice(
             attacker_dice=rr.defender_attack_dice,
             defender_dice=rr.attacker_defense_dice,
         )
@@ -1237,38 +1223,41 @@ def resolve_close_combat(
         )
         defender_suppress = def_vs_atk["remaining_suppress"]
 
-        # ---------------- EFFECTS (unchanged semantics) ----------------
+        # ---------------- EFFECTS ----------------
         rr.attacker_effects = {
             "damage": attacker_damage,
             "suppress": attacker_suppress,
             "remaining_criticals": atk_vs_def["remaining_criticals"],
         }
+
         rr.defender_effects = {
             "damage": defender_damage,
             "suppress": defender_suppress,
             "remaining_criticals": def_vs_atk["remaining_criticals"],
         }
 
-        # ---------------- RESOLUTION DETAIL (NEW, NON-BREAKING) --------
         rr.attacker_resolution = atk_vs_def
         rr.defender_resolution = def_vs_atk
 
         # =================================================
-        # APPLY DAMAGE (10.7.3)
+        # APPLY DAMAGE
         # =================================================
         if attacker_damage:
             ctx.defender.apply_damage(attacker_damage)
+
         if defender_damage:
             ctx.attacker.apply_damage(defender_damage)
 
         # =================================================
-        # APPLY SUPPRESSION (10.7.3)
+        # APPLY SUPPRESSION (SAFE — NO FALLBACK CHAIN)
         # =================================================
         if attacker_suppress > 0 and ctx.defender.alive:
-            ctx.defender.apply_suppression()
+            if not ctx.defender.is_suppressed():
+                ctx.defender.apply_suppression()
 
         if defender_suppress > 0 and ctx.attacker.alive:
-            ctx.attacker.apply_suppression()
+            if not ctx.attacker.is_suppressed():
+                ctx.attacker.apply_suppression()
 
         rr.attacker_hp_after = ctx.attacker.hp
         rr.defender_hp_after = ctx.defender.hp
@@ -1303,15 +1292,15 @@ def resolve_close_combat(
         result.outcome = "no_decision" if any_hp_lost else "all_hits_cancelled"
 
     # =================================================
-    # Emit ALL rounds as ACTION_EFFECT
+    # EVENT EMISSION
     # =================================================
     event_bus = context.event_bus if context else None
+
     if event_bus and result.rounds:
         event_bus.emit(
             {
                 "type": "ACTION_EFFECT",
                 "payload": {
-                    # ---------- EXISTING FIELDS (UNCHANGED) ----------
                     "action": "CloseCombat",
                     "attacker": ctx.attacker.unit_id,
                     "defender": ctx.defender.unit_id,
@@ -1328,6 +1317,7 @@ def resolve_close_combat(
                                 }
                                 for d in r.attacker_attack_dice
                             ],
+
                             "attacker_defense_dice": [
                                 {
                                     "color": d.color.name,
@@ -1335,6 +1325,7 @@ def resolve_close_combat(
                                 }
                                 for d in r.attacker_defense_dice
                             ],
+
                             "defender_attack_dice": [
                                 {
                                     "color": d.color.name,
@@ -1342,6 +1333,7 @@ def resolve_close_combat(
                                 }
                                 for d in r.defender_attack_dice
                             ],
+
                             "defender_defense_dice": [
                                 {
                                     "color": d.color.name,
@@ -1358,11 +1350,16 @@ def resolve_close_combat(
                             "attacker_effects": r.attacker_effects,
                             "defender_effects": r.defender_effects,
 
-                            # ---------- NEW (NON-BREAKING) ----------
                             "resolution": {
                                 "attacker": r.attacker_resolution,
                                 "defender": r.defender_resolution,
                             },
+
+                            # ✅ NEW: FINAL STATE (NO BREAKING)
+                            "attacker_suppressed": ctx.attacker.is_suppressed(),
+                            "defender_suppressed": ctx.defender.is_suppressed(),
+                            "attacker_fallback": ctx.attacker.is_in_fallback(),
+                            "defender_fallback": ctx.defender.is_in_fallback(),
                         }
                         for r in result.rounds
                     ],
@@ -2103,6 +2100,143 @@ class DiceModifier(ABC):
 
 
 ================================================================================
+FILE: C:\repos\python\assault\assault_model\combat\morale.py
+================================================================================
+
+# assault_model/combat/morale.py
+
+import os
+from assault_model.units.unit_instance import UnitInstance
+
+DEBUG_TRACE = os.getenv("ASSAULT_DEBUG_TRACE", "0") == "1"
+
+
+def _trace(tag: str, **data):
+    if not DEBUG_TRACE:
+        return
+    payload = " ".join(f"{k}={v}" for k, v in data.items())
+    print(f"[TRACE][{tag}] {payload}")
+
+
+# =====================================================
+# PUBLIC API
+# =====================================================
+
+def apply_suppression(unit: UnitInstance):
+    """
+    Entry point for suppression handling.
+
+    ✅ Does NOT duplicate logic
+    ✅ Delegates to UnitInstance
+    """
+
+    if not unit.is_alive():
+        return
+
+    # delega en la unidad (ya tiene lógica de fallback incluida)
+    unit.apply_suppression()
+
+
+def apply_suppression_hits(unit: UnitInstance, hits: int):
+    """
+    Apply multiple suppression hits from combat result.
+
+    IMPORTANT:
+    - Each hit after the first may trigger fallback
+    """
+
+    if not unit.is_alive() or hits <= 0:
+        return
+
+    _trace(
+        "SUPPRESSION_HITS",
+        unit=unit.unit_id,
+        hits=hits,
+    )
+
+    for _ in range(hits):
+        unit.apply_suppression()
+
+
+def resolve_fallback(unit: UnitInstance):
+    """
+    Resolve fallback effects AFTER it has been triggered.
+
+    This separates:
+    ✔ state change (UnitInstance)
+    ✔ behaviour (movement, destruction, etc.)
+    """
+
+    if not unit.is_in_fallback():
+        return
+
+    _trace(
+        "RESOLVE_FALLBACK",
+        unit=unit.unit_id,
+        position=unit.position,
+    )
+
+    # ===============================
+    # SPECIAL RULES
+    # ===============================
+
+    # artillery eliminated on fallback
+    try:
+        category = unit.unit_type.category.name
+    except Exception:
+        category = None
+
+    if category == "ARTILLERY":
+        _trace("FALLBACK_ARTILLERY_DESTROYED", unit=unit.unit_id)
+        unit.alive = False
+        return
+
+    # ===============================
+    # MOVEMENT (MVP SIMPLE)
+    # ===============================
+
+    retreat_unit_simple(unit)
+
+
+# =====================================================
+# INTERNAL HELPERS
+# =====================================================
+
+def retreat_unit_simple(unit: UnitInstance):
+    """
+    Minimal fallback movement (safe implementation).
+
+    ✅ No dependency on map system
+    ✅ Does not break engine
+    ✅ Replace later with real pathfinding
+    """
+
+    if unit.position is None:
+        return  # embarked or invalid
+
+    try:
+        q, r = unit.position
+
+        # simple retreat backwards (placeholder)
+        new_pos = (q - 1, r)
+
+        _trace(
+            "FALLBACK_MOVE",
+            unit=unit.unit_id,
+            from_pos=unit.position,
+            to=new_pos,
+        )
+
+        unit.position = new_pos
+
+    except Exception:
+        _trace(
+            "FALLBACK_MOVE_FAILED",
+            unit=unit.unit_id,
+        )
+
+
+================================================================================
 FILE: C:\repos\python\assault\assault_model\combat\ranged_combat_resolver.py
 ================================================================================
 
@@ -2122,6 +2256,11 @@ from assault_model.combat.dice_comparison import compare_dice
 from assault_model.combat.line_of_sight import (
     check_line_of_sight,
     LineOfSight,
+)
+
+from assault_model.combat.morale import (
+    apply_suppression_hits,
+    resolve_fallback,
 )
 
 import os
@@ -2168,19 +2307,18 @@ def resolve_ranged_combat(
 ) -> CombatResolutionResult:
 
     # =================================================
-    # CONTEXT (NO CAMBIA NADA EXISTENTE)
+    # CONTEXT
     # =================================================
     game_map = context.game_map if context and context.game_map else None
 
     # =================================================
-    # ✅ NUEVO: LINE OF SIGHT (NO INVASIVO)
+    # LINE OF SIGHT
     # =================================================
     los = LineOfSight.CLEAR
 
     if game_map:
         los = check_line_of_sight(attacker, target, game_map)
 
-    # 🔹 Observabilidad extra SIN romper nada
     _trace(
         "LOS_CHECK",
         attacker=attacker.unit_id,
@@ -2188,27 +2326,34 @@ def resolve_ranged_combat(
         los=los.name,
     )
 
-    # ✅ BLOQUEO SOLO AÑADE EARLY EXIT (no rompe nada existente)
     if los == LineOfSight.BLOCKED:
         _trace(
             "RANGED_BLOCKED",
             attacker=attacker.unit_id,
             defender=target.unit_id,
         )
-
-        # ✅ devolvemos estructura válida (no rompemos callers)
         return CombatResolutionResult([], [], [])
 
     # ---------------- ATTACK DICE ----------------
-    attack_colors = attacker.unit_type.get_attack_dice(
-        distance=distance,
-        target_category=target.unit_type.category,
+    attack_colors = list(
+        attacker.unit_type.get_attack_dice(
+            distance=distance,
+            target_category=target.unit_type.category,
+        )
     )
 
-    attack_colors = list(attack_colors)  # ✅ seguridad
+    # ---------------- SUPPRESSION (ATTACKER PENALTY) ----------------
+    if getattr(attacker, "suppressed", False):
+        if attack_colors:
+            attack_colors = attack_colors[:-1]
+            _trace(
+                "SUPPRESSION_ATTACK_PENALTY",
+                attacker=attacker.unit_id,
+                remaining_dice=len(attack_colors),
+            )
 
-    # ✅ PARTIAL LOS = solo modificador leve (NO rompe sistema)
-    if los == LineOfSight.PARTIAL and len(attack_colors) > 0:
+    # ---------------- PARTIAL LOS PENALTY ----------------
+    if los == LineOfSight.PARTIAL and attack_colors:
         attack_colors = attack_colors[:-1]
 
     attack_pool = AttackDicePool(attack_colors)
@@ -2226,14 +2371,12 @@ def resolve_ranged_combat(
         target.unit_type.get_defense_dice(sector=attack_sector)
     )
 
-    # ✅ TERRAIN (idéntico a tu versión original)
     if game_map:
         hex_ = game_map.get_hex(target.position)
         if hex_ is not None:
             terrain_mod = TerrainModifier.from_hex(hex_)
             defense_colors = terrain_mod.modify_defense(defense_colors)
 
-            # ✅ observabilidad extra opcional
             _trace(
                 "TERRAIN_APPLIED",
                 defender=target.unit_id,
@@ -2241,7 +2384,6 @@ def resolve_ranged_combat(
                 defense_dice=len(defense_colors),
             )
 
-    # ✅ BUILD POOL (igual que antes)
     defense_pool = DefenseDicePool(defense_colors)
     defense_results: list[DiceResult] = defense_pool.roll()
 
@@ -2274,28 +2416,26 @@ def resolve_ranged_combat(
 
     defender_killed = hp_before > 0 and hp_after == 0
 
-    # ---------------- SUPPRESSION ----------------
-    suppressed = False
+    # ---------------- SUPPRESSION (CORRECTO) ----------------
     if remaining_suppress > 0 and target.alive:
-        target.apply_suppression()
-        suppressed = True
 
-    # ✅ TRACE ORIGINAL + LOS AÑADIDO
-    _trace(
-        "RANGED_RESOLUTION",
-        attacker=attacker.unit_id,
-        defender=target.unit_id,
-        los=los.name,
-        damage=damage,
-        remaining_damage=remaining_damage,
-        remaining_criticals=remaining_criticals,
-        remaining_suppress=remaining_suppress,
-        hp_before=hp_before,
-        hp_after=hp_after,
-        defender_killed=defender_killed,
-        suppressed=suppressed,
-    )
+        suppressed_before = target.is_suppressed()
+        fallback_before = target.is_in_fallback()
 
+        apply_suppression_hits(target, remaining_suppress)
+        resolve_fallback(target)
+
+        _trace(
+            "SUPPRESSION_RESOLVED",
+            unit=target.unit_id,
+            hits=remaining_suppress,
+            suppressed_before=suppressed_before,
+            fallback_before=fallback_before,
+            suppressed_after=target.is_suppressed(),
+            fallback_after=target.is_in_fallback(),
+        )
+
+    # ---------------- RESULT ----------------
     result = CombatResolutionResult(
         attack_roll=attack_results,
         defense_roll=defense_results,
@@ -2313,7 +2453,7 @@ def resolve_ranged_combat(
                     "defender": target.unit_id,
                     "distance": distance,
                     "attack_sector": attack_sector.name,
-                    "los": los.name,  # ✅ añadido SIN romper nada
+                    "los": los.name,
 
                     "attacker_attack_dice": [
                         {
@@ -2330,16 +2470,39 @@ def resolve_ranged_combat(
                         for d in defense_results
                     ],
 
+                    # ============================
+                    # EFFECTS (CORREGIDO)
+                    # ============================
                     "attacker_effects": {
                         "damage": damage,
                         "criticals": criticals,
+
+                        # legacy
                         "suppress": remaining_suppress,
+
+                        # nuevos
+                        "suppress_attempts": remaining_suppress,
+                        "suppression_applied": remaining_suppress > 0,
+                        "suppression_state_after": target.is_suppressed(),
+                        "fallback_triggered": target.is_in_fallback(),
+                    },
+
+                    "suppression": {
+                        "attempts": remaining_suppress,
+                        "applied": remaining_suppress > 0,
+                        "state": target.is_suppressed(),
+                        "fallback": target.is_in_fallback(),
                     },
 
                     "defender_hp_before": hp_before,
                     "defender_hp_after": hp_after,
                     "defender_killed": defender_killed,
-                    "defender_suppressed": suppressed,
+
+                    "defender_suppressed": target.is_suppressed(),
+                    "defender_fallback": target.is_in_fallback(),
+
+                    # ✅ CLAVE PARA REPLAY
+                    "defender_position_after": target.position,
 
                     "resolution": comparison,
                     "outcome": "resolved",
@@ -2722,17 +2885,6 @@ from assault_model.units.unit_instance import UnitInstance
 class ActivationState:
     """
     Handles unit activation within a turn.
-
-    Responsibilities:
-    - Maintain the ordered list of units remaining to activate.
-    - Expose the currently active unit.
-    - Select the next unit to activate.
-    - Track which units have completed their activation.
-
-    IMPORTANT:
-    - Selecting a unit (next_unit) is NOT the same as consuming its activation.
-    - Activation consumption must be done explicitly by the engine
-      once the unit action has completed.
     """
 
     def __init__(self, units: List[UnitInstance]):
@@ -2740,40 +2892,45 @@ class ActivationState:
         self.activated: List[UnitInstance] = []
         self.active_unit: Optional[UnitInstance] = None
 
+    # -------------------------------------------------
+    # NEXT UNIT
+    # -------------------------------------------------
     def next_unit(self) -> Optional[UnitInstance]:
-        """
-        Selects the next unit to activate.
 
-        Returns:
-        - The next active unit, or None if no units remain.
+        while self.remaining:
 
-        NOTE:
-        - This method ONLY selects the unit.
-        - It does NOT consume the activation.
-        """
-        if not self.remaining:
-            self.active_unit = None
-            return None
+            unit = self.remaining.pop(0)
 
-        unit = self.remaining.pop(0)
-        self.active_unit = unit
-        return unit
+            # ✅ evita duplicados o inconsistencias
+            if unit in self.activated:
+                continue
 
+            self.active_unit = unit
+            return unit
+
+        self.active_unit = None
+        return None
+
+    # -------------------------------------------------
+    # CONSUME ACTIVATION
+    # -------------------------------------------------
     def consume(self, unit: UnitInstance) -> None:
-        """
-        Marks a unit as having completed its activation.
 
-        This should be called by the game engine AFTER
-        the unit has executed its action.
-        """
         if unit not in self.activated:
             self.activated.append(unit)
 
+        # ✅ limpiar active_unit
+        if self.active_unit == unit:
+            self.active_unit = None
+
+    # -------------------------------------------------
+    # RESET TURN
+    # -------------------------------------------------
     def reset(self, units: List[UnitInstance]) -> None:
-        """
-        Resets activation state for a new turn.
-        """
-        self.remaining = list(units)
+
+        # ✅ solo unidades vivas
+        self.remaining = [u for u in units if u.alive]
+
         self.activated = []
         self.active_unit = None
 
@@ -4358,18 +4515,70 @@ class RuntimeGameState:
         self.turn = TurnState(turn_number=base_state.turn)
 
     # =================================================
+    # ✅ ACTION GUARD
+    # =================================================
+    def _can_unit_act(self, unit) -> bool:
+        if unit is None:
+            return False
+
+        if not unit.alive:
+            return False
+
+        if getattr(unit, "fallback", False):
+            return False
+
+        if getattr(unit, "suppressed", False):
+            return False
+
+        return True
+
+    # =================================================
     # TURN CONTROL
     # =================================================
     def start_turn(self) -> None:
+        """
+        Start of turn:
+        - clears suppression
+        - clears fallback
+        - resets activation
+        """
+
+        for unit in self.base_state.units:
+
+            # ------------------------------
+            # SUPPRESSION RECOVERY
+            # ------------------------------
+            if getattr(unit, "suppressed", False):
+                unit.clear_suppression()
+
+                _trace(
+                    "SUPPRESSION_RECOVERED",
+                    unit=unit.unit_id,
+                )
+
+            # ------------------------------
+            # FALLBACK RECOVERY ✅ NEW
+            # ------------------------------
+            if getattr(unit, "fallback", False):
+                unit.clear_fallback()
+
+                _trace(
+                    "FALLBACK_RECOVERED",
+                    unit=unit.unit_id,
+                )
+
         self.base_state.activation_state.reset(self.base_state.units)
         self.base_state.activation_state.next_unit()
 
         _trace(
             "TURN_START_UNITS",
+            turn=getattr(self.base_state, "turn", None),
             units=[
                 {
                     "id": u.unit_id,
+                    "side": u.side,
                     "alive": u.alive,
+                    "hp": getattr(u, "hp", None),
                     "suppressed": getattr(u, "suppressed", False),
                     "fallback": getattr(u, "fallback", False),
                 }
@@ -4378,13 +4587,8 @@ class RuntimeGameState:
         )
 
     def end_turn(self) -> None:
-        """
-        Finalize the current turn and advance the turn counter.
-        """
         self.base_state.end_turn()
         self.turn = TurnState(turn_number=self.base_state.turn)
-
-        # ✅ ahora el estado vive en GameState
         self._check_match_end()
 
     # =================================================
@@ -4394,9 +4598,7 @@ class RuntimeGameState:
         return self.base_state.done
 
     def _check_match_end(self, context: ExecutionContext | None = None):
-        """
-        Check whether the match has ended and update GameState.
-        """
+
         if self.base_state.done:
             return
 
@@ -4405,9 +4607,6 @@ class RuntimeGameState:
 
         event_bus = context.event_bus if context else None
 
-        # ---------------------------------------------
-        # DRAW: no units alive
-        # ---------------------------------------------
         if len(alive_units) == 0:
             self.base_state.done = True
             self.base_state.winner = None
@@ -4427,9 +4626,6 @@ class RuntimeGameState:
                 )
             return
 
-        # ---------------------------------------------
-        # VICTORY: one side alive
-        # ---------------------------------------------
         if len(alive_sides) == 1:
             winner = next(iter(alive_sides))
 
@@ -4451,9 +4647,6 @@ class RuntimeGameState:
                 )
             return
 
-        # ---------------------------------------------
-        # DRAW: max turns
-        # ---------------------------------------------
         if (
             self.scenario.max_turns is not None
             and self.base_state.turn >= self.scenario.max_turns
@@ -4484,13 +4677,12 @@ class RuntimeGameState:
         activable = []
 
         for unit in gs.units:
-            if not unit.alive:
+
+            # ✅ central guard
+            if not self._can_unit_act(unit):
                 continue
+
             if unit in gs.activation_state.activated:
-                continue
-            if getattr(unit, "suppressed", False):
-                continue
-            if getattr(unit, "fallback", False):
                 continue
 
             prev_active = gs.activation_state.active_unit
@@ -4545,6 +4737,37 @@ class RuntimeGameState:
             attacker=attacker.unit_id if attacker else None,
         )
 
+        # =================================================
+        # ✅ HARD BLOCK
+        # =================================================
+        if attacker and not self._can_unit_act(attacker):
+
+            _trace(
+                "ACTION_BLOCKED",
+                unit=attacker.unit_id,
+                suppressed=attacker.is_suppressed(),
+                fallback=attacker.is_in_fallback(),
+                action=action.__class__.__name__,
+            )
+
+            if event_bus:
+                event_bus.emit(
+                    {
+                        "type": "ACTION_BLOCKED",
+                        "payload": {
+                            "unit": attacker.unit_id,
+                            "action": action.__class__.__name__,
+                            "reason": (
+                                "FALLBACK"
+                                if attacker.is_in_fallback()
+                                else "SUPPRESSED"
+                            ),
+                        },
+                    }
+                )
+
+            return None
+
         prev_position = None
         if attacker and attacker.position:
             prev_position = HexCoord(attacker.position.q, attacker.position.r)
@@ -4569,10 +4792,8 @@ class RuntimeGameState:
 
         self.base_state = result.new_state
 
-        # ✅ comprobar fin tras cada acción
         self._check_match_end(context)
 
-        # ✅ si termina la partida → salir limpio
         if self.base_state.done:
             return result
 
@@ -5035,6 +5256,12 @@ def _trace(tag: str, **data):
 class UnitInstance:
     """
     Runtime instance of a unit on the battlefield.
+
+    ✅ Includes:
+    - health / alive state
+    - suppression system
+    - fallback system  ✅ NEW
+    - embark / transport logic
     """
 
     def __init__(
@@ -5044,7 +5271,7 @@ class UnitInstance:
         side: str,
         position: tuple[int, int] | None,
         experience: str = "REGULAR",
-        event_bus=None,   # ✅ optional, injected from GameState/Runtime
+        event_bus=None,
     ):
         self.unit_id = unit_id
         self.unit_type = unit_type
@@ -5052,7 +5279,7 @@ class UnitInstance:
         self.position = position
         self.experience = experience
 
-        # Event bus (may be None)
+        # Event bus (optional)
         self._event_bus = event_bus
 
         # ============================
@@ -5061,6 +5288,12 @@ class UnitInstance:
         self.max_strength = unit_type.max_strength
         self.strength = self.max_strength
         self.alive = True
+
+        # ============================
+        # Morale state ✅ FIXED
+        # ============================
+        self.suppressed: bool = False
+        self.fallback: bool = False
 
         # ============================
         # Transport / embark state
@@ -5094,6 +5327,12 @@ class UnitInstance:
     def is_embarked(self) -> bool:
         return self.embarked
 
+    def is_suppressed(self) -> bool:
+        return self.suppressed
+
+    def is_in_fallback(self) -> bool:
+        return self.fallback
+
     # ----------------------------
     # Movement
     # ----------------------------
@@ -5105,7 +5344,7 @@ class UnitInstance:
         self.position = (q, r)
 
     # ----------------------------
-    # Embark / disembark hooks
+    # Embark / disembark
     # ----------------------------
     def embark_into(self, vehicle: "UnitInstance"):
         if self.embarked:
@@ -5120,12 +5359,16 @@ class UnitInstance:
 
     def disembark_from(self, vehicle: "UnitInstance", q: int, r: int):
         if not self.embarked or self.carrier_id != vehicle.unit_id:
-            raise RuntimeError(f"{self.unit_id} not embarked in {vehicle.unit_id}")
+            raise RuntimeError(
+                f"{self.unit_id} not embarked in {vehicle.unit_id}"
+            )
 
         self.embarked = False
         self.carrier_id = None
         self.position = (q, r)
-        vehicle.passengers.remove(self.unit_id)
+
+        if hasattr(vehicle, "passengers") and self.unit_id in vehicle.passengers:
+            vehicle.passengers.remove(self.unit_id)
 
         _trace("DISEMBARK", unit=self.unit_id, vehicle=vehicle.unit_id)
 
@@ -5133,6 +5376,14 @@ class UnitInstance:
     # Combat hooks
     # ----------------------------
     def apply_damage(self, dmg: int):
+        """
+        Apply direct HP damage.
+
+        ✅ Safe:
+        - ignores negative/zero damage
+        - ignores dead units
+        """
+
         if dmg <= 0 or not self.alive:
             return
 
@@ -5156,7 +5407,7 @@ class UnitInstance:
             killed=killed,
         )
 
-        # ✅ EMIT RAW EVENT TO BUS
+        # Optional event emission
         if self._event_bus:
             self._event_bus.emit(
                 {
@@ -5169,14 +5420,110 @@ class UnitInstance:
                         "hp_after": hp_after,
                         "killed": killed,
                         "position": self.position,
-                        "reason": "direct_damage",
                     },
                 }
             )
 
+    # ----------------------------
+    # Suppression system ✅ FIXED
+    # ----------------------------
     def apply_suppression(self):
-        # Placeholder – suppression state handled elsewhere
-        pass
+        """
+        Apply suppression effect.
+
+        RULE:
+        - If already suppressed → triggers fallback
+        """
+
+        if not self.alive:
+            return
+
+        # 🔴 ya suprimido → fallback
+        if self.suppressed:
+            self.trigger_fallback()
+            return
+
+        self.suppressed = True
+
+        _trace(
+            "SUPPRESSION_APPLIED",
+            unit=self.unit_id,
+        )
+
+        if self._event_bus:
+            self._event_bus.emit(
+                {
+                    "type": "SUPPRESSED",
+                    "payload": {
+                        "unit": self.unit_id,
+                        "position": self.position,
+                    },
+                }
+            )
+
+    def clear_suppression(self):
+        """
+        Clear suppression (typically at turn start).
+        """
+
+        if not self.suppressed:
+            return
+
+        self.suppressed = False
+
+        _trace(
+            "SUPPRESSION_CLEARED",
+            unit=self.unit_id,
+        )
+
+    # ----------------------------
+    # Fallback system ✅ NEW
+    # ----------------------------
+    def trigger_fallback(self):
+        """
+        Trigger fallback (retreat / morale break).
+        """
+
+        if not self.alive:
+            return
+
+        self.suppressed = False
+        self.fallback = True
+
+        _trace(
+            "FALLBACK_TRIGGERED",
+            unit=self.unit_id,
+        )
+
+        if self._event_bus:
+            self._event_bus.emit(
+                {
+                    "type": "FALLBACK",
+                    "payload": {
+                        "unit": self.unit_id,
+                        "position": self.position,
+                    },
+                }
+            )
+
+        # 🔴 regla simplificada del juego
+        if self.unit_type.category.name == "ARTILLERY":
+            self.alive = False
+
+    def clear_fallback(self):
+        """
+        Clear fallback state (future: recovery phase)
+        """
+
+        if not self.fallback:
+            return
+
+        self.fallback = False
+
+        _trace(
+            "FALLBACK_CLEARED",
+            unit=self.unit_id,
+        )
 
 
 ================================================================================

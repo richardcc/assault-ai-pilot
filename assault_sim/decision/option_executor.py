@@ -4,53 +4,49 @@ from assault_sim.rl.tactical_options import TacticalOption
 
 class OptionExecutor:
     """
-    Executes a TacticalOption using existing heuristics.
+    Executes a TacticalOption using heuristics.
 
-    This class ADAPTS HRL intentions to the real heuristic API.
-    It must NOT assume methods that do not exist.
+    ✅ RESPONSABILIDAD:
+    - traducir intención → acción
+    - SIEMPRE pasar option a la heurística
     """
 
     def __init__(self, heuristic_controller):
         self.heuristic = heuristic_controller
 
-    def execute(self, option: TacticalOption, state, unit):
+    def execute(self, state, option: TacticalOption):
         """
         Execute ONE step of the given tactical option.
         """
 
-        # -------------------------------------------------
-        # ADVANCE: create contact / move forward
-        # -------------------------------------------------
-        if option == TacticalOption.ADVANCE:
-            return self.heuristic.advance_towards_enemy(unit, state)
+        unit = state.active_unit
+
+        if unit is None:
+            return None
 
         # -------------------------------------------------
-        # FLANK: currently reuse heuristic logic
-        # (can be specialized later)
+        # ✅ TODAS LAS OPCIONES VAN POR choose_action
         # -------------------------------------------------
-        if option == TacticalOption.FLANK:
-            return self.heuristic.flank_best_position(unit, state)
+        if option in (
+            TacticalOption.ADVANCE,
+            TacticalOption.FLANK,
+            TacticalOption.ATTACK,
+        ):
+            return self.heuristic.choose_action(state, option)
 
         # -------------------------------------------------
-        # ATTACK: defer to existing heuristic attack logic
-        # (choose_action already prioritizes assault/ranged)
-        # -------------------------------------------------
-        if option == TacticalOption.ATTACK:
-            return self.heuristic.choose_action(state)
-
-        # -------------------------------------------------
-        # HOLD: explicit wait
+        # HOLD
         # -------------------------------------------------
         if option == TacticalOption.HOLD:
             return WaitAction(unit.unit_id)
 
         # -------------------------------------------------
-        # RETREAT: move away from closest enemy
+        # RETREAT
         # -------------------------------------------------
         if option == TacticalOption.RETREAT:
-            return self.heuristic.retreat(unit, state)
+            return self.heuristic.choose_action(state, option)
 
         # -------------------------------------------------
-        # SAFETY FALLBACK
+        # SAFETY
         # -------------------------------------------------
         return WaitAction(unit.unit_id)

@@ -1,17 +1,4 @@
 # assault_model/combat/close_combat_resolver.py
-#
-# Close combat resolver.
-#
-# RESPONSIBILITY:
-# - Compute close combat rounds
-# - Roll dice
-# - Apply effects (damage + suppression)
-# - Determine winner
-#
-# IMPORTANT:
-# - PURE combat computation
-# - NO formatting
-# - Emits ACTION_EFFECT
 
 from assault_model.combat.attack_dice_pool import AttackDicePool
 from assault_model.combat.defense_dice_pool import DefenseDicePool
@@ -48,7 +35,6 @@ class CloseCombatRoundResult:
         self.attacker_effects = {}
         self.defender_effects = {}
 
-        # NEW – resolution detail (non-breaking)
         self.attacker_resolution = {}
         self.defender_resolution = {}
 
@@ -124,9 +110,9 @@ def resolve_close_combat(
         rr.defender_defense_dice = dice_results["defender_defense"]
 
         # =================================================
-        # ATTACKER → DEFENDER (10.7.2)
+        # ATTACKER → DEFENDER
         # =================================================
-        atk_vs_def = compare_dice_10_7_2(
+        atk_vs_def = compare_dice(
             attacker_dice=rr.attacker_attack_dice,
             defender_dice=rr.defender_defense_dice,
         )
@@ -138,9 +124,9 @@ def resolve_close_combat(
         attacker_suppress = atk_vs_def["remaining_suppress"]
 
         # =================================================
-        # DEFENDER → ATTACKER (10.7.2)
+        # DEFENDER → ATTACKER
         # =================================================
-        def_vs_atk = compare_dice_10_7_2(
+        def_vs_atk = compare_dice(
             attacker_dice=rr.defender_attack_dice,
             defender_dice=rr.attacker_defense_dice,
         )
@@ -151,38 +137,41 @@ def resolve_close_combat(
         )
         defender_suppress = def_vs_atk["remaining_suppress"]
 
-        # ---------------- EFFECTS (unchanged semantics) ----------------
+        # ---------------- EFFECTS ----------------
         rr.attacker_effects = {
             "damage": attacker_damage,
             "suppress": attacker_suppress,
             "remaining_criticals": atk_vs_def["remaining_criticals"],
         }
+
         rr.defender_effects = {
             "damage": defender_damage,
             "suppress": defender_suppress,
             "remaining_criticals": def_vs_atk["remaining_criticals"],
         }
 
-        # ---------------- RESOLUTION DETAIL (NEW, NON-BREAKING) --------
         rr.attacker_resolution = atk_vs_def
         rr.defender_resolution = def_vs_atk
 
         # =================================================
-        # APPLY DAMAGE (10.7.3)
+        # APPLY DAMAGE
         # =================================================
         if attacker_damage:
             ctx.defender.apply_damage(attacker_damage)
+
         if defender_damage:
             ctx.attacker.apply_damage(defender_damage)
 
         # =================================================
-        # APPLY SUPPRESSION (10.7.3)
+        # APPLY SUPPRESSION (SAFE — NO FALLBACK CHAIN)
         # =================================================
         if attacker_suppress > 0 and ctx.defender.alive:
-            ctx.defender.apply_suppression()
+            if not ctx.defender.is_suppressed():
+                ctx.defender.apply_suppression()
 
         if defender_suppress > 0 and ctx.attacker.alive:
-            ctx.attacker.apply_suppression()
+            if not ctx.attacker.is_suppressed():
+                ctx.attacker.apply_suppression()
 
         rr.attacker_hp_after = ctx.attacker.hp
         rr.defender_hp_after = ctx.defender.hp
@@ -217,15 +206,15 @@ def resolve_close_combat(
         result.outcome = "no_decision" if any_hp_lost else "all_hits_cancelled"
 
     # =================================================
-    # Emit ALL rounds as ACTION_EFFECT
+    # EVENT EMISSION
     # =================================================
     event_bus = context.event_bus if context else None
+
     if event_bus and result.rounds:
         event_bus.emit(
             {
                 "type": "ACTION_EFFECT",
                 "payload": {
-                    # ---------- EXISTING FIELDS (UNCHANGED) ----------
                     "action": "CloseCombat",
                     "attacker": ctx.attacker.unit_id,
                     "defender": ctx.defender.unit_id,
@@ -242,6 +231,7 @@ def resolve_close_combat(
                                 }
                                 for d in r.attacker_attack_dice
                             ],
+
                             "attacker_defense_dice": [
                                 {
                                     "color": d.color.name,
@@ -249,6 +239,7 @@ def resolve_close_combat(
                                 }
                                 for d in r.attacker_defense_dice
                             ],
+
                             "defender_attack_dice": [
                                 {
                                     "color": d.color.name,
@@ -256,6 +247,7 @@ def resolve_close_combat(
                                 }
                                 for d in r.defender_attack_dice
                             ],
+
                             "defender_defense_dice": [
                                 {
                                     "color": d.color.name,
@@ -272,11 +264,16 @@ def resolve_close_combat(
                             "attacker_effects": r.attacker_effects,
                             "defender_effects": r.defender_effects,
 
-                            # ---------- NEW (NON-BREAKING) ----------
                             "resolution": {
                                 "attacker": r.attacker_resolution,
                                 "defender": r.defender_resolution,
                             },
+
+                            # ✅ NEW: FINAL STATE (NO BREAKING)
+                            "attacker_suppressed": ctx.attacker.is_suppressed(),
+                            "defender_suppressed": ctx.defender.is_suppressed(),
+                            "attacker_fallback": ctx.attacker.is_in_fallback(),
+                            "defender_fallback": ctx.defender.is_in_fallback(),
                         }
                         for r in result.rounds
                     ],

@@ -42,28 +42,57 @@ class RuntimeGameState:
         self.turn = TurnState(turn_number=base_state.turn)
 
     # =================================================
+    # ✅ ACTION GUARD
+    # =================================================
+    def _can_unit_act(self, unit) -> bool:
+        if unit is None:
+            return False
+
+        if not unit.alive:
+            return False
+
+        if getattr(unit, "fallback", False):
+            return False
+
+        if getattr(unit, "suppressed", False):
+            return False
+
+        return True
+
+    # =================================================
     # TURN CONTROL
     # =================================================
     def start_turn(self) -> None:
-        # =================================================
-        # ✅ CLEAR SUPPRESSION AT TURN START
-        # =================================================
-        # At the beginning of each turn, all units remove
-        # suppression state.
-        #
-        # Design:
-        # - Simple and global
-        # - Matches boardgame behavior
-        # - Keeps system predictable
-        #
-        # IMPORTANT:
-        # - Does not affect dead units
-        # - Safe if unit has no suppression attribute
+        """
+        Start of turn:
+        - clears suppression
+        - clears fallback
+        - resets activation
+        """
 
         for unit in self.base_state.units:
+
+            # ------------------------------
+            # SUPPRESSION RECOVERY
+            # ------------------------------
             if getattr(unit, "suppressed", False):
                 unit.clear_suppression()
 
+                _trace(
+                    "SUPPRESSION_RECOVERED",
+                    unit=unit.unit_id,
+                )
+
+            # ------------------------------
+            # FALLBACK RECOVERY ✅ NEW
+            # ------------------------------
+            if getattr(unit, "fallback", False):
+                unit.clear_fallback()
+
+                _trace(
+                    "FALLBACK_RECOVERED",
+                    unit=unit.unit_id,
+                )
 
         self.base_state.activation_state.reset(self.base_state.units)
         self.base_state.activation_state.next_unit()
@@ -71,36 +100,22 @@ class RuntimeGameState:
         _trace(
             "TURN_START_UNITS",
             turn=getattr(self.base_state, "turn", None),
-
             units=[
                 {
                     "id": u.unit_id,
                     "side": u.side,
                     "alive": u.alive,
-
-                    # ✅ Combat state
                     "hp": getattr(u, "hp", None),
-
-                    # ✅ Suppression (core feature)
                     "suppressed": getattr(u, "suppressed", False),
-
-                    # ✅ Future-proof (optional states)
                     "fallback": getattr(u, "fallback", False),
                 }
                 for u in self.base_state.units
             ],
         )
 
- 
- 
     def end_turn(self) -> None:
-        """
-        Finalize the current turn and advance the turn counter.
-        """
         self.base_state.end_turn()
         self.turn = TurnState(turn_number=self.base_state.turn)
-
-        # ✅ ahora el estado vive en GameState
         self._check_match_end()
 
     # =================================================
@@ -110,9 +125,7 @@ class RuntimeGameState:
         return self.base_state.done
 
     def _check_match_end(self, context: ExecutionContext | None = None):
-        """
-        Check whether the match has ended and update GameState.
-        """
+
         if self.base_state.done:
             return
 
@@ -121,9 +134,6 @@ class RuntimeGameState:
 
         event_bus = context.event_bus if context else None
 
-        # ---------------------------------------------
-        # DRAW: no units alive
-        # ---------------------------------------------
         if len(alive_units) == 0:
             self.base_state.done = True
             self.base_state.winner = None
@@ -143,9 +153,6 @@ class RuntimeGameState:
                 )
             return
 
-        # ---------------------------------------------
-        # VICTORY: one side alive
-        # ---------------------------------------------
         if len(alive_sides) == 1:
             winner = next(iter(alive_sides))
 
@@ -167,9 +174,6 @@ class RuntimeGameState:
                 )
             return
 
-        # ---------------------------------------------
-        # DRAW: max turns
-        # ---------------------------------------------
         if (
             self.scenario.max_turns is not None
             and self.base_state.turn >= self.scenario.max_turns
@@ -200,13 +204,12 @@ class RuntimeGameState:
         activable = []
 
         for unit in gs.units:
-            if not unit.alive:
+
+            # ✅ central guard
+            if not self._can_unit_act(unit):
                 continue
+
             if unit in gs.activation_state.activated:
-                continue
-            if getattr(unit, "suppressed", False):
-                continue
-            if getattr(unit, "fallback", False):
                 continue
 
             prev_active = gs.activation_state.active_unit
@@ -220,9 +223,10 @@ class RuntimeGameState:
                 activable.append(unit)
 
         return activable
-
+    # VERY IMPORTANT AVOID LAST UNIT NOT ACTIVATED
     def turn_has_ended(self) -> bool:
-        return not self.base_state.activation_state.remaining
+        state = self.base_state.activation_state
+        return not state.remaining and state.active_unit is None
 
     # =================================================
     # INTERNAL ACTIVATION
@@ -261,6 +265,37 @@ class RuntimeGameState:
             attacker=attacker.unit_id if attacker else None,
         )
 
+        # =================================================
+        # ✅ HARD BLOCK
+        # =================================================
+        if attacker and not self._can_unit_act(attacker):
+
+            _trace(
+                "ACTION_BLOCKED",
+                unit=attacker.unit_id,
+                suppressed=attacker.is_suppressed(),
+                fallback=attacker.is_in_fallback(),
+                action=action.__class__.__name__,
+            )
+
+            if event_bus:
+                event_bus.emit(
+                    {
+                        "type": "ACTION_BLOCKED",
+                        "payload": {
+                            "unit": attacker.unit_id,
+                            "action": action.__class__.__name__,
+                            "reason": (
+                                "FALLBACK"
+                                if attacker.is_in_fallback()
+                                else "SUPPRESSED"
+                            ),
+                        },
+                    }
+                )
+
+            return None
+
         prev_position = None
         if attacker and attacker.position:
             prev_position = HexCoord(attacker.position.q, attacker.position.r)
@@ -271,7 +306,11 @@ class RuntimeGameState:
         if isinstance(action, WaitAction):
             self._consume_activation(attacker)
             self._advance_activation()
-            return None
+            return {
+                "type": "WAIT",
+                "unit": attacker.unit_id if attacker else None
+            }
+
 
         # -------------------------------------------------
         # APPLY ACTION
@@ -285,19 +324,17 @@ class RuntimeGameState:
 
         self.base_state = result.new_state
 
-        # ✅ comprobar fin tras cada acción
         self._check_match_end(context)
 
-        # ✅ si termina la partida → salir limpio
         if self.base_state.done:
             return result
+
 
         # -------------------------------------------------
         # CONTINUE TURN
         # -------------------------------------------------
         self._consume_activation(attacker)
         self._advance_activation()
-
         if event_bus and prev_position and isinstance(action, MoveAction):
             unit_after = next(
                 (u for u in self.base_state.units if u.unit_id == action.unit_id),

@@ -1,20 +1,16 @@
 import torch
 import torch.optim as optim
-import torch.distributions as dist
+import torch.distributions as torch_dist
+
 import numpy as np
 from pathlib import Path
 
-from assault_sim.config.config_loader import load_sim_config
-from assault_sim.sim_env import SimEnv
-from assault_sim.training_env import TrainingEnv
-
 from assault_sim.rl.policy_net import PolicyNet
-from assault_sim.rl.option_policy import OptionPolicy
 from assault_sim.rl.tactical_options import TacticalOption
 
-from assault_sim.decision.hrl_controller import HRLController
-from assault_sim.decision.option_executor import OptionExecutor
-from assault_sim.heuristics.tactical_path_heuristic import TacticalPathHeuristic
+from assault_sim.engine.env_factory import create_env
+from assault_sim.engine.hrl_factory import create_hrl_controller
+from assault_sim.engine.rollout import collect_rollout
 
 
 # -------------------------------------------------
@@ -24,13 +20,13 @@ RL_SIDE = "US"
 
 TOTAL_EPISODES = 1000
 ROLLOUT_STEPS = 64
-PPO_EPOCHS = 4
+PPO_EPOCHS = 6
 
-CLIP_EPS = 0.2
+CLIP_EPS = 0.15
 GAMMA = 0.99
 LAMBDA = 0.95
 VALUE_COEF = 0.5
-ENTROPY_COEF = 0.03
+ENTROPY_COEF = 0.05
 
 
 # -------------------------------------------------
@@ -40,7 +36,7 @@ def compute_gae(rewards, values, dones, gamma, lam):
     advantages = []
     gae = 0.0
 
-    values = values + [0.0]  # bootstrap
+    values = values + [0.0]
 
     for t in reversed(range(len(rewards))):
         delta = rewards[t] + gamma * values[t + 1] * (1 - dones[t]) - values[t]
@@ -50,27 +46,25 @@ def compute_gae(rewards, values, dones, gamma, lam):
     return advantages
 
 
+# -------------------------------------------------
+# MAIN
+# -------------------------------------------------
 def main():
-    print(">>> PPO HRL training started")
+
+    print(">>> PPO HRL (ENGINE MODE)")
     print(f">>> RL SIDE: {RL_SIDE}")
 
     # -------------------------------------------------
     # ENV
     # -------------------------------------------------
-    sim_config = load_sim_config(Path("assault_sim/config/sim_config.yaml"))
-    sim_config.scenario_name = "phase01_seq001_initial_contact"
-
-    sim_env = SimEnv(sim_config, controller=None)
-    env = TrainingEnv(
-        sim_env,
-        env_config_path=Path("assault_sim/config/env_config.json"),
+    env = create_env(
+        config_path=Path("assault_sim/config/sim_config.yaml"),
+        scenario="phase01_seq001_initial_contact",
         rl_side=RL_SIDE,
     )
 
     obs = env.reset()
     input_dim = obs.shape[0]
-
-    print(f">>> OBS DIM: {input_dim}")
 
     # -------------------------------------------------
     # POLICY
@@ -80,109 +74,45 @@ def main():
     policy = PolicyNet(input_dim=input_dim, max_actions=num_options)
     optimizer = optim.Adam(policy.parameters(), lr=3e-4)
 
-    option_policy = OptionPolicy(policy)
-    heuristic_controller = TacticalPathHeuristic()
-    option_executor = OptionExecutor(heuristic_controller)
-
-    hrl_controller = HRLController(
-        option_policy=option_policy,
-        option_executor=option_executor,
-        rl_side=RL_SIDE,
-    )
+    controller = create_hrl_controller(policy, RL_SIDE)
 
     rollout_idx = 0
 
     # -------------------------------------------------
-    # PPO LOOP
+    # TRAIN LOOP
     # -------------------------------------------------
     while rollout_idx < TOTAL_EPISODES:
 
         print(f"\n[ROLLOUT {rollout_idx}]")
 
-        obs_buf = []
-        act_buf = []
-        old_logp_buf = []
-        value_buf = []
-        reward_buf = []
-        done_buf = []
+        rollout = collect_rollout(
+            env=env,
+            controller=controller,
+            steps=ROLLOUT_STEPS,
+        )
 
-        steps = 0
-
-        while steps < ROLLOUT_STEPS:
-
-            state = env.state
-            active = state.active_unit if state else None
-
-            # avanzar si no hay unidad
-            if active is None:
-                obs, _, done, _ = env.step(None)
-                steps += 1
-                continue
-
-            # -------------------------
-            # DECISION
-            # -------------------------
-            if active.side == RL_SIDE:
-
-                action = hrl_controller.choose_action(state, obs)
-
-                # ✅ GUARDAMOS TEMPORALMENTE (NO EN BUFFER)
-                last_obs = obs
-                last_action = option_policy.last_option.value
-                last_logp = option_policy.last_log_prob.detach()
-                last_value = option_policy.last_value.item()
-
-                reward_for_rl = True
-
-            else:
-                action = heuristic_controller.choose_action(state)
-                reward_for_rl = False
-
-            if action is None:
-                obs, _, done, _ = env.step(None)
-                steps += 1
-                continue
-
-            # -------------------------
-            # STEP
-            # -------------------------
-            next_obs, reward, done, _ = env.step(action)
-
-            # ✅ SOLO AQUÍ GUARDAMOS TODO (FIX CRÍTICO)
-            if reward_for_rl:
-
-                obs_buf.append(last_obs)
-                act_buf.append(last_action)
-                old_logp_buf.append(last_logp)
-                value_buf.append(last_value)
-
-                reward_buf.append(reward)
-                done_buf.append(done)
-
-            obs = next_obs
-            steps += 1
-
-            if done:
-                obs = env.reset()
-
-        # -------------------------
-        # VALIDACIÓN
-        # -------------------------
-        if len(reward_buf) == 0:
+        if len(rollout["rewards"]) == 0:
+            print("⚠️ empty rollout")
             rollout_idx += 1
             continue
 
-        assert len(obs_buf) == len(reward_buf), "Buffer mismatch"
+        # -------------------------------------------------
+        # TENSORS
+        # -------------------------------------------------
+        obs_t = torch.tensor(np.array(rollout["obs"]), dtype=torch.float32)
+        act_t = torch.tensor(rollout["actions"], dtype=torch.long)
+        old_logp_t = torch.stack(rollout["logp"])
+        value_buf = rollout["values"]
 
-        # -------------------------
+        # -------------------------------------------------
         # GAE
-        # -------------------------
+        # -------------------------------------------------
         advantages = compute_gae(
-            reward_buf,
+            rollout["rewards"],
             value_buf,
-            done_buf,
+            rollout["dones"],
             GAMMA,
-            LAMBDA
+            LAMBDA,
         )
 
         returns = [a + v for a, v in zip(advantages, value_buf)]
@@ -191,24 +121,26 @@ def main():
         returns = torch.tensor(returns, dtype=torch.float32)
 
         if advantages.numel() > 1:
-            advantages = (advantages - advantages.mean()) / (advantages.std() + 1e-8)
+            advantages = (advantages - advantages.mean()) / (
+                advantages.std() + 1e-8
+            )
 
-        obs_t = torch.tensor(np.array(obs_buf), dtype=torch.float32)
-        act_t = torch.tensor(act_buf, dtype=torch.long)
-        old_logp_t = torch.stack(old_logp_buf)
-
-        # -------------------------
+        # -------------------------------------------------
         # PPO UPDATE
-        # -------------------------
+        # -------------------------------------------------
         for _ in range(PPO_EPOCHS):
 
             logits, values = policy(obs_t)
-            dist_opt = dist.Categorical(logits=logits)
+            dist = torch_dist.Categorical(logits=logits)
 
-            logp = dist_opt.log_prob(act_t)
+            logp = dist.log_prob(act_t)
             ratio = torch.exp(logp - old_logp_t)
 
-            clipped = torch.clamp(ratio, 1 - CLIP_EPS, 1 + CLIP_EPS)
+            clipped = torch.clamp(
+                ratio,
+                1 - CLIP_EPS,
+                1 + CLIP_EPS,
+            )
 
             policy_loss = -torch.min(
                 ratio * advantages,
@@ -216,25 +148,29 @@ def main():
             ).mean()
 
             value_loss = (returns - values.squeeze()).pow(2).mean()
-            entropy = dist_opt.entropy().mean()
+            entropy = dist.entropy().mean()
 
-            loss = policy_loss + VALUE_COEF * value_loss - ENTROPY_COEF * entropy
+            loss = (
+                policy_loss
+                + VALUE_COEF * value_loss
+                - ENTROPY_COEF * entropy
+            )
 
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
 
-        avg_reward = sum(reward_buf) / len(reward_buf) if reward_buf else 0.0
-        print(f"[ROLLOUT {rollout_idx}] avg_reward={avg_reward:.2f} steps={len(reward_buf)}")
-      
-        
+        avg_reward = sum(rollout["rewards"]) / len(rollout["rewards"])
+
+        print(f"[ROLLOUT {rollout_idx}] reward={avg_reward:.3f}")
+
         rollout_idx += 1
 
     # -------------------------------------------------
     # SAVE
     # -------------------------------------------------
-    ckpt_path = Path("assault_sim/checkpoints") / f"ppo_{RL_SIDE}.pt"
-    ckpt_path.parent.mkdir(parents=True, exist_ok=True)
+    ckpt = Path("assault_sim/checkpoints/ppo_us.pt")
+    ckpt.parent.mkdir(parents=True, exist_ok=True)
 
     torch.save(
         {
@@ -242,10 +178,10 @@ def main():
             "input_dim": input_dim,
             "max_actions": num_options,
         },
-        ckpt_path,
+        ckpt,
     )
 
-    print(f">>> TRAINING FINISHED: {ckpt_path}")
+    print(f">>> SAVED: {ckpt}")
 
 
 if __name__ == "__main__":

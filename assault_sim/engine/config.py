@@ -1,0 +1,9 @@
+class PPOConfig:
+    TOTAL_EPISODES = 1000
+    ROLLOUT_STEPS = 256
+    PPO_EPOCHS = 6
+    CLIP_EPS = 0.2
+    GAMMA = 0.99
+    LAMBDA = 0.95
+    VALUE_COEF = 0.5
+    ENTROPY_COEF = 0.05

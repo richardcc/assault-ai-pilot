@@ -1,17 +1,30 @@
-# assault_sim/train/train.py
-
 from pathlib import Path
 import argparse
+import torch
 
 from assault_sim.config.config_loader import load_sim_config
 from assault_sim.sim_env import SimEnv
 from assault_sim.training_env import TrainingEnv
+
 from assault_sim.debug.console_observer import ConsoleObserver
 from assault_sim.debug.debug_config import DebugConfig
 
+# ✅ HRL stack
+from assault_sim.rl.option_policy import OptionPolicy
+from assault_sim.decision.hrl_controller import HRLController
+from assault_sim.decision.option_executor import OptionExecutor
+from assault_sim.rl.tactical_options import TacticalOption
+from assault_sim.rl.policy_net import PolicyNet  # ✅ NUEVO
+
+# ✅ heuristic
 from assault_sim.heuristics.tactical_path_heuristic import TacticalPathHeuristic
 
+# ✅ IMPORTANTE
+from assault_model.actions.status import WaitAction
+
+
 RL_SIDE = "US"
+CHECKPOINT = Path("assault_sim/checkpoints/ppo_US.pt")  # ✅ NUEVO
 
 
 # -----------------------------------------------------
@@ -26,11 +39,56 @@ def parse_args():
         default=Path("assault_sim/config/sim_config.yaml"),
     )
     parser.add_argument("--scenario", type=str)
-    parser.add_argument("--seed", type=int)
     parser.add_argument("--debug", action="store_true")
-    parser.add_argument("--no-observability", action="store_true")
 
     return parser.parse_args()
+
+
+# -----------------------------------------------------
+# ✅ LOAD MODEL (IGUAL QUE EVALUATION)
+# -----------------------------------------------------
+def load_model():
+    checkpoint = torch.load(CHECKPOINT)
+
+    policy = PolicyNet(
+        input_dim=checkpoint["input_dim"],
+        max_actions=checkpoint["max_actions"],
+    )
+
+    policy.load_state_dict(checkpoint["model_state_dict"])
+    policy.eval()
+
+    return policy
+
+
+# -----------------------------------------------------
+# BUILD CONTROLLERS
+# -----------------------------------------------------
+def build_controllers(policy):
+
+    heuristic = TacticalPathHeuristic()
+
+    # ✅ RL controller (SIEMPRE con policy ahora)
+    option_policy = OptionPolicy(policy)
+    executor_rl = OptionExecutor(heuristic)
+
+    rl_controller = HRLController(
+        option_policy=option_policy,
+        option_executor=executor_rl,
+        rl_side=RL_SIDE,
+    )
+
+    # ✅ enemy (igual que evaluation)
+    executor_enemy = OptionExecutor(heuristic)
+
+    class EnemyController:
+        def choose_action(self, state, obs):
+            return executor_enemy.execute(
+                state,
+                TacticalOption.ATTACK
+            )
+
+    return rl_controller, EnemyController()
 
 
 # -----------------------------------------------------
@@ -44,20 +102,15 @@ def main():
     if args.scenario:
         sim_config.scenario_name = args.scenario
 
-    if args.seed is not None:
-        sim_config.seed = args.seed
-
-    debug_cfg = DebugConfig(enabled=args.debug and not args.no_observability)
-
-    controller = TacticalPathHeuristic()
+    debug_cfg = DebugConfig(enabled=args.debug)
 
     sim_env = SimEnv(
         sim_config,
         debug_config=debug_cfg,
-        controller=None,   # control manual
+        controller=None,
     )
 
-    training_env = TrainingEnv(
+    env = TrainingEnv(
         sim_env,
         env_config_path=Path("assault_sim/config/env_config.json"),
         rl_side=RL_SIDE,
@@ -68,33 +121,47 @@ def main():
     if sim_env.event_bus:
         sim_env.event_bus.subscribe(observer)
 
-    obs = training_env.reset()
+    # ✅ ✅ CLAVE: ahora usamos el modelo PPO real
+    policy = load_model()
+    rl_controller, enemy_controller = build_controllers(policy)
+
+    obs = env.reset()
     done = False
-
-    print("\n=== SIMULATION START ===")
-    print(f"Scenario: {sim_config.scenario_name}")
-    print("========================\n")
-
     step_count = 0
 
     while not done:
-        state = sim_env.game_state
-        active = state.active_unit
 
-        if active:
-            action = controller.choose_action(state)
+        state = env.state
+        active = state.active_unit if state else None
+
+        # -----------------------------------------
+        # SELECT ACTION
+        # -----------------------------------------
+        if active is None:
+            action = WaitAction("SYSTEM")
+
+        elif active.side == RL_SIDE:
+
+            action = rl_controller.choose_action(state, obs)
+
+            if action is None:
+                action = WaitAction(active.unit_id)
+
         else:
-            action = None
+            action = enemy_controller.choose_action(state, obs)
 
-        obs, reward, done, _ = training_env.step(action)
+        # -----------------------------------------
+        # STEP
+        # -----------------------------------------
+        obs, reward, done, info = env.step(action)
 
         step_count += 1
 
-        if step_count > 500:
+        if step_count >= 500:
             print("⚠️ Forced stop")
             break
 
-    state = sim_env.game_state
+    state = env.state
 
     print("\n=== SIMULATION FINISHED ===")
     print(f"Winner: {state.winner}")

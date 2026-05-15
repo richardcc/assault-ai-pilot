@@ -19,12 +19,12 @@ html, body {
 /* ================================================= */
 #assault-app {
   display: grid;
-  grid-template-rows: auto 1fr auto;
+  grid-template-rows: auto minmax(0, 1fr) auto;
   height: 100vh;
 }
 
 /* ================================================= */
-/* HEADER LAYOUT                                     */
+/* HEADER                                            */
 /* ================================================= */
 #app-header {
   display: grid;
@@ -40,40 +40,35 @@ html, body {
 }
 
 /* ================================================= */
-/* MAIN LAYOUT                                       */
+/* MAIN                                              */
 /* ================================================= */
 #app-main {
   display: grid;
-
-  /* ✅ CORREGIDO: ancho correcto */
   grid-template-columns: 360px 1fr 300px;
-
   gap: 8px;
   padding: 8px;
+
   overflow: hidden;
-}
-
-/* ✅ LEFT RAG COLUMN (fix clave) */
-#slot-rag-left {
-  border: 1px dashed #666;
-
-  display: flex;              /* 🔥 necesario */
-  flex-direction: column;
+  min-height: 0;
   height: 100%;
-
-  overflow: hidden;           /* 🔥 no scroll aquí */
 }
 
-#slot-log-right {
+/* ================================================= */
+/* LEFT COLUMN                                       */
+/* ================================================= */
+#slot-rag-left {
   border: 1px dashed #666;
 
   display: flex;
   flex-direction: column;
-
   height: 100%;
-  overflow: hidden; /* ✅ clave */
+
+  overflow: hidden;
 }
 
+/* ================================================= */
+/* MAP CENTER                                        */
+/* ================================================= */
 #slot-map-center {
   border: 2px solid #444;
   position: relative;
@@ -81,7 +76,45 @@ html, body {
 }
 
 /* ================================================= */
-/* FOOTER LAYOUT                                     */
+/* RIGHT LOG PANEL                                   */
+/* ================================================= */
+#slot-log-right {
+  border: 1px dashed #666;
+
+  display: flex;
+  flex-direction: column;
+
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+}
+
+/* 👉 IMPORTANTE: todos los hijos NO crecen */
+#slot-log-right > * {
+  flex: 0 0 auto;
+}
+
+/* 👉 SOLO el log ocupa todo el espacio */
+#event-log {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+/* ================================================= */
+/* LOG ENTRIES                                       */
+/* ================================================= */
+.event-log-entry {
+  border-bottom: 1px solid #333;
+  margin-bottom: 6px;
+  padding: 4px;
+
+  white-space: pre-line;
+  font-size: 12px;
+}
+
+/* ================================================= */
+/* FOOTER                                            */
 /* ================================================= */
 #app-footer {
   display: grid;
@@ -110,19 +143,28 @@ html, body {
   pointer-events: none;
 }
 
-#event-log {
+/* ================================================= */
+/* SCROLL (VISIBLE PERO SIMPLE)                      */
+/* ================================================= */
+#event-log::-webkit-scrollbar {
+  width: 8px;
+}
+
+#event-log::-webkit-scrollbar-thumb {
+  background: #555;
+  border-radius: 4px;
+}
+
+#slot-footer-right {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+
+  overflow: hidden;
+}
+
+/* 👉 el combat panel ocupa el espacio */
+#slot-footer-right > .combat-panel {
   flex: 1;
-  overflow-y: auto;
-
-  padding: 6px;
+  min-height: 0;
 }
-
-.event-log-entry {
-  border-bottom: 1px solid #333;
-  margin-bottom: 6px;
-  padding: 4px;
-
-  white-space: pre-line; /* ✅ multiline */
-  font-size: 12px;
-}
-``

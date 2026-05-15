@@ -3,9 +3,12 @@
    Compact HUD-style layout
    ================================================= */
 
+
 .combat-panel {
   width: 100%;
-  max-height: 200px;
+
+  /* ❌ QUITAMOS max-height */
+  /* max-height: 200px; */
 
   background: #111;
   border: 1px solid #555;
@@ -16,7 +19,9 @@
   font-size: 12px;
 
   padding: 6px;
-  overflow-y: auto;
+
+  /* ❌ NO scroll aquí */
+  overflow: hidden;
 }
 
 /* =================================================

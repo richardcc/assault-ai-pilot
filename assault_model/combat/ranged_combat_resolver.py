@@ -16,6 +16,11 @@ from assault_model.combat.line_of_sight import (
     LineOfSight,
 )
 
+from assault_model.combat.morale import (
+    apply_suppression_hits,
+    resolve_fallback,
+)
+
 import os
 
 DEBUG_TRACE = os.getenv("ASSAULT_DEBUG_TRACE", "0") == "1"
@@ -60,19 +65,18 @@ def resolve_ranged_combat(
 ) -> CombatResolutionResult:
 
     # =================================================
-    # CONTEXT (NO CAMBIA NADA EXISTENTE)
+    # CONTEXT
     # =================================================
     game_map = context.game_map if context and context.game_map else None
 
     # =================================================
-    # ✅ NUEVO: LINE OF SIGHT (NO INVASIVO)
+    # LINE OF SIGHT
     # =================================================
     los = LineOfSight.CLEAR
 
     if game_map:
         los = check_line_of_sight(attacker, target, game_map)
 
-    # 🔹 Observabilidad extra SIN romper nada
     _trace(
         "LOS_CHECK",
         attacker=attacker.unit_id,
@@ -80,53 +84,34 @@ def resolve_ranged_combat(
         los=los.name,
     )
 
-    # ✅ BLOQUEO SOLO AÑADE EARLY EXIT (no rompe nada existente)
     if los == LineOfSight.BLOCKED:
         _trace(
             "RANGED_BLOCKED",
             attacker=attacker.unit_id,
             defender=target.unit_id,
         )
-
-        # ✅ devolvemos estructura válida (no rompemos callers)
         return CombatResolutionResult([], [], [])
 
     # ---------------- ATTACK DICE ----------------
-    attack_colors = attacker.unit_type.get_attack_dice(
-        distance=distance,
-        target_category=target.unit_type.category,
+    attack_colors = list(
+        attacker.unit_type.get_attack_dice(
+            distance=distance,
+            target_category=target.unit_type.category,
+        )
     )
 
-    attack_colors = list(attack_colors)  # ✅ seguridad
-
-    # =================================================
-    # ✅ SUPPRESSION EFFECT ON ATTACKER
-    # =================================================
-    # If attacker is suppressed, reduce attack effectiveness by removing
-    # one attack die (if available).
-    #
-    # Design goals:
-    # - Minimal impact (no structural changes)
-    # - Safe (no crash if dice list is empty)
-    # - Compatible with existing resolution flow
-    #
-    # Tactical meaning:
-    # - Suppressed units have reduced combat efficiency
-
+    # ---------------- SUPPRESSION (ATTACKER PENALTY) ----------------
     if getattr(attacker, "suppressed", False):
-        if len(attack_colors) > 0:
+        if attack_colors:
             attack_colors = attack_colors[:-1]
-
             _trace(
                 "SUPPRESSION_ATTACK_PENALTY",
                 attacker=attacker.unit_id,
-                removed_die=True,
                 remaining_dice=len(attack_colors),
             )
 
-
-    # ✅ PARTIAL LOS = solo modificador leve (NO rompe sistema)
-    if los == LineOfSight.PARTIAL and len(attack_colors) > 0:
+    # ---------------- PARTIAL LOS PENALTY ----------------
+    if los == LineOfSight.PARTIAL and attack_colors:
         attack_colors = attack_colors[:-1]
 
     attack_pool = AttackDicePool(attack_colors)
@@ -144,14 +129,12 @@ def resolve_ranged_combat(
         target.unit_type.get_defense_dice(sector=attack_sector)
     )
 
-    # ✅ TERRAIN (idéntico a tu versión original)
     if game_map:
         hex_ = game_map.get_hex(target.position)
         if hex_ is not None:
             terrain_mod = TerrainModifier.from_hex(hex_)
             defense_colors = terrain_mod.modify_defense(defense_colors)
 
-            # ✅ observabilidad extra opcional
             _trace(
                 "TERRAIN_APPLIED",
                 defender=target.unit_id,
@@ -159,7 +142,6 @@ def resolve_ranged_combat(
                 defense_dice=len(defense_colors),
             )
 
-    # ✅ BUILD POOL (igual que antes)
     defense_pool = DefenseDicePool(defense_colors)
     defense_results: list[DiceResult] = defense_pool.roll()
 
@@ -192,28 +174,26 @@ def resolve_ranged_combat(
 
     defender_killed = hp_before > 0 and hp_after == 0
 
-    # ---------------- SUPPRESSION ----------------
-    suppressed = False
+    # ---------------- SUPPRESSION (CORRECTO) ----------------
     if remaining_suppress > 0 and target.alive:
-        target.apply_suppression()
-        suppressed = True
 
-    # ✅ TRACE ORIGINAL + LOS AÑADIDO
-    _trace(
-        "RANGED_RESOLUTION",
-        attacker=attacker.unit_id,
-        defender=target.unit_id,
-        los=los.name,
-        damage=damage,
-        remaining_damage=remaining_damage,
-        remaining_criticals=remaining_criticals,
-        remaining_suppress=remaining_suppress,
-        hp_before=hp_before,
-        hp_after=hp_after,
-        defender_killed=defender_killed,
-        suppressed=suppressed,
-    )
+        suppressed_before = target.is_suppressed()
+        fallback_before = target.is_in_fallback()
 
+        apply_suppression_hits(target, remaining_suppress)
+        resolve_fallback(target)
+
+        _trace(
+            "SUPPRESSION_RESOLVED",
+            unit=target.unit_id,
+            hits=remaining_suppress,
+            suppressed_before=suppressed_before,
+            fallback_before=fallback_before,
+            suppressed_after=target.is_suppressed(),
+            fallback_after=target.is_in_fallback(),
+        )
+
+    # ---------------- RESULT ----------------
     result = CombatResolutionResult(
         attack_roll=attack_results,
         defense_roll=defense_results,
@@ -231,7 +211,7 @@ def resolve_ranged_combat(
                     "defender": target.unit_id,
                     "distance": distance,
                     "attack_sector": attack_sector.name,
-                    "los": los.name,  # ✅ añadido SIN romper nada
+                    "los": los.name,
 
                     "attacker_attack_dice": [
                         {
@@ -248,43 +228,39 @@ def resolve_ranged_combat(
                         for d in defense_results
                     ],
 
-
-
-                    # =================================================
-                    # ✅ ENRICHED EFFECTS FOR REPLAY / UI
-                    # =================================================
-                    # We expose both raw dice outcome (attempts) and
-                    # actual gameplay effect (applied).
-                    #
-                    # This is essential for:
-                    # - replay fidelity
-                    # - UI rendering
-                    # - RL analysis
-                    #
-                    # DO NOT REMOVE existing fields (backward compatibility)
-
+                    # ============================
+                    # EFFECTS (CORREGIDO)
+                    # ============================
                     "attacker_effects": {
                         "damage": damage,
                         "criticals": criticals,
 
-                        # ✅ legacy (keep for compatibility)
+                        # legacy
                         "suppress": remaining_suppress,
 
-                        # ✅ NEW (explicit semantics)
+                        # nuevos
                         "suppress_attempts": remaining_suppress,
-                        "suppression_applied": suppressed,
+                        "suppression_applied": remaining_suppress > 0,
+                        "suppression_state_after": target.is_suppressed(),
+                        "fallback_triggered": target.is_in_fallback(),
                     },
 
-                    # ✅ NEW structured block (recommended for UI)
                     "suppression": {
                         "attempts": remaining_suppress,
-                        "applied": suppressed,
+                        "applied": remaining_suppress > 0,
+                        "state": target.is_suppressed(),
+                        "fallback": target.is_in_fallback(),
                     },
 
                     "defender_hp_before": hp_before,
                     "defender_hp_after": hp_after,
                     "defender_killed": defender_killed,
-                    "defender_suppressed": suppressed,
+
+                    "defender_suppressed": target.is_suppressed(),
+                    "defender_fallback": target.is_in_fallback(),
+
+                    # ✅ CLAVE PARA REPLAY
+                    "defender_position_after": target.position,
 
                     "resolution": comparison,
                     "outcome": "resolved",

@@ -5,17 +5,6 @@ from assault_model.units.unit_instance import UnitInstance
 class ActivationState:
     """
     Handles unit activation within a turn.
-
-    Responsibilities:
-    - Maintain the ordered list of units remaining to activate.
-    - Expose the currently active unit.
-    - Select the next unit to activate.
-    - Track which units have completed their activation.
-
-    IMPORTANT:
-    - Selecting a unit (next_unit) is NOT the same as consuming its activation.
-    - Activation consumption must be done explicitly by the engine
-      once the unit action has completed.
     """
 
     def __init__(self, units: List[UnitInstance]):
@@ -23,39 +12,68 @@ class ActivationState:
         self.activated: List[UnitInstance] = []
         self.active_unit: Optional[UnitInstance] = None
 
+    # -------------------------------------------------
+    # NEXT UNIT
+    # -------------------------------------------------
     def next_unit(self) -> Optional[UnitInstance]:
-        """
-        Selects the next unit to activate.
 
-        Returns:
-        - The next active unit, or None if no units remain.
+        while self.remaining:
 
-        NOTE:
-        - This method ONLY selects the unit.
-        - It does NOT consume the activation.
-        """
-        if not self.remaining:
-            self.active_unit = None
-            return None
+            unit = self.remaining.pop(0)
 
-        unit = self.remaining.pop(0)
-        self.active_unit = unit
-        return unit
+            if unit in self.activated:
+                continue
 
+            self.active_unit = unit
+            return unit
+
+        self.active_unit = None
+        return None
+
+
+    # -------------------------------------------------
+    # CONSUME ACTIVATION
+    # -------------------------------------------------
     def consume(self, unit: UnitInstance) -> None:
-        """
-        Marks a unit as having completed its activation.
 
-        This should be called by the game engine AFTER
-        the unit has executed its action.
-        """
         if unit not in self.activated:
             self.activated.append(unit)
 
+        # ✅ limpiar active_unit
+        if self.active_unit == unit:
+            self.active_unit = None
+
+    # -------------------------------------------------
+    # RESET TURN
+    # -------------------------------------------------
     def reset(self, units: List[UnitInstance]) -> None:
-        """
-        Resets activation state for a new turn.
-        """
-        self.remaining = list(units)
+
+        alive = [u for u in units if u.alive]
+
+        # group by side
+        by_side = {}
+        for u in alive:
+            by_side.setdefault(u.side, []).append(u)
+
+        # ✅ ensure deterministic order
+        sides = sorted(by_side.keys())
+
+        self.remaining = []
+        index = 0
+
+        while True:
+            added = False
+
+            for side in sides:
+                side_units = by_side[side]
+                if index < len(side_units):
+                    unit = side_units[index]
+                    self.remaining.append(unit)
+                    added = True
+
+            if not added:
+                break
+
+            index += 1
         self.activated = []
         self.active_unit = None

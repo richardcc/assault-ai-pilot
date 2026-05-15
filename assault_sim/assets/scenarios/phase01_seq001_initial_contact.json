@@ -28,21 +28,21 @@
       "unit_id": "GE_1",
       "side": "GE",
       "unit_key": "GE_RIFLES_43",
-      "position": [3, 4],
+      "position": [3, 6],
       "experience": "REGULAR"
     },
     {
       "unit_id": "GE_2",
       "side": "GE",
       "unit_key": "GE_RIFLES_43",
-      "position": [4, 4],
+      "position": [4, 7],
       "experience": "REGULAR"
     },
     {
       "unit_id": "GE_3",
       "side": "GE",
       "unit_key": "GE_RIFLES_43",
-      "position": [5, 1],
+      "position": [5, 7],
       "experience": "REGULAR"
     },
 
