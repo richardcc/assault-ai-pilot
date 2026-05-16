@@ -1,14 +1,6 @@
 {
-  "id": "phase01_seq001_initial_contact",
-  "alias": "mettete_i_piedi_terra_1_min",
-
-  "curriculum": {
-    "phase": 1,
-    "sequence": 1,
-    "goal": "initial_contact"
-  },
-
-  "max_turns": 13,
+  "id": "mettete_i_piedi_terra_1_min",
+  "max_turns": 12,
 
   "map": {
     "pieces": [
@@ -45,7 +37,20 @@
       "position": [5, 7],
       "experience": "REGULAR"
     },
-
+    {
+      "unit_id": "GE_4",
+      "side": "GE",
+      "unit_key": "GE_50MM_MORTAR",
+      "position": [2, 7],
+      "experience": "REGULAR"
+    },
+    {
+      "unit_id": "GE_5",
+      "side": "GE",
+      "unit_key": "GE_50MM_MORTAR",
+      "position": [6, 7],
+      "experience": "REGULAR"
+    },
     {
       "unit_id": "US_1",
       "side": "US",
@@ -65,6 +70,20 @@
       "side": "US",
       "unit_key": "US_RIFLES_43",
       "position": [7, 12],
+      "experience": "REGULAR"
+    },
+    {
+      "unit_id": "US_4",
+      "side": "US",
+      "unit_key": "US_RIFLES_43",
+      "position": [4, 13],
+      "experience": "REGULAR"
+    },
+    {
+      "unit_id": "US_5",
+      "side": "US",
+      "unit_key": "US_RIFLES_43",
+      "position": [8, 13],
       "experience": "REGULAR"
     }
   ],

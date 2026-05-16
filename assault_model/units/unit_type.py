@@ -5,7 +5,6 @@ import os
 from assault_model.combat.dice_color import DiceColor
 from assault_model.combat.attack_sector import AttackSector
 
-
 DEBUG_TRACE = os.getenv("ASSAULT_DEBUG_TRACE", "0") == "1"
 
 
@@ -42,7 +41,7 @@ class UnitType:
         movement: int,
         max_strength: int,
         base_defense: Dict[str, List[str]],
-        attack: Dict[str, Dict[str, Dict[str, List[str]]]],
+        attack: Dict,
         traits: List[str],
     ) -> None:
         self.code = code
@@ -59,52 +58,80 @@ class UnitType:
         self.traits = traits
 
     # =================================================
-    #  COMBAT API
+    # ✅ NEW: MODE RESOLUTION
     # =================================================
+    def _resolve_attack_mode(self, distance: int) -> str:
+        """
+        Decide which attack mode to use.
+        """
 
+        # Default → direct fire
+        mode = "DIRECT_FIRE"
+
+        # Mortar / indirect units
+        if self.classification == "INDIRECT_FIRE_UNIT":
+            if 3 <= distance <= 8:
+                mode = "INDIRECT_FIRE"
+
+        return mode
+
+    # =================================================
+    # ✅ NEW CORE FUNCTION (replaces old logic)
+    # =================================================
     def get_attack_dice(
         self,
         distance: int,
         target_category: UnitCategory,
     ) -> List[DiceColor]:
         """
-        Return attack dice for a given target category at a given distance (hexes).
-        distance=0 covers close combat.
+        Return attack dice given distance and target type.
+        Supports multiple attack modes (DIRECT / INDIRECT).
         """
 
-        # Translate distance -> card band key
-        if distance == 0:
-            band_key = "0"
-        elif 1 <= distance <= 3:
-            band_key = "1-3"
-        elif 4 <= distance <= 7:
-            band_key = "4-7"
-        else:
-            band_key = "8-10"
-
         try:
-            dice = self._attack_raw[target_category.value][band_key]["dice"]
-            return [DiceColor[d] for d in dice]
-        except Exception:
-            return []
-        
+            mode = self._resolve_attack_mode(distance)
+
+            _trace("ATTACK_MODE", unit=self.code, mode=mode, dist=distance)
+
+            attack_mode = self._attack_raw.get(mode, {})
+            target_table = attack_mode.get(target_category.value, {})
+
+            # Iterate range bands
+            for key, value in target_table.items():
+
+                if "-" in key:
+                    start, end = map(int, key.split("-"))
+                    if start <= distance <= end:
+                        return [DiceColor[d] for d in value["dice"]]
+
+                else:
+                    if int(key) == distance:
+                        return [DiceColor[d] for d in value["dice"]]
+
+        except Exception as e:
+            _trace("ATTACK_ERROR", error=str(e), unit=self.code)
+
+        return []
+
+    # =================================================
+    # CLOSE COMBAT
+    # =================================================
     def get_close_combat_attack_dice(
-        self, target_category: UnitCategory
+        self,
+        target_category: UnitCategory,
     ) -> List[DiceColor]:
-        # Close combat is simply distance = 0
         return self.get_attack_dice(
             distance=0,
             target_category=target_category,
-        )        
-    
+        )
+
+    # =================================================
+    # DEFENSE
+    # =================================================
     def get_defense_dice(
         self,
         sector: AttackSector,
     ) -> List[DiceColor]:
-        """
-        Return defense dice for a given attack sector.
-        Used by BOTH close combat and ranged combat.
-        """
         try:
             dice = self._base_defense_raw[sector.name]
             return [DiceColor[d] for d in dice]

@@ -5,6 +5,9 @@ from assault_sim.training_env import TrainingEnv
 from assault_sim.config.config_loader import load_sim_config
 
 
+# -------------------------------------------------
+# ✅ SINGLE ENV
+# -------------------------------------------------
 def make_env(
     config_path: Path,
     rl_side: str,
@@ -26,5 +29,23 @@ def make_env(
     return env
 
 
-# ✅ ALIAS PROFESIONAL
+# -------------------------------------------------
+# ✅ MULTI ENV (lista de envs)
+# -------------------------------------------------
+def make_envs(
+    config_path: Path,
+    rl_side: str,
+    scenario: str,
+    n_envs: int = 4,
+):
+    return [
+        make_env(config_path, rl_side, scenario)
+        for _ in range(n_envs)
+    ]
+
+
+# -------------------------------------------------
+# ✅ ALIASES
+# -------------------------------------------------
 create_env = make_env
+create_envs = make_envs

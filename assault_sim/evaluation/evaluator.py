@@ -1,6 +1,6 @@
 from assault_sim.evaluation.metrics_tracker import MetricsTracker
 from assault_model.actions.status import WaitAction
-from collections import defaultdict  # ✅ NEW
+from collections import defaultdict
 
 
 class Evaluator:
@@ -26,8 +26,20 @@ class Evaluator:
 
         tracker = MetricsTracker(self.rl_side)
 
-        # ✅ NEW: contador por opción
+        # -----------------------------
+        # L2 usage
+        # -----------------------------
         option_counts = defaultdict(int)
+
+        # -----------------------------
+        # L3 usage
+        # -----------------------------
+        formation_counts = defaultdict(int)
+
+        # -----------------------------
+        # L3 -> L2 mapping
+        # -----------------------------
+        strategy_option_map = defaultdict(lambda: defaultdict(int))
 
         obs = self.env.reset()
         done = False
@@ -46,17 +58,42 @@ class Evaluator:
                 action = WaitAction("SYSTEM")
 
             elif active.side == self.rl_side:
+
                 action = self.rl_controller.choose_action(state, obs)
 
-                # ✅ NEW: registrar opción RL
+                # -----------------------------
+                # L2 OPTION
+                # -----------------------------
                 option = getattr(self.rl_controller, "current_option", None)
+
+                # -----------------------------
+                # L3 FORMATION
+                # -----------------------------
+                formation = None
+                if hasattr(self.rl_controller, "formation_engine"):
+                    formation_obj = self.rl_controller.formation_engine.current_strategy
+                    if formation_obj is not None:
+                        formation = formation_obj.name
+                        formation_counts[formation] += 1
+
+                # -----------------------------
+                # TRACK L2
+                # -----------------------------
                 if option is not None:
                     option_counts[option.name] += 1
+
+                    # -----------------------------
+                    # TRACK L3 -> L2 RELATION
+                    # -----------------------------
+                    if formation is not None:
+                        strategy_option_map[formation][option.name] += 1
 
             else:
                 action = self.enemy_controller.choose_action(state, obs)
 
-            # ✅ FIX: nunca permitir None
+            # -----------------------------------------
+            # SAFETY: never None
+            # -----------------------------------------
             if action is None and active is not None:
                 action = WaitAction(active.unit_id)
 
@@ -92,9 +129,16 @@ class Evaluator:
                 done = True
                 break
 
-        # ✅ NUEVO: añadir estadísticas al resultado
+        # -----------------------------------------
+        # BUILD RESULT
+        # -----------------------------------------
         result = tracker.build_result(self.env.state)
+
         result["option_counts"] = dict(option_counts)
+        result["formation_counts"] = dict(formation_counts)
+        result["strategy_option_map"] = {
+            k: dict(v) for k, v in strategy_option_map.items()
+        }
 
         return result
 

@@ -7,7 +7,7 @@ from assault_model.actions.status import WaitAction
 from assault_model.map.hex_utils import hex_distance
 
 from assault_sim.rl.state_encoder import encode_state
-from assault_sim.rewards.aggressive_reward import AggressiveReward
+from assault_sim.rewards.aggressive_reward import ProgressiveReward
 
 
 DEBUG_TRACE = os.getenv("ASSAULT_DEBUG_TRACE", "0") == "1"
@@ -18,6 +18,25 @@ def _trace(tag: str, **data):
         return
     payload = " ".join(f"{k}={v}" for k, v in data.items())
     print(f"[TRACE][{tag}] {payload}")
+
+
+# -------------------------------------------------
+# ✅ DISTANCIA OPTIMIZADA (early stop)
+# -------------------------------------------------
+def _min_dist_fast(units_a, units_b):
+    best = 999
+
+    for a in units_a:
+        for b in units_b:
+            d = hex_distance(a.position, b.position)
+            if d < best:
+                best = d
+                if best <= 1:  # 🔥 early stop
+                    return best
+    return best
+
+
+from assault_sim.rewards.aggressive_reward import ProgressiveReward
 
 
 class TrainingEnv:
@@ -41,9 +60,10 @@ class TrainingEnv:
         self.scenario_override = scenario_override
         self.current_step = 0
 
-        self.reward_fn = AggressiveReward(rl_side)
+        # ✅ aquí está el cambio real
+        self.reward_fn = ProgressiveReward(rl_side)
 
-        # stats (solo informativo)
+        # stats
         self.rl_attacks = 0
         self.rl_damage = 0
         self.rl_kills = 0
@@ -57,6 +77,7 @@ class TrainingEnv:
 
     # -------------------------------------------------
     def reset(self):
+
         state = self.sim.reset()
 
         self.current_step = 0
@@ -89,7 +110,7 @@ class TrainingEnv:
         actor_side = active.side if active else None
 
         # -------------------------------------------------
-        # COHERENCE (simple)
+        # COHERENCE
         # -------------------------------------------------
         if active is None:
             action = WaitAction("SYSTEM")
@@ -104,22 +125,15 @@ class TrainingEnv:
         hp_before = {u.unit_id: getattr(u, "hp", 0) for u in state.units}
         alive_before = {u.unit_id: bool(u.alive) for u in state.units}
 
-        # distancia
         own_units = [u for u in state.units if u.alive and u.side == self.rl_side]
         enemy_units = [u for u in state.units if u.alive and u.side != self.rl_side]
 
         pre_dist = None
         if own_units and enemy_units:
-            try:
-                pre_dist = min(
-                    hex_distance(us.position, ge.position)
-                    for us in own_units for ge in enemy_units
-                )
-            except Exception:
-                pre_dist = None
+            pre_dist = _min_dist_fast(own_units, enemy_units)
 
         # -------------------------------------------------
-        # STEP REAL
+        # STEP
         # -------------------------------------------------
         next_state, _, sim_done, _ = self.sim.step(action)
 
@@ -136,7 +150,7 @@ class TrainingEnv:
         alive_after = {u.unit_id: bool(u.alive) for u in next_state.units}
 
         # -------------------------------------------------
-        # RL INFO (mínimo limpio)
+        # RL INFO
         # -------------------------------------------------
         rl_info = {
             "damage": 0,
@@ -172,30 +186,24 @@ class TrainingEnv:
         next_enemy = [u for u in next_state.units if u.alive and u.side != self.rl_side]
 
         if next_own and next_enemy:
-            try:
-                post_dist = min(
-                    hex_distance(us.position, ge.position)
-                    for us in next_own for ge in next_enemy
-                )
-            except Exception:
-                post_dist = None
+            post_dist = _min_dist_fast(next_own, next_enemy)
 
         # -------------------------------------------------
-        # ✅ REWARD SOLO AQUÍ
+        # ✅ REWARD SOLO PARA RL
         # -------------------------------------------------
-        reward = self.reward_fn.compute(
-            state=state,
-            next_state=next_state,
-            action=action,
-            active=active,
-            info=rl_info,
-            pre_dist=pre_dist,
-            post_dist=post_dist,
-        )
-
-        # 💣 FIX CRÍTICO MULTI-AGENTE
-        if actor_side != self.rl_side:
+        if actor_side == self.rl_side:
+            reward = self.reward_fn.compute(
+                state=state,
+                next_state=next_state,
+                action=action,
+                active=active,
+                info=rl_info,
+                pre_dist=pre_dist,
+                post_dist=post_dist,
+            )
+        else:
             reward = 0.0
+
         # -------------------------------------------------
         # DONE
         # -------------------------------------------------
@@ -206,7 +214,7 @@ class TrainingEnv:
             done = True
 
         # -------------------------------------------------
-        # INFO LIGERO
+        # INFO
         # -------------------------------------------------
         info = {
             "rl_damage": self.rl_damage,

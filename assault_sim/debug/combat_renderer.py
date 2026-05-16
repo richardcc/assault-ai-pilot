@@ -151,7 +151,14 @@ class CombatRenderer:
             if defender_id else "?"
         )
 
-        self.turn_buffer.add_line("         🎯 RANGED COMBAT")
+        # ✅ NUEVO: detectar modo
+        mode = payload.get("attack_mode", "DIRECT_FIRE")
+
+        if mode == "INDIRECT_FIRE":
+            self.turn_buffer.add_line("         🎯 RangedIndirectAttack (no LOS)")
+        else:
+            self.turn_buffer.add_line("         🎯 RangedDirectAttack")
+
         self.turn_buffer.add_line(
             f"             {atk_label} → {def_label} "
             f"(dist {distance}, sector {sector})"
@@ -195,11 +202,7 @@ class CombatRenderer:
         if defender_id is not None and hp_after is not None:
             self.unit_formatter.override_hp(defender_id, hp_after)
 
-        # -------------------------------------------------
-        # ✅ SUPPRESSION VISUALIZATION
-        # -------------------------------------------------
-        # Shows suppression effect clearly in console output
-
+        # ✅ SUPPRESSION
         suppression = payload.get("suppression", {})
 
         if suppression.get("applied"):

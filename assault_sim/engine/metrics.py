@@ -10,9 +10,9 @@ class MetricsTracker:
         self.wins = 0
 
     def update(self, info):
-        self.kills = info.get("rl_kills", self.kills)
-        self.damage = info.get("rl_damage", self.damage)
-        self.attacks = info.get("rl_attacks", self.attacks)
+        self.kills += info.get("rl_kills", 0)
+        self.damage += info.get("rl_damage", 0)
+        self.attacks += info.get("rl_attacks", 0)
 
     def summary(self):
         return {

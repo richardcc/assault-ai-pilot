@@ -6,14 +6,13 @@ def collect_rollout(env, controller, steps):
 
     obs = env.reset()
 
-    trajectory = {
-        "obs": [],
-        "actions": [],
-        "logp": [],
-        "values": [],
-        "rewards": [],
-        "dones": [],
-    }
+    # ✅ buffers locales (rápidos)
+    obs_buf = []
+    actions_buf = []
+    logp_buf = []
+    values_buf = []
+    rewards_buf = []
+    dones_buf = []
 
     step_count = 0
 
@@ -30,7 +29,6 @@ def collect_rollout(env, controller, steps):
             store = False
 
         else:
-
             # -------------------------------------------------
             # RL SIDE
             # -------------------------------------------------
@@ -38,7 +36,7 @@ def collect_rollout(env, controller, steps):
 
                 action = controller.choose_action(state, obs)
 
-                # ✅ datos PPO
+                # ✅ guardar datos PPO
                 last_obs = obs
                 last_action = controller.policy.last_option.value
                 last_logp = controller.policy.last_log_prob.detach()
@@ -50,16 +48,14 @@ def collect_rollout(env, controller, steps):
             # ENEMY SIDE
             # -------------------------------------------------
             else:
-
                 action = controller.executor.execute(
                     state,
                     TacticalOption.ATTACK
                 )
-
                 store = False
 
             # -------------------------------------------------
-            # NUNCA permitir None
+            # fallback seguro
             # -------------------------------------------------
             if action is None:
                 action = WaitAction(active.unit_id)
@@ -74,16 +70,15 @@ def collect_rollout(env, controller, steps):
         # -------------------------------------------------
         if store:
 
-            # penalizar WAIT
             if isinstance(action, WaitAction):
                 reward -= 0.05
 
-            trajectory["obs"].append(last_obs)
-            trajectory["actions"].append(last_action)
-            trajectory["logp"].append(last_logp)
-            trajectory["values"].append(last_value)
-            trajectory["rewards"].append(reward)
-            trajectory["dones"].append(done)
+            obs_buf.append(last_obs)
+            actions_buf.append(last_action)
+            logp_buf.append(last_logp)
+            values_buf.append(last_value)
+            rewards_buf.append(reward)
+            dones_buf.append(done)
 
         obs = next_obs
         step_count += 1
@@ -94,8 +89,16 @@ def collect_rollout(env, controller, steps):
         if done:
             obs = env.reset()
 
-    return trajectory
+    # ✅ construir dict al final (más eficiente)
+    return {
+        "obs": obs_buf,
+        "actions": actions_buf,
+        "logp": logp_buf,
+        "values": values_buf,
+        "rewards": rewards_buf,
+        "dones": dones_buf,
+    }
 
 
-# ✅ compatibilidad opcional
+# ✅ compatibilidad
 run_episode = collect_rollout

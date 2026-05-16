@@ -42,7 +42,7 @@ class ResultsAnalyzer:
         }
 
     # -------------------------------------------------
-    # ✅ NEW: ACTION USAGE AGGREGATION
+    # ACTION USAGE (L2)
     # -------------------------------------------------
     def aggregate_action_usage(self):
 
@@ -56,12 +56,46 @@ class ResultsAnalyzer:
 
         total = sum(total_counts.values())
 
-        usage = {
+        return {
             opt: (count, count / total if total > 0 else 0.0)
             for opt, count in total_counts.items()
         }
 
-        return usage
+    # -------------------------------------------------
+    # ✅ NEW: FORMATION USAGE (L3)
+    # -------------------------------------------------
+    def aggregate_formation_usage(self):
+
+        formation_totals = defaultdict(int)
+
+        for r in self.results:
+            formation_counts = r.get("formation_counts", {})
+
+            for k, v in formation_counts.items():
+                formation_totals[k] += v
+
+        total = sum(formation_totals.values())
+
+        return {
+            k: (v, v / total if total > 0 else 0.0)
+            for k, v in formation_totals.items()
+        }
+
+    # -------------------------------------------------
+    # ✅ NEW: STRATEGY → OPTION (L3 → L2)
+    # -------------------------------------------------
+    def aggregate_strategy_mapping(self):
+
+        strategy_option_totals = defaultdict(lambda: defaultdict(int))
+
+        for r in self.results:
+            mapping = r.get("strategy_option_map", {})
+
+            for strat, options in mapping.items():
+                for opt, count in options.items():
+                    strategy_option_totals[strat][opt] += count
+
+        return strategy_option_totals
 
     # -------------------------------------------------
     # SIDE AGGREGATION
@@ -83,7 +117,7 @@ class ResultsAnalyzer:
         return agg
 
     # -------------------------------------------------
-    # EFFICIENCY (GLOBAL)
+    # EFFICIENCY
     # -------------------------------------------------
     def efficiency(self):
 
@@ -149,10 +183,12 @@ class ResultsAnalyzer:
         summary = self.summary()
         efficiency = self.efficiency()
         sides = self.aggregate_side_stats()
-        top_units = self.top_units()
 
-        # ✅ NEW
         action_usage = self.aggregate_action_usage()
+        formation_usage = self.aggregate_formation_usage()
+        strategy_mapping = self.aggregate_strategy_mapping()
+
+        top_units = self.top_units()
 
         print("\n=== GLOBAL ===")
         print(summary)
@@ -164,8 +200,10 @@ class ResultsAnalyzer:
         print(dict(sides["RL"]))
         print(dict(sides["ENEMY"]))
 
-        # ✅ NEW
-        print("\n=== ACTION USAGE ===")
+        # -------------------------------------------------
+        # L2 ACTION USAGE
+        # -------------------------------------------------
+        print("\n=== ACTION USAGE (L2) ===")
         if action_usage:
             for opt, (count, ratio) in sorted(
                 action_usage.items(),
@@ -176,6 +214,37 @@ class ResultsAnalyzer:
         else:
             print("No action data.")
 
+        # -------------------------------------------------
+        # L3 FORMATION USAGE
+        # -------------------------------------------------
+        print("\n=== FORMATION USAGE (L3) ===")
+        if formation_usage:
+            for strat, (count, ratio) in sorted(
+                formation_usage.items(),
+                key=lambda x: x[1][0],
+                reverse=True
+            ):
+                print(f"{strat}: {count} ({ratio:.2%})")
+        else:
+            print("No formation data.")
+
+        # -------------------------------------------------
+        # L3 → L2 MAPPING
+        # -------------------------------------------------
+        print("\n=== STRATEGY → OPTION (L3 → L2) ===")
+
+        for strat, options in strategy_mapping.items():
+            total = sum(options.values())
+
+            print(f"\n{strat}:")
+
+            for opt, v in sorted(options.items(), key=lambda x: x[1], reverse=True):
+                ratio = v / total if total > 0 else 0
+                print(f"  {opt}: {v} ({ratio:.2%})")
+
+        # -------------------------------------------------
+        # TOP UNITS
+        # -------------------------------------------------
         print("\n=== TOP UNITS (damage) ===")
         for uid, data in top_units:
             print(uid, data)

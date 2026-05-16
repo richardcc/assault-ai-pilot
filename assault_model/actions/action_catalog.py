@@ -2,16 +2,13 @@ from assault_model.actions.movement import MoveAction
 from assault_model.actions.status import WaitAction
 from assault_model.actions.assault import AssaultAction
 
-# Direct ranged fire action (Rulebook §10.0–§10.2)
+# Direct ranged fire action
 from assault_model.actions.ranged_direct import RangedDirectAttack
 
 from assault_model.rules.movement_rules import MovementRules
 from assault_model.rules.movement_outcome import MovementOutcome
 
-# Canonical hex distance utility
 from assault_model.map.hex_utils import hex_distance
-
-# Line of sight rules (temporary RF-R02 implementation)
 from assault_model.combat.line_of_sight import has_line_of_sight
 
 import os
@@ -27,28 +24,13 @@ def _trace(tag: str, **data):
 
 
 class ActionCatalog:
-    """
-    Canonical ActionCatalog of the MODEL.
-
-    Responsibilities:
-    - Declare which actions are legal
-    - Never decide combat resolution details
-
-    Invariants:
-    - Every MoveAction represents a REAL movement
-    - Close Combat is triggered only by movement into an enemy hex
-    - Ranged Fire is an explicit declared action
-    - No empty or no-op actions are generated
-    """
 
     def __init__(self, game_state):
         self.gs = game_state
 
     def actions(self):
-        # Actions are always relative to the CURRENT active unit
         active = self.gs.active_unit
 
-        # Defensive fallback
         if active is None:
             return [WaitAction(None)]
 
@@ -60,7 +42,7 @@ class ActionCatalog:
         )
 
         # ----------------------------------
-        # MOVEMENT-DRIVEN ACTIONS
+        # MOVEMENT
         # ----------------------------------
         movement_paths = MovementRules.get_legal_paths(self.gs, active)
 
@@ -73,9 +55,6 @@ class ActionCatalog:
                 target=mp.target_unit_id,
             )
 
-            # ------------------------------
-            # Normal movement
-            # ------------------------------
             if mp.outcome == MovementOutcome.END_IN_EMPTY_HEX:
                 actions.append(
                     MoveAction(
@@ -84,9 +63,6 @@ class ActionCatalog:
                     )
                 )
 
-            # ------------------------------
-            # Close combat via movement
-            # ------------------------------
             elif mp.outcome == MovementOutcome.END_IN_ENEMY_HEX:
                 target = next(
                     (u for u in self.gs.units if u.unit_id == mp.target_unit_id),
@@ -102,12 +78,12 @@ class ActionCatalog:
                     )
 
         # ----------------------------------
-        # RANGED DIRECT FIRE ACTIONS
+        # RANGED FIRE
         # ----------------------------------
         actions.extend(self._ranged_fire_actions(active))
 
         # ----------------------------------
-        # WAIT (always valid)
+        # WAIT
         # ----------------------------------
         actions.append(WaitAction(active.unit_id))
 
@@ -120,79 +96,90 @@ class ActionCatalog:
         return actions
 
     # ==================================================
-    # RANGED DIRECT FIRE SUPPORT
+    # RANGED FIRE (DIRECT + INDIRECT)
     # ==================================================
     def _ranged_fire_actions(self, active):
-        """
-        Declare direct ranged fire actions.
 
-        IMPORTANT:
-        - No dice
-        - No profiles
-        - No weapon logic
-
-        Combat resolution (range bands, dice pools, traits)
-        is handled entirely by the combat resolver
-        using the unit cards (same as close combat).
-        """
         actions = []
 
-        # Unit must be capable of firing
         if not getattr(active, "can_fire", True):
             return actions
 
         for other in self.gs.units:
-            # Ignore friendly units
+
             if other.side == active.side:
                 continue
 
-            # Ignore dead units
             if not other.alive:
                 continue
 
-            # Range legality check
+            # ✅ Distance
+            distance = hex_distance(active.position, other.position)
+
+            # ✅ Weapon range (based on unit attack tables)
             if not self._in_weapon_range(active, other):
                 continue
 
-            # Line of sight check
-            if not self._has_line_of_sight(active, other):
+            # ✅ Determine mode
+            mode = active.unit_type._resolve_attack_mode(distance)
+
+            # ✅ Mortar min range (block short range)
+            if mode == "INDIRECT_FIRE" and distance < 3:
                 continue
 
+            # ✅ LOS only for direct fire
+            if mode == "DIRECT_FIRE":
+                if not self._has_line_of_sight(active, other):
+                    continue
+
+            # ✅ Add action
             _trace(
                 "ACTION_ADD",
                 action="RangedDirectAttack",
                 attacker=active.unit_id,
                 target=other.unit_id,
+                mode=mode,
             )
 
-            # ✅ Only DECLARE the action.
-            # ✅ Resolver determines dice by distance using unit cards.
             actions.append(
                 RangedDirectAttack(
                     active.unit_id,
                     other.unit_id,
+                    attack_mode=mode,
                 )
             )
 
         return actions
 
+    # ==================================================
+    # RANGE CHECK (BASED ON UNIT CARDS)
+    # ==================================================
     def _in_weapon_range(self, attacker, target):
-        """
-        Coarse weapon range legality.
 
-        Fine-grained dice selection by distance
-        happens in the combat resolver via unit cards.
-        """
         distance = hex_distance(attacker.position, target.position)
 
-        # Temporary legality limits (Phase 01 / 01.5)
-        min_range = getattr(attacker, "weapon_min_range", 1)
-        max_range = getattr(attacker, "weapon_range", 10)
+        attack = attacker.unit_type._attack_raw
 
-        return min_range <= distance <= max_range
+        for mode_data in attack.values():
 
+            table = mode_data.get(target.unit_type.category.value)
+            if not table:
+                continue
+
+            for key in table.keys():
+
+                if "-" in key:
+                    start, end = map(int, key.split("-"))
+                    if start <= distance <= end:
+                        return True
+                else:
+                    if int(key) == distance:
+                        return True
+
+        return False
+
+    # ==================================================
+    # LOS
+    # ==================================================
     def _has_line_of_sight(self, attacker, target):
-        """
-        Check line of sight for direct fire.
-        """
         return has_line_of_sight(attacker, target, self.gs.game_map)

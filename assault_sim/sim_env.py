@@ -41,38 +41,57 @@ class SimEnv:
     # RESET
     # -------------------------------------------------
     def reset(self):
-        root = self.config.data_root
+            root = self.config.data_root
 
-        unit_catalog = load_unit_catalog(root / self.config.unit_catalog)
-        map_catalog = load_map_piece_catalog(root / self.config.map_piece_catalog)
+            unit_catalog = load_unit_catalog(root / self.config.unit_catalog)
+            map_catalog = load_map_piece_catalog(root / self.config.map_piece_catalog)
 
-        scenario_path = (
-            root
-            / self.config.scenario_folder
-            / f"{self.config.scenario_name}.json"
-        )
+            scenario_path = (
+                root
+                / self.config.scenario_folder
+                / f"{self.config.scenario_name}.json"
+            )
 
-        self.scenario = load_scenario(scenario_path, unit_catalog, map_catalog)
-        self.game_state = GameState.from_scenario(self.scenario)
+            self.scenario = load_scenario(scenario_path, unit_catalog, map_catalog)
+            self.game_state = GameState.from_scenario(self.scenario)
 
-        self.runtime = RuntimeGameState(self.game_state, self.scenario)
-        self.runtime.start_turn()
-        self.game_state = self.runtime.base_state
+            self.runtime = RuntimeGameState(self.game_state, self.scenario)
+            self.runtime.start_turn()
+            self.game_state = self.runtime.base_state
 
-        self._step_counter = 0  # reset loop guard
+            self._step_counter = 0  # reset loop guard
 
-        if self.event_bus:
-            self.event_bus.emit({
-                "type": "RESET",
-                "payload": {
-                    "scenario": self.scenario.name,
-                    "turn": self.game_state.turn,
-                },
-            })
+            if self.event_bus:
+                self.event_bus.emit({
+                    "type": "RESET",
+                    "payload": {
+                        "scenario": self.scenario.name,
+                        "turn": self.game_state.turn,
+                    },
+                })
 
-            self._emit_map_state()
+                # ✅ ✅ NUEVO: SCENARIO INITIALIZED
+                self.event_bus.emit({
+                    "type": "SCENARIO_INITIALIZED",
+                    "payload": {
+                        "scenario": self.scenario.name,
+                        "units": [
+                            {
+                                "unit_id": u.unit_id,
+                                "type": u.unit_type.code,
+                                "classification": u.unit_type.classification,
+                                "side": u.side,
+                                "position": u.position,
+                                "modes": list(u.unit_type._attack_raw.keys()),
+                            }
+                            for u in self.game_state.units
+                        ]
+                    },
+                })
 
-        return self.game_state
+                self._emit_map_state()
+
+            return self.game_state
 
     # -------------------------------------------------
     # STEP

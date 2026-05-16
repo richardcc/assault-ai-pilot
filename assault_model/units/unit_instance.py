@@ -18,8 +18,10 @@ class UnitInstance:
     ✅ Includes:
     - health / alive state
     - suppression system
-    - fallback system  ✅ NEW
+    - fallback system
     - embark / transport logic
+    ✅ NEW:
+    - unified combat interface (supports DIRECT + INDIRECT fire)
     """
 
     def __init__(
@@ -48,7 +50,7 @@ class UnitInstance:
         self.alive = True
 
         # ============================
-        # Morale state ✅ FIXED
+        # Morale state
         # ============================
         self.suppressed: bool = False
         self.fallback: bool = False
@@ -102,6 +104,54 @@ class UnitInstance:
         self.position = (q, r)
 
     # ----------------------------
+    # Distance helper ✅ NEW
+    # ----------------------------
+    def get_distance_to(self, other: "UnitInstance") -> int:
+        if self.position is None or other.position is None:
+            return 999
+
+        q1, r1 = self.position
+        q2, r2 = other.position
+
+        return abs(q1 - q2) + abs(r1 - r2)
+
+    # ----------------------------
+    # Combat API ✅ NEW
+    # ----------------------------
+    def get_attack_dice(self, target: "UnitInstance"):
+        """
+        Resolve attack dice using UnitType logic.
+
+        ✅ Supports:
+        - DIRECT_FIRE
+        - INDIRECT_FIRE
+        """
+
+        if not self.alive or target is None:
+            return []
+
+        # Cannot attack without valid positions
+        if self.position is None or target.position is None:
+            return []
+
+        distance = self.get_distance_to(target)
+
+        dice = self.unit_type.get_attack_dice(
+            distance=distance,
+            target_category=target.unit_type.category,
+        )
+
+        _trace(
+            "ATTACK_RESOLVE",
+            attacker=self.unit_id,
+            target=target.unit_id,
+            dist=distance,
+            dice=[d.name for d in dice] if dice else [],
+        )
+
+        return dice
+
+    # ----------------------------
     # Embark / disembark
     # ----------------------------
     def embark_into(self, vehicle: "UnitInstance"):
@@ -134,13 +184,6 @@ class UnitInstance:
     # Combat hooks
     # ----------------------------
     def apply_damage(self, dmg: int):
-        """
-        Apply direct HP damage.
-
-        ✅ Safe:
-        - ignores negative/zero damage
-        - ignores dead units
-        """
 
         if dmg <= 0 or not self.alive:
             return
@@ -165,7 +208,6 @@ class UnitInstance:
             killed=killed,
         )
 
-        # Optional event emission
         if self._event_bus:
             self._event_bus.emit(
                 {
@@ -183,30 +225,20 @@ class UnitInstance:
             )
 
     # ----------------------------
-    # Suppression system ✅ FIXED
+    # Suppression
     # ----------------------------
     def apply_suppression(self):
-        """
-        Apply suppression effect.
-
-        RULE:
-        - If already suppressed → triggers fallback
-        """
 
         if not self.alive:
             return
 
-        # 🔴 ya suprimido → fallback
         if self.suppressed:
             self.trigger_fallback()
             return
 
         self.suppressed = True
 
-        _trace(
-            "SUPPRESSION_APPLIED",
-            unit=self.unit_id,
-        )
+        _trace("SUPPRESSION_APPLIED", unit=self.unit_id)
 
         if self._event_bus:
             self._event_bus.emit(
@@ -220,27 +252,18 @@ class UnitInstance:
             )
 
     def clear_suppression(self):
-        """
-        Clear suppression (typically at turn start).
-        """
 
         if not self.suppressed:
             return
 
         self.suppressed = False
 
-        _trace(
-            "SUPPRESSION_CLEARED",
-            unit=self.unit_id,
-        )
+        _trace("SUPPRESSION_CLEARED", unit=self.unit_id)
 
     # ----------------------------
-    # Fallback system ✅ NEW
+    # Fallback
     # ----------------------------
     def trigger_fallback(self):
-        """
-        Trigger fallback (retreat / morale break).
-        """
 
         if not self.alive:
             return
@@ -248,10 +271,7 @@ class UnitInstance:
         self.suppressed = False
         self.fallback = True
 
-        _trace(
-            "FALLBACK_TRIGGERED",
-            unit=self.unit_id,
-        )
+        _trace("FALLBACK_TRIGGERED", unit=self.unit_id)
 
         if self._event_bus:
             self._event_bus.emit(
@@ -264,21 +284,14 @@ class UnitInstance:
                 }
             )
 
-        # 🔴 regla simplificada del juego
         if self.unit_type.category.name == "ARTILLERY":
             self.alive = False
 
     def clear_fallback(self):
-        """
-        Clear fallback state (future: recovery phase)
-        """
 
         if not self.fallback:
             return
 
         self.fallback = False
 
-        _trace(
-            "FALLBACK_CLEARED",
-            unit=self.unit_id,
-        )
+        _trace("FALLBACK_CLEARED", unit=self.unit_id)

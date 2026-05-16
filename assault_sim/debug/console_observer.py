@@ -45,6 +45,36 @@ class ConsoleObserver:
             self.deploy.reset(payload)
             self._map_rendered_once = False
 
+        # ---------------- SCENARIO INIT ----------------
+        elif event_type == "SCENARIO_INITIALIZED":
+            payload = payload  # ya lo tienes arriba
+
+            print("\n=== UNITS IN SCENARIO ===")
+            print(f"Scenario: {payload.get('scenario')}\n")
+
+            for u in payload.get("units", []):
+
+                pos = u["position"]
+
+                # ✅ FIX: formatear HexCoord
+                if pos is None:
+                    pos_str = "None"
+                elif hasattr(pos, "q") and hasattr(pos, "r"):
+                    pos_str = f"({pos.q},{pos.r})"
+                else:
+                    pos_str = str(pos)
+
+                print(
+                    f"{u['unit_id']:8} | "
+                    f"type={u['type']:20} | "
+                    f"class={u['classification']:22} | "
+                    f"modes={u['modes']} | "
+                    f"pos={pos_str}"
+                )
+
+            print("=" * 50)
+
+
         # ---------------- UNIT LOADED ----------------
         elif event_type == "UNIT_LOADED":
             self.deploy.on_unit_loaded(payload)

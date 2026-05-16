@@ -58,12 +58,13 @@ def resolve_critical(face: DiceFace, target_class: UnitClass):
 # =================================================
 def resolve_ranged_combat(
     *,
+    action,  # ✅ NUEVO
     attacker,
     target,
     distance: int,
     context: ExecutionContext | None = None,
 ) -> CombatResolutionResult:
-
+    
     # =================================================
     # CONTEXT
     # =================================================
@@ -201,6 +202,7 @@ def resolve_ranged_combat(
     )
 
     # ---------------- EMIT ACTION_EFFECT ----------------
+ # ---------------- EMIT ACTION_EFFECT ----------------
     if context and context.event_bus:
         context.event_bus.emit(
             {
@@ -212,6 +214,9 @@ def resolve_ranged_combat(
                     "distance": distance,
                     "attack_sector": attack_sector.name,
                     "los": los.name,
+
+                # ✅ CLAVE
+                "attack_mode": getattr(action, "attack_mode", "DIRECT_FIRE"),
 
                     "attacker_attack_dice": [
                         {

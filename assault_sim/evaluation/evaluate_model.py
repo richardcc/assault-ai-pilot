@@ -149,7 +149,7 @@ def main():
     # DASHBOARD
     # -------------------------------------------------
     dashboard.save_csv("metrics.csv")
-    dashboard.plot()
+    dashboard.plot_all()
 
     print("\n>>> EVALUATION FINISHED")
 

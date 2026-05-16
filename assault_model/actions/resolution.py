@@ -163,12 +163,12 @@ def resolve_action(
             distance = hex_distance(attacker.position, target.position)
 
             result_combat = resolve_ranged_combat(
+                action=action,  # ✅ CLAVE
                 attacker=attacker,
                 target=target,
                 distance=distance,
                 context=context,
             )
-
         # ------------------------------
         # UNKNOWN COMBAT MODE
         # ------------------------------

@@ -1,9 +1,9 @@
 class PPOConfig:
-    TOTAL_EPISODES = 2000      # ✅ más experiencia real
-    ROLLOUT_STEPS = 256       # ✅ correcto (no tocar)
-    PPO_EPOCHS = 8            # 🔼 mejor uso de datos
-    CLIP_EPS = 0.15           # 🔥 más estable (antes 0.2)
-    GAMMA = 0.99              # ✅ correcto
-    LAMBDA = 0.95             # ✅ correcto
-    VALUE_COEF = 0.5          # ✅ balanceado
-    ENTROPY_COEF = 0.03       # 🔥 clave para reducir pasividad
+    TOTAL_EPISODES = 6000        # 🔥 clave
+    ROLLOUT_STEPS = 256
+    PPO_EPOCHS = 8
+    CLIP_EPS = 0.15
+    GAMMA = 0.99
+    LAMBDA = 0.95
+    VALUE_COEF = 0.5
+    ENTROPY_COEF = 0.03          # 🔧 luego bajar a 0.01

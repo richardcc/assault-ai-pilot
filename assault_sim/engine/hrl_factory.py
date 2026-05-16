@@ -4,14 +4,12 @@ from assault_sim.rl.option_policy import OptionPolicy
 from assault_sim.heuristics.tactical_path_heuristic import TacticalPathHeuristic
 
 
-def make_hrl(policy_net, rl_side, event_bus=None):
+def create_hrl_controller(policy_net, rl_side, event_bus=None):
 
     option_policy = OptionPolicy(policy_net)
 
-    # ✅ CLAVE: crear heuristic
+    # ✅ heuristic independiente por instancia
     heuristic = TacticalPathHeuristic()
-
-    # ✅ CLAVE: pasarla al executor
     executor = OptionExecutor(heuristic)
 
     controller = HRLController(
@@ -22,4 +20,3 @@ def make_hrl(policy_net, rl_side, event_bus=None):
     )
 
     return controller
-create_hrl_controller = make_hrl

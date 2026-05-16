@@ -1,15 +1,17 @@
 from assault_sim.rl.tactical_options import TacticalOption
 from assault_sim.rl.state_encoder import explainable_context
 
+from assault_sim.strategy.formation_strategy import (
+    FormationStrategy,
+    FormationStrategyEngine,
+)
+
 
 class HRLController:
 
-    # -------------------------------------------------
-    # ✅ HORIZON AJUSTADO
-    # -------------------------------------------------
     OPTION_HORIZON = {
         TacticalOption.ADVANCE: 6,
-        TacticalOption.FLANK: 5,    # 🔥 antes 8 → reduce drift
+        TacticalOption.FLANK: 5,
         TacticalOption.ATTACK: 10,
         TacticalOption.HOLD: 1,
         TacticalOption.RETREAT: 2,
@@ -24,46 +26,37 @@ class HRLController:
         self.current_option = None
         self.steps_remaining = -1
 
-    # -------------------------------------------------
-    # MAIN
+        self.formation_engine = FormationStrategyEngine()
+
     # -------------------------------------------------
     def choose_action(self, state, obs):
 
         active = state.active_unit
 
-        # -------------------------------------------------
-        # No control
-        # -------------------------------------------------
         if active is None or active.side != self.rl_side:
             return None
 
         # -------------------------------------------------
-        # 🔥 detectar combate cercano
+        # Detect close combat
         # -------------------------------------------------
         in_close_combat = False
         for u in state.units:
             if u.side != active.side and u.alive:
-                if hasattr(active, "position") and hasattr(u, "position"):
-                    dx = abs(active.position.q - u.position.q)
-                    dy = abs(active.position.r - u.position.r)
-                    if dx <= 1 and dy <= 1:
-                        in_close_combat = True
-                        break
+                dx = abs(active.position.q - u.position.q)
+                dy = abs(active.position.r - u.position.r)
+                if dx <= 1 and dy <= 1:
+                    in_close_combat = True
+                    break
 
-        # -------------------------------------------------
-        # ¿nueva opción?
-        # -------------------------------------------------
         is_new_selection = (
             self.current_option is None or self.steps_remaining <= 0
         )
 
         # -------------------------------------------------
-        # ✅ mantener ATTACK con continuidad
+        # Maintain ATTACK continuity
         # -------------------------------------------------
         if not is_new_selection:
             if self.current_option == TacticalOption.ATTACK:
-
-                # 🔥 extender si sigue en combate
                 if in_close_combat:
                     self.steps_remaining = max(self.steps_remaining, 3)
 
@@ -71,26 +64,56 @@ class HRLController:
                 return self.executor.execute(state, self.current_option)
 
         # -------------------------------------------------
-        # ✅ forzar ATTACK si hay combate cercano
+        # Force ATTACK in close combat
         # -------------------------------------------------
         if in_close_combat:
             self.current_option = TacticalOption.ATTACK
-            self.steps_remaining = 5   # 🔥 antes 2
+            self.steps_remaining = 5
 
         # -------------------------------------------------
-        # selección nueva
+        # New decision
         # -------------------------------------------------
         elif is_new_selection:
 
-            self.current_option = self.policy.choose_option(obs)
+            strategy = self.formation_engine.update(state, self.rl_side)
+            ppo_option = self.policy.choose_option(obs)
+
+            # -------------------------------------------------
+            # ✅ FINAL L3 → L2 FUSION
+            # -------------------------------------------------
+
+            if strategy == FormationStrategy.ATTACK:
+                if ppo_option in [TacticalOption.ATTACK, TacticalOption.ADVANCE]:
+                    self.current_option = ppo_option
+                else:
+                    self.current_option = TacticalOption.ATTACK
+
+            elif strategy == FormationStrategy.PUSH_VP:
+                if ppo_option in [TacticalOption.ADVANCE, TacticalOption.FLANK]:
+                    self.current_option = ppo_option
+                else:
+                    self.current_option = TacticalOption.ADVANCE
+
+            elif strategy == FormationStrategy.HOLD_VP:
+                if ppo_option in [TacticalOption.HOLD, TacticalOption.ATTACK]:
+                    self.current_option = ppo_option
+                else:
+                    self.current_option = TacticalOption.HOLD
+
+            elif strategy == FormationStrategy.CLEANUP:
+                self.current_option = TacticalOption.ATTACK
+
+            else:
+                self.current_option = ppo_option
+
             self.steps_remaining = self.OPTION_HORIZON[self.current_option]
 
-            # 🔥 bloquear FLANK en combate cercano
+            # Avoid pointless FLANK in combat
             if in_close_combat and self.current_option == TacticalOption.FLANK:
                 self.current_option = TacticalOption.ATTACK
 
             # -------------------------------------------------
-            # EVENT LOG
+            # Logging
             # -------------------------------------------------
             if self.event_bus:
                 context = explainable_context(
@@ -108,19 +131,12 @@ class HRLController:
                         "category": self.current_option.category(),
                         "turn": state.turn,
                         "context": context,
+                        "formation": strategy.name,
                         "policy_info": self.policy.last_decision_info,
                     }
                 })
 
         # -------------------------------------------------
-        # decremento estándar
-        # -------------------------------------------------
         self.steps_remaining -= 1
 
-        # -------------------------------------------------
-        # ejecutar
-        # -------------------------------------------------
-        return self.executor.execute(
-            state,
-            self.current_option
-        )
+        return self.executor.execute(state, self.current_option)
