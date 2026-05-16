@@ -5,7 +5,6 @@ from .components.survival_reward import SurvivalReward
 from .components.positioning_reward import PositioningReward
 from .components.vp_reward import VPReward
 
-
 class ProgressiveReward(BaseReward):
 
     def __init__(self, rl_side=None):
@@ -20,7 +19,6 @@ class ProgressiveReward(BaseReward):
 
         self.wait_streak = 0
 
-        # 🔥 importante: lo vas a actualizar desde fuera
         self.current_update = 0
         self.total_updates = 4000
 
@@ -41,31 +39,29 @@ class ProgressiveReward(BaseReward):
 
         action_name = action.__class__.__name__ if action else ""
 
-        # -------------------------------------------------
-        # 🔥 PROGRESS
-        # -------------------------------------------------
         progress = self.current_update / self.total_updates
 
         # -------------------------------------------------
         # 🥇 FASE 1 (0 → 0.3)
-        # aprender supervivencia + daño básico
+        # ✅ introducir indirect DESDE EL INICIO
         # -------------------------------------------------
         if progress < 0.3:
 
-            # daño
-            reward += 0.1 * info.get("damage", 0)
+            reward += 0.2 * info.get("damage", 0)
 
-            # kill fuerte
             if info.get("defender_killed"):
-                reward += 1.0
+                reward += 2.0
 
-            # morir penaliza fuerte
             if active and not active.alive:
-                reward -= 1.0
+                reward -= 2.0
+
+            # ✅ 🔥 CLAVE: indirect existe desde fase 1
+            if "Indirect" in action_name:
+                reward += 0.5
 
         # -------------------------------------------------
         # 🥈 FASE 2 (0.3 → 0.6)
-        # añade posición
+        # ✅ más peso a posición
         # -------------------------------------------------
         elif progress < 0.6:
 
@@ -76,19 +72,27 @@ class ProgressiveReward(BaseReward):
 
             reward += self.survival.compute(
                 active=active,
-                info=info
+                info=info,
+                action_name=action_name
             )
 
-            reward += 0.3 * self.position.compute(
+            # ✅ subir peso de posición
+            reward += 0.5 * self.position.compute(
                 state=state,
                 next_state=next_state,
                 pre_dist=pre_dist,
                 post_dist=post_dist
             )
 
+            # ✅ VP empieza antes
+            reward += 0.3 * self.vp.compute(
+                next_state=next_state,
+                active=active
+            )
+
         # -------------------------------------------------
         # 🥉 FASE 3 (0.6 → 1.0)
-        # reward completo
+        # ✅ completo balanceado
         # -------------------------------------------------
         else:
 
@@ -99,7 +103,8 @@ class ProgressiveReward(BaseReward):
 
             reward += self.survival.compute(
                 active=active,
-                info=info
+                info=info,
+                action_name=action_name
             )
 
             reward += self.position.compute(
@@ -119,14 +124,14 @@ class ProgressiveReward(BaseReward):
         # -------------------------------------------------
         if "Wait" in action_name:
             self.wait_streak += 1
-            reward -= 0.05 * min(self.wait_streak, 5)
+            reward -= 0.03 * min(self.wait_streak, 5)
         else:
             self.wait_streak = 0
 
         # -------------------------------------------------
         # COSTE TIEMPO
         # -------------------------------------------------
-        reward -= 0.01
+        reward -= 0.005
 
         # -------------------------------------------------
         # CLIP

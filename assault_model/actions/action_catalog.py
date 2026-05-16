@@ -145,7 +145,6 @@ class ActionCatalog:
                 RangedDirectAttack(
                     active.unit_id,
                     other.unit_id,
-                    attack_mode=mode,
                 )
             )
 

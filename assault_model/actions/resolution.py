@@ -140,35 +140,53 @@ def resolve_action(
             result_combat = resolve_close_combat(ctx, context)
 
         # ------------------------------
-        # RANGED DIRECT FIRE
+        # RANGED DIRECT + INDIRECT FIRE
         # ------------------------------
-        elif action.combat_mode == CombatMode.RANGED_DIRECT:
+        elif action.combat_mode in (
+            CombatMode.RANGED_DIRECT,
+            CombatMode.RANGED_INDIRECT,
+        ):
 
             attacker = next(
                 (u for u in new_state.units if u.unit_id == action.unit_id),
                 None,
             )
-            target = next(
-                (u for u in new_state.units if u.unit_id == action.target_id),
-                None,
-            )
+
+            # ✅ Target para indirecto y directo
+            if action.combat_mode == CombatMode.RANGED_DIRECT:
+                target = next(
+                    (u for u in new_state.units if u.unit_id == action.target_id),
+                    None,
+                )
+                distance = hex_distance(attacker.position, target.position)
+
+            else:
+                # ✅ INDIRECT FIRE (target_hex)
+                target = next(
+                    (u for u in new_state.units if u.position == action.target_hex and u.alive),
+                    None,
+                )
+
+                if target is None:
+                    # 🔥 no hay unidad → no hay combate
+                    return ActionResolutionResult(new_state=new_state, combat_result=None)
+
+                distance = hex_distance(attacker.position, action.target_hex)
 
             if attacker is None or target is None:
                 raise RuntimeError(
                     f"Invalid attacker or target for ranged combat "
-                    f"(attacker={action.unit_id}, target={action.target_id})"
+                    f"(attacker={action.unit_id})"
                 )
 
-            # Geometry only
-            distance = hex_distance(attacker.position, target.position)
-
             result_combat = resolve_ranged_combat(
-                action=action,  # ✅ CLAVE
+                action=action,
                 attacker=attacker,
                 target=target,
                 distance=distance,
                 context=context,
             )
+
         # ------------------------------
         # UNKNOWN COMBAT MODE
         # ------------------------------

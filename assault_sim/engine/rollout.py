@@ -6,9 +6,10 @@ def collect_rollout(env, controller, steps):
 
     obs = env.reset()
 
-    # ✅ buffers locales (rápidos)
+    # ✅ buffers
     obs_buf = []
     actions_buf = []
+    attack_modes_buf = []
     logp_buf = []
     values_buf = []
     rewards_buf = []
@@ -22,7 +23,7 @@ def collect_rollout(env, controller, steps):
         active = state.active_unit if state else None
 
         # -------------------------------------------------
-        # NO ACTIVE → avanzar turno
+        # NO ACTIVE
         # -------------------------------------------------
         if active is None:
             action = WaitAction("SYSTEM")
@@ -36,16 +37,18 @@ def collect_rollout(env, controller, steps):
 
                 action = controller.choose_action(state, obs)
 
-                # ✅ guardar datos PPO
+                # ✅ PPO data
                 last_obs = obs
-                last_action = controller.policy.last_option.value
+                last_option = controller.policy.last_option
+                last_action = last_option.value
+                last_attack_mode = controller.policy.last_attack_mode
                 last_logp = controller.policy.last_log_prob.detach()
                 last_value = controller.policy.last_value.item()
 
                 store = True
 
             # -------------------------------------------------
-            # ENEMY SIDE
+            # ENEMY SIDE (heuristic)
             # -------------------------------------------------
             else:
                 action = controller.executor.execute(
@@ -55,7 +58,7 @@ def collect_rollout(env, controller, steps):
                 store = False
 
             # -------------------------------------------------
-            # fallback seguro
+            # SAFETY
             # -------------------------------------------------
             if action is None:
                 action = WaitAction(active.unit_id)
@@ -70,11 +73,13 @@ def collect_rollout(env, controller, steps):
         # -------------------------------------------------
         if store:
 
-            if isinstance(action, WaitAction):
-                reward -= 0.05
-
             obs_buf.append(last_obs)
             actions_buf.append(last_action)
+
+            attack_modes_buf.append(
+                last_attack_mode if last_attack_mode is not None else 0
+            )
+
             logp_buf.append(last_logp)
             values_buf.append(last_value)
             rewards_buf.append(reward)
@@ -84,15 +89,21 @@ def collect_rollout(env, controller, steps):
         step_count += 1
 
         # -------------------------------------------------
-        # RESET EPISODIO
+        # RESET
         # -------------------------------------------------
         if done:
             obs = env.reset()
 
-    # ✅ construir dict al final (más eficiente)
+    # -------------------------------------------------
+    # ✅ SEGURIDAD FINAL
+    # -------------------------------------------------
+    if len(attack_modes_buf) != len(actions_buf):
+        attack_modes_buf = [0] * len(actions_buf)
+
     return {
         "obs": obs_buf,
         "actions": actions_buf,
+        "attack_modes": attack_modes_buf,
         "logp": logp_buf,
         "values": values_buf,
         "rewards": rewards_buf,

@@ -13,15 +13,37 @@ class CombatReward:
         dmg = info.get("damage", 0)
         killed = info.get("defender_killed", False)
 
-        # daño
+        # ----------------------------------------
+        # ✅ BASE DAMAGE
+        # ----------------------------------------
         reward += 0.5 * dmg
 
-        # kill
+        # ----------------------------------------
+        # ✅ KILL
+        # ----------------------------------------
         if killed:
             reward += 4.5
 
-        # bonus por atacar
+        # ----------------------------------------
+        # ✅ ATTACK BONUS
+        # ----------------------------------------
         if is_attack:
             reward += 0.4
+
+        # ========================================
+        # 🔥 ✅ INDIRECT FIRE BONUS (CLAVE)
+        # ========================================
+        if "Indirect" in action_name:
+
+            # ✅ base: que no desaparezca
+            reward += 1.5
+
+            # ✅ SI acierta → muy valioso
+            if dmg > 0:
+                reward += 2.0
+
+            # ✅ SI mata → aún mejor que direct
+            if killed:
+                reward += 3.0
 
         return reward

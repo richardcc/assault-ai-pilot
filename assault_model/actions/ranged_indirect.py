@@ -1,20 +1,32 @@
 from assault_model.actions.base import CombatAction
 from assault_model.actions.action_type import ActionType
 from assault_model.actions.combat_mode import CombatMode
-from assault_model.combat.range_attack_profile import RangeAttackProfile
-from assault_model.combat.defense_profile import DefenseProfile
 
 
 class RangedIndirectAttack(CombatAction):
-    def __init__(
-        self,
-        unit_id: str,
-        target_hex: tuple[int, int],
-        attack_profile: RangeAttackProfile,
-        defense_profile: DefenseProfile,
-    ):
-        super().__init__(unit_id, ActionType.RANGED_ATTACK)
+    """
+    Declares an indirect ranged attack (mortar, artillery, etc.)
+
+    Design:
+    - ActionType represents the decision (RANGED_INDIRECT)
+    - Engine resolver uses unit stats from unit_type
+    """
+
+    def __init__(self, unit_id: str, target_hex: tuple[int, int]):
+
+        # ✅ acción separada (clave para RL)
+        super().__init__(unit_id, ActionType.RANGED_INDIRECT)
+
+        # ✅ target es HEX (no unidad)
         self.target_hex = target_hex
-        self.attack_profile = attack_profile
-        self.defense_profile = defense_profile
+
+        # ✅ metadata para resolver
         self.combat_mode = CombatMode.RANGED_INDIRECT
+
+    def __repr__(self) -> str:
+        return (
+            f"RangedIndirectAttack("
+            f"unit_id={self.unit_id}, "
+            f"target_hex={self.target_hex}"
+            f")"
+        )

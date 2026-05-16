@@ -1,38 +1,55 @@
-# assault_sim/rl/policy_net.py
-
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 
 
 class PolicyNet(nn.Module):
     """
-    Actor-Critic network.
+    PPO Policy Network with dual decision heads.
 
     Outputs:
-    - policy logits (for action selection)
-    - state value (for critic)
+    - option_logits
+    - attack_mode_logits
+    - value
     """
 
-    def __init__(self, input_dim, max_actions):
+    def __init__(self, input_dim: int, num_options: int):
         super().__init__()
 
-        # ✅ DEBUG prints (solo temporales)
-        self.shared = nn.Sequential(
-            nn.Linear(input_dim, 64),
+        # -------------------------------------------------
+        # ✅ SHARED ENCODER (MEJORADO)
+        # -------------------------------------------------
+        self.backbone = nn.Sequential(
+            nn.Linear(input_dim, 128),
+            nn.LayerNorm(128),          # ✅ estabilidad
             nn.ReLU(),
-            nn.Linear(64, 64),
+            nn.Linear(128, 128),
+            nn.LayerNorm(128),          # ✅ estabilidad
             nn.ReLU(),
         )
-        # Actor head
-        self.policy_head = nn.Linear(64, max_actions)
 
-        # Critic head
-        self.value_head = nn.Linear(64, 1)
+        # -------------------------------------------------
+        # ✅ OPTION HEAD
+        # -------------------------------------------------
+        self.option_head = nn.Linear(128, num_options)
 
+        # -------------------------------------------------
+        # ✅ ATTACK MODE HEAD
+        # -------------------------------------------------
+        self.attack_mode_head = nn.Linear(128, 2)
+
+        # -------------------------------------------------
+        # ✅ VALUE HEAD
+        # -------------------------------------------------
+        self.value_head = nn.Linear(128, 1)
+
+    # -------------------------------------------------
     def forward(self, x):
-        features = self.shared(x)
 
-        logits = self.policy_head(features)
-        value = self.value_head(features).squeeze(-1)
+        features = self.backbone(x)
 
-        return logits, value
+        option_logits = self.option_head(features)
+        attack_mode_logits = self.attack_mode_head(features)
+        value = self.value_head(features)
+
+        return option_logits, attack_mode_logits, value

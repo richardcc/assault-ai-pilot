@@ -1,5 +1,3 @@
-# assault_sim/evaluation/evaluate_model.py
-
 import torch
 from pathlib import Path
 
@@ -29,36 +27,57 @@ MAX_STEPS = 200
 
 CONFIG_PATH = Path("assault_sim/config/sim_config.yaml")
 ENV_CONFIG = Path("assault_sim/config/env_config.json")
-CHECKPOINT = Path("assault_sim/checkpoints/ppo_US.pt")
+
+# ✅ NUEVO PATH (consistente con training)
+CHECKPOINT = Path("models/latest.pt")
 
 
 # -------------------------------------------------
-# BUILD MODEL
+# BUILD MODEL ✅ ARREGLADO
 # -------------------------------------------------
 def load_model():
 
-    checkpoint = torch.load(CHECKPOINT)
+    print(">>> Loading model")
 
-    policy = PolicyNet(
-        input_dim=checkpoint["input_dim"],
-        max_actions=checkpoint["max_actions"],
+    # ✅ construir env SOLO para obtener input_dim
+    sim_config = load_sim_config(CONFIG_PATH)
+    sim_config.scenario_name = "phase01_seq001_initial_contact"
+
+    sim_env = SimEnv(sim_config)
+
+    env = TrainingEnv(
+        sim_env,
+        env_config_path=ENV_CONFIG,
+        rl_side=RL_SIDE,
     )
 
-    policy.load_state_dict(checkpoint["model_state_dict"])
-    policy.eval()
+    obs = env.reset()
+    input_dim = obs.shape[0]
 
-    return policy
+    # ✅ modelo correcto
+    policy_net = PolicyNet(
+        input_dim=input_dim,
+        num_options=len(TacticalOption)
+    )
+
+    # ✅ cargar pesos
+    checkpoint = torch.load(CHECKPOINT, map_location="cpu")
+    policy_net.load_state_dict(checkpoint)
+
+    policy_net.eval()
+
+    return policy_net   # ✅ SOLO la red
 
 
 # -------------------------------------------------
-# BUILD CONTROLLERS
+# BUILD CONTROLLERS ✅ ARREGLADO
 # -------------------------------------------------
-def build_controllers(policy):
+def build_controllers(policy_net):
 
     heuristic = TacticalPathHeuristic()
 
-    # RL
-    option_policy = OptionPolicy(policy)
+    # ✅ RL controller correcto
+    option_policy = OptionPolicy(policy_net)
     executor_rl = OptionExecutor(heuristic)
 
     rl_controller = HRLController(
@@ -67,7 +86,7 @@ def build_controllers(policy):
         rl_side=RL_SIDE,
     )
 
-    # ENEMY (baseline simple)
+    # ✅ ENEMY baseline
     executor_enemy = OptionExecutor(heuristic)
 
     class EnemyController:
@@ -108,17 +127,17 @@ def main():
 
     print(">>> EVALUATION PIPELINE START")
 
-    # model
-    policy = load_model()
+    # ✅ MODEL
+    policy_net = load_model()
     print("✅ Model loaded")
 
-    # controllers
-    rl_controller, enemy_controller = build_controllers(policy)
+    # ✅ CONTROLLERS (IMPORTANTE: pasar policy_net)
+    rl_controller, enemy_controller = build_controllers(policy_net)
 
-    # env
+    # ✅ ENV
     env = build_env()
 
-    # evaluator
+    # ✅ EVALUATOR
     evaluator = Evaluator(
         env,
         rl_controller,
@@ -127,7 +146,7 @@ def main():
         max_steps=MAX_STEPS
     )
 
-    # dashboard
+    # ✅ DASHBOARD
     dashboard = EvalDashboard()
 
     # -------------------------------------------------
@@ -139,14 +158,13 @@ def main():
         dashboard.add_episode(r)
 
     # -------------------------------------------------
-    # ANALYSIS
+    # ANALYSIS ✅ SIN CAMBIOS
     # -------------------------------------------------
     analyzer = ResultsAnalyzer(results, RL_SIDE)
-
     analyzer.print_report()
 
     # -------------------------------------------------
-    # DASHBOARD
+    # DASHBOARD ✅ SIN CAMBIOS
     # -------------------------------------------------
     dashboard.save_csv("metrics.csv")
     dashboard.plot_all()

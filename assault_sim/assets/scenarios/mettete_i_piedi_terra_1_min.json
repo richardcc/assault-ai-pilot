@@ -40,7 +40,7 @@
     {
       "unit_id": "GE_4",
       "side": "GE",
-      "unit_key": "GE_50MM_MORTAR",
+      "unit_key": "GE_HEAVY_MG_42",
       "position": [2, 7],
       "experience": "REGULAR"
     },
@@ -83,7 +83,21 @@
       "unit_id": "US_5",
       "side": "US",
       "unit_key": "US_RIFLES_43",
+      "position": [5, 13],
+      "experience": "REGULAR"
+    },
+    {
+      "unit_id": "US_6",
+      "side": "US",
+      "unit_key": "US_BAZOOKA_TEAM",
       "position": [8, 13],
+      "experience": "REGULAR"
+    },
+    {
+      "unit_id": "US_7",
+      "side": "US",
+      "unit_key": "US_81MM_MORTAR",
+      "position": [9, 13],
       "experience": "REGULAR"
     }
   ],

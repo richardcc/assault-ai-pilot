@@ -7,16 +7,23 @@ class PositioningReward:
 
         reward = 0.0
 
-        # distancia a enemigo
+        # ----------------------------------------
+        # ✅ DISTANCIA A ENEMIGO (SUAVIZADA)
+        # ----------------------------------------
         if pre_dist is not None and post_dist is not None:
+
             delta = pre_dist - post_dist
 
-            reward += 0.3 * delta
+            # acercarse → OK
+            reward += 0.2 * delta   # 🔧 antes 0.3
 
+            # alejarse → castigo suave (ANTES era demasiado fuerte)
             if delta < 0:
-                reward -= 0.7
+                reward -= 0.2       # 🔧 antes -0.7 ❌
 
-        # distancia a VP
+        # ----------------------------------------
+        # ✅ DISTANCIA A VP (OK, pero suavizado)
+        # ----------------------------------------
         if next_state.vp_tracker:
             vp_points = next_state.vp_tracker.conditions.points
 
@@ -34,7 +41,7 @@ class PositioningReward:
                     pre_vp = min_dist(state.units)
                     post_vp = min_dist(next_state.units)
 
-                    reward += 0.2 * (pre_vp - post_vp)
+                    reward += 0.1 * (pre_vp - post_vp)   # 🔧 antes 0.2
 
                 except ValueError:
                     pass

@@ -14,7 +14,7 @@ from assault_sim.rl.option_policy import OptionPolicy
 from assault_sim.decision.hrl_controller import HRLController
 from assault_sim.decision.option_executor import OptionExecutor
 from assault_sim.rl.tactical_options import TacticalOption
-from assault_sim.rl.policy_net import PolicyNet  # ✅ NUEVO
+from assault_sim.rl.policy_net import PolicyNet
 
 # ✅ heuristic
 from assault_sim.heuristics.tactical_path_heuristic import TacticalPathHeuristic
@@ -24,7 +24,7 @@ from assault_model.actions.status import WaitAction
 
 
 RL_SIDE = "US"
-CHECKPOINT = Path("assault_sim/checkpoints/ppo_US.pt")  # ✅ NUEVO
+CHECKPOINT = Path("models/latest.pt")  # ✅ ALINEADO con train_ppo
 
 
 # -----------------------------------------------------
@@ -45,31 +45,51 @@ def parse_args():
 
 
 # -----------------------------------------------------
-# ✅ LOAD MODEL (IGUAL QUE EVALUATION)
+# ✅ LOAD MODEL (NUEVO FORMATO CORRECTO)
 # -----------------------------------------------------
-def load_model():
-    checkpoint = torch.load(CHECKPOINT)
+def load_model(config_path, scenario):
 
-    policy = PolicyNet(
-        input_dim=checkpoint["input_dim"],
-        max_actions=checkpoint["max_actions"],
+    print(">>> Loading model")
+
+    # ✅ crear env SOLO para input_dim
+    sim_config = load_sim_config(config_path)
+    sim_config.scenario_name = scenario
+
+    sim_env = SimEnv(sim_config)
+
+    env = TrainingEnv(
+        sim_env,
+        env_config_path=Path("assault_sim/config/env_config.json"),
+        rl_side=RL_SIDE,
     )
 
-    policy.load_state_dict(checkpoint["model_state_dict"])
-    policy.eval()
+    obs = env.reset()
+    input_dim = obs.shape[0]
 
-    return policy
+    # ✅ modelo nuevo
+    policy_net = PolicyNet(
+        input_dim=input_dim,
+        num_options=len(TacticalOption)
+    )
+
+    # ✅ cargar pesos (state_dict directo)
+    checkpoint = torch.load(CHECKPOINT, map_location="cpu")
+    policy_net.load_state_dict(checkpoint)
+
+    policy_net.eval()
+
+    return policy_net
 
 
 # -----------------------------------------------------
 # BUILD CONTROLLERS
 # -----------------------------------------------------
-def build_controllers(policy):
+def build_controllers(policy_net):
 
     heuristic = TacticalPathHeuristic()
 
-    # ✅ RL controller (SIEMPRE con policy ahora)
-    option_policy = OptionPolicy(policy)
+    # ✅ IMPORTANTE: envolver en OptionPolicy
+    option_policy = OptionPolicy(policy_net)
     executor_rl = OptionExecutor(heuristic)
 
     rl_controller = HRLController(
@@ -78,7 +98,7 @@ def build_controllers(policy):
         rl_side=RL_SIDE,
     )
 
-    # ✅ enemy (igual que evaluation)
+    # ✅ enemy baseline
     executor_enemy = OptionExecutor(heuristic)
 
     class EnemyController:
@@ -95,12 +115,15 @@ def build_controllers(policy):
 # MAIN
 # -----------------------------------------------------
 def main():
+
     args = parse_args()
 
     sim_config = load_sim_config(args.config)
 
     if args.scenario:
         sim_config.scenario_name = args.scenario
+    else:
+        sim_config.scenario_name = "phase01_seq001_initial_contact"
 
     debug_cfg = DebugConfig(enabled=args.debug)
 
@@ -121,9 +144,10 @@ def main():
     if sim_env.event_bus:
         sim_env.event_bus.subscribe(observer)
 
-    # ✅ ✅ CLAVE: ahora usamos el modelo PPO real
-    policy = load_model()
-    rl_controller, enemy_controller = build_controllers(policy)
+    # ✅ ✅ CLAVE: cargar modelo correctamente
+    policy_net = load_model(args.config, sim_config.scenario_name)
+
+    rl_controller, enemy_controller = build_controllers(policy_net)
 
     obs = env.reset()
     done = False
@@ -172,5 +196,6 @@ def main():
         print(f"Final VP: {state.vp_tracker.total_points}")
 
 
+# -----------------------------------------------------
 if __name__ == "__main__":
     main()

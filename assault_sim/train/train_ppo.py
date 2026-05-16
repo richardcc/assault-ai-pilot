@@ -7,7 +7,9 @@ from pathlib import Path
 import multiprocessing as mp
 
 from assault_sim.rl.policy_net import PolicyNet
+from assault_sim.rl.option_policy import OptionPolicy   # ✅ CLAVE
 from assault_sim.rl.tactical_options import TacticalOption
+
 from assault_sim.engine.env_factory import make_env
 from assault_sim.engine.hrl_factory import create_hrl_controller
 from assault_sim.engine.rollout import collect_rollout
@@ -22,10 +24,12 @@ TOTAL_UPDATES = 4000
 ROLLOUT_STEPS = 32
 PPO_EPOCHS = 2
 
-CLIP_EPS = 0.1
+CLIP_EPS = 0.05
 GAMMA = 0.99
 LAMBDA = 0.95
 VALUE_COEF = 0.5
+
+ENTROPY_COEF = 0.003
 
 NUM_ENVS = 10
 BATCH_ROLLOUTS = 24
@@ -48,7 +52,7 @@ def compute_gae(rewards, values, dones, gamma, lam):
 
 
 # -------------------------------------------------
-# ✅ WORKER LOOP (CONTINUO)
+# ✅ WORKER LOOP (FIX PRINCIPAL)
 # -------------------------------------------------
 def worker_loop(
     rollout_queue,
@@ -58,44 +62,42 @@ def worker_loop(
     weights_queue,
     progress_queue
 ):
-
-    import torch
     torch.set_num_threads(1)
     torch.cuda.is_available = lambda: False
 
     env = make_env(config_path, rl_side, scenario)
-
     obs = env.reset()
     input_dim = obs.shape[0]
-    num_options = len(TacticalOption)
 
-    from assault_sim.rl.policy_net import PolicyNet
+    # ✅ CREAR RED
+    policy_net = PolicyNet(
+        input_dim=input_dim,
+        num_options=len(TacticalOption)
+    )
+    policy_net.eval()
 
-    policy = PolicyNet(input_dim=input_dim, max_actions=num_options)
-    policy.eval()
+    # ✅ CLAVE: ENVOLVER EN OptionPolicy
+    policy = OptionPolicy(policy_net)
 
     controller = create_hrl_controller(policy, rl_side)
 
-    # 🔥 reward progresivo
     reward_fn = env.reward_fn
 
     while True:
 
-        # -------------------------------------------------
-        # actualizar policy
-        # -------------------------------------------------
+        # ✅ actualizar pesos
         if not weights_queue.empty():
-            new_weights = weights_queue.get()
-            policy.load_state_dict(new_weights)
+            policy_net.load_state_dict(weights_queue.get())
 
-        # -------------------------------------------------
-        # actualizar progreso (reward progresivo)
-        # -------------------------------------------------
+        # ✅ progreso curriculum
         if not progress_queue.empty():
-            progress = progress_queue.get()
-            reward_fn.current_update = progress
+            reward_fn.current_update = progress_queue.get()
 
         rollout = collect_rollout(env, controller, ROLLOUT_STEPS)
+
+        if "attack_modes" not in rollout:
+            rollout["attack_modes"] = [0] * len(rollout["actions"])
+
         rollout_queue.put(rollout)
 
 
@@ -110,25 +112,23 @@ def main():
     config_path = Path("assault_sim/config/sim_config.yaml")
     scenario = "phase01_seq001_initial_contact"
 
-    # sample env
     env = make_env(config_path, RL_SIDE, scenario)
     obs = env.reset()
     input_dim = obs.shape[0]
 
-    num_options = len(TacticalOption)
+    policy = PolicyNet(
+        input_dim=input_dim,
+        num_options=len(TacticalOption)
+    ).to(DEVICE)
 
-    policy = PolicyNet(input_dim=input_dim, max_actions=num_options).to(DEVICE)
     optimizer = optim.Adam(policy.parameters(), lr=3e-4)
 
-    # -------------------------------------------------
-    # 🔥 QUEUES
-    # -------------------------------------------------
     rollout_queue = mp.Queue(maxsize=64)
     weights_queue = mp.Queue(maxsize=1)
     progress_queue = mp.Queue(maxsize=1)
 
     # -------------------------------------------------
-    # 🔥 WORKERS
+    # WORKERS
     # -------------------------------------------------
     workers = []
     for _ in range(NUM_ENVS):
@@ -151,39 +151,35 @@ def main():
     buffer = []
 
     # -------------------------------------------------
-    # 🔥 TRAIN LOOP
+    # TRAIN LOOP
     # -------------------------------------------------
     while rollout_idx < TOTAL_UPDATES:
 
         rollout = rollout_queue.get()
+
+        if "attack_modes" not in rollout:
+            rollout["attack_modes"] = [0] * len(rollout["actions"])
+
         buffer.append(rollout)
 
         if len(buffer) < BATCH_ROLLOUTS:
             continue
 
-        # -------------------------------------------------
-        # COMBINE
-        # -------------------------------------------------
-        combined = {
-            "obs": [],
-            "actions": [],
-            "logp": [],
-            "values": [],
-            "rewards": [],
-            "dones": []
-        }
+        combined = {k: [] for k in [
+            "obs", "actions", "attack_modes", "logp",
+            "values", "rewards", "dones"
+        ]}
 
         for roll in buffer:
             for k in combined:
-                combined[k].extend(roll[k])
+                if k in roll:
+                    combined[k].extend(roll[k])
 
         buffer = []
 
-        # -------------------------------------------------
-        # TENSORS
-        # -------------------------------------------------
         obs_t = torch.from_numpy(np.array(combined["obs"])).float().to(DEVICE)
         act_t = torch.tensor(combined["actions"], dtype=torch.long).to(DEVICE)
+        attack_mode_t = torch.tensor(combined["attack_modes"], dtype=torch.long).to(DEVICE)
         old_logp_t = torch.stack(combined["logp"]).to(DEVICE)
 
         value_buf = combined["values"]
@@ -211,12 +207,17 @@ def main():
         # -------------------------------------------------
         for _ in range(PPO_EPOCHS):
 
-            logits, values = policy(obs_t)
-            dist = torch_dist.Categorical(logits=logits)
+            option_logits, attack_logits, values = policy(obs_t)
 
-            logp = dist.log_prob(act_t)
-            ratio = torch.exp(logp - old_logp_t)
+            option_dist = torch_dist.Categorical(logits=option_logits)
+            attack_dist = torch_dist.Categorical(logits=attack_logits)
 
+            logp_option = option_dist.log_prob(act_t)
+            logp_attack = attack_dist.log_prob(attack_mode_t)
+
+            logp = logp_option + logp_attack
+
+            ratio = torch.exp(torch.clamp(logp - old_logp_t, -10, 10))
             clipped = torch.clamp(ratio, 1 - CLIP_EPS, 1 + CLIP_EPS)
 
             policy_loss = -torch.min(
@@ -225,12 +226,16 @@ def main():
             ).mean()
 
             value_loss = (returns - values.squeeze()).pow(2).mean()
-            entropy = dist.entropy().mean()
+
+            entropy = (
+                option_dist.entropy().mean()
+                + 0.5 * attack_dist.entropy().mean()
+            )
 
             loss = (
                 policy_loss +
                 VALUE_COEF * value_loss -
-                0.01 * entropy
+                ENTROPY_COEF * entropy
             )
 
             optimizer.zero_grad()
@@ -238,7 +243,14 @@ def main():
             optimizer.step()
 
         # -------------------------------------------------
-        # 🔥 ENVIAR NUEVA POLICY
+        # SAVE MODEL
+        # -------------------------------------------------
+        if rollout_idx % 200 == 0:
+            Path("models").mkdir(exist_ok=True)
+            torch.save(policy.state_dict(), "models/latest.pt")
+
+        # -------------------------------------------------
+        # SYNC WORKERS
         # -------------------------------------------------
         safe_state = {
             k: v.detach().cpu().clone()
@@ -248,7 +260,6 @@ def main():
         if not weights_queue.full():
             weights_queue.put(safe_state)
 
-        # 🔥 enviar progreso a reward
         if not progress_queue.full():
             progress_queue.put(rollout_idx)
 
@@ -259,14 +270,15 @@ def main():
         # -------------------------------------------------
         if rollout_idx % 20 == 0:
             avg_reward = sum(combined["rewards"]) / len(combined["rewards"])
+            avg_mode = np.mean(combined["attack_modes"])
+
             print(f"[UPDATE {rollout_idx}] reward={avg_reward:.3f}")
             print(f"batch size: {len(combined['obs'])}")
+            print(f"attack_mode avg: {avg_mode:.2f}")
 
         rollout_idx += 1
 
 
-# -------------------------------------------------
-# WINDOWS
 # -------------------------------------------------
 if __name__ == "__main__":
     mp.set_start_method("spawn", force=True)

@@ -1,14 +1,15 @@
 from assault_sim.decision.hrl_controller import HRLController
 from assault_sim.decision.option_executor import OptionExecutor
-from assault_sim.rl.option_policy import OptionPolicy
 from assault_sim.heuristics.tactical_path_heuristic import TacticalPathHeuristic
 
 
-def create_hrl_controller(policy_net, rl_side, event_bus=None):
+def create_hrl_controller(option_policy, rl_side, event_bus=None):
+    """
+    Expects an already constructed OptionPolicy.
+    """
 
-    option_policy = OptionPolicy(policy_net)
+    # ✅ NO volver a crear OptionPolicy aquí
 
-    # ✅ heuristic independiente por instancia
     heuristic = TacticalPathHeuristic()
     executor = OptionExecutor(heuristic)
 

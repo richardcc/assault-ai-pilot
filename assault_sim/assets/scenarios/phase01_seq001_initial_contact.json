@@ -20,35 +20,35 @@
       "unit_id": "GE_1",
       "side": "GE",
       "unit_key": "GE_RIFLES_43",
-      "position": [3, 6],
+      "position": [3, 3],
       "experience": "REGULAR"
     },
     {
       "unit_id": "GE_2",
       "side": "GE",
       "unit_key": "GE_RIFLES_43",
-      "position": [4, 7],
+      "position": [4, 4],
       "experience": "REGULAR"
     },
     {
       "unit_id": "GE_3",
       "side": "GE",
       "unit_key": "GE_RIFLES_43",
-      "position": [5, 7],
+      "position": [5, 4],
       "experience": "REGULAR"
     },
     {
       "unit_id": "GE_4",
       "side": "GE",
-      "unit_key": "GE_50MM_MORTAR",
-      "position": [2, 7],
+      "unit_key": "GE_HEAVY_MG_42",
+      "position": [2, 4],
       "experience": "REGULAR"
     },
     {
       "unit_id": "GE_5",
       "side": "GE",
       "unit_key": "GE_50MM_MORTAR",
-      "position": [6, 7],
+      "position": [6, 4],
       "experience": "REGULAR"
     },
     {
@@ -82,7 +82,21 @@
     {
       "unit_id": "US_5",
       "side": "US",
+      "unit_key": "US_BAZOOKA_TEAM",
+      "position": [8, 13],
+      "experience": "REGULAR"
+    },
+    {
+      "unit_id": "US_6",
+      "side": "US",
       "unit_key": "US_RIFLES_43",
+      "position": [8, 13],
+      "experience": "REGULAR"
+    },
+    {
+      "unit_id": "US_7",
+      "side": "US",
+      "unit_key": "US_81MM_MORTAR",
       "position": [8, 13],
       "experience": "REGULAR"
     }

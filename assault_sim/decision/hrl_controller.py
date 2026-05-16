@@ -18,12 +18,14 @@ class HRLController:
     }
 
     def __init__(self, option_policy, option_executor, rl_side, event_bus=None):
+        # ✅ asegurarse de que es OptionPolicy
         self.policy = option_policy
         self.executor = option_executor
         self.rl_side = rl_side
         self.event_bus = event_bus
 
         self.current_option = None
+        self.current_attack_mode = None
         self.steps_remaining = -1
 
         self.formation_engine = FormationStrategyEngine()
@@ -33,6 +35,7 @@ class HRLController:
 
         active = state.active_unit
 
+        # ✅ seguridad
         if active is None or active.side != self.rl_side:
             return None
 
@@ -53,35 +56,44 @@ class HRLController:
         )
 
         # -------------------------------------------------
-        # Maintain ATTACK continuity
+        # MAINTAIN CURRENT OPTION
         # -------------------------------------------------
         if not is_new_selection:
+
+            # ✅ mantener ATTACK coherente
             if self.current_option == TacticalOption.ATTACK:
                 if in_close_combat:
                     self.steps_remaining = max(self.steps_remaining, 3)
 
-                self.steps_remaining -= 1
-                return self.executor.execute(state, self.current_option)
+            self.steps_remaining -= 1
+
+            return self.executor.execute(
+                state,
+                self.current_option,
+                self.current_attack_mode
+            )
 
         # -------------------------------------------------
-        # Force ATTACK in close combat
+        # FORCE ATTACK EN COMBATE CERCANO
         # -------------------------------------------------
         if in_close_combat:
             self.current_option = TacticalOption.ATTACK
+            self.current_attack_mode = 0  # direct
             self.steps_remaining = 5
 
         # -------------------------------------------------
-        # New decision
+        # NEW DECISION (RL + STRATEGY)
         # -------------------------------------------------
-        elif is_new_selection:
+        else:
 
             strategy = self.formation_engine.update(state, self.rl_side)
-            ppo_option = self.policy.choose_option(obs)
+
+            # ✅ CLAVE: esto requiere OptionPolicy
+            ppo_option, attack_mode = self.policy.choose_option(obs)
 
             # -------------------------------------------------
-            # ✅ FINAL L3 → L2 FUSION
+            # Strategy fusion
             # -------------------------------------------------
-
             if strategy == FormationStrategy.ATTACK:
                 if ppo_option in [TacticalOption.ATTACK, TacticalOption.ADVANCE]:
                     self.current_option = ppo_option
@@ -106,14 +118,25 @@ class HRLController:
             else:
                 self.current_option = ppo_option
 
+            # -------------------------------------------------
+            # ✅ ATTACK MODE (robusto)
+            # -------------------------------------------------
+            if self.current_option == TacticalOption.ATTACK:
+                self.current_attack_mode = 0 if attack_mode is None else attack_mode
+            else:
+                self.current_attack_mode = None
+
             self.steps_remaining = self.OPTION_HORIZON[self.current_option]
 
-            # Avoid pointless FLANK in combat
+            # -------------------------------------------------
+            # ✅ evitar flank en melee
+            # -------------------------------------------------
             if in_close_combat and self.current_option == TacticalOption.FLANK:
                 self.current_option = TacticalOption.ATTACK
+                self.current_attack_mode = 0
 
             # -------------------------------------------------
-            # Logging
+            # LOGGING
             # -------------------------------------------------
             if self.event_bus:
                 context = explainable_context(
@@ -127,16 +150,24 @@ class HRLController:
                     "payload": {
                         "side": self.rl_side,
                         "option": self.current_option.name,
+                        "attack_mode": (
+                            "INDIRECT" if self.current_attack_mode == 1 else "DIRECT"
+                            if self.current_attack_mode is not None else None
+                        ),
                         "description": self.current_option.description(),
                         "category": self.current_option.category(),
                         "turn": state.turn,
                         "context": context,
                         "formation": strategy.name,
-                        "policy_info": self.policy.last_decision_info,
+                        "policy_info": getattr(self.policy, "last_decision_info", {}),
                     }
                 })
 
         # -------------------------------------------------
         self.steps_remaining -= 1
 
-        return self.executor.execute(state, self.current_option)
+        return self.executor.execute(
+            state,
+            self.current_option,
+            self.current_attack_mode
+        )
