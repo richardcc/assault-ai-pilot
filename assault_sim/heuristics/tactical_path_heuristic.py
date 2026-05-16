@@ -32,21 +32,29 @@ class TacticalPathHeuristic:
         dist = hex_distance(unit.position, target.position)
 
         # -------------------------------------------------
-        # ✅ ✅ ✅ ATTACK (FIX REAL)
+        # ✅ ✅ ✅ ATTACK (FUERTE Y DIRECTO)
         # -------------------------------------------------
         if option == TacticalOption.ATTACK:
 
-            # 🔴 1. SI ESTÁ ADYACENTE → MELEE SIEMPRE
+            # 🔥 MUY CERCA → FORZAR COMBATE
+            if dist <= 2:
+                melee = self._attack_close(actions, target)
+                if melee:
+                    return melee
+
+            # 🔴 ADYACENTE → MELEE SIEMPRE
             if dist <= 1:
                 return self._attack_close(actions, target)
 
-            # 🟡 2. DISTANCIA MEDIA → RANGED
-            if dist <= 3:
+            # 🟡 DISTANCIA MEDIA → ATACAR SI SE PUEDE
+            if dist <= 4:
                 ranged = self._attack_ranged(actions)
                 if ranged:
                     return ranged
 
-            # 🟢 3. LEJOS → MOVER
+                return self._move_closer(actions, unit, target)
+
+            # 🟢 LEJOS → ACERCARSE
             return self._move_closer(actions, unit, target)
 
         # -------------------------------------------------
@@ -56,25 +64,40 @@ class TacticalPathHeuristic:
             return self._move_closer(actions, unit, target)
 
         # -------------------------------------------------
-        # HOLD
+        # HOLD (defensivo activo)
         # -------------------------------------------------
         if option == TacticalOption.HOLD:
+
             if dist <= 3:
                 ranged = self._attack_ranged(actions)
                 if ranged:
                     return ranged
+
+                if dist <= 2:
+                    return self._attack_close(actions, target)
+
             return self._wait(actions)
 
         # -------------------------------------------------
-        # RETREAT
+        # RETREAT (muy limitado)
         # -------------------------------------------------
         if option == TacticalOption.RETREAT:
+
+            # ❌ NO retirarse en combate
+            if dist <= 3:
+                return self._wait(actions)
+
             return self._move_away(actions, unit, target)
 
         # -------------------------------------------------
-        # FLANK
+        # FLANK (no spamear)
         # -------------------------------------------------
         if option == TacticalOption.FLANK:
+
+            # ❌ evitar flanqueo si ya estás relativamente cerca
+            if dist <= 4:
+                return self._move_closer(actions, unit, target)
+
             return self._move_closer_force(actions, unit, target)
 
         return self._wait(actions)
@@ -136,24 +159,25 @@ class TacticalPathHeuristic:
             if d < best_dist:
                 best_dist = d
                 best = a
-            elif best is None and d <= best_dist:
+            # ✅ importante: eliminar movimientos "empate flojo"
+            elif best is None and d < best_dist:
                 best = a
 
         return best or self._wait(actions)
 
     # -------------------------------------------------
-    # ✅ ✅ ✅ MELEE REAL (FIX IMPORTANTE)
+    # ✅ ✅ MELEE
     # -------------------------------------------------
     def _attack_close(self, actions, enemy):
 
-        # ✅ PRIORIDAD → acciones melee explícitas
+        # PRIORIDAD: melee explícito
         for a in actions:
             name = a.__class__.__name__
 
             if "Assault" in name or "Close" in name:
                 return a
 
-        # ✅ fallback ofensivo (evitar ranged si hay otra cosa)
+        # fallback ofensivo
         for a in actions:
             if a.action_type.category != ActionCategory.MOVEMENT \
                and a.action_type.category != ActionCategory.STATUS:

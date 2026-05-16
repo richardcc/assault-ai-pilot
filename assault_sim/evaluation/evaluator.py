@@ -1,5 +1,6 @@
 from assault_sim.evaluation.metrics_tracker import MetricsTracker
 from assault_model.actions.status import WaitAction
+from collections import defaultdict  # ✅ NEW
 
 
 class Evaluator:
@@ -25,6 +26,9 @@ class Evaluator:
 
         tracker = MetricsTracker(self.rl_side)
 
+        # ✅ NEW: contador por opción
+        option_counts = defaultdict(int)
+
         obs = self.env.reset()
         done = False
 
@@ -43,6 +47,11 @@ class Evaluator:
 
             elif active.side == self.rl_side:
                 action = self.rl_controller.choose_action(state, obs)
+
+                # ✅ NEW: registrar opción RL
+                option = getattr(self.rl_controller, "current_option", None)
+                if option is not None:
+                    option_counts[option.name] += 1
 
             else:
                 action = self.enemy_controller.choose_action(state, obs)
@@ -83,7 +92,11 @@ class Evaluator:
                 done = True
                 break
 
-        return tracker.build_result(self.env.state)
+        # ✅ NUEVO: añadir estadísticas al resultado
+        result = tracker.build_result(self.env.state)
+        result["option_counts"] = dict(option_counts)
+
+        return result
 
     # -------------------------------------------------
     # MULTI EPISODE

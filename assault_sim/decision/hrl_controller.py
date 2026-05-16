@@ -9,10 +9,10 @@ class HRLController:
     # -------------------------------------------------
     OPTION_HORIZON = {
         TacticalOption.ADVANCE: 6,
-        TacticalOption.FLANK: 8,
+        TacticalOption.FLANK: 5,    # 🔥 antes 8 → reduce drift
         TacticalOption.ATTACK: 10,
-        TacticalOption.HOLD: 3,
-        TacticalOption.RETREAT: 4,
+        TacticalOption.HOLD: 1,
+        TacticalOption.RETREAT: 2,
     }
 
     def __init__(self, option_policy, option_executor, rl_side, event_bus=None):
@@ -32,13 +32,13 @@ class HRLController:
         active = state.active_unit
 
         # -------------------------------------------------
-        # No control → salir
+        # No control
         # -------------------------------------------------
         if active is None or active.side != self.rl_side:
             return None
 
         # -------------------------------------------------
-        # 🔥 NUEVO: detectar combate cercano
+        # 🔥 detectar combate cercano
         # -------------------------------------------------
         in_close_combat = False
         for u in state.units:
@@ -58,30 +58,39 @@ class HRLController:
         )
 
         # -------------------------------------------------
-        # ✅ FIX 1: mantener ATTACK
+        # ✅ mantener ATTACK con continuidad
         # -------------------------------------------------
         if not is_new_selection:
             if self.current_option == TacticalOption.ATTACK:
+
+                # 🔥 extender si sigue en combate
+                if in_close_combat:
+                    self.steps_remaining = max(self.steps_remaining, 3)
+
                 self.steps_remaining -= 1
                 return self.executor.execute(state, self.current_option)
 
         # -------------------------------------------------
-        # ✅ FIX 2: forzar ATTACK si hay combate cercano
+        # ✅ forzar ATTACK si hay combate cercano
         # -------------------------------------------------
         if in_close_combat:
             self.current_option = TacticalOption.ATTACK
-            self.steps_remaining = 2  # corto pero decisivo
+            self.steps_remaining = 5   # 🔥 antes 2
 
         # -------------------------------------------------
-        # Selección nueva (normal)
+        # selección nueva
         # -------------------------------------------------
         elif is_new_selection:
 
             self.current_option = self.policy.choose_option(obs)
             self.steps_remaining = self.OPTION_HORIZON[self.current_option]
 
+            # 🔥 bloquear FLANK en combate cercano
+            if in_close_combat and self.current_option == TacticalOption.FLANK:
+                self.current_option = TacticalOption.ATTACK
+
             # -------------------------------------------------
-            # EVENT LOG (opcional)
+            # EVENT LOG
             # -------------------------------------------------
             if self.event_bus:
                 context = explainable_context(
@@ -104,7 +113,7 @@ class HRLController:
                 })
 
         # -------------------------------------------------
-        # decrementar contador
+        # decremento estándar
         # -------------------------------------------------
         self.steps_remaining -= 1
 

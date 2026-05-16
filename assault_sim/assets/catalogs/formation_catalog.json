@@ -1,0 +1,25 @@
+{
+  "US_INF_RIFLE": {
+    "side": "US",
+    "units": [
+      "rifle_43",
+      "rifle_43",
+      "rifle_43",
+      "rifle_43",
+      "rifle_43",
+      "bazooka_team",
+      "mortar_81mm"
+    ]
+  },
+
+  "GE_FJ_RIFLE_III": {
+    "side": "GE",
+    "units": [
+      "fj_rifle_43",
+      "fj_rifle_43",
+      "fj_rifle_43",
+      "mg_42",
+      "mortar_50mm"
+    ]
+  }
+}

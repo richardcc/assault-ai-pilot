@@ -42,6 +42,28 @@ class ResultsAnalyzer:
         }
 
     # -------------------------------------------------
+    # ✅ NEW: ACTION USAGE AGGREGATION
+    # -------------------------------------------------
+    def aggregate_action_usage(self):
+
+        total_counts = defaultdict(int)
+
+        for r in self.results:
+            option_counts = r.get("option_counts", {})
+
+            for opt, count in option_counts.items():
+                total_counts[opt] += count
+
+        total = sum(total_counts.values())
+
+        usage = {
+            opt: (count, count / total if total > 0 else 0.0)
+            for opt, count in total_counts.items()
+        }
+
+        return usage
+
+    # -------------------------------------------------
     # SIDE AGGREGATION
     # -------------------------------------------------
     def aggregate_side_stats(self):
@@ -129,6 +151,9 @@ class ResultsAnalyzer:
         sides = self.aggregate_side_stats()
         top_units = self.top_units()
 
+        # ✅ NEW
+        action_usage = self.aggregate_action_usage()
+
         print("\n=== GLOBAL ===")
         print(summary)
 
@@ -138,6 +163,18 @@ class ResultsAnalyzer:
         print("\n=== SIDE TOTALS ===")
         print(dict(sides["RL"]))
         print(dict(sides["ENEMY"]))
+
+        # ✅ NEW
+        print("\n=== ACTION USAGE ===")
+        if action_usage:
+            for opt, (count, ratio) in sorted(
+                action_usage.items(),
+                key=lambda x: x[1][0],
+                reverse=True
+            ):
+                print(f"{opt}: {count} ({ratio:.2%})")
+        else:
+            print("No action data.")
 
         print("\n=== TOP UNITS (damage) ===")
         for uid, data in top_units:
