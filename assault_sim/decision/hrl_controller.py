@@ -6,6 +6,8 @@ from assault_sim.strategy.formation_strategy import (
     FormationStrategyEngine,
 )
 
+import random
+
 
 class HRLController:
 
@@ -18,7 +20,6 @@ class HRLController:
     }
 
     def __init__(self, option_policy, option_executor, rl_side, event_bus=None):
-        # ✅ asegurarse de que es OptionPolicy
         self.policy = option_policy
         self.executor = option_executor
         self.rl_side = rl_side
@@ -35,12 +36,11 @@ class HRLController:
 
         active = state.active_unit
 
-        # ✅ seguridad
         if active is None or active.side != self.rl_side:
             return None
 
         # -------------------------------------------------
-        # Detect close combat
+        # ✅ Detect close combat
         # -------------------------------------------------
         in_close_combat = False
         for u in state.units:
@@ -51,19 +51,17 @@ class HRLController:
                     in_close_combat = True
                     break
 
+        # -------------------------------------------------
+        # ✅ ¿toca nueva decisión?
+        # -------------------------------------------------
         is_new_selection = (
             self.current_option is None or self.steps_remaining <= 0
         )
 
         # -------------------------------------------------
-        # MAINTAIN CURRENT OPTION
+        # ✅ mantener opción actual (sin overrides destructivos)
         # -------------------------------------------------
         if not is_new_selection:
-
-            # ✅ mantener ATTACK coherente
-            if self.current_option == TacticalOption.ATTACK:
-                if in_close_combat:
-                    self.steps_remaining = max(self.steps_remaining, 3)
 
             self.steps_remaining -= 1
 
@@ -74,94 +72,120 @@ class HRLController:
             )
 
         # -------------------------------------------------
-        # FORCE ATTACK EN COMBATE CERCANO
+        # ✅ NUEVA DECISIÓN
         # -------------------------------------------------
-        if in_close_combat:
-            self.current_option = TacticalOption.ATTACK
-            self.current_attack_mode = 0  # direct
-            self.steps_remaining = 5
+
+        strategy = self.formation_engine.update(state, self.rl_side)
+
+        # ✅ PPO decide base
+        ppo_option, attack_mode = self.policy.choose_option(obs)
 
         # -------------------------------------------------
-        # NEW DECISION (RL + STRATEGY)
+        # ✅ EXPLORACIÓN
         # -------------------------------------------------
+        if random.random() < 0.1:
+            ppo_option = random.choice(list(TacticalOption))
+
+        # -------------------------------------------------
+        # ✅ SOFT BIAS (NO overrides)
+        # -------------------------------------------------
+
+        # 🔥 combate cercano → favorecer ATTACK
+        if in_close_combat and ppo_option != TacticalOption.ATTACK:
+            if random.random() < 0.6:
+                ppo_option = TacticalOption.ATTACK
+
+        # 🔥 estrategia ATTACK → empujar (no forzar)
+        if strategy == FormationStrategy.ATTACK:
+            if ppo_option != TacticalOption.ATTACK:
+                if random.random() < 0.6:
+                    ppo_option = TacticalOption.ATTACK
+
+        # 🔥 PUSH_VP → favorecer movimiento
+        elif strategy == FormationStrategy.PUSH_VP:
+            if ppo_option not in [TacticalOption.ADVANCE, TacticalOption.FLANK]:
+                if random.random() < 0.7:
+                    ppo_option = TacticalOption.ADVANCE
+
+        # 🔥 HOLD_VP → evitar HOLD inútil
+        elif strategy == FormationStrategy.HOLD_VP:
+            if ppo_option == TacticalOption.HOLD:
+                if random.random() < 0.9:
+                    ppo_option = TacticalOption.ADVANCE
+
+        # 🔥 CLEANUP → favorecer eliminar enemigos
+        elif strategy == FormationStrategy.CLEANUP:
+            if ppo_option != TacticalOption.ATTACK:
+                if random.random() < 0.7:
+                    ppo_option = TacticalOption.ATTACK
+
+        # -------------------------------------------------
+        # ✅ evitar acciones inútiles (SOFT)
+        # -------------------------------------------------
+
+        if ppo_option in [TacticalOption.HOLD, TacticalOption.RETREAT]:
+            if random.random() < 0.6:
+                ppo_option = TacticalOption.ADVANCE
+
+        # -------------------------------------------------
+        # ✅ evitar attack desde lejos (SOFT)
+        # -------------------------------------------------
+        if ppo_option == TacticalOption.ATTACK and not in_close_combat:
+
+            close_enemy = False
+
+            for u in state.units:
+                if u.side != active.side and u.alive:
+                    dx = abs(active.position.q - u.position.q)
+                    dy = abs(active.position.r - u.position.r)
+
+                    if dx <= 3 and dy <= 3:
+                        close_enemy = True
+                        break
+
+            if not close_enemy:
+                if random.random() < 0.5:
+                    ppo_option = TacticalOption.ADVANCE
+
+        # -------------------------------------------------
+        # ✅ asignar decisión final
+        # -------------------------------------------------
+        self.current_option = ppo_option
+
+        if self.current_option == TacticalOption.ATTACK:
+            self.current_attack_mode = 0 if attack_mode is None else attack_mode
         else:
+            self.current_attack_mode = None
 
-            strategy = self.formation_engine.update(state, self.rl_side)
+        self.steps_remaining = self.OPTION_HORIZON[self.current_option]
 
-            # ✅ CLAVE: esto requiere OptionPolicy
-            ppo_option, attack_mode = self.policy.choose_option(obs)
+        # -------------------------------------------------
+        # ✅ LOGGING
+        # -------------------------------------------------
+        if self.event_bus:
+            context = explainable_context(
+                state,
+                rl_side=self.rl_side,
+                max_turns=getattr(state, "max_turns", None),
+            )
 
-            # -------------------------------------------------
-            # Strategy fusion
-            # -------------------------------------------------
-            if strategy == FormationStrategy.ATTACK:
-                if ppo_option in [TacticalOption.ATTACK, TacticalOption.ADVANCE]:
-                    self.current_option = ppo_option
-                else:
-                    self.current_option = TacticalOption.ATTACK
-
-            elif strategy == FormationStrategy.PUSH_VP:
-                if ppo_option in [TacticalOption.ADVANCE, TacticalOption.FLANK]:
-                    self.current_option = ppo_option
-                else:
-                    self.current_option = TacticalOption.ADVANCE
-
-            elif strategy == FormationStrategy.HOLD_VP:
-                if ppo_option in [TacticalOption.HOLD, TacticalOption.ATTACK]:
-                    self.current_option = ppo_option
-                else:
-                    self.current_option = TacticalOption.HOLD
-
-            elif strategy == FormationStrategy.CLEANUP:
-                self.current_option = TacticalOption.ATTACK
-
-            else:
-                self.current_option = ppo_option
-
-            # -------------------------------------------------
-            # ✅ ATTACK MODE (robusto)
-            # -------------------------------------------------
-            if self.current_option == TacticalOption.ATTACK:
-                self.current_attack_mode = 0 if attack_mode is None else attack_mode
-            else:
-                self.current_attack_mode = None
-
-            self.steps_remaining = self.OPTION_HORIZON[self.current_option]
-
-            # -------------------------------------------------
-            # ✅ evitar flank en melee
-            # -------------------------------------------------
-            if in_close_combat and self.current_option == TacticalOption.FLANK:
-                self.current_option = TacticalOption.ATTACK
-                self.current_attack_mode = 0
-
-            # -------------------------------------------------
-            # LOGGING
-            # -------------------------------------------------
-            if self.event_bus:
-                context = explainable_context(
-                    state,
-                    rl_side=self.rl_side,
-                    max_turns=getattr(state, "max_turns", None),
-                )
-
-                self.event_bus.emit({
-                    "type": "HRL_DECISION",
-                    "payload": {
-                        "side": self.rl_side,
-                        "option": self.current_option.name,
-                        "attack_mode": (
-                            "INDIRECT" if self.current_attack_mode == 1 else "DIRECT"
-                            if self.current_attack_mode is not None else None
-                        ),
-                        "description": self.current_option.description(),
-                        "category": self.current_option.category(),
-                        "turn": state.turn,
-                        "context": context,
-                        "formation": strategy.name,
-                        "policy_info": getattr(self.policy, "last_decision_info", {}),
-                    }
-                })
+            self.event_bus.emit({
+                "type": "HRL_DECISION",
+                "payload": {
+                    "side": self.rl_side,
+                    "option": self.current_option.name,
+                    "attack_mode": (
+                        "INDIRECT" if self.current_attack_mode == 1 else "DIRECT"
+                        if self.current_attack_mode is not None else None
+                    ),
+                    "description": self.current_option.description(),
+                    "category": self.current_option.category(),
+                    "turn": state.turn,
+                    "context": context,
+                    "formation": strategy.name,
+                    "policy_info": getattr(self.policy, "last_decision_info", {}),
+                }
+            })
 
         # -------------------------------------------------
         self.steps_remaining -= 1

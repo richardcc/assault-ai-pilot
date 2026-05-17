@@ -6,7 +6,7 @@ from assault_sim.config.config_loader import load_sim_config
 
 
 # -------------------------------------------------
-# ✅ SINGLE ENV
+# ✅ SINGLE ENV (MISMO FLUJO QUE train.py)
 # -------------------------------------------------
 def make_env(
     config_path: Path,
@@ -15,22 +15,27 @@ def make_env(
     controller=None,
 ) -> TrainingEnv:
 
+    # ✅ cargar config EXACTAMENTE igual que train.py
     config = load_sim_config(config_path)
-    config.scenario_name = scenario
 
-    sim = SimEnv(config, controller=controller)
+    # ✅ crear SimEnv como train.py
+    sim_env = SimEnv(
+        config=config,
+        controller=controller
+    )
 
+    # ✅ TrainingEnv encima (sin romper flujo)
     env = TrainingEnv(
-        sim,
-        env_config_path=Path("assault_sim/config/env_config.json"),
-        rl_side=rl_side,
+        sim_env,
+        config_path,
+        rl_side
     )
 
     return env
 
 
 # -------------------------------------------------
-# ✅ MULTI ENV (lista de envs)
+# ✅ MULTI ENV
 # -------------------------------------------------
 def make_envs(
     config_path: Path,

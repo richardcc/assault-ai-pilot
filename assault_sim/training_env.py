@@ -1,7 +1,6 @@
-import json
+import yaml
 import os
 from pathlib import Path
-from typing import Dict
 
 from assault_model.actions.status import WaitAction
 from assault_model.map.hex_utils import hex_distance
@@ -21,7 +20,7 @@ def _trace(tag: str, **data):
 
 
 # -------------------------------------------------
-# ✅ DISTANCIA OPTIMIZADA (early stop)
+# ✅ DISTANCIA OPTIMIZADA
 # -------------------------------------------------
 def _min_dist_fast(units_a, units_b):
     best = 999
@@ -31,14 +30,14 @@ def _min_dist_fast(units_a, units_b):
             d = hex_distance(a.position, b.position)
             if d < best:
                 best = d
-                if best <= 1:  # 🔥 early stop
-                    return best
+                if best <= 1:
+                    return best  # early stop
     return best
 
 
-from assault_sim.rewards.aggressive_reward import ProgressiveReward
-
-
+# -------------------------------------------------
+# ✅ TRAINING ENV
+# -------------------------------------------------
 class TrainingEnv:
 
     def __init__(
@@ -46,13 +45,14 @@ class TrainingEnv:
         sim_env,
         env_config_path: Path,
         rl_side: str,
-        scenario_override: str | None = None,
+        scenario_override=None,
     ):
         self.sim = sim_env
         self.rl_side = rl_side
 
+        # ✅ FIX CRÍTICO → YAML en vez de JSON
         with open(env_config_path, "r", encoding="utf-8") as f:
-            self.env_config = json.load(f)
+            self.env_config = yaml.safe_load(f)
 
         env_cfg = self.env_config.get("environment", {})
         self.max_steps = env_cfg.get("max_steps", None)
@@ -60,7 +60,6 @@ class TrainingEnv:
         self.scenario_override = scenario_override
         self.current_step = 0
 
-        # ✅ aquí está el cambio real
         self.reward_fn = ProgressiveReward(rl_side)
 
         # stats
@@ -189,7 +188,7 @@ class TrainingEnv:
             post_dist = _min_dist_fast(next_own, next_enemy)
 
         # -------------------------------------------------
-        # ✅ REWARD SOLO PARA RL
+        # ✅ REWARD SOLO RL
         # -------------------------------------------------
         if actor_side == self.rl_side:
             reward = self.reward_fn.compute(

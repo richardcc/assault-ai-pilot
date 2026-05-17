@@ -1,0 +1,68 @@
+<svg width="900" height="800" xmlns="http://www.w3.org/2000/svg">
+  <style>
+    .box { fill: #1e1e2e; stroke: #6c8cff; stroke-width: 2; rx: 10; }
+    .text { fill: #ffffff; font-family: monospace; font-size: 13px; }
+    .arrow { stroke: #aaaaaa; stroke-width: 2; marker-end: url(#arrowhead); }
+  </style>
+
+  <defs>
+    <marker id="arrowhead" markerWidth="10" markerHeight="7"
+            refX="10" refY="3.5" orient="auto">
+      <polygon points="0 0, 10 3.5, 0 7" fill="#aaaaaa"/>
+    </marker>
+  </defs>
+
+  <!-- PPO -->
+  <rect x="250" y="20" width="400" height="70" class="box"/>
+  <text x="270" y="50" class="text">PPO TRAINING</text>
+  <text x="270" y="70" class="text">Policy update / GAE / optimization</text>
+
+  <!-- Policy -->
+  <rect x="250" y="120" width="400" height="70" class="box"/>
+  <text x="270" y="150" class="text">POLICY (L2) - OptionPolicy</text>
+  <text x="270" y="170" class="text">π(option | state)</text>
+
+  <!-- HRL -->
+  <rect x="250" y="220" width="400" height="80" class="box"/>
+  <text x="270" y="250" class="text">HRL CONTROLLER (L2 core)</text>
+  <text x="270" y="270" class="text">- PPO decision</text>
+  <text x="270" y="290" class="text">- soft bias strategy</text>
+
+  <!-- Strategy -->
+  <rect x="50" y="220" width="180" height="80" class="box"/>
+  <text x="70" y="250" class="text">L3 Strategy</text>
+  <text x="70" y="270" class="text">FormationEngine</text>
+  <text x="70" y="290" class="text">(bias only)</text>
+
+  <!-- Executor -->
+  <rect x="250" y="340" width="400" height="80" class="box"/>
+  <text x="270" y="370" class="text">EXECUTOR (L1)</text>
+  <text x="270" y="390" class="text">Option → Actions</text>
+
+  <!-- Env -->
+  <rect x="250" y="460" width="400" height="80" class="box"/>
+  <text x="270" y="490" class="text">SIM ENV</text>
+  <text x="270" y="510" class="text">Game simulation</text>
+
+  <!-- Reward -->
+  <rect x="250" y="580" width="400" height="80" class="box"/>
+  <text x="270" y="610" class="text">REWARD</text>
+  <text x="270" y="630" class="text">Damage / Kill / VP / Death</text>
+
+  <!-- Rollout -->
+  <rect x="250" y="700" width="400" height="80" class="box"/>
+  <text x="270" y="730" class="text">ROLLOUT</text>
+  <text x="270" y="750" class="text">Turn-based aggregation</text>
+
+  <!-- Arrows -->
+  <line x1="450" y1="90" x2="450" y2="120" class="arrow"/>
+  <line x1="450" y1="190" x2="450" y2="220" class="arrow"/>
+  <line x1="450" y1="300" x2="450" y2="340" class="arrow"/>
+  <line x1="450" y1="420" x2="450" y2="460" class="arrow"/>
+  <line x1="450" y1="540" x2="450" y2="580" class="arrow"/>
+  <line x1="450" y1="660" x2="450" y2="700" class="arrow"/>
+  <line x1="450" y1="780" x2="450" y2="20" class="arrow"/>
+
+  <!-- Strategy arrow -->
+  <line x1="230" y1="260" x2="250" y2="260" class="arrow"/>
+</svg>

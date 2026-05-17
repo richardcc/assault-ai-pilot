@@ -1,0 +1,87 @@
+# =========================
+# FEATURES (solo nombres)
+# =========================
+
+features:
+  - enemy_distance
+  - enemy_hp
+  - enemy_threat
+  - exposure
+  - vp_distance
+  - vp_control
+
+# =========================
+# OPTIONS (L2)
+# =========================
+
+options:
+
+  ATTACK:
+    description: "Attack best target in range"
+
+    score:
+      base: 1.0
+
+      modifiers:
+        - if: enemy_hp == 1
+          add: 6.0
+
+        - if: enemy_hp == 2
+          add: 3.0
+
+        - if: enemy_distance < 5
+          add: 2.0
+
+        - if: exposure > 0.7
+          add: -2.0
+
+    constraints:
+      - enemy_in_range == true
+
+
+  ADVANCE:
+    description: "Move towards objective"
+
+    score:
+      base: 0.5
+
+      modifiers:
+        - if: vp_distance < 5
+          add: 2.0
+
+        - if: exposure > 0.6
+          add: -1.5
+
+        - if: enemy_distance < 2
+          add: -2.0
+
+
+  FLANK:
+    description: "Reposition for better angle"
+
+    score:
+      base: 0.6
+
+      modifiers:
+        - if: enemy_distance < 4
+          add: 2.0
+
+        - if: exposure > 0.5
+          add: -1.0
+
+        - if: vp_control < 0.5
+          add: -1.0
+
+
+  HOLD:
+    description: "Stay and react"
+
+    score:
+      base: 0.4
+
+      modifiers:
+        - if: vp_control == true
+          add: 2.0
+
+        - if: enemy_distance < 3
+          add: 1.5

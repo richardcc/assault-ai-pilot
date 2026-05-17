@@ -13,13 +13,13 @@ class SurvivalReward:
         # ✅ EVITAR DAÑO
         # ----------------------------------------
         if damage_taken > 0:
-            reward -= 0.6 * damage_taken   # 🔧 antes 0.8 (demasiado fuerte)
+            reward -= 0.3 * damage_taken   # 🔧 antes 0.8 (demasiado fuerte)
 
         # ----------------------------------------
         # ✅ INTERCAMBIO (SUAVIZADO)
         # ----------------------------------------
         if damage_taken > damage_given:
-            reward -= 0.3   # 🔧 antes -0.6
+            reward -= 0.1   # 🔧 antes -0.6
 
         # ----------------------------------------
         # ✅ INDIRECT FIRE DEFENSIVO

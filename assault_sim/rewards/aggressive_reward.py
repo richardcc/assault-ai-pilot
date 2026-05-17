@@ -1,26 +1,11 @@
 from .base_reward import BaseReward
 
-from .components.combat_reward import CombatReward
-from .components.survival_reward import SurvivalReward
-from .components.positioning_reward import PositioningReward
-from .components.vp_reward import VPReward
 
 class ProgressiveReward(BaseReward):
 
     def __init__(self, rl_side=None):
         super().__init__(rl_side)
-
         self.rl_side = rl_side
-
-        self.combat = CombatReward()
-        self.survival = SurvivalReward()
-        self.position = PositioningReward()
-        self.vp = VPReward()
-
-        self.wait_streak = 0
-
-        self.current_update = 0
-        self.total_updates = 4000
 
     def compute(
         self,
@@ -37,105 +22,83 @@ class ProgressiveReward(BaseReward):
         info = info or {}
         reward = 0.0
 
+        # -------------------------------------------------
+        # DAMAGE (más incentivo a combatir)
+        # -------------------------------------------------
+        damage = info.get("damage", 0)
+        reward += 0.4 * damage   # 🔥 antes 0.3
+
+        # pequeño boost (reducido)
+        if damage > 0:
+            reward += 0.03       # 🔥 antes 0.05
+
         action_name = action.__class__.__name__ if action else ""
 
-        progress = self.current_update / self.total_updates
+        # -------------------------------------------------
+        # PENALIZAR SOLO DIRECT VACÍO (mucho más suave)
+        # -------------------------------------------------
+        if damage == 0 and "RangedDirect" in action_name:
+            reward -= 0.005      # 🔥 antes 0.02
 
         # -------------------------------------------------
-        # 🥇 FASE 1 (0 → 0.3)
-        # ✅ introducir indirect DESDE EL INICIO
+        # BONUS INDIRECT (mantener)
         # -------------------------------------------------
-        if progress < 0.3:
-
-            reward += 0.2 * info.get("damage", 0)
-
-            if info.get("defender_killed"):
-                reward += 2.0
-
-            if active and not active.alive:
-                reward -= 2.0
-
-            # ✅ 🔥 CLAVE: indirect existe desde fase 1
-            if "Indirect" in action_name:
-                reward += 0.5
+        if "Indirect" in action_name and damage > 0:
+            reward += 0.3
 
         # -------------------------------------------------
-        # 🥈 FASE 2 (0.3 → 0.6)
-        # ✅ más peso a posición
+        # BONUS MELEE
         # -------------------------------------------------
-        elif progress < 0.6:
-
-            reward += self.combat.compute(
-                action_name=action_name,
-                info=info
-            )
-
-            reward += self.survival.compute(
-                active=active,
-                info=info,
-                action_name=action_name
-            )
-
-            # ✅ subir peso de posición
-            reward += 0.5 * self.position.compute(
-                state=state,
-                next_state=next_state,
-                pre_dist=pre_dist,
-                post_dist=post_dist
-            )
-
-            # ✅ VP empieza antes
-            reward += 0.3 * self.vp.compute(
-                next_state=next_state,
-                active=active
-            )
+        if "Close" in action_name and info.get("defender_killed"):
+            reward += 1.0
 
         # -------------------------------------------------
-        # 🥉 FASE 3 (0.6 → 1.0)
-        # ✅ completo balanceado
+        # MICRO BONUS A ATACAR (anti-colapso)
         # -------------------------------------------------
-        else:
-
-            reward += self.combat.compute(
-                action_name=action_name,
-                info=info
-            )
-
-            reward += self.survival.compute(
-                active=active,
-                info=info,
-                action_name=action_name
-            )
-
-            reward += self.position.compute(
-                state=state,
-                next_state=next_state,
-                pre_dist=pre_dist,
-                post_dist=post_dist
-            )
-
-            reward += self.vp.compute(
-                next_state=next_state,
-                active=active
-            )
+        if "Attack" in action_name:
+            reward += 0.01
 
         # -------------------------------------------------
-        # WAIT STREAK
+        # KILL
         # -------------------------------------------------
-        if "Wait" in action_name:
-            self.wait_streak += 1
-            reward -= 0.03 * min(self.wait_streak, 5)
-        else:
-            self.wait_streak = 0
+        if info.get("defender_killed"):
+            reward += 3.0
 
         # -------------------------------------------------
-        # COSTE TIEMPO
+        # DEATH (reducido para evitar miedo excesivo)
         # -------------------------------------------------
-        reward -= 0.005
+        if active and not active.alive:
+            reward -= 3.0    # 🔥 antes 4.0
+
+        # -------------------------------------------------
+        # VP diferencial
+        # -------------------------------------------------
+        try:
+            if hasattr(state, "vp_tracker") and hasattr(next_state, "vp_tracker"):
+                prev_vp = state.vp_tracker.score(self.rl_side)
+                new_vp = next_state.vp_tracker.score(self.rl_side)
+
+                reward += (new_vp - prev_vp) * 1.0
+        except Exception:
+            pass
+
+        # -------------------------------------------------
+        # ENDGAME
+        # -------------------------------------------------
+        if getattr(next_state, "done", False):
+            if getattr(next_state, "winner", None) == self.rl_side:
+                reward += 10.0
+            elif getattr(next_state, "winner", None) is not None:
+                reward -= 10.0
+
+        # -------------------------------------------------
+        # TIME COST
+        # -------------------------------------------------
+        reward -= 0.01
 
         # -------------------------------------------------
         # CLIP
         # -------------------------------------------------
-        reward = max(min(reward, 5.0), -5.0)
+        reward = max(min(reward, 10.0), -10.0)
 
         return reward

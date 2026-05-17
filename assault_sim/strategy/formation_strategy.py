@@ -38,7 +38,7 @@ class FormationStrategyEngine:
             return FormationStrategy.PUSH_VP
 
         # -------------------------------------------------
-        # DISTANCIA A ENEMIGOS
+        # DISTANCIA ENEMIGO
         # -------------------------------------------------
         def min_enemy_distance():
             best = 999
@@ -52,7 +52,7 @@ class FormationStrategyEngine:
         enemy_dist = min_enemy_distance()
 
         # -------------------------------------------------
-        # CLEANUP (enemigos débiles)
+        # CLEANUP (relajado)
         # -------------------------------------------------
         low_hp_enemies = [
             e for e in enemy_units
@@ -87,41 +87,19 @@ class FormationStrategyEngine:
         vp_dist = distance_to_vp()
 
         # -------------------------------------------------
-        # ✅ NUEVAS MEJORAS CLAVE
+        # ✅ DECISIONES
         # -------------------------------------------------
 
-        # 🔥 1. CLEANUP más agresivo pero no abusivo
-        if len(low_hp_enemies) >= 3:
+        # 🔥 1. CLEANUP más usable
+        if len(low_hp_enemies) >= 2:
             return FormationStrategy.CLEANUP
 
-        # 🔥 2. HOLD más frecuente (reduce suicidio)
+        # 🔥 2. CERCA DE VP → MENOS HOLD (clave)
         if vp_dist <= 2:
-            return FormationStrategy.HOLD_VP
-
-        # 🔥 3. ATTACK más probable (antes era poco frecuente)
-        if enemy_dist <= 3:
-            # pequeña aleatorización controla rigidez
-            if random.random() < 0.7:
-                return FormationStrategy.ATTACK
-            else:
-                return FormationStrategy.HOLD_VP
-
-        # 🔥 4. CONTROL DE PUSH (CLAVE)
-        if vp_dist > 2:
-
-            # ❗ antes: siempre PUSH → suicidio
-            # ✅ ahora: mezcla inteligente
-
             roll = random.random()
 
-            if roll < 0.55:
-                return FormationStrategy.PUSH_VP
-
-            elif roll < 0.80:
+            if roll < 0.4:
                 return FormationStrategy.HOLD_VP
-
             else:
                 return FormationStrategy.ATTACK
 
-        # fallback
-        return FormationStrategy.HOLD_VP
