@@ -1,47 +1,52 @@
 from enum import Enum
-
-# Canonical hex distance utility (supports HexCoord)
-from assault_model.map.hex_utils import hex_distance
+from assault_model.config.terrain_config import terrain_config
 
 
 class LineOfSight(Enum):
     CLEAR = "CLEAR"
-    PARTIAL = "PARTIAL"
+    HINDERED = "HINDERED"
     BLOCKED = "BLOCKED"
 
 
 # -------------------------------------------------
-# LOS computation (RANGE-BASED, TEMPORARY)
+# ✅ MAIN LOS FUNCTION
 # -------------------------------------------------
 def check_line_of_sight(attacker, target, game_map) -> LineOfSight:
     """
-    Temporary Line of Sight rule (Phase 01.5).
+    Determines line of sight between attacker and target
+    using terrain_config.
 
-    This implementation is intentionally simple and is only
-    used to validate ranged fire legality (RF-R02).
-
-    Rules:
-    - CLEAR if hex distance <= 6
-    - BLOCKED otherwise
-
-    Terrain, elevation, and obstruction modifiers are handled
-    later during combat resolution.
+    Current simplified model:
+    - Only target hex is evaluated
+    - Future: full hex-path tracing
     """
-    distance = hex_distance(attacker.position, target.position)
 
-    if distance <= 3:
+    if game_map is None:
         return LineOfSight.CLEAR
 
-    return LineOfSight.BLOCKED
+    target_hex = game_map.get_hex_from_coord(target.position)
+
+    if target_hex is None:
+        return LineOfSight.CLEAR
+
+    # ✅ single source of truth
+    terrain_name = target_hex.get_terrain()
+
+    # ✅ rules come from config
+    los_type = terrain_config.get_los(terrain_name)
+
+    try:
+        return LineOfSight[los_type]
+    except KeyError:
+        raise ValueError(f"Invalid LOS type '{los_type}' in terrain_config")
 
 
+# -------------------------------------------------
+# ✅ HELPER
+# -------------------------------------------------
 def has_line_of_sight(attacker, target, game_map) -> bool:
     """
-    Convenience helper for direct ranged fire validation.
-
-    Returns True only if LOS is CLEAR.
+    Returns True if LOS is not blocked.
     """
-    return (
-        check_line_of_sight(attacker, target, game_map)
-        == LineOfSight.CLEAR
-    )
+
+    return check_line_of_sight(attacker, target, game_map) != LineOfSight.BLOCKED

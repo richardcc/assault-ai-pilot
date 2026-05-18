@@ -23,3 +23,12 @@ class Hex:
 
     def neighbors(self) -> list["Hex"]:
         return [self.neighbor(d) for d in HexDirection]
+
+    # -------------------------------------------------
+    # ✅ SIMPLIFIED TERRAIN (FINAL FORM)
+    # -------------------------------------------------
+    def get_terrain(self) -> str:
+        """
+        Returns the terrain type of the hex.
+        """
+        return self.terrain.value

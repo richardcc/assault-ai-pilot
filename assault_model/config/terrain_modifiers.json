@@ -1,0 +1,92 @@
+{
+  "terrain": {
+
+    "clear": {
+      "defense": {
+        "INFANTRY": ["GREEN"],
+        "VEHICLE": [],
+        "ARTILLERY": []
+      },
+      "los": "CLEAR"
+    },
+
+    "water": {
+      "defense": {
+        "INFANTRY": [],
+        "VEHICLE": [],
+        "ARTILLERY": []
+      },
+      "los": "CLEAR",
+      "impassable": true
+    },
+
+    "rocky": {
+      "defense": {
+        "INFANTRY": ["BLUE", "YELLOW"],
+        "VEHICLE": ["GREEN"],
+        "ARTILLERY": ["GREEN"]
+      },
+      "los": "CLEAR"
+    },
+
+    "olive_vine_grove": {
+      "defense": {
+        "INFANTRY": ["GREEN", "GREEN"],
+        "VEHICLE": ["BLUE"],
+        "ARTILLERY": ["BLUE"]
+      },
+      "los": "HINDERED"
+    },
+
+    "light_forest": {
+      "defense": {
+        "INFANTRY": ["YELLOW", "GREEN"],
+        "VEHICLE": ["GREEN"],
+        "ARTILLERY": ["BLUE"]
+      },
+      "los": "HINDERED"
+    },
+
+    "brush": {
+      "defense": {
+        "INFANTRY": ["GREEN", "BLUE"],
+        "VEHICLE": ["GREEN"],
+        "ARTILLERY": ["GREEN"]
+      },
+      "los": "HINDERED"
+    },
+
+    "heavy_forest": {
+      "defense": {
+        "INFANTRY": ["GREEN", "YELLOW", "YELLOW"],
+        "VEHICLE": ["GREEN"],
+        "ARTILLERY": ["GREEN"]
+      },
+      "los": "BLOCKED",
+      "no_indirect_from": true
+    },
+
+    "building_single": {
+      "defense": {
+        "INFANTRY": ["BLUE", "YELLOW", "YELLOW"],
+        "VEHICLE": ["BLUE"],
+        "ARTILLERY": ["GREEN"]
+      },
+      "los": "BLOCKED",
+      "no_indirect_from": true,
+      "elevation": 0
+    },
+
+    "building_multi": {
+      "defense": {
+        "INFANTRY": ["RED", "GREEN", "GREEN"],
+        "VEHICLE": ["BLUE"],
+        "ARTILLERY": ["GREEN"]
+      },
+      "los": "BLOCKED",
+      "no_indirect_from": true,
+      "elevation": 1
+    }
+
+  }
+}

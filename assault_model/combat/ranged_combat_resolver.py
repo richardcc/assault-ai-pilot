@@ -9,6 +9,8 @@ from assault_model.map.combat_geometry import determine_attack_sector
 from assault_model.runtime.execution_context import ExecutionContext
 from assault_model.combat.battle_die import DiceResult
 from assault_model.combat.dice_comparison import compare_dice
+from assault_model.config.terrain_config import terrain_config
+from assault_model.actions.combat_mode import CombatMode
 
 # ✅ NUEVO (SIN ROMPER NADA)
 from assault_model.combat.line_of_sight import (
@@ -93,6 +95,26 @@ def resolve_ranged_combat(
         )
         return CombatResolutionResult([], [], [])
 
+    # =================================================
+    # TERRAIN RULES (INDIRECT RESTRICTIONS)
+    # =================================================
+    if game_map:
+        attacker_hex = game_map.get_hex(attacker.position)
+
+        if attacker_hex is not None:
+            terrain_name = attacker_hex.get_terrain()
+
+            if terrain_config.has_flag(terrain_name, "no_indirect_from"):
+                if getattr(action, "combat_mode", None) is not None:
+                    if getattr(action, "combat_mode", None) == CombatMode.RANGED_INDIRECT:
+                        _trace(
+                            "INDIRECT_BLOCKED_BY_TERRAIN",
+                            attacker=attacker.unit_id,
+                            terrain=terrain_name,
+                        )
+
+                        return CombatResolutionResult([], [], [])
+
     # ---------------- ATTACK DICE ----------------
     attack_colors = list(
         attacker.unit_type.get_attack_dice(
@@ -112,7 +134,7 @@ def resolve_ranged_combat(
             )
 
     # ---------------- PARTIAL LOS PENALTY ----------------
-    if los == LineOfSight.PARTIAL and attack_colors:
+    if los == LineOfSight.HINDERED and attack_colors:
         attack_colors = attack_colors[:-1]
 
     attack_pool = AttackDicePool(attack_colors)
@@ -133,7 +155,15 @@ def resolve_ranged_combat(
     if game_map:
         hex_ = game_map.get_hex(target.position)
         if hex_ is not None:
-            terrain_mod = TerrainModifier.from_hex(hex_)
+            
+            terrain_name = hex_.get_terrain()
+
+            _trace(
+                "TERRAIN_USED",
+                defender=target.unit_id,
+                terrain=terrain_name,
+            )
+            terrain_mod = TerrainModifier.from_hex(hex_, target)
             defense_colors = terrain_mod.modify_defense(defense_colors)
 
             _trace(

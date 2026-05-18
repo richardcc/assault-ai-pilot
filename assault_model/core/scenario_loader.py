@@ -1,17 +1,3 @@
-# assault_model/core/scenario_loader.py
-#
-# Scenario loader.
-# Responsible for constructing a Scenario object from a scenario JSON file.
-# This includes:
-# - Map construction from map pieces
-# - Unit instantiation from the unit catalog
-# - Victory condition parsing
-# - Initial GameState creation
-#
-# NOTE:
-# - This module defines WHAT exists at the start of the game,
-#   not how the game runs.
-
 import json
 import os
 from pathlib import Path
@@ -28,25 +14,17 @@ from assault_model.core.victory_conditions import VictoryConditions
 from assault_model.state.game_state import GameState
 
 
-# -------------------------------------------------
-# DEBUG TRACE (configurable by environment variable)
-# -------------------------------------------------
 DEBUG_TRACE = os.getenv("ASSAULT_DEBUG_TRACE", "0") == "1"
 
 
 def _trace(tag: str, **data):
-    """Internal debug helper for scenario loading."""
     if not DEBUG_TRACE:
         return
     payload = " ".join(f"{k}={v}" for k, v in data.items())
     print(f"[TRACE][{tag}] {payload}")
 
 
-# -------------------------------------------------
-# Errors
-# -------------------------------------------------
 class ScenarioLoaderError(Exception):
-    """Raised when a scenario file cannot be loaded or is invalid."""
     pass
 
 
@@ -54,9 +32,6 @@ class ScenarioLoaderError(Exception):
 # Helpers
 # -------------------------------------------------
 def _offset_hex(hex_: Hex, origin: Tuple[int, int]) -> Hex:
-    """
-    Returns a new Hex translated by an origin offset.
-    """
     return Hex(
         q=hex_.q + origin[0],
         r=hex_.r + origin[1],
@@ -72,27 +47,20 @@ def load_scenario(
     unit_catalog: Dict[str, UnitType],
     map_piece_catalog: Dict[str, MapPieceDefinition],
 ) -> Scenario:
-    """
-    Load a Scenario from a JSON file.
-    """
 
-    # ---------------------------------------------
-    # Load and parse scenario JSON
-    # ---------------------------------------------
     if not scenario_path.exists():
         raise ScenarioLoaderError(f"Scenario not found: {scenario_path}")
 
     raw = json.loads(scenario_path.read_text(encoding="utf-8"))
 
     # =================================================
-    # MAP CONSTRUCTION (FROM MAP PIECES)
+    # MAP CONSTRUCTION
     # =================================================
     pieces_def = raw.get("map", {}).get("pieces", [])
     if not pieces_def:
         raise ScenarioLoaderError("Scenario map has no pieces")
 
     global_hexes: List[Hex] = []
-    pending_hex_states: List[Tuple[Tuple[int, int], object]] = []
     pending_hex_edges: List[
         Tuple[Tuple[int, int], Tuple[int, int], object]
     ] = []
@@ -108,13 +76,11 @@ def load_scenario(
         piece = map_piece_catalog[piece_id]
         origin = tuple(entry["origin"])
 
+        # ✅ HEXES
         for h in piece.hexes:
             global_hexes.append(_offset_hex(h, origin))
 
-        for (q, r), state in piece.hex_states.items():
-            global_coord = (q + origin[0], r + origin[1])
-            pending_hex_states.append((global_coord, state))
-
+        # ✅ EDGES
         for (a, b), feature in piece.hex_edges.items():
             aq, ar = a
             bq, br = b
@@ -126,6 +92,7 @@ def load_scenario(
                 )
             )
 
+    # ✅ check overlapping
     coords = [(h.q, h.r) for h in global_hexes]
     if len(coords) != len(set(coords)):
         raise ScenarioLoaderError("Overlapping hexes detected")
@@ -133,12 +100,8 @@ def load_scenario(
     game_map = Map(hexes=global_hexes)
 
     # =================================================
-    # ATTACH HEX STATES AND EDGE FEATURES
+    # APPLY EDGE FEATURES ONLY
     # =================================================
-    for (q, r), state in pending_hex_states:
-        state.hex = game_map.get_hex(q, r)
-        game_map.set_hex_state(q, r, state)
-
     for a, b, feature in pending_hex_edges:
         game_map.add_hex_edge_feature(a, b, feature)
 
@@ -164,14 +127,6 @@ def load_scenario(
         pos = HexCoord(*pos_tuple)
         unit_type = unit_catalog[unit_key]
 
-        _trace(
-            "SCENARIO_UNIT_TYPE",
-            unit_id=u["unit_id"],
-            unit_key=unit_key,
-            attack_raw=unit_type._attack_raw,
-            base_defense_raw=unit_type._base_defense_raw,
-        )
-
         units.append(
             UnitInstance(
                 unit_id=u["unit_id"],
@@ -183,7 +138,7 @@ def load_scenario(
         )
 
     # =================================================
-    # SCENARIO OBJECT
+    # SCENARIO
     # =================================================
     scenario = Scenario(
         name=raw["id"],
@@ -198,7 +153,7 @@ def load_scenario(
     )
 
     # =================================================
-    # INITIAL GAME STATE
+    # GAME STATE
     # =================================================
     game_state = GameState(
         game_map=game_map,

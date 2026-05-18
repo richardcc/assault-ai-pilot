@@ -1,10 +1,7 @@
-# assault_sim/debug/map_renderer.py
-
 class MapRenderer:
     """
     Renders the full game map with:
-    - terrain (water / clear),
-    - hex state (building 🏠 / woods 🌳),
+    - terrain (water / clear / special),
     - units (🔵 GE / 🔴 US),
     - victory points 🚩.
     """
@@ -67,47 +64,49 @@ class MapRenderer:
                     continue
 
                 # -------------------------------------------------
-                # BASE TERRAIN
+                # TERRAIN (single source of truth)
                 # -------------------------------------------------
-                if hex_.terrain.value == "water":
+                terrain = hex_.get_terrain()
+
+                if terrain == "water":
                     symbol = "~~~"
+                elif terrain == "building_single":
+                    symbol = "🏠"
+
+                elif terrain == "building_multi":
+                    symbol = "🏢"
+                elif terrain == "light_forest":
+                    symbol = "🌳"
+                elif terrain == "olive_vine_grove":
+                    symbol = "🌿"
+
+                elif terrain == "rocky":
+                    symbol = "⛰️"
+
                 else:
                     symbol = " . "
 
                 # -------------------------------------------------
-                # HEX STATE (terrain features)
-                # -------------------------------------------------
-                hs = self.game_map.get_hex_state(q, r)
-                if hs:
-                    if getattr(hs, "building", False):
-                        symbol = "🏠"
-                    elif getattr(hs, "woods", False):
-                        symbol = "🌳"
-
-                # -------------------------------------------------
-                # VICTORY POINT (overlay base)
+                # VICTORY POINT
                 # -------------------------------------------------
                 if (q, r) in self.vps:
                     symbol = "🚩"
 
                 # -------------------------------------------------
-                # UNIT OVERLAY (priority)
+                # UNIT OVERLAY (highest priority)
                 # -------------------------------------------------
                 if (q, r) in unit_at:
                     u = unit_at[(q, r)]
                     icon = "🔵" if u.side == "GE" else "🔴"
 
-                    # suppression indicator
                     if getattr(u, "suppressed", False):
                         icon += "😵"
 
-                    # keep VP visible if present
                     if (q, r) in self.vps:
                         symbol = f"{icon}🚩"
                     else:
                         symbol = f"{icon}{symbol.strip()}"
 
-                # print
                 print(f"{symbol:>4}", end=" ")
 
             print()
@@ -116,6 +115,7 @@ class MapRenderer:
         # LEGEND
         # -------------------------------------------------
         print(
-            "\nLegend: . CLEAR | ~~~ WATER | 🏠 BUILDING | 🌳 WOODS "
-            "| 🔵 GE | 🔴 US | 🚩 VP\n"
+            "\nLegend: . CLEAR | ~~~ WATER | 🏠 SINGLE | 🏢 MULTI | ⛰️ ROCKY\n"
+            "        🌳 FOREST | 🌿 GROVE | 🔵 GE | 🔴 US | 🚩 VP\n"
         )
+        

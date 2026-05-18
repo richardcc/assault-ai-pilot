@@ -1,9 +1,6 @@
-# assault_model/map/map.py
-
 from typing import Dict, List, Tuple, Optional
 
 from assault_model.map.hex import Hex
-from assault_model.map.hex_state import HexState
 from assault_model.map.hex_edge_feature import HexEdgeFeature
 
 
@@ -14,8 +11,7 @@ class Map:
     A Map is a collection of global hexes.
     It is immutable in terms of geometry during gameplay.
 
-    The Map also serves as a registry for dynamic hex state
-    and static edge features that are queried by game resolvers.
+    The Map serves as a registry for hexes and static edge features.
     """
 
     def __init__(self, hexes: List[Hex]) -> None:
@@ -26,14 +22,15 @@ class Map:
             (h.q, h.r): h for h in hexes
         }
 
-        # Dynamic per-hex state indexed by global coordinates
-        self.hex_states: Dict[Tuple[int, int], HexState] = {}
-
         # Static edge features indexed by ordered coordinate pairs
         self.hex_edges: Dict[
             Tuple[Tuple[int, int], Tuple[int, int]],
             HexEdgeFeature,
         ] = {}
+
+    # ---------------------------------------------------------
+    # Hex retrieval
+    # ---------------------------------------------------------
 
     def get_hex(self, q: int, r: int) -> Optional[Hex]:
         """
@@ -41,29 +38,19 @@ class Map:
         """
         return self._hex_index.get((q, r))
 
+    def get_hex_from_coord(self, coord) -> Optional[Hex]:
+        """
+        Convenience helper to retrieve a hex using a HexCoord-like object.
+        """
+        if coord is None:
+            return None
+        return self.get_hex(coord.q, coord.r)
+
     def all_hexes(self) -> List[Hex]:
         """
         Return all hexes in the map.
         """
         return self.hexes
-
-    # ---------------------------------------------------------
-    # Hex state handling
-    # ---------------------------------------------------------
-
-    def set_hex_state(self, q: int, r: int, state: HexState) -> None:
-        """
-        Associate a HexState with a global hex coordinate.
-
-        This method does not apply any game rules.
-        """
-        self.hex_states[(q, r)] = state
-
-    def get_hex_state(self, q: int, r: int) -> Optional[HexState]:
-        """
-        Retrieve the HexState associated with a hex, if any.
-        """
-        return self.hex_states.get((q, r))
 
     # ---------------------------------------------------------
     # Hex edge feature handling

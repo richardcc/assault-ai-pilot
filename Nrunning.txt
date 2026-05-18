@@ -1,4 +1,4 @@
-
+.\git_publish.ps1
 
 
 cd '.\OneDrive - UNED\pry_ai\'
@@ -12,6 +12,9 @@ tree "C:\Users\Richard\OneDrive - UNED\pry_ai\assault_model" /F /A > files.txt
 
 
 python -m assault_sim.train.train
+python -m assault_sim.train.train -- debug
+python -m assault_sim.evaluation.evaluate_model
+
 
 Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
 .\generate_uml.ps1
