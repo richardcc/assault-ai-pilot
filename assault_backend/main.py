@@ -5,10 +5,13 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
 # =====================================================
-# LOADERS (RAW JSON, NO INFERENCE)
+# LOADERS
 # =====================================================
 
+# ✅ IMPORTANTE:
+# load_scenario_raw AHORA YA CONSTRUYE HEXES + TERRAIN
 from services.scenario_service import load_scenario_raw
+
 from services.map_piece_service import (
     load_map_piece_catalog_raw,
     load_map_piece_raw,
@@ -20,7 +23,7 @@ from services.unit_service import (
 )
 
 # =====================================================
-# RAG schemas (separated by responsibility)
+# RAG schemas
 # =====================================================
 
 from schemas.rag import (
@@ -50,7 +53,7 @@ app.add_middleware(
 )
 
 # =====================================================
-# LOAD TACTICAL RULEBOOK (ONCE AT STARTUP)
+# LOAD TACTICAL RULEBOOK
 # =====================================================
 
 RULEBOOK_PATH = (
@@ -66,7 +69,7 @@ with open(RULEBOOK_PATH, "r", encoding="utf-8") as f:
     TYPED_RULEBOOK = json.load(f)
 
 # =====================================================
-# ENGINE (WARM SINGLETON)
+# ENGINE
 # =====================================================
 
 engine = ExplainableEngine(
@@ -83,7 +86,7 @@ engine = ExplainableEngine(
 @app.get("/api/engine/status")
 def engine_status():
     """
-    Returns engine readiness and capability information.
+    Engine health + capability info.
     """
     return {
         "status": "ready",
@@ -102,42 +105,54 @@ def engine_status():
 )
 def explain_activation(request: ExplainActivationRequest):
     """
-    Explain one activation using the warm Explainable Engine.
+    Explain one activation using HRL + Tactical layers.
     """
     return engine.explain_activation(request.activation)
 
 # =====================================================
-# SCENARIO (RAW JSON)
+# SCENARIO (CON HEXES + TERRAIN)
 # =====================================================
 
 @app.get("/api/scenarios/{scenario_id}")
-def get_scenario_raw(scenario_id: str):
+def get_scenario(scenario_id: str):
     """
-    Return the scenario JSON exactly as stored on disk.
-    No transformation, no inference.
+    Return scenario with:
+    ✅ pieces
+    ✅ grid
+    ✅ hexes (built from map pieces)
+    ✅ terrain per hex
     """
     try:
-        return load_scenario_raw(scenario_id)
+        scenario = load_scenario_raw(scenario_id)
+        return scenario
+
     except FileNotFoundError:
         raise HTTPException(
             status_code=404,
             detail="Scenario not found"
         )
 
+    except Exception as e:
+        print(f"[ERROR] Scenario build failed: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail="Scenario build error"
+        )
+
 # =====================================================
-# MAP PIECES (RAW JSON)
+# MAP PIECES (RAW)
 # =====================================================
 
 @app.get("/api/map_pieces")
 def list_map_pieces_raw():
     """
-    Return list of available map piece IDs.
-    Raw catalog keys, no transformation.
+    Return list of map piece IDs.
     """
     try:
         catalog = load_map_piece_catalog_raw()
         pieces = catalog.get("pieces", {})
         return sorted(pieces.keys())
+
     except FileNotFoundError:
         raise HTTPException(
             status_code=500,
@@ -148,30 +163,31 @@ def list_map_pieces_raw():
 @app.get("/api/map_pieces/{piece_id}")
 def get_map_piece_raw(piece_id: str):
     """
-    Return a map piece JSON exactly as stored in catalog.
-    No transformation, no inference.
+    Return raw map piece definition.
     """
     try:
         return load_map_piece_raw(piece_id)
+
     except FileNotFoundError:
         raise HTTPException(
             status_code=404,
             detail="Map piece not found"
         )
+
 # =====================================================
-# UNITS (RAW JSON)
+# UNITS (RAW)
 # =====================================================
 
 @app.get("/api/units")
 def list_units_raw():
     """
-    Return list of available unit keys.
-    Raw catalog keys, no transformation.
+    Return available unit keys.
     """
     try:
         catalog = load_unit_catalog_raw()
         units = catalog.get("units", {})
         return sorted(units.keys())
+
     except FileNotFoundError:
         raise HTTPException(
             status_code=500,
@@ -182,11 +198,11 @@ def list_units_raw():
 @app.get("/api/units/{unit_key}")
 def get_unit_raw(unit_key: str):
     """
-    Return a unit definition exactly as stored in unit_catalog.json.
-    No transformation, no inference.
+    Return raw unit definition.
     """
     try:
         return load_unit_raw(unit_key)
+
     except KeyError:
         raise HTTPException(
             status_code=404,

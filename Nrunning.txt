@@ -15,7 +15,7 @@ python -m assault_sim.train.train
 python -m assault_sim.train.train -- debug
 python -m assault_sim.evaluation.evaluate_model
 python -m assault_sim.runners.run_match_rl_vs_heuristic
-
+python -m export_project
 
 Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
 .\generate_uml.ps1
