@@ -1,5 +1,3 @@
-# assault_model/combat/ranged_combat_resolver.py
-
 from assault_model.combat.modifiers.terrain_modifier import TerrainModifier
 from assault_model.combat.attack_dice_pool import AttackDicePool
 from assault_model.combat.defense_dice_pool import DefenseDicePool
@@ -12,7 +10,6 @@ from assault_model.combat.dice_comparison import compare_dice
 from assault_model.config.terrain_config import terrain_config
 from assault_model.actions.combat_mode import CombatMode
 
-# ✅ NUEVO (SIN ROMPER NADA)
 from assault_model.combat.line_of_sight import (
     check_line_of_sight,
     LineOfSight,
@@ -35,9 +32,6 @@ def _trace(tag: str, **data):
     print(f"[TRACE][{tag}] {payload}")
 
 
-# =================================================
-# Result container (internal)
-# =================================================
 class CombatResolutionResult:
     def __init__(self, attack_roll, defense_roll, criticals):
         self.attack_roll = attack_roll
@@ -45,9 +39,6 @@ class CombatResolutionResult:
         self.criticals = criticals
 
 
-# =================================================
-# Primary critical registration (10.7.3)
-# =================================================
 def resolve_critical(face: DiceFace, target_class: UnitClass):
     return {
         "face": face.name,
@@ -55,30 +46,30 @@ def resolve_critical(face: DiceFace, target_class: UnitClass):
     }
 
 
-# =================================================
-# Resolver
-# =================================================
 def resolve_ranged_combat(
     *,
-    action,  # ✅ NUEVO
+    action,
     attacker,
     target,
     distance: int,
     context: ExecutionContext | None = None,
 ) -> CombatResolutionResult:
-    
-    # =================================================
-    # CONTEXT
-    # =================================================
+
     game_map = context.game_map if context and context.game_map else None
+    terrain_cfg = context.terrain_config if context and hasattr(context, "terrain_config") else terrain_config
 
     # =================================================
-    # LINE OF SIGHT
+    # LOS
     # =================================================
     los = LineOfSight.CLEAR
 
     if game_map:
-        los = check_line_of_sight(attacker, target, game_map)
+        los = check_line_of_sight(
+            attacker,
+            target,
+            game_map,
+            terrain_cfg
+        )
 
     _trace(
         "LOS_CHECK",
@@ -96,7 +87,7 @@ def resolve_ranged_combat(
         return CombatResolutionResult([], [], [])
 
     # =================================================
-    # TERRAIN RULES (INDIRECT RESTRICTIONS)
+    # INDIRECT RESTRICTIONS
     # =================================================
     if game_map:
         attacker_hex = game_map.get_hex(attacker.position)
@@ -104,18 +95,11 @@ def resolve_ranged_combat(
         if attacker_hex is not None:
             terrain_name = attacker_hex.get_terrain()
 
-            if terrain_config.has_flag(terrain_name, "no_indirect_from"):
-                if getattr(action, "combat_mode", None) is not None:
-                    if getattr(action, "combat_mode", None) == CombatMode.RANGED_INDIRECT:
-                        _trace(
-                            "INDIRECT_BLOCKED_BY_TERRAIN",
-                            attacker=attacker.unit_id,
-                            terrain=terrain_name,
-                        )
+            if terrain_cfg.get(terrain_name, {}).get("no_indirect_from", False):
+                if getattr(action, "combat_mode", None) == CombatMode.RANGED_INDIRECT:
+                    return CombatResolutionResult([], [], [])
 
-                        return CombatResolutionResult([], [], [])
-
-    # ---------------- ATTACK DICE ----------------
+    # ---------------- ATTACK ----------------
     attack_colors = list(
         attacker.unit_type.get_attack_dice(
             distance=distance,
@@ -123,116 +107,73 @@ def resolve_ranged_combat(
         )
     )
 
-    # ---------------- SUPPRESSION (ATTACKER PENALTY) ----------------
-    if getattr(attacker, "suppressed", False):
-        if attack_colors:
-            attack_colors = attack_colors[:-1]
-            _trace(
-                "SUPPRESSION_ATTACK_PENALTY",
-                attacker=attacker.unit_id,
-                remaining_dice=len(attack_colors),
-            )
-
-    # ---------------- PARTIAL LOS PENALTY ----------------
-    if los == LineOfSight.HINDERED and attack_colors:
+    if getattr(attacker, "suppressed", False) and attack_colors:
         attack_colors = attack_colors[:-1]
 
-    attack_pool = AttackDicePool(attack_colors)
-    attack_results: list[DiceResult] = attack_pool.roll()
+    attack_results = AttackDicePool(attack_colors).roll()
 
-    # ---------------- ATTACK SECTOR ----------------
-    attack_sector = determine_attack_sector(
+    # ---------------- SECTOR ----------------
+    sector = determine_attack_sector(
         attacker_pos=attacker.position,
         defender_pos=target.position,
         defender_facing=getattr(target, "facing", "N"),
     )
 
-    # ---------------- DEFENSE DICE ----------------
+    # ---------------- DEFENSE ----------------
     defense_colors = list(
-        target.unit_type.get_defense_dice(sector=attack_sector)
+        target.unit_type.get_defense_dice(sector=sector)
     )
 
     if game_map:
         hex_ = game_map.get_hex(target.position)
-        if hex_ is not None:
-            
-            terrain_name = hex_.get_terrain()
-
-            _trace(
-                "TERRAIN_USED",
-                defender=target.unit_id,
-                terrain=terrain_name,
+        if hex_:
+            terrain_mod = TerrainModifier.from_hex(
+                hex_,
+                target,
+                los=los   # ✅ ÚNICO sitio donde se aplica LOS
             )
-            terrain_mod = TerrainModifier.from_hex(hex_, target)
             defense_colors = terrain_mod.modify_defense(defense_colors)
 
-            _trace(
-                "TERRAIN_APPLIED",
-                defender=target.unit_id,
-                hex=target.position,
-                defense_dice=len(defense_colors),
-            )
+    defense_results = DefenseDicePool(defense_colors).roll()
 
-    defense_pool = DefenseDicePool(defense_colors)
-    defense_results: list[DiceResult] = defense_pool.roll()
-
-    # ---------------- DICE COMPARISON ----------------
+    # ---------------- RESOLUTION ----------------
     comparison = compare_dice(
         attacker_dice=attack_results,
         defender_dice=defense_results,
     )
 
-    remaining_damage = comparison["remaining_damage"]
-    remaining_criticals = comparison["remaining_criticals"]
-    remaining_suppress = comparison["remaining_suppress"]
+    dmg = comparison["remaining_damage"]
+    crits = comparison["remaining_criticals"]
+    suppress = comparison["remaining_suppress"]
 
-    # ---------------- CRITICALS ----------------
     criticals = [
         resolve_critical(
             DiceFace.CRITICAL,
             UnitClass[target.unit_type.category.value],
         )
-        for _ in range(remaining_criticals)
+        for _ in range(crits)
     ]
 
-    # ---------------- DAMAGE ----------------
-    damage = remaining_damage + remaining_criticals
+    total_damage = dmg + crits
 
     hp_before = target.hp
-    if damage > 0:
-        target.apply_damage(damage)
+    if total_damage > 0:
+        target.apply_damage(total_damage)
     hp_after = target.hp
 
-    defender_killed = hp_before > 0 and hp_after == 0
+    killed = hp_before > 0 and hp_after == 0
 
-    # ---------------- SUPPRESSION (CORRECTO) ----------------
-    if remaining_suppress > 0 and target.alive:
-
-        suppressed_before = target.is_suppressed()
-        fallback_before = target.is_in_fallback()
-
-        apply_suppression_hits(target, remaining_suppress)
+    # ---------------- SUPPRESSION ----------------
+    if suppress > 0 and target.alive:
+        apply_suppression_hits(target, suppress)
         resolve_fallback(target)
 
-        _trace(
-            "SUPPRESSION_RESOLVED",
-            unit=target.unit_id,
-            hits=remaining_suppress,
-            suppressed_before=suppressed_before,
-            fallback_before=fallback_before,
-            suppressed_after=target.is_suppressed(),
-            fallback_after=target.is_in_fallback(),
-        )
-
-    # ---------------- RESULT ----------------
     result = CombatResolutionResult(
         attack_roll=attack_results,
         defense_roll=defense_results,
         criticals=criticals,
     )
 
-    # ---------------- EMIT ACTION_EFFECT ----------------
- # ---------------- EMIT ACTION_EFFECT ----------------
     if context and context.event_bus:
         context.event_bus.emit(
             {
@@ -242,64 +183,30 @@ def resolve_ranged_combat(
                     "attacker": attacker.unit_id,
                     "defender": target.unit_id,
                     "distance": distance,
-                    "attack_sector": attack_sector.name,
+                    "attack_sector": sector.name,
                     "los": los.name,
-
-                # ✅ CLAVE
-                "attack_mode": getattr(action, "attack_mode", "DIRECT_FIRE"),
+                    "attack_mode": getattr(action, "attack_mode", "DIRECT_FIRE"),
 
                     "attacker_attack_dice": [
-                        {
-                            "color": d.color.name,
-                            "faces": [f.name for f in d.faces],
-                        }
+                        {"color": d.color.name, "faces": [f.name for f in d.faces]}
                         for d in attack_results
                     ],
                     "defender_defense_dice": [
-                        {
-                            "color": d.color.name,
-                            "faces": [f.name for f in d.faces],
-                        }
+                        {"color": d.color.name, "faces": [f.name for f in d.faces]}
                         for d in defense_results
                     ],
 
-                    # ============================
-                    # EFFECTS (CORREGIDO)
-                    # ============================
                     "attacker_effects": {
-                        "damage": damage,
+                        "damage": total_damage,
                         "criticals": criticals,
-
-                        # legacy
-                        "suppress": remaining_suppress,
-
-                        # nuevos
-                        "suppress_attempts": remaining_suppress,
-                        "suppression_applied": remaining_suppress > 0,
+                        "suppress": suppress,
                         "suppression_state_after": target.is_suppressed(),
-                        "fallback_triggered": target.is_in_fallback(),
-                    },
-
-                    "suppression": {
-                        "attempts": remaining_suppress,
-                        "applied": remaining_suppress > 0,
-                        "state": target.is_suppressed(),
-                        "fallback": target.is_in_fallback(),
                     },
 
                     "defender_hp_before": hp_before,
                     "defender_hp_after": hp_after,
-                    "defender_killed": defender_killed,
-
-                    "defender_suppressed": target.is_suppressed(),
-                    "defender_fallback": target.is_in_fallback(),
-
-                    # ✅ CLAVE PARA REPLAY
-                    "defender_position_after": target.position,
-
+                    "defender_killed": killed,
                     "resolution": comparison,
-                    "outcome": "resolved",
-                    "winner": None,
                 },
             }
         )

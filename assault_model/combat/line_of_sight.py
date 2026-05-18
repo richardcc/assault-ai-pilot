@@ -1,52 +1,95 @@
 from enum import Enum
-from assault_model.config.terrain_config import terrain_config
 
+from assault_model.map.hex_line import hex_line
+from assault_model.map.hex_coord import HexCoord
+
+
+# -------------------------------------------------
+# LOS RESULT
+# -------------------------------------------------
 
 class LineOfSight(Enum):
-    CLEAR = "CLEAR"
-    HINDERED = "HINDERED"
-    BLOCKED = "BLOCKED"
+    CLEAR = 0
+    HINDERED = 1
+    BLOCKED = 2
 
 
 # -------------------------------------------------
-# ✅ MAIN LOS FUNCTION
+# CACHE GLOBAL
 # -------------------------------------------------
-def check_line_of_sight(attacker, target, game_map) -> LineOfSight:
-    """
-    Determines line of sight between attacker and target
-    using terrain_config.
 
-    Current simplified model:
-    - Only target hex is evaluated
-    - Future: full hex-path tracing
-    """
-
-    if game_map is None:
-        return LineOfSight.CLEAR
-
-    target_hex = game_map.get_hex_from_coord(target.position)
-
-    if target_hex is None:
-        return LineOfSight.CLEAR
-
-    # ✅ single source of truth
-    terrain_name = target_hex.get_terrain()
-
-    # ✅ rules come from config
-    los_type = terrain_config.get_los(terrain_name)
-
-    try:
-        return LineOfSight[los_type]
-    except KeyError:
-        raise ValueError(f"Invalid LOS type '{los_type}' in terrain_config")
+_los_cache = {}
 
 
-# -------------------------------------------------
-# ✅ HELPER
-# -------------------------------------------------
-def has_line_of_sight(attacker, target, game_map) -> bool:
-    """
-    Returns True if LOS is not blocked.
-    """
+def _make_key(a: HexCoord, b: HexCoord):
+    return (a.q, a.r, b.q, b.r)
 
-    return check_line_of_sight(attacker, target, game_map) != LineOfSight.BLOCKED
+
+def check_line_of_sight(attacker, target, game_map, terrain_config):
+
+    start = attacker.position
+    end = target.position
+
+    key = _make_key(start, end)
+
+    # ✅ CACHE HIT
+    if key in _los_cache:
+        return _los_cache[key]
+
+    line = hex_line(start, end)
+
+    # ignoramos origen y destino
+    path = line[1:-1]
+
+    hindrance = 0
+
+    for coord in path:
+        hex_ = game_map.get_hex(coord.q, coord.r)
+
+        if not hex_:
+            continue
+
+        terrain = hex_.get_terrain()
+        config = terrain_config.get(terrain, {})
+
+        los_type = config.get("los", "CLEAR")
+
+        # -------------------------------------------------
+        # BLOCKED → exit inmediato
+        # -------------------------------------------------
+        if los_type == "BLOCKED":
+            result = LineOfSight.BLOCKED
+            _los_cache[key] = result
+            return result
+
+        # -------------------------------------------------
+        # HINDERED → acumulamos
+        # -------------------------------------------------
+        if los_type == "HINDERED":
+            hindrance += 1
+
+            # ✅ regla del manual: 3 hindrances = BLOCKED
+            if hindrance >= 3:
+                result = LineOfSight.BLOCKED
+                _los_cache[key] = result
+                return result
+
+    # -------------------------------------------------
+    # RESULTADO FINAL
+    # -------------------------------------------------
+    if hindrance >= 1:
+        result = LineOfSight.HINDERED
+    else:
+        result = LineOfSight.CLEAR
+
+    _los_cache[key] = result
+    return result
+
+
+def has_line_of_sight(attacker, target, game_map, terrain_config):
+    return check_line_of_sight(
+        attacker,
+        target,
+        game_map,
+        terrain_config
+    ) != LineOfSight.BLOCKED

@@ -23,55 +23,63 @@ class ProgressiveReward(BaseReward):
         reward = 0.0
 
         # -------------------------------------------------
-        # DAMAGE (más incentivo a combatir)
+        # ✅ DAMAGE DEALT (principal señal positiva)
         # -------------------------------------------------
         damage = info.get("damage", 0)
-        reward += 0.4 * damage   # 🔥 antes 0.3
+        reward += 0.4 * damage
 
-        # pequeño boost (reducido)
         if damage > 0:
-            reward += 0.03       # 🔥 antes 0.05
+            reward += 0.03
 
+        # -------------------------------------------------
+        # ✅ DAMAGE TAKEN (🔥 NUEVO — CLAVE)
+        # -------------------------------------------------
+        damage_taken = info.get("damage_taken", 0)
+        reward -= 0.3 * damage_taken
+
+        # -------------------------------------------------
+        # ACTION TYPE
+        # -------------------------------------------------
         action_name = action.__class__.__name__ if action else ""
 
         # -------------------------------------------------
-        # PENALIZAR SOLO DIRECT VACÍO (mucho más suave)
+        # ✅ PENALIZAR SOLO DIRECT VACÍO
         # -------------------------------------------------
         if damage == 0 and "RangedDirect" in action_name:
-            reward -= 0.005      # 🔥 antes 0.02
+            reward -= 0.005
 
         # -------------------------------------------------
-        # BONUS INDIRECT (mantener)
+        # ✅ BONUS INDIRECT
         # -------------------------------------------------
         if "Indirect" in action_name and damage > 0:
             reward += 0.3
 
         # -------------------------------------------------
-        # BONUS MELEE
+        # ✅ BONUS MELEE
         # -------------------------------------------------
         if "Close" in action_name and info.get("defender_killed"):
             reward += 1.0
 
         # -------------------------------------------------
-        # MICRO BONUS A ATACAR (anti-colapso)
+        # ✅ MICRO BONUS A ATACAR (SOLO SI FUNCIONA)
         # -------------------------------------------------
-        if "Attack" in action_name:
+        if "Attack" in action_name and damage > 0:
             reward += 0.01
 
         # -------------------------------------------------
-        # KILL
+        # ✅ KILL
         # -------------------------------------------------
         if info.get("defender_killed"):
             reward += 3.0
 
         # -------------------------------------------------
-        # DEATH (reducido para evitar miedo excesivo)
+        # ✅ DEATH (ligero castigo)
         # -------------------------------------------------
         if active and not active.alive:
-            reward -= 3.0    # 🔥 antes 4.0
+            reward -= 3.0
 
         # -------------------------------------------------
-        # VP diferencial
+        # ✅ VP diferencial
         # -------------------------------------------------
         try:
             if hasattr(state, "vp_tracker") and hasattr(next_state, "vp_tracker"):
@@ -83,7 +91,7 @@ class ProgressiveReward(BaseReward):
             pass
 
         # -------------------------------------------------
-        # ENDGAME
+        # ✅ ENDGAME (CLAVE)
         # -------------------------------------------------
         if getattr(next_state, "done", False):
             if getattr(next_state, "winner", None) == self.rl_side:
@@ -92,12 +100,12 @@ class ProgressiveReward(BaseReward):
                 reward -= 10.0
 
         # -------------------------------------------------
-        # TIME COST
+        # ✅ TIME COST
         # -------------------------------------------------
         reward -= 0.01
 
         # -------------------------------------------------
-        # CLIP
+        # ✅ CLIP
         # -------------------------------------------------
         reward = max(min(reward, 10.0), -10.0)
 

@@ -20,8 +20,9 @@ class UnitInstance:
     - suppression system
     - fallback system
     - embark / transport logic
+
     ✅ NEW:
-    - unified combat interface (supports DIRECT + INDIRECT fire)
+    - spotting memory (persistent visibility)
     """
 
     def __init__(
@@ -56,12 +57,17 @@ class UnitInstance:
         self.fallback: bool = False
 
         # ============================
+        # ✅ NEW: Spotting / visibility state
+        # ============================
+        self.spotted_enemies: set[str] = set()
+        self.last_seen_turn: dict[str, int] = {}
+
+        # ============================
         # Transport / embark state
         # ============================
         self.embarked: bool = False
         self.carrier_id: str | None = None
 
-        # Only meaningful for vehicles
         if self.unit_type.category.name == "VEHICLE":
             self.passengers: list[str] = []
 
@@ -104,7 +110,7 @@ class UnitInstance:
         self.position = (q, r)
 
     # ----------------------------
-    # Distance helper ✅ NEW
+    # Distance helper
     # ----------------------------
     def get_distance_to(self, other: "UnitInstance") -> int:
         if self.position is None or other.position is None:
@@ -116,21 +122,13 @@ class UnitInstance:
         return abs(q1 - q2) + abs(r1 - r2)
 
     # ----------------------------
-    # Combat API ✅ NEW
+    # Combat API
     # ----------------------------
     def get_attack_dice(self, target: "UnitInstance"):
-        """
-        Resolve attack dice using UnitType logic.
-
-        ✅ Supports:
-        - DIRECT_FIRE
-        - INDIRECT_FIRE
-        """
 
         if not self.alive or target is None:
             return []
 
-        # Cannot attack without valid positions
         if self.position is None or target.position is None:
             return []
 
@@ -150,6 +148,20 @@ class UnitInstance:
         )
 
         return dice
+
+    # ----------------------------
+    # Spotting helpers ✅ NEW
+    # ----------------------------
+    def can_see(self, other: "UnitInstance") -> bool:
+        return other.unit_id in self.spotted_enemies
+
+    def remember_enemy(self, enemy_id: str, turn: int):
+        self.spotted_enemies.add(enemy_id)
+        self.last_seen_turn[enemy_id] = turn
+
+    def forget_enemy(self, enemy_id: str):
+        if enemy_id in self.spotted_enemies:
+            self.spotted_enemies.remove(enemy_id)
 
     # ----------------------------
     # Embark / disembark
@@ -252,12 +264,9 @@ class UnitInstance:
             )
 
     def clear_suppression(self):
-
         if not self.suppressed:
             return
-
         self.suppressed = False
-
         _trace("SUPPRESSION_CLEARED", unit=self.unit_id)
 
     # ----------------------------

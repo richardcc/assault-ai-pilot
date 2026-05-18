@@ -1,8 +1,6 @@
 from assault_model.actions.movement import MoveAction
 from assault_model.actions.status import WaitAction
 from assault_model.actions.assault import AssaultAction
-
-# Direct ranged fire action
 from assault_model.actions.ranged_direct import RangedDirectAttack
 
 from assault_model.rules.movement_rules import MovementRules
@@ -113,26 +111,31 @@ class ActionCatalog:
             if not other.alive:
                 continue
 
+            # -------------------------------------------------
+            # ✅ SPOTTING (CLAVE)
+            # -------------------------------------------------
+            if other.unit_id not in active.spotted_enemies:
+                continue
+
             # ✅ Distance
             distance = hex_distance(active.position, other.position)
 
-            # ✅ Weapon range (based on unit attack tables)
+            # ✅ Weapon range
             if not self._in_weapon_range(active, other):
                 continue
 
             # ✅ Determine mode
             mode = active.unit_type._resolve_attack_mode(distance)
 
-            # ✅ Mortar min range (block short range)
+            # ✅ Mortar min range
             if mode == "INDIRECT_FIRE" and distance < 3:
                 continue
 
-            # ✅ LOS only for direct fire
+            # ✅ LOS obligatorio para direct fire
             if mode == "DIRECT_FIRE":
                 if not self._has_line_of_sight(active, other):
                     continue
 
-            # ✅ Add action
             _trace(
                 "ACTION_ADD",
                 action="RangedDirectAttack",
@@ -151,7 +154,7 @@ class ActionCatalog:
         return actions
 
     # ==================================================
-    # RANGE CHECK (BASED ON UNIT CARDS)
+    # RANGE CHECK
     # ==================================================
     def _in_weapon_range(self, attacker, target):
 
@@ -181,4 +184,9 @@ class ActionCatalog:
     # LOS
     # ==================================================
     def _has_line_of_sight(self, attacker, target):
-        return has_line_of_sight(attacker, target, self.gs.game_map)
+        return has_line_of_sight(
+            attacker,
+            target,
+            self.gs.game_map,
+            self.gs.terrain_config
+        )

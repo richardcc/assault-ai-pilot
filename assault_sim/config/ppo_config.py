@@ -17,8 +17,8 @@ class PPOConfig:
     ENTROPY_COEF = 0.02
 
     # Parallelism
-    NUM_ENVS = 16
-    BATCH_ROLLOUTS = 12
+    NUM_ENVS = 32
+    BATCH_ROLLOUTS = 20
 
     # Optimizer
     LR = 3e-4

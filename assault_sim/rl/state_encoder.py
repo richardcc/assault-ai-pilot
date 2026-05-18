@@ -1,12 +1,10 @@
-# assault_sim/rl/state_encoder.py
-
 import numpy as np
 from assault_model.map.hex_utils import hex_distance
 
 
 # =================================================
 # NUMERIC STATE (USED BY RL)
-# ✅ MEJORADO: incluye objetivo (VP)
+# ✅ MEJORADO: incluye objetivo (VP) + VISIBILITY
 # =================================================
 def encode_state(state, rl_side=None, max_turns=None):
 
@@ -65,6 +63,8 @@ def encode_state(state, rl_side=None, max_turns=None):
     dq = 0.0
     dr = 0.0
 
+    closest_enemy = None
+
     if active is not None and enemy_units:
         closest_enemy = min(
             enemy_units,
@@ -91,7 +91,6 @@ def encode_state(state, rl_side=None, max_turns=None):
 
         if vp_points:
 
-            # cada VictoryPoint tiene hex_coords = (q, r)
             target_vp = min(
                 vp_points,
                 key=lambda p: hex_distance(active.position, p.hex_coords)
@@ -100,6 +99,25 @@ def encode_state(state, rl_side=None, max_turns=None):
             dist = hex_distance(active.position, target_vp.hex_coords)
 
             vp_dist = np.clip(dist / 10.0, 0.0, 1.0)
+
+    # -------------------------------------------------
+    # ✅ NUEVO: VISIBILITY (ROMPE EL COLAPSO)
+    # -------------------------------------------------
+    visible_enemy = 0.0
+
+    if active is not None and closest_enemy is not None:
+        if closest_enemy.unit_id in active.spotted_enemies:
+            visible_enemy = 1.0
+
+    # -------------------------------------------------
+    # ✅ NUEVO: DISTANCIA AL ENEMIGO
+    # -------------------------------------------------
+    enemy_dist = 0.0
+
+    if active is not None and closest_enemy is not None:
+        d = hex_distance(active.position, closest_enemy.position)
+        enemy_dist = np.clip(d / 10.0, 0.0, 1.0)
+
     # -------------------------
     # FINAL VECTOR
     # -------------------------
@@ -117,7 +135,11 @@ def encode_state(state, rl_side=None, max_turns=None):
             dq,
             dr,
 
-            vp_dist   # 🔥 NUEVO (CLAVE)
+            vp_dist,
+
+            # 🔥 NUEVOS (CLAVE)
+            visible_enemy,
+            enemy_dist,
         ],
         dtype=np.float32,
     )

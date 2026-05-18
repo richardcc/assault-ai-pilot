@@ -130,7 +130,7 @@ window.mapEntityLayerSprites = (function () {
     const def = GAME_STATE.uiMetadata?.units?.[key];
     if (!def) return null;
 
-    const sprite = PIXI.Sprite.from(`/public/assets/counters/${def.full}`);
+    const sprite = PIXI.Sprite.from(`/public/art/counters/${def.full}`);
 
     sprite.anchor.set(0.5);
     sprite.unitId = unit.unit_id;

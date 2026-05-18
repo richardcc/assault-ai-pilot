@@ -44,3 +44,6 @@ Fully simulate Assault LOS:
 - Realistic visibility
 - Tactical positioning
 - Emergent AI behaviour
+1️⃣ añadir decay (te lo integro limpio)
+2️⃣ traits → SCOUT mejora spotting
+3️⃣ elevation (top tier feature)

@@ -54,6 +54,26 @@ window.renderUnitStateView = function renderUnitStateView(gameState) {
           card.className = "unit-card";
           card.dataset.unitId = unit.unit_id;
 
+          // -------------------------------------------------
+          // 🔥 TOOLTIP (HOVER)
+          // -------------------------------------------------
+          card.addEventListener("mouseenter", (evt) => {
+            if (window.showUnitTooltip) {
+              window.showUnitTooltip(unit, gameState.uiMetadata, evt);
+            }
+          });
+
+          card.addEventListener("mousemove", (evt) => {
+            if (window.moveUnitTooltip) {
+              window.moveUnitTooltip(evt);
+            }
+          });
+
+          card.addEventListener("mouseleave", () => {
+            if (window.hideUnitTooltip) {
+              window.hideUnitTooltip();
+            }
+          })
           // ---------------------------------------------
           // IMAGE
           // ---------------------------------------------

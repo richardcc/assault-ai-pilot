@@ -1,7 +1,7 @@
 .\git_publish.ps1
 
 
-cd '.\OneDrive - UNED\pry_ai\'
+cd "C:\repos\python\assault\"
 Set-ExecutionPolicy -Scope CurrentUser -ExecutionPolicy RemoteSigned
 .\.venv\Scripts\Activate.ps1
 code .
@@ -14,6 +14,7 @@ tree "C:\Users\Richard\OneDrive - UNED\pry_ai\assault_model" /F /A > files.txt
 python -m assault_sim.train.train
 python -m assault_sim.train.train -- debug
 python -m assault_sim.evaluation.evaluate_model
+python -m assault_sim.runners.run_match_rl_vs_heuristic
 
 
 Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass

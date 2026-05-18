@@ -1,9 +1,4 @@
 # assault_sim/runners/run_match_rl_vs_heuristic.py
-#
-# HRL-enabled replay:
-# - RL chooses tactical OPTIONS (not engine actions)
-# - Heuristics execute those options
-# - TrainingEnv remains untouched
 
 import torch
 from pathlib import Path
@@ -16,61 +11,42 @@ from assault_sim.rl.policy_net import PolicyNet
 from assault_sim.rl.option_policy import OptionPolicy
 from assault_sim.decision.hrl_controller import HRLController
 from assault_sim.decision.option_executor import OptionExecutor
+from assault_sim.rl.tactical_options import TacticalOption
+
 from assault_sim.heuristics.tactical_path_heuristic import TacticalPathHeuristic
 
 from assault_sim.debug.console_observer import ConsoleObserver
 from assault_sim.debug.debug_config import DebugConfig
 
+# ✅ SISTEMA DE REPLAY CORRECTO
 from assault_sim.debug.replay_observer import ReplayObserver
 from assault_sim.debug.replay_writer import ReplayWriter
 from assault_sim.debug.replay_utils import extract_initial_state
 
 
+RL_SIDE = "US"
+CHECKPOINT = Path("models/latest.pt")
+
+
 def main():
+
     # =================================================
-    # DEFINE RL SIDE (MUST MATCH TRAINING)
+    # SIDES
     # =================================================
-    rl_side = "US"        # "GE" or "US"
+    rl_side = RL_SIDE
     enemy_side = "GE" if rl_side == "US" else "US"
 
     print(f">>> Replaying HRL: RL ({rl_side}) vs Heuristic ({enemy_side})")
 
     # -------------------------------------------------
-    # Load trained PPO checkpoint
-    # -------------------------------------------------
-    checkpoint_path = (
-        Path(__file__).resolve()
-        .parent.parent
-        / "checkpoints"
-        / f"ppo_{rl_side}_phase01_HRL.pt"
-    )
-
-    checkpoint = torch.load(checkpoint_path, map_location="cpu")
-
-    policy = PolicyNet(
-        input_dim=checkpoint["input_dim"],
-        max_actions=checkpoint["max_actions"],
-    )
-    policy.load_state_dict(checkpoint["model_state_dict"])
-    policy.eval()
-
-    print(">>> PPO model loaded (option-level policy)")
-
-    # -------------------------------------------------
-    # HRL / Heuristic components (NO env dependency)
-    # -------------------------------------------------
-    option_policy = OptionPolicy(policy)
-    heuristic_controller = TacticalPathHeuristic()
-    option_executor = OptionExecutor(heuristic_controller)
-
-    # -------------------------------------------------
-    # Environment (MUST be created BEFORE HRLController)
+    # ENV (para obtener input_dim correcto)
     # -------------------------------------------------
     sim_config = load_sim_config(
         Path("assault_sim/config/sim_config.yaml")
     )
+
     sim_config.scenario_name = "phase01_seq001_initial_contact"
-    sim_config.seed = 42   # reproducible
+    sim_config.seed = 42
 
     sim_env = SimEnv(
         sim_config,
@@ -84,18 +60,42 @@ def main():
         rl_side=rl_side,
     )
 
+    obs = env.reset()
+    input_dim = obs.shape[0]
+
     # -------------------------------------------------
-    # HRL Controller (NOW event_bus exists)
+    # MODEL ✅
     # -------------------------------------------------
+    print(f">>> Loading checkpoint: {CHECKPOINT}")
+
+    policy = PolicyNet(
+        input_dim=input_dim,
+        num_options=len(TacticalOption),
+    )
+
+    checkpoint = torch.load(CHECKPOINT, map_location="cpu")
+    policy.load_state_dict(checkpoint)
+    policy.eval()
+
+    print(">>> PPO model loaded ✅")
+
+    # -------------------------------------------------
+    # HRL COMPONENTS
+    # -------------------------------------------------
+    option_policy = OptionPolicy(policy)
+
+    heuristic = TacticalPathHeuristic()
+    executor = OptionExecutor(heuristic)
+
     hrl_controller = HRLController(
         option_policy=option_policy,
-        option_executor=option_executor,
+        option_executor=executor,
         rl_side=rl_side,
-        event_bus=sim_env.event_bus,   # ✅ CRITICAL
+        event_bus=sim_env.event_bus,
     )
 
     # -------------------------------------------------
-    # Observers (CALLABLE OBJECTS)
+    # OBSERVERS ✅
     # -------------------------------------------------
     observer = ConsoleObserver(rl_side=rl_side)
     replay_observer = ReplayObserver()
@@ -105,11 +105,8 @@ def main():
         sim_env.event_bus.subscribe(replay_observer)
 
     # -------------------------------------------------
-    # Reset environment
+    # INIT REPLAY ✅ CRÍTICO
     # -------------------------------------------------
-    obs = env.reset()
-
-    # Capture initial state for replay
     replay_observer.replay.initial_state = extract_initial_state(
         sim_env.game_state
     )
@@ -122,26 +119,37 @@ def main():
         },
     }
 
+    # -------------------------------------------------
+    # LOOP
+    # -------------------------------------------------
     done = False
     step = 0
 
-    # -------------------------------------------------
-    # Run one full match (HRL loop)
-    # -------------------------------------------------
     while not done:
+
         state = sim_env.game_state
         active = state.active_unit
 
         if active is not None and active.side == rl_side:
+
+            # ✅ fallback defensivo por si strategy = None
             action = hrl_controller.choose_action(state, obs)
+
+            if action is None:
+                action = executor.execute(state, TacticalOption.ATTACK)
+
         else:
-            action = heuristic_controller.choose_action(state)
+            # ✅ Enemy usa heuristic correctamente
+            action = heuristic.choose_action(
+                state,
+                TacticalOption.ATTACK
+            )
 
         obs, _, done, _ = env.step(action)
         step += 1
 
     # -------------------------------------------------
-    # Final score (machine-level summary)
+    # FINAL RESULT
     # -------------------------------------------------
     final_state = sim_env.game_state
     vp = (
@@ -151,10 +159,20 @@ def main():
 
     print("\n=== MATCH FINISHED ===")
     print(f"Total steps: {step}")
+    print(f"Winner:      {final_state.winner}")
+    print(f"Reason:      {final_state.end_reason}")
     print(f"Final VP:    {vp}")
 
+    # ✅ añadir resultado (SIN ROMPER FORMAT)
+    replay_observer.replay.meta["result"] = {
+        "winner": final_state.winner,
+        "reason": final_state.end_reason,
+        "vp": vp,
+        "steps": step,
+    }
+
     # -------------------------------------------------
-    # Write replay to disk
+    # SAVE REPLAY ✅ (FORMATO EXACTO)
     # -------------------------------------------------
     replay_dir = Path("assault_sim/session/replays")
     replay_dir.mkdir(parents=True, exist_ok=True)
@@ -166,8 +184,9 @@ def main():
 
     ReplayWriter.write(replay_observer.replay, replay_path)
 
-    print(f"Replay saved to: {replay_path}")
+    print(f"✅ Replay saved to: {replay_path}")
 
 
+# -----------------------------------------------------
 if __name__ == "__main__":
     main()

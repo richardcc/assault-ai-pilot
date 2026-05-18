@@ -40,7 +40,7 @@ class HRLController:
             return None
 
         # -------------------------------------------------
-        # ✅ Detect close combat
+        # ✅ close combat detection
         # -------------------------------------------------
         in_close_combat = False
         for u in state.units:
@@ -52,17 +52,13 @@ class HRLController:
                     break
 
         # -------------------------------------------------
-        # ✅ ¿toca nueva decisión?
+        # ✅ reuse option if still active
         # -------------------------------------------------
         is_new_selection = (
             self.current_option is None or self.steps_remaining <= 0
         )
 
-        # -------------------------------------------------
-        # ✅ mantener opción actual (sin overrides destructivos)
-        # -------------------------------------------------
         if not is_new_selection:
-
             self.steps_remaining -= 1
 
             return self.executor.execute(
@@ -72,55 +68,54 @@ class HRLController:
             )
 
         # -------------------------------------------------
-        # ✅ NUEVA DECISIÓN
+        # ✅ NEW DECISION
         # -------------------------------------------------
 
         strategy = self.formation_engine.update(state, self.rl_side)
+
+        # ✅ 🔥 FIX CRÍTICO: nunca None
+        if strategy is None:
+            strategy = FormationStrategy.ATTACK
 
         # ✅ PPO decide base
         ppo_option, attack_mode = self.policy.choose_option(obs)
 
         # -------------------------------------------------
-        # ✅ EXPLORACIÓN
+        # ✅ exploration
         # -------------------------------------------------
         if random.random() < 0.1:
             ppo_option = random.choice(list(TacticalOption))
 
         # -------------------------------------------------
-        # ✅ SOFT BIAS (NO overrides)
+        # ✅ SOFT BIAS
         # -------------------------------------------------
 
-        # 🔥 combate cercano → favorecer ATTACK
         if in_close_combat and ppo_option != TacticalOption.ATTACK:
             if random.random() < 0.6:
                 ppo_option = TacticalOption.ATTACK
 
-        # 🔥 estrategia ATTACK → empujar (no forzar)
         if strategy == FormationStrategy.ATTACK:
             if ppo_option != TacticalOption.ATTACK:
                 if random.random() < 0.6:
                     ppo_option = TacticalOption.ATTACK
 
-        # 🔥 PUSH_VP → favorecer movimiento
         elif strategy == FormationStrategy.PUSH_VP:
             if ppo_option not in [TacticalOption.ADVANCE, TacticalOption.FLANK]:
                 if random.random() < 0.7:
                     ppo_option = TacticalOption.ADVANCE
 
-        # 🔥 HOLD_VP → evitar HOLD inútil
         elif strategy == FormationStrategy.HOLD_VP:
             if ppo_option == TacticalOption.HOLD:
                 if random.random() < 0.9:
                     ppo_option = TacticalOption.ADVANCE
 
-        # 🔥 CLEANUP → favorecer eliminar enemigos
         elif strategy == FormationStrategy.CLEANUP:
             if ppo_option != TacticalOption.ATTACK:
                 if random.random() < 0.7:
                     ppo_option = TacticalOption.ATTACK
 
         # -------------------------------------------------
-        # ✅ evitar acciones inútiles (SOFT)
+        # ✅ avoid useless actions
         # -------------------------------------------------
 
         if ppo_option in [TacticalOption.HOLD, TacticalOption.RETREAT]:
@@ -128,7 +123,7 @@ class HRLController:
                 ppo_option = TacticalOption.ADVANCE
 
         # -------------------------------------------------
-        # ✅ evitar attack desde lejos (SOFT)
+        # ✅ avoid long-distance attack
         # -------------------------------------------------
         if ppo_option == TacticalOption.ATTACK and not in_close_combat:
 
@@ -148,7 +143,7 @@ class HRLController:
                     ppo_option = TacticalOption.ADVANCE
 
         # -------------------------------------------------
-        # ✅ asignar decisión final
+        # ✅ assign final decision
         # -------------------------------------------------
         self.current_option = ppo_option
 
@@ -160,7 +155,7 @@ class HRLController:
         self.steps_remaining = self.OPTION_HORIZON[self.current_option]
 
         # -------------------------------------------------
-        # ✅ LOGGING
+        # ✅ LOGGING (safe)
         # -------------------------------------------------
         if self.event_bus:
             context = explainable_context(
@@ -182,7 +177,7 @@ class HRLController:
                     "category": self.current_option.category(),
                     "turn": state.turn,
                     "context": context,
-                    "formation": strategy.name,
+                    "formation": strategy.name if strategy else "NONE",
                     "policy_info": getattr(self.policy, "last_decision_info", {}),
                 }
             })
