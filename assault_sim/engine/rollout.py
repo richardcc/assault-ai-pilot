@@ -1,15 +1,18 @@
 from assault_model.actions.status import WaitAction
 from assault_sim.rl.tactical_options import TacticalOption
+from assault_sim.engine.activation_manager import ActivationManager
+
 import random
 
 
 def collect_rollout(env, controller, steps):
 
     obs = env.reset()
-
     controller.policy.reset_hidden()
 
-    # ✅ buffers finales
+    activation_manager = ActivationManager(env.sim.game_state)
+
+    # buffers
     obs_buf = []
     actions_buf = []
     attack_modes_buf = []
@@ -18,74 +21,85 @@ def collect_rollout(env, controller, steps):
     rewards_buf = []
     dones_buf = []
 
-    # 🔥 NUEVO: buffer de secuencias
     sequence = []
-
     SEQ_LEN = 8
 
     step_count = 0
-
     turn_reward = 0.0
     turn_start_obs = None
 
     while step_count < steps:
 
-        state = env.state
-        active = state.active_unit if state else None
+        state = env.sim.game_state
 
-        if active is None:
+        # ✅ NUEVO: scheduler
+        side, unit = None, None
+
+        for _ in range(len(activation_manager.sides) * 2):
+            side, unit = activation_manager.next_activation()
+            if unit is not None:
+                break
+
+        if unit is None:
             action = WaitAction("SYSTEM")
+            next_obs, reward, done, _ = env.step(action)
+            obs = next_obs
+            step_count += 1
+            continue
 
+        # ---------------- RL SIDE ----------------
+        if side == controller.rl_side:
+
+            if turn_start_obs is None:
+                turn_start_obs = obs
+
+            action = controller.choose_action(state, unit, obs)
+
+            last_option = controller.policy.last_option
+            last_action = last_option.value
+            last_attack_mode = controller.policy.last_attack_mode
+            last_logp = controller.policy.last_log_prob.detach()
+            last_value = controller.policy.last_value.item()
+
+        # ---------------- ENEMY ----------------
         else:
 
-            # ---------------- RL SIDE ----------------
-            if active.side == controller.rl_side:
+            enemy_option = random.choice([
+                TacticalOption.ATTACK,
+                TacticalOption.ADVANCE,
+                TacticalOption.FLANK,
+                TacticalOption.HOLD,
+            ])
 
-                if turn_start_obs is None:
-                    turn_start_obs = obs
+            action = controller.executor.execute(state, unit, enemy_option)
 
-                action = controller.choose_action(state, obs)
-
-                last_option = controller.policy.last_option
-                last_action = last_option.value
-                last_attack_mode = controller.policy.last_attack_mode
-                last_logp = controller.policy.last_log_prob.detach()
-                last_value = controller.policy.last_value.item()
-
-            # ---------------- ENEMY ----------------
-            else:
-
-                enemy_option = random.choice([
-                    TacticalOption.ATTACK,
-                    TacticalOption.ADVANCE,
-                    TacticalOption.FLANK,
-                    TacticalOption.HOLD,
-                ])
-
-                action = controller.executor.execute(state, enemy_option)
-
-            if action is None:
-                action = WaitAction(active.unit_id)
+        # ✅ safety
+        if action is None:
+            action = WaitAction(unit.unit_id)
 
         # ---------------- STEP ----------------
         next_obs, reward, done, info = env.step(action)
 
-        # acumular reward RL
-        if active is not None and active.side == controller.rl_side:
+        # ✅ CONEXIÓN CRÍTICA (igual que runner)
+        activation_manager.state = env.sim.game_state
+        activation_manager.blocked_units = env.sim.runtime.activated_units.copy()
+
+        # acumular reward
+        if side == controller.rl_side:
             turn_reward += reward
 
-        # detectar fin turno RL
-        next_state = env.state
-        next_active = next_state.active_unit if next_state else None
+        # detectar cambio de turno RL
+        next_state = env.sim.game_state
+
+        # ✅ ya no existe active_unit → detectamos por scheduler
+        next_side, _ = activation_manager.next_activation()
 
         rl_turn_finished = (
-            active is not None
-            and active.side == controller.rl_side
-            and next_active is not None
-            and next_active.side != controller.rl_side
+            side == controller.rl_side
+            and next_side != controller.rl_side
         )
 
-        # ---------------- STORE EN SECUENCIA ----------------
+        # ---------------- STORE ----------------
         if rl_turn_finished and turn_start_obs is not None:
 
             sequence.append({
@@ -98,7 +112,6 @@ def collect_rollout(env, controller, steps):
                 "done": done
             })
 
-            # ✅ si tenemos secuencia suficiente → guardar
             if len(sequence) >= SEQ_LEN:
 
                 chunk = sequence[:SEQ_LEN]
@@ -111,26 +124,25 @@ def collect_rollout(env, controller, steps):
                 rewards_buf.extend([x["reward"] for x in chunk])
                 dones_buf.extend([x["done"] for x in chunk])
 
-                # sliding window
                 sequence = sequence[1:]
 
             turn_reward = 0.0
             turn_start_obs = None
 
-        # ---------------- avanzar ----------------
         obs = next_obs
         step_count += 1
 
-        # ---------------- RESET ----------------
         if done:
             obs = env.reset()
             controller.policy.reset_hidden()
+
+            activation_manager = ActivationManager(env.sim.game_state)
 
             sequence = []
             turn_reward = 0.0
             turn_start_obs = None
 
-    # ---------------- seguridad ----------------
+    # safety
     if len(attack_modes_buf) < len(actions_buf):
         attack_modes_buf += [0] * (len(actions_buf) - len(attack_modes_buf))
 
