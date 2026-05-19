@@ -14,11 +14,13 @@ from assault_sim.decision.option_executor import OptionExecutor
 from assault_sim.rl.tactical_options import TacticalOption
 
 from assault_sim.heuristics.tactical_path_heuristic import TacticalPathHeuristic
+from assault_sim.engine.activation_manager import ActivationManager
+
+from assault_model.actions.status import WaitAction
 
 from assault_sim.debug.console_observer import ConsoleObserver
 from assault_sim.debug.debug_config import DebugConfig
 
-# ✅ SISTEMA DE REPLAY CORRECTO
 from assault_sim.debug.replay_observer import ReplayObserver
 from assault_sim.debug.replay_writer import ReplayWriter
 from assault_sim.debug.replay_utils import extract_initial_state
@@ -30,16 +32,13 @@ CHECKPOINT = Path("models/latest.pt")
 
 def main():
 
-    # =================================================
-    # SIDES
-    # =================================================
     rl_side = RL_SIDE
     enemy_side = "GE" if rl_side == "US" else "US"
 
     print(f">>> Replaying HRL: RL ({rl_side}) vs Heuristic ({enemy_side})")
 
     # -------------------------------------------------
-    # ENV (para obtener input_dim correcto)
+    # ENV
     # -------------------------------------------------
     sim_config = load_sim_config(
         Path("assault_sim/config/sim_config.yaml")
@@ -64,7 +63,7 @@ def main():
     input_dim = obs.shape[0]
 
     # -------------------------------------------------
-    # MODEL ✅
+    # MODEL
     # -------------------------------------------------
     print(f">>> Loading checkpoint: {CHECKPOINT}")
 
@@ -95,7 +94,7 @@ def main():
     )
 
     # -------------------------------------------------
-    # OBSERVERS ✅
+    # OBSERVERS
     # -------------------------------------------------
     observer = ConsoleObserver(rl_side=rl_side)
     replay_observer = ReplayObserver()
@@ -105,7 +104,7 @@ def main():
         sim_env.event_bus.subscribe(replay_observer)
 
     # -------------------------------------------------
-    # INIT REPLAY ✅ CRÍTICO
+    # INIT REPLAY
     # -------------------------------------------------
     replay_observer.replay.initial_state = extract_initial_state(
         sim_env.game_state
@@ -120,6 +119,11 @@ def main():
     }
 
     # -------------------------------------------------
+    # ✅ NEW: ACTIVATION MANAGER
+    # -------------------------------------------------
+    activation_manager = ActivationManager(sim_env.game_state)
+
+    # -------------------------------------------------
     # LOOP
     # -------------------------------------------------
     done = False
@@ -128,25 +132,29 @@ def main():
     while not done:
 
         state = sim_env.game_state
-        active = state.active_unit
 
-        if active is not None and active.side == rl_side:
+        # ✅ scheduler decide
+        side, unit = activation_manager.next_activation()
 
-            # ✅ fallback defensivo por si strategy = None
-            action = hrl_controller.choose_action(state, obs)
+        if unit is None:
+            action = WaitAction("SYSTEM")
 
-            if action is None:
-                action = executor.execute(state, TacticalOption.ATTACK)
+        elif side == rl_side:
+            action = hrl_controller.choose_action(state, unit, obs)
 
         else:
-            # ✅ Enemy usa heuristic correctamente
-            action = heuristic.choose_action(
-                state,
-                TacticalOption.ATTACK
-            )
+            action = heuristic.choose_action(state, TacticalOption.ATTACK)
+
+        # ✅ safety
+        if action is None:
+            unit_id = unit.unit_id if unit else "SYSTEM"
+            action = WaitAction(unit_id)
 
         obs, _, done, _ = env.step(action)
         step += 1
+
+        # ✅ actualizar scheduler
+        activation_manager.state = sim_env.game_state
 
     # -------------------------------------------------
     # FINAL RESULT
@@ -163,7 +171,6 @@ def main():
     print(f"Reason:      {final_state.end_reason}")
     print(f"Final VP:    {vp}")
 
-    # ✅ añadir resultado (SIN ROMPER FORMAT)
     replay_observer.replay.meta["result"] = {
         "winner": final_state.winner,
         "reason": final_state.end_reason,
@@ -172,7 +179,7 @@ def main():
     }
 
     # -------------------------------------------------
-    # SAVE REPLAY ✅ (FORMATO EXACTO)
+    # SAVE REPLAY
     # -------------------------------------------------
     replay_dir = Path("assault_sim/session/replays")
     replay_dir.mkdir(parents=True, exist_ok=True)
@@ -187,6 +194,5 @@ def main():
     print(f"✅ Replay saved to: {replay_path}")
 
 
-# -----------------------------------------------------
 if __name__ == "__main__":
     main()

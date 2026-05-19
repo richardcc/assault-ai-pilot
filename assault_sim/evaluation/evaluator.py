@@ -2,6 +2,8 @@ from assault_sim.evaluation.metrics_tracker import MetricsTracker
 from assault_model.actions.status import WaitAction
 from collections import defaultdict
 
+from assault_sim.engine.activation_manager import ActivationManager
+
 
 class Evaluator:
 
@@ -26,19 +28,8 @@ class Evaluator:
 
         tracker = MetricsTracker(self.rl_side)
 
-        # -----------------------------
-        # L2 usage
-        # -----------------------------
         option_counts = defaultdict(int)
-
-        # -----------------------------
-        # L3 usage
-        # -----------------------------
         formation_counts = defaultdict(int)
-
-        # -----------------------------
-        # L3 -> L2 mapping
-        # -----------------------------
         strategy_option_map = defaultdict(lambda: defaultdict(int))
 
         obs = self.env.reset()
@@ -46,20 +37,25 @@ class Evaluator:
 
         prev_state = self.env.state
 
+        # ✅ Activation Manager
+        activation_manager = ActivationManager(self.env.state)
+
         while not done:
 
             state = self.env.state
-            active = state.active_unit if state else None
+
+            # ✅ scheduler decide
+            side, unit = activation_manager.next_activation()
 
             # -----------------------------------------
             # SELECT ACTION
             # -----------------------------------------
-            if active is None:
+            if unit is None:
                 action = WaitAction("SYSTEM")
 
-            elif active.side == self.rl_side:
+            elif side == self.rl_side:
 
-                action = self.rl_controller.choose_action(state, obs)
+                action = self.rl_controller.choose_action(state, unit, obs)
 
                 # -----------------------------
                 # L2 OPTION
@@ -82,26 +78,24 @@ class Evaluator:
                 if option is not None:
                     option_counts[option.name] += 1
 
-                    # -----------------------------
-                    # TRACK L3 -> L2 RELATION
-                    # -----------------------------
                     if formation is not None:
                         strategy_option_map[formation][option.name] += 1
 
             else:
+                # ✅ FIX: enemy usa API antigua
                 action = self.enemy_controller.choose_action(state, obs)
 
             # -----------------------------------------
-            # SAFETY: never None
+            # ✅ SAFETY ROBUSTA (SIN active_unit)
             # -----------------------------------------
-            if action is None and active is not None:
-                action = WaitAction(active.unit_id)
+            if action is None:
+                unit_id = unit.unit_id if unit is not None else "SYSTEM"
+                action = WaitAction(unit_id)
 
             # -----------------------------------------
             # TRACK BEFORE STEP
             # -----------------------------------------
-            current_state = state
-            tracker.track_action(current_state, action)
+            tracker.track_action(state, action)
 
             # -----------------------------------------
             # STEP
@@ -109,6 +103,9 @@ class Evaluator:
             obs, reward, done, info = self.env.step(action)
 
             next_state = self.env.state
+
+            # ✅ UPDATE scheduler state
+            activation_manager.state = next_state
 
             # -----------------------------------------
             # TRACK AFTER STEP

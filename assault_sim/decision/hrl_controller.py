@@ -6,6 +6,8 @@ from assault_sim.strategy.formation_strategy import (
     FormationStrategyEngine,
 )
 
+from assault_model.actions.status import WaitAction
+
 import random
 
 
@@ -31,16 +33,17 @@ class HRLController:
 
         self.formation_engine = FormationStrategyEngine()
 
-        # ✅ NEW: store last payload
+        # ✅ store last payload
         self.last_payload = None
 
     # -------------------------------------------------
-    def choose_action(self, state, obs):
+    def choose_action(self, state, unit, obs):
 
-        active = state.active_unit
+        active = unit
 
-        if active is None or active.side != self.rl_side:
-            return None
+        # ✅ seguridad mínima (no debería pasar con scheduler)
+        if active is None:
+            return WaitAction("SYSTEM")
 
         # -------------------------------------------------
         # ✅ close combat detection
@@ -70,7 +73,11 @@ class HRLController:
                 self.current_attack_mode
             )
 
-            # ✅ FIX: reuse last payload
+            # ✅ safety: nunca None
+            if action is None:
+                action = WaitAction(active.unit_id)
+
+            # ✅ reuse payload
             if self.last_payload:
                 action.hrl_payload = self.last_payload
 
@@ -79,7 +86,6 @@ class HRLController:
         # -------------------------------------------------
         # ✅ NEW DECISION
         # -------------------------------------------------
-
         strategy = self.formation_engine.update(state, self.rl_side)
 
         if strategy is None:
@@ -96,7 +102,6 @@ class HRLController:
         # -------------------------------------------------
         # ✅ SOFT BIAS
         # -------------------------------------------------
-
         if in_close_combat and ppo_option != TacticalOption.ATTACK:
             if random.random() < 0.6:
                 ppo_option = TacticalOption.ATTACK
@@ -124,7 +129,6 @@ class HRLController:
         # -------------------------------------------------
         # ✅ avoid useless actions
         # -------------------------------------------------
-
         if ppo_option in [TacticalOption.HOLD, TacticalOption.RETREAT]:
             if random.random() < 0.6:
                 ppo_option = TacticalOption.ADVANCE
@@ -162,7 +166,7 @@ class HRLController:
         self.steps_remaining = self.OPTION_HORIZON[self.current_option]
 
         # -------------------------------------------------
-        # ✅ BUILD PAYLOAD (ONCE)
+        # ✅ BUILD PAYLOAD
         # -------------------------------------------------
         payload = {
             "formation": strategy.name if strategy else None,
@@ -174,11 +178,10 @@ class HRLController:
             "policy_info": getattr(self.policy, "last_decision_info", {})
         }
 
-        # ✅ store for reuse
         self.last_payload = payload
 
         # -------------------------------------------------
-        # ✅ EVENT BUS (UNCHANGED)
+        # ✅ EVENT BUS
         # -------------------------------------------------
         if self.event_bus:
             context = explainable_context(
@@ -210,6 +213,10 @@ class HRLController:
             self.current_option,
             self.current_attack_mode
         )
+
+        # ✅ safety: nunca None
+        if action is None:
+            action = WaitAction(active.unit_id)
 
         # ✅ attach payload
         action.hrl_payload = payload

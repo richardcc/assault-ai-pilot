@@ -35,15 +35,6 @@ def _trace(tag: str, **data):
     print(f"[TRACE][{tag}] {payload}")
 
 
-# =================================================
-# SIDE → HEX OWNERSHIP MAPPING
-# =================================================
-SIDE_TO_HEX_OWNERSHIP: Dict[str, HexOwnership] = {
-    "GE": HexOwnership.SIDE_A,
-    "US": HexOwnership.SIDE_B,
-}
-
-
 class GameState:
     """
     Canonical runtime game state.
@@ -68,6 +59,16 @@ class GameState:
         self.activation_state = ActivationState(units)
 
         # -----------------------------
+        # ✅ EXPLICIT TURN ORDER
+        # -----------------------------
+        self.turn_order = self._build_turn_order(units)
+
+        # -----------------------------
+        # ✅ DYNAMIC SIDE → OWNERSHIP
+        # -----------------------------
+        self.side_to_ownership = self._build_side_ownership()
+
+        # -----------------------------
         # MAP STATE
         # -----------------------------
         self.hex_states: Dict[tuple[int, int], HexState] = {
@@ -86,7 +87,7 @@ class GameState:
         self.reaction_context: Optional["ReactionContext"] = None
 
         # -----------------------------
-        # ✅ NUEVO: TERMINAL STATE
+        # TERMINAL STATE
         # -----------------------------
         self.done: bool = False
         self.winner: Optional[str] = None
@@ -94,6 +95,33 @@ class GameState:
 
         # inicialización
         self.recalculate_hex_control()
+
+    # =================================================
+    # TURN ORDER
+    # =================================================
+    def _build_turn_order(self, units: List[UnitInstance]) -> List[str]:
+        """
+        Deterministic side order from units.
+        """
+        return sorted({u.side for u in units if u.alive})
+
+    # =================================================
+    # ✅ SIDE → OWNERSHIP (SIN HARDCODE)
+    # =================================================
+    def _build_side_ownership(self) -> Dict[str, HexOwnership]:
+        """
+        Dynamic mapping of sides to HexOwnership values.
+        """
+        ownership_values = list(HexOwnership)
+
+        if len(self.turn_order) > len(ownership_values):
+            raise ValueError("More sides than HexOwnership values")
+
+        mapping = {}
+        for i, side in enumerate(self.turn_order):
+            mapping[side] = ownership_values[i]
+
+        return mapping
 
     # =================================================
     # FACTORY
@@ -108,7 +136,7 @@ class GameState:
         )
 
     # =================================================
-    # ACTIVATION
+    # ACTIVATION (LEGACY - NO TOCAR)
     # =================================================
     @property
     def active_unit(self) -> Optional[UnitInstance]:
@@ -139,7 +167,7 @@ class GameState:
 
             if len(present_sides) == 1:
                 side = next(iter(present_sides))
-                hex_state.ownership = SIDE_TO_HEX_OWNERSHIP.get(
+                hex_state.ownership = self.side_to_ownership.get(
                     side,
                     HexOwnership.NONE,
                 )
