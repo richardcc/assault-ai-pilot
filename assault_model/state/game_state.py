@@ -11,8 +11,7 @@ from assault_model.map.hex_state import HexState
 from assault_model.units.unit_instance import UnitInstance
 from assault_model.core.victory_conditions import VictoryConditions
 from assault_model.core.vp_tracker import VictoryPointTracker
-from assault_model.state.turn import TurnState, TurnPhase
-from assault_model.core.activation import ActivationState
+from assault_model.state.turn import TurnState
 from assault_model.map.hex_coord import HexCoord
 
 # --- COMBAT IMPORTS ---
@@ -37,7 +36,9 @@ def _trace(tag: str, **data):
 
 class GameState:
     """
-    Canonical runtime game state.
+    ✅ Pure state container
+    ✅ No activation logic
+    ✅ Deterministic and RL-safe
     """
 
     def __init__(
@@ -56,15 +57,14 @@ class GameState:
         self.turn = turn
 
         self.turn_state = TurnState(turn_number=turn)
-        self.activation_state = ActivationState(units)
 
         # -----------------------------
-        # ✅ EXPLICIT TURN ORDER
+        # ✅ TURN ORDER (CRÍTICO)
         # -----------------------------
         self.turn_order = self._build_turn_order(units)
 
         # -----------------------------
-        # ✅ DYNAMIC SIDE → OWNERSHIP
+        # ✅ SIDE → OWNERSHIP
         # -----------------------------
         self.side_to_ownership = self._build_side_ownership()
 
@@ -93,35 +93,28 @@ class GameState:
         self.winner: Optional[str] = None
         self.end_reason: Optional[str] = None
 
-        # inicialización
+        # init
         self.recalculate_hex_control()
 
     # =================================================
     # TURN ORDER
     # =================================================
     def _build_turn_order(self, units: List[UnitInstance]) -> List[str]:
-        """
-        Deterministic side order from units.
-        """
         return sorted({u.side for u in units if u.alive})
 
     # =================================================
-    # ✅ SIDE → OWNERSHIP (SIN HARDCODE)
+    # SIDE → OWNERSHIP
     # =================================================
     def _build_side_ownership(self) -> Dict[str, HexOwnership]:
-        """
-        Dynamic mapping of sides to HexOwnership values.
-        """
         ownership_values = list(HexOwnership)
 
         if len(self.turn_order) > len(ownership_values):
             raise ValueError("More sides than HexOwnership values")
 
-        mapping = {}
-        for i, side in enumerate(self.turn_order):
-            mapping[side] = ownership_values[i]
-
-        return mapping
+        return {
+            side: ownership_values[i]
+            for i, side in enumerate(self.turn_order)
+        }
 
     # =================================================
     # FACTORY
@@ -136,30 +129,17 @@ class GameState:
         )
 
     # =================================================
-    # ACTIVATION (LEGACY - NO TOCAR)
-    # =================================================
-    @property
-    def active_unit(self) -> Optional[UnitInstance]:
-        return self.activation_state.active_unit
-
-    def start_action_phase(self) -> None:
-        self.turn_state.phase = TurnPhase.ACTION
-        self.activation_state.reset(self.units)
-        self.activation_state.next_unit()
-
-    # =================================================
     # HEX CONTROL
     # =================================================
     def recalculate_hex_control(self) -> None:
+
         units_by_hex: Dict[tuple[int, int], set[str]] = {}
 
         for unit in self.units:
             if not unit.alive or not unit.position:
                 continue
 
-            pos: HexCoord = unit.position
-            coords = (pos.q, pos.r)
-
+            coords = (unit.position.q, unit.position.r)
             units_by_hex.setdefault(coords, set()).add(unit.side)
 
         for coords, hex_state in self.hex_states.items():
@@ -185,6 +165,7 @@ class GameState:
     # TURN END
     # =================================================
     def end_turn(self) -> None:
+
         self.recalculate_hex_control()
 
         if self.vp_tracker:
@@ -201,6 +182,7 @@ class GameState:
     # COMBAT CONTEXT
     # =================================================
     def create_combat_context(self, action):
+
         attacker = next(
             (u for u in self.units if u.unit_id == action.unit_id),
             None,
