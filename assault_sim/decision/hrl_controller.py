@@ -31,6 +31,9 @@ class HRLController:
 
         self.formation_engine = FormationStrategyEngine()
 
+        # ✅ NEW: store last payload
+        self.last_payload = None
+
     # -------------------------------------------------
     def choose_action(self, state, obs):
 
@@ -61,11 +64,17 @@ class HRLController:
         if not is_new_selection:
             self.steps_remaining -= 1
 
-            return self.executor.execute(
+            action = self.executor.execute(
                 state,
                 self.current_option,
                 self.current_attack_mode
             )
+
+            # ✅ FIX: reuse last payload
+            if self.last_payload:
+                action.hrl_payload = self.last_payload
+
+            return action
 
         # -------------------------------------------------
         # ✅ NEW DECISION
@@ -73,11 +82,9 @@ class HRLController:
 
         strategy = self.formation_engine.update(state, self.rl_side)
 
-        # ✅ 🔥 FIX CRÍTICO: nunca None
         if strategy is None:
             strategy = FormationStrategy.ATTACK
 
-        # ✅ PPO decide base
         ppo_option, attack_mode = self.policy.choose_option(obs)
 
         # -------------------------------------------------
@@ -155,7 +162,23 @@ class HRLController:
         self.steps_remaining = self.OPTION_HORIZON[self.current_option]
 
         # -------------------------------------------------
-        # ✅ LOGGING (safe)
+        # ✅ BUILD PAYLOAD (ONCE)
+        # -------------------------------------------------
+        payload = {
+            "formation": strategy.name if strategy else None,
+            "option": self.current_option.name if self.current_option else None,
+            "attack_mode": (
+                "INDIRECT" if self.current_attack_mode == 1 else
+                "DIRECT" if self.current_attack_mode is not None else None
+            ),
+            "policy_info": getattr(self.policy, "last_decision_info", {})
+        }
+
+        # ✅ store for reuse
+        self.last_payload = payload
+
+        # -------------------------------------------------
+        # ✅ EVENT BUS (UNCHANGED)
         # -------------------------------------------------
         if self.event_bus:
             context = explainable_context(
@@ -168,25 +191,27 @@ class HRLController:
                 "type": "HRL_DECISION",
                 "payload": {
                     "side": self.rl_side,
-                    "option": self.current_option.name,
-                    "attack_mode": (
-                        "INDIRECT" if self.current_attack_mode == 1 else "DIRECT"
-                        if self.current_attack_mode is not None else None
-                    ),
+                    "option": payload["option"],
+                    "attack_mode": payload["attack_mode"],
                     "description": self.current_option.description(),
                     "category": self.current_option.category(),
                     "turn": state.turn,
                     "context": context,
-                    "formation": strategy.name if strategy else "NONE",
-                    "policy_info": getattr(self.policy, "last_decision_info", {}),
+                    "formation": payload["formation"],
+                    "policy_info": payload["policy_info"],
                 }
             })
 
         # -------------------------------------------------
         self.steps_remaining -= 1
 
-        return self.executor.execute(
+        action = self.executor.execute(
             state,
             self.current_option,
             self.current_attack_mode
         )
+
+        # ✅ attach payload
+        action.hrl_payload = payload
+
+        return action
