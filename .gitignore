@@ -15,7 +15,7 @@ __pycache__/
 venv/
 
 # ===============================
-# Sphinx / Documentation
+# Documentation / Sphinx
 # ===============================
 docs/_build/
 *.buildinfo
@@ -50,6 +50,17 @@ _scripts_hold/
 # ===============================
 assault-web/assets/
 assault-web/data/
+
+# ===============================
+# 🚨 GAME ART (PROTECTED / VASSAL)
+# 🚨 CRÍTICO PARA NO ROMPER LICENCIA
+# ===============================
+public/art/
+public/assets/
+
+# fallback general (por si cambian rutas)
+**/art/
+**/assets/
 
 # ===============================
 # Personal / private material
