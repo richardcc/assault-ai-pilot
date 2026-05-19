@@ -14,11 +14,11 @@ import random
 class HRLController:
 
     OPTION_HORIZON = {
-        TacticalOption.ADVANCE: 6,
-        TacticalOption.FLANK: 5,
-        TacticalOption.ATTACK: 10,
+        TacticalOption.ADVANCE: 3,
+        TacticalOption.FLANK: 2,
+        TacticalOption.ATTACK: 4,   # 🔧 reducido (antes 10)
         TacticalOption.HOLD: 1,
-        TacticalOption.RETREAT: 2,
+        TacticalOption.RETREAT: 1,
     }
 
     def __init__(self, option_policy, option_executor, rl_side, event_bus=None):
@@ -32,8 +32,6 @@ class HRLController:
         self.steps_remaining = -1
 
         self.formation_engine = FormationStrategyEngine()
-
-        # ✅ store last payload
         self.last_payload = None
 
     # -------------------------------------------------
@@ -41,12 +39,11 @@ class HRLController:
 
         active = unit
 
-        # ✅ seguridad mínima (no debería pasar con scheduler)
         if active is None:
             return WaitAction("SYSTEM")
 
         # -------------------------------------------------
-        # ✅ close combat detection
+        # ✅ Detect close combat
         # -------------------------------------------------
         in_close_combat = False
         for u in state.units:
@@ -58,7 +55,7 @@ class HRLController:
                     break
 
         # -------------------------------------------------
-        # ✅ reuse option if still active
+        # ✅ REUSE OPTION
         # -------------------------------------------------
         is_new_selection = (
             self.current_option is None or self.steps_remaining <= 0
@@ -74,11 +71,9 @@ class HRLController:
                 self.current_attack_mode
             )
 
-            # ✅ safety: nunca None
             if action is None:
                 action = WaitAction(active.unit_id)
 
-            # ✅ reuse payload
             if self.last_payload:
                 action.hrl_payload = self.last_payload
 
@@ -88,90 +83,69 @@ class HRLController:
         # ✅ NEW DECISION
         # -------------------------------------------------
         strategy = self.formation_engine.update(state, self.rl_side)
-
         if strategy is None:
             strategy = FormationStrategy.ATTACK
 
+        # ✅ decisión PPO REAL
         ppo_option, attack_mode = self.policy.choose_option(obs)
 
         # -------------------------------------------------
-        # ✅ exploration
+        # ✅ EXPLORATION (OK)
         # -------------------------------------------------
         if random.random() < 0.1:
             ppo_option = random.choice(list(TacticalOption))
 
         # -------------------------------------------------
-        # ✅ SOFT BIAS
+        # ✅ SOFT BIAS (NO destructivo)
         # -------------------------------------------------
-        if in_close_combat and ppo_option != TacticalOption.ATTACK:
-            if random.random() < 0.6:
-                ppo_option = TacticalOption.ATTACK
 
-        if strategy == FormationStrategy.ATTACK:
-            if ppo_option != TacticalOption.ATTACK:
-                if random.random() < 0.6:
-                    ppo_option = TacticalOption.ATTACK
+        # 🔧 mantener ATTACK si ya fue elegido
+        if ppo_option != TacticalOption.ATTACK:
 
-        elif strategy == FormationStrategy.PUSH_VP:
-            if ppo_option not in [TacticalOption.ADVANCE, TacticalOption.FLANK]:
-                if random.random() < 0.7:
-                    ppo_option = TacticalOption.ADVANCE
-
-        elif strategy == FormationStrategy.HOLD_VP:
-            if ppo_option == TacticalOption.HOLD:
-                if random.random() < 0.9:
-                    ppo_option = TacticalOption.ADVANCE
-
-        elif strategy == FormationStrategy.CLEANUP:
-            if ppo_option != TacticalOption.ATTACK:
-                if random.random() < 0.7:
-                    ppo_option = TacticalOption.ATTACK
-
-        # -------------------------------------------------
-        # ✅ avoid useless actions
-        # -------------------------------------------------
-        if ppo_option in [TacticalOption.HOLD, TacticalOption.RETREAT]:
-            if random.random() < 0.6:
-                ppo_option = TacticalOption.ADVANCE
-
-        # -------------------------------------------------
-        # ✅ avoid long-distance attack
-        # -------------------------------------------------
-        if ppo_option == TacticalOption.ATTACK and not in_close_combat:
-
-            close_enemy = False
-
-            for u in state.units:
-                if u.side != active.side and u.alive:
-                    dx = abs(active.position.q - u.position.q)
-                    dy = abs(active.position.r - u.position.r)
-
-                    if dx <= 3 and dy <= 3:
-                        close_enemy = True
-                        break
-
-            if not close_enemy:
+            if in_close_combat:
                 if random.random() < 0.5:
+                    ppo_option = TacticalOption.ATTACK
+
+            if strategy == FormationStrategy.ATTACK:
+                if random.random() < 0.4:
+                    ppo_option = TacticalOption.ATTACK
+
+            elif strategy == FormationStrategy.PUSH_VP:
+                if random.random() < 0.4:
                     ppo_option = TacticalOption.ADVANCE
 
+            elif strategy == FormationStrategy.CLEANUP:
+                if random.random() < 0.5:
+                    ppo_option = TacticalOption.ATTACK
+
         # -------------------------------------------------
-        # ✅ assign final decision
+        # ✅ IMPORTANTE: NO BLOQUEAR ATTACK
+        # -------------------------------------------------
+        # ❌ eliminado:
+        # - bloqueo por distancia
+        # - forzado a ADVANCE
+        # - destrucción de decisiones PPO
+
+        # -------------------------------------------------
+        # ✅ ASSIGN FINAL DECISION
         # -------------------------------------------------
         self.current_option = ppo_option
 
         if self.current_option == TacticalOption.ATTACK:
-            self.current_attack_mode = 0 if attack_mode is None else attack_mode
+            self.current_attack_mode = (
+                0 if attack_mode is None else attack_mode
+            )
         else:
             self.current_attack_mode = None
 
         self.steps_remaining = self.OPTION_HORIZON[self.current_option]
 
         # -------------------------------------------------
-        # ✅ BUILD PAYLOAD
+        # ✅ PAYLOAD
         # -------------------------------------------------
         payload = {
             "formation": strategy.name if strategy else None,
-            "option": self.current_option.name if self.current_option else None,
+            "option": self.current_option.name,
             "attack_mode": (
                 "INDIRECT" if self.current_attack_mode == 1 else
                 "DIRECT" if self.current_attack_mode is not None else None
@@ -215,11 +189,10 @@ class HRLController:
             self.current_option,
             self.current_attack_mode
         )
-        # ✅ safety: nunca None
+
         if action is None:
             action = WaitAction(active.unit_id)
 
-        # ✅ attach payload
         action.hrl_payload = payload
 
         return action

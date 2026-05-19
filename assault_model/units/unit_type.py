@@ -60,20 +60,29 @@ class UnitType:
     # =================================================
     # ✅ NEW: MODE RESOLUTION
     # =================================================
-    def _resolve_attack_mode(self, distance: int) -> str:
+    def _resolve_attack_mode(self, distance: int) -> str | None:
         """
-        Decide which attack mode to use.
+        Decide which attack mode to use based on actual attack tables.
         """
 
-        # Default → direct fire
-        mode = "DIRECT_FIRE"
+        for mode, targets in self._attack_raw.items():
 
-        # Mortar / indirect units
-        if self.classification == "INDIRECT_FIRE_UNIT":
-            if 3 <= distance <= 8:
-                mode = "INDIRECT_FIRE"
+            for target_type, table in targets.items():
 
-        return mode
+                for key in table.keys():
+
+                    if "-" in key:
+                        start, end = map(int, key.split("-"))
+
+                        if start <= distance <= end:
+                            return mode
+
+                    else:
+                        if int(key) == distance:
+                            return mode
+
+        return None
+    
 
     # =================================================
     # ✅ NEW CORE FUNCTION (replaces old logic)

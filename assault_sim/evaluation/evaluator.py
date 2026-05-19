@@ -1,8 +1,7 @@
-from assault_sim.evaluation.metrics_tracker import MetricsTracker
-from assault_model.actions.status import WaitAction
 from collections import defaultdict
 
-from assault_sim.engine.activation_manager import ActivationManager
+from assault_sim.evaluation.metrics_tracker import MetricsTracker
+from assault_sim.engine.match_runner import MatchRunner
 
 
 class Evaluator:
@@ -11,7 +10,7 @@ class Evaluator:
         self,
         env,
         rl_controller,
-        enemy_controller,
+        enemy_controller,  # compatibilidad, no usado
         rl_side: str,
         max_steps: int = 300,
     ):
@@ -28,108 +27,79 @@ class Evaluator:
 
         tracker = MetricsTracker(self.rl_side)
 
+        # ✅ 🔥 SOLO conectar si existe el event_bus
+        if self.env.sim.event_bus is not None:
+            self.env.sim.event_bus.subscribe(tracker)
+
+        # ✅ L2 / L3 tracking
         option_counts = defaultdict(int)
         formation_counts = defaultdict(int)
         strategy_option_map = defaultdict(lambda: defaultdict(int))
 
+        # ✅ reset ANTES de crear runner
         obs = self.env.reset()
+        runner = MatchRunner(self.env)
+
         done = False
-
-        prev_state = self.env.state
-
-        # ✅ Activation Manager
-        activation_manager = ActivationManager(self.env.state)
-
+        steps = 0
+        prev_state = self.env.sim.game_state
         while not done:
 
-            state = self.env.state
+            step = runner.step(self.rl_controller, obs)
+            info = step.get("info", {}) or {}
+            obs = step["obs"]
+            done = step["done"]
 
-            # ✅ scheduler decide
-            side, unit = activation_manager.next_activation()
+            side = step.get("side")
 
-            # -----------------------------------------
-            # SELECT ACTION
-            # -----------------------------------------
-            if unit is None:
-                action = WaitAction("SYSTEM")
+            state = self.env.sim.game_state
 
-            elif side == self.rl_side:
+            # -------------------------------------------------
+            # ✅ TRACK L2 / L3 (policy real)
+            # -------------------------------------------------
+            if side == self.rl_side:
 
-                action = self.rl_controller.choose_action(state, unit, obs)
+                policy = self.rl_controller.hrl_controller.policy
 
-                # -----------------------------
-                # L2 OPTION
-                # -----------------------------
-                option = getattr(self.rl_controller, "current_option", None)
-
-                # -----------------------------
-                # L3 FORMATION
-                # -----------------------------
-                formation = None
-                if hasattr(self.rl_controller, "formation_engine"):
-                    formation_obj = self.rl_controller.formation_engine.current_strategy
-                    if formation_obj is not None:
-                        formation = formation_obj.name
-                        formation_counts[formation] += 1
-
-                # -----------------------------
-                # TRACK L2
-                # -----------------------------
+                # ----- L2 -----
+                option = policy.last_option
                 if option is not None:
                     option_counts[option.name] += 1
 
-                    if formation is not None:
-                        strategy_option_map[formation][option.name] += 1
+                # ----- L3 -----
+                formation = None
+                hrl = self.rl_controller.hrl_controller
 
-            else:
-                # ✅ FIX: enemy usa API antigua
-                action = self.enemy_controller.choose_action(state, obs)
+                if hasattr(hrl, "formation_engine"):
+                    strat_obj = hrl.formation_engine.current_strategy
+                    if strat_obj is not None:
+                        formation = strat_obj.name
+                        formation_counts[formation] += 1
 
-            # -----------------------------------------
-            # ✅ SAFETY ROBUSTA (SIN active_unit)
-            # -----------------------------------------
-            if action is None:
-                unit_id = unit.unit_id if unit is not None else "SYSTEM"
-                action = WaitAction(unit_id)
+                # ----- mapping L3 → L2 -----
+                if option is not None and formation is not None:
+                    strategy_option_map[formation][option.name] += 1
 
-            # -----------------------------------------
-            # TRACK BEFORE STEP
-            # -----------------------------------------
-            tracker.track_action(state, action)
-
-            # -----------------------------------------
-            # STEP
-            # -----------------------------------------
-            obs, reward, done, info = self.env.step(action)
-
-            next_state = self.env.state
-
-            # ✅ UPDATE scheduler state
-            activation_manager.state = next_state
-
-            # -----------------------------------------
-            # TRACK AFTER STEP
-            # -----------------------------------------
-            if prev_state is not None and next_state is not None:
-                tracker.track_damage(info, next_state, prev_state)
-                tracker.track_kills(next_state, prev_state)
-
-            tracker.track_state(next_state)
+            # -------------------------------------------------
+            # ✅ TRACK STATE (vida / daño recibido)
+            # -------------------------------------------------
+            tracker.track_damage(info, state, prev_state)
+            tracker.track_state(state)
             tracker.step()
+            prev_state = state
+            steps += 1
 
-            prev_state = next_state
-
-            # -----------------------------------------
+            # -------------------------------------------------
             # SAFETY LIMIT
-            # -----------------------------------------
-            if tracker.steps >= self.max_steps:
+            # -------------------------------------------------
+            if steps >= self.max_steps:
                 done = True
                 break
 
-        # -----------------------------------------
+        # -------------------------------------------------
         # BUILD RESULT
-        # -----------------------------------------
-        result = tracker.build_result(self.env.state)
+        # -------------------------------------------------
+        result = tracker.build_result(self.env.sim.game_state)
 
         result["option_counts"] = dict(option_counts)
         result["formation_counts"] = dict(formation_counts)
@@ -147,13 +117,17 @@ class Evaluator:
         results = []
 
         for ep in range(episodes):
-            result = self.run_episode()
-            results.append(result)
 
-            winner = result["winner"]
-            vp = result["vp"]
-            steps = result["steps"]
+            try:
+                result = self.run_episode()
+                results.append(result)
 
-            print(f"[EP {ep}] winner={winner} vp={vp} steps={steps}")
+                print(
+                    f"[EP {ep}] winner={result.get('winner')} "
+                    f"vp={result.get('vp')} steps={result.get('steps')}"
+                )
+
+            except Exception as e:
+                print(f"❌ ERROR in episode {ep}: {e}")
 
         return results

@@ -30,96 +30,93 @@ class FormationStrategyEngine:
     # -------------------------------------------------
     def _select_strategy(self, state, rl_side):
 
-            own_units = [u for u in state.units if u.side == rl_side and u.alive]
-            enemy_units = [u for u in state.units if u.side != rl_side and u.alive]
+        own_units = [u for u in state.units if u.side == rl_side and u.alive]
+        enemy_units = [u for u in state.units if u.side != rl_side and u.alive]
 
-            # fallback seguro
-            if not own_units or not enemy_units:
+        # -------------------------------------------------
+        # ✅ fallback seguro
+        # -------------------------------------------------
+        if not own_units or not enemy_units:
+            return FormationStrategy.PUSH_VP
+
+        # -------------------------------------------------
+        # DISTANCIA A ENEMIGOS
+        # -------------------------------------------------
+        def min_enemy_distance():
+            best = 999
+            for u in own_units:
+                for e in enemy_units:
+                    dx = abs(u.position.q - e.position.q)
+                    dy = abs(u.position.r - e.position.r)
+                    best = min(best, dx + dy)
+            return best
+
+        enemy_dist = min_enemy_distance()
+
+        # -------------------------------------------------
+        # CLEANUP (enemigos débiles)
+        # -------------------------------------------------
+        low_hp_enemies = [
+            e for e in enemy_units
+            if hasattr(e, "hp") and e.hp <= 1
+        ]
+
+        # -------------------------------------------------
+        # VP
+        # -------------------------------------------------
+        vp_positions = []
+
+        if hasattr(state, "vp_tracker") and state.vp_tracker:
+            try:
+                vp_positions = [
+                    vp.hex_coords for vp in state.vp_tracker.conditions.points
+                ]
+            except Exception:
+                vp_positions = []
+
+        def distance_to_vp():
+            if not vp_positions:
+                return 999
+
+            best = 999
+            for u in own_units:
+                for vp in vp_positions:
+                    dx = abs(u.position.q - vp[0])
+                    dy = abs(u.position.r - vp[1])
+                    best = min(best, dx + dy)
+            return best
+
+        vp_dist = distance_to_vp()
+
+        # -------------------------------------------------
+        # ✅ DECISIONES
+        # -------------------------------------------------
+
+        # 🔥 1. CLEANUP agresivo si enemigos débiles
+        if len(low_hp_enemies) >= 2:
+            return FormationStrategy.CLEANUP
+
+        # 🔥 2. COMBATE cercano → SIEMPRE atacar
+        if enemy_dist <= 3:
+            return FormationStrategy.ATTACK
+
+        # 🔥 3. cerca de VP → mantener presión
+        if vp_dist <= 2:
+            return FormationStrategy.HOLD_VP
+
+        # 🔥 4. lejos → push controlado PERO con tendencia a atacar
+        if vp_dist > 2:
+
+            roll = random.random()
+
+            if roll < 0.4:
                 return FormationStrategy.PUSH_VP
-
-            # -------------------------------------------------
-            # DISTANCIA A ENEMIGOS
-            # -------------------------------------------------
-            def min_enemy_distance():
-                best = 999
-                for u in own_units:
-                    for e in enemy_units:
-                        dx = abs(u.position.q - e.position.q)
-                        dy = abs(u.position.r - e.position.r)
-                        best = min(best, dx + dy)
-                return best
-
-            enemy_dist = min_enemy_distance()
-
-            # -------------------------------------------------
-            # CLEANUP (enemigos débiles)
-            # -------------------------------------------------
-            low_hp_enemies = [
-                e for e in enemy_units
-                if hasattr(e, "hp") and e.hp <= 1
-            ]
-
-            # -------------------------------------------------
-            # VP
-            # -------------------------------------------------
-            vp_positions = []
-
-            if hasattr(state, "vp_tracker") and state.vp_tracker:
-                try:
-                    vp_positions = [
-                        vp.hex_coords for vp in state.vp_tracker.conditions.points
-                    ]
-                except Exception:
-                    vp_positions = []
-
-            def distance_to_vp():
-                if not vp_positions:
-                    return 999
-
-                best = 999
-                for u in own_units:
-                    for vp in vp_positions:
-                        dx = abs(u.position.q - vp[0])
-                        dy = abs(u.position.r - vp[1])
-                        best = min(best, dx + dy)
-                return best
-
-            vp_dist = distance_to_vp()
-
-            # -------------------------------------------------
-            # ✅ DECISIONES
-            # -------------------------------------------------
-
-            # 🔥 CLEANUP
-            if len(low_hp_enemies) >= 3:
-                return FormationStrategy.CLEANUP
-
-            # 🔥 HOLD cerca de VP
-            if vp_dist <= 2:
+            elif roll < 0.7:
+                return FormationStrategy.ATTACK   # 🔥 más agresivo
+            else:
                 return FormationStrategy.HOLD_VP
 
-            # 🔥 COMBATE cercano
-            if enemy_dist <= 3:
-                if random.random() < 0.7:
-                    return FormationStrategy.ATTACK
-                else:
-                    return FormationStrategy.HOLD_VP
-
-            # 🔥 PUSH con control
-            if vp_dist > 2:
-
-                roll = random.random()
-
-                if roll < 0.55:
-                    return FormationStrategy.PUSH_VP
-
-                elif roll < 0.80:
-                    return FormationStrategy.HOLD_VP
-
-                else:
-                    return FormationStrategy.ATTACK
-
-            # -------------------------------------------------
-            # ✅ FALLBACK GLOBAL (CRÍTICO)
-            # -------------------------------------------------
-            return FormationStrategy.ATTACK
+        # -------------------------------------------------
+        # ✅ FALLBACK GLOBAL
+        # -------------------------------------------------
+        return FormationStrategy.ATTACK

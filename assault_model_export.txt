@@ -33,8 +33,6 @@ FILE: C:\repos\python\assault\assault_model\actions\action_catalog.py
 from assault_model.actions.movement import MoveAction
 from assault_model.actions.status import WaitAction
 from assault_model.actions.assault import AssaultAction
-
-# Direct ranged fire action
 from assault_model.actions.ranged_direct import RangedDirectAttack
 
 from assault_model.rules.movement_rules import MovementRules
@@ -57,21 +55,20 @@ def _trace(tag: str, **data):
 
 class ActionCatalog:
 
-    def __init__(self, game_state):
+    def __init__(self, game_state, unit):
         self.gs = game_state
+        self.unit = unit  # ✅ NEW
 
     def actions(self):
-        active = self.gs.active_unit
+        print("[CATALOG DEBUG]", self.unit.unit_id)
+        active = self.unit  # ✅ clave
 
         if active is None:
-            return [WaitAction(None)]
+            return [WaitAction("SYSTEM")]
 
         actions = []
 
-        _trace(
-            "ACTION_CATALOG_START",
-            unit=active.unit_id,
-        )
+        _trace("ACTION_CATALOG_START", unit=active.unit_id)
 
         # ----------------------------------
         # MOVEMENT
@@ -119,6 +116,12 @@ class ActionCatalog:
         # ----------------------------------
         actions.append(WaitAction(active.unit_id))
 
+
+        # ✅ ✅ DEBUG BIEN PUESTO (CLAVE)
+        print("[CATALOG ACTIONS FINAL]", active.unit_id)
+        for a in actions:
+            print("   ->", a)
+
         _trace(
             "ACTION_CATALOG_END",
             unit=active.unit_id,
@@ -128,7 +131,7 @@ class ActionCatalog:
         return actions
 
     # ==================================================
-    # RANGED FIRE (DIRECT + INDIRECT)
+    # RANGED FIRE
     # ==================================================
     def _ranged_fire_actions(self, active):
 
@@ -145,26 +148,24 @@ class ActionCatalog:
             if not other.alive:
                 continue
 
-            # ✅ Distance
+            if other.unit_id not in getattr(active, "spotted_enemies", []):
+                print("[SPOTTED CHECK]", active.unit_id, getattr(active, "spotted_enemies", []))
+                continue
+
             distance = hex_distance(active.position, other.position)
 
-            # ✅ Weapon range (based on unit attack tables)
             if not self._in_weapon_range(active, other):
                 continue
 
-            # ✅ Determine mode
             mode = active.unit_type._resolve_attack_mode(distance)
 
-            # ✅ Mortar min range (block short range)
             if mode == "INDIRECT_FIRE" and distance < 3:
                 continue
 
-            # ✅ LOS only for direct fire
             if mode == "DIRECT_FIRE":
                 if not self._has_line_of_sight(active, other):
                     continue
 
-            # ✅ Add action
             _trace(
                 "ACTION_ADD",
                 action="RangedDirectAttack",
@@ -177,23 +178,18 @@ class ActionCatalog:
                 RangedDirectAttack(
                     active.unit_id,
                     other.unit_id,
-                    attack_mode=mode,
                 )
             )
 
         return actions
 
     # ==================================================
-    # RANGE CHECK (BASED ON UNIT CARDS)
-    # ==================================================
     def _in_weapon_range(self, attacker, target):
 
         distance = hex_distance(attacker.position, target.position)
-
         attack = attacker.unit_type._attack_raw
 
         for mode_data in attack.values():
-
             table = mode_data.get(target.unit_type.category.value)
             if not table:
                 continue
@@ -211,10 +207,13 @@ class ActionCatalog:
         return False
 
     # ==================================================
-    # LOS
-    # ==================================================
     def _has_line_of_sight(self, attacker, target):
-        return has_line_of_sight(attacker, target, self.gs.game_map)
+        return has_line_of_sight(
+            attacker,
+            target,
+            self.gs.game_map,
+            self.gs.terrain_config
+        )
 
 
 ================================================================================
@@ -236,7 +235,8 @@ class ActionCategory(Enum):
 FILE: C:\repos\python\assault\assault_model\actions\action_type.py
 ================================================================================
 
-from enum import Enum
+from enum import Enum   # ✅ ESTE ERA EL FALLO
+
 from assault_model.actions.action_category import ActionCategory
 
 
@@ -247,7 +247,8 @@ class ActionType(Enum):
     FAST_MOVE = (ActionCategory.MOVEMENT, "FAST_MOVE")
 
     # Combat
-    RANGED_ATTACK = (ActionCategory.COMBAT, "RANGED_ATTACK")
+    RANGED_DIRECT = (ActionCategory.COMBAT, "RANGED_DIRECT")
+    RANGED_INDIRECT = (ActionCategory.COMBAT, "RANGED_INDIRECT")
     CLOSE_COMBAT = (ActionCategory.COMBAT, "CLOSE_COMBAT")
 
     # Control / status
@@ -257,7 +258,6 @@ class ActionType(Enum):
     def __init__(self, category: ActionCategory, label: str):
         self.category = category
         self.label = label
-
 
 
 ================================================================================
@@ -458,42 +458,33 @@ from assault_model.actions.combat_mode import CombatMode
 
 class RangedDirectAttack(CombatAction):
     """
-    Declares a ranged attack action.
-
-    Combat resolution (dice, range bands, traits, etc.)
-    is handled later by the combat resolver.
+    Declares a direct ranged attack action.
 
     Design:
-    - Action type stays the same (RANGED_ATTACK).
-    - combat_mode indicates the general category (direct ranged).
-    - attack_mode indicates how the attack is executed
-      (DIRECT_FIRE vs INDIRECT_FIRE).
+    - ActionType defines the decision (RANGED_DIRECT).
+    - combat_mode is used internally by the engine.
+    - No attack_mode: decision belongs to RL, not inside the action.
     """
 
     def __init__(
         self,
         unit_id: str,
         target_id: str,
-        attack_mode: str = "DIRECT_FIRE",
     ):
-        # ✅ Base action type (do not change)
-        super().__init__(unit_id, ActionType.RANGED_ATTACK)
+        # ✅ CLAVE: acción diferenciada
+        super().__init__(unit_id, ActionType.RANGED_DIRECT)
 
         # ✅ Target unit
         self.target_id = target_id
 
-        # ✅ Existing system (kept for compatibility)
+        # ✅ Engine semantic
         self.combat_mode = CombatMode.RANGED_DIRECT
-
-        # ✅ NEW: execution mode (used by resolver + renderer)
-        self.attack_mode = attack_mode
 
     def __repr__(self) -> str:
         return (
             f"RangedDirectAttack("
             f"unit_id={self.unit_id}, "
-            f"target_id={self.target_id}, "
-            f"attack_mode={self.attack_mode}"
+            f"target_id={self.target_id}"
             f")"
         )
 
@@ -505,23 +496,36 @@ FILE: C:\repos\python\assault\assault_model\actions\ranged_indirect.py
 from assault_model.actions.base import CombatAction
 from assault_model.actions.action_type import ActionType
 from assault_model.actions.combat_mode import CombatMode
-from assault_model.combat.range_attack_profile import RangeAttackProfile
-from assault_model.combat.defense_profile import DefenseProfile
 
 
 class RangedIndirectAttack(CombatAction):
-    def __init__(
-        self,
-        unit_id: str,
-        target_hex: tuple[int, int],
-        attack_profile: RangeAttackProfile,
-        defense_profile: DefenseProfile,
-    ):
-        super().__init__(unit_id, ActionType.RANGED_ATTACK)
+    """
+    Declares an indirect ranged attack (mortar, artillery, etc.)
+
+    Design:
+    - ActionType represents the decision (RANGED_INDIRECT)
+    - Engine resolver uses unit stats from unit_type
+    """
+
+    def __init__(self, unit_id: str, target_hex: tuple[int, int]):
+
+        # ✅ acción separada (clave para RL)
+        super().__init__(unit_id, ActionType.RANGED_INDIRECT)
+
+        # ✅ target es HEX (no unidad)
         self.target_hex = target_hex
-        self.attack_profile = attack_profile
-        self.defense_profile = defense_profile
+
+        # ✅ metadata para resolver
         self.combat_mode = CombatMode.RANGED_INDIRECT
+
+    def __repr__(self) -> str:
+        return (
+            f"RangedIndirectAttack("
+            f"unit_id={self.unit_id}, "
+            f"target_hex={self.target_hex}"
+            f")"
+        )
+
 
 
 ================================================================================
@@ -700,35 +704,53 @@ def resolve_action(
             result_combat = resolve_close_combat(ctx, context)
 
         # ------------------------------
-        # RANGED DIRECT FIRE
+        # RANGED DIRECT + INDIRECT FIRE
         # ------------------------------
-        elif action.combat_mode == CombatMode.RANGED_DIRECT:
+        elif action.combat_mode in (
+            CombatMode.RANGED_DIRECT,
+            CombatMode.RANGED_INDIRECT,
+        ):
 
             attacker = next(
                 (u for u in new_state.units if u.unit_id == action.unit_id),
                 None,
             )
-            target = next(
-                (u for u in new_state.units if u.unit_id == action.target_id),
-                None,
-            )
+
+            # ✅ Target para indirecto y directo
+            if action.combat_mode == CombatMode.RANGED_DIRECT:
+                target = next(
+                    (u for u in new_state.units if u.unit_id == action.target_id),
+                    None,
+                )
+                distance = hex_distance(attacker.position, target.position)
+
+            else:
+                # ✅ INDIRECT FIRE (target_hex)
+                target = next(
+                    (u for u in new_state.units if u.position == action.target_hex and u.alive),
+                    None,
+                )
+
+                if target is None:
+                    # 🔥 no hay unidad → no hay combate
+                    return ActionResolutionResult(new_state=new_state, combat_result=None)
+
+                distance = hex_distance(attacker.position, action.target_hex)
 
             if attacker is None or target is None:
                 raise RuntimeError(
                     f"Invalid attacker or target for ranged combat "
-                    f"(attacker={action.unit_id}, target={action.target_id})"
+                    f"(attacker={action.unit_id})"
                 )
 
-            # Geometry only
-            distance = hex_distance(attacker.position, target.position)
-
             result_combat = resolve_ranged_combat(
-                action=action,  # ✅ CLAVE
+                action=action,
                 attacker=attacker,
                 target=target,
                 distance=distance,
                 context=context,
             )
+
         # ------------------------------
         # UNKNOWN COMBAT MODE
         # ------------------------------
@@ -2022,52 +2044,99 @@ FILE: C:\repos\python\assault\assault_model\combat\line_of_sight.py
 
 from enum import Enum
 
-# Canonical hex distance utility (supports HexCoord)
-from assault_model.map.hex_utils import hex_distance
+from assault_model.map.hex_line import hex_line
+from assault_model.map.hex_coord import HexCoord
 
+
+# -------------------------------------------------
+# LOS RESULT
+# -------------------------------------------------
 
 class LineOfSight(Enum):
-    CLEAR = "CLEAR"
-    PARTIAL = "PARTIAL"
-    BLOCKED = "BLOCKED"
+    CLEAR = 0
+    HINDERED = 1
+    BLOCKED = 2
 
 
 # -------------------------------------------------
-# LOS computation (RANGE-BASED, TEMPORARY)
+# CACHE GLOBAL
 # -------------------------------------------------
-def check_line_of_sight(attacker, target, game_map) -> LineOfSight:
-    """
-    Temporary Line of Sight rule (Phase 01.5).
 
-    This implementation is intentionally simple and is only
-    used to validate ranged fire legality (RF-R02).
-
-    Rules:
-    - CLEAR if hex distance <= 6
-    - BLOCKED otherwise
-
-    Terrain, elevation, and obstruction modifiers are handled
-    later during combat resolution.
-    """
-    distance = hex_distance(attacker.position, target.position)
-
-    if distance <= 3:
-        return LineOfSight.CLEAR
-
-    return LineOfSight.BLOCKED
+_los_cache = {}
 
 
-def has_line_of_sight(attacker, target, game_map) -> bool:
-    """
-    Convenience helper for direct ranged fire validation.
+def _make_key(a: HexCoord, b: HexCoord):
+    return (a.q, a.r, b.q, b.r)
 
-    Returns True only if LOS is CLEAR.
-    """
-    return (
-        check_line_of_sight(attacker, target, game_map)
-        == LineOfSight.CLEAR
-    )
 
+def check_line_of_sight(attacker, target, game_map, terrain_config):
+
+    start = attacker.position
+    end = target.position
+
+    key = _make_key(start, end)
+
+    # ✅ CACHE HIT
+    if key in _los_cache:
+        return _los_cache[key]
+
+    line = hex_line(start, end)
+
+    # ignoramos origen y destino
+    path = line[1:-1]
+
+    hindrance = 0
+
+    for coord in path:
+        hex_ = game_map.get_hex(coord.q, coord.r)
+
+        if not hex_:
+            continue
+
+        terrain = hex_.get_terrain()
+        config = terrain_config.get(terrain, {})
+
+        los_type = config.get("los", "CLEAR")
+
+        # -------------------------------------------------
+        # BLOCKED → exit inmediato
+        # -------------------------------------------------
+        if los_type == "BLOCKED":
+            result = LineOfSight.BLOCKED
+            _los_cache[key] = result
+            return result
+
+        # -------------------------------------------------
+        # HINDERED → acumulamos
+        # -------------------------------------------------
+        if los_type == "HINDERED":
+            hindrance += 1
+
+            # ✅ regla del manual: 3 hindrances = BLOCKED
+            if hindrance >= 3:
+                result = LineOfSight.BLOCKED
+                _los_cache[key] = result
+                return result
+
+    # -------------------------------------------------
+    # RESULTADO FINAL
+    # -------------------------------------------------
+    if hindrance >= 1:
+        result = LineOfSight.HINDERED
+    else:
+        result = LineOfSight.CLEAR
+
+    _los_cache[key] = result
+    return result
+
+
+def has_line_of_sight(attacker, target, game_map, terrain_config):
+    return check_line_of_sight(
+        attacker,
+        target,
+        game_map,
+        terrain_config
+    ) != LineOfSight.BLOCKED
 
 
 ================================================================================
@@ -2254,8 +2323,6 @@ def retreat_unit_simple(unit: UnitInstance):
 FILE: C:\repos\python\assault\assault_model\combat\ranged_combat_resolver.py
 ================================================================================
 
-# assault_model/combat/ranged_combat_resolver.py
-
 from assault_model.combat.modifiers.terrain_modifier import TerrainModifier
 from assault_model.combat.attack_dice_pool import AttackDicePool
 from assault_model.combat.defense_dice_pool import DefenseDicePool
@@ -2265,8 +2332,9 @@ from assault_model.map.combat_geometry import determine_attack_sector
 from assault_model.runtime.execution_context import ExecutionContext
 from assault_model.combat.battle_die import DiceResult
 from assault_model.combat.dice_comparison import compare_dice
+from assault_model.config.terrain_config import terrain_config
+from assault_model.actions.combat_mode import CombatMode
 
-# ✅ NUEVO (SIN ROMPER NADA)
 from assault_model.combat.line_of_sight import (
     check_line_of_sight,
     LineOfSight,
@@ -2289,9 +2357,6 @@ def _trace(tag: str, **data):
     print(f"[TRACE][{tag}] {payload}")
 
 
-# =================================================
-# Result container (internal)
-# =================================================
 class CombatResolutionResult:
     def __init__(self, attack_roll, defense_roll, criticals):
         self.attack_roll = attack_roll
@@ -2299,9 +2364,6 @@ class CombatResolutionResult:
         self.criticals = criticals
 
 
-# =================================================
-# Primary critical registration (10.7.3)
-# =================================================
 def resolve_critical(face: DiceFace, target_class: UnitClass):
     return {
         "face": face.name,
@@ -2309,30 +2371,30 @@ def resolve_critical(face: DiceFace, target_class: UnitClass):
     }
 
 
-# =================================================
-# Resolver
-# =================================================
 def resolve_ranged_combat(
     *,
-    action,  # ✅ NUEVO
+    action,
     attacker,
     target,
     distance: int,
     context: ExecutionContext | None = None,
 ) -> CombatResolutionResult:
-    
-    # =================================================
-    # CONTEXT
-    # =================================================
+
     game_map = context.game_map if context and context.game_map else None
+    terrain_cfg = context.terrain_config if context and hasattr(context, "terrain_config") else terrain_config
 
     # =================================================
-    # LINE OF SIGHT
+    # LOS
     # =================================================
     los = LineOfSight.CLEAR
 
     if game_map:
-        los = check_line_of_sight(attacker, target, game_map)
+        los = check_line_of_sight(
+            attacker,
+            target,
+            game_map,
+            terrain_cfg
+        )
 
     _trace(
         "LOS_CHECK",
@@ -2349,7 +2411,20 @@ def resolve_ranged_combat(
         )
         return CombatResolutionResult([], [], [])
 
-    # ---------------- ATTACK DICE ----------------
+    # =================================================
+    # INDIRECT RESTRICTIONS
+    # =================================================
+    if game_map:
+        attacker_hex = game_map.get_hex(attacker.position)
+
+        if attacker_hex is not None:
+            terrain_name = attacker_hex.get_terrain()
+
+            if terrain_cfg.get(terrain_name, {}).get("no_indirect_from", False):
+                if getattr(action, "combat_mode", None) == CombatMode.RANGED_INDIRECT:
+                    return CombatResolutionResult([], [], [])
+
+    # ---------------- ATTACK ----------------
     attack_colors = list(
         attacker.unit_type.get_attack_dice(
             distance=distance,
@@ -2357,108 +2432,73 @@ def resolve_ranged_combat(
         )
     )
 
-    # ---------------- SUPPRESSION (ATTACKER PENALTY) ----------------
-    if getattr(attacker, "suppressed", False):
-        if attack_colors:
-            attack_colors = attack_colors[:-1]
-            _trace(
-                "SUPPRESSION_ATTACK_PENALTY",
-                attacker=attacker.unit_id,
-                remaining_dice=len(attack_colors),
-            )
-
-    # ---------------- PARTIAL LOS PENALTY ----------------
-    if los == LineOfSight.PARTIAL and attack_colors:
+    if getattr(attacker, "suppressed", False) and attack_colors:
         attack_colors = attack_colors[:-1]
 
-    attack_pool = AttackDicePool(attack_colors)
-    attack_results: list[DiceResult] = attack_pool.roll()
+    attack_results = AttackDicePool(attack_colors).roll()
 
-    # ---------------- ATTACK SECTOR ----------------
-    attack_sector = determine_attack_sector(
+    # ---------------- SECTOR ----------------
+    sector = determine_attack_sector(
         attacker_pos=attacker.position,
         defender_pos=target.position,
         defender_facing=getattr(target, "facing", "N"),
     )
 
-    # ---------------- DEFENSE DICE ----------------
+    # ---------------- DEFENSE ----------------
     defense_colors = list(
-        target.unit_type.get_defense_dice(sector=attack_sector)
+        target.unit_type.get_defense_dice(sector=sector)
     )
 
     if game_map:
         hex_ = game_map.get_hex(target.position)
-        if hex_ is not None:
-            terrain_mod = TerrainModifier.from_hex(hex_)
+        if hex_:
+            terrain_mod = TerrainModifier.from_hex(
+                hex_,
+                target,
+                los=los   # ✅ ÚNICO sitio donde se aplica LOS
+            )
             defense_colors = terrain_mod.modify_defense(defense_colors)
 
-            _trace(
-                "TERRAIN_APPLIED",
-                defender=target.unit_id,
-                hex=target.position,
-                defense_dice=len(defense_colors),
-            )
+    defense_results = DefenseDicePool(defense_colors).roll()
 
-    defense_pool = DefenseDicePool(defense_colors)
-    defense_results: list[DiceResult] = defense_pool.roll()
-
-    # ---------------- DICE COMPARISON ----------------
+    # ---------------- RESOLUTION ----------------
     comparison = compare_dice(
         attacker_dice=attack_results,
         defender_dice=defense_results,
     )
 
-    remaining_damage = comparison["remaining_damage"]
-    remaining_criticals = comparison["remaining_criticals"]
-    remaining_suppress = comparison["remaining_suppress"]
+    dmg = comparison["remaining_damage"]
+    crits = comparison["remaining_criticals"]
+    suppress = comparison["remaining_suppress"]
 
-    # ---------------- CRITICALS ----------------
     criticals = [
         resolve_critical(
             DiceFace.CRITICAL,
             UnitClass[target.unit_type.category.value],
         )
-        for _ in range(remaining_criticals)
+        for _ in range(crits)
     ]
 
-    # ---------------- DAMAGE ----------------
-    damage = remaining_damage + remaining_criticals
+    total_damage = dmg + crits
 
     hp_before = target.hp
-    if damage > 0:
-        target.apply_damage(damage)
+    if total_damage > 0:
+        target.apply_damage(total_damage)
     hp_after = target.hp
 
-    defender_killed = hp_before > 0 and hp_after == 0
+    killed = hp_before > 0 and hp_after == 0
 
-    # ---------------- SUPPRESSION (CORRECTO) ----------------
-    if remaining_suppress > 0 and target.alive:
-
-        suppressed_before = target.is_suppressed()
-        fallback_before = target.is_in_fallback()
-
-        apply_suppression_hits(target, remaining_suppress)
+    # ---------------- SUPPRESSION ----------------
+    if suppress > 0 and target.alive:
+        apply_suppression_hits(target, suppress)
         resolve_fallback(target)
 
-        _trace(
-            "SUPPRESSION_RESOLVED",
-            unit=target.unit_id,
-            hits=remaining_suppress,
-            suppressed_before=suppressed_before,
-            fallback_before=fallback_before,
-            suppressed_after=target.is_suppressed(),
-            fallback_after=target.is_in_fallback(),
-        )
-
-    # ---------------- RESULT ----------------
     result = CombatResolutionResult(
         attack_roll=attack_results,
         defense_roll=defense_results,
         criticals=criticals,
     )
 
-    # ---------------- EMIT ACTION_EFFECT ----------------
- # ---------------- EMIT ACTION_EFFECT ----------------
     if context and context.event_bus:
         context.event_bus.emit(
             {
@@ -2468,69 +2508,36 @@ def resolve_ranged_combat(
                     "attacker": attacker.unit_id,
                     "defender": target.unit_id,
                     "distance": distance,
-                    "attack_sector": attack_sector.name,
+                    "attack_sector": sector.name,
                     "los": los.name,
-
-                # ✅ CLAVE
-                "attack_mode": getattr(action, "attack_mode", "DIRECT_FIRE"),
+                    "attack_mode": getattr(action, "attack_mode", "DIRECT_FIRE"),
 
                     "attacker_attack_dice": [
-                        {
-                            "color": d.color.name,
-                            "faces": [f.name for f in d.faces],
-                        }
+                        {"color": d.color.name, "faces": [f.name for f in d.faces]}
                         for d in attack_results
                     ],
                     "defender_defense_dice": [
-                        {
-                            "color": d.color.name,
-                            "faces": [f.name for f in d.faces],
-                        }
+                        {"color": d.color.name, "faces": [f.name for f in d.faces]}
                         for d in defense_results
                     ],
 
-                    # ============================
-                    # EFFECTS (CORREGIDO)
-                    # ============================
                     "attacker_effects": {
-                        "damage": damage,
+                        "damage": total_damage,
                         "criticals": criticals,
-
-                        # legacy
-                        "suppress": remaining_suppress,
-
-                        # nuevos
-                        "suppress_attempts": remaining_suppress,
-                        "suppression_applied": remaining_suppress > 0,
+                        "suppress": suppress,
                         "suppression_state_after": target.is_suppressed(),
-                        "fallback_triggered": target.is_in_fallback(),
-                    },
-
-                    "suppression": {
-                        "attempts": remaining_suppress,
-                        "applied": remaining_suppress > 0,
-                        "state": target.is_suppressed(),
-                        "fallback": target.is_in_fallback(),
                     },
 
                     "defender_hp_before": hp_before,
                     "defender_hp_after": hp_after,
-                    "defender_killed": defender_killed,
-
-                    "defender_suppressed": target.is_suppressed(),
-                    "defender_fallback": target.is_in_fallback(),
-
-                    # ✅ CLAVE PARA REPLAY
-                    "defender_position_after": target.position,
-
+                    "defender_killed": killed,
                     "resolution": comparison,
-                    "outcome": "resolved",
-                    "winner": None,
                 },
             }
         )
 
     return result
+
 
 
 ================================================================================
@@ -2821,6 +2828,71 @@ class ReactionTrigger(Enum):
 
 
 ================================================================================
+FILE: C:\repos\python\assault\assault_model\combat\spotting.py
+================================================================================
+
+from assault_model.combat.line_of_sight import LineOfSight
+
+
+def can_spot(attacker, target, los, game_map, terrain_config):
+    """
+    Deterministic spotting logic (rule-consistent).
+
+    LOS already encodes terrain obstruction.
+    """
+
+    # --------------------------------------
+    # BLOCKED → nunca visible
+    # --------------------------------------
+    if los == LineOfSight.BLOCKED:
+        return False
+
+    # --------------------------------------
+    # HINDERED CASE
+    # --------------------------------------
+    if los == LineOfSight.HINDERED:
+
+        # terreno del objetivo
+        hex_ = game_map.get_hex(target.position)
+
+        if hex_:
+            terrain = hex_.get_terrain()
+            config = terrain_config.get(terrain, {})
+
+            # si además está en terreno que también cubre
+            if config.get("los") == "HINDERED":
+                return False
+
+        # si solo la línea está entorpecida → sí visible
+        return True
+
+    # --------------------------------------
+    # CLEAR → siempre visible
+    # --------------------------------------
+    return True
+
+
+================================================================================
+FILE: C:\repos\python\assault\assault_model\combat\terrain_rules.py
+================================================================================
+
+from assault_model.combat.dice_color import DiceColor
+
+TERRAIN_DEFENSE = {
+    "clear": [],
+
+    # woods (tu mapa)
+    "woods": [DiceColor.BLUE],
+
+    # buildings (tu mapa)
+    "building": [DiceColor.GREEN, DiceColor.YELLOW],
+
+    # agua (normalmente sin bonus, pero depende del chart real)
+    "water": [],
+}
+
+
+================================================================================
 FILE: C:\repos\python\assault\assault_model\combat\unit_class.py
 ================================================================================
 
@@ -2864,33 +2936,219 @@ FILE: C:\repos\python\assault\assault_model\combat\modifiers\terrain_modifier.py
 
 from assault_model.combat.modifier import DiceModifier
 from assault_model.combat.dice_color import DiceColor
+from assault_model.config.terrain_config import terrain_config
+from assault_model.combat.line_of_sight import LineOfSight
 
 
 class TerrainModifier(DiceModifier):
-    def __init__(self, defense_bonus: list[DiceColor] | None = None):
+    """
+    Applies terrain-based defense modifiers using terrain_config.
+    Also integrates LOS effects (HINDERED → extra defense).
+    """
+
+    def __init__(self, defense_bonus=None, los=None):
         self.defense_bonus = defense_bonus or []
+        self.los = los  # ✅ NEW
+
 
     @staticmethod
-    def from_hex(hex_):
-        bonuses = []
+    def from_hex(hex_, unit, los=None):
+        """
+        Build a TerrainModifier using:
+        - terrain (from hex)
+        - unit class
+        - LOS condition (optional)
+        """
 
-        state = getattr(hex_, "state", None)
+        terrain_name = hex_.get_terrain()
 
-        if state:
-            if getattr(state, "building", False):
-                bonuses += [DiceColor.GREEN, DiceColor.BLUE]
+        # ✅ base defense from terrain
+        dice_names = terrain_config.get_defense_dice(
+            terrain_name,
+            unit.unit_class.name
+        )
 
-            if getattr(state, "woods", False):
-                bonuses += [DiceColor.BLUE]
+        dice = []
+        for name in dice_names:
+            try:
+                dice.append(DiceColor[name])
+            except KeyError:
+                raise ValueError(f"Invalid dice color '{name}' in terrain_config")
 
-        return TerrainModifier(bonuses)
+        return TerrainModifier(defense_bonus=dice, los=los)
 
-    def modify_attack(self, dice: list[DiceColor]) -> list[DiceColor]:
+
+    def modify_attack(self, dice):
         return dice
 
-    def modify_defense(self, dice: list[DiceColor]) -> list[DiceColor]:
-        return dice + self.defense_bonus
 
+    def modify_defense(self, dice):
+
+        result = dice + self.defense_bonus
+
+        # -------------------------------------------------
+        # ✅ LOS EFFECT (RULEBOOK 10.9.2)
+        # -------------------------------------------------
+        if self.los == LineOfSight.HINDERED:
+
+            # ✅ simple, consistent with system:
+            # reuse weakest defensive die
+            result.append(DiceColor.GREEN)
+
+        return result
+
+
+
+================================================================================
+FILE: C:\repos\python\assault\assault_model\config\terrain_config.py
+================================================================================
+
+import json
+from pathlib import Path
+
+
+class TerrainConfig:
+
+    def __init__(self, config_path=None):
+
+        if config_path is None:
+            config_path = Path(__file__).parent / "terrain_modifiers.json"
+
+        with open(config_path, "r", encoding="utf-8") as f:
+            self.data = json.load(f)
+
+    # -----------------------------
+    # Terrain entry
+    # -----------------------------
+    def get(self, terrain_name):
+        return self.data["terrain"].get(
+            terrain_name,
+            self.data["terrain"]["clear"]
+        )
+
+    # -----------------------------
+    # Defense dice
+    # -----------------------------
+    def get_defense_dice(self, terrain_name, unit_type):
+        entry = self.get(terrain_name)
+        return entry.get("defense", {}).get(unit_type, [])
+
+    # -----------------------------
+    # LOS
+    # -----------------------------
+    def get_los(self, terrain_name):
+        entry = self.get(terrain_name)
+        return entry.get("los", "CLEAR")
+
+    # -----------------------------
+    # Flags
+    # -----------------------------
+    def has_flag(self, terrain_name, flag):
+        entry = self.get(terrain_name)
+        return entry.get(flag, False)
+
+
+# ✅ 💥 ESTA LÍNEA FALTABA
+terrain_config = TerrainConfig()
+
+
+
+================================================================================
+FILE: C:\repos\python\assault\assault_model\config\terrain_modifiers.json
+================================================================================
+
+{
+  "terrain": {
+
+    "clear": {
+      "defense": {
+        "INFANTRY": ["GREEN"],
+        "VEHICLE": [],
+        "ARTILLERY": []
+      },
+      "los": "CLEAR"
+    },
+
+    "water": {
+      "defense": {
+        "INFANTRY": [],
+        "VEHICLE": [],
+        "ARTILLERY": []
+      },
+      "los": "CLEAR",
+      "impassable": true
+    },
+
+    "rocky": {
+      "defense": {
+        "INFANTRY": ["BLUE", "YELLOW"],
+        "VEHICLE": ["GREEN"],
+        "ARTILLERY": ["GREEN"]
+      },
+      "los": "CLEAR"
+    },
+
+    "olive_vine_grove": {
+      "defense": {
+        "INFANTRY": ["GREEN", "GREEN"],
+        "VEHICLE": ["BLUE"],
+        "ARTILLERY": ["BLUE"]
+      },
+      "los": "HINDERED"
+    },
+
+    "light_forest": {
+      "defense": {
+        "INFANTRY": ["YELLOW", "GREEN"],
+        "VEHICLE": ["GREEN"],
+        "ARTILLERY": ["BLUE"]
+      },
+      "los": "HINDERED"
+    },
+
+    "brush": {
+      "defense": {
+        "INFANTRY": ["GREEN", "BLUE"],
+        "VEHICLE": ["GREEN"],
+        "ARTILLERY": ["GREEN"]
+      },
+      "los": "HINDERED"
+    },
+
+    "heavy_forest": {
+      "defense": {
+        "INFANTRY": ["GREEN", "YELLOW", "YELLOW"],
+        "VEHICLE": ["GREEN"],
+        "ARTILLERY": ["GREEN"]
+      },
+      "los": "BLOCKED",
+      "no_indirect_from": true
+    },
+
+    "building_single": {
+      "defense": {
+        "INFANTRY": ["BLUE", "YELLOW", "YELLOW"],
+        "VEHICLE": ["BLUE"],
+        "ARTILLERY": ["GREEN"]
+      },
+      "los": "BLOCKED",
+      "no_indirect_from": true,
+      "elevation": 0
+    },
+
+    "building_multi": {
+      "defense": {
+        "INFANTRY": ["RED", "GREEN", "GREEN"],
+        "VEHICLE": ["BLUE"],
+        "ARTILLERY": ["GREEN"]
+      },
+      "los": "BLOCKED",
+      "no_indirect_from": true,
+      "elevation": 1
+    }
+
+  }
+}
 
 
 ================================================================================
@@ -3057,20 +3315,6 @@ class Scenario:
 FILE: C:\repos\python\assault\assault_model\core\scenario_loader.py
 ================================================================================
 
-# assault_model/core/scenario_loader.py
-#
-# Scenario loader.
-# Responsible for constructing a Scenario object from a scenario JSON file.
-# This includes:
-# - Map construction from map pieces
-# - Unit instantiation from the unit catalog
-# - Victory condition parsing
-# - Initial GameState creation
-#
-# NOTE:
-# - This module defines WHAT exists at the start of the game,
-#   not how the game runs.
-
 import json
 import os
 from pathlib import Path
@@ -3087,25 +3331,17 @@ from assault_model.core.victory_conditions import VictoryConditions
 from assault_model.state.game_state import GameState
 
 
-# -------------------------------------------------
-# DEBUG TRACE (configurable by environment variable)
-# -------------------------------------------------
 DEBUG_TRACE = os.getenv("ASSAULT_DEBUG_TRACE", "0") == "1"
 
 
 def _trace(tag: str, **data):
-    """Internal debug helper for scenario loading."""
     if not DEBUG_TRACE:
         return
     payload = " ".join(f"{k}={v}" for k, v in data.items())
     print(f"[TRACE][{tag}] {payload}")
 
 
-# -------------------------------------------------
-# Errors
-# -------------------------------------------------
 class ScenarioLoaderError(Exception):
-    """Raised when a scenario file cannot be loaded or is invalid."""
     pass
 
 
@@ -3113,9 +3349,6 @@ class ScenarioLoaderError(Exception):
 # Helpers
 # -------------------------------------------------
 def _offset_hex(hex_: Hex, origin: Tuple[int, int]) -> Hex:
-    """
-    Returns a new Hex translated by an origin offset.
-    """
     return Hex(
         q=hex_.q + origin[0],
         r=hex_.r + origin[1],
@@ -3131,27 +3364,20 @@ def load_scenario(
     unit_catalog: Dict[str, UnitType],
     map_piece_catalog: Dict[str, MapPieceDefinition],
 ) -> Scenario:
-    """
-    Load a Scenario from a JSON file.
-    """
 
-    # ---------------------------------------------
-    # Load and parse scenario JSON
-    # ---------------------------------------------
     if not scenario_path.exists():
         raise ScenarioLoaderError(f"Scenario not found: {scenario_path}")
 
     raw = json.loads(scenario_path.read_text(encoding="utf-8"))
 
     # =================================================
-    # MAP CONSTRUCTION (FROM MAP PIECES)
+    # MAP CONSTRUCTION
     # =================================================
     pieces_def = raw.get("map", {}).get("pieces", [])
     if not pieces_def:
         raise ScenarioLoaderError("Scenario map has no pieces")
 
     global_hexes: List[Hex] = []
-    pending_hex_states: List[Tuple[Tuple[int, int], object]] = []
     pending_hex_edges: List[
         Tuple[Tuple[int, int], Tuple[int, int], object]
     ] = []
@@ -3167,13 +3393,11 @@ def load_scenario(
         piece = map_piece_catalog[piece_id]
         origin = tuple(entry["origin"])
 
+        # ✅ HEXES
         for h in piece.hexes:
             global_hexes.append(_offset_hex(h, origin))
 
-        for (q, r), state in piece.hex_states.items():
-            global_coord = (q + origin[0], r + origin[1])
-            pending_hex_states.append((global_coord, state))
-
+        # ✅ EDGES
         for (a, b), feature in piece.hex_edges.items():
             aq, ar = a
             bq, br = b
@@ -3185,6 +3409,7 @@ def load_scenario(
                 )
             )
 
+    # ✅ check overlapping
     coords = [(h.q, h.r) for h in global_hexes]
     if len(coords) != len(set(coords)):
         raise ScenarioLoaderError("Overlapping hexes detected")
@@ -3192,12 +3417,8 @@ def load_scenario(
     game_map = Map(hexes=global_hexes)
 
     # =================================================
-    # ATTACH HEX STATES AND EDGE FEATURES
+    # APPLY EDGE FEATURES
     # =================================================
-    for (q, r), state in pending_hex_states:
-        state.hex = game_map.get_hex(q, r)
-        game_map.set_hex_state(q, r, state)
-
     for a, b, feature in pending_hex_edges:
         game_map.add_hex_edge_feature(a, b, feature)
 
@@ -3207,6 +3428,7 @@ def load_scenario(
     units: List[UnitInstance] = []
 
     for u in raw.get("units", []):
+
         unit_key = u["unit_key"]
 
         if unit_key not in unit_catalog:
@@ -3223,14 +3445,6 @@ def load_scenario(
         pos = HexCoord(*pos_tuple)
         unit_type = unit_catalog[unit_key]
 
-        _trace(
-            "SCENARIO_UNIT_TYPE",
-            unit_id=u["unit_id"],
-            unit_key=unit_key,
-            attack_raw=unit_type._attack_raw,
-            base_defense_raw=unit_type._base_defense_raw,
-        )
-
         units.append(
             UnitInstance(
                 unit_id=u["unit_id"],
@@ -3242,7 +3456,7 @@ def load_scenario(
         )
 
     # =================================================
-    # SCENARIO OBJECT
+    # SCENARIO
     # =================================================
     scenario = Scenario(
         name=raw["id"],
@@ -3257,7 +3471,7 @@ def load_scenario(
     )
 
     # =================================================
-    # INITIAL GAME STATE
+    # ✅ GAME STATE (SIN ACTIVACIÓN)
     # =================================================
     game_state = GameState(
         game_map=game_map,
@@ -3265,7 +3479,9 @@ def load_scenario(
         turn=1,
     )
 
-    game_state.start_action_phase()
+    # ❌ ELIMINADO:
+    # game_state.start_action_phase()
+
     scenario.initial_game_state = game_state
 
     return scenario
@@ -3568,6 +3784,16 @@ class Hex:
     def neighbors(self) -> list["Hex"]:
         return [self.neighbor(d) for d in HexDirection]
 
+    # -------------------------------------------------
+    # ✅ SIMPLIFIED TERRAIN (FINAL FORM)
+    # -------------------------------------------------
+    def get_terrain(self) -> str:
+        """
+        Returns the terrain type of the hex.
+        """
+        return self.terrain.value
+
+
 
 ================================================================================
 FILE: C:\repos\python\assault\assault_model\map\hex_coord.py
@@ -3657,6 +3883,89 @@ class HexEdgeFeature(Enum):
     """
 
     WALL = "wall"
+
+
+================================================================================
+FILE: C:\repos\python\assault\assault_model\map\hex_line.py
+================================================================================
+
+from assault_model.map.hex_coord import HexCoord
+
+
+# -------------------------------------------------
+# Helpers cube coords
+# -------------------------------------------------
+
+def _cube_from_axial(h: HexCoord):
+    x = h.q
+    z = h.r
+    y = -x - z
+    return (x, y, z)
+
+
+def _cube_to_axial(x: int, y: int, z: int):
+    return HexCoord(x, z)
+
+
+def _cube_lerp(a, b, t):
+    return (
+        a[0] + (b[0] - a[0]) * t,
+        a[1] + (b[1] - a[1]) * t,
+        a[2] + (b[2] - a[2]) * t,
+    )
+
+
+def _cube_round(x, y, z):
+    rx = round(x)
+    ry = round(y)
+    rz = round(z)
+
+    dx = abs(rx - x)
+    dy = abs(ry - y)
+    dz = abs(rz - z)
+
+    if dx > dy and dx > dz:
+        rx = -ry - rz
+    elif dy > dz:
+        ry = -rx - rz
+    else:
+        rz = -rx - ry
+
+    return rx, ry, rz
+
+
+# -------------------------------------------------
+# Public API
+# -------------------------------------------------
+
+def hex_distance(a: HexCoord, b: HexCoord) -> int:
+    return (abs(a.q - b.q) + abs(a.q + a.r - b.q - b.r) + abs(a.r - b.r)) // 2
+
+
+def hex_line(a: HexCoord, b: HexCoord):
+    """
+    Returns list of hex coords forming a straight line from a to b.
+    Uses cube coords internally for correctness.
+    """
+
+    a_cube = _cube_from_axial(a)
+    b_cube = _cube_from_axial(b)
+
+    N = hex_distance(a, b)
+
+    results = []
+
+    if N == 0:
+        return [a]
+
+    for i in range(N + 1):
+        t = i / N
+        lerp = _cube_lerp(a_cube, b_cube, t)
+        rounded = _cube_round(*lerp)
+        results.append(_cube_to_axial(*rounded))
+
+    return results
+
 
 
 ================================================================================
@@ -3804,12 +4113,9 @@ def hex_distance(a: CoordLike, b: CoordLike) -> int:
 FILE: C:\repos\python\assault\assault_model\map\map.py
 ================================================================================
 
-# assault_model/map/map.py
-
 from typing import Dict, List, Tuple, Optional
 
 from assault_model.map.hex import Hex
-from assault_model.map.hex_state import HexState
 from assault_model.map.hex_edge_feature import HexEdgeFeature
 
 
@@ -3820,8 +4126,7 @@ class Map:
     A Map is a collection of global hexes.
     It is immutable in terms of geometry during gameplay.
 
-    The Map also serves as a registry for dynamic hex state
-    and static edge features that are queried by game resolvers.
+    The Map serves as a registry for hexes and static edge features.
     """
 
     def __init__(self, hexes: List[Hex]) -> None:
@@ -3832,14 +4137,15 @@ class Map:
             (h.q, h.r): h for h in hexes
         }
 
-        # Dynamic per-hex state indexed by global coordinates
-        self.hex_states: Dict[Tuple[int, int], HexState] = {}
-
         # Static edge features indexed by ordered coordinate pairs
         self.hex_edges: Dict[
             Tuple[Tuple[int, int], Tuple[int, int]],
             HexEdgeFeature,
         ] = {}
+
+    # ---------------------------------------------------------
+    # Hex retrieval
+    # ---------------------------------------------------------
 
     def get_hex(self, q: int, r: int) -> Optional[Hex]:
         """
@@ -3847,29 +4153,19 @@ class Map:
         """
         return self._hex_index.get((q, r))
 
+    def get_hex_from_coord(self, coord) -> Optional[Hex]:
+        """
+        Convenience helper to retrieve a hex using a HexCoord-like object.
+        """
+        if coord is None:
+            return None
+        return self.get_hex(coord.q, coord.r)
+
     def all_hexes(self) -> List[Hex]:
         """
         Return all hexes in the map.
         """
         return self.hexes
-
-    # ---------------------------------------------------------
-    # Hex state handling
-    # ---------------------------------------------------------
-
-    def set_hex_state(self, q: int, r: int, state: HexState) -> None:
-        """
-        Associate a HexState with a global hex coordinate.
-
-        This method does not apply any game rules.
-        """
-        self.hex_states[(q, r)] = state
-
-    def get_hex_state(self, q: int, r: int) -> Optional[HexState]:
-        """
-        Retrieve the HexState associated with a hex, if any.
-        """
-        return self.hex_states.get((q, r))
 
     # ---------------------------------------------------------
     # Hex edge feature handling
@@ -3900,16 +4196,14 @@ class Map:
         return self.hex_edges.get((a, b))
 
 
+
 ================================================================================
 FILE: C:\repos\python\assault\assault_model\map\map_piece.py
 ================================================================================
 
-# assault_model/map/map_piece.py
-
 from typing import Dict, List, Tuple, Optional
 
 from assault_model.map.hex import Hex
-from assault_model.map.hex_state import HexState
 from assault_model.map.hex_edge_feature import HexEdgeFeature
 
 
@@ -3923,43 +4217,45 @@ class MapPieceDefinition:
     - static
     - immutable
     - reusable across scenarios
-    - contains local hex coordinates and base terrain
+    - defines a shape + terrain exceptions
 
     A map piece contains NO units and NO execution logic.
 
-    MapPieceDefinition may optionally include:
-    - hex_states: dynamic hex overlays (buildings, woods, etc.)
-    - hex_edges: edge features between adjacent hexes (walls, hedges, etc.)
+    MapPieceDefinition includes:
+    - shape: (width, height)
+    - hexes: full generated hex list (after loader expands sparse data)
+    - hex_edges: edge features (walls, hedges, etc.)
     """
 
     def __init__(
         self,
         piece_id: str,
         description: str,
+        shape: Tuple[int, int],   # ✅ NEW
         hexes: List[Hex],
-        hex_states: Optional[Dict[Tuple[int, int], HexState]] = None,
         hex_edges: Optional[
             Dict[Tuple[Tuple[int, int], Tuple[int, int]], HexEdgeFeature]
         ] = None,
     ) -> None:
         self.piece_id = piece_id
         self.description = description
+
+        # ✅ shape explicitly stored
+        self.shape = shape
+
+        # ✅ already expanded grid
         self.hexes = hexes
 
-        # Optional per-hex dynamic state (indexed by local coordinates)
-        self.hex_states: Dict[Tuple[int, int], HexState] = hex_states or {}
-
-        # Optional edge features between pairs of local coordinates
+        # ✅ edge features
         self.hex_edges: Dict[
             Tuple[Tuple[int, int], Tuple[int, int]], HexEdgeFeature
         ] = hex_edges or {}
 
 
+
 ================================================================================
 FILE: C:\repos\python\assault\assault_model\map\map_piece_loader.py
 ================================================================================
-
-# assault_model/map/map_piece_loader.py
 
 import json
 from pathlib import Path
@@ -3968,22 +4264,15 @@ from typing import Dict, List, Tuple
 from assault_model.map.map_piece import MapPieceDefinition
 from assault_model.map.hex import Hex
 from assault_model.map.terrain import Terrain
-from assault_model.map.hex_state import HexState
 from assault_model.map.hex_edge_feature import HexEdgeFeature
 
 
 class MapPieceCatalogError(Exception):
-    """Raised when the map piece catalog is invalid or cannot be loaded."""
+    pass
 
 
 def load_map_piece_catalog(path: Path) -> Dict[str, MapPieceDefinition]:
-    """
-    Load a map piece catalog from a JSON file and convert it into
-    MapPieceDefinition objects.
 
-    This loader is responsible only for reading static map data.
-    No game rules or logic are applied here.
-    """
     if not path.exists():
         raise MapPieceCatalogError(f"Map piece catalog not found: {path}")
 
@@ -4001,70 +4290,72 @@ def load_map_piece_catalog(path: Path) -> Dict[str, MapPieceDefinition]:
 
     for piece_id, data in raw["pieces"].items():
         try:
-            # -------------------------------------------------
-            # Base hex loading (FIXED: supports hexes by rows)
-            # -------------------------------------------------
-            hexes: List[Hex] = []
 
-            for row in data.get("hexes", []):
-                for h in row:
-                    try:
-                        terrain = Terrain(h["terrain"])
-                    except ValueError as exc:
-                        raise MapPieceCatalogError(
-                            f"Invalid terrain '{h['terrain']}' in piece '{piece_id}'"
-                        ) from exc
+            # ✅ SHAPE
+            if "shape" not in data:
+                raise MapPieceCatalogError(
+                    f"Piece '{piece_id}' missing 'shape'"
+                )
 
-                    hexes.append(
-                        Hex(
-                            q=int(h["q"]),
-                            r=int(h["r"]),
-                            terrain=terrain,
-                        )
+            width, height = data["shape"]
+
+            # -------------------------------------------------
+            # ✅ GENERATE FULL GRID (default CLEAR)
+            # -------------------------------------------------
+            hex_map: Dict[Tuple[int, int], Hex] = {}
+
+            for q in range(width):
+                for r in range(height):
+                    hex_map[(q, r)] = Hex(q=q, r=r, terrain=Terrain.CLEAR)
+
+            # -------------------------------------------------
+            # ✅ APPLY EXCEPTIONS (flat list)
+            # -------------------------------------------------
+            for h in data.get("hexes", []):
+                q = int(h["q"])
+                r = int(h["r"])
+
+                if (q, r) not in hex_map:
+                    raise MapPieceCatalogError(
+                        f"Hex ({q},{r}) outside shape in piece '{piece_id}'"
                     )
 
+                terrain_name = h.get("terrain", "clear")
+
+                try:
+                    terrain = Terrain(terrain_name)
+                except ValueError as exc:
+                    raise MapPieceCatalogError(
+                        f"Invalid terrain '{terrain_name}' in piece '{piece_id}'"
+                    ) from exc
+
+                hex_map[(q, r)] = Hex(q=q, r=r, terrain=terrain)
+
+            hexes: List[Hex] = list(hex_map.values())
+
             # -------------------------------------------------
-            # Optional hex state loading
-            # -------------------------------------------------
-            hex_states: Dict[Tuple[int, int], HexState] = {}
-
-            for key, state_data in data.get("hex_states", {}).items():
-                q, r = map(int, key.split(","))
-
-                state = HexState(hex_=None)
-                state.building = state_data.get("building", False)
-                state.woods = state_data.get("woods", False)
-
-                hex_states[(q, r)] = state
-
-            # -------------------------------------------------
-            # Optional hex edge feature loading
+            # EDGE FEATURES
             # -------------------------------------------------
             hex_edges: Dict[
-                Tuple[Tuple[int, int], Tuple[int, int]], HexEdgeFeature
+                Tuple[Tuple[int, int], Tuple[int, int]],
+                HexEdgeFeature,
             ] = {}
 
             for edge in data.get("hex_edges", []):
                 a = tuple(map(int, edge["from"].split(",")))
                 b = tuple(map(int, edge["to"].split(",")))
 
-                try:
-                    feature = HexEdgeFeature(edge["feature"])
-                except ValueError as exc:
-                    raise MapPieceCatalogError(
-                        f"Invalid edge feature '{edge['feature']}' in piece '{piece_id}'"
-                    ) from exc
-
+                feature = HexEdgeFeature(edge["feature"])
                 hex_edges[(a, b)] = feature
 
             # -------------------------------------------------
-            # MapPieceDefinition construction
+            # BUILD PIECE
             # -------------------------------------------------
             piece = MapPieceDefinition(
                 piece_id=piece_id,
                 description=data.get("description", ""),
+                shape=(width, height),
                 hexes=hexes,
-                hex_states=hex_states,
                 hex_edges=hex_edges,
             )
 
@@ -4085,43 +4376,124 @@ FILE: C:\repos\python\assault\assault_model\map\terrain.py
 from enum import Enum
 
 class Terrain(Enum):
-    """
-    Base terrain type of a hex.
-
-    Terrain represents the immutable ground substrate of a hex.
-    It only includes terrain types with intrinsic, always-on rules.
-
-    Terrain does NOT include cover, obstacles, buildings, vegetation,
-    or any other elements whose effects depend on context or direction.
-    """
 
     CLEAR = "clear"
-    """
-    Open ground with no inherent movement, LOS, or combat modifiers.
-    Most hexes use CLEAR as their base terrain.
-    """
-
-    HILL = "hill"
-    """
-    Elevated ground.
-
-    Elevation affects line of sight and positional rules.
-    All elevation effects are resolved contextually by game resolvers.
-    """
-
     WATER = "water"
-    """
-    Deep water terrain.
+    HILL = "hill"
 
-    Water is inherently impassable to most ground units.
-    Movement restrictions apply regardless of unit context.
+    # ✅ vegetation
+    LIGHT_FOREST = "light_forest"
+    HEAVY_FOREST = "heavy_forest"
+    BRUSH = "brush"
+
+    # ✅ buildings
+    BUILDING_SINGLE = "building_single"
+    BUILDING_MULTI = "building_multi"
+
+    
+    ROCKY = "rocky"
+    OLIVE_GROVE = "olive_vine_grove"
+
+
+
+================================================================================
+FILE: C:\repos\python\assault\assault_model\map\terrain_utils.py
+================================================================================
+
+def resolve_terrain(hex_):
     """
+    Returns the effective terrain of a hex.
+
+    Priority:
+    1. terrain defined in state (if any)
+    2. base terrain
+    """
+
+    state = getattr(hex_, "state", None)
+
+    if state:
+        # explicit ordering = no ambiguity
+        if getattr(state, "building_multi", False):
+            return "building_multi"
+
+        if getattr(state, "building_single", False):
+            return "building_single"
+
+        if getattr(state, "heavy_forest", False):
+            return "heavy_forest"
+
+        if getattr(state, "light_forest", False):
+            return "light_forest"
+
+        if getattr(state, "olive_vine_grove", False):
+            return "olive_vine_grove"
+
+        if getattr(state, "rocky", False):
+            return "rocky"
+
+    return hex_.terrain.value
 
 
 ================================================================================
 FILE: C:\repos\python\assault\assault_model\map\__init__.py
 ================================================================================
 
+
+
+
+================================================================================
+FILE: C:\repos\python\assault\assault_model\roadmap\los_roadmap.md
+================================================================================
+
+# LOS System Roadmap (Assault Engine)
+
+## Phase 1 ✅ (DONE)
+- Terrain-based LOS using terrain_config
+- CLEAR / HINDERED / BLOCKED
+- Integrated in combat resolver
+
+---
+
+## Phase 2 🔥 (Next)
+### Ray Tracing (Core LOS)
+- Evaluate all hexes between attacker and defender
+- Accumulate LOS effects:
+  - 1 hindrance → HINDERED
+  - 3 hindrances → BLOCKED
+
+---
+
+## Phase 3 🔥🔥
+### Terrain Interaction Improvements
+- Multiple hindrance stacking
+- Forest vs buildings vs walls interaction
+- Directional LOS (walls, slopes)
+
+---
+
+## Phase 4 💥 (Gameplay Critical)
+### Spotting System (Rule 10.5)
+- LOS != visibility
+- Add spotting roll
+- Hidden units and ambush
+
+---
+
+## Phase 5 🚀 (Advanced Simulation)
+- Elevation system (hills, buildings)
+- Indirect fire LOS rules
+- Smoke / dynamic LOS blockers
+
+---
+
+## Final Goal
+Fully simulate Assault LOS:
+- Realistic visibility
+- Tactical positioning
+- Emergent AI behaviour
+1️⃣ añadir decay (te lo integro limpio)
+2️⃣ traits → SCOUT mejora spotting
+3️⃣ elevation (top tier feature)
 
 
 
@@ -4647,7 +5019,7 @@ FILE: C:\repos\python\assault\assault_model\runtime\game_state_runtime.py
 
 """
 RuntimeGameState is the authoritative execution engine of the game.
-This class is responsible for ALL game evolution.
+Pure execution engine (no activation logic).
 """
 
 from assault_model.state.game_state import GameState
@@ -4656,12 +5028,9 @@ from assault_model.state.turn import TurnState
 from assault_model.actions.action import Action
 from assault_model.actions.movement import MoveAction
 from assault_model.actions.status import WaitAction
-from assault_model.actions.assault import AssaultAction
 from assault_model.actions.resolution import resolve_action
-from assault_model.actions.action_catalog import ActionCatalog
 
 from assault_model.combat.combat_resolution import CombatResolutionResult
-from assault_model.combat.reaction_context import ReactionContext
 
 from assault_model.runtime.execution_context import ExecutionContext
 from assault_model.map.hex_coord import HexCoord
@@ -4680,7 +5049,9 @@ def _trace(tag: str, **data):
 
 class RuntimeGameState:
     """
-    Authoritative engine implementation.
+    ✅ Pure execution engine
+    ✅ No activation system
+    ✅ Deterministic
     """
 
     def __init__(self, base_state: GameState, scenario):
@@ -4688,22 +5059,39 @@ class RuntimeGameState:
         self.scenario = scenario
         self.turn = TurnState(turn_number=base_state.turn)
 
+        # ✅ NEW: control de activaciones por turno
+        self.activated_units = set()
+
     # =================================================
-    # ✅ ACTION GUARD
+    # TURN END (FIX FINAL)
+    # =================================================
+    def turn_has_ended(self) -> bool:
+        """
+        Turn ends when all eligible units have already acted.
+        """
+
+        for u in self.base_state.units:
+
+            if not self._can_unit_act(u):
+                continue
+
+            if u.unit_id not in self.activated_units:
+                return False
+
+        return True
+
+    # =================================================
+    # ACTION GUARD
     # =================================================
     def _can_unit_act(self, unit) -> bool:
         if unit is None:
             return False
-
         if not unit.alive:
             return False
-
         if getattr(unit, "fallback", False):
             return False
-
         if getattr(unit, "suppressed", False):
             return False
-
         return True
 
     # =================================================
@@ -4714,47 +5102,31 @@ class RuntimeGameState:
         Start of turn:
         - clears suppression
         - clears fallback
-        - resets activation
+        - resets activation tracker
         """
+
+        # ✅ reset activaciones
+        self.activated_units.clear()
 
         for unit in self.base_state.units:
 
-            # ------------------------------
-            # SUPPRESSION RECOVERY
-            # ------------------------------
             if getattr(unit, "suppressed", False):
                 unit.clear_suppression()
+                _trace("SUPPRESSION_RECOVERED", unit=unit.unit_id)
 
-                _trace(
-                    "SUPPRESSION_RECOVERED",
-                    unit=unit.unit_id,
-                )
-
-            # ------------------------------
-            # FALLBACK RECOVERY ✅ NEW
-            # ------------------------------
             if getattr(unit, "fallback", False):
                 unit.clear_fallback()
-
-                _trace(
-                    "FALLBACK_RECOVERED",
-                    unit=unit.unit_id,
-                )
-
-        self.base_state.activation_state.reset(self.base_state.units)
-        self.base_state.activation_state.next_unit()
+                _trace("FALLBACK_RECOVERED", unit=unit.unit_id)
 
         _trace(
             "TURN_START_UNITS",
-            turn=getattr(self.base_state, "turn", None),
+            turn=self.base_state.turn,
             units=[
                 {
                     "id": u.unit_id,
                     "side": u.side,
                     "alive": u.alive,
                     "hp": getattr(u, "hp", None),
-                    "suppressed": getattr(u, "suppressed", False),
-                    "fallback": getattr(u, "fallback", False),
                 }
                 for u in self.base_state.units
             ],
@@ -4781,23 +5153,21 @@ class RuntimeGameState:
 
         event_bus = context.event_bus if context else None
 
-        if len(alive_units) == 0:
+        if not alive_units:
             self.base_state.done = True
             self.base_state.winner = None
             self.base_state.end_reason = "all_units_destroyed"
 
             if event_bus:
-                event_bus.emit(
-                    {
-                        "type": "MATCH_END",
-                        "payload": {
-                            "result": "draw",
-                            "winner": None,
-                            "reason": self.base_state.end_reason,
-                            "turn": self.base_state.turn,
-                        },
-                    }
-                )
+                event_bus.emit({
+                    "type": "MATCH_END",
+                    "payload": {
+                        "result": "draw",
+                        "winner": None,
+                        "reason": self.base_state.end_reason,
+                        "turn": self.base_state.turn,
+                    },
+                })
             return
 
         if len(alive_sides) == 1:
@@ -4808,17 +5178,15 @@ class RuntimeGameState:
             self.base_state.end_reason = "last_side_standing"
 
             if event_bus:
-                event_bus.emit(
-                    {
-                        "type": "MATCH_END",
-                        "payload": {
-                            "result": "victory",
-                            "winner": winner,
-                            "reason": self.base_state.end_reason,
-                            "turn": self.base_state.turn,
-                        },
-                    }
-                )
+                event_bus.emit({
+                    "type": "MATCH_END",
+                    "payload": {
+                        "result": "victory",
+                        "winner": winner,
+                        "reason": self.base_state.end_reason,
+                        "turn": self.base_state.turn,
+                    },
+                })
             return
 
         if (
@@ -4830,61 +5198,15 @@ class RuntimeGameState:
             self.base_state.end_reason = "max_turns"
 
             if event_bus:
-                event_bus.emit(
-                    {
-                        "type": "MATCH_END",
-                        "payload": {
-                            "result": "draw",
-                            "winner": None,
-                            "reason": self.base_state.end_reason,
-                            "turn": self.base_state.turn,
-                        },
-                    }
-                )
-
-    # =================================================
-    # ACTIVATION
-    # =================================================
-    def get_activable_units(self):
-        gs = self.base_state
-        catalog = ActionCatalog(gs)
-        activable = []
-
-        for unit in gs.units:
-
-            # ✅ central guard
-            if not self._can_unit_act(unit):
-                continue
-
-            if unit in gs.activation_state.activated:
-                continue
-
-            prev_active = gs.activation_state.active_unit
-            gs.activation_state.active_unit = unit
-            try:
-                actions = catalog.actions()
-            finally:
-                gs.activation_state.active_unit = prev_active
-
-            if any(not isinstance(a, WaitAction) for a in actions):
-                activable.append(unit)
-
-        return activable
-    # VERY IMPORTANT AVOID LAST UNIT NOT ACTIVATED
-    def turn_has_ended(self) -> bool:
-        state = self.base_state.activation_state
-        return not state.remaining and state.active_unit is None
-
-    # =================================================
-    # INTERNAL ACTIVATION
-    # =================================================
-    def _consume_activation(self, unit):
-        if unit is None:
-            return
-        self.base_state.activation_state.consume(unit)
-
-    def _advance_activation(self):
-        self.base_state.activation_state.next_unit()
+                event_bus.emit({
+                    "type": "MATCH_END",
+                    "payload": {
+                        "result": "draw",
+                        "winner": None,
+                        "reason": self.base_state.end_reason,
+                        "turn": self.base_state.turn,
+                    },
+                })
 
     # =================================================
     # MAIN EXECUTION
@@ -4895,14 +5217,11 @@ class RuntimeGameState:
         combat_result: CombatResolutionResult | None = None,
         context: ExecutionContext | None = None,
     ):
+
         event_bus = context.event_bus if context else None
 
         attacker = next(
-            (
-                u
-                for u in self.base_state.units
-                if u.unit_id == getattr(action, "unit_id", None)
-            ),
+            (u for u in self.base_state.units if u.unit_id == getattr(action, "unit_id", None)),
             None,
         )
 
@@ -4912,34 +5231,17 @@ class RuntimeGameState:
             attacker=attacker.unit_id if attacker else None,
         )
 
-        # =================================================
+        # ✅ marcar unidad como activada
+        if attacker:
+            self.activated_units.add(attacker.unit_id)
+
         # ✅ HARD BLOCK
-        # =================================================
         if attacker and not self._can_unit_act(attacker):
 
             _trace(
                 "ACTION_BLOCKED",
                 unit=attacker.unit_id,
-                suppressed=attacker.is_suppressed(),
-                fallback=attacker.is_in_fallback(),
-                action=action.__class__.__name__,
             )
-
-            if event_bus:
-                event_bus.emit(
-                    {
-                        "type": "ACTION_BLOCKED",
-                        "payload": {
-                            "unit": attacker.unit_id,
-                            "action": action.__class__.__name__,
-                            "reason": (
-                                "FALLBACK"
-                                if attacker.is_in_fallback()
-                                else "SUPPRESSED"
-                            ),
-                        },
-                    }
-                )
 
             return None
 
@@ -4951,13 +5253,10 @@ class RuntimeGameState:
         # WAIT
         # -------------------------------------------------
         if isinstance(action, WaitAction):
-            self._consume_activation(attacker)
-            self._advance_activation()
             return {
                 "type": "WAIT",
                 "unit": attacker.unit_id if attacker else None
             }
-
 
         # -------------------------------------------------
         # APPLY ACTION
@@ -4976,12 +5275,9 @@ class RuntimeGameState:
         if self.base_state.done:
             return result
 
-
         # -------------------------------------------------
-        # CONTINUE TURN
+        # EVENT: MOVEMENT
         # -------------------------------------------------
-        self._consume_activation(attacker)
-        self._advance_activation()
         if event_bus and prev_position and isinstance(action, MoveAction):
             unit_after = next(
                 (u for u in self.base_state.units if u.unit_id == action.unit_id),
@@ -4992,18 +5288,17 @@ class RuntimeGameState:
                     unit_after.position.q,
                     unit_after.position.r,
                 )
-                event_bus.emit(
-                    {
-                        "type": "UNIT_MOVED",
-                        "payload": {
-                            "unit_id": action.unit_id,
-                            "from": prev_position,
-                            "to": new_position,
-                        },
-                    }
-                )
+                event_bus.emit({
+                    "type": "UNIT_MOVED",
+                    "payload": {
+                        "unit_id": action.unit_id,
+                        "from": prev_position,
+                        "to": new_position,
+                    },
+                })
 
         return result
+
 
 
 ================================================================================
@@ -5023,8 +5318,7 @@ from assault_model.map.hex_state import HexState
 from assault_model.units.unit_instance import UnitInstance
 from assault_model.core.victory_conditions import VictoryConditions
 from assault_model.core.vp_tracker import VictoryPointTracker
-from assault_model.state.turn import TurnState, TurnPhase
-from assault_model.core.activation import ActivationState
+from assault_model.state.turn import TurnState
 from assault_model.map.hex_coord import HexCoord
 
 # --- COMBAT IMPORTS ---
@@ -5047,18 +5341,11 @@ def _trace(tag: str, **data):
     print(f"[TRACE][{tag}] {payload}")
 
 
-# =================================================
-# SIDE → HEX OWNERSHIP MAPPING
-# =================================================
-SIDE_TO_HEX_OWNERSHIP: Dict[str, HexOwnership] = {
-    "GE": HexOwnership.SIDE_A,
-    "US": HexOwnership.SIDE_B,
-}
-
-
 class GameState:
     """
-    Canonical runtime game state.
+    ✅ Pure state container
+    ✅ No activation logic
+    ✅ Deterministic and RL-safe
     """
 
     def __init__(
@@ -5077,7 +5364,16 @@ class GameState:
         self.turn = turn
 
         self.turn_state = TurnState(turn_number=turn)
-        self.activation_state = ActivationState(units)
+
+        # -----------------------------
+        # ✅ TURN ORDER (CRÍTICO)
+        # -----------------------------
+        self.turn_order = self._build_turn_order(units)
+
+        # -----------------------------
+        # ✅ SIDE → OWNERSHIP
+        # -----------------------------
+        self.side_to_ownership = self._build_side_ownership()
 
         # -----------------------------
         # MAP STATE
@@ -5098,14 +5394,34 @@ class GameState:
         self.reaction_context: Optional["ReactionContext"] = None
 
         # -----------------------------
-        # ✅ NUEVO: TERMINAL STATE
+        # TERMINAL STATE
         # -----------------------------
         self.done: bool = False
         self.winner: Optional[str] = None
         self.end_reason: Optional[str] = None
 
-        # inicialización
+        # init
         self.recalculate_hex_control()
+
+    # =================================================
+    # TURN ORDER
+    # =================================================
+    def _build_turn_order(self, units: List[UnitInstance]) -> List[str]:
+        return sorted({u.side for u in units if u.alive})
+
+    # =================================================
+    # SIDE → OWNERSHIP
+    # =================================================
+    def _build_side_ownership(self) -> Dict[str, HexOwnership]:
+        ownership_values = list(HexOwnership)
+
+        if len(self.turn_order) > len(ownership_values):
+            raise ValueError("More sides than HexOwnership values")
+
+        return {
+            side: ownership_values[i]
+            for i, side in enumerate(self.turn_order)
+        }
 
     # =================================================
     # FACTORY
@@ -5120,30 +5436,17 @@ class GameState:
         )
 
     # =================================================
-    # ACTIVATION
-    # =================================================
-    @property
-    def active_unit(self) -> Optional[UnitInstance]:
-        return self.activation_state.active_unit
-
-    def start_action_phase(self) -> None:
-        self.turn_state.phase = TurnPhase.ACTION
-        self.activation_state.reset(self.units)
-        self.activation_state.next_unit()
-
-    # =================================================
     # HEX CONTROL
     # =================================================
     def recalculate_hex_control(self) -> None:
+
         units_by_hex: Dict[tuple[int, int], set[str]] = {}
 
         for unit in self.units:
             if not unit.alive or not unit.position:
                 continue
 
-            pos: HexCoord = unit.position
-            coords = (pos.q, pos.r)
-
+            coords = (unit.position.q, unit.position.r)
             units_by_hex.setdefault(coords, set()).add(unit.side)
 
         for coords, hex_state in self.hex_states.items():
@@ -5151,7 +5454,7 @@ class GameState:
 
             if len(present_sides) == 1:
                 side = next(iter(present_sides))
-                hex_state.ownership = SIDE_TO_HEX_OWNERSHIP.get(
+                hex_state.ownership = self.side_to_ownership.get(
                     side,
                     HexOwnership.NONE,
                 )
@@ -5169,6 +5472,7 @@ class GameState:
     # TURN END
     # =================================================
     def end_turn(self) -> None:
+
         self.recalculate_hex_control()
 
         if self.vp_tracker:
@@ -5185,6 +5489,7 @@ class GameState:
     # COMBAT CONTEXT
     # =================================================
     def create_combat_context(self, action):
+
         attacker = next(
             (u for u in self.units if u.unit_id == action.unit_id),
             None,
@@ -5456,8 +5761,9 @@ class UnitInstance:
     - suppression system
     - fallback system
     - embark / transport logic
+
     ✅ NEW:
-    - unified combat interface (supports DIRECT + INDIRECT fire)
+    - spotting memory (persistent visibility)
     """
 
     def __init__(
@@ -5492,12 +5798,17 @@ class UnitInstance:
         self.fallback: bool = False
 
         # ============================
+        # ✅ NEW: Spotting / visibility state
+        # ============================
+        self.spotted_enemies: set[str] = set()
+        self.last_seen_turn: dict[str, int] = {}
+
+        # ============================
         # Transport / embark state
         # ============================
         self.embarked: bool = False
         self.carrier_id: str | None = None
 
-        # Only meaningful for vehicles
         if self.unit_type.category.name == "VEHICLE":
             self.passengers: list[str] = []
 
@@ -5540,7 +5851,7 @@ class UnitInstance:
         self.position = (q, r)
 
     # ----------------------------
-    # Distance helper ✅ NEW
+    # Distance helper
     # ----------------------------
     def get_distance_to(self, other: "UnitInstance") -> int:
         if self.position is None or other.position is None:
@@ -5552,21 +5863,13 @@ class UnitInstance:
         return abs(q1 - q2) + abs(r1 - r2)
 
     # ----------------------------
-    # Combat API ✅ NEW
+    # Combat API
     # ----------------------------
     def get_attack_dice(self, target: "UnitInstance"):
-        """
-        Resolve attack dice using UnitType logic.
-
-        ✅ Supports:
-        - DIRECT_FIRE
-        - INDIRECT_FIRE
-        """
 
         if not self.alive or target is None:
             return []
 
-        # Cannot attack without valid positions
         if self.position is None or target.position is None:
             return []
 
@@ -5586,6 +5889,20 @@ class UnitInstance:
         )
 
         return dice
+
+    # ----------------------------
+    # Spotting helpers ✅ NEW
+    # ----------------------------
+    def can_see(self, other: "UnitInstance") -> bool:
+        return other.unit_id in self.spotted_enemies
+
+    def remember_enemy(self, enemy_id: str, turn: int):
+        self.spotted_enemies.add(enemy_id)
+        self.last_seen_turn[enemy_id] = turn
+
+    def forget_enemy(self, enemy_id: str):
+        if enemy_id in self.spotted_enemies:
+            self.spotted_enemies.remove(enemy_id)
 
     # ----------------------------
     # Embark / disembark
@@ -5688,12 +6005,9 @@ class UnitInstance:
             )
 
     def clear_suppression(self):
-
         if not self.suppressed:
             return
-
         self.suppressed = False
-
         _trace("SUPPRESSION_CLEARED", unit=self.unit_id)
 
     # ----------------------------
@@ -5731,6 +6045,7 @@ class UnitInstance:
         self.fallback = False
 
         _trace("FALLBACK_CLEARED", unit=self.unit_id)
+
 
 
 ================================================================================

@@ -16,6 +16,9 @@ from assault_sim.engine.env_factory import make_env
 from assault_sim.engine.hrl_factory import create_hrl_controller
 from assault_sim.engine.rollout import collect_rollout
 
+from assault_sim.decision.controller_adapter import RLvsHeuristicController
+from assault_sim.heuristics.tactical_path_heuristic import TacticalPathHeuristic
+
 
 # -------------------------------------------------
 # GAE
@@ -23,7 +26,8 @@ from assault_sim.engine.rollout import collect_rollout
 def compute_gae(rewards, values, dones, gamma, lam):
     advantages = []
     gae = 0.0
-    values = values + [0.0]
+
+    values = list(values) + [0.0]
 
     for t in reversed(range(len(rewards))):
         delta = rewards[t] + gamma * values[t + 1] * (1 - dones[t]) - values[t]
@@ -44,50 +48,71 @@ def worker_loop(
     progress_queue
 ):
     torch.set_num_threads(1)
-    torch.cuda.is_available = lambda: False
 
+    # -------------------------------------------------
+    # ENV
+    # -------------------------------------------------
     env = make_env(config_path, PPOConfig.RL_SIDE, scenario)
     obs = env.reset()
     input_dim = obs.shape[0]
 
+    # -------------------------------------------------
+    # POLICY
+    # -------------------------------------------------
     policy_net = PolicyNet(
         input_dim=input_dim,
         num_options=len(TacticalOption)
     )
     policy_net.eval()
 
-    policy = OptionPolicy(policy_net)
-    controller = create_hrl_controller(policy, PPOConfig.RL_SIDE)
+    option_policy = OptionPolicy(policy_net)
+    hrl_controller = create_hrl_controller(option_policy, PPOConfig.RL_SIDE)
+
+    heuristic = TacticalPathHeuristic()
+
+    controller = RLvsHeuristicController(
+        rl_side=PPOConfig.RL_SIDE,
+        hrl_controller=hrl_controller,
+        heuristic=heuristic,
+        executor=hrl_controller.executor,
+    )
 
     reward_fn = env.reward_fn
 
+    # -------------------------------------------------
+    # LOOP
+    # -------------------------------------------------
     while True:
 
-        # sync weights (safe)
+        # ✅ sync weights
         try:
             state_dict = weights_queue.get_nowait()
             policy_net.load_state_dict(state_dict)
         except:
             pass
 
-        # sync training progress
+        # ✅ sync curriculum / progress
         try:
             reward_fn.current_update = progress_queue.get_nowait()
         except:
             pass
 
-        rollout = collect_rollout(env, controller, PPOConfig.ROLLOUT_STEPS)
+        rollout = collect_rollout(
+            env,
+            controller,
+            PPOConfig.ROLLOUT_STEPS
+        )
 
+        # ✅ safety
         if "attack_modes" not in rollout:
             rollout["attack_modes"] = [0] * len(rollout["actions"])
 
-        # 🔥 evita enviar LSTM hidden
-        controller.policy.reset_hidden()
+        # ✅ reset hidden state (important para RNN)
+        option_policy.reset_hidden()
 
-        try:
-            rollout_queue.put(rollout, timeout=1)
-        except:
-            pass
+        # ✅ non-blocking put
+        if not rollout_queue.full():
+            rollout_queue.put(rollout)
 
 
 # -------------------------------------------------
@@ -98,13 +123,16 @@ def main():
     DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f">>> Using device: {DEVICE}")
 
-    config_path = Path("assault_sim/config/sim_config.yaml")
+    config_path = Path("C:/repos/python/assault/assault_sim/config/sim_config.yaml")
     scenario = "phase01_seq001_initial_contact"
 
     env = make_env(config_path, PPOConfig.RL_SIDE, scenario)
     obs = env.reset()
     input_dim = obs.shape[0]
 
+    # -------------------------------------------------
+    # POLICY
+    # -------------------------------------------------
     policy = PolicyNet(
         input_dim=input_dim,
         num_options=len(TacticalOption)
@@ -120,6 +148,7 @@ def main():
     # WORKERS
     # -------------------------------------------------
     workers = []
+
     for _ in range(PPOConfig.NUM_ENVS):
         p = mp.Process(
             target=worker_loop,
@@ -153,6 +182,9 @@ def main():
         if len(buffer) < PPOConfig.BATCH_ROLLOUTS:
             continue
 
+        # -------------------------------------------------
+        # MERGE ROLLOUTS
+        # -------------------------------------------------
         combined = {k: [] for k in [
             "obs", "actions", "attack_modes", "logp",
             "values", "rewards", "dones"
@@ -174,21 +206,19 @@ def main():
             option_counts[TacticalOption(a).name] += 1
 
         # -------------------------------------------------
-        # TENSORS (optimizado)
+        # TENSORS
         # -------------------------------------------------
-
-        # ✅ CORRECTO (rápido)
-        obs_arr = np.array(combined["obs"], dtype=np.float32)
+        obs_arr = np.asarray(combined["obs"], dtype=np.float32)
         obs_t = torch.from_numpy(obs_arr).to(DEVICE)
 
-        # ✅ estos están bien (listas simples)
         act_t = torch.tensor(combined["actions"], dtype=torch.long).to(DEVICE)
         attack_mode_t = torch.tensor(combined["attack_modes"], dtype=torch.long).to(DEVICE)
 
-        # ✅ ya es tensor → OK
-        old_logp_t = torch.stack(combined["logp"]).to(DEVICE)
+        old_logp_t = torch.stack([
+            lp.squeeze() for lp in combined["logp"]
+        ]).to(DEVICE)
 
-        value_buf = combined["values"]
+        value_buf = list(combined["values"])
 
         advantages = compute_gae(
             combined["rewards"],
@@ -204,7 +234,9 @@ def main():
         returns = torch.tensor(returns, dtype=torch.float32).to(DEVICE)
 
         if advantages.numel() > 1:
-            advantages = (advantages - advantages.mean()) / (advantages.std() + 1e-8)
+            advantages = (advantages - advantages.mean()) / (
+                advantages.std() + 1e-8
+            )
 
         # -------------------------------------------------
         # PPO UPDATE
@@ -226,7 +258,11 @@ def main():
             logp = logp_option + logp_attack
 
             ratio = torch.exp(torch.clamp(logp - old_logp_t, -10, 10))
-            clipped = torch.clamp(ratio, 1 - PPOConfig.CLIP_EPS, 1 + PPOConfig.CLIP_EPS)
+            clipped = torch.clamp(
+                ratio,
+                1 - PPOConfig.CLIP_EPS,
+                1 + PPOConfig.CLIP_EPS
+            )
 
             policy_loss = -torch.min(
                 ratio * advantages,
@@ -258,7 +294,7 @@ def main():
             torch.save(policy.state_dict(), "models/latest.pt")
 
         # -------------------------------------------------
-        # SYNC
+        # SYNC TO WORKERS
         # -------------------------------------------------
         safe_state = {
             k: v.detach().cpu().clone()
@@ -270,8 +306,6 @@ def main():
 
         if not progress_queue.full():
             progress_queue.put(rollout_idx)
-
-        torch.cuda.empty_cache()
 
         # -------------------------------------------------
         # LOG

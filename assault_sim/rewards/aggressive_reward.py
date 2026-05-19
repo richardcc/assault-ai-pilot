@@ -23,60 +23,97 @@ class ProgressiveReward(BaseReward):
         reward = 0.0
 
         # -------------------------------------------------
-        # ✅ DAMAGE DEALT (principal señal positiva)
+        # ✅ DAMAGE DEALT (signal principal)
         # -------------------------------------------------
         damage = info.get("damage", 0)
-        reward += 0.4 * damage
+        reward += 0.7 * damage   # 🔥 ligeramente más fuerte
 
         if damage > 0:
-            reward += 0.03
+            reward += 0.15   # 🔥 refuerzo claro
 
         # -------------------------------------------------
-        # ✅ DAMAGE TAKEN (🔥 NUEVO — CLAVE)
+        # ✅ DAMAGE TAKEN (reducido → menos miedo)
         # -------------------------------------------------
         damage_taken = info.get("damage_taken", 0)
-        reward -= 0.3 * damage_taken
+        reward -= 0.15 * damage_taken
 
         # -------------------------------------------------
         # ACTION TYPE
         # -------------------------------------------------
         action_name = action.__class__.__name__ if action else ""
+        action_upper = action_name.upper()
 
         # -------------------------------------------------
-        # ✅ PENALIZAR SOLO DIRECT VACÍO
+        # ✅ PENALIZAR ATAQUE FALLIDO (muy ligero)
         # -------------------------------------------------
-        if damage == 0 and "RangedDirect" in action_name:
-            reward -= 0.005
+        if damage == 0 and "RANGEDDIRECT" in action_upper:
+            reward -= 0.01
 
         # -------------------------------------------------
         # ✅ BONUS INDIRECT
         # -------------------------------------------------
-        if "Indirect" in action_name and damage > 0:
+        if "INDIRECT" in action_upper and damage > 0:
             reward += 0.3
 
         # -------------------------------------------------
         # ✅ BONUS MELEE
         # -------------------------------------------------
-        if "Close" in action_name and info.get("defender_killed"):
+        if "CLOSE" in action_upper and info.get("defender_killed"):
             reward += 1.0
 
         # -------------------------------------------------
-        # ✅ MICRO BONUS A ATACAR (SOLO SI FUNCIONA)
+        # ✅ INCENTIVAR ATAQUE (CLAVE)
         # -------------------------------------------------
-        if "Attack" in action_name and damage > 0:
-            reward += 0.01
+        if "ATTACK" in action_upper:
+            reward += 0.3   # 🔥 antes era demasiado bajo
+
+        if "ATTACK" in action_upper and damage > 0:
+            reward += 0.2   # 🔥 refuerzo doble
 
         # -------------------------------------------------
-        # ✅ KILL
+        # ✅ KILL (objetivo principal)
         # -------------------------------------------------
         if info.get("defender_killed"):
-            reward += 3.0
+            reward += 4.0   # 🔥 más fuerte → evita pasividad
 
         # -------------------------------------------------
-        # ✅ DEATH (ligero castigo)
+        # ✅ DEATH (penaliza pero no bloquea)
         # -------------------------------------------------
         if active and not active.alive:
-            reward -= 3.0
+            reward -= 2.5
+
+        # -------------------------------------------------
+        # ✅ PRESIÓN HACIA COMBATE
+        # -------------------------------------------------
+        if pre_dist is not None and post_dist is not None:
+
+            if post_dist < pre_dist:
+                reward += 0.06
+
+            if post_dist > pre_dist:
+                reward -= 0.01
+
+            # 🔥 combate cercano incentivado
+            if post_dist <= 2:
+                reward += 0.05
+
+        # -------------------------------------------------
+        # ✅ EVITAR SPAM DE FLANK
+        # -------------------------------------------------
+        if "FLANK" in action_upper:
+            reward -= 0.005
+
+        # -------------------------------------------------
+        # ✅ PENALIZAR HOLD
+        # -------------------------------------------------
+        if "HOLD" in action_upper:
+            reward -= 0.08
+
+        # -------------------------------------------------
+        # ✅ PENALIZAR RETREAT (🔥 CRÍTICO)
+        # -------------------------------------------------
+        if "RETREAT" in action_upper:
+            reward -= 0.05   # 🔥 evita colapso sin prohibirlo
 
         # -------------------------------------------------
         # ✅ VP diferencial
@@ -85,24 +122,23 @@ class ProgressiveReward(BaseReward):
             if hasattr(state, "vp_tracker") and hasattr(next_state, "vp_tracker"):
                 prev_vp = state.vp_tracker.score(self.rl_side)
                 new_vp = next_state.vp_tracker.score(self.rl_side)
-
-                reward += (new_vp - prev_vp) * 1.0
+                reward += (new_vp - prev_vp) * 1.5
         except Exception:
             pass
 
         # -------------------------------------------------
-        # ✅ ENDGAME (CLAVE)
+        # ✅ ENDGAME
         # -------------------------------------------------
         if getattr(next_state, "done", False):
             if getattr(next_state, "winner", None) == self.rl_side:
-                reward += 10.0
+                reward += 12.0
             elif getattr(next_state, "winner", None) is not None:
                 reward -= 10.0
 
         # -------------------------------------------------
-        # ✅ TIME COST
+        # ✅ TIME COST (anti-camping)
         # -------------------------------------------------
-        reward -= 0.01
+        reward -= 0.02   # 🔥 ligero ajuste
 
         # -------------------------------------------------
         # ✅ CLIP

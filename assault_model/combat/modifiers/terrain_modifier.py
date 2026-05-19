@@ -1,6 +1,6 @@
 from assault_model.combat.modifier import DiceModifier
 from assault_model.combat.dice_color import DiceColor
-from assault_model.config.terrain_config import terrain_config
+from assault_model.map.terrain_config import terrain_config
 from assault_model.combat.line_of_sight import LineOfSight
 
 

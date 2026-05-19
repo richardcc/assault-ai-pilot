@@ -19,12 +19,14 @@ def can_spot(attacker, target, los, game_map, terrain_config):
     # --------------------------------------
     if los == LineOfSight.HINDERED:
 
-        # terreno del objetivo
-        hex_ = game_map.get_hex(target.position)
+        # ✅ obtener hex correctamente
+        hex_ = game_map.get_hex(target.position.q, target.position.r)
 
         if hex_:
             terrain = hex_.get_terrain()
-            config = terrain_config.get(terrain, {})
+
+            # ✅ usar API correcta
+            config = terrain_config.get(terrain)
 
             # si además está en terreno que también cubre
             if config.get("los") == "HINDERED":

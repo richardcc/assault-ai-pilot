@@ -18,18 +18,25 @@ def _trace(tag: str, **data):
     if not DEBUG_TRACE:
         return
     payload = " ".join(f"{k}={v}" for k, v in data.items())
-    print(f"[TRACE][{tag}] {payload}")
 
 
 class ActionCatalog:
 
-    def __init__(self, game_state, unit):
+    def __init__(self, game_state, unit, terrain_config=None):
         self.gs = game_state
-        self.unit = unit  # ✅ NEW
+        self.unit = unit
+
+        if terrain_config is None:
+            raise ValueError(
+                "ActionCatalog requires terrain_config. "
+                "Use: ActionCatalog(state, unit, terrain_config)"
+            )
+
+        self.terrain_config = terrain_config
+
 
     def actions(self):
-
-        active = self.unit  # ✅ clave
+        active = self.unit
 
         if active is None:
             return [WaitAction("SYSTEM")]
@@ -84,6 +91,10 @@ class ActionCatalog:
         # ----------------------------------
         actions.append(WaitAction(active.unit_id))
 
+        # ----------------------------------
+        # DEBUG FINAL
+        # ----------------------------------
+
         _trace(
             "ACTION_CATALOG_END",
             unit=active.unit_id,
@@ -101,6 +112,8 @@ class ActionCatalog:
 
         if not getattr(active, "can_fire", True):
             return actions
+
+        # ✅ debug claro de spotting
 
         for other in self.gs.units:
 
@@ -173,5 +186,5 @@ class ActionCatalog:
             attacker,
             target,
             self.gs.game_map,
-            self.gs.terrain_config
+            self.terrain_config
         )

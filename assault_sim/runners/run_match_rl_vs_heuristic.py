@@ -1,4 +1,4 @@
-# assault_sim/runners/run_match_rl_vs_heuristic.py
+# C:\repos\python\assault\assault_sim\runners\run_match_rl_vs_heuristic.py
 
 import torch
 from pathlib import Path
@@ -14,9 +14,9 @@ from assault_sim.decision.option_executor import OptionExecutor
 from assault_sim.rl.tactical_options import TacticalOption
 
 from assault_sim.heuristics.tactical_path_heuristic import TacticalPathHeuristic
-from assault_sim.engine.activation_manager import ActivationManager
 
-from assault_model.actions.status import WaitAction
+from assault_sim.engine.match_runner import MatchRunner
+from assault_sim.decision.controller_adapter import RLvsHeuristicController
 
 from assault_sim.debug.console_observer import ConsoleObserver
 from assault_sim.debug.debug_config import DebugConfig
@@ -41,7 +41,7 @@ def main():
     # ENV
     # -------------------------------------------------
     sim_config = load_sim_config(
-        Path("assault_sim/config/sim_config.yaml")
+        Path("C:/repos/python/assault/assault_sim/config/sim_config.yaml")
     )
 
     sim_config.scenario_name = "phase01_seq001_initial_contact"
@@ -55,7 +55,7 @@ def main():
 
     env = TrainingEnv(
         sim_env,
-        env_config_path=Path("assault_sim/config/env_config.json"),
+        env_config_path=Path("C:/repos/python/assault/assault_sim/config/env_config.json"),
         rl_side=rl_side,
     )
 
@@ -93,6 +93,13 @@ def main():
         event_bus=sim_env.event_bus,
     )
 
+    controller = RLvsHeuristicController(
+        rl_side=rl_side,
+        hrl_controller=hrl_controller,
+        heuristic=heuristic,
+        executor=executor,
+    )
+
     # -------------------------------------------------
     # OBSERVERS
     # -------------------------------------------------
@@ -119,56 +126,30 @@ def main():
     }
 
     # -------------------------------------------------
-    # ACTIVATION MANAGER
+    # MATCH RUNNER
     # -------------------------------------------------
-    activation_manager = ActivationManager(sim_env.game_state)
+    runner = MatchRunner(env)
 
-    # -------------------------------------------------
-    # LOOP
-    # -------------------------------------------------
     done = False
     step = 0
 
+    # -------------------------------------------------
+    # LOOP (UNIFICADO)
+    # -------------------------------------------------
     while not done:
 
-        state = sim_env.game_state
+        result = runner.step(controller, obs)
 
-        # ✅ FIX CLAVE: reintentar scheduler
-        side, unit = None, None
+        obs = result["obs"]
+        done = result["done"]
 
-        for _ in range(len(activation_manager.sides) * 2):
-            side, unit = activation_manager.next_activation()
-            if unit is not None:
-                break
-
-        # ✅ solo si realmente no hay nadie
-        if unit is None:
-            action = WaitAction("SYSTEM")
-
-        elif side == rl_side:
-            action = hrl_controller.choose_action(state, unit, obs)
-
-        else:
-            action = heuristic.choose_action(state, unit, TacticalOption.ATTACK)
-
-        # ✅ safety extra
-        if action is None:
-            unit_id = unit.unit_id if unit else "SYSTEM"
-            action = WaitAction(unit_id)
-
-        obs, _, done, _ = env.step(action)
         step += 1
-
-        # ✅ actualizar scheduler
-        activation_manager.state = sim_env.game_state
-
-        # ✅ CONEXIÓN CRÍTICA runtime ↔ scheduler
-        activation_manager.blocked_units = sim_env.runtime.activated_units.copy()
 
     # -------------------------------------------------
     # FINAL RESULT
     # -------------------------------------------------
     final_state = sim_env.game_state
+
     vp = (
         final_state.vp_tracker.total_points
         if final_state.vp_tracker else 0
@@ -190,7 +171,7 @@ def main():
     # -------------------------------------------------
     # SAVE REPLAY
     # -------------------------------------------------
-    replay_dir = Path("assault_sim/session/replays")
+    replay_dir = Path("C:/repos/python/assault/assault_sim/session/replays")
     replay_dir.mkdir(parents=True, exist_ok=True)
 
     replay_path = replay_dir / (

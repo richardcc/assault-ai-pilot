@@ -12,6 +12,7 @@ from assault_model.units.unit_instance import UnitInstance
 from assault_model.units.unit_type import UnitType
 from assault_model.core.victory_conditions import VictoryConditions
 from assault_model.state.game_state import GameState
+from assault_model.map.terrain_config import terrain_config
 
 
 DEBUG_TRACE = os.getenv("ASSAULT_DEBUG_TRACE", "0") == "1"
@@ -152,6 +153,7 @@ def load_scenario(
             else None
         ),
     )
+    scenario.terrain_config = terrain_config
 
     # =================================================
     # ✅ GAME STATE (SIN ACTIVACIÓN)

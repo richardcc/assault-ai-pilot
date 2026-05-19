@@ -7,17 +7,13 @@ from assault_model.map.hex_utils import hex_distance
 
 from assault_sim.rl.tactical_options import TacticalOption
 
+from assault_model.map.terrain_config import terrain_config
 
 class OptionExecutor:
-    """
-    Executes a TacticalOption using RL-driven decisions.
-    """
 
     def __init__(self, heuristic_controller):
         self.heuristic = heuristic_controller
 
-    # -------------------------------------------------
-    # ✅ NEW SIGNATURE (CRÍTICO)
     # -------------------------------------------------
     def execute(
         self,
@@ -27,114 +23,77 @@ class OptionExecutor:
         attack_mode: int | None = None
     ):
 
-        # ✅ nunca usar state.active_unit
         if unit is None:
             return WaitAction("SYSTEM")
 
         # -------------------------------------------------
-        # ✅ ATTACK
+        # ✅ ATTACK (FIXED)
         # -------------------------------------------------
         if option == TacticalOption.ATTACK:
             return self._execute_attack(state, unit, attack_mode)
 
         # -------------------------------------------------
-        # ✅ ADVANCE
-        # -------------------------------------------------
         if option == TacticalOption.ADVANCE:
             return self._move_closer(state, unit)
 
-        # -------------------------------------------------
-        # ✅ FLANK
         # -------------------------------------------------
         if option == TacticalOption.FLANK:
             return self._flank_move(state, unit)
 
         # -------------------------------------------------
-        # ✅ RETREAT (fallback a heuristic)
+        # ✅ RETREAT (NO ATAQUE)
         # -------------------------------------------------
         if option == TacticalOption.RETREAT:
-            action = self.heuristic.choose_action(state, option)
+
+            action = self.heuristic.choose_action(state, unit, option)
+
+            # bloquear ataques
+            if isinstance(action, (RangedDirectAttack, RangedIndirectAttack)):
+                return WaitAction(unit.unit_id)
+
             return action or WaitAction(unit.unit_id)
 
         # -------------------------------------------------
-        # ✅ HOLD
+        # ✅ HOLD (FIXED)
         # -------------------------------------------------
         if option == TacticalOption.HOLD:
+
+            actions = ActionCatalog(state, unit, terrain_config).actions()
+
+            attacks = [
+                a for a in actions
+                if isinstance(a, RangedDirectAttack)
+            ]
+
+            if attacks:
+                return attacks[0]
+
             return WaitAction(unit.unit_id)
 
-        # -------------------------------------------------
-        # ✅ DEFAULT SAFETY
-        # -------------------------------------------------
         return WaitAction(unit.unit_id)
 
     # -------------------------------------------------
-    # ✅ ATTACK
+    # ✅ ATTACK FIXED: usa ActionCatalog
     # -------------------------------------------------
     def _execute_attack(self, state, unit, attack_mode):
 
-        if attack_mode is None:
-            attack_mode = 0
+        actions = ActionCatalog(state, unit, terrain_config).actions()
 
-        target = self._select_attack_target(state, unit, attack_mode)
-
-        if target is None:
-            return WaitAction(unit.unit_id)
-
-        if attack_mode == 1:
-            return RangedIndirectAttack(
-                unit_id=unit.unit_id,
-                target_hex=target.position,
-            )
-
-        return RangedDirectAttack(
-            unit_id=unit.unit_id,
-            target_id=target.unit_id,
-        )
-
-    # -------------------------------------------------
-    # ✅ TARGET SELECTION
-    # -------------------------------------------------
-    def _select_attack_target(self, state, unit, attack_mode):
-
-        enemies = [
-            u for u in state.units
-            if u.side != unit.side and u.alive
+        attacks = [
+            a for a in actions
+            if isinstance(a, (RangedDirectAttack, RangedIndirectAttack))
         ]
 
-        if not enemies:
-            return None
+        if not attacks:
+            return self._move_closer(state, unit)
 
-        best = None
-        best_score = -999
+        # se puede mejorar con scoring, pero esto ya es correcto
+        return attacks[0]
 
-        for e in enemies:
-
-            dist = hex_distance(unit.position, e.position)
-            hp = getattr(e, "hp", 3)
-
-            score = 0.0
-
-            # kill priority
-            if hp == 1:
-                score += 6.0
-            elif hp == 2:
-                score += 3.0
-
-            # distance
-            score += max(0, 5 - dist)
-
-            if score > best_score:
-                best_score = score
-                best = e
-
-        return best
-
-    # -------------------------------------------------
-    # ✅ MOVE CLOSER
     # -------------------------------------------------
     def _move_closer(self, state, unit):
 
-        actions = ActionCatalog(state, unit).actions()
+        actions = ActionCatalog(state, unit, terrain_config).actions()
 
         enemies = [
             u for u in state.units
@@ -149,8 +108,18 @@ class OptionExecutor:
             key=lambda e: hex_distance(unit.position, e.position)
         )
 
+        dist_now = hex_distance(unit.position, target.position)
+
+        # ✅ solo atacar si el sistema lo permite (no forzar)
+        attacks = [
+            a for a in actions
+            if isinstance(a, RangedDirectAttack)
+        ]
+        if attacks:
+            return attacks[0]
+
         best = None
-        best_dist = hex_distance(unit.position, target.position)
+        best_dist = dist_now
 
         for a in actions:
             if a.action_type.category != ActionCategory.MOVEMENT:
@@ -162,18 +131,16 @@ class OptionExecutor:
 
             d = hex_distance(path[-1], target.position)
 
-            if d < best_dist:
-                best_dist = d
+            if best is None or d <= best_dist:
                 best = a
+                best_dist = d
 
         return best or WaitAction(unit.unit_id)
 
     # -------------------------------------------------
-    # ✅ FLANK
-    # -------------------------------------------------
     def _flank_move(self, state, unit):
 
-        actions = ActionCatalog(state, unit).actions()
+        actions = ActionCatalog(state, unit, terrain_config).actions()
 
         enemies = [
             u for u in state.units
@@ -187,6 +154,14 @@ class OptionExecutor:
             enemies,
             key=lambda e: hex_distance(unit.position, e.position)
         )
+
+        # ✅ igual que en move_closer → usar ataques válidos
+        attacks = [
+            a for a in actions
+            if isinstance(a, RangedDirectAttack)
+        ]
+        if attacks:
+            return attacks[0]
 
         best = None
         best_score = -999
@@ -202,15 +177,7 @@ class OptionExecutor:
             new_pos = path[-1]
             dist = hex_distance(new_pos, target.position)
 
-            score = 0.0
-
-            score += max(0, 6 - dist)
-
-            if dist <= 1:
-                score -= 3.0
-
-            if new_pos.q == unit.position.q or new_pos.r == unit.position.r:
-                score -= 1.0
+            score = max(0, 6 - dist)
 
             if score > best_score:
                 best_score = score

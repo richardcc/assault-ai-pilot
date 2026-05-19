@@ -7,7 +7,8 @@ from assault_model.map.combat_geometry import determine_attack_sector
 from assault_model.runtime.execution_context import ExecutionContext
 from assault_model.combat.battle_die import DiceResult
 from assault_model.combat.dice_comparison import compare_dice
-from assault_model.config.terrain_config import terrain_config
+from assault_model.map.terrain_config import terrain_config
+
 from assault_model.actions.combat_mode import CombatMode
 
 from assault_model.combat.line_of_sight import (

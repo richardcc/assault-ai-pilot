@@ -1,120 +1,101 @@
-from assault_model.actions.status import WaitAction
-from assault_sim.rl.tactical_options import TacticalOption
-from assault_sim.engine.activation_manager import ActivationManager
-
-import random
+from assault_sim.engine.match_runner import MatchRunner
 
 
-def collect_rollout(env, controller, steps):
+def collect_rollout(env, controller, max_steps, seq_len=8):
 
-    obs = env.reset()
-    controller.policy.reset_hidden()
+    runner = MatchRunner(env)
 
-    activation_manager = ActivationManager(env.sim.game_state)
+    obs = runner.reset()
+    controller.hrl_controller.policy.reset_hidden()
 
-    # buffers
-    obs_buf = []
-    actions_buf = []
-    attack_modes_buf = []
-    logp_buf = []
-    values_buf = []
-    rewards_buf = []
-    dones_buf = []
+    obs_buf, actions_buf = [], []
+    attack_modes_buf, logp_buf = [], []
+    values_buf, rewards_buf, dones_buf = [], [], []
 
     sequence = []
-    SEQ_LEN = 8
+
+    turn_start_obs = None
+    turn_reward = 0.0
 
     step_count = 0
-    turn_reward = 0.0
-    turn_start_obs = None
 
-    while step_count < steps:
+    last_action = None
+    last_attack_mode = 0
+    last_logp = None
+    last_value = None
 
-        state = env.sim.game_state
+    # ✅ DEBUG LIMIT
+    DEBUG_STEPS = 60
 
-        # ✅ NUEVO: scheduler
-        side, unit = None, None
+    while step_count < max_steps or len(sequence) == 0:
 
-        for _ in range(len(activation_manager.sides) * 2):
-            side, unit = activation_manager.next_activation()
-            if unit is not None:
-                break
+        policy = controller.hrl_controller.policy
 
-        if unit is None:
-            action = WaitAction("SYSTEM")
-            next_obs, reward, done, _ = env.step(action)
-            obs = next_obs
-            step_count += 1
-            continue
+        step = runner.step(controller, obs)
 
-        # ---------------- RL SIDE ----------------
+        next_obs = step["obs"]
+        reward = step["reward"]
+        done = step["done"]
+        side = step["side"]
+        unit = step.get("unit")
+        action_obj = step.get("action")
+
+
+        # -------------------------------------------------
+        # ✅ INICIO TURNO RL
+        # -------------------------------------------------
         if side == controller.rl_side:
 
             if turn_start_obs is None:
                 turn_start_obs = obs
 
-            action = controller.choose_action(state, unit, obs)
+            last_option = policy.last_option
 
-            last_option = controller.policy.last_option
-            last_action = last_option.value
-            last_attack_mode = controller.policy.last_attack_mode
-            last_logp = controller.policy.last_log_prob.detach()
-            last_value = controller.policy.last_value.item()
 
-        # ---------------- ENEMY ----------------
-        else:
+            if last_option is not None:
+                last_action = last_option.value
+                last_attack_mode = (
+                    policy.last_attack_mode
+                    if policy.last_attack_mode is not None else 0
+                )
 
-            enemy_option = random.choice([
-                TacticalOption.ATTACK,
-                TacticalOption.ADVANCE,
-                TacticalOption.FLANK,
-                TacticalOption.HOLD,
-            ])
+            if policy.last_log_prob is not None:
+                last_logp = policy.last_log_prob.detach()
 
-            action = controller.executor.execute(state, unit, enemy_option)
+            if policy.last_value is not None:
+                last_value = policy.last_value.item()
 
-        # ✅ safety
-        if action is None:
-            action = WaitAction(unit.unit_id)
-
-        # ---------------- STEP ----------------
-        next_obs, reward, done, info = env.step(action)
-
-        # ✅ CONEXIÓN CRÍTICA (igual que runner)
-        activation_manager.state = env.sim.game_state
-        activation_manager.blocked_units = env.sim.runtime.activated_units.copy()
-
-        # acumular reward
-        if side == controller.rl_side:
             turn_reward += reward
 
-        # detectar cambio de turno RL
-        next_state = env.sim.game_state
+        # -------------------------------------------------
+        # ✅ FIN TURNO RL
+        # -------------------------------------------------
+        if step.get("is_rl_turn_end", False) and turn_start_obs is not None:
 
-        # ✅ ya no existe active_unit → detectamos por scheduler
-        next_side, _ = activation_manager.next_activation()
-
-        rl_turn_finished = (
-            side == controller.rl_side
-            and next_side != controller.rl_side
-        )
-
-        # ---------------- STORE ----------------
-        if rl_turn_finished and turn_start_obs is not None:
+            if last_action is None:
+                last_action = 0
+            if last_logp is None:
+                last_logp = 0.0
+            if last_value is None:
+                last_value = 0.0
 
             sequence.append({
                 "obs": turn_start_obs,
                 "action": last_action,
-                "attack_mode": last_attack_mode if last_attack_mode is not None else 0,
+                "attack_mode": last_attack_mode,
                 "logp": last_logp,
                 "value": last_value,
                 "reward": turn_reward,
-                "done": done
+                "done": done,
             })
 
-            if len(sequence) >= SEQ_LEN:
+            turn_start_obs = None
+            turn_reward = 0.0
 
-                chunk = sequence[:SEQ_LEN]
+            if len(sequence) >= seq_len:
+
+                chunk = sequence[:seq_len]
+                sequence = sequence[1:]
 
                 obs_buf.extend([x["obs"] for x in chunk])
                 actions_buf.extend([x["action"] for x in chunk])
@@ -124,27 +105,34 @@ def collect_rollout(env, controller, steps):
                 rewards_buf.extend([x["reward"] for x in chunk])
                 dones_buf.extend([x["done"] for x in chunk])
 
-                sequence = sequence[1:]
-
-            turn_reward = 0.0
-            turn_start_obs = None
-
+        # -------------------------------------------------
+        # AVANCE
+        # -------------------------------------------------
         obs = next_obs
         step_count += 1
 
+        # -------------------------------------------------
+        # RESET EPISODIO
+        # -------------------------------------------------
         if done:
-            obs = env.reset()
-            controller.policy.reset_hidden()
+            obs = runner.reset()
+            controller.hrl_controller.policy.reset_hidden()
 
-            activation_manager = ActivationManager(env.sim.game_state)
-
-            sequence = []
-            turn_reward = 0.0
             turn_start_obs = None
+            turn_reward = 0.0
 
-    # safety
-    if len(attack_modes_buf) < len(actions_buf):
-        attack_modes_buf += [0] * (len(actions_buf) - len(attack_modes_buf))
+    # -------------------------------------------------
+    # FLUSH FINAL
+    # -------------------------------------------------
+    if len(sequence) > 0:
+        for x in sequence:
+            obs_buf.append(x["obs"])
+            actions_buf.append(x["action"])
+            attack_modes_buf.append(x["attack_mode"])
+            logp_buf.append(x["logp"])
+            values_buf.append(x["value"])
+            rewards_buf.append(x["reward"])
+            dones_buf.append(x["done"])
 
     return {
         "obs": obs_buf,

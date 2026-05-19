@@ -12,18 +12,6 @@ def _trace(tag: str, **data):
 
 
 class UnitInstance:
-    """
-    Runtime instance of a unit on the battlefield.
-
-    ✅ Includes:
-    - health / alive state
-    - suppression system
-    - fallback system
-    - embark / transport logic
-
-    ✅ NEW:
-    - spotting memory (persistent visibility)
-    """
 
     def __init__(
         self,
@@ -39,47 +27,33 @@ class UnitInstance:
         self.side = side
         self.position = position
         self.experience = experience
-
-        # Event bus (optional)
         self._event_bus = event_bus
 
-        # ============================
-        # Runtime combat state
-        # ============================
+        # Combat state
         self.max_strength = unit_type.max_strength
         self.strength = self.max_strength
         self.alive = True
 
-        # ============================
-        # Morale state
-        # ============================
-        self.suppressed: bool = False
-        self.fallback: bool = False
+        # Morale
+        self.suppressed = False
+        self.fallback = False
 
-        # ============================
-        # ✅ NEW: Spotting / visibility state
-        # ============================
+        # Spotting (runtime)
         self.spotted_enemies: set[str] = set()
         self.last_seen_turn: dict[str, int] = {}
 
-        # ============================
-        # Transport / embark state
-        # ============================
-        self.embarked: bool = False
-        self.carrier_id: str | None = None
+        # Transport
+        self.embarked = False
+        self.carrier_id = None
 
         if self.unit_type.category.name == "VEHICLE":
-            self.passengers: list[str] = []
+            self.passengers = []
 
-    # ----------------------------
-    # Aliases
     # ----------------------------
     @property
     def hp(self) -> int:
         return self.strength
 
-    # ----------------------------
-    # State checks
     # ----------------------------
     def is_alive(self) -> bool:
         return self.alive
@@ -100,17 +74,11 @@ class UnitInstance:
         return self.fallback
 
     # ----------------------------
-    # Movement
-    # ----------------------------
     def move_to(self, q: int, r: int):
         if self.embarked:
-            raise RuntimeError(
-                f"Embarked unit {self.unit_id} cannot move on map"
-            )
+            raise RuntimeError(f"Embarked unit {self.unit_id} cannot move")
         self.position = (q, r)
 
-    # ----------------------------
-    # Distance helper
     # ----------------------------
     def get_distance_to(self, other: "UnitInstance") -> int:
         if self.position is None or other.position is None:
@@ -118,11 +86,8 @@ class UnitInstance:
 
         q1, r1 = self.position
         q2, r2 = other.position
-
         return abs(q1 - q2) + abs(r1 - r2)
 
-    # ----------------------------
-    # Combat API
     # ----------------------------
     def get_attack_dice(self, target: "UnitInstance"):
 
@@ -150,7 +115,7 @@ class UnitInstance:
         return dice
 
     # ----------------------------
-    # Spotting helpers ✅ NEW
+    # Spotting
     # ----------------------------
     def can_see(self, other: "UnitInstance") -> bool:
         return other.unit_id in self.spotted_enemies
@@ -160,11 +125,10 @@ class UnitInstance:
         self.last_seen_turn[enemy_id] = turn
 
     def forget_enemy(self, enemy_id: str):
-        if enemy_id in self.spotted_enemies:
-            self.spotted_enemies.remove(enemy_id)
+        self.spotted_enemies.discard(enemy_id)
 
     # ----------------------------
-    # Embark / disembark
+    # Embark
     # ----------------------------
     def embark_into(self, vehicle: "UnitInstance"):
         if self.embarked:
@@ -179,21 +143,19 @@ class UnitInstance:
 
     def disembark_from(self, vehicle: "UnitInstance", q: int, r: int):
         if not self.embarked or self.carrier_id != vehicle.unit_id:
-            raise RuntimeError(
-                f"{self.unit_id} not embarked in {vehicle.unit_id}"
-            )
+            raise RuntimeError(f"{self.unit_id} not embarked")
 
         self.embarked = False
         self.carrier_id = None
         self.position = (q, r)
 
-        if hasattr(vehicle, "passengers") and self.unit_id in vehicle.passengers:
+        if self.unit_id in getattr(vehicle, "passengers", []):
             vehicle.passengers.remove(self.unit_id)
 
         _trace("DISEMBARK", unit=self.unit_id, vehicle=vehicle.unit_id)
 
     # ----------------------------
-    # Combat hooks
+    # Damage
     # ----------------------------
     def apply_damage(self, dmg: int):
 
@@ -221,20 +183,18 @@ class UnitInstance:
         )
 
         if self._event_bus:
-            self._event_bus.emit(
-                {
-                    "type": "DIRECT_DAMAGE",
-                    "payload": {
-                        "target": self.unit_id,
-                        "side": self.side,
-                        "damage": dmg,
-                        "hp_before": hp_before,
-                        "hp_after": hp_after,
-                        "killed": killed,
-                        "position": self.position,
-                    },
-                }
-            )
+            self._event_bus.emit({
+                "type": "DIRECT_DAMAGE",
+                "payload": {
+                    "target": self.unit_id,
+                    "side": self.side,
+                    "damage": dmg,
+                    "hp_before": hp_before,
+                    "hp_after": hp_after,
+                    "killed": killed,
+                    "position": self.position,
+                },
+            })
 
     # ----------------------------
     # Suppression
@@ -252,22 +212,10 @@ class UnitInstance:
 
         _trace("SUPPRESSION_APPLIED", unit=self.unit_id)
 
-        if self._event_bus:
-            self._event_bus.emit(
-                {
-                    "type": "SUPPRESSED",
-                    "payload": {
-                        "unit": self.unit_id,
-                        "position": self.position,
-                    },
-                }
-            )
-
     def clear_suppression(self):
-        if not self.suppressed:
-            return
-        self.suppressed = False
-        _trace("SUPPRESSION_CLEARED", unit=self.unit_id)
+        if self.suppressed:
+            self.suppressed = False
+            _trace("SUPPRESSION_CLEARED", unit=self.unit_id)
 
     # ----------------------------
     # Fallback
@@ -282,25 +230,22 @@ class UnitInstance:
 
         _trace("FALLBACK_TRIGGERED", unit=self.unit_id)
 
-        if self._event_bus:
-            self._event_bus.emit(
-                {
-                    "type": "FALLBACK",
-                    "payload": {
-                        "unit": self.unit_id,
-                        "position": self.position,
-                    },
-                }
-            )
-
         if self.unit_type.category.name == "ARTILLERY":
             self.alive = False
 
     def clear_fallback(self):
+        if self.fallback:
+            self.fallback = False
+            _trace("FALLBACK_CLEARED", unit=self.unit_id)
 
-        if not self.fallback:
-            return
+    # ==================================================
+    # ✅ 🔥 CRÍTICO: optimización deepcopy
+    # ==================================================
+    def __getstate__(self):
+        state = self.__dict__.copy()
 
-        self.fallback = False
+        # ✅ NO copiar estado dinámico (spotting)
+        state["spotted_enemies"] = set()
+        state["last_seen_turn"] = {}
 
-        _trace("FALLBACK_CLEARED", unit=self.unit_id)
+        return state

@@ -15,8 +15,6 @@ DEBUG_TRACE = os.getenv("ASSAULT_DEBUG_TRACE", "0") == "1"
 def _trace(tag: str, **data):
     if not DEBUG_TRACE:
         return
-    payload = " ".join(f"{k}={v}" for k, v in data.items())
-    print(f"[TRACE][{tag}] {payload}")
 
 
 # -------------------------------------------------
@@ -57,9 +55,14 @@ class TrainingEnv:
 
         self.reward_fn = ProgressiveReward(rl_side)
 
+        # 🔥 acumulados (estos NO van en info)
         self.rl_attacks = 0
         self.rl_damage = 0
         self.rl_kills = 0
+
+        self.enemy_attacks = 0
+        self.enemy_damage = 0
+        self.enemy_kills = 0
 
         self._vp_hexes = set()
 
@@ -80,15 +83,15 @@ class TrainingEnv:
         self.rl_damage = 0
         self.rl_kills = 0
 
-        self._vp_hexes.clear()
+        self.enemy_attacks = 0
+        self.enemy_damage = 0
+        self.enemy_kills = 0
 
-        if state.vp_tracker and getattr(state.vp_tracker, "conditions", None):
-            for vp in state.vp_tracker.conditions.points:
-                self._vp_hexes.add(vp.hex_coords)
+        self._vp_hexes.clear()
 
         return encode_state(
             state,
-            unit=None,  # ✅ no active unit aquí
+            unit=None,
             rl_side=self.rl_side,
             max_turns=self.sim.scenario.max_turns,
         )
@@ -97,10 +100,7 @@ class TrainingEnv:
     def step(self, action):
 
         state = self.sim.game_state
-        if state is None:
-            raise RuntimeError("GameState is None")
 
-        # ✅ identificar actor desde la acción
         actor = None
         actor_side = None
 
@@ -119,15 +119,8 @@ class TrainingEnv:
         # -------------------------------------------------
         # SNAPSHOT BEFORE
         # -------------------------------------------------
-        hp_before = {u.unit_id: getattr(u, "hp", 0) for u in state.units}
-        alive_before = {u.unit_id: bool(u.alive) for u in state.units}
-
-        own_units = [u for u in state.units if u.alive and u.side == self.rl_side]
-        enemy_units = [u for u in state.units if u.alive and u.side != self.rl_side]
-
-        pre_dist = None
-        if own_units and enemy_units:
-            pre_dist = _min_dist_fast(own_units, enemy_units)
+        hp_before = {u.unit_id: u.hp for u in state.units}
+        alive_before = {u.unit_id: u.alive for u in state.units}
 
         # -------------------------------------------------
         # STEP
@@ -137,45 +130,64 @@ class TrainingEnv:
         action_name = action.__class__.__name__
         is_attack = ("Ranged" in action_name) or ("Close" in action_name)
 
-        if actor_side == self.rl_side and is_attack:
-            self.rl_attacks += 1
+        # -------------------------------------------------
+        # ✅ INFO (DELTA POR STEP)
+        # -------------------------------------------------
+        info = {
+            "unit_id": action.unit_id if hasattr(action, "unit_id") else None,
+            "rl_damage": 0,
+            "rl_attacks": 0,
+            "rl_kills": 0,
+            "enemy_damage": 0,
+            "enemy_attacks": 0,
+            "enemy_kills": 0,
+            "is_wait": is_wait,
+            "turn": next_state.turn,
+        }
+
+        # -------------------------------------------------
+        # ATAQUES
+        # -------------------------------------------------
+        if is_attack:
+            if actor_side == self.rl_side:
+                self.rl_attacks += 1
+                info["rl_attacks"] += 1
+            else:
+                self.enemy_attacks += 1
+                info["enemy_attacks"] += 1
 
         # -------------------------------------------------
         # SNAPSHOT AFTER
         # -------------------------------------------------
-        hp_after = {u.unit_id: getattr(u, "hp", 0) for u in next_state.units}
-        alive_after = {u.unit_id: bool(u.alive) for u in next_state.units}
+        hp_after = {u.unit_id: u.hp for u in next_state.units}
+        alive_after = {u.unit_id: u.alive for u in next_state.units}
 
-        rl_info = {
-            "damage": 0,
-            "defender_killed": False,
-            "is_wait": is_wait,
-        }
-
-        for unit_id, before_hp in hp_before.items():
-            after_hp = hp_after.get(unit_id, before_hp)
+        # -------------------------------------------------
+        # DAÑO Y KILLS
+        # -------------------------------------------------
+        for uid, before_hp in hp_before.items():
+            after_hp = hp_after.get(uid, before_hp)
             damage = max(0, before_hp - after_hp)
 
-            if actor_side == self.rl_side and is_attack:
-                self.rl_damage += damage
-                rl_info["damage"] += damage
+            if damage == 0:
+                continue
 
-            if alive_before.get(unit_id, False) and not alive_after.get(unit_id, True):
-                if actor_side == self.rl_side and is_attack:
-                    self.rl_kills += 1
-                    rl_info["defender_killed"] = True
+            if is_attack:
+                if actor_side == self.rl_side:
+                    self.rl_damage += damage
+                    info["rl_damage"] += damage
+                else:
+                    self.enemy_damage += damage
+                    info["enemy_damage"] += damage
 
-        _trace("COMBAT", action=action_name, dmg=rl_info["damage"], kills=self.rl_kills)
-
-        # -------------------------------------------------
-        # DIST AFTER
-        # -------------------------------------------------
-        post_dist = None
-        next_own = [u for u in next_state.units if u.alive and u.side == self.rl_side]
-        next_enemy = [u for u in next_state.units if u.alive and u.side != self.rl_side]
-
-        if next_own and next_enemy:
-            post_dist = _min_dist_fast(next_own, next_enemy)
+            if alive_before[uid] and not alive_after.get(uid, True):
+                if is_attack:
+                    if actor_side == self.rl_side:
+                        self.rl_kills += 1
+                        info["rl_kills"] += 1
+                    else:
+                        self.enemy_kills += 1
+                        info["enemy_kills"] += 1
 
         # -------------------------------------------------
         # REWARD
@@ -186,9 +198,9 @@ class TrainingEnv:
                 next_state=next_state,
                 action=action,
                 active=actor,
-                info=rl_info,
-                pre_dist=pre_dist,
-                post_dist=post_dist,
+                info=info,
+                pre_dist=None,
+                post_dist=None,
             )
         else:
             reward = 0.0
@@ -202,14 +214,7 @@ class TrainingEnv:
         if self.max_steps and self.current_step >= self.max_steps:
             done = True
 
-        info = {
-            "rl_damage": self.rl_damage,
-            "rl_kills": self.rl_kills,
-            "rl_attacks": self.rl_attacks,
-            "is_wait": is_wait,
-            "turn": next_state.turn,
-            "done": done,
-        }
+        info["done"] = done
 
         return (
             encode_state(

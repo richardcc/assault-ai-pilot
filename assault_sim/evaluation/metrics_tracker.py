@@ -7,28 +7,12 @@ from collections import defaultdict
 class UnitStats:
     def __init__(self):
         self.attacks = 0
-
-        self.ranged = 0
-        self.melee = 0
-
-        # ✅ NUEVO
-        self.direct = 0
-        self.indirect = 0
-
         self.damage_done = 0
         self.damage_taken = 0
-
-        # ✅ NUEVO
-        self.direct_damage = 0
-        self.indirect_damage = 0
-
         self.kills = 0
-
-        # ✅ NUEVO
-        self.direct_kills = 0
-        self.indirect_kills = 0
-
         self.alive = True
+        self.alive_count = 0
+        self._last_hp = None
 
 
 # -------------------------------------------------
@@ -51,141 +35,119 @@ class MetricsTracker:
         self.vp_progression = []
         self.steps = 0
 
-    def _side(self, unit_side):
-        return "RL" if unit_side == self.rl_side else "ENEMY"
+    # -------------------------------------------------
+    def _side(self, unit_id: str):
+        return "RL" if unit_id.startswith(self.rl_side) else "ENEMY"
 
     # -------------------------------------------------
-    # ✅ ACTION TRACKING (DIRECT vs INDIRECT)
+    # ✅ EVENT-BASED TRACKING (REPLAY / DEBUG)
     # -------------------------------------------------
-    def track_action(self, state, action):
-        active = state.active_unit
+    def on_event(self, event):
 
-        if active is None or action is None:
+        if not event or event.get("type") != "ACTION_EFFECT":
             return
 
-        unit_id = active.unit_id
-        side = self._side(active.side)
+        payload = event.get("payload", {})
 
-        name = action.__class__.__name__
+        attacker = payload.get("attacker")
+        defender = payload.get("defender")
 
-        is_ranged = "Ranged" in name
-        is_melee = "Assault" in name or "Close" in name
-        is_attack = is_ranged or is_melee
+        if not attacker or not defender:
+            return
 
-        is_indirect = "Indirect" in name
-        is_direct = is_ranged and not is_indirect
+        side = self._side(attacker)
 
-        if is_attack:
-            self.units[unit_id].attacks += 1
-            self.side[side]["attacks"] += 1
+        # ✅ contar ataque
+        self.side[side]["attacks"] += 1
+        self.units[attacker].attacks += 1
 
-            if is_ranged:
-                self.units[unit_id].ranged += 1
+        # ✅ estimar daño desde dados
+        attack_dice = payload.get("attack_dice", [])
+        defense_dice = payload.get("defense_dice", [])
 
-            if is_melee:
-                self.units[unit_id].melee += 1
+        hits = sum(1 for d in attack_dice if "HIT" in d or "CRIT" in d)
+        blocks = sum(1 for d in defense_dice if "BLOCK" in d)
 
-            # ✅ NUEVO
-            if is_direct:
-                self.units[unit_id].direct += 1
-                self.side[side]["direct"] += 1
+        damage = max(0, hits - blocks)
 
-            if is_indirect:
-                self.units[unit_id].indirect += 1
-                self.side[side]["indirect"] += 1
+        self.side[side]["damage"] += damage
+        self.units[attacker].damage_done += damage
+        self.units[defender].damage_taken += damage
+
+        # ✅ kill aproximado (puedes mejorar si tienes info de HP)
+        if damage > 0:
+            self.units[attacker].kills += 1
+            self.side[side]["kills"] += 1
 
     # -------------------------------------------------
-    # ✅ DAMAGE (CON DESGLOSE)
+    # ✅ FALLBACK: INFO-BASED TRACKING (EVALUATION)
     # -------------------------------------------------
     def track_damage(self, info, state, prev_state):
-        before = {u.unit_id: u.hp for u in prev_state.units}
-        after = {u.unit_id: u.hp for u in state.units}
 
-        attacker = prev_state.active_unit
+        if not info:
+            return
 
-        action = prev_state.last_action if hasattr(prev_state, "last_action") else None
-        name = action.__class__.__name__ if action else ""
+        unit_id = info.get("unit_id")
+        if not unit_id:
+            return
 
-        is_indirect = "Indirect" in name
-        is_direct = "Ranged" in name and not is_indirect
+        side = self._side(unit_id)
 
-        for unit_id, hp_before in before.items():
-            hp_after = after.get(unit_id, hp_before)
+        if side == "RL":
+            damage = info.get("rl_damage", 0)
+            attacks = info.get("rl_attacks", 0)
+            kills = info.get("rl_kills", 0)
+        else:
+            damage = info.get("enemy_damage", 0)
+            attacks = info.get("enemy_attacks", 0)
+            kills = info.get("enemy_kills", 0)
 
-            dmg = max(0, hp_before - hp_after)
+        # ✅ GLOBAL
+        self.side[side]["damage"] += damage
+        self.side[side]["attacks"] += attacks
+        self.side[side]["kills"] += kills
 
-            if dmg <= 0:
-                continue
+        # ✅ 🔥 POR UNIDAD (ESTO ERA LO QUE FALLABA)
+        u = self.units[unit_id]
+        u.damage_done += damage
+        u.attacks += attacks
+        u.kills += kills
 
-            target_unit = next((u for u in state.units if u.unit_id == unit_id), None)
-            if target_unit is None:
-                continue
-
-            target_side = self._side(target_unit.side)
-            attacker_side = "RL" if target_side == "ENEMY" else "ENEMY"
-
-            # global
-            self.side[attacker_side]["damage"] += dmg
-
-            # target recibe
-            self.units[unit_id].damage_taken += dmg
-
-            # atacante hace
-            if attacker is not None:
-                self.units[attacker.unit_id].damage_done += dmg
-
-                if is_direct:
-                    self.units[attacker.unit_id].direct_damage += dmg
-
-                if is_indirect:
-                    self.units[attacker.unit_id].indirect_damage += dmg
+        u.kills += kills
 
     # -------------------------------------------------
-    # ✅ KILLS (DESGLOSE)
-    # -------------------------------------------------
-    def track_kills(self, state, prev_state):
-        prev_alive = {u.unit_id: u.alive for u in prev_state.units}
-        attacker = prev_state.active_unit
-
-        action = prev_state.last_action if hasattr(prev_state, "last_action") else None
-        name = action.__class__.__name__ if action else ""
-
-        is_indirect = "Indirect" in name
-        is_direct = "Ranged" in name and not is_indirect
-
-        for u in state.units:
-
-            if prev_alive.get(u.unit_id, True) and not u.alive:
-
-                if not self.units[u.unit_id].alive:
-                    continue
-
-                side = self._side(u.side)
-                killer_side = "RL" if side == "ENEMY" else "ENEMY"
-
-                self.side[killer_side]["kills"] += 1
-
-                if attacker is not None:
-                    self.units[attacker.unit_id].kills += 1
-
-                    if is_direct:
-                        self.units[attacker.unit_id].direct_kills += 1
-
-                    if is_indirect:
-                        self.units[attacker.unit_id].indirect_kills += 1
-
-                self.units[u.unit_id].alive = False
+    def track_kills(self, state, prev_state, info=None):
+        pass
 
     # -------------------------------------------------
     def track_state(self, state):
-        vp = state.vp_tracker.total_points if state.vp_tracker else 0
-        self.vp_progression.append(vp)
 
+        # ✅ asegurar existencia de unidades
+        for u in state.units:
+            if u.unit_id not in self.units:
+                self.units[u.unit_id] = UnitStats()
+
+        # ✅ actualizar estado
+        for u in state.units:
+            stats = self.units[u.unit_id]
+
+            stats.alive = u.alive
+
+            if u.alive:
+                stats.alive_count += 1
+
+            prev_hp = stats._last_hp if stats._last_hp is not None else u.hp
+            dmg_taken = max(0, prev_hp - u.hp)
+
+            if dmg_taken > 0:
+                stats.damage_taken += dmg_taken
+
+            stats._last_hp = u.hp
+
+    # -------------------------------------------------
     def step(self):
         self.steps += 1
 
-    # -------------------------------------------------
-    # ✅ OUTPUT
     # -------------------------------------------------
     def build_result(self, final_state):
 
@@ -203,13 +165,11 @@ class MetricsTracker:
             "winner": final_state.winner,
             "vp": final_state.vp_tracker.total_points if final_state.vp_tracker else 0,
             "steps": self.steps,
-
             "efficiency": {
                 "RL": efficiency("RL"),
                 "ENEMY": efficiency("ENEMY"),
             },
-
             "side": self.side,
-            "units": self.units,
+            "units": dict(self.units),
             "vp_progression": self.vp_progression,
         }

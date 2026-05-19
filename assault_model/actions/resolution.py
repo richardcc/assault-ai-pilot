@@ -112,7 +112,7 @@ def resolve_action(
         _trace("RESOLVE_MOVE", unit=action.unit_id)
 
         if action.path:
-            new_state = deepcopy(state)
+            new_state = state
 
             unit = next(
                 (u for u in new_state.units if u.unit_id == action.unit_id),
@@ -130,7 +130,7 @@ def resolve_action(
         _trace("RESOLVE_COMBAT", unit=action.unit_id, mode=action.combat_mode)
 
         # Always work on a copy of the state
-        new_state = deepcopy(state)
+        new_state = state
 
         # ------------------------------
         # CLOSE COMBAT (ASSAULT)

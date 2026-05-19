@@ -50,7 +50,7 @@ def check_line_of_sight(attacker, target, game_map, terrain_config):
             continue
 
         terrain = hex_.get_terrain()
-        config = terrain_config.get(terrain, {})
+        config = terrain_config.get(terrain)
 
         los_type = config.get("los", "CLEAR")
 

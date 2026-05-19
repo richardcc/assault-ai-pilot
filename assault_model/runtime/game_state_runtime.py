@@ -15,6 +15,7 @@ from assault_model.combat.combat_resolution import CombatResolutionResult
 
 from assault_model.runtime.execution_context import ExecutionContext
 from assault_model.map.hex_coord import HexCoord
+from assault_model.combat.spotting_runtime import update_spotting
 
 import os
 
@@ -133,7 +134,7 @@ class RuntimeGameState:
         alive_sides = {u.side for u in alive_units}
 
         event_bus = context.event_bus if context else None
-
+        
         if not alive_units:
             self.base_state.done = True
             self.base_state.winner = None
@@ -198,8 +199,9 @@ class RuntimeGameState:
         combat_result: CombatResolutionResult | None = None,
         context: ExecutionContext | None = None,
     ):
-
+        
         event_bus = context.event_bus if context else None
+        update_spotting(self.base_state, self.scenario.terrain_config)
 
         attacker = next(
             (u for u in self.base_state.units if u.unit_id == getattr(action, "unit_id", None)),
@@ -277,5 +279,5 @@ class RuntimeGameState:
                         "to": new_position,
                     },
                 })
-
+        update_spotting(self.base_state, self.scenario.terrain_config)
         return result

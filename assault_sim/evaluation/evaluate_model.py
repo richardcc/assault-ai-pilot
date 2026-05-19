@@ -1,6 +1,5 @@
 import torch
 from pathlib import Path
-import random
 
 from assault_sim.config.config_loader import load_sim_config
 from assault_sim.sim_env import SimEnv
@@ -8,26 +7,26 @@ from assault_sim.training_env import TrainingEnv
 
 from assault_sim.rl.policy_net import PolicyNet
 from assault_sim.rl.option_policy import OptionPolicy
-from assault_sim.decision.hrl_controller import HRLController
-from assault_sim.decision.option_executor import OptionExecutor
 from assault_sim.rl.tactical_options import TacticalOption
 
+from assault_sim.decision.hrl_controller import HRLController
+from assault_sim.decision.option_executor import OptionExecutor
+from assault_sim.decision.controller_adapter import RLvsHeuristicController
 from assault_sim.heuristics.tactical_path_heuristic import TacticalPathHeuristic
 
-from assault_sim.evaluation.evaluator import Evaluator
 from assault_sim.evaluation.results import ResultsAnalyzer
 from assault_sim.evaluation.eval_dashboard import EvalDashboard
-
+from assault_sim.evaluation.evaluator import Evaluator  # ✅ CLAVE
+from assault_sim.debug.debug_config import DebugConfig
 
 # -------------------------------------------------
 # CONFIG
 # -------------------------------------------------
 RL_SIDE = "US"
-EPISODES = 500
-MAX_STEPS = 200
+EPISODES = 50
 
-CONFIG_PATH = Path("assault_sim/config/sim_config.yaml")
-ENV_CONFIG = Path("assault_sim/config/env_config.json")
+CONFIG_PATH = Path("C:/repos/python/assault/assault_sim/config/sim_config.yaml")
+ENV_CONFIG = Path("C:/repos/python/assault/assault_sim/config/env_config.json")
 CHECKPOINT = Path("models/latest.pt")
 
 
@@ -41,7 +40,13 @@ def load_model():
     sim_config = load_sim_config(CONFIG_PATH)
     sim_config.scenario_name = "phase01_seq001_initial_contact"
 
-    sim_env = SimEnv(sim_config)
+    
+    sim_env = SimEnv(
+        sim_config,
+        controller=None,
+        debug_config=DebugConfig(enabled=True)  # 🔥 ESTA ES LA CLAVE
+    )
+
 
     env = TrainingEnv(
         sim_env,
@@ -65,34 +70,29 @@ def load_model():
 
 
 # -------------------------------------------------
-# BUILD CONTROLLERS ✅ MISMA LÓGICA QUE RUNNER
+# BUILD CONTROLLER
 # -------------------------------------------------
-def build_controllers(policy_net):
+def build_controller(policy_net, sim_env):
 
-    heuristic = TacticalPathHeuristic()
-
-    # ✅ RL controller (igual que antes)
     option_policy = OptionPolicy(policy_net)
-    executor_rl = OptionExecutor(heuristic)
+    heuristic = TacticalPathHeuristic()
+    executor = OptionExecutor(heuristic)
 
-    rl_controller = HRLController(
+    hrl_controller = HRLController(
         option_policy=option_policy,
-        option_executor=executor_rl,
+        option_executor=executor,
         rl_side=RL_SIDE,
+        event_bus=sim_env.event_bus,
     )
 
-    # ✅ ENEMY = MISMA LÓGICA QUE RUNNER
-    executor_enemy = OptionExecutor(heuristic)
+    controller = RLvsHeuristicController(
+        rl_side=RL_SIDE,
+        hrl_controller=hrl_controller,
+        heuristic=heuristic,
+        executor=executor,
+    )
 
-    class EnemyController:
-        def choose_action(self, state, obs):
-            # 🔥 exactamente como runner:
-            option = random.choice(list(TacticalOption))
-            return executor_enemy.execute(state, option)
-
-    enemy_controller = EnemyController()
-
-    return rl_controller, enemy_controller
+    return controller
 
 
 # -------------------------------------------------
@@ -111,7 +111,7 @@ def build_env():
         rl_side=RL_SIDE,
     )
 
-    return env
+    return env, sim_env
 
 
 # -------------------------------------------------
@@ -124,27 +124,29 @@ def main():
     policy_net = load_model()
     print("✅ Model loaded")
 
-    rl_controller, enemy_controller = build_controllers(policy_net)
+    env, sim_env = build_env()
+    controller = build_controller(policy_net, sim_env)
 
-    env = build_env()
-
-    print(">>> RL SIDE:", RL_SIDE)
-
-    evaluator = Evaluator(
-        env,
-        rl_controller,
-        enemy_controller,
-        RL_SIDE,
-        max_steps=MAX_STEPS
-    )
+    print(f">>> RL SIDE: {RL_SIDE}")
 
     dashboard = EvalDashboard()
 
+    # ✅ USAR EVALUATOR (CLAVE)
+    evaluator = Evaluator(
+        env=env,
+        rl_controller=controller,
+        enemy_controller=controller.heuristic,
+        rl_side=RL_SIDE,
+    )
+
+    # ✅ ejecutar episodios
     results = evaluator.evaluate(EPISODES)
 
+    # ✅ dashboard
     for r in results:
         dashboard.add_episode(r)
 
+    # ✅ análisis
     analyzer = ResultsAnalyzer(results, RL_SIDE)
     analyzer.print_report()
 
@@ -154,6 +156,5 @@ def main():
     print("\n>>> EVALUATION FINISHED")
 
 
-# -------------------------------------------------
 if __name__ == "__main__":
     main()

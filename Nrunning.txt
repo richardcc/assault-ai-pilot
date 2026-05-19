@@ -12,7 +12,6 @@ tree "C:\Users\Richard\OneDrive - UNED\pry_ai\assault_model" /F /A > files.txt
 
 
 python -m assault_sim.train.train_ppo
-python -m assault_sim.train.train -- debug
 python -m assault_sim.evaluation.evaluate_model
 python -m assault_sim.runners.run_match_rl_vs_heuristic
 python -m export_project
