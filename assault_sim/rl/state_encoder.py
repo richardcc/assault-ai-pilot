@@ -4,31 +4,24 @@ from assault_model.map.hex_utils import hex_distance
 
 # =================================================
 # NUMERIC STATE (USED BY RL)
-# ✅ MEJORADO: incluye objetivo (VP) + VISIBILITY
 # =================================================
-def encode_state(state, rl_side=None, max_turns=None):
+def encode_state(state, unit=None, rl_side=None, max_turns=None):
 
-    active = state.active_unit
+    active = unit  # ✅ NEW (antes active_unit)
 
     # -------------------------
-    # Original features
+    # BASIC FEATURES
     # -------------------------
     active_hp = active.hp if active is not None else 0
     n_units = len(state.units) if state.units is not None else 0
     vp = state.vp_tracker.total_points if state.vp_tracker else 0
 
     # -------------------------
-    # Global force balance
+    # GLOBAL FORCE BALANCE
     # -------------------------
     if rl_side is not None and state.units is not None:
-        own_units = [
-            u for u in state.units
-            if u.alive and u.side == rl_side
-        ]
-        enemy_units = [
-            u for u in state.units
-            if u.alive and u.side != rl_side
-        ]
+        own_units = [u for u in state.units if u.alive and u.side == rl_side]
+        enemy_units = [u for u in state.units if u.alive and u.side != rl_side]
 
         own_units_alive = len(own_units)
         enemy_units_alive = len(enemy_units)
@@ -50,7 +43,7 @@ def encode_state(state, rl_side=None, max_turns=None):
     hp_balance = (own_total_hp - enemy_total_hp) / max_hp
 
     # -------------------------
-    # Time pressure
+    # TIME PRESSURE
     # -------------------------
     if max_turns and max_turns > 0:
         time_progress = state.turn / max_turns
@@ -58,11 +51,9 @@ def encode_state(state, rl_side=None, max_turns=None):
         time_progress = 0.0
 
     # -------------------------
-    # Dirección a enemigo
+    # DIRECTION TO ENEMY
     # -------------------------
-    dq = 0.0
-    dr = 0.0
-
+    dq, dr = 0.0, 0.0
     closest_enemy = None
 
     if active is not None and enemy_units:
@@ -71,47 +62,38 @@ def encode_state(state, rl_side=None, max_turns=None):
             key=lambda e: hex_distance(active.position, e.position),
         )
 
-        dq = closest_enemy.position.q - active.position.q
-        dr = closest_enemy.position.r - active.position.r
-
-        dq = np.clip(dq / 10.0, -1.0, 1.0)
-        dr = np.clip(dr / 10.0, -1.0, 1.0)
+        dq = np.clip((closest_enemy.position.q - active.position.q) / 10.0, -1.0, 1.0)
+        dr = np.clip((closest_enemy.position.r - active.position.r) / 10.0, -1.0, 1.0)
 
     # -------------------------
-    # ✅ DISTANCIA A OBJETIVO (VP)
+    # DISTANCE TO VP
     # -------------------------
     vp_dist = 0.0
 
     if active is not None and state.vp_tracker:
-
-        vp_tracker = state.vp_tracker
-        conditions = vp_tracker.conditions
-
-        vp_points = getattr(conditions, "points", [])
+        vp_points = getattr(state.vp_tracker.conditions, "points", [])
 
         if vp_points:
-
             target_vp = min(
                 vp_points,
                 key=lambda p: hex_distance(active.position, p.hex_coords)
             )
 
             dist = hex_distance(active.position, target_vp.hex_coords)
-
             vp_dist = np.clip(dist / 10.0, 0.0, 1.0)
 
-    # -------------------------------------------------
-    # ✅ NUEVO: VISIBILITY (ROMPE EL COLAPSO)
-    # -------------------------------------------------
+    # -------------------------
+    # VISIBILITY
+    # -------------------------
     visible_enemy = 0.0
 
     if active is not None and closest_enemy is not None:
-        if closest_enemy.unit_id in active.spotted_enemies:
+        if closest_enemy.unit_id in getattr(active, "spotted_enemies", []):
             visible_enemy = 1.0
 
-    # -------------------------------------------------
-    # ✅ NUEVO: DISTANCIA AL ENEMIGO
-    # -------------------------------------------------
+    # -------------------------
+    # DISTANCE TO ENEMY
+    # -------------------------
     enemy_dist = 0.0
 
     if active is not None and closest_enemy is not None:
@@ -121,28 +103,24 @@ def encode_state(state, rl_side=None, max_turns=None):
     # -------------------------
     # FINAL VECTOR
     # -------------------------
-    return np.array(
-        [
-            state.turn,
-            active_hp,
-            n_units,
-            vp,
+    return np.array([
+        state.turn,
+        active_hp,
+        n_units,
+        vp,
 
-            unit_balance,
-            hp_balance,
-            time_progress,
+        unit_balance,
+        hp_balance,
+        time_progress,
 
-            dq,
-            dr,
+        dq,
+        dr,
 
-            vp_dist,
+        vp_dist,
 
-            # 🔥 NUEVOS (CLAVE)
-            visible_enemy,
-            enemy_dist,
-        ],
-        dtype=np.float32,
-    )
+        visible_enemy,
+        enemy_dist,
+    ], dtype=np.float32)
 
 
 # =================================================
@@ -152,18 +130,9 @@ def explainable_context(state, rl_side=None, max_turns=None):
 
     units = state.units or []
 
-    own_units = [
-        u for u in units
-        if u.alive and rl_side is not None and u.side == rl_side
-    ]
-    enemy_units = [
-        u for u in units
-        if u.alive and rl_side is not None and u.side != rl_side
-    ]
+    own_units = [u for u in units if u.alive and u.side == rl_side]
+    enemy_units = [u for u in units if u.alive and u.side != rl_side]
 
-    # -------------------------
-    # Friendly strength
-    # -------------------------
     if len(own_units) > len(enemy_units):
         friendly_strength = "HIGH"
     elif len(own_units) < len(enemy_units):
@@ -171,9 +140,6 @@ def explainable_context(state, rl_side=None, max_turns=None):
     else:
         friendly_strength = "EVEN"
 
-    # -------------------------
-    # Enemy pressure
-    # -------------------------
     if not enemy_units:
         enemy_pressure = "NONE"
     elif len(enemy_units) >= len(own_units):
@@ -181,9 +147,6 @@ def explainable_context(state, rl_side=None, max_turns=None):
     else:
         enemy_pressure = "LOW"
 
-    # -------------------------
-    # Objective / time pressure
-    # -------------------------
     if max_turns and max_turns > 0:
         progress = state.turn / max_turns
         if progress < 0.33:

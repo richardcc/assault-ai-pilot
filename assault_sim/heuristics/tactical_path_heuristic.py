@@ -7,13 +7,15 @@ import random
 
 class TacticalPathHeuristic:
 
-    def choose_action(self, state, option: TacticalOption):
+    # -------------------------------------------------
+    # ✅ NUEVA FIRMA (SIN active_unit)
+    # -------------------------------------------------
+    def choose_action(self, state, unit, option: TacticalOption):
 
-        unit = state.active_unit
         if unit is None or not unit.alive:
             return None
 
-        actions = ActionCatalog(state).actions()
+        actions = ActionCatalog(state, unit).actions()
         if not actions:
             return None
 
@@ -25,7 +27,6 @@ class TacticalPathHeuristic:
         if not enemies:
             return self._wait(actions)
 
-        # ✅ target base simple
         target = min(
             enemies,
             key=lambda e: hex_distance(unit.position, e.position)
@@ -34,14 +35,12 @@ class TacticalPathHeuristic:
         dist = hex_distance(unit.position, target.position)
 
         # -------------------------------------------------
-        # ATTACK (fallback)
+        # ATTACK
         # -------------------------------------------------
         if option == TacticalOption.ATTACK:
-
             ranged = self._attack_ranged(actions, state, unit)
             if ranged:
                 return ranged
-
             return self._move_closer(actions, unit, target)
 
         # -------------------------------------------------
@@ -74,7 +73,7 @@ class TacticalPathHeuristic:
         return self._wait(actions)
 
     # =================================================
-    # ✅ SIMPLE RANGED (no lógica de tipo de ataque)
+    # RANGED
     # =================================================
     def _attack_ranged(self, actions, state, unit):
 
@@ -110,16 +109,12 @@ class TacticalPathHeuristic:
 
             score = 0.0
 
-            # matar
             if hp == 1:
                 score += 6.0
             elif hp == 2:
                 score += 3.0
 
-            # distancia
             score += max(0, 5 - dist)
-
-            # pequeño ruido
             score += random.uniform(-0.2, 0.2)
 
             if score > best_score:

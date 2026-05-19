@@ -20,8 +20,6 @@ def _trace(tag: str, **data):
 
 
 # -------------------------------------------------
-# ✅ DISTANCIA OPTIMIZADA
-# -------------------------------------------------
 def _min_dist_fast(units_a, units_b):
     best = 999
 
@@ -31,12 +29,10 @@ def _min_dist_fast(units_a, units_b):
             if d < best:
                 best = d
                 if best <= 1:
-                    return best  # early stop
+                    return best
     return best
 
 
-# -------------------------------------------------
-# ✅ TRAINING ENV
 # -------------------------------------------------
 class TrainingEnv:
 
@@ -50,7 +46,6 @@ class TrainingEnv:
         self.sim = sim_env
         self.rl_side = rl_side
 
-        # ✅ FIX CRÍTICO → YAML en vez de JSON
         with open(env_config_path, "r", encoding="utf-8") as f:
             self.env_config = yaml.safe_load(f)
 
@@ -62,7 +57,6 @@ class TrainingEnv:
 
         self.reward_fn = ProgressiveReward(rl_side)
 
-        # stats
         self.rl_attacks = 0
         self.rl_damage = 0
         self.rl_kills = 0
@@ -86,14 +80,15 @@ class TrainingEnv:
         self.rl_damage = 0
         self.rl_kills = 0
 
-        # cache VP
         self._vp_hexes.clear()
+
         if state.vp_tracker and getattr(state.vp_tracker, "conditions", None):
             for vp in state.vp_tracker.conditions.points:
                 self._vp_hexes.add(vp.hex_coords)
 
         return encode_state(
             state,
+            unit=None,  # ✅ no active unit aquí
             rl_side=self.rl_side,
             max_turns=self.sim.scenario.max_turns,
         )
@@ -105,16 +100,19 @@ class TrainingEnv:
         if state is None:
             raise RuntimeError("GameState is None")
 
-        active = state.active_unit
-        actor_side = active.side if active else None
+        # ✅ identificar actor desde la acción
+        actor = None
+        actor_side = None
 
-        # -------------------------------------------------
-        # COHERENCE
-        # -------------------------------------------------
-        if active is None:
+        if action is not None and hasattr(action, "unit_id"):
+            actor = next(
+                (u for u in state.units if u.unit_id == action.unit_id),
+                None,
+            )
+            actor_side = actor.side if actor else None
+
+        if action is None:
             action = WaitAction("SYSTEM")
-        elif action is not None and action.unit_id != active.unit_id:
-            action = WaitAction(active.unit_id)
 
         is_wait = isinstance(action, WaitAction)
 
@@ -136,7 +134,7 @@ class TrainingEnv:
         # -------------------------------------------------
         next_state, _, sim_done, _ = self.sim.step(action)
 
-        action_name = action.__class__.__name__ if action else ""
+        action_name = action.__class__.__name__
         is_attack = ("Ranged" in action_name) or ("Close" in action_name)
 
         if actor_side == self.rl_side and is_attack:
@@ -148,9 +146,6 @@ class TrainingEnv:
         hp_after = {u.unit_id: getattr(u, "hp", 0) for u in next_state.units}
         alive_after = {u.unit_id: bool(u.alive) for u in next_state.units}
 
-        # -------------------------------------------------
-        # RL INFO
-        # -------------------------------------------------
         rl_info = {
             "damage": 0,
             "defender_killed": False,
@@ -170,12 +165,7 @@ class TrainingEnv:
                     self.rl_kills += 1
                     rl_info["defender_killed"] = True
 
-        _trace(
-            "COMBAT",
-            action=action_name,
-            dmg=rl_info["damage"],
-            kills=self.rl_kills,
-        )
+        _trace("COMBAT", action=action_name, dmg=rl_info["damage"], kills=self.rl_kills)
 
         # -------------------------------------------------
         # DIST AFTER
@@ -188,14 +178,14 @@ class TrainingEnv:
             post_dist = _min_dist_fast(next_own, next_enemy)
 
         # -------------------------------------------------
-        # ✅ REWARD SOLO RL
+        # REWARD
         # -------------------------------------------------
         if actor_side == self.rl_side:
             reward = self.reward_fn.compute(
                 state=state,
                 next_state=next_state,
                 action=action,
-                active=active,
+                active=actor,
                 info=rl_info,
                 pre_dist=pre_dist,
                 post_dist=post_dist,
@@ -212,9 +202,6 @@ class TrainingEnv:
         if self.max_steps and self.current_step >= self.max_steps:
             done = True
 
-        # -------------------------------------------------
-        # INFO
-        # -------------------------------------------------
         info = {
             "rl_damage": self.rl_damage,
             "rl_kills": self.rl_kills,
@@ -227,6 +214,7 @@ class TrainingEnv:
         return (
             encode_state(
                 next_state,
+                unit=None,
                 rl_side=self.rl_side,
                 max_turns=self.sim.scenario.max_turns,
             ),

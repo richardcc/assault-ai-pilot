@@ -63,7 +63,10 @@ class SimEnv:
 
         self._step_counter = 0
 
+        # ✅ EVENT BUS
         if self.event_bus:
+
+            # ✅ RESET EVENT (IMPORTANTE)
             self.event_bus.emit({
                 "type": "RESET",
                 "payload": {
@@ -91,6 +94,7 @@ class SimEnv:
                 },
             })
 
+            # ✅ MAP STATE
             self._emit_map_state()
 
         return self.game_state
@@ -118,7 +122,8 @@ class SimEnv:
                 "payload": {
                     "turn": self.game_state.turn,
                     "action": action.__class__.__name__,
-                },
+                    "unit_id": getattr(action, "unit_id", None),  # ✅ CRÍTICO
+                }
             })
 
         # -------------------------------------------------

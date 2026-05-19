@@ -23,21 +23,20 @@ def _trace(tag: str, **data):
 
 class ActionCatalog:
 
-    def __init__(self, game_state):
+    def __init__(self, game_state, unit):
         self.gs = game_state
+        self.unit = unit  # ✅ NEW
 
     def actions(self):
-        active = self.gs.active_unit
+
+        active = self.unit  # ✅ clave
 
         if active is None:
-            return [WaitAction(None)]
+            return [WaitAction("SYSTEM")]
 
         actions = []
 
-        _trace(
-            "ACTION_CATALOG_START",
-            unit=active.unit_id,
-        )
+        _trace("ACTION_CATALOG_START", unit=active.unit_id)
 
         # ----------------------------------
         # MOVEMENT
@@ -94,7 +93,7 @@ class ActionCatalog:
         return actions
 
     # ==================================================
-    # RANGED FIRE (DIRECT + INDIRECT)
+    # RANGED FIRE
     # ==================================================
     def _ranged_fire_actions(self, active):
 
@@ -111,27 +110,19 @@ class ActionCatalog:
             if not other.alive:
                 continue
 
-            # -------------------------------------------------
-            # ✅ SPOTTING (CLAVE)
-            # -------------------------------------------------
-            if other.unit_id not in active.spotted_enemies:
+            if other.unit_id not in getattr(active, "spotted_enemies", []):
                 continue
 
-            # ✅ Distance
             distance = hex_distance(active.position, other.position)
 
-            # ✅ Weapon range
             if not self._in_weapon_range(active, other):
                 continue
 
-            # ✅ Determine mode
             mode = active.unit_type._resolve_attack_mode(distance)
 
-            # ✅ Mortar min range
             if mode == "INDIRECT_FIRE" and distance < 3:
                 continue
 
-            # ✅ LOS obligatorio para direct fire
             if mode == "DIRECT_FIRE":
                 if not self._has_line_of_sight(active, other):
                     continue
@@ -154,16 +145,12 @@ class ActionCatalog:
         return actions
 
     # ==================================================
-    # RANGE CHECK
-    # ==================================================
     def _in_weapon_range(self, attacker, target):
 
         distance = hex_distance(attacker.position, target.position)
-
         attack = attacker.unit_type._attack_raw
 
         for mode_data in attack.values():
-
             table = mode_data.get(target.unit_type.category.value)
             if not table:
                 continue
@@ -180,8 +167,6 @@ class ActionCatalog:
 
         return False
 
-    # ==================================================
-    # LOS
     # ==================================================
     def _has_line_of_sight(self, attacker, target):
         return has_line_of_sight(

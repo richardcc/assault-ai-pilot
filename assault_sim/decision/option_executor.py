@@ -14,42 +14,57 @@ class OptionExecutor:
     """
 
     def __init__(self, heuristic_controller):
-        self.heuristic = heuristic_controller  # ✅ temporal
+        self.heuristic = heuristic_controller
 
     # -------------------------------------------------
-    def execute(self, state, option: TacticalOption, attack_mode: int | None = None):
+    # ✅ NEW SIGNATURE (CRÍTICO)
+    # -------------------------------------------------
+    def execute(
+        self,
+        state,
+        unit,
+        option: TacticalOption,
+        attack_mode: int | None = None
+    ):
 
-        unit = state.active_unit
-
+        # ✅ nunca usar state.active_unit
         if unit is None:
-            return None
+            return WaitAction("SYSTEM")
 
         # -------------------------------------------------
-        # ✅ ATTACK (ya en L2)
+        # ✅ ATTACK
         # -------------------------------------------------
         if option == TacticalOption.ATTACK:
             return self._execute_attack(state, unit, attack_mode)
 
         # -------------------------------------------------
-        # ✅ ADVANCE (nuevo en L2)
+        # ✅ ADVANCE
         # -------------------------------------------------
         if option == TacticalOption.ADVANCE:
             return self._move_closer(state, unit)
 
         # -------------------------------------------------
-        # ✅ resto aún usa heuristic (por ahora)
+        # ✅ FLANK
         # -------------------------------------------------
         if option == TacticalOption.FLANK:
             return self._flank_move(state, unit)
 
+        # -------------------------------------------------
+        # ✅ RETREAT (fallback a heuristic)
+        # -------------------------------------------------
         if option == TacticalOption.RETREAT:
-            return self.heuristic.choose_action(state, option)
-        
+            action = self.heuristic.choose_action(state, option)
+            return action or WaitAction(unit.unit_id)
 
+        # -------------------------------------------------
+        # ✅ HOLD
         # -------------------------------------------------
         if option == TacticalOption.HOLD:
             return WaitAction(unit.unit_id)
 
+        # -------------------------------------------------
+        # ✅ DEFAULT SAFETY
+        # -------------------------------------------------
         return WaitAction(unit.unit_id)
 
     # -------------------------------------------------
@@ -65,21 +80,19 @@ class OptionExecutor:
         if target is None:
             return WaitAction(unit.unit_id)
 
-        # INDIRECT
         if attack_mode == 1:
             return RangedIndirectAttack(
                 unit_id=unit.unit_id,
                 target_hex=target.position,
             )
 
-        # DIRECT
         return RangedDirectAttack(
             unit_id=unit.unit_id,
             target_id=target.unit_id,
         )
 
     # -------------------------------------------------
-    # ✅ TARGET SELECTION (migrado desde heuristic)
+    # ✅ TARGET SELECTION
     # -------------------------------------------------
     def _select_attack_target(self, state, unit, attack_mode):
 
@@ -101,13 +114,13 @@ class OptionExecutor:
 
             score = 0.0
 
-            # ✅ prioridad matar (igual que heuristic)
+            # kill priority
             if hp == 1:
                 score += 6.0
             elif hp == 2:
                 score += 3.0
 
-            # ✅ distancia
+            # distance
             score += max(0, 5 - dist)
 
             if score > best_score:
@@ -117,11 +130,11 @@ class OptionExecutor:
         return best
 
     # -------------------------------------------------
-    # ✅ MOVE CLOSER (migrado desde heuristic)
+    # ✅ MOVE CLOSER
     # -------------------------------------------------
     def _move_closer(self, state, unit):
 
-        actions = ActionCatalog(state).actions()
+        actions = ActionCatalog(state, unit).actions()
 
         enemies = [
             u for u in state.units
@@ -131,7 +144,6 @@ class OptionExecutor:
         if not enemies:
             return WaitAction(unit.unit_id)
 
-        # mismo target heuristic
         target = min(
             enemies,
             key=lambda e: hex_distance(unit.position, e.position)
@@ -155,16 +167,13 @@ class OptionExecutor:
                 best = a
 
         return best or WaitAction(unit.unit_id)
-    
+
     # -------------------------------------------------
-    # ✅ FLANK = acercarse pero evitando frontal directo
+    # ✅ FLANK
     # -------------------------------------------------
     def _flank_move(self, state, unit):
 
-        from assault_model.actions.action_catalog import ActionCatalog
-        from assault_model.actions.action_category import ActionCategory
-
-        actions = ActionCatalog(state).actions()
+        actions = ActionCatalog(state, unit).actions()
 
         enemies = [
             u for u in state.units
@@ -191,21 +200,15 @@ class OptionExecutor:
                 continue
 
             new_pos = path[-1]
-
-            # distancia al enemigo
             dist = hex_distance(new_pos, target.position)
 
             score = 0.0
 
-            # ✅ queremos acercarnos
             score += max(0, 6 - dist)
 
-            # ✅ pero no demasiado directo (evita melee inmediato)
             if dist <= 1:
                 score -= 3.0
 
-            # ✅ ligero sesgo lateral (rompe línea directa)
-            # truco simple: penalizar quedarse en misma línea q/r
             if new_pos.q == unit.position.q or new_pos.r == unit.position.r:
                 score -= 1.0
 

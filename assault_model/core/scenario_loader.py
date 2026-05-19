@@ -100,7 +100,7 @@ def load_scenario(
     game_map = Map(hexes=global_hexes)
 
     # =================================================
-    # APPLY EDGE FEATURES ONLY
+    # APPLY EDGE FEATURES
     # =================================================
     for a, b, feature in pending_hex_edges:
         game_map.add_hex_edge_feature(a, b, feature)
@@ -111,6 +111,7 @@ def load_scenario(
     units: List[UnitInstance] = []
 
     for u in raw.get("units", []):
+
         unit_key = u["unit_key"]
 
         if unit_key not in unit_catalog:
@@ -153,7 +154,7 @@ def load_scenario(
     )
 
     # =================================================
-    # GAME STATE
+    # ✅ GAME STATE (SIN ACTIVACIÓN)
     # =================================================
     game_state = GameState(
         game_map=game_map,
@@ -161,7 +162,9 @@ def load_scenario(
         turn=1,
     )
 
-    game_state.start_action_phase()
+    # ❌ ELIMINADO:
+    # game_state.start_action_phase()
+
     scenario.initial_game_state = game_state
 
     return scenario

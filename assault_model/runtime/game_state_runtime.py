@@ -1,6 +1,6 @@
 """
 RuntimeGameState is the authoritative execution engine of the game.
-This class is responsible for ALL game evolution.
+Pure execution engine (no activation logic).
 """
 
 from assault_model.state.game_state import GameState
@@ -9,12 +9,9 @@ from assault_model.state.turn import TurnState
 from assault_model.actions.action import Action
 from assault_model.actions.movement import MoveAction
 from assault_model.actions.status import WaitAction
-from assault_model.actions.assault import AssaultAction
 from assault_model.actions.resolution import resolve_action
-from assault_model.actions.action_catalog import ActionCatalog
 
 from assault_model.combat.combat_resolution import CombatResolutionResult
-from assault_model.combat.reaction_context import ReactionContext
 
 from assault_model.runtime.execution_context import ExecutionContext
 from assault_model.map.hex_coord import HexCoord
@@ -33,7 +30,9 @@ def _trace(tag: str, **data):
 
 class RuntimeGameState:
     """
-    Authoritative engine implementation.
+    ✅ Pure execution engine
+    ✅ No activation system
+    ✅ Deterministic
     """
 
     def __init__(self, base_state: GameState, scenario):
@@ -41,22 +40,39 @@ class RuntimeGameState:
         self.scenario = scenario
         self.turn = TurnState(turn_number=base_state.turn)
 
+        # ✅ NEW: control de activaciones por turno
+        self.activated_units = set()
+
     # =================================================
-    # ✅ ACTION GUARD
+    # TURN END (FIX FINAL)
+    # =================================================
+    def turn_has_ended(self) -> bool:
+        """
+        Turn ends when all eligible units have already acted.
+        """
+
+        for u in self.base_state.units:
+
+            if not self._can_unit_act(u):
+                continue
+
+            if u.unit_id not in self.activated_units:
+                return False
+
+        return True
+
+    # =================================================
+    # ACTION GUARD
     # =================================================
     def _can_unit_act(self, unit) -> bool:
         if unit is None:
             return False
-
         if not unit.alive:
             return False
-
         if getattr(unit, "fallback", False):
             return False
-
         if getattr(unit, "suppressed", False):
             return False
-
         return True
 
     # =================================================
@@ -67,47 +83,31 @@ class RuntimeGameState:
         Start of turn:
         - clears suppression
         - clears fallback
-        - resets activation
+        - resets activation tracker
         """
+
+        # ✅ reset activaciones
+        self.activated_units.clear()
 
         for unit in self.base_state.units:
 
-            # ------------------------------
-            # SUPPRESSION RECOVERY
-            # ------------------------------
             if getattr(unit, "suppressed", False):
                 unit.clear_suppression()
+                _trace("SUPPRESSION_RECOVERED", unit=unit.unit_id)
 
-                _trace(
-                    "SUPPRESSION_RECOVERED",
-                    unit=unit.unit_id,
-                )
-
-            # ------------------------------
-            # FALLBACK RECOVERY ✅ NEW
-            # ------------------------------
             if getattr(unit, "fallback", False):
                 unit.clear_fallback()
-
-                _trace(
-                    "FALLBACK_RECOVERED",
-                    unit=unit.unit_id,
-                )
-
-        self.base_state.activation_state.reset(self.base_state.units)
-        self.base_state.activation_state.next_unit()
+                _trace("FALLBACK_RECOVERED", unit=unit.unit_id)
 
         _trace(
             "TURN_START_UNITS",
-            turn=getattr(self.base_state, "turn", None),
+            turn=self.base_state.turn,
             units=[
                 {
                     "id": u.unit_id,
                     "side": u.side,
                     "alive": u.alive,
                     "hp": getattr(u, "hp", None),
-                    "suppressed": getattr(u, "suppressed", False),
-                    "fallback": getattr(u, "fallback", False),
                 }
                 for u in self.base_state.units
             ],
@@ -134,23 +134,21 @@ class RuntimeGameState:
 
         event_bus = context.event_bus if context else None
 
-        if len(alive_units) == 0:
+        if not alive_units:
             self.base_state.done = True
             self.base_state.winner = None
             self.base_state.end_reason = "all_units_destroyed"
 
             if event_bus:
-                event_bus.emit(
-                    {
-                        "type": "MATCH_END",
-                        "payload": {
-                            "result": "draw",
-                            "winner": None,
-                            "reason": self.base_state.end_reason,
-                            "turn": self.base_state.turn,
-                        },
-                    }
-                )
+                event_bus.emit({
+                    "type": "MATCH_END",
+                    "payload": {
+                        "result": "draw",
+                        "winner": None,
+                        "reason": self.base_state.end_reason,
+                        "turn": self.base_state.turn,
+                    },
+                })
             return
 
         if len(alive_sides) == 1:
@@ -161,17 +159,15 @@ class RuntimeGameState:
             self.base_state.end_reason = "last_side_standing"
 
             if event_bus:
-                event_bus.emit(
-                    {
-                        "type": "MATCH_END",
-                        "payload": {
-                            "result": "victory",
-                            "winner": winner,
-                            "reason": self.base_state.end_reason,
-                            "turn": self.base_state.turn,
-                        },
-                    }
-                )
+                event_bus.emit({
+                    "type": "MATCH_END",
+                    "payload": {
+                        "result": "victory",
+                        "winner": winner,
+                        "reason": self.base_state.end_reason,
+                        "turn": self.base_state.turn,
+                    },
+                })
             return
 
         if (
@@ -183,61 +179,15 @@ class RuntimeGameState:
             self.base_state.end_reason = "max_turns"
 
             if event_bus:
-                event_bus.emit(
-                    {
-                        "type": "MATCH_END",
-                        "payload": {
-                            "result": "draw",
-                            "winner": None,
-                            "reason": self.base_state.end_reason,
-                            "turn": self.base_state.turn,
-                        },
-                    }
-                )
-
-    # =================================================
-    # ACTIVATION
-    # =================================================
-    def get_activable_units(self):
-        gs = self.base_state
-        catalog = ActionCatalog(gs)
-        activable = []
-
-        for unit in gs.units:
-
-            # ✅ central guard
-            if not self._can_unit_act(unit):
-                continue
-
-            if unit in gs.activation_state.activated:
-                continue
-
-            prev_active = gs.activation_state.active_unit
-            gs.activation_state.active_unit = unit
-            try:
-                actions = catalog.actions()
-            finally:
-                gs.activation_state.active_unit = prev_active
-
-            if any(not isinstance(a, WaitAction) for a in actions):
-                activable.append(unit)
-
-        return activable
-    # VERY IMPORTANT AVOID LAST UNIT NOT ACTIVATED
-    def turn_has_ended(self) -> bool:
-        state = self.base_state.activation_state
-        return not state.remaining and state.active_unit is None
-
-    # =================================================
-    # INTERNAL ACTIVATION
-    # =================================================
-    def _consume_activation(self, unit):
-        if unit is None:
-            return
-        self.base_state.activation_state.consume(unit)
-
-    def _advance_activation(self):
-        self.base_state.activation_state.next_unit()
+                event_bus.emit({
+                    "type": "MATCH_END",
+                    "payload": {
+                        "result": "draw",
+                        "winner": None,
+                        "reason": self.base_state.end_reason,
+                        "turn": self.base_state.turn,
+                    },
+                })
 
     # =================================================
     # MAIN EXECUTION
@@ -248,14 +198,11 @@ class RuntimeGameState:
         combat_result: CombatResolutionResult | None = None,
         context: ExecutionContext | None = None,
     ):
+
         event_bus = context.event_bus if context else None
 
         attacker = next(
-            (
-                u
-                for u in self.base_state.units
-                if u.unit_id == getattr(action, "unit_id", None)
-            ),
+            (u for u in self.base_state.units if u.unit_id == getattr(action, "unit_id", None)),
             None,
         )
 
@@ -265,34 +212,17 @@ class RuntimeGameState:
             attacker=attacker.unit_id if attacker else None,
         )
 
-        # =================================================
+        # ✅ marcar unidad como activada
+        if attacker:
+            self.activated_units.add(attacker.unit_id)
+
         # ✅ HARD BLOCK
-        # =================================================
         if attacker and not self._can_unit_act(attacker):
 
             _trace(
                 "ACTION_BLOCKED",
                 unit=attacker.unit_id,
-                suppressed=attacker.is_suppressed(),
-                fallback=attacker.is_in_fallback(),
-                action=action.__class__.__name__,
             )
-
-            if event_bus:
-                event_bus.emit(
-                    {
-                        "type": "ACTION_BLOCKED",
-                        "payload": {
-                            "unit": attacker.unit_id,
-                            "action": action.__class__.__name__,
-                            "reason": (
-                                "FALLBACK"
-                                if attacker.is_in_fallback()
-                                else "SUPPRESSED"
-                            ),
-                        },
-                    }
-                )
 
             return None
 
@@ -304,13 +234,10 @@ class RuntimeGameState:
         # WAIT
         # -------------------------------------------------
         if isinstance(action, WaitAction):
-            self._consume_activation(attacker)
-            self._advance_activation()
             return {
                 "type": "WAIT",
                 "unit": attacker.unit_id if attacker else None
             }
-
 
         # -------------------------------------------------
         # APPLY ACTION
@@ -329,12 +256,9 @@ class RuntimeGameState:
         if self.base_state.done:
             return result
 
-
         # -------------------------------------------------
-        # CONTINUE TURN
+        # EVENT: MOVEMENT
         # -------------------------------------------------
-        self._consume_activation(attacker)
-        self._advance_activation()
         if event_bus and prev_position and isinstance(action, MoveAction):
             unit_after = next(
                 (u for u in self.base_state.units if u.unit_id == action.unit_id),
@@ -345,15 +269,13 @@ class RuntimeGameState:
                     unit_after.position.q,
                     unit_after.position.r,
                 )
-                event_bus.emit(
-                    {
-                        "type": "UNIT_MOVED",
-                        "payload": {
-                            "unit_id": action.unit_id,
-                            "from": prev_position,
-                            "to": new_position,
-                        },
-                    }
-                )
+                event_bus.emit({
+                    "type": "UNIT_MOVED",
+                    "payload": {
+                        "unit_id": action.unit_id,
+                        "from": prev_position,
+                        "to": new_position,
+                    },
+                })
 
         return result

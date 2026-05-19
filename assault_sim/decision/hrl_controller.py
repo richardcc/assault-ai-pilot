@@ -69,6 +69,7 @@ class HRLController:
 
             action = self.executor.execute(
                 state,
+                active,
                 self.current_option,
                 self.current_attack_mode
             )
@@ -210,10 +211,10 @@ class HRLController:
 
         action = self.executor.execute(
             state,
+            active,
             self.current_option,
             self.current_attack_mode
         )
-
         # ✅ safety: nunca None
         if action is None:
             action = WaitAction(active.unit_id)

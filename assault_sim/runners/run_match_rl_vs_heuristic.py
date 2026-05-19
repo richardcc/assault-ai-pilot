@@ -119,7 +119,7 @@ def main():
     }
 
     # -------------------------------------------------
-    # ✅ NEW: ACTIVATION MANAGER
+    # ACTIVATION MANAGER
     # -------------------------------------------------
     activation_manager = ActivationManager(sim_env.game_state)
 
@@ -133,9 +133,15 @@ def main():
 
         state = sim_env.game_state
 
-        # ✅ scheduler decide
-        side, unit = activation_manager.next_activation()
+        # ✅ FIX CLAVE: reintentar scheduler
+        side, unit = None, None
 
+        for _ in range(len(activation_manager.sides) * 2):
+            side, unit = activation_manager.next_activation()
+            if unit is not None:
+                break
+
+        # ✅ solo si realmente no hay nadie
         if unit is None:
             action = WaitAction("SYSTEM")
 
@@ -143,9 +149,9 @@ def main():
             action = hrl_controller.choose_action(state, unit, obs)
 
         else:
-            action = heuristic.choose_action(state, TacticalOption.ATTACK)
+            action = heuristic.choose_action(state, unit, TacticalOption.ATTACK)
 
-        # ✅ safety
+        # ✅ safety extra
         if action is None:
             unit_id = unit.unit_id if unit else "SYSTEM"
             action = WaitAction(unit_id)
@@ -155,6 +161,9 @@ def main():
 
         # ✅ actualizar scheduler
         activation_manager.state = sim_env.game_state
+
+        # ✅ CONEXIÓN CRÍTICA runtime ↔ scheduler
+        activation_manager.blocked_units = sim_env.runtime.activated_units.copy()
 
     # -------------------------------------------------
     # FINAL RESULT
