@@ -1,5 +1,3 @@
-# assault_sim/evaluation/results.py
-
 import statistics
 from collections import defaultdict
 
@@ -62,7 +60,7 @@ class ResultsAnalyzer:
         }
 
     # -------------------------------------------------
-    # ✅ NEW: FORMATION USAGE (L3)
+    # FORMATION USAGE (L3)
     # -------------------------------------------------
     def aggregate_formation_usage(self):
 
@@ -82,7 +80,7 @@ class ResultsAnalyzer:
         }
 
     # -------------------------------------------------
-    # ✅ NEW: STRATEGY → OPTION (L3 → L2)
+    # STRATEGY → OPTION
     # -------------------------------------------------
     def aggregate_strategy_mapping(self):
 
@@ -98,7 +96,7 @@ class ResultsAnalyzer:
         return strategy_option_totals
 
     # -------------------------------------------------
-    # SIDE AGGREGATION
+    # SIDE AGGREGATION (GLOBAL)
     # -------------------------------------------------
     def aggregate_side_stats(self):
 
@@ -117,7 +115,26 @@ class ResultsAnalyzer:
         return agg
 
     # -------------------------------------------------
-    # EFFICIENCY
+    # ✅ NEW: L1 AGGREGATION (acciones reales)
+    # -------------------------------------------------
+    def aggregate_l1_stats(self):
+
+        agg = {
+            "RL": defaultdict(int),
+            "ENEMY": defaultdict(int),
+        }
+
+        for r in self.results:
+            l1 = r.get("l1", {})
+
+            for side in ["RL", "ENEMY"]:
+                for k, v in l1.get(side, {}).items():
+                    agg[side][k] += v
+
+        return agg
+
+    # -------------------------------------------------
+    # EFFICIENCY (GLOBAL)
     # -------------------------------------------------
     def efficiency(self):
 
@@ -127,6 +144,28 @@ class ResultsAnalyzer:
             attacks = agg[side]["attacks"]
             damage = agg[side]["damage"]
             kills = agg[side]["kills"]
+
+            return {
+                "damage_per_attack": damage / attacks if attacks else 0,
+                "kills_per_attack": kills / attacks if attacks else 0,
+            }
+
+        return {
+            "RL": compute("RL"),
+            "ENEMY": compute("ENEMY"),
+        }
+
+    # -------------------------------------------------
+    # ✅ NEW: L1 EFFICIENCY
+    # -------------------------------------------------
+    def l1_efficiency(self):
+
+        agg = self.aggregate_l1_stats()
+
+        def compute(side):
+            attacks = agg[side].get("attacks", 0)
+            damage = agg[side].get("damage", 0)
+            kills = agg[side].get("kills", 0)
 
             return {
                 "damage_per_attack": damage / attacks if attacks else 0,
@@ -184,6 +223,9 @@ class ResultsAnalyzer:
         efficiency = self.efficiency()
         sides = self.aggregate_side_stats()
 
+        l1_stats = self.aggregate_l1_stats()
+        l1_eff = self.l1_efficiency()
+
         action_usage = self.aggregate_action_usage()
         formation_usage = self.aggregate_formation_usage()
         strategy_mapping = self.aggregate_strategy_mapping()
@@ -196,9 +238,16 @@ class ResultsAnalyzer:
         print("\n=== EFFICIENCY ===")
         print(efficiency)
 
+        print("\n=== L1 EFFICIENCY (REAL COMBAT) ===")
+        print(l1_eff)
+
         print("\n=== SIDE TOTALS ===")
         print(dict(sides["RL"]))
         print(dict(sides["ENEMY"]))
+
+        print("\n=== L1 (REAL ACTIONS) ===")
+        print(dict(l1_stats["RL"]))
+        print(dict(l1_stats["ENEMY"]))
 
         # -------------------------------------------------
         # L2 ACTION USAGE

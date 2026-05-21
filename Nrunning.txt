@@ -1,6 +1,14 @@
 .\git_publish.ps1
 
 
+cd C:\repos\python\assault\assault_ai_ui
+npm run dev
+
+
+http://127.0.0.1:8000/api/scenarios/phase01_seq001_initial_contact
+http://127.0.0.1:8000/api/ui/scenarios/phase01_seq001_initial_contact
+
+
 cd "C:\repos\python\assault\"
 Set-ExecutionPolicy -Scope CurrentUser -ExecutionPolicy RemoteSigned
 .\.venv\Scripts\Activate.ps1
@@ -26,3 +34,11 @@ $env:ASSAULT_DEBUG_TRACE="1"
 
 python -m assault_sim.train.train --debug
 python -m assault_sim.train.train_ppo
+
+Histograma
+
+
+cd "C:\repos\python\assault"
+.\.venv\Scripts\Activate.ps1
+cd assault_backend
+python -m uvicorn main:app --reload

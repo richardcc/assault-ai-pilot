@@ -7,6 +7,8 @@ from assault_sim.strategy.formation_strategy import (
 )
 
 from assault_model.actions.status import WaitAction
+from assault_model.actions.action_catalog import ActionCatalog
+from assault_model.map.terrain_config import terrain_config
 
 import random
 
@@ -16,7 +18,7 @@ class HRLController:
     OPTION_HORIZON = {
         TacticalOption.ADVANCE: 3,
         TacticalOption.FLANK: 2,
-        TacticalOption.ATTACK: 4,   # 🔧 reducido (antes 10)
+        TacticalOption.ATTACK: 1,
         TacticalOption.HOLD: 1,
         TacticalOption.RETREAT: 1,
     }
@@ -35,6 +37,18 @@ class HRLController:
         self.last_payload = None
 
     # -------------------------------------------------
+    def _can_attack(self, state, unit):
+
+        actions = ActionCatalog(state, unit, terrain_config).actions()
+
+
+        return any(
+            "Ranged" in a.__class__.__name__
+            for a in actions
+        )
+
+
+    # -------------------------------------------------
     def choose_action(self, state, unit, obs):
 
         active = unit
@@ -43,25 +57,9 @@ class HRLController:
             return WaitAction("SYSTEM")
 
         # -------------------------------------------------
-        # ✅ Detect close combat
-        # -------------------------------------------------
-        in_close_combat = False
-        for u in state.units:
-            if u.side != active.side and u.alive:
-                dx = abs(active.position.q - u.position.q)
-                dy = abs(active.position.r - u.position.r)
-                if dx <= 1 and dy <= 1:
-                    in_close_combat = True
-                    break
-
-        # -------------------------------------------------
         # ✅ REUSE OPTION
         # -------------------------------------------------
-        is_new_selection = (
-            self.current_option is None or self.steps_remaining <= 0
-        )
-
-        if not is_new_selection:
+        if self.current_option is not None and self.steps_remaining > 0:
             self.steps_remaining -= 1
 
             action = self.executor.execute(
@@ -86,48 +84,25 @@ class HRLController:
         if strategy is None:
             strategy = FormationStrategy.ATTACK
 
-        # ✅ decisión PPO REAL
+        # ✅ PPO decision (CORE)
         ppo_option, attack_mode = self.policy.choose_option(obs)
 
         # -------------------------------------------------
-        # ✅ EXPLORATION (OK)
+        # ✅ MINIMAL GUIDED BIAS (solo si hay ataque posible)
+        # -------------------------------------------------
+        if ppo_option != TacticalOption.ATTACK:
+            if self._can_attack(state, active):
+                if random.random() < 0.3:   # 🔥 empuje suave
+                    ppo_option = TacticalOption.ATTACK
+
+        # -------------------------------------------------
+        # ✅ LIGHT EXPLORATION
         # -------------------------------------------------
         if random.random() < 0.1:
             ppo_option = random.choice(list(TacticalOption))
 
         # -------------------------------------------------
-        # ✅ SOFT BIAS (NO destructivo)
-        # -------------------------------------------------
-
-        # 🔧 mantener ATTACK si ya fue elegido
-        if ppo_option != TacticalOption.ATTACK:
-
-            if in_close_combat:
-                if random.random() < 0.5:
-                    ppo_option = TacticalOption.ATTACK
-
-            if strategy == FormationStrategy.ATTACK:
-                if random.random() < 0.4:
-                    ppo_option = TacticalOption.ATTACK
-
-            elif strategy == FormationStrategy.PUSH_VP:
-                if random.random() < 0.4:
-                    ppo_option = TacticalOption.ADVANCE
-
-            elif strategy == FormationStrategy.CLEANUP:
-                if random.random() < 0.5:
-                    ppo_option = TacticalOption.ATTACK
-
-        # -------------------------------------------------
-        # ✅ IMPORTANTE: NO BLOQUEAR ATTACK
-        # -------------------------------------------------
-        # ❌ eliminado:
-        # - bloqueo por distancia
-        # - forzado a ADVANCE
-        # - destrucción de decisiones PPO
-
-        # -------------------------------------------------
-        # ✅ ASSIGN FINAL DECISION
+        # ✅ ASSIGN FINAL OPTION
         # -------------------------------------------------
         self.current_option = ppo_option
 
@@ -141,7 +116,7 @@ class HRLController:
         self.steps_remaining = self.OPTION_HORIZON[self.current_option]
 
         # -------------------------------------------------
-        # ✅ PAYLOAD
+        # ✅ PAYLOAD (para debug / explainability)
         # -------------------------------------------------
         payload = {
             "formation": strategy.name if strategy else None,
@@ -150,13 +125,12 @@ class HRLController:
                 "INDIRECT" if self.current_attack_mode == 1 else
                 "DIRECT" if self.current_attack_mode is not None else None
             ),
-            "policy_info": getattr(self.policy, "last_decision_info", {})
         }
 
         self.last_payload = payload
 
         # -------------------------------------------------
-        # ✅ EVENT BUS
+        # ✅ EVENT BUS (NO TOCAR)
         # -------------------------------------------------
         if self.event_bus:
             context = explainable_context(
@@ -171,15 +145,14 @@ class HRLController:
                     "side": self.rl_side,
                     "option": payload["option"],
                     "attack_mode": payload["attack_mode"],
-                    "description": self.current_option.description(),
-                    "category": self.current_option.category(),
-                    "turn": state.turn,
-                    "context": context,
                     "formation": payload["formation"],
-                    "policy_info": payload["policy_info"],
+                    "context": context,
+                    "turn": state.turn,
                 }
             })
 
+        # -------------------------------------------------
+        # ✅ EXECUTE
         # -------------------------------------------------
         self.steps_remaining -= 1
 

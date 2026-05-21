@@ -1,7 +1,8 @@
 {
   "id": "mettete_i_piedi_terra_1_min",
   "max_turns": 12,
-
+  "shape": [9,16],
+  
   "map": {
     "pieces": [
       {

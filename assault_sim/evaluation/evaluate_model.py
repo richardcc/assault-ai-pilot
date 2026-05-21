@@ -23,7 +23,7 @@ from assault_sim.debug.debug_config import DebugConfig
 # CONFIG
 # -------------------------------------------------
 RL_SIDE = "US"
-EPISODES = 50
+EPISODES = 500
 
 CONFIG_PATH = Path("C:/repos/python/assault/assault_sim/config/sim_config.yaml")
 ENV_CONFIG = Path("C:/repos/python/assault/assault_sim/config/env_config.json")

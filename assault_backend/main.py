@@ -3,7 +3,7 @@ from pathlib import Path
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-
+from services.scenario_service_ui import load_ui_scenario
 # =====================================================
 # LOADERS
 # =====================================================
@@ -44,9 +44,13 @@ app = FastAPI(
     version="1.0",
 )
 
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=[
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -207,4 +211,32 @@ def get_unit_raw(unit_key: str):
         raise HTTPException(
             status_code=404,
             detail="Unit not found"
+        )
+
+# =====================================================
+# SCENARIO (UI ADAPTER)
+# =====================================================
+
+@app.get("/api/ui/scenarios/{scenario_id}")
+def get_ui_scenario(scenario_id: str):
+    """
+    Return UI-friendly scenario:
+    ✅ flat hex list
+    ✅ normalized unit positions
+    ✅ simplified structure
+    """
+    try:
+        return load_ui_scenario(scenario_id)
+
+    except FileNotFoundError:
+        raise HTTPException(
+            status_code=404,
+            detail="Scenario not found"
+        )
+
+    except Exception as e:
+        print(f"[ERROR] UI scenario build failed: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail="Scenario UI error"
         )

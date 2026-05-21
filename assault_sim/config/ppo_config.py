@@ -14,11 +14,11 @@ class PPOConfig:
 
     # Loss
     VALUE_COEF = 0.5
-    ENTROPY_COEF = 0.05        # 🔥 CLAVE
+    ENTROPY_COEF = 0.1        # 🔥 CLAVE
 
     # Parallelism
     NUM_ENVS = 16              # ↓ menos estabilidad, más reacción
-    BATCH_ROLLOUTS = 10        # ↓
+    BATCH_ROLLOUTS = 5        # ↓
 
     # Optimizer
     LR = 3e-4
