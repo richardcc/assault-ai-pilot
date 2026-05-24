@@ -6,10 +6,13 @@ function App() {
   return (
     <div className="app">
 
-      {/* HEADER */}
-      <header className="header">
-        <div className="header-left">
+      {/* =========================
+          HEADER
+      ========================= */}
+      <div className="header">
+        <div>ASSAULT AI</div>
 
+        <div>
           <button onClick={() => gameController.start("human")}>
             🎮 Human vs AI
           </button>
@@ -25,41 +28,39 @@ function App() {
           <button onClick={() => gameController.stop()}>
             ⛔ Stop
           </button>
-
         </div>
+      </div>
 
-        <div className="header-center">
-          Turn: (pending)
-        </div>
+      {/* =========================
+          MAIN LAYOUT
+      ========================= */}
+      <div className="main">
 
-        <div className="header-right">
-          🤖 Assistant
-        </div>
-      </header>
-
-      {/* MAIN */}
-      <main className="main">
-
-        <aside className="left">
+        {/* LEFT PANEL */}
+        <div className="left">
           <h3>AI / Actions</h3>
           <p>Select a unit</p>
-        </aside>
+        </div>
 
-        <section className="center">
+        {/* ✅ CENTER = MAP */}
+        <div className="center">
           <GameCanvas />
-        </section>
+        </div>
 
-        <aside className="right">
+        {/* RIGHT PANEL */}
+        <div className="right">
           <h3>Event Log</h3>
           <p>Events will appear here</p>
-        </aside>
+        </div>
 
-      </main>
+      </div>
 
-      {/* FOOTER */}
-      <footer className="footer">
-        <div>Units | Actions | Info</div>
-      </footer>
+      {/* =========================
+          FOOTER
+      ========================= */}
+      <div className="footer">
+        Units | Actions | Info
+      </div>
 
     </div>
   );

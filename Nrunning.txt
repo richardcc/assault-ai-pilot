@@ -4,6 +4,7 @@
 cd C:\repos\python\assault\assault_ai_ui
 npm run dev
 
+console.log("DATA:", data);
 
 http://127.0.0.1:8000/api/scenarios/phase01_seq001_initial_contact
 http://127.0.0.1:8000/api/ui/scenarios/phase01_seq001_initial_contact
@@ -42,3 +43,6 @@ cd "C:\repos\python\assault"
 .\.venv\Scripts\Activate.ps1
 cd assault_backend
 python -m uvicorn main:app --reload
+
+http://localhost:5173/art/maps/Map%20S2.png
+http://localhost:5173/art/maps/map_s3.png

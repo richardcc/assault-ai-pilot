@@ -26,7 +26,7 @@ MAP_PIECE_CATALOG_PATH = (
 def load_ui_scenario(scenario_id: str) -> dict:
     """
     Build UI scenario from raw scenario + catalog data.
-    Produces a clean UI-ready structure (no engine coupling).
+    Pure UI layer (no game state).
     """
 
     # ---------------------------------------------
@@ -52,7 +52,7 @@ def load_ui_scenario(scenario_id: str) -> dict:
     pieces_catalog = catalog.get("pieces", {})
 
     # ---------------------------------------------
-    # BUILD UI PIECES + GLOBAL HEXES
+    # BUILD MAP
     # ---------------------------------------------
     ui_pieces = []
     hexes = []
@@ -66,26 +66,21 @@ def load_ui_scenario(scenario_id: str) -> dict:
         if not piece_def:
             raise ValueError(f"Unknown map piece: {piece_id}")
 
-        piece_hexes = piece_def.get("hexes", [])
-        piece_shape = piece_def.get("shape", [1, 1])
-
-        # ✅ UI-safe piece (clean, no mutation of original data)
         ui_pieces.append({
             "id": piece_id,
             "origin": [origin_q, origin_r],
-            "shape": piece_shape,
+            "shape": piece_def.get("shape", [1, 1]),
         })
 
-        # ✅ Expand piece-local hexes into global map coords
-        for h in piece_hexes:
+        for h in piece_def.get("hexes", []):
             hexes.append({
                 "q": origin_q + h.get("q", 0),
                 "r": origin_r + h.get("r", 0),
-                "terrain": h.get("terrain", "clear")
+                "terrain": h.get("terrain", "clear"),
             })
 
     # ---------------------------------------------
-    # BUILD UNITS
+    # BUILD UNITS (STATIC ONLY)
     # ---------------------------------------------
     units = []
 
@@ -94,23 +89,22 @@ def load_ui_scenario(scenario_id: str) -> dict:
 
         units.append({
             "id": u.get("unit_id"),
+            "unit_key": u.get("unit_key"),
             "q": q,
             "r": r,
-            "side": u.get("side")
+            "side": u.get("side"),
         })
 
     # ---------------------------------------------
-    # FINAL STRUCTURE
+    # FINAL
     # ---------------------------------------------
     return {
         "id": scenario.get("id"),
         "maxTurns": scenario.get("max_turns"),
         "shape": scenario.get("shape"),
-
         "map": {
             "pieces": ui_pieces
         },
-
         "hexes": hexes,
-        "units": units
+        "units": units,  # ⚠️ solo placeholder (se sustituye luego)
     }

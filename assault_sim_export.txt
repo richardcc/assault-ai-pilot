@@ -998,6 +998,7 @@ FILE: C:\repos\python\assault\assault_sim\assets\scenarios\mettete_i_piedi_terra
 {
   "id": "mettete_i_piedi_terra_1_min",
   "max_turns": 12,
+  "shape": [9,16],
 
   "map": {
     "pieces": [
@@ -1115,7 +1116,8 @@ FILE: C:\repos\python\assault\assault_sim\assets\scenarios\phase01_seq001_initia
 {
   "id": "mettete_i_piedi_terra_1_min",
   "max_turns": 12,
-
+  "shape": [9,16],
+  
   "map": {
     "pieces": [
       {
