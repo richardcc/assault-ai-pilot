@@ -55,9 +55,9 @@ export default function GameCanvas() {
 
     drawHexGridBase(
       grid,
-      data.shape,                 // ✅ FIX
+      data.shape,
       showCoordsRef.current,
-      data.hexes,                // ✅ FIX
+      data.hexes,
       showMapRef.current
     );
 
@@ -100,12 +100,11 @@ export default function GameCanvas() {
 
       setupCamera(app, world, containerRef.current!);
 
-      // ✅ FOCUS CAMERA DESDE PANEL
+      // ✅ FOCUS CAMERA
       (window as any).focusUnit = (unitId: string) => {
         const data = lastStateRef.current;
-        if (!data || !data.units) return;
+        if (!data?.units) return;
 
-        // ✅ OJO: usar id (no unit_id)
         const unit = data.units.find((u: any) => u.id === unitId);
         if (!unit) return;
 
@@ -115,15 +114,15 @@ export default function GameCanvas() {
         const app = appRef.current;
         if (!world || !app) return;
 
-        // ✅ centrar cámara
         world.pivot.set(x, y + HEX_SIZE);
         world.position.set(
           app.renderer.width / 2,
           app.renderer.height / 2
         );
       };
+
       // ---------------------------------------------
-      // SUBSCRIBE
+      // SUBSCRIBE (solo una vez)
       // ---------------------------------------------
       if (!subscribedRef.current) {
         subscribedRef.current = true;
@@ -132,15 +131,25 @@ export default function GameCanvas() {
 
           const data = state;
 
-          console.log("RECEIVED STATE:", data);
+          console.log("RECEIVED STATE FULL:", JSON.stringify(data, null, 2));
 
-          // ✅ IGNORAR SOLO SI de verdad es incompleto
-          if (!data || !data.hexes || !data.shape) {
-            return;
+          // ✅ 1. SIEMPRE actualizar UI (Turn / Active)
+          if (data) {
+            setGameData(prev => ({
+              ...prev,
+              ...data,
+
+              // ✅ 🔥 CLAVE: no perder piezas si WS viene vacío
+              map: data.map?.pieces?.length
+                ? data.map
+                : prev?.map
+            }));
           }
 
+          // ✅ 2. solo render si hay mapa válido
+          if (!data?.hexes || !data?.shape) return;
+
           lastStateRef.current = data;
-          setGameData(data);
 
           background.visible = showMapRef.current;
           grid.visible = showGridRef.current;
@@ -149,16 +158,18 @@ export default function GameCanvas() {
           grid.removeChildren();
 
           // ✅ MAP
-          if (data.map?.pieces) {
-            drawMapPieces(background, data.map.pieces);
+          const pieces = data.map?.pieces ?? lastStateRef.current?.map?.pieces ?? [];
+
+          if (pieces.length) {
+            drawMapPieces(background, pieces);
           }
 
           // ✅ GRID
           drawHexGridBase(
             grid,
-            data.shape,              // ✅ FIX
+            data.shape,
             showCoordsRef.current,
-            data.hexes,             // ✅ FIX
+            data.hexes,
             showMapRef.current
           );
 
@@ -198,8 +209,16 @@ export default function GameCanvas() {
         gap: "20px",
       }}>
         <div>{gameData?.scenario_name ?? gameData?.id ?? "Scenario"}</div>
-        <div>Turn: {gameData?.turn ?? "-"}</div>
-        <div>Active: {gameData?.active_side ?? "-"}</div>
+
+        {/* ✅ FIX turno robusto */}
+        <div>
+          Turn: {gameData?.turn != null ? gameData.turn : "-"}
+        </div>
+
+        {/* ✅ FIX active robusto */}
+        <div>
+          Active: {gameData?.active_side ?? "-"}
+        </div>
       </div>
 
       {/* MAP */}

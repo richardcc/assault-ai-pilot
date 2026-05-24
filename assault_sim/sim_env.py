@@ -176,25 +176,55 @@ class SimEnv:
         if not self.event_bus:
             return
 
+        game_map = self.game_state.game_map
+        hexes = getattr(game_map, "hexes", [])
+
+        # ✅ CALCULAR SHAPE (FIX CRÍTICO)
+        max_q = max(h.q for h in hexes) if hexes else 0
+        max_r = max(h.r for h in hexes) if hexes else 0
+        shape = [max_q + 1, max_r + 1]
+
+        # ✅ HEXES SERIALIZABLES
+        hex_list = [
+            {
+                "q": h.q,
+                "r": h.r,
+                "terrain": getattr(h, "terrain", None)
+            }
+            for h in hexes
+        ]
+
+        # 🚨 NO ENVIAR PIECES DESDE AQUÍ
+        # (porque SimEnv no los tiene)
+
         self.event_bus.emit({
             "type": "MAP_STATE",
             "payload": {
-                # --- core state ---
                 "turn": self.game_state.turn,
-                "game_map": self.game_state.game_map,
-                "units": self.game_state.units,
-                "vp_tracker": self.game_state.vp_tracker,
-                "game_state": self.game_state,
-
-                # --- scenario context ---
+                "active_side": getattr(self.runtime, "active_side", None),
                 "scenario_name": getattr(self.scenario, "name", None),
 
-                # --- activation metadata ---
-                "active_side": getattr(self.runtime, "active_side", None),
-                "activated_units": list(getattr(self.runtime, "activated_units", [])),
-                "sides": getattr(self.runtime, "sides", []),
+                "shape": shape,
+                "hexes": hex_list,
+
+                # ✅ 🔥 IMPORTANTE
+                "map": {
+                    "pieces": []
+                },
+
+                "units": [
+                    {
+                        "id": u.unit_id,
+                        "unit_key": u.unit_type.code,
+                        "q": u.position.q if u.position else None,
+                        "r": u.position.r if u.position else None,
+                        "side": u.side,
+                        "hp": getattr(u, "hp", None),
+                    }
+                    for u in self.game_state.units
+                ],
             },
-        })
+    })
 
     # -------------------------------------------------
     # MATCH END

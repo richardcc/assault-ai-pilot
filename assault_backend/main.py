@@ -117,20 +117,12 @@ def explain_activation(request: ExplainActivationRequest):
 @app.get("/api/ui/scenarios/{scenario_id}")
 def get_scenario(scenario_id: str):
     try:
-        # ✅ mapa (UI)
-        ui_data = load_ui_scenario(scenario_id)
-
-        # ✅ iniciar sesión solo una vez
+        # ✅ iniciar sesión
         if game_session.env is None:
             game_session.start(scenario_id)
 
-        # ✅ estado real
-        state = game_session.get_state()
-
-        # ✅ sustituir units
-        ui_data["units"] = state["units"]
-
-        return ui_data
+        # ✅ devolver estado real completo
+        return game_session.get_state()
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -246,23 +238,25 @@ async def websocket_game(ws: WebSocket):
     await ws.accept()
     print("✅ WebSocket connected")
 
-    last_state = None
-
     try:
+        # ✅ esperar a que exista env
+        while game_session.env is None:
+            await asyncio.sleep(0.1)
+
+        env = game_session.env
+
+        # ✅ handler del EventBus
+        def handler(event):
+            if event["type"] == "MAP_STATE":
+                asyncio.create_task(ws.send_json(event["payload"]))
+
+        # ✅ SUSCRIPCIÓN REAL
+        if env.event_bus:
+            env.event_bus.subscribe(handler)
+
+        # ✅ mantener conexión viva
         while True:
-            if game_session.env is None:
-                # espera a que haya escenario cargado
-                await asyncio.sleep(0.2)
-                continue
-
-            state = game_session.get_state()
-
-            # ✅ opcional: evitar enviar duplicados
-            if state != last_state:
-                await ws.send_json(state)
-                last_state = state
-
-            await asyncio.sleep(0.5)
+            await asyncio.sleep(1)
 
     except WebSocketDisconnect:
         print("❌ WebSocket disconnected")

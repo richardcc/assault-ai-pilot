@@ -18,12 +18,14 @@ export async function drawMapPieces(
 
     const texture = await PIXI.Assets.load(texturePath);
     const sprite = new PIXI.Sprite(texture);
-
     // grid origin
     const [q, r] = piece.origin;
     const { x, y } = axialToPixel(q, r);
 
     const [hexW, hexH] = piece.shape;
+    
+    console.log("PIECE:", piece);
+    console.log("IMAGE:", piece.id, mapPieceImages[piece.id]);
 
     // ✅ width FIX correcto (esto sí era clave)
     const targetWidth = (hexW + 0.5) * HEX_WIDTH;
