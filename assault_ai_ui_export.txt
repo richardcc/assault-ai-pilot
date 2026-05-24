@@ -3185,322 +3185,6 @@ FILE: C:\repos\python\assault\assault_ai_ui\app\ai\ExplainPanel.tsx
 FILE: C:\repos\python\assault\assault_ai_ui\app\game\GameCanvas.tsx
 ================================================================================
 
-// Game canvas 
-
-
-
-================================================================================
-FILE: C:\repos\python\assault\assault_ai_ui\app\game\Renderer.tsx
-================================================================================
-
-// Game renderer 
-
-
-
-================================================================================
-FILE: C:\repos\python\assault\assault_ai_ui\app\rag\RagWindow.tsx
-================================================================================
-
-// RAG Assistant 
-
-
-
-================================================================================
-FILE: C:\repos\python\assault\assault_ai_ui\app\replay\ReplayView.tsx
-================================================================================
-
-// Replay UI 
-
-
-
-================================================================================
-FILE: C:\repos\python\assault\assault_ai_ui\app\ui\Button.tsx
-================================================================================
-
-// Button component 
-
-
-
-================================================================================
-FILE: C:\repos\python\assault\assault_ai_ui\app\ui\Layout.tsx
-================================================================================
-
-// Layout component 
-
-
-
-================================================================================
-FILE: C:\repos\python\assault\assault_ai_ui\public\favicon.svg
-================================================================================
-
-<svg xmlns="http://www.w3.org/2000/svg" width="48" height="46" fill="none" viewBox="0 0 48 46"><path fill="#863bff" d="M25.946 44.938c-.664.845-2.021.375-2.021-.698V33.937a2.26 2.26 0 0 0-2.262-2.262H10.287c-.92 0-1.456-1.04-.92-1.788l7.48-10.471c1.07-1.497 0-3.578-1.842-3.578H1.237c-.92 0-1.456-1.04-.92-1.788L10.013.474c.214-.297.556-.474.92-.474h28.894c.92 0 1.456 1.04.92 1.788l-7.48 10.471c-1.07 1.498 0 3.579 1.842 3.579h11.377c.943 0 1.473 1.088.89 1.83L25.947 44.94z" style="fill:#863bff;fill:color(display-p3 .5252 .23 1);fill-opacity:1"/><mask id="a" width="48" height="46" x="0" y="0" maskUnits="userSpaceOnUse" style="mask-type:alpha"><path fill="#000" d="M25.842 44.938c-.664.844-2.021.375-2.021-.698V33.937a2.26 2.26 0 0 0-2.262-2.262H10.183c-.92 0-1.456-1.04-.92-1.788l7.48-10.471c1.07-1.498 0-3.579-1.842-3.579H1.133c-.92 0-1.456-1.04-.92-1.787L9.91.473c.214-.297.556-.474.92-.474h28.894c.92 0 1.456 1.04.92 1.788l-7.48 10.471c-1.07 1.498 0 3.578 1.842 3.578h11.377c.943 0 1.473 1.088.89 1.832L25.843 44.94z" style="fill:#000;fill-opacity:1"/></mask><g mask="url(#a)"><g filter="url(#b)"><ellipse cx="5.508" cy="14.704" fill="#ede6ff" rx="5.508" ry="14.704" style="fill:#ede6ff;fill:color(display-p3 .9275 .9033 1);fill-opacity:1" transform="matrix(.00324 1 1 -.00324 -4.47 31.516)"/></g><g filter="url(#c)"><ellipse cx="10.399" cy="29.851" fill="#ede6ff" rx="10.399" ry="29.851" style="fill:#ede6ff;fill:color(display-p3 .9275 .9033 1);fill-opacity:1" transform="matrix(.00324 1 1 -.00324 -39.328 7.883)"/></g><g filter="url(#d)"><ellipse cx="5.508" cy="30.487" fill="#7e14ff" rx="5.508" ry="30.487" style="fill:#7e14ff;fill:color(display-p3 .4922 .0767 1);fill-opacity:1" transform="rotate(89.814 -25.913 -14.639)scale(1 -1)"/></g><g filter="url(#e)"><ellipse cx="5.508" cy="30.599" fill="#7e14ff" rx="5.508" ry="30.599" style="fill:#7e14ff;fill:color(display-p3 .4922 .0767 1);fill-opacity:1" transform="rotate(89.814 -32.644 -3.334)scale(1 -1)"/></g><g filter="url(#f)"><ellipse cx="5.508" cy="30.599" fill="#7e14ff" rx="5.508" ry="30.599" style="fill:#7e14ff;fill:color(display-p3 .4922 .0767 1);fill-opacity:1" transform="matrix(.00324 1 1 -.00324 -34.34 30.47)"/></g><g filter="url(#g)"><ellipse cx="14.072" cy="22.078" fill="#ede6ff" rx="14.072" ry="22.078" style="fill:#ede6ff;fill:color(display-p3 .9275 .9033 1);fill-opacity:1" transform="rotate(93.35 24.506 48.493)scale(-1 1)"/></g><g filter="url(#h)"><ellipse cx="3.47" cy="21.501" fill="#7e14ff" rx="3.47" ry="21.501" style="fill:#7e14ff;fill:color(display-p3 .4922 .0767 1);fill-opacity:1" transform="rotate(89.009 28.708 47.59)scale(-1 1)"/></g><g filter="url(#i)"><ellipse cx="3.47" cy="21.501" fill="#7e14ff" rx="3.47" ry="21.501" style="fill:#7e14ff;fill:color(display-p3 .4922 .0767 1);fill-opacity:1" transform="rotate(89.009 28.708 47.59)scale(-1 1)"/></g><g filter="url(#j)"><ellipse cx=".387" cy="8.972" fill="#7e14ff" rx="4.407" ry="29.108" style="fill:#7e14ff;fill:color(display-p3 .4922 .0767 1);fill-opacity:1" transform="rotate(39.51 .387 8.972)"/></g><g filter="url(#k)"><ellipse cx="47.523" cy="-6.092" fill="#7e14ff" rx="4.407" ry="29.108" style="fill:#7e14ff;fill:color(display-p3 .4922 .0767 1);fill-opacity:1" transform="rotate(37.892 47.523 -6.092)"/></g><g filter="url(#l)"><ellipse cx="41.412" cy="6.333" fill="#47bfff" rx="5.971" ry="9.665" style="fill:#47bfff;fill:color(display-p3 .2799 .748 1);fill-opacity:1" transform="rotate(37.892 41.412 6.333)"/></g><g filter="url(#m)"><ellipse cx="-1.879" cy="38.332" fill="#7e14ff" rx="4.407" ry="29.108" style="fill:#7e14ff;fill:color(display-p3 .4922 .0767 1);fill-opacity:1" transform="rotate(37.892 -1.88 38.332)"/></g><g filter="url(#n)"><ellipse cx="-1.879" cy="38.332" fill="#7e14ff" rx="4.407" ry="29.108" style="fill:#7e14ff;fill:color(display-p3 .4922 .0767 1);fill-opacity:1" transform="rotate(37.892 -1.88 38.332)"/></g><g filter="url(#o)"><ellipse cx="35.651" cy="29.907" fill="#7e14ff" rx="4.407" ry="29.108" style="fill:#7e14ff;fill:color(display-p3 .4922 .0767 1);fill-opacity:1" transform="rotate(37.892 35.651 29.907)"/></g><g filter="url(#p)"><ellipse cx="38.418" cy="32.4" fill="#47bfff" rx="5.971" ry="15.297" style="fill:#47bfff;fill:color(display-p3 .2799 .748 1);fill-opacity:1" transform="rotate(37.892 38.418 32.4)"/></g></g><defs><filter id="b" width="60.045" height="41.654" x="-19.77" y="16.149" color-interpolation-filters="sRGB" filterUnits="userSpaceOnUse"><feFlood flood-opacity="0" result="BackgroundImageFix"/><feBlend in="SourceGraphic" in2="BackgroundImageFix" result="shape"/><feGaussianBlur result="effect1_foregroundBlur_2002_17158" stdDeviation="7.659"/></filter><filter id="c" width="90.34" height="51.437" x="-54.613" y="-7.533" color-interpolation-filters="sRGB" filterUnits="userSpaceOnUse"><feFlood flood-opacity="0" result="BackgroundImageFix"/><feBlend in="SourceGraphic" in2="BackgroundImageFix" result="shape"/><feGaussianBlur result="effect1_foregroundBlur_2002_17158" stdDeviation="7.659"/></filter><filter id="d" width="79.355" height="29.4" x="-49.64" y="2.03" color-interpolation-filters="sRGB" filterUnits="userSpaceOnUse"><feFlood flood-opacity="0" result="BackgroundImageFix"/><feBlend in="SourceGraphic" in2="BackgroundImageFix" result="shape"/><feGaussianBlur result="effect1_foregroundBlur_2002_17158" stdDeviation="4.596"/></filter><filter id="e" width="79.579" height="29.4" x="-45.045" y="20.029" color-interpolation-filters="sRGB" filterUnits="userSpaceOnUse"><feFlood flood-opacity="0" result="BackgroundImageFix"/><feBlend in="SourceGraphic" in2="BackgroundImageFix" result="shape"/><feGaussianBlur result="effect1_foregroundBlur_2002_17158" stdDeviation="4.596"/></filter><filter id="f" width="79.579" height="29.4" x="-43.513" y="21.178" color-interpolation-filters="sRGB" filterUnits="userSpaceOnUse"><feFlood flood-opacity="0" result="BackgroundImageFix"/><feBlend in="SourceGraphic" in2="BackgroundImageFix" result="shape"/><feGaussianBlur result="effect1_foregroundBlur_2002_17158" stdDeviation="4.596"/></filter><filter id="g" width="74.749" height="58.852" x="15.756" y="-17.901" color-interpolation-filters="sRGB" filterUnits="userSpaceOnUse"><feFlood flood-opacity="0" result="BackgroundImageFix"/><feBlend in="SourceGraphic" in2="BackgroundImageFix" result="shape"/><feGaussianBlur result="effect1_foregroundBlur_2002_17158" stdDeviation="7.659"/></filter><filter id="h" width="61.377" height="25.362" x="23.548" y="2.284" color-interpolation-filters="sRGB" filterUnits="userSpaceOnUse"><feFlood flood-opacity="0" result="BackgroundImageFix"/><feBlend in="SourceGraphic" in2="BackgroundImageFix" result="shape"/><feGaussianBlur result="effect1_foregroundBlur_2002_17158" stdDeviation="4.596"/></filter><filter id="i" width="61.377" height="25.362" x="23.548" y="2.284" color-interpolation-filters="sRGB" filterUnits="userSpaceOnUse"><feFlood flood-opacity="0" result="BackgroundImageFix"/><feBlend in="SourceGraphic" in2="BackgroundImageFix" result="shape"/><feGaussianBlur result="effect1_foregroundBlur_2002_17158" stdDeviation="4.596"/></filter><filter id="j" width="56.045" height="63.649" x="-27.636" y="-22.853" color-interpolation-filters="sRGB" filterUnits="userSpaceOnUse"><feFlood flood-opacity="0" result="BackgroundImageFix"/><feBlend in="SourceGraphic" in2="BackgroundImageFix" result="shape"/><feGaussianBlur result="effect1_foregroundBlur_2002_17158" stdDeviation="4.596"/></filter><filter id="k" width="54.814" height="64.646" x="20.116" y="-38.415" color-interpolation-filters="sRGB" filterUnits="userSpaceOnUse"><feFlood flood-opacity="0" result="BackgroundImageFix"/><feBlend in="SourceGraphic" in2="BackgroundImageFix" result="shape"/><feGaussianBlur result="effect1_foregroundBlur_2002_17158" stdDeviation="4.596"/></filter><filter id="l" width="33.541" height="35.313" x="24.641" y="-11.323" color-interpolation-filters="sRGB" filterUnits="userSpaceOnUse"><feFlood flood-opacity="0" result="BackgroundImageFix"/><feBlend in="SourceGraphic" in2="BackgroundImageFix" result="shape"/><feGaussianBlur result="effect1_foregroundBlur_2002_17158" stdDeviation="4.596"/></filter><filter id="m" width="54.814" height="64.646" x="-29.286" y="6.009" color-interpolation-filters="sRGB" filterUnits="userSpaceOnUse"><feFlood flood-opacity="0" result="BackgroundImageFix"/><feBlend in="SourceGraphic" in2="BackgroundImageFix" result="shape"/><feGaussianBlur result="effect1_foregroundBlur_2002_17158" stdDeviation="4.596"/></filter><filter id="n" width="54.814" height="64.646" x="-29.286" y="6.009" color-interpolation-filters="sRGB" filterUnits="userSpaceOnUse"><feFlood flood-opacity="0" result="BackgroundImageFix"/><feBlend in="SourceGraphic" in2="BackgroundImageFix" result="shape"/><feGaussianBlur result="effect1_foregroundBlur_2002_17158" stdDeviation="4.596"/></filter><filter id="o" width="54.814" height="64.646" x="8.244" y="-2.416" color-interpolation-filters="sRGB" filterUnits="userSpaceOnUse"><feFlood flood-opacity="0" result="BackgroundImageFix"/><feBlend in="SourceGraphic" in2="BackgroundImageFix" result="shape"/><feGaussianBlur result="effect1_foregroundBlur_2002_17158" stdDeviation="4.596"/></filter><filter id="p" width="39.409" height="43.623" x="18.713" y="10.588" color-interpolation-filters="sRGB" filterUnits="userSpaceOnUse"><feFlood flood-opacity="0" result="BackgroundImageFix"/><feBlend in="SourceGraphic" in2="BackgroundImageFix" result="shape"/><feGaussianBlur result="effect1_foregroundBlur_2002_17158" stdDeviation="4.596"/></filter></defs></svg>
-
-
-================================================================================
-FILE: C:\repos\python\assault\assault_ai_ui\public\icons.svg
-================================================================================
-
-<svg xmlns="http://www.w3.org/2000/svg">
-  <symbol id="bluesky-icon" viewBox="0 0 16 17">
-    <g clip-path="url(#bluesky-clip)"><path fill="#08060d" d="M7.75 7.735c-.693-1.348-2.58-3.86-4.334-5.097-1.68-1.187-2.32-.981-2.74-.79C.188 2.065.1 2.812.1 3.251s.241 3.602.398 4.13c.52 1.744 2.367 2.333 4.07 2.145-2.495.37-4.71 1.278-1.805 4.512 3.196 3.309 4.38-.71 4.987-2.746.608 2.036 1.307 5.91 4.93 2.746 2.72-2.746.747-4.143-1.747-4.512 1.702.189 3.55-.4 4.07-2.145.156-.528.397-3.691.397-4.13s-.088-1.186-.575-1.406c-.42-.19-1.06-.395-2.741.79-1.755 1.24-3.64 3.752-4.334 5.099"/></g>
-    <defs><clipPath id="bluesky-clip"><path fill="#fff" d="M.1.85h15.3v15.3H.1z"/></clipPath></defs>
-  </symbol>
-  <symbol id="discord-icon" viewBox="0 0 20 19">
-    <path fill="#08060d" d="M16.224 3.768a14.5 14.5 0 0 0-3.67-1.153c-.158.286-.343.67-.47.976a13.5 13.5 0 0 0-4.067 0c-.128-.306-.317-.69-.476-.976A14.4 14.4 0 0 0 3.868 3.77C1.546 7.28.916 10.703 1.231 14.077a14.7 14.7 0 0 0 4.5 2.306q.545-.748.965-1.587a9.5 9.5 0 0 1-1.518-.74q.191-.14.372-.293c2.927 1.369 6.107 1.369 8.999 0q.183.152.372.294-.723.437-1.52.74.418.838.963 1.588a14.6 14.6 0 0 0 4.504-2.308c.37-3.911-.63-7.302-2.644-10.309m-9.13 8.234c-.878 0-1.599-.82-1.599-1.82 0-.998.705-1.82 1.6-1.82.894 0 1.614.82 1.599 1.82.001 1-.705 1.82-1.6 1.82m5.91 0c-.878 0-1.599-.82-1.599-1.82 0-.998.705-1.82 1.6-1.82.893 0 1.614.82 1.599 1.82 0 1-.706 1.82-1.6 1.82"/>
-  </symbol>
-  <symbol id="documentation-icon" viewBox="0 0 21 20">
-    <path fill="none" stroke="#aa3bff" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.35" d="m15.5 13.333 1.533 1.322c.645.555.967.833.967 1.178s-.322.623-.967 1.179L15.5 18.333m-3.333-5-1.534 1.322c-.644.555-.966.833-.966 1.178s.322.623.966 1.179l1.534 1.321"/>
-    <path fill="none" stroke="#aa3bff" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.35" d="M17.167 10.836v-4.32c0-1.41 0-2.117-.224-2.68-.359-.906-1.118-1.621-2.08-1.96-.599-.21-1.349-.21-2.848-.21-2.623 0-3.935 0-4.983.369-1.684.591-3.013 1.842-3.641 3.428C3 6.449 3 7.684 3 10.154v2.122c0 2.558 0 3.838.706 4.726q.306.383.713.671c.76.536 1.79.64 3.581.66"/>
-    <path fill="none" stroke="#aa3bff" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.35" d="M3 10a2.78 2.78 0 0 1 2.778-2.778c.555 0 1.209.097 1.748-.047.48-.129.854-.503.982-.982.145-.54.048-1.194.048-1.749a2.78 2.78 0 0 1 2.777-2.777"/>
-  </symbol>
-  <symbol id="github-icon" viewBox="0 0 19 19">
-    <path fill="#08060d" fill-rule="evenodd" d="M9.356 1.85C5.05 1.85 1.57 5.356 1.57 9.694a7.84 7.84 0 0 0 5.324 7.44c.387.079.528-.168.528-.376 0-.182-.013-.805-.013-1.454-2.165.467-2.616-.935-2.616-.935-.349-.91-.864-1.143-.864-1.143-.71-.48.051-.48.051-.48.787.051 1.2.805 1.2.805.695 1.194 1.817.857 2.268.649.064-.507.27-.857.49-1.052-1.728-.182-3.545-.857-3.545-3.87 0-.857.31-1.558.8-2.104-.078-.195-.349-1 .077-2.078 0 0 .657-.208 2.14.805a7.5 7.5 0 0 1 1.946-.26c.657 0 1.328.092 1.946.26 1.483-1.013 2.14-.805 2.14-.805.426 1.078.155 1.883.078 2.078.502.546.799 1.247.799 2.104 0 3.013-1.818 3.675-3.558 3.87.284.247.528.714.528 1.454 0 1.052-.012 1.896-.012 2.156 0 .208.142.455.528.377a7.84 7.84 0 0 0 5.324-7.441c.013-4.338-3.48-7.844-7.773-7.844" clip-rule="evenodd"/>
-  </symbol>
-  <symbol id="social-icon" viewBox="0 0 20 20">
-    <path fill="none" stroke="#aa3bff" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.35" d="M12.5 6.667a4.167 4.167 0 1 0-8.334 0 4.167 4.167 0 0 0 8.334 0"/>
-    <path fill="none" stroke="#aa3bff" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.35" d="M2.5 16.667a5.833 5.833 0 0 1 8.75-5.053m3.837.474.513 1.035c.07.144.257.282.414.309l.93.155c.596.1.736.536.307.965l-.723.73a.64.64 0 0 0-.152.531l.207.903c.164.715-.213.991-.84.618l-.872-.52a.63.63 0 0 0-.577 0l-.872.52c-.624.373-1.003.094-.84-.618l.207-.903a.64.64 0 0 0-.152-.532l-.723-.729c-.426-.43-.289-.864.306-.964l.93-.156a.64.64 0 0 0 .412-.31l.513-1.034c.28-.562.735-.562 1.012 0"/>
-  </symbol>
-  <symbol id="x-icon" viewBox="0 0 19 19">
-    <path fill="#08060d" fill-rule="evenodd" d="M1.893 1.98c.052.072 1.245 1.769 2.653 3.77l2.892 4.114c.183.261.333.48.333.486s-.068.089-.152.183l-.522.593-.765.867-3.597 4.087c-.375.426-.734.834-.798.905a1 1 0 0 0-.118.148c0 .01.236.017.664.017h.663l.729-.83c.4-.457.796-.906.879-.999a692 692 0 0 0 1.794-2.038c.034-.037.301-.34.594-.675l.551-.624.345-.392a7 7 0 0 1 .34-.374c.006 0 .93 1.306 2.052 2.903l2.084 2.965.045.063h2.275c1.87 0 2.273-.003 2.266-.021-.008-.02-1.098-1.572-3.894-5.547-2.013-2.862-2.28-3.246-2.273-3.266.008-.019.282-.332 2.085-2.38l2-2.274 1.567-1.782c.022-.028-.016-.03-.65-.03h-.674l-.3.342a871 871 0 0 1-1.782 2.025c-.067.075-.405.458-.75.852a100 100 0 0 1-.803.91c-.148.172-.299.344-.99 1.127-.304.343-.32.358-.345.327-.015-.019-.904-1.282-1.976-2.808L6.365 1.85H1.8zm1.782.91 8.078 11.294c.772 1.08 1.413 1.973 1.425 1.984.016.017.241.02 1.05.017l1.03-.004-2.694-3.766L7.796 5.75 5.722 2.852l-1.039-.004-1.039-.004z" clip-rule="evenodd"/>
-  </symbol>
-</svg>
-
-
-
-================================================================================
-FILE: C:\repos\python\assault\assault_ai_ui\roadmap\ROADMAP.md
-================================================================================
-
-# 🚀 ASSAULT AI UI — ROADMAP COMPLETO
-
----
-
-# 🧭 VISIÓN
-
-Construir un sistema completo:
-
-- 🎮 Jugar vs AI (RL vs usuario)
-- 🔁 Visualizar replays
-- 🧠 Explainability (HRL + decisiones)
-- 🤖 RAG Assistant flotante
-
----
-
-# 🧱 ARQUITECTURA FINAL
-
-## Backend
-- Engine Assault (YA LO TIENES ✅)
-- API REST:
-  - /game/start
-  - /game/state
-  - /game/action
-  - /game/actions
-  - /explain
-  - /rag/query
-
-## Frontend
-- React + TypeScript + Vite
-- PixiJS (mapa)
-- React UI (paneles)
-
----
-
-# 📅 FASE 0 — ENTORNO ✅ (YA HECHO)
-
-✅ Vite funcionando  
-✅ React + TypeScript  
-✅ npm run dev  
-
----
-
-# 🚧 FASE 1 — BASE REAL (CRÍTICA)
-
-## 🎯 Objetivo:
-Mostrar un mapa básico en pantalla con Pixi
-
----
-
-## ✅ Tareas
-
-### 1. Crear GameCanvas
-Archivo:
-src/GameCanvas.tsx
-
-- contenedor Pixi
-- montar canvas
-- fondo visible
-
----
-
-### 2. Instalar PixiJS
-
-```bash
-npm install pixi.js
-
-
-================================================================================
-FILE: C:\repos\python\assault\assault_ai_ui\services\api.ts
-================================================================================
-
-// API service 
-
-
-
-================================================================================
-FILE: C:\repos\python\assault\assault_ai_ui\services\game.ts
-================================================================================
-
-// Game state client 
-
-
-
-================================================================================
-FILE: C:\repos\python\assault\assault_ai_ui\src\App.css
-================================================================================
-
-/* GLOBAL RESET */
-* {
-  box-sizing: border-box;
-}
-
-html, body, #root {
-  width: 100%;
-  height: 100%;
-  margin: 0;
-  padding: 0;
-  overflow: hidden;
-}
-
-/* APP ROOT */
-.app {
-  display: flex;
-  flex-direction: column;
-  width: 100%;   /* ✅ fix horizontal */
-  height: 100%;
-  background-color: #111;
-  color: #fff;
-  font-family: Arial, sans-serif;
-}
-
-/* HEADER */
-.header {
-  height: 60px;
-  background-color: #222;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 0 16px;
-  border-bottom: 1px solid #333;
-}
-
-/* MAIN LAYOUT */
-.main {
-  flex: 1;
-  display: flex;
-  width: 100%;        /* ✅ fix clave */
-  min-height: 0;
-}
-
-/* LEFT PANEL */
-.left {
-  width: 280px;
-  background-color: #1a1a1a;
-  padding: 10px;
-  border-right: 1px solid #333;
-  overflow-y: auto;
-}
-
-/* CENTER MAP (CRITICAL FOR PIXI) */
-.center {
-  flex: 1;
-  width: 100%;        /* ✅ fix horizontal */
-  min-width: 0;       /* ✅ evita overflow */
-  background-color: #000;
-
-  display: flex;
-  justify-content: center;
-  align-items: center;
-}
-
-/* PLACEHOLDER */
-.map-placeholder {
-  opacity: 0.5;
-}
-
-/* RIGHT PANEL */
-.right {
-  width: 300px;
-  background-color: #1a1a1a;
-  padding: 10px;
-  border-left: 1px solid #333;
-  overflow-y: auto;
-}
-
-/* FOOTER */
-.footer {
-  height: 120px;
-  background-color: #222;
-  padding: 10px;
-  border-top: 1px solid #333;
-}
-
-
-================================================================================
-FILE: C:\repos\python\assault\assault_ai_ui\src\App.tsx
-================================================================================
-
-import "./App.css";
-import GameCanvas from "./GameCanvas";
-
-function App() {
-  return (
-    <div className="app">
-
-      {/* HEADER */}
-      <header className="header">
-        <div className="header-left">MODE: Replay | Play</div>
-        <div className="header-center">Turn 1</div>
-        <div className="header-right">🤖 Assistant</div>
-      </header>
-
-      {/* MAIN */}
-      <main className="main">
-
-        {/* LEFT PANEL */}
-        <aside className="left">
-          <h3>AI / Actions</h3>
-          <p>Select a unit</p>
-        </aside>
-
-        {/* MAP */}
-        <section className="center">
-          <GameCanvas />
-        </section>
-
-        {/* RIGHT PANEL */}
-        <aside className="right">
-          <h3>Event Log</h3>
-          <p>Events will appear here</p>
-        </aside>
-
-      </main>
-
-      {/* FOOTER */}
-      <footer className="footer">
-        <div>Units | Actions | Info</div>
-      </footer>
-
-    </div>
-  );
-}
-
-export default App;
-
-
-================================================================================
-FILE: C:\repos\python\assault\assault_ai_ui\src\GameCanvas.tsx
-================================================================================
-
 import { useEffect, useRef, useState } from "react";
 import * as PIXI from "pixi.js";
 
@@ -3710,6 +3394,336 @@ export default function GameCanvas() {
 
 
 ================================================================================
+FILE: C:\repos\python\assault\assault_ai_ui\app\game\Renderer.tsx
+================================================================================
+
+// Game renderer 
+
+
+
+================================================================================
+FILE: C:\repos\python\assault\assault_ai_ui\app\rag\RagWindow.tsx
+================================================================================
+
+// RAG Assistant 
+
+
+
+================================================================================
+FILE: C:\repos\python\assault\assault_ai_ui\app\replay\ReplayView.tsx
+================================================================================
+
+// Replay UI 
+
+
+
+================================================================================
+FILE: C:\repos\python\assault\assault_ai_ui\app\ui\Button.tsx
+================================================================================
+
+// Button component 
+
+
+
+================================================================================
+FILE: C:\repos\python\assault\assault_ai_ui\app\ui\Layout.tsx
+================================================================================
+
+// Layout component 
+
+
+
+================================================================================
+FILE: C:\repos\python\assault\assault_ai_ui\public\favicon.svg
+================================================================================
+
+<svg xmlns="http://www.w3.org/2000/svg" width="48" height="46" fill="none" viewBox="0 0 48 46"><path fill="#863bff" d="M25.946 44.938c-.664.845-2.021.375-2.021-.698V33.937a2.26 2.26 0 0 0-2.262-2.262H10.287c-.92 0-1.456-1.04-.92-1.788l7.48-10.471c1.07-1.497 0-3.578-1.842-3.578H1.237c-.92 0-1.456-1.04-.92-1.788L10.013.474c.214-.297.556-.474.92-.474h28.894c.92 0 1.456 1.04.92 1.788l-7.48 10.471c-1.07 1.498 0 3.579 1.842 3.579h11.377c.943 0 1.473 1.088.89 1.83L25.947 44.94z" style="fill:#863bff;fill:color(display-p3 .5252 .23 1);fill-opacity:1"/><mask id="a" width="48" height="46" x="0" y="0" maskUnits="userSpaceOnUse" style="mask-type:alpha"><path fill="#000" d="M25.842 44.938c-.664.844-2.021.375-2.021-.698V33.937a2.26 2.26 0 0 0-2.262-2.262H10.183c-.92 0-1.456-1.04-.92-1.788l7.48-10.471c1.07-1.498 0-3.579-1.842-3.579H1.133c-.92 0-1.456-1.04-.92-1.787L9.91.473c.214-.297.556-.474.92-.474h28.894c.92 0 1.456 1.04.92 1.788l-7.48 10.471c-1.07 1.498 0 3.578 1.842 3.578h11.377c.943 0 1.473 1.088.89 1.832L25.843 44.94z" style="fill:#000;fill-opacity:1"/></mask><g mask="url(#a)"><g filter="url(#b)"><ellipse cx="5.508" cy="14.704" fill="#ede6ff" rx="5.508" ry="14.704" style="fill:#ede6ff;fill:color(display-p3 .9275 .9033 1);fill-opacity:1" transform="matrix(.00324 1 1 -.00324 -4.47 31.516)"/></g><g filter="url(#c)"><ellipse cx="10.399" cy="29.851" fill="#ede6ff" rx="10.399" ry="29.851" style="fill:#ede6ff;fill:color(display-p3 .9275 .9033 1);fill-opacity:1" transform="matrix(.00324 1 1 -.00324 -39.328 7.883)"/></g><g filter="url(#d)"><ellipse cx="5.508" cy="30.487" fill="#7e14ff" rx="5.508" ry="30.487" style="fill:#7e14ff;fill:color(display-p3 .4922 .0767 1);fill-opacity:1" transform="rotate(89.814 -25.913 -14.639)scale(1 -1)"/></g><g filter="url(#e)"><ellipse cx="5.508" cy="30.599" fill="#7e14ff" rx="5.508" ry="30.599" style="fill:#7e14ff;fill:color(display-p3 .4922 .0767 1);fill-opacity:1" transform="rotate(89.814 -32.644 -3.334)scale(1 -1)"/></g><g filter="url(#f)"><ellipse cx="5.508" cy="30.599" fill="#7e14ff" rx="5.508" ry="30.599" style="fill:#7e14ff;fill:color(display-p3 .4922 .0767 1);fill-opacity:1" transform="matrix(.00324 1 1 -.00324 -34.34 30.47)"/></g><g filter="url(#g)"><ellipse cx="14.072" cy="22.078" fill="#ede6ff" rx="14.072" ry="22.078" style="fill:#ede6ff;fill:color(display-p3 .9275 .9033 1);fill-opacity:1" transform="rotate(93.35 24.506 48.493)scale(-1 1)"/></g><g filter="url(#h)"><ellipse cx="3.47" cy="21.501" fill="#7e14ff" rx="3.47" ry="21.501" style="fill:#7e14ff;fill:color(display-p3 .4922 .0767 1);fill-opacity:1" transform="rotate(89.009 28.708 47.59)scale(-1 1)"/></g><g filter="url(#i)"><ellipse cx="3.47" cy="21.501" fill="#7e14ff" rx="3.47" ry="21.501" style="fill:#7e14ff;fill:color(display-p3 .4922 .0767 1);fill-opacity:1" transform="rotate(89.009 28.708 47.59)scale(-1 1)"/></g><g filter="url(#j)"><ellipse cx=".387" cy="8.972" fill="#7e14ff" rx="4.407" ry="29.108" style="fill:#7e14ff;fill:color(display-p3 .4922 .0767 1);fill-opacity:1" transform="rotate(39.51 .387 8.972)"/></g><g filter="url(#k)"><ellipse cx="47.523" cy="-6.092" fill="#7e14ff" rx="4.407" ry="29.108" style="fill:#7e14ff;fill:color(display-p3 .4922 .0767 1);fill-opacity:1" transform="rotate(37.892 47.523 -6.092)"/></g><g filter="url(#l)"><ellipse cx="41.412" cy="6.333" fill="#47bfff" rx="5.971" ry="9.665" style="fill:#47bfff;fill:color(display-p3 .2799 .748 1);fill-opacity:1" transform="rotate(37.892 41.412 6.333)"/></g><g filter="url(#m)"><ellipse cx="-1.879" cy="38.332" fill="#7e14ff" rx="4.407" ry="29.108" style="fill:#7e14ff;fill:color(display-p3 .4922 .0767 1);fill-opacity:1" transform="rotate(37.892 -1.88 38.332)"/></g><g filter="url(#n)"><ellipse cx="-1.879" cy="38.332" fill="#7e14ff" rx="4.407" ry="29.108" style="fill:#7e14ff;fill:color(display-p3 .4922 .0767 1);fill-opacity:1" transform="rotate(37.892 -1.88 38.332)"/></g><g filter="url(#o)"><ellipse cx="35.651" cy="29.907" fill="#7e14ff" rx="4.407" ry="29.108" style="fill:#7e14ff;fill:color(display-p3 .4922 .0767 1);fill-opacity:1" transform="rotate(37.892 35.651 29.907)"/></g><g filter="url(#p)"><ellipse cx="38.418" cy="32.4" fill="#47bfff" rx="5.971" ry="15.297" style="fill:#47bfff;fill:color(display-p3 .2799 .748 1);fill-opacity:1" transform="rotate(37.892 38.418 32.4)"/></g></g><defs><filter id="b" width="60.045" height="41.654" x="-19.77" y="16.149" color-interpolation-filters="sRGB" filterUnits="userSpaceOnUse"><feFlood flood-opacity="0" result="BackgroundImageFix"/><feBlend in="SourceGraphic" in2="BackgroundImageFix" result="shape"/><feGaussianBlur result="effect1_foregroundBlur_2002_17158" stdDeviation="7.659"/></filter><filter id="c" width="90.34" height="51.437" x="-54.613" y="-7.533" color-interpolation-filters="sRGB" filterUnits="userSpaceOnUse"><feFlood flood-opacity="0" result="BackgroundImageFix"/><feBlend in="SourceGraphic" in2="BackgroundImageFix" result="shape"/><feGaussianBlur result="effect1_foregroundBlur_2002_17158" stdDeviation="7.659"/></filter><filter id="d" width="79.355" height="29.4" x="-49.64" y="2.03" color-interpolation-filters="sRGB" filterUnits="userSpaceOnUse"><feFlood flood-opacity="0" result="BackgroundImageFix"/><feBlend in="SourceGraphic" in2="BackgroundImageFix" result="shape"/><feGaussianBlur result="effect1_foregroundBlur_2002_17158" stdDeviation="4.596"/></filter><filter id="e" width="79.579" height="29.4" x="-45.045" y="20.029" color-interpolation-filters="sRGB" filterUnits="userSpaceOnUse"><feFlood flood-opacity="0" result="BackgroundImageFix"/><feBlend in="SourceGraphic" in2="BackgroundImageFix" result="shape"/><feGaussianBlur result="effect1_foregroundBlur_2002_17158" stdDeviation="4.596"/></filter><filter id="f" width="79.579" height="29.4" x="-43.513" y="21.178" color-interpolation-filters="sRGB" filterUnits="userSpaceOnUse"><feFlood flood-opacity="0" result="BackgroundImageFix"/><feBlend in="SourceGraphic" in2="BackgroundImageFix" result="shape"/><feGaussianBlur result="effect1_foregroundBlur_2002_17158" stdDeviation="4.596"/></filter><filter id="g" width="74.749" height="58.852" x="15.756" y="-17.901" color-interpolation-filters="sRGB" filterUnits="userSpaceOnUse"><feFlood flood-opacity="0" result="BackgroundImageFix"/><feBlend in="SourceGraphic" in2="BackgroundImageFix" result="shape"/><feGaussianBlur result="effect1_foregroundBlur_2002_17158" stdDeviation="7.659"/></filter><filter id="h" width="61.377" height="25.362" x="23.548" y="2.284" color-interpolation-filters="sRGB" filterUnits="userSpaceOnUse"><feFlood flood-opacity="0" result="BackgroundImageFix"/><feBlend in="SourceGraphic" in2="BackgroundImageFix" result="shape"/><feGaussianBlur result="effect1_foregroundBlur_2002_17158" stdDeviation="4.596"/></filter><filter id="i" width="61.377" height="25.362" x="23.548" y="2.284" color-interpolation-filters="sRGB" filterUnits="userSpaceOnUse"><feFlood flood-opacity="0" result="BackgroundImageFix"/><feBlend in="SourceGraphic" in2="BackgroundImageFix" result="shape"/><feGaussianBlur result="effect1_foregroundBlur_2002_17158" stdDeviation="4.596"/></filter><filter id="j" width="56.045" height="63.649" x="-27.636" y="-22.853" color-interpolation-filters="sRGB" filterUnits="userSpaceOnUse"><feFlood flood-opacity="0" result="BackgroundImageFix"/><feBlend in="SourceGraphic" in2="BackgroundImageFix" result="shape"/><feGaussianBlur result="effect1_foregroundBlur_2002_17158" stdDeviation="4.596"/></filter><filter id="k" width="54.814" height="64.646" x="20.116" y="-38.415" color-interpolation-filters="sRGB" filterUnits="userSpaceOnUse"><feFlood flood-opacity="0" result="BackgroundImageFix"/><feBlend in="SourceGraphic" in2="BackgroundImageFix" result="shape"/><feGaussianBlur result="effect1_foregroundBlur_2002_17158" stdDeviation="4.596"/></filter><filter id="l" width="33.541" height="35.313" x="24.641" y="-11.323" color-interpolation-filters="sRGB" filterUnits="userSpaceOnUse"><feFlood flood-opacity="0" result="BackgroundImageFix"/><feBlend in="SourceGraphic" in2="BackgroundImageFix" result="shape"/><feGaussianBlur result="effect1_foregroundBlur_2002_17158" stdDeviation="4.596"/></filter><filter id="m" width="54.814" height="64.646" x="-29.286" y="6.009" color-interpolation-filters="sRGB" filterUnits="userSpaceOnUse"><feFlood flood-opacity="0" result="BackgroundImageFix"/><feBlend in="SourceGraphic" in2="BackgroundImageFix" result="shape"/><feGaussianBlur result="effect1_foregroundBlur_2002_17158" stdDeviation="4.596"/></filter><filter id="n" width="54.814" height="64.646" x="-29.286" y="6.009" color-interpolation-filters="sRGB" filterUnits="userSpaceOnUse"><feFlood flood-opacity="0" result="BackgroundImageFix"/><feBlend in="SourceGraphic" in2="BackgroundImageFix" result="shape"/><feGaussianBlur result="effect1_foregroundBlur_2002_17158" stdDeviation="4.596"/></filter><filter id="o" width="54.814" height="64.646" x="8.244" y="-2.416" color-interpolation-filters="sRGB" filterUnits="userSpaceOnUse"><feFlood flood-opacity="0" result="BackgroundImageFix"/><feBlend in="SourceGraphic" in2="BackgroundImageFix" result="shape"/><feGaussianBlur result="effect1_foregroundBlur_2002_17158" stdDeviation="4.596"/></filter><filter id="p" width="39.409" height="43.623" x="18.713" y="10.588" color-interpolation-filters="sRGB" filterUnits="userSpaceOnUse"><feFlood flood-opacity="0" result="BackgroundImageFix"/><feBlend in="SourceGraphic" in2="BackgroundImageFix" result="shape"/><feGaussianBlur result="effect1_foregroundBlur_2002_17158" stdDeviation="4.596"/></filter></defs></svg>
+
+
+================================================================================
+FILE: C:\repos\python\assault\assault_ai_ui\public\icons.svg
+================================================================================
+
+<svg xmlns="http://www.w3.org/2000/svg">
+  <symbol id="bluesky-icon" viewBox="0 0 16 17">
+    <g clip-path="url(#bluesky-clip)"><path fill="#08060d" d="M7.75 7.735c-.693-1.348-2.58-3.86-4.334-5.097-1.68-1.187-2.32-.981-2.74-.79C.188 2.065.1 2.812.1 3.251s.241 3.602.398 4.13c.52 1.744 2.367 2.333 4.07 2.145-2.495.37-4.71 1.278-1.805 4.512 3.196 3.309 4.38-.71 4.987-2.746.608 2.036 1.307 5.91 4.93 2.746 2.72-2.746.747-4.143-1.747-4.512 1.702.189 3.55-.4 4.07-2.145.156-.528.397-3.691.397-4.13s-.088-1.186-.575-1.406c-.42-.19-1.06-.395-2.741.79-1.755 1.24-3.64 3.752-4.334 5.099"/></g>
+    <defs><clipPath id="bluesky-clip"><path fill="#fff" d="M.1.85h15.3v15.3H.1z"/></clipPath></defs>
+  </symbol>
+  <symbol id="discord-icon" viewBox="0 0 20 19">
+    <path fill="#08060d" d="M16.224 3.768a14.5 14.5 0 0 0-3.67-1.153c-.158.286-.343.67-.47.976a13.5 13.5 0 0 0-4.067 0c-.128-.306-.317-.69-.476-.976A14.4 14.4 0 0 0 3.868 3.77C1.546 7.28.916 10.703 1.231 14.077a14.7 14.7 0 0 0 4.5 2.306q.545-.748.965-1.587a9.5 9.5 0 0 1-1.518-.74q.191-.14.372-.293c2.927 1.369 6.107 1.369 8.999 0q.183.152.372.294-.723.437-1.52.74.418.838.963 1.588a14.6 14.6 0 0 0 4.504-2.308c.37-3.911-.63-7.302-2.644-10.309m-9.13 8.234c-.878 0-1.599-.82-1.599-1.82 0-.998.705-1.82 1.6-1.82.894 0 1.614.82 1.599 1.82.001 1-.705 1.82-1.6 1.82m5.91 0c-.878 0-1.599-.82-1.599-1.82 0-.998.705-1.82 1.6-1.82.893 0 1.614.82 1.599 1.82 0 1-.706 1.82-1.6 1.82"/>
+  </symbol>
+  <symbol id="documentation-icon" viewBox="0 0 21 20">
+    <path fill="none" stroke="#aa3bff" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.35" d="m15.5 13.333 1.533 1.322c.645.555.967.833.967 1.178s-.322.623-.967 1.179L15.5 18.333m-3.333-5-1.534 1.322c-.644.555-.966.833-.966 1.178s.322.623.966 1.179l1.534 1.321"/>
+    <path fill="none" stroke="#aa3bff" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.35" d="M17.167 10.836v-4.32c0-1.41 0-2.117-.224-2.68-.359-.906-1.118-1.621-2.08-1.96-.599-.21-1.349-.21-2.848-.21-2.623 0-3.935 0-4.983.369-1.684.591-3.013 1.842-3.641 3.428C3 6.449 3 7.684 3 10.154v2.122c0 2.558 0 3.838.706 4.726q.306.383.713.671c.76.536 1.79.64 3.581.66"/>
+    <path fill="none" stroke="#aa3bff" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.35" d="M3 10a2.78 2.78 0 0 1 2.778-2.778c.555 0 1.209.097 1.748-.047.48-.129.854-.503.982-.982.145-.54.048-1.194.048-1.749a2.78 2.78 0 0 1 2.777-2.777"/>
+  </symbol>
+  <symbol id="github-icon" viewBox="0 0 19 19">
+    <path fill="#08060d" fill-rule="evenodd" d="M9.356 1.85C5.05 1.85 1.57 5.356 1.57 9.694a7.84 7.84 0 0 0 5.324 7.44c.387.079.528-.168.528-.376 0-.182-.013-.805-.013-1.454-2.165.467-2.616-.935-2.616-.935-.349-.91-.864-1.143-.864-1.143-.71-.48.051-.48.051-.48.787.051 1.2.805 1.2.805.695 1.194 1.817.857 2.268.649.064-.507.27-.857.49-1.052-1.728-.182-3.545-.857-3.545-3.87 0-.857.31-1.558.8-2.104-.078-.195-.349-1 .077-2.078 0 0 .657-.208 2.14.805a7.5 7.5 0 0 1 1.946-.26c.657 0 1.328.092 1.946.26 1.483-1.013 2.14-.805 2.14-.805.426 1.078.155 1.883.078 2.078.502.546.799 1.247.799 2.104 0 3.013-1.818 3.675-3.558 3.87.284.247.528.714.528 1.454 0 1.052-.012 1.896-.012 2.156 0 .208.142.455.528.377a7.84 7.84 0 0 0 5.324-7.441c.013-4.338-3.48-7.844-7.773-7.844" clip-rule="evenodd"/>
+  </symbol>
+  <symbol id="social-icon" viewBox="0 0 20 20">
+    <path fill="none" stroke="#aa3bff" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.35" d="M12.5 6.667a4.167 4.167 0 1 0-8.334 0 4.167 4.167 0 0 0 8.334 0"/>
+    <path fill="none" stroke="#aa3bff" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.35" d="M2.5 16.667a5.833 5.833 0 0 1 8.75-5.053m3.837.474.513 1.035c.07.144.257.282.414.309l.93.155c.596.1.736.536.307.965l-.723.73a.64.64 0 0 0-.152.531l.207.903c.164.715-.213.991-.84.618l-.872-.52a.63.63 0 0 0-.577 0l-.872.52c-.624.373-1.003.094-.84-.618l.207-.903a.64.64 0 0 0-.152-.532l-.723-.729c-.426-.43-.289-.864.306-.964l.93-.156a.64.64 0 0 0 .412-.31l.513-1.034c.28-.562.735-.562 1.012 0"/>
+  </symbol>
+  <symbol id="x-icon" viewBox="0 0 19 19">
+    <path fill="#08060d" fill-rule="evenodd" d="M1.893 1.98c.052.072 1.245 1.769 2.653 3.77l2.892 4.114c.183.261.333.48.333.486s-.068.089-.152.183l-.522.593-.765.867-3.597 4.087c-.375.426-.734.834-.798.905a1 1 0 0 0-.118.148c0 .01.236.017.664.017h.663l.729-.83c.4-.457.796-.906.879-.999a692 692 0 0 0 1.794-2.038c.034-.037.301-.34.594-.675l.551-.624.345-.392a7 7 0 0 1 .34-.374c.006 0 .93 1.306 2.052 2.903l2.084 2.965.045.063h2.275c1.87 0 2.273-.003 2.266-.021-.008-.02-1.098-1.572-3.894-5.547-2.013-2.862-2.28-3.246-2.273-3.266.008-.019.282-.332 2.085-2.38l2-2.274 1.567-1.782c.022-.028-.016-.03-.65-.03h-.674l-.3.342a871 871 0 0 1-1.782 2.025c-.067.075-.405.458-.75.852a100 100 0 0 1-.803.91c-.148.172-.299.344-.99 1.127-.304.343-.32.358-.345.327-.015-.019-.904-1.282-1.976-2.808L6.365 1.85H1.8zm1.782.91 8.078 11.294c.772 1.08 1.413 1.973 1.425 1.984.016.017.241.02 1.05.017l1.03-.004-2.694-3.766L7.796 5.75 5.722 2.852l-1.039-.004-1.039-.004z" clip-rule="evenodd"/>
+  </symbol>
+</svg>
+
+
+
+================================================================================
+FILE: C:\repos\python\assault\assault_ai_ui\roadmap\ROADMAP.md
+================================================================================
+
+# 🚀 ASSAULT AI UI — ROADMAP COMPLETO
+
+---
+
+# 🧭 VISIÓN
+
+Construir un sistema completo:
+
+- 🎮 Jugar vs AI (RL vs usuario)
+- 🔁 Visualizar replays
+- 🧠 Explainability (HRL + decisiones)
+- 🤖 RAG Assistant flotante
+
+---
+
+# 🧱 ARQUITECTURA FINAL
+
+## Backend
+- Engine Assault (YA LO TIENES ✅)
+- API REST:
+  - /game/start
+  - /game/state
+  - /game/action
+  - /game/actions
+  - /explain
+  - /rag/query
+
+## Frontend
+- React + TypeScript + Vite
+- PixiJS (mapa)
+- React UI (paneles)
+
+---
+
+# 📅 FASE 0 — ENTORNO ✅ (YA HECHO)
+
+✅ Vite funcionando  
+✅ React + TypeScript  
+✅ npm run dev  
+
+---
+
+# 🚧 FASE 1 — BASE REAL (CRÍTICA)
+
+## 🎯 Objetivo:
+Mostrar un mapa básico en pantalla con Pixi
+
+---
+
+## ✅ Tareas
+
+### 1. Crear GameCanvas
+Archivo:
+src/GameCanvas.tsx
+
+- contenedor Pixi
+- montar canvas
+- fondo visible
+
+---
+
+### 2. Instalar PixiJS
+
+```bash
+npm install pixi.js
+
+
+================================================================================
+FILE: C:\repos\python\assault\assault_ai_ui\services\api.ts
+================================================================================
+
+// API service 
+
+
+
+================================================================================
+FILE: C:\repos\python\assault\assault_ai_ui\services\game.ts
+================================================================================
+
+// Game state client 
+
+
+
+================================================================================
+FILE: C:\repos\python\assault\assault_ai_ui\src\App.css
+================================================================================
+
+/* GLOBAL RESET */
+* {
+  box-sizing: border-box;
+}
+
+html, body, #root {
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+}
+
+/* APP ROOT */
+.app {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+  background-color: #111;
+  color: #fff;
+  font-family: Arial, sans-serif;
+}
+
+/* HEADER */
+.header {
+  height: 60px;
+  background-color: #222;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0 16px;
+  border-bottom: 1px solid #333;
+}
+
+/* MAIN LAYOUT */
+.main {
+  flex: 1;
+  display: flex;
+  width: 100%;
+  min-height: 0; /* ✅ CRÍTICO */
+}
+
+/* LEFT PANEL */
+.left {
+  width: 280px;
+  background-color: #1a1a1a;
+  padding: 10px;
+  border-right: 1px solid #333;
+  overflow-y: auto;
+}
+
+/* CENTER MAP (FIXED) */
+.center {
+  flex: 1;
+  width: 100%;
+  min-width: 0;
+  min-height: 0; /* ✅ CRÍTICO */
+
+  background-color: #000;
+}
+
+/* PLACEHOLDER */
+.map-placeholder {
+  opacity: 0.5;
+}
+
+/* RIGHT PANEL */
+.right {
+  width: 300px;
+  background-color: #1a1a1a;
+  padding: 10px;
+  border-left: 1px solid #333;
+  overflow-y: auto;
+}
+
+/* FOOTER */
+.footer {
+  height: 120px;
+  background-color: #222;
+  padding: 10px;
+  border-top: 1px solid #333;
+}
+
+
+
+================================================================================
+FILE: C:\repos\python\assault\assault_ai_ui\src\App.tsx
+================================================================================
+
+import "./App.css";
+import GameCanvas from "./game/GameCanvas";
+import { gameController } from "./game/gameControllerInstance";
+
+function App() {
+  return (
+    <div className="app">
+
+      {/* HEADER */}
+      <header className="header">
+        <div className="header-left">
+
+          <button onClick={() => gameController.start("human")}>
+            🎮 Human vs AI
+          </button>
+
+          <button onClick={() => gameController.start("ai_vs_ai")}>
+            🤖 AI vs AI
+          </button>
+
+          <button onClick={() => gameController.start("replay")}>
+            🔁 Replay
+          </button>
+
+          <button onClick={() => gameController.stop()}>
+            ⛔ Stop
+          </button>
+
+        </div>
+
+        <div className="header-center">
+          Turn: (pending)
+        </div>
+
+        <div className="header-right">
+          🤖 Assistant
+        </div>
+      </header>
+
+      {/* MAIN */}
+      <main className="main">
+
+        <aside className="left">
+          <h3>AI / Actions</h3>
+          <p>Select a unit</p>
+        </aside>
+
+        <section className="center">
+          <GameCanvas />
+        </section>
+
+        <aside className="right">
+          <h3>Event Log</h3>
+          <p>Events will appear here</p>
+        </aside>
+
+      </main>
+
+      {/* FOOTER */}
+      <footer className="footer">
+        <div>Units | Actions | Info</div>
+      </footer>
+
+    </div>
+  );
+}
+
+export default App;
+
+
+
+================================================================================
 FILE: C:\repos\python\assault\assault_ai_ui\src\index.css
 ================================================================================
 
@@ -3860,41 +3874,242 @@ FILE: C:\repos\python\assault\assault_ai_ui\src\assets\vite.svg
 
 
 ================================================================================
-FILE: C:\repos\python\assault\assault_ai_ui\src\data\map_piece_art_mapping.json
+FILE: C:\repos\python\assault\assault_ai_ui\src\game\GameCanvas.tsx
 ================================================================================
 
-{
-  "mapPieceImages": {
-    "S2": "/public/art/maps/Map S2.png",
-    "S3": "/public/art/maps/Map S3.png"
+import { useEffect, useRef, useState } from "react";
+import * as PIXI from "pixi.js";
+
+import { gameController } from "./gameControllerInstance";
+import { drawHexGridBase } from "./render/hexGridRenderer";
+import { drawMapPieces } from "./render/mapPieceRenderer";
+import { setupCamera } from "./systems/cameraController";
+import LayerControls from "./systems/LayerControls";
+
+export default function GameCanvas() {
+
+  const containerRef = useRef<HTMLDivElement | null>(null);
+  const appRef = useRef<PIXI.Application | null>(null);
+
+  // ✅ LAYER REFS
+  const backgroundRef = useRef<PIXI.Container | null>(null);
+  const gridRef = useRef<PIXI.Container | null>(null);
+
+  // ✅ FIX: hook en lugar correcto
+  const subscribedRef = useRef(false);
+
+  // ✅ STATE UI
+  const [showMap, setShowMap] = useState(true);
+  const [showGrid, setShowGrid] = useState(true);
+
+  useEffect(() => {
+    if (!containerRef.current) return;
+
+    const app = new PIXI.Application();
+
+    app.init({
+      resizeTo: containerRef.current!,
+      background: "#000",
+    }).then(() => {
+
+      containerRef.current!.appendChild(app.canvas);
+      appRef.current = app;
+
+      // ✅ WORLD
+      const world = new PIXI.Container();
+      app.stage.addChild(world);
+
+      // ✅ LAYERS
+      const background = new PIXI.Container();
+      const grid = new PIXI.Container();
+
+      world.addChild(background);
+      world.addChild(grid);
+
+      backgroundRef.current = background;
+      gridRef.current = grid;
+
+      // ✅ CAMERA
+      setupCamera(app, world, containerRef.current!);
+
+      // ✅ SUBSCRIBE (protegido)
+      if (!subscribedRef.current) {
+        subscribedRef.current = true;
+
+        gameController.subscribe((state) => {
+          const data = state.raw;
+          if (!data) return;
+
+          background.removeChildren();
+          grid.removeChildren();
+
+          if (data.map?.pieces) {
+            drawMapPieces(background, data.map.pieces);
+          }
+
+          drawHexGridBase(grid, data.shape);
+        });
+      }
+
+    });
+
+    return () => {
+      appRef.current?.destroy(true);
+    };
+
+  }, []);
+
+  // ✅ VISIBILITY SYNC
+  useEffect(() => {
+    if (backgroundRef.current) {
+      backgroundRef.current.visible = showMap;
+    }
+
+    if (gridRef.current) {
+      gridRef.current.visible = showGrid;
+    }
+  }, [showMap, showGrid]);
+
+  return (
+    <>
+      <div
+        ref={containerRef}
+        style={{
+          width: "100%",
+          height: "100%",
+          position: "relative",
+        }}
+      />
+
+      <LayerControls
+        showMap={showMap}
+        showGrid={showGrid}
+        onToggleMap={setShowMap}
+        onToggleGrid={setShowGrid}
+      />
+    </>
+  );
+}
+
+
+
+================================================================================
+FILE: C:\repos\python\assault\assault_ai_ui\src\game\GameController.ts
+================================================================================
+
+export class GameController {
+  private mode: GameMode = "human";
+  private state: GameState | null = null;
+
+  private listeners: Listener[] = [];
+  private running = false;
+
+  // 🔥 NUEVO
+  private lastState: GameState | null = null;
+
+  // ----------------------------------
+  async start(mode: GameMode) {
+    this.mode = mode;
+    this.running = true;
+
+    console.log("Starting mode:", mode);
+
+    if (mode === "replay") {
+      await this.loadReplay();
+    } else {
+      await this.loadScenario();
+    }
+
+    if (mode === "ai_vs_ai") {
+      this.startLoop();
+    }
+  }
+
+  // ----------------------------------
+  private async loadScenario() {
+    const res = await fetch(
+      "http://127.0.0.1:8000/api/ui/scenarios/mettete_i_piedi_terra_1_min"
+    );
+
+    const data = await res.json();
+
+    this.state = {
+      turn: 1,
+      raw: data,
+    };
+
+    console.log("✅ Scenario loaded:", data);
+
+    this.emit();
+  }
+
+  // ----------------------------------
+  subscribe(cb: Listener) {
+    this.listeners.push(cb);
+
+    // 🔥 CLAVE: replay inmediato
+    if (this.lastState) {
+      cb(this.lastState);
+    }
+  }
+
+  private emit() {
+    if (!this.state) return;
+
+    // 🔥 guardado
+    this.lastState = this.state;
+
+    for (const cb of this.listeners) {
+      cb(this.state);
+    }
+  }
+
+  private sleep(ms: number) {
+    return new Promise((r) => setTimeout(r, ms));
   }
 }
 
 
 ================================================================================
-FILE: C:\repos\python\assault\assault_ai_ui\src\renderers\hexGridRenderer.ts
+FILE: C:\repos\python\assault\assault_ai_ui\src\game\gameControllerInstance.ts
+================================================================================
+
+import { GameController } from "./GameController";
+
+export const gameController = new GameController();
+
+
+================================================================================
+FILE: C:\repos\python\assault\assault_ai_ui\src\game\render\hexGridRenderer.ts
 ================================================================================
 
 import * as PIXI from "pixi.js";
 
 // ---------------------------------------------
-const HEX_SIZE = 30;
+// CONFIG
+// ---------------------------------------------
+export const HEX_SIZE = 30;
+
+const HEX_WIDTH = HEX_SIZE * Math.sqrt(3);
+const HEX_HEIGHT = HEX_SIZE * (3 / 2);
 
 // ---------------------------------------------
-// AXIAL → PIXEL (vertical offset layout)
+// AXIAL → PIXEL (EVEN-R OFFSET ✅ CORRECTO)
 // ---------------------------------------------
 export function axialToPixel(q: number, r: number) {
+
   const x =
-    HEX_SIZE * Math.sqrt(3) * (q + 0.5 * (r % 2));
+    HEX_WIDTH * (q + 0.5 * (r % 2)) + HEX_WIDTH / 2;
 
   const y =
-    HEX_SIZE * (3 / 2) * r;
+    HEX_HEIGHT * r;
 
   return { x, y };
 }
 
+
 // ---------------------------------------------
-// DRAW SINGLE HEX (stroke only)
+// DRAW SINGLE HEX
 // ---------------------------------------------
 export function drawHex(
   g: PIXI.Graphics,
@@ -3920,7 +4135,6 @@ export function drawHex(
 
   g.closePath();
 
-  // stroke only (no fill)
   g.stroke({
     width: 2,
     color: 0xffffff,
@@ -3928,7 +4142,7 @@ export function drawHex(
 }
 
 // ---------------------------------------------
-// DRAW FULL HEX GRID BASE (using shape)
+// DRAW GRID (RECTANGULAR SHAPE CORRECTO)
 // ---------------------------------------------
 export function drawHexGridBase(
   container: PIXI.Container,
@@ -3943,11 +4157,12 @@ export function drawHexGridBase(
 
       const { x, y } = axialToPixel(q, r);
 
-      // snap to pixel to avoid rendering artifacts
-      const px = Math.round(x);
-      const py = Math.round(y);
-
-      drawHex(g, px, py, HEX_SIZE);
+      drawHex(
+        g,
+        Math.round(x),
+        Math.round(y + HEX_SIZE), // ✅ mantiene altura correcta
+        HEX_SIZE
+      );
     }
   }
 
@@ -3957,28 +4172,27 @@ export function drawHexGridBase(
 
 
 ================================================================================
-FILE: C:\repos\python\assault\assault_ai_ui\src\renderers\mapPieceRenderer.ts
+FILE: C:\repos\python\assault\assault_ai_ui\src\game\render\mapPieceMapping.ts
+================================================================================
+
+export const mapPieceImages = {
+  S2: "/art/maps/Map S2.png",
+  S3: "/art/maps/Map S3.png",
+};
+
+
+================================================================================
+FILE: C:\repos\python\assault\assault_ai_ui\src\game\render\mapPieceRenderer.ts
 ================================================================================
 
 import * as PIXI from "pixi.js";
-import { axialToPixel } from "./hexGridRenderer";
-import mapPieceMapping from "../data/map_piece_art_mapping.json";
+import { axialToPixel, HEX_SIZE } from "./hexGridRenderer";
+import { mapPieceImages } from "./mapPieceMapping";
 
 // ---------------------------------------------
-// CONFIG
-// ---------------------------------------------
-const HEX_SIZE = 30;
-
 const HEX_WIDTH = HEX_SIZE * Math.sqrt(3);
 const HEX_HEIGHT = HEX_SIZE * (3 / 2);
-// ---------------------------------------------
-// IMAGE OFFSET (tune this)
-// ---------------------------------------------
-const IMAGE_OFFSET_X = -HEX_WIDTH * 0.5;
-const IMAGE_OFFSET_Y = -HEX_SIZE;
 
-// ---------------------------------------------
-// DRAW MAP PIECES
 // ---------------------------------------------
 export async function drawMapPieces(
   container: PIXI.Container,
@@ -3986,78 +4200,57 @@ export async function drawMapPieces(
 ) {
   for (const piece of pieces) {
 
-    const texturePath =
-      mapPieceMapping.mapPieceImages[piece.id];
-
-    if (!texturePath) {
-      console.warn("Missing map piece:", piece.id);
-      continue;
-    }
+    const texturePath = mapPieceImages[piece.id];
+    if (!texturePath) continue;
 
     const texture = await PIXI.Assets.load(texturePath);
-
     const sprite = new PIXI.Sprite(texture);
 
+    // grid origin
     const [q, r] = piece.origin;
-
     const { x, y } = axialToPixel(q, r);
 
-    // ---------------------------------------------
-    // GET PIECE SIZE (IN HEX)
-    // ---------------------------------------------
-    const [hexWidthCount, hexHeightCount] =
-      getPieceShape(piece.id);
+    const [hexW, hexH] = piece.shape;
 
-    // ---------------------------------------------
-    // TARGET SIZE IN PIXELS
-    // ---------------------------------------------
-    const targetWidth = (hexWidthCount + 0.5) * HEX_WIDTH;
+    // ✅ width FIX correcto (esto sí era clave)
+    const targetWidth = (hexW + 0.5) * HEX_WIDTH;
 
-    // IMPORTANT: height needs correction (hex overlap)
     const targetHeight =
-      (hexHeightCount - 1) * HEX_HEIGHT + HEX_SIZE * 2;
+      (hexH - 1) * HEX_HEIGHT + HEX_SIZE * 2;
 
-    // ---------------------------------------------
-    // SCALE IMAGE
-    // ---------------------------------------------
     const scaleX = targetWidth / texture.width;
     const scaleY = targetHeight / texture.height;
 
     sprite.scale.set(scaleX, scaleY);
 
     // ---------------------------------------------
-    // POSITION (snap to pixel)
+    // ✅ ALIGNMENT FINAL CORRECTO
     // ---------------------------------------------
-    sprite.x = Math.round(x + IMAGE_OFFSET_X);
-    sprite.y = Math.round(y + IMAGE_OFFSET_Y);
 
-    // top-left alignment
+    // ✅ X YA CORRECTO (grid xmin = borde del hex)
+    // ---------------------------------------------
+    // ✅ CORRECT GRID ALIGNMENT (true Ymin)
+    // ---------------------------------------------
+
+    const offsetX = -HEX_WIDTH / 2;
+
+    // ✅ EXACT MATCH WITH GRID RENDERING
+    const offsetY = 0 ;
+
+    sprite.x = x + offsetX;
+    sprite.y = y + offsetY;
+
+
     sprite.anchor.set(0, 0);
 
     container.addChild(sprite);
   }
 }
 
-// ---------------------------------------------
-// PIECE SHAPE (TEMP → should come from backend)
-// ---------------------------------------------
-function getPieceShape(id: string): [number, number] {
-  switch (id) {
-    case "S2":
-      return [9, 8];
-
-    case "S3":
-      return [9, 8];
-
-    default:
-      return [1, 1];
-  }
-}
-``
 
 
 ================================================================================
-FILE: C:\repos\python\assault\assault_ai_ui\src\systems\cameraController.ts
+FILE: C:\repos\python\assault\assault_ai_ui\src\game\systems\cameraController.ts
 ================================================================================
 
 import * as PIXI from "pixi.js";
@@ -4067,46 +4260,15 @@ export function setupCamera(
   world: PIXI.Container,
   container: HTMLDivElement
 ) {
-  // ----------------------------
-  // ZOOM (wheel)
-  // ----------------------------
-  container.addEventListener("wheel", (e) => {
-    if (e.shiftKey) return; // evita conflicto con rotate
 
-    e.preventDefault();
-
-    const scaleFactor = 1.1;
-    const direction = e.deltaY > 0 ? 1 / scaleFactor : scaleFactor;
-
-    const rect = app.canvas.getBoundingClientRect();
-
-    const mouseX = e.clientX - rect.left;
-    const mouseY = e.clientY - rect.top;
-
-    const worldPosBefore = {
-      x: (mouseX - world.x) / world.scale.x,
-      y: (mouseY - world.y) / world.scale.y,
-    };
-
-    world.scale.x *= direction;
-    world.scale.y *= direction;
-
-    const worldPosAfter = {
-      x: worldPosBefore.x * world.scale.x,
-      y: worldPosBefore.y * world.scale.y,
-    };
-
-    world.x = mouseX - worldPosAfter.x;
-    world.y = mouseY - worldPosAfter.y;
-  });
-
-  // ----------------------------
-  // PAN (drag)
-  // ----------------------------
   let dragging = false;
   let last = { x: 0, y: 0 };
 
+  // ----------------------------
+  // MOUSE DRAG
+  // ----------------------------
   app.canvas.addEventListener("mousedown", (e) => {
+    if (e.button !== 0) return;
     dragging = true;
     last.x = e.clientX;
     last.y = e.clientY;
@@ -4130,40 +4292,127 @@ export function setupCamera(
   });
 
   // ----------------------------
-  // ROTATE (shift + wheel)
+  // ZOOM + ROTATE
   // ----------------------------
-  container.addEventListener("wheel", (e) => {
-    if (!e.shiftKey) return;
-
+  const handleWheel = (e: WheelEvent) => {
     e.preventDefault();
 
     const rect = app.canvas.getBoundingClientRect();
-
     const mouseX = e.clientX - rect.left;
     const mouseY = e.clientY - rect.top;
 
-    const rotationAmount = e.deltaY * 0.001;
+    if (e.shiftKey) {
+      // ROTATE
+      const rot = e.deltaY * 0.001;
 
-    const before = {
-      x: (mouseX - world.x) / world.scale.x,
-      y: (mouseY - world.y) / world.scale.y,
-    };
+      const before = {
+        x: (mouseX - world.x) / world.scale.x,
+        y: (mouseY - world.y) / world.scale.y,
+      };
 
-    world.rotation += rotationAmount;
+      world.rotation += rot;
 
-    const cos = Math.cos(rotationAmount);
-    const sin = Math.sin(rotationAmount);
+      const cos = Math.cos(rot);
+      const sin = Math.sin(rot);
 
-    const after = {
-      x: before.x * cos - before.y * sin,
-      y: before.x * sin + before.y * cos,
-    };
+      const after = {
+        x: before.x * cos - before.y * sin,
+        y: before.x * sin + before.y * cos,
+      };
 
-    world.x = mouseX - after.x * world.scale.x;
-    world.y = mouseY - after.y * world.scale.y;
-  });
+      world.x = mouseX - after.x * world.scale.x;
+      world.y = mouseY - after.y * world.scale.y;
+
+    } else {
+      // ZOOM
+      const factor = 1.1;
+      const dir = e.deltaY > 0 ? 1 / factor : factor;
+
+      const before = {
+        x: (mouseX - world.x) / world.scale.x,
+        y: (mouseY - world.y) / world.scale.y,
+      };
+
+      world.scale.x *= dir;
+      world.scale.y *= dir;
+
+      const minScale = 0.5;
+      const maxScale = 3;
+
+      world.scale.x = Math.max(minScale, Math.min(maxScale, world.scale.x));
+      world.scale.y = world.scale.x;
+
+      const after = {
+        x: before.x * world.scale.x,
+        y: before.y * world.scale.y,
+      };
+
+      world.x = mouseX - after.x;
+      world.y = mouseY - after.y;
+    }
+  };
+
+  container.addEventListener("wheel", handleWheel);
+
+  return () => {
+    container.removeEventListener("wheel", handleWheel);
+  };
 }
 
+
+
+================================================================================
+FILE: C:\repos\python\assault\assault_ai_ui\src\game\systems\LayerControls.tsx
+================================================================================
+
+type Props = {
+  showMap: boolean;
+  showGrid: boolean;
+  onToggleMap: (value: boolean) => void;
+  onToggleGrid: (value: boolean) => void;
+};
+
+export default function LayerControls({
+  showMap,
+  showGrid,
+  onToggleMap,
+  onToggleGrid,
+}: Props) {
+  return (
+    <div
+      style={{
+        position: "absolute",
+        top: 10,
+        left: 10,
+        background: "#222",
+        padding: "8px",
+        borderRadius: "4px",
+        color: "white",
+        fontSize: "14px",
+      }}
+    >
+      <label>
+        <input
+          type="checkbox"
+          checked={showMap}
+          onChange={(e) => onToggleMap(e.target.checked)}
+        />
+        Map
+      </label>
+
+      <br />
+
+      <label>
+        <input
+          type="checkbox"
+          checked={showGrid}
+          onChange={(e) => onToggleGrid(e.target.checked)}
+        />
+        Grid
+      </label>
+    </div>
+  );
+}
 
 
 ================================================================================

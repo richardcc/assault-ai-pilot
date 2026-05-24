@@ -12,35 +12,56 @@ export default function GameCanvas() {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const appRef = useRef<PIXI.Application | null>(null);
 
-  // ✅ LAYER REFS
+  // ✅ PIXI refs
   const backgroundRef = useRef<PIXI.Container | null>(null);
   const gridRef = useRef<PIXI.Container | null>(null);
 
-  // ✅ FIX: hook en lugar correcto
   const subscribedRef = useRef(false);
+  const initializedRef = useRef(false); // 🔥 CLAVE
 
-  // ✅ STATE UI
+  // ✅ UI state
   const [showMap, setShowMap] = useState(true);
   const [showGrid, setShowGrid] = useState(true);
 
+  // ✅ refs para evitar stale closure
+  const showMapRef = useRef(true);
+  const showGridRef = useRef(true);
+
   useEffect(() => {
+    showMapRef.current = showMap;
+    showGridRef.current = showGrid;
+
+    // ✅ proteger null
+    if (!backgroundRef.current || !gridRef.current) return;
+
+    backgroundRef.current.visible = showMap;
+    gridRef.current.visible = showGrid;
+
+  }, [showMap, showGrid]);
+
+  useEffect(() => {
+    if (initializedRef.current) return; // 🔥 evita doble init (React StrictMode)
+    initializedRef.current = true;
+
     if (!containerRef.current) return;
 
     const app = new PIXI.Application();
 
     app.init({
-      resizeTo: containerRef.current!,
+      resizeTo: containerRef.current,
       background: "#000",
     }).then(() => {
 
-      containerRef.current!.appendChild(app.canvas);
+      if (!containerRef.current) return; // 🔥 evita null
+
+      containerRef.current.appendChild(app.canvas);
       appRef.current = app;
 
-      // ✅ WORLD
+      // WORLD
       const world = new PIXI.Container();
       app.stage.addChild(world);
 
-      // ✅ LAYERS
+      // LAYERS
       const background = new PIXI.Container();
       const grid = new PIXI.Container();
 
@@ -50,16 +71,24 @@ export default function GameCanvas() {
       backgroundRef.current = background;
       gridRef.current = grid;
 
-      // ✅ CAMERA
-      setupCamera(app, world, containerRef.current!);
+      // ✅ VISIBILITY INICIAL
+      background.visible = showMapRef.current;
+      grid.visible = showGridRef.current;
 
-      // ✅ SUBSCRIBE (protegido)
+      // CAMERA
+      setupCamera(app, world, containerRef.current);
+
+      // SUBSCRIBE
       if (!subscribedRef.current) {
         subscribedRef.current = true;
 
         gameController.subscribe((state) => {
           const data = state.raw;
           if (!data) return;
+
+          // ✅ VISIBILITY SIEMPRE
+          background.visible = showMapRef.current;
+          grid.visible = showGridRef.current;
 
           background.removeChildren();
           grid.removeChildren();
@@ -76,20 +105,10 @@ export default function GameCanvas() {
 
     return () => {
       appRef.current?.destroy(true);
+      appRef.current = null;
     };
 
   }, []);
-
-  // ✅ VISIBILITY SYNC
-  useEffect(() => {
-    if (backgroundRef.current) {
-      backgroundRef.current.visible = showMap;
-    }
-
-    if (gridRef.current) {
-      gridRef.current.visible = showGrid;
-    }
-  }, [showMap, showGrid]);
 
   return (
     <>
