@@ -13,9 +13,16 @@ type Unit = {
 
 type Props = {
   units: Unit[];
+  activeSide?: string;
+  activatedUnits?: string[];
 };
 
-export function UnitStatePanel({ units }: Props) {
+export function UnitStatePanel({
+  units,
+  activeSide,
+  activatedUnits = []
+}: Props) {
+
   const unitsBySide: Record<string, Unit[]> = {};
 
   for (const u of units) {
@@ -32,10 +39,9 @@ export function UnitStatePanel({ units }: Props) {
         background: "#222",
         color: "#fff",
         borderTop: "2px solid #444",
-        padding: 10, // ✅ movemos padding aquí
+        padding: 10,
       }}
     >
-      {/* CONTENT */}
       <div
         style={{
           display: "flex",
@@ -50,7 +56,7 @@ export function UnitStatePanel({ units }: Props) {
               marginRight: 20,
             }}
           >
-            {/* ✅ HEADER CON BANDERA */}
+            {/* HEADER */}
             <div
               style={{
                 display: "flex",
@@ -85,7 +91,25 @@ export function UnitStatePanel({ units }: Props) {
             {/* UNITS */}
             <div style={{ display: "flex", flexWrap: "wrap" }}>
               {list.map((u) => {
+
                 const def = unitImages[u.unit_key];
+
+                const isOwn = u.side === activeSide;
+                const isAvailable =
+                  isOwn && !activatedUnits.includes(u.id);
+
+                let border = "#555";
+                let background = "#333";
+                let opacity = 1;
+
+                if (!isOwn) {
+                  opacity = 0.6; // enemigo
+                } else if (!isAvailable) {
+                  opacity = 0.8; // usada
+                } else {
+                  border = "#00ff00"; // ✅ disponible
+                  background = "#263826";
+                }
 
                 return (
                   <div
@@ -104,14 +128,16 @@ export function UnitStatePanel({ units }: Props) {
                       height: 90,
                       margin: 4,
                       padding: 4,
-                      background: "#333",
-                      border: "1px solid #555",
+                      background,
+                      border: `1px solid ${border}`,
                       display: "flex",
                       flexDirection: "column",
                       alignItems: "center",
                       justifyContent: "center",
                       gap: 1,
                       cursor: "pointer",
+                      opacity,
+                      transition: "all 0.15s ease",
                     }}
                   >
                     {/* IMAGE */}
@@ -132,7 +158,6 @@ export function UnitStatePanel({ units }: Props) {
                       style={{
                         fontSize: 7,
                         textAlign: "center",
-                        marginTop: 1,
                         lineHeight: "8px",
                       }}
                     >
@@ -154,7 +179,6 @@ export function UnitStatePanel({ units }: Props) {
                     <div
                       style={{
                         fontSize: 10,
-                        marginTop: -2,
                       }}
                     >
                       {u.hp != null

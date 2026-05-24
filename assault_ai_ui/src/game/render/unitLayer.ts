@@ -5,7 +5,13 @@ import { axialToPixel, HEX_SIZE } from "./hexGridRenderer";
 
 // ✅ hover global (viene del panel)
 let highlightedUnitId: string | null = null;
+let selectedUnitId: string | null = null;
 
+(window as any).selectUnit = (id: string | null) => {
+  selectedUnitId = id;
+};
+
+  
 (window as any).highlightUnit = (id: string | null) => {
   highlightedUnitId = id;
 };
@@ -21,7 +27,13 @@ export class UnitLayer {
   }
 
   // -----------------------------------------
-  async sync(units: any[]) {
+  async sync(state: any) {
+    if (!state) return;
+
+    const units = state.units || [];
+    const activeSide = state.active_side;
+    const activated = state.activated_units || [];
+
     const seen = new Set<string>();
 
     for (const unit of units) {
@@ -36,21 +48,65 @@ export class UnitLayer {
         this.container.addChild(sprite);
       }
 
-      // ✅ POSICIÓN SIEMPRE (IMPORTANTE)
+      // ✅ POSICIÓN
       const { x, y } = axialToPixel(unit.q, unit.r);
 
       sprite.x = Math.round(x);
       sprite.y = Math.round(y + HEX_SIZE);
 
-      // ✅ escala base
       const base = (sprite as any).__baseScale ?? 1;
 
-      if (unit.id === highlightedUnitId) {
+      // -----------------------------------------
+      // ✅ ESTADOS
+      const isOwn = unit.side === activeSide;
+      const isAvailable = isOwn && !activated.includes(unit.id);
+
+      if (unit.id === selectedUnitId) {
+        sprite.scale.set(base * 1.3);
+        sprite.tint = 0xffcc00; // 🟡 selección
+      } else if (unit.id === highlightedUnitId) {
         sprite.scale.set(base * 1.2);
-        sprite.alpha = 1;
       } else {
         sprite.scale.set(base);
-        sprite.alpha = unit.hp <= 0 ? 0.4 : 1;
+        sprite.tint = isOwn ? 0xffffff : 0xaaaaaa;
+      }
+
+      // ✅ alpha base
+      if (unit.hp <= 0) {
+        sprite.alpha = 0.4;
+      } else if (!isOwn) {
+        sprite.alpha = 0.7; // enemigo
+      } else if (!isAvailable) {
+        sprite.alpha = 0.7; // usada
+      } else {
+        sprite.alpha = 1; // disponible
+      }
+
+      // ✅ tint (opcional suave)
+      sprite.tint = isOwn ? 0xffffff : 0xaaaaaa;
+
+      // ✅ HIGHLIGHT DISPONIBLE (HALO)
+      let highlight = sprite.getChildByName("availableHighlight");
+
+      if (isAvailable) {
+        if (!highlight) {
+          highlight = new PIXI.Graphics();
+          highlight.name = "availableHighlight";
+
+          highlight.beginFill(0x00ff00, 0.25);
+          highlight.drawCircle(0, 0, HEX_SIZE * 0.8);
+          highlight.endFill();
+
+          sprite.addChildAt(highlight, 0);
+        }
+
+        // ✅ animación suave
+        highlight.alpha = 0.5 + Math.sin(Date.now() / 300) * 0.3;
+
+      } else {
+        if (highlight) {
+          sprite.removeChild(highlight);
+        }
       }
 
       seen.add(unit.id);
@@ -88,7 +144,6 @@ export class UnitLayer {
 
       sprite.scale.set(baseScale);
 
-      // ✅ guardar escala base (IMPORTANTE)
       (container as any).__baseScale = baseScale;
 
       container.addChild(sprite);
@@ -96,12 +151,10 @@ export class UnitLayer {
       console.error("❌ error loading sprite:", def.full, err);
     }
 
-    // ✅ config facción
     const side = sides[unit.side] || {
       bgColor: 0x333333,
     };
 
-    // ✅ LABEL
     const labelContainer = new PIXI.Container();
 
     const bg = new PIXI.Graphics();
@@ -124,9 +177,17 @@ export class UnitLayer {
 
     labelContainer.addChild(label);
 
-    labelContainer.y = HEX_SIZE * 0.4; // ✅ bien centrado dentro del hex
+    labelContainer.y = HEX_SIZE * 0.4;
 
     container.addChild(labelContainer);
+
+    container.eventMode = "static";
+
+    container.on("pointerdown", () => {
+      if ((window as any).onUnitClick) {
+        (window as any).onUnitClick(unit);
+      }
+    });
 
     return container;
   }

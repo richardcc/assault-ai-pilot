@@ -12,11 +12,6 @@ export class GameController {
 
   private socket: WebSocket | null = null;
 
-  private controllersBySide: Record<string, ControllerType> = {
-    US: "human",
-    GE: "ai",
-  };
-
   // ----------------------------------
   async start(mode: GameMode) {
     if (this.socket && this.socket.readyState === WebSocket.OPEN) {
@@ -28,6 +23,22 @@ export class GameController {
 
     console.log("Starting mode:", mode);
 
+    // ✅ ✅ 🔥 FIX CLAVE: iniciar partida en backend con sides
+    await fetch("http://127.0.0.1:8000/api/game/start", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        scenario_id: "mettete_i_piedi_terra_1_min",
+
+        // ✅ aquí defines quién controla cada bando
+        sides: {
+          GE: "human",
+          US: "ai"
+        }
+      })
+    });
+
+    // ✅ luego cargas estado inicial
     await this.loadScenario();
 
     setTimeout(() => {
@@ -149,7 +160,7 @@ export class GameController {
         return;
       }
 
-      if (this.controllersBySide[activeSide] !== "ai") {
+      if (data?.sides?.[activeSide] !== "ai") {
         setTimeout(loop, 500);
         return;
       }

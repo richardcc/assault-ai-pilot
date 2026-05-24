@@ -182,11 +182,15 @@ from typing import Dict
 
 class GameStartRequest(BaseModel):
     scenario_id: str
+    sides: Dict[str, str]
 
+
+class UnitActionsRequest(BaseModel):
+    unit_id: str
 
 @app.post("/api/game/start")
 def game_start(req: GameStartRequest):
-    game_session.start(req.scenario_id)
+    game_session.start(req.scenario_id, req.sides)
 
     return {
         "status": "started",
@@ -263,3 +267,28 @@ async def websocket_game(ws: WebSocket):
 
     except Exception as e:
         print("❌ WebSocket error:", e)
+
+# =====================================================
+# GAME ACTIONS (QUERY ONLY - NO EXECUTION)
+# =====================================================
+from services.action_service import get_unit_actions
+
+
+@app.post("/api/game/actions")
+def game_actions(req: UnitActionsRequest):
+
+    if game_session.env is None:
+        return {"error": "no game"}
+
+    state = game_session.env.game_state
+
+    unit = next(
+        (u for u in state.units if u.unit_id == req.unit_id),
+        None
+    )
+
+    if not unit:
+        return {"error": "unit not found"}
+
+    # ✅ delega en servicio
+    return get_unit_actions(game_session.env, unit)

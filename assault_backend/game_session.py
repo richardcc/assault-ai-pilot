@@ -27,9 +27,10 @@ class GameSession:
     def __init__(self):
         self.env: Optional[SimEnv] = None
         self.scenario_id: Optional[str] = None  # ✅ nuevo
+        self.sides_config = {}
 
     # ---------------------------------------------
-    def start(self, scenario_id: str):
+    def start(self, scenario_id: str, sides: Dict[str, str]):
         base_path = Path(__file__).resolve().parents[1]
 
         config_path = (
@@ -51,7 +52,7 @@ class GameSession:
 
         # ✅ guardar escenario (CLAVE)
         self.scenario_id = scenario_id
-
+        self.sides_config = sides  
         self.env = SimEnv(
             config,
             debug_config=DebugConfig(enabled=True)
@@ -139,6 +140,9 @@ class GameSession:
                     })
 
         # ✅ FINAL
+        activated_units = []
+        if hasattr(runtime, "activated_units"):
+            activated_units = list(runtime.activated_units)
         return {
             "scenario_name": getattr(self.env.scenario, "name", None),
 
@@ -152,4 +156,6 @@ class GameSession:
             },
 
             "units": units,
+            "sides": self.sides_config,
+            "activated_units": activated_units,
         }

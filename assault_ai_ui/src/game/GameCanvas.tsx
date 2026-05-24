@@ -32,6 +32,7 @@ export default function GameCanvas() {
   const showCoordsRef = useRef(false);
 
   const [gameData, setGameData] = useState<any>(null);
+  const [availableMoves, setAvailableMoves] = useState<any[]>([]);
   const lastStateRef = useRef<any>(null);
 
   // ---------------------------------------------
@@ -44,21 +45,23 @@ export default function GameCanvas() {
 
     if (!backgroundRef.current || !gridRef.current) return;
 
-    backgroundRef.current.visible = showMapRef.current;
-    gridRef.current.visible = showGridRef.current;
+    backgroundRef.current.visible = showMap;
+    gridRef.current.visible = showGrid;
 
+    // ✅ 🔥 FORZAR REDRAW CUANDO CAMBIAN TOGGLES
     const data = lastStateRef.current;
-    if (!data?.hexes || !data?.shape) return;
+    if (!data) return;
 
     const grid = gridRef.current;
+
     grid.removeChildren();
 
     drawHexGridBase(
       grid,
       data.shape,
-      showCoordsRef.current,
+      showCoords,
       data.hexes,
-      showMapRef.current
+      showMap
     );
 
   }, [showMap, showGrid, showCoords]);
@@ -150,6 +153,50 @@ export default function GameCanvas() {
           if (!data?.hexes || !data?.shape) return;
 
           lastStateRef.current = data;
+          // ✅ forzar redraw con settings actualizados
+          const showCoordsNow = showCoordsRef.current;
+          const showMapNow = showMapRef.current;
+          // ✅ CLICK EN UNIDADES (GLOBAL)
+          (window as any).onUnitClick = async (unit: any) => {
+
+            const data = lastStateRef.current;
+            if (!data) return;
+
+            const isHumanTurn =
+              data?.sides?.[data.active_side] === "human";
+
+            if (!isHumanTurn) return;
+
+            const isAvailable =
+              unit.side === data.active_side &&
+              !data.activated_units?.includes(unit.id);
+
+            if (!isAvailable) return;
+
+            console.log("✅ selected:", unit.id);
+
+            (window as any).selectUnit?.(unit.id);
+
+            // ✅ limpiar movimientos previos
+            setAvailableMoves([]);
+
+            // ✅ llamar backend
+            const res = await fetch("http://127.0.0.1:8000/api/game/actions", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                unit_id: unit.id
+              })
+            });
+
+            const actions = await res.json();
+
+            console.log("🎯 actions:", actions);
+
+            // ✅ guardar movimientos
+            setAvailableMoves(actions.moves || []);
+          };
+
 
           background.visible = showMapRef.current;
           grid.visible = showGridRef.current;
@@ -165,17 +212,19 @@ export default function GameCanvas() {
           }
 
           // ✅ GRID
+
           drawHexGridBase(
             grid,
             data.shape,
-            showCoordsRef.current,
+            showCoordsNow,
             data.hexes,
-            showMapRef.current
+            showMapNow
           );
+
 
           // ✅ UNITS
           if (unitLayerRef.current) {
-            unitLayerRef.current.sync(data.units || []);
+            unitLayerRef.current.sync(data);
           }
         });
       }
@@ -216,8 +265,14 @@ export default function GameCanvas() {
         </div>
 
         {/* ✅ FIX active robusto */}
-        <div>
-          Active: {gameData?.active_side ?? "-"}
+        <div style={{
+          color: gameData?.sides?.[gameData?.active_side] === "human"
+            ? "lime"
+            : "orange"
+        }}>
+          Active: {gameData?.active_side ?? "-"} (
+          {gameData?.sides?.[gameData?.active_side] ?? "-"}
+          )
         </div>
       </div>
 
@@ -239,7 +294,12 @@ export default function GameCanvas() {
       </div>
 
       {/* PANEL */}
-      <UnitStatePanel units={gameData?.units || []} />
+      <UnitStatePanel
+        units={gameData?.units || []}
+        activeSide={gameData?.active_side}
+        activatedUnits={gameData?.activated_units || []}
+      />
+
 
     </div>
   );
