@@ -17,30 +17,54 @@ export default function GameCanvas() {
   const gridRef = useRef<PIXI.Container | null>(null);
 
   const subscribedRef = useRef(false);
-  const initializedRef = useRef(false); // 🔥 CLAVE
+  const initializedRef = useRef(false);
 
   // ✅ UI state
   const [showMap, setShowMap] = useState(true);
   const [showGrid, setShowGrid] = useState(true);
+  const [showCoords, setShowCoords] = useState(false);
 
-  // ✅ refs para evitar stale closure
+  // ✅ refs para PIXI
   const showMapRef = useRef(true);
   const showGridRef = useRef(true);
+  const showCoordsRef = useRef(false);
 
+  // ✅ guardar último estado
+  const lastStateRef = useRef<any>(null);
+
+  // ---------------------------------------------
+  // ✅ SYNC VISIBILITY + REDRAW
+  // ---------------------------------------------
   useEffect(() => {
     showMapRef.current = showMap;
     showGridRef.current = showGrid;
+    showCoordsRef.current = showCoords;
 
-    // ✅ proteger null
     if (!backgroundRef.current || !gridRef.current) return;
 
     backgroundRef.current.visible = showMap;
     gridRef.current.visible = showGrid;
 
-  }, [showMap, showGrid]);
+    // ✅ redraw grid con coords + terrain
+    const state = lastStateRef.current;
+    if (!state) return;
 
+    const data = state.raw;
+    if (!data) return;
+
+    const grid = gridRef.current;
+
+    grid.removeChildren();
+
+    drawHexGridBase(grid, data.shape, showCoordsRef.current, data.hexes,showMap);
+
+  }, [showMap, showGrid, showCoords]);
+
+  // ---------------------------------------------
+  // ✅ INIT PIXI
+  // ---------------------------------------------
   useEffect(() => {
-    if (initializedRef.current) return; // 🔥 evita doble init (React StrictMode)
+    if (initializedRef.current) return;
     initializedRef.current = true;
 
     if (!containerRef.current) return;
@@ -52,16 +76,14 @@ export default function GameCanvas() {
       background: "#000",
     }).then(() => {
 
-      if (!containerRef.current) return; // 🔥 evita null
+      if (!containerRef.current) return;
 
       containerRef.current.appendChild(app.canvas);
       appRef.current = app;
 
-      // WORLD
       const world = new PIXI.Container();
       app.stage.addChild(world);
 
-      // LAYERS
       const background = new PIXI.Container();
       const grid = new PIXI.Container();
 
@@ -71,22 +93,20 @@ export default function GameCanvas() {
       backgroundRef.current = background;
       gridRef.current = grid;
 
-      // ✅ VISIBILITY INICIAL
       background.visible = showMapRef.current;
       grid.visible = showGridRef.current;
 
-      // CAMERA
       setupCamera(app, world, containerRef.current);
 
-      // SUBSCRIBE
       if (!subscribedRef.current) {
         subscribedRef.current = true;
 
         gameController.subscribe((state) => {
+          lastStateRef.current = state;
+
           const data = state.raw;
           if (!data) return;
 
-          // ✅ VISIBILITY SIEMPRE
           background.visible = showMapRef.current;
           grid.visible = showGridRef.current;
 
@@ -97,7 +117,7 @@ export default function GameCanvas() {
             drawMapPieces(background, data.map.pieces);
           }
 
-          drawHexGridBase(grid, data.shape);
+          drawHexGridBase(grid, data.shape, showCoordsRef.current, data.hexes,showMap);
         });
       }
 
@@ -110,23 +130,33 @@ export default function GameCanvas() {
 
   }, []);
 
+  // ---------------------------------------------
+  // ✅ RENDER
+  // ---------------------------------------------
   return (
-    <>
+    <div
+      style={{
+        width: "100%",
+        height: "100%",
+        position: "relative",
+      }}
+    >
       <div
         ref={containerRef}
         style={{
           width: "100%",
           height: "100%",
-          position: "relative",
         }}
       />
 
       <LayerControls
         showMap={showMap}
         showGrid={showGrid}
+        showCoords={showCoords}
         onToggleMap={setShowMap}
         onToggleGrid={setShowGrid}
+        onToggleCoords={setShowCoords}
       />
-    </>
+    </div>
   );
 }
