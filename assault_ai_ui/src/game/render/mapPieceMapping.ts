@@ -1,0 +1,4 @@
+export const mapPieceImages = {
+  S2: "/art/maps/Map S2.png",
+  S3: "/art/maps/Map S3.png",
+};

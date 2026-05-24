@@ -1,23 +1,30 @@
 import * as PIXI from "pixi.js";
 
 // ---------------------------------------------
-const HEX_SIZE = 30;
+// CONFIG
+// ---------------------------------------------
+export const HEX_SIZE = 30;
+
+const HEX_WIDTH = HEX_SIZE * Math.sqrt(3);
+const HEX_HEIGHT = HEX_SIZE * (3 / 2);
 
 // ---------------------------------------------
-// AXIAL → PIXEL (vertical offset layout)
+// AXIAL → PIXEL (EVEN-R OFFSET ✅ CORRECTO)
 // ---------------------------------------------
 export function axialToPixel(q: number, r: number) {
+
   const x =
-    HEX_SIZE * Math.sqrt(3) * (q + 0.5 * (r % 2));
+    HEX_WIDTH * (q + 0.5 * (r % 2)) + HEX_WIDTH / 2;
 
   const y =
-    HEX_SIZE * (3 / 2) * r;
+    HEX_HEIGHT * r;
 
   return { x, y };
 }
 
+
 // ---------------------------------------------
-// DRAW SINGLE HEX (stroke only)
+// DRAW SINGLE HEX
 // ---------------------------------------------
 export function drawHex(
   g: PIXI.Graphics,
@@ -43,7 +50,6 @@ export function drawHex(
 
   g.closePath();
 
-  // stroke only (no fill)
   g.stroke({
     width: 2,
     color: 0xffffff,
@@ -51,7 +57,7 @@ export function drawHex(
 }
 
 // ---------------------------------------------
-// DRAW FULL HEX GRID BASE (using shape)
+// DRAW GRID (RECTANGULAR SHAPE CORRECTO)
 // ---------------------------------------------
 export function drawHexGridBase(
   container: PIXI.Container,
@@ -66,11 +72,12 @@ export function drawHexGridBase(
 
       const { x, y } = axialToPixel(q, r);
 
-      // snap to pixel to avoid rendering artifacts
-      const px = Math.round(x);
-      const py = Math.round(y);
-
-      drawHex(g, px, py, HEX_SIZE);
+      drawHex(
+        g,
+        Math.round(x),
+        Math.round(y + HEX_SIZE), // ✅ mantiene altura correcta
+        HEX_SIZE
+      );
     }
   }
 

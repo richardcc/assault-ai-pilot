@@ -1,5 +1,6 @@
 import "./App.css";
-import GameCanvas from "./GameCanvas";
+import GameCanvas from "./game/GameCanvas";
+import { gameController } from "./game/gameControllerInstance";
 
 function App() {
   return (
@@ -7,26 +8,47 @@ function App() {
 
       {/* HEADER */}
       <header className="header">
-        <div className="header-left">MODE: Replay | Play</div>
-        <div className="header-center">Turn 1</div>
-        <div className="header-right">🤖 Assistant</div>
+        <div className="header-left">
+
+          <button onClick={() => gameController.start("human")}>
+            🎮 Human vs AI
+          </button>
+
+          <button onClick={() => gameController.start("ai_vs_ai")}>
+            🤖 AI vs AI
+          </button>
+
+          <button onClick={() => gameController.start("replay")}>
+            🔁 Replay
+          </button>
+
+          <button onClick={() => gameController.stop()}>
+            ⛔ Stop
+          </button>
+
+        </div>
+
+        <div className="header-center">
+          Turn: (pending)
+        </div>
+
+        <div className="header-right">
+          🤖 Assistant
+        </div>
       </header>
 
       {/* MAIN */}
       <main className="main">
 
-        {/* LEFT PANEL */}
         <aside className="left">
           <h3>AI / Actions</h3>
           <p>Select a unit</p>
         </aside>
 
-        {/* MAP */}
         <section className="center">
           <GameCanvas />
         </section>
 
-        {/* RIGHT PANEL */}
         <aside className="right">
           <h3>Event Log</h3>
           <p>Events will appear here</p>
