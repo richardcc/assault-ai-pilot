@@ -47,20 +47,17 @@ export default function GameCanvas() {
     backgroundRef.current.visible = showMapRef.current;
     gridRef.current.visible = showGridRef.current;
 
-    const state = lastStateRef.current;
-    if (!state) return;
-
-    const data = state.raw;
-    if (!data) return;
+    const data = lastStateRef.current;
+    if (!data?.hexes || !data?.shape) return;
 
     const grid = gridRef.current;
     grid.removeChildren();
 
     drawHexGridBase(
       grid,
-      data.shape,
+      data.shape,                 // ✅ FIX
       showCoordsRef.current,
-      data.hexes,
+      data.hexes,                // ✅ FIX
       showMapRef.current
     );
 
@@ -82,21 +79,9 @@ export default function GameCanvas() {
       background: "#000",
     }).then(() => {
 
-      if (!containerRef.current) return;
-
-      containerRef.current.appendChild(app.canvas);
+      containerRef.current?.appendChild(app.canvas);
       appRef.current = app;
 
-      requestAnimationFrame(() => {
-        if (!containerRef.current) return;
-
-        const w = containerRef.current.clientWidth;
-        const h = containerRef.current.clientHeight;
-
-        app.renderer.resize(w, h);
-      });
-
-      // ✅ WORLD
       const world = new PIXI.Container();
       app.stage.addChild(world);
       worldRef.current = world;
@@ -107,34 +92,27 @@ export default function GameCanvas() {
       world.addChild(background);
       world.addChild(grid);
 
-      // ✅ UNITS
       const unitLayer = new UnitLayer(world);
       unitLayerRef.current = unitLayer;
 
       backgroundRef.current = background;
       gridRef.current = grid;
 
-      background.visible = showMapRef.current;
-      grid.visible = showGridRef.current;
+      setupCamera(app, world, containerRef.current!);
 
-      setupCamera(app, world, containerRef.current);
-
-      // ✅ 🔥 FOCUS CAMERA DESDE PANEL
+      // ✅ FOCUS CAMERA DESDE PANEL
       (window as any).focusUnit = (unitId: string) => {
-        const state = lastStateRef.current;
-        if (!state) return;
+        const data = lastStateRef.current;
+        if (!data || !data.units) return;
 
-        const units = state.raw?.units;
-        if (!units) return;
-
-        const unit = units.find((u: any) => u.id === unitId);
+        // ✅ OJO: usar id (no unit_id)
+        const unit = data.units.find((u: any) => u.id === unitId);
         if (!unit) return;
 
         const { x, y } = axialToPixel(unit.q, unit.r);
 
         const world = worldRef.current;
         const app = appRef.current;
-
         if (!world || !app) return;
 
         // ✅ centrar cámara
@@ -144,7 +122,6 @@ export default function GameCanvas() {
           app.renderer.height / 2
         );
       };
-
       // ---------------------------------------------
       // SUBSCRIBE
       // ---------------------------------------------
@@ -152,14 +129,18 @@ export default function GameCanvas() {
         subscribedRef.current = true;
 
         gameController.subscribe((state) => {
-          lastStateRef.current = state;
 
-          const data = state.raw;
-          if (!data) return;
+          const data = state;
 
-          setGameData({
-            units: data.units || []
-          });
+          console.log("RECEIVED STATE:", data);
+
+          // ✅ IGNORAR SOLO SI de verdad es incompleto
+          if (!data || !data.hexes || !data.shape) {
+            return;
+          }
+
+          lastStateRef.current = data;
+          setGameData(data);
 
           background.visible = showMapRef.current;
           grid.visible = showGridRef.current;
@@ -173,19 +154,17 @@ export default function GameCanvas() {
           }
 
           // ✅ GRID
-          if (data.shape && data.hexes) {
-            drawHexGridBase(
-              grid,
-              data.shape,
-              showCoordsRef.current,
-              data.hexes,
-              showMapRef.current
-            );
-          }
+          drawHexGridBase(
+            grid,
+            data.shape,              // ✅ FIX
+            showCoordsRef.current,
+            data.hexes,             // ✅ FIX
+            showMapRef.current
+          );
 
           // ✅ UNITS
-          if (unitLayerRef.current && data.units) {
-            unitLayerRef.current.sync(data.units);
+          if (unitLayerRef.current) {
+            unitLayerRef.current.sync(data.units || []);
           }
         });
       }
@@ -208,20 +187,26 @@ export default function GameCanvas() {
       flexDirection: "column",
       width: "100%",
       height: "100%",
-      position: "relative",
     }}>
 
-      {/* MAP */}
+      {/* HEADER */}
       <div style={{
-        flex: 1,
-        position: "relative",
+        background: "#1a1a1a",
+        color: "#eee",
+        padding: "8px 12px",
+        display: "flex",
+        gap: "20px",
       }}>
+        <div>{gameData?.scenario_name ?? gameData?.id ?? "Scenario"}</div>
+        <div>Turn: {gameData?.turn ?? "-"}</div>
+        <div>Active: {gameData?.active_side ?? "-"}</div>
+      </div>
+
+      {/* MAP */}
+      <div style={{ flex: 1, position: "relative" }}>
         <div
           ref={containerRef}
-          style={{
-            width: "100%",
-            height: "100%",
-          }}
+          style={{ width: "100%", height: "100%" }}
         />
 
         <LayerControls

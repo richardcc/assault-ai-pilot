@@ -50,18 +50,25 @@ def _trace(tag: str, **data):
     if not DEBUG_TRACE:
         return
     payload = " ".join(f"{k}={v}" for k, v in data.items())
-    print(f"[TRACE][{tag}] {payload}")
 
 
 class ActionCatalog:
 
-    def __init__(self, game_state, unit):
+    def __init__(self, game_state, unit, terrain_config=None):
         self.gs = game_state
-        self.unit = unit  # ✅ NEW
+        self.unit = unit
+
+        if terrain_config is None:
+            raise ValueError(
+                "ActionCatalog requires terrain_config. "
+                "Use: ActionCatalog(state, unit, terrain_config)"
+            )
+
+        self.terrain_config = terrain_config
+
 
     def actions(self):
-        print("[CATALOG DEBUG]", self.unit.unit_id)
-        active = self.unit  # ✅ clave
+        active = self.unit
 
         if active is None:
             return [WaitAction("SYSTEM")]
@@ -116,11 +123,9 @@ class ActionCatalog:
         # ----------------------------------
         actions.append(WaitAction(active.unit_id))
 
-
-        # ✅ ✅ DEBUG BIEN PUESTO (CLAVE)
-        print("[CATALOG ACTIONS FINAL]", active.unit_id)
-        for a in actions:
-            print("   ->", a)
+        # ----------------------------------
+        # DEBUG FINAL
+        # ----------------------------------
 
         _trace(
             "ACTION_CATALOG_END",
@@ -140,6 +145,8 @@ class ActionCatalog:
         if not getattr(active, "can_fire", True):
             return actions
 
+        # ✅ debug claro de spotting
+
         for other in self.gs.units:
 
             if other.side == active.side:
@@ -149,7 +156,6 @@ class ActionCatalog:
                 continue
 
             if other.unit_id not in getattr(active, "spotted_enemies", []):
-                print("[SPOTTED CHECK]", active.unit_id, getattr(active, "spotted_enemies", []))
                 continue
 
             distance = hex_distance(active.position, other.position)
@@ -212,7 +218,7 @@ class ActionCatalog:
             attacker,
             target,
             self.gs.game_map,
-            self.gs.terrain_config
+            self.terrain_config
         )
 
 
@@ -676,7 +682,7 @@ def resolve_action(
         _trace("RESOLVE_MOVE", unit=action.unit_id)
 
         if action.path:
-            new_state = deepcopy(state)
+            new_state = state
 
             unit = next(
                 (u for u in new_state.units if u.unit_id == action.unit_id),
@@ -694,7 +700,7 @@ def resolve_action(
         _trace("RESOLVE_COMBAT", unit=action.unit_id, mode=action.combat_mode)
 
         # Always work on a copy of the state
-        new_state = deepcopy(state)
+        new_state = state
 
         # ------------------------------
         # CLOSE COMBAT (ASSAULT)
@@ -2094,7 +2100,7 @@ def check_line_of_sight(attacker, target, game_map, terrain_config):
             continue
 
         terrain = hex_.get_terrain()
-        config = terrain_config.get(terrain, {})
+        config = terrain_config.get(terrain)
 
         los_type = config.get("los", "CLEAR")
 
@@ -2332,7 +2338,8 @@ from assault_model.map.combat_geometry import determine_attack_sector
 from assault_model.runtime.execution_context import ExecutionContext
 from assault_model.combat.battle_die import DiceResult
 from assault_model.combat.dice_comparison import compare_dice
-from assault_model.config.terrain_config import terrain_config
+from assault_model.map.terrain_config import terrain_config
+
 from assault_model.actions.combat_mode import CombatMode
 
 from assault_model.combat.line_of_sight import (
@@ -2852,12 +2859,14 @@ def can_spot(attacker, target, los, game_map, terrain_config):
     # --------------------------------------
     if los == LineOfSight.HINDERED:
 
-        # terreno del objetivo
-        hex_ = game_map.get_hex(target.position)
+        # ✅ obtener hex correctamente
+        hex_ = game_map.get_hex(target.position.q, target.position.r)
 
         if hex_:
             terrain = hex_.get_terrain()
-            config = terrain_config.get(terrain, {})
+
+            # ✅ usar API correcta
+            config = terrain_config.get(terrain)
 
             # si además está en terreno que también cubre
             if config.get("los") == "HINDERED":
@@ -2870,6 +2879,56 @@ def can_spot(attacker, target, los, game_map, terrain_config):
     # CLEAR → siempre visible
     # --------------------------------------
     return True
+
+
+
+================================================================================
+FILE: C:\repos\python\assault\assault_model\combat\spotting_runtime (2).py
+================================================================================
+
+
+
+
+================================================================================
+FILE: C:\repos\python\assault\assault_model\combat\spotting_runtime.py
+================================================================================
+
+from assault_model.combat.line_of_sight import check_line_of_sight
+from assault_model.combat.spotting import can_spot
+
+
+def update_spotting(state, terrain_config):
+
+    for unit in state.units:
+
+        if not unit.alive:
+            unit.spotted_enemies = set()
+            continue
+
+        visible = []
+
+        for other in state.units:
+
+            if other.side == unit.side:
+                continue
+
+            if not other.alive:
+                continue
+
+            # ✅ LOS correcto
+            los = check_line_of_sight(
+                unit,
+                other,
+                state.game_map,
+                terrain_config
+            )
+
+            # ✅ spotting coherente
+            if can_spot(unit, other, los, state.game_map, terrain_config):
+                visible.append(other.unit_id)
+
+        unit.spotted_enemies = set(visible)
+
 
 
 ================================================================================
@@ -2936,7 +2995,7 @@ FILE: C:\repos\python\assault\assault_model\combat\modifiers\terrain_modifier.py
 
 from assault_model.combat.modifier import DiceModifier
 from assault_model.combat.dice_color import DiceColor
-from assault_model.config.terrain_config import terrain_config
+from assault_model.map.terrain_config import terrain_config
 from assault_model.combat.line_of_sight import LineOfSight
 
 
@@ -2997,158 +3056,6 @@ class TerrainModifier(DiceModifier):
 
         return result
 
-
-
-================================================================================
-FILE: C:\repos\python\assault\assault_model\config\terrain_config.py
-================================================================================
-
-import json
-from pathlib import Path
-
-
-class TerrainConfig:
-
-    def __init__(self, config_path=None):
-
-        if config_path is None:
-            config_path = Path(__file__).parent / "terrain_modifiers.json"
-
-        with open(config_path, "r", encoding="utf-8") as f:
-            self.data = json.load(f)
-
-    # -----------------------------
-    # Terrain entry
-    # -----------------------------
-    def get(self, terrain_name):
-        return self.data["terrain"].get(
-            terrain_name,
-            self.data["terrain"]["clear"]
-        )
-
-    # -----------------------------
-    # Defense dice
-    # -----------------------------
-    def get_defense_dice(self, terrain_name, unit_type):
-        entry = self.get(terrain_name)
-        return entry.get("defense", {}).get(unit_type, [])
-
-    # -----------------------------
-    # LOS
-    # -----------------------------
-    def get_los(self, terrain_name):
-        entry = self.get(terrain_name)
-        return entry.get("los", "CLEAR")
-
-    # -----------------------------
-    # Flags
-    # -----------------------------
-    def has_flag(self, terrain_name, flag):
-        entry = self.get(terrain_name)
-        return entry.get(flag, False)
-
-
-# ✅ 💥 ESTA LÍNEA FALTABA
-terrain_config = TerrainConfig()
-
-
-
-================================================================================
-FILE: C:\repos\python\assault\assault_model\config\terrain_modifiers.json
-================================================================================
-
-{
-  "terrain": {
-
-    "clear": {
-      "defense": {
-        "INFANTRY": ["GREEN"],
-        "VEHICLE": [],
-        "ARTILLERY": []
-      },
-      "los": "CLEAR"
-    },
-
-    "water": {
-      "defense": {
-        "INFANTRY": [],
-        "VEHICLE": [],
-        "ARTILLERY": []
-      },
-      "los": "CLEAR",
-      "impassable": true
-    },
-
-    "rocky": {
-      "defense": {
-        "INFANTRY": ["BLUE", "YELLOW"],
-        "VEHICLE": ["GREEN"],
-        "ARTILLERY": ["GREEN"]
-      },
-      "los": "CLEAR"
-    },
-
-    "olive_vine_grove": {
-      "defense": {
-        "INFANTRY": ["GREEN", "GREEN"],
-        "VEHICLE": ["BLUE"],
-        "ARTILLERY": ["BLUE"]
-      },
-      "los": "HINDERED"
-    },
-
-    "light_forest": {
-      "defense": {
-        "INFANTRY": ["YELLOW", "GREEN"],
-        "VEHICLE": ["GREEN"],
-        "ARTILLERY": ["BLUE"]
-      },
-      "los": "HINDERED"
-    },
-
-    "brush": {
-      "defense": {
-        "INFANTRY": ["GREEN", "BLUE"],
-        "VEHICLE": ["GREEN"],
-        "ARTILLERY": ["GREEN"]
-      },
-      "los": "HINDERED"
-    },
-
-    "heavy_forest": {
-      "defense": {
-        "INFANTRY": ["GREEN", "YELLOW", "YELLOW"],
-        "VEHICLE": ["GREEN"],
-        "ARTILLERY": ["GREEN"]
-      },
-      "los": "BLOCKED",
-      "no_indirect_from": true
-    },
-
-    "building_single": {
-      "defense": {
-        "INFANTRY": ["BLUE", "YELLOW", "YELLOW"],
-        "VEHICLE": ["BLUE"],
-        "ARTILLERY": ["GREEN"]
-      },
-      "los": "BLOCKED",
-      "no_indirect_from": true,
-      "elevation": 0
-    },
-
-    "building_multi": {
-      "defense": {
-        "INFANTRY": ["RED", "GREEN", "GREEN"],
-        "VEHICLE": ["BLUE"],
-        "ARTILLERY": ["GREEN"]
-      },
-      "los": "BLOCKED",
-      "no_indirect_from": true,
-      "elevation": 1
-    }
-
-  }
-}
 
 
 ================================================================================
@@ -3329,6 +3236,7 @@ from assault_model.units.unit_instance import UnitInstance
 from assault_model.units.unit_type import UnitType
 from assault_model.core.victory_conditions import VictoryConditions
 from assault_model.state.game_state import GameState
+from assault_model.map.terrain_config import terrain_config
 
 
 DEBUG_TRACE = os.getenv("ASSAULT_DEBUG_TRACE", "0") == "1"
@@ -3469,6 +3377,7 @@ def load_scenario(
             else None
         ),
     )
+    scenario.terrain_config = terrain_config
 
     # =================================================
     # ✅ GAME STATE (SIN ACTIVACIÓN)
@@ -4397,6 +4306,158 @@ class Terrain(Enum):
 
 
 ================================================================================
+FILE: C:\repos\python\assault\assault_model\map\terrain_config.py
+================================================================================
+
+import json
+from pathlib import Path
+
+
+class TerrainConfig:
+
+    def __init__(self, config_path=None):
+
+        if config_path is None:
+            config_path = Path(__file__).parent / "terrain_modifiers.json"
+
+        with open(config_path, "r", encoding="utf-8") as f:
+            self.data = json.load(f)
+
+    # -----------------------------
+    # Terrain entry
+    # -----------------------------
+    def get(self, terrain_name):
+        return self.data["terrain"].get(
+            terrain_name,
+            self.data["terrain"]["clear"]
+        )
+
+    # -----------------------------
+    # Defense dice
+    # -----------------------------
+    def get_defense_dice(self, terrain_name, unit_type):
+        entry = self.get(terrain_name)
+        return entry.get("defense", {}).get(unit_type, [])
+
+    # -----------------------------
+    # LOS
+    # -----------------------------
+    def get_los(self, terrain_name):
+        entry = self.get(terrain_name)
+        return entry.get("los", "CLEAR")
+
+    # -----------------------------
+    # Flags
+    # -----------------------------
+    def has_flag(self, terrain_name, flag):
+        entry = self.get(terrain_name)
+        return entry.get(flag, False)
+
+
+# ✅ 💥 ESTA LÍNEA FALTABA
+terrain_config = TerrainConfig()
+
+
+
+================================================================================
+FILE: C:\repos\python\assault\assault_model\map\terrain_modifiers.json
+================================================================================
+
+{
+  "terrain": {
+
+    "clear": {
+      "defense": {
+        "INFANTRY": ["GREEN"],
+        "VEHICLE": [],
+        "ARTILLERY": []
+      },
+      "los": "CLEAR"
+    },
+
+    "water": {
+      "defense": {
+        "INFANTRY": [],
+        "VEHICLE": [],
+        "ARTILLERY": []
+      },
+      "los": "CLEAR",
+      "impassable": true
+    },
+
+    "rocky": {
+      "defense": {
+        "INFANTRY": ["BLUE", "YELLOW"],
+        "VEHICLE": ["GREEN"],
+        "ARTILLERY": ["GREEN"]
+      },
+      "los": "CLEAR"
+    },
+
+    "olive_vine_grove": {
+      "defense": {
+        "INFANTRY": ["GREEN", "GREEN"],
+        "VEHICLE": ["BLUE"],
+        "ARTILLERY": ["BLUE"]
+      },
+      "los": "HINDERED"
+    },
+
+    "light_forest": {
+      "defense": {
+        "INFANTRY": ["YELLOW", "GREEN"],
+        "VEHICLE": ["GREEN"],
+        "ARTILLERY": ["BLUE"]
+      },
+      "los": "HINDERED"
+    },
+
+    "brush": {
+      "defense": {
+        "INFANTRY": ["GREEN", "BLUE"],
+        "VEHICLE": ["GREEN"],
+        "ARTILLERY": ["GREEN"]
+      },
+      "los": "HINDERED"
+    },
+
+    "heavy_forest": {
+      "defense": {
+        "INFANTRY": ["GREEN", "YELLOW", "YELLOW"],
+        "VEHICLE": ["GREEN"],
+        "ARTILLERY": ["GREEN"]
+      },
+      "los": "BLOCKED",
+      "no_indirect_from": true
+    },
+
+    "building_single": {
+      "defense": {
+        "INFANTRY": ["BLUE", "YELLOW", "YELLOW"],
+        "VEHICLE": ["BLUE"],
+        "ARTILLERY": ["GREEN"]
+      },
+      "los": "BLOCKED",
+      "no_indirect_from": true,
+      "elevation": 0
+    },
+
+    "building_multi": {
+      "defense": {
+        "INFANTRY": ["RED", "GREEN", "GREEN"],
+        "VEHICLE": ["BLUE"],
+        "ARTILLERY": ["GREEN"]
+      },
+      "los": "BLOCKED",
+      "no_indirect_from": true,
+      "elevation": 1
+    }
+
+  }
+}
+
+
+================================================================================
 FILE: C:\repos\python\assault\assault_model\map\terrain_utils.py
 ================================================================================
 
@@ -5034,6 +5095,7 @@ from assault_model.combat.combat_resolution import CombatResolutionResult
 
 from assault_model.runtime.execution_context import ExecutionContext
 from assault_model.map.hex_coord import HexCoord
+from assault_model.combat.spotting_runtime import update_spotting
 
 import os
 
@@ -5152,7 +5214,7 @@ class RuntimeGameState:
         alive_sides = {u.side for u in alive_units}
 
         event_bus = context.event_bus if context else None
-
+        
         if not alive_units:
             self.base_state.done = True
             self.base_state.winner = None
@@ -5217,8 +5279,9 @@ class RuntimeGameState:
         combat_result: CombatResolutionResult | None = None,
         context: ExecutionContext | None = None,
     ):
-
+        
         event_bus = context.event_bus if context else None
+        update_spotting(self.base_state, self.scenario.terrain_config)
 
         attacker = next(
             (u for u in self.base_state.units if u.unit_id == getattr(action, "unit_id", None)),
@@ -5296,7 +5359,7 @@ class RuntimeGameState:
                         "to": new_position,
                     },
                 })
-
+        update_spotting(self.base_state, self.scenario.terrain_config)
         return result
 
 
@@ -5753,18 +5816,6 @@ def _trace(tag: str, **data):
 
 
 class UnitInstance:
-    """
-    Runtime instance of a unit on the battlefield.
-
-    ✅ Includes:
-    - health / alive state
-    - suppression system
-    - fallback system
-    - embark / transport logic
-
-    ✅ NEW:
-    - spotting memory (persistent visibility)
-    """
 
     def __init__(
         self,
@@ -5780,47 +5831,33 @@ class UnitInstance:
         self.side = side
         self.position = position
         self.experience = experience
-
-        # Event bus (optional)
         self._event_bus = event_bus
 
-        # ============================
-        # Runtime combat state
-        # ============================
+        # Combat state
         self.max_strength = unit_type.max_strength
         self.strength = self.max_strength
         self.alive = True
 
-        # ============================
-        # Morale state
-        # ============================
-        self.suppressed: bool = False
-        self.fallback: bool = False
+        # Morale
+        self.suppressed = False
+        self.fallback = False
 
-        # ============================
-        # ✅ NEW: Spotting / visibility state
-        # ============================
+        # Spotting (runtime)
         self.spotted_enemies: set[str] = set()
         self.last_seen_turn: dict[str, int] = {}
 
-        # ============================
-        # Transport / embark state
-        # ============================
-        self.embarked: bool = False
-        self.carrier_id: str | None = None
+        # Transport
+        self.embarked = False
+        self.carrier_id = None
 
         if self.unit_type.category.name == "VEHICLE":
-            self.passengers: list[str] = []
+            self.passengers = []
 
-    # ----------------------------
-    # Aliases
     # ----------------------------
     @property
     def hp(self) -> int:
         return self.strength
 
-    # ----------------------------
-    # State checks
     # ----------------------------
     def is_alive(self) -> bool:
         return self.alive
@@ -5841,17 +5878,11 @@ class UnitInstance:
         return self.fallback
 
     # ----------------------------
-    # Movement
-    # ----------------------------
     def move_to(self, q: int, r: int):
         if self.embarked:
-            raise RuntimeError(
-                f"Embarked unit {self.unit_id} cannot move on map"
-            )
+            raise RuntimeError(f"Embarked unit {self.unit_id} cannot move")
         self.position = (q, r)
 
-    # ----------------------------
-    # Distance helper
     # ----------------------------
     def get_distance_to(self, other: "UnitInstance") -> int:
         if self.position is None or other.position is None:
@@ -5859,11 +5890,8 @@ class UnitInstance:
 
         q1, r1 = self.position
         q2, r2 = other.position
-
         return abs(q1 - q2) + abs(r1 - r2)
 
-    # ----------------------------
-    # Combat API
     # ----------------------------
     def get_attack_dice(self, target: "UnitInstance"):
 
@@ -5891,7 +5919,7 @@ class UnitInstance:
         return dice
 
     # ----------------------------
-    # Spotting helpers ✅ NEW
+    # Spotting
     # ----------------------------
     def can_see(self, other: "UnitInstance") -> bool:
         return other.unit_id in self.spotted_enemies
@@ -5901,11 +5929,10 @@ class UnitInstance:
         self.last_seen_turn[enemy_id] = turn
 
     def forget_enemy(self, enemy_id: str):
-        if enemy_id in self.spotted_enemies:
-            self.spotted_enemies.remove(enemy_id)
+        self.spotted_enemies.discard(enemy_id)
 
     # ----------------------------
-    # Embark / disembark
+    # Embark
     # ----------------------------
     def embark_into(self, vehicle: "UnitInstance"):
         if self.embarked:
@@ -5920,21 +5947,19 @@ class UnitInstance:
 
     def disembark_from(self, vehicle: "UnitInstance", q: int, r: int):
         if not self.embarked or self.carrier_id != vehicle.unit_id:
-            raise RuntimeError(
-                f"{self.unit_id} not embarked in {vehicle.unit_id}"
-            )
+            raise RuntimeError(f"{self.unit_id} not embarked")
 
         self.embarked = False
         self.carrier_id = None
         self.position = (q, r)
 
-        if hasattr(vehicle, "passengers") and self.unit_id in vehicle.passengers:
+        if self.unit_id in getattr(vehicle, "passengers", []):
             vehicle.passengers.remove(self.unit_id)
 
         _trace("DISEMBARK", unit=self.unit_id, vehicle=vehicle.unit_id)
 
     # ----------------------------
-    # Combat hooks
+    # Damage
     # ----------------------------
     def apply_damage(self, dmg: int):
 
@@ -5962,20 +5987,18 @@ class UnitInstance:
         )
 
         if self._event_bus:
-            self._event_bus.emit(
-                {
-                    "type": "DIRECT_DAMAGE",
-                    "payload": {
-                        "target": self.unit_id,
-                        "side": self.side,
-                        "damage": dmg,
-                        "hp_before": hp_before,
-                        "hp_after": hp_after,
-                        "killed": killed,
-                        "position": self.position,
-                    },
-                }
-            )
+            self._event_bus.emit({
+                "type": "DIRECT_DAMAGE",
+                "payload": {
+                    "target": self.unit_id,
+                    "side": self.side,
+                    "damage": dmg,
+                    "hp_before": hp_before,
+                    "hp_after": hp_after,
+                    "killed": killed,
+                    "position": self.position,
+                },
+            })
 
     # ----------------------------
     # Suppression
@@ -5993,22 +6016,10 @@ class UnitInstance:
 
         _trace("SUPPRESSION_APPLIED", unit=self.unit_id)
 
-        if self._event_bus:
-            self._event_bus.emit(
-                {
-                    "type": "SUPPRESSED",
-                    "payload": {
-                        "unit": self.unit_id,
-                        "position": self.position,
-                    },
-                }
-            )
-
     def clear_suppression(self):
-        if not self.suppressed:
-            return
-        self.suppressed = False
-        _trace("SUPPRESSION_CLEARED", unit=self.unit_id)
+        if self.suppressed:
+            self.suppressed = False
+            _trace("SUPPRESSION_CLEARED", unit=self.unit_id)
 
     # ----------------------------
     # Fallback
@@ -6023,28 +6034,25 @@ class UnitInstance:
 
         _trace("FALLBACK_TRIGGERED", unit=self.unit_id)
 
-        if self._event_bus:
-            self._event_bus.emit(
-                {
-                    "type": "FALLBACK",
-                    "payload": {
-                        "unit": self.unit_id,
-                        "position": self.position,
-                    },
-                }
-            )
-
         if self.unit_type.category.name == "ARTILLERY":
             self.alive = False
 
     def clear_fallback(self):
+        if self.fallback:
+            self.fallback = False
+            _trace("FALLBACK_CLEARED", unit=self.unit_id)
 
-        if not self.fallback:
-            return
+    # ==================================================
+    # ✅ 🔥 CRÍTICO: optimización deepcopy
+    # ==================================================
+    def __getstate__(self):
+        state = self.__dict__.copy()
 
-        self.fallback = False
+        # ✅ NO copiar estado dinámico (spotting)
+        state["spotted_enemies"] = set()
+        state["last_seen_turn"] = {}
 
-        _trace("FALLBACK_CLEARED", unit=self.unit_id)
+        return state
 
 
 
@@ -6114,20 +6122,29 @@ class UnitType:
     # =================================================
     # ✅ NEW: MODE RESOLUTION
     # =================================================
-    def _resolve_attack_mode(self, distance: int) -> str:
+    def _resolve_attack_mode(self, distance: int) -> str | None:
         """
-        Decide which attack mode to use.
+        Decide which attack mode to use based on actual attack tables.
         """
 
-        # Default → direct fire
-        mode = "DIRECT_FIRE"
+        for mode, targets in self._attack_raw.items():
 
-        # Mortar / indirect units
-        if self.classification == "INDIRECT_FIRE_UNIT":
-            if 3 <= distance <= 8:
-                mode = "INDIRECT_FIRE"
+            for target_type, table in targets.items():
 
-        return mode
+                for key in table.keys():
+
+                    if "-" in key:
+                        start, end = map(int, key.split("-"))
+
+                        if start <= distance <= end:
+                            return mode
+
+                    else:
+                        if int(key) == distance:
+                            return mode
+
+        return None
+    
 
     # =================================================
     # ✅ NEW CORE FUNCTION (replaces old logic)

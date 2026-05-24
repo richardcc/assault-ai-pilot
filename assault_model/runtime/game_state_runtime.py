@@ -32,8 +32,11 @@ def _trace(tag: str, **data):
 class RuntimeGameState:
     """
     ✅ Pure execution engine
-    ✅ No activation system
     ✅ Deterministic
+
+    Extended with:
+    ✅ alternating activations (no hardcode)
+    ✅ backward compatibility (turn_has_ended still works)
     """
 
     def __init__(self, base_state: GameState, scenario):
@@ -41,11 +44,56 @@ class RuntimeGameState:
         self.scenario = scenario
         self.turn = TurnState(turn_number=base_state.turn)
 
-        # ✅ NEW: control de activaciones por turno
+        # activation tracking (existing)
         self.activated_units = set()
 
+        # --- NEW: dynamic sides ---
+        self.sides = self._extract_sides()
+        self.active_side = self.sides[0] if self.sides else None
+
     # =================================================
-    # TURN END (FIX FINAL)
+    # SIDES (NEW)
+    # =================================================
+    def _extract_sides(self):
+        return sorted({
+            u.side for u in self.base_state.units
+        })
+
+    def get_available_units(self, side):
+        return [
+            u for u in self.base_state.units
+            if u.side == side
+            and u.unit_id not in self.activated_units
+            and self._can_unit_act(u)
+        ]
+
+    def _next_side(self, current):
+        if not self.sides:
+            return None
+        idx = self.sides.index(current)
+        return self.sides[(idx + 1) % len(self.sides)]
+
+    def next_activation(self):
+        if not self.active_side:
+            return
+
+        next_side = self._next_side(self.active_side)
+
+        for _ in range(len(self.sides)):
+            if self.get_available_units(next_side):
+                self.active_side = next_side
+                return
+            next_side = self._next_side(next_side)
+
+        # --- new turn ---
+        self.activated_units.clear()
+        self.base_state.turn += 1
+
+        self.sides = self._extract_sides()
+        self.active_side = self.sides[0] if self.sides else None
+
+    # =================================================
+    # TURN END (UNCHANGED - compatibility)
     # =================================================
     def turn_has_ended(self) -> bool:
         """
@@ -63,7 +111,7 @@ class RuntimeGameState:
         return True
 
     # =================================================
-    # ACTION GUARD
+    # ACTION GUARD (UNCHANGED)
     # =================================================
     def _can_unit_act(self, unit) -> bool:
         if unit is None:
@@ -77,18 +125,15 @@ class RuntimeGameState:
         return True
 
     # =================================================
-    # TURN CONTROL
+    # TURN CONTROL (MINIMAL EXTENSION)
     # =================================================
     def start_turn(self) -> None:
-        """
-        Start of turn:
-        - clears suppression
-        - clears fallback
-        - resets activation tracker
-        """
 
-        # ✅ reset activaciones
         self.activated_units.clear()
+
+        # --- NEW: reset sides each turn ---
+        self.sides = self._extract_sides()
+        self.active_side = self.sides[0] if self.sides else None
 
         for unit in self.base_state.units:
 
@@ -120,7 +165,7 @@ class RuntimeGameState:
         self._check_match_end()
 
     # =================================================
-    # MATCH END
+    # MATCH END (UNCHANGED)
     # =================================================
     def is_match_over(self) -> bool:
         return self.base_state.done
@@ -191,7 +236,7 @@ class RuntimeGameState:
                 })
 
     # =================================================
-    # MAIN EXECUTION
+    # MAIN EXECUTION (MINIMAL CHANGE)
     # =================================================
     def apply_action(
         self,
@@ -214,36 +259,23 @@ class RuntimeGameState:
             attacker=attacker.unit_id if attacker else None,
         )
 
-        # ✅ marcar unidad como activada
         if attacker:
             self.activated_units.add(attacker.unit_id)
 
-        # ✅ HARD BLOCK
         if attacker and not self._can_unit_act(attacker):
-
-            _trace(
-                "ACTION_BLOCKED",
-                unit=attacker.unit_id,
-            )
-
+            _trace("ACTION_BLOCKED", unit=attacker.unit_id)
             return None
 
         prev_position = None
         if attacker and attacker.position:
             prev_position = HexCoord(attacker.position.q, attacker.position.r)
 
-        # -------------------------------------------------
-        # WAIT
-        # -------------------------------------------------
         if isinstance(action, WaitAction):
             return {
                 "type": "WAIT",
                 "unit": attacker.unit_id if attacker else None
             }
 
-        # -------------------------------------------------
-        # APPLY ACTION
-        # -------------------------------------------------
         result = resolve_action(
             state=self.base_state,
             action=action,
@@ -255,12 +287,13 @@ class RuntimeGameState:
 
         self._check_match_end(context)
 
+        # --- NEW: activation step ---
+        if attacker:
+            self.next_activation()
+
         if self.base_state.done:
             return result
 
-        # -------------------------------------------------
-        # EVENT: MOVEMENT
-        # -------------------------------------------------
         if event_bus and prev_position and isinstance(action, MoveAction):
             unit_after = next(
                 (u for u in self.base_state.units if u.unit_id == action.unit_id),
@@ -279,5 +312,6 @@ class RuntimeGameState:
                         "to": new_position,
                     },
                 })
+
         update_spotting(self.base_state, self.scenario.terrain_config)
         return result

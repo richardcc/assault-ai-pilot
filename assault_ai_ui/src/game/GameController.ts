@@ -1,15 +1,24 @@
+import { suggestMove } from "../ai/suggestMove";
+
+type ControllerType = "human" | "ai";
+
 export class GameController {
+
   private mode: GameMode = "human";
-  private state: GameState | null = null;
+  private state: any = null;
 
   private listeners: Listener[] = [];
-  private lastState: GameState | null = null;
+  private lastState: any = null;
 
   private socket: WebSocket | null = null;
 
+  private controllersBySide: Record<string, ControllerType> = {
+    US: "human",
+    GE: "ai",
+  };
+
   // ----------------------------------
   async start(mode: GameMode) {
-    // ✅ evitar doble start
     if (this.socket && this.socket.readyState === WebSocket.OPEN) {
       console.log("⚠️ already started");
       return;
@@ -19,15 +28,15 @@ export class GameController {
 
     console.log("Starting mode:", mode);
 
-    if (mode === "replay") {
-      await this.loadReplay();
-    } else {
-      await this.loadScenario();
-    }
+    await this.loadScenario();
 
     setTimeout(() => {
       this.startWebSocket();
     }, 300);
+
+    if (mode === "ai") {
+      this.startLoop();
+    }
   }
 
   // ----------------------------------
@@ -39,19 +48,11 @@ export class GameController {
 
       const data = await res.json();
 
-      if (!data || !data.hexes) {
-        console.error("❌ Invalid scenario data", data);
-        return;
-      }
-
-      this.state = {
-        turn: 1,
-        raw: data,
-      };
-
-      console.log("✅ Scenario loaded:", data);
+      // ✅ keep same structure as runtime
+      this.state = data;
 
       this.emit();
+
     } catch (e) {
       console.error("❌ Scenario load error", e);
     }
@@ -74,19 +75,13 @@ export class GameController {
     };
 
     this.socket.onmessage = (event) => {
-      const data = JSON.parse(event.data);
+      const msg = JSON.parse(event.data);
 
-      if (!this.state) return;
-
-      this.state = {
-        turn: this.state.turn,
-        raw: {
-          ...this.state.raw,
-          units: data.units,
-        },
-      };
-
-      this.emit();
+      // ✅ ONLY accept MAP_STATE
+      if (msg.type === "MAP_STATE" && msg.payload) {
+        this.state = msg.payload;
+        this.emit();
+      }
     };
 
     this.socket.onclose = () => {
@@ -121,32 +116,74 @@ export class GameController {
   }
 
   // ----------------------------------
-  // ✅ NUEVO: obtener unidad por ID
-  getUnitById(id: string) {
-    const units = this.state?.raw?.units;
-    if (!units) return null;
+  private sendMove(unitId: string, move: any) {
+    if (!this.socket) return;
 
-    return units.find((u: any) => u.id === id) || null;
+    this.socket.send(
+      JSON.stringify({
+        action: "move",
+        unit_id: unitId,
+        q: move.q,
+        r: move.r,
+      })
+    );
   }
 
   // ----------------------------------
-  // ✅ NUEVO: obtener posición
-  getUnitPosition(id: string) {
-    const unit = this.getUnitById(id);
-    if (!unit) return null;
+  private startLoop() {
+    console.log("🤖 AI loop started");
 
-    return {
-      q: unit.q,
-      r: unit.r,
+    const loop = () => {
+
+      if (!this.state) {
+        setTimeout(loop, 1000);
+        return;
+      }
+
+      const data = this.state;
+
+      const activeSide = data.active_side;
+
+      if (!activeSide) {
+        setTimeout(loop, 1000);
+        return;
+      }
+
+      if (this.controllersBySide[activeSide] !== "ai") {
+        setTimeout(loop, 500);
+        return;
+      }
+
+      const units = data.units || [];
+      const activated = data.activated_units || [];
+
+      const availableUnits = units.filter((u: any) =>
+        u.side === activeSide &&
+        !activated.includes(u.unit_id)
+      );
+
+      if (availableUnits.length === 0) {
+        setTimeout(loop, 500);
+        return;
+      }
+
+      for (const unit of availableUnits) {
+        const move = suggestMove(unit, data);
+
+        if (move) {
+          console.log("🤖 AI move:", unit.unit_id, move);
+          this.sendMove(unit.unit_id, move);
+        }
+      }
+
+      setTimeout(loop, 1000);
     };
+
+    loop();
   }
 
   // ----------------------------------
   private async loadReplay() {
     console.warn("Replay not implemented yet");
-  }
-
-  private startLoop() {
-    console.warn("AI loop not implemented yet");
   }
 }

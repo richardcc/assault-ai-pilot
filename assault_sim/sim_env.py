@@ -26,8 +26,7 @@ class SimEnv:
         self.config = config
         self.debug_config = debug_config or DebugConfig(enabled=False)
 
-        # ❌ controller eliminado conceptualmente (pero lo dejamos sin usar)
-        self.controller = controller
+        self.controller = controller  # not used (kept for compatibility)
 
         self.event_bus = EventBus() if self.debug_config.enabled else None
 
@@ -63,10 +62,8 @@ class SimEnv:
 
         self._step_counter = 0
 
-        # ✅ EVENT BUS
         if self.event_bus:
 
-            # ✅ RESET EVENT (IMPORTANTE)
             self.event_bus.emit({
                 "type": "RESET",
                 "payload": {
@@ -75,7 +72,6 @@ class SimEnv:
                 },
             })
 
-            # ✅ SCENARIO INITIALIZED
             self.event_bus.emit({
                 "type": "SCENARIO_INITIALIZED",
                 "payload": {
@@ -94,70 +90,67 @@ class SimEnv:
                 },
             })
 
-            # ✅ MAP STATE
             self._emit_map_state()
 
         return self.game_state
 
     # -------------------------------------------------
-    # STEP (CLEAN VERSION)
+    # STEP
     # -------------------------------------------------
     def step(self, action):
 
-        # ✅ loop protection
         self._step_counter += 1
         if self._step_counter > self._max_steps:
             raise RuntimeError("Simulation overflow (infinite loop protection)")
 
-        # -------------------------------------------------
-        # DEBUG: NO ACTION
-        # -------------------------------------------------
         if action is None and DEBUG_TRACE:
             print("[TRACE][NO_ACTION_AVAILABLE] (external scheduler handles it)")
 
-        # ✅ ACTION EVENT (SIN active_unit)
         if self.event_bus and action is not None:
             self.event_bus.emit({
                 "type": "ACTION",
                 "payload": {
                     "turn": self.game_state.turn,
                     "action": action.__class__.__name__,
-                    "unit_id": getattr(action, "unit_id", None),  # ✅ CRÍTICO
+                    "unit_id": getattr(action, "unit_id", None),
                 }
             })
+
+        context = ExecutionContext(event_bus=self.event_bus)
+
+        prev_turn = self.game_state.turn
 
         # -------------------------------------------------
         # APPLY ACTION
         # -------------------------------------------------
-        context = ExecutionContext(event_bus=self.event_bus)
-
         self.runtime.apply_action(action, context=context)
         self.game_state = self.runtime.base_state
 
-        # ✅ MAP AFTER ACTION
+        # -------------------------------------------------
+        # MAP UPDATE
+        # -------------------------------------------------
         self._emit_map_state()
 
-        # ✅ MATCH END
+        # -------------------------------------------------
+        # MATCH END
+        # -------------------------------------------------
         if self.game_state.done:
             self._emit_match_end()
             return self.game_state, 0.0, True, {}
 
         # -------------------------------------------------
-        # TURN END
+        # TURN CHANGE (runtime-driven)
         # -------------------------------------------------
-        if self.runtime.turn_has_ended():
+        if self.game_state.turn != prev_turn:
 
             if DEBUG_TRACE:
-                print("[TRACE][TURN_EMPTY] advancing turn")
-
-            self.runtime.end_turn()
-            self.game_state = self.runtime.base_state
+                print("[TRACE][TURN_ADVANCED] new turn detected")
 
             if self.event_bus:
                 self.event_bus.emit({
                     "type": "TURN_END",
                     "payload": {
-                        "turn": self.game_state.turn,
+                        "turn": prev_turn,
                     },
                 })
 
@@ -167,7 +160,6 @@ class SimEnv:
                 self._emit_match_end()
                 return self.game_state, 0.0, True, {}
 
-            # ✅ NEXT TURN
             self.runtime.start_turn()
             self.game_state = self.runtime.base_state
 
@@ -187,11 +179,20 @@ class SimEnv:
         self.event_bus.emit({
             "type": "MAP_STATE",
             "payload": {
+                # --- core state ---
                 "turn": self.game_state.turn,
                 "game_map": self.game_state.game_map,
                 "units": self.game_state.units,
                 "vp_tracker": self.game_state.vp_tracker,
                 "game_state": self.game_state,
+
+                # --- scenario context ---
+                "scenario_name": getattr(self.scenario, "name", None),
+
+                # --- activation metadata ---
+                "active_side": getattr(self.runtime, "active_side", None),
+                "activated_units": list(getattr(self.runtime, "activated_units", [])),
+                "sides": getattr(self.runtime, "sides", []),
             },
         })
 

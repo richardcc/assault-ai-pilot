@@ -25,28 +25,28 @@ export class UnitLayer {
     const seen = new Set<string>();
 
     for (const unit of units) {
+
       let sprite = this.sprites[unit.id];
 
+      // ✅ CREATE if missing
       if (!sprite) {
-        this.createSprite(unit).then((s) => {
-          this.sprites[unit.id] = s;
-          this.container.addChild(s);
-        });
-        continue;
+        sprite = await this.createSprite(unit);
+
+        this.sprites[unit.id] = sprite;
+        this.container.addChild(sprite);
       }
 
-      // ✅ posición EXACTA del hex
+      // ✅ POSICIÓN SIEMPRE (IMPORTANTE)
       const { x, y } = axialToPixel(unit.q, unit.r);
 
       sprite.x = Math.round(x);
       sprite.y = Math.round(y + HEX_SIZE);
 
-      // ✅ escala base segura
+      // ✅ escala base
       const base = (sprite as any).__baseScale ?? 1;
 
-      // ✅ hover highlight
       if (unit.id === highlightedUnitId) {
-        sprite.scale.set(base * 1.2);   // pequeño zoom
+        sprite.scale.set(base * 1.2);
         sprite.alpha = 1;
       } else {
         sprite.scale.set(base);
@@ -56,7 +56,7 @@ export class UnitLayer {
       seen.add(unit.id);
     }
 
-    // ✅ limpiar eliminados
+    // ✅ cleanup
     Object.keys(this.sprites).forEach((id) => {
       if (!seen.has(id)) {
         this.container.removeChild(this.sprites[id]);
