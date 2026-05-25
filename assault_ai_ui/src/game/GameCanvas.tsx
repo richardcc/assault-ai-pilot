@@ -1,13 +1,14 @@
-// File: GameCanvas.tsx
+// File: C:\repos\python\assault\assault_ai_ui\src\game\GameCanvas.tsx
 
 import { useEffect, useRef, useState } from "react";
 import * as PIXI from "pixi.js";
 
-// ❌ YA NO SE USA DIRECTAMENTE
-// import { gameController } from "./gameControllerInstance";
-// import { drawMapPieces } from "./render/mapPieceRenderer";
+import {
+  drawHexGridBase,
+  axialToPixel,   // ✅ AÑADIR ESTO
+  HEX_SIZE
+} from "./render/hexGridRenderer";
 
-import { drawHexGridBase } from "./render/hexGridRenderer";
 import { setupCamera } from "./systems/cameraController";
 
 import LayerControls from "./systems/LayerControls";
@@ -17,6 +18,10 @@ import { UnitLayer } from "./render/unitLayer";
 import { handleUnitClick } from "./systems/unitInteractionSystem";
 import { subscribeToGameState } from "./systems/gameStateSystem";
 import { registerFocusUnit } from "./systems/cameraSystem";
+
+import { HighlightLayer } from "./render/highlightLayer";
+import { updateHighlights } from "./systems/highlightSystem";
+import { updateLayerVisibility } from "./systems/layerVisibilitySystem";
 
 export default function GameCanvas() {
 
@@ -28,6 +33,7 @@ export default function GameCanvas() {
   const backgroundRef = useRef<PIXI.Container | null>(null);
   const gridRef = useRef<PIXI.Container | null>(null);
   const unitLayerRef = useRef<UnitLayer | null>(null);
+  const highlightLayerRef = useRef<HighlightLayer | null>(null);
 
   const subscribedRef = useRef(false);
   const initializedRef = useRef(false);
@@ -42,33 +48,27 @@ export default function GameCanvas() {
 
   const [gameData, setGameData] = useState<any>(null);
   const [availableMoves, setAvailableMoves] = useState<any[]>([]);
+  const [selectedUnitId, setSelectedUnitId] = useState<string | null>(null);
+  const [hoverHex, setHoverHex] = useState<{ q: number, r: number } | null>(null);
+
   const lastStateRef = useRef<any>(null);
 
   // ---------------------------------------------
-  // SYNC VISIBILITY (sin cambios)
+  // SYNC VISIBILITY
   // ---------------------------------------------
   useEffect(() => {
+
     showMapRef.current = showMap;
     showGridRef.current = showGrid;
     showCoordsRef.current = showCoords;
 
-    if (!backgroundRef.current || !gridRef.current) return;
-
-    backgroundRef.current.visible = showMap;
-    gridRef.current.visible = showGrid;
-
-    const data = lastStateRef.current;
-    if (!data) return;
-
-    const grid = gridRef.current;
-    grid.removeChildren();
-
-    drawHexGridBase(
-      grid,
-      data.shape,
-      showCoords,
-      data.hexes,
-      showMap
+    updateLayerVisibility(
+      backgroundRef.current,
+      gridRef.current,
+      lastStateRef,
+      showMap,
+      showGrid,
+      showCoords
     );
 
   }, [showMap, showGrid, showCoords]);
@@ -77,6 +77,7 @@ export default function GameCanvas() {
   // INIT PIXI
   // ---------------------------------------------
   useEffect(() => {
+
     if (initializedRef.current) return;
     initializedRef.current = true;
 
@@ -93,6 +94,52 @@ export default function GameCanvas() {
       appRef.current = app;
 
       const world = new PIXI.Container();
+
+      // ✅ Enable pointer events
+      world.eventMode = "static";
+      world.hitArea = app.screen;
+
+      // ✅ Hover detection (optimized)
+
+      
+      world.on("pointermove", (event: any) => {
+
+        // ✅ convert screen → world coordinates
+        const pos = world.toLocal(event.global);
+
+        const data = lastStateRef.current;
+        if (!data?.hexes) return;
+
+        let closestHex: any = null;
+        let minDist = Infinity;
+
+        for (const hex of data.hexes) {
+
+          const { x, y } = axialToPixel(hex.q, hex.r);
+
+          const dx = pos.x - x;
+          const dy = pos.y - (y + HEX_SIZE);
+
+          const dist = dx * dx + dy * dy;
+
+          if (dist < minDist) {
+            minDist = dist;
+            closestHex = hex;
+          }
+        }
+
+        if (closestHex) {
+          setHoverHex(prev => {
+            if (!prev || prev.q !== closestHex.q || prev.r !== closestHex.r) {
+              return { q: closestHex.q, r: closestHex.r };
+            }
+            return prev;
+          });
+        }
+
+      });
+
+
       app.stage.addChild(world);
       worldRef.current = world;
 
@@ -105,17 +152,23 @@ export default function GameCanvas() {
       const unitLayer = new UnitLayer(world);
       unitLayerRef.current = unitLayer;
 
+      const highlightLayer = new HighlightLayer(world);
+      highlightLayerRef.current = highlightLayer;
+
       backgroundRef.current = background;
       gridRef.current = grid;
 
       setupCamera(app, world, containerRef.current!);
 
-      // ✅ FIX 1: CAMERA SYSTEM
+      // ✅ Camera system
       registerFocusUnit(worldRef, appRef, lastStateRef);
 
-      // ✅ FIX 2: INPUT SYSTEM (fuera del subscribe)
+      // ✅ Unit click handling
       (window as any).onUnitClick = (unit: any) => {
+
         const data = lastStateRef.current;
+
+        setSelectedUnitId(unit.id);
 
         handleUnitClick(
           unit,
@@ -124,7 +177,7 @@ export default function GameCanvas() {
         );
       };
 
-      // ✅ FIX 3: SUBSCRIBE (externalizado)
+      // ✅ Game state subscription
       if (!subscribedRef.current) {
         subscribedRef.current = true;
 
@@ -145,12 +198,29 @@ export default function GameCanvas() {
     return () => {
       appRef.current?.destroy(true);
       appRef.current = null;
+
+      (window as any).onUnitClick = undefined;
     };
 
   }, []);
 
   // ---------------------------------------------
-  // RENDER (sin cambios)
+  // ✅ HIGHLIGHTS SYSTEM
+  // ---------------------------------------------
+  useEffect(() => {
+
+    updateHighlights(
+      highlightLayerRef.current,
+      lastStateRef.current,
+      selectedUnitId,
+      availableMoves,
+      hoverHex
+    );
+
+  }, [availableMoves, selectedUnitId, hoverHex]);
+
+  // ---------------------------------------------
+  // RENDER
   // ---------------------------------------------
   return (
     <div style={{
@@ -167,7 +237,9 @@ export default function GameCanvas() {
         display: "flex",
         gap: "20px",
       }}>
-        <div>{gameData?.scenario_name ?? gameData?.id ?? "Scenario"}</div>
+        <div>
+          {gameData?.scenario_name ?? gameData?.id ?? "Scenario"}
+        </div>
 
         <div>
           Turn: {gameData?.turn != null ? gameData.turn : "-"}

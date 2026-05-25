@@ -20,6 +20,7 @@ export function axialToPixel(q: number, r: number) {
   };
 }
 
+
 // ---------------------------------------------
 function axialToLabel(q: number, r: number) {
   return `${String.fromCharCode(65 + q)}${r + 1}`;
