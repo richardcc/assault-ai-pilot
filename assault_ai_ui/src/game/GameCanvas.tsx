@@ -4,8 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import * as PIXI from "pixi.js";
 
 import {
-  drawHexGridBase,
-  axialToPixel,   // ✅ AÑADIR ESTO
+  axialToPixel,
   HEX_SIZE
 } from "./render/hexGridRenderer";
 
@@ -29,7 +28,6 @@ export default function GameCanvas() {
   const appRef = useRef<PIXI.Application | null>(null);
 
   const worldRef = useRef<PIXI.Container | null>(null);
-
   const backgroundRef = useRef<PIXI.Container | null>(null);
   const gridRef = useRef<PIXI.Container | null>(null);
   const unitLayerRef = useRef<UnitLayer | null>(null);
@@ -54,7 +52,7 @@ export default function GameCanvas() {
   const lastStateRef = useRef<any>(null);
 
   // ---------------------------------------------
-  // SYNC VISIBILITY
+  // VISIBILITY
   // ---------------------------------------------
   useEffect(() => {
 
@@ -94,32 +92,27 @@ export default function GameCanvas() {
       appRef.current = app;
 
       const world = new PIXI.Container();
-
-      // ✅ Enable pointer events
       world.eventMode = "static";
       world.hitArea = app.screen;
 
-      // ✅ Hover detection (optimized)
-
-      
+      // ---------------------------------------------
+      // ✅ HOVER
+      // ---------------------------------------------
       world.on("pointermove", (event: any) => {
 
-        // ✅ convert screen → world coordinates
         const pos = world.toLocal(event.global);
-
         const data = lastStateRef.current;
+
         if (!data?.hexes) return;
 
         let closestHex: any = null;
         let minDist = Infinity;
 
         for (const hex of data.hexes) {
-
           const { x, y } = axialToPixel(hex.q, hex.r);
 
           const dx = pos.x - x;
           const dy = pos.y - (y + HEX_SIZE);
-
           const dist = dx * dx + dy * dy;
 
           if (dist < minDist) {
@@ -138,7 +131,6 @@ export default function GameCanvas() {
         }
 
       });
-
 
       app.stage.addChild(world);
       worldRef.current = world;
@@ -160,12 +152,12 @@ export default function GameCanvas() {
 
       setupCamera(app, world, containerRef.current!);
 
-      // ✅ Camera system
       registerFocusUnit(worldRef, appRef, lastStateRef);
 
-      // ✅ Unit click handling
+      // ---------------------------------------------
+      // ✅ UNIT CLICK
+      // ---------------------------------------------
       (window as any).onUnitClick = (unit: any) => {
-
         const data = lastStateRef.current;
 
         setSelectedUnitId(unit.id);
@@ -177,7 +169,50 @@ export default function GameCanvas() {
         );
       };
 
-      // ✅ Game state subscription
+      // ---------------------------------------------
+      // ✅ HEX CLICK → MOVE
+      // ---------------------------------------------
+      (window as any).onHexClick = (q: number, r: number) => {
+
+        const data = lastStateRef.current;
+        const unitId = selectedUnitId;
+
+        if (!unitId || !data) return;
+
+        const move = availableMoves.find(
+          (m: any) => m.q === q && m.r === r
+        );
+
+        if (!move) return;
+
+        const sprite = (unitLayerRef.current as any)?.sprites[unitId];
+
+        if (sprite && (window as any).animateUnitMove) {
+          (window as any).animateUnitMove(
+            sprite,
+            { q, r },
+            null,
+            appRef.current?.ticker,
+            300
+          );
+        }
+
+        fetch("/step", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify({
+            action: "move",
+            unit_id: unitId,
+            target: { q, r }
+          })
+        });
+      };
+
+      // ---------------------------------------------
+      // ✅ GAME STATE SUB
+      // ---------------------------------------------
       if (!subscribedRef.current) {
         subscribedRef.current = true;
 
@@ -195,17 +230,19 @@ export default function GameCanvas() {
 
     });
 
+    // ✅ ✅ MUY IMPORTANTE: return fuera del then
     return () => {
       appRef.current?.destroy(true);
       appRef.current = null;
 
       (window as any).onUnitClick = undefined;
+      (window as any).onHexClick = undefined;
     };
 
   }, []);
 
   // ---------------------------------------------
-  // ✅ HIGHLIGHTS SYSTEM
+  // HIGHLIGHTS
   // ---------------------------------------------
   useEffect(() => {
 

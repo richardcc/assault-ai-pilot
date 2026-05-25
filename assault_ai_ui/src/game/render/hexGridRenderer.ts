@@ -221,6 +221,7 @@ export function drawHexGridBase(
       // ✅ CLICK
       // ---------------------------------
       hit.on("pointerdown", () => {
+
         selectionHighlight.clear();
 
         selectionHighlight.fill({
@@ -234,7 +235,14 @@ export function drawHexGridBase(
         });
 
         drawHex(selectionHighlight, px, py, HEX_SIZE);
+
+        // 💣 AÑADE ESTE BLOQUE
+        if ((window as any).onHexClick) {
+          (window as any).onHexClick(q, r);
+        }
+
       });
+
 
       container.addChild(hit);
     }

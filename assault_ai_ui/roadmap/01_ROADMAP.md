@@ -1,3 +1,7 @@
+REVISAR DISTANCIAS TY CECINOS POISBLEMENET MAL Y GENERALIZAR EL CALCULO
+class MovementRules:
+
+
 # 🧠 Assault Engine - Roadmap Arquitectura (Activaciones Flexibles)
 
 ## 🎯 Objetivo

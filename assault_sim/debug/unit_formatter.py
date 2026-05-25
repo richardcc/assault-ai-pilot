@@ -45,26 +45,24 @@ class UnitFormatter:
     # PUBLIC API
     # -------------------------------------------------
     def label(self, unit_id: str) -> str:
-        """
-        Return the formatted label for a unit.
-
-        Examples:
-        - 🔵GE_1 ❤️❤️
-        - 🔴US_2 ❤️
-        """
 
         for u in self._units:
-            if u.unit_id == unit_id:
-                icon = "🔵" if u.side == "GE" else "🔴"
 
-                # ✅ Use override if present, otherwise real unit.hp
+            # ✅ soportar dict y objeto
+            uid = getattr(u, "unit_id", None) or u.get("unit_id")
+            side = getattr(u, "side", None) or u.get("side")
+
+            if uid == unit_id:
+
+                icon = "🔵" if side == "GE" else "🔴"
+
                 hp = self._hp_override.get(
                     unit_id,
-                    getattr(u, "hp", 0)
+                    getattr(u, "hp", None) or u.get("hp", 0)
                 )
 
                 hearts = "❤️" * max(0, hp)
-                return f"{icon}{u.unit_id} {hearts}".strip()
 
-        # Fallback if unit is unknown
+                return f"{icon}{uid} {hearts}".strip()
+
         return unit_id

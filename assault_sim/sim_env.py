@@ -116,7 +116,7 @@ class SimEnv:
                 "payload": {
                     "turn": self.game_state.turn,
                     "action": action.__class__.__name__,
-                    "unit_id": getattr(action, "unit_id", None),
+                    "unit_id": getattr(action, "unit", None).unit_id if getattr(action, "unit", None) else None,
                 }
             })
 
@@ -203,6 +203,7 @@ class SimEnv:
 
         self.event_bus.emit({
             "type": "MAP_STATE",
+            "state": self.game_state,
             "payload": {
                 "turn": self.game_state.turn,
                 "active_side": getattr(self.runtime, "active_side", None),
