@@ -190,12 +190,31 @@ class UnitActionsRequest(BaseModel):
 
 @app.post("/api/game/start")
 def game_start(req: GameStartRequest):
-    game_session.start(req.scenario_id, req.sides)
 
-    return {
-        "status": "started",
-        "scenario": req.scenario_id,
-    }
+    print("[DEBUG][start] request:", req)
+
+    try:
+        # ✅ RESET EXPLÍCITO (muy importante)
+        game_session.env = None
+
+        # ✅ START REAL
+        game_session.start(req.scenario_id, req.sides)
+
+        # ✅ CHECK DURO
+        if game_session.env is None:
+            print("[ERROR][start] env is still None after start")
+            raise Exception("env not initialized")
+
+        print("[DEBUG][start] env created OK")
+
+        return {
+            "status": "started",
+            "scenario": req.scenario_id,
+        }
+
+    except Exception as e:
+        print("[ERROR][start] exception:", str(e))
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.get("/api/game/state")
@@ -274,21 +293,66 @@ async def websocket_game(ws: WebSocket):
 from services.action_service import get_unit_actions
 
 
+from fastapi import HTTPException
+import time
+
 @app.post("/api/game/actions")
 def game_actions(req: UnitActionsRequest):
 
-    if game_session.env is None:
-        return {"error": "no game"}
+    # -------------------------------------------------
+    # ✅ WAIT FOR ENV (fix race condition)
+    # -------------------------------------------------
+    for _ in range(10):  # max 1 second
+        if game_session.env is not None:
+            break
+        time.sleep(0.1)
 
+    if game_session.env is None:
+        print("[ERROR][actions] env is None")
+        raise HTTPException(status_code=400, detail="no game")
+
+    # -------------------------------------------------
+    # ✅ GET STATE
+    # -------------------------------------------------
     state = game_session.env.game_state
 
+    # -------------------------------------------------
+    # ✅ FIND UNIT
+    # -------------------------------------------------
     unit = next(
         (u for u in state.units if u.unit_id == req.unit_id),
         None
     )
 
     if not unit:
-        return {"error": "unit not found"}
+        print(f"[ERROR][actions] unit not found: {req.unit_id}")
+        raise HTTPException(status_code=404, detail="unit not found")
 
-    # ✅ delega en servicio
-    return get_unit_actions(game_session.env, unit)
+    # -------------------------------------------------
+    # ✅ DEBUG INFO (muy importante ahora)
+    # -------------------------------------------------
+    runtime = getattr(game_session.env, "runtime", None)
+
+    if runtime:
+        print(
+            f"[DEBUG][actions] unit={unit.unit_id} "
+            f"side={unit.side} "
+            f"active_side={runtime.active_side} "
+            f"activated={unit.unit_id in runtime.activated_units}"
+        )
+    else:
+        print("[DEBUG][actions] runtime not available")
+
+    # -------------------------------------------------
+    # ✅ DELEGATE
+    # -------------------------------------------------
+    try:
+        result = get_unit_actions(game_session.env, unit)
+
+        print("[DEBUG][actions] result:", result)
+
+        return result
+
+    except Exception as e:
+        print("[ERROR][actions] exception:", str(e))
+        raise HTTPException(status_code=500, detail=str(e))

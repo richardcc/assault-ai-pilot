@@ -3,6 +3,8 @@ from assault_model.actions.assault import AssaultAction
 from assault_model.actions.ranged_direct import RangedDirectAttack
 from assault_model.actions.action_catalog import ActionCatalog
 
+import json
+
 
 def get_unit_actions(env, unit):
     """
@@ -11,12 +13,35 @@ def get_unit_actions(env, unit):
     """
 
     state = env.game_state
+    runtime = env.runtime
 
-    # ✅ build catalog using real rules
+    # -------------------------------------------------
+    # ✅ VALIDATION (runtime)
+    # -------------------------------------------------
+    is_active_side = (unit.side == getattr(runtime, "active_side", None))
+    is_not_activated = (unit.unit_id not in getattr(runtime, "activated_units", set()))
+
+    if not (is_active_side and is_not_activated):
+        return {
+            "unit_id": unit.unit_id,
+            "moves": [],
+            "attacks": [],
+            "abilities": [],
+            "disabled": True
+        }
+
+    # -------------------------------------------------
+    # ✅ TERRAIN CONFIG (CORRECTO)
+    # -------------------------------------------------
+    terrain_config = state.game_map.terrain_config
+
+    # -------------------------------------------------
+    # ✅ ACTION CATALOG
+    # -------------------------------------------------
     catalog = ActionCatalog(
         state,
         unit,
-        terrain_config=env.config.terrain_config
+        terrain_config=terrain_config
     )
 
     actions = catalog.actions()
@@ -24,11 +49,11 @@ def get_unit_actions(env, unit):
     moves = []
     attacks = []
 
+    # -------------------------------------------------
+    # ✅ PROCESS ACTIONS (CORRECTO)
+    # -------------------------------------------------
     for action in actions:
 
-        # -----------------------------
-        # MOVE
-        # -----------------------------
         if isinstance(action, MoveAction):
             if action.path:
                 last = action.path[-1]
@@ -37,27 +62,33 @@ def get_unit_actions(env, unit):
                     "r": last.r
                 })
 
-        # -----------------------------
-        # ASSAULT
-        # -----------------------------
         elif isinstance(action, AssaultAction):
             attacks.append({
                 "type": "assault",
                 "target_id": action.target_id
             })
 
-        # -----------------------------
-        # RANGED
-        # -----------------------------
         elif isinstance(action, RangedDirectAttack):
             attacks.append({
                 "type": "ranged",
                 "target_id": action.target_id
             })
 
-    return {
+    # -------------------------------------------------
+    # ✅ RESULT (FUERA DEL LOOP)
+    # -------------------------------------------------
+    result = {
         "unit_id": unit.unit_id,
         "moves": moves,
         "attacks": attacks,
-        "abilities": []
+        "abilities": [],
+        "disabled": False
     }
+
+    # -------------------------------------------------
+    # ✅ DEBUG
+    # -------------------------------------------------
+    print("[DEBUG][get_unit_actions]")
+    print(json.dumps(result, indent=2))
+
+    return result

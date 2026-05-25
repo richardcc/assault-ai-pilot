@@ -1,13 +1,22 @@
+// File: GameCanvas.tsx
+
 import { useEffect, useRef, useState } from "react";
 import * as PIXI from "pixi.js";
 
-import { gameController } from "./gameControllerInstance";
-import { drawHexGridBase, axialToPixel, HEX_SIZE } from "./render/hexGridRenderer";
-import { drawMapPieces } from "./render/mapPieceRenderer";
+// ❌ YA NO SE USA DIRECTAMENTE
+// import { gameController } from "./gameControllerInstance";
+// import { drawMapPieces } from "./render/mapPieceRenderer";
+
+import { drawHexGridBase } from "./render/hexGridRenderer";
 import { setupCamera } from "./systems/cameraController";
+
 import LayerControls from "./systems/LayerControls";
 import { UnitStatePanel } from "./ui/UnitStatePanel";
 import { UnitLayer } from "./render/unitLayer";
+
+import { handleUnitClick } from "./systems/unitInteractionSystem";
+import { subscribeToGameState } from "./systems/gameStateSystem";
+import { registerFocusUnit } from "./systems/cameraSystem";
 
 export default function GameCanvas() {
 
@@ -36,7 +45,7 @@ export default function GameCanvas() {
   const lastStateRef = useRef<any>(null);
 
   // ---------------------------------------------
-  // SYNC VISIBILITY
+  // SYNC VISIBILITY (sin cambios)
   // ---------------------------------------------
   useEffect(() => {
     showMapRef.current = showMap;
@@ -48,12 +57,10 @@ export default function GameCanvas() {
     backgroundRef.current.visible = showMap;
     gridRef.current.visible = showGrid;
 
-    // ✅ 🔥 FORZAR REDRAW CUANDO CAMBIAN TOGGLES
     const data = lastStateRef.current;
     if (!data) return;
 
     const grid = gridRef.current;
-
     grid.removeChildren();
 
     drawHexGridBase(
@@ -103,129 +110,33 @@ export default function GameCanvas() {
 
       setupCamera(app, world, containerRef.current!);
 
-      // ✅ FOCUS CAMERA
-      (window as any).focusUnit = (unitId: string) => {
+      // ✅ FIX 1: CAMERA SYSTEM
+      registerFocusUnit(worldRef, appRef, lastStateRef);
+
+      // ✅ FIX 2: INPUT SYSTEM (fuera del subscribe)
+      (window as any).onUnitClick = (unit: any) => {
         const data = lastStateRef.current;
-        if (!data?.units) return;
 
-        const unit = data.units.find((u: any) => u.id === unitId);
-        if (!unit) return;
-
-        const { x, y } = axialToPixel(unit.q, unit.r);
-
-        const world = worldRef.current;
-        const app = appRef.current;
-        if (!world || !app) return;
-
-        world.pivot.set(x, y + HEX_SIZE);
-        world.position.set(
-          app.renderer.width / 2,
-          app.renderer.height / 2
+        handleUnitClick(
+          unit,
+          data,
+          setAvailableMoves
         );
       };
 
-      // ---------------------------------------------
-      // SUBSCRIBE (solo una vez)
-      // ---------------------------------------------
+      // ✅ FIX 3: SUBSCRIBE (externalizado)
       if (!subscribedRef.current) {
         subscribedRef.current = true;
 
-        gameController.subscribe((state) => {
-
-          const data = state;
-
-          console.log("RECEIVED STATE FULL:", JSON.stringify(data, null, 2));
-
-          // ✅ 1. SIEMPRE actualizar UI (Turn / Active)
-          if (data) {
-            setGameData(prev => ({
-              ...prev,
-              ...data,
-
-              // ✅ 🔥 CLAVE: no perder piezas si WS viene vacío
-              map: data.map?.pieces?.length
-                ? data.map
-                : prev?.map
-            }));
-          }
-
-          // ✅ 2. solo render si hay mapa válido
-          if (!data?.hexes || !data?.shape) return;
-
-          lastStateRef.current = data;
-          // ✅ forzar redraw con settings actualizados
-          const showCoordsNow = showCoordsRef.current;
-          const showMapNow = showMapRef.current;
-          // ✅ CLICK EN UNIDADES (GLOBAL)
-          (window as any).onUnitClick = async (unit: any) => {
-
-            const data = lastStateRef.current;
-            if (!data) return;
-
-            const isHumanTurn =
-              data?.sides?.[data.active_side] === "human";
-
-            if (!isHumanTurn) return;
-
-            const isAvailable =
-              unit.side === data.active_side &&
-              !data.activated_units?.includes(unit.id);
-
-            if (!isAvailable) return;
-
-            console.log("✅ selected:", unit.id);
-
-            (window as any).selectUnit?.(unit.id);
-
-            // ✅ limpiar movimientos previos
-            setAvailableMoves([]);
-
-            // ✅ llamar backend
-            const res = await fetch("http://127.0.0.1:8000/api/game/actions", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                unit_id: unit.id
-              })
-            });
-
-            const actions = await res.json();
-
-            console.log("🎯 actions:", actions);
-
-            // ✅ guardar movimientos
-            setAvailableMoves(actions.moves || []);
-          };
-
-
-          background.visible = showMapRef.current;
-          grid.visible = showGridRef.current;
-
-          background.removeChildren();
-          grid.removeChildren();
-
-          // ✅ MAP
-          const pieces = data.map?.pieces ?? lastStateRef.current?.map?.pieces ?? [];
-
-          if (pieces.length) {
-            drawMapPieces(background, pieces);
-          }
-
-          // ✅ GRID
-
-          drawHexGridBase(
-            grid,
-            data.shape,
-            showCoordsNow,
-            data.hexes,
-            showMapNow
-          );
-
-
-          // ✅ UNITS
-          if (unitLayerRef.current) {
-            unitLayerRef.current.sync(data);
-          }
+        subscribeToGameState({
+          setGameData,
+          lastStateRef,
+          background,
+          grid,
+          unitLayerRef,
+          showMapRef,
+          showGridRef,
+          showCoordsRef,
         });
       }
 
@@ -239,7 +150,7 @@ export default function GameCanvas() {
   }, []);
 
   // ---------------------------------------------
-  // RENDER
+  // RENDER (sin cambios)
   // ---------------------------------------------
   return (
     <div style={{
@@ -249,7 +160,6 @@ export default function GameCanvas() {
       height: "100%",
     }}>
 
-      {/* HEADER */}
       <div style={{
         background: "#1a1a1a",
         color: "#eee",
@@ -259,12 +169,10 @@ export default function GameCanvas() {
       }}>
         <div>{gameData?.scenario_name ?? gameData?.id ?? "Scenario"}</div>
 
-        {/* ✅ FIX turno robusto */}
         <div>
           Turn: {gameData?.turn != null ? gameData.turn : "-"}
         </div>
 
-        {/* ✅ FIX active robusto */}
         <div style={{
           color: gameData?.sides?.[gameData?.active_side] === "human"
             ? "lime"
@@ -276,7 +184,6 @@ export default function GameCanvas() {
         </div>
       </div>
 
-      {/* MAP */}
       <div style={{ flex: 1, position: "relative" }}>
         <div
           ref={containerRef}
@@ -293,13 +200,11 @@ export default function GameCanvas() {
         />
       </div>
 
-      {/* PANEL */}
       <UnitStatePanel
         units={gameData?.units || []}
         activeSide={gameData?.active_side}
         activatedUnits={gameData?.activated_units || []}
       />
-
 
     </div>
   );

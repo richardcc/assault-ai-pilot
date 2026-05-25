@@ -188,3 +188,4 @@ class ActionCatalog:
             self.gs.game_map,
             self.terrain_config
         )
+

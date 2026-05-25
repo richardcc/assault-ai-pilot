@@ -31,8 +31,7 @@ class SimEnv:
         self.config = config
         self.debug_config = debug_config or DebugConfig(enabled=False)
 
-        # ❌ controller eliminado conceptualmente (pero lo dejamos sin usar)
-        self.controller = controller
+        self.controller = controller  # not used (kept for compatibility)
 
         self.event_bus = EventBus() if self.debug_config.enabled else None
 
@@ -68,10 +67,8 @@ class SimEnv:
 
         self._step_counter = 0
 
-        # ✅ EVENT BUS
         if self.event_bus:
 
-            # ✅ RESET EVENT (IMPORTANTE)
             self.event_bus.emit({
                 "type": "RESET",
                 "payload": {
@@ -80,7 +77,6 @@ class SimEnv:
                 },
             })
 
-            # ✅ SCENARIO INITIALIZED
             self.event_bus.emit({
                 "type": "SCENARIO_INITIALIZED",
                 "payload": {
@@ -99,70 +95,67 @@ class SimEnv:
                 },
             })
 
-            # ✅ MAP STATE
             self._emit_map_state()
 
         return self.game_state
 
     # -------------------------------------------------
-    # STEP (CLEAN VERSION)
+    # STEP
     # -------------------------------------------------
     def step(self, action):
 
-        # ✅ loop protection
         self._step_counter += 1
         if self._step_counter > self._max_steps:
             raise RuntimeError("Simulation overflow (infinite loop protection)")
 
-        # -------------------------------------------------
-        # DEBUG: NO ACTION
-        # -------------------------------------------------
         if action is None and DEBUG_TRACE:
             print("[TRACE][NO_ACTION_AVAILABLE] (external scheduler handles it)")
 
-        # ✅ ACTION EVENT (SIN active_unit)
         if self.event_bus and action is not None:
             self.event_bus.emit({
                 "type": "ACTION",
                 "payload": {
                     "turn": self.game_state.turn,
                     "action": action.__class__.__name__,
-                    "unit_id": getattr(action, "unit_id", None),  # ✅ CRÍTICO
+                    "unit_id": getattr(action, "unit_id", None),
                 }
             })
+
+        context = ExecutionContext(event_bus=self.event_bus)
+
+        prev_turn = self.game_state.turn
 
         # -------------------------------------------------
         # APPLY ACTION
         # -------------------------------------------------
-        context = ExecutionContext(event_bus=self.event_bus)
-
         self.runtime.apply_action(action, context=context)
         self.game_state = self.runtime.base_state
 
-        # ✅ MAP AFTER ACTION
+        # -------------------------------------------------
+        # MAP UPDATE
+        # -------------------------------------------------
         self._emit_map_state()
 
-        # ✅ MATCH END
+        # -------------------------------------------------
+        # MATCH END
+        # -------------------------------------------------
         if self.game_state.done:
             self._emit_match_end()
             return self.game_state, 0.0, True, {}
 
         # -------------------------------------------------
-        # TURN END
+        # TURN CHANGE (runtime-driven)
         # -------------------------------------------------
-        if self.runtime.turn_has_ended():
+        if self.game_state.turn != prev_turn:
 
             if DEBUG_TRACE:
-                print("[TRACE][TURN_EMPTY] advancing turn")
-
-            self.runtime.end_turn()
-            self.game_state = self.runtime.base_state
+                print("[TRACE][TURN_ADVANCED] new turn detected")
 
             if self.event_bus:
                 self.event_bus.emit({
                     "type": "TURN_END",
                     "payload": {
-                        "turn": self.game_state.turn,
+                        "turn": prev_turn,
                     },
                 })
 
@@ -172,7 +165,6 @@ class SimEnv:
                 self._emit_match_end()
                 return self.game_state, 0.0, True, {}
 
-            # ✅ NEXT TURN
             self.runtime.start_turn()
             self.game_state = self.runtime.base_state
 
@@ -189,16 +181,55 @@ class SimEnv:
         if not self.event_bus:
             return
 
+        game_map = self.game_state.game_map
+        hexes = getattr(game_map, "hexes", [])
+
+        # ✅ CALCULAR SHAPE (FIX CRÍTICO)
+        max_q = max(h.q for h in hexes) if hexes else 0
+        max_r = max(h.r for h in hexes) if hexes else 0
+        shape = [max_q + 1, max_r + 1]
+
+        # ✅ HEXES SERIALIZABLES
+        hex_list = [
+            {
+                "q": h.q,
+                "r": h.r,
+                "terrain": getattr(h, "terrain", None)
+            }
+            for h in hexes
+        ]
+
+        # 🚨 NO ENVIAR PIECES DESDE AQUÍ
+        # (porque SimEnv no los tiene)
+
         self.event_bus.emit({
             "type": "MAP_STATE",
             "payload": {
                 "turn": self.game_state.turn,
-                "game_map": self.game_state.game_map,
-                "units": self.game_state.units,
-                "vp_tracker": self.game_state.vp_tracker,
-                "game_state": self.game_state,
+                "active_side": getattr(self.runtime, "active_side", None),
+                "scenario_name": getattr(self.scenario, "name", None),
+
+                "shape": shape,
+                "hexes": hex_list,
+
+                # ✅ 🔥 IMPORTANTE
+                "map": {
+                    "pieces": []
+                },
+
+                "units": [
+                    {
+                        "id": u.unit_id,
+                        "unit_key": u.unit_type.code,
+                        "q": u.position.q if u.position else None,
+                        "r": u.position.r if u.position else None,
+                        "side": u.side,
+                        "hp": getattr(u, "hp", None),
+                    }
+                    for u in self.game_state.units
+                ],
             },
-        })
+    })
 
     # -------------------------------------------------
     # MATCH END
@@ -8226,10 +8257,10 @@ FILE: C:\repos\python\assault\assault_sim\session\replays\phase01_seq001_initial
       "GE": "HEURISTIC"
     },
     "result": {
-      "winner": "US",
-      "reason": "last_side_standing",
+      "winner": null,
+      "reason": "max_turns",
       "vp": 0,
-      "steps": 58
+      "steps": 66
     }
   },
   "initial_state": {
@@ -8363,23 +8394,15 @@ FILE: C:\repos\python\assault\assault_sim\session\replays\phase01_seq001_initial
           "type": "HRL_DECISION",
           "payload": {
             "side": "US",
-            "option": "ADVANCE",
-            "attack_mode": null,
-            "description": "advance towards the objective",
-            "category": "MANEUVER",
-            "turn": 1,
+            "option": "ATTACK",
+            "attack_mode": "DIRECT",
+            "formation": "PUSH_VP",
             "context": {
               "friendly_strength": "HIGH",
               "enemy_pressure": "LOW",
               "objective_distance": "UNKNOWN"
             },
-            "formation": "ATTACK",
-            "policy_info": {
-              "option": "ADVANCE",
-              "attack_mode": null,
-              "confidence": 0.9768041968345642,
-              "value_estimate": 98.60088348388672
-            }
+            "turn": 1
           }
         },
         {
@@ -8404,7 +8427,6 @@ FILE: C:\repos\python\assault\assault_sim\session\replays\phase01_seq001_initial
               {
                 "color": "YELLOW",
                 "faces": [
-                  "DAMAGE",
                   "DAMAGE"
                 ]
               },
@@ -8419,21 +8441,22 @@ FILE: C:\repos\python\assault\assault_sim\session\replays\phase01_seq001_initial
               {
                 "color": "YELLOW",
                 "faces": [
+                  "DAMAGE",
                   "DAMAGE"
                 ]
               }
             ],
             "attacker_effects": {
-              "damage": 2,
+              "damage": 0,
               "criticals": [],
               "suppress": 0,
               "suppression_state_after": false
             },
             "defender_hp_before": 3,
-            "defender_hp_after": 1,
+            "defender_hp_after": 3,
             "defender_killed": false,
             "resolution": {
-              "remaining_damage": 2,
+              "remaining_damage": 0,
               "remaining_criticals": 0,
               "remaining_suppress": 0
             }
@@ -8460,23 +8483,26 @@ FILE: C:\repos\python\assault\assault_sim\session\replays\phase01_seq001_initial
             "attacker_attack_dice": [
               {
                 "color": "YELLOW",
-                "faces": []
+                "faces": [
+                  "DAMAGE",
+                  "DAMAGE"
+                ]
               },
               {
                 "color": "YELLOW",
-                "faces": [
-                  "DAMAGE"
-                ]
-              },
-              {
-                "color": "BLUE",
-                "faces": [
-                  "DAMAGE"
-                ]
-              },
-              {
-                "color": "BLUE",
                 "faces": []
+              },
+              {
+                "color": "BLUE",
+                "faces": [
+                  "DAMAGE"
+                ]
+              },
+              {
+                "color": "BLUE",
+                "faces": [
+                  "DAMAGE"
+                ]
               }
             ],
             "defender_defense_dice": [
@@ -8488,19 +8514,34 @@ FILE: C:\repos\python\assault\assault_sim\session\replays\phase01_seq001_initial
               }
             ],
             "attacker_effects": {
-              "damage": 1,
+              "damage": 3,
               "criticals": [],
               "suppress": 0,
               "suppression_state_after": false
             },
             "defender_hp_before": 4,
-            "defender_hp_after": 3,
+            "defender_hp_after": 1,
             "defender_killed": false,
             "resolution": {
-              "remaining_damage": 1,
+              "remaining_damage": 3,
               "remaining_criticals": 0,
               "remaining_suppress": 0
             }
+          }
+        },
+        {
+          "type": "HRL_DECISION",
+          "payload": {
+            "side": "US",
+            "option": "HOLD",
+            "attack_mode": null,
+            "formation": "PUSH_VP",
+            "context": {
+              "friendly_strength": "HIGH",
+              "enemy_pressure": "LOW",
+              "objective_distance": "UNKNOWN"
+            },
+            "turn": 1
           }
         },
         {
@@ -8525,38 +8566,38 @@ FILE: C:\repos\python\assault\assault_sim\session\replays\phase01_seq001_initial
               {
                 "color": "YELLOW",
                 "faces": [
-                  "DAMAGE",
+                  "CRITICAL",
                   "DAMAGE"
                 ]
               },
               {
                 "color": "GREEN",
-                "faces": [
-                  "DAMAGE"
-                ]
+                "faces": []
               }
             ],
             "defender_defense_dice": [
               {
                 "color": "YELLOW",
-                "faces": [
-                  "DAMAGE",
-                  "DAMAGE"
-                ]
+                "faces": []
               }
             ],
             "attacker_effects": {
-              "damage": 1,
-              "criticals": [],
+              "damage": 2,
+              "criticals": [
+                {
+                  "face": "CRITICAL",
+                  "target_class": "INFANTRY"
+                }
+              ],
               "suppress": 0,
               "suppression_state_after": false
             },
             "defender_hp_before": 2,
-            "defender_hp_after": 1,
-            "defender_killed": false,
+            "defender_hp_after": 0,
+            "defender_killed": true,
             "resolution": {
               "remaining_damage": 1,
-              "remaining_criticals": 0,
+              "remaining_criticals": 1,
               "remaining_suppress": 0
             }
           }
@@ -8584,6 +8625,21 @@ FILE: C:\repos\python\assault\assault_sim\session\replays\phase01_seq001_initial
           }
         },
         {
+          "type": "HRL_DECISION",
+          "payload": {
+            "side": "US",
+            "option": "ATTACK",
+            "attack_mode": "DIRECT",
+            "formation": "PUSH_VP",
+            "context": {
+              "friendly_strength": "HIGH",
+              "enemy_pressure": "LOW",
+              "objective_distance": "UNKNOWN"
+            },
+            "turn": 1
+          }
+        },
+        {
           "type": "ACTION",
           "payload": {
             "turn": 1,
@@ -8604,13 +8660,12 @@ FILE: C:\repos\python\assault\assault_sim\session\replays\phase01_seq001_initial
             "attacker_attack_dice": [
               {
                 "color": "YELLOW",
-                "faces": [
-                  "DAMAGE"
-                ]
+                "faces": []
               },
               {
                 "color": "GREEN",
                 "faces": [
+                  "CRITICAL",
                   "DAMAGE"
                 ]
               }
@@ -8625,7 +8680,12 @@ FILE: C:\repos\python\assault\assault_sim\session\replays\phase01_seq001_initial
             ],
             "attacker_effects": {
               "damage": 1,
-              "criticals": [],
+              "criticals": [
+                {
+                  "face": "CRITICAL",
+                  "target_class": "INFANTRY"
+                }
+              ],
               "suppress": 0,
               "suppression_state_after": false
             },
@@ -8633,8 +8693,8 @@ FILE: C:\repos\python\assault\assault_sim\session\replays\phase01_seq001_initial
             "defender_hp_after": 2,
             "defender_killed": false,
             "resolution": {
-              "remaining_damage": 1,
-              "remaining_criticals": 0,
+              "remaining_damage": 0,
+              "remaining_criticals": 1,
               "remaining_suppress": 0
             }
           }
@@ -8665,23 +8725,38 @@ FILE: C:\repos\python\assault\assault_sim\session\replays\phase01_seq001_initial
           "type": "HRL_DECISION",
           "payload": {
             "side": "US",
-            "option": "ADVANCE",
+            "option": "HOLD",
             "attack_mode": null,
-            "description": "advance towards the objective",
-            "category": "MANEUVER",
-            "turn": 1,
+            "formation": "PUSH_VP",
             "context": {
               "friendly_strength": "HIGH",
               "enemy_pressure": "LOW",
               "objective_distance": "UNKNOWN"
             },
-            "formation": "ATTACK",
-            "policy_info": {
-              "option": "ADVANCE",
-              "attack_mode": null,
-              "confidence": 0.990242063999176,
-              "value_estimate": 116.65900421142578
-            }
+            "turn": 1
+          }
+        },
+        {
+          "type": "ACTION",
+          "payload": {
+            "turn": 1,
+            "action": "WaitAction",
+            "unit_id": "US_4"
+          }
+        },
+        {
+          "type": "HRL_DECISION",
+          "payload": {
+            "side": "US",
+            "option": "RETREAT",
+            "attack_mode": null,
+            "formation": "PUSH_VP",
+            "context": {
+              "friendly_strength": "HIGH",
+              "enemy_pressure": "LOW",
+              "objective_distance": "UNKNOWN"
+            },
+            "turn": 1
           }
         },
         {
@@ -8689,120 +8764,36 @@ FILE: C:\repos\python\assault\assault_sim\session\replays\phase01_seq001_initial
           "payload": {
             "turn": 1,
             "action": "MoveAction",
-            "unit_id": "US_4"
+            "unit_id": "US_5"
           }
         },
         {
           "type": "UNIT_MOVED",
           "payload": {
-            "unit_id": "US_4",
+            "unit_id": "US_5",
             "from": {
-              "q": 8,
-              "r": 12
+              "q": 2,
+              "r": 13
             },
             "to": {
-              "q": 8,
-              "r": 11
+              "q": 3,
+              "r": 13
             }
           }
         },
         {
-          "type": "ACTION",
+          "type": "HRL_DECISION",
           "payload": {
-            "turn": 1,
-            "action": "RangedDirectAttack",
-            "unit_id": "GE_5"
-          }
-        },
-        {
-          "type": "ACTION_EFFECT",
-          "payload": {
-            "action": "RangedCombat",
-            "attacker": "GE_5",
-            "defender": "US_2",
-            "distance": 8,
-            "attack_sector": "FRONT",
-            "los": "CLEAR",
-            "attack_mode": "DIRECT_FIRE",
-            "attacker_attack_dice": [
-              {
-                "color": "GREEN",
-                "faces": [
-                  "DAMAGE"
-                ]
-              }
-            ],
-            "defender_defense_dice": [
-              {
-                "color": "YELLOW",
-                "faces": [
-                  "DAMAGE"
-                ]
-              }
-            ],
-            "attacker_effects": {
-              "damage": 0,
-              "criticals": [],
-              "suppress": 0,
-              "suppression_state_after": false
+            "side": "US",
+            "option": "ATTACK",
+            "attack_mode": "DIRECT",
+            "formation": "PUSH_VP",
+            "context": {
+              "friendly_strength": "HIGH",
+              "enemy_pressure": "LOW",
+              "objective_distance": "UNKNOWN"
             },
-            "defender_hp_before": 4,
-            "defender_hp_after": 4,
-            "defender_killed": false,
-            "resolution": {
-              "remaining_damage": 0,
-              "remaining_criticals": 0,
-              "remaining_suppress": 0
-            }
-          }
-        },
-        {
-          "type": "ACTION",
-          "payload": {
-            "turn": 1,
-            "action": "RangedDirectAttack",
-            "unit_id": "US_5"
-          }
-        },
-        {
-          "type": "ACTION_EFFECT",
-          "payload": {
-            "action": "RangedCombat",
-            "attacker": "US_5",
-            "defender": "GE_1",
-            "distance": 8,
-            "attack_sector": "REAR",
-            "los": "CLEAR",
-            "attack_mode": "DIRECT_FIRE",
-            "attacker_attack_dice": [
-              {
-                "color": "BLUE",
-                "faces": []
-              }
-            ],
-            "defender_defense_dice": [
-              {
-                "color": "YELLOW",
-                "faces": [
-                  "CRITICAL",
-                  "DAMAGE"
-                ]
-              }
-            ],
-            "attacker_effects": {
-              "damage": 0,
-              "criticals": [],
-              "suppress": 0,
-              "suppression_state_after": false
-            },
-            "defender_hp_before": 1,
-            "defender_hp_after": 1,
-            "defender_killed": false,
-            "resolution": {
-              "remaining_damage": 0,
-              "remaining_criticals": 0,
-              "remaining_suppress": 0
-            }
+            "turn": 1
           }
         },
         {
@@ -8827,29 +8818,31 @@ FILE: C:\repos\python\assault\assault_sim\session\replays\phase01_seq001_initial
               {
                 "color": "YELLOW",
                 "faces": [
-                  "DAMAGE",
+                  "CRITICAL",
                   "DAMAGE"
                 ]
               },
               {
                 "color": "GREEN",
-                "faces": [
-                  "DAMAGE"
-                ]
+                "faces": []
               }
             ],
             "defender_defense_dice": [
               {
                 "color": "YELLOW",
                 "faces": [
-                  "CRITICAL",
                   "DAMAGE"
                 ]
               }
             ],
             "attacker_effects": {
               "damage": 1,
-              "criticals": [],
+              "criticals": [
+                {
+                  "face": "CRITICAL",
+                  "target_class": "INFANTRY"
+                }
+              ],
               "suppress": 0,
               "suppression_state_after": false
             },
@@ -8857,8 +8850,8 @@ FILE: C:\repos\python\assault\assault_sim\session\replays\phase01_seq001_initial
             "defender_hp_after": 1,
             "defender_killed": false,
             "resolution": {
-              "remaining_damage": 1,
-              "remaining_criticals": 0,
+              "remaining_damage": 0,
+              "remaining_criticals": 1,
               "remaining_suppress": 0
             }
           }
@@ -8867,23 +8860,15 @@ FILE: C:\repos\python\assault\assault_sim\session\replays\phase01_seq001_initial
           "type": "HRL_DECISION",
           "payload": {
             "side": "US",
-            "option": "ATTACK",
-            "attack_mode": "DIRECT",
-            "description": "engage the enemy directly",
-            "category": "ENGAGEMENT",
-            "turn": 1,
+            "option": "HOLD",
+            "attack_mode": null,
+            "formation": "PUSH_VP",
             "context": {
               "friendly_strength": "HIGH",
               "enemy_pressure": "LOW",
               "objective_distance": "UNKNOWN"
             },
-            "formation": "ATTACK",
-            "policy_info": {
-              "option": "ADVANCE",
-              "attack_mode": null,
-              "confidence": 0.9919824004173279,
-              "value_estimate": 120.74051666259766
-            }
+            "turn": 1
           }
         },
         {
@@ -8908,43 +8893,34 @@ FILE: C:\repos\python\assault\assault_sim\session\replays\phase01_seq001_initial
               {
                 "color": "GREEN",
                 "faces": [
-                  "CRITICAL",
                   "DAMAGE"
                 ]
               },
               {
                 "color": "BLUE",
-                "faces": [
-                  "DAMAGE"
-                ]
+                "faces": []
               }
             ],
             "defender_defense_dice": [
               {
                 "color": "YELLOW",
                 "faces": [
-                  "DAMAGE",
                   "DAMAGE"
                 ]
               }
             ],
             "attacker_effects": {
-              "damage": 1,
-              "criticals": [
-                {
-                  "face": "CRITICAL",
-                  "target_class": "INFANTRY"
-                }
-              ],
+              "damage": 0,
+              "criticals": [],
               "suppress": 0,
               "suppression_state_after": false
             },
             "defender_hp_before": 1,
-            "defender_hp_after": 0,
-            "defender_killed": true,
+            "defender_hp_after": 1,
+            "defender_killed": false,
             "resolution": {
               "remaining_damage": 0,
-              "remaining_criticals": 1,
+              "remaining_criticals": 0,
               "remaining_suppress": 0
             }
           }
@@ -8975,40 +8951,32 @@ FILE: C:\repos\python\assault\assault_sim\session\replays\phase01_seq001_initial
             "attacker_attack_dice": [
               {
                 "color": "YELLOW",
+                "faces": []
+              },
+              {
+                "color": "YELLOW",
                 "faces": [
                   "CRITICAL",
                   "DAMAGE"
                 ]
               },
               {
-                "color": "YELLOW",
-                "faces": [
-                  "DAMAGE"
-                ]
+                "color": "BLUE",
+                "faces": []
               },
               {
                 "color": "BLUE",
-                "faces": [
-                  "DAMAGE"
-                ]
-              },
-              {
-                "color": "BLUE",
-                "faces": [
-                  "DAMAGE"
-                ]
+                "faces": []
               }
             ],
             "defender_defense_dice": [
               {
                 "color": "YELLOW",
-                "faces": [
-                  "DAMAGE"
-                ]
+                "faces": []
               }
             ],
             "attacker_effects": {
-              "damage": 4,
+              "damage": 2,
               "criticals": [
                 {
                   "face": "CRITICAL",
@@ -9019,11 +8987,78 @@ FILE: C:\repos\python\assault\assault_sim\session\replays\phase01_seq001_initial
               "suppression_state_after": false
             },
             "defender_hp_before": 4,
-            "defender_hp_after": 0,
-            "defender_killed": true,
+            "defender_hp_after": 2,
+            "defender_killed": false,
             "resolution": {
-              "remaining_damage": 3,
+              "remaining_damage": 1,
               "remaining_criticals": 1,
+              "remaining_suppress": 0
+            }
+          }
+        },
+        {
+          "type": "HRL_DECISION",
+          "payload": {
+            "side": "US",
+            "option": "ATTACK",
+            "attack_mode": "DIRECT",
+            "formation": "PUSH_VP",
+            "context": {
+              "friendly_strength": "HIGH",
+              "enemy_pressure": "LOW",
+              "objective_distance": "UNKNOWN"
+            },
+            "turn": 2
+          }
+        },
+        {
+          "type": "ACTION",
+          "payload": {
+            "turn": 2,
+            "action": "RangedDirectAttack",
+            "unit_id": "US_1"
+          }
+        },
+        {
+          "type": "ACTION_EFFECT",
+          "payload": {
+            "action": "RangedCombat",
+            "attacker": "US_1",
+            "defender": "GE_1",
+            "distance": 7,
+            "attack_sector": "REAR",
+            "los": "CLEAR",
+            "attack_mode": "DIRECT_FIRE",
+            "attacker_attack_dice": [
+              {
+                "color": "YELLOW",
+                "faces": [
+                  "DAMAGE"
+                ]
+              },
+              {
+                "color": "GREEN",
+                "faces": []
+              }
+            ],
+            "defender_defense_dice": [
+              {
+                "color": "YELLOW",
+                "faces": []
+              }
+            ],
+            "attacker_effects": {
+              "damage": 1,
+              "criticals": [],
+              "suppress": 0,
+              "suppression_state_after": false
+            },
+            "defender_hp_before": 3,
+            "defender_hp_after": 2,
+            "defender_killed": false,
+            "resolution": {
+              "remaining_damage": 1,
+              "remaining_criticals": 0,
               "remaining_suppress": 0
             }
           }
@@ -9033,28 +9068,40 @@ FILE: C:\repos\python\assault\assault_sim\session\replays\phase01_seq001_initial
           "payload": {
             "turn": 2,
             "action": "RangedDirectAttack",
-            "unit_id": "US_2"
+            "unit_id": "GE_2"
           }
         },
         {
           "type": "ACTION_EFFECT",
           "payload": {
             "action": "RangedCombat",
-            "attacker": "US_2",
-            "defender": "GE_5",
-            "distance": 8,
-            "attack_sector": "REAR",
+            "attacker": "GE_2",
+            "defender": "US_3",
+            "distance": 7,
+            "attack_sector": "FRONT",
             "los": "CLEAR",
             "attack_mode": "DIRECT_FIRE",
             "attacker_attack_dice": [
               {
                 "color": "YELLOW",
+                "faces": [
+                  "CRITICAL",
+                  "DAMAGE"
+                ]
+              },
+              {
+                "color": "YELLOW",
+                "faces": [
+                  "DAMAGE"
+                ]
+              },
+              {
+                "color": "BLUE",
                 "faces": []
               },
               {
-                "color": "GREEN",
+                "color": "BLUE",
                 "faces": [
-                  "CRITICAL",
                   "DAMAGE"
                 ]
               }
@@ -9069,18 +9116,55 @@ FILE: C:\repos\python\assault\assault_sim\session\replays\phase01_seq001_initial
               }
             ],
             "attacker_effects": {
-              "damage": 0,
+              "damage": 2,
               "criticals": [],
               "suppress": 0,
               "suppression_state_after": false
             },
             "defender_hp_before": 1,
-            "defender_hp_after": 1,
-            "defender_killed": false,
+            "defender_hp_after": 0,
+            "defender_killed": true,
             "resolution": {
-              "remaining_damage": 0,
+              "remaining_damage": 2,
               "remaining_criticals": 0,
               "remaining_suppress": 0
+            }
+          }
+        },
+        {
+          "type": "HRL_DECISION",
+          "payload": {
+            "side": "US",
+            "option": "RETREAT",
+            "attack_mode": null,
+            "formation": "PUSH_VP",
+            "context": {
+              "friendly_strength": "HIGH",
+              "enemy_pressure": "LOW",
+              "objective_distance": "UNKNOWN"
+            },
+            "turn": 2
+          }
+        },
+        {
+          "type": "ACTION",
+          "payload": {
+            "turn": 2,
+            "action": "MoveAction",
+            "unit_id": "US_2"
+          }
+        },
+        {
+          "type": "UNIT_MOVED",
+          "payload": {
+            "unit_id": "US_2",
+            "from": {
+              "q": 3,
+              "r": 12
+            },
+            "to": {
+              "q": 4,
+              "r": 12
             }
           }
         },
@@ -9097,8 +9181,8 @@ FILE: C:\repos\python\assault\assault_sim\session\replays\phase01_seq001_initial
           "payload": {
             "action": "RangedCombat",
             "attacker": "GE_3",
-            "defender": "US_6",
-            "distance": 10,
+            "defender": "US_1",
+            "distance": 7,
             "attack_sector": "FRONT",
             "los": "CLEAR",
             "attack_mode": "DIRECT_FIRE",
@@ -9106,12 +9190,15 @@ FILE: C:\repos\python\assault\assault_sim\session\replays\phase01_seq001_initial
               {
                 "color": "YELLOW",
                 "faces": [
+                  "DAMAGE",
                   "DAMAGE"
                 ]
               },
               {
                 "color": "YELLOW",
-                "faces": []
+                "faces": [
+                  "DAMAGE"
+                ]
               },
               {
                 "color": "BLUE",
@@ -9127,48 +9214,46 @@ FILE: C:\repos\python\assault\assault_sim\session\replays\phase01_seq001_initial
             "defender_defense_dice": [
               {
                 "color": "YELLOW",
-                "faces": [
-                  "DAMAGE",
-                  "DAMAGE"
-                ]
+                "faces": []
               }
             ],
             "attacker_effects": {
-              "damage": 0,
+              "damage": 4,
               "criticals": [],
               "suppress": 0,
               "suppression_state_after": false
             },
-            "defender_hp_before": 4,
-            "defender_hp_after": 4,
-            "defender_killed": false,
+            "defender_hp_before": 2,
+            "defender_hp_after": 0,
+            "defender_killed": true,
             "resolution": {
-              "remaining_damage": 0,
+              "remaining_damage": 4,
               "remaining_criticals": 0,
               "remaining_suppress": 0
             }
           }
         },
         {
-          "type": "ACTION",
+          "type": "HRL_DECISION",
           "payload": {
-            "turn": 2,
-            "action": "MoveAction",
-            "unit_id": "US_3"
+            "side": "US",
+            "option": "HOLD",
+            "attack_mode": null,
+            "formation": "PUSH_VP",
+            "context": {
+              "friendly_strength": "HIGH",
+              "enemy_pressure": "LOW",
+              "objective_distance": "UNKNOWN"
+            },
+            "turn": 2
           }
         },
         {
-          "type": "UNIT_MOVED",
+          "type": "ACTION",
           "payload": {
-            "unit_id": "US_3",
-            "from": {
-              "q": 5,
-              "r": 12
-            },
-            "to": {
-              "q": 5,
-              "r": 11
-            }
+            "turn": 2,
+            "action": "WaitAction",
+            "unit_id": "US_4"
           }
         },
         {
@@ -9194,98 +9279,18 @@ FILE: C:\repos\python\assault\assault_sim\session\replays\phase01_seq001_initial
           }
         },
         {
-          "type": "ACTION",
-          "payload": {
-            "turn": 2,
-            "action": "MoveAction",
-            "unit_id": "US_4"
-          }
-        },
-        {
-          "type": "UNIT_MOVED",
-          "payload": {
-            "unit_id": "US_4",
-            "from": {
-              "q": 8,
-              "r": 11
-            },
-            "to": {
-              "q": 8,
-              "r": 10
-            }
-          }
-        },
-        {
-          "type": "ACTION",
-          "payload": {
-            "turn": 2,
-            "action": "RangedDirectAttack",
-            "unit_id": "GE_5"
-          }
-        },
-        {
-          "type": "ACTION_EFFECT",
-          "payload": {
-            "action": "RangedCombat",
-            "attacker": "GE_5",
-            "defender": "US_2",
-            "distance": 8,
-            "attack_sector": "FRONT",
-            "los": "CLEAR",
-            "attack_mode": "DIRECT_FIRE",
-            "attacker_attack_dice": [
-              {
-                "color": "GREEN",
-                "faces": [
-                  "DAMAGE"
-                ]
-              }
-            ],
-            "defender_defense_dice": [
-              {
-                "color": "YELLOW",
-                "faces": [
-                  "DAMAGE"
-                ]
-              }
-            ],
-            "attacker_effects": {
-              "damage": 0,
-              "criticals": [],
-              "suppress": 0,
-              "suppression_state_after": false
-            },
-            "defender_hp_before": 4,
-            "defender_hp_after": 4,
-            "defender_killed": false,
-            "resolution": {
-              "remaining_damage": 0,
-              "remaining_criticals": 0,
-              "remaining_suppress": 0
-            }
-          }
-        },
-        {
           "type": "HRL_DECISION",
           "payload": {
             "side": "US",
-            "option": "ADVANCE",
-            "attack_mode": null,
-            "description": "advance towards the objective",
-            "category": "MANEUVER",
-            "turn": 2,
+            "option": "ATTACK",
+            "attack_mode": "DIRECT",
+            "formation": "PUSH_VP",
             "context": {
               "friendly_strength": "HIGH",
               "enemy_pressure": "LOW",
               "objective_distance": "UNKNOWN"
             },
-            "formation": "ATTACK",
-            "policy_info": {
-              "option": "ADVANCE",
-              "attack_mode": null,
-              "confidence": 0.99244225025177,
-              "value_estimate": 121.98930358886719
-            }
+            "turn": 2
           }
         },
         {
@@ -9301,7 +9306,7 @@ FILE: C:\repos\python\assault\assault_sim\session\replays\phase01_seq001_initial
           "payload": {
             "action": "RangedCombat",
             "attacker": "US_5",
-            "defender": "GE_1",
+            "defender": "GE_4",
             "distance": 8,
             "attack_sector": "REAR",
             "los": "CLEAR",
@@ -9316,58 +9321,9 @@ FILE: C:\repos\python\assault\assault_sim\session\replays\phase01_seq001_initial
               {
                 "color": "YELLOW",
                 "faces": [
+                  "DAMAGE",
                   "DAMAGE"
                 ]
-              }
-            ],
-            "attacker_effects": {
-              "damage": 0,
-              "criticals": [],
-              "suppress": 0,
-              "suppression_state_after": false
-            },
-            "defender_hp_before": 1,
-            "defender_hp_after": 1,
-            "defender_killed": false,
-            "resolution": {
-              "remaining_damage": 0,
-              "remaining_criticals": 0,
-              "remaining_suppress": 0
-            }
-          }
-        },
-        {
-          "type": "ACTION",
-          "payload": {
-            "turn": 2,
-            "action": "RangedDirectAttack",
-            "unit_id": "US_6"
-          }
-        },
-        {
-          "type": "ACTION_EFFECT",
-          "payload": {
-            "action": "RangedCombat",
-            "attacker": "US_6",
-            "defender": "GE_3",
-            "distance": 10,
-            "attack_sector": "REAR",
-            "los": "CLEAR",
-            "attack_mode": "DIRECT_FIRE",
-            "attacker_attack_dice": [
-              {
-                "color": "YELLOW",
-                "faces": []
-              },
-              {
-                "color": "GREEN",
-                "faces": []
-              }
-            ],
-            "defender_defense_dice": [
-              {
-                "color": "YELLOW",
-                "faces": []
               }
             ],
             "attacker_effects": {
@@ -9384,6 +9340,94 @@ FILE: C:\repos\python\assault\assault_sim\session\replays\phase01_seq001_initial
               "remaining_criticals": 0,
               "remaining_suppress": 0
             }
+          }
+        },
+        {
+          "type": "HRL_DECISION",
+          "payload": {
+            "side": "US",
+            "option": "HOLD",
+            "attack_mode": null,
+            "formation": "PUSH_VP",
+            "context": {
+              "friendly_strength": "HIGH",
+              "enemy_pressure": "LOW",
+              "objective_distance": "UNKNOWN"
+            },
+            "turn": 2
+          }
+        },
+        {
+          "type": "ACTION",
+          "payload": {
+            "turn": 2,
+            "action": "RangedDirectAttack",
+            "unit_id": "US_6"
+          }
+        },
+        {
+          "type": "ACTION_EFFECT",
+          "payload": {
+            "action": "RangedCombat",
+            "attacker": "US_6",
+            "defender": "GE_2",
+            "distance": 9,
+            "attack_sector": "REAR",
+            "los": "CLEAR",
+            "attack_mode": "DIRECT_FIRE",
+            "attacker_attack_dice": [
+              {
+                "color": "YELLOW",
+                "faces": [
+                  "CRITICAL",
+                  "DAMAGE"
+                ]
+              },
+              {
+                "color": "GREEN",
+                "faces": [
+                  "DAMAGE"
+                ]
+              }
+            ],
+            "defender_defense_dice": [
+              {
+                "color": "YELLOW",
+                "faces": [
+                  "CRITICAL",
+                  "DAMAGE"
+                ]
+              }
+            ],
+            "attacker_effects": {
+              "damage": 1,
+              "criticals": [],
+              "suppress": 0,
+              "suppression_state_after": false
+            },
+            "defender_hp_before": 1,
+            "defender_hp_after": 0,
+            "defender_killed": true,
+            "resolution": {
+              "remaining_damage": 1,
+              "remaining_criticals": 0,
+              "remaining_suppress": 0
+            }
+          }
+        },
+        {
+          "type": "HRL_DECISION",
+          "payload": {
+            "side": "US",
+            "option": "ATTACK",
+            "attack_mode": "DIRECT",
+            "formation": "HOLD_VP",
+            "context": {
+              "friendly_strength": "HIGH",
+              "enemy_pressure": "LOW",
+              "objective_distance": "UNKNOWN"
+            },
+            "turn": 2
           }
         },
         {
@@ -9419,13 +9463,16 @@ FILE: C:\repos\python\assault\assault_sim\session\replays\phase01_seq001_initial
               },
               {
                 "color": "GREEN",
-                "faces": []
+                "faces": [
+                  "DAMAGE"
+                ]
               }
             ],
             "defender_defense_dice": [
               {
                 "color": "YELLOW",
                 "faces": [
+                  "CRITICAL",
                   "DAMAGE"
                 ]
               }
@@ -9465,7 +9512,7 @@ FILE: C:\repos\python\assault\assault_sim\session\replays\phase01_seq001_initial
             "action": "RangedCombat",
             "attacker": "GE_1",
             "defender": "US_2",
-            "distance": 7,
+            "distance": 8,
             "attack_sector": "FRONT",
             "los": "CLEAR",
             "attack_mode": "DIRECT_FIRE",
@@ -9473,20 +9520,18 @@ FILE: C:\repos\python\assault\assault_sim\session\replays\phase01_seq001_initial
               {
                 "color": "YELLOW",
                 "faces": [
-                  "DAMAGE",
                   "DAMAGE"
                 ]
               },
               {
                 "color": "YELLOW",
-                "faces": [
-                  "DAMAGE",
-                  "DAMAGE"
-                ]
+                "faces": []
               },
               {
                 "color": "BLUE",
-                "faces": []
+                "faces": [
+                  "DAMAGE"
+                ]
               },
               {
                 "color": "BLUE",
@@ -9497,21 +9542,22 @@ FILE: C:\repos\python\assault\assault_sim\session\replays\phase01_seq001_initial
               {
                 "color": "YELLOW",
                 "faces": [
+                  "CRITICAL",
                   "DAMAGE"
                 ]
               }
             ],
             "attacker_effects": {
-              "damage": 3,
+              "damage": 0,
               "criticals": [],
               "suppress": 0,
               "suppression_state_after": false
             },
             "defender_hp_before": 4,
-            "defender_hp_after": 1,
+            "defender_hp_after": 4,
             "defender_killed": false,
             "resolution": {
-              "remaining_damage": 3,
+              "remaining_damage": 0,
               "remaining_criticals": 0,
               "remaining_suppress": 0
             }
@@ -9521,23 +9567,15 @@ FILE: C:\repos\python\assault\assault_sim\session\replays\phase01_seq001_initial
           "type": "HRL_DECISION",
           "payload": {
             "side": "US",
-            "option": "ATTACK",
-            "attack_mode": "DIRECT",
-            "description": "engage the enemy directly",
-            "category": "ENGAGEMENT",
-            "turn": 3,
+            "option": "HOLD",
+            "attack_mode": null,
+            "formation": "HOLD_VP",
             "context": {
               "friendly_strength": "HIGH",
               "enemy_pressure": "LOW",
               "objective_distance": "UNKNOWN"
             },
-            "formation": "ATTACK",
-            "policy_info": {
-              "option": "ADVANCE",
-              "attack_mode": null,
-              "confidence": 0.9926002025604248,
-              "value_estimate": 122.46649169921875
-            }
+            "turn": 3
           }
         },
         {
@@ -9554,7 +9592,7 @@ FILE: C:\repos\python\assault\assault_sim\session\replays\phase01_seq001_initial
             "action": "RangedCombat",
             "attacker": "US_2",
             "defender": "GE_4",
-            "distance": 7,
+            "distance": 8,
             "attack_sector": "REAR",
             "los": "CLEAR",
             "attack_mode": "DIRECT_FIRE",
@@ -9565,28 +9603,28 @@ FILE: C:\repos\python\assault\assault_sim\session\replays\phase01_seq001_initial
               },
               {
                 "color": "GREEN",
-                "faces": []
-              }
-            ],
-            "defender_defense_dice": [
-              {
-                "color": "YELLOW",
                 "faces": [
                   "DAMAGE"
                 ]
               }
             ],
+            "defender_defense_dice": [
+              {
+                "color": "YELLOW",
+                "faces": []
+              }
+            ],
             "attacker_effects": {
-              "damage": 0,
+              "damage": 1,
               "criticals": [],
               "suppress": 0,
               "suppression_state_after": false
             },
             "defender_hp_before": 2,
-            "defender_hp_after": 2,
+            "defender_hp_after": 1,
             "defender_killed": false,
             "resolution": {
-              "remaining_damage": 0,
+              "remaining_damage": 1,
               "remaining_criticals": 0,
               "remaining_suppress": 0
             }
@@ -9613,16 +9651,16 @@ FILE: C:\repos\python\assault\assault_sim\session\replays\phase01_seq001_initial
             "attacker_attack_dice": [
               {
                 "color": "YELLOW",
-                "faces": []
-              },
-              {
-                "color": "YELLOW",
                 "faces": [
                   "CRITICAL",
                   "DAMAGE"
                 ]
               },
               {
+                "color": "YELLOW",
+                "faces": []
+              },
+              {
                 "color": "BLUE",
                 "faces": []
               },
@@ -9635,65 +9673,7 @@ FILE: C:\repos\python\assault\assault_sim\session\replays\phase01_seq001_initial
               {
                 "color": "YELLOW",
                 "faces": [
-                  "DAMAGE"
-                ]
-              }
-            ],
-            "attacker_effects": {
-              "damage": 1,
-              "criticals": [
-                {
-                  "face": "CRITICAL",
-                  "target_class": "INFANTRY"
-                }
-              ],
-              "suppress": 0,
-              "suppression_state_after": false
-            },
-            "defender_hp_before": 4,
-            "defender_hp_after": 3,
-            "defender_killed": false,
-            "resolution": {
-              "remaining_damage": 0,
-              "remaining_criticals": 1,
-              "remaining_suppress": 0
-            }
-          }
-        },
-        {
-          "type": "ACTION",
-          "payload": {
-            "turn": 3,
-            "action": "RangedDirectAttack",
-            "unit_id": "US_3"
-          }
-        },
-        {
-          "type": "ACTION_EFFECT",
-          "payload": {
-            "action": "RangedCombat",
-            "attacker": "US_3",
-            "defender": "GE_4",
-            "distance": 8,
-            "attack_sector": "REAR",
-            "los": "CLEAR",
-            "attack_mode": "DIRECT_FIRE",
-            "attacker_attack_dice": [
-              {
-                "color": "YELLOW",
-                "faces": [
-                  "DAMAGE"
-                ]
-              },
-              {
-                "color": "GREEN",
-                "faces": []
-              }
-            ],
-            "defender_defense_dice": [
-              {
-                "color": "YELLOW",
-                "faces": [
+                  "CRITICAL",
                   "DAMAGE"
                 ]
               }
@@ -9704,14 +9684,37 @@ FILE: C:\repos\python\assault\assault_sim\session\replays\phase01_seq001_initial
               "suppress": 0,
               "suppression_state_after": false
             },
-            "defender_hp_before": 2,
-            "defender_hp_after": 2,
+            "defender_hp_before": 4,
+            "defender_hp_after": 4,
             "defender_killed": false,
             "resolution": {
               "remaining_damage": 0,
               "remaining_criticals": 0,
               "remaining_suppress": 0
             }
+          }
+        },
+        {
+          "type": "HRL_DECISION",
+          "payload": {
+            "side": "US",
+            "option": "HOLD",
+            "attack_mode": null,
+            "formation": "HOLD_VP",
+            "context": {
+              "friendly_strength": "HIGH",
+              "enemy_pressure": "LOW",
+              "objective_distance": "UNKNOWN"
+            },
+            "turn": 3
+          }
+        },
+        {
+          "type": "ACTION",
+          "payload": {
+            "turn": 3,
+            "action": "WaitAction",
+            "unit_id": "US_4"
           }
         },
         {
@@ -9728,137 +9731,62 @@ FILE: C:\repos\python\assault\assault_sim\session\replays\phase01_seq001_initial
             "action": "RangedCombat",
             "attacker": "GE_4",
             "defender": "US_2",
-            "distance": 7,
+            "distance": 8,
             "attack_sector": "FRONT",
             "los": "CLEAR",
             "attack_mode": "DIRECT_FIRE",
             "attacker_attack_dice": [
               {
-                "color": "RED",
-                "faces": [
-                  "DAMAGE",
-                  "DAMAGE"
-                ]
-              },
-              {
                 "color": "YELLOW",
-                "faces": [
-                  "DAMAGE"
-                ]
-              },
-              {
-                "color": "GREEN",
-                "faces": [
-                  "DAMAGE"
-                ]
+                "faces": []
               },
               {
                 "color": "BLUE",
-                "faces": [
-                  "DAMAGE"
-                ]
-              }
-            ],
-            "defender_defense_dice": [
-              {
-                "color": "YELLOW",
-                "faces": [
-                  "DAMAGE"
-                ]
-              }
-            ],
-            "attacker_effects": {
-              "damage": 4,
-              "criticals": [],
-              "suppress": 0,
-              "suppression_state_after": false
-            },
-            "defender_hp_before": 1,
-            "defender_hp_after": 0,
-            "defender_killed": true,
-            "resolution": {
-              "remaining_damage": 4,
-              "remaining_criticals": 0,
-              "remaining_suppress": 0
-            }
-          }
-        },
-        {
-          "type": "ACTION",
-          "payload": {
-            "turn": 3,
-            "action": "RangedDirectAttack",
-            "unit_id": "US_4"
-          }
-        },
-        {
-          "type": "ACTION_EFFECT",
-          "payload": {
-            "action": "RangedCombat",
-            "attacker": "US_4",
-            "defender": "GE_3",
-            "distance": 9,
-            "attack_sector": "REAR",
-            "los": "CLEAR",
-            "attack_mode": "DIRECT_FIRE",
-            "attacker_attack_dice": [
-              {
-                "color": "YELLOW",
-                "faces": [
-                  "DAMAGE"
-                ]
+                "faces": []
               },
               {
-                "color": "GREEN",
-                "faces": [
-                  "DAMAGE"
-                ]
+                "color": "BLUE",
+                "faces": []
               }
             ],
             "defender_defense_dice": [
               {
                 "color": "YELLOW",
                 "faces": [
+                  "CRITICAL",
                   "DAMAGE"
                 ]
               }
             ],
             "attacker_effects": {
-              "damage": 1,
+              "damage": 0,
               "criticals": [],
               "suppress": 0,
               "suppression_state_after": false
             },
-            "defender_hp_before": 3,
-            "defender_hp_after": 2,
+            "defender_hp_before": 4,
+            "defender_hp_after": 4,
             "defender_killed": false,
             "resolution": {
-              "remaining_damage": 1,
+              "remaining_damage": 0,
               "remaining_criticals": 0,
               "remaining_suppress": 0
             }
           }
         },
         {
-          "type": "ACTION",
+          "type": "HRL_DECISION",
           "payload": {
-            "turn": 3,
-            "action": "MoveAction",
-            "unit_id": "GE_5"
-          }
-        },
-        {
-          "type": "UNIT_MOVED",
-          "payload": {
-            "unit_id": "GE_5",
-            "from": {
-              "q": 6,
-              "r": 4
+            "side": "US",
+            "option": "ATTACK",
+            "attack_mode": "DIRECT",
+            "formation": "HOLD_VP",
+            "context": {
+              "friendly_strength": "HIGH",
+              "enemy_pressure": "LOW",
+              "objective_distance": "UNKNOWN"
             },
-            "to": {
-              "q": 6,
-              "r": 5
-            }
+            "turn": 3
           }
         },
         {
@@ -9874,7 +9802,7 @@ FILE: C:\repos\python\assault\assault_sim\session\replays\phase01_seq001_initial
           "payload": {
             "action": "RangedCombat",
             "attacker": "US_5",
-            "defender": "GE_1",
+            "defender": "GE_4",
             "distance": 8,
             "attack_sector": "REAR",
             "los": "CLEAR",
@@ -9882,9 +9810,7 @@ FILE: C:\repos\python\assault\assault_sim\session\replays\phase01_seq001_initial
             "attacker_attack_dice": [
               {
                 "color": "BLUE",
-                "faces": [
-                  "DAMAGE"
-                ]
+                "faces": []
               }
             ],
             "defender_defense_dice": [
@@ -9917,21 +9843,13 @@ FILE: C:\repos\python\assault\assault_sim\session\replays\phase01_seq001_initial
             "side": "US",
             "option": "ATTACK",
             "attack_mode": "DIRECT",
-            "description": "engage the enemy directly",
-            "category": "ENGAGEMENT",
-            "turn": 3,
+            "formation": "HOLD_VP",
             "context": {
               "friendly_strength": "HIGH",
               "enemy_pressure": "LOW",
               "objective_distance": "UNKNOWN"
             },
-            "formation": "ATTACK",
-            "policy_info": {
-              "option": "ADVANCE",
-              "attack_mode": null,
-              "confidence": 0.9926685094833374,
-              "value_estimate": 122.67366790771484
-            }
+            "turn": 3
           }
         },
         {
@@ -9956,68 +9874,7 @@ FILE: C:\repos\python\assault\assault_sim\session\replays\phase01_seq001_initial
               {
                 "color": "YELLOW",
                 "faces": [
-                  "DAMAGE"
-                ]
-              },
-              {
-                "color": "GREEN",
-                "faces": [
-                  "DAMAGE"
-                ]
-              }
-            ],
-            "defender_defense_dice": [
-              {
-                "color": "YELLOW",
-                "faces": [
-                  "DAMAGE"
-                ]
-              }
-            ],
-            "attacker_effects": {
-              "damage": 1,
-              "criticals": [],
-              "suppress": 0,
-              "suppression_state_after": false
-            },
-            "defender_hp_before": 2,
-            "defender_hp_after": 1,
-            "defender_killed": false,
-            "resolution": {
-              "remaining_damage": 1,
-              "remaining_criticals": 0,
-              "remaining_suppress": 0
-            }
-          }
-        },
-        {
-          "type": "ACTION",
-          "payload": {
-            "turn": 3,
-            "action": "RangedDirectAttack",
-            "unit_id": "US_7"
-          }
-        },
-        {
-          "type": "ACTION_EFFECT",
-          "payload": {
-            "action": "RangedCombat",
-            "attacker": "US_7",
-            "defender": "GE_4",
-            "distance": 10,
-            "attack_sector": "REAR",
-            "los": "CLEAR",
-            "attack_mode": "DIRECT_FIRE",
-            "attacker_attack_dice": [
-              {
-                "color": "GREEN",
-                "faces": [
-                  "DAMAGE"
-                ]
-              },
-              {
-                "color": "GREEN",
-                "faces": [
+                  "DAMAGE",
                   "DAMAGE"
                 ]
               },
@@ -10030,23 +9887,61 @@ FILE: C:\repos\python\assault\assault_sim\session\replays\phase01_seq001_initial
               {
                 "color": "YELLOW",
                 "faces": [
+                  "DAMAGE",
                   "DAMAGE"
                 ]
               }
             ],
             "attacker_effects": {
-              "damage": 1,
+              "damage": 0,
               "criticals": [],
               "suppress": 0,
               "suppression_state_after": false
             },
-            "defender_hp_before": 2,
-            "defender_hp_after": 1,
+            "defender_hp_before": 3,
+            "defender_hp_after": 3,
             "defender_killed": false,
             "resolution": {
-              "remaining_damage": 1,
+              "remaining_damage": 0,
               "remaining_criticals": 0,
               "remaining_suppress": 0
+            }
+          }
+        },
+        {
+          "type": "HRL_DECISION",
+          "payload": {
+            "side": "US",
+            "option": "RETREAT",
+            "attack_mode": null,
+            "formation": "HOLD_VP",
+            "context": {
+              "friendly_strength": "HIGH",
+              "enemy_pressure": "LOW",
+              "objective_distance": "UNKNOWN"
+            },
+            "turn": 3
+          }
+        },
+        {
+          "type": "ACTION",
+          "payload": {
+            "turn": 3,
+            "action": "MoveAction",
+            "unit_id": "US_7"
+          }
+        },
+        {
+          "type": "UNIT_MOVED",
+          "payload": {
+            "unit_id": "US_7",
+            "from": {
+              "q": 5,
+              "r": 13
+            },
+            "to": {
+              "q": 6,
+              "r": 13
             }
           }
         }
@@ -10068,7 +9963,7 @@ FILE: C:\repos\python\assault\assault_sim\session\replays\phase01_seq001_initial
           "payload": {
             "action": "RangedCombat",
             "attacker": "GE_1",
-            "defender": "US_5",
+            "defender": "US_2",
             "distance": 8,
             "attack_sector": "FRONT",
             "los": "CLEAR",
@@ -10082,9 +9977,7 @@ FILE: C:\repos\python\assault\assault_sim\session\replays\phase01_seq001_initial
               },
               {
                 "color": "YELLOW",
-                "faces": [
-                  "DAMAGE"
-                ]
+                "faces": []
               },
               {
                 "color": "BLUE",
@@ -10104,19 +9997,34 @@ FILE: C:\repos\python\assault\assault_sim\session\replays\phase01_seq001_initial
               }
             ],
             "attacker_effects": {
-              "damage": 3,
+              "damage": 2,
               "criticals": [],
               "suppress": 0,
               "suppression_state_after": false
             },
-            "defender_hp_before": 2,
-            "defender_hp_after": 0,
-            "defender_killed": true,
+            "defender_hp_before": 4,
+            "defender_hp_after": 2,
+            "defender_killed": false,
             "resolution": {
-              "remaining_damage": 3,
+              "remaining_damage": 2,
               "remaining_criticals": 0,
               "remaining_suppress": 0
             }
+          }
+        },
+        {
+          "type": "HRL_DECISION",
+          "payload": {
+            "side": "US",
+            "option": "ATTACK",
+            "attack_mode": "DIRECT",
+            "formation": "ATTACK",
+            "context": {
+              "friendly_strength": "HIGH",
+              "enemy_pressure": "LOW",
+              "objective_distance": "UNKNOWN"
+            },
+            "turn": 4
           }
         },
         {
@@ -10124,14 +10032,14 @@ FILE: C:\repos\python\assault\assault_sim\session\replays\phase01_seq001_initial
           "payload": {
             "turn": 4,
             "action": "RangedDirectAttack",
-            "unit_id": "US_3"
+            "unit_id": "US_2"
           }
         },
         {
           "type": "ACTION_EFFECT",
           "payload": {
             "action": "RangedCombat",
-            "attacker": "US_3",
+            "attacker": "US_2",
             "defender": "GE_4",
             "distance": 8,
             "attack_sector": "REAR",
@@ -10146,7 +10054,9 @@ FILE: C:\repos\python\assault\assault_sim\session\replays\phase01_seq001_initial
               },
               {
                 "color": "GREEN",
-                "faces": []
+                "faces": [
+                  "DAMAGE"
+                ]
               }
             ],
             "defender_defense_dice": [
@@ -10158,16 +10068,16 @@ FILE: C:\repos\python\assault\assault_sim\session\replays\phase01_seq001_initial
               }
             ],
             "attacker_effects": {
-              "damage": 0,
+              "damage": 1,
               "criticals": [],
               "suppress": 0,
               "suppression_state_after": false
             },
             "defender_hp_before": 1,
-            "defender_hp_after": 1,
-            "defender_killed": false,
+            "defender_hp_after": 0,
+            "defender_killed": true,
             "resolution": {
-              "remaining_damage": 0,
+              "remaining_damage": 1,
               "remaining_criticals": 0,
               "remaining_suppress": 0
             }
@@ -10194,10 +10104,184 @@ FILE: C:\repos\python\assault\assault_sim\session\replays\phase01_seq001_initial
             "attacker_attack_dice": [
               {
                 "color": "YELLOW",
+                "faces": []
+              },
+              {
+                "color": "YELLOW",
+                "faces": [
+                  "DAMAGE"
+                ]
+              },
+              {
+                "color": "BLUE",
+                "faces": []
+              },
+              {
+                "color": "BLUE",
+                "faces": []
+              }
+            ],
+            "defender_defense_dice": [
+              {
+                "color": "YELLOW",
                 "faces": [
                   "DAMAGE",
                   "DAMAGE"
                 ]
+              }
+            ],
+            "attacker_effects": {
+              "damage": 0,
+              "criticals": [],
+              "suppress": 0,
+              "suppression_state_after": false
+            },
+            "defender_hp_before": 4,
+            "defender_hp_after": 4,
+            "defender_killed": false,
+            "resolution": {
+              "remaining_damage": 0,
+              "remaining_criticals": 0,
+              "remaining_suppress": 0
+            }
+          }
+        },
+        {
+          "type": "HRL_DECISION",
+          "payload": {
+            "side": "US",
+            "option": "HOLD",
+            "attack_mode": null,
+            "formation": "ATTACK",
+            "context": {
+              "friendly_strength": "HIGH",
+              "enemy_pressure": "LOW",
+              "objective_distance": "UNKNOWN"
+            },
+            "turn": 4
+          }
+        },
+        {
+          "type": "ACTION",
+          "payload": {
+            "turn": 4,
+            "action": "WaitAction",
+            "unit_id": "US_4"
+          }
+        },
+        {
+          "type": "HRL_DECISION",
+          "payload": {
+            "side": "US",
+            "option": "HOLD",
+            "attack_mode": null,
+            "formation": "ATTACK",
+            "context": {
+              "friendly_strength": "HIGH",
+              "enemy_pressure": "LOW",
+              "objective_distance": "UNKNOWN"
+            },
+            "turn": 4
+          }
+        },
+        {
+          "type": "ACTION",
+          "payload": {
+            "turn": 4,
+            "action": "WaitAction",
+            "unit_id": "US_5"
+          }
+        },
+        {
+          "type": "HRL_DECISION",
+          "payload": {
+            "side": "US",
+            "option": "RETREAT",
+            "attack_mode": null,
+            "formation": "ATTACK",
+            "context": {
+              "friendly_strength": "HIGH",
+              "enemy_pressure": "LOW",
+              "objective_distance": "UNKNOWN"
+            },
+            "turn": 4
+          }
+        },
+        {
+          "type": "ACTION",
+          "payload": {
+            "turn": 4,
+            "action": "MoveAction",
+            "unit_id": "US_6"
+          }
+        },
+        {
+          "type": "UNIT_MOVED",
+          "payload": {
+            "unit_id": "US_6",
+            "from": {
+              "q": 7,
+              "r": 12
+            },
+            "to": {
+              "q": 8,
+              "r": 11
+            }
+          }
+        },
+        {
+          "type": "HRL_DECISION",
+          "payload": {
+            "side": "US",
+            "option": "HOLD",
+            "attack_mode": null,
+            "formation": "ATTACK",
+            "context": {
+              "friendly_strength": "HIGH",
+              "enemy_pressure": "LOW",
+              "objective_distance": "UNKNOWN"
+            },
+            "turn": 4
+          }
+        },
+        {
+          "type": "ACTION",
+          "payload": {
+            "turn": 4,
+            "action": "WaitAction",
+            "unit_id": "US_7"
+          }
+        },
+        {
+          "type": "ACTION",
+          "payload": {
+            "turn": 4,
+            "action": "WaitAction",
+            "unit_id": "SYSTEM"
+          }
+        },
+        {
+          "type": "ACTION",
+          "payload": {
+            "turn": 4,
+            "action": "RangedDirectAttack",
+            "unit_id": "GE_1"
+          }
+        },
+        {
+          "type": "ACTION_EFFECT",
+          "payload": {
+            "action": "RangedCombat",
+            "attacker": "GE_1",
+            "defender": "US_2",
+            "distance": 8,
+            "attack_sector": "FRONT",
+            "los": "CLEAR",
+            "attack_mode": "DIRECT_FIRE",
+            "attacker_attack_dice": [
+              {
+                "color": "YELLOW",
+                "faces": []
               },
               {
                 "color": "YELLOW",
@@ -10208,11 +10292,15 @@ FILE: C:\repos\python\assault\assault_sim\session\replays\phase01_seq001_initial
               },
               {
                 "color": "BLUE",
-                "faces": []
+                "faces": [
+                  "DAMAGE"
+                ]
               },
               {
                 "color": "BLUE",
-                "faces": []
+                "faces": [
+                  "DAMAGE"
+                ]
               }
             ],
             "defender_defense_dice": [
@@ -10234,7 +10322,109 @@ FILE: C:\repos\python\assault\assault_sim\session\replays\phase01_seq001_initial
               "suppress": 0,
               "suppression_state_after": false
             },
-            "defender_hp_before": 3,
+            "defender_hp_before": 2,
+            "defender_hp_after": 0,
+            "defender_killed": true,
+            "resolution": {
+              "remaining_damage": 2,
+              "remaining_criticals": 1,
+              "remaining_suppress": 0
+            }
+          }
+        }
+      ]
+    },
+    {
+      "turn": 5,
+      "events": [
+        {
+          "type": "HRL_DECISION",
+          "payload": {
+            "side": "US",
+            "option": "HOLD",
+            "attack_mode": null,
+            "formation": "ATTACK",
+            "context": {
+              "friendly_strength": "HIGH",
+              "enemy_pressure": "LOW",
+              "objective_distance": "UNKNOWN"
+            },
+            "turn": 5
+          }
+        },
+        {
+          "type": "ACTION",
+          "payload": {
+            "turn": 5,
+            "action": "WaitAction",
+            "unit_id": "US_4"
+          }
+        },
+        {
+          "type": "ACTION",
+          "payload": {
+            "turn": 5,
+            "action": "RangedDirectAttack",
+            "unit_id": "GE_1"
+          }
+        },
+        {
+          "type": "ACTION_EFFECT",
+          "payload": {
+            "action": "RangedCombat",
+            "attacker": "GE_1",
+            "defender": "US_5",
+            "distance": 8,
+            "attack_sector": "FRONT",
+            "los": "CLEAR",
+            "attack_mode": "DIRECT_FIRE",
+            "attacker_attack_dice": [
+              {
+                "color": "YELLOW",
+                "faces": [
+                  "CRITICAL",
+                  "DAMAGE"
+                ]
+              },
+              {
+                "color": "YELLOW",
+                "faces": [
+                  "CRITICAL",
+                  "DAMAGE"
+                ]
+              },
+              {
+                "color": "BLUE",
+                "faces": []
+              },
+              {
+                "color": "BLUE",
+                "faces": [
+                  "DAMAGE"
+                ]
+              }
+            ],
+            "defender_defense_dice": [
+              {
+                "color": "YELLOW",
+                "faces": [
+                  "CRITICAL",
+                  "DAMAGE"
+                ]
+              }
+            ],
+            "attacker_effects": {
+              "damage": 3,
+              "criticals": [
+                {
+                  "face": "CRITICAL",
+                  "target_class": "INFANTRY"
+                }
+              ],
+              "suppress": 0,
+              "suppression_state_after": false
+            },
+            "defender_hp_before": 2,
             "defender_hp_after": 0,
             "defender_killed": true,
             "resolution": {
@@ -10245,354 +10435,26 @@ FILE: C:\repos\python\assault\assault_sim\session\replays\phase01_seq001_initial
           }
         },
         {
-          "type": "ACTION",
-          "payload": {
-            "turn": 4,
-            "action": "RangedDirectAttack",
-            "unit_id": "US_4"
-          }
-        },
-        {
-          "type": "ACTION_EFFECT",
-          "payload": {
-            "action": "RangedCombat",
-            "attacker": "US_4",
-            "defender": "GE_3",
-            "distance": 9,
-            "attack_sector": "REAR",
-            "los": "CLEAR",
-            "attack_mode": "DIRECT_FIRE",
-            "attacker_attack_dice": [
-              {
-                "color": "YELLOW",
-                "faces": [
-                  "DAMAGE"
-                ]
-              },
-              {
-                "color": "GREEN",
-                "faces": []
-              }
-            ],
-            "defender_defense_dice": [
-              {
-                "color": "YELLOW",
-                "faces": [
-                  "DAMAGE"
-                ]
-              }
-            ],
-            "attacker_effects": {
-              "damage": 0,
-              "criticals": [],
-              "suppress": 0,
-              "suppression_state_after": false
-            },
-            "defender_hp_before": 1,
-            "defender_hp_after": 1,
-            "defender_killed": false,
-            "resolution": {
-              "remaining_damage": 0,
-              "remaining_criticals": 0,
-              "remaining_suppress": 0
-            }
-          }
-        },
-        {
-          "type": "ACTION",
-          "payload": {
-            "turn": 4,
-            "action": "RangedDirectAttack",
-            "unit_id": "GE_4"
-          }
-        },
-        {
-          "type": "ACTION_EFFECT",
-          "payload": {
-            "action": "RangedCombat",
-            "attacker": "GE_4",
-            "defender": "US_3",
-            "distance": 8,
-            "attack_sector": "FRONT",
-            "los": "CLEAR",
-            "attack_mode": "DIRECT_FIRE",
-            "attacker_attack_dice": [
-              {
-                "color": "YELLOW",
-                "faces": [
-                  "DAMAGE",
-                  "DAMAGE"
-                ]
-              },
-              {
-                "color": "BLUE",
-                "faces": []
-              },
-              {
-                "color": "BLUE",
-                "faces": []
-              }
-            ],
-            "defender_defense_dice": [
-              {
-                "color": "YELLOW",
-                "faces": [
-                  "CRITICAL",
-                  "DAMAGE"
-                ]
-              }
-            ],
-            "attacker_effects": {
-              "damage": 0,
-              "criticals": [],
-              "suppress": 0,
-              "suppression_state_after": false
-            },
-            "defender_hp_before": 3,
-            "defender_hp_after": 3,
-            "defender_killed": false,
-            "resolution": {
-              "remaining_damage": 0,
-              "remaining_criticals": 0,
-              "remaining_suppress": 0
-            }
-          }
-        },
-        {
           "type": "HRL_DECISION",
           "payload": {
             "side": "US",
-            "option": "ADVANCE",
+            "option": "HOLD",
             "attack_mode": null,
-            "description": "advance towards the objective",
-            "category": "MANEUVER",
-            "turn": 4,
+            "formation": "PUSH_VP",
             "context": {
-              "friendly_strength": "LOW",
-              "enemy_pressure": "HIGH",
+              "friendly_strength": "HIGH",
+              "enemy_pressure": "LOW",
               "objective_distance": "UNKNOWN"
             },
-            "formation": "CLEANUP",
-            "policy_info": {
-              "option": "ADVANCE",
-              "attack_mode": null,
-              "confidence": 0.9926930665969849,
-              "value_estimate": 122.78716278076172
-            }
-          }
-        },
-        {
-          "type": "ACTION",
-          "payload": {
-            "turn": 4,
-            "action": "RangedDirectAttack",
-            "unit_id": "US_7"
-          }
-        },
-        {
-          "type": "ACTION_EFFECT",
-          "payload": {
-            "action": "RangedCombat",
-            "attacker": "US_7",
-            "defender": "GE_4",
-            "distance": 10,
-            "attack_sector": "REAR",
-            "los": "CLEAR",
-            "attack_mode": "DIRECT_FIRE",
-            "attacker_attack_dice": [
-              {
-                "color": "GREEN",
-                "faces": []
-              },
-              {
-                "color": "GREEN",
-                "faces": []
-              },
-              {
-                "color": "GREEN",
-                "faces": []
-              }
-            ],
-            "defender_defense_dice": [
-              {
-                "color": "YELLOW",
-                "faces": [
-                  "DAMAGE",
-                  "DAMAGE"
-                ]
-              }
-            ],
-            "attacker_effects": {
-              "damage": 0,
-              "criticals": [],
-              "suppress": 0,
-              "suppression_state_after": false
-            },
-            "defender_hp_before": 1,
-            "defender_hp_after": 1,
-            "defender_killed": false,
-            "resolution": {
-              "remaining_damage": 0,
-              "remaining_criticals": 0,
-              "remaining_suppress": 0
-            }
-          }
-        },
-        {
-          "type": "ACTION",
-          "payload": {
-            "turn": 4,
-            "action": "MoveAction",
-            "unit_id": "GE_5"
-          }
-        },
-        {
-          "type": "UNIT_MOVED",
-          "payload": {
-            "unit_id": "GE_5",
-            "from": {
-              "q": 6,
-              "r": 5
-            },
-            "to": {
-              "q": 6,
-              "r": 6
-            }
-          }
-        }
-      ]
-    },
-    {
-      "turn": 5,
-      "events": [
-        {
-          "type": "ACTION",
-          "payload": {
-            "turn": 5,
-            "action": "RangedDirectAttack",
-            "unit_id": "US_3"
-          }
-        },
-        {
-          "type": "ACTION_EFFECT",
-          "payload": {
-            "action": "RangedCombat",
-            "attacker": "US_3",
-            "defender": "GE_4",
-            "distance": 8,
-            "attack_sector": "REAR",
-            "los": "CLEAR",
-            "attack_mode": "DIRECT_FIRE",
-            "attacker_attack_dice": [
-              {
-                "color": "YELLOW",
-                "faces": [
-                  "DAMAGE"
-                ]
-              },
-              {
-                "color": "GREEN",
-                "faces": []
-              }
-            ],
-            "defender_defense_dice": [
-              {
-                "color": "YELLOW",
-                "faces": []
-              }
-            ],
-            "attacker_effects": {
-              "damage": 1,
-              "criticals": [],
-              "suppress": 0,
-              "suppression_state_after": false
-            },
-            "defender_hp_before": 1,
-            "defender_hp_after": 0,
-            "defender_killed": true,
-            "resolution": {
-              "remaining_damage": 1,
-              "remaining_criticals": 0,
-              "remaining_suppress": 0
-            }
+            "turn": 5
           }
         },
         {
           "type": "ACTION",
           "payload": {
             "turn": 5,
-            "action": "MoveAction",
-            "unit_id": "GE_1"
-          }
-        },
-        {
-          "type": "UNIT_MOVED",
-          "payload": {
-            "unit_id": "GE_1",
-            "from": {
-              "q": 3,
-              "r": 5
-            },
-            "to": {
-              "q": 3,
-              "r": 6
-            }
-          }
-        },
-        {
-          "type": "ACTION",
-          "payload": {
-            "turn": 5,
-            "action": "RangedDirectAttack",
-            "unit_id": "US_4"
-          }
-        },
-        {
-          "type": "ACTION_EFFECT",
-          "payload": {
-            "action": "RangedCombat",
-            "attacker": "US_4",
-            "defender": "GE_3",
-            "distance": 9,
-            "attack_sector": "REAR",
-            "los": "CLEAR",
-            "attack_mode": "DIRECT_FIRE",
-            "attacker_attack_dice": [
-              {
-                "color": "YELLOW",
-                "faces": [
-                  "DAMAGE",
-                  "DAMAGE"
-                ]
-              },
-              {
-                "color": "GREEN",
-                "faces": []
-              }
-            ],
-            "defender_defense_dice": [
-              {
-                "color": "YELLOW",
-                "faces": [
-                  "CRITICAL",
-                  "DAMAGE"
-                ]
-              }
-            ],
-            "attacker_effects": {
-              "damage": 0,
-              "criticals": [],
-              "suppress": 0,
-              "suppression_state_after": false
-            },
-            "defender_hp_before": 1,
-            "defender_hp_after": 1,
-            "defender_killed": false,
-            "resolution": {
-              "remaining_damage": 0,
-              "remaining_criticals": 0,
-              "remaining_suppress": 0
-            }
+            "action": "WaitAction",
+            "unit_id": "US_6"
           }
         },
         {
@@ -10621,23 +10483,15 @@ FILE: C:\repos\python\assault\assault_sim\session\replays\phase01_seq001_initial
           "type": "HRL_DECISION",
           "payload": {
             "side": "US",
-            "option": "ADVANCE",
+            "option": "HOLD",
             "attack_mode": null,
-            "description": "advance towards the objective",
-            "category": "MANEUVER",
-            "turn": 5,
+            "formation": "PUSH_VP",
             "context": {
-              "friendly_strength": "EVEN",
-              "enemy_pressure": "HIGH",
+              "friendly_strength": "HIGH",
+              "enemy_pressure": "LOW",
               "objective_distance": "UNKNOWN"
             },
-            "formation": "CLEANUP",
-            "policy_info": {
-              "option": "ADVANCE",
-              "attack_mode": null,
-              "confidence": 0.9927196502685547,
-              "value_estimate": 122.85054779052734
-            }
+            "turn": 5
           }
         },
         {
@@ -10653,7 +10507,7 @@ FILE: C:\repos\python\assault\assault_sim\session\replays\phase01_seq001_initial
           "payload": {
             "action": "RangedCombat",
             "attacker": "US_7",
-            "defender": "GE_1",
+            "defender": "GE_3",
             "distance": 9,
             "attack_sector": "REAR",
             "los": "CLEAR",
@@ -10662,12 +10516,15 @@ FILE: C:\repos\python\assault\assault_sim\session\replays\phase01_seq001_initial
               {
                 "color": "GREEN",
                 "faces": [
+                  "CRITICAL",
                   "DAMAGE"
                 ]
               },
               {
                 "color": "BLUE",
-                "faces": []
+                "faces": [
+                  "DAMAGE"
+                ]
               }
             ],
             "defender_defense_dice": [
@@ -10679,63 +10536,22 @@ FILE: C:\repos\python\assault\assault_sim\session\replays\phase01_seq001_initial
               }
             ],
             "attacker_effects": {
-              "damage": 0,
-              "criticals": [],
-              "suppress": 0,
-              "suppression_state_after": false
-            },
-            "defender_hp_before": 1,
-            "defender_hp_after": 1,
-            "defender_killed": false,
-            "resolution": {
-              "remaining_damage": 0,
-              "remaining_criticals": 0,
-              "remaining_suppress": 0
-            }
-          }
-        },
-        {
-          "type": "ACTION",
-          "payload": {
-            "turn": 5,
-            "action": "RangedDirectAttack",
-            "unit_id": "GE_5"
-          }
-        },
-        {
-          "type": "ACTION_EFFECT",
-          "payload": {
-            "action": "RangedCombat",
-            "attacker": "GE_5",
-            "defender": "US_3",
-            "distance": 5,
-            "attack_sector": "FRONT",
-            "los": "CLEAR",
-            "attack_mode": "DIRECT_FIRE",
-            "attacker_attack_dice": [
-              {
-                "color": "GREEN",
-                "faces": []
-              }
-            ],
-            "defender_defense_dice": [
-              {
-                "color": "YELLOW",
-                "faces": []
-              }
-            ],
-            "attacker_effects": {
-              "damage": 0,
-              "criticals": [],
+              "damage": 2,
+              "criticals": [
+                {
+                  "face": "CRITICAL",
+                  "target_class": "INFANTRY"
+                }
+              ],
               "suppress": 0,
               "suppression_state_after": false
             },
             "defender_hp_before": 3,
-            "defender_hp_after": 3,
+            "defender_hp_after": 1,
             "defender_killed": false,
             "resolution": {
-              "remaining_damage": 0,
-              "remaining_criticals": 0,
+              "remaining_damage": 1,
+              "remaining_criticals": 1,
               "remaining_suppress": 0
             }
           }
@@ -10749,17 +10565,731 @@ FILE: C:\repos\python\assault\assault_sim\session\replays\phase01_seq001_initial
           "type": "ACTION",
           "payload": {
             "turn": 6,
+            "action": "MoveAction",
+            "unit_id": "GE_1"
+          }
+        },
+        {
+          "type": "UNIT_MOVED",
+          "payload": {
+            "unit_id": "GE_1",
+            "from": {
+              "q": 3,
+              "r": 5
+            },
+            "to": {
+              "q": 4,
+              "r": 5
+            }
+          }
+        },
+        {
+          "type": "HRL_DECISION",
+          "payload": {
+            "side": "US",
+            "option": "HOLD",
+            "attack_mode": null,
+            "formation": "PUSH_VP",
+            "context": {
+              "friendly_strength": "HIGH",
+              "enemy_pressure": "LOW",
+              "objective_distance": "UNKNOWN"
+            },
+            "turn": 6
+          }
+        },
+        {
+          "type": "ACTION",
+          "payload": {
+            "turn": 6,
+            "action": "WaitAction",
+            "unit_id": "US_4"
+          }
+        },
+        {
+          "type": "ACTION",
+          "payload": {
+            "turn": 6,
             "action": "RangedDirectAttack",
-            "unit_id": "US_3"
+            "unit_id": "GE_3"
           }
         },
         {
           "type": "ACTION_EFFECT",
           "payload": {
             "action": "RangedCombat",
-            "attacker": "US_3",
+            "attacker": "GE_3",
+            "defender": "US_7",
+            "distance": 9,
+            "attack_sector": "FRONT",
+            "los": "CLEAR",
+            "attack_mode": "DIRECT_FIRE",
+            "attacker_attack_dice": [
+              {
+                "color": "YELLOW",
+                "faces": [
+                  "DAMAGE"
+                ]
+              },
+              {
+                "color": "YELLOW",
+                "faces": [
+                  "DAMAGE"
+                ]
+              },
+              {
+                "color": "BLUE",
+                "faces": [
+                  "DAMAGE"
+                ]
+              },
+              {
+                "color": "BLUE",
+                "faces": [
+                  "DAMAGE"
+                ]
+              }
+            ],
+            "defender_defense_dice": [
+              {
+                "color": "YELLOW",
+                "faces": [
+                  "CRITICAL",
+                  "DAMAGE"
+                ]
+              }
+            ],
+            "attacker_effects": {
+              "damage": 2,
+              "criticals": [],
+              "suppress": 0,
+              "suppression_state_after": false
+            },
+            "defender_hp_before": 2,
+            "defender_hp_after": 0,
+            "defender_killed": true,
+            "resolution": {
+              "remaining_damage": 2,
+              "remaining_criticals": 0,
+              "remaining_suppress": 0
+            }
+          }
+        },
+        {
+          "type": "HRL_DECISION",
+          "payload": {
+            "side": "US",
+            "option": "HOLD",
+            "attack_mode": null,
+            "formation": "PUSH_VP",
+            "context": {
+              "friendly_strength": "EVEN",
+              "enemy_pressure": "HIGH",
+              "objective_distance": "UNKNOWN"
+            },
+            "turn": 6
+          }
+        },
+        {
+          "type": "ACTION",
+          "payload": {
+            "turn": 6,
+            "action": "WaitAction",
+            "unit_id": "US_6"
+          }
+        },
+        {
+          "type": "ACTION",
+          "payload": {
+            "turn": 6,
+            "action": "WaitAction",
+            "unit_id": "SYSTEM"
+          }
+        },
+        {
+          "type": "ACTION",
+          "payload": {
+            "turn": 6,
+            "action": "MoveAction",
+            "unit_id": "GE_1"
+          }
+        },
+        {
+          "type": "UNIT_MOVED",
+          "payload": {
+            "unit_id": "GE_1",
+            "from": {
+              "q": 4,
+              "r": 5
+            },
+            "to": {
+              "q": 4,
+              "r": 6
+            }
+          }
+        }
+      ]
+    },
+    {
+      "turn": 7,
+      "events": [
+        {
+          "type": "HRL_DECISION",
+          "payload": {
+            "side": "US",
+            "option": "HOLD",
+            "attack_mode": null,
+            "formation": "PUSH_VP",
+            "context": {
+              "friendly_strength": "EVEN",
+              "enemy_pressure": "HIGH",
+              "objective_distance": "UNKNOWN"
+            },
+            "turn": 7
+          }
+        },
+        {
+          "type": "ACTION",
+          "payload": {
+            "turn": 7,
+            "action": "WaitAction",
+            "unit_id": "US_4"
+          }
+        },
+        {
+          "type": "ACTION",
+          "payload": {
+            "turn": 7,
+            "action": "MoveAction",
+            "unit_id": "GE_1"
+          }
+        },
+        {
+          "type": "UNIT_MOVED",
+          "payload": {
+            "unit_id": "GE_1",
+            "from": {
+              "q": 4,
+              "r": 6
+            },
+            "to": {
+              "q": 5,
+              "r": 6
+            }
+          }
+        },
+        {
+          "type": "HRL_DECISION",
+          "payload": {
+            "side": "US",
+            "option": "HOLD",
+            "attack_mode": null,
+            "formation": "PUSH_VP",
+            "context": {
+              "friendly_strength": "EVEN",
+              "enemy_pressure": "HIGH",
+              "objective_distance": "UNKNOWN"
+            },
+            "turn": 7
+          }
+        },
+        {
+          "type": "ACTION",
+          "payload": {
+            "turn": 7,
+            "action": "WaitAction",
+            "unit_id": "US_6"
+          }
+        },
+        {
+          "type": "ACTION",
+          "payload": {
+            "turn": 7,
+            "action": "MoveAction",
+            "unit_id": "GE_3"
+          }
+        },
+        {
+          "type": "UNIT_MOVED",
+          "payload": {
+            "unit_id": "GE_3",
+            "from": {
+              "q": 5,
+              "r": 5
+            },
+            "to": {
+              "q": 6,
+              "r": 5
+            }
+          }
+        }
+      ]
+    },
+    {
+      "turn": 8,
+      "events": [
+        {
+          "type": "HRL_DECISION",
+          "payload": {
+            "side": "US",
+            "option": "ATTACK",
+            "attack_mode": "DIRECT",
+            "formation": "PUSH_VP",
+            "context": {
+              "friendly_strength": "EVEN",
+              "enemy_pressure": "HIGH",
+              "objective_distance": "UNKNOWN"
+            },
+            "turn": 8
+          }
+        },
+        {
+          "type": "ACTION",
+          "payload": {
+            "turn": 8,
+            "action": "RangedDirectAttack",
+            "unit_id": "US_4"
+          }
+        },
+        {
+          "type": "ACTION_EFFECT",
+          "payload": {
+            "action": "RangedCombat",
+            "attacker": "US_4",
+            "defender": "GE_1",
+            "distance": 9,
+            "attack_sector": "REAR",
+            "los": "CLEAR",
+            "attack_mode": "DIRECT_FIRE",
+            "attacker_attack_dice": [
+              {
+                "color": "YELLOW",
+                "faces": [
+                  "DAMAGE",
+                  "DAMAGE"
+                ]
+              },
+              {
+                "color": "GREEN",
+                "faces": [
+                  "DAMAGE"
+                ]
+              }
+            ],
+            "defender_defense_dice": [
+              {
+                "color": "YELLOW",
+                "faces": [
+                  "CRITICAL",
+                  "DAMAGE"
+                ]
+              }
+            ],
+            "attacker_effects": {
+              "damage": 1,
+              "criticals": [],
+              "suppress": 0,
+              "suppression_state_after": false
+            },
+            "defender_hp_before": 2,
+            "defender_hp_after": 1,
+            "defender_killed": false,
+            "resolution": {
+              "remaining_damage": 1,
+              "remaining_criticals": 0,
+              "remaining_suppress": 0
+            }
+          }
+        },
+        {
+          "type": "ACTION",
+          "payload": {
+            "turn": 8,
+            "action": "RangedDirectAttack",
+            "unit_id": "GE_1"
+          }
+        },
+        {
+          "type": "ACTION_EFFECT",
+          "payload": {
+            "action": "RangedCombat",
+            "attacker": "GE_1",
+            "defender": "US_4",
+            "distance": 9,
+            "attack_sector": "FRONT",
+            "los": "CLEAR",
+            "attack_mode": "DIRECT_FIRE",
+            "attacker_attack_dice": [
+              {
+                "color": "YELLOW",
+                "faces": [
+                  "DAMAGE",
+                  "DAMAGE"
+                ]
+              },
+              {
+                "color": "YELLOW",
+                "faces": [
+                  "DAMAGE",
+                  "DAMAGE"
+                ]
+              },
+              {
+                "color": "BLUE",
+                "faces": []
+              },
+              {
+                "color": "BLUE",
+                "faces": []
+              }
+            ],
+            "defender_defense_dice": [
+              {
+                "color": "YELLOW",
+                "faces": []
+              }
+            ],
+            "attacker_effects": {
+              "damage": 4,
+              "criticals": [],
+              "suppress": 0,
+              "suppression_state_after": false
+            },
+            "defender_hp_before": 4,
+            "defender_hp_after": 0,
+            "defender_killed": true,
+            "resolution": {
+              "remaining_damage": 4,
+              "remaining_criticals": 0,
+              "remaining_suppress": 0
+            }
+          }
+        },
+        {
+          "type": "HRL_DECISION",
+          "payload": {
+            "side": "US",
+            "option": "HOLD",
+            "attack_mode": null,
+            "formation": "PUSH_VP",
+            "context": {
+              "friendly_strength": "LOW",
+              "enemy_pressure": "HIGH",
+              "objective_distance": "UNKNOWN"
+            },
+            "turn": 8
+          }
+        },
+        {
+          "type": "ACTION",
+          "payload": {
+            "turn": 8,
+            "action": "WaitAction",
+            "unit_id": "US_6"
+          }
+        },
+        {
+          "type": "ACTION",
+          "payload": {
+            "turn": 8,
+            "action": "MoveAction",
+            "unit_id": "GE_3"
+          }
+        },
+        {
+          "type": "UNIT_MOVED",
+          "payload": {
+            "unit_id": "GE_3",
+            "from": {
+              "q": 6,
+              "r": 5
+            },
+            "to": {
+              "q": 7,
+              "r": 5
+            }
+          }
+        }
+      ]
+    },
+    {
+      "turn": 9,
+      "events": [
+        {
+          "type": "HRL_DECISION",
+          "payload": {
+            "side": "US",
+            "option": "HOLD",
+            "attack_mode": null,
+            "formation": "PUSH_VP",
+            "context": {
+              "friendly_strength": "LOW",
+              "enemy_pressure": "HIGH",
+              "objective_distance": "UNKNOWN"
+            },
+            "turn": 9
+          }
+        },
+        {
+          "type": "ACTION",
+          "payload": {
+            "turn": 9,
+            "action": "WaitAction",
+            "unit_id": "US_6"
+          }
+        },
+        {
+          "type": "ACTION",
+          "payload": {
+            "turn": 9,
+            "action": "MoveAction",
+            "unit_id": "GE_1"
+          }
+        },
+        {
+          "type": "UNIT_MOVED",
+          "payload": {
+            "unit_id": "GE_1",
+            "from": {
+              "q": 5,
+              "r": 6
+            },
+            "to": {
+              "q": 6,
+              "r": 6
+            }
+          }
+        },
+        {
+          "type": "ACTION",
+          "payload": {
+            "turn": 9,
+            "action": "MoveAction",
+            "unit_id": "GE_3"
+          }
+        },
+        {
+          "type": "UNIT_MOVED",
+          "payload": {
+            "unit_id": "GE_3",
+            "from": {
+              "q": 7,
+              "r": 5
+            },
+            "to": {
+              "q": 8,
+              "r": 5
+            }
+          }
+        }
+      ]
+    },
+    {
+      "turn": 10,
+      "events": [
+        {
+          "type": "HRL_DECISION",
+          "payload": {
+            "side": "US",
+            "option": "HOLD",
+            "attack_mode": null,
+            "formation": "PUSH_VP",
+            "context": {
+              "friendly_strength": "LOW",
+              "enemy_pressure": "HIGH",
+              "objective_distance": "UNKNOWN"
+            },
+            "turn": 10
+          }
+        },
+        {
+          "type": "ACTION",
+          "payload": {
+            "turn": 10,
+            "action": "WaitAction",
+            "unit_id": "US_6"
+          }
+        },
+        {
+          "type": "ACTION",
+          "payload": {
+            "turn": 10,
+            "action": "MoveAction",
+            "unit_id": "GE_1"
+          }
+        },
+        {
+          "type": "UNIT_MOVED",
+          "payload": {
+            "unit_id": "GE_1",
+            "from": {
+              "q": 6,
+              "r": 6
+            },
+            "to": {
+              "q": 7,
+              "r": 6
+            }
+          }
+        },
+        {
+          "type": "ACTION",
+          "payload": {
+            "turn": 10,
+            "action": "MoveAction",
+            "unit_id": "GE_3"
+          }
+        },
+        {
+          "type": "UNIT_MOVED",
+          "payload": {
+            "unit_id": "GE_3",
+            "from": {
+              "q": 8,
+              "r": 5
+            },
+            "to": {
+              "q": 8,
+              "r": 6
+            }
+          }
+        }
+      ]
+    },
+    {
+      "turn": 11,
+      "events": [
+        {
+          "type": "HRL_DECISION",
+          "payload": {
+            "side": "US",
+            "option": "ATTACK",
+            "attack_mode": "DIRECT",
+            "formation": "PUSH_VP",
+            "context": {
+              "friendly_strength": "LOW",
+              "enemy_pressure": "HIGH",
+              "objective_distance": "UNKNOWN"
+            },
+            "turn": 11
+          }
+        },
+        {
+          "type": "ACTION",
+          "payload": {
+            "turn": 11,
+            "action": "RangedDirectAttack",
+            "unit_id": "US_6"
+          }
+        },
+        {
+          "type": "ACTION_EFFECT",
+          "payload": {
+            "action": "RangedCombat",
+            "attacker": "US_6",
             "defender": "GE_3",
-            "distance": 6,
+            "distance": 5,
+            "attack_sector": "REAR",
+            "los": "CLEAR",
+            "attack_mode": "DIRECT_FIRE",
+            "attacker_attack_dice": [
+              {
+                "color": "RED",
+                "faces": [
+                  "DAMAGE",
+                  "SUPPRESS"
+                ]
+              },
+              {
+                "color": "RED",
+                "faces": [
+                  "DAMAGE",
+                  "SUPPRESS"
+                ]
+              }
+            ],
+            "defender_defense_dice": [
+              {
+                "color": "YELLOW",
+                "faces": [
+                  "CRITICAL",
+                  "DAMAGE"
+                ]
+              }
+            ],
+            "attacker_effects": {
+              "damage": 0,
+              "criticals": [],
+              "suppress": 2,
+              "suppression_state_after": false
+            },
+            "defender_hp_before": 1,
+            "defender_hp_after": 1,
+            "defender_killed": false,
+            "resolution": {
+              "remaining_damage": 0,
+              "remaining_criticals": 0,
+              "remaining_suppress": 2
+            }
+          }
+        },
+        {
+          "type": "ACTION",
+          "payload": {
+            "turn": 11,
+            "action": "MoveAction",
+            "unit_id": "GE_1"
+          }
+        },
+        {
+          "type": "UNIT_MOVED",
+          "payload": {
+            "unit_id": "GE_1",
+            "from": {
+              "q": 7,
+              "r": 6
+            },
+            "to": {
+              "q": 7,
+              "r": 7
+            }
+          }
+        }
+      ]
+    },
+    {
+      "turn": 12,
+      "events": [
+        {
+          "type": "HRL_DECISION",
+          "payload": {
+            "side": "US",
+            "option": "HOLD",
+            "attack_mode": null,
+            "formation": "PUSH_VP",
+            "context": {
+              "friendly_strength": "LOW",
+              "enemy_pressure": "HIGH",
+              "objective_distance": "UNKNOWN"
+            },
+            "turn": 12
+          }
+        },
+        {
+          "type": "ACTION",
+          "payload": {
+            "turn": 12,
+            "action": "RangedDirectAttack",
+            "unit_id": "US_6"
+          }
+        },
+        {
+          "type": "ACTION_EFFECT",
+          "payload": {
+            "action": "RangedCombat",
+            "attacker": "US_6",
+            "defender": "GE_1",
+            "distance": 5,
             "attack_sector": "REAR",
             "los": "CLEAR",
             "attack_mode": "DIRECT_FIRE",
@@ -10801,580 +11331,6 @@ FILE: C:\repos\python\assault\assault_sim\session\replays\phase01_seq001_initial
               "remaining_damage": 1,
               "remaining_criticals": 0,
               "remaining_suppress": 1
-            }
-          }
-        },
-        {
-          "type": "ACTION",
-          "payload": {
-            "turn": 6,
-            "action": "RangedDirectAttack",
-            "unit_id": "GE_1"
-          }
-        },
-        {
-          "type": "ACTION_EFFECT",
-          "payload": {
-            "action": "RangedCombat",
-            "attacker": "GE_1",
-            "defender": "US_7",
-            "distance": 9,
-            "attack_sector": "FRONT",
-            "los": "CLEAR",
-            "attack_mode": "DIRECT_FIRE",
-            "attacker_attack_dice": [
-              {
-                "color": "YELLOW",
-                "faces": [
-                  "CRITICAL",
-                  "DAMAGE"
-                ]
-              },
-              {
-                "color": "YELLOW",
-                "faces": []
-              },
-              {
-                "color": "BLUE",
-                "faces": []
-              },
-              {
-                "color": "BLUE",
-                "faces": []
-              }
-            ],
-            "defender_defense_dice": [
-              {
-                "color": "YELLOW",
-                "faces": [
-                  "DAMAGE"
-                ]
-              }
-            ],
-            "attacker_effects": {
-              "damage": 1,
-              "criticals": [
-                {
-                  "face": "CRITICAL",
-                  "target_class": "INFANTRY"
-                }
-              ],
-              "suppress": 0,
-              "suppression_state_after": false
-            },
-            "defender_hp_before": 2,
-            "defender_hp_after": 1,
-            "defender_killed": false,
-            "resolution": {
-              "remaining_damage": 0,
-              "remaining_criticals": 1,
-              "remaining_suppress": 0
-            }
-          }
-        },
-        {
-          "type": "ACTION",
-          "payload": {
-            "turn": 6,
-            "action": "MoveAction",
-            "unit_id": "US_4"
-          }
-        },
-        {
-          "type": "UNIT_MOVED",
-          "payload": {
-            "unit_id": "US_4",
-            "from": {
-              "q": 8,
-              "r": 10
-            },
-            "to": {
-              "q": 8,
-              "r": 9
-            }
-          }
-        },
-        {
-          "type": "ACTION",
-          "payload": {
-            "turn": 6,
-            "action": "RangedDirectAttack",
-            "unit_id": "GE_5"
-          }
-        },
-        {
-          "type": "ACTION_EFFECT",
-          "payload": {
-            "action": "RangedCombat",
-            "attacker": "GE_5",
-            "defender": "US_3",
-            "distance": 5,
-            "attack_sector": "FRONT",
-            "los": "CLEAR",
-            "attack_mode": "DIRECT_FIRE",
-            "attacker_attack_dice": [
-              {
-                "color": "GREEN",
-                "faces": [
-                  "CRITICAL",
-                  "DAMAGE"
-                ]
-              }
-            ],
-            "defender_defense_dice": [
-              {
-                "color": "YELLOW",
-                "faces": [
-                  "DAMAGE"
-                ]
-              }
-            ],
-            "attacker_effects": {
-              "damage": 1,
-              "criticals": [
-                {
-                  "face": "CRITICAL",
-                  "target_class": "INFANTRY"
-                }
-              ],
-              "suppress": 0,
-              "suppression_state_after": false
-            },
-            "defender_hp_before": 3,
-            "defender_hp_after": 2,
-            "defender_killed": false,
-            "resolution": {
-              "remaining_damage": 0,
-              "remaining_criticals": 1,
-              "remaining_suppress": 0
-            }
-          }
-        },
-        {
-          "type": "HRL_DECISION",
-          "payload": {
-            "side": "US",
-            "option": "HOLD",
-            "attack_mode": null,
-            "description": "hold the current position",
-            "category": "DEFENSIVE",
-            "turn": 6,
-            "context": {
-              "friendly_strength": "HIGH",
-              "enemy_pressure": "LOW",
-              "objective_distance": "UNKNOWN"
-            },
-            "formation": "CLEANUP",
-            "policy_info": {
-              "option": "ADVANCE",
-              "attack_mode": null,
-              "confidence": 0.9931556582450867,
-              "value_estimate": 114.37682342529297
-            }
-          }
-        },
-        {
-          "type": "ACTION",
-          "payload": {
-            "turn": 6,
-            "action": "RangedDirectAttack",
-            "unit_id": "US_7"
-          }
-        },
-        {
-          "type": "ACTION_EFFECT",
-          "payload": {
-            "action": "RangedCombat",
-            "attacker": "US_7",
-            "defender": "GE_1",
-            "distance": 9,
-            "attack_sector": "REAR",
-            "los": "CLEAR",
-            "attack_mode": "DIRECT_FIRE",
-            "attacker_attack_dice": [
-              {
-                "color": "GREEN",
-                "faces": []
-              },
-              {
-                "color": "BLUE",
-                "faces": []
-              }
-            ],
-            "defender_defense_dice": [
-              {
-                "color": "YELLOW",
-                "faces": [
-                  "DAMAGE"
-                ]
-              }
-            ],
-            "attacker_effects": {
-              "damage": 0,
-              "criticals": [],
-              "suppress": 0,
-              "suppression_state_after": false
-            },
-            "defender_hp_before": 1,
-            "defender_hp_after": 1,
-            "defender_killed": false,
-            "resolution": {
-              "remaining_damage": 0,
-              "remaining_criticals": 0,
-              "remaining_suppress": 0
-            }
-          }
-        }
-      ]
-    },
-    {
-      "turn": 7,
-      "events": [
-        {
-          "type": "ACTION",
-          "payload": {
-            "turn": 7,
-            "action": "RangedDirectAttack",
-            "unit_id": "GE_1"
-          }
-        },
-        {
-          "type": "ACTION_EFFECT",
-          "payload": {
-            "action": "RangedCombat",
-            "attacker": "GE_1",
-            "defender": "US_7",
-            "distance": 9,
-            "attack_sector": "FRONT",
-            "los": "CLEAR",
-            "attack_mode": "DIRECT_FIRE",
-            "attacker_attack_dice": [
-              {
-                "color": "YELLOW",
-                "faces": []
-              },
-              {
-                "color": "YELLOW",
-                "faces": [
-                  "DAMAGE",
-                  "DAMAGE"
-                ]
-              },
-              {
-                "color": "BLUE",
-                "faces": [
-                  "DAMAGE"
-                ]
-              },
-              {
-                "color": "BLUE",
-                "faces": []
-              }
-            ],
-            "defender_defense_dice": [
-              {
-                "color": "YELLOW",
-                "faces": [
-                  "CRITICAL",
-                  "DAMAGE"
-                ]
-              }
-            ],
-            "attacker_effects": {
-              "damage": 1,
-              "criticals": [],
-              "suppress": 0,
-              "suppression_state_after": false
-            },
-            "defender_hp_before": 1,
-            "defender_hp_after": 0,
-            "defender_killed": true,
-            "resolution": {
-              "remaining_damage": 1,
-              "remaining_criticals": 0,
-              "remaining_suppress": 0
-            }
-          }
-        },
-        {
-          "type": "HRL_DECISION",
-          "payload": {
-            "side": "US",
-            "option": "ADVANCE",
-            "attack_mode": null,
-            "description": "advance towards the objective",
-            "category": "MANEUVER",
-            "turn": 7,
-            "context": {
-              "friendly_strength": "EVEN",
-              "enemy_pressure": "HIGH",
-              "objective_distance": "UNKNOWN"
-            },
-            "formation": "CLEANUP",
-            "policy_info": {
-              "option": "ADVANCE",
-              "attack_mode": null,
-              "confidence": 0.9916408061981201,
-              "value_estimate": 95.18923950195312
-            }
-          }
-        },
-        {
-          "type": "ACTION",
-          "payload": {
-            "turn": 7,
-            "action": "RangedDirectAttack",
-            "unit_id": "US_3"
-          }
-        },
-        {
-          "type": "ACTION_EFFECT",
-          "payload": {
-            "action": "RangedCombat",
-            "attacker": "US_3",
-            "defender": "GE_5",
-            "distance": 5,
-            "attack_sector": "REAR",
-            "los": "CLEAR",
-            "attack_mode": "DIRECT_FIRE",
-            "attacker_attack_dice": [
-              {
-                "color": "RED",
-                "faces": [
-                  "DAMAGE"
-                ]
-              },
-              {
-                "color": "RED",
-                "faces": [
-                  "DAMAGE",
-                  "DAMAGE"
-                ]
-              }
-            ],
-            "defender_defense_dice": [
-              {
-                "color": "YELLOW",
-                "faces": [
-                  "CRITICAL",
-                  "DAMAGE"
-                ]
-              }
-            ],
-            "attacker_effects": {
-              "damage": 1,
-              "criticals": [],
-              "suppress": 0,
-              "suppression_state_after": false
-            },
-            "defender_hp_before": 1,
-            "defender_hp_after": 0,
-            "defender_killed": true,
-            "resolution": {
-              "remaining_damage": 1,
-              "remaining_criticals": 0,
-              "remaining_suppress": 0
-            }
-          }
-        },
-        {
-          "type": "ACTION",
-          "payload": {
-            "turn": 7,
-            "action": "MoveAction",
-            "unit_id": "US_4"
-          }
-        },
-        {
-          "type": "UNIT_MOVED",
-          "payload": {
-            "unit_id": "US_4",
-            "from": {
-              "q": 8,
-              "r": 9
-            },
-            "to": {
-              "q": 8,
-              "r": 8
-            }
-          }
-        }
-      ]
-    },
-    {
-      "turn": 8,
-      "events": [
-        {
-          "type": "ACTION",
-          "payload": {
-            "turn": 8,
-            "action": "MoveAction",
-            "unit_id": "GE_1"
-          }
-        },
-        {
-          "type": "UNIT_MOVED",
-          "payload": {
-            "unit_id": "GE_1",
-            "from": {
-              "q": 3,
-              "r": 6
-            },
-            "to": {
-              "q": 4,
-              "r": 6
-            }
-          }
-        },
-        {
-          "type": "ACTION",
-          "payload": {
-            "turn": 8,
-            "action": "MoveAction",
-            "unit_id": "US_3"
-          }
-        },
-        {
-          "type": "UNIT_MOVED",
-          "payload": {
-            "unit_id": "US_3",
-            "from": {
-              "q": 5,
-              "r": 11
-            },
-            "to": {
-              "q": 5,
-              "r": 10
-            }
-          }
-        },
-        {
-          "type": "HRL_DECISION",
-          "payload": {
-            "side": "US",
-            "option": "ATTACK",
-            "attack_mode": "DIRECT",
-            "description": "engage the enemy directly",
-            "category": "ENGAGEMENT",
-            "turn": 8,
-            "context": {
-              "friendly_strength": "HIGH",
-              "enemy_pressure": "LOW",
-              "objective_distance": "UNKNOWN"
-            },
-            "formation": "CLEANUP",
-            "policy_info": {
-              "option": "ADVANCE",
-              "attack_mode": null,
-              "confidence": 0.9812495112419128,
-              "value_estimate": 70.02781677246094
-            }
-          }
-        },
-        {
-          "type": "ACTION",
-          "payload": {
-            "turn": 8,
-            "action": "MoveAction",
-            "unit_id": "US_4"
-          }
-        },
-        {
-          "type": "UNIT_MOVED",
-          "payload": {
-            "unit_id": "US_4",
-            "from": {
-              "q": 8,
-              "r": 8
-            },
-            "to": {
-              "q": 8,
-              "r": 7
-            }
-          }
-        }
-      ]
-    },
-    {
-      "turn": 9,
-      "events": [
-        {
-          "type": "ACTION",
-          "payload": {
-            "turn": 9,
-            "action": "MoveAction",
-            "unit_id": "GE_1"
-          }
-        },
-        {
-          "type": "UNIT_MOVED",
-          "payload": {
-            "unit_id": "GE_1",
-            "from": {
-              "q": 4,
-              "r": 6
-            },
-            "to": {
-              "q": 5,
-              "r": 6
-            }
-          }
-        },
-        {
-          "type": "ACTION",
-          "payload": {
-            "turn": 9,
-            "action": "RangedDirectAttack",
-            "unit_id": "US_3"
-          }
-        },
-        {
-          "type": "ACTION_EFFECT",
-          "payload": {
-            "action": "RangedCombat",
-            "attacker": "US_3",
-            "defender": "GE_1",
-            "distance": 4,
-            "attack_sector": "REAR",
-            "los": "CLEAR",
-            "attack_mode": "DIRECT_FIRE",
-            "attacker_attack_dice": [
-              {
-                "color": "RED",
-                "faces": [
-                  "DAMAGE",
-                  "DAMAGE"
-                ]
-              },
-              {
-                "color": "RED",
-                "faces": [
-                  "DAMAGE",
-                  "DAMAGE"
-                ]
-              }
-            ],
-            "defender_defense_dice": [
-              {
-                "color": "YELLOW",
-                "faces": [
-                  "DAMAGE"
-                ]
-              }
-            ],
-            "attacker_effects": {
-              "damage": 3,
-              "criticals": [],
-              "suppress": 0,
-              "suppression_state_after": false
-            },
-            "defender_hp_before": 1,
-            "defender_hp_after": 0,
-            "defender_killed": true,
-            "resolution": {
-              "remaining_damage": 3,
-              "remaining_criticals": 0,
-              "remaining_suppress": 0
             }
           }
         }

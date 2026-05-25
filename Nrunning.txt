@@ -10,6 +10,9 @@ http://127.0.0.1:8000/api/scenarios/phase01_seq001_initial_contact
 http://127.0.0.1:8000/api/ui/scenarios/phase01_seq001_initial_contact
 
 
+cd assault_backend
+python -m uvicorn main:app --reload
+
 cd "C:\repos\python\assault\"
 Set-ExecutionPolicy -Scope CurrentUser -ExecutionPolicy RemoteSigned
 .\.venv\Scripts\Activate.ps1

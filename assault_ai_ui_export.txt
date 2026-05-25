@@ -3472,74 +3472,420 @@ FILE: C:\repos\python\assault\assault_ai_ui\public\icons.svg
 
 
 ================================================================================
-FILE: C:\repos\python\assault\assault_ai_ui\roadmap\ROADMAP.md
+FILE: C:\repos\python\assault\assault_ai_ui\public\art\counters\desktop.ini
 ================================================================================
 
-# 🚀 ASSAULT AI UI — ROADMAP COMPLETO
+[LocalizedFileNames]
+GE 50mm Mortarb.png=@GE 50mm Mortarb.png,0
+GE 50mm Mortar.png=@GE 50mm Mortar.png,0
+US 81mm Mortarb.png=@US 81mm Mortarb.png,0
+GE 81mm Mortar.png=@GE 81mm Mortar.png,0
+GE 81mm Mortarb.png=@GE 81mm Mortarb.png,0
+GE HMG 42.png=@GE HMG 42.png,0
+GE HMG 42b.png=@GE HMG 42b.png,0
+IT 81mm Mortar.png=@IT 81mm Mortar.png,0
+IT 81mm Mortarb.png=@IT 81mm Mortarb.png,0
+US 81mm Mortar.png=@US 81mm Mortar.png,0
+US Bazooka Team 43.png=@US Bazooka Team 43.png,0
+US Bazooka Team 43b.png=@US Bazooka Team 43b.png,0
+
+
+
+================================================================================
+FILE: C:\repos\python\assault\assault_ai_ui\roadmap\01_ROADMAP.md
+================================================================================
+
+# 🧠 Assault Engine - Roadmap Arquitectura (Activaciones Flexibles)
+
+## 🎯 Objetivo
+
+Implementar sistema de:
+
+- ✅ Alternating activations (flexible)
+- ✅ Runtime-driven turn system (no hardcoded)
+- ✅ Compatible con:
+  - Training (RL)
+  - Match runner
+  - Web UI
 
 ---
 
-# 🧭 VISIÓN
+# 🏗️ 1. PRINCIPIOS FUNDAMENTALES
+
+## ✅ Reglas de diseño
+
+- ❌ NO hardcodear lados ("US", "GE")
+- ❌ NO lógica de reglas en frontend
+- ✅ TODO basado en GameState
+- ✅ Runtime gestiona flujo
+- ✅ Model es la verdad absoluta
+
+---
+
+# 🧠 2. DISTRIBUCIÓN DE RESPONSABILIDADES
+
+## 🔴 assault_model (engine)
+
+Responsabilidades:
+
+- reglas del juego
+- acciones (Move, Attack…)
+- combate
+- GameState
+
+❌ NO turnos complejos  
+❌ NO IA  
+❌ NO UI  
+
+---
+
+## 🟠 RuntimeGameState (NÚCLEO NUEVO)
+
+Responsabilidades:
+
+- active_side
+- activated_units
+- alternancia de lados
+- fin de turno
+
+👉 ESTE ES EL CAMBIO PRINCIPAL
+
+---
+
+## 🔵 SimEnv
+
+Responsabilidades:
+
+- ejecutar acciones
+- emitir eventos
+
+❌ NO lógica de activaciones
+
+---
+
+## 🟣 Controller / Runner
+
+Responsabilidades:
+
+- AI vs Human
+- elegir acción
+
+❌ NO reglas de turno
+
+---
+
+## 🟢 Frontend
+
+Responsabilidades:
+
+- mostrar estado
+- permitir input válido
+
+❌ NO reglas
+
+---
+
+# 🔧 3. IMPLEMENTACIÓN PASO A PASO
+
+---
+
+## ✅ PASO 1 — RuntimeGameState
+
+### Añadir estado
+
+```python
+self.sides = self._extract_sides()
+self.active_side = self.sides[0]
+self.activated_units = set()
+
+
+================================================================================
+FILE: C:\repos\python\assault\assault_ai_ui\roadmap\ROADMAP.md
+================================================================================
+
+🚀 ASSAULT AI UI — ROADMAP COMPLETO
+
+==================================================
+🧭 VISIÓN
+==================================================
 
 Construir un sistema completo:
 
-- 🎮 Jugar vs AI (RL vs usuario)
+- 🎮 Jugar vs AI (IA vs jugador humano)
 - 🔁 Visualizar replays
 - 🧠 Explainability (HRL + decisiones)
 - 🤖 RAG Assistant flotante
 
----
+IMPORTANTE:
+El sistema es por BANDOS, no por número de unidades.
+Alternancia: GE → US → GE → US…
+Si un bando se queda sin unidades activables, el otro sigue.
 
-# 🧱 ARQUITECTURA FINAL
+==================================================
+🧱 ARQUITECTURA FINAL
+==================================================
 
-## Backend
-- Engine Assault (YA LO TIENES ✅)
-- API REST:
-  - /game/start
-  - /game/state
-  - /game/action
-  - /game/actions
-  - /explain
-  - /rag/query
+BACKEND:
+- SimEnv (motor del juego)
+- ActivationManager (controla turnos)
+- HRLController (IA entrenada)
+- OptionExecutor (convierte decisiones en acciones)
+- FastAPI
 
-## Frontend
+Endpoints:
+
+- POST /api/game/start
+- GET  /api/game/next
+- POST /api/game/step
+- GET  /api/game/state
+- POST /api/explain
+- POST /api/rag/query
+
+FRONTEND:
 - React + TypeScript + Vite
 - PixiJS (mapa)
-- React UI (paneles)
+- UI React (paneles, botones)
 
----
+==================================================
+📌 MODELO DE TURNO (CRÍTICO)
+==================================================
 
-# 📅 FASE 0 — ENTORNO ✅ (YA HECHO)
+NO es por unidad emparejada.
 
-✅ Vite funcionando  
-✅ React + TypeScript  
-✅ npm run dev  
+ES así:
 
----
+Turno:
+  GE → activa 1 unidad
+  US → activa 1 unidad
+  GE → siguiente unidad disponible
+  US → siguiente unidad disponible
 
-# 🚧 FASE 1 — BASE REAL (CRÍTICA)
+Si un bando no tiene unidades activables:
+  → se salta
+  → el otro bando continúa
 
-## 🎯 Objetivo:
-Mostrar un mapa básico en pantalla con Pixi
+La UI NO decide el orden.
+El orden SIEMPRE lo decide el backend (ActivationManager).
 
----
+==================================================
+📅 FASE 0 — ENTORNO ✅
+==================================================
 
-## ✅ Tareas
+- Vite funcionando
+- React + TypeScript
+- npm run dev
 
-### 1. Crear GameCanvas
-Archivo:
-src/GameCanvas.tsx
+==================================================
+📅 FASE 1 — RENDER DEL MAPA ✅
+==================================================
 
-- contenedor Pixi
-- montar canvas
-- fondo visible
+- Grid hexagonal
+- Hover
+- Selección de hex
+- Colores por terreno (modo debug)
+- Texto legible (shadow + resolution fix)
+- Render estable Pixi v8
 
----
+==================================================
+📅 FASE 2 — ESCENARIO BACKEND → UI ✅
+==================================================
 
-### 2. Instalar PixiJS
+Endpoint:
+GET /api/ui/scenarios/{id}
 
-```bash
-npm install pixi.js
+Devuelve:
+- shape del mapa
+- hexes (q, r, terrain)
+- units (q, r, side)
+
+UI ya renderiza:
+- grid
+- terreno
+- unidades (posición base)
+
+==================================================
+📅 FASE 3 — LOOP DE JUEGO (CRÍTICO 🔥)
+==================================================
+
+OBJETIVO:
+Conectar UI ↔ SimEnv
+
+Flujo:
+
+1. UI → /game/start
+2. backend crea:
+   - SimEnv
+   - ActivationManager
+   - HRLController
+
+3. UI pide:
+   GET /game/next
+
+4. backend responde:
+{
+  unit_id,
+  side,
+  position
+}
+
+5. UI:
+
+   if side == IA:
+       autoplay (backend decide)
+   else:
+       esperar input usuario
+
+6. Usuario hace acción:
+   → click / botón
+
+7. UI → POST /game/step
+
+8. backend:
+   → SimEnv.step(action)
+   → actualiza GameState
+
+9. UI renderiza nuevo estado
+
+Loop se repite
+
+==================================================
+📅 FASE 4 — CONTROL HUMANO
+==================================================
+
+Para unidades del jugador:
+
+- Selección de unidad
+- Click en hex destino
+- Acciones disponibles:
+  - MOVE
+  - ATTACK
+  - WAIT
+
+UI debe preguntar:
+
+GET /game/actions?unit_id=XXX
+
+backend responde:
+- lista de acciones válidas
+
+==================================================
+📅 FASE 5 — AUTOPLAY IA
+==================================================
+
+Para IA:
+
+- backend usa HRLController
+- decide:
+  - option (ATTACK / ADVANCE / etc)
+- OptionExecutor convierte → acción real
+- backend ejecuta step automáticamente
+
+UI solo renderiza
+
+==================================================
+📅 FASE 6 — EXPLAINABILITY 🧠
+==================================================
+
+Endpoint:
+POST /api/explain/activation
+
+Devuelve:
+- strategic_intent (HRL)
+- tactical_execution (rules + dice)
+
+UI:
+- panel lateral
+- tooltip en hover
+- explicación por acción
+
+==================================================
+📅 FASE 7 — REPLAYS
+==================================================
+
+Backend:
+- guarda eventos (event_bus)
+
+Formato:
+- lista de eventos:
+  - MOVE
+  - ATTACK
+  - DAMAGE
+  - HRL_DECISION
+
+UI:
+- play / pause
+- timeline
+- scrubbing turno a turno
+
+==================================================
+📅 FASE 8 — RAG ASSISTANT 🤖
+==================================================
+
+Endpoint:
+POST /api/rag/query
+
+UI:
+- chat flotante
+
+Ejemplos:
+- "¿Por qué atacó aquí?"
+- "¿Qué opción era mejor?"
+
+Backend responde usando:
+- HRL + reglas
+
+==================================================
+📅 FASE 9 — UI PRO
+==================================================
+
+- ocultar coords en modo normal
+- iconos terreno
+- animaciones:
+  - movimiento
+  - disparo
+  - impacto
+- selección visual de unidades
+- overlay de rangos
+
+==================================================
+📅 FASE 10 — GAME READY 🚀
+==================================================
+
+- IA vs humano
+- múltiples escenarios
+- guardado de partida
+- replay viewer
+- explicación integrada
+
+==================================================
+✅ ESTADO ACTUAL
+==================================================
+
+Ya tienes:
+
+✔ motor de juego completo
+✔ IA entrenada (PPO + HRL)
+✔ render hex grid
+✔ backend con escenarios
+✔ explainable engine
+
+FALTA SOLO:
+
+🔥 conectar loop de juego en tiempo real
+
+==================================================
+🎯 SIGUIENTE PASO
+==================================================
+
+Implementar:
+
+👉 /api/game/start
+👉 /api/game/next
+👉 /api/game/step
+
+Y conectar con UI
+
+==================================================
 
 
 ================================================================================
@@ -3602,8 +3948,9 @@ html, body, #root {
   flex: 1;
   display: flex;
   width: 100%;
-  min-height: 0; /* ✅ CRÍTICO */
+  height: 100%; /* ✅ CLAVE */
 }
+
 
 /* LEFT PANEL */
 .left {
@@ -3619,7 +3966,9 @@ html, body, #root {
   flex: 1;
   width: 100%;
   min-width: 0;
-  min-height: 0; /* ✅ CRÍTICO */
+
+  display: flex;       /* ✅ CLAVE */
+  flex-direction: column;
 
   background-color: #000;
 }
@@ -3660,10 +4009,13 @@ function App() {
   return (
     <div className="app">
 
-      {/* HEADER */}
-      <header className="header">
-        <div className="header-left">
+      {/* =========================
+          HEADER
+      ========================= */}
+      <div className="header">
+        <div>ASSAULT AI</div>
 
+        <div>
           <button onClick={() => gameController.start("human")}>
             🎮 Human vs AI
           </button>
@@ -3679,48 +4031,45 @@ function App() {
           <button onClick={() => gameController.stop()}>
             ⛔ Stop
           </button>
-
         </div>
+      </div>
 
-        <div className="header-center">
-          Turn: (pending)
-        </div>
+      {/* =========================
+          MAIN LAYOUT
+      ========================= */}
+      <div className="main">
 
-        <div className="header-right">
-          🤖 Assistant
-        </div>
-      </header>
-
-      {/* MAIN */}
-      <main className="main">
-
-        <aside className="left">
+        {/* LEFT PANEL */}
+        <div className="left">
           <h3>AI / Actions</h3>
           <p>Select a unit</p>
-        </aside>
+        </div>
 
-        <section className="center">
+        {/* ✅ CENTER = MAP */}
+        <div className="center">
           <GameCanvas />
-        </section>
+        </div>
 
-        <aside className="right">
+        {/* RIGHT PANEL */}
+        <div className="right">
           <h3>Event Log</h3>
           <p>Events will appear here</p>
-        </aside>
+        </div>
 
-      </main>
+      </div>
 
-      {/* FOOTER */}
-      <footer className="footer">
-        <div>Units | Actions | Info</div>
-      </footer>
+      {/* =========================
+          FOOTER
+      ========================= */}
+      <div className="footer">
+        Units | Actions | Info
+      </div>
 
     </div>
   );
 }
 
 export default App;
-
 
 
 ================================================================================
@@ -3785,14 +4134,10 @@ FILE: C:\repos\python\assault\assault_ai_ui\src\index.css
   margin: 0 auto;
   text-align: center;
   border-inline: 1px solid var(--border);
-  min-height: 100svh;
+
+  height: 100vh; /* ✅ CLAVE */
   display: flex;
   flex-direction: column;
-  box-sizing: border-box;
-}
-
-body {
-  margin: 0;
 }
 
 h1,
@@ -3839,6 +4184,10 @@ code {
   background: var(--code-bg);
 }
 
+body {
+  margin: 0;
+  height: 100vh; /* ✅ CLAVE */
+}
 
 
 ================================================================================
@@ -3856,6 +4205,23 @@ createRoot(document.getElementById('root')!).render(
   </StrictMode>,
 )
 
+
+
+================================================================================
+FILE: C:\repos\python\assault\assault_ai_ui\src\ai\suggestMove.ts
+================================================================================
+
+export function suggestMove(units: any[], state: any) {
+    if (!units || units.length === 0) {
+        return null;
+    }
+
+    // simple fallback: pick first available unit
+    return {
+        type: "WaitAction",
+        unit_id: units[0].unit_id,
+    };
+}
 
 
 ================================================================================
@@ -3881,73 +4247,230 @@ import { useEffect, useRef, useState } from "react";
 import * as PIXI from "pixi.js";
 
 import { gameController } from "./gameControllerInstance";
-import { drawHexGridBase } from "./render/hexGridRenderer";
+import { drawHexGridBase, axialToPixel, HEX_SIZE } from "./render/hexGridRenderer";
 import { drawMapPieces } from "./render/mapPieceRenderer";
 import { setupCamera } from "./systems/cameraController";
 import LayerControls from "./systems/LayerControls";
+import { UnitStatePanel } from "./ui/UnitStatePanel";
+import { UnitLayer } from "./render/unitLayer";
 
 export default function GameCanvas() {
 
   const containerRef = useRef<HTMLDivElement | null>(null);
   const appRef = useRef<PIXI.Application | null>(null);
 
-  // ✅ LAYER REFS
+  const worldRef = useRef<PIXI.Container | null>(null);
+
   const backgroundRef = useRef<PIXI.Container | null>(null);
   const gridRef = useRef<PIXI.Container | null>(null);
+  const unitLayerRef = useRef<UnitLayer | null>(null);
 
-  // ✅ FIX: hook en lugar correcto
   const subscribedRef = useRef(false);
+  const initializedRef = useRef(false);
 
-  // ✅ STATE UI
   const [showMap, setShowMap] = useState(true);
   const [showGrid, setShowGrid] = useState(true);
+  const [showCoords, setShowCoords] = useState(false);
 
+  const showMapRef = useRef(true);
+  const showGridRef = useRef(true);
+  const showCoordsRef = useRef(false);
+
+  const [gameData, setGameData] = useState<any>(null);
+  const [availableMoves, setAvailableMoves] = useState<any[]>([]);
+  const lastStateRef = useRef<any>(null);
+
+  // ---------------------------------------------
+  // SYNC VISIBILITY
+  // ---------------------------------------------
   useEffect(() => {
+    showMapRef.current = showMap;
+    showGridRef.current = showGrid;
+    showCoordsRef.current = showCoords;
+
+    if (!backgroundRef.current || !gridRef.current) return;
+
+    backgroundRef.current.visible = showMap;
+    gridRef.current.visible = showGrid;
+
+    // ✅ 🔥 FORZAR REDRAW CUANDO CAMBIAN TOGGLES
+    const data = lastStateRef.current;
+    if (!data) return;
+
+    const grid = gridRef.current;
+
+    grid.removeChildren();
+
+    drawHexGridBase(
+      grid,
+      data.shape,
+      showCoords,
+      data.hexes,
+      showMap
+    );
+
+  }, [showMap, showGrid, showCoords]);
+
+  // ---------------------------------------------
+  // INIT PIXI
+  // ---------------------------------------------
+  useEffect(() => {
+    if (initializedRef.current) return;
+    initializedRef.current = true;
+
     if (!containerRef.current) return;
 
     const app = new PIXI.Application();
 
     app.init({
-      resizeTo: containerRef.current!,
+      resizeTo: containerRef.current,
       background: "#000",
     }).then(() => {
 
-      containerRef.current!.appendChild(app.canvas);
+      containerRef.current?.appendChild(app.canvas);
       appRef.current = app;
 
-      // ✅ WORLD
       const world = new PIXI.Container();
       app.stage.addChild(world);
+      worldRef.current = world;
 
-      // ✅ LAYERS
       const background = new PIXI.Container();
       const grid = new PIXI.Container();
 
       world.addChild(background);
       world.addChild(grid);
 
+      const unitLayer = new UnitLayer(world);
+      unitLayerRef.current = unitLayer;
+
       backgroundRef.current = background;
       gridRef.current = grid;
 
-      // ✅ CAMERA
       setupCamera(app, world, containerRef.current!);
 
-      // ✅ SUBSCRIBE (protegido)
+      // ✅ FOCUS CAMERA
+      (window as any).focusUnit = (unitId: string) => {
+        const data = lastStateRef.current;
+        if (!data?.units) return;
+
+        const unit = data.units.find((u: any) => u.id === unitId);
+        if (!unit) return;
+
+        const { x, y } = axialToPixel(unit.q, unit.r);
+
+        const world = worldRef.current;
+        const app = appRef.current;
+        if (!world || !app) return;
+
+        world.pivot.set(x, y + HEX_SIZE);
+        world.position.set(
+          app.renderer.width / 2,
+          app.renderer.height / 2
+        );
+      };
+
+      // ---------------------------------------------
+      // SUBSCRIBE (solo una vez)
+      // ---------------------------------------------
       if (!subscribedRef.current) {
         subscribedRef.current = true;
 
         gameController.subscribe((state) => {
-          const data = state.raw;
-          if (!data) return;
+
+          const data = state;
+
+          console.log("RECEIVED STATE FULL:", JSON.stringify(data, null, 2));
+
+          // ✅ 1. SIEMPRE actualizar UI (Turn / Active)
+          if (data) {
+            setGameData(prev => ({
+              ...prev,
+              ...data,
+
+              // ✅ 🔥 CLAVE: no perder piezas si WS viene vacío
+              map: data.map?.pieces?.length
+                ? data.map
+                : prev?.map
+            }));
+          }
+
+          // ✅ 2. solo render si hay mapa válido
+          if (!data?.hexes || !data?.shape) return;
+
+          lastStateRef.current = data;
+          // ✅ forzar redraw con settings actualizados
+          const showCoordsNow = showCoordsRef.current;
+          const showMapNow = showMapRef.current;
+          // ✅ CLICK EN UNIDADES (GLOBAL)
+          (window as any).onUnitClick = async (unit: any) => {
+
+            const data = lastStateRef.current;
+            if (!data) return;
+
+            const isHumanTurn =
+              data?.sides?.[data.active_side] === "human";
+
+            if (!isHumanTurn) return;
+
+            const isAvailable =
+              unit.side === data.active_side &&
+              !data.activated_units?.includes(unit.id);
+
+            if (!isAvailable) return;
+
+            console.log("✅ selected:", unit.id);
+
+            (window as any).selectUnit?.(unit.id);
+
+            // ✅ limpiar movimientos previos
+            setAvailableMoves([]);
+
+            // ✅ llamar backend
+            const res = await fetch("http://127.0.0.1:8000/api/game/actions", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                unit_id: unit.id
+              })
+            });
+
+            const actions = await res.json();
+
+            console.log("🎯 actions:", actions);
+
+            // ✅ guardar movimientos
+            setAvailableMoves(actions.moves || []);
+          };
+
+
+          background.visible = showMapRef.current;
+          grid.visible = showGridRef.current;
 
           background.removeChildren();
           grid.removeChildren();
 
-          if (data.map?.pieces) {
-            drawMapPieces(background, data.map.pieces);
+          // ✅ MAP
+          const pieces = data.map?.pieces ?? lastStateRef.current?.map?.pieces ?? [];
+
+          if (pieces.length) {
+            drawMapPieces(background, pieces);
           }
 
-          drawHexGridBase(grid, data.shape);
+          // ✅ GRID
+
+          drawHexGridBase(
+            grid,
+            data.shape,
+            showCoordsNow,
+            data.hexes,
+            showMapNow
+          );
+
+
+          // ✅ UNITS
+          if (unitLayerRef.current) {
+            unitLayerRef.current.sync(data);
+          }
         });
       }
 
@@ -3955,39 +4478,75 @@ export default function GameCanvas() {
 
     return () => {
       appRef.current?.destroy(true);
+      appRef.current = null;
     };
 
   }, []);
 
-  // ✅ VISIBILITY SYNC
-  useEffect(() => {
-    if (backgroundRef.current) {
-      backgroundRef.current.visible = showMap;
-    }
-
-    if (gridRef.current) {
-      gridRef.current.visible = showGrid;
-    }
-  }, [showMap, showGrid]);
-
+  // ---------------------------------------------
+  // RENDER
+  // ---------------------------------------------
   return (
-    <>
-      <div
-        ref={containerRef}
-        style={{
-          width: "100%",
-          height: "100%",
-          position: "relative",
-        }}
+    <div style={{
+      display: "flex",
+      flexDirection: "column",
+      width: "100%",
+      height: "100%",
+    }}>
+
+      {/* HEADER */}
+      <div style={{
+        background: "#1a1a1a",
+        color: "#eee",
+        padding: "8px 12px",
+        display: "flex",
+        gap: "20px",
+      }}>
+        <div>{gameData?.scenario_name ?? gameData?.id ?? "Scenario"}</div>
+
+        {/* ✅ FIX turno robusto */}
+        <div>
+          Turn: {gameData?.turn != null ? gameData.turn : "-"}
+        </div>
+
+        {/* ✅ FIX active robusto */}
+        <div style={{
+          color: gameData?.sides?.[gameData?.active_side] === "human"
+            ? "lime"
+            : "orange"
+        }}>
+          Active: {gameData?.active_side ?? "-"} (
+          {gameData?.sides?.[gameData?.active_side] ?? "-"}
+          )
+        </div>
+      </div>
+
+      {/* MAP */}
+      <div style={{ flex: 1, position: "relative" }}>
+        <div
+          ref={containerRef}
+          style={{ width: "100%", height: "100%" }}
+        />
+
+        <LayerControls
+          showMap={showMap}
+          showGrid={showGrid}
+          showCoords={showCoords}
+          onToggleMap={setShowMap}
+          onToggleGrid={setShowGrid}
+          onToggleCoords={setShowCoords}
+        />
+      </div>
+
+      {/* PANEL */}
+      <UnitStatePanel
+        units={gameData?.units || []}
+        activeSide={gameData?.active_side}
+        activatedUnits={gameData?.activated_units || []}
       />
 
-      <LayerControls
-        showMap={showMap}
-        showGrid={showGrid}
-        onToggleMap={setShowMap}
-        onToggleGrid={setShowGrid}
-      />
-    </>
+
+    </div>
   );
 }
 
@@ -3997,57 +4556,119 @@ export default function GameCanvas() {
 FILE: C:\repos\python\assault\assault_ai_ui\src\game\GameController.ts
 ================================================================================
 
+import { suggestMove } from "../ai/suggestMove";
+
+type ControllerType = "human" | "ai";
+
 export class GameController {
+
   private mode: GameMode = "human";
-  private state: GameState | null = null;
+  private state: any = null;
 
   private listeners: Listener[] = [];
-  private running = false;
+  private lastState: any = null;
 
-  // 🔥 NUEVO
-  private lastState: GameState | null = null;
+  private socket: WebSocket | null = null;
 
   // ----------------------------------
   async start(mode: GameMode) {
+    if (this.socket && this.socket.readyState === WebSocket.OPEN) {
+      console.log("⚠️ already started");
+      return;
+    }
+
     this.mode = mode;
-    this.running = true;
 
     console.log("Starting mode:", mode);
 
-    if (mode === "replay") {
-      await this.loadReplay();
-    } else {
-      await this.loadScenario();
-    }
+    // ✅ ✅ 🔥 FIX CLAVE: iniciar partida en backend con sides
+    await fetch("http://127.0.0.1:8000/api/game/start", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        scenario_id: "mettete_i_piedi_terra_1_min",
 
-    if (mode === "ai_vs_ai") {
+        // ✅ aquí defines quién controla cada bando
+        sides: {
+          GE: "human",
+          US: "ai"
+        }
+      })
+    });
+
+    // ✅ luego cargas estado inicial
+    await this.loadScenario();
+
+    setTimeout(() => {
+      this.startWebSocket();
+    }, 300);
+
+    if (mode === "ai") {
       this.startLoop();
     }
   }
 
   // ----------------------------------
   private async loadScenario() {
-    const res = await fetch(
-      "http://127.0.0.1:8000/api/ui/scenarios/mettete_i_piedi_terra_1_min"
-    );
+    try {
+      const res = await fetch(
+        "http://127.0.0.1:8000/api/ui/scenarios/mettete_i_piedi_terra_1_min"
+      );
 
-    const data = await res.json();
+      const data = await res.json();
 
-    this.state = {
-      turn: 1,
-      raw: data,
+      // ✅ keep same structure as runtime
+      this.state = data;
+
+      this.emit();
+
+    } catch (e) {
+      console.error("❌ Scenario load error", e);
+    }
+  }
+
+  // ----------------------------------
+  private startWebSocket() {
+    if (this.socket && this.socket.readyState === WebSocket.OPEN) {
+      return;
+    }
+
+    this.socket = new WebSocket("ws://127.0.0.1:8000/ws/game");
+
+    this.socket.onopen = () => {
+      console.log("✅ WS connected");
     };
 
-    console.log("✅ Scenario loaded:", data);
+    this.socket.onerror = (err) => {
+      console.error("❌ WS error", err);
+    };
 
-    this.emit();
+    this.socket.onmessage = (event) => {
+      const msg = JSON.parse(event.data);
+
+      // ✅ ONLY accept MAP_STATE
+      if (msg.type === "MAP_STATE" && msg.payload) {
+        this.state = msg.payload;
+        this.emit();
+      }
+    };
+
+    this.socket.onclose = () => {
+      console.log("❌ WS closed");
+
+      setTimeout(() => {
+        if (this.mode) {
+          console.log("🔄 retry WS...");
+          this.startWebSocket();
+        }
+      }, 1000);
+    };
   }
 
   // ----------------------------------
   subscribe(cb: Listener) {
     this.listeners.push(cb);
 
-    // 🔥 CLAVE: replay inmediato
     if (this.lastState) {
       cb(this.lastState);
     }
@@ -4056,7 +4677,6 @@ export class GameController {
   private emit() {
     if (!this.state) return;
 
-    // 🔥 guardado
     this.lastState = this.state;
 
     for (const cb of this.listeners) {
@@ -4064,8 +4684,76 @@ export class GameController {
     }
   }
 
-  private sleep(ms: number) {
-    return new Promise((r) => setTimeout(r, ms));
+  // ----------------------------------
+  private sendMove(unitId: string, move: any) {
+    if (!this.socket) return;
+
+    this.socket.send(
+      JSON.stringify({
+        action: "move",
+        unit_id: unitId,
+        q: move.q,
+        r: move.r,
+      })
+    );
+  }
+
+  // ----------------------------------
+  private startLoop() {
+    console.log("🤖 AI loop started");
+
+    const loop = () => {
+
+      if (!this.state) {
+        setTimeout(loop, 1000);
+        return;
+      }
+
+      const data = this.state;
+
+      const activeSide = data.active_side;
+
+      if (!activeSide) {
+        setTimeout(loop, 1000);
+        return;
+      }
+
+      if (data?.sides?.[activeSide] !== "ai") {
+        setTimeout(loop, 500);
+        return;
+      }
+
+      const units = data.units || [];
+      const activated = data.activated_units || [];
+
+      const availableUnits = units.filter((u: any) =>
+        u.side === activeSide &&
+        !activated.includes(u.unit_id)
+      );
+
+      if (availableUnits.length === 0) {
+        setTimeout(loop, 500);
+        return;
+      }
+
+      for (const unit of availableUnits) {
+        const move = suggestMove(unit, data);
+
+        if (move) {
+          console.log("🤖 AI move:", unit.unit_id, move);
+          this.sendMove(unit.unit_id, move);
+        }
+      }
+
+      setTimeout(loop, 1000);
+    };
+
+    loop();
+  }
+
+  // ----------------------------------
+  private async loadReplay() {
+    console.warn("Replay not implemented yet");
   }
 }
 
@@ -4080,13 +4768,527 @@ export const gameController = new GameController();
 
 
 ================================================================================
+FILE: C:\repos\python\assault\assault_ai_ui\src\game\animation\unitMovement.ts
+================================================================================
+
+import * as PIXI from "pixi.js";
+import { axialToPixel, HEX_SIZE } from "../render/hexGridRenderer";
+
+// -------------------------------------------------
+// Unit Movement Animator
+// -------------------------------------------------
+
+const VISUAL_Y_OFFSET = () => HEX_SIZE * 0.02;
+
+// -------------------------------------------------
+// Movement sounds (GLOBAL SAFE)
+// -------------------------------------------------
+
+const moveSounds: HTMLAudioElement[] = [
+  new Audio("/assets/sfx/move/stepdirt_1.wav"),
+  new Audio("/assets/sfx/move/stepdirt_2.wav"),
+  new Audio("/assets/sfx/move/stepdirt_3.wav"),
+  new Audio("/assets/sfx/move/stepdirt_4.wav"),
+  new Audio("/assets/sfx/move/stepdirt_5.wav"),
+  new Audio("/assets/sfx/move/stepdirt_6.wav"),
+  new Audio("/assets/sfx/move/stepdirt_7.wav"),
+  new Audio("/assets/sfx/move/stepdirt_8.wav")
+];
+
+moveSounds.forEach(a => { a.volume = 0.35; });
+
+// -------------------------------------------------
+// Position helpers
+// -------------------------------------------------
+function hexToWorld(q: number, r: number) {
+  const p = axialToPixel(q, r);
+  return { x: p.x, y: p.y + HEX_SIZE + VISUAL_Y_OFFSET() };
+}
+
+export function snapUnitToHex(sprite: PIXI.Container, q: number, r: number) {
+  const p = hexToWorld(q, r);
+  sprite.x = p.x;
+  sprite.y = p.y;
+  (sprite as any).__lastQ = q;
+  (sprite as any).__lastR = r;
+}
+
+// -------------------------------------------------
+// Draw HEX
+// -------------------------------------------------
+function drawHexAt(q: number, r: number, color: number, alpha = 0.35) {
+  const g = new PIXI.Graphics();
+
+  const { x, y } = axialToPixel(q, r);
+  const px = Math.round(x);
+  const py = Math.round(y + HEX_SIZE);
+
+  const size = HEX_SIZE;
+
+  g.moveTo(
+    px + size * Math.cos(Math.PI / 6),
+    py + size * Math.sin(Math.PI / 6)
+  );
+
+  for (let i = 1; i <= 6; i++) {
+    const angle = Math.PI / 6 + (i * Math.PI) / 3;
+
+    g.lineTo(
+      px + size * Math.cos(angle),
+      py + size * Math.sin(angle)
+    );
+  }
+
+  g.closePath();
+
+  g.fill({ color, alpha });
+
+  return g;
+}
+
+// -------------------------------------------------
+// Draw ARROW
+// -------------------------------------------------
+function drawArrow(
+  fromQ: number,
+  fromR: number,
+  toQ: number,
+  toR: number,
+  color = 0xffffff
+) {
+  const g = new PIXI.Graphics();
+
+  const from = axialToPixel(fromQ, fromR);
+  const to = axialToPixel(toQ, toR);
+
+  const fx = Math.round(from.x);
+  const fy = Math.round(from.y + HEX_SIZE);
+  const tx = Math.round(to.x);
+  const ty = Math.round(to.y + HEX_SIZE);
+
+  const dx = tx - fx;
+  const dy = ty - fy;
+  const angle = Math.atan2(dy, dx);
+
+  const headLen = 12;
+
+  g.stroke({ width: 3, color });
+
+  g.moveTo(fx, fy);
+  g.lineTo(tx, ty);
+
+  g.lineTo(
+    tx - headLen * Math.cos(angle - Math.PI / 6),
+    ty - headLen * Math.sin(angle - Math.PI / 6)
+  );
+
+  g.moveTo(tx, ty);
+  g.lineTo(
+    tx - headLen * Math.cos(angle + Math.PI / 6),
+    ty - headLen * Math.sin(angle + Math.PI / 6)
+  );
+
+  return g;
+}
+
+// -------------------------------------------------
+// Animate MOVEMENT
+// -------------------------------------------------
+export function animateUnitMove(
+  sprite: PIXI.Container,
+  toHex: { q: number; r: number },
+  layer: PIXI.Container,
+  duration = 400,
+  onComplete?: () => void
+) {
+  const lastQ = (sprite as any).__lastQ;
+  const lastR = (sprite as any).__lastR;
+
+  if (lastQ === toHex.q && lastR === toHex.r) {
+    onComplete?.();
+    return;
+  }
+
+  (sprite as any).__lastQ = toHex.q;
+  (sprite as any).__lastR = toHex.r;
+
+  const sound =
+    moveSounds[Math.floor(Math.random() * moveSounds.length)];
+  sound.cloneNode(true).play().catch(() => {});
+
+  const start = { x: sprite.x, y: sprite.y };
+  const end = hexToWorld(toHex.q, toHex.r);
+
+  const originHex =
+    typeof lastQ === "number"
+      ? drawHexAt(lastQ, lastR, 0x3399ff, 0.3)
+      : null;
+
+  const destHex = drawHexAt(toHex.q, toHex.r, 0x33cc66, 0.4);
+
+  const arrow =
+    typeof lastQ === "number"
+      ? drawArrow(lastQ, lastR, toHex.q, toHex.r)
+      : null;
+
+  if (originHex) layer.addChild(originHex);
+  layer.addChild(destHex);
+  if (arrow) layer.addChild(arrow);
+
+  let elapsed = 0;
+
+  const ticker = PIXI.Ticker.shared;
+
+  function tick(delta: number) {
+    elapsed += ticker.deltaMS;
+    const t = Math.min(elapsed / duration, 1);
+
+    const ease =
+      t < 0.5
+        ? 2 * t * t
+        : 1 - Math.pow(-2 * t + 2, 2) / 2;
+
+    sprite.x = start.x + (end.x - start.x) * ease;
+    sprite.y = start.y + (end.y - start.y) * ease;
+
+    if (t >= 1) {
+      ticker.remove(tick);
+      originHex?.destroy();
+      destHex.destroy();
+      arrow?.destroy();
+      onComplete?.();
+    }
+  }
+
+  ticker.add(tick);
+}
+
+// -------------------------------------------------
+// Animate ATTACK
+// -------------------------------------------------
+export function animateUnitAttack(
+  attackerQ: number,
+  attackerR: number,
+  defenderQ: number,
+  defenderR: number,
+  layer: PIXI.Container,
+  result: "MISS" | "HIT" | "CRITICAL" = "HIT"
+) {
+  const attackerHex = drawHexAt(attackerQ, attackerR, 0xff4444, 0.35);
+  const defenderHex = drawHexAt(defenderQ, defenderR, 0xffd700, 0.45);
+
+  const arrowColor = result === "MISS" ? 0x888888 : 0xffaa00;
+
+  const arrow = drawArrow(
+    attackerQ,
+    attackerR,
+    defenderQ,
+    defenderR,
+    arrowColor
+  );
+
+  layer.addChild(attackerHex);
+  layer.addChild(defenderHex);
+  layer.addChild(arrow);
+
+  setTimeout(() => {
+    attackerHex.destroy();
+    defenderHex.destroy();
+    arrow.destroy();
+  }, 500);
+}
+
+
+
+================================================================================
+FILE: C:\repos\python\assault\assault_ai_ui\src\game\config\sides.ts
+================================================================================
+
+export const sides: Record<string, any> = {
+  US: {
+    id: "US",
+    label: "United States",
+    short_label: "US",
+    marker: "/art/markers/Markers USA.png",
+    dead_marker: "/art/markers/Markers USA Dead.png",
+
+    // ✅ añadimos estilo visual
+    color: "#4da6ff",
+    bgColor: 0x003366,
+  },
+
+  GE: {
+    id: "GE",
+    label: "Germany",
+    short_label: "GE",
+    marker: "/art/markers/Markers Germany.png",
+    dead_marker: "/art/markers/Markers Germany Dead.png",
+
+    color: "#ff4d4d",
+    bgColor: 0x660000,
+  },
+
+  UK: {
+    id: "UK",
+    label: "United Kingdom",
+    short_label: "UK",
+    marker: "/art/markers/Markers UK.png",
+    dead_marker: "/art/markers/Markers UK Dead.png",
+
+    color: "#66ccff",
+    bgColor: 0x003a66,
+  },
+
+  IT: {
+    id: "IT",
+    label: "Italy",
+    short_label: "IT",
+    marker: "/art/markers/Markers Italy.png",
+    dead_marker: "/art/markers/Markers Italy Dead.png",
+
+    color: "#88cc88",
+    bgColor: 0x2e5c2e,
+  },
+};
+
+
+================================================================================
+FILE: C:\repos\python\assault\assault_ai_ui\src\game\config\terrainConfig.ts
+================================================================================
+
+// ---------------------------------------------
+// Terrain configuration
+// ---------------------------------------------
+
+export type TerrainType =
+  | "clear"
+  | "water"
+  | "light_forest"
+  | "olive_vine_grove"
+  | "brush"
+  | "rocky"
+  | "building_single"
+  | "building_multi";
+
+// ---------------------------------------------
+export const TERRAIN_CONFIG = {
+
+  clear: {
+    color: 0x3b3b3b,
+    label: "clear",
+    short: "C",
+  },
+
+  water: {
+    color: 0x3366cc,
+    label: "water",
+    short: "W",
+  },
+
+  light_forest: {
+    color: 0x6aa84f,
+    label: "light forest",
+    short: "LF",
+  },
+
+  olive_vine_grove: {
+    color: 0x93c47d,
+    label: "olive grove",
+    short: "OG",
+  },
+
+  brush: {
+    color: 0x9bbb59,
+    label: "brush",
+    short: "BR",
+  },
+
+  rocky: {
+    color: 0x999999,
+    label: "rocky",
+    short: "R",
+  },
+
+  building_single: {
+    color: 0x8b5a2b,
+    label: "building",
+    short: "B",
+  },
+
+  building_multi: {
+    color: 0x5a3a1b,
+    label: "building+",
+    short: "B+",
+  },
+
+} as const;
+
+// ---------------------------------------------
+export function getTerrainColor(t: string): number {
+  return TERRAIN_CONFIG[t as keyof typeof TERRAIN_CONFIG]?.color ?? 0xff00ff;
+}
+
+export function getTerrainLabel(t: string): string {
+  return TERRAIN_CONFIG[t as keyof typeof TERRAIN_CONFIG]?.label ?? t;
+}
+
+export function getTerrainShort(t: string): string {
+  return TERRAIN_CONFIG[t as keyof typeof TERRAIN_CONFIG]?.short ?? "?";
+}
+
+
+
+================================================================================
+FILE: C:\repos\python\assault\assault_ai_ui\src\game\config\unitImages.ts
+================================================================================
+
+export const unitImages = {
+  GE_RIFLES_43: {
+    label: "GE Rifles 43",
+    full: "/art/counters/GE Rifles 43.png",
+    half: "/art/counters/GE Rifles 43b.png",
+    card: "/art/counters/GE Unit Rifles 43.jpg",
+    card_half: "/art/counters/GE Unit Rifles 43b.jpg"
+  },
+
+  GE_FJ_RIFLES_43: {
+    label: "GE FJ Rifles 43",
+    full: "/art/counters/GE FJ Rifles 43.png",
+    half: "/art/counters/GE FJ Rifles 43b.png"
+  },
+
+  GE_HEAVY_MG_42: {
+    label: "GE Heavy MG 42",
+    full: "/art/counters/GE HMG 42.png",
+    half: "/art/counters/GE HMG 42b.png",
+    card: "/art/counters/GE Unit Heavy MG42.jpg",
+    card_half: "/art/counters/GE Unit Heavy MG42b.jpg"
+  },
+
+  GE_50MM_MORTAR: {
+    label: "GE 50mm Mortar",
+    full: "/art/counters/GE 50mm Mortar.png",
+    half: "/art/counters/GE 50mm Mortarb.png",
+    card: "/art/counters/GE Unit 50mm Mortar.jpg",
+    card_half: "/art/counters/GE Unit 50mm Mortarb.jpg"
+  },
+
+  US_RIFLES_43: {
+    label: "US Rifles 43",
+    full: "/art/counters/US Rifles 43.png",
+    half: "/art/counters/US Rifles 43b.png",
+    card: "/art/counters/US Unit Rifles 43.jpg",
+    card_half: "/art/counters/US Unit Rifles 43b.jpg"
+  },
+
+  US_RANGERS_43: {
+    label: "US Rangers 43",
+    full: "/art/counters/US Rangers 43.png",
+    half: "/art/counters/US Rangers 43b.png",
+    card: "/art/counters/US Unit Rangers 43.jpg",
+    card_half: "/art/counters/US Unit Rangers 43b.jpg"
+  },
+
+  US_BAZOOKA_TEAM: {
+    label: "US Bazooka Team 43",
+    full: "/art/counters/US Bazooka Team 43.png",
+    half: "/art/counters/US Bazooka Team 43b.png",
+    card: "/art/counters/US Unit Bazooka Team 43.jpg",
+    card_half: "/art/counters/US Unit Bazooka Team 43b.jpg"
+  },
+
+  US_81MM_MORTAR: {
+    label: "US 81mm Mortar",
+    full: "/art/counters/US 81mm Mortar.png",
+    half: "/art/counters/US 81mm Mortarb.png",
+    card: "/art/counters/US Unit 81mm Mortar.jpg",
+    card_half: "/art/counters/US Unit 81mm Mortarb.jpg"
+  }
+};
+
+
+================================================================================
+FILE: C:\repos\python\assault\assault_ai_ui\src\game\render\gameHeader.css
+================================================================================
+
+.game-header {
+    padding: 10px;
+    background: #1e1e1e;
+    color: #eee;
+    font-family: sans-serif;
+    border-bottom: 1px solid #444;
+}
+
+.header-row {
+    display: flex;
+    gap: 20px;
+    font-size: 14px;
+}
+
+.scenario {
+    font-weight: bold;
+}
+
+.turn {
+    color: #9cdcfe;
+}
+
+.active-side {
+    color: #ce9178;
+}
+
+
+================================================================================
+FILE: C:\repos\python\assault\assault_ai_ui\src\game\render\GameHeader.ts
+================================================================================
+
+type GameStatePayload = {
+  scenario_name?: string;
+  turn?: number;          // ✅ puede no venir al inicio
+  active_side?: string;
+};
+
+type Props = {
+  state: GameStatePayload | null;
+};
+
+export function GameHeader({ state }: Props) {
+  if (!state) {
+    return <div className="game-header">Loading...</div>;
+  }
+
+  return (
+    <div className="game-header">
+      <div className="header-row">
+        <span className="scenario">
+          {state.scenario_name ?? "Scenario"}
+        </span>
+
+        <span className="turn">
+          Turn: {state.turn != null ? state.turn : "-"}
+        </span>
+
+        <span className="active-side">
+          Active: {state.active_side ?? "-"}
+        </span>
+      </div>
+    </div>
+  );
+}
+
+
+================================================================================
 FILE: C:\repos\python\assault\assault_ai_ui\src\game\render\hexGridRenderer.ts
 ================================================================================
 
 import * as PIXI from "pixi.js";
 
-// ---------------------------------------------
-// CONFIG
+import {
+  getTerrainColor,
+  getTerrainLabel,
+  getTerrainShort,
+} from "../config/terrainConfig";
+
 // ---------------------------------------------
 export const HEX_SIZE = 30;
 
@@ -4094,38 +5296,36 @@ const HEX_WIDTH = HEX_SIZE * Math.sqrt(3);
 const HEX_HEIGHT = HEX_SIZE * (3 / 2);
 
 // ---------------------------------------------
-// AXIAL → PIXEL (EVEN-R OFFSET ✅ CORRECTO)
-// ---------------------------------------------
 export function axialToPixel(q: number, r: number) {
-
-  const x =
-    HEX_WIDTH * (q + 0.5 * (r % 2)) + HEX_WIDTH / 2;
-
-  const y =
-    HEX_HEIGHT * r;
-
-  return { x, y };
+  return {
+    x: HEX_WIDTH * (q + 0.5 * (r % 2)) + HEX_WIDTH / 2,
+    y: HEX_HEIGHT * r,
+  };
 }
 
-
 // ---------------------------------------------
-// DRAW SINGLE HEX
+function axialToLabel(q: number, r: number) {
+  return `${String.fromCharCode(65 + q)}${r + 1}`;
+}
+
 // ---------------------------------------------
 export function drawHex(
   g: PIXI.Graphics,
   x: number,
   y: number,
-  size: number
+  size: number,
+  fillColor?: number,
+  fillAlpha: number = 1
 ) {
-  const angleOffset = Math.PI / 6;
+  const offset = Math.PI / 6;
 
   g.moveTo(
-    x + size * Math.cos(angleOffset),
-    y + size * Math.sin(angleOffset)
+    x + size * Math.cos(offset),
+    y + size * Math.sin(offset)
   );
 
   for (let i = 1; i <= 6; i++) {
-    const angle = angleOffset + (i * Math.PI) / 3;
+    const angle = offset + (i * Math.PI) / 3;
 
     g.lineTo(
       x + size * Math.cos(angle),
@@ -4135,40 +5335,195 @@ export function drawHex(
 
   g.closePath();
 
+  if (fillColor !== undefined) {
+    g.fill({ color: fillColor, alpha: fillAlpha });
+  }
+
   g.stroke({
     width: 2,
     color: 0xffffff,
+    alpha: 0.4,
   });
 }
 
 // ---------------------------------------------
-// DRAW GRID (RECTANGULAR SHAPE CORRECTO)
-// ---------------------------------------------
 export function drawHexGridBase(
   container: PIXI.Container,
-  shape: [number, number]
+  shape: [number, number],
+  showCoords: boolean,
+  hexes: { q: number; r: number; terrain: string }[] = [],
+  showMap: boolean
 ) {
   const [width, height] = shape;
 
   const g = new PIXI.Graphics();
+  container.sortableChildren = true;
 
+  const terrainMap = new Map<number, string>();
+  for (const h of hexes) {
+    terrainMap.set(h.q * 100 + h.r, h.terrain);
+  }
+
+  // ---------------------------------------------
+  // ✅ HOVER TEXT (FIX NÍTIDO)
+  // ---------------------------------------------
+  const hoverText = new PIXI.Text({
+    text: "",
+    style: {
+      fill: "#ffffff",
+      fontSize: 9,
+      lineHeight: 12,
+      dropShadow: {
+        color: "#000000",
+        alpha: 0.9,
+        blur: 3,
+        distance: 2,
+      },
+    },
+    resolution: 2, // ✅ clave
+  });
+
+  hoverText.visible = false;
+  hoverText.zIndex = 10;
+  hoverText.eventMode = "none";
+  hoverText.roundPixels = true; // ✅ CLAVE
+
+  container.addChild(hoverText);
+
+  const hoverHighlight = new PIXI.Graphics();
+  hoverHighlight.zIndex = 4;
+  container.addChild(hoverHighlight);
+
+  const selectionHighlight = new PIXI.Graphics();
+  selectionHighlight.zIndex = 6;
+  container.addChild(selectionHighlight);
+
+  const coordsLayer = new PIXI.Container();
+  coordsLayer.zIndex = 3;
+  container.addChild(coordsLayer);
+
+  // ---------------------------------------------
+  // GRID LOOP
+  // ---------------------------------------------
   for (let r = 0; r < height; r++) {
     for (let q = 0; q < width; q++) {
 
       const { x, y } = axialToPixel(q, r);
+      const px = Math.round(x);
+      const py = Math.round(y + HEX_SIZE);
 
-      drawHex(
-        g,
-        Math.round(x),
-        Math.round(y + HEX_SIZE), // ✅ mantiene altura correcta
-        HEX_SIZE
-      );
+      const terrain = terrainMap.get(q * 100 + r) ?? "clear";
+
+      if (!showMap) {
+        drawHex(g, px, py, HEX_SIZE, getTerrainColor(terrain), 0.6);
+      } else {
+        drawHex(g, px, py, HEX_SIZE);
+      }
+
+      const coord = axialToLabel(q, r);
+      const shortLabel = `${coord}\n${getTerrainShort(terrain)}`;
+      const fullLabel = `${coord}\n${getTerrainLabel(terrain)}`;
+
+      // ---------------------------------
+      // ✅ GRID TEXT (FIX NÍTIDO)
+      // ---------------------------------
+      if (showCoords) {
+        const text = new PIXI.Text({
+          text: shortLabel,
+          style: {
+            fill: "#f5f5f5",
+            fontSize: 9,
+            lineHeight: 12,
+            dropShadow: {
+              color: "#000000",
+              alpha: 0.7,
+              blur: 2,
+              distance: 1,
+            },
+          },
+          resolution: 2, // ✅ clave
+        });
+
+        text.roundPixels = true; // ✅ CLAVE
+
+        text.x = Math.round(px - HEX_SIZE * 0.6);
+        text.y = Math.round(py - HEX_SIZE * 0.45);
+
+        coordsLayer.addChild(text);
+      }
+
+      // ---------------------------------
+      // ✅ HIT
+      // ---------------------------------
+      const hit = new PIXI.Graphics();
+
+      hit.poly([
+        px + HEX_SIZE * Math.cos(Math.PI / 6),
+        py + HEX_SIZE * Math.sin(Math.PI / 6),
+        px + HEX_SIZE * Math.cos(Math.PI / 2),
+        py + HEX_SIZE * Math.sin(Math.PI / 2),
+        px + HEX_SIZE * Math.cos(5 * Math.PI / 6),
+        py + HEX_SIZE * Math.sin(5 * Math.PI / 6),
+        px + HEX_SIZE * Math.cos(7 * Math.PI / 6),
+        py + HEX_SIZE * Math.sin(7 * Math.PI / 6),
+        px + HEX_SIZE * Math.cos(3 * Math.PI / 2),
+        py + HEX_SIZE * Math.sin(3 * Math.PI / 2),
+        px + HEX_SIZE * Math.cos(11 * Math.PI / 6),
+        py + HEX_SIZE * Math.sin(11 * Math.PI / 6),
+      ]);
+
+      hit.fill({ color: 0xffffff, alpha: 0.001 });
+      hit.eventMode = "static";
+      hit.cursor = "pointer";
+
+      // ---------------------------------
+      // ✅ HOVER (FIX NÍTIDO)
+      // ---------------------------------
+      hit.on("pointerenter", () => {
+        hoverText.text = fullLabel;
+
+        hoverText.x = Math.round(px - HEX_SIZE * 0.6);
+        hoverText.y = Math.round(py - HEX_SIZE * 0.45);
+
+        hoverText.visible = true;
+
+        hoverHighlight.clear();
+        hoverHighlight.fill({ color: 0xffffff, alpha: 0.15 });
+        hoverHighlight.stroke({ width: 2, color: 0xffffff });
+
+        drawHex(hoverHighlight, px, py, HEX_SIZE);
+      });
+
+      hit.on("pointerleave", () => {
+        hoverText.visible = false;
+        hoverHighlight.clear();
+      });
+
+      // ---------------------------------
+      // ✅ CLICK
+      // ---------------------------------
+      hit.on("pointerdown", () => {
+        selectionHighlight.clear();
+
+        selectionHighlight.fill({
+          color: 0x3399ff,
+          alpha: 0.25,
+        });
+
+        selectionHighlight.stroke({
+          width: 3,
+          color: 0x3399ff,
+        });
+
+        drawHex(selectionHighlight, px, py, HEX_SIZE);
+      });
+
+      container.addChild(hit);
     }
   }
 
   container.addChild(g);
 }
-
 
 
 ================================================================================
@@ -4205,12 +5560,14 @@ export async function drawMapPieces(
 
     const texture = await PIXI.Assets.load(texturePath);
     const sprite = new PIXI.Sprite(texture);
-
     // grid origin
     const [q, r] = piece.origin;
     const { x, y } = axialToPixel(q, r);
 
     const [hexW, hexH] = piece.shape;
+    
+    console.log("PIECE:", piece);
+    console.log("IMAGE:", piece.id, mapPieceImages[piece.id]);
 
     // ✅ width FIX correcto (esto sí era clave)
     const targetWidth = (hexW + 0.5) * HEX_WIDTH;
@@ -4247,6 +5604,206 @@ export async function drawMapPieces(
   }
 }
 
+
+
+================================================================================
+FILE: C:\repos\python\assault\assault_ai_ui\src\game\render\unitLayer.ts
+================================================================================
+
+import * as PIXI from "pixi.js";
+import { unitImages } from "../config/unitImages";
+import { sides } from "../config/sides";
+import { axialToPixel, HEX_SIZE } from "./hexGridRenderer";
+
+// ✅ hover global (viene del panel)
+let highlightedUnitId: string | null = null;
+let selectedUnitId: string | null = null;
+
+(window as any).selectUnit = (id: string | null) => {
+  selectedUnitId = id;
+};
+
+  
+(window as any).highlightUnit = (id: string | null) => {
+  highlightedUnitId = id;
+};
+
+export class UnitLayer {
+  private container: PIXI.Container;
+  private sprites: Record<string, PIXI.Container> = {};
+
+  constructor(world: PIXI.Container) {
+    this.container = new PIXI.Container();
+    this.container.label = "unitLayer";
+    world.addChild(this.container);
+  }
+
+  // -----------------------------------------
+  async sync(state: any) {
+    if (!state) return;
+
+    const units = state.units || [];
+    const activeSide = state.active_side;
+    const activated = state.activated_units || [];
+
+    const seen = new Set<string>();
+
+    for (const unit of units) {
+
+      let sprite = this.sprites[unit.id];
+
+      // ✅ CREATE if missing
+      if (!sprite) {
+        sprite = await this.createSprite(unit);
+
+        this.sprites[unit.id] = sprite;
+        this.container.addChild(sprite);
+      }
+
+      // ✅ POSICIÓN
+      const { x, y } = axialToPixel(unit.q, unit.r);
+
+      sprite.x = Math.round(x);
+      sprite.y = Math.round(y + HEX_SIZE);
+
+      const base = (sprite as any).__baseScale ?? 1;
+
+      // -----------------------------------------
+      // ✅ ESTADOS
+      const isOwn = unit.side === activeSide;
+      const isAvailable = isOwn && !activated.includes(unit.id);
+
+      if (unit.id === selectedUnitId) {
+        sprite.scale.set(base * 1.3);
+        sprite.tint = 0xffcc00; // 🟡 selección
+      } else if (unit.id === highlightedUnitId) {
+        sprite.scale.set(base * 1.2);
+      } else {
+        sprite.scale.set(base);
+        sprite.tint = isOwn ? 0xffffff : 0xaaaaaa;
+      }
+
+      // ✅ alpha base
+      if (unit.hp <= 0) {
+        sprite.alpha = 0.4;
+      } else if (!isOwn) {
+        sprite.alpha = 0.7; // enemigo
+      } else if (!isAvailable) {
+        sprite.alpha = 0.7; // usada
+      } else {
+        sprite.alpha = 1; // disponible
+      }
+
+      // ✅ tint (opcional suave)
+      sprite.tint = isOwn ? 0xffffff : 0xaaaaaa;
+
+      // ✅ HIGHLIGHT DISPONIBLE (HALO)
+      let highlight = sprite.getChildByName("availableHighlight");
+
+      if (isAvailable) {
+        if (!highlight) {
+          highlight = new PIXI.Graphics();
+          highlight.name = "availableHighlight";
+
+          highlight.beginFill(0x00ff00, 0.25);
+          highlight.drawCircle(0, 0, HEX_SIZE * 0.8);
+          highlight.endFill();
+
+          sprite.addChildAt(highlight, 0);
+        }
+
+        // ✅ animación suave
+        highlight.alpha = 0.5 + Math.sin(Date.now() / 300) * 0.3;
+
+      } else {
+        if (highlight) {
+          sprite.removeChild(highlight);
+        }
+      }
+
+      seen.add(unit.id);
+    }
+
+    // ✅ cleanup
+    Object.keys(this.sprites).forEach((id) => {
+      if (!seen.has(id)) {
+        this.container.removeChild(this.sprites[id]);
+        this.sprites[id].destroy();
+        delete this.sprites[id];
+      }
+    });
+  }
+
+  // -----------------------------------------
+  private async createSprite(unit: any): Promise<PIXI.Container> {
+    const container = new PIXI.Container();
+
+    const def = unitImages[unit.unit_key];
+
+    if (!def) {
+      console.warn("❌ missing sprite for", unit.unit_key);
+      return container;
+    }
+
+    try {
+      const texture = await PIXI.Assets.load(def.full);
+
+      const sprite = new PIXI.Sprite(texture);
+      sprite.anchor.set(0.5);
+
+      const desiredSize = HEX_SIZE * 3;
+      const baseScale = desiredSize / texture.width;
+
+      sprite.scale.set(baseScale);
+
+      (container as any).__baseScale = baseScale;
+
+      container.addChild(sprite);
+    } catch (err) {
+      console.error("❌ error loading sprite:", def.full, err);
+    }
+
+    const side = sides[unit.side] || {
+      bgColor: 0x333333,
+    };
+
+    const labelContainer = new PIXI.Container();
+
+    const bg = new PIXI.Graphics();
+    bg.roundRect(-14, -7, 28, 14, 3);
+    bg.fill({ color: side.bgColor, alpha: 0.85 });
+
+    labelContainer.addChild(bg);
+
+    const label = new PIXI.Text({
+      text: unit.id,
+      style: {
+        fontSize: 7,
+        fill: "#ffffff",
+      },
+      resolution: 2,
+    });
+
+    label.anchor.set(0.5);
+    label.roundPixels = true;
+
+    labelContainer.addChild(label);
+
+    labelContainer.y = HEX_SIZE * 0.4;
+
+    container.addChild(labelContainer);
+
+    container.eventMode = "static";
+
+    container.on("pointerdown", () => {
+      if ((window as any).onUnitClick) {
+        (window as any).onUnitClick(unit);
+      }
+    });
+
+    return container;
+  }
+}
 
 
 ================================================================================
@@ -4368,15 +5925,20 @@ FILE: C:\repos\python\assault\assault_ai_ui\src\game\systems\LayerControls.tsx
 type Props = {
   showMap: boolean;
   showGrid: boolean;
+  showCoords: boolean; // ✅ NUEVO
+
   onToggleMap: (value: boolean) => void;
   onToggleGrid: (value: boolean) => void;
+  onToggleCoords: (value: boolean) => void; // ✅ NUEVO
 };
 
 export default function LayerControls({
   showMap,
   showGrid,
+  showCoords,
   onToggleMap,
   onToggleGrid,
+  onToggleCoords,
 }: Props) {
   return (
     <div
@@ -4385,13 +5947,20 @@ export default function LayerControls({
         top: 10,
         left: 10,
         background: "#222",
-        padding: "8px",
-        borderRadius: "4px",
+        padding: "10px",
+        borderRadius: "6px",
         color: "white",
         fontSize: "14px",
+
+        display: "flex",
+        flexDirection: "column",
+        gap: "8px",
+
+        zIndex: 1000,
       }}
     >
-      <label>
+      {/* ✅ MAP */}
+      <label style={{ display: "flex", gap: "6px", alignItems: "center" }}>
         <input
           type="checkbox"
           checked={showMap}
@@ -4400,9 +5969,8 @@ export default function LayerControls({
         Map
       </label>
 
-      <br />
-
-      <label>
+      {/* ✅ GRID */}
+      <label style={{ display: "flex", gap: "6px", alignItems: "center" }}>
         <input
           type="checkbox"
           checked={showGrid}
@@ -4410,9 +5978,225 @@ export default function LayerControls({
         />
         Grid
       </label>
+
+      {/* ✅ 🔥 NEW: COORDS */}
+      <label style={{ display: "flex", gap: "6px", alignItems: "center" }}>
+        <input
+          type="checkbox"
+          checked={showCoords}
+          onChange={(e) => onToggleCoords(e.target.checked)}
+        />
+        Coords
+      </label>
     </div>
   );
 }
+
+
+================================================================================
+FILE: C:\repos\python\assault\assault_ai_ui\src\game\ui\UnitStatePanel.tsx
+================================================================================
+
+import React from "react";
+import { unitImages } from "../config/unitImages";
+import { sides } from "../config/sides";
+
+type Unit = {
+  id: string;
+  unit_key: string;
+  side: string;
+  hp?: number;
+  q: number;
+  r: number;
+};
+
+type Props = {
+  units: Unit[];
+  activeSide?: string;
+  activatedUnits?: string[];
+};
+
+export function UnitStatePanel({
+  units,
+  activeSide,
+  activatedUnits = []
+}: Props) {
+
+  const unitsBySide: Record<string, Unit[]> = {};
+
+  for (const u of units) {
+    if (!unitsBySide[u.side]) {
+      unitsBySide[u.side] = [];
+    }
+    unitsBySide[u.side].push(u);
+  }
+
+  return (
+    <div
+      style={{
+        width: "100%",
+        background: "#222",
+        color: "#fff",
+        borderTop: "2px solid #444",
+        padding: 10,
+      }}
+    >
+      <div
+        style={{
+          display: "flex",
+          overflowX: "auto",
+        }}
+      >
+        {Object.entries(unitsBySide).map(([side, list]) => (
+          <div
+            key={side}
+            style={{
+              minWidth: 200,
+              marginRight: 20,
+            }}
+          >
+            {/* HEADER */}
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 6,
+                marginBottom: 6,
+                borderBottom: "1px solid #555",
+                paddingBottom: 2,
+              }}
+            >
+              {sides[side]?.marker && (
+                <img
+                  src={encodeURI(sides[side].marker)}
+                  style={{
+                    width: 18,
+                    height: 18,
+                    objectFit: "contain",
+                  }}
+                />
+              )}
+
+              <div
+                style={{
+                  fontWeight: "bold",
+                  fontSize: 14,
+                }}
+              >
+                {sides[side]?.short_label || side}
+              </div>
+            </div>
+
+            {/* UNITS */}
+            <div style={{ display: "flex", flexWrap: "wrap" }}>
+              {list.map((u) => {
+
+                const def = unitImages[u.unit_key];
+
+                const isOwn = u.side === activeSide;
+                const isAvailable =
+                  isOwn && !activatedUnits.includes(u.id);
+
+                let border = "#555";
+                let background = "#333";
+                let opacity = 1;
+
+                if (!isOwn) {
+                  opacity = 0.6; // enemigo
+                } else if (!isAvailable) {
+                  opacity = 0.8; // usada
+                } else {
+                  border = "#00ff00"; // ✅ disponible
+                  background = "#263826";
+                }
+
+                return (
+                  <div
+                    key={u.id}
+                    onMouseEnter={() =>
+                      (window as any).highlightUnit?.(u.id)
+                    }
+                    onMouseLeave={() =>
+                      (window as any).highlightUnit?.(null)
+                    }
+                    onClick={() =>
+                      (window as any).focusUnit?.(u.id)
+                    }
+                    style={{
+                      width: 80,
+                      height: 90,
+                      margin: 4,
+                      padding: 4,
+                      background,
+                      border: `1px solid ${border}`,
+                      display: "flex",
+                      flexDirection: "column",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      gap: 1,
+                      cursor: "pointer",
+                      opacity,
+                      transition: "all 0.15s ease",
+                    }}
+                  >
+                    {/* IMAGE */}
+                    {def?.full && (
+                      <img
+                        src={encodeURI(def.full)}
+                        style={{
+                          width: 45,
+                          height: 45,
+                          objectFit: "contain",
+                          marginBottom: 2,
+                        }}
+                      />
+                    )}
+
+                    {/* LABEL */}
+                    <div
+                      style={{
+                        fontSize: 7,
+                        textAlign: "center",
+                        lineHeight: "8px",
+                      }}
+                    >
+                      {def?.label || u.unit_key}
+                    </div>
+
+                    {/* ID */}
+                    <div
+                      style={{
+                        fontSize: 9,
+                        fontWeight: "bold",
+                        lineHeight: "10px",
+                      }}
+                    >
+                      {u.id}
+                    </div>
+
+                    {/* HP */}
+                    <div
+                      style={{
+                        fontSize: 10,
+                      }}
+                    >
+                      {u.hp != null
+                        ? Array.from({ length: u.hp }).map((_, i) => (
+                            <span key={i}>❤️</span>
+                          ))
+                        : "-"}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 
 
 ================================================================================

@@ -16,7 +16,7 @@ from assault_model.runtime.execution_context import ExecutionContext
 
 from assault_sim.debug.debug_config import DebugConfig
 from assault_sim.debug.event_bus import EventBus
-
+from assault_model.map.terrain_config import terrain_config
 
 DEBUG_TRACE = os.getenv("ASSAULT_DEBUG_TRACE", "0") == "1"
 
@@ -55,6 +55,10 @@ class SimEnv:
 
         self.scenario = load_scenario(scenario_path, unit_catalog, map_catalog)
         self.game_state = GameState.from_scenario(self.scenario)
+
+        
+        self.terrain_config = terrain_config
+        self.game_state.game_map.terrain_config = terrain_config
 
         self.runtime = RuntimeGameState(self.game_state, self.scenario)
         self.runtime.start_turn()
