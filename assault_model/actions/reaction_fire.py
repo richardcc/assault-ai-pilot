@@ -17,8 +17,14 @@ class ReactionFireAction(CombatAction):
         condition: ReactionCondition,
     ):
         super().__init__(unit_id, ActionType.RANGED_ATTACK)
+
         self.target_id = target_id
         self.attack_profile = attack_profile
         self.defense_profile = defense_profile
         self.condition = condition
         self.combat_mode = CombatMode.RANGED_DIRECT
+
+        # -------------------------
+        # ACTION ID
+        # -------------------------
+        self.action_id = f"REACTION_FIRE:{unit_id}:{target_id}"

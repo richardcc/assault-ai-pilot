@@ -11,5 +11,11 @@ class AssaultAction(CombatAction):
 
     def __init__(self, unit_id: str, target_id: str):
         super().__init__(unit_id, ActionType.CLOSE_COMBAT)
+
         self.target_id = target_id
         self.combat_mode = CombatMode.ASSAULT
+
+        # -------------------------
+        # ACTION ID
+        # -------------------------
+        self.action_id = f"ASSAULT:{unit_id}:{target_id}"

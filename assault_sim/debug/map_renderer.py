@@ -1,45 +1,48 @@
 class MapRenderer:
     """
-    Renders the full game map with:
-    - terrain (water / clear / special),
-    - units (🔵 GE / 🔴 US),
-    - victory points 🚩.
+    Renders the map from payload (JSON only).
+    No dependency on game_map or engine objects.
     """
 
     def __init__(self):
-        self.game_map = None
+        self.hexes = []
         self.units = []
         self.vps = set()
 
+    # -------------------------------------------------
+    # STATE UPDATE
+    # -------------------------------------------------
     def update_state(self, payload: dict):
-        self.game_map = payload.get("game_map")
+        self.hexes = payload.get("hexes", [])
         self.units = payload.get("units", [])
 
-        self.vps.clear()
-        vp_tracker = payload.get("vp_tracker")
+        # ✅ NUEVO FORMATO VPs
+        self.vps = set(tuple(v) for v in payload.get("vps", []))
 
-        if vp_tracker and getattr(vp_tracker, "conditions", None):
-            for vp in vp_tracker.conditions.points:
-                self.vps.add(vp.hex_coords)
-
+    # -------------------------------------------------
+    # RENDER
+    # -------------------------------------------------
     def render(self, turn):
+
         print(f"\n=== MAP STATE — TURN {turn} ===\n")
 
-        if not self.game_map:
+        if not self.hexes:
             print("(map unavailable)")
             return
 
         # -------------------------------------------------
-        # UNIT LOOKUP
+        # BUILD LOOKUPS
         # -------------------------------------------------
+        hex_lookup = {(h["q"], h["r"]): h for h in self.hexes}
+
         unit_at = {
-            (u.position.q, u.position.r): u
+            (u["q"], u["r"]): u
             for u in self.units
-            if getattr(u, "alive", True) and u.position
+            if u.get("q") is not None and u.get("r") is not None
         }
 
-        max_q = max(h.q for h in self.game_map.hexes)
-        max_r = max(h.r for h in self.game_map.hexes)
+        max_q = max(h["q"] for h in self.hexes)
+        max_r = max(h["r"] for h in self.hexes)
 
         # -------------------------------------------------
         # HEADER
@@ -53,54 +56,51 @@ class MapRenderer:
         # MAP LOOP
         # -------------------------------------------------
         for r in range(max_r + 1):
+
             indent = "  " if r % 2 else ""
             print(f"{r:<2} {indent}", end="")
 
             for q in range(max_q + 1):
-                hex_ = self.game_map.get_hex(q, r)
+
+                hex_ = hex_lookup.get((q, r))
 
                 if not hex_:
                     print("     ", end="")
                     continue
 
-                # -------------------------------------------------
-                # TERRAIN (single source of truth)
-                # -------------------------------------------------
-                terrain = hex_.get_terrain()
+                # -------------------------
+                # TERRAIN
+                # -------------------------
+                terrain = hex_.get("terrain", "clear")
 
                 if terrain == "water":
                     symbol = "~~~"
                 elif terrain == "building_single":
                     symbol = "🏠"
-
                 elif terrain == "building_multi":
                     symbol = "🏢"
                 elif terrain == "light_forest":
                     symbol = "🌳"
                 elif terrain == "olive_vine_grove":
                     symbol = "🌿"
-
                 elif terrain == "rocky":
                     symbol = "⛰️"
-
                 else:
                     symbol = " . "
 
-                # -------------------------------------------------
-                # VICTORY POINT
-                # -------------------------------------------------
+                # -------------------------
+                # VP
+                # -------------------------
                 if (q, r) in self.vps:
                     symbol = "🚩"
 
-                # -------------------------------------------------
-                # UNIT OVERLAY (highest priority)
-                # -------------------------------------------------
+                # -------------------------
+                # UNIT OVERLAY
+                # -------------------------
                 if (q, r) in unit_at:
-                    u = unit_at[(q, r)]
-                    icon = "🔵" if u.side == "GE" else "🔴"
 
-                    if getattr(u, "suppressed", False):
-                        icon += "😵"
+                    u = unit_at[(q, r)]
+                    icon = "🔵" if u["side"] == "GE" else "🔴"
 
                     if (q, r) in self.vps:
                         symbol = f"{icon}🚩"
@@ -118,4 +118,3 @@ class MapRenderer:
             "\nLegend: . CLEAR | ~~~ WATER | 🏠 SINGLE | 🏢 MULTI | ⛰️ ROCKY\n"
             "        🌳 FOREST | 🌿 GROVE | 🔵 GE | 🔴 US | 🚩 VP\n"
         )
-        

@@ -1,5 +1,3 @@
-// File: C:\repos\python\assault\assault_ai_ui\src\game\GameCanvas.tsx
-
 import { useEffect, useRef, useState } from "react";
 import * as PIXI from "pixi.js";
 
@@ -15,6 +13,8 @@ import { UnitStatePanel } from "./ui/UnitStatePanel";
 import { UnitLayer } from "./render/unitLayer";
 
 import { handleUnitClick } from "./systems/unitInteractionSystem";
+import { handleHexClick } from "./systems/hexInteractionSystem";
+
 import { subscribeToGameState } from "./systems/gameStateSystem";
 import { registerFocusUnit } from "./systems/cameraSystem";
 
@@ -50,6 +50,37 @@ export default function GameCanvas() {
   const [hoverHex, setHoverHex] = useState<{ q: number, r: number } | null>(null);
 
   const lastStateRef = useRef<any>(null);
+
+  // 💣 FIX CLAVE: refs para evitar stale state
+  const selectedUnitRef = useRef<string | null>(null);
+  const availableMovesRef = useRef<any[]>([]);
+  const fxLayerRef = useRef<PIXI.Container | null>(null);
+  
+  useEffect(() => {
+    selectedUnitRef.current = selectedUnitId;
+  }, [selectedUnitId]);
+
+  useEffect(() => {
+    availableMovesRef.current = availableMoves;
+  }, [availableMoves]);
+
+  useEffect(() => {
+
+    (window as any).__setGameState = (state: any) => {
+      console.log("💣 applying full state", state);
+
+      setGameData(state);
+      lastStateRef.current = state;
+
+      // 💣 FIX: asegurar que Pixi sync se ejecuta en el siguiente tick
+      setTimeout(() => {
+        unitLayerRef.current?.sync(state);
+      }, 0);
+    };
+
+  }, [])
+
+  
 
   // ---------------------------------------------
   // VISIBILITY
@@ -96,7 +127,7 @@ export default function GameCanvas() {
       world.hitArea = app.screen;
 
       // ---------------------------------------------
-      // ✅ HOVER
+      // HOVER
       // ---------------------------------------------
       world.on("pointermove", (event: any) => {
 
@@ -132,8 +163,53 @@ export default function GameCanvas() {
 
       });
 
+      // ---------------------------------------------
+      // 💣 CLICK MAP
+      // ---------------------------------------------
+      world.on("pointerdown", (event: any) => {
+
+        const pos = world.toLocal(event.global);
+        const data = lastStateRef.current;
+
+        if (!data?.hexes) return;
+
+        let closestHex: any = null;
+        let minDist = Infinity;
+
+        for (const hex of data.hexes) {
+          const { x, y } = axialToPixel(hex.q, hex.r);
+
+          const dx = pos.x - x;
+          const dy = pos.y - (y + HEX_SIZE);
+          const dist = dx * dx + dy * dy;
+
+          if (dist < minDist) {
+            minDist = dist;
+            closestHex = hex;
+          }
+        }
+
+        if (closestHex) {
+          console.log("🖱️ CLICK DETECTED", closestHex.q, closestHex.r);
+
+          (window as any).onHexClick?.(
+            closestHex.q,
+            closestHex.r
+          );
+        }
+      });
+
       app.stage.addChild(world);
       worldRef.current = world;
+
+      // 💣 FX LAYER (NUEVO)
+      const fxLayer = new PIXI.Container();
+      fxLayer.label = "fxLayer";
+
+      // MUY IMPORTANTE → sobre el world
+      app.stage.addChild(fxLayer);
+
+      fxLayerRef.current = fxLayer;
 
       const background = new PIXI.Container();
       const grid = new PIXI.Container();
@@ -151,11 +227,10 @@ export default function GameCanvas() {
       gridRef.current = grid;
 
       setupCamera(app, world, containerRef.current!);
-
       registerFocusUnit(worldRef, appRef, lastStateRef);
 
       // ---------------------------------------------
-      // ✅ UNIT CLICK
+      // UNIT CLICK
       // ---------------------------------------------
       (window as any).onUnitClick = (unit: any) => {
         const data = lastStateRef.current;
@@ -170,48 +245,24 @@ export default function GameCanvas() {
       };
 
       // ---------------------------------------------
-      // ✅ HEX CLICK → MOVE
+      // 💣 HEX CLICK (FIXED con refs)
       // ---------------------------------------------
       (window as any).onHexClick = (q: number, r: number) => {
-
-        const data = lastStateRef.current;
-        const unitId = selectedUnitId;
-
-        if (!unitId || !data) return;
-
-        const move = availableMoves.find(
-          (m: any) => m.q === q && m.r === r
+        handleHexClick(
+          q,
+          r,
+          selectedUnitRef.current,
+          availableMovesRef.current,
+          unitLayerRef,
+          appRef,
+          fxLayerRef, // 💣 AÑADIDO
+          setAvailableMoves,
+          setSelectedUnitId
         );
-
-        if (!move) return;
-
-        const sprite = (unitLayerRef.current as any)?.sprites[unitId];
-
-        if (sprite && (window as any).animateUnitMove) {
-          (window as any).animateUnitMove(
-            sprite,
-            { q, r },
-            null,
-            appRef.current?.ticker,
-            300
-          );
-        }
-
-        fetch("/step", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json"
-          },
-          body: JSON.stringify({
-            action: "move",
-            unit_id: unitId,
-            target: { q, r }
-          })
-        });
       };
 
       // ---------------------------------------------
-      // ✅ GAME STATE SUB
+      // GAME STATE
       // ---------------------------------------------
       if (!subscribedRef.current) {
         subscribedRef.current = true;
@@ -230,7 +281,6 @@ export default function GameCanvas() {
 
     });
 
-    // ✅ ✅ MUY IMPORTANTE: return fuera del then
     return () => {
       appRef.current?.destroy(true);
       appRef.current = null;
@@ -260,44 +310,20 @@ export default function GameCanvas() {
   // RENDER
   // ---------------------------------------------
   return (
-    <div style={{
-      display: "flex",
-      flexDirection: "column",
-      width: "100%",
-      height: "100%",
-    }}>
+    <div style={{ display: "flex", flexDirection: "column", width: "100%", height: "100%" }}>
 
-      <div style={{
-        background: "#1a1a1a",
-        color: "#eee",
-        padding: "8px 12px",
-        display: "flex",
-        gap: "20px",
-      }}>
-        <div>
-          {gameData?.scenario_name ?? gameData?.id ?? "Scenario"}
-        </div>
-
-        <div>
-          Turn: {gameData?.turn != null ? gameData.turn : "-"}
-        </div>
-
+      <div style={{ background: "#1a1a1a", color: "#eee", padding: "8px 12px", display: "flex", gap: "20px" }}>
+        <div>{gameData?.scenario_name ?? gameData?.id ?? "Scenario"}</div>
+        <div>Turn: {gameData?.turn ?? "-"}</div>
         <div style={{
-          color: gameData?.sides?.[gameData?.active_side] === "human"
-            ? "lime"
-            : "orange"
+          color: gameData?.sides?.[gameData?.active_side] === "human" ? "lime" : "orange"
         }}>
-          Active: {gameData?.active_side ?? "-"} (
-          {gameData?.sides?.[gameData?.active_side] ?? "-"}
-          )
+          Active: {gameData?.active_side ?? "-"} ({gameData?.sides?.[gameData?.active_side] ?? "-"})
         </div>
       </div>
 
       <div style={{ flex: 1, position: "relative" }}>
-        <div
-          ref={containerRef}
-          style={{ width: "100%", height: "100%" }}
-        />
+        <div ref={containerRef} style={{ width: "100%", height: "100%" }} />
 
         <LayerControls
           showMap={showMap}

@@ -6,11 +6,6 @@ from assault_model.actions.combat_mode import CombatMode
 class RangedDirectAttack(CombatAction):
     """
     Declares a direct ranged attack action.
-
-    Design:
-    - ActionType defines the decision (RANGED_DIRECT).
-    - combat_mode is used internally by the engine.
-    - No attack_mode: decision belongs to RL, not inside the action.
     """
 
     def __init__(
@@ -18,14 +13,12 @@ class RangedDirectAttack(CombatAction):
         unit_id: str,
         target_id: str,
     ):
-        # ✅ CLAVE: acción diferenciada
         super().__init__(unit_id, ActionType.RANGED_DIRECT)
 
-        # ✅ Target unit
         self.target_id = target_id
-
-        # ✅ Engine semantic
         self.combat_mode = CombatMode.RANGED_DIRECT
+
+        self.action_id = f"RANGED_DIRECT:{unit_id}:{target_id}"
 
     def __repr__(self) -> str:
         return (

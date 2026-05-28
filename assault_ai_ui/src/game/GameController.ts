@@ -54,12 +54,11 @@ export class GameController {
   private async loadScenario() {
     try {
       const res = await fetch(
-        "http://127.0.0.1:8000/api/ui/scenarios/mettete_i_piedi_terra_1_min"
+        "http://127.0.0.1:8000/api/game/state"
       );
 
       const data = await res.json();
 
-      // ✅ keep same structure as runtime
       this.state = data;
 
       this.emit();
@@ -127,17 +126,19 @@ export class GameController {
   }
 
   // ----------------------------------
-  private sendMove(unitId: string, move: any) {
-    if (!this.socket) return;
+  private async sendMove(unitId: string, move: any) {
 
-    this.socket.send(
-      JSON.stringify({
-        action: "move",
-        unit_id: unitId,
-        q: move.q,
-        r: move.r,
+    if (!move.action_id) return;
+
+    await fetch("http://127.0.0.1:8000/api/game/step", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        action_id: move.action_id
       })
-    );
+    });
   }
 
   // ----------------------------------
@@ -170,7 +171,7 @@ export class GameController {
 
       const availableUnits = units.filter((u: any) =>
         u.side === activeSide &&
-        !activated.includes(u.unit_id)
+        !activated.includes(u.id)
       );
 
       if (availableUnits.length === 0) {
@@ -183,7 +184,7 @@ export class GameController {
 
         if (move) {
           console.log("🤖 AI move:", unit.unit_id, move);
-          this.sendMove(unit.unit_id, move);
+          this.sendMove(unit.id, move);
         }
       }
 

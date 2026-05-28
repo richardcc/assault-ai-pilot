@@ -14,14 +14,20 @@ class RangedIndirectAttack(CombatAction):
 
     def __init__(self, unit_id: str, target_hex: tuple[int, int]):
 
-        # ✅ acción separada (clave para RL)
+        # action type
         super().__init__(unit_id, ActionType.RANGED_INDIRECT)
 
-        # ✅ target es HEX (no unidad)
+        # target is a hex coordinate (q, r)
         self.target_hex = target_hex
 
-        # ✅ metadata para resolver
+        # engine metadata
         self.combat_mode = CombatMode.RANGED_INDIRECT
+
+        # -------------------------
+        # ACTION ID
+        # -------------------------
+        q, r = target_hex
+        self.action_id = f"RANGED_INDIRECT:{unit_id}:{q}:{r}"
 
     def __repr__(self) -> str:
         return (

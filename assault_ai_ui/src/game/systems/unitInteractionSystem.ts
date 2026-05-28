@@ -1,5 +1,3 @@
-// File: C:\repos\python\assault\assault_ai_ui\src\game\systems\unitInteractionSystem.ts
-
 export async function handleUnitClick(
   unit: any,
   state: any,
@@ -13,29 +11,41 @@ export async function handleUnitClick(
 
   if (!isHumanTurn) return;
 
+  const id = unit.unit_id ?? unit.id;
+
   const isAvailable =
     unit.side === state.active_side &&
-    !state.activated_units?.includes(unit.id);
+    !state.activated_units?.includes(id);
 
   if (!isAvailable) return;
 
-  console.log("✅ selected:", unit.id);
+  console.log("✅ selected:", id);
 
-  (window as any).selectUnit?.(unit.id);
+  (window as any).selectUnit?.(id);
 
   // ✅ clear previous
   setAvailableMoves([]);
 
-  // ✅ backend call
   const res = await fetch("http://127.0.0.1:8000/api/game/actions", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ unit_id: unit.id })
+    body: JSON.stringify({ unit_id: id })
   });
 
   const actions = await res.json();
 
   console.log("🎯 actions:", actions);
 
-  setAvailableMoves(actions.moves || []);
+  const allActions = [
+    ...(actions.moves || []).map(m => ({
+      ...m,
+      kind: "move"
+    })),
+    ...(actions.attacks || []).map(a => ({
+      ...a,
+      kind: "attack"
+    }))
+  ];
+
+  setAvailableMoves(allActions);
 }

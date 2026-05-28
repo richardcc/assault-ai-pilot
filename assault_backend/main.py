@@ -223,26 +223,26 @@ def game_state():
 
 
 @app.post("/api/game/step")
-def game_step(payload: Dict):
-    unit_id = payload.get("unit_id")
-    side = payload.get("side")
+async def game_step(payload: Dict):
 
-    unit = next(
-        (u for u in game_session.env.game_state.units if u.unit_id == unit_id),
-        None
-    )
+    action_id = payload.get("action_id")
 
-    if unit is None:
-        return {"error": "unit not found"}
+    if not action_id:
+        return {"error": "missing action_id"}
 
-    if side == "GE":
-        game_session.step_ai(unit)
-    else:
-        game_session.step_human(payload)
+    try:
+        state, reward, done, info = game_session.env.step(action_id)
 
-    return {
-        "state": game_session.get_state()
-    }
+        return {
+            "state": game_session.get_state(),
+            "reward": reward,
+            "done": done,
+            "info": info
+        }
+
+    except Exception as e:
+        print("[ERROR][step]", str(e))
+        raise HTTPException(status_code=500, detail=str(e))
 
 from fastapi import WebSocket, WebSocketDisconnect
 import asyncio
@@ -262,22 +262,30 @@ async def websocket_game(ws: WebSocket):
     print("✅ WebSocket connected")
 
     try:
-        # ✅ esperar a que exista env
         while game_session.env is None:
             await asyncio.sleep(0.1)
 
         env = game_session.env
 
-        # ✅ handler del EventBus
+        # 💣 ✅ FIX CLAVE
+        loop = asyncio.get_running_loop()
+
         def handler(event):
             if event["type"] == "MAP_STATE":
-                asyncio.create_task(ws.send_json(event["payload"]))
 
-        # ✅ SUSCRIPCIÓN REAL
+                async def safe_send():
+                    try:
+                        await ws.send_json({
+                            "type": "MAP_STATE",
+                            "payload": event["payload"]
+                        })
+                    except Exception as e:
+                        print("⚠️ WS dropped:", str(e))     
+
+
         if env.event_bus:
             env.event_bus.subscribe(handler)
 
-        # ✅ mantener conexión viva
         while True:
             await asyncio.sleep(1)
 

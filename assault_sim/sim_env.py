@@ -9,6 +9,7 @@ from assault_sim.config.config_loader import SimConfig
 from assault_model.units.catalog_loader import load_unit_catalog
 from assault_model.map.map_piece_loader import load_map_piece_catalog
 from assault_model.core.scenario_loader import load_scenario
+from assault_model.actions.action_catalog import ActionCatalog
 
 from assault_model.state.game_state import GameState
 from assault_model.runtime.game_state_runtime import RuntimeGameState
@@ -26,8 +27,7 @@ class SimEnv:
         self.config = config
         self.debug_config = debug_config or DebugConfig(enabled=False)
 
-        self.controller = controller  # not used (kept for compatibility)
-
+        self.controller = controller
         self.event_bus = EventBus() if self.debug_config.enabled else None
 
         self.scenario = None
@@ -56,8 +56,6 @@ class SimEnv:
         self.scenario = load_scenario(scenario_path, unit_catalog, map_catalog)
         self.game_state = GameState.from_scenario(self.scenario)
 
-        
-        self.terrain_config = terrain_config
         self.game_state.game_map.terrain_config = terrain_config
 
         self.runtime = RuntimeGameState(self.game_state, self.scenario)
@@ -87,7 +85,6 @@ class SimEnv:
                             "classification": u.unit_type.classification,
                             "side": u.side,
                             "position": u.position,
-                            "modes": list(u.unit_type._attack_raw.keys()),
                         }
                         for u in self.game_state.units
                     ]
@@ -103,20 +100,31 @@ class SimEnv:
     # -------------------------------------------------
     def step(self, action):
 
+        print("[DEBUG] step received:", action, type(action))
+        # ✅ SOLO resolver si NO es una acción real (para no romper RL)
+        if not hasattr(action, "apply"):
+            print("[DEBUG] treating as action_id")
+            action = self._resolve_action_by_id(str(action))
+
+            if action is None:
+                print("[ERROR] action could not be resolved ❌")
         self._step_counter += 1
         if self._step_counter > self._max_steps:
-            raise RuntimeError("Simulation overflow (infinite loop protection)")
+            raise RuntimeError("Simulation overflow")
 
         if action is None and DEBUG_TRACE:
-            print("[TRACE][NO_ACTION_AVAILABLE] (external scheduler handles it)")
+            print("[TRACE][NO_ACTION_AVAILABLE]")
 
+        # ✅ ACTION EVENT
         if self.event_bus and action is not None:
             self.event_bus.emit({
                 "type": "ACTION",
                 "payload": {
                     "turn": self.game_state.turn,
                     "action": action.__class__.__name__,
-                    "unit_id": getattr(action, "unit", None).unit_id if getattr(action, "unit", None) else None,
+                    "unit_id": getattr(action, "unit_id", None),
+                    "target_unit_id": getattr(action, "target_id", None),
+                    "action_id": getattr(action, "action_id", None),
                 }
             })
 
@@ -124,38 +132,25 @@ class SimEnv:
 
         prev_turn = self.game_state.turn
 
-        # -------------------------------------------------
-        # APPLY ACTION
-        # -------------------------------------------------
+        # APPLY
         self.runtime.apply_action(action, context=context)
         self.game_state = self.runtime.base_state
 
-        # -------------------------------------------------
-        # MAP UPDATE
-        # -------------------------------------------------
+        # UPDATE MAP
         self._emit_map_state()
 
-        # -------------------------------------------------
-        # MATCH END
-        # -------------------------------------------------
+        # END MATCH
         if self.game_state.done:
             self._emit_match_end()
             return self.game_state, 0.0, True, {}
 
-        # -------------------------------------------------
-        # TURN CHANGE (runtime-driven)
-        # -------------------------------------------------
+        # TURN CHANGE
         if self.game_state.turn != prev_turn:
-
-            if DEBUG_TRACE:
-                print("[TRACE][TURN_ADVANCED] new turn detected")
 
             if self.event_bus:
                 self.event_bus.emit({
                     "type": "TURN_END",
-                    "payload": {
-                        "turn": prev_turn,
-                    },
+                    "payload": {"turn": prev_turn},
                 })
 
             self._emit_map_state()
@@ -174,6 +169,55 @@ class SimEnv:
         return self.game_state, 0.0, False, {}
 
     # -------------------------------------------------
+    # ✅ NEW: RESOLVE ACTION BY ID
+    # -------------------------------------------------
+    def _resolve_action_by_id(self, action_id: str):
+
+        print(f"[DEBUG] resolving action_id: {action_id}")
+
+        if not action_id:
+            return None
+
+        try:
+            parts = action_id.split(":")
+            unit_id = parts[1]
+            print(f"[DEBUG] extracted unit_id: {unit_id}")
+        except Exception:
+            print("[DEBUG] failed to parse action_id")
+            return None
+
+        unit = next(
+            (u for u in self.game_state.units if u.unit_id == unit_id),
+            None
+        )
+
+        print(f"[DEBUG] found unit: {unit.unit_id if unit else None}")
+
+        if unit is None:
+            return None
+
+        catalog = ActionCatalog(
+            self.game_state,
+            unit,
+            terrain_config=self.game_state.game_map.terrain_config
+        )
+
+        actions = catalog.actions()
+
+        print(f"[DEBUG] available actions:")
+        for a in actions:
+            print("   ", getattr(a, "action_id", None))
+
+        for a in actions:
+            if getattr(a, "action_id", None) == action_id:
+                print("[DEBUG] MATCH FOUND ✅")
+                return a
+
+        print("[DEBUG] NO MATCH ❌")
+        return None
+
+
+    # -------------------------------------------------
     # MAP STATE
     # -------------------------------------------------
     def _emit_map_state(self):
@@ -183,27 +227,30 @@ class SimEnv:
         game_map = self.game_state.game_map
         hexes = getattr(game_map, "hexes", [])
 
-        # ✅ CALCULAR SHAPE (FIX CRÍTICO)
-        max_q = max(h.q for h in hexes) if hexes else 0
-        max_r = max(h.r for h in hexes) if hexes else 0
+        max_q = max((h.q for h in hexes), default=0)
+        max_r = max((h.r for h in hexes), default=0)
         shape = [max_q + 1, max_r + 1]
 
-        # ✅ HEXES SERIALIZABLES
         hex_list = [
             {
                 "q": h.q,
                 "r": h.r,
-                "terrain": getattr(h, "terrain", None)
+                "terrain": h.get_terrain()
             }
             for h in hexes
         ]
 
-        # 🚨 NO ENVIAR PIECES DESDE AQUÍ
-        # (porque SimEnv no los tiene)
+        vps = []
+        vp_tracker = getattr(self.game_state, "vp_tracker", None)
 
-        self.event_bus.emit({
+        if vp_tracker and getattr(vp_tracker, "conditions", None):
+            for vp in getattr(vp_tracker.conditions, "points", []):
+                vps.append(tuple(vp.hex_coords))
+
+        event = {
             "type": "MAP_STATE",
             "state": self.game_state,
+
             "payload": {
                 "turn": self.game_state.turn,
                 "active_side": getattr(self.runtime, "active_side", None),
@@ -211,16 +258,11 @@ class SimEnv:
 
                 "shape": shape,
                 "hexes": hex_list,
-
-                # ✅ 🔥 IMPORTANTE
-                "map": {
-                    "pieces": []
-                },
+                "vps": vps,
 
                 "units": [
                     {
                         "id": u.unit_id,
-                        "unit_key": u.unit_type.code,
                         "q": u.position.q if u.position else None,
                         "r": u.position.r if u.position else None,
                         "side": u.side,
@@ -229,7 +271,9 @@ class SimEnv:
                     for u in self.game_state.units
                 ],
             },
-    })
+        }
+
+        self.event_bus.emit(event)
 
     # -------------------------------------------------
     # MATCH END

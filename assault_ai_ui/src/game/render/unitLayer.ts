@@ -3,30 +3,34 @@ import { unitImages } from "../config/unitImages";
 import { sides } from "../config/sides";
 import { axialToPixel, HEX_SIZE } from "./hexGridRenderer";
 
-// ✅ hover global (viene del panel)
+// ✅ global hover / selection
 let highlightedUnitId: string | null = null;
 let selectedUnitId: string | null = null;
+
+// ✅ highlights separados
+const highlights = new Map<string, PIXI.Graphics>();
 
 (window as any).selectUnit = (id: string | null) => {
   selectedUnitId = id;
 };
 
-  
 (window as any).highlightUnit = (id: string | null) => {
   highlightedUnitId = id;
 };
 
 export class UnitLayer {
-  private container: PIXI.Container;
-  private sprites: Record<string, PIXI.Container> = {};
+  public container: PIXI.Container;
 
   constructor(world: PIXI.Container) {
     this.container = new PIXI.Container();
     this.container.label = "unitLayer";
+
+    // ✅ importante para layering correcto
+    this.container.sortableChildren = true;
+
     world.addChild(this.container);
   }
 
-  // -----------------------------------------
   async sync(state: any) {
     if (!state) return;
 
@@ -37,87 +41,111 @@ export class UnitLayer {
     const seen = new Set<string>();
 
     for (const unit of units) {
+      const id = unit.id;
 
-      let sprite = this.sprites[unit.id];
+      let sprite = this.container.children.find(
+        (c: any) =>
+          c.__unitId === id &&
+          c.__type === "unit"
+      ) as PIXI.Container | undefined;
 
-      // ✅ CREATE if missing
       if (!sprite) {
         sprite = await this.createSprite(unit);
-
-        this.sprites[unit.id] = sprite;
         this.container.addChild(sprite);
       }
 
-      // ✅ POSICIÓN
+      // ✅ posición
       const { x, y } = axialToPixel(unit.q, unit.r);
 
-      sprite.x = Math.round(x);
-      sprite.y = Math.round(y + HEX_SIZE);
+      const newX = Math.round(x);
+      const newY = Math.round(y + HEX_SIZE);
+
+      const isMoving = (sprite as any).__isMoving === true;
+
+      const dx = sprite.x - newX;
+      const dy = sprite.y - newY;
+      const dist = dx * dx + dy * dy;
+
+      if (!isMoving || dist < 1) {
+        sprite.x = newX;
+        sprite.y = newY;
+      }
 
       const base = (sprite as any).__baseScale ?? 1;
 
-      // -----------------------------------------
-      // ✅ ESTADOS
       const isOwn = unit.side === activeSide;
-      const isAvailable = isOwn && !activated.includes(unit.id);
+      const isAvailable =
+        isOwn &&
+        !activated.includes(id) &&
+        !(window as any).__hiddenHighlights?.has(id);
 
-      if (unit.id === selectedUnitId) {
-        sprite.scale.set(base * 1.3);
-        sprite.tint = 0xffcc00; // 🟡 selección
-      } else if (unit.id === highlightedUnitId) {
-        sprite.scale.set(base * 1.2);
-      } else {
-        sprite.scale.set(base);
-        sprite.tint = isOwn ? 0xffffff : 0xaaaaaa;
+      // 💣 ✅ FIX REAL DEL BUG: reset FORZADO
+      sprite.scale.x = base;
+      sprite.scale.y = base;
+
+      // ✅ aplicar estados
+      if (id === selectedUnitId) {
+        sprite.scale.x = base * 1.3;
+        sprite.scale.y = base * 1.3;
+      } else if (id === highlightedUnitId) {
+        sprite.scale.x = base * 1.2;
+        sprite.scale.y = base * 1.2;
       }
 
-      // ✅ alpha base
+      // ✅ alpha
       if (unit.hp <= 0) {
         sprite.alpha = 0.4;
-      } else if (!isOwn) {
-        sprite.alpha = 0.7; // enemigo
-      } else if (!isAvailable) {
-        sprite.alpha = 0.7; // usada
+      } else if (!isOwn || !isAvailable) {
+        sprite.alpha = 0.7;
       } else {
-        sprite.alpha = 1; // disponible
+        sprite.alpha = 1;
       }
 
-      // ✅ tint (opcional suave)
-      sprite.tint = isOwn ? 0xffffff : 0xaaaaaa;
-
-      // ✅ HIGHLIGHT DISPONIBLE (HALO)
-      let highlight = sprite.getChildByName("availableHighlight");
+      // -----------------------------------------
+      // ✅ highlight separado (correcto)
+      let highlight = highlights.get(id);
 
       if (isAvailable) {
+
         if (!highlight) {
           highlight = new PIXI.Graphics();
-          highlight.name = "availableHighlight";
 
-          highlight.beginFill(0x00ff00, 0.25);
-          highlight.drawCircle(0, 0, HEX_SIZE * 0.8);
-          highlight.endFill();
+          (highlight as any).__type = "fx";
+          (highlight as any).__unitId = id;
+          (highlight as any).name = "availableHighlight";
 
-          sprite.addChildAt(highlight, 0);
+          // ✅ Pixi v8 API correcta
+          highlight.circle(0, 0, HEX_SIZE * 0.8);
+          highlight.fill({ color: 0x00ff00, alpha: 0.25 });
+
+          highlight.zIndex = -1;
+          highlight.eventMode = "none";
+
+          this.container.addChild(highlight);
+          highlights.set(id, highlight);
         }
 
-        // ✅ animación suave
+        // ✅ seguir al sprite
+        highlight.x = sprite.x;
+        highlight.y = sprite.y;
+        highlight.visible = true;
+
         highlight.alpha = 0.5 + Math.sin(Date.now() / 300) * 0.3;
 
       } else {
         if (highlight) {
-          sprite.removeChild(highlight);
+          this.container.removeChild(highlight);
+          highlights.delete(id);
         }
       }
 
-      seen.add(unit.id);
+      seen.add(id);
     }
 
-    // ✅ cleanup
-    Object.keys(this.sprites).forEach((id) => {
-      if (!seen.has(id)) {
-        this.container.removeChild(this.sprites[id]);
-        this.sprites[id].destroy();
-        delete this.sprites[id];
+    // ✅ mantener visibles
+    this.container.children.forEach((child: any) => {
+      if (child.__unitId && seen.has(child.__unitId)) {
+        child.visible = true;
       }
     });
   }
@@ -125,6 +153,10 @@ export class UnitLayer {
   // -----------------------------------------
   private async createSprite(unit: any): Promise<PIXI.Container> {
     const container = new PIXI.Container();
+
+    (container as any).__unitId = unit.id;
+    (container as any).__isMoving = false;
+    (container as any).__type = "unit";
 
     const def = unitImages[unit.unit_key];
 
@@ -147,13 +179,13 @@ export class UnitLayer {
       (container as any).__baseScale = baseScale;
 
       container.addChild(sprite);
+
     } catch (err) {
       console.error("❌ error loading sprite:", def.full, err);
     }
 
-    const side = sides[unit.side] || {
-      bgColor: 0x333333,
-    };
+    // ✅ etiqueta
+    const side = sides[unit.side] || { bgColor: 0x333333 };
 
     const labelContainer = new PIXI.Container();
 
@@ -176,7 +208,6 @@ export class UnitLayer {
     label.roundPixels = true;
 
     labelContainer.addChild(label);
-
     labelContainer.y = HEX_SIZE * 0.4;
 
     container.addChild(labelContainer);

@@ -18,6 +18,7 @@ def _trace(tag: str, **data):
     if not DEBUG_TRACE:
         return
     payload = " ".join(f"{k}={v}" for k, v in data.items())
+    print(f"[TRACE] {tag} {payload}")
 
 
 class ActionCatalog:
@@ -101,6 +102,15 @@ class ActionCatalog:
             action_count=len(actions),
         )
 
+        # ✅ ✅ NUEVO: DEBUG ACTION IDs
+        if DEBUG_TRACE:
+            for a in actions:
+                _trace(
+                    "ACTION_ID",
+                    unit=active.unit_id,
+                    action=getattr(a, "action_id", None)
+                )
+
         return actions
 
     # ==================================================
@@ -112,8 +122,6 @@ class ActionCatalog:
 
         if not getattr(active, "can_fire", True):
             return actions
-
-        # ✅ debug claro de spotting
 
         for other in self.gs.units:
 
@@ -188,4 +196,3 @@ class ActionCatalog:
             self.gs.game_map,
             self.terrain_config
         )
-

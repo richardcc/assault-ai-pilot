@@ -79,22 +79,21 @@ def load_ui_scenario(scenario_id: str) -> dict:
                 "terrain": h.get("terrain", "clear"),
             })
 
-    # ---------------------------------------------
-    # BUILD UNITS (STATIC ONLY)
-    # ---------------------------------------------
-    units = []
+        # ---------------------------------------------
+        # BUILD UNITS (STATIC ONLY)
+        # ---------------------------------------------
+        units = []
 
-    for u in scenario.get("units", []):
-        q, r = u.get("position", [0, 0])
+        for u in scenario.get("units", []):
+            q, r = u.get("position", [0, 0])
 
-        units.append({
-            "id": u.get("unit_id"),
-            "unit_key": u.get("unit_key"),
-            "q": q,
-            "r": r,
-            "side": u.get("side"),
-        })
-
+            units.append({
+                "id": u.get("unit_id"),   # ✅ ESTE ES EL FIX
+                "unit_key": u.get("unit_key"),
+                "q": q,
+                "r": r,
+                "side": u.get("side"),
+            })
     # ---------------------------------------------
     # FINAL
     # ---------------------------------------------

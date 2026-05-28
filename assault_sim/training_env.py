@@ -55,7 +55,6 @@ class TrainingEnv:
 
         self.reward_fn = ProgressiveReward(rl_side)
 
-        # acumulados globales
         self.rl_attacks = 0
         self.rl_damage = 0
         self.rl_kills = 0
@@ -131,39 +130,33 @@ class TrainingEnv:
         name = action_name.lower()
 
         # -------------------------------------------------
-        # ✅ ACTION TYPE (ROBUSTO)
-        # 🔥 ORDEN CRÍTICO: específico → general
+        # ACTION TYPE
         # -------------------------------------------------
         if is_wait:
             action_type = "wait"
-
         elif "close" in name:
             action_type = "direct"
-
         elif "assault" in name:
             action_type = "assault"
-
         elif "ranged" in name:
             action_type = "indirect"
-
         elif "move" in name:
             action_type = "move"
-
         else:
             action_type = "unknown"
 
-        # ✅ usar action_type como fuente única de verdad
         is_attack = action_type in ["direct", "indirect", "assault"]
 
-        # DEBUG útil
         if DEBUG_TRACE:
             print(f"⚙️ ACTION: {action_name} -> {action_type}")
 
         # -------------------------------------------------
-        # ✅ INFO (DELTA POR STEP)
+        # ✅ INFO (FIX AÑADIDO)
         # -------------------------------------------------
         info = {
             "unit_id": action.unit_id if hasattr(action, "unit_id") else None,
+            "action_id": getattr(action, "action_id", None),  # ✅ 💣 NUEVO
+
             "rl_damage": 0,
             "rl_attacks": 0,
             "rl_kills": 0,
@@ -171,13 +164,13 @@ class TrainingEnv:
             "enemy_attacks": 0,
             "enemy_kills": 0,
             "is_wait": is_wait,
-            "action_type": action_type,                      # categoría simple
-            "action_class": action.__class__.__name__,       # ✅ REAL (LO IMPORTANTE)
+            "action_type": action_type,
+            "action_class": action.__class__.__name__,
             "turn": next_state.turn,
         }
 
         # -------------------------------------------------
-        # ATAQUES
+        # ATTACKS
         # -------------------------------------------------
         if is_attack:
             if actor_side == self.rl_side:
@@ -194,7 +187,7 @@ class TrainingEnv:
         alive_after = {u.unit_id: u.alive for u in next_state.units}
 
         # -------------------------------------------------
-        # DAÑO Y KILLS
+        # DAMAGE & KILLS
         # -------------------------------------------------
         for uid, before_hp in hp_before.items():
             after_hp = hp_after.get(uid, before_hp)

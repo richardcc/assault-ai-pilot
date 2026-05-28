@@ -16,7 +16,7 @@ def get_unit_actions(env, unit):
     runtime = env.runtime
 
     # -------------------------------------------------
-    # ✅ VALIDATION (runtime)
+    # VALIDATION (runtime)
     # -------------------------------------------------
     is_active_side = (unit.side == getattr(runtime, "active_side", None))
     is_not_activated = (unit.unit_id not in getattr(runtime, "activated_units", set()))
@@ -31,12 +31,12 @@ def get_unit_actions(env, unit):
         }
 
     # -------------------------------------------------
-    # ✅ TERRAIN CONFIG (CORRECTO)
+    # TERRAIN CONFIG
     # -------------------------------------------------
     terrain_config = state.game_map.terrain_config
 
     # -------------------------------------------------
-    # ✅ ACTION CATALOG
+    # ACTION CATALOG
     # -------------------------------------------------
     catalog = ActionCatalog(
         state,
@@ -50,32 +50,50 @@ def get_unit_actions(env, unit):
     attacks = []
 
     # -------------------------------------------------
-    # ✅ PROCESS ACTIONS (CORRECTO)
+    # PROCESS ACTIONS (FIXED ✅)
     # -------------------------------------------------
     for action in actions:
 
+        # -------------------------
+        # MOVEMENT
+        # -------------------------
         if isinstance(action, MoveAction):
             if action.path:
                 last = action.path[-1]
                 moves.append({
                     "q": last.q,
-                    "r": last.r
+                    "r": last.r,
+
+                    # ✅ 💣 CLAVE
+                    "action_id": action.action_id
                 })
 
+        # -------------------------
+        # ASSAULT
+        # -------------------------
         elif isinstance(action, AssaultAction):
             attacks.append({
                 "type": "assault",
-                "target_id": action.target_id
+                "target_id": action.target_id,
+
+                # ✅ 💣 CLAVE
+                "action_id": action.action_id
             })
 
+        # -------------------------
+        # RANGED DIRECT
+        # -------------------------
         elif isinstance(action, RangedDirectAttack):
             attacks.append({
                 "type": "ranged",
-                "target_id": action.target_id
+                "target_id": action.target_id,
+
+                # ✅ 💣 CLAVE
+                "action_id": action.action_id
             })
 
     # -------------------------------------------------
-    # ✅ RESULT (FUERA DEL LOOP)
+    # RESULT
     # -------------------------------------------------
     result = {
         "unit_id": unit.unit_id,
@@ -86,7 +104,7 @@ def get_unit_actions(env, unit):
     }
 
     # -------------------------------------------------
-    # ✅ DEBUG
+    # DEBUG
     # -------------------------------------------------
     print("[DEBUG][get_unit_actions]")
     print(json.dumps(result, indent=2))
