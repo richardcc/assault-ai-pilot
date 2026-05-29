@@ -1,6 +1,8 @@
 import { suggestMove } from "../ai/suggestMove";
 
 type ControllerType = "human" | "ai";
+type GameMode = "human" | "ai" | "ai_vs_ai" | "replay";
+type Listener = (state: any) => void;
 
 export class GameController {
 

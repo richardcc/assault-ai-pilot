@@ -9,7 +9,6 @@ import {
 import { setupCamera } from "./systems/cameraController";
 
 import LayerControls from "./systems/LayerControls";
-import { UnitStatePanel } from "./ui/UnitStatePanel";
 import { UnitLayer } from "./render/unitLayer";
 
 import { handleUnitClick } from "./systems/unitInteractionSystem";
@@ -22,7 +21,13 @@ import { HighlightLayer } from "./render/highlightLayer";
 import { updateHighlights } from "./systems/highlightSystem";
 import { updateLayerVisibility } from "./systems/layerVisibilitySystem";
 
-export default function GameCanvas() {
+export default function GameCanvas({
+  setGameData,
+  selectedUnitId,
+  setSelectedUnitId,
+  availableMoves,
+  setAvailableMoves,
+}: any) {
 
   const containerRef = useRef<HTMLDivElement | null>(null);
   const appRef = useRef<PIXI.Application | null>(null);
@@ -44,9 +49,6 @@ export default function GameCanvas() {
   const showGridRef = useRef(true);
   const showCoordsRef = useRef(false);
 
-  const [gameData, setGameData] = useState<any>(null);
-  const [availableMoves, setAvailableMoves] = useState<any[]>([]);
-  const [selectedUnitId, setSelectedUnitId] = useState<string | null>(null);
   const [hoverHex, setHoverHex] = useState<{ q: number, r: number } | null>(null);
 
   const lastStateRef = useRef<any>(null);
@@ -306,41 +308,18 @@ export default function GameCanvas() {
 
   }, [availableMoves, selectedUnitId, hoverHex]);
 
-  // ---------------------------------------------
-  // RENDER
-  // ---------------------------------------------
   return (
-    <div style={{ display: "flex", flexDirection: "column", width: "100%", height: "100%" }}>
+    <div style={{ flex: 1, width: "100%", height: "100%", minHeight: 0, position: "relative", display: "flex", flexDirection: "column" }}>
+      <div ref={containerRef} style={{ flex: 1, width: "100%", height: "100%" }} />
 
-      <div style={{ background: "#1a1a1a", color: "#eee", padding: "8px 12px", display: "flex", gap: "20px" }}>
-        <div>{gameData?.scenario_name ?? gameData?.id ?? "Scenario"}</div>
-        <div>Turn: {gameData?.turn ?? "-"}</div>
-        <div style={{
-          color: gameData?.sides?.[gameData?.active_side] === "human" ? "lime" : "orange"
-        }}>
-          Active: {gameData?.active_side ?? "-"} ({gameData?.sides?.[gameData?.active_side] ?? "-"})
-        </div>
-      </div>
-
-      <div style={{ flex: 1, position: "relative" }}>
-        <div ref={containerRef} style={{ width: "100%", height: "100%" }} />
-
-        <LayerControls
-          showMap={showMap}
-          showGrid={showGrid}
-          showCoords={showCoords}
-          onToggleMap={setShowMap}
-          onToggleGrid={setShowGrid}
-          onToggleCoords={setShowCoords}
-        />
-      </div>
-
-      <UnitStatePanel
-        units={gameData?.units || []}
-        activeSide={gameData?.active_side}
-        activatedUnits={gameData?.activated_units || []}
+      <LayerControls
+        showMap={showMap}
+        showGrid={showGrid}
+        showCoords={showCoords}
+        onToggleMap={setShowMap}
+        onToggleGrid={setShowGrid}
+        onToggleCoords={setShowCoords}
       />
-
     </div>
   );
 }

@@ -13,7 +13,7 @@ export function updateHighlights(
   layer.clear();
 
   // ✅ selected
-  let selectedUnit = null;
+  let selectedUnit: any = null;
 
   if (selectedUnitId) {
     selectedUnit = data.units?.find((u: any) => u.id === selectedUnitId);

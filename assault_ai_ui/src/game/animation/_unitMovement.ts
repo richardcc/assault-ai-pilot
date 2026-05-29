@@ -141,7 +141,7 @@ export function animateUnitMove(
 
   const sound =
     moveSounds[Math.floor(Math.random() * moveSounds.length)];
-  sound.cloneNode(true).play().catch(() => {});
+  (sound.cloneNode(true) as HTMLAudioElement).play().catch(() => {});
 
   const start = { x: sprite.x, y: sprite.y };
   const end = hexToWorld(toHex.q, toHex.r);
@@ -166,7 +166,7 @@ export function animateUnitMove(
 
   const ticker = PIXI.Ticker.shared;
 
-  function tick(delta: number) {
+  function tick(delta: any) {
     elapsed += ticker.deltaMS;
     const t = Math.min(elapsed / duration, 1);
 
