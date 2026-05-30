@@ -5,14 +5,13 @@ export function updateHighlights(
   data: any,
   selectedUnitId: string | null,
   availableMoves: any[],
-  hoverHex: { q: number, r: number } | null
+  hoverHex: { q: number; r: number } | null
 ) {
-
   if (!layer || !data) return;
 
   layer.clear();
 
-  // ✅ selected
+  // 1. Find selected unit position
   let selectedUnit: any = null;
 
   if (selectedUnitId) {
@@ -23,16 +22,25 @@ export function updateHighlights(
     }
   }
 
-  // ✅ hover
-  if (
-    hoverHex &&
-    availableMoves.some(m => m.q === hoverHex.q && m.r === hoverHex.r)
-  ) {
-    layer.drawHover(hoverHex.q, hoverHex.r);
-  }
+  // 2. Draw all valid move/attack destinations
+  const moves   = availableMoves.filter((m: any) => m.kind !== "attack");
+  const attacks = availableMoves.filter((m: any) => m.kind === "attack");
 
-  // ✅ moves
-  if (availableMoves.length > 0) {
-    layer.drawMoves(availableMoves);
+  if (moves.length > 0)   layer.drawMoves(moves);
+  if (attacks.length > 0) layer.drawAttacks(attacks);
+
+  // 3. Draw hover highlight + directional arrow from unit to hovered hex
+  if (hoverHex && selectedUnit) {
+    const isValidMove   = moves.some(  (m: any) => m.q === hoverHex.q && m.r === hoverHex.r);
+    const isValidAttack = attacks.some((a: any) => a.q === hoverHex.q && a.r === hoverHex.r);
+
+    if (isValidMove || isValidAttack) {
+      layer.drawHover(hoverHex.q, hoverHex.r);
+      layer.drawArrow(
+        selectedUnit.q, selectedUnit.r,
+        hoverHex.q,     hoverHex.r,
+        isValidAttack
+      );
+    }
   }
 }

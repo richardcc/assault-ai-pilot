@@ -3,7 +3,7 @@ from assault_model.actions.ranged_direct import RangedDirectAttack
 from assault_model.actions.ranged_indirect import RangedIndirectAttack
 from assault_model.map.hex_utils import hex_distance
 from assault_model.map.terrain_config import terrain_config
-
+from assault_model.actions.status import WaitAction
 from assault_sim.rl.tactical_options import TacticalOption
 
 
@@ -51,8 +51,7 @@ class TacticalPathHeuristic:
             return self._flank_move(state, unit, moves)
 
         if option == TacticalOption.HOLD:
-            # ✅ HOLD no ataca: deja control limpio
-            return None
+            return WaitAction(unit.unit_id)
 
         if option == TacticalOption.RETREAT:
             return self._retreat(state, unit, moves)

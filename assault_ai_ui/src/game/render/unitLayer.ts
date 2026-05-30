@@ -66,6 +66,11 @@ export class UnitLayer {
       const dy = sprite.y - newY;
       const dist = dx * dx + dy * dy;
 
+      // If flagged as moving but already at destination — release the lock
+      if (isMoving && dist < 1) {
+        (sprite as any).__isMoving = false;
+      }
+
       if (!isMoving || dist < 1) {
         sprite.x = newX;
         sprite.y = newY;

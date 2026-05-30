@@ -149,6 +149,173 @@ class ExplainableEngine:
 
 
 ================================================================================
+FILE: C:\repos\python\assault\assault_backend\game_session.py
+================================================================================
+
+from typing import Optional, Dict, Any
+from pathlib import Path
+import json
+
+from assault_sim.sim_env import SimEnv
+from assault_sim.debug.debug_config import DebugConfig
+from assault_sim.config.config_loader import load_sim_config
+
+
+MAP_PIECE_CATALOG_PATH = (
+    Path(__file__).resolve().parents[1]
+    / "assault_sim"
+    / "assets"
+    / "catalogs"
+    / "map_piece_catalog.json"
+)
+
+SCENARIOS_PATH = (
+    Path(__file__).resolve().parents[1]
+    / "assault_sim"
+    / "assets"
+    / "scenarios"
+)
+
+
+class GameSession:
+    def __init__(self):
+        self.env: Optional[SimEnv] = None
+        self.scenario_id: Optional[str] = None  # ✅ nuevo
+        self.sides_config = {}
+
+    # ---------------------------------------------
+    def start(self, scenario_id: str, sides: Dict[str, str]):
+        base_path = Path(__file__).resolve().parents[1]
+
+        config_path = (
+            base_path
+            / "assault_sim"
+            / "config"
+            / "sim_config.yaml"
+        )
+
+        config = load_sim_config(str(config_path))
+
+        config.data_root = (
+            base_path
+            / "assault_sim"
+            / "assets"
+        )
+
+        config.scenario_name = scenario_id
+
+        # ✅ guardar escenario (CLAVE)
+        self.scenario_id = scenario_id
+        self.sides_config = sides  
+        self.env = SimEnv(
+            config,
+            debug_config=DebugConfig(enabled=True)
+        )
+
+        self.env.reset()
+
+    # ---------------------------------------------
+    def get_state(self) -> Dict[str, Any]:
+        if self.env is None:
+            return {"units": []}
+
+        state = self.env.game_state
+        runtime = self.env.runtime
+        game_map = state.game_map
+
+        # ✅ cargar catálogo
+        with open(MAP_PIECE_CATALOG_PATH, "r", encoding="utf-8") as f:
+            catalog = json.load(f)
+
+        pieces_catalog = catalog.get("pieces", {})
+
+        # ✅ UNITS
+        units = []
+        for u in state.units:
+            if not getattr(u, "alive", True):
+                continue
+            if not u.position:
+                continue
+
+            units.append({
+                "id": u.unit_id,
+                "unit_key": str(u.unit_type.code),
+                "q": u.position.q,
+                "r": u.position.r,
+                "side": u.side,
+                "hp": getattr(u, "hp", None),
+            })
+
+        # ✅ HEXES
+        raw_hexes = getattr(game_map, "hexes", [])
+
+        hex_list = []
+        for h in raw_hexes:
+            q = getattr(h, "q", None)
+            r = getattr(h, "r", None)
+
+            if q is None or r is None:
+                continue
+
+            hex_list.append({
+                "q": q,
+                "r": r,
+                "terrain": getattr(h, "terrain", None)
+            })
+
+        # ✅ SHAPE
+        if hex_list:
+            max_q = max(h["q"] for h in hex_list)
+            max_r = max(h["r"] for h in hex_list)
+            shape = [max_q + 1, max_r + 1]
+        else:
+            shape = [0, 0]
+
+        # =========================================
+        # ✅ ✅ FIX REAL → PIECES DESDE SCENARIO
+        # =========================================
+        pieces = []
+
+        if self.scenario_id:
+            scenario_path = SCENARIOS_PATH / f"{self.scenario_id}.json"
+
+            if scenario_path.exists():
+                with open(scenario_path, "r", encoding="utf-8") as f:
+                    scenario = json.load(f)
+
+                for piece in scenario.get("map", {}).get("pieces", []):
+                    piece_id = piece.get("id")
+                    origin = piece.get("origin", [0, 0])
+
+                    pieces.append({
+                        "id": piece_id,
+                        "origin": origin,
+                        "shape": pieces_catalog.get(piece_id, {}).get("shape", [1, 1]),
+                    })
+
+        # ✅ FINAL
+        activated_units = []
+        if hasattr(runtime, "activated_units"):
+            activated_units = list(runtime.activated_units)
+        return {
+            "scenario_name": getattr(self.env.scenario, "name", None),
+
+            "turn": getattr(state, "turn", 0),
+            "active_side": getattr(runtime, "active_side", None),
+
+            "shape": shape,
+            "hexes": hex_list,
+            "map": {
+                "pieces": pieces
+            },
+
+            "units": units,
+            "sides": self.sides_config,
+            "activated_units": activated_units,
+        }
+
+
+================================================================================
 FILE: C:\repos\python\assault\assault_backend\hrl_service.py
 ================================================================================
 
@@ -191,12 +358,15 @@ from pathlib import Path
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from services.scenario_service_ui import load_ui_scenario
+from game_session import GameSession
+
+# ✅ sesión persistente
+game_session = GameSession()
+
 # =====================================================
 # LOADERS
 # =====================================================
 
-# ✅ IMPORTANTE:
-# load_scenario_raw AHORA YA CONSTRUYE HEXES + TERRAIN
 from services.scenario_service import load_scenario_raw
 
 from services.map_piece_service import (
@@ -231,7 +401,6 @@ app = FastAPI(
     version="1.0",
 )
 
-
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
@@ -244,7 +413,7 @@ app.add_middleware(
 )
 
 # =====================================================
-# LOAD TACTICAL RULEBOOK
+# LOAD RULEBOOK
 # =====================================================
 
 RULEBOOK_PATH = (
@@ -271,14 +440,11 @@ engine = ExplainableEngine(
 )
 
 # =====================================================
-# ENDPOINTS
+# ENGINE ENDPOINTS
 # =====================================================
 
 @app.get("/api/engine/status")
 def engine_status():
-    """
-    Engine health + capability info.
-    """
     return {
         "status": "ready",
         "engine": "assault-rag-backend",
@@ -295,40 +461,26 @@ def engine_status():
     response_model=ExplainActivationResponse,
 )
 def explain_activation(request: ExplainActivationRequest):
-    """
-    Explain one activation using HRL + Tactical layers.
-    """
     return engine.explain_activation(request.activation)
 
+
 # =====================================================
-# SCENARIO (CON HEXES + TERRAIN)
+# ✅ SCENARIO + GAME STATE (UNIFICADO)
 # =====================================================
 
-@app.get("/api/scenarios/{scenario_id}")
+@app.get("/api/ui/scenarios/{scenario_id}")
 def get_scenario(scenario_id: str):
-    """
-    Return scenario with:
-    ✅ pieces
-    ✅ grid
-    ✅ hexes (built from map pieces)
-    ✅ terrain per hex
-    """
     try:
-        scenario = load_scenario_raw(scenario_id)
-        return scenario
+        # ✅ iniciar sesión
+        if game_session.env is None:
+            game_session.start(scenario_id)
 
-    except FileNotFoundError:
-        raise HTTPException(
-            status_code=404,
-            detail="Scenario not found"
-        )
+        # ✅ devolver estado real completo
+        return game_session.get_state()
 
     except Exception as e:
-        print(f"[ERROR] Scenario build failed: {e}")
-        raise HTTPException(
-            status_code=500,
-            detail="Scenario build error"
-        )
+        raise HTTPException(status_code=500, detail=str(e))
+
 
 # =====================================================
 # MAP PIECES (RAW)
@@ -336,34 +488,21 @@ def get_scenario(scenario_id: str):
 
 @app.get("/api/map_pieces")
 def list_map_pieces_raw():
-    """
-    Return list of map piece IDs.
-    """
     try:
         catalog = load_map_piece_catalog_raw()
         pieces = catalog.get("pieces", {})
         return sorted(pieces.keys())
-
     except FileNotFoundError:
-        raise HTTPException(
-            status_code=500,
-            detail="Map piece catalog not found"
-        )
+        raise HTTPException(status_code=500, detail="Map piece catalog not found")
 
 
 @app.get("/api/map_pieces/{piece_id}")
 def get_map_piece_raw(piece_id: str):
-    """
-    Return raw map piece definition.
-    """
     try:
         return load_map_piece_raw(piece_id)
-
     except FileNotFoundError:
-        raise HTTPException(
-            status_code=404,
-            detail="Map piece not found"
-        )
+        raise HTTPException(status_code=404, detail="Map piece not found")
+
 
 # =====================================================
 # UNITS (RAW)
@@ -371,62 +510,214 @@ def get_map_piece_raw(piece_id: str):
 
 @app.get("/api/units")
 def list_units_raw():
-    """
-    Return available unit keys.
-    """
     try:
         catalog = load_unit_catalog_raw()
         units = catalog.get("units", {})
         return sorted(units.keys())
-
     except FileNotFoundError:
-        raise HTTPException(
-            status_code=500,
-            detail="Unit catalog not found"
-        )
+        raise HTTPException(status_code=500, detail="Unit catalog not found")
 
 
 @app.get("/api/units/{unit_key}")
 def get_unit_raw(unit_key: str):
-    """
-    Return raw unit definition.
-    """
     try:
         return load_unit_raw(unit_key)
-
     except KeyError:
-        raise HTTPException(
-            status_code=404,
-            detail="Unit not found"
-        )
+        raise HTTPException(status_code=404, detail="Unit not found")
+
 
 # =====================================================
-# SCENARIO (UI ADAPTER)
+# GAME CONTROL
 # =====================================================
 
-@app.get("/api/ui/scenarios/{scenario_id}")
-def get_ui_scenario(scenario_id: str):
-    """
-    Return UI-friendly scenario:
-    ✅ flat hex list
-    ✅ normalized unit positions
-    ✅ simplified structure
-    """
+from pydantic import BaseModel
+from typing import Dict
+
+
+class GameStartRequest(BaseModel):
+    scenario_id: str
+    sides: Dict[str, str]
+
+
+class UnitActionsRequest(BaseModel):
+    unit_id: str
+
+@app.post("/api/game/start")
+def game_start(req: GameStartRequest):
+
+    print("[DEBUG][start] request:", req)
+
     try:
-        return load_ui_scenario(scenario_id)
+        # ✅ RESET EXPLÍCITO (muy importante)
+        game_session.env = None
 
-    except FileNotFoundError:
-        raise HTTPException(
-            status_code=404,
-            detail="Scenario not found"
-        )
+        # ✅ START REAL
+        game_session.start(req.scenario_id, req.sides)
+
+        # ✅ CHECK DURO
+        if game_session.env is None:
+            print("[ERROR][start] env is still None after start")
+            raise Exception("env not initialized")
+
+        print("[DEBUG][start] env created OK")
+
+        return {
+            "status": "started",
+            "scenario": req.scenario_id,
+        }
 
     except Exception as e:
-        print(f"[ERROR] UI scenario build failed: {e}")
-        raise HTTPException(
-            status_code=500,
-            detail="Scenario UI error"
+        print("[ERROR][start] exception:", str(e))
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/game/state")
+def game_state():
+    return game_session.get_state()
+
+
+@app.post("/api/game/step")
+async def game_step(payload: Dict):
+
+    action_id = payload.get("action_id")
+
+    if not action_id:
+        return {"error": "missing action_id"}
+
+    try:
+        state, reward, done, info = game_session.env.step(action_id)
+
+        return {
+            "state": game_session.get_state(),
+            "reward": reward,
+            "done": done,
+            "info": info
+        }
+
+    except Exception as e:
+        print("[ERROR][step]", str(e))
+        raise HTTPException(status_code=500, detail=str(e))
+
+from fastapi import WebSocket, WebSocketDisconnect
+import asyncio
+
+
+from fastapi import WebSocket, WebSocketDisconnect
+import asyncio
+
+
+# =====================================================
+# ✅ WEBSOCKET (GAME STATE REALTIME)
+# =====================================================
+
+@app.websocket("/ws/game")
+async def websocket_game(ws: WebSocket):
+    await ws.accept()
+    print("✅ WebSocket connected")
+
+    try:
+        while game_session.env is None:
+            await asyncio.sleep(0.1)
+
+        env = game_session.env
+
+        # 💣 ✅ FIX CLAVE
+        loop = asyncio.get_running_loop()
+
+        def handler(event):
+            if event["type"] == "MAP_STATE":
+
+                async def safe_send():
+                    try:
+                        await ws.send_json({
+                            "type": "MAP_STATE",
+                            "payload": event["payload"]
+                        })
+                    except Exception as e:
+                        print("⚠️ WS dropped:", str(e))     
+
+
+        if env.event_bus:
+            env.event_bus.subscribe(handler)
+
+        while True:
+            await asyncio.sleep(1)
+
+    except WebSocketDisconnect:
+        print("❌ WebSocket disconnected")
+
+    except Exception as e:
+        print("❌ WebSocket error:", e)
+
+# =====================================================
+# GAME ACTIONS (QUERY ONLY - NO EXECUTION)
+# =====================================================
+from services.action_service import get_unit_actions
+
+
+from fastapi import HTTPException
+import time
+
+@app.post("/api/game/actions")
+def game_actions(req: UnitActionsRequest):
+
+    # -------------------------------------------------
+    # ✅ WAIT FOR ENV (fix race condition)
+    # -------------------------------------------------
+    for _ in range(10):  # max 1 second
+        if game_session.env is not None:
+            break
+        time.sleep(0.1)
+
+    if game_session.env is None:
+        print("[ERROR][actions] env is None")
+        raise HTTPException(status_code=400, detail="no game")
+
+    # -------------------------------------------------
+    # ✅ GET STATE
+    # -------------------------------------------------
+    state = game_session.env.game_state
+
+    # -------------------------------------------------
+    # ✅ FIND UNIT
+    # -------------------------------------------------
+    unit = next(
+        (u for u in state.units if u.unit_id == req.unit_id),
+        None
+    )
+
+    if not unit:
+        print(f"[ERROR][actions] unit not found: {req.unit_id}")
+        raise HTTPException(status_code=404, detail="unit not found")
+
+    # -------------------------------------------------
+    # ✅ DEBUG INFO (muy importante ahora)
+    # -------------------------------------------------
+    runtime = getattr(game_session.env, "runtime", None)
+
+    if runtime:
+        print(
+            f"[DEBUG][actions] unit={unit.unit_id} "
+            f"side={unit.side} "
+            f"active_side={runtime.active_side} "
+            f"activated={unit.unit_id in runtime.activated_units}"
         )
+    else:
+        print("[DEBUG][actions] runtime not available")
+
+    # -------------------------------------------------
+    # ✅ DELEGATE
+    # -------------------------------------------------
+    try:
+        result = get_unit_actions(game_session.env, unit)
+
+        print("[DEBUG][actions] result:", result)
+
+        return result
+
+    except Exception as e:
+        print("[ERROR][actions] exception:", str(e))
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 ================================================================================
@@ -548,6 +839,125 @@ class ScenarioResponse(BaseModel):
     goal: str
     max_turns: int
     sides: List[ScenarioSide]
+
+
+================================================================================
+FILE: C:\repos\python\assault\assault_backend\services\action_service.py
+================================================================================
+
+from assault_model.actions.movement import MoveAction
+from assault_model.actions.assault import AssaultAction
+from assault_model.actions.ranged_direct import RangedDirectAttack
+from assault_model.actions.action_catalog import ActionCatalog
+
+import json
+
+
+def get_unit_actions(env, unit):
+    """
+    Compute available actions for a unit and
+    convert them to frontend-friendly JSON.
+    """
+
+    state = env.game_state
+    runtime = env.runtime
+
+    # -------------------------------------------------
+    # VALIDATION (runtime)
+    # -------------------------------------------------
+    is_active_side = (unit.side == getattr(runtime, "active_side", None))
+    is_not_activated = (unit.unit_id not in getattr(runtime, "activated_units", set()))
+
+    if not (is_active_side and is_not_activated):
+        return {
+            "unit_id": unit.unit_id,
+            "moves": [],
+            "attacks": [],
+            "abilities": [],
+            "disabled": True
+        }
+
+    # -------------------------------------------------
+    # TERRAIN CONFIG
+    # -------------------------------------------------
+    terrain_config = state.game_map.terrain_config
+
+    # -------------------------------------------------
+    # ACTION CATALOG
+    # -------------------------------------------------
+    catalog = ActionCatalog(
+        state,
+        unit,
+        terrain_config=terrain_config
+    )
+
+    actions = catalog.actions()
+
+    moves = []
+    attacks = []
+
+    # -------------------------------------------------
+    # PROCESS ACTIONS (FIXED ✅)
+    # -------------------------------------------------
+    for action in actions:
+
+        # -------------------------
+        # MOVEMENT
+        # -------------------------
+        if isinstance(action, MoveAction):
+            if action.path:
+                last = action.path[-1]
+                moves.append({
+                    "q": last.q,
+                    "r": last.r,
+
+                    # ✅ 💣 CLAVE
+                    "action_id": action.action_id
+                })
+
+        # -------------------------
+        # ASSAULT
+        # -------------------------
+        elif isinstance(action, AssaultAction):
+            attacks.append({
+                "type": "assault",
+                "target_id": action.target_id,
+
+                # ✅ 💣 CLAVE
+                "action_id": action.action_id
+            })
+
+        # -------------------------
+        # RANGED DIRECT
+        # -------------------------
+        elif isinstance(action, RangedDirectAttack):
+            attacks.append({
+                "type": "ranged",
+                "target_id": action.target_id,
+
+                # ✅ 💣 CLAVE
+                "action_id": action.action_id
+            })
+
+    # -------------------------------------------------
+    # RESULT
+    # -------------------------------------------------
+    result = {
+        "unit_id": unit.unit_id,
+        "moves": moves,
+        "attacks": attacks,
+        "abilities": [],
+        "disabled": False
+    }
+
+    # -------------------------------------------------
+    # DEBUG
+    # -------------------------------------------------
+    print("[DEBUG][get_unit_actions]")
+    print(json.dumps(result, indent=2))
+
+    return result
+
 
 
 ================================================================================
@@ -716,7 +1126,7 @@ MAP_PIECE_CATALOG_PATH = (
 def load_ui_scenario(scenario_id: str) -> dict:
     """
     Build UI scenario from raw scenario + catalog data.
-    Produces a clean UI-ready structure (no engine coupling).
+    Pure UI layer (no game state).
     """
 
     # ---------------------------------------------
@@ -742,7 +1152,7 @@ def load_ui_scenario(scenario_id: str) -> dict:
     pieces_catalog = catalog.get("pieces", {})
 
     # ---------------------------------------------
-    # BUILD UI PIECES + GLOBAL HEXES
+    # BUILD MAP
     # ---------------------------------------------
     ui_pieces = []
     hexes = []
@@ -756,55 +1166,47 @@ def load_ui_scenario(scenario_id: str) -> dict:
         if not piece_def:
             raise ValueError(f"Unknown map piece: {piece_id}")
 
-        piece_hexes = piece_def.get("hexes", [])
-        piece_shape = piece_def.get("shape", [1, 1])
-
-        # ✅ UI-safe piece (clean, no mutation of original data)
         ui_pieces.append({
             "id": piece_id,
             "origin": [origin_q, origin_r],
-            "shape": piece_shape,
+            "shape": piece_def.get("shape", [1, 1]),
         })
 
-        # ✅ Expand piece-local hexes into global map coords
-        for h in piece_hexes:
+        for h in piece_def.get("hexes", []):
             hexes.append({
                 "q": origin_q + h.get("q", 0),
                 "r": origin_r + h.get("r", 0),
-                "terrain": h.get("terrain", "clear")
+                "terrain": h.get("terrain", "clear"),
             })
 
-    # ---------------------------------------------
-    # BUILD UNITS
-    # ---------------------------------------------
-    units = []
+        # ---------------------------------------------
+        # BUILD UNITS (STATIC ONLY)
+        # ---------------------------------------------
+        units = []
 
-    for u in scenario.get("units", []):
-        q, r = u.get("position", [0, 0])
+        for u in scenario.get("units", []):
+            q, r = u.get("position", [0, 0])
 
-        units.append({
-            "id": u.get("unit_id"),
-            "q": q,
-            "r": r,
-            "side": u.get("side")
-        })
-
+            units.append({
+                "id": u.get("unit_id"),   # ✅ ESTE ES EL FIX
+                "unit_key": u.get("unit_key"),
+                "q": q,
+                "r": r,
+                "side": u.get("side"),
+            })
     # ---------------------------------------------
-    # FINAL STRUCTURE
+    # FINAL
     # ---------------------------------------------
     return {
         "id": scenario.get("id"),
         "maxTurns": scenario.get("max_turns"),
         "shape": scenario.get("shape"),
-
         "map": {
             "pieces": ui_pieces
         },
-
         "hexes": hexes,
-        "units": units
+        "units": units,  # ⚠️ solo placeholder (se sustituye luego)
     }
-
 
 
 ================================================================================

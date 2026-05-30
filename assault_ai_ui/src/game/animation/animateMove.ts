@@ -1,61 +1,80 @@
+/**
+ * Smoothly animates a PixiJS container from its current position to a target
+ * pixel position using requestAnimationFrame and cubic ease-in-out.
+ * Blocks re-entry via __isMoving. Always calls onComplete (with safety timeout).
+ */
 export function animateMove(
   container: any,
   to: { x: number; y: number },
-  ticker: any,
-  duration = 300
+  _ticker: any,           // kept for API compat, not used
+  duration = 380,
+  onComplete?: () => void
 ) {
-  if (!container || !ticker) return;
+  if (!container) {
+    onComplete?.();
+    return;
+  }
 
   const startX = container.x;
   const startY = container.y;
 
-  // ✅ guard against invalid values
+  // Guard: invalid positions
   if (
-    isNaN(startX) ||
-    isNaN(startY) ||
-    isNaN(to.x) ||
-    isNaN(to.y)
+    !isFinite(startX) || !isFinite(startY) ||
+    !isFinite(to.x)   || !isFinite(to.y)
   ) {
-    console.error("💣 INVALID POSITIONS", {
+    console.error("❌ animateMove: invalid positions", {
       id: container.__unitId,
       from: { x: startX, y: startY },
-      to
+      to,
     });
+    onComplete?.();
     return;
   }
 
-  let time = 0;
+  // Already at destination
+  if (Math.abs(startX - to.x) < 0.5 && Math.abs(startY - to.y) < 0.5) {
+    container.x = to.x;
+    container.y = to.y;
+    onComplete?.();
+    return;
+  }
 
-  // ✅ block sync while animating
+  // Block double-dispatch
   container.__isMoving = true;
 
-  const update = (delta: number) => {
-    time += delta * (1000 / 60);
+  const startTime = performance.now();
 
-    const t = Math.min(time / duration, 1);
-    const ease = 1 - Math.pow(1 - t, 3);
+  // Safety timeout — always resolves even if rAF never fires
+  const safetyTimer = setTimeout(() => {
+    container.x = to.x;
+    container.y = to.y;
+    container.__isMoving = false;
+    onComplete?.();
+  }, duration + 200);
+
+  function frame(now: number) {
+    const t = Math.min((now - startTime) / duration, 1);
+
+    // Cubic ease-in-out
+    const ease = t < 0.5
+      ? 4 * t * t * t
+      : 1 - Math.pow(-2 * t + 2, 3) / 2;
 
     container.x = startX + (to.x - startX) * ease;
     container.y = startY + (to.y - startY) * ease;
 
-    // ✅ finish only once
-    if (t >= 1) {
-      ticker.remove(update);
-
+    if (t < 1) {
+      requestAnimationFrame(frame);
+    } else {
+      // Snap exactly to target
       container.x = to.x;
       container.y = to.y;
-
-      // ✅ release after frame
-      if (t >= 1) {
-        ticker.remove(update);
-
-        container.x = to.x;
-        container.y = to.y;
-
-        container.__isMoving = false; // 💣 FIX REAL
-      }
+      container.__isMoving = false;
+      clearTimeout(safetyTimer);
+      onComplete?.();
     }
-  };
+  }
 
-  ticker.add(update);
+  requestAnimationFrame(frame);
 }

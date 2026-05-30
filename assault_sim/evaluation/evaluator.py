@@ -38,7 +38,7 @@ class Evaluator:
 
         # ✅ reset ANTES de crear runner
         obs = self.env.reset()
-        runner = MatchRunner(self.env)
+        runner = MatchRunner(self.env, controller=self.rl_controller)
 
         done = False
         steps = 0

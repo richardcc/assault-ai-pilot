@@ -3,7 +3,7 @@ from assault_sim.engine.match_runner import MatchRunner
 
 def collect_rollout(env, controller, max_steps, seq_len=8):
 
-    runner = MatchRunner(env)
+    runner = MatchRunner(env, controller=controller)
 
     obs = runner.reset()
     controller.hrl_controller.policy.reset_hidden()

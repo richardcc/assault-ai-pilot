@@ -18,6 +18,7 @@ from assault_model.runtime.execution_context import ExecutionContext
 from assault_sim.debug.debug_config import DebugConfig
 from assault_sim.debug.event_bus import EventBus
 from assault_model.map.terrain_config import terrain_config
+from assault_model.actions.status import WaitAction
 
 DEBUG_TRACE = os.getenv("ASSAULT_DEBUG_TRACE", "0") == "1"
 
@@ -100,14 +101,20 @@ class SimEnv:
     # -------------------------------------------------
     def step(self, action):
 
-        print("[DEBUG] step received:", action, type(action))
-        # ✅ SOLO resolver si NO es una acción real (para no romper RL)
-        if not hasattr(action, "apply"):
-            print("[DEBUG] treating as action_id")
-            action = self._resolve_action_by_id(str(action))
 
+        if hasattr(action, "action_id"): pass
+        elif isinstance(action, WaitAction): pass
+        elif isinstance(action, str):
+            action = self._resolve_action_by_id(action)
             if action is None:
                 print("[ERROR] action could not be resolved ❌")
+                return self.game_state, 0.0, False, {}
+        elif action is None:
+            action = WaitAction("SYSTEM")
+        else:
+            print("[ERROR] unsupported action type:", type(action))
+            return self.game_state, 0.0, False, {}
+
         self._step_counter += 1
         if self._step_counter > self._max_steps:
             raise RuntimeError("Simulation overflow")
@@ -247,7 +254,7 @@ class SimEnv:
             for vp in getattr(vp_tracker.conditions, "points", []):
                 vps.append(tuple(vp.hex_coords))
 
-        event = {
+            event = {
             "type": "MAP_STATE",
             "state": self.game_state,
 
@@ -268,12 +275,16 @@ class SimEnv:
                         "side": u.side,
                         "hp": getattr(u, "hp", None),
                     }
-                    for u in self.game_state.units
+                    # 🛠️ ¡ARREGLADO AQUÍ! 
+                    # Añadimos este filtro para que solo emita al visualizador las unidades vivas.
+                    for u in self.game_state.units if getattr(u, "alive", True)
                 ],
             },
         }
 
         self.event_bus.emit(event)
+
+
 
     # -------------------------------------------------
     # MATCH END

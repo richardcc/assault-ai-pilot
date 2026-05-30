@@ -50,6 +50,7 @@ def _trace(tag: str, **data):
     if not DEBUG_TRACE:
         return
     payload = " ".join(f"{k}={v}" for k, v in data.items())
+    print(f"[TRACE] {tag} {payload}")
 
 
 class ActionCatalog:
@@ -133,6 +134,15 @@ class ActionCatalog:
             action_count=len(actions),
         )
 
+        # ✅ ✅ NUEVO: DEBUG ACTION IDs
+        if DEBUG_TRACE:
+            for a in actions:
+                _trace(
+                    "ACTION_ID",
+                    unit=active.unit_id,
+                    action=getattr(a, "action_id", None)
+                )
+
         return actions
 
     # ==================================================
@@ -144,8 +154,6 @@ class ActionCatalog:
 
         if not getattr(active, "can_fire", True):
             return actions
-
-        # ✅ debug claro de spotting
 
         for other in self.gs.units:
 
@@ -222,6 +230,7 @@ class ActionCatalog:
         )
 
 
+
 ================================================================================
 FILE: C:\repos\python\assault\assault_model\actions\action_category.py
 ================================================================================
@@ -283,8 +292,14 @@ class AssaultAction(CombatAction):
 
     def __init__(self, unit_id: str, target_id: str):
         super().__init__(unit_id, ActionType.CLOSE_COMBAT)
+
         self.target_id = target_id
         self.combat_mode = CombatMode.ASSAULT
+
+        # -------------------------
+        # ACTION ID
+        # -------------------------
+        self.action_id = f"ASSAULT:{unit_id}:{target_id}"
 
 
 ================================================================================
@@ -407,14 +422,18 @@ from assault_model.map.hex_coord import HexCoord
 class MoveAction(MovementAction):
     """
     Movement intent action.
-
-    The path represents the movement target(s), NOT the origin.
-    The origin must always be obtained from the current GameState.
     """
 
     def __init__(self, unit_id: str, path: list[HexCoord]):
         super().__init__(unit_id, ActionType.MOVE)
         self.path = path
+
+        # ✅ 💣 ID de acción
+        if self.path:
+            dest = self.path[-1]
+            self.action_id = f"MOVE:{unit_id}:{dest.q}:{dest.r}"
+        else:
+            self.action_id = f"MOVE:{unit_id}:NONE"
 
     @property
     def destination(self) -> HexCoord | None:
@@ -424,13 +443,18 @@ class MoveAction(MovementAction):
 class AdvanceAction(MovementAction):
     """
     Advance movement intent action.
-
-    The path represents the movement target(s), NOT the origin.
     """
 
     def __init__(self, unit_id: str, path: list[HexCoord]):
         super().__init__(unit_id, ActionType.ADVANCE)
         self.path = path
+
+        # ✅ 💣 ID de acción
+        if self.path:
+            dest = self.path[-1]
+            self.action_id = f"ADVANCE:{unit_id}:{dest.q}:{dest.r}"
+        else:
+            self.action_id = f"ADVANCE:{unit_id}:NONE"
 
     @property
     def destination(self) -> HexCoord | None:
@@ -440,17 +464,23 @@ class AdvanceAction(MovementAction):
 class FastMoveAction(MovementAction):
     """
     Fast movement intent action.
-
-    The path represents the movement target(s), NOT the origin.
     """
 
     def __init__(self, unit_id: str, path: list[HexCoord]):
         super().__init__(unit_id, ActionType.FAST_MOVE)
         self.path = path
 
+        # ✅ 💣 ID de acción
+        if self.path:
+            dest = self.path[-1]
+            self.action_id = f"FAST_MOVE:{unit_id}:{dest.q}:{dest.r}"
+        else:
+            self.action_id = f"FAST_MOVE:{unit_id}:NONE"
+
     @property
     def destination(self) -> HexCoord | None:
         return self.path[-1] if self.path else None
+
 
 
 ================================================================================
@@ -465,11 +495,6 @@ from assault_model.actions.combat_mode import CombatMode
 class RangedDirectAttack(CombatAction):
     """
     Declares a direct ranged attack action.
-
-    Design:
-    - ActionType defines the decision (RANGED_DIRECT).
-    - combat_mode is used internally by the engine.
-    - No attack_mode: decision belongs to RL, not inside the action.
     """
 
     def __init__(
@@ -477,14 +502,12 @@ class RangedDirectAttack(CombatAction):
         unit_id: str,
         target_id: str,
     ):
-        # ✅ CLAVE: acción diferenciada
         super().__init__(unit_id, ActionType.RANGED_DIRECT)
 
-        # ✅ Target unit
         self.target_id = target_id
-
-        # ✅ Engine semantic
         self.combat_mode = CombatMode.RANGED_DIRECT
+
+        self.action_id = f"RANGED_DIRECT:{unit_id}:{target_id}"
 
     def __repr__(self) -> str:
         return (
@@ -493,6 +516,7 @@ class RangedDirectAttack(CombatAction):
             f"target_id={self.target_id}"
             f")"
         )
+
 
 
 ================================================================================
@@ -515,14 +539,20 @@ class RangedIndirectAttack(CombatAction):
 
     def __init__(self, unit_id: str, target_hex: tuple[int, int]):
 
-        # ✅ acción separada (clave para RL)
+        # action type
         super().__init__(unit_id, ActionType.RANGED_INDIRECT)
 
-        # ✅ target es HEX (no unidad)
+        # target is a hex coordinate (q, r)
         self.target_hex = target_hex
 
-        # ✅ metadata para resolver
+        # engine metadata
         self.combat_mode = CombatMode.RANGED_INDIRECT
+
+        # -------------------------
+        # ACTION ID
+        # -------------------------
+        q, r = target_hex
+        self.action_id = f"RANGED_INDIRECT:{unit_id}:{q}:{r}"
 
     def __repr__(self) -> str:
         return (
@@ -557,11 +587,18 @@ class ReactionFireAction(CombatAction):
         condition: ReactionCondition,
     ):
         super().__init__(unit_id, ActionType.RANGED_ATTACK)
+
         self.target_id = target_id
         self.attack_profile = attack_profile
         self.defense_profile = defense_profile
         self.condition = condition
         self.combat_mode = CombatMode.RANGED_DIRECT
+
+        # -------------------------
+        # ACTION ID
+        # -------------------------
+        self.action_id = f"REACTION_FIRE:{unit_id}:{target_id}"
+
 
 
 ================================================================================
@@ -4736,61 +4773,55 @@ FILE: C:\repos\python\assault\assault_model\rules\movement_rules.py
 from assault_model.rules.movement_path import MovementPath
 from assault_model.rules.movement_outcome import MovementOutcome
 from assault_model.map.hex_coord import HexCoord
-from assault_model.map.hex_direction import HexDirection
 
 from assault_model.rules.movement_terrain_rules import MovementTerrainRules
 
 
 class MovementRules:
-    """
-    Computes legal movement paths.
-
-    Version 1:
-    - Single-hex movement only
-    - No terrain cost
-    - No ZOC
-
-    Rules: TM-R02, TM-R03
-    """
 
     @staticmethod
     def get_legal_paths(game_state, unit):
-        """
-        Returns a list of MovementPath.
-        Each path represents ONE complete movement action.
 
-        Rules: TM-R02, TM-R03
-        """
         paths: list[MovementPath] = []
 
         pos: HexCoord = unit.position
         q = pos.q
         r = pos.r
 
-        for direction in HexDirection:
-            dq, dr = direction.value
+        # ✅ FIX: vecinos correctos según tu grid (odd-r)
+        if r % 2 == 0:
+            neighbors = [
+                (-1,  0),
+                (+1,  0),
+                ( 0, -1),
+                ( 0, +1),
+                (-1, -1),
+                (-1, +1),
+            ]
+        else:
+            neighbors = [
+                (-1,  0),
+                (+1,  0),
+                ( 0, -1),
+                ( 0, +1),
+                (+1, -1),
+                (+1, +1),
+            ]
+
+        for dq, dr in neighbors:
+
             target_q = q + dq
             target_r = r + dr
 
-            # -------------------------
-            # Hex outside map
-            # -------------------------
             hex_tile = game_state.game_map.get_hex(target_q, target_r)
             if hex_tile is None:
                 continue
 
-            # -------------------------
-            # Destination legality (terrain, structural rules)
-            # -------------------------
-            # Rules: TM-R02, TM-R03, TM-R09
             if not MovementTerrainRules.can_enter_hex(unit, hex_tile):
                 continue
 
             dest_hex = HexCoord(target_q, target_r)
 
-            # -------------------------
-            # Occupancy check
-            # -------------------------
             occupant = next(
                 (
                     u
@@ -4800,9 +4831,6 @@ class MovementRules:
                 None,
             )
 
-            # -------------------------
-            # EMPTY HEX → normal move
-            # -------------------------
             if occupant is None:
                 paths.append(
                     MovementPath(
@@ -4812,9 +4840,6 @@ class MovementRules:
                 )
                 continue
 
-            # -------------------------
-            # ENEMY → close combat
-            # -------------------------
             if occupant.side != unit.side:
                 paths.append(
                     MovementPath(
@@ -4825,9 +4850,6 @@ class MovementRules:
                 )
                 continue
 
-            # -------------------------
-            # FRIENDLY VEHICLE → embark
-            # -------------------------
             if getattr(occupant, "is_vehicle", False):
                 paths.append(
                     MovementPath(
@@ -4837,12 +4859,6 @@ class MovementRules:
                     )
                 )
                 continue
-
-            # -------------------------
-            # FRIENDLY INFANTRY → illegal destination
-            # -------------------------
-            # Rule: TM-R09
-            # No path added
 
         return paths
 
@@ -5112,8 +5128,11 @@ def _trace(tag: str, **data):
 class RuntimeGameState:
     """
     ✅ Pure execution engine
-    ✅ No activation system
     ✅ Deterministic
+
+    Extended with:
+    ✅ alternating activations (no hardcode)
+    ✅ backward compatibility (turn_has_ended still works)
     """
 
     def __init__(self, base_state: GameState, scenario):
@@ -5121,11 +5140,56 @@ class RuntimeGameState:
         self.scenario = scenario
         self.turn = TurnState(turn_number=base_state.turn)
 
-        # ✅ NEW: control de activaciones por turno
+        # activation tracking (existing)
         self.activated_units = set()
 
+        # --- NEW: dynamic sides ---
+        self.sides = self._extract_sides()
+        self.active_side = self.sides[0] if self.sides else None
+
     # =================================================
-    # TURN END (FIX FINAL)
+    # SIDES (NEW)
+    # =================================================
+    def _extract_sides(self):
+        return sorted({
+            u.side for u in self.base_state.units
+        })
+
+    def get_available_units(self, side):
+        return [
+            u for u in self.base_state.units
+            if u.side == side
+            and u.unit_id not in self.activated_units
+            and self._can_unit_act(u)
+        ]
+
+    def _next_side(self, current):
+        if not self.sides:
+            return None
+        idx = self.sides.index(current)
+        return self.sides[(idx + 1) % len(self.sides)]
+
+    def next_activation(self):
+        if not self.active_side:
+            return
+
+        next_side = self._next_side(self.active_side)
+
+        for _ in range(len(self.sides)):
+            if self.get_available_units(next_side):
+                self.active_side = next_side
+                return
+            next_side = self._next_side(next_side)
+
+        # --- new turn ---
+        self.activated_units.clear()
+        self.base_state.turn += 1
+
+        self.sides = self._extract_sides()
+        self.active_side = self.sides[0] if self.sides else None
+
+    # =================================================
+    # TURN END (UNCHANGED - compatibility)
     # =================================================
     def turn_has_ended(self) -> bool:
         """
@@ -5143,7 +5207,7 @@ class RuntimeGameState:
         return True
 
     # =================================================
-    # ACTION GUARD
+    # ACTION GUARD (UNCHANGED)
     # =================================================
     def _can_unit_act(self, unit) -> bool:
         if unit is None:
@@ -5157,18 +5221,15 @@ class RuntimeGameState:
         return True
 
     # =================================================
-    # TURN CONTROL
+    # TURN CONTROL (MINIMAL EXTENSION)
     # =================================================
     def start_turn(self) -> None:
-        """
-        Start of turn:
-        - clears suppression
-        - clears fallback
-        - resets activation tracker
-        """
 
-        # ✅ reset activaciones
         self.activated_units.clear()
+
+        # --- NEW: reset sides each turn ---
+        self.sides = self._extract_sides()
+        self.active_side = self.sides[0] if self.sides else None
 
         for unit in self.base_state.units:
 
@@ -5200,7 +5261,7 @@ class RuntimeGameState:
         self._check_match_end()
 
     # =================================================
-    # MATCH END
+    # MATCH END (UNCHANGED)
     # =================================================
     def is_match_over(self) -> bool:
         return self.base_state.done
@@ -5271,7 +5332,7 @@ class RuntimeGameState:
                 })
 
     # =================================================
-    # MAIN EXECUTION
+    # MAIN EXECUTION (MINIMAL CHANGE)
     # =================================================
     def apply_action(
         self,
@@ -5294,36 +5355,23 @@ class RuntimeGameState:
             attacker=attacker.unit_id if attacker else None,
         )
 
-        # ✅ marcar unidad como activada
         if attacker:
             self.activated_units.add(attacker.unit_id)
 
-        # ✅ HARD BLOCK
         if attacker and not self._can_unit_act(attacker):
-
-            _trace(
-                "ACTION_BLOCKED",
-                unit=attacker.unit_id,
-            )
-
+            _trace("ACTION_BLOCKED", unit=attacker.unit_id)
             return None
 
         prev_position = None
         if attacker and attacker.position:
             prev_position = HexCoord(attacker.position.q, attacker.position.r)
 
-        # -------------------------------------------------
-        # WAIT
-        # -------------------------------------------------
         if isinstance(action, WaitAction):
             return {
                 "type": "WAIT",
                 "unit": attacker.unit_id if attacker else None
             }
 
-        # -------------------------------------------------
-        # APPLY ACTION
-        # -------------------------------------------------
         result = resolve_action(
             state=self.base_state,
             action=action,
@@ -5335,12 +5383,13 @@ class RuntimeGameState:
 
         self._check_match_end(context)
 
+        # --- NEW: activation step ---
+        if attacker:
+            self.next_activation()
+
         if self.base_state.done:
             return result
 
-        # -------------------------------------------------
-        # EVENT: MOVEMENT
-        # -------------------------------------------------
         if event_bus and prev_position and isinstance(action, MoveAction):
             unit_after = next(
                 (u for u in self.base_state.units if u.unit_id == action.unit_id),
@@ -5359,9 +5408,9 @@ class RuntimeGameState:
                         "to": new_position,
                     },
                 })
+
         update_spotting(self.base_state, self.scenario.terrain_config)
         return result
-
 
 
 ================================================================================

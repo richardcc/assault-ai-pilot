@@ -24,8 +24,7 @@ from assault_sim.heuristics.tactical_path_heuristic import TacticalPathHeuristic
 # GAE
 # -------------------------------------------------
 def compute_gae(rewards, values, dones, gamma, lam):
-    advantages = []
-    gae = 0.0
+    advantages = []a
 
     values = list(values) + [0.0]
 

@@ -1,6 +1,8 @@
 .\git_publish.ps1
 
 
+@folder C:\repos\python\assault
+
 cd C:\repos\python\assault\assault_ai_ui
 npm run dev
 

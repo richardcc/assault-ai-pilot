@@ -8,10 +8,13 @@ class ActivationManager:
     - No implicit active_unit
     - Explicit unit selection
     - Turn-based alternation
+    
+    Supports intelligent unit selection via optional selector callback.
     """
 
-    def __init__(self, state):
+    def __init__(self, state, unit_selector=None):
         self.state = state
+        self.unit_selector = unit_selector  # ✅ callback para selección inteligente
 
         # ✅ dinámico desde GameState
         self.sides = list(self._extract_sides())
@@ -73,9 +76,22 @@ class ActivationManager:
 
     def _find_activable_unit(self, side):
         """
-        Find first valid unit for a side respecting blocked units.
+        Find best valid unit for a side respecting blocked units.
+        
+        If unit_selector callback is provided, use it for intelligent selection.
+        Otherwise, fall back to sequential (first valid) selection.
         """
+        
+        # ✅ Si hay selector inteligente, usarlo
+        if self.unit_selector:
+            try:
+                best_unit = self.unit_selector(side, self.state, self.blocked_units)
+                if best_unit is not None and best_unit.unit_id not in self.blocked_units:
+                    return best_unit
+            except Exception as e:
+                print(f"[WARN] Unit selector failed: {e}, falling back to sequential")
 
+        # ✅ Fallback secuencial (primera unidad válida)
         for u in self.state.units:
 
             if not u.alive:

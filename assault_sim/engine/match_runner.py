@@ -4,13 +4,32 @@ from assault_sim.engine.activation_manager import ActivationManager
 
 class MatchRunner:
 
-    def __init__(self, env):
+    def __init__(self, env, controller=None):
         self.env = env
-        self.activation_manager = ActivationManager(env.sim.game_state)
+        self.controller = controller
+        # ✅ Si hay controller con select_best_unit, usarlo para selección inteligente
+        unit_selector = (
+            controller.select_best_unit 
+            if controller and hasattr(controller, 'select_best_unit') 
+            else None
+        )
+        self.activation_manager = ActivationManager(
+            env.sim.game_state, 
+            unit_selector=unit_selector
+        )
 
     def reset(self):
         obs = self.env.reset()
-        self.activation_manager = ActivationManager(self.env.sim.game_state)
+        # ✅ Mantener el selector al resetear
+        unit_selector = (
+            self.controller.select_best_unit 
+            if self.controller and hasattr(self.controller, 'select_best_unit') 
+            else None
+        )
+        self.activation_manager = ActivationManager(
+            self.env.sim.game_state,
+            unit_selector=unit_selector
+        )
         return obs
 
     def step(self, controller, obs):
@@ -73,8 +92,13 @@ class MatchRunner:
         # -----------------------------------------
         next_side = None
 
-        # ✅ Creamos copia temporal del scheduler
-        temp_am = ActivationManager(self.env.sim.game_state)
+        # ✅ Creamos copia temporal del scheduler con el mismo selector
+        unit_selector = (
+            self.controller.select_best_unit 
+            if self.controller and hasattr(self.controller, 'select_best_unit') 
+            else None
+        )
+        temp_am = ActivationManager(self.env.sim.game_state, unit_selector=unit_selector)
         temp_am.blocked_units = self.activation_manager.blocked_units.copy()
 
         for _ in range(len(temp_am.sides)):
