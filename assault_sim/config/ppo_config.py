@@ -4,9 +4,9 @@ class PPOConfig:
     TOTAL_UPDATES = 4000
 
     # PPO
-    ROLLOUT_STEPS = 128        # ↓ menos conservador
-    PPO_EPOCHS = 1            # ↑ más aprendizaje
-    CLIP_EPS = 0.1            # ↑ deja moverse
+    ROLLOUT_STEPS = 192        # ✅ más contexto (mejor decisiones)
+    PPO_EPOCHS = 3             # ✅ aprende mejor de cada batch
+    CLIP_EPS = 0.1
 
     # Discounting
     GAMMA = 0.99
@@ -14,11 +14,11 @@ class PPOConfig:
 
     # Loss
     VALUE_COEF = 0.5
-    ENTROPY_COEF = 0.05
+    ENTROPY_COEF = 0.05        # 👇 lo bajamos dinámico luego
 
     # Parallelism
-    NUM_ENVS = 16              # ↓ menos estabilidad, más reacción
-    BATCH_ROLLOUTS = 8        # ↓
+    NUM_ENVS = 20
+    BATCH_ROLLOUTS = 4
 
     # Optimizer
     LR = 8e-5

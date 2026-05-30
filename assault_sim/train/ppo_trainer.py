@@ -6,7 +6,7 @@ from assault_sim.config.ppo_config import PPOConfig
 
 
 # ----------------------------------------
-# ✅ GAE (CRÍTICO)
+# ✅ GAE
 # ----------------------------------------
 def compute_gae(rewards, values, dones, gamma, lam):
 
@@ -26,7 +26,7 @@ def compute_gae(rewards, values, dones, gamma, lam):
 # ----------------------------------------
 # ✅ PPO UPDATE
 # ----------------------------------------
-def ppo_update(policy, optimizer, batch, schedule, device):
+def ppo_update(policy, optimizer, batch, schedule, device, entropy_coef):
 
     update, alpha, kl_coef = schedule
 
@@ -52,6 +52,7 @@ def ppo_update(policy, optimizer, batch, schedule, device):
             + attack_dist.log_prob(attack_t)
         )
 
+        # ✅ ratio más estable
         ratio = torch.exp(torch.clamp(logp - old_logp_t, -5, 5))
 
         clipped = torch.clamp(
@@ -65,31 +66,34 @@ def ppo_update(policy, optimizer, batch, schedule, device):
             clipped * advantages
         ).mean()
 
-        value_loss = (returns - values.view(-1)).pow(2).mean()
+        # ✅ value loss estable
+        values_flat = values.view(-1)
+        value_loss = (returns - values_flat).pow(2).mean()
 
-        entropy = (
-            option_dist.entropy().mean()
-            + 0.5 * attack_dist.entropy().mean()
-        )
+        # ✅ entropy separado (más claro)
+        entropy_option = option_dist.entropy().mean()
+        entropy_attack = attack_dist.entropy().mean()
+        entropy = entropy_option + 0.5 * entropy_attack
 
+        # ✅ LOSS FINAL (CON ENTROPY DINÁMICO)
         loss = (
             policy_loss
             + PPOConfig.VALUE_COEF * value_loss
-            - PPOConfig.ENTROPY_COEF * entropy
+            - entropy_coef * entropy    # 🔥 AQUÍ CAMBIO CLAVE
         )
 
-        # ✅ KL
+        # ✅ KL penalty
         kl = (old_logp_t - logp).mean()
         loss += kl_coef * kl
 
-        # ✅ imitation
+        # ✅ imitation (teacher)
         imitation_loss = F.cross_entropy(option_logits, teacher_t)
         loss += alpha * imitation_loss
 
-        # ✅ controlled update
         if update:
             optimizer.zero_grad()
             loss.backward()
+            torch.nn.utils.clip_grad_norm_(policy.parameters(), 0.5)
             optimizer.step()
 
     return loss.item()

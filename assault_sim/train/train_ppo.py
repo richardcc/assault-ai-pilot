@@ -128,13 +128,20 @@ def main():
 
         schedule = ppo_schedule(rollout_idx)
 
+        # ✅ ENTROPY DECAY (AQUÍ)
+        entropy_coef = PPOConfig.ENTROPY_COEF * (
+            1.0 - rollout_idx / PPOConfig.TOTAL_UPDATES
+        )
+        entropy_coef = max(entropy_coef, 0.01)
+
         loss = ppo_update(
             policy,
             optimizer,
             batch,
             schedule,
             device,
-        )
+            entropy_coef,   # ✅ nuevo parámetro
+)
 
         # -------------------------------------------------
         # ✅ SYNC WEIGHTS (workers)
