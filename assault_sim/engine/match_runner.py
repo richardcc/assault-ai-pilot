@@ -7,37 +7,42 @@ class MatchRunner:
     def __init__(self, env, controller=None):
         self.env = env
         self.controller = controller
-        # ✅ Si hay controller con select_best_unit, usarlo para selección inteligente
+
         unit_selector = (
-            controller.select_best_unit 
-            if controller and hasattr(controller, 'select_best_unit') 
+            controller.select_best_unit
+            if controller and hasattr(controller, "select_best_unit")
             else None
         )
+
         self.activation_manager = ActivationManager(
-            env.sim.game_state, 
+            env.sim.game_state,
             unit_selector=unit_selector
         )
 
+    # -------------------------------------------------
     def reset(self):
         obs = self.env.reset()
-        # ✅ Mantener el selector al resetear
+
         unit_selector = (
-            self.controller.select_best_unit 
-            if self.controller and hasattr(self.controller, 'select_best_unit') 
+            self.controller.select_best_unit
+            if self.controller and hasattr(self.controller, "select_best_unit")
             else None
         )
+
         self.activation_manager = ActivationManager(
             self.env.sim.game_state,
             unit_selector=unit_selector
         )
+
         return obs
 
+    # -------------------------------------------------
     def step(self, controller, obs):
 
         state = self.env.sim.game_state
 
         # -----------------------------------------
-        # Next activation
+        # NEXT ACTIVATION
         # -----------------------------------------
         side, unit = None, None
 
@@ -71,12 +76,16 @@ class MatchRunner:
             }
 
         # -----------------------------------------
-        # ACTION
+        # ✅ ACTION (NUEVO MODELO LIMPIO)
         # -----------------------------------------
+        # 🔥 DELEGAR COMPLETAMENTE EN EL CONTROLLER
         action = controller.act(state, side, unit, obs)
 
+        # fallback safety (muy importante)
         if action is None:
+            print(f"[WARN] {side}:{unit.unit_id} returned None → WAIT")
             action = WaitAction(unit.unit_id)
+
         next_obs, reward, done, info = self.env.step(action)
 
         # -----------------------------------------
@@ -88,17 +97,21 @@ class MatchRunner:
         )
 
         # -----------------------------------------
-        # ✅ SAFE NEXT SIDE DETECTION (SIN ROMPER ESTADO)
+        # DETECT NEXT SIDE
         # -----------------------------------------
         next_side = None
 
-        # ✅ Creamos copia temporal del scheduler con el mismo selector
         unit_selector = (
-            self.controller.select_best_unit 
-            if self.controller and hasattr(self.controller, 'select_best_unit') 
+            self.controller.select_best_unit
+            if self.controller and hasattr(self.controller, "select_best_unit")
             else None
         )
-        temp_am = ActivationManager(self.env.sim.game_state, unit_selector=unit_selector)
+
+        temp_am = ActivationManager(
+            self.env.sim.game_state,
+            unit_selector=unit_selector
+        )
+
         temp_am.blocked_units = self.activation_manager.blocked_units.copy()
 
         for _ in range(len(temp_am.sides)):
@@ -108,7 +121,7 @@ class MatchRunner:
                 break
 
         # -----------------------------------------
-        # ✅ DETECT FIN TURNO RL
+        # RL TURN END
         # -----------------------------------------
         is_rl_turn_end = (
             side == controller.rl_side and

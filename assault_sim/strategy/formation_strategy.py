@@ -2,6 +2,9 @@ from enum import Enum
 from typing import Optional
 import random
 
+from assault_model.map.hex_utils import hex_distance
+from assault_model.map.hex_coord import HexCoord
+
 
 class FormationStrategy(Enum):
     ATTACK = 0
@@ -30,8 +33,15 @@ class FormationStrategyEngine:
     # -------------------------------------------------
     def _select_strategy(self, state, rl_side):
 
-        own_units = [u for u in state.units if u.side == rl_side and u.alive]
-        enemy_units = [u for u in state.units if u.side != rl_side and u.alive]
+        own_units = [
+            u for u in state.units
+            if u.side == rl_side and u.alive and u.position is not None
+        ]
+
+        enemy_units = [
+            u for u in state.units
+            if u.side != rl_side and u.alive and u.position is not None
+        ]
 
         # -------------------------------------------------
         # ✅ fallback seguro
@@ -40,21 +50,21 @@ class FormationStrategyEngine:
             return FormationStrategy.PUSH_VP
 
         # -------------------------------------------------
-        # DISTANCIA A ENEMIGOS
+        # ✅ DISTANCIA A ENEMIGOS
         # -------------------------------------------------
         def min_enemy_distance():
             best = 999
             for u in own_units:
                 for e in enemy_units:
-                    dx = abs(u.position.q - e.position.q)
-                    dy = abs(u.position.r - e.position.r)
-                    best = min(best, dx + dy)
+                    d = hex_distance(u.position, e.position)
+                    if d < best:
+                        best = d
             return best
 
         enemy_dist = min_enemy_distance()
 
         # -------------------------------------------------
-        # CLEANUP (enemigos débiles)
+        # ✅ CLEANUP (enemigos débiles)
         # -------------------------------------------------
         low_hp_enemies = [
             e for e in enemy_units
@@ -62,7 +72,7 @@ class FormationStrategyEngine:
         ]
 
         # -------------------------------------------------
-        # VP
+        # ✅ VP DISTANCE
         # -------------------------------------------------
         vp_positions = []
 
@@ -81,42 +91,55 @@ class FormationStrategyEngine:
             best = 999
             for u in own_units:
                 for vp in vp_positions:
-                    dx = abs(u.position.q - vp[0])
-                    dy = abs(u.position.r - vp[1])
-                    best = min(best, dx + dy)
+                    vp_pos = HexCoord(vp[0], vp[1])
+                    d = hex_distance(u.position, vp_pos)
+                    if d < best:
+                        best = d
             return best
 
         vp_dist = distance_to_vp()
 
         # -------------------------------------------------
-        # ✅ DECISIONES
+        # ✅ DECISIONES SUAVES (CLAVE)
         # -------------------------------------------------
 
-        # 🔥 1. CLEANUP agresivo si enemigos débiles
+        roll = random.random()
+
+        # CLEANUP
         if len(low_hp_enemies) >= 2:
             return FormationStrategy.CLEANUP
 
-        # 🔥 2. COMBATE cercano → SIEMPRE atacar
+        # 🔥 COMBATE CERCANO (NO FORZAR ATTACK)
         if enemy_dist <= 3:
-            return FormationStrategy.ATTACK
 
-        # 🔥 3. cerca de VP → mantener presión
+            if roll < 0.4:
+                return FormationStrategy.ATTACK
+            elif roll < 0.7:
+                return FormationStrategy.HOLD_VP
+            else:
+                return FormationStrategy.CLEANUP
+
+        # 🔥 CERCA DE VP
         if vp_dist <= 2:
-            return FormationStrategy.HOLD_VP
 
-        # 🔥 4. lejos → push controlado PERO con tendencia a atacar
+            if roll < 0.5:
+                return FormationStrategy.HOLD_VP
+            elif roll < 0.75:
+                return FormationStrategy.ATTACK
+            else:
+                return FormationStrategy.PUSH_VP
+
+        # 🔥 LEJOS → MÁS MEZCLA REAL
         if vp_dist > 2:
-
-            roll = random.random()
 
             if roll < 0.4:
                 return FormationStrategy.PUSH_VP
-            elif roll < 0.7:
-                return FormationStrategy.ATTACK   # 🔥 más agresivo
-            else:
+            elif roll < 0.65:
                 return FormationStrategy.HOLD_VP
+            elif roll < 0.85:
+                return FormationStrategy.ATTACK
+            else:
+                return FormationStrategy.CLEANUP
 
-        # -------------------------------------------------
-        # ✅ FALLBACK GLOBAL
-        # -------------------------------------------------
-        return FormationStrategy.ATTACK
+        # fallback real
+        return FormationStrategy.HOLD_VP

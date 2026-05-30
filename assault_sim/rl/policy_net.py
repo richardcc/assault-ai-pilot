@@ -1,21 +1,15 @@
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
 
 
 class PolicyNet(nn.Module):
-    """
-    PPO Policy Network with dual decision heads + LSTM memory.
-    """
 
     def __init__(self, input_dim: int, num_options: int):
         super().__init__()
 
         self.hidden_size = 128
 
-        # -------------------------------------------------
-        # ✅ ENCODER (tu backbone)
-        # -------------------------------------------------
+        # Backbone
         self.backbone = nn.Sequential(
             nn.Linear(input_dim, 128),
             nn.LayerNorm(128),
@@ -25,46 +19,45 @@ class PolicyNet(nn.Module):
             nn.ReLU(),
         )
 
-        # -------------------------------------------------
-        # 🔥 LSTM (NUEVO)
-        # -------------------------------------------------
+        # LSTM
         self.lstm = nn.LSTM(
             input_size=128,
             hidden_size=self.hidden_size,
             batch_first=True
         )
 
-        # -------------------------------------------------
-        # ✅ OPTION HEAD
-        # -------------------------------------------------
+        # Heads
         self.option_head = nn.Linear(self.hidden_size, num_options)
-
-        # -------------------------------------------------
-        # ✅ ATTACK MODE HEAD
-        # -------------------------------------------------
         self.attack_mode_head = nn.Linear(self.hidden_size, 2)
-
-        # -------------------------------------------------
-        # ✅ VALUE HEAD
-        # -------------------------------------------------
         self.value_head = nn.Linear(self.hidden_size, 1)
 
     # -------------------------------------------------
-    def forward(self, x, hidden):
+    def forward(self, x, hidden=None):
 
-        # ✅ encoder
-        features = self.backbone(x)   # [B, 128]
+        # ✅ asegurar tensor
+        if not isinstance(x, torch.Tensor):
+            x = torch.tensor(x, dtype=torch.float32)
 
-        # ✅ LSTM espera [B, T, F]
-        features = features.unsqueeze(1)  # T=1
+        if x.dim() == 1:
+            x = x.unsqueeze(0)
+
+        # ✅ hidden init
+        if hidden is None:
+            hidden = self.init_hidden(x.shape[0], device=x.device)
+
+        # encoder
+        features = self.backbone(x)
+
+        # LSTM [B, T, F]
+        features = features.unsqueeze(1)
 
         out, hidden = self.lstm(features, hidden)
 
-        out = out.squeeze(1)  # [B, 128]
+        out = out.squeeze(1)
 
         option_logits = self.option_head(out)
         attack_mode_logits = self.attack_mode_head(out)
-        value = self.value_head(out)
+        value = self.value_head(out).squeeze(-1)
 
         return option_logits, attack_mode_logits, value, hidden
 

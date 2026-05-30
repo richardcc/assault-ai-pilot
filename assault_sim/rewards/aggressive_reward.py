@@ -1,205 +1,197 @@
-from .base_reward import BaseReward
-from assault_model.actions.status import WaitAction
+    from .base_reward import BaseReward
+    from assault_model.actions.status import WaitAction
 
 
-class ProgressiveReward(BaseReward):
+    class ProgressiveReward(BaseReward):
 
-    def __init__(self, rl_side=None):
-        super().__init__(rl_side)
-        self.rl_side = rl_side
+        def __init__(self, rl_side=None):
+            super().__init__(rl_side)
+            self.rl_side = rl_side
+            self.last_action = None
 
-        # anti-spam
-        self.last_action = None
+        def compute(
+            self,
+            *,
+            state,
+            next_state,
+            action,
+            active,
+            info,
+            pre_dist,
+            post_dist
+        ) -> float:
 
-    def compute(
-        self,
-        *,
-        state,
-        next_state,
-        action,
-        active,
-        info,
-        pre_dist,
-        post_dist
-    ) -> float:
+            info = info or {}
+            reward = 0.0
 
-        info = info or {}
-        reward = 0.0
+            # -------------------------------------------------
+            # DATA
+            # -------------------------------------------------
+            damage = info.get("rl_damage", 0)
+            damage_taken = info.get("enemy_damage", 0)
+            killed = info.get("rl_kills", 0) > 0
 
-        # -------------------------------------------------
-        # ✅ DATOS
-        # -------------------------------------------------
-        damage = info.get("rl_damage", 0)
-        damage_taken = info.get("enemy_damage", 0)
-        killed = info.get("rl_kills", 0) > 0
+            action_class = info.get("action_class", "")
+            action_upper = action_class.upper()
 
-        action_class = info.get("action_class", "")
-        action_upper = action_class.upper()
+            l2 = info.get("l2_option", "")
+            is_attack = "ATTACK" in action_upper
 
-        # ✅ 🔥 L2 REAL (CRÍTICO)
-        l2 = info.get("l2_option", "")
+            # =================================================
+            # ✅ DAMAGE (CORE)
+            # =================================================
+            reward += damage * 0.8
+            reward -= damage_taken * 0.8
 
-        is_attack = "ATTACK" in action_upper
+            # ✅ trade quality (CLAVE)
+            if damage > damage_taken:
+                reward += 0.2
 
-        # -------------------------------------------------
-        # ✅ DAMAGE
-        # -------------------------------------------------
-        reward += 1.4 * damage
+            # ✅ perfect trade
+            if damage_taken == 0 and damage > 0:
+                reward += 0.3
 
-        if damage > 0:
-            reward += 0.25
-
-        # -------------------------------------------------
-        # ✅ DAMAGE TAKEN
-        # -------------------------------------------------
-        reward -= 0.2 * damage_taken
-
-        # -------------------------------------------------
-        # ✅ ATAQUE BASE
-        # -------------------------------------------------
-        if is_attack:
-            reward += 0.6
-
-        if is_attack and damage > 0:
-            reward += 1.0
-
-        if is_attack and damage == 0:
-            reward -= 0.01
-
-        # -------------------------------------------------
-        # ✅ TIPO DE ATAQUE
-        # -------------------------------------------------
-        if "ASSAULT" in action_upper:
-            reward += 1.2
-
-        elif "CLOSE" in action_upper:
-            reward += 0.6
-
-        elif "RANGED" in action_upper:
-            reward += 0.3
-
-        # anti-spam ranged
-        if "RANGEDDIRECTATTACK" in action_upper:
-            reward -= 0.2
-
-        # -------------------------------------------------
-        # ✅ ATAQUE CERCA
-        # -------------------------------------------------
-        if is_attack and pre_dist is not None and pre_dist <= 3:
-            reward += 0.8
-
-        # -------------------------------------------------
-        # ✅ KILL
-        # -------------------------------------------------
-        if killed:
-            reward += 6.0
-
-        # -------------------------------------------------
-        # ✅ MUERTE PROPIA
-        # -------------------------------------------------
-        if active and not active.alive:
-            reward -= 3.0
-
-        # -------------------------------------------------
-        # ✅ MOVIMIENTO
-        # -------------------------------------------------
-        if pre_dist is not None and post_dist is not None:
-
-            if post_dist < pre_dist:
-                reward += 0.05
-
-            if post_dist > pre_dist:
-                reward -= 0.02
-
-            if post_dist <= 2:
+            # ✅ survivability (MUY IMPORTANTE)
+            if damage_taken == 0:
                 reward += 0.1
 
-        # -------------------------------------------------
-        # ✅ NO ATACAR CERCA
-        # -------------------------------------------------
-        if not is_attack and pre_dist is not None and pre_dist <= 3:
-            reward -= 0.4
+            # =================================================
+            # ✅ ATTACK QUALITY
+            # =================================================
+            if is_attack:
+                reward += 0.5
 
-        # -------------------------------------------------
-        # ✅ INACTIVIDAD
-        # -------------------------------------------------
-        if damage == 0 and not is_attack:
-            reward -= 0.08
+                if damage > 0:
+                    reward += 1.0
+                else:
+                    reward -= 0.3
 
-        # -------------------------------------------------
-        # ✅ WAIT
-        # -------------------------------------------------
-        if isinstance(action, WaitAction):
-            reward -= 0.2
+                if damage_taken > damage:
+                    reward -= 0.3
 
-        # -------------------------------------------------
-        # ✅ RETREAT
-        # -------------------------------------------------
-        if l2 == "RETREAT":
-            reward -= 0.08
+            # =================================================
+            # ✅ KILL
+            # =================================================
+            if killed:
+                reward += 4.0
 
-        # -------------------------------------------------
-        # ✅ 🔥 FLANK (L2 REAL)
-        # -------------------------------------------------
-        if l2 == "FLANK":
-            reward -= 0.25
+            # =================================================
+            # ✅ POSITIONING
+            # =================================================
+            if pre_dist is not None and post_dist is not None:
 
-            if pre_dist is not None and pre_dist <= 4:
-                reward -= 0.6
+                if post_dist < pre_dist:
+                    reward += 0.05
 
-        # -------------------------------------------------
-        # ✅ 🔥 INCENTIVAR ATTACK (L2)
-        # -------------------------------------------------
-        if l2 == "ATTACK":
-            reward += 0.6
+                if post_dist <= 2:
+                    reward += 0.1
 
-        # -------------------------------------------------
-        # ✅ 🔥 INCENTIVAR ADVANCE
-        # -------------------------------------------------
-        if l2 == "ADVANCE":
-            reward += 0.2
+            # =================================================
+            # ✅ HOLD PASIVO (NO FORZAR ATTACK)
+            # =================================================
+            if (
+                l2 == "HOLD"
+                and not is_attack
+                and pre_dist is not None
+                and pre_dist <= 3
+            ):
+                reward -= 0.5
 
-        # -------------------------------------------------
-        # ✅ ANTI-SPAM
-        # -------------------------------------------------
-        if self.last_action is not None and self.last_action == action_class:
-            reward -= 0.1
+            # =================================================
+            # ✅ INACTIVITY
+            # =================================================
+            if damage == 0 and not is_attack:
+                reward -= 0.05
 
-        self.last_action = action_class
+            # =================================================
+            # ✅ WAIT
+            # =================================================
+            if isinstance(action, WaitAction):
+                reward -= 0.2
 
-        # -------------------------------------------------
-        # ✅ VP
-        # -------------------------------------------------
-        if hasattr(state, "vp_tracker") and state.vp_tracker:
-            if hasattr(next_state, "vp_tracker") and next_state.vp_tracker:
+            # =================================================
+            # ✅ L2 CONTROL (TACTICAL)
+            # =================================================
 
-                prev_vp = state.vp_tracker.score.get(self.rl_side, 0)
-                new_vp = next_state.vp_tracker.score.get(self.rl_side, 0)
+            # -------------------------
+            # ATTACK
+            # -------------------------
+            if l2 == "ATTACK":
+                reward += 0.2
 
-                delta_vp = new_vp - prev_vp
+            # -------------------------
+            # RETREAT (REAL)
+            # -------------------------
+            elif l2 == "RETREAT":
 
-                if delta_vp != 0:
-                    reward += delta_vp * 1.3
+                if pre_dist is not None:
 
-        # -------------------------------------------------
-        # ✅ ENDGAME
-        # -------------------------------------------------
-        if getattr(next_state, "done", False):
-            winner = getattr(next_state, "winner", None)
+                    if pre_dist <= 3:
+                        reward += 0.5   # ✅ escape inteligente
 
-            if winner == self.rl_side:
-                reward += 6.0
-            elif winner is not None:
-                reward -= 6.0
+                    if damage_taken == 0:
+                        reward += 0.2   # ✅ evitó daño
 
-        # -------------------------------------------------
-        # ✅ COSTE TEMPORAL
-        # -------------------------------------------------
-        reward -= 0.03
+                else:
+                    reward += 0.1
 
-        # -------------------------------------------------
-        # ✅ CLIP
-        # -------------------------------------------------
-        reward = max(min(reward, 10.0), -10.0)
+            # -------------------------
+            # FLANK (REAL)
+            # -------------------------
+            elif l2 == "FLANK":
 
-        return reward
+                if damage == 0:
+                    reward += 0.3
+
+                if pre_dist is not None and post_dist is not None:
+                    if abs(post_dist - pre_dist) <= 1:
+                        reward += 0.2   # ✅ reposicionamiento
+
+                if damage_taken == 0:
+                    reward += 0.1       # ✅ posición segura
+
+            # -------------------------
+            # ADVANCE CONTROL (ANTI-SUICIDIO)
+            # -------------------------
+            if l2 == "ADVANCE" and damage_taken > 0:
+                reward -= 0.25
+
+            # =================================================
+            # ✅ ANTI-SPAM
+            # =================================================
+            if self.last_action is not None and self.last_action == action_class:
+                reward -= 0.1
+
+            self.last_action = action_class
+
+            # =================================================
+            # ✅ VICTORY POINTS
+            # =================================================
+            if hasattr(state, "vp_tracker") and state.vp_tracker:
+                if hasattr(next_state, "vp_tracker") and next_state.vp_tracker:
+
+                    prev_vp = state.vp_tracker.score.get(self.rl_side, 0)
+                    new_vp = next_state.vp_tracker.score.get(self.rl_side, 0)
+
+                    reward += (new_vp - prev_vp) * 1.2
+
+            # =================================================
+            # ✅ ENDGAME
+            # =================================================
+            if getattr(next_state, "done", False):
+                winner = getattr(next_state, "winner", None)
+
+                if winner == self.rl_side:
+                    reward += 5.0
+                elif winner is not None:
+                    reward -= 5.0
+
+            # =================================================
+            # ✅ TIME COST
+            # =================================================
+            reward -= 0.02
+
+            # =================================================
+            # ✅ CLIP
+            # =================================================
+            return max(min(reward, 10.0), -10.0)

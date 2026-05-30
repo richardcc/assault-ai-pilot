@@ -1,154 +1,152 @@
-from assault_model.state.game_state import GameState
+from assault_sim.strategy.formation_strategy import FormationStrategyEngine
 from assault_model.actions.status import WaitAction
+from assault_sim.rl.tactical_options import TacticalOption
 
 
 class DecisionEngineController:
-    def __init__(self, env, decision_engine=None, heuristic_controller=None):
-        """
-        Simulation controller for DecisionEngine-based execution.
 
-        :param env: SimEnv instance
-        :param decision_engine: planner (independent, no RL)
-        :param heuristic_controller: optional fallback
-        """
-        self.env = env
+    def __init__(self, rl_side, decision_engine, option_policy, heuristic, sim_env):
+        self.rl_side = rl_side
         self.decision_engine = decision_engine
-        self.heuristic_controller = heuristic_controller
+        self.option_policy = option_policy
+        self.heuristic = heuristic
+        self.sim_env = sim_env
 
-    # --------------------------------------------------
-    # ✅ MAIN DECISION ROUTING
-    # --------------------------------------------------
-    def _select_action(self, state, active_side, available_units):
+        # PPO tracking
+        self.current_option = None
+        self.current_attack_mode = 0
+        self.last_logp = None
+        self.last_value = None
+
+        # L3 strategy layer
+        self.formation_engine = FormationStrategyEngine()
+        self.current_strategy = None
+
+        self.debug = False
+
+        # Train vs evaluation mode
+        self.training_mode = True
+
+    # -------------------------------------------------
+    def reset(self):
         """
-        Decision priority:
-        1. DecisionEngine (planner)
-        2. Heuristic fallback
-        3. Safe fallback (wait)
+        Reset per-episode state.
+        This is critical for LSTM stability and strategy consistency.
         """
+        if hasattr(self.option_policy, "reset_hidden"):
+            self.option_policy.reset_hidden()
 
-        # ✅ 1. DecisionEngine (PRIMARY)
-        if self.decision_engine:
-            intent = self.decision_engine.compute_intent(self.env)
+        # Reset strategy state
+        self.formation_engine.current_strategy = None
+        self.formation_engine.remaining_steps = 0
+        self.current_strategy = None
 
-            if intent and isinstance(intent, tuple) and len(intent) == 2:
-                unit, action = intent
-                return unit, action
+    # -------------------------------------------------
+    def act(self, state, side, unit, obs):
 
-        # ✅ 2. Heuristic fallback
-        if self.heuristic_controller:
-            from assault_sim.rl.tactical_options import TacticalOption
+        # =================================================
+        # RL SIDE
+        # =================================================
+        if side == self.rl_side:
 
-            unit = available_units[0]
+            # -------------------------------------------------
+            # L3: Update strategy every step
+            # -------------------------------------------------
+            game_state = self.sim_env.game_state
+            strategy = self.formation_engine.update(game_state, self.rl_side)
+            self.current_strategy = strategy
 
-            action = self.heuristic_controller.choose_action(
-                state,
-                unit,
-                TacticalOption.ATTACK
-            )
+            # -------------------------------------------------
+            # L2: Sample option from policy (single call)
+            # -------------------------------------------------
+            option, attack_mode, logp, value = self.option_policy.choose_option(obs)
 
-            if action:
-                return unit, action
+            # -------------------------------------------------
+            # 🔥 L3 → L2 bias (key fix)
+            # -------------------------------------------------
+            if strategy is not None:
 
-        # ✅ 3. Safe fallback
-        unit = available_units[0]
-        return unit, WaitAction(unit.unit_id)
+                if strategy.name == "ATTACK":
+                    if option == TacticalOption.ADVANCE:
+                        option = TacticalOption.ATTACK
 
-    # --------------------------------------------------
-    # ✅ MAIN LOOP
-    # --------------------------------------------------
-    def run_simulation(self):
-        state = self.env.reset()
-        steps = 0
+                elif strategy.name == "PUSH_VP":
+                    if option == TacticalOption.HOLD:
+                        option = TacticalOption.ADVANCE
 
-        print("[SIM START] DecisionEngine simulation started.")
+                elif strategy.name == "HOLD_VP":
+                    if option == TacticalOption.ADVANCE:
+                        option = TacticalOption.HOLD
 
-        while not self.env.game_state.done:
-            runtime = self.env.runtime
-            active_side = getattr(runtime, "active_side", None)
+                elif strategy.name == "CLEANUP":
+                    option = TacticalOption.ATTACK
 
-            # --------------------------------------------------
-            # ✅ FAILSAFE
-            # --------------------------------------------------
-            if not active_side:
-                state, _, done, _ = self.env.step(WaitAction("SYSTEM"))
-                if done:
-                    break
-                continue
+            # Store PPO outputs
+            self.current_option = option
+            self.current_attack_mode = attack_mode if attack_mode is not None else 0
+            self.last_logp = logp
+            self.last_value = value
 
-            # --------------------------------------------------
-            # ✅ AVAILABLE UNITS
-            # --------------------------------------------------
-            available_units = [
-                u for u in self.env.game_state.units
-                if u.side == active_side
-                and getattr(u, "alive", True)
-                and u.unit_id not in runtime.activated_units
-            ]
+            # -------------------------------------------------
+            # DecisionEngine only active during evaluation
+            # -------------------------------------------------
+            intent = None
+            if not self.training_mode:
+                intent = self.decision_engine.compute_intent(self.sim_env)
 
-            # --------------------------------------------------
-            # ✅ TURN HANDLING
-            # --------------------------------------------------
-            if not available_units:
-                state, _, done, _ = self.env.step(WaitAction("SYSTEM"))
-                if done:
-                    break
-                continue
+            # -------------------------------------------------
+            # Intent-based execution (evaluation only)
+            # -------------------------------------------------
+            if intent:
+                chosen_unit, action = intent
 
-            # --------------------------------------------------
-            # ✅ DECISION
-            # --------------------------------------------------
-            current_unit, action_to_execute = self._select_action(
-                state,
-                active_side,
-                available_units
-            )
+                if chosen_unit and chosen_unit.unit_id == unit.unit_id:
+                    action.unit_id = unit.unit_id
+                    self.sim_env.runtime.activated_units.add(unit.unit_id)
+                    return action
 
-            # --------------------------------------------------
-            # ✅ SAFETY
-            # --------------------------------------------------
-            if action_to_execute and current_unit:
-                action_to_execute.unit_id = current_unit.unit_id
+            # -------------------------------------------------
+            # PPO + heuristic execution (training path)
+            # -------------------------------------------------
+            action = self.heuristic.choose_action(state, unit, option)
 
-            # --------------------------------------------------
-            # ✅ MARK ACTIVATED
-            # --------------------------------------------------
-            runtime.activated_units.add(current_unit.unit_id)
+            if action is None:
+                if self.debug:
+                    print(f"[RL] {unit.unit_id} -> WAIT (fallback)")
+                action = WaitAction(unit.unit_id)
 
-            # --------------------------------------------------
-            # ✅ EXECUTE
-            # --------------------------------------------------
-            state, _, done, _ = self.env.step(action_to_execute)
-            steps += 1
+            action.unit_id = unit.unit_id
+            self.sim_env.runtime.activated_units.add(unit.unit_id)
 
-            # --------------------------------------------------
-            # ✅ CLEAR DECISION ENGINE CACHE
-            # --------------------------------------------------
-            if self.decision_engine and hasattr(self.decision_engine, "clear_cache"):
-                self.decision_engine.clear_cache()
+            return action
 
-            # --------------------------------------------------
-            # ✅ DEBUG OUTPUT
-            # --------------------------------------------------
-            action_name = getattr(
-                action_to_execute,
-                "action_id",
-                action_to_execute.__class__.__name__
-            )
+        # =================================================
+        # ENEMY SIDE (heuristic only)
+        # =================================================
+        options_to_try = [
+            TacticalOption.ATTACK,
+            TacticalOption.FLANK,
+            TacticalOption.ADVANCE,
+            TacticalOption.RETREAT,
+            TacticalOption.HOLD,
+        ]
 
-            print(
-                f"[STEP {steps:03d}] "
-                f"Side: {active_side} | "
-                f"Unit: {current_unit.unit_id} | "
-                f"Action: {action_name}"
-            )
+        action = None
 
-        # --------------------------------------------------
-        # ✅ END
-        # --------------------------------------------------
-        print(
-            f"[SIM DONE] Winner: {self.env.game_state.winner} | "
-            f"Reason: {getattr(self.env.game_state, 'end_reason', 'N/A')} | "
-            f"Steps: {steps}"
-        )
+        for opt in options_to_try:
+            action = self.heuristic.choose_action(state, unit, opt)
 
-        return self.env.game_state
+            if action is not None:
+                if self.debug:
+                    print(f"[ENEMY] {unit.unit_id} -> {opt.name}")
+                break
+
+        if action is None:
+            if self.debug:
+                print(f"[ENEMY] {unit.unit_id} -> WAIT (fallback)")
+            action = WaitAction(unit.unit_id)
+
+        action.unit_id = unit.unit_id
+        self.sim_env.runtime.activated_units.add(unit.unit_id)
+
+        return action

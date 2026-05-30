@@ -1,24 +1,27 @@
 import copy
 from assault_model.actions.status import WaitAction
 from assault_model.actions.action_catalog import ActionCatalog
+from assault_model.map.hex_utils import hex_distance
+from assault_model.map.hex_coord import HexCoord
+from assault_sim.strategy.formation_strategy import FormationStrategyEngine
 
 
 class DecisionEngine:
     """
     Decision engine using:
-    - ActionCatalog (action generation)
-    - Environment simulation (lookahead)
-    - Heuristic state evaluation (NO RL dependency)
+    - ActionCatalog for action generation
+    - Environment simulation for lookahead
+    - Heuristic evaluation (no RL dependency)
 
     Returns INTENT only (no execution)
     """
 
     def __init__(self):
-        # ✅ Cache to avoid recomputing same state decisions
+        # Cache for unit selection decisions per turn/state
         self._unit_selection_cache = {}
 
     # --------------------------------------------------
-    # ✅ MAIN ENTRY WITH CACHE
+    # MAIN ENTRY (WITH CACHE)
     # --------------------------------------------------
     def compute_intent(self, env):
         state = env.game_state
@@ -30,11 +33,11 @@ class DecisionEngine:
             tuple(sorted(runtime.activated_units))
         )
 
-        # ✅ CACHE HIT
+        # Cache hit
         if cache_key in self._unit_selection_cache:
             return self._unit_selection_cache[cache_key]
 
-        # 1. Available units
+        # Get available units
         units = [
             u for u in state.units
             if u.side == active_side
@@ -46,9 +49,9 @@ class DecisionEngine:
 
         best_unit = None
         best_action = None
-        best_score = -999999
+        best_score = float("-inf")
 
-        # 2. Evaluate all unit-action pairs
+        # Evaluate all unit-action pairs
         for unit in units:
             actions = self._get_unit_actions(env, unit)
 
@@ -68,13 +71,14 @@ class DecisionEngine:
         return None
 
     # --------------------------------------------------
-    # ✅ CLEAR CACHE
+    # CACHE MANAGEMENT
     # --------------------------------------------------
     def clear_cache(self):
+        """Clear per-turn decision cache."""
         self._unit_selection_cache.clear()
 
     # --------------------------------------------------
-    # ✅ ACTION GENERATION
+    # ACTION GENERATION
     # --------------------------------------------------
     def _get_unit_actions(self, env, unit):
         catalog = ActionCatalog(
@@ -85,24 +89,22 @@ class DecisionEngine:
         return catalog.actions()
 
     # --------------------------------------------------
-    # ✅ EVALUATION (PURE, NO RL)
+    # ACTION EVALUATION
     # --------------------------------------------------
     def evaluate_action(self, env, action, side):
         """
-        Simulates action outcome and evaluates resulting state.
+        Simulates the action and evaluates resulting state.
+        Falls back to heuristic if simulation fails.
         """
-
         try:
-            # ✅ simulate action
             sandbox_env = copy.deepcopy(env)
 
-            # Disable event emission (performance)
+            # Disable events for performance
             if hasattr(sandbox_env, "event_bus"):
                 sandbox_env.event_bus = None
 
             sandbox_env.step(action)
 
-            # ✅ evaluate resulting state
             return self._evaluate_state_quality(
                 sandbox_env.game_state,
                 side
@@ -112,19 +114,19 @@ class DecisionEngine:
             return self._heuristic_score(action)
 
     # --------------------------------------------------
-    # ✅ STATE EVALUATION (KEY FUNCTION)
+    # STATE EVALUATION (CORE HEURISTIC)
     # --------------------------------------------------
     def _evaluate_state_quality(self, state, side):
 
         # ----------------------------------------
-        # ✅ Victory Points
+        # Victory points
         # ----------------------------------------
         vp_score = 0
         if hasattr(state, "vp_tracker") and hasattr(state.vp_tracker, "total_points"):
             vp_score = state.vp_tracker.total_points
 
         # ----------------------------------------
-        # ✅ Units split
+        # Unit split
         # ----------------------------------------
         friendly_units = [
             u for u in state.units
@@ -137,19 +139,19 @@ class DecisionEngine:
         ]
 
         # ----------------------------------------
-        # ✅ HP
+        # HP totals
         # ----------------------------------------
         friendly_hp = sum(getattr(u, "hp", 0) for u in friendly_units)
         enemy_hp = sum(getattr(u, "hp", 0) for u in enemy_units)
 
         # ----------------------------------------
-        # ✅ Unit counts
+        # Unit counts
         # ----------------------------------------
         num_friendly = len(friendly_units)
         num_enemy = len(enemy_units)
 
         # ----------------------------------------
-        # ✅ Dead units
+        # Dead units
         # ----------------------------------------
         friendly_dead = len([
             u for u in state.units
@@ -162,7 +164,7 @@ class DecisionEngine:
         ])
 
         # ----------------------------------------
-        # ✅ Low HP units (critical state)
+        # Critical HP units
         # ----------------------------------------
         low_enemy = sum(
             1 for u in enemy_units if getattr(u, "hp", 0) <= 1
@@ -173,58 +175,62 @@ class DecisionEngine:
         )
 
         # ----------------------------------------
-        # ✅ Distance to VP (progress signal)
+        # ✅ Distance to VP (HEX CORRECT)
         # ----------------------------------------
-        def distance(a, b):
-            return abs(a.q - b.q) + abs(a.r - b.r)
-
         progress_score = 0
         vp_positions = []
 
-        if (
-            hasattr(state, "game_map") and
-            hasattr(state.game_map, "vp_positions")
-        ):
+        if hasattr(state, "game_map") and hasattr(state.game_map, "vp_positions"):
             vp_positions = state.game_map.vp_positions
 
         if vp_positions:
             for u in friendly_units:
-                if hasattr(u, "position"):
-                    min_dist = min(
-                        distance(u.position, vp)
-                        for vp in vp_positions
-                    )
-                    progress_score -= min_dist  # más cerca = mejor
+                if hasattr(u, "position") and u.position is not None:
+
+                    try:
+                        min_dist = min(
+                            hex_distance(
+                                u.position,
+                                HexCoord(vp[0], vp[1])
+                            )
+                            for vp in vp_positions
+                        )
+                        progress_score -= min_dist
+                    except Exception:
+                        pass
 
         # ----------------------------------------
-        # ✅ FINAL SCORE
+        # Final score
         # ----------------------------------------
         score = 0
 
-        # 🎯 Objetivo de partida
+        # Objective (long-term)
         score += vp_score * 100
 
-        # ⚔️ Combate
+        # Combat advantage
         score += (friendly_hp - enemy_hp) * 5
         score += (num_friendly - num_enemy) * 40
 
-        # 💀 Eliminaciones
+        # Kills
         score += enemy_dead * 80
         score -= friendly_dead * 80
 
-        # 🔥 Estado crítico (setup de kills)
+        # Critical state pressure
         score += low_enemy * 25
         score -= low_friendly * 25
 
-        # 🗺️ Progreso estratégico
+        # Strategic positioning
         score += progress_score * 2
 
-        return score   
+        return score
 
     # --------------------------------------------------
-    # ✅ FALLBACK (IF SIMULATION FAILS)
+    # FALLBACK HEURISTIC
     # --------------------------------------------------
     def _heuristic_score(self, action):
+        """
+        Simple heuristic used when simulation fails.
+        """
         score = 0
         action_type = action.__class__.__name__.lower()
 

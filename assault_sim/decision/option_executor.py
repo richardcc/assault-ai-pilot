@@ -107,20 +107,7 @@ class OptionExecutor:
             enemies,
             key=lambda e: hex_distance(unit.position, e.position)
         )
-
-        dist_now = hex_distance(unit.position, target.position)
-
-        # ✅ solo atacar si el sistema lo permite (no forzar)
-        attacks = [
-            a for a in actions
-            if isinstance(a, RangedDirectAttack)
-        ]
-        if attacks:
-            return attacks[0]
-
         best = None
-        best_dist = dist_now
-
         for a in actions:
             if a.action_type.category != ActionCategory.MOVEMENT:
                 continue
@@ -154,14 +141,6 @@ class OptionExecutor:
             enemies,
             key=lambda e: hex_distance(unit.position, e.position)
         )
-
-        # ✅ igual que en move_closer → usar ataques válidos
-        attacks = [
-            a for a in actions
-            if isinstance(a, RangedDirectAttack)
-        ]
-        if attacks:
-            return attacks[0]
 
         best = None
         best_score = -999

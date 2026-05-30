@@ -84,11 +84,11 @@ class MetricsTracker:
     # -------------------------------------------------
     def build_result(self, game_state):
 
-        print("\n==============================")
-        print("📊 FINAL TRACKER STATE")
-        print("L1 RL:", dict(self.l1["RL"]))
-        print("L1 ENEMY:", dict(self.l1["ENEMY"]))
-        print("==============================\n")
+#        print("\n==============================")
+#        print("📊 FINAL TRACKER STATE")
+#        print("L1 RL:", dict(self.l1["RL"]))
+#        print("L1 ENEMY:", dict(self.l1["ENEMY"]))
+#        print("==============================\n")
 
         return {
             "winner": getattr(game_state, "winner", None),

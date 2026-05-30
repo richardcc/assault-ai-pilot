@@ -1,13 +1,16 @@
 import numpy as np
 from assault_model.map.hex_utils import hex_distance
 
+# ✅ NEW IMPORT
+from assault_sim.rl.features.tactical_features import compute_tactical_features
+
 
 # =================================================
 # NUMERIC STATE (USED BY RL)
 # =================================================
 def encode_state(state, unit=None, rl_side=None, max_turns=None):
 
-    active = unit  # ✅ NEW (antes active_unit)
+    active = unit
 
     # -------------------------
     # BASIC FEATURES
@@ -56,7 +59,7 @@ def encode_state(state, unit=None, rl_side=None, max_turns=None):
     dq, dr = 0.0, 0.0
     closest_enemy = None
 
-    if active is not None and enemy_units:
+    if active is not None and enemy_units and active.position is not None:
         closest_enemy = min(
             enemy_units,
             key=lambda e: hex_distance(active.position, e.position),
@@ -70,7 +73,7 @@ def encode_state(state, unit=None, rl_side=None, max_turns=None):
     # -------------------------
     vp_dist = 0.0
 
-    if active is not None and state.vp_tracker:
+    if active is not None and state.vp_tracker and active.position is not None:
         vp_points = getattr(state.vp_tracker.conditions, "points", [])
 
         if vp_points:
@@ -101,9 +104,9 @@ def encode_state(state, unit=None, rl_side=None, max_turns=None):
         enemy_dist = np.clip(d / 10.0, 0.0, 1.0)
 
     # -------------------------
-    # FINAL VECTOR
+    # BASE VECTOR
     # -------------------------
-    return np.array([
+    obs = [
         state.turn,
         active_hp,
         n_units,
@@ -120,11 +123,21 @@ def encode_state(state, unit=None, rl_side=None, max_turns=None):
 
         visible_enemy,
         enemy_dist,
-    ], dtype=np.float32)
+    ]
+
+    # =================================================
+    # ✅ NEW: TACTICAL FEATURES (MODULAR)
+    # =================================================
+    obs.extend(compute_tactical_features(state, rl_side))
+
+    # -------------------------
+    # FINAL VECTOR
+    # -------------------------
+    return np.array(obs, dtype=np.float32)
 
 
 # =================================================
-# SYMBOLIC / EXPLAINABLE CONTEXT
+# SYMBOLIC / EXPLAINABLE CONTEXT (NO CAMBIAR)
 # =================================================
 def explainable_context(state, rl_side=None, max_turns=None):
 
