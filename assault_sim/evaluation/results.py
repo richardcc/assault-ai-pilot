@@ -40,63 +40,85 @@ class ResultsAnalyzer:
         }
 
     # -------------------------------------------------
-    # ACTION USAGE (L2)
+    # ✅ ADVANCED METRICS
+    # -------------------------------------------------
+    def aggregate_advanced_metrics(self):
+
+        agg = {
+            "good_trades": 0,
+            "bad_trades": 0,
+            "zero_damage_attacks": 0,
+            "turns_in_range": 0,
+            "attacks_in_range": 0,
+            "total_attacks": 0,
+        }
+
+        for r in self.results:
+            adv = r.get("advanced", {})
+
+            agg["good_trades"] += adv.get("good_trades", 0)
+            agg["bad_trades"] += adv.get("bad_trades", 0)
+            agg["zero_damage_attacks"] += adv.get("zero_damage_attacks", 0)
+            agg["turns_in_range"] += adv.get("turns_in_range", 0)
+            agg["attacks_in_range"] += adv.get("attacks_in_range", 0)
+            agg["total_attacks"] += adv.get("total_attacks", 0)
+
+        return agg
+
+    # -------------------------------------------------
+    # ACTION USAGE
     # -------------------------------------------------
     def aggregate_action_usage(self):
 
         total_counts = defaultdict(int)
 
         for r in self.results:
-            option_counts = r.get("option_counts", {})
-
-            for opt, count in option_counts.items():
+            for opt, count in r.get("option_counts", {}).items():
                 total_counts[opt] += count
 
         total = sum(total_counts.values())
 
         return {
-            opt: (count, count / total if total > 0 else 0.0)
+            opt: (count, count / total if total else 0)
             for opt, count in total_counts.items()
         }
 
     # -------------------------------------------------
-    # FORMATION USAGE (L3)
+    # FORMATION USAGE
     # -------------------------------------------------
     def aggregate_formation_usage(self):
 
-        formation_totals = defaultdict(int)
+        totals = defaultdict(int)
 
         for r in self.results:
-            formation_counts = r.get("formation_counts", {})
+            for k, v in r.get("formation_counts", {}).items():
+                totals[k] += v
 
-            for k, v in formation_counts.items():
-                formation_totals[k] += v
-
-        total = sum(formation_totals.values())
+        total = sum(totals.values())
 
         return {
-            k: (v, v / total if total > 0 else 0.0)
-            for k, v in formation_totals.items()
+            k: (v, v / total if total else 0)
+            for k, v in totals.items()
         }
 
     # -------------------------------------------------
-    # STRATEGY → OPTION
+    # STRATEGY MAPPING
     # -------------------------------------------------
     def aggregate_strategy_mapping(self):
 
-        strategy_option_totals = defaultdict(lambda: defaultdict(int))
+        mapping = defaultdict(lambda: defaultdict(int))
 
         for r in self.results:
-            mapping = r.get("strategy_option_map", {})
+            m = r.get("strategy_option_map", {})
 
-            for strat, options in mapping.items():
-                for opt, count in options.items():
-                    strategy_option_totals[strat][opt] += count
+            for strat, opts in m.items():
+                for o, c in opts.items():
+                    mapping[strat][o] += c
 
-        return strategy_option_totals
+        return mapping
 
     # -------------------------------------------------
-    # SIDE AGGREGATION (GLOBAL)
+    # SIDE TOTALS
     # -------------------------------------------------
     def aggregate_side_stats(self):
 
@@ -106,16 +128,14 @@ class ResultsAnalyzer:
         }
 
         for r in self.results:
-            side = r["side"]
-
-            for s in ["RL", "ENEMY"]:
-                for k, v in side[s].items():
-                    agg[s][k] += v
+            for side in ["RL", "ENEMY"]:
+                for k, v in r["side"][side].items():
+                    agg[side][k] += v
 
         return agg
 
     # -------------------------------------------------
-    # L1 AGGREGATION
+    # L1 STATS
     # -------------------------------------------------
     def aggregate_l1_stats(self):
 
@@ -141,19 +161,16 @@ class ResultsAnalyzer:
         agg = self.aggregate_side_stats()
 
         def compute(side):
-            attacks = agg[side]["attacks"]
-            damage = agg[side]["damage"]
-            kills = agg[side]["kills"]
+            a = agg[side]["attacks"]
+            d = agg[side]["damage"]
+            k = agg[side]["kills"]
 
             return {
-                "damage_per_attack": damage / attacks if attacks else 0,
-                "kills_per_attack": kills / attacks if attacks else 0,
+                "damage_per_attack": d / a if a else 0,
+                "kills_per_attack": k / a if a else 0,
             }
 
-        return {
-            "RL": compute("RL"),
-            "ENEMY": compute("ENEMY"),
-        }
+        return {"RL": compute("RL"), "ENEMY": compute("ENEMY")}
 
     # -------------------------------------------------
     # L1 EFFICIENCY
@@ -163,24 +180,22 @@ class ResultsAnalyzer:
         agg = self.aggregate_l1_stats()
 
         def compute(side):
-            attacks = agg[side].get("attacks", 0)
-            damage = agg[side].get("damage", 0)
-            kills = agg[side].get("kills", 0)
+            a = agg[side].get("attacks", 0)
+            d = agg[side].get("damage", 0)
+            k = agg[side].get("kills", 0)
 
             return {
-                "damage_per_attack": damage / attacks if attacks else 0,
-                "kills_per_attack": kills / attacks if attacks else 0,
+                "damage_per_attack": d / a if a else 0,
+                "kills_per_attack": k / a if a else 0,
             }
 
-        return {
-            "RL": compute("RL"),
-            "ENEMY": compute("ENEMY"),
-        }
+        return {"RL": compute("RL"), "ENEMY": compute("ENEMY")}
 
     # -------------------------------------------------
-    # ✅ UNIT AGGREGATION (MEJORADO)
+    # UNIT AGGREGATION
     # -------------------------------------------------
     def aggregate_units(self):
+
         units = defaultdict(lambda: {
             "attacks": 0,
             "damage": 0,
@@ -191,16 +206,13 @@ class ResultsAnalyzer:
         })
 
         for r in self.results:
-            unit_data = r.get("units", {})
-
             for side in ["RL", "ENEMY"]:
-                for uid, stats in unit_data.get(side, {}).items():
+                for uid, stats in r.get("units", {}).get(side, {}).items():
 
                     units[uid]["damage"] += stats.get("damage", 0)
                     units[uid]["attacks"] += stats.get("attacks", 0)
                     units[uid]["kills"] += stats.get("kills", 0)
 
-                    # ✅ NUEVO: metadata (una sola vez)
                     if units[uid]["unit_key"] is None:
                         units[uid]["unit_key"] = stats.get("unit_key")
                         units[uid]["category"] = stats.get("category")
@@ -209,70 +221,27 @@ class ResultsAnalyzer:
         return units
 
     # -------------------------------------------------
-    # TOP UNITS
-    # -------------------------------------------------
-    def top_units(self, key="damage", top_n=None):
-
-        units = self.aggregate_units()
-
-        sorted_units = sorted(
-            units.items(),
-            key=lambda x: x[1][key],
-            reverse=True
-        )
-
-        if top_n is not None:
-            return sorted_units[:top_n]
-
-        return sorted_units
-
-    # -------------------------------------------------
-    # ✅ NUEVO: AGRUPAR POR TIPO
-    # -------------------------------------------------
-    def aggregate_by_unit_key(self):
-
-        units = self.aggregate_units()
-        agg = {}
-
-        for uid, data in units.items():
-            key = data.get("unit_key")
-
-            if key not in agg:
-                agg[key] = {
-                    "damage": 0,
-                    "attacks": 0,
-                    "kills": 0
-                }
-
-            agg[key]["damage"] += data["damage"]
-            agg[key]["attacks"] += data["attacks"]
-            agg[key]["kills"] += data["kills"]
-
-        return agg
-
-    # -------------------------------------------------
     # PRINT REPORT
     # -------------------------------------------------
     def print_report(self):
 
         summary = self.summary()
-        efficiency = self.efficiency()
         sides = self.aggregate_side_stats()
-
         l1_stats = self.aggregate_l1_stats()
+        eff = self.efficiency()
         l1_eff = self.l1_efficiency()
 
-        action_usage = self.aggregate_action_usage()
-        formation_usage = self.aggregate_formation_usage()
-        strategy_mapping = self.aggregate_strategy_mapping()
+        action = self.aggregate_action_usage()
+        formation = self.aggregate_formation_usage()
+        mapping = self.aggregate_strategy_mapping()
 
-        top_units = self.top_units()
+        adv = self.aggregate_advanced_metrics()
 
         print("\n=== GLOBAL ===")
         print(summary)
 
         print("\n=== EFFICIENCY ===")
-        print(efficiency)
+        print(eff)
 
         print("\n=== L1 EFFICIENCY (REAL COMBAT) ===")
         print(l1_eff)
@@ -285,68 +254,28 @@ class ResultsAnalyzer:
         print(dict(l1_stats["RL"]))
         print(dict(l1_stats["ENEMY"]))
 
-        # -------------------------------------------------
-        # ACTION USAGE
-        # -------------------------------------------------
-        print("\n=== ACTION USAGE (L2) ===")
-        for opt, (count, ratio) in sorted(
-            action_usage.items(),
-            key=lambda x: x[1][0],
-            reverse=True
-        ):
-            print(f"{opt}: {count} ({ratio:.2%})")
+        print("\n=== ACTION USAGE ===")
+        for k, (c, r) in sorted(action.items(), key=lambda x: x[1][0], reverse=True):
+            print(f"{k}: {c} ({r:.2%})")
 
-        # -------------------------------------------------
-        # FORMATION USAGE
-        # -------------------------------------------------
-        print("\n=== FORMATION USAGE (L3) ===")
-        for strat, (count, ratio) in sorted(
-            formation_usage.items(),
-            key=lambda x: x[1][0],
-            reverse=True
-        ):
-            print(f"{strat}: {count} ({ratio:.2%})")
+        print("\n=== FORMATION USAGE ===")
+        for k, (c, r) in sorted(formation.items(), key=lambda x: x[1][0], reverse=True):
+            print(f"{k}: {c} ({r:.2%})")
 
-        # -------------------------------------------------
-        # STRATEGY → OPTION
-        # -------------------------------------------------
-        print("\n=== STRATEGY → OPTION (L3 → L2) ===")
-
-        for strat, options in strategy_mapping.items():
-            total = sum(options.values())
-
+        print("\n=== STRATEGY → OPTION ===")
+        for strat, opts in mapping.items():
+            total = sum(opts.values())
             print(f"\n{strat}:")
-            for opt, v in sorted(options.items(), key=lambda x: x[1], reverse=True):
-                ratio = v / total if total > 0 else 0
-                print(f"  {opt}: {v} ({ratio:.2%})")
+            for o, v in sorted(opts.items(), key=lambda x: x[1], reverse=True):
+                print(f"  {o}: {v} ({v/total:.2%})")
 
-        # -------------------------------------------------
-        # ✅ TOP UNITS (MEJORADO)
-        # -------------------------------------------------
-        print("\n=== TOP UNITS (damage) ===")
-        for uid, data in top_units:
+        # ✅ ADVANCED
+        print("\n=== ADVANCED METRICS ===")
 
-            unit_key = data.get("unit_key", "UNK")
-            category = data.get("category", "UNK")
+        total_attacks = max(1, adv["total_attacks"])
+        range_total = max(1, adv["turns_in_range"])
 
-            attacks = data["attacks"]
-            damage = data["damage"]
-
-            dpa = damage / attacks if attacks else 0
-
-            print(f"{uid} [{unit_key} | {category}] dmg/atk={dpa:.2f} {data}")
-
-        # -------------------------------------------------
-        # ✅ POR TIPO (NUEVO)
-        # -------------------------------------------------
-        print("\n=== UNIT TYPE SUMMARY ===")
-
-        by_type = self.aggregate_by_unit_key()
-
-        for key, data in by_type.items():
-            attacks = data["attacks"]
-            damage = data["damage"]
-
-            dpa = damage / attacks if attacks else 0
-
-            print(f"{key}: dmg/atk={dpa:.2f} {data}")
+        print(f"good_trade_rate:  {adv['good_trades'] / total_attacks:.3f}")
+        print(f"bad_trade_rate:   {adv['bad_trades'] / total_attacks:.3f}")
+        print(f"selectivity:      {adv['attacks_in_range'] / range_total:.3f}")
+        print(f"zero_dmg_rate:    {adv['zero_damage_attacks'] / total_attacks:.3f}")

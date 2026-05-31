@@ -4,6 +4,9 @@ import numpy as np
 from assault_sim.evaluation.metrics_tracker import MetricsTracker
 from assault_sim.engine.match_runner import MatchRunner
 
+# ✅ advanced metrics (correct import)
+from assault_sim.evaluation.advanced_metrics import AdvancedMetrics
+
 
 class Evaluator:
 
@@ -11,7 +14,7 @@ class Evaluator:
         self,
         env,
         rl_controller,
-        enemy_controller,  # legacy (no usado)
+        enemy_controller,  # legacy (not used)
         rl_side: str,
         max_steps: int = 300,
     ):
@@ -26,16 +29,19 @@ class Evaluator:
     def run_episode(self):
 
         tracker = MetricsTracker(self.rl_side)
+        advanced_metrics = AdvancedMetrics()  # ✅ NEW
 
-        # ✅ compatibilidad robusta con distintos envs
+        # -------------------------------------------------
+        # EVENT BUS
+        # -------------------------------------------------
         sim = getattr(self.env, "sim", None) or getattr(self.env, "sim_env", None)
 
         if sim is not None and getattr(sim, "event_bus", None) is not None:
             sim.event_bus.subscribe(tracker)
 
-        # -------------------------------
+        # -------------------------------------------------
         # POLICY TRACKING
-        # -------------------------------
+        # -------------------------------------------------
         option_counts = defaultdict(int)
         formation_counts = defaultdict(int)
         strategy_option_map = defaultdict(lambda: defaultdict(int))
@@ -44,7 +50,7 @@ class Evaluator:
 
         obs = self.env.reset()
 
-        # ✅ reset controller (LSTM / estado interno)
+        # ✅ reset controller (important)
         if hasattr(self.controller, "reset"):
             self.controller.reset()
 
@@ -53,10 +59,8 @@ class Evaluator:
         done = False
         steps = 0
 
-        sim = getattr(self.env, "sim", None) or getattr(self.env, "sim_env", None)
         prev_state = sim.game_state if sim is not None else None
-
-        final_state = prev_state  # ✅ fallback seguro
+        final_state = prev_state
 
         # -------------------------------------------------
         # MAIN LOOP
@@ -65,7 +69,6 @@ class Evaluator:
 
             step = runner.step(self.controller, obs)
 
-            # ✅ robustez contra None
             if not step:
                 break
 
@@ -78,23 +81,21 @@ class Evaluator:
             state = sim.game_state if sim is not None else None
 
             if state is not None:
-                final_state = state  # ✅ siempre guardamos último válido
+                final_state = state
 
             reward_trace.append(step.get("reward", 0.0))
 
             # -------------------------------------------------
-            # ✅ TRACK POLICY (L2 / L3)
+            # POLICY TRACKING (L2 / L3)
             # -------------------------------------------------
             if side == self.rl_side:
 
                 controller = self.controller
 
-                # ✅ L2 (option)
                 option = getattr(controller, "current_option", None)
                 if option is not None:
                     option_counts[option.name] += 1
 
-                # ✅ L3 (formation)
                 strategy = getattr(controller, "current_strategy", None)
                 formation = None
 
@@ -102,21 +103,54 @@ class Evaluator:
                     formation = strategy.name
                     formation_counts[formation] += 1
 
-                # ✅ mapping strategy → option
                 if option is not None and formation is not None:
                     strategy_option_map[formation][option.name] += 1
 
             # -------------------------------------------------
-            # ✅ TRACK METRICS (CRÍTICO)
+            # DISTANCE (for advanced metrics)
+            # -------------------------------------------------
+            pre_dist = None
+
+            if state is not None and hasattr(state, "units"):
+
+                rl_units = [
+                    u for u in state.units
+                    if u.side == self.rl_side and u.alive
+                ]
+
+                enemy_units = [
+                    u for u in state.units
+                    if u.side != self.rl_side and u.alive
+                ]
+
+                dists = []
+
+                for u in rl_units:
+                    for e in enemy_units:
+                        if u.position and e.position:
+                            dq = abs(u.position.q - e.position.q)
+                            dr = abs(u.position.r - e.position.r)
+                            dists.append(dq + dr)
+
+
+                if dists:
+                    pre_dist = min(dists)
+
+            # -------------------------------------------------
+            # CORE METRICS
             # -------------------------------------------------
             tracker.track_damage(info, state, prev_state)
             tracker.track_state(state)
             tracker.step()
 
+            # -------------------------------------------------
+            # ✅ ADVANCED METRICS
+            # -------------------------------------------------
+            advanced_metrics.update(info, pre_dist)
+
             prev_state = state
             steps += 1
 
-            # ✅ HARD SAFETY (evitar loops rotos)
             if steps >= self.max_steps:
                 done = True
                 break
@@ -126,11 +160,10 @@ class Evaluator:
         # -------------------------------------------------
         result = tracker.build_result(final_state)
 
-        # ✅ métricas adicionales
         result["steps"] = steps
         result["avg_reward"] = float(np.mean(reward_trace)) if reward_trace else 0.0
 
-        # ✅ POLICY INFO (L2 / L3)
+        # policy tracking
         result["option_counts"] = dict(option_counts)
         result["formation_counts"] = dict(formation_counts)
 
@@ -138,10 +171,13 @@ class Evaluator:
             strat: dict(opts) for strat, opts in strategy_option_map.items()
         }
 
+        # ✅ attach advanced metrics
+        result["advanced"] = advanced_metrics.to_dict()
+
         return result
 
     # -------------------------------------------------
-    # MULTI EPISODE
+    # MULTI EPISODE (FIX CRÍTICO)
     # -------------------------------------------------
     def evaluate(self, episodes: int):
 

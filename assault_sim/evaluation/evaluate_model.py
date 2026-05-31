@@ -113,30 +113,38 @@ def build_controller(policy, sim_env):
 
 
 # -------------------------------------------------
-# RUN 1 EPISODE
+# RUN 1 EPISODE (SAFE VERSION)
 # -------------------------------------------------
 def run_episode(_):
 
-    env, sim_env = build_env()
-    policy = get_policy(env)
-    controller = build_controller(policy, sim_env)
+    try:
+        env, sim_env = build_env()
+        policy = get_policy(env)
+        controller = build_controller(policy, sim_env)
 
-    evaluator = Evaluator(
-        env=env,
-        rl_controller=controller,
-        enemy_controller=None,
-        rl_side=RL_SIDE,
-    )
+        evaluator = Evaluator(
+            env=env,
+            rl_controller=controller,
+            enemy_controller=None,
+            rl_side=RL_SIDE,
+        )
 
-    with torch.no_grad():
-        results = evaluator.evaluate(1)
+        with torch.no_grad():
+            results = evaluator.evaluate(1)
 
-    result = results[0]
+        if not results:
+            return None, {}, {}
 
-    # ✅ COMBAT metrics ya embebidas
-    combat = result.get("combat", {})
+        result = results[0]
 
-    return result, combat
+        combat = result.get("combat", {})
+        advanced = result.get("advanced", {})
+
+        return result, combat, advanced
+
+    except Exception:
+        # multiprocessing safe fallback
+        return None, {}, {}
 
 
 # -------------------------------------------------
@@ -149,29 +157,46 @@ def main():
 
     results = []
 
-    # ✅ acumuladores
+    # -------------------------------------------------
+    # AGGREGATORS
+    # -------------------------------------------------
     agg = {
+        # combat
         "trade_sum": 0.0,
         "trade_count": 0,
         "bad_attacks": 0,
         "total_attacks": 0,
         "damage_sum": 0.0,
         "damage_taken_sum": 0.0,
+
+        # advanced
+        "good_trades": 0,
+        "bad_trades": 0,
+        "zero_damage_attacks": 0,
+        "turns_in_range": 0,
+        "attacks_in_range": 0,
     }
 
     # -------------------------------------------------
-    # PARALLEL
+    # PARALLEL LOOP
     # -------------------------------------------------
     with Pool(NUM_WORKERS) as p:
 
-        for result, combat in tqdm(
+        for result, combat, advanced in tqdm(
             p.imap_unordered(run_episode, range(EPISODES), chunksize=5),
             total=EPISODES,
             desc="Evaluating",
         ):
+
+            # ✅ skip broken episodes
+            if result is None:
+                continue
+
             results.append(result)
 
-            # ✅ acumulación robusta
+            # --------------------------
+            # COMBAT
+            # --------------------------
             trade_mean = combat.get("trade_mean", 0.0)
             bad_rate = combat.get("bad_attack_rate", 0.0)
             total_attacks = combat.get("total_attacks", 0)
@@ -188,6 +213,15 @@ def main():
             agg["damage_sum"] += damage
             agg["damage_taken_sum"] += enemy_damage
 
+            # --------------------------
+            # ADVANCED
+            # --------------------------
+            agg["good_trades"] += advanced.get("good_trades", 0)
+            agg["bad_trades"] += advanced.get("bad_trades", 0)
+            agg["zero_damage_attacks"] += advanced.get("zero_damage_attacks", 0)
+            agg["turns_in_range"] += advanced.get("turns_in_range", 0)
+            agg["attacks_in_range"] += advanced.get("attacks_in_range", 0)
+
     print(">>> Episodes finished ✅")
 
     # -------------------------------------------------
@@ -203,7 +237,20 @@ def main():
     print(f"damage_ratio:    {damage_ratio:.3f}")
 
     # -------------------------------------------------
-    # DASHBOARD
+    # ✅ ADVANCED METRICS (FIXED)
+    # -------------------------------------------------
+    print("\n=== ADVANCED METRICS ===")
+
+    total_attacks = max(1, agg["good_trades"] + agg["bad_trades"])
+    range_total = max(1, agg["turns_in_range"])
+
+    print(f"good_trade_rate:  {agg['good_trades'] / total_attacks:.3f}")
+    print(f"bad_trade_rate:   {agg['bad_trades'] / total_attacks:.3f}")
+    print(f"selectivity:      {agg['attacks_in_range'] / range_total:.3f}")
+    print(f"zero_dmg_rate:    {agg['zero_damage_attacks'] / total_attacks:.3f}")
+
+    # -------------------------------------------------
+    # DASHBOARD + REPORT
     # -------------------------------------------------
     dashboard = EvalDashboard()
     for r in results:
