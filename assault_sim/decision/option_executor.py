@@ -178,25 +178,57 @@ class OptionExecutor:
         for a in attacks:
             target = getattr(a, "target", None)
 
+            if target is None or not target.alive:
+                continue
+
+            unit = a.unit  # ✅ muy importante
+
+            # -------------------------------------------------
+            # 🔥 NUEVO: COMBAT ADVANTAGE
+            # -------------------------------------------------
+            adv = unit.get_combat_advantage(target)
+
+            # 🚫 evitar combates muy malos
+            if adv < -1.0:
+                continue
+
             score = 0
 
-            if target is not None:
+            # ✅ combate (lo más importante)
+            score += adv * 15
 
-                hp = getattr(target, "hp", 10)
+            # -------------------------------------------------
+            # ✅ LOGICA EXISTENTE (mantener)
+            # -------------------------------------------------
+            hp = getattr(target, "hp", 10)
 
-                # ✅ prioriza enemigos débiles
-                score += (10 - hp) * 5
+            # prioriza enemigos débiles
+            score += (10 - hp) * 3
 
-                # ✅ bonus por kill
-                if hp <= 1:
-                    score += 100
+            # bonus por kill
+            if hp <= 1:
+                score += 50
 
-                # ✅ evita targets con mucha vida
-                score -= hp * 2
+            # penaliza targets muy duros
+            score -= hp * 1.5
 
             # pequeño sesgo ofensivo
             score += 5
 
+            # -------------------------------------------------
+            # ✅ DISTANCIA (extra importante)
+            # -------------------------------------------------
+            if hasattr(unit, "position") and hasattr(target, "position"):
+                dist = hex_distance(unit.position, target.position)
+
+                if dist <= 2:
+                    score += 2
+                elif dist > 6:
+                    score -= 3
+
+            # -------------------------------------------------
+            # ✅ BEST SELECTION
+            # -------------------------------------------------
             if score > best_score:
                 best_score = score
                 best = a

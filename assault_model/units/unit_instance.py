@@ -249,3 +249,85 @@ class UnitInstance:
         state["last_seen_turn"] = {}
 
         return state
+    
+    # ==================================================
+    # 🔥 COMBAT MODELING HELPERS
+    # ==================================================
+
+    def get_attack_power_vs(self, target: "UnitInstance") -> float:
+        """
+        Approximate offensive power based on attack dice.
+        """
+
+        dice = self.get_attack_dice(target)
+
+        # pesos simples por dado (ajustables)
+        weights = {
+            "RED": 1.0,
+            "YELLOW": 0.75,
+            "GREEN": 0.5,
+            "BLUE": 0.4,
+        }
+
+        power = 0.0
+        for d in dice:
+            power += weights.get(d.name, 0.5)
+
+        # ajustar por HP (unidad dañada pega menos)
+        hp_factor = self.hp / max(1, self.max_strength)
+
+        return power * hp_factor
+
+    # --------------------------------------------------
+    def get_expected_damage(self, target: "UnitInstance") -> float:
+        """
+        Expected damage proxy.
+        """
+
+        return self.get_attack_power_vs(target)
+
+    # --------------------------------------------------
+    def get_combat_advantage(self, target: "UnitInstance") -> float:
+
+        if target is None or not target.alive:
+            return 0.0
+
+        # --- attack power ---
+        my_attack = self.get_attack_power_vs(target)
+        enemy_attack = target.get_attack_power_vs(self)
+
+        # 💥 caso crítico: no puede hacer daño
+        if my_attack == 0:
+            return -2.0
+
+        # --- distancia ---
+        distance = self.get_distance_to(target)
+
+        range_factor = 1.0
+        if distance > 6:
+            range_factor = 0.6
+        elif distance > 3:
+            range_factor = 0.8
+
+        # --- HP ---
+        my_hp_ratio = self.hp / max(1, self.max_strength)
+        enemy_hp_ratio = target.hp / max(1, target.max_strength)
+
+        hp_advantage = (my_hp_ratio - enemy_hp_ratio) * 1.5
+
+        # --- final ---
+        advantage = (
+            my_attack * 2.0 * range_factor
+            - enemy_attack * 1.5
+            + hp_advantage
+        )
+
+        return advantage
+
+    # --------------------------------------------------
+    def is_favorable_vs(self, target: "UnitInstance") -> bool:
+        return self.get_combat_advantage(target) > 0
+
+    # --------------------------------------------------
+    def is_unfavorable_vs(self, target: "UnitInstance") -> bool:
+        return self.get_combat_advantage(target) < -1.0
