@@ -181,38 +181,42 @@ class ResultsAnalyzer:
     # UNIT AGGREGATION
     # -------------------------------------------------
     def aggregate_units(self):
-
         units = defaultdict(lambda: {
             "attacks": 0,
             "damage": 0,
             "kills": 0,
-            "alive_count": 0,
         })
 
         for r in self.results:
-            for uid, stats in r["units"].items():
+            unit_data = r.get("units", {})
 
-                units[uid]["attacks"] += stats.attacks
-                units[uid]["damage"] += stats.damage_done
-                units[uid]["kills"] += stats.kills
+            for side in ["RL", "ENEMY"]:
+                for uid, stats in unit_data.get(side, {}).items():
 
-                if stats.alive:
-                    units[uid]["alive_count"] += 1
+                    # ✅ FIX AQUÍ (usar dict correctamente)
+                    units[uid]["damage"] += stats.get("damage", 0)
+                    units[uid]["attacks"] += stats.get("attacks", 0)
+                    units[uid]["kills"] += stats.get("kills", 0)
 
         return units
 
     # -------------------------------------------------
     # TOP UNITS
     # -------------------------------------------------
-    def top_units(self, key="damage", top_n=10):
+    def top_units(self, key="damage", top_n=None):
 
         units = self.aggregate_units()
 
-        return sorted(
+        sorted_units = sorted(
             units.items(),
             key=lambda x: x[1][key],
             reverse=True
-        )[:top_n]
+        )
+
+        if top_n is not None:
+            return sorted_units[:top_n]
+
+        return sorted_units
 
     # -------------------------------------------------
     # PRINT REPORT

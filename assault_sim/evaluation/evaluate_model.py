@@ -2,7 +2,7 @@ import torch
 from pathlib import Path
 from multiprocessing import Pool, cpu_count, freeze_support
 
-from tqdm import tqdm   # ✅ progreso
+from tqdm import tqdm
 
 from assault_sim.config.config_loader import load_sim_config
 from assault_sim.sim_env import SimEnv
@@ -44,7 +44,7 @@ _policy = None
 
 
 # -------------------------------------------------
-# BUILD MODEL (CACHE)
+# BUILD MODEL
 # -------------------------------------------------
 def get_policy(env):
     global _policy
@@ -129,9 +129,14 @@ def run_episode(_):
     )
 
     with torch.no_grad():
-        r = evaluator.evaluate(1)
+        results = evaluator.evaluate(1)
 
-    return r[0]
+    result = results[0]
+
+    # ✅ COMBAT metrics ya embebidas
+    combat = result.get("combat", {})
+
+    return result, combat
 
 
 # -------------------------------------------------
@@ -144,17 +149,58 @@ def main():
 
     results = []
 
-    # ✅ barra de progreso REAL
+    # ✅ acumuladores
+    agg = {
+        "trade_sum": 0.0,
+        "trade_count": 0,
+        "bad_attacks": 0,
+        "total_attacks": 0,
+        "damage_sum": 0.0,
+        "damage_taken_sum": 0.0,
+    }
+
+    # -------------------------------------------------
+    # PARALLEL
+    # -------------------------------------------------
     with Pool(NUM_WORKERS) as p:
 
-        for r in tqdm(
+        for result, combat in tqdm(
             p.imap_unordered(run_episode, range(EPISODES), chunksize=5),
             total=EPISODES,
             desc="Evaluating",
         ):
-            results.append(r)
+            results.append(result)
+
+            # ✅ acumulación robusta
+            trade_mean = combat.get("trade_mean", 0.0)
+            bad_rate = combat.get("bad_attack_rate", 0.0)
+            total_attacks = combat.get("total_attacks", 0)
+
+            damage = result["side"]["RL"].get("damage", 0)
+            enemy_damage = result["side"]["ENEMY"].get("damage", 0)
+
+            agg["trade_sum"] += trade_mean * total_attacks
+            agg["trade_count"] += total_attacks
+
+            agg["bad_attacks"] += bad_rate * total_attacks
+            agg["total_attacks"] += total_attacks
+
+            agg["damage_sum"] += damage
+            agg["damage_taken_sum"] += enemy_damage
 
     print(">>> Episodes finished ✅")
+
+    # -------------------------------------------------
+    # FINAL METRICS
+    # -------------------------------------------------
+    trade_mean = agg["trade_sum"] / max(1, agg["trade_count"])
+    bad_attack_rate = agg["bad_attacks"] / max(1, agg["total_attacks"])
+    damage_ratio = agg["damage_sum"] / max(1, agg["damage_taken_sum"])
+
+    print("\n=== COMBAT INTELLIGENCE ===")
+    print(f"trade_mean:      {trade_mean:.3f}")
+    print(f"bad_attack_rate: {bad_attack_rate:.3f}")
+    print(f"damage_ratio:    {damage_ratio:.3f}")
 
     # -------------------------------------------------
     # DASHBOARD
@@ -163,9 +209,6 @@ def main():
     for r in results:
         dashboard.add_episode(r)
 
-    # -------------------------------------------------
-    # ANALYSIS
-    # -------------------------------------------------
     analyzer = ResultsAnalyzer(results, RL_SIDE)
     analyzer.print_report()
 
@@ -176,7 +219,7 @@ def main():
 
 
 # -------------------------------------------------
-# ENTRY POINT (WINDOWS FIX)
+# ENTRY POINT
 # -------------------------------------------------
 if __name__ == "__main__":
     freeze_support()

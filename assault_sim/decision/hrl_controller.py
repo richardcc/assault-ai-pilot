@@ -17,7 +17,6 @@ import random
 
 class HRLController:
 
-    # ✅ horizon uniforme
     OPTION_HORIZON = {
         TacticalOption.ADVANCE: 1,
         TacticalOption.FLANK: 1,
@@ -38,27 +37,41 @@ class HRLController:
 
         self.formation_engine = FormationStrategyEngine()
         self.last_payload = None
-        
+
         self.last_logp = torch.tensor(0.0)
         self.last_value = torch.tensor(0.0)
 
-
     # -------------------------------------------------
     def _can_attack(self, state, unit):
-
         actions = ActionCatalog(state, unit, terrain_config).actions()
-
         return any("Ranged" in a.__class__.__name__ for a in actions)
 
     # -------------------------------------------------
+    # ✅ NUEVO: contexto táctico local
+    # -------------------------------------------------
+    def _local_advantage(self, state, unit):
+        if unit is None or unit.position is None:
+            return 0
+
+        friend = 0
+        enemy = 0
+
+        for u in state.units:
+            if not u.alive or u.position is None:
+                continue
+
+            d = abs(u.position.q - unit.position.q) + abs(u.position.r - unit.position.r)
+            if d <= 3:
+                if u.side == unit.side:
+                    friend += 1
+                else:
+                    enemy += 1
+
+        return friend - enemy
+
+    # -------------------------------------------------
     def _sample_policy(self, obs):
-        """
-        ✅ network → logits → distributions → sample
-        ✅ ALSO returns log_prob + value (CRITICAL)
-        """
-
         device = next(self.policy.parameters()).device
-
         obs_t = torch.tensor(obs, dtype=torch.float32, device=device).unsqueeze(0)
 
         hidden = self.policy.init_hidden(1, device)
@@ -68,21 +81,17 @@ class HRLController:
         option_dist = torch_dist.Categorical(logits=option_logits)
         attack_dist = torch_dist.Categorical(logits=attack_logits)
 
-        # ✅ sample actions
         option_sample = option_dist.sample()
         attack_sample = attack_dist.sample()
 
-        # ✅ compute log probability (CRITICAL FOR PPO)
         logp = (
             option_dist.log_prob(option_sample) +
             attack_dist.log_prob(attack_sample)
         )
 
-        # ✅ store for rollout
         self.last_logp = logp.squeeze()
         self.last_value = value.squeeze()
 
-        # ✅ return clean python values
         option = TacticalOption(option_sample.item())
         attack_mode = attack_sample.item()
 
@@ -91,9 +100,7 @@ class HRLController:
     # -------------------------------------------------
     def choose_action(self, state, unit, obs):
 
-        active = unit
-
-        if active is None:
+        if unit is None:
             return WaitAction("SYSTEM")
 
         # -------------------------------------------------
@@ -105,13 +112,13 @@ class HRLController:
 
             action = self.executor.execute(
                 state,
-                active,
+                unit,
                 self.current_option,
                 self.current_attack_mode,
             )
 
             if action is None:
-                action = WaitAction(active.unit_id)
+                action = WaitAction(unit.unit_id)
 
             if self.last_payload:
                 action.hrl_payload = self.last_payload
@@ -125,36 +132,50 @@ class HRLController:
         if strategy is None:
             strategy = FormationStrategy.ATTACK
 
-        # 🔥 SAMPLE FROM POLICY (corregido)
         ppo_option, attack_mode = self._sample_policy(obs)
 
         # -------------------------------------------------
-        # ✅ STRATEGY BIAS
+        # ✅ CONTEXTO TÁCTICO (🔥 NUEVO CLAVE)
+        # -------------------------------------------------
+        local_adv = self._local_advantage(state, unit)
+        can_attack = self._can_attack(state, unit)
+
+        # -------------------------------------------------
+        # ✅ STRATEGY BIAS (reducido y más inteligente)
         # -------------------------------------------------
         if strategy == FormationStrategy.ATTACK:
-            if random.random() < 0.6:
+            if ppo_option != TacticalOption.ATTACK and random.random() < 0.4:
                 ppo_option = TacticalOption.ATTACK
 
         elif strategy == FormationStrategy.CLEANUP:
-            if random.random() < 0.7:
+            if random.random() < 0.5:
                 ppo_option = TacticalOption.ATTACK
 
         elif strategy == FormationStrategy.HOLD_VP:
-            if random.random() < 0.4:
+            if local_adv < 0:
                 ppo_option = TacticalOption.HOLD
 
         # -------------------------------------------------
-        # ✅ ATTACK PUSH
+        # ✅ ATTACK PUSH CONTEXTUAL
         # -------------------------------------------------
-        if ppo_option != TacticalOption.ATTACK:
-            if self._can_attack(state, active):
-                if random.random() < 0.2:
+        if can_attack:
+
+            if local_adv > 0:
+                if random.random() < 0.6:
+                    ppo_option = TacticalOption.ATTACK
+
+            elif local_adv == 0:
+                if random.random() < 0.35:
+                    ppo_option = TacticalOption.ATTACK
+
+            else:
+                if random.random() < 0.15:
                     ppo_option = TacticalOption.ATTACK
 
         # -------------------------------------------------
-        # ✅ EXPLORATION
+        # ✅ EXPLORATION CONTROLADA (menos caótica)
         # -------------------------------------------------
-        if random.random() < 0.1:
+        if random.random() < 0.05:
             ppo_option = random.choice(list(TacticalOption))
 
         # -------------------------------------------------
@@ -215,13 +236,13 @@ class HRLController:
 
         action = self.executor.execute(
             state,
-            active,
+            unit,
             self.current_option,
             self.current_attack_mode,
         )
 
         if action is None:
-            action = WaitAction(active.unit_id)
+            action = WaitAction(unit.unit_id)
 
         action.hrl_payload = payload
 

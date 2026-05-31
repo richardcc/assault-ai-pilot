@@ -3,10 +3,11 @@ from pathlib import Path
 from assault_sim.sim_env import SimEnv
 from assault_sim.training_env import TrainingEnv
 from assault_sim.config.config_loader import load_sim_config
+from assault_sim.rewards.progressive_reward import ProgressiveReward  # ✅ IMPORT CLAVE
 
 
 # -------------------------------------------------
-# ✅ SINGLE ENV (MISMO FLUJO QUE train.py)
+# ✅ SINGLE ENV
 # -------------------------------------------------
 def make_env(
     config_path: Path,
@@ -15,20 +16,24 @@ def make_env(
     controller=None,
 ) -> TrainingEnv:
 
-    # ✅ cargar config EXACTAMENTE igual que train.py
+    # ✅ cargar config
     config = load_sim_config(config_path)
 
-    # ✅ crear SimEnv como train.py
+    # ✅ crear SimEnv
     sim_env = SimEnv(
         config=config,
         controller=controller
     )
 
-    # ✅ TrainingEnv encima (sin romper flujo)
+    # ✅ crear reward (CLAVE)
+    reward_fn = ProgressiveReward(rl_side=rl_side)
+
+    # ✅ TrainingEnv con reward explícito
     env = TrainingEnv(
         sim_env,
         config_path,
-        rl_side
+        rl_side,
+        reward_fn=reward_fn   # 💥 ESTO ARREGLA TODO
     )
 
     return env

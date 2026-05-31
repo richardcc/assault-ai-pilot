@@ -6,7 +6,7 @@ from assault_model.actions.status import WaitAction
 from assault_model.map.hex_utils import hex_distance
 
 from assault_sim.rl.state_encoder import encode_state
-from assault_sim.rewards.aggressive_reward import ProgressiveReward
+from assault_sim.rewards.progressive_reward import ProgressiveReward
 
 
 DEBUG_TRACE = os.getenv("ASSAULT_DEBUG_TRACE", "0") == "1"
@@ -40,6 +40,7 @@ class TrainingEnv:
         env_config_path: Path,
         rl_side: str,
         scenario_override=None,
+        reward_fn=None   # ✅ NUEVO
     ):
         self.sim = sim_env
         self.rl_side = rl_side
@@ -53,7 +54,7 @@ class TrainingEnv:
         self.scenario_override = scenario_override
         self.current_step = 0
 
-        self.reward_fn = ProgressiveReward(rl_side)
+        self.reward_fn = reward_fn or ProgressiveReward(rl_side)
 
         self.rl_attacks = 0
         self.rl_damage = 0

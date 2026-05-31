@@ -8,20 +8,21 @@ from assault_sim.strategy.formation_strategy import FormationStrategyEngine
 
 class DecisionEngine:
     """
-    Decision engine using:
-    - ActionCatalog for action generation
-    - Environment simulation for lookahead
-    - Heuristic evaluation (no RL dependency)
+    Improved Decision Engine
+
+    ✅ Preserves original structure
+    ✅ Adds combat awareness
+    ✅ Improves action scoring
+    ✅ Keeps compatibility with PPO / HRL
 
     Returns INTENT only (no execution)
     """
 
     def __init__(self):
-        # Cache for unit selection decisions per turn/state
         self._unit_selection_cache = {}
 
     # --------------------------------------------------
-    # MAIN ENTRY (WITH CACHE)
+    # MAIN ENTRY
     # --------------------------------------------------
     def compute_intent(self, env):
         state = env.game_state
@@ -33,11 +34,9 @@ class DecisionEngine:
             tuple(sorted(runtime.activated_units))
         )
 
-        # Cache hit
         if cache_key in self._unit_selection_cache:
             return self._unit_selection_cache[cache_key]
 
-        # Get available units
         units = [
             u for u in state.units
             if u.side == active_side
@@ -51,7 +50,13 @@ class DecisionEngine:
         best_action = None
         best_score = float("-inf")
 
-        # Evaluate all unit-action pairs
+        # 🔥 NUEVO: priorización ligera de unidades útiles
+        units = sorted(
+            units,
+            key=lambda u: getattr(u, "hp", 0),
+            reverse=True
+        )
+
         for unit in units:
             actions = self._get_unit_actions(env, unit)
 
@@ -71,14 +76,9 @@ class DecisionEngine:
         return None
 
     # --------------------------------------------------
-    # CACHE MANAGEMENT
-    # --------------------------------------------------
     def clear_cache(self):
-        """Clear per-turn decision cache."""
         self._unit_selection_cache.clear()
 
-    # --------------------------------------------------
-    # ACTION GENERATION
     # --------------------------------------------------
     def _get_unit_actions(self, env, unit):
         catalog = ActionCatalog(
@@ -89,45 +89,117 @@ class DecisionEngine:
         return catalog.actions()
 
     # --------------------------------------------------
-    # ACTION EVALUATION
+    # ✅ IMPROVED ACTION EVALUATION
     # --------------------------------------------------
     def evaluate_action(self, env, action, side):
-        """
-        Simulates the action and evaluates resulting state.
-        Falls back to heuristic if simulation fails.
-        """
         try:
             sandbox_env = copy.deepcopy(env)
 
-            # Disable events for performance
+            # Disable events
             if hasattr(sandbox_env, "event_bus"):
                 sandbox_env.event_bus = None
 
+            # snapshot before
+            before_state = sandbox_env.game_state
+            before_hp = {
+                u.unit_id: getattr(u, "hp", 0)
+                for u in before_state.units
+            }
+
             sandbox_env.step(action)
 
-            return self._evaluate_state_quality(
-                sandbox_env.game_state,
+            after_state = sandbox_env.game_state
+
+            base_score = self._evaluate_state_quality(after_state, side)
+
+            # 🔥 NUEVO: evaluación de combate directo
+            combat_score = self._evaluate_combat_delta(
+                before_state,
+                after_state,
+                before_hp,
                 side
             )
+
+            # 🔥 NUEVO: bonus contextual de acción
+            action_bonus = self._action_bias(action)
+
+            return base_score + combat_score + action_bonus
 
         except Exception:
             return self._heuristic_score(action)
 
     # --------------------------------------------------
-    # STATE EVALUATION (CORE HEURISTIC)
+    # ✅ NUEVO: COMBAT DELTA
+    # --------------------------------------------------
+    def _evaluate_combat_delta(self, before, after, hp_before, side):
+        friendly_loss = 0
+        enemy_loss = 0
+
+        for u in after.units:
+            before_hp = hp_before.get(u.unit_id, 0)
+            after_hp = getattr(u, "hp", 0)
+
+            delta = before_hp - after_hp
+            if delta <= 0:
+                continue
+
+            if u.side == side:
+                friendly_loss += delta
+            else:
+                enemy_loss += delta
+
+        score = 0
+
+        # 🔥 clave: premiar trades positivos
+        score += enemy_loss * 25
+        score -= friendly_loss * 30
+
+        # 🔥 kill detection
+        for u in after.units:
+            if u.side != side and not getattr(u, "alive", True):
+                score += 80
+            if u.side == side and not getattr(u, "alive", True):
+                score -= 80
+
+        return score
+
+    # --------------------------------------------------
+    # ✅ NUEVO: ACTION BIAS
+    # --------------------------------------------------
+    def _action_bias(self, action):
+        name = action.__class__.__name__.lower()
+
+        score = 0
+
+        if "attack" in name:
+            score += 10  # leve incentivo a atacar bien
+
+        if "assault" in name:
+            score += 25  # más risky → más reward
+
+        if "move" in name:
+            score += 5
+
+        if "wait" in name:
+            score -= 25  # ❗ penaliza pasividad
+
+        return score
+
+    # --------------------------------------------------
+    # STATE EVALUATION (MEJORADO)
     # --------------------------------------------------
     def _evaluate_state_quality(self, state, side):
 
-        # ----------------------------------------
-        # Victory points
-        # ----------------------------------------
+        # ------------------------
+        # VP
+        # ------------------------
         vp_score = 0
         if hasattr(state, "vp_tracker") and hasattr(state.vp_tracker, "total_points"):
             vp_score = state.vp_tracker.total_points
 
-        # ----------------------------------------
-        # Unit split
-        # ----------------------------------------
+        # ------------------------
+        # Units
+        # ------------------------
         friendly_units = [
             u for u in state.units
             if u.side == side and getattr(u, "alive", True)
@@ -138,21 +210,12 @@ class DecisionEngine:
             if u.side != side and getattr(u, "alive", True)
         ]
 
-        # ----------------------------------------
-        # HP totals
-        # ----------------------------------------
         friendly_hp = sum(getattr(u, "hp", 0) for u in friendly_units)
         enemy_hp = sum(getattr(u, "hp", 0) for u in enemy_units)
 
-        # ----------------------------------------
-        # Unit counts
-        # ----------------------------------------
         num_friendly = len(friendly_units)
         num_enemy = len(enemy_units)
 
-        # ----------------------------------------
-        # Dead units
-        # ----------------------------------------
         friendly_dead = len([
             u for u in state.units
             if u.side == side and not getattr(u, "alive", True)
@@ -163,20 +226,15 @@ class DecisionEngine:
             if u.side != side and not getattr(u, "alive", True)
         ])
 
-        # ----------------------------------------
-        # Critical HP units
-        # ----------------------------------------
-        low_enemy = sum(
-            1 for u in enemy_units if getattr(u, "hp", 0) <= 1
-        )
+        # ------------------------
+        # LOW HP PRESSURE
+        # ------------------------
+        low_enemy = sum(1 for u in enemy_units if getattr(u, "hp", 0) <= 1)
+        low_friendly = sum(1 for u in friendly_units if getattr(u, "hp", 0) <= 1)
 
-        low_friendly = sum(
-            1 for u in friendly_units if getattr(u, "hp", 0) <= 1
-        )
-
-        # ----------------------------------------
-        # ✅ Distance to VP (HEX CORRECT)
-        # ----------------------------------------
+        # ------------------------
+        # VP DISTANCE
+        # ------------------------
         progress_score = 0
         vp_positions = []
 
@@ -185,8 +243,7 @@ class DecisionEngine:
 
         if vp_positions:
             for u in friendly_units:
-                if hasattr(u, "position") and u.position is not None:
-
+                if getattr(u, "position", None):
                     try:
                         min_dist = min(
                             hex_distance(
@@ -199,48 +256,43 @@ class DecisionEngine:
                     except Exception:
                         pass
 
-        # ----------------------------------------
-        # Final score
-        # ----------------------------------------
+        # ------------------------
+        # FINAL SCORE
+        # ------------------------
         score = 0
 
-        # Objective (long-term)
-        score += vp_score * 100
+        # 🎯 VP (más importante ahora)
+        score += vp_score * 120
 
-        # Combat advantage
-        score += (friendly_hp - enemy_hp) * 5
-        score += (num_friendly - num_enemy) * 40
+        # 💥 combate
+        score += (friendly_hp - enemy_hp) * 6
+        score += (num_friendly - num_enemy) * 50
 
-        # Kills
-        score += enemy_dead * 80
-        score -= friendly_dead * 80
+        # ☠ kills
+        score += enemy_dead * 90
+        score -= friendly_dead * 90
 
-        # Critical state pressure
-        score += low_enemy * 25
-        score -= low_friendly * 25
+        # presión
+        score += low_enemy * 30
+        score -= low_friendly * 30
 
-        # Strategic positioning
-        score += progress_score * 2
+        # 🧭 posicionamiento
+        score += progress_score * 3
 
         return score
 
     # --------------------------------------------------
-    # FALLBACK HEURISTIC
-    # --------------------------------------------------
     def _heuristic_score(self, action):
-        """
-        Simple heuristic used when simulation fails.
-        """
         score = 0
-        action_type = action.__class__.__name__.lower()
+        name = action.__class__.__name__.lower()
 
-        if "attack" in action_type:
+        if "attack" in name:
             score += 50
-        if "assault" in action_type:
+        if "assault" in name:
             score += 70
-        if "move" in action_type:
+        if "move" in name:
             score += 20
-        if "wait" in action_type:
-            score -= 10
+        if "wait" in name:
+            score -= 20
 
         return score

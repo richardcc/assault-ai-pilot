@@ -2,6 +2,7 @@ import torch
 import torch.optim as optim
 import multiprocessing as mp
 import numpy as np
+import time
 from pathlib import Path
 
 from assault_sim.config.ppo_config import PPOConfig
@@ -14,9 +15,6 @@ from assault_sim.train.ppo_schedule import ppo_schedule
 from assault_sim.train.ppo_trainer import ppo_update, compute_gae
 
 
-# =================================================
-# ✅ CONFIG
-# =================================================
 MODEL_DIR = Path("C:/repos/python/assault/models")
 LATEST_PATH = MODEL_DIR / "latest.pt"
 
@@ -42,25 +40,18 @@ def main():
 
     optimizer = optim.Adam(policy.parameters(), lr=PPOConfig.LR)
 
-    # -------------------------------------------------
-    # ✅ (OPCIONAL) LOAD EXISTING MODEL
-    # -------------------------------------------------
     if LATEST_PATH.exists():
         try:
             print(f">>> Loading existing model: {LATEST_PATH}")
             policy.load_state_dict(torch.load(LATEST_PATH, map_location=device))
         except Exception as e:
-            print(f"⚠️ Could not load model (dimension mismatch likely): {e}")
+            print(f"⚠️ Could not load model: {e}")
             print(">>> Starting from scratch")
 
     rollout_queue = mp.Queue(maxsize=32)
     weights_queue = mp.Queue(maxsize=1)
 
-    # -------------------------------------------------
-    # WORKERS
-    # -------------------------------------------------
     workers = []
-
     for _ in range(PPOConfig.NUM_ENVS):
         p = mp.Process(
             target=worker_loop,
@@ -73,9 +64,10 @@ def main():
     rollout_idx = 0
     buffer = []
 
-    # =================================================
-    # TRAIN LOOP
-    # =================================================
+    start_time = time.time()
+    last_log_time = start_time
+    last_update = 0
+
     while rollout_idx < PPOConfig.TOTAL_UPDATES:
 
         rollout = rollout_queue.get()
@@ -84,20 +76,27 @@ def main():
         if len(buffer) < PPOConfig.BATCH_ROLLOUTS:
             continue
 
-        # -------------------------------------------------
-        # MERGE ROLLOUTS
-        # -------------------------------------------------
-        combined = {k: [] for k in rollout.keys()}
+        # ---------------- MERGE ----------------
+
+        combined = {k: [] for k in rollout.keys() if k != "reward_by_action"}
+        reward_tracker = {}
 
         for r in buffer:
+
             for k in combined:
                 combined[k].extend(r[k])
 
+            for action, stats in r.get("reward_by_action", {}).items():
+                if action not in reward_tracker:
+                    reward_tracker[action] = {"sum": 0.0, "count": 0}
+
+                reward_tracker[action]["sum"] += stats["sum"]
+                reward_tracker[action]["count"] += stats["count"]
+
         buffer = []
 
-        # -------------------------------------------------
-        # GAE
-        # -------------------------------------------------
+        # ---------------- GAE ----------------
+
         advantages = compute_gae(
             combined["rewards"],
             combined["values"],
@@ -113,9 +112,8 @@ def main():
 
         advantages = (advantages - advantages.mean()) / (advantages.std() + 1e-8)
 
-        # -------------------------------------------------
-        # TENSORS
-        # -------------------------------------------------
+        # ---------------- TENSORS ----------------
+
         batch = {
             "obs": torch.tensor(np.array(combined["obs"]), dtype=torch.float32).to(device),
             "actions": torch.tensor(np.array(combined["actions"]), dtype=torch.long).to(device),
@@ -128,7 +126,6 @@ def main():
 
         schedule = ppo_schedule(rollout_idx)
 
-        # ✅ ENTROPY DECAY (AQUÍ)
         entropy_coef = PPOConfig.ENTROPY_COEF * (
             1.0 - rollout_idx / PPOConfig.TOTAL_UPDATES
         )
@@ -140,44 +137,61 @@ def main():
             batch,
             schedule,
             device,
-            entropy_coef,   # ✅ nuevo parámetro
-)
+            entropy_coef,
+        )
 
-        # -------------------------------------------------
-        # ✅ SYNC WEIGHTS (workers)
-        # -------------------------------------------------
+        # ---------------- SYNC ----------------
+
         safe_state = {k: v.detach().cpu().clone() for k, v in policy.state_dict().items()}
-
         if not weights_queue.full():
             weights_queue.put(safe_state)
 
-        # =================================================
-        # ✅ 💾 SAVE MODEL (CLAVE)
-        # =================================================
+        # ---------------- SAVE ----------------
+
         MODEL_DIR.mkdir(parents=True, exist_ok=True)
 
-        # ✅ guardar último modelo (frecuente)
         if rollout_idx % 100 == 0:
             torch.save(policy.state_dict(), LATEST_PATH)
             print(f"✅ Saved latest → {LATEST_PATH}")
 
-        # ✅ checkpoints históricos
         if rollout_idx % 500 == 0:
             ckpt_path = MODEL_DIR / f"checkpoint_{rollout_idx}.pt"
             torch.save(policy.state_dict(), ckpt_path)
             print(f"📦 Saved checkpoint → {ckpt_path}")
 
-        # =================================================
-        # ✅ LOGGING
-        # =================================================
+        # ---------------- LOGGING ----------------
+
         if rollout_idx % 20 == 0:
+
+            current_time = time.time()
+            elapsed = current_time - last_log_time
+
+            updates_done = rollout_idx - last_update
+            throughput = updates_done / elapsed if elapsed > 0 else 0.0
+
+            samples = (
+                PPOConfig.NUM_ENVS *
+                PPOConfig.ROLLOUT_STEPS *
+                PPOConfig.BATCH_ROLLOUTS
+            )
+            samples_per_sec = samples / elapsed if elapsed > 0 else 0.0
 
             print(f"[UPDATE {rollout_idx}] loss={loss:.3f}")
             print(f"avg_reward={np.mean(combined['rewards']):.3f}")
+            print(f"UPDATES/sec: {throughput:.2f}")
+            print(f"SAMPLES/sec: {samples_per_sec:.0f}")
 
-            # -------------------------
+            # ✅ NUEVO
+            print("REWARD BY ACTION:")
+            for action, stats in reward_tracker.items():
+                if stats["count"] > 0:
+                    avg = stats["sum"] / stats["count"]
+                    print(f"  {action}: avg={avg:.3f}")
+
+            last_log_time = current_time
+            last_update = rollout_idx
+
             # ACTION USAGE
-            # -------------------------
             actions = combined["actions"]
             unique, counts = np.unique(actions, return_counts=True)
 
@@ -189,12 +203,9 @@ def main():
                     name = TacticalOption(u).name
                 except:
                     name = str(u)
-
                 print(f"  {name}: {c} ({100*c/total:.1f}%)")
 
-            # -------------------------
             # ATTACK MODES
-            # -------------------------
             attack_modes = combined["attack_modes"]
             unique_a, counts_a = np.unique(attack_modes, return_counts=True)
 

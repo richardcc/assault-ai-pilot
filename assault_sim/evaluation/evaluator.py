@@ -16,7 +16,7 @@ class Evaluator:
         max_steps: int = 300,
     ):
         self.env = env
-        self.controller = rl_controller  # ✅ único controller
+        self.controller = rl_controller
         self.rl_side = rl_side
         self.max_steps = max_steps
 
@@ -27,10 +27,15 @@ class Evaluator:
 
         tracker = MetricsTracker(self.rl_side)
 
-        if self.env.sim.event_bus is not None:
-            self.env.sim.event_bus.subscribe(tracker)
+        # ✅ tolerante a distintas implementaciones
+        sim = getattr(self.env, "sim", None) or getattr(self.env, "sim_env", None)
 
-        # ✅ tracking
+        if sim is not None and getattr(sim, "event_bus", None) is not None:
+            sim.event_bus.subscribe(tracker)
+
+        # -------------------------------
+        # POLICY TRACKING
+        # -------------------------------
         option_counts = defaultdict(int)
         formation_counts = defaultdict(int)
         strategy_option_map = defaultdict(lambda: defaultdict(int))
@@ -39,7 +44,7 @@ class Evaluator:
 
         obs = self.env.reset()
 
-        # ✅ CRÍTICO: reset controller (LSTM + strategy)
+        # ✅ reset controller (LSTM, etc.)
         if hasattr(self.controller, "reset"):
             self.controller.reset()
 
@@ -47,8 +52,13 @@ class Evaluator:
 
         done = False
         steps = 0
-        prev_state = self.env.sim.game_state
 
+        sim = getattr(self.env, "sim", None) or getattr(self.env, "sim_env", None)
+        prev_state = sim.game_state if sim is not None else None
+
+        # -------------------------------------------------
+        # MAIN LOOP
+        # -------------------------------------------------
         while not done:
 
             step = runner.step(self.controller, obs)
@@ -58,23 +68,24 @@ class Evaluator:
             done = step["done"]
             side = step.get("side")
 
-            state = self.env.sim.game_state
+            sim = getattr(self.env, "sim", None) or getattr(self.env, "sim_env", None)
+            state = sim.game_state if sim is not None else None
 
-            reward_trace.append(step["reward"])
+            reward_trace.append(step.get("reward", 0.0))
 
             # -------------------------------------------------
-            # ✅ TRACK POLICY
+            # ✅ TRACK POLICY (L2 / L3)
             # -------------------------------------------------
             if side == self.rl_side:
 
                 controller = self.controller
 
-                # ✅ OPTION (L2)
+                # L2
                 option = getattr(controller, "current_option", None)
                 if option is not None:
                     option_counts[option.name] += 1
 
-                # ✅ STRATEGY (L3) ✅ CAMBIO CLAVE
+                # L3
                 strategy = getattr(controller, "current_strategy", None)
                 formation = None
 
@@ -82,12 +93,12 @@ class Evaluator:
                     formation = strategy.name
                     formation_counts[formation] += 1
 
-                # ✅ mapping L3 → L2
+                # mapping strategy → option
                 if option is not None and formation is not None:
                     strategy_option_map[formation][option.name] += 1
 
             # -------------------------------------------------
-            # ✅ TRACK STATE
+            # ✅ TRACK METRICS (CRÍTICO)
             # -------------------------------------------------
             tracker.track_damage(info, state, prev_state)
             tracker.track_state(state)
@@ -96,9 +107,7 @@ class Evaluator:
             prev_state = state
             steps += 1
 
-            # -------------------------------------------------
-            # SAFETY LIMIT
-            # -------------------------------------------------
+            # SAFETY
             if steps >= self.max_steps:
                 done = True
                 break
@@ -106,11 +115,15 @@ class Evaluator:
         # -------------------------------------------------
         # BUILD RESULT
         # -------------------------------------------------
-        result = tracker.build_result(self.env.sim.game_state)
+        final_state = state if state is not None else None
 
+        result = tracker.build_result(final_state)
+
+        # ✅ métricas adicionales
         result["steps"] = steps
         result["avg_reward"] = float(np.mean(reward_trace)) if reward_trace else 0.0
 
+        # ✅ POLICY INFO
         result["option_counts"] = dict(option_counts)
         result["formation_counts"] = dict(formation_counts)
 
@@ -132,14 +145,6 @@ class Evaluator:
             try:
                 result = self.run_episode()
                 results.append(result)
-
-                #print(
-                 #   f"[EP {ep}] "
-                  #  f"winner={result.get('winner')} "
-                   # f"vp={result.get('vp')} "
-                    #f"steps={result.get('steps')} "
-                    #f"avg_reward={result.get('avg_reward'):.3f}"
-               # )
 
             except Exception as e:
                 print(f"❌ ERROR in episode {ep}: {e}")

@@ -9,6 +9,18 @@ class ProgressiveReward(BaseReward):
         self.rl_side = rl_side
         self.last_action = None
 
+        # =================================================
+        # ✅ METRICS (COMBAT INTELLIGENCE)
+        # =================================================
+        self.trade_sum = 0.0
+        self.trade_count = 0
+
+        self.bad_attacks = 0
+        self.total_attacks = 0
+
+        self.damage_given_total = 0
+        self.damage_taken_total = 0
+
     def compute(
         self,
         *,
@@ -38,38 +50,83 @@ class ProgressiveReward(BaseReward):
         is_attack = "ATTACK" in action_upper
 
         # =================================================
-        # ✅ DAMAGE (CORE)
+        # ✅ BASE REWARD
+        # =================================================
+        if l2 == "FLANK":
+            if pre_dist is not None and pre_dist <= 3:
+                reward += 0.5
+            else:
+                reward += 0.1
+
+        elif l2 == "RETREAT":
+            reward += 1.0
+
+        # =================================================
+        # ✅ DAMAGE
         # =================================================
         reward += damage * 0.8
         reward -= damage_taken * 0.8
 
-        # ✅ trade positivo
         if damage > damage_taken:
             reward += 0.2
 
-        # ✅ trade perfecto
         if damage >= 2 and damage_taken == 0:
             reward += 0.4
 
-        # ✅ supervivencia SOLO si haces algo útil
         if damage_taken == 0 and damage > 0:
-            reward += 0.1
+            reward += 0.3
 
         # =================================================
-        # ✅ ATTACK QUALITY (REBALANCEADO)
+        # ✅ METRICS LOGGING (NO afecta al reward)
+        # =================================================
+        self.damage_given_total += damage
+        self.damage_taken_total += damage_taken
+
+        if is_attack:
+            trade = damage - damage_taken
+
+            self.trade_sum += trade
+            self.trade_count += 1
+
+            if damage_taken > damage:
+                self.bad_attacks += 1
+
+            self.total_attacks += 1
+
+        # =================================================
+        # 🔥 COMBAT INTELLIGENCE (PHASE 2.5 FINAL)
         # =================================================
         if is_attack:
 
-            reward += 0.3  # antes 0.5 → bajamos dominancia
+            trade = damage - damage_taken
+
+            # ✅ señal principal (mantener)
+            reward += trade * 0.6
+
+            # ✅ castigo ligero (NO bloquear comportamiento)
+            if trade < 0:
+                reward -= 0.2   # 🔥 BAJADO más
+
+            # ✅ incentivo por buen ataque
+            elif trade > 0:
+                reward += 0.25
+
+        # =================================================
+        # ✅ ATTACK (AJUSTADO FINAL)
+        # =================================================
+        if is_attack:
+
+            # ✅ incentivo a participar (IMPORTANTE)
+            reward += 0.15   # 🔥 SUBIDO (era 0.1)
 
             if damage > 0:
-                reward += 1.0
+                reward += 0.15
             else:
-                reward -= 0.4   # castigo fuerte
+                reward -= 0.5   # 🔽 ligeramente
 
-            # 🔥 MAL trade = muy castigado
-            if damage_taken > damage:
-                reward -= 0.6
+            # ❌ ELIMINAR ESTA LÍNEA (DOBLE PENALIZACIÓN)
+            # if damage_taken > damage:
+            #     reward -= 0.5
 
         # =================================================
         # ✅ KILL
@@ -78,7 +135,7 @@ class ProgressiveReward(BaseReward):
             reward += 4.0
 
         # =================================================
-        # ✅ POSITIONING
+        # ✅ POSITION
         # =================================================
         if pre_dist is not None and post_dist is not None:
 
@@ -89,7 +146,7 @@ class ProgressiveReward(BaseReward):
                 reward += 0.1
 
         # =================================================
-        # ✅ HOLD PASIVO
+        # ✅ HOLD
         # =================================================
         if (
             l2 == "HOLD"
@@ -99,14 +156,13 @@ class ProgressiveReward(BaseReward):
         ):
             reward -= 0.5
 
-        # HOLD sin impacto
         if l2 == "HOLD" and damage == 0:
             reward -= 0.15
 
         # =================================================
         # ✅ INACTIVITY
         # =================================================
-        if damage == 0 and not is_attack:
+        if damage == 0 and not is_attack and l2 not in ["FLANK", "RETREAT"]:
             reward -= 0.05
 
         # =================================================
@@ -119,50 +175,48 @@ class ProgressiveReward(BaseReward):
         # ✅ L2 CONTROL
         # =================================================
 
-        # -------------------------
-        # ATTACK
-        # -------------------------
-        if l2 == "ATTACK":
-            reward += 0.2
-
-        # -------------------------
-        # RETREAT (IMPORTANTE)
-        # -------------------------
-        elif l2 == "RETREAT":
+        if l2 == "RETREAT":
 
             if pre_dist is not None and pre_dist <= 3:
+                reward += 1.0
+
+            if damage_taken == 0:
                 reward += 0.6
 
-            if damage_taken == 0:
-                reward += 0.2
-
             if damage_taken > damage:
-                reward += 0.3  # escapar buen trade
+                reward += 0.3
 
-        # -------------------------
-        # FLANK (CLAVE)
-        # -------------------------
         elif l2 == "FLANK":
 
-            reward += 0.4
+            if pre_dist is not None and pre_dist <= 3:
 
-            if damage_taken == 0:
-                reward += 0.2
+                reward += 1.0
 
-            if pre_dist is not None and post_dist is not None:
-                if abs(post_dist - pre_dist) <= 1:
-                    reward += 0.3
+                if damage_taken == 0:
+                    reward += 0.2
 
-        # -------------------------
-        # ADVANCE control
-        # -------------------------
+                if post_dist is not None:
+                    if abs(post_dist - pre_dist) <= 1:
+                        reward += 0.3
+
+                if damage == 0:
+                    reward += 0.5
+
+        # =================================================
+        # ✅ ADVANCE
+        # =================================================
         if l2 == "ADVANCE" and damage_taken > 0:
             reward -= 0.25
 
         # =================================================
-        # 🔥 FORZAR DECISIÓN EN COMBATE
+        # ✅ COMBAT PRESSURE
         # =================================================
-        if pre_dist is not None and pre_dist <= 3 and not is_attack:
+        if (
+            pre_dist is not None
+            and pre_dist <= 3
+            and not is_attack
+            and l2 not in ["FLANK", "RETREAT"]
+        ):
             reward -= 0.2
 
         # =================================================
@@ -174,7 +228,7 @@ class ProgressiveReward(BaseReward):
         self.last_action = action_class
 
         # =================================================
-        # ✅ VICTORY POINTS
+        # ✅ VP
         # =================================================
         if hasattr(state, "vp_tracker") and state.vp_tracker:
             if hasattr(next_state, "vp_tracker") and next_state.vp_tracker:
@@ -196,11 +250,21 @@ class ProgressiveReward(BaseReward):
                 reward -= 5.0
 
         # =================================================
-        # ✅ TIME COST
+        # ✅ TIME
         # =================================================
         reward -= 0.02
 
         # =================================================
-        # ✅ CLIP
+        # ✅ CLAMP FINAL
+        # =================================================
+        if l2 == "FLANK":
+            reward = max(reward, 0.3)
+
+        elif l2 == "RETREAT":
+            reward = max(reward, 0.5)
+
+        if l2 == "ATTACK":
+            reward = min(reward, 1.2)
+
         # =================================================
         return max(min(reward, 10.0), -10.0)

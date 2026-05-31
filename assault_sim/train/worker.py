@@ -12,7 +12,6 @@ from assault_sim.rl.option_policy import OptionPolicy
 from assault_sim.decision.decision_engine import DecisionEngine
 from assault_sim.heuristics.tactical_path_heuristic import TacticalPathHeuristic
 
-# ✅ IMPORT CORRECTO
 from assault_sim.decision.decision_engine_controller import DecisionEngineController
 
 
@@ -43,7 +42,7 @@ def worker_loop(
     ).to(device)
 
     # -------------------------------------------------
-    # ✅ CONTROLLER (CORRECTO)
+    # CONTROLLER
     # -------------------------------------------------
     decision_engine = DecisionEngine()
     option_policy = OptionPolicy(policy)
@@ -57,7 +56,6 @@ def worker_loop(
         sim_env=env.sim,
     )
 
-    # 🔥 CLAVE: activar modo training
     controller.training_mode = True
 
     # -------------------------------------------------
@@ -70,11 +68,33 @@ def worker_loop(
             state_dict = weights_queue.get()
             policy.load_state_dict(state_dict)
 
-        # ✅ Rollout
+        # ✅ Rollout normal
         rollout = collect_rollout(
             env,
             controller,
             max_steps=PPOConfig.ROLLOUT_STEPS
         )
+
+        # =================================================
+        # ✅ 🔥 NUEVO: REWARD POR ACCIÓN
+        # =================================================
+        reward_tracker = {}
+
+        # 👇 asumimos que rollout trae "infos" y "rewards"
+        for reward, l2 in zip(rollout["rewards"], rollout["l2"]):
+
+            action_name = l2 if l2 is not None else "UNKNOWN"
+
+            if action_name not in reward_tracker:
+                reward_tracker[action_name] = {
+                    "sum": 0.0,
+                    "count": 0
+                }
+
+            reward_tracker[action_name]["sum"] += reward
+            reward_tracker[action_name]["count"] += 1
+
+        # ✅ añadir al rollout
+        rollout["reward_by_action"] = reward_tracker
 
         rollout_queue.put(rollout)

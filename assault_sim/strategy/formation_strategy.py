@@ -22,7 +22,6 @@ class FormationStrategyEngine:
 
     # -------------------------------------------------
     def update(self, state, rl_side):
-
         if self.current_strategy is None or self.remaining_steps <= 0:
             self.current_strategy = self._select_strategy(state, rl_side)
             self.remaining_steps = self.horizon
@@ -43,32 +42,33 @@ class FormationStrategyEngine:
             if u.side != rl_side and u.alive and u.position is not None
         ]
 
-        # -------------------------------------------------
-        # ✅ fallback seguro
-        # -------------------------------------------------
         if not own_units or not enemy_units:
             return FormationStrategy.PUSH_VP
 
         # -------------------------------------------------
-        # ✅ DISTANCIA A ENEMIGOS
+        # ✅ DISTANCIA ENEMIGO (mínima)
         # -------------------------------------------------
-        def min_enemy_distance():
-            best = 999
-            for u in own_units:
-                for e in enemy_units:
-                    d = hex_distance(u.position, e.position)
-                    if d < best:
-                        best = d
-            return best
-
-        enemy_dist = min_enemy_distance()
+        enemy_dist = min(
+            hex_distance(u.position, e.position)
+            for u in own_units
+            for e in enemy_units
+        )
 
         # -------------------------------------------------
-        # ✅ CLEANUP (enemigos débiles)
+        # ✅ VENTAJA LOCAL (🔥 CLAVE NUEVO)
+        # -------------------------------------------------
+        friendly_hp = sum(getattr(u, "hp", 0) for u in own_units)
+        enemy_hp = sum(getattr(e, "hp", 0) for e in enemy_units)
+
+        hp_advantage = friendly_hp - enemy_hp
+        unit_advantage = len(own_units) - len(enemy_units)
+
+        # -------------------------------------------------
+        # ✅ ENEMIGOS DÉBILES
         # -------------------------------------------------
         low_hp_enemies = [
             e for e in enemy_units
-            if hasattr(e, "hp") and e.hp <= 1
+            if getattr(e, "hp", 0) <= 1
         ]
 
         # -------------------------------------------------
@@ -88,58 +88,84 @@ class FormationStrategyEngine:
             if not vp_positions:
                 return 999
 
-            best = 999
-            for u in own_units:
-                for vp in vp_positions:
-                    vp_pos = HexCoord(vp[0], vp[1])
-                    d = hex_distance(u.position, vp_pos)
-                    if d < best:
-                        best = d
-            return best
+            return min(
+                hex_distance(u.position, HexCoord(vp[0], vp[1]))
+                for u in own_units
+                for vp in vp_positions
+            )
 
         vp_dist = distance_to_vp()
 
-        # -------------------------------------------------
-        # ✅ DECISIONES SUAVES (CLAVE)
-        # -------------------------------------------------
-
         roll = random.random()
 
-        # CLEANUP
+        # -------------------------------------------------
+        # ✅ CLEANUP (solo si conviene)
+        # -------------------------------------------------
         if len(low_hp_enemies) >= 2:
-            return FormationStrategy.CLEANUP
+            if hp_advantage >= 0 or roll < 0.6:
+                return FormationStrategy.CLEANUP
 
-        # 🔥 COMBATE CERCANO (NO FORZAR ATTACK)
+        # -------------------------------------------------
+        # ✅ COMBATE CERCANO (🔥 MÁS INTELIGENTE)
+        # -------------------------------------------------
         if enemy_dist <= 3:
 
-            if roll < 0.4:
-                return FormationStrategy.ATTACK
-            elif roll < 0.7:
-                return FormationStrategy.HOLD_VP
-            else:
-                return FormationStrategy.CLEANUP
+            # ✅ si vamos ganando → agresivo
+            if hp_advantage > 0 or unit_advantage > 0:
+                if roll < 0.6:
+                    return FormationStrategy.ATTACK
+                elif roll < 0.85:
+                    return FormationStrategy.CLEANUP
+                else:
+                    return FormationStrategy.HOLD_VP
 
-        # 🔥 CERCA DE VP
+            # ❌ si vamos perdiendo → defensivo
+            else:
+                if roll < 0.5:
+                    return FormationStrategy.HOLD_VP
+                elif roll < 0.8:
+                    return FormationStrategy.PUSH_VP
+                else:
+                    return FormationStrategy.ATTACK  # gamble controlado
+
+        # -------------------------------------------------
+        # ✅ CERCA DEL VP
+        # -------------------------------------------------
         if vp_dist <= 2:
 
-            if roll < 0.5:
-                return FormationStrategy.HOLD_VP
-            elif roll < 0.75:
-                return FormationStrategy.ATTACK
+            if hp_advantage >= 0:
+                if roll < 0.6:
+                    return FormationStrategy.HOLD_VP
+                elif roll < 0.85:
+                    return FormationStrategy.ATTACK
+                else:
+                    return FormationStrategy.CLEANUP
             else:
-                return FormationStrategy.PUSH_VP
+                return FormationStrategy.HOLD_VP
 
-        # 🔥 LEJOS → MÁS MEZCLA REAL
+        # -------------------------------------------------
+        # ✅ LEJOS DEL VP
+        # -------------------------------------------------
         if vp_dist > 2:
 
-            if roll < 0.4:
-                return FormationStrategy.PUSH_VP
-            elif roll < 0.65:
-                return FormationStrategy.HOLD_VP
-            elif roll < 0.85:
-                return FormationStrategy.ATTACK
-            else:
-                return FormationStrategy.CLEANUP
+            if hp_advantage > 2:
+                if roll < 0.5:
+                    return FormationStrategy.ATTACK
+                else:
+                    return FormationStrategy.PUSH_VP
 
-        # fallback real
+            elif hp_advantage < -2:
+                if roll < 0.6:
+                    return FormationStrategy.HOLD_VP
+                else:
+                    return FormationStrategy.PUSH_VP
+
+            else:
+                if roll < 0.4:
+                    return FormationStrategy.PUSH_VP
+                elif roll < 0.7:
+                    return FormationStrategy.ATTACK
+                else:
+                    return FormationStrategy.HOLD_VP
+
         return FormationStrategy.HOLD_VP

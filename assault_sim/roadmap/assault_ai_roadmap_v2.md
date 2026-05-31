@@ -1,4 +1,4 @@
-# ASSAULT AI ROADMAP v3 (OPERABLE)
+# ASSAULT AI ROADMAP v4 (PRODUCTION READY)
 
 ## STATUS LEGEND
 - [ ] TODO
@@ -7,11 +7,11 @@
 
 ---
 
-# PHASE 1 — STABILIZATION
+# PHASE 1 — STABILIZATION ✅
 
 ## Tasks
 - [x] PPO stable
-- [x] No collapse after 500 updates
+- [x] No collapse after 500+ updates
 - [x] Balanced action distribution
 
 ## Metrics
@@ -20,31 +20,55 @@
 - entropy
 
 ## Done Criteria
-- ALL actions >10%
-- Attack >25%
+- ALL actions > 10%
+- Attack > 25%
 
 ---
 
-# PHASE 2 — BEHAVIOR CONSOLIDATION
+# PHASE 2 — BEHAVIOR CONSOLIDATION ⚠️
 
 ## Tasks
-- [~] Run 1000+ updates
-- [ ] Inspect replays
-- [ ] Validate tactics
+- [x] Run 3000–4000 episodes
+- [ ] Inspect replays manually
+- [ ] Validate tactical behavior
 
 ## Checks
-- [ ] Attacks in range
+- [ ] Attacks happen in range
 - [ ] No retreat spam
-- [ ] No oscillations
+- [ ] No oscillation patterns
+- [ ] Units do not suicide blindly ❗
 
 ## Metrics
 - win_rate
 - damage_ratio
 - avg_reward
 
+## Done Criteria (REAL)
+- attack ∈ [25–45%]
+- retreat < 25%
+- damage_ratio >= 0.9 ✅ (CRITICAL)
+
+---
+
+# 🔥 PHASE 2.5 — COMBAT INTELLIGENCE (NEW - CRITICAL)
+
+## Purpose
+Fix decision quality in combat (WHEN to attack / NOT attack).
+
+## Tasks
+- [ ] Add trade-based reward (damage - damage_taken)
+- [ ] Penalize bad engagements
+- [ ] Reward efficient combat
+
+## Metrics
+- damage_per_attack
+- kills_per_attack
+- damage_ratio
+
 ## Done Criteria
-- attack ∈ [25–40%]
-- retreat <20%
+- damage_ratio >= 0.95 ✅
+- kills_per_attack improves
+- winrate >= 45% ✅
 
 ---
 
@@ -53,101 +77,149 @@
 ## Tasks
 - [ ] Remove redundant signals
 - [ ] Normalize reward scale
-- [ ] Align reward with strategy
+- [ ] Align reward with actual winning behavior
+
+## Checks
+- [ ] No conflicting incentives
+- [ ] No action accidentally over-rewarded
 
 ## Done Criteria
 - reward stable
-- no action dominates reward
+- no single action dominates reward
+- smooth learning curve
 
 ---
 
 # PHASE 4 — STRATEGY-CONDITIONED POLICY
 
 ## Tasks
-- [ ] Add strategy to observation
-- [ ] Modify PolicyNet
-- [ ] Remove manual bias
+- [ ] Add strategy context (L3) to observation
+- [ ] Modify PolicyNet (concatenate strategy)
+- [ ] Remove manual action bias
 
 ## Done Criteria
-- strategy → behavior learned
+- behavior adapts to strategy
+- strategy → different action profiles
 
 ---
 
 # PHASE 5 — IMITATION LEARNING
 
 ## Tasks
-- [ ] Integrate DecisionEngine teacher
+- [ ] Integrate DecisionEngine as teacher
 - [ ] Add imitation loss
+- [ ] Mix PPO + supervised loss
 
 ## Done Criteria
 - faster convergence
+- more stable early training
 
 ---
 
 # PHASE 6 — OPPONENT EVOLUTION
 
 ## Tasks
-- [ ] Add snapshot pool
-- [ ] Random sampling
+- [ ] Snapshot pool of past models
+- [ ] Random opponent sampling
 
 ## Done Criteria
-- robust vs all opponents
+- agent robust to multiple playstyles
+- avoids overfitting to one opponent
 
 ---
 
 # PHASE 7 — SELF-PLAY
 
 ## Tasks
-- [ ] PPO vs snapshot
-- [ ] freeze opponent
+- [ ] Train vs frozen snapshots
+- [ ] PPO vs PPO
 
 ## Done Criteria
-- improving vs past versions
+- continuous improvement vs past versions
+- higher skill ceiling
 
 ---
 
-# PHASE 8 — FEATURES
+# PHASE 8 — FEATURES (STATE IMPROVEMENT)
 
 ## Tasks
-- [ ] ally_distance
-- [ ] threat_level
-- [ ] line_of_sight
+- [ ] Add:
+    - ally_distance
+    - enemy_count_near
+    - threat_level
+    - local advantage (#allies vs enemies)
+    - line_of_sight
+
+## Done Criteria
+- improved combat decisions
+- better positioning
 
 ---
 
-# PHASE 9 — DSL
+# PHASE 9 — DSL (CONFIGURABLE REWARD)
 
 ## Tasks
-- [ ] move scoring to config
+- [ ] Move reward weights to config
+- [ ] Enable quick tuning
+
+## Done Criteria
+- reward editable without code changes
 
 ---
 
 # PHASE 10 — VECTORIZED ENV
 
 ## Tasks
-- [ ] parallel envs
+- [ ] Parallel rollout environments
+
+## Done Criteria
+- faster training
+- higher sample throughput
 
 ---
 
-# PHASE 11 — FULL HRL
+# PHASE 11 — FULL HRL (OPTIONAL ADVANCED)
 
 ## Tasks
-- [ ] L3 PPO
-- [ ] L2 PPO
-- [ ] L1 learned
+- [ ] L3 PPO (strategy level)
+- [ ] L2 PPO (tactical level)
+- [ ] L1 learned (actions)
+
+## Done Criteria
+- hierarchical behavior
+- better long-term planning
 
 ---
 
-# GLOBAL TARGET
+# ✅ GLOBAL TARGET
 
-- stable winrate increase
-- damage_ratio >=1.0
-- no collapse
+- winrate ≥ 50%
+- damage_ratio ≥ 1.0
+- non-collapsing behavior
+- multiple tactics used meaningfully
+
+---
+
+# 🔥 KEY LESSONS
+
+- Stability ≠ intelligence
+- Exploration ≠ good decisions
+- Reward must encode decision quality (not just action outcome)
+
+---
+
+# ✅ CURRENT STATUS (PROJECT)
+
+- Phase 1: ✅ DONE
+- Phase 2: ⚠️ PARTIAL (fails in combat)
+- Phase 2.5: ❌ REQUIRED NEXT STEP
+- Phase 3+: ⛔ BLOCKED until combat is fixed
 
 ---
 
 # NOTE
 
-This file is meant to be actively updated during development.
-Mark progress continuously.
+Do NOT proceed to Phase 3+  
+until damage_ratio and winrate improve.
 
+Combat intelligence is the real bottleneck.

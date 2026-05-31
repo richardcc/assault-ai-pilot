@@ -31,7 +31,6 @@ def collect_rollout(env, controller, max_steps, seq_len=8):
 
     runner = MatchRunner(env, controller=controller)
 
-    # ✅ reset env + controller (MUY IMPORTANTE PARA LSTM)
     obs = runner.reset()
     if hasattr(controller, "reset"):
         controller.reset()
@@ -43,6 +42,7 @@ def collect_rollout(env, controller, max_steps, seq_len=8):
     attack_modes_buf, logp_buf = [], []
     values_buf, rewards_buf, dones_buf = [], [], []
     teacher_actions_buf = []
+    l2_buf = []  # ✅ NUEVO
 
     sequence = []
 
@@ -51,12 +51,12 @@ def collect_rollout(env, controller, max_steps, seq_len=8):
 
     step_count = 0
 
-    # ✅ tracked per RL turn
     last_action = 0
     last_attack_mode = 0
     last_logp = torch.zeros(1, dtype=torch.float32)
     last_value = torch.zeros(1, dtype=torch.float32)
     last_teacher = 0
+    last_l2 = "UNKNOWN"  # ✅ NUEVO
 
     decision_engine = DecisionEngine()
 
@@ -80,9 +80,7 @@ def collect_rollout(env, controller, max_steps, seq_len=8):
             if turn_start_obs is None:
                 turn_start_obs = obs
 
-            # ----------------------------------------
-            # ✅ TEACHER SIGNAL
-            # ----------------------------------------
+            # TEACHER
             teacher_idx = 0
             try:
                 intent = decision_engine.compute_intent(env)
@@ -94,30 +92,30 @@ def collect_rollout(env, controller, max_steps, seq_len=8):
 
             last_teacher = teacher_idx
 
-            # ----------------------------------------
-            # ✅ CONTROLLER OUTPUT
-            # ----------------------------------------
+            # CONTROLLER OUTPUT
             option = getattr(controller, "current_option", None)
             logp = getattr(controller, "last_logp", None)
             value = getattr(controller, "last_value", None)
             attack_mode = getattr(controller, "current_attack_mode", 0)
 
-            # ✅ option
             if option is not None:
                 last_action = option.value if not isinstance(option, int) else option
 
-            # ✅ attack mode (nunca None)
+                # ✅ NUEVO: extraer nombre L2
+                if hasattr(option, "name"):
+                    last_l2 = option.name
+                else:
+                    last_l2 = str(option)
+
             last_attack_mode = attack_mode if attack_mode is not None else 0
 
-            # ✅ logp (YA tensor)
             if logp is not None:
                 last_logp = logp.detach()
             else:
                 last_logp = torch.zeros(1, dtype=torch.float32)
 
-            # ✅ value (YA tensor → FIX CLAVE)
             if value is not None:
-                last_value = value.detach()  # ✅ CORRECTO
+                last_value = value.detach()
             else:
                 last_value = torch.zeros(1, dtype=torch.float32)
 
@@ -137,14 +135,14 @@ def collect_rollout(env, controller, max_steps, seq_len=8):
                 "reward": turn_reward,
                 "done": done,
                 "teacher": last_teacher,
+                "l2": last_l2,  # ✅ NUEVO
             })
 
-            # reset turn
             turn_start_obs = None
             turn_reward = 0.0
 
             # ----------------------------------------
-            # ✅ SLIDING WINDOW
+            # SLIDING WINDOW
             # ----------------------------------------
             if len(sequence) >= seq_len:
 
@@ -159,10 +157,9 @@ def collect_rollout(env, controller, max_steps, seq_len=8):
                 rewards_buf.extend(x["reward"] for x in chunk)
                 dones_buf.extend(x["done"] for x in chunk)
                 teacher_actions_buf.extend(x["teacher"] for x in chunk)
+                l2_buf.extend(x["l2"] for x in chunk)  # ✅ NUEVO
 
-        # ----------------------------------------
         # STEP
-        # ----------------------------------------
         obs = next_obs
         step_count += 1
 
@@ -174,7 +171,6 @@ def collect_rollout(env, controller, max_steps, seq_len=8):
         if done:
             obs = runner.reset()
 
-            # ✅ reset LSTM aquí también
             if hasattr(controller, "reset"):
                 controller.reset()
 
@@ -193,6 +189,7 @@ def collect_rollout(env, controller, max_steps, seq_len=8):
         rewards_buf.append(x["reward"])
         dones_buf.append(x["done"])
         teacher_actions_buf.append(x["teacher"])
+        l2_buf.append(x["l2"])  # ✅ NUEVO
 
     return {
         "obs": obs_buf,
@@ -203,4 +200,5 @@ def collect_rollout(env, controller, max_steps, seq_len=8):
         "rewards": rewards_buf,
         "dones": dones_buf,
         "teacher_actions": teacher_actions_buf,
+        "l2": l2_buf,  # ✅ NUEVO
     }
