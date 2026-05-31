@@ -115,7 +115,7 @@ class ResultsAnalyzer:
         return agg
 
     # -------------------------------------------------
-    # ✅ NEW: L1 AGGREGATION (acciones reales)
+    # L1 AGGREGATION
     # -------------------------------------------------
     def aggregate_l1_stats(self):
 
@@ -134,7 +134,7 @@ class ResultsAnalyzer:
         return agg
 
     # -------------------------------------------------
-    # EFFICIENCY (GLOBAL)
+    # EFFICIENCY
     # -------------------------------------------------
     def efficiency(self):
 
@@ -156,7 +156,7 @@ class ResultsAnalyzer:
         }
 
     # -------------------------------------------------
-    # ✅ NEW: L1 EFFICIENCY
+    # L1 EFFICIENCY
     # -------------------------------------------------
     def l1_efficiency(self):
 
@@ -178,13 +178,16 @@ class ResultsAnalyzer:
         }
 
     # -------------------------------------------------
-    # UNIT AGGREGATION
+    # ✅ UNIT AGGREGATION (MEJORADO)
     # -------------------------------------------------
     def aggregate_units(self):
         units = defaultdict(lambda: {
             "attacks": 0,
             "damage": 0,
             "kills": 0,
+            "unit_key": None,
+            "category": None,
+            "classification": None,
         })
 
         for r in self.results:
@@ -193,10 +196,15 @@ class ResultsAnalyzer:
             for side in ["RL", "ENEMY"]:
                 for uid, stats in unit_data.get(side, {}).items():
 
-                    # ✅ FIX AQUÍ (usar dict correctamente)
                     units[uid]["damage"] += stats.get("damage", 0)
                     units[uid]["attacks"] += stats.get("attacks", 0)
                     units[uid]["kills"] += stats.get("kills", 0)
+
+                    # ✅ NUEVO: metadata (una sola vez)
+                    if units[uid]["unit_key"] is None:
+                        units[uid]["unit_key"] = stats.get("unit_key")
+                        units[uid]["category"] = stats.get("category")
+                        units[uid]["classification"] = stats.get("classification")
 
         return units
 
@@ -217,6 +225,30 @@ class ResultsAnalyzer:
             return sorted_units[:top_n]
 
         return sorted_units
+
+    # -------------------------------------------------
+    # ✅ NUEVO: AGRUPAR POR TIPO
+    # -------------------------------------------------
+    def aggregate_by_unit_key(self):
+
+        units = self.aggregate_units()
+        agg = {}
+
+        for uid, data in units.items():
+            key = data.get("unit_key")
+
+            if key not in agg:
+                agg[key] = {
+                    "damage": 0,
+                    "attacks": 0,
+                    "kills": 0
+                }
+
+            agg[key]["damage"] += data["damage"]
+            agg[key]["attacks"] += data["attacks"]
+            agg[key]["kills"] += data["kills"]
+
+        return agg
 
     # -------------------------------------------------
     # PRINT REPORT
@@ -254,35 +286,29 @@ class ResultsAnalyzer:
         print(dict(l1_stats["ENEMY"]))
 
         # -------------------------------------------------
-        # L2 ACTION USAGE
+        # ACTION USAGE
         # -------------------------------------------------
         print("\n=== ACTION USAGE (L2) ===")
-        if action_usage:
-            for opt, (count, ratio) in sorted(
-                action_usage.items(),
-                key=lambda x: x[1][0],
-                reverse=True
-            ):
-                print(f"{opt}: {count} ({ratio:.2%})")
-        else:
-            print("No action data.")
+        for opt, (count, ratio) in sorted(
+            action_usage.items(),
+            key=lambda x: x[1][0],
+            reverse=True
+        ):
+            print(f"{opt}: {count} ({ratio:.2%})")
 
         # -------------------------------------------------
-        # L3 FORMATION USAGE
+        # FORMATION USAGE
         # -------------------------------------------------
         print("\n=== FORMATION USAGE (L3) ===")
-        if formation_usage:
-            for strat, (count, ratio) in sorted(
-                formation_usage.items(),
-                key=lambda x: x[1][0],
-                reverse=True
-            ):
-                print(f"{strat}: {count} ({ratio:.2%})")
-        else:
-            print("No formation data.")
+        for strat, (count, ratio) in sorted(
+            formation_usage.items(),
+            key=lambda x: x[1][0],
+            reverse=True
+        ):
+            print(f"{strat}: {count} ({ratio:.2%})")
 
         # -------------------------------------------------
-        # L3 → L2 MAPPING
+        # STRATEGY → OPTION
         # -------------------------------------------------
         print("\n=== STRATEGY → OPTION (L3 → L2) ===")
 
@@ -290,14 +316,37 @@ class ResultsAnalyzer:
             total = sum(options.values())
 
             print(f"\n{strat}:")
-
             for opt, v in sorted(options.items(), key=lambda x: x[1], reverse=True):
                 ratio = v / total if total > 0 else 0
                 print(f"  {opt}: {v} ({ratio:.2%})")
 
         # -------------------------------------------------
-        # TOP UNITS
+        # ✅ TOP UNITS (MEJORADO)
         # -------------------------------------------------
         print("\n=== TOP UNITS (damage) ===")
         for uid, data in top_units:
-            print(uid, data)
+
+            unit_key = data.get("unit_key", "UNK")
+            category = data.get("category", "UNK")
+
+            attacks = data["attacks"]
+            damage = data["damage"]
+
+            dpa = damage / attacks if attacks else 0
+
+            print(f"{uid} [{unit_key} | {category}] dmg/atk={dpa:.2f} {data}")
+
+        # -------------------------------------------------
+        # ✅ POR TIPO (NUEVO)
+        # -------------------------------------------------
+        print("\n=== UNIT TYPE SUMMARY ===")
+
+        by_type = self.aggregate_by_unit_key()
+
+        for key, data in by_type.items():
+            attacks = data["attacks"]
+            damage = data["damage"]
+
+            dpa = damage / attacks if attacks else 0
+
+            print(f"{key}: dmg/atk={dpa:.2f} {data}")

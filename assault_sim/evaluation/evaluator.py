@@ -27,7 +27,7 @@ class Evaluator:
 
         tracker = MetricsTracker(self.rl_side)
 
-        # ✅ tolerante a distintas implementaciones
+        # ✅ compatibilidad robusta con distintos envs
         sim = getattr(self.env, "sim", None) or getattr(self.env, "sim_env", None)
 
         if sim is not None and getattr(sim, "event_bus", None) is not None:
@@ -44,7 +44,7 @@ class Evaluator:
 
         obs = self.env.reset()
 
-        # ✅ reset controller (LSTM, etc.)
+        # ✅ reset controller (LSTM / estado interno)
         if hasattr(self.controller, "reset"):
             self.controller.reset()
 
@@ -56,6 +56,8 @@ class Evaluator:
         sim = getattr(self.env, "sim", None) or getattr(self.env, "sim_env", None)
         prev_state = sim.game_state if sim is not None else None
 
+        final_state = prev_state  # ✅ fallback seguro
+
         # -------------------------------------------------
         # MAIN LOOP
         # -------------------------------------------------
@@ -63,13 +65,20 @@ class Evaluator:
 
             step = runner.step(self.controller, obs)
 
+            # ✅ robustez contra None
+            if not step:
+                break
+
             info = step.get("info", {}) or {}
-            obs = step["obs"]
-            done = step["done"]
+            obs = step.get("obs")
+            done = step.get("done", False)
             side = step.get("side")
 
             sim = getattr(self.env, "sim", None) or getattr(self.env, "sim_env", None)
             state = sim.game_state if sim is not None else None
+
+            if state is not None:
+                final_state = state  # ✅ siempre guardamos último válido
 
             reward_trace.append(step.get("reward", 0.0))
 
@@ -80,12 +89,12 @@ class Evaluator:
 
                 controller = self.controller
 
-                # L2
+                # ✅ L2 (option)
                 option = getattr(controller, "current_option", None)
                 if option is not None:
                     option_counts[option.name] += 1
 
-                # L3
+                # ✅ L3 (formation)
                 strategy = getattr(controller, "current_strategy", None)
                 formation = None
 
@@ -93,7 +102,7 @@ class Evaluator:
                     formation = strategy.name
                     formation_counts[formation] += 1
 
-                # mapping strategy → option
+                # ✅ mapping strategy → option
                 if option is not None and formation is not None:
                     strategy_option_map[formation][option.name] += 1
 
@@ -107,7 +116,7 @@ class Evaluator:
             prev_state = state
             steps += 1
 
-            # SAFETY
+            # ✅ HARD SAFETY (evitar loops rotos)
             if steps >= self.max_steps:
                 done = True
                 break
@@ -115,20 +124,18 @@ class Evaluator:
         # -------------------------------------------------
         # BUILD RESULT
         # -------------------------------------------------
-        final_state = state if state is not None else None
-
         result = tracker.build_result(final_state)
 
         # ✅ métricas adicionales
         result["steps"] = steps
         result["avg_reward"] = float(np.mean(reward_trace)) if reward_trace else 0.0
 
-        # ✅ POLICY INFO
+        # ✅ POLICY INFO (L2 / L3)
         result["option_counts"] = dict(option_counts)
         result["formation_counts"] = dict(formation_counts)
 
         result["strategy_option_map"] = {
-            k: dict(v) for k, v in strategy_option_map.items()
+            strat: dict(opts) for strat, opts in strategy_option_map.items()
         }
 
         return result

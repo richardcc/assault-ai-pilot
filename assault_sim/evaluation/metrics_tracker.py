@@ -6,7 +6,6 @@ class MetricsTracker:
     def __init__(self, rl_side: str):
         self.rl_side = rl_side
         self.debug = True
-
         self.reset()
 
     # -------------------------------------------------
@@ -23,7 +22,7 @@ class MetricsTracker:
         }
 
         # -------------------------------
-        # ✅ L1 USAGE
+        # L1 USAGE
         # -------------------------------
         self.l1 = {
             "RL": defaultdict(int),
@@ -31,7 +30,7 @@ class MetricsTracker:
         }
 
         # -------------------------------
-        # 🔥 L1 COMBAT STATS
+        # L1 COMBAT STATS
         # -------------------------------
         self.l1_stats = {
             "RL": defaultdict(lambda: {"damage": 0, "kills": 0, "attacks": 0}),
@@ -39,18 +38,32 @@ class MetricsTracker:
         }
 
         # -------------------------------
-        # 🔥 UNIT STATS (FIX FINAL)
+        # UNIT STATS (EXTENDIDO)
         # -------------------------------
         self.unit_stats = {
-            "RL": defaultdict(lambda: {"damage": 0, "attacks": 0, "kills": 0}),
-            "ENEMY": defaultdict(lambda: {"damage": 0, "attacks": 0, "kills": 0}),
+            "RL": defaultdict(lambda: {
+                "damage": 0,
+                "attacks": 0,
+                "kills": 0,
+                "unit_key": None,
+                "category": None,
+                "classification": None,
+            }),
+            "ENEMY": defaultdict(lambda: {
+                "damage": 0,
+                "attacks": 0,
+                "kills": 0,
+                "unit_key": None,
+                "category": None,
+                "classification": None,
+            }),
         }
 
         self.steps = 0
 
-        # -------------------------------------------------
-        # 🔥 COMBAT INTELLIGENCE
-        # -------------------------------------------------
+        # -------------------------------
+        # COMBAT INTELLIGENCE
+        # -------------------------------
         self.trade_sum = 0.0
         self.trade_count = 0
 
@@ -67,9 +80,9 @@ class MetricsTracker:
         if not info:
             return
 
-        # =================================================
-        # 🔥 UNIT ID ROBUSTO
-        # =================================================
+        # -------------------------------------------------
+        # UNIT ID robusto
+        # -------------------------------------------------
         unit_id = info.get("unit_id")
 
         if not unit_id:
@@ -91,7 +104,7 @@ class MetricsTracker:
         enemy_kills = info.get("enemy_kills", 0)
 
         # -------------------------------------------------
-        # ✅ SIDE TOTALS
+        # SIDE TOTALS
         # -------------------------------------------------
         if rl_attacks > 0:
             self.side_totals["RL"]["attacks"] += rl_attacks
@@ -108,13 +121,13 @@ class MetricsTracker:
             self.side_totals["ENEMY"]["kills"] += enemy_kills
 
         # -------------------------------------------------
-        # ✅ L1 USAGE
+        # L1 USAGE
         # -------------------------------------------------
         action_class = info.get("action_class") or "unknown"
         self.l1[side][action_class] += 1
 
         # -------------------------------------------------
-        # 🔥 L1 COMBAT STATS
+        # L1 COMBAT STATS
         # -------------------------------------------------
         if rl_attacks > 0:
             entry = self.l1_stats["RL"][action_class]
@@ -129,7 +142,14 @@ class MetricsTracker:
             entry["kills"] += enemy_kills
 
         # -------------------------------------------------
-        # 🔥 UNIT STATS COMPLETO (FIX REAL)
+        # UNIT OBJECT (clave)
+        # -------------------------------------------------
+        unit_obj = None
+        if state is not None and hasattr(state, "units"):
+            unit_obj = next((u for u in state.units if u.unit_id == unit_id), None)
+
+        # -------------------------------------------------
+        # UNIT STATS + METADATA (FIX REAL)
         # -------------------------------------------------
         if rl_attacks > 0:
             entry = self.unit_stats["RL"][unit_id]
@@ -137,19 +157,34 @@ class MetricsTracker:
             entry["damage"] += rl_damage
             entry["kills"] += rl_kills
 
+            if unit_obj and entry["unit_key"] is None:
+                ut = getattr(unit_obj, "unit_type", None)
+
+                if ut:
+                    entry["unit_key"] = getattr(ut, "code", None)
+                    entry["category"] = getattr(ut.category, "value", None) if ut.category else None
+                    entry["classification"] = getattr(ut, "classification", None)
+
         if enemy_attacks > 0:
             entry = self.unit_stats["ENEMY"][unit_id]
             entry["attacks"] += enemy_attacks
             entry["damage"] += enemy_damage
             entry["kills"] += enemy_kills
 
+            if unit_obj and entry["unit_key"] is None:
+                ut = getattr(unit_obj, "unit_type", None)
+
+                if ut:
+                    entry["unit_key"] = getattr(ut, "code", None)
+                    entry["category"] = getattr(ut.category, "value", None) if ut.category else None
+                    entry["classification"] = getattr(ut, "classification", None)
+
         # -------------------------------------------------
-        # 🔥 GLOBAL COMBAT INTELLIGENCE
+        # COMBAT INTELLIGENCE
         # -------------------------------------------------
         self.damage_taken_total += enemy_damage
 
         if rl_attacks > 0:
-
             trade = rl_damage - enemy_damage
 
             self.trade_sum += trade
@@ -194,7 +229,6 @@ class MetricsTracker:
             "ENEMY": compute_l1_efficiency(self.l1_stats["ENEMY"]),
         }
 
-        # 🔥 OUTPUT COMPLETO
         units_output = {
             "RL": {k: dict(v) for k, v in self.unit_stats["RL"].items()},
             "ENEMY": {k: dict(v) for k, v in self.unit_stats["ENEMY"].items()},
