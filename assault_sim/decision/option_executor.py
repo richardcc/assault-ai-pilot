@@ -9,6 +9,7 @@ from assault_sim.rl.tactical_options import TacticalOption
 
 from assault_model.map.terrain_config import terrain_config
 
+
 class OptionExecutor:
 
     def __init__(self, heuristic_controller):
@@ -27,7 +28,7 @@ class OptionExecutor:
             return WaitAction("SYSTEM")
 
         # -------------------------------------------------
-        # ✅ ATTACK (FIXED)
+        # ✅ ATTACK
         # -------------------------------------------------
         if option == TacticalOption.ATTACK:
             return self._execute_attack(state, unit, attack_mode)
@@ -54,7 +55,7 @@ class OptionExecutor:
             return action or WaitAction(unit.unit_id)
 
         # -------------------------------------------------
-        # ✅ HOLD (FIXED)
+        # ✅ HOLD (MEJORADO)
         # -------------------------------------------------
         if option == TacticalOption.HOLD:
 
@@ -66,14 +67,14 @@ class OptionExecutor:
             ]
 
             if attacks:
-                return attacks[0]
+                return self._best_attack(attacks)  # ✅ CAMBIO CLAVE
 
             return WaitAction(unit.unit_id)
 
         return WaitAction(unit.unit_id)
 
     # -------------------------------------------------
-    # ✅ ATTACK FIXED: usa ActionCatalog
+    # ✅ ATTACK (MEJORADO)
     # -------------------------------------------------
     def _execute_attack(self, state, unit, attack_mode):
 
@@ -87,8 +88,7 @@ class OptionExecutor:
         if not attacks:
             return self._move_closer(state, unit)
 
-        # se puede mejorar con scoring, pero esto ya es correcto
-        return attacks[0]
+        return self._best_attack(attacks)  # ✅ CAMBIO CLAVE
 
     # -------------------------------------------------
     def _move_closer(self, state, unit):
@@ -107,7 +107,10 @@ class OptionExecutor:
             enemies,
             key=lambda e: hex_distance(unit.position, e.position)
         )
+
         best = None
+        best_dist = None  # ✅ fix implícito seguro
+
         for a in actions:
             if a.action_type.category != ActionCategory.MOVEMENT:
                 continue
@@ -163,3 +166,39 @@ class OptionExecutor:
                 best = a
 
         return best or self._move_closer(state, unit)
+
+    # -------------------------------------------------
+    # ✅ NUEVO: SELECCIÓN INTELIGENTE DE TARGET
+    # -------------------------------------------------
+    def _best_attack(self, attacks):
+
+        best = None
+        best_score = float("-inf")
+
+        for a in attacks:
+            target = getattr(a, "target", None)
+
+            score = 0
+
+            if target is not None:
+
+                hp = getattr(target, "hp", 10)
+
+                # ✅ prioriza enemigos débiles
+                score += (10 - hp) * 5
+
+                # ✅ bonus por kill
+                if hp <= 1:
+                    score += 100
+
+                # ✅ evita targets con mucha vida
+                score -= hp * 2
+
+            # pequeño sesgo ofensivo
+            score += 5
+
+            if score > best_score:
+                best_score = score
+                best = a
+
+        return best
