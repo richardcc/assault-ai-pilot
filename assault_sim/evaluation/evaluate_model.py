@@ -1,6 +1,10 @@
 import torch
 from pathlib import Path
 from multiprocessing import Pool, cpu_count, freeze_support
+import traceback
+import json
+from datetime import datetime
+import os
 
 from tqdm import tqdm
 
@@ -17,7 +21,16 @@ from assault_sim.decision.decision_engine_controller import DecisionEngineContro
 
 from assault_sim.heuristics.tactical_path_heuristic import TacticalPathHeuristic
 
-from assault_sim.evaluation.results import ResultsAnalyzer
+# ✅ FIX CRÍTICO → NUEVO ANALYZER
+from assault_sim.evaluation.results_analyzer import ResultsAnalyzer
+from assault_sim.evaluation.policy.l2_options import compute_option_performance
+from assault_sim.evaluation.policy.l3_formations import compute_formation_performance
+from assault_sim.evaluation.policy.mapping import (
+    build_strategy_option_map,
+    normalize_strategy_option_map,
+)
+from assault_sim.evaluation.units.unit_aggregation import aggregate_units
+
 from assault_sim.evaluation.eval_dashboard import EvalDashboard
 from assault_sim.evaluation.evaluator import Evaluator
 
@@ -61,7 +74,31 @@ def get_policy(env):
     )
 
     checkpoint = torch.load(CHECKPOINT, map_location="cpu")
-    policy.load_state_dict(checkpoint)
+
+    # checkpoint can be either a raw state_dict or a dict with keys
+    state = None
+    if isinstance(checkpoint, dict):
+        # common keys
+        if "state_dict" in checkpoint:
+            state = checkpoint["state_dict"]
+        elif "model_state_dict" in checkpoint:
+            state = checkpoint["model_state_dict"]
+        else:
+            # assume it's already a state dict
+            state = checkpoint
+    else:
+        state = checkpoint
+
+    try:
+        policy.load_state_dict(state)
+    except Exception:
+        # try to be forgiving: if keys are prefixed (e.g. "module."), strip them
+        try:
+            new_state = {k.replace("module.", ""): v for k, v in state.items()}
+            policy.load_state_dict(new_state)
+        except Exception:
+            print("❌ Failed to load checkpoint state_dict")
+            raise
     policy.eval()
 
     _policy = policy
@@ -108,15 +145,14 @@ def build_controller(policy, sim_env):
         sim_env=sim_env,
     )
 
-    controller.training_mode = False
+    controller.training_mode = True
     return controller
 
 
 # -------------------------------------------------
-# RUN 1 EPISODE (SAFE VERSION)
+# RUN 1 EPISODE
 # -------------------------------------------------
 def run_episode(_):
-
     try:
         env, sim_env = build_env()
         policy = get_policy(env)
@@ -143,7 +179,9 @@ def run_episode(_):
         return result, combat, advanced
 
     except Exception:
-        # multiprocessing safe fallback
+        # provide full traceback to help debugging in multiprocess
+        tb = traceback.format_exc()
+        print(f"❌ Exception in run_episode:\n{tb}")
         return None, {}, {}
 
 
@@ -161,7 +199,6 @@ def main():
     # AGGREGATORS
     # -------------------------------------------------
     agg = {
-        # combat
         "trade_sum": 0.0,
         "trade_count": 0,
         "bad_attacks": 0,
@@ -169,7 +206,6 @@ def main():
         "damage_sum": 0.0,
         "damage_taken_sum": 0.0,
 
-        # advanced
         "good_trades": 0,
         "bad_trades": 0,
         "zero_damage_attacks": 0,
@@ -188,15 +224,12 @@ def main():
             desc="Evaluating",
         ):
 
-            # ✅ skip broken episodes
             if result is None:
                 continue
 
             results.append(result)
 
-            # --------------------------
-            # COMBAT
-            # --------------------------
+            # ---- COMBAT
             trade_mean = combat.get("trade_mean", 0.0)
             bad_rate = combat.get("bad_attack_rate", 0.0)
             total_attacks = combat.get("total_attacks", 0)
@@ -213,9 +246,7 @@ def main():
             agg["damage_sum"] += damage
             agg["damage_taken_sum"] += enemy_damage
 
-            # --------------------------
-            # ADVANCED
-            # --------------------------
+            # ---- ADVANCED
             agg["good_trades"] += advanced.get("good_trades", 0)
             agg["bad_trades"] += advanced.get("bad_trades", 0)
             agg["zero_damage_attacks"] += advanced.get("zero_damage_attacks", 0)
@@ -225,7 +256,7 @@ def main():
     print(">>> Episodes finished ✅")
 
     # -------------------------------------------------
-    # FINAL METRICS
+    # PRINT HIGH LEVEL
     # -------------------------------------------------
     trade_mean = agg["trade_sum"] / max(1, agg["trade_count"])
     bad_attack_rate = agg["bad_attacks"] / max(1, agg["total_attacks"])
@@ -236,9 +267,6 @@ def main():
     print(f"bad_attack_rate: {bad_attack_rate:.3f}")
     print(f"damage_ratio:    {damage_ratio:.3f}")
 
-    # -------------------------------------------------
-    # ✅ ADVANCED METRICS (FIXED)
-    # -------------------------------------------------
     print("\n=== ADVANCED METRICS ===")
 
     total_attacks = max(1, agg["good_trades"] + agg["bad_trades"])
@@ -250,14 +278,52 @@ def main():
     print(f"zero_dmg_rate:    {agg['zero_damage_attacks'] / total_attacks:.3f}")
 
     # -------------------------------------------------
-    # DASHBOARD + REPORT
+    # FINAL ANALYSIS (🔥 AQUÍ ESTÁ EL CAMBIO REAL)
+    # -------------------------------------------------
+    analyzer = ResultsAnalyzer(results, RL_SIDE)
+    analyzer.print_report()
+
+    # -------------------------------------------------
+    # STRUCTURED REPORT (JSON)
+    # -------------------------------------------------
+    try:
+        report = {
+            "meta": {
+                "episodes_requested": EPISODES,
+                "episodes_collected": len(results),
+                "workers": NUM_WORKERS,
+                "timestamp": datetime.utcnow().isoformat() + "Z",
+            },
+            "summary": analyzer.summary(),
+            "combat": analyzer.combat_metrics(),
+            "advanced": analyzer.advanced_metrics(),
+            "action_execution": analyzer.action_execution(),
+            "l2_options": compute_option_performance(results),
+            "l3_formations": compute_formation_performance(results),
+            "strategy_option_map": normalize_strategy_option_map(
+                build_strategy_option_map(results)
+            ),
+            "units": aggregate_units(results),
+        }
+
+        out_name = f"metrics_report_{datetime.utcnow().strftime('%Y%m%dT%H%M%SZ')}.json"
+        out_path = os.path.join(os.getcwd(), out_name)
+
+        with open(out_path, "w", encoding="utf-8") as fh:
+            json.dump(report, fh, indent=2, ensure_ascii=False)
+
+        print(f"\n>>> Structured metrics saved to {out_path}")
+
+    except Exception:
+        print("❌ Failed to build structured JSON report")
+        print(traceback.format_exc())
+
+    # -------------------------------------------------
+    # DASHBOARD
     # -------------------------------------------------
     dashboard = EvalDashboard()
     for r in results:
         dashboard.add_episode(r)
-
-    analyzer = ResultsAnalyzer(results, RL_SIDE)
-    analyzer.print_report()
 
     dashboard.save_csv("metrics.csv")
     dashboard.plot_all()

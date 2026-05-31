@@ -3138,20 +3138,21 @@ from assault_sim.strategy.formation_strategy import FormationStrategyEngine
 
 class DecisionEngine:
     """
-    Decision engine using:
-    - ActionCatalog for action generation
-    - Environment simulation for lookahead
-    - Heuristic evaluation (no RL dependency)
+    Improved Decision Engine
+
+    ✅ Preserves original structure
+    ✅ Adds combat awareness
+    ✅ Improves action scoring
+    ✅ Keeps compatibility with PPO / HRL
 
     Returns INTENT only (no execution)
     """
 
     def __init__(self):
-        # Cache for unit selection decisions per turn/state
         self._unit_selection_cache = {}
 
     # --------------------------------------------------
-    # MAIN ENTRY (WITH CACHE)
+    # MAIN ENTRY
     # --------------------------------------------------
     def compute_intent(self, env):
         state = env.game_state
@@ -3163,11 +3164,9 @@ class DecisionEngine:
             tuple(sorted(runtime.activated_units))
         )
 
-        # Cache hit
         if cache_key in self._unit_selection_cache:
             return self._unit_selection_cache[cache_key]
 
-        # Get available units
         units = [
             u for u in state.units
             if u.side == active_side
@@ -3181,7 +3180,13 @@ class DecisionEngine:
         best_action = None
         best_score = float("-inf")
 
-        # Evaluate all unit-action pairs
+        # 🔥 NUEVO: priorización ligera de unidades útiles
+        units = sorted(
+            units,
+            key=lambda u: getattr(u, "hp", 0),
+            reverse=True
+        )
+
         for unit in units:
             actions = self._get_unit_actions(env, unit)
 
@@ -3201,14 +3206,9 @@ class DecisionEngine:
         return None
 
     # --------------------------------------------------
-    # CACHE MANAGEMENT
-    # --------------------------------------------------
     def clear_cache(self):
-        """Clear per-turn decision cache."""
         self._unit_selection_cache.clear()
 
-    # --------------------------------------------------
-    # ACTION GENERATION
     # --------------------------------------------------
     def _get_unit_actions(self, env, unit):
         catalog = ActionCatalog(
@@ -3219,45 +3219,117 @@ class DecisionEngine:
         return catalog.actions()
 
     # --------------------------------------------------
-    # ACTION EVALUATION
+    # ✅ IMPROVED ACTION EVALUATION
     # --------------------------------------------------
     def evaluate_action(self, env, action, side):
-        """
-        Simulates the action and evaluates resulting state.
-        Falls back to heuristic if simulation fails.
-        """
         try:
             sandbox_env = copy.deepcopy(env)
 
-            # Disable events for performance
+            # Disable events
             if hasattr(sandbox_env, "event_bus"):
                 sandbox_env.event_bus = None
 
+            # snapshot before
+            before_state = sandbox_env.game_state
+            before_hp = {
+                u.unit_id: getattr(u, "hp", 0)
+                for u in before_state.units
+            }
+
             sandbox_env.step(action)
 
-            return self._evaluate_state_quality(
-                sandbox_env.game_state,
+            after_state = sandbox_env.game_state
+
+            base_score = self._evaluate_state_quality(after_state, side)
+
+            # 🔥 NUEVO: evaluación de combate directo
+            combat_score = self._evaluate_combat_delta(
+                before_state,
+                after_state,
+                before_hp,
                 side
             )
+
+            # 🔥 NUEVO: bonus contextual de acción
+            action_bonus = self._action_bias(action)
+
+            return base_score + combat_score + action_bonus
 
         except Exception:
             return self._heuristic_score(action)
 
     # --------------------------------------------------
-    # STATE EVALUATION (CORE HEURISTIC)
+    # ✅ NUEVO: COMBAT DELTA
+    # --------------------------------------------------
+    def _evaluate_combat_delta(self, before, after, hp_before, side):
+        friendly_loss = 0
+        enemy_loss = 0
+
+        for u in after.units:
+            before_hp = hp_before.get(u.unit_id, 0)
+            after_hp = getattr(u, "hp", 0)
+
+            delta = before_hp - after_hp
+            if delta <= 0:
+                continue
+
+            if u.side == side:
+                friendly_loss += delta
+            else:
+                enemy_loss += delta
+
+        score = 0
+
+        # 🔥 clave: premiar trades positivos
+        score += enemy_loss * 25
+        score -= friendly_loss * 30
+
+        # 🔥 kill detection
+        for u in after.units:
+            if u.side != side and not getattr(u, "alive", True):
+                score += 80
+            if u.side == side and not getattr(u, "alive", True):
+                score -= 80
+
+        return score
+
+    # --------------------------------------------------
+    # ✅ NUEVO: ACTION BIAS
+    # --------------------------------------------------
+    def _action_bias(self, action):
+        name = action.__class__.__name__.lower()
+
+        score = 0
+
+        if "attack" in name:
+            score += 10  # leve incentivo a atacar bien
+
+        if "assault" in name:
+            score += 25  # más risky → más reward
+
+        if "move" in name:
+            score += 5
+
+        if "wait" in name:
+            score -= 25  # ❗ penaliza pasividad
+
+        return score
+
+    # --------------------------------------------------
+    # STATE EVALUATION (MEJORADO)
     # --------------------------------------------------
     def _evaluate_state_quality(self, state, side):
 
-        # ----------------------------------------
-        # Victory points
-        # ----------------------------------------
+        # ------------------------
+        # VP
+        # ------------------------
         vp_score = 0
         if hasattr(state, "vp_tracker") and hasattr(state.vp_tracker, "total_points"):
             vp_score = state.vp_tracker.total_points
 
-        # ----------------------------------------
-        # Unit split
-        # ----------------------------------------
+        # ------------------------
+        # Units
+        # ------------------------
         friendly_units = [
             u for u in state.units
             if u.side == side and getattr(u, "alive", True)
@@ -3268,21 +3340,12 @@ class DecisionEngine:
             if u.side != side and getattr(u, "alive", True)
         ]
 
-        # ----------------------------------------
-        # HP totals
-        # ----------------------------------------
         friendly_hp = sum(getattr(u, "hp", 0) for u in friendly_units)
         enemy_hp = sum(getattr(u, "hp", 0) for u in enemy_units)
 
-        # ----------------------------------------
-        # Unit counts
-        # ----------------------------------------
         num_friendly = len(friendly_units)
         num_enemy = len(enemy_units)
 
-        # ----------------------------------------
-        # Dead units
-        # ----------------------------------------
         friendly_dead = len([
             u for u in state.units
             if u.side == side and not getattr(u, "alive", True)
@@ -3293,20 +3356,15 @@ class DecisionEngine:
             if u.side != side and not getattr(u, "alive", True)
         ])
 
-        # ----------------------------------------
-        # Critical HP units
-        # ----------------------------------------
-        low_enemy = sum(
-            1 for u in enemy_units if getattr(u, "hp", 0) <= 1
-        )
+        # ------------------------
+        # LOW HP PRESSURE
+        # ------------------------
+        low_enemy = sum(1 for u in enemy_units if getattr(u, "hp", 0) <= 1)
+        low_friendly = sum(1 for u in friendly_units if getattr(u, "hp", 0) <= 1)
 
-        low_friendly = sum(
-            1 for u in friendly_units if getattr(u, "hp", 0) <= 1
-        )
-
-        # ----------------------------------------
-        # ✅ Distance to VP (HEX CORRECT)
-        # ----------------------------------------
+        # ------------------------
+        # VP DISTANCE
+        # ------------------------
         progress_score = 0
         vp_positions = []
 
@@ -3315,8 +3373,7 @@ class DecisionEngine:
 
         if vp_positions:
             for u in friendly_units:
-                if hasattr(u, "position") and u.position is not None:
-
+                if getattr(u, "position", None):
                     try:
                         min_dist = min(
                             hex_distance(
@@ -3329,51 +3386,47 @@ class DecisionEngine:
                     except Exception:
                         pass
 
-        # ----------------------------------------
-        # Final score
-        # ----------------------------------------
+        # ------------------------
+        # FINAL SCORE
+        # ------------------------
         score = 0
 
-        # Objective (long-term)
-        score += vp_score * 100
+        # 🎯 VP (más importante ahora)
+        score += vp_score * 120
 
-        # Combat advantage
-        score += (friendly_hp - enemy_hp) * 5
-        score += (num_friendly - num_enemy) * 40
+        # 💥 combate
+        score += (friendly_hp - enemy_hp) * 6
+        score += (num_friendly - num_enemy) * 50
 
-        # Kills
-        score += enemy_dead * 80
-        score -= friendly_dead * 80
+        # ☠ kills
+        score += enemy_dead * 90
+        score -= friendly_dead * 90
 
-        # Critical state pressure
-        score += low_enemy * 25
-        score -= low_friendly * 25
+        # presión
+        score += low_enemy * 30
+        score -= low_friendly * 30
 
-        # Strategic positioning
-        score += progress_score * 2
+        # 🧭 posicionamiento
+        score += progress_score * 3
 
         return score
 
-    # --------------------------------------------------
-    # FALLBACK HEURISTIC
     # --------------------------------------------------
     def _heuristic_score(self, action):
-        """
-        Simple heuristic used when simulation fails.
-        """
         score = 0
-        action_type = action.__class__.__name__.lower()
+        name = action.__class__.__name__.lower()
 
-        if "attack" in action_type:
+        if "attack" in name:
             score += 50
-        if "assault" in action_type:
+        if "assault" in name:
             score += 70
-        if "move" in action_type:
+        if "move" in name:
             score += 20
-        if "wait" in action_type:
-            score -= 10
+        if "wait" in name:
+            score -= 20
 
         return score
+
 
 
 ================================================================================
@@ -3558,7 +3611,6 @@ import random
 
 class HRLController:
 
-    # ✅ horizon uniforme
     OPTION_HORIZON = {
         TacticalOption.ADVANCE: 1,
         TacticalOption.FLANK: 1,
@@ -3579,27 +3631,41 @@ class HRLController:
 
         self.formation_engine = FormationStrategyEngine()
         self.last_payload = None
-        
+
         self.last_logp = torch.tensor(0.0)
         self.last_value = torch.tensor(0.0)
 
-
     # -------------------------------------------------
     def _can_attack(self, state, unit):
-
         actions = ActionCatalog(state, unit, terrain_config).actions()
-
         return any("Ranged" in a.__class__.__name__ for a in actions)
 
     # -------------------------------------------------
+    # ✅ NUEVO: contexto táctico local
+    # -------------------------------------------------
+    def _local_advantage(self, state, unit):
+        if unit is None or unit.position is None:
+            return 0
+
+        friend = 0
+        enemy = 0
+
+        for u in state.units:
+            if not u.alive or u.position is None:
+                continue
+
+            d = abs(u.position.q - unit.position.q) + abs(u.position.r - unit.position.r)
+            if d <= 3:
+                if u.side == unit.side:
+                    friend += 1
+                else:
+                    enemy += 1
+
+        return friend - enemy
+
+    # -------------------------------------------------
     def _sample_policy(self, obs):
-        """
-        ✅ network → logits → distributions → sample
-        ✅ ALSO returns log_prob + value (CRITICAL)
-        """
-
         device = next(self.policy.parameters()).device
-
         obs_t = torch.tensor(obs, dtype=torch.float32, device=device).unsqueeze(0)
 
         hidden = self.policy.init_hidden(1, device)
@@ -3609,21 +3675,17 @@ class HRLController:
         option_dist = torch_dist.Categorical(logits=option_logits)
         attack_dist = torch_dist.Categorical(logits=attack_logits)
 
-        # ✅ sample actions
         option_sample = option_dist.sample()
         attack_sample = attack_dist.sample()
 
-        # ✅ compute log probability (CRITICAL FOR PPO)
         logp = (
             option_dist.log_prob(option_sample) +
             attack_dist.log_prob(attack_sample)
         )
 
-        # ✅ store for rollout
         self.last_logp = logp.squeeze()
         self.last_value = value.squeeze()
 
-        # ✅ return clean python values
         option = TacticalOption(option_sample.item())
         attack_mode = attack_sample.item()
 
@@ -3632,9 +3694,7 @@ class HRLController:
     # -------------------------------------------------
     def choose_action(self, state, unit, obs):
 
-        active = unit
-
-        if active is None:
+        if unit is None:
             return WaitAction("SYSTEM")
 
         # -------------------------------------------------
@@ -3646,13 +3706,13 @@ class HRLController:
 
             action = self.executor.execute(
                 state,
-                active,
+                unit,
                 self.current_option,
                 self.current_attack_mode,
             )
 
             if action is None:
-                action = WaitAction(active.unit_id)
+                action = WaitAction(unit.unit_id)
 
             if self.last_payload:
                 action.hrl_payload = self.last_payload
@@ -3666,36 +3726,50 @@ class HRLController:
         if strategy is None:
             strategy = FormationStrategy.ATTACK
 
-        # 🔥 SAMPLE FROM POLICY (corregido)
         ppo_option, attack_mode = self._sample_policy(obs)
 
         # -------------------------------------------------
-        # ✅ STRATEGY BIAS
+        # ✅ CONTEXTO TÁCTICO (🔥 NUEVO CLAVE)
+        # -------------------------------------------------
+        local_adv = self._local_advantage(state, unit)
+        can_attack = self._can_attack(state, unit)
+
+        # -------------------------------------------------
+        # ✅ STRATEGY BIAS (reducido y más inteligente)
         # -------------------------------------------------
         if strategy == FormationStrategy.ATTACK:
-            if random.random() < 0.6:
+            if ppo_option != TacticalOption.ATTACK and random.random() < 0.4:
                 ppo_option = TacticalOption.ATTACK
 
         elif strategy == FormationStrategy.CLEANUP:
-            if random.random() < 0.7:
+            if random.random() < 0.5:
                 ppo_option = TacticalOption.ATTACK
 
         elif strategy == FormationStrategy.HOLD_VP:
-            if random.random() < 0.4:
+            if local_adv < 0:
                 ppo_option = TacticalOption.HOLD
 
         # -------------------------------------------------
-        # ✅ ATTACK PUSH
+        # ✅ ATTACK PUSH CONTEXTUAL
         # -------------------------------------------------
-        if ppo_option != TacticalOption.ATTACK:
-            if self._can_attack(state, active):
-                if random.random() < 0.2:
+        if can_attack:
+
+            if local_adv > 0:
+                if random.random() < 0.6:
+                    ppo_option = TacticalOption.ATTACK
+
+            elif local_adv == 0:
+                if random.random() < 0.35:
+                    ppo_option = TacticalOption.ATTACK
+
+            else:
+                if random.random() < 0.15:
                     ppo_option = TacticalOption.ATTACK
 
         # -------------------------------------------------
-        # ✅ EXPLORATION
+        # ✅ EXPLORATION CONTROLADA (menos caótica)
         # -------------------------------------------------
-        if random.random() < 0.1:
+        if random.random() < 0.05:
             ppo_option = random.choice(list(TacticalOption))
 
         # -------------------------------------------------
@@ -3756,13 +3830,13 @@ class HRLController:
 
         action = self.executor.execute(
             state,
-            active,
+            unit,
             self.current_option,
             self.current_attack_mode,
         )
 
         if action is None:
-            action = WaitAction(active.unit_id)
+            action = WaitAction(unit.unit_id)
 
         action.hrl_payload = payload
 
@@ -3784,6 +3858,7 @@ from assault_sim.rl.tactical_options import TacticalOption
 
 from assault_model.map.terrain_config import terrain_config
 
+
 class OptionExecutor:
 
     def __init__(self, heuristic_controller):
@@ -3802,7 +3877,7 @@ class OptionExecutor:
             return WaitAction("SYSTEM")
 
         # -------------------------------------------------
-        # ✅ ATTACK (FIXED)
+        # ✅ ATTACK
         # -------------------------------------------------
         if option == TacticalOption.ATTACK:
             return self._execute_attack(state, unit, attack_mode)
@@ -3829,7 +3904,7 @@ class OptionExecutor:
             return action or WaitAction(unit.unit_id)
 
         # -------------------------------------------------
-        # ✅ HOLD (FIXED)
+        # ✅ HOLD (MEJORADO)
         # -------------------------------------------------
         if option == TacticalOption.HOLD:
 
@@ -3841,14 +3916,14 @@ class OptionExecutor:
             ]
 
             if attacks:
-                return attacks[0]
+                return self._best_attack(attacks)  # ✅ CAMBIO CLAVE
 
             return WaitAction(unit.unit_id)
 
         return WaitAction(unit.unit_id)
 
     # -------------------------------------------------
-    # ✅ ATTACK FIXED: usa ActionCatalog
+    # ✅ ATTACK (MEJORADO)
     # -------------------------------------------------
     def _execute_attack(self, state, unit, attack_mode):
 
@@ -3862,8 +3937,7 @@ class OptionExecutor:
         if not attacks:
             return self._move_closer(state, unit)
 
-        # se puede mejorar con scoring, pero esto ya es correcto
-        return attacks[0]
+        return self._best_attack(attacks)  # ✅ CAMBIO CLAVE
 
     # -------------------------------------------------
     def _move_closer(self, state, unit):
@@ -3882,7 +3956,10 @@ class OptionExecutor:
             enemies,
             key=lambda e: hex_distance(unit.position, e.position)
         )
+
         best = None
+        best_dist = None  # ✅ fix implícito seguro
+
         for a in actions:
             if a.action_type.category != ActionCategory.MOVEMENT:
                 continue
@@ -3939,6 +4016,73 @@ class OptionExecutor:
 
         return best or self._move_closer(state, unit)
 
+    # -------------------------------------------------
+    # ✅ NUEVO: SELECCIÓN INTELIGENTE DE TARGET
+    # -------------------------------------------------
+    def _best_attack(self, attacks):
+
+        best = None
+        best_score = float("-inf")
+
+        for a in attacks:
+            target = getattr(a, "target", None)
+
+            if target is None or not target.alive:
+                continue
+
+            unit = a.unit  # ✅ muy importante
+
+            # -------------------------------------------------
+            # 🔥 NUEVO: COMBAT ADVANTAGE
+            # -------------------------------------------------
+            adv = unit.get_combat_advantage(target)
+
+            # 🚫 evitar combates muy malos
+            if adv < -1.0:
+                continue
+
+            score = 0
+
+            # ✅ combate (lo más importante)
+            score += adv * 15
+
+            # -------------------------------------------------
+            # ✅ LOGICA EXISTENTE (mantener)
+            # -------------------------------------------------
+            hp = getattr(target, "hp", 10)
+
+            # prioriza enemigos débiles
+            score += (10 - hp) * 3
+
+            # bonus por kill
+            if hp <= 1:
+                score += 50
+
+            # penaliza targets muy duros
+            score -= hp * 1.5
+
+            # pequeño sesgo ofensivo
+            score += 5
+
+            # -------------------------------------------------
+            # ✅ DISTANCIA (extra importante)
+            # -------------------------------------------------
+            if hasattr(unit, "position") and hasattr(target, "position"):
+                dist = hex_distance(unit.position, target.position)
+
+                if dist <= 2:
+                    score += 2
+                elif dist > 6:
+                    score -= 3
+
+            # -------------------------------------------------
+            # ✅ BEST SELECTION
+            # -------------------------------------------------
+            if score > best_score:
+                best_score = score
+                best = a
+
+        return best
 
 
 ================================================================================
@@ -4574,6 +4718,78 @@ def collect_rollout(env, controller, max_steps, seq_len=8):
 
 
 ================================================================================
+FILE: C:\repos\python\assault\assault_sim\evaluation\advanced_metrics.py
+================================================================================
+
+class AdvancedMetrics:
+
+    def __init__(self):
+        self.total_attacks = 0
+        self.good_trades = 0
+        self.bad_trades = 0
+
+        self.turns_in_range = 0
+        self.attacks_in_range = 0
+
+        self.zero_damage_attacks = 0
+
+    # -------------------------------------------------
+    # UPDATE (PER STEP)
+    # -------------------------------------------------
+    def update(self, info, pre_dist):
+
+        damage = info.get("rl_damage", 0)
+        damage_taken = info.get("enemy_damage", 0)
+
+        action_class = info.get("action_class", "")
+        is_attack = "ATTACK" in action_class.upper()
+
+        trade = damage - damage_taken
+
+        # =================================================
+        # ✅ ATTACK METRICS (FIXED)
+        # =================================================
+        if is_attack:
+
+            # 🔥 SOLO contar ataques "reales"
+            # (evita inflar métricas con acciones basura)
+            if damage > 0 or damage_taken > 0:
+
+                self.total_attacks += 1
+
+                if trade > 0:
+                    self.good_trades += 1
+                elif trade < 0:
+                    self.bad_trades += 1
+
+                # ✅ zero damage SOLO si hubo interacción
+                if damage == 0:
+                    self.zero_damage_attacks += 1
+
+        # =================================================
+        # ✅ RANGE / SELECTIVITY
+        # =================================================
+        if pre_dist is not None and pre_dist <= 3:
+            self.turns_in_range += 1
+
+            if is_attack:
+                self.attacks_in_range += 1
+
+    # -------------------------------------------------
+    # EXPORT
+    # -------------------------------------------------
+    def to_dict(self):
+        return {
+            "total_attacks": self.total_attacks,
+            "good_trades": self.good_trades,
+            "bad_trades": self.bad_trades,
+            "turns_in_range": self.turns_in_range,
+            "attacks_in_range": self.attacks_in_range,
+            "zero_damage_attacks": self.zero_damage_attacks,
+        }
+
+
+================================================================================
 FILE: C:\repos\python\assault\assault_sim\evaluation\evaluate_model.py
 ================================================================================
 
@@ -4692,30 +4908,38 @@ def build_controller(policy, sim_env):
 
 
 # -------------------------------------------------
-# RUN 1 EPISODE
+# RUN 1 EPISODE (SAFE VERSION)
 # -------------------------------------------------
 def run_episode(_):
 
-    env, sim_env = build_env()
-    policy = get_policy(env)
-    controller = build_controller(policy, sim_env)
+    try:
+        env, sim_env = build_env()
+        policy = get_policy(env)
+        controller = build_controller(policy, sim_env)
 
-    evaluator = Evaluator(
-        env=env,
-        rl_controller=controller,
-        enemy_controller=None,
-        rl_side=RL_SIDE,
-    )
+        evaluator = Evaluator(
+            env=env,
+            rl_controller=controller,
+            enemy_controller=None,
+            rl_side=RL_SIDE,
+        )
 
-    with torch.no_grad():
-        results = evaluator.evaluate(1)
+        with torch.no_grad():
+            results = evaluator.evaluate(1)
 
-    result = results[0]
+        if not results:
+            return None, {}, {}
 
-    # ✅ COMBAT metrics ya embebidas
-    combat = result.get("combat", {})
+        result = results[0]
 
-    return result, combat
+        combat = result.get("combat", {})
+        advanced = result.get("advanced", {})
+
+        return result, combat, advanced
+
+    except Exception:
+        # multiprocessing safe fallback
+        return None, {}, {}
 
 
 # -------------------------------------------------
@@ -4728,29 +4952,46 @@ def main():
 
     results = []
 
-    # ✅ acumuladores
+    # -------------------------------------------------
+    # AGGREGATORS
+    # -------------------------------------------------
     agg = {
+        # combat
         "trade_sum": 0.0,
         "trade_count": 0,
         "bad_attacks": 0,
         "total_attacks": 0,
         "damage_sum": 0.0,
         "damage_taken_sum": 0.0,
+
+        # advanced
+        "good_trades": 0,
+        "bad_trades": 0,
+        "zero_damage_attacks": 0,
+        "turns_in_range": 0,
+        "attacks_in_range": 0,
     }
 
     # -------------------------------------------------
-    # PARALLEL
+    # PARALLEL LOOP
     # -------------------------------------------------
     with Pool(NUM_WORKERS) as p:
 
-        for result, combat in tqdm(
+        for result, combat, advanced in tqdm(
             p.imap_unordered(run_episode, range(EPISODES), chunksize=5),
             total=EPISODES,
             desc="Evaluating",
         ):
+
+            # ✅ skip broken episodes
+            if result is None:
+                continue
+
             results.append(result)
 
-            # ✅ acumulación robusta
+            # --------------------------
+            # COMBAT
+            # --------------------------
             trade_mean = combat.get("trade_mean", 0.0)
             bad_rate = combat.get("bad_attack_rate", 0.0)
             total_attacks = combat.get("total_attacks", 0)
@@ -4767,6 +5008,15 @@ def main():
             agg["damage_sum"] += damage
             agg["damage_taken_sum"] += enemy_damage
 
+            # --------------------------
+            # ADVANCED
+            # --------------------------
+            agg["good_trades"] += advanced.get("good_trades", 0)
+            agg["bad_trades"] += advanced.get("bad_trades", 0)
+            agg["zero_damage_attacks"] += advanced.get("zero_damage_attacks", 0)
+            agg["turns_in_range"] += advanced.get("turns_in_range", 0)
+            agg["attacks_in_range"] += advanced.get("attacks_in_range", 0)
+
     print(">>> Episodes finished ✅")
 
     # -------------------------------------------------
@@ -4782,7 +5032,20 @@ def main():
     print(f"damage_ratio:    {damage_ratio:.3f}")
 
     # -------------------------------------------------
-    # DASHBOARD
+    # ✅ ADVANCED METRICS (FIXED)
+    # -------------------------------------------------
+    print("\n=== ADVANCED METRICS ===")
+
+    total_attacks = max(1, agg["good_trades"] + agg["bad_trades"])
+    range_total = max(1, agg["turns_in_range"])
+
+    print(f"good_trade_rate:  {agg['good_trades'] / total_attacks:.3f}")
+    print(f"bad_trade_rate:   {agg['bad_trades'] / total_attacks:.3f}")
+    print(f"selectivity:      {agg['attacks_in_range'] / range_total:.3f}")
+    print(f"zero_dmg_rate:    {agg['zero_damage_attacks'] / total_attacks:.3f}")
+
+    # -------------------------------------------------
+    # DASHBOARD + REPORT
     # -------------------------------------------------
     dashboard = EvalDashboard()
     for r in results:
@@ -4815,6 +5078,9 @@ import numpy as np
 from assault_sim.evaluation.metrics_tracker import MetricsTracker
 from assault_sim.engine.match_runner import MatchRunner
 
+# ✅ advanced metrics (correct import)
+from assault_sim.evaluation.advanced_metrics import AdvancedMetrics
+
 
 class Evaluator:
 
@@ -4822,7 +5088,7 @@ class Evaluator:
         self,
         env,
         rl_controller,
-        enemy_controller,  # legacy (no usado)
+        enemy_controller,  # legacy (not used)
         rl_side: str,
         max_steps: int = 300,
     ):
@@ -4837,16 +5103,19 @@ class Evaluator:
     def run_episode(self):
 
         tracker = MetricsTracker(self.rl_side)
+        advanced_metrics = AdvancedMetrics()  # ✅ NEW
 
-        # ✅ tolerante a distintas implementaciones
+        # -------------------------------------------------
+        # EVENT BUS
+        # -------------------------------------------------
         sim = getattr(self.env, "sim", None) or getattr(self.env, "sim_env", None)
 
         if sim is not None and getattr(sim, "event_bus", None) is not None:
             sim.event_bus.subscribe(tracker)
 
-        # -------------------------------
+        # -------------------------------------------------
         # POLICY TRACKING
-        # -------------------------------
+        # -------------------------------------------------
         option_counts = defaultdict(int)
         formation_counts = defaultdict(int)
         strategy_option_map = defaultdict(lambda: defaultdict(int))
@@ -4855,7 +5124,7 @@ class Evaluator:
 
         obs = self.env.reset()
 
-        # ✅ reset controller (LSTM, etc.)
+        # ✅ reset controller (important)
         if hasattr(self.controller, "reset"):
             self.controller.reset()
 
@@ -4864,8 +5133,8 @@ class Evaluator:
         done = False
         steps = 0
 
-        sim = getattr(self.env, "sim", None) or getattr(self.env, "sim_env", None)
         prev_state = sim.game_state if sim is not None else None
+        final_state = prev_state
 
         # -------------------------------------------------
         # MAIN LOOP
@@ -4874,29 +5143,33 @@ class Evaluator:
 
             step = runner.step(self.controller, obs)
 
+            if not step:
+                break
+
             info = step.get("info", {}) or {}
-            obs = step["obs"]
-            done = step["done"]
+            obs = step.get("obs")
+            done = step.get("done", False)
             side = step.get("side")
 
             sim = getattr(self.env, "sim", None) or getattr(self.env, "sim_env", None)
             state = sim.game_state if sim is not None else None
 
+            if state is not None:
+                final_state = state
+
             reward_trace.append(step.get("reward", 0.0))
 
             # -------------------------------------------------
-            # ✅ TRACK POLICY (L2 / L3)
+            # POLICY TRACKING (L2 / L3)
             # -------------------------------------------------
             if side == self.rl_side:
 
                 controller = self.controller
 
-                # L2
                 option = getattr(controller, "current_option", None)
                 if option is not None:
                     option_counts[option.name] += 1
 
-                # L3
                 strategy = getattr(controller, "current_strategy", None)
                 formation = None
 
@@ -4904,21 +5177,54 @@ class Evaluator:
                     formation = strategy.name
                     formation_counts[formation] += 1
 
-                # mapping strategy → option
                 if option is not None and formation is not None:
                     strategy_option_map[formation][option.name] += 1
 
             # -------------------------------------------------
-            # ✅ TRACK METRICS (CRÍTICO)
+            # DISTANCE (for advanced metrics)
+            # -------------------------------------------------
+            pre_dist = None
+
+            if state is not None and hasattr(state, "units"):
+
+                rl_units = [
+                    u for u in state.units
+                    if u.side == self.rl_side and u.alive
+                ]
+
+                enemy_units = [
+                    u for u in state.units
+                    if u.side != self.rl_side and u.alive
+                ]
+
+                dists = []
+
+                for u in rl_units:
+                    for e in enemy_units:
+                        if u.position and e.position:
+                            dq = abs(u.position.q - e.position.q)
+                            dr = abs(u.position.r - e.position.r)
+                            dists.append(dq + dr)
+
+
+                if dists:
+                    pre_dist = min(dists)
+
+            # -------------------------------------------------
+            # CORE METRICS
             # -------------------------------------------------
             tracker.track_damage(info, state, prev_state)
             tracker.track_state(state)
             tracker.step()
 
+            # -------------------------------------------------
+            # ✅ ADVANCED METRICS
+            # -------------------------------------------------
+            advanced_metrics.update(info, pre_dist)
+
             prev_state = state
             steps += 1
 
-            # SAFETY
             if steps >= self.max_steps:
                 done = True
                 break
@@ -4926,26 +5232,26 @@ class Evaluator:
         # -------------------------------------------------
         # BUILD RESULT
         # -------------------------------------------------
-        final_state = state if state is not None else None
-
         result = tracker.build_result(final_state)
 
-        # ✅ métricas adicionales
         result["steps"] = steps
         result["avg_reward"] = float(np.mean(reward_trace)) if reward_trace else 0.0
 
-        # ✅ POLICY INFO
+        # policy tracking
         result["option_counts"] = dict(option_counts)
         result["formation_counts"] = dict(formation_counts)
 
         result["strategy_option_map"] = {
-            k: dict(v) for k, v in strategy_option_map.items()
+            strat: dict(opts) for strat, opts in strategy_option_map.items()
         }
+
+        # ✅ attach advanced metrics
+        result["advanced"] = advanced_metrics.to_dict()
 
         return result
 
     # -------------------------------------------------
-    # MULTI EPISODE
+    # MULTI EPISODE (FIX CRÍTICO)
     # -------------------------------------------------
     def evaluate(self, episodes: int):
 
@@ -4995,6 +5301,19 @@ class EvalDashboard:
         enemy_attacks = result["side"]["ENEMY"].get("attacks", 0)
 
         # -----------------------------
+        # ✅ NEW: ADVANCED METRICS
+        # -----------------------------
+        adv = result.get("advanced", {})
+
+        total_attacks = max(1, adv.get("total_attacks", 0))
+        range_total = max(1, adv.get("turns_in_range", 0))
+
+        good_trade = adv.get("good_trades", 0) / total_attacks
+        bad_trade = adv.get("bad_trades", 0) / total_attacks
+        selectivity = adv.get("attacks_in_range", 0) / range_total
+        zero_dmg = adv.get("zero_damage_attacks", 0) / total_attacks
+
+        # -----------------------------
         # L2 tracking
         # -----------------------------
         option_counts = result.get("option_counts", {})
@@ -5025,6 +5344,12 @@ class EvalDashboard:
 
             "rl_efficiency": rl_damage / max(1, rl_attacks),
             "enemy_efficiency": enemy_damage / max(1, enemy_attacks),
+
+            # ✅ NEW (advanced)
+            "good_trade": good_trade,
+            "bad_trade": bad_trade,
+            "selectivity": selectivity,
+            "zero_dmg": zero_dmg,
         }
 
         self.records.append(row)
@@ -5074,86 +5399,27 @@ class EvalDashboard:
 
         fig, axs = plt.subplots(2, 2, figsize=(12, 8))
 
-        # ---------------------------
-        # VP
-        # ---------------------------
         axs[0, 0].plot(df["vp"])
         axs[0, 0].set_title("VP over episodes")
-        axs[0, 0].set_xlabel("Episode")
-        axs[0, 0].set_ylabel("VP")
 
-        # ---------------------------
-        # Steps
-        # ---------------------------
         axs[0, 1].plot(df["steps"])
-        axs[0, 1].set_title("Steps per episode")
-        axs[0, 1].set_xlabel("Episode")
-        axs[0, 1].set_ylabel("Steps")
+        axs[0, 1].set_title("Steps")
 
-        # ---------------------------
-        # Damage
-        # ---------------------------
         axs[1, 0].plot(df["rl_damage"], label="RL")
         axs[1, 0].plot(df["enemy_damage"], label="ENEMY")
         axs[1, 0].set_title("Damage")
         axs[1, 0].legend()
 
-        # ---------------------------
-        # Efficiency
-        # ---------------------------
         axs[1, 1].plot(df["rl_efficiency"], label="RL")
         axs[1, 1].plot(df["enemy_efficiency"], label="ENEMY")
-        axs[1, 1].set_title("Efficiency (damage per attack)")
+        axs[1, 1].set_title("Efficiency")
         axs[1, 1].legend()
 
         plt.tight_layout()
         plt.show()
 
     # -------------------------------------------------
-    # ✅ NEW: STRATEGY BAR PLOTS
-    # -------------------------------------------------
-    def plot_strategy_distribution(self):
-
-        # ---------------------------
-        # L3 Formation
-        # ---------------------------
-        if self.formation_counter:
-            plt.figure(figsize=(10, 4))
-
-            names = list(self.formation_counter.keys())
-            values = list(self.formation_counter.values())
-
-            plt.bar(names, values)
-            plt.title("Formation Strategy Distribution (L3)")
-            plt.xticks(rotation=45)
-
-            plt.tight_layout()
-            plt.show()
-
-        else:
-            print("No formation data available.")
-
-        # ---------------------------
-        # L2 Options
-        # ---------------------------
-        if self.option_counter:
-            plt.figure(figsize=(10, 4))
-
-            names = list(self.option_counter.keys())
-            values = list(self.option_counter.values())
-
-            plt.bar(names, values)
-            plt.title("Tactical Option Distribution (L2)")
-            plt.xticks(rotation=45)
-
-            plt.tight_layout()
-            plt.show()
-
-        else:
-            print("No option data available.")
-
-# -------------------------------------------------
-    # ✅ FULL DASHBOARD (ALL IN ONE FIGURE)
+    # ✅ FULL DASHBOARD (EXTENDED, SAME WINDOW)
     # -------------------------------------------------
     def plot_all(self):
 
@@ -5163,66 +5429,62 @@ class EvalDashboard:
             print("No data to plot.")
             return
 
-        # 2 filas × 3 columnas
-        fig, axs = plt.subplots(2, 3, figsize=(16, 8))
+        # 🔥 Expandimos a 3x3 (pero manteniendo todo lo anterior)
+        fig, axs = plt.subplots(3, 3, figsize=(16, 12))
 
-        # ---------------------------
-        # VP
-        # ---------------------------
+        # =============================
+        # ROW 1 (original)
+        # =============================
         axs[0, 0].plot(df["vp"])
-        axs[0, 0].set_title("VP over episodes")
+        axs[0, 0].set_title("VP")
 
-        # ---------------------------
-        # Steps
-        # ---------------------------
         axs[0, 1].plot(df["steps"])
         axs[0, 1].set_title("Steps")
 
-        # ---------------------------
-        # Damage
-        # ---------------------------
         axs[0, 2].plot(df["rl_damage"], label="RL")
         axs[0, 2].plot(df["enemy_damage"], label="ENEMY")
         axs[0, 2].set_title("Damage")
         axs[0, 2].legend()
 
-        # ---------------------------
-        # Efficiency
-        # ---------------------------
+        # =============================
+        # ROW 2 (original + improved)
+        # =============================
         axs[1, 0].plot(df["rl_efficiency"], label="RL")
         axs[1, 0].plot(df["enemy_efficiency"], label="ENEMY")
         axs[1, 0].set_title("Efficiency")
         axs[1, 0].legend()
 
-        # ---------------------------
-        # L3 (formation)
-        # ---------------------------
+        # ✅ NEW
+        axs[1, 1].plot(df["selectivity"])
+        axs[1, 1].set_title("Selectivity")
+
+        axs[1, 2].plot(df["good_trade"])
+        axs[1, 2].set_title("Good Trade Rate")
+
+        # =============================
+        # ROW 3 (advanced)
+        # =============================
+        axs[2, 0].plot(df["zero_dmg"])
+        axs[2, 0].set_title("Zero Damage Rate")
+
+        axs[2, 1].plot(df["bad_trade"])
+        axs[2, 1].set_title("Bad Trade Rate")
+
+        # L3 formation (existing)
         if self.formation_counter:
-            names = list(self.formation_counter.keys())
-            values = list(self.formation_counter.values())
-
-            axs[1, 1].bar(names, values)
-            axs[1, 1].set_title("L3 Formation")
-            axs[1, 1].tick_params(axis='x', rotation=45)
+            axs[2, 2].bar(
+                list(self.formation_counter.keys()),
+                list(self.formation_counter.values())
+            )
+            axs[2, 2].set_title("L3 Formation")
+            axs[2, 2].tick_params(axis='x', rotation=45)
         else:
-            axs[1, 1].set_title("L3 Formation (empty)")
-
-        # ---------------------------
-        # L2 (options)
-        # ---------------------------
-        if self.option_counter:
-            names = list(self.option_counter.keys())
-            values = list(self.option_counter.values())
-
-            axs[1, 2].bar(names, values)
-            axs[1, 2].set_title("L2 Options")
-            axs[1, 2].tick_params(axis='x', rotation=45)
-        else:
-            axs[1, 2].set_title("L2 Options (empty)")
+            axs[2, 2].set_title("L3 Formation (empty)")
 
         plt.tight_layout()
         plt.show()
-        
+
+
 if __name__ == "__main__":
     print("✅ Dashboard module ready")
 
@@ -5239,7 +5501,6 @@ class MetricsTracker:
     def __init__(self, rl_side: str):
         self.rl_side = rl_side
         self.debug = True
-
         self.reset()
 
     # -------------------------------------------------
@@ -5256,7 +5517,7 @@ class MetricsTracker:
         }
 
         # -------------------------------
-        # ✅ L1 USAGE
+        # L1 USAGE
         # -------------------------------
         self.l1 = {
             "RL": defaultdict(int),
@@ -5264,7 +5525,7 @@ class MetricsTracker:
         }
 
         # -------------------------------
-        # 🔥 L1 COMBAT STATS
+        # L1 COMBAT STATS
         # -------------------------------
         self.l1_stats = {
             "RL": defaultdict(lambda: {"damage": 0, "kills": 0, "attacks": 0}),
@@ -5272,18 +5533,32 @@ class MetricsTracker:
         }
 
         # -------------------------------
-        # 🔥 UNIT STATS (FIX FINAL)
+        # UNIT STATS (EXTENDIDO)
         # -------------------------------
         self.unit_stats = {
-            "RL": defaultdict(lambda: {"damage": 0, "attacks": 0, "kills": 0}),
-            "ENEMY": defaultdict(lambda: {"damage": 0, "attacks": 0, "kills": 0}),
+            "RL": defaultdict(lambda: {
+                "damage": 0,
+                "attacks": 0,
+                "kills": 0,
+                "unit_key": None,
+                "category": None,
+                "classification": None,
+            }),
+            "ENEMY": defaultdict(lambda: {
+                "damage": 0,
+                "attacks": 0,
+                "kills": 0,
+                "unit_key": None,
+                "category": None,
+                "classification": None,
+            }),
         }
 
         self.steps = 0
 
-        # -------------------------------------------------
-        # 🔥 COMBAT INTELLIGENCE
-        # -------------------------------------------------
+        # -------------------------------
+        # COMBAT INTELLIGENCE
+        # -------------------------------
         self.trade_sum = 0.0
         self.trade_count = 0
 
@@ -5300,9 +5575,9 @@ class MetricsTracker:
         if not info:
             return
 
-        # =================================================
-        # 🔥 UNIT ID ROBUSTO
-        # =================================================
+        # -------------------------------------------------
+        # UNIT ID robusto
+        # -------------------------------------------------
         unit_id = info.get("unit_id")
 
         if not unit_id:
@@ -5324,7 +5599,7 @@ class MetricsTracker:
         enemy_kills = info.get("enemy_kills", 0)
 
         # -------------------------------------------------
-        # ✅ SIDE TOTALS
+        # SIDE TOTALS
         # -------------------------------------------------
         if rl_attacks > 0:
             self.side_totals["RL"]["attacks"] += rl_attacks
@@ -5341,13 +5616,13 @@ class MetricsTracker:
             self.side_totals["ENEMY"]["kills"] += enemy_kills
 
         # -------------------------------------------------
-        # ✅ L1 USAGE
+        # L1 USAGE
         # -------------------------------------------------
         action_class = info.get("action_class") or "unknown"
         self.l1[side][action_class] += 1
 
         # -------------------------------------------------
-        # 🔥 L1 COMBAT STATS
+        # L1 COMBAT STATS
         # -------------------------------------------------
         if rl_attacks > 0:
             entry = self.l1_stats["RL"][action_class]
@@ -5362,7 +5637,14 @@ class MetricsTracker:
             entry["kills"] += enemy_kills
 
         # -------------------------------------------------
-        # 🔥 UNIT STATS COMPLETO (FIX REAL)
+        # UNIT OBJECT (clave)
+        # -------------------------------------------------
+        unit_obj = None
+        if state is not None and hasattr(state, "units"):
+            unit_obj = next((u for u in state.units if u.unit_id == unit_id), None)
+
+        # -------------------------------------------------
+        # UNIT STATS + METADATA (FIX REAL)
         # -------------------------------------------------
         if rl_attacks > 0:
             entry = self.unit_stats["RL"][unit_id]
@@ -5370,19 +5652,34 @@ class MetricsTracker:
             entry["damage"] += rl_damage
             entry["kills"] += rl_kills
 
+            if unit_obj and entry["unit_key"] is None:
+                ut = getattr(unit_obj, "unit_type", None)
+
+                if ut:
+                    entry["unit_key"] = getattr(ut, "code", None)
+                    entry["category"] = getattr(ut.category, "value", None) if ut.category else None
+                    entry["classification"] = getattr(ut, "classification", None)
+
         if enemy_attacks > 0:
             entry = self.unit_stats["ENEMY"][unit_id]
             entry["attacks"] += enemy_attacks
             entry["damage"] += enemy_damage
             entry["kills"] += enemy_kills
 
+            if unit_obj and entry["unit_key"] is None:
+                ut = getattr(unit_obj, "unit_type", None)
+
+                if ut:
+                    entry["unit_key"] = getattr(ut, "code", None)
+                    entry["category"] = getattr(ut.category, "value", None) if ut.category else None
+                    entry["classification"] = getattr(ut, "classification", None)
+
         # -------------------------------------------------
-        # 🔥 GLOBAL COMBAT INTELLIGENCE
+        # COMBAT INTELLIGENCE
         # -------------------------------------------------
         self.damage_taken_total += enemy_damage
 
         if rl_attacks > 0:
-
             trade = rl_damage - enemy_damage
 
             self.trade_sum += trade
@@ -5427,7 +5724,6 @@ class MetricsTracker:
             "ENEMY": compute_l1_efficiency(self.l1_stats["ENEMY"]),
         }
 
-        # 🔥 OUTPUT COMPLETO
         units_output = {
             "RL": {k: dict(v) for k, v in self.unit_stats["RL"].items()},
             "ENEMY": {k: dict(v) for k, v in self.unit_stats["ENEMY"].items()},
@@ -5507,63 +5803,85 @@ class ResultsAnalyzer:
         }
 
     # -------------------------------------------------
-    # ACTION USAGE (L2)
+    # ✅ ADVANCED METRICS
+    # -------------------------------------------------
+    def aggregate_advanced_metrics(self):
+
+        agg = {
+            "good_trades": 0,
+            "bad_trades": 0,
+            "zero_damage_attacks": 0,
+            "turns_in_range": 0,
+            "attacks_in_range": 0,
+            "total_attacks": 0,
+        }
+
+        for r in self.results:
+            adv = r.get("advanced", {})
+
+            agg["good_trades"] += adv.get("good_trades", 0)
+            agg["bad_trades"] += adv.get("bad_trades", 0)
+            agg["zero_damage_attacks"] += adv.get("zero_damage_attacks", 0)
+            agg["turns_in_range"] += adv.get("turns_in_range", 0)
+            agg["attacks_in_range"] += adv.get("attacks_in_range", 0)
+            agg["total_attacks"] += adv.get("total_attacks", 0)
+
+        return agg
+
+    # -------------------------------------------------
+    # ACTION USAGE
     # -------------------------------------------------
     def aggregate_action_usage(self):
 
         total_counts = defaultdict(int)
 
         for r in self.results:
-            option_counts = r.get("option_counts", {})
-
-            for opt, count in option_counts.items():
+            for opt, count in r.get("option_counts", {}).items():
                 total_counts[opt] += count
 
         total = sum(total_counts.values())
 
         return {
-            opt: (count, count / total if total > 0 else 0.0)
+            opt: (count, count / total if total else 0)
             for opt, count in total_counts.items()
         }
 
     # -------------------------------------------------
-    # FORMATION USAGE (L3)
+    # FORMATION USAGE
     # -------------------------------------------------
     def aggregate_formation_usage(self):
 
-        formation_totals = defaultdict(int)
+        totals = defaultdict(int)
 
         for r in self.results:
-            formation_counts = r.get("formation_counts", {})
+            for k, v in r.get("formation_counts", {}).items():
+                totals[k] += v
 
-            for k, v in formation_counts.items():
-                formation_totals[k] += v
-
-        total = sum(formation_totals.values())
+        total = sum(totals.values())
 
         return {
-            k: (v, v / total if total > 0 else 0.0)
-            for k, v in formation_totals.items()
+            k: (v, v / total if total else 0)
+            for k, v in totals.items()
         }
 
     # -------------------------------------------------
-    # STRATEGY → OPTION
+    # STRATEGY MAPPING
     # -------------------------------------------------
     def aggregate_strategy_mapping(self):
 
-        strategy_option_totals = defaultdict(lambda: defaultdict(int))
+        mapping = defaultdict(lambda: defaultdict(int))
 
         for r in self.results:
-            mapping = r.get("strategy_option_map", {})
+            m = r.get("strategy_option_map", {})
 
-            for strat, options in mapping.items():
-                for opt, count in options.items():
-                    strategy_option_totals[strat][opt] += count
+            for strat, opts in m.items():
+                for o, c in opts.items():
+                    mapping[strat][o] += c
 
-        return strategy_option_totals
+        return mapping
 
     # -------------------------------------------------
-    # SIDE AGGREGATION (GLOBAL)
+    # SIDE TOTALS
     # -------------------------------------------------
     def aggregate_side_stats(self):
 
@@ -5573,16 +5891,14 @@ class ResultsAnalyzer:
         }
 
         for r in self.results:
-            side = r["side"]
-
-            for s in ["RL", "ENEMY"]:
-                for k, v in side[s].items():
-                    agg[s][k] += v
+            for side in ["RL", "ENEMY"]:
+                for k, v in r["side"][side].items():
+                    agg[side][k] += v
 
         return agg
 
     # -------------------------------------------------
-    # ✅ NEW: L1 AGGREGATION (acciones reales)
+    # L1 STATS
     # -------------------------------------------------
     def aggregate_l1_stats(self):
 
@@ -5601,84 +5917,71 @@ class ResultsAnalyzer:
         return agg
 
     # -------------------------------------------------
-    # EFFICIENCY (GLOBAL)
+    # EFFICIENCY
     # -------------------------------------------------
     def efficiency(self):
 
         agg = self.aggregate_side_stats()
 
         def compute(side):
-            attacks = agg[side]["attacks"]
-            damage = agg[side]["damage"]
-            kills = agg[side]["kills"]
+            a = agg[side]["attacks"]
+            d = agg[side]["damage"]
+            k = agg[side]["kills"]
 
             return {
-                "damage_per_attack": damage / attacks if attacks else 0,
-                "kills_per_attack": kills / attacks if attacks else 0,
+                "damage_per_attack": d / a if a else 0,
+                "kills_per_attack": k / a if a else 0,
             }
 
-        return {
-            "RL": compute("RL"),
-            "ENEMY": compute("ENEMY"),
-        }
+        return {"RL": compute("RL"), "ENEMY": compute("ENEMY")}
 
     # -------------------------------------------------
-    # ✅ NEW: L1 EFFICIENCY
+    # L1 EFFICIENCY
     # -------------------------------------------------
     def l1_efficiency(self):
 
         agg = self.aggregate_l1_stats()
 
         def compute(side):
-            attacks = agg[side].get("attacks", 0)
-            damage = agg[side].get("damage", 0)
-            kills = agg[side].get("kills", 0)
+            a = agg[side].get("attacks", 0)
+            d = agg[side].get("damage", 0)
+            k = agg[side].get("kills", 0)
 
             return {
-                "damage_per_attack": damage / attacks if attacks else 0,
-                "kills_per_attack": kills / attacks if attacks else 0,
+                "damage_per_attack": d / a if a else 0,
+                "kills_per_attack": k / a if a else 0,
             }
 
-        return {
-            "RL": compute("RL"),
-            "ENEMY": compute("ENEMY"),
-        }
+        return {"RL": compute("RL"), "ENEMY": compute("ENEMY")}
 
     # -------------------------------------------------
     # UNIT AGGREGATION
     # -------------------------------------------------
     def aggregate_units(self):
+
         units = defaultdict(lambda: {
             "attacks": 0,
             "damage": 0,
             "kills": 0,
+            "unit_key": None,
+            "category": None,
+            "classification": None,
         })
 
         for r in self.results:
-            unit_data = r.get("units", {})
-
             for side in ["RL", "ENEMY"]:
-                for uid, stats in unit_data.get(side, {}).items():
+                for uid, stats in r.get("units", {}).get(side, {}).items():
 
-                    # ✅ FIX AQUÍ (usar dict correctamente)
                     units[uid]["damage"] += stats.get("damage", 0)
                     units[uid]["attacks"] += stats.get("attacks", 0)
                     units[uid]["kills"] += stats.get("kills", 0)
 
+                    if units[uid]["unit_key"] is None:
+                        units[uid]["unit_key"] = stats.get("unit_key")
+                        units[uid]["category"] = stats.get("category")
+                        units[uid]["classification"] = stats.get("classification")
+
         return units
-
-    # -------------------------------------------------
-    # TOP UNITS
-    # -------------------------------------------------
-    def top_units(self, key="damage", top_n=10):
-
-        units = self.aggregate_units()
-
-        return sorted(
-            units.items(),
-            key=lambda x: x[1][key],
-            reverse=True
-        )[:top_n]
 
     # -------------------------------------------------
     # PRINT REPORT
@@ -5686,23 +5989,22 @@ class ResultsAnalyzer:
     def print_report(self):
 
         summary = self.summary()
-        efficiency = self.efficiency()
         sides = self.aggregate_side_stats()
-
         l1_stats = self.aggregate_l1_stats()
+        eff = self.efficiency()
         l1_eff = self.l1_efficiency()
 
-        action_usage = self.aggregate_action_usage()
-        formation_usage = self.aggregate_formation_usage()
-        strategy_mapping = self.aggregate_strategy_mapping()
+        action = self.aggregate_action_usage()
+        formation = self.aggregate_formation_usage()
+        mapping = self.aggregate_strategy_mapping()
 
-        top_units = self.top_units()
+        adv = self.aggregate_advanced_metrics()
 
         print("\n=== GLOBAL ===")
         print(summary)
 
         print("\n=== EFFICIENCY ===")
-        print(efficiency)
+        print(eff)
 
         print("\n=== L1 EFFICIENCY (REAL COMBAT) ===")
         print(l1_eff)
@@ -5715,55 +6017,31 @@ class ResultsAnalyzer:
         print(dict(l1_stats["RL"]))
         print(dict(l1_stats["ENEMY"]))
 
-        # -------------------------------------------------
-        # L2 ACTION USAGE
-        # -------------------------------------------------
-        print("\n=== ACTION USAGE (L2) ===")
-        if action_usage:
-            for opt, (count, ratio) in sorted(
-                action_usage.items(),
-                key=lambda x: x[1][0],
-                reverse=True
-            ):
-                print(f"{opt}: {count} ({ratio:.2%})")
-        else:
-            print("No action data.")
+        print("\n=== ACTION USAGE ===")
+        for k, (c, r) in sorted(action.items(), key=lambda x: x[1][0], reverse=True):
+            print(f"{k}: {c} ({r:.2%})")
 
-        # -------------------------------------------------
-        # L3 FORMATION USAGE
-        # -------------------------------------------------
-        print("\n=== FORMATION USAGE (L3) ===")
-        if formation_usage:
-            for strat, (count, ratio) in sorted(
-                formation_usage.items(),
-                key=lambda x: x[1][0],
-                reverse=True
-            ):
-                print(f"{strat}: {count} ({ratio:.2%})")
-        else:
-            print("No formation data.")
+        print("\n=== FORMATION USAGE ===")
+        for k, (c, r) in sorted(formation.items(), key=lambda x: x[1][0], reverse=True):
+            print(f"{k}: {c} ({r:.2%})")
 
-        # -------------------------------------------------
-        # L3 → L2 MAPPING
-        # -------------------------------------------------
-        print("\n=== STRATEGY → OPTION (L3 → L2) ===")
-
-        for strat, options in strategy_mapping.items():
-            total = sum(options.values())
-
+        print("\n=== STRATEGY → OPTION ===")
+        for strat, opts in mapping.items():
+            total = sum(opts.values())
             print(f"\n{strat}:")
+            for o, v in sorted(opts.items(), key=lambda x: x[1], reverse=True):
+                print(f"  {o}: {v} ({v/total:.2%})")
 
-            for opt, v in sorted(options.items(), key=lambda x: x[1], reverse=True):
-                ratio = v / total if total > 0 else 0
-                print(f"  {opt}: {v} ({ratio:.2%})")
+        # ✅ ADVANCED
+        print("\n=== ADVANCED METRICS ===")
 
-        # -------------------------------------------------
-        # TOP UNITS
-        # -------------------------------------------------
-        print("\n=== TOP UNITS (damage) ===")
-        for uid, data in top_units:
-            print(uid, data)
+        total_attacks = max(1, adv["total_attacks"])
+        range_total = max(1, adv["turns_in_range"])
 
+        print(f"good_trade_rate:  {adv['good_trades'] / total_attacks:.3f}")
+        print(f"bad_trade_rate:   {adv['bad_trades'] / total_attacks:.3f}")
+        print(f"selectivity:      {adv['attacks_in_range'] / range_total:.3f}")
+        print(f"zero_dmg_rate:    {adv['zero_damage_attacks'] / total_attacks:.3f}")
 
 
 ================================================================================
@@ -7100,9 +7378,9 @@ class ProgressiveReward(BaseReward):
         self.rl_side = rl_side
         self.last_action = None
 
-        # =================================================
-        # ✅ METRICS (COMBAT INTELLIGENCE)
-        # =================================================
+        # -------------------------------
+        # METRICS (DEBUG / ANALYTICS)
+        # -------------------------------
         self.trade_sum = 0.0
         self.trade_count = 0
 
@@ -7112,6 +7390,7 @@ class ProgressiveReward(BaseReward):
         self.damage_given_total = 0
         self.damage_taken_total = 0
 
+    # -------------------------------------------------
     def compute(
         self,
         *,
@@ -7127,55 +7406,27 @@ class ProgressiveReward(BaseReward):
         info = info or {}
         reward = 0.0
 
-        # -------------------------------------------------
-        # DATA
-        # -------------------------------------------------
+        # -------------------------------
+        # CORE DATA
+        # -------------------------------
         damage = info.get("rl_damage", 0)
         damage_taken = info.get("enemy_damage", 0)
         killed = info.get("rl_kills", 0) > 0
 
         action_class = info.get("action_class", "")
-        action_upper = action_class.upper()
-
         l2 = info.get("l2_option", "")
-        is_attack = "ATTACK" in action_upper
+
+        is_attack = "ATTACK" in action_class.upper()
 
         # =================================================
-        # ✅ BASE REWARD
-        # =================================================
-        if l2 == "FLANK":
-            if pre_dist is not None and pre_dist <= 3:
-                reward += 0.5
-            else:
-                reward += 0.1
-
-        elif l2 == "RETREAT":
-            reward += 1.0
-
-        # =================================================
-        # ✅ DAMAGE
-        # =================================================
-        reward += damage * 0.8
-        reward -= damage_taken * 0.8
-
-        if damage > damage_taken:
-            reward += 0.2
-
-        if damage >= 2 and damage_taken == 0:
-            reward += 0.4
-
-        if damage_taken == 0 and damage > 0:
-            reward += 0.3
-
-        # =================================================
-        # ✅ METRICS LOGGING (NO afecta al reward)
+        # METRICS TRACKING (no reward impact)
         # =================================================
         self.damage_given_total += damage
         self.damage_taken_total += damage_taken
 
-        if is_attack:
-            trade = damage - damage_taken
+        trade = damage - damage_taken
 
+        if is_attack:
             self.trade_sum += trade
             self.trade_count += 1
 
@@ -7185,48 +7436,41 @@ class ProgressiveReward(BaseReward):
             self.total_attacks += 1
 
         # =================================================
-        # 🔥 COMBAT INTELLIGENCE (PHASE 2.5 FINAL)
+        # 🔥 CORE: COMBAT QUALITY (balanced)
         # =================================================
         if is_attack:
 
-            trade = damage - damage_taken
+            # Main signal (stable scaling)
+            reward += trade * 1.0
 
-            # ✅ señal principal (mantener)
-            reward += trade * 0.6
-
-            # ✅ castigo ligero (NO bloquear comportamiento)
+            # Penalize bad trades
             if trade < 0:
-                reward -= 0.2   # 🔥 BAJADO más
+                reward -= 0.5
 
-            # ✅ incentivo por buen ataque
+            # Reward good trades (controlled)
             elif trade > 0:
-                reward += 0.25
+                reward += 0.4 + (trade * 0.25)
 
-        # =================================================
-        # ✅ ATTACK (AJUSTADO FINAL)
-        # =================================================
-        if is_attack:
+            # Avoid useless attacks
+            if damage == 0:
+                reward -= 0.4
 
-            # ✅ incentivo a participar (IMPORTANTE)
-            reward += 0.15   # 🔥 SUBIDO (era 0.1)
+            # 🔥 small base cost to attack (encourage selectivity)
+            reward -= 0.1
 
-            if damage > 0:
-                reward += 0.15
-            else:
-                reward -= 0.5   # 🔽 ligeramente
-
-            # ❌ ELIMINAR ESTA LÍNEA (DOBLE PENALIZACIÓN)
-            # if damage_taken > damage:
-            #     reward -= 0.5
+        else:
+            # Reward avoiding bad combat
+            if trade < 0:
+                reward += 0.2
 
         # =================================================
         # ✅ KILL
         # =================================================
         if killed:
-            reward += 4.0
+            reward += 3.0
 
         # =================================================
-        # ✅ POSITION
+        # ✅ POSITIONING
         # =================================================
         if pre_dist is not None and post_dist is not None:
 
@@ -7234,92 +7478,48 @@ class ProgressiveReward(BaseReward):
                 reward += 0.05
 
             if post_dist <= 2:
-                reward += 0.1
+                reward += 0.05
 
         # =================================================
-        # ✅ HOLD
+        # ✅ RETREAT (important under disadvantage)
         # =================================================
-        if (
-            l2 == "HOLD"
-            and not is_attack
-            and pre_dist is not None
-            and pre_dist <= 3
-        ):
-            reward -= 0.5
-
-        if l2 == "HOLD" and damage == 0:
-            reward -= 0.15
-
-        # =================================================
-        # ✅ INACTIVITY
-        # =================================================
-        if damage == 0 and not is_attack and l2 not in ["FLANK", "RETREAT"]:
-            reward -= 0.05
-
-        # =================================================
-        # ✅ WAIT
-        # =================================================
-        if isinstance(action, WaitAction):
-            reward -= 0.2
-
-        # =================================================
-        # ✅ L2 CONTROL
-        # =================================================
-
         if l2 == "RETREAT":
 
-            if pre_dist is not None and pre_dist <= 3:
-                reward += 1.0
+            reward += 0.6
 
             if damage_taken == 0:
                 reward += 0.6
 
-            if damage_taken > damage:
-                reward += 0.3
-
-        elif l2 == "FLANK":
-
-            if pre_dist is not None and pre_dist <= 3:
-
-                reward += 1.0
-
-                if damage_taken == 0:
-                    reward += 0.2
-
-                if post_dist is not None:
-                    if abs(post_dist - pre_dist) <= 1:
-                        reward += 0.3
-
-                if damage == 0:
-                    reward += 0.5
+        # =================================================
+        # ✅ PASSIVITY CONTROL
+        # =================================================
+        if l2 == "HOLD" and not is_attack:
+            reward -= 0.15
 
         # =================================================
-        # ✅ ADVANCE
-        # =================================================
-        if l2 == "ADVANCE" and damage_taken > 0:
-            reward -= 0.25
-
-        # =================================================
-        # ✅ COMBAT PRESSURE
+        # ✅ PRESSURE CONTROL (forces decisions)
         # =================================================
         if (
             pre_dist is not None
             and pre_dist <= 3
             and not is_attack
-            and l2 not in ["FLANK", "RETREAT"]
+            and l2 != "RETREAT"
         ):
-            reward -= 0.2
+            reward -= 0.3
 
         # =================================================
-        # ✅ ANTI-SPAM
+        # ✅ ACTION PENALTIES
         # =================================================
-        if self.last_action is not None and self.last_action == action_class:
-            reward -= 0.1
+        if isinstance(action, WaitAction):
+            reward -= 0.25
+
+        if self.last_action == action_class:
+            reward -= 0.05
 
         self.last_action = action_class
 
         # =================================================
-        # ✅ VP
+        # ✅ OBJECTIVES (VP)
         # =================================================
         if hasattr(state, "vp_tracker") and state.vp_tracker:
             if hasattr(next_state, "vp_tracker") and next_state.vp_tracker:
@@ -7327,7 +7527,7 @@ class ProgressiveReward(BaseReward):
                 prev_vp = state.vp_tracker.score.get(self.rl_side, 0)
                 new_vp = next_state.vp_tracker.score.get(self.rl_side, 0)
 
-                reward += (new_vp - prev_vp) * 1.2
+                reward += (new_vp - prev_vp) * 1.5
 
         # =================================================
         # ✅ ENDGAME
@@ -7341,23 +7541,10 @@ class ProgressiveReward(BaseReward):
                 reward -= 5.0
 
         # =================================================
-        # ✅ TIME
+        # ✅ TIME PENALTY
         # =================================================
         reward -= 0.02
 
-        # =================================================
-        # ✅ CLAMP FINAL
-        # =================================================
-        if l2 == "FLANK":
-            reward = max(reward, 0.3)
-
-        elif l2 == "RETREAT":
-            reward = max(reward, 0.5)
-
-        if l2 == "ATTACK":
-            reward = min(reward, 1.2)
-
-        # =================================================
         return max(min(reward, 10.0), -10.0)
 
 
@@ -8339,10 +8526,10 @@ def compute_tactical_features(state, rl_side):
 
 
 ================================================================================
-FILE: C:\repos\python\assault\assault_sim\roadmap\assault_ai_roadmap_v2.md
+FILE: C:\repos\python\assault\assault_sim\roadmap\assault_ai_roadmap_v5.md
 ================================================================================
 
-# ASSAULT AI ROADMAP v4 (PRODUCTION READY)
+# ASSAULT AI ROADMAP v5 (COMBAT-AWARE)
 
 ## STATUS LEGEND
 - [ ] TODO
@@ -8352,221 +8539,200 @@ FILE: C:\repos\python\assault\assault_sim\roadmap\assault_ai_roadmap_v2.md
 ---
 
 # PHASE 1 — STABILIZATION ✅
-
-## Tasks
 - [x] PPO stable
 - [x] No collapse after 500+ updates
 - [x] Balanced action distribution
 
-## Metrics
-- action_distribution
-- reward_mean
-- entropy
-
-## Done Criteria
-- ALL actions > 10%
-- Attack > 25%
-
 ---
 
-# PHASE 2 — BEHAVIOR CONSOLIDATION ⚠️
+# PHASE 2 — BEHAVIOR CONSOLIDATION ⚠️ (IN PROGRESS)
 
 ## Tasks
 - [x] Run 3000–4000 episodes
 - [ ] Inspect replays manually
 - [ ] Validate tactical behavior
 
-## Checks
-- [ ] Attacks happen in range
-- [ ] No retreat spam
-- [ ] No oscillation patterns
-- [ ] Units do not suicide blindly ❗
-
-## Metrics
-- win_rate
-- damage_ratio
-- avg_reward
-
-## Done Criteria (REAL)
-- attack ∈ [25–45%]
+## Done Criteria
+- attack ∈ [25–50%]
 - retreat < 25%
-- damage_ratio >= 0.9 ✅ (CRITICAL)
+- damage_ratio ≥ 0.8
 
 ---
 
-# 🔥 PHASE 2.5 — COMBAT INTELLIGENCE (NEW - CRITICAL)
-
-## Purpose
-Fix decision quality in combat (WHEN to attack / NOT attack).
+# PHASE 2.5 — COMBAT INTELLIGENCE 🔥 (IN PROGRESS)
 
 ## Tasks
-- [ ] Add trade-based reward (damage - damage_taken)
+- [ ] Trade-based reward
 - [ ] Penalize bad engagements
 - [ ] Reward efficient combat
 
-## Metrics
-- damage_per_attack
-- kills_per_attack
-- damage_ratio
+---
+
+# PHASE 2.6 — COMBAT MODELING LAYER 🔥 (CRITICAL NEW)
+
+## Core APIs (UnitInstance)
+- [ ] get_attack_power_vs(target)
+- [ ] get_expected_damage(target)
+- [ ] get_combat_advantage(target)
+- [ ] is_favorable_vs(target)
+
+## Executor Upgrade
+- [ ] Use combat_advantage in scoring
+- [ ] Avoid bad trades
+- [ ] Better target selection
 
 ## Done Criteria
-- damage_ratio >= 0.95 ✅
-- kills_per_attack improves
-- winrate >= 45% ✅
+- damage_ratio ≥ 0.75
+- win_rate ≥ 0.55
 
 ---
 
-# PHASE 3 — REWARD QUALITY
+# PHASE 2.7 — GAME BALANCE VALIDATION ⚖️
 
 ## Tasks
-- [ ] Remove redundant signals
-- [ ] Normalize reward scale
-- [ ] Align reward with actual winning behavior
-
-## Checks
-- [ ] No conflicting incentives
-- [ ] No action accidentally over-rewarded
+- [ ] Analyze UNIT TYPE SUMMARY
+- [ ] Detect imbalance
+- [ ] Compare per-unit efficiency
 
 ## Done Criteria
-- reward stable
-- no single action dominates reward
-- smooth learning curve
+- No unit < 0.3 dmg/atk
+- No unit > 1.5 dmg/atk
 
 ---
 
-# PHASE 4 — STRATEGY-CONDITIONED POLICY
+# PHASE 2.8 — GAME DESIGN FIXES 🔧
 
 ## Tasks
-- [ ] Add strategy context (L3) to observation
-- [ ] Modify PolicyNet (concatenate strategy)
-- [ ] Remove manual action bias
+- [ ] Balance Infantry (GE vs US)
+- [ ] Fix Bazooka team
+- [ ] Adjust Mortars
 
 ## Done Criteria
-- behavior adapts to strategy
-- strategy → different action profiles
+- damage_ratio ≥ 0.9
+- win_rate ≥ 0.5
 
 ---
 
-# PHASE 5 — IMITATION LEARNING
-
-## Tasks
-- [ ] Integrate DecisionEngine as teacher
-- [ ] Add imitation loss
-- [ ] Mix PPO + supervised loss
-
-## Done Criteria
-- faster convergence
-- more stable early training
+# PHASE 3 — REWARD QUALITY ⛔ BLOCKED
 
 ---
 
-# PHASE 6 — OPPONENT EVOLUTION
+# PHASE 4 — FEATURES (UPDATED)
 
-## Tasks
-- [ ] Snapshot pool of past models
-- [ ] Random opponent sampling
-
-## Done Criteria
-- agent robust to multiple playstyles
-- avoids overfitting to one opponent
+## Add Features
+- [ ] combat_advantage
+- [ ] expected_damage
+- [ ] local advantage
 
 ---
 
-# PHASE 7 — SELF-PLAY
-
-## Tasks
-- [ ] Train vs frozen snapshots
-- [ ] PPO vs PPO
-
-## Done Criteria
-- continuous improvement vs past versions
-- higher skill ceiling
-
----
-
-# PHASE 8 — FEATURES (STATE IMPROVEMENT)
-
-## Tasks
-- [ ] Add:
-    - ally_distance
-    - enemy_count_near
-    - threat_level
-    - local advantage (#allies vs enemies)
-    - line_of_sight
-
-## Done Criteria
-- improved combat decisions
-- better positioning
-
----
-
-# PHASE 9 — DSL (CONFIGURABLE REWARD)
-
-## Tasks
-- [ ] Move reward weights to config
-- [ ] Enable quick tuning
-
-## Done Criteria
-- reward editable without code changes
-
----
-
-# PHASE 10 — VECTORIZED ENV
-
-## Tasks
-- [ ] Parallel rollout environments
-
-## Done Criteria
-- faster training
-- higher sample throughput
-
----
-
-# PHASE 11 — FULL HRL (OPTIONAL ADVANCED)
-
-## Tasks
-- [ ] L3 PPO (strategy level)
-- [ ] L2 PPO (tactical level)
-- [ ] L1 learned (actions)
-
-## Done Criteria
-- hierarchical behavior
-- better long-term planning
-
----
-
-# ✅ GLOBAL TARGET
-
-- winrate ≥ 50%
+# GLOBAL TARGET
+- winrate ≥ 60%
 - damage_ratio ≥ 1.0
-- non-collapsing behavior
-- multiple tactics used meaningfully
+- intelligent engagements
+
+
+
+
+
+================================================================================
+FILE: C:\repos\python\assault\assault_sim\roadmap\assault_ai_roadmap_v5_baseline.md
+================================================================================
+
+# ASSAULT AI ROADMAP v5 (COMBAT-AWARE)
+
+## STATUS LEGEND
+- [ ] TODO
+- [~] IN PROGRESS
+- [x] DONE
 
 ---
 
-# 🔥 KEY LESSONS
-
-- Stability ≠ intelligence
-- Exploration ≠ good decisions
-- Reward must encode decision quality (not just action outcome)
-
----
-
-# ✅ CURRENT STATUS (PROJECT)
-
-- Phase 1: ✅ DONE
-- Phase 2: ⚠️ PARTIAL (fails in combat)
-- Phase 2.5: ❌ REQUIRED NEXT STEP
-- Phase 3+: ⛔ BLOCKED until combat is fixed
+# PHASE 1 — STABILIZATION ✅
+- [x] PPO stable
+- [x] No collapse after 500+ updates
+- [x] Balanced action distribution
 
 ---
 
-# NOTE
+# PHASE 2 — BEHAVIOR CONSOLIDATION ⚠️ (IN PROGRESS)
 
-Do NOT proceed to Phase 3+  
-until damage_ratio and winrate improve.
+## Tasks
+- [x] Run 3000–4000 episodes
+- [ ] Inspect replays manually
+- [ ] Validate tactical behavior
 
-Combat intelligence is the real bottleneck.
+## ✅ BASELINE SNAPSHOT (PRE-COMBAT MODELING)
+Episodes:        500
+win_rate:        0.512
+damage_ratio:    0.568
+RL dmg/atk:      0.67
+ENEMY dmg/atk:   1.29
+trade_mean:      0.672
+bad_attack_rate: 0.000
+
+## UNIT ANALYSIS
+US_RIFLES_43 → 0.90 dmg/atk
+GE_RIFLES_43 → 1.61 dmg/atk
+US_BAZOOKA_TEAM → 0.06 dmg/atk
+US_81MM_MORTAR → 0.44 dmg/atk
+GE_50MM_MORTAR → 0.26 dmg/atk
+
+## Done Criteria
+- attack ∈ [25–50%]
+- retreat < 25%
+- damage_ratio ≥ 0.8
+
+---
+
+# PHASE 2.5 — COMBAT INTELLIGENCE 🔥
+- [ ] Trade-based reward
+- [ ] Penalize bad engagement
+- [ ] Reward efficient combat
+
+---
+
+# PHASE 2.6 — COMBAT MODELING LAYER 🔥
+
+## Core APIs (UnitInstance)
+- [ ] get_attack_power_vs(target)
+- [ ] get_expected_damage(target)
+- [ ] get_combat_advantage(target)
+- [ ] is_favorable_vs(target)
+
+## Executor Upgrade
+- [ ] Use combat_advantage in scoring
+- [ ] Avoid bad trades
+- [ ] Improve targeting
+
+## Target Metrics
+- damage_ratio ≥ 0.75
+- win_rate ≥ 0.55
+
+---
+
+# PHASE 2.7 — GAME BALANCE VALIDATION ⚖️
+- [ ] Analyze unit efficiency
+- [ ] Detect imbalance
+
+---
+
+# PHASE 2.8 — GAME DESIGN FIXES 🔧
+- [ ] Balance infantry
+- [ ] Fix bazooka
+- [ ] Adjust mortars
+
+---
+
+# PHASE 3 — REWARD QUALITY ⛔ BLOCKED
+
+---
+
+# GLOBAL TARGET
+- winrate ≥ 60%
+- damage_ratio ≥ 1.0
+- intelligent engagements
+
 
 
 ================================================================================
@@ -11650,7 +11816,6 @@ class FormationStrategyEngine:
 
     # -------------------------------------------------
     def update(self, state, rl_side):
-
         if self.current_strategy is None or self.remaining_steps <= 0:
             self.current_strategy = self._select_strategy(state, rl_side)
             self.remaining_steps = self.horizon
@@ -11671,32 +11836,33 @@ class FormationStrategyEngine:
             if u.side != rl_side and u.alive and u.position is not None
         ]
 
-        # -------------------------------------------------
-        # ✅ fallback seguro
-        # -------------------------------------------------
         if not own_units or not enemy_units:
             return FormationStrategy.PUSH_VP
 
         # -------------------------------------------------
-        # ✅ DISTANCIA A ENEMIGOS
+        # ✅ DISTANCIA ENEMIGO (mínima)
         # -------------------------------------------------
-        def min_enemy_distance():
-            best = 999
-            for u in own_units:
-                for e in enemy_units:
-                    d = hex_distance(u.position, e.position)
-                    if d < best:
-                        best = d
-            return best
-
-        enemy_dist = min_enemy_distance()
+        enemy_dist = min(
+            hex_distance(u.position, e.position)
+            for u in own_units
+            for e in enemy_units
+        )
 
         # -------------------------------------------------
-        # ✅ CLEANUP (enemigos débiles)
+        # ✅ VENTAJA LOCAL (🔥 CLAVE NUEVO)
+        # -------------------------------------------------
+        friendly_hp = sum(getattr(u, "hp", 0) for u in own_units)
+        enemy_hp = sum(getattr(e, "hp", 0) for e in enemy_units)
+
+        hp_advantage = friendly_hp - enemy_hp
+        unit_advantage = len(own_units) - len(enemy_units)
+
+        # -------------------------------------------------
+        # ✅ ENEMIGOS DÉBILES
         # -------------------------------------------------
         low_hp_enemies = [
             e for e in enemy_units
-            if hasattr(e, "hp") and e.hp <= 1
+            if getattr(e, "hp", 0) <= 1
         ]
 
         # -------------------------------------------------
@@ -11716,62 +11882,87 @@ class FormationStrategyEngine:
             if not vp_positions:
                 return 999
 
-            best = 999
-            for u in own_units:
-                for vp in vp_positions:
-                    vp_pos = HexCoord(vp[0], vp[1])
-                    d = hex_distance(u.position, vp_pos)
-                    if d < best:
-                        best = d
-            return best
+            return min(
+                hex_distance(u.position, HexCoord(vp[0], vp[1]))
+                for u in own_units
+                for vp in vp_positions
+            )
 
         vp_dist = distance_to_vp()
 
-        # -------------------------------------------------
-        # ✅ DECISIONES SUAVES (CLAVE)
-        # -------------------------------------------------
-
         roll = random.random()
 
-        # CLEANUP
+        # -------------------------------------------------
+        # ✅ CLEANUP (solo si conviene)
+        # -------------------------------------------------
         if len(low_hp_enemies) >= 2:
-            return FormationStrategy.CLEANUP
+            if hp_advantage >= 0 or roll < 0.6:
+                return FormationStrategy.CLEANUP
 
-        # 🔥 COMBATE CERCANO (NO FORZAR ATTACK)
+        # -------------------------------------------------
+        # ✅ COMBATE CERCANO (🔥 MÁS INTELIGENTE)
+        # -------------------------------------------------
         if enemy_dist <= 3:
 
-            if roll < 0.4:
-                return FormationStrategy.ATTACK
-            elif roll < 0.7:
-                return FormationStrategy.HOLD_VP
-            else:
-                return FormationStrategy.CLEANUP
+            # ✅ si vamos ganando → agresivo
+            if hp_advantage > 0 or unit_advantage > 0:
+                if roll < 0.6:
+                    return FormationStrategy.ATTACK
+                elif roll < 0.85:
+                    return FormationStrategy.CLEANUP
+                else:
+                    return FormationStrategy.HOLD_VP
 
-        # 🔥 CERCA DE VP
+            # ❌ si vamos perdiendo → defensivo
+            else:
+                if roll < 0.5:
+                    return FormationStrategy.HOLD_VP
+                elif roll < 0.8:
+                    return FormationStrategy.PUSH_VP
+                else:
+                    return FormationStrategy.ATTACK  # gamble controlado
+
+        # -------------------------------------------------
+        # ✅ CERCA DEL VP
+        # -------------------------------------------------
         if vp_dist <= 2:
 
-            if roll < 0.5:
-                return FormationStrategy.HOLD_VP
-            elif roll < 0.75:
-                return FormationStrategy.ATTACK
+            if hp_advantage >= 0:
+                if roll < 0.6:
+                    return FormationStrategy.HOLD_VP
+                elif roll < 0.85:
+                    return FormationStrategy.ATTACK
+                else:
+                    return FormationStrategy.CLEANUP
             else:
-                return FormationStrategy.PUSH_VP
+                return FormationStrategy.HOLD_VP
 
-        # 🔥 LEJOS → MÁS MEZCLA REAL
+        # -------------------------------------------------
+        # ✅ LEJOS DEL VP
+        # -------------------------------------------------
         if vp_dist > 2:
 
-            if roll < 0.4:
-                return FormationStrategy.PUSH_VP
-            elif roll < 0.65:
-                return FormationStrategy.HOLD_VP
-            elif roll < 0.85:
-                return FormationStrategy.ATTACK
+            if hp_advantage > 2:
+                if roll < 0.5:
+                    return FormationStrategy.ATTACK
+                else:
+                    return FormationStrategy.PUSH_VP
+
+            elif hp_advantage < -2:
+                if roll < 0.6:
+                    return FormationStrategy.HOLD_VP
+                else:
+                    return FormationStrategy.PUSH_VP
+
             else:
-                return FormationStrategy.CLEANUP
+                if roll < 0.4:
+                    return FormationStrategy.PUSH_VP
+                elif roll < 0.7:
+                    return FormationStrategy.ATTACK
+                else:
+                    return FormationStrategy.HOLD_VP
 
-        # fallback real
         return FormationStrategy.HOLD_VP
-
 
 
 ================================================================================

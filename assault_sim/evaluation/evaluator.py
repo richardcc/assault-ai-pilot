@@ -3,8 +3,6 @@ import numpy as np
 
 from assault_sim.evaluation.metrics_tracker import MetricsTracker
 from assault_sim.engine.match_runner import MatchRunner
-
-# ✅ advanced metrics (correct import)
 from assault_sim.evaluation.advanced_metrics import AdvancedMetrics
 
 
@@ -29,11 +27,8 @@ class Evaluator:
     def run_episode(self):
 
         tracker = MetricsTracker(self.rl_side)
-        advanced_metrics = AdvancedMetrics()  # ✅ NEW
+        advanced_metrics = AdvancedMetrics()
 
-        # -------------------------------------------------
-        # EVENT BUS
-        # -------------------------------------------------
         sim = getattr(self.env, "sim", None) or getattr(self.env, "sim_env", None)
 
         if sim is not None and getattr(sim, "event_bus", None) is not None:
@@ -48,9 +43,11 @@ class Evaluator:
 
         reward_trace = []
 
+        # ✅ CRÍTICO → LOG REAL DE EVENTOS
+        events_log = []
+
         obs = self.env.reset()
 
-        # ✅ reset controller (important)
         if hasattr(self.controller, "reset"):
             self.controller.reset()
 
@@ -80,48 +77,111 @@ class Evaluator:
             sim = getattr(self.env, "sim", None) or getattr(self.env, "sim_env", None)
             state = sim.game_state if sim is not None else None
 
-            if state is not None:
-                final_state = state
+            if state is None:
+                break
+
+            final_state = state
 
             reward_trace.append(step.get("reward", 0.0))
 
             # -------------------------------------------------
-            # POLICY TRACKING (L2 / L3)
+            # ✅ EVENT CAPTURE (FIX REAL ROBUSTO)
+            # -------------------------------------------------
+            for key in ["attack_events", "events", "combat_events", "attacks"]:
+
+                if key not in info:
+                    continue
+
+                for e in info[key]:
+
+                    if not isinstance(e, dict):
+                        continue
+
+                    attack_type = (
+                        e.get("attack_type")
+                        or e.get("type")
+                        or e.get("action")
+                    )
+
+                    if attack_type is None:
+                        continue
+
+                    events_log.append({
+                        "type": "attack",
+                        "attack_type": str(attack_type),
+                        "damage": e.get("damage", 0),
+                        "attacker": e.get("attacker"),
+                        "target": e.get("target"),
+                    })
+                
+            # end for key in ...
+
+            # -------------------------------------------------
+            # FALLBACK: synthesize an event from info fields
+            # if no explicit event lists are provided by the env
+            # -------------------------------------------------
+            action_type = info.get("action_type")
+            rl_dmg = info.get("rl_damage", 0)
+            enemy_dmg = info.get("enemy_damage", 0)
+            rl_atk = info.get("rl_attacks", 0)
+            enemy_atk = info.get("enemy_attacks", 0)
+
+            is_attack_action = action_type in ("direct", "indirect", "assault")
+
+            if is_attack_action and (rl_dmg or enemy_dmg or rl_atk or enemy_atk):
+                # determine attacker side for this step
+                atk_side = side
+
+                atk_damage = 0
+                if atk_side == self.rl_side:
+                    atk_damage = rl_dmg
+                else:
+                    atk_damage = enemy_dmg
+
+                # normalize attack type
+                atk_type_norm = None
+                if action_type == "indirect":
+                    atk_type_norm = "INDIRECT"
+                elif action_type in ("direct", "assault"):
+                    atk_type_norm = "DIRECT"
+                else:
+                    atk_type_norm = str(action_type).upper() if action_type else "OTHER"
+
+                events_log.append({
+                    "type": "attack",
+                    "attack_type": atk_type_norm,
+                    "damage": atk_damage,
+                    "attacker": info.get("unit_id"),
+                    "target": info.get("target_id") or info.get("target"),
+                })
+
+            # -------------------------------------------------
+            # POLICY TRACKING
             # -------------------------------------------------
             if side == self.rl_side:
 
-                controller = self.controller
-
-                option = getattr(controller, "current_option", None)
+                option = getattr(self.controller, "current_option", None)
                 if option is not None:
                     option_counts[option.name] += 1
 
-                strategy = getattr(controller, "current_strategy", None)
-                formation = None
+                strategy = getattr(self.controller, "current_strategy", None)
 
                 if strategy is not None:
                     formation = strategy.name
                     formation_counts[formation] += 1
 
-                if option is not None and formation is not None:
-                    strategy_option_map[formation][option.name] += 1
+                    if option is not None:
+                        strategy_option_map[formation][option.name] += 1
 
             # -------------------------------------------------
-            # DISTANCE (for advanced metrics)
+            # DISTANCE
             # -------------------------------------------------
             pre_dist = None
 
-            if state is not None and hasattr(state, "units"):
+            if hasattr(state, "units"):
 
-                rl_units = [
-                    u for u in state.units
-                    if u.side == self.rl_side and u.alive
-                ]
-
-                enemy_units = [
-                    u for u in state.units
-                    if u.side != self.rl_side and u.alive
-                ]
+                rl_units = [u for u in state.units if u.side == self.rl_side and u.alive]
+                enemy_units = [u for u in state.units if u.side != self.rl_side and u.alive]
 
                 dists = []
 
@@ -131,7 +191,6 @@ class Evaluator:
                             dq = abs(u.position.q - e.position.q)
                             dr = abs(u.position.r - e.position.r)
                             dists.append(dq + dr)
-
 
                 if dists:
                     pre_dist = min(dists)
@@ -144,7 +203,7 @@ class Evaluator:
             tracker.step()
 
             # -------------------------------------------------
-            # ✅ ADVANCED METRICS
+            # ADVANCED METRICS
             # -------------------------------------------------
             advanced_metrics.update(info, pre_dist)
 
@@ -152,7 +211,6 @@ class Evaluator:
             steps += 1
 
             if steps >= self.max_steps:
-                done = True
                 break
 
         # -------------------------------------------------
@@ -161,9 +219,12 @@ class Evaluator:
         result = tracker.build_result(final_state)
 
         result["steps"] = steps
+        result["episode_length"] = steps
         result["avg_reward"] = float(np.mean(reward_trace)) if reward_trace else 0.0
 
-        # policy tracking
+        # -------------------------------------------------
+        # POLICY TRACKING
+        # -------------------------------------------------
         result["option_counts"] = dict(option_counts)
         result["formation_counts"] = dict(formation_counts)
 
@@ -171,13 +232,20 @@ class Evaluator:
             strat: dict(opts) for strat, opts in strategy_option_map.items()
         }
 
-        # ✅ attach advanced metrics
+        # -------------------------------------------------
+        # ✅ GUARDAR EVENTOS (CLAVE)
+        # -------------------------------------------------
+        result["events"] = events_log
+
+        # -------------------------------------------------
+        # ADVANCED METRICS
+        # -------------------------------------------------
         result["advanced"] = advanced_metrics.to_dict()
 
         return result
 
     # -------------------------------------------------
-    # MULTI EPISODE (FIX CRÍTICO)
+    # MULTI EPISODE
     # -------------------------------------------------
     def evaluate(self, episodes: int):
 

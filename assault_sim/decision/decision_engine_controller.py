@@ -2,6 +2,9 @@ from assault_sim.strategy.formation_strategy import FormationStrategyEngine
 from assault_model.actions.status import WaitAction
 from assault_sim.rl.tactical_options import TacticalOption
 
+# ✅ NUEVO
+from assault_sim.decision.option_executor import OptionExecutor
+
 
 class DecisionEngineController:
 
@@ -11,6 +14,9 @@ class DecisionEngineController:
         self.option_policy = option_policy
         self.heuristic = heuristic
         self.sim_env = sim_env
+
+        # ✅ NUEVO: executor real (CRÍTICO)
+        self.executor = OptionExecutor(self.heuristic)
 
         # PPO tracking
         self.current_option = None
@@ -31,12 +37,11 @@ class DecisionEngineController:
     def reset(self):
         """
         Reset per-episode state.
-        This is critical for LSTM stability and strategy consistency.
+        Critical for LSTM + strategy consistency.
         """
         if hasattr(self.option_policy, "reset_hidden"):
             self.option_policy.reset_hidden()
 
-        # Reset strategy state
         self.formation_engine.current_strategy = None
         self.formation_engine.remaining_steps = 0
         self.current_strategy = None
@@ -50,19 +55,19 @@ class DecisionEngineController:
         if side == self.rl_side:
 
             # -------------------------------------------------
-            # L3: Update strategy every step
+            # L3: STRATEGY
             # -------------------------------------------------
             game_state = self.sim_env.game_state
             strategy = self.formation_engine.update(game_state, self.rl_side)
             self.current_strategy = strategy
 
             # -------------------------------------------------
-            # L2: Sample option from policy (single call)
+            # L2: POLICY (modelo RL)
             # -------------------------------------------------
             option, attack_mode, logp, value = self.option_policy.choose_option(obs)
 
             # -------------------------------------------------
-            # 🔥 L3 → L2 bias (key fix)
+            # 🔥 L3 → L2 BIAS
             # -------------------------------------------------
             if strategy is not None:
 
@@ -81,21 +86,23 @@ class DecisionEngineController:
                 elif strategy.name == "CLEANUP":
                     option = TacticalOption.ATTACK
 
-            # Store PPO outputs
+            # -------------------------------------------------
+            # STORE PPO OUTPUTS
+            # -------------------------------------------------
             self.current_option = option
             self.current_attack_mode = attack_mode if attack_mode is not None else 0
             self.last_logp = logp
             self.last_value = value
 
             # -------------------------------------------------
-            # DecisionEngine only active during evaluation
+            # DecisionEngine (solo en evaluación)
             # -------------------------------------------------
             intent = None
             if not self.training_mode:
                 intent = self.decision_engine.compute_intent(self.sim_env)
 
             # -------------------------------------------------
-            # Intent-based execution (evaluation only)
+            # INTENT EXECUTION (EVAL ONLY)
             # -------------------------------------------------
             if intent:
                 chosen_unit, action = intent
@@ -106,10 +113,16 @@ class DecisionEngineController:
                     return action
 
             # -------------------------------------------------
-            # PPO + heuristic execution (training path)
+            # ✅ EJECUCIÓN REAL (CRÍTICO)
             # -------------------------------------------------
-            action = self.heuristic.choose_action(state, unit, option)
+            action = self.executor.execute(
+                state,
+                unit,
+                option,
+                attack_mode=self.current_attack_mode
+            )
 
+            # fallback seguro
             if action is None:
                 if self.debug:
                     print(f"[RL] {unit.unit_id} -> WAIT (fallback)")
@@ -118,10 +131,13 @@ class DecisionEngineController:
             action.unit_id = unit.unit_id
             self.sim_env.runtime.activated_units.add(unit.unit_id)
 
+            if self.debug:
+                print(f"[RL] {unit.unit_id} -> {option.name}")
+
             return action
 
         # =================================================
-        # ENEMY SIDE (heuristic only)
+        # ENEMY SIDE (heurística)
         # =================================================
         options_to_try = [
             TacticalOption.ATTACK,

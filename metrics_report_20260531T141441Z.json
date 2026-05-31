@@ -1,0 +1,197 @@
+{
+  "meta": {
+    "episodes_requested": 10,
+    "episodes_collected": 10,
+    "workers": 2,
+    "timestamp": "2026-05-31T14:14:41.867045Z"
+  },
+  "summary": {
+    "episodes": 10,
+    "win_rate": 0.6,
+    "draws": 0,
+    "avg_vp": 0,
+    "avg_steps": 56
+  },
+  "combat": {
+    "trade_mean": 0.8652482269503546,
+    "damage_ratio": 0.6354166666666666
+  },
+  "advanced": {
+    "good_trade_rate": 0.4631578947368421,
+    "bad_trade_rate": 0.5368421052631579,
+    "selectivity": 0.4782608695652174,
+    "zero_dmg_rate": 0.5368421052631579
+  },
+  "action_execution": {},
+  "l2_options": {
+    "ATTACK": {
+      "usage": 193,
+      "damage_per_attack": 0.8365000553252689,
+      "kills_per_attack": 0.28438913768052615
+    },
+    "ADVANCE": {
+      "usage": 91,
+      "damage_per_attack": 0.9196294684973583,
+      "kills_per_attack": 0.3028606855612809
+    },
+    "HOLD": {
+      "usage": 27,
+      "damage_per_attack": 0.9053105957927908,
+      "kills_per_attack": 0.29971252160583317
+    }
+  },
+  "l3_formations": {
+    "ATTACK": {
+      "usage": 159,
+      "damage_per_attack": 0.8324246389332192,
+      "kills_per_attack": 0.28373071351791906
+    },
+    "PUSH_VP": {
+      "usage": 93,
+      "damage_per_attack": 0.9218340357510006,
+      "kills_per_attack": 0.3041558353567962
+    },
+    "CLEANUP": {
+      "usage": 30,
+      "damage_per_attack": 0.8569195035939423,
+      "kills_per_attack": 0.28773751214068966
+    },
+    "HOLD_VP": {
+      "usage": 29,
+      "damage_per_attack": 0.8906932456162048,
+      "kills_per_attack": 0.2941161922192269
+    }
+  },
+  "strategy_option_map": {
+    "ATTACK": {
+      "ATTACK": [
+        159,
+        1.0
+      ]
+    },
+    "PUSH_VP": {
+      "ADVANCE": [
+        91,
+        0.978494623655914
+      ],
+      "ATTACK": [
+        2,
+        0.021505376344086023
+      ]
+    },
+    "CLEANUP": {
+      "ATTACK": [
+        30,
+        1.0
+      ]
+    },
+    "HOLD_VP": {
+      "HOLD": [
+        27,
+        0.9310344827586207
+      ],
+      "ATTACK": [
+        2,
+        0.06896551724137931
+      ]
+    }
+  },
+  "units": {
+    "US_2": {
+      "attacks": 15,
+      "damage": 15,
+      "kills": 2,
+      "side": "RL",
+      "category": "INFANTRY",
+      "classification": "STANDARD_INFANTRY"
+    },
+    "US_3": {
+      "attacks": 31,
+      "damage": 44,
+      "kills": 16,
+      "side": "RL",
+      "category": "INFANTRY",
+      "classification": "STANDARD_INFANTRY"
+    },
+    "US_5": {
+      "attacks": 21,
+      "damage": 5,
+      "kills": 1,
+      "side": "RL",
+      "category": "INFANTRY",
+      "classification": "SPECIALIZED_INFANTRY"
+    },
+    "US_6": {
+      "attacks": 25,
+      "damage": 19,
+      "kills": 7,
+      "side": "RL",
+      "category": "INFANTRY",
+      "classification": "STANDARD_INFANTRY"
+    },
+    "US_4": {
+      "attacks": 21,
+      "damage": 29,
+      "kills": 10,
+      "side": "RL",
+      "category": "INFANTRY",
+      "classification": "STANDARD_INFANTRY"
+    },
+    "US_7": {
+      "attacks": 26,
+      "damage": 9,
+      "kills": 5,
+      "side": "RL",
+      "category": "INFANTRY",
+      "classification": "INDIRECT_FIRE_UNIT"
+    },
+    "GE_2": {
+      "attacks": 24,
+      "damage": 32,
+      "kills": 3,
+      "side": "ENEMY",
+      "category": "INFANTRY",
+      "classification": "STANDARD_INFANTRY"
+    },
+    "GE_3": {
+      "attacks": 30,
+      "damage": 47,
+      "kills": 13,
+      "side": "ENEMY",
+      "category": "INFANTRY",
+      "classification": "STANDARD_INFANTRY"
+    },
+    "GE_4": {
+      "attacks": 30,
+      "damage": 51,
+      "kills": 18,
+      "side": "ENEMY",
+      "category": "INFANTRY",
+      "classification": "SUPPORT_INFANTRY"
+    },
+    "GE_5": {
+      "attacks": 48,
+      "damage": 12,
+      "kills": 4,
+      "side": "ENEMY",
+      "category": "INFANTRY",
+      "classification": "INDIRECT_FIRE_UNIT"
+    },
+    "GE_1": {
+      "attacks": 30,
+      "damage": 50,
+      "kills": 15,
+      "side": "ENEMY",
+      "category": "INFANTRY",
+      "classification": "STANDARD_INFANTRY"
+    },
+    "US_1": {
+      "attacks": 2,
+      "damage": 1,
+      "kills": 0,
+      "side": "RL",
+      "category": "INFANTRY",
+      "classification": "STANDARD_INFANTRY"
+    }
+  }
+}

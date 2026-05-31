@@ -6,7 +6,6 @@ from assault_model.actions.action_category import ActionCategory
 from assault_model.map.hex_utils import hex_distance
 
 from assault_sim.rl.tactical_options import TacticalOption
-
 from assault_model.map.terrain_config import terrain_config
 
 
@@ -48,14 +47,13 @@ class OptionExecutor:
 
             action = self.heuristic.choose_action(state, unit, option)
 
-            # bloquear ataques
             if isinstance(action, (RangedDirectAttack, RangedIndirectAttack)):
                 return WaitAction(unit.unit_id)
 
             return action or WaitAction(unit.unit_id)
 
         # -------------------------------------------------
-        # ✅ HOLD (MEJORADO)
+        # ✅ HOLD (MEJORADO CON FALLBACK)
         # -------------------------------------------------
         if option == TacticalOption.HOLD:
 
@@ -67,14 +65,15 @@ class OptionExecutor:
             ]
 
             if attacks:
-                return self._best_attack(attacks)  # ✅ CAMBIO CLAVE
+                best = self._best_attack(attacks)
+                return best if best else attacks[0]
 
             return WaitAction(unit.unit_id)
 
         return WaitAction(unit.unit_id)
 
     # -------------------------------------------------
-    # ✅ ATTACK (MEJORADO)
+    # ✅ ATTACK (MEJORADO CON FALLBACK)
     # -------------------------------------------------
     def _execute_attack(self, state, unit, attack_mode):
 
@@ -88,7 +87,10 @@ class OptionExecutor:
         if not attacks:
             return self._move_closer(state, unit)
 
-        return self._best_attack(attacks)  # ✅ CAMBIO CLAVE
+        best = self._best_attack(attacks)
+
+        # ✅ fallback crítico (SIEMPRE dispara)
+        return best if best else attacks[0]
 
     # -------------------------------------------------
     def _move_closer(self, state, unit):
@@ -109,7 +111,7 @@ class OptionExecutor:
         )
 
         best = None
-        best_dist = None  # ✅ fix implícito seguro
+        best_dist = None
 
         for a in actions:
             if a.action_type.category != ActionCategory.MOVEMENT:
@@ -168,7 +170,7 @@ class OptionExecutor:
         return best or self._move_closer(state, unit)
 
     # -------------------------------------------------
-    # ✅ NUEVO: SELECCIÓN INTELIGENTE DE TARGET
+    # ✅ TARGET SELECTION (FIX SUAVE + FALLBACK)
     # -------------------------------------------------
     def _best_attack(self, attacks):
 
@@ -176,61 +178,55 @@ class OptionExecutor:
         best_score = float("-inf")
 
         for a in attacks:
+
             target = getattr(a, "target", None)
 
             if target is None or not target.alive:
                 continue
 
-            unit = a.unit  # ✅ muy importante
+            unit = a.unit
 
-            # -------------------------------------------------
-            # 🔥 NUEVO: COMBAT ADVANTAGE
-            # -------------------------------------------------
             adv = unit.get_combat_advantage(target)
+            hp = getattr(target, "hp", 10)
 
-            # 🚫 evitar combates muy malos
-            if adv < -1.0:
+            # ✅ filtro suave (NO bloquea todo)
+            if adv < -0.3:
+                continue
+
+            # ✅ evita solo casos muy malos
+            if adv < 0.0 and hp > 6:
                 continue
 
             score = 0
 
-            # ✅ combate (lo más importante)
-            score += adv * 15
+            # ✅ núcleo del scoring
+            score += adv * 30
 
-            # -------------------------------------------------
-            # ✅ LOGICA EXISTENTE (mantener)
-            # -------------------------------------------------
-            hp = getattr(target, "hp", 10)
-
-            # prioriza enemigos débiles
+            # ✅ debilidad del enemigo
             score += (10 - hp) * 3
 
-            # bonus por kill
+            # ✅ kill confirm
             if hp <= 1:
-                score += 50
+                score += 60
 
-            # penaliza targets muy duros
-            score -= hp * 1.5
+            # ✅ castigo a duros
+            score -= hp * 2
 
-            # pequeño sesgo ofensivo
+            # ✅ sesgo ofensivo
             score += 5
 
-            # -------------------------------------------------
-            # ✅ DISTANCIA (extra importante)
-            # -------------------------------------------------
+            # distancia
             if hasattr(unit, "position") and hasattr(target, "position"):
                 dist = hex_distance(unit.position, target.position)
 
                 if dist <= 2:
-                    score += 2
+                    score += 3
                 elif dist > 6:
-                    score -= 3
+                    score -= 5
 
-            # -------------------------------------------------
-            # ✅ BEST SELECTION
-            # -------------------------------------------------
             if score > best_score:
                 best_score = score
                 best = a
 
-        return best
+        # ✅ fallback crítico: JAMÁS dejar sin ataque
+        return best if best is not None else attacks[0]

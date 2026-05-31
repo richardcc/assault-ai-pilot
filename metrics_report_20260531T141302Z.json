@@ -1,0 +1,185 @@
+{
+  "meta": {
+    "episodes_requested": 10,
+    "episodes_collected": 10,
+    "workers": 2,
+    "timestamp": "2026-05-31T14:13:02.957358Z"
+  },
+  "summary": {
+    "episodes": 10,
+    "win_rate": 0.6,
+    "draws": 0,
+    "avg_vp": 0,
+    "avg_steps": 57.3
+  },
+  "combat": {
+    "trade_mean": 0.8787878787878788,
+    "damage_ratio": 0.5658536585365853
+  },
+  "advanced": {
+    "good_trade_rate": 0.4186046511627907,
+    "bad_trade_rate": 0.5813953488372093,
+    "selectivity": 0.4146341463414634,
+    "zero_dmg_rate": 0.5813953488372093
+  },
+  "action_execution": {},
+  "l2_options": {
+    "ATTACK": {
+      "usage": 129,
+      "damage_per_attack": 0.7118330635400025,
+      "kills_per_attack": 0.2435504408753498
+    },
+    "ADVANCE": {
+      "usage": 112,
+      "damage_per_attack": 1.026215866472762,
+      "kills_per_attack": 0.35730637537401877
+    },
+    "HOLD": {
+      "usage": 62,
+      "damage_per_attack": 1.0527094374000228,
+      "kills_per_attack": 0.3619557195175535
+    }
+  },
+  "l3_formations": {
+    "ATTACK": {
+      "usage": 109,
+      "damage_per_attack": 0.6807898991212663,
+      "kills_per_attack": 0.23039844888925998
+    },
+    "PUSH_VP": {
+      "usage": 116,
+      "damage_per_attack": 1.0319720882299144,
+      "kills_per_attack": 0.3596841223503361
+    },
+    "CLEANUP": {
+      "usage": 16,
+      "damage_per_attack": 0.8323340471092078,
+      "kills_per_attack": 0.29882226980728055
+    },
+    "HOLD_VP": {
+      "usage": 62,
+      "damage_per_attack": 1.0527094374000228,
+      "kills_per_attack": 0.3619557195175535
+    }
+  },
+  "strategy_option_map": {
+    "ATTACK": {
+      "ATTACK": [
+        109,
+        1.0
+      ]
+    },
+    "PUSH_VP": {
+      "ADVANCE": [
+        112,
+        0.9655172413793104
+      ],
+      "ATTACK": [
+        4,
+        0.034482758620689655
+      ]
+    },
+    "CLEANUP": {
+      "ATTACK": [
+        16,
+        1.0
+      ]
+    },
+    "HOLD_VP": {
+      "HOLD": [
+        62,
+        1.0
+      ]
+    }
+  },
+  "units": {
+    "US_2": {
+      "attacks": 11,
+      "damage": 14,
+      "kills": 2,
+      "side": "RL",
+      "category": "INFANTRY",
+      "classification": "STANDARD_INFANTRY"
+    },
+    "US_3": {
+      "attacks": 26,
+      "damage": 30,
+      "kills": 9,
+      "side": "RL",
+      "category": "INFANTRY",
+      "classification": "STANDARD_INFANTRY"
+    },
+    "US_5": {
+      "attacks": 14,
+      "damage": 0,
+      "kills": 0,
+      "side": "RL",
+      "category": "INFANTRY",
+      "classification": "SPECIALIZED_INFANTRY"
+    },
+    "US_7": {
+      "attacks": 28,
+      "damage": 15,
+      "kills": 5,
+      "side": "RL",
+      "category": "INFANTRY",
+      "classification": "INDIRECT_FIRE_UNIT"
+    },
+    "US_4": {
+      "attacks": 21,
+      "damage": 27,
+      "kills": 12,
+      "side": "RL",
+      "category": "INFANTRY",
+      "classification": "STANDARD_INFANTRY"
+    },
+    "US_6": {
+      "attacks": 32,
+      "damage": 30,
+      "kills": 12,
+      "side": "RL",
+      "category": "INFANTRY",
+      "classification": "STANDARD_INFANTRY"
+    },
+    "GE_2": {
+      "attacks": 21,
+      "damage": 33,
+      "kills": 3,
+      "side": "ENEMY",
+      "category": "INFANTRY",
+      "classification": "STANDARD_INFANTRY"
+    },
+    "GE_3": {
+      "attacks": 26,
+      "damage": 46,
+      "kills": 12,
+      "side": "ENEMY",
+      "category": "INFANTRY",
+      "classification": "STANDARD_INFANTRY"
+    },
+    "GE_5": {
+      "attacks": 33,
+      "damage": 8,
+      "kills": 2,
+      "side": "ENEMY",
+      "category": "INFANTRY",
+      "classification": "INDIRECT_FIRE_UNIT"
+    },
+    "GE_1": {
+      "attacks": 29,
+      "damage": 54,
+      "kills": 14,
+      "side": "ENEMY",
+      "category": "INFANTRY",
+      "classification": "STANDARD_INFANTRY"
+    },
+    "GE_4": {
+      "attacks": 34,
+      "damage": 64,
+      "kills": 25,
+      "side": "ENEMY",
+      "category": "INFANTRY",
+      "classification": "SUPPORT_INFANTRY"
+    }
+  }
+}

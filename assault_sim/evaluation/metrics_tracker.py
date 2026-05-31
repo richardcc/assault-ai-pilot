@@ -197,7 +197,31 @@ class MetricsTracker:
 
     # -------------------------------------------------
     def track_state(self, state):
-        pass
+        # Ensure every unit in the state has an entry in unit_stats with metadata
+        if state is None or not hasattr(state, "units"):
+            return
+
+        for u in state.units:
+            uid = getattr(u, "unit_id", None)
+            if not uid:
+                continue
+
+            side = "RL" if getattr(u, "side", None) == self.rl_side else "ENEMY"
+
+            entry = self.unit_stats[side][uid]
+
+            # populate metadata if available
+            if entry.get("unit_key") is None:
+                ut = getattr(u, "unit_type", None)
+                if ut:
+                    entry["unit_key"] = getattr(ut, "code", None)
+                    entry["category"] = getattr(ut.category, "value", None) if getattr(ut, "category", None) else None
+                    entry["classification"] = getattr(ut, "classification", None)
+
+            # ensure counts exist (default dict handles zeros)
+            _ = entry["attacks"]
+            _ = entry["damage"]
+            _ = entry["kills"]
 
     # -------------------------------------------------
     def step(self):
