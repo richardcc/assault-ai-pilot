@@ -1,5 +1,4 @@
-import { axialToPixel, HEX_SIZE } from "../render/hexGridRenderer";
-import { animateMove } from "../animation/animateMove";
+import { axialToPixel, HEX_SIZE, formatCoords } from "../render/hexGridRenderer";
 import { runAiTurns } from "./aiTurnRunner";
 
 export async function handleHexClick(
@@ -26,37 +25,20 @@ export async function handleHexClick(
 
   const actionId = move.action_id;
 
-  // Find the unit container in the Pixi scene
-  const unitContainer = unitLayerRef.current?.container?.children.find(
-    (c: any) => c.__unitId === selectedUnitId
-  );
-
-  if (!unitContainer) {
-    console.warn("❌ unit container not found:", selectedUnitId);
-    return;
-  }
-
   // Block double-dispatch while animating
-  if (unitContainer.__isMoving) {
+  if (unitLayerRef.current?.container?.children.find(
+    (c: any) => c.__unitId === selectedUnitId
+  )?.__isMoving) {
     console.warn("⛔ MOVE BLOCKED: already moving", selectedUnitId);
     return;
   }
 
-  // Convert axial hex to pixel centre
-  const { x, y } = axialToPixel(q, r);
-  const to = {
-    x: Math.round(x),
-    y: Math.round(y + HEX_SIZE),
-  };
-
-  console.log("🎬 animating move", { id: selectedUnitId, to });
+  console.log("🎬 animating move", { id: selectedUnitId, to: { q, r } });
 
   // 1. If it's a move, animate the unit visually first
   const isAttack = move.kind === "attack";
   if (!isAttack) {
-    await new Promise<void>((resolve) => {
-      animateMove(unitContainer, to, null as any, 380, resolve);
-    });
+    await unitLayerRef.current?.moveUnit(selectedUnitId, q, r);
   }
 
   console.log("✅ preparation complete, posting to backend");
@@ -73,6 +55,14 @@ export async function handleHexClick(
   });
   const stepData = await stepRes.json();
   const stateAfterHuman = stepData.state;
+
+  // Log human action result
+  if (isAttack) {
+    const targetUnit = stateAfterHuman?.units?.find((u: any) => u.id === move.target_id);
+    (window as any).logSystemEvent?.("combat", `👤 Human Order: Combat attack on ${move.target_id} at hex ${formatCoords(q, r)}`);
+  } else {
+    (window as any).logSystemEvent?.("move", `👤 Human Order: Move ${selectedUnitId} to hex ${formatCoords(q, r)}`);
+  }
 
   // Trigger Combat FX if there are combat events in the human's step
   if (isAttack && stateAfterHuman?.last_events && unitLayerRef?.current) {
@@ -98,6 +88,16 @@ export async function handleHexClick(
 
   // 4. Update the visual state
   (window as any).__setGameState?.(stateAfterHuman);
+
+  // Log action completion with outcome
+  if (!isAttack) {
+    (window as any).logSystemEvent?.("move", `✅ Movement complete: Unit at hex ${formatCoords(q, r)}`);
+  } else {
+    const defenderAfter = stateAfterHuman?.units?.find((u: any) => u.id === move.target_id);
+    const defenderDead = defenderAfter && defenderAfter.hp != null && defenderAfter.hp <= 0;
+    const resultMsg = defenderDead ? "DESTROYED" : "Wounded";
+    (window as any).logSystemEvent?.("combat", `✅ Combat complete: Target ${resultMsg}`);
+  }
 
   // 5. If the next active side belongs to AI — run all AI actions automatically
   const sides = stateAfterHuman?.sides ?? {};

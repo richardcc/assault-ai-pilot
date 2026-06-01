@@ -1,10 +1,12 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import "./App.css";
 import GameCanvas from "./game/GameCanvas";
 import { gameController } from "./game/gameControllerInstance";
 import { UnitStatePanel } from "./game/ui/UnitStatePanel";
+import { CombatPanel } from "./game/ui/CombatPanel";
 import { unitImages } from "./game/config/unitImages";
 import { sides } from "./game/config/sides";
+import { formatCoords } from "./game/render/hexGridRenderer";
 
 type LogEntry = {
   type: string;
@@ -23,6 +25,7 @@ type Unit = {
 
 function App() {
   const [gameData, setGameData] = useState<any>(null);
+  const [deadUnits, setDeadUnits] = useState<Unit[]>([]);
   const [selectedUnitId, setSelectedUnitId] = useState<string | null>(null);
   const [availableMoves, setAvailableMoves] = useState<any[]>([]);
   const [logEvents, setLogEvents] = useState<LogEntry[]>([]);
@@ -30,6 +33,7 @@ function App() {
 
   const lastTurnRef = useRef<number>(-1);
   const lastActiveSideRef = useRef<string>("");
+  const prevUnitsRef = useRef<Unit[] | null>(null);
 
   // Helper to add structured log events
   const addLog = (type: string, text: string) => {
@@ -88,11 +92,54 @@ function App() {
     }
   }, [selectedUnitId, gameData]);
 
+  // Keep dead units visible in the roster even if they disappear from the map state
+  useEffect(() => {
+    if (!gameData?.units) return;
+
+    const currentUnits: Unit[] = gameData.units;
+    const currentDead = currentUnits.filter((u) => u.hp != null && u.hp <= 0);
+    const currentIds = new Set(currentUnits.map((u) => u.id));
+    const previousUnits = prevUnitsRef.current || [];
+
+    setDeadUnits((prev) => {
+      const nextDeadMap = new Map<string, Unit>();
+
+      // Add any units currently dead in the state
+      for (const dead of currentDead) {
+        nextDeadMap.set(dead.id, dead);
+      }
+
+      // Preserve dead units that disappeared from the current state
+      for (const prevUnit of previousUnits) {
+        if (!currentIds.has(prevUnit.id) && prevUnit.hp != null && prevUnit.hp <= 0) {
+          nextDeadMap.set(prevUnit.id, prevUnit);
+        }
+      }
+
+      return Array.from(nextDeadMap.values());
+    });
+
+    prevUnitsRef.current = currentUnits;
+  }, [gameData]);
+
   // Action card trigger handler
   const handleActionCardClick = (action: any) => {
     if (typeof (window as any).onHexClick === "function") {
-      addLog("move", `👉 Order dispatched: ${action.kind.toUpperCase()} to hex (${action.q}, ${action.r})`);
-      (window as any).onHexClick(action.q, action.r);
+      const targetQ = action.q ?? action.target_q;
+      const targetR = action.r ?? action.target_r;
+      const actionType = action.kind === "attack" 
+        ? (action.type ? action.type.toUpperCase() : "ATTACK")
+        : "MOVE";
+      const coordStr = targetQ != null && targetR != null ? formatCoords(targetQ, targetR) : "?";
+      
+      (window as any).logSystemEvent?.("move", `👤 Human Order: ${actionType} to hex ${coordStr}`);
+      addLog("move", `👉 Order dispatched: ${actionType} to hex ${coordStr}`);
+      
+      if (targetQ != null && targetR != null) {
+        (window as any).onHexClick(targetQ, targetR);
+      } else {
+        console.warn("⛔ Missing target coordinates for action", action);
+      }
     }
   };
 
@@ -116,6 +163,22 @@ function App() {
   const selectedUnitSpec = selectedUnit 
     ? unitImages[selectedUnit.unit_key as keyof typeof unitImages] 
     : null;
+
+  const panelUnits = useMemo(() => {
+    const liveUnits: Unit[] = gameData?.units || [];
+    const merged = [...liveUnits];
+    const liveIds = new Set(liveUnits.map((u) => u.id));
+
+    for (const dead of deadUnits) {
+      if (!liveIds.has(dead.id)) {
+        merged.push(dead);
+      }
+    }
+
+    return merged;
+  }, [gameData?.units, deadUnits]);
+
+  const latestCombatEvent = gameData?.last_events?.slice().reverse().find((event: any) => event.type === "ACTION_EFFECT");
 
   return (
     <div className="app">
@@ -236,13 +299,20 @@ function App() {
                       onClick={() => handleActionCardClick(action)}
                     >
                       <div className="action-header">
-                        <div className="action-type">{action.kind}</div>
-                        <div className="action-coords">Hex {action.q},{action.r}</div>
+                        <div className="action-type">
+                          {action.kind === "attack"
+                            ? (action.type ? action.type.toUpperCase() : "ATTACK")
+                            : (action.kind || "MOVE").toUpperCase()
+                          }
+                        </div>
+                        <div className="action-coords">
+                          {formatCoords(action.q ?? action.target_q ?? 0, action.r ?? action.target_r ?? 0)}
+                        </div>
                       </div>
                       <div className="action-desc">
                         {action.kind === "attack" 
-                          ? `Initiate assault against target at coordinates (${action.q}, ${action.r})`
-                          : `March troop to sector location (${action.q}, ${action.r})`
+                          ? `Initiate ${(action.type || "assault").toLowerCase()} attack against target at ${formatCoords(action.q ?? action.target_q ?? 0, action.r ?? action.target_r ?? 0)}`
+                          : `March troop to sector location ${formatCoords(action.q ?? 0, action.r ?? 0)}`
                         }
                       </div>
                     </div>
@@ -305,7 +375,7 @@ function App() {
       ========================= */}
       <div className="footer">
         <UnitStatePanel
-          units={gameData?.units || []}
+          units={panelUnits}
           activeSide={gameData?.active_side}
           activatedUnits={gameData?.activated_units || []}
           selectedUnitId={selectedUnitId}
@@ -317,6 +387,10 @@ function App() {
             }
           }}
         />
+
+        {latestCombatEvent && (
+          <CombatPanel event={latestCombatEvent} units={gameData?.units || []} />
+        )}
       </div>
     </div>
   );

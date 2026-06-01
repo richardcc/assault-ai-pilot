@@ -14,25 +14,36 @@ export function drawArrowPixels(
   const angle = Math.atan2(dy, dx);
   const headLen = 14;
 
-  g.lineStyle(3, 0xffffff, 0.9);
+  // ✅ Configurar estilo de trazo
+  g.setStrokeStyle({
+    width: 3,
+    color: 0xffffff,
+    alpha: 0.9
+  });
 
+  // ✅ Dibujar línea principal
   g.moveTo(fromX, fromY);
   g.lineTo(toX, toY);
+  g.stroke();
 
+  // ✅ Dibujar punta izquierda
   g.moveTo(toX, toY);
   g.lineTo(
     toX - headLen * Math.cos(angle - Math.PI / 6),
     toY - headLen * Math.sin(angle - Math.PI / 6)
   );
+  g.stroke();
 
+  // ✅ Dibujar punta derecha
   g.moveTo(toX, toY);
   g.lineTo(
     toX - headLen * Math.cos(angle + Math.PI / 6),
     toY - headLen * Math.sin(angle + Math.PI / 6)
   );
+  g.stroke();
 
   g.alpha = 0.8;
-  g.zIndex = 9999; // ✅ CLAVE
+  g.zIndex = 9999;
 
   layer.addChild(g);
 

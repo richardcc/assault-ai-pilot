@@ -41,10 +41,18 @@ export async function handleUnitClick(
       ...m,
       kind: "move"
     })),
-    ...(actions.attacks || []).map(a => ({
-      ...a,
-      kind: "attack"
-    }))
+    ...(actions.attacks || []).map(a => {
+      const target = state.units?.find(
+        (u: any) => u.id === a.target_id || u.unit_id === a.target_id
+      );
+
+      return {
+        ...a,
+        kind: "attack",
+        q: target?.q,
+        r: target?.r,
+      };
+    })
   ];
 
   setAvailableMoves(allActions);

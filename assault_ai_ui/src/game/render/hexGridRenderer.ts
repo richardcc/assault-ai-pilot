@@ -26,6 +26,10 @@ function axialToLabel(q: number, r: number) {
   return `${String.fromCharCode(65 + q)}${r + 1}`;
 }
 
+export function formatCoords(q: number, r: number): string {
+  return `[${axialToLabel(q, r)}]`;
+}
+
 // ---------------------------------------------
 export function drawHex(
   g: PIXI.Graphics,

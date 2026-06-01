@@ -1,5 +1,6 @@
 import { unitImages } from "../config/unitImages";
 import { sides } from "../config/sides";
+import { formatCoords } from "../render/hexGridRenderer";
 
 type Unit = {
   id: string;
@@ -73,9 +74,11 @@ export function UnitStatePanel({
           <div className="roster-list">
             {list.map((u) => {
               const def = unitImages[u.unit_key as keyof typeof unitImages];
+              const dead = u.hp != null && u.hp <= 0;
               const isOwn = u.side === activeSide;
-              const isAvailable = isOwn && !activatedUnits.includes(u.id);
+              const isAvailable = isOwn && !activatedUnits.includes(u.id) && !dead;
               const isSelected = u.id === selectedUnitId;
+              const deadMarker = dead ? sides[u.side]?.dead_marker : undefined;
 
               // Compute CSS class names based on unit status
               let cardClass = "trooper-card";
@@ -83,7 +86,9 @@ export function UnitStatePanel({
                 cardClass += " selected";
               }
               
-              if (!isOwn) {
+              if (dead) {
+                cardClass += " dead";
+              } else if (!isOwn) {
                 cardClass += " enemy";
               } else if (!isAvailable) {
                 cardClass += " ally-used";
@@ -109,15 +114,24 @@ export function UnitStatePanel({
                   }}
                   onClick={() => handleCardClick(u)}
                   className={cardClass}
-                  title={`Coords: (${u.q}, ${u.r})`}
+                  title={`Coords: ${formatCoords(u.q, u.r)}`}
                 >
                   {/* IMAGE */}
                   {def?.full && (
-                    <img
-                      src={encodeURI(def.full)}
-                      className="trooper-card-img"
-                      alt={def.label || u.unit_key}
-                    />
+                    <div className="trooper-card-img-wrapper">
+                      <img
+                        src={encodeURI(def.full)}
+                        className={`trooper-card-img${dead ? " dead" : ""}`}
+                        alt={def?.label || u.unit_key}
+                      />
+                      {deadMarker && (
+                        <img
+                          src={encodeURI(deadMarker)}
+                          className="trooper-card-dead-marker"
+                          alt="Dead marker"
+                        />
+                      )}
+                    </div>
                   )}
 
                   {/* LABEL */}
@@ -132,11 +146,15 @@ export function UnitStatePanel({
 
                   {/* HP DISPLAY */}
                   <div className="trooper-card-hp">
-                    {u.hp != null
-                      ? Array.from({ length: u.hp }).map((_, i) => (
-                          <span key={i} style={{ color: "#ff3838" }}>❤️</span>
-                        ))
-                      : "-"}
+                    {dead ? (
+                      <span style={{ color: "#ff3838", fontWeight: 700 }}>DEAD</span>
+                    ) : u.hp != null ? (
+                      Array.from({ length: u.hp }).map((_, i) => (
+                        <span key={i} style={{ color: "#ff3838" }}>❤️</span>
+                      ))
+                    ) : (
+                      "-"
+                    )}
                   </div>
                 </div>
               );

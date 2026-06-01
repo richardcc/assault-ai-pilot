@@ -1,3 +1,5 @@
+import { formatCoords } from "../render/hexGridRenderer";
+
 /**
  * aiTurnRunner.ts
  *
@@ -8,7 +10,6 @@
 
 import { gameController } from "../gameControllerInstance";
 import { axialToPixel, HEX_SIZE } from "../render/hexGridRenderer";
-import { animateMove } from "../animation/animateMove";
 
 const BACKEND = "http://127.0.0.1:8000";
 const AI_DELAY_MS = 800; // pause between AI actions so the user can see them
@@ -94,29 +95,15 @@ export async function runAiTurns(
     
     // Log selection/action choice to the System Log panel
     if (action.kind === "move") {
-      (window as any).logSystemEvent?.("move", `🤖 AI Order: Move ${aiUnit.id} to hex (${action.data.q}, ${action.data.r})`);
+      (window as any).logSystemEvent?.("move", `🤖 AI Order: Move ${aiUnit.id} to hex ${formatCoords(action.data.q, action.data.r)}`);
     } else if (action.kind === "attack") {
       (window as any).logSystemEvent?.("combat", `⚔️ AI Order: Combat attack by ${aiUnit.id} on target ${action.data.target_id}`);
     }
 
     // If it's a move, trigger the visual animation in Pixi before stepping
     if (action.kind === "move" && unitLayerRef?.current) {
-      const unitContainer = unitLayerRef.current.container?.children.find(
-        (c: any) => c.__unitId === aiUnit.id
-      );
-
-      if (unitContainer) {
-        const { q, r } = action.data;
-        const { x, y } = axialToPixel(q, r);
-        const to = {
-          x: Math.round(x),
-          y: Math.round(y + HEX_SIZE),
-        };
-        console.log(`🎬 AI Animating move for ${aiUnit.id} to (${q}, ${r})`);
-        await new Promise<void>((resolve) => {
-          animateMove(unitContainer, to, null as any, 380, resolve);
-        });
-      }
+      const { q, r } = action.data;
+      await unitLayerRef.current.moveUnit(aiUnit.id, q, r);
     } else {
       // Visual delay for attacks or actions that don't animate movement
       await new Promise(r => setTimeout(r, AI_DELAY_MS));

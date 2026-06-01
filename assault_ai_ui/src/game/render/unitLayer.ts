@@ -1,31 +1,10 @@
 import * as PIXI from "pixi.js";
-import { unitImages } from "../config/unitImages";
-import { sides } from "../config/sides";
 import { axialToPixel, HEX_SIZE } from "./hexGridRenderer";
-import { updateUnitMovement } from "../systems/unitMovementSystem";
+import { initUnitLayerState, getSelectedUnitId, getHighlightedUnitId } from "./unitLayerState";
+import { createUnitSprite } from "./unitLayerSprite";
+import { updateHighlight } from "./unitLayerHighlight";
+import { moveUnit } from "./unitLayerMovement";
 
-// --------------------------------------------------
-// GLOBAL STATE (selection / hover)
-// --------------------------------------------------
-let highlightedUnitId: string | null = null;
-let selectedUnitId: string | null = null;
-
-(window as any).selectUnit = (id: string | null) => {
-  selectedUnitId = id;
-};
-
-(window as any).highlightUnit = (id: string | null) => {
-  highlightedUnitId = id;
-};
-
-// --------------------------------------------------
-// HIGHLIGHTS CACHE
-// --------------------------------------------------
-const highlights = new Map<string, PIXI.Graphics>();
-
-// --------------------------------------------------
-// UNIT LAYER
-// --------------------------------------------------
 export class UnitLayer {
   public container: PIXI.Container;
 
@@ -35,57 +14,46 @@ export class UnitLayer {
     this.container.sortableChildren = true;
 
     world.addChild(this.container);
+    initUnitLayerState();
   }
 
-  // --------------------------------------------------
-  // MAIN SYNC
-  // --------------------------------------------------
+  /**
+   * Synchronize unit layer with game state
+   */
   async sync(state: any) {
     if (!state) return;
 
     const units = state.units || [];
     const activeSide = state.active_side;
     const activated = state.activated_units || [];
-
     const seen = new Set<string>();
 
     for (const unit of units) {
       const id = unit.id;
 
-      // ---------------------------------------------
-      // GET / CREATE SPRITE
-      // ---------------------------------------------
+      // Get or create sprite
       let sprite = this.container.children.find(
-        (c: any) =>
-          c.__unitId === id &&
-          c.__type === "unit"
+        (c: any) => c.__unitId === id && c.__type === "unit"
       ) as PIXI.Container | undefined;
 
       if (!sprite) {
-        sprite = await this.createSprite(unit);
+        sprite = await createUnitSprite(unit);
         this.container.addChild(sprite);
       }
 
-      // ---------------------------------------------
-      // POSITION + MOVEMENT (EXTERNAL SYSTEM ✅)
-      // ---------------------------------------------
+      // Update position (no animation - snap if not moving)
       const { x, y } = axialToPixel(unit.q, unit.r);
-
       const newX = Math.round(x);
       const newY = Math.round(y + HEX_SIZE);
 
-      updateUnitMovement(
-        sprite,
-        newX,
-        newY,
-        this.container
-      );
+      const isMoving = sprite.__isMoving === true;
+      if (!isMoving) {
+        sprite.x = newX;
+        sprite.y = newY;
+      }
 
-      // ---------------------------------------------
-      // VISUAL STATE
-      // ---------------------------------------------
+      // Update visual state
       const base = (sprite as any).__baseScale ?? 1;
-
       const isOwn = unit.side === activeSide;
       const isAvailable =
         isOwn &&
@@ -94,153 +62,54 @@ export class UnitLayer {
 
       sprite.scale.set(base);
 
-      if (id === selectedUnitId) {
+      if (id === getSelectedUnitId()) {
         sprite.scale.set(base * 1.3);
-      } else if (id === highlightedUnitId) {
+      } else if (id === getHighlightedUnitId()) {
         sprite.scale.set(base * 1.2);
       }
 
       if (unit.hp <= 0) {
+        sprite.visible = false;
         sprite.alpha = 0.4;
-      } else if (!isOwn || !isAvailable) {
+        seen.add(id);
+        continue;
+      }
+
+      if (!isOwn || !isAvailable) {
         sprite.alpha = 0.7;
       } else {
         sprite.alpha = 1;
       }
 
-      // ---------------------------------------------
-      // HIGHLIGHTS
-      // ---------------------------------------------
-      this.updateHighlight(sprite, id, isAvailable);
+      // Update highlight
+      updateHighlight(this.container, sprite, id, isAvailable);
 
       seen.add(id);
     }
 
-    // ---------------------------------------------
-    // CLEANUP
-    // ---------------------------------------------
+    // Cleanup stale sprites for units no longer present in state
+    const toRemove: any[] = [];
     this.container.children.forEach((child: any) => {
-      if (child.__unitId && seen.has(child.__unitId)) {
-        child.visible = true;
+      if (child.__unitId && !seen.has(child.__unitId)) {
+        toRemove.push(child);
       }
     });
-  }
 
-  // --------------------------------------------------
-  // HIGHLIGHT LOGIC
-  // --------------------------------------------------
-  private updateHighlight(sprite: any, id: string, isAvailable: boolean) {
-    let highlight = highlights.get(id);
-
-    if (isAvailable) {
-      if (!highlight) {
-        highlight = new PIXI.Graphics();
-
-        (highlight as any).__type = "fx";
-        (highlight as any).__unitId = id;
-
-        highlight.circle(0, 0, HEX_SIZE * 0.8);
-        highlight.fill({ color: 0x00ff00, alpha: 0.25 });
-
-        highlight.zIndex = -1;
-        highlight.eventMode = "none";
-
-        this.container.addChild(highlight);
-        highlights.set(id, highlight);
-      }
-
-      highlight.x = sprite.x;
-      highlight.y = sprite.y;
-      highlight.visible = true;
-
-      highlight.alpha = 0.5 + Math.sin(Date.now() / 300) * 0.3;
-
-    } else if (highlight) {
-      this.container.removeChild(highlight);
-      highlights.delete(id);
-    }
-  }
-
-  // --------------------------------------------------
-  // SPRITE CREATION
-  // --------------------------------------------------
-  private async createSprite(unit: any): Promise<PIXI.Container> {
-    const container = new PIXI.Container();
-
-    (container as any).__unitId = unit.id;
-    (container as any).__isMoving = false;
-    (container as any).__type = "unit";
-
-    const def = unitImages[unit.unit_key];
-
-    if (!def) {
-      console.warn("❌ missing sprite for", unit.unit_key);
-      return container;
-    }
-
-    try {
-      const texture = await PIXI.Assets.load(def.full);
-
-      const sprite = new PIXI.Sprite(texture);
-      sprite.anchor.set(0.5);
-
-      const scale = (HEX_SIZE * 3) / texture.width;
-      sprite.scale.set(scale);
-
-      (container as any).__baseScale = scale;
-
-      container.addChild(sprite);
-
-    } catch (err) {
-      console.error("❌ error loading sprite:", def.full, err);
-    }
-
-    this.addLabel(container, unit);
-    this.addInteraction(container, unit);
-
-    return container;
-  }
-
-  // --------------------------------------------------
-  // LABEL
-  // --------------------------------------------------
-  private addLabel(container: PIXI.Container, unit: any) {
-    const side = sides[unit.side] || { bgColor: 0x333333 };
-
-    const labelContainer = new PIXI.Container();
-
-    const bg = new PIXI.Graphics();
-    bg.roundRect(-14, -7, 28, 14, 3);
-    bg.fill({ color: side.bgColor, alpha: 0.85 });
-
-    const label = new PIXI.Text({
-      text: unit.id,
-      style: {
-        fontSize: 7,
-        fill: "#ffffff"
-      },
-      resolution: 2,
+    toRemove.forEach((child) => {
+      this.container.removeChild(child);
+      child.destroy({ children: true });
     });
-
-    label.anchor.set(0.5);
-    label.roundPixels = true;
-
-    labelContainer.addChild(bg);
-    labelContainer.addChild(label);
-
-    labelContainer.y = HEX_SIZE * 0.4;
-
-    container.addChild(labelContainer);
   }
 
-  // --------------------------------------------------
-  // INTERACTION
-  // --------------------------------------------------
-  private addInteraction(container: PIXI.Container, unit: any) {
-    container.eventMode = "static";
-
-    container.on("pointerdown", () => {
-      (window as any).onUnitClick?.(unit);
-    });
+  /**
+   * Central movement manager for both human and AI
+   * Handles: arrow, animation, and sound
+   */
+  public async moveUnit(
+    unitId: string,
+    targetQ: number,
+    targetR: number
+  ): Promise<void> {
+    await moveUnit(this.container, unitId, targetQ, targetR);
   }
 }
