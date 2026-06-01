@@ -1,6 +1,6 @@
 .\git_publish.ps1
 
-
+http://localhost:6006/
 @folder C:\repos\python\assault
 
 cd C:\repos\python\assault\assault_ai_ui
@@ -8,8 +8,10 @@ npm run dev
 
 console.log("DATA:", data);
 
-http://127.0.0.1:8000/api/scenarios/phase01_seq001_initial_contact
+//http://127.0.0.1:8000/api/scenarios/phase01_seq001_initial_contact
 http://127.0.0.1:8000/api/ui/scenarios/phase01_seq001_initial_contact
+
+python -m tensorboard.main --logdir models/runs
 
 
 cd assault_backend

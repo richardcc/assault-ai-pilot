@@ -21,14 +21,17 @@ def worker_loop(
     scenario,
     weights_queue,
     progress_queue,
+    reward_fn=None,
 ):
 
+    torch.set_num_threads(1)
+    torch.set_num_interop_threads(1)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     # -------------------------------------------------
     # ENV
     # -------------------------------------------------
-    env = make_env(config_path, PPOConfig.RL_SIDE, scenario)
+    env = make_env(config_path, PPOConfig.RL_SIDE, scenario, reward_fn=reward_fn)
 
     obs = env.reset()
     input_dim = obs.shape[0]
@@ -40,6 +43,7 @@ def worker_loop(
         input_dim=input_dim,
         num_options=len(TacticalOption)
     ).to(device)
+    policy.eval()
 
     # -------------------------------------------------
     # CONTROLLER
@@ -69,11 +73,12 @@ def worker_loop(
             policy.load_state_dict(state_dict)
 
         # ✅ Rollout normal
-        rollout = collect_rollout(
-            env,
-            controller,
-            max_steps=PPOConfig.ROLLOUT_STEPS
-        )
+        with torch.no_grad():
+            rollout = collect_rollout(
+                env,
+                controller,
+                max_steps=PPOConfig.ROLLOUT_STEPS
+            )
 
         # =================================================
         # ✅ 🔥 NUEVO: REWARD POR ACCIÓN

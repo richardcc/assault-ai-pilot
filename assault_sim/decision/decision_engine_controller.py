@@ -16,7 +16,8 @@ class DecisionEngineController:
         self.sim_env = sim_env
 
         # ✅ NUEVO: executor real (CRÍTICO)
-        self.executor = OptionExecutor(self.heuristic)
+        # Temporarily disable bad-trade filtering to recover baseline attack behavior.
+        self.executor = OptionExecutor(self.heuristic, avoid_bad_trades=False, adv_threshold=-0.5)
 
         # PPO tracking
         self.current_option = None

@@ -1,3 +1,5 @@
+import { soundService } from "../audio/SoundService"
+
 /**
  * Smoothly animates a PixiJS container from its current position to a target
  * pixel position using requestAnimationFrame and cubic ease-in-out.
@@ -39,7 +41,7 @@ export function animateMove(
     onComplete?.();
     return;
   }
-
+  soundService.playMove();
   // Block double-dispatch
   container.__isMoving = true;
 

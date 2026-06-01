@@ -47,7 +47,15 @@ function App() {
       setGameData(state);
     });
 
+    (window as any).logSystemEvent = (type: string, text: string) => {
+      addLog(type, text);
+    };
+
     addLog("system", "🖥️ Tactical Control System initialized. Ready to launch.");
+
+    return () => {
+      (window as any).logSystemEvent = undefined;
+    };
   }, []);
 
   // Monitor game state changes to output beautiful terminal logs

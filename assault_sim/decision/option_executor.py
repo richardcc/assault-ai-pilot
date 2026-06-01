@@ -11,8 +11,12 @@ from assault_model.map.terrain_config import terrain_config
 
 class OptionExecutor:
 
-    def __init__(self, heuristic_controller):
+    def __init__(self, heuristic_controller, avoid_bad_trades: bool = False, adv_threshold: float = -0.5):
         self.heuristic = heuristic_controller
+        # When True, block attacks whose combat advantage is below adv_threshold.
+        self.avoid_bad_trades = avoid_bad_trades
+        # Minimum combat advantage required to consider an attack.
+        self.adv_threshold = adv_threshold
 
     # -------------------------------------------------
     def execute(
@@ -184,18 +188,34 @@ class OptionExecutor:
             if target is None or not target.alive:
                 continue
 
-            unit = a.unit
+            # robustly obtain the acting unit from the action object
+            unit = getattr(a, "unit", None) or getattr(a, "actor", None) or getattr(a, "attacker", None)
+            if unit is None:
+                # cannot score this attack without a unit reference
+                continue
 
             adv = unit.get_combat_advantage(target)
+            # expected damage proxy (optional further gating)
+            exp_dmg = getattr(unit, "get_expected_damage", lambda t: 0.0)(target)
             hp = getattr(target, "hp", 10)
 
-            # ✅ filtro suave (NO bloquea todo)
-            if adv < -0.3:
-                continue
+            # If configured, block attacks that look like bad trades.
+            if self.avoid_bad_trades:
+                # hard block for very negative advantage
+                if adv < -0.3:
+                    continue
 
-            # ✅ evita solo casos muy malos
-            if adv < 0.0 and hp > 6:
-                continue
+                # configurable threshold: skip when advantage below threshold
+                if adv < self.adv_threshold:
+                    continue
+
+                # avoid low-advantage attacks vs high-HP targets
+                if adv < 0.0 and hp > 6:
+                    continue
+
+                # avoid tiny expected damage attacks (e.g., bazooka team against armored)
+                if exp_dmg <= 0.05 and hp > 3:
+                    continue
 
             score = 0
 
@@ -228,5 +248,9 @@ class OptionExecutor:
                 best_score = score
                 best = a
 
-        # ✅ fallback crítico: JAMÁS dejar sin ataque
-        return best if best is not None else attacks[0]
+        # If no acceptable attack was found, fall back to the safest available attack.
+        if best is not None:
+            return best
+
+        # fallback crítico: JAMÁS dejar sin ataque
+        return attacks[0] if attacks else WaitAction("SYSTEM")

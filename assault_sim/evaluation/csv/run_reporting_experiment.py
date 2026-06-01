@@ -92,7 +92,7 @@ def run_experiment():
         option_policy = OptionPolicy(policy)
 
         heuristic = TacticalPathHeuristic()
-        executor = OptionExecutor(heuristic)
+        executor = OptionExecutor(heuristic, avoid_bad_trades=False, adv_threshold=-0.5)
 
         hrl_controller = HRLController(
             option_policy=option_policy,

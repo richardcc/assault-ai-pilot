@@ -14,6 +14,7 @@ def make_env(
     rl_side: str,
     scenario: str,
     controller=None,
+    reward_fn=None,
 ) -> TrainingEnv:
 
     # ✅ cargar config
@@ -25,15 +26,16 @@ def make_env(
         controller=controller
     )
 
-    # ✅ crear reward (CLAVE)
-    reward_fn = ProgressiveReward(rl_side=rl_side)
+    # ✅ crear reward (CLAVE) si no se proporciona uno
+    if reward_fn is None:
+        reward_fn = ProgressiveReward(rl_side=rl_side)
 
     # ✅ TrainingEnv con reward explícito
     env = TrainingEnv(
         sim_env,
         config_path,
         rl_side,
-        reward_fn=reward_fn   # 💥 ESTO ARREGLA TODO
+        reward_fn=reward_fn,
     )
 
     return env

@@ -128,6 +128,12 @@ export class GameController {
   }
 
   // ----------------------------------
+  updateState(newState: any) {
+    this.state = newState;
+    this.emit();
+  }
+
+  // ----------------------------------
   private async sendMove(unitId: string, move: any) {
 
     if (!move.action_id) return;

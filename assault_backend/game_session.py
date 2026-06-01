@@ -28,6 +28,7 @@ class GameSession:
         self.env: Optional[SimEnv] = None
         self.scenario_id: Optional[str] = None  # ✅ nuevo
         self.sides_config = {}
+        self.last_events = []
 
     # ---------------------------------------------
     def start(self, scenario_id: str, sides: Dict[str, str]):
@@ -58,7 +59,19 @@ class GameSession:
             debug_config=DebugConfig(enabled=True)
         )
 
+        self.last_events = []
+        if self.env.event_bus:
+            def on_event(event):
+                # ✅ Only collect ACTION_EFFECT events (combat results with serializable data)
+                # UNIT_MOVED / MAP_STATE contain HexCoord objects that break JSON serialization
+                if event.get("type") == "ACTION_EFFECT":
+                    self.last_events.append(event)
+            self.env.event_bus.subscribe(on_event)
+
         self.env.reset()
+
+        # ✅ Discard startup events (contain non-JSON-serializable objects like HexCoord)
+        self.last_events.clear()
 
     # ---------------------------------------------
     def get_state(self) -> Dict[str, Any]:
@@ -143,7 +156,10 @@ class GameSession:
         activated_units = []
         if hasattr(runtime, "activated_units"):
             activated_units = list(runtime.activated_units)
-        return {
+        copied_events = self.last_events.copy()
+        self.last_events.clear()
+
+        payload = {
             "scenario_name": getattr(self.env.scenario, "name", None),
 
             "turn": getattr(state, "turn", 0),
@@ -158,4 +174,6 @@ class GameSession:
             "units": units,
             "sides": self.sides_config,
             "activated_units": activated_units,
+            "last_events": copied_events,
         }
+        return payload

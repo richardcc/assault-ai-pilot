@@ -11,7 +11,8 @@ def create_hrl_controller(option_policy, rl_side, event_bus=None):
     # ✅ NO volver a crear OptionPolicy aquí
 
     heuristic = TacticalPathHeuristic()
-    executor = OptionExecutor(heuristic)
+    # avoid_bad_trades disabled for baseline/debug behavior
+    executor = OptionExecutor(heuristic, avoid_bad_trades=False, adv_threshold=-0.5)
 
     controller = HRLController(
         option_policy=option_policy,

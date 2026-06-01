@@ -3,12 +3,16 @@ import torch.optim as optim
 import multiprocessing as mp
 import numpy as np
 import time
+from datetime import datetime
+import socket
+from torch.utils.tensorboard import SummaryWriter
 from pathlib import Path
 
 from assault_sim.config.ppo_config import PPOConfig
 from assault_sim.rl.policy_net import PolicyNet
 from assault_sim.rl.tactical_options import TacticalOption
 from assault_sim.engine.env_factory import make_env
+from assault_sim.rewards.shaped_reward import ShapedReward
 
 from assault_sim.train.worker import worker_loop
 from assault_sim.train.ppo_schedule import ppo_schedule
@@ -19,7 +23,7 @@ MODEL_DIR = Path("C:/repos/python/assault/models")
 LATEST_PATH = MODEL_DIR / "latest.pt"
 
 
-def main():
+def main(reward_fn=None):
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f">>> Using device: {device}")
@@ -27,7 +31,10 @@ def main():
     config_path = Path("C:/repos/python/assault/assault_sim/config/sim_config.yaml")
     scenario = "phase01_seq001_initial_contact"
 
-    env = make_env(config_path, PPOConfig.RL_SIDE, scenario)
+    # reward shaping: allow injecting a custom reward_fn (used by grid runs)
+    if reward_fn is None:
+        reward_fn = ShapedReward(rl_side=PPOConfig.RL_SIDE)
+    env = make_env(config_path, PPOConfig.RL_SIDE, scenario, reward_fn=reward_fn)
     obs = env.reset()
     input_dim = obs.shape[0]
 
@@ -37,6 +44,10 @@ def main():
         input_dim=input_dim,
         num_options=len(TacticalOption)
     ).to(device)
+
+    # TensorBoard writer
+    run_name = f"ppo_{datetime.utcnow().strftime('%Y%m%dT%H%M%SZ')}_{socket.gethostname()}"
+    writer = SummaryWriter(log_dir=(MODEL_DIR / "runs" / run_name))
 
     optimizer = optim.Adam(policy.parameters(), lr=PPOConfig.LR)
 
@@ -55,7 +66,7 @@ def main():
     for _ in range(PPOConfig.NUM_ENVS):
         p = mp.Process(
             target=worker_loop,
-            args=(rollout_queue, config_path, scenario, weights_queue, None),
+            args=(rollout_queue, config_path, scenario, weights_queue, None, reward_fn),
         )
         p.daemon = True
         p.start()
@@ -176,8 +187,13 @@ def main():
             )
             samples_per_sec = samples / elapsed if elapsed > 0 else 0.0
 
+            avg_reward = float(np.mean(combined['rewards']))
             print(f"[UPDATE {rollout_idx}] loss={loss:.3f}")
-            print(f"avg_reward={np.mean(combined['rewards']):.3f}")
+            print(f"avg_reward={avg_reward:.3f}")
+            # TensorBoard scalars
+            writer.add_scalar('train/loss', float(loss), rollout_idx)
+            writer.add_scalar('train/avg_reward', avg_reward, rollout_idx)
+            writer.add_scalar('train/entropy_coef', float(entropy_coef), rollout_idx)
             print(f"UPDATES/sec: {throughput:.2f}")
             print(f"SAMPLES/sec: {samples_per_sec:.0f}")
 
@@ -187,6 +203,7 @@ def main():
                 if stats["count"] > 0:
                     avg = stats["sum"] / stats["count"]
                     print(f"  {action}: avg={avg:.3f}")
+                    writer.add_scalar(f'reward_by_action/{action}', float(avg), rollout_idx)
 
             last_log_time = current_time
             last_update = rollout_idx
@@ -204,6 +221,7 @@ def main():
                 except:
                     name = str(u)
                 print(f"  {name}: {c} ({100*c/total:.1f}%)")
+                writer.add_scalar(f'action_usage/{name}', int(c), rollout_idx)
 
             # ATTACK MODES
             attack_modes = combined["attack_modes"]
@@ -214,10 +232,14 @@ def main():
 
             for u, c in zip(unique_a, counts_a):
                 print(f"  mode {u}: {c} ({100*c/total_a:.1f}%)")
+                writer.add_scalar(f'attack_modes/mode_{u}', int(c), rollout_idx)
 
             print("-" * 50)
 
         rollout_idx += 1
+
+    # close writer
+    writer.close()
 
 
 if __name__ == "__main__":

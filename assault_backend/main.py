@@ -52,6 +52,8 @@ app.add_middleware(
     allow_origins=[
         "http://localhost:5173",
         "http://127.0.0.1:5173",
+        "http://localhost:5174",
+        "http://127.0.0.1:5174",
     ],
     allow_credentials=True,
     allow_methods=["*"],
@@ -115,11 +117,11 @@ def explain_activation(request: ExplainActivationRequest):
 # =====================================================
 
 @app.get("/api/ui/scenarios/{scenario_id}")
-def get_scenario(scenario_id: str):
+async def get_scenario(scenario_id: str):
     try:
         # ✅ iniciar sesión
         if game_session.env is None:
-            game_session.start(scenario_id)
+            game_session.start(scenario_id, {})
 
         # ✅ devolver estado real completo
         return game_session.get_state()
