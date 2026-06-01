@@ -53,3 +53,24 @@ python -m uvicorn main:app --reload
 
 http://localhost:5173/art/maps/Map%20S2.png
 http://localhost:5173/art/maps/map_s3.png
+
+
+
+Fase 1: Contexto TEA
+- Ambigüedad diagnóstica
+- Baja visibilidad física
+- Conductas disruptivas en espacios públicos
+
+Fase 2: Juicio social
+- Atribuciones erróneas
+- Negligencia parental, mala educación o falta de normas
+
+Fase 3: Estigma por asociación
+- Extensión del estigma (Goffman, 1963)
+
+Consecuencias psicológicas
+- Culpa
+- Vergüenza
+- Aislamiento social
+- Estrés crónico (Hayes & Watson, 2013)
+

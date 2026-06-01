@@ -7,6 +7,7 @@ import { CombatPanel } from "./game/ui/CombatPanel";
 import { unitImages } from "./game/config/unitImages";
 import { sides } from "./game/config/sides";
 import { formatCoords } from "./game/render/hexGridRenderer";
+import { DispatchedOrdersPanel } from "./game/ui/DispatchedOrdersPanel";
 
 type LogEntry = {
   type: string;
@@ -289,40 +290,10 @@ function App() {
               </div>
 
               {/* Dynamic Actions readout list */}
-              <div className="panel-title">Dispatched Orders</div>
-              <div className="actions-list">
-                {availableMoves.length > 0 ? (
-                  availableMoves.map((action, i) => (
-                    <div
-                      key={i}
-                      className={`action-card ${action.kind === "attack" ? "action-attack" : ""}`}
-                      onClick={() => handleActionCardClick(action)}
-                    >
-                      <div className="action-header">
-                        <div className="action-type">
-                          {action.kind === "attack"
-                            ? (action.type ? action.type.toUpperCase() : "ATTACK")
-                            : (action.kind || "MOVE").toUpperCase()
-                          }
-                        </div>
-                        <div className="action-coords">
-                          {formatCoords(action.q ?? action.target_q ?? 0, action.r ?? action.target_r ?? 0)}
-                        </div>
-                      </div>
-                      <div className="action-desc">
-                        {action.kind === "attack" 
-                          ? `Initiate ${(action.type || "assault").toLowerCase()} attack against target at ${formatCoords(action.q ?? action.target_q ?? 0, action.r ?? action.target_r ?? 0)}`
-                          : `March troop to sector location ${formatCoords(action.q ?? 0, action.r ?? 0)}`
-                        }
-                      </div>
-                    </div>
-                  ))
-                ) : (
-                  <div style={{ fontSize: "12px", color: "var(--text-muted)", fontStyle: "italic", textAlign: "center", padding: "10px" }}>
-                    No valid operations available for this unit.
-                  </div>
-                )}
-              </div>
+              <DispatchedOrdersPanel
+                availableMoves={availableMoves}
+                selectedUnitId={selectedUnitId}
+              />
             </div>
           ) : (
             /* Radar scanning placeholder when no target is locked */

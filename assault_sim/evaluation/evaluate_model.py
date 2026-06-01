@@ -47,7 +47,7 @@ CONFIG_PATH = Path("C:/repos/python/assault/assault_sim/config/sim_config.yaml")
 ENV_CONFIG = Path("C:/repos/python/assault/assault_sim/config/env_config.json")
 CHECKPOINT = Path("models/latest.pt")
 
-NUM_WORKERS = min(6, cpu_count())
+NUM_WORKERS = min(20, cpu_count())
 
 
 # -------------------------------------------------
@@ -145,7 +145,7 @@ def build_controller(policy, sim_env):
         sim_env=sim_env,
     )
 
-    controller.training_mode = True
+    controller.training_mode = False
     return controller
 
 

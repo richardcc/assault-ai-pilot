@@ -3437,6 +3437,9 @@ from assault_sim.strategy.formation_strategy import FormationStrategyEngine
 from assault_model.actions.status import WaitAction
 from assault_sim.rl.tactical_options import TacticalOption
 
+# ✅ NUEVO
+from assault_sim.decision.option_executor import OptionExecutor
+
 
 class DecisionEngineController:
 
@@ -3446,6 +3449,10 @@ class DecisionEngineController:
         self.option_policy = option_policy
         self.heuristic = heuristic
         self.sim_env = sim_env
+
+        # ✅ NUEVO: executor real (CRÍTICO)
+        # Temporarily disable bad-trade filtering to recover baseline attack behavior.
+        self.executor = OptionExecutor(self.heuristic, avoid_bad_trades=False, adv_threshold=-0.5)
 
         # PPO tracking
         self.current_option = None
@@ -3466,12 +3473,11 @@ class DecisionEngineController:
     def reset(self):
         """
         Reset per-episode state.
-        This is critical for LSTM stability and strategy consistency.
+        Critical for LSTM + strategy consistency.
         """
         if hasattr(self.option_policy, "reset_hidden"):
             self.option_policy.reset_hidden()
 
-        # Reset strategy state
         self.formation_engine.current_strategy = None
         self.formation_engine.remaining_steps = 0
         self.current_strategy = None
@@ -3485,19 +3491,19 @@ class DecisionEngineController:
         if side == self.rl_side:
 
             # -------------------------------------------------
-            # L3: Update strategy every step
+            # L3: STRATEGY
             # -------------------------------------------------
             game_state = self.sim_env.game_state
             strategy = self.formation_engine.update(game_state, self.rl_side)
             self.current_strategy = strategy
 
             # -------------------------------------------------
-            # L2: Sample option from policy (single call)
+            # L2: POLICY (modelo RL)
             # -------------------------------------------------
             option, attack_mode, logp, value = self.option_policy.choose_option(obs)
 
             # -------------------------------------------------
-            # 🔥 L3 → L2 bias (key fix)
+            # 🔥 L3 → L2 BIAS
             # -------------------------------------------------
             if strategy is not None:
 
@@ -3516,21 +3522,23 @@ class DecisionEngineController:
                 elif strategy.name == "CLEANUP":
                     option = TacticalOption.ATTACK
 
-            # Store PPO outputs
+            # -------------------------------------------------
+            # STORE PPO OUTPUTS
+            # -------------------------------------------------
             self.current_option = option
             self.current_attack_mode = attack_mode if attack_mode is not None else 0
             self.last_logp = logp
             self.last_value = value
 
             # -------------------------------------------------
-            # DecisionEngine only active during evaluation
+            # DecisionEngine (solo en evaluación)
             # -------------------------------------------------
             intent = None
             if not self.training_mode:
                 intent = self.decision_engine.compute_intent(self.sim_env)
 
             # -------------------------------------------------
-            # Intent-based execution (evaluation only)
+            # INTENT EXECUTION (EVAL ONLY)
             # -------------------------------------------------
             if intent:
                 chosen_unit, action = intent
@@ -3541,10 +3549,16 @@ class DecisionEngineController:
                     return action
 
             # -------------------------------------------------
-            # PPO + heuristic execution (training path)
+            # ✅ EJECUCIÓN REAL (CRÍTICO)
             # -------------------------------------------------
-            action = self.heuristic.choose_action(state, unit, option)
+            action = self.executor.execute(
+                state,
+                unit,
+                option,
+                attack_mode=self.current_attack_mode
+            )
 
+            # fallback seguro
             if action is None:
                 if self.debug:
                     print(f"[RL] {unit.unit_id} -> WAIT (fallback)")
@@ -3553,10 +3567,13 @@ class DecisionEngineController:
             action.unit_id = unit.unit_id
             self.sim_env.runtime.activated_units.add(unit.unit_id)
 
+            if self.debug:
+                print(f"[RL] {unit.unit_id} -> {option.name}")
+
             return action
 
         # =================================================
-        # ENEMY SIDE (heuristic only)
+        # ENEMY SIDE (heurística)
         # =================================================
         options_to_try = [
             TacticalOption.ATTACK,
@@ -3585,7 +3602,6 @@ class DecisionEngineController:
         self.sim_env.runtime.activated_units.add(unit.unit_id)
 
         return action
-
 
 
 ================================================================================
@@ -3855,14 +3871,17 @@ from assault_model.actions.action_category import ActionCategory
 from assault_model.map.hex_utils import hex_distance
 
 from assault_sim.rl.tactical_options import TacticalOption
-
 from assault_model.map.terrain_config import terrain_config
 
 
 class OptionExecutor:
 
-    def __init__(self, heuristic_controller):
+    def __init__(self, heuristic_controller, avoid_bad_trades: bool = False, adv_threshold: float = -0.5):
         self.heuristic = heuristic_controller
+        # When True, block attacks whose combat advantage is below adv_threshold.
+        self.avoid_bad_trades = avoid_bad_trades
+        # Minimum combat advantage required to consider an attack.
+        self.adv_threshold = adv_threshold
 
     # -------------------------------------------------
     def execute(
@@ -3897,14 +3916,13 @@ class OptionExecutor:
 
             action = self.heuristic.choose_action(state, unit, option)
 
-            # bloquear ataques
             if isinstance(action, (RangedDirectAttack, RangedIndirectAttack)):
                 return WaitAction(unit.unit_id)
 
             return action or WaitAction(unit.unit_id)
 
         # -------------------------------------------------
-        # ✅ HOLD (MEJORADO)
+        # ✅ HOLD (MEJORADO CON FALLBACK)
         # -------------------------------------------------
         if option == TacticalOption.HOLD:
 
@@ -3916,14 +3934,15 @@ class OptionExecutor:
             ]
 
             if attacks:
-                return self._best_attack(attacks)  # ✅ CAMBIO CLAVE
+                best = self._best_attack(attacks)
+                return best if best else attacks[0]
 
             return WaitAction(unit.unit_id)
 
         return WaitAction(unit.unit_id)
 
     # -------------------------------------------------
-    # ✅ ATTACK (MEJORADO)
+    # ✅ ATTACK (MEJORADO CON FALLBACK)
     # -------------------------------------------------
     def _execute_attack(self, state, unit, attack_mode):
 
@@ -3937,7 +3956,10 @@ class OptionExecutor:
         if not attacks:
             return self._move_closer(state, unit)
 
-        return self._best_attack(attacks)  # ✅ CAMBIO CLAVE
+        best = self._best_attack(attacks)
+
+        # ✅ fallback crítico (SIEMPRE dispara)
+        return best if best else attacks[0]
 
     # -------------------------------------------------
     def _move_closer(self, state, unit):
@@ -3958,7 +3980,7 @@ class OptionExecutor:
         )
 
         best = None
-        best_dist = None  # ✅ fix implícito seguro
+        best_dist = None
 
         for a in actions:
             if a.action_type.category != ActionCategory.MOVEMENT:
@@ -4017,7 +4039,7 @@ class OptionExecutor:
         return best or self._move_closer(state, unit)
 
     # -------------------------------------------------
-    # ✅ NUEVO: SELECCIÓN INTELIGENTE DE TARGET
+    # ✅ TARGET SELECTION (FIX SUAVE + FALLBACK)
     # -------------------------------------------------
     def _best_attack(self, attacks):
 
@@ -4025,64 +4047,79 @@ class OptionExecutor:
         best_score = float("-inf")
 
         for a in attacks:
+
             target = getattr(a, "target", None)
 
             if target is None or not target.alive:
                 continue
 
-            unit = a.unit  # ✅ muy importante
-
-            # -------------------------------------------------
-            # 🔥 NUEVO: COMBAT ADVANTAGE
-            # -------------------------------------------------
-            adv = unit.get_combat_advantage(target)
-
-            # 🚫 evitar combates muy malos
-            if adv < -1.0:
+            # robustly obtain the acting unit from the action object
+            unit = getattr(a, "unit", None) or getattr(a, "actor", None) or getattr(a, "attacker", None)
+            if unit is None:
+                # cannot score this attack without a unit reference
                 continue
+
+            adv = unit.get_combat_advantage(target)
+            # expected damage proxy (optional further gating)
+            exp_dmg = getattr(unit, "get_expected_damage", lambda t: 0.0)(target)
+            hp = getattr(target, "hp", 10)
+
+            # If configured, block attacks that look like bad trades.
+            if self.avoid_bad_trades:
+                # hard block for very negative advantage
+                if adv < -0.3:
+                    continue
+
+                # configurable threshold: skip when advantage below threshold
+                if adv < self.adv_threshold:
+                    continue
+
+                # avoid low-advantage attacks vs high-HP targets
+                if adv < 0.0 and hp > 6:
+                    continue
+
+                # avoid tiny expected damage attacks (e.g., bazooka team against armored)
+                if exp_dmg <= 0.05 and hp > 3:
+                    continue
 
             score = 0
 
-            # ✅ combate (lo más importante)
-            score += adv * 15
+            # ✅ núcleo del scoring
+            score += adv * 30
 
-            # -------------------------------------------------
-            # ✅ LOGICA EXISTENTE (mantener)
-            # -------------------------------------------------
-            hp = getattr(target, "hp", 10)
-
-            # prioriza enemigos débiles
+            # ✅ debilidad del enemigo
             score += (10 - hp) * 3
 
-            # bonus por kill
+            # ✅ kill confirm
             if hp <= 1:
-                score += 50
+                score += 60
 
-            # penaliza targets muy duros
-            score -= hp * 1.5
+            # ✅ castigo a duros
+            score -= hp * 2
 
-            # pequeño sesgo ofensivo
+            # ✅ sesgo ofensivo
             score += 5
 
-            # -------------------------------------------------
-            # ✅ DISTANCIA (extra importante)
-            # -------------------------------------------------
+            # distancia
             if hasattr(unit, "position") and hasattr(target, "position"):
                 dist = hex_distance(unit.position, target.position)
 
                 if dist <= 2:
-                    score += 2
+                    score += 3
                 elif dist > 6:
-                    score -= 3
+                    score -= 5
 
-            # -------------------------------------------------
-            # ✅ BEST SELECTION
-            # -------------------------------------------------
             if score > best_score:
                 best_score = score
                 best = a
 
-        return best
+        # If no acceptable attack was found, fall back to the safest available attack.
+        if best is not None:
+            return best
+
+        # fallback crítico: JAMÁS dejar sin ataque
+        return attacks[0] if attacks else WaitAction("SYSTEM")
+
 
 
 ================================================================================
@@ -4255,6 +4292,7 @@ def make_env(
     rl_side: str,
     scenario: str,
     controller=None,
+    reward_fn=None,
 ) -> TrainingEnv:
 
     # ✅ cargar config
@@ -4266,15 +4304,16 @@ def make_env(
         controller=controller
     )
 
-    # ✅ crear reward (CLAVE)
-    reward_fn = ProgressiveReward(rl_side=rl_side)
+    # ✅ crear reward (CLAVE) si no se proporciona uno
+    if reward_fn is None:
+        reward_fn = ProgressiveReward(rl_side=rl_side)
 
     # ✅ TrainingEnv con reward explícito
     env = TrainingEnv(
         sim_env,
         config_path,
         rl_side,
-        reward_fn=reward_fn   # 💥 ESTO ARREGLA TODO
+        reward_fn=reward_fn,
     )
 
     return env
@@ -4319,7 +4358,8 @@ def create_hrl_controller(option_policy, rl_side, event_bus=None):
     # ✅ NO volver a crear OptionPolicy aquí
 
     heuristic = TacticalPathHeuristic()
-    executor = OptionExecutor(heuristic)
+    # avoid_bad_trades disabled for baseline/debug behavior
+    executor = OptionExecutor(heuristic, avoid_bad_trades=False, adv_threshold=-0.5)
 
     controller = HRLController(
         option_policy=option_policy,
@@ -4796,6 +4836,10 @@ FILE: C:\repos\python\assault\assault_sim\evaluation\evaluate_model.py
 import torch
 from pathlib import Path
 from multiprocessing import Pool, cpu_count, freeze_support
+import traceback
+import json
+from datetime import datetime
+import os
 
 from tqdm import tqdm
 
@@ -4812,7 +4856,16 @@ from assault_sim.decision.decision_engine_controller import DecisionEngineContro
 
 from assault_sim.heuristics.tactical_path_heuristic import TacticalPathHeuristic
 
-from assault_sim.evaluation.results import ResultsAnalyzer
+# ✅ FIX CRÍTICO → NUEVO ANALYZER
+from assault_sim.evaluation.results_analyzer import ResultsAnalyzer
+from assault_sim.evaluation.policy.l2_options import compute_option_performance
+from assault_sim.evaluation.policy.l3_formations import compute_formation_performance
+from assault_sim.evaluation.policy.mapping import (
+    build_strategy_option_map,
+    normalize_strategy_option_map,
+)
+from assault_sim.evaluation.units.unit_aggregation import aggregate_units
+
 from assault_sim.evaluation.eval_dashboard import EvalDashboard
 from assault_sim.evaluation.evaluator import Evaluator
 
@@ -4856,7 +4909,31 @@ def get_policy(env):
     )
 
     checkpoint = torch.load(CHECKPOINT, map_location="cpu")
-    policy.load_state_dict(checkpoint)
+
+    # checkpoint can be either a raw state_dict or a dict with keys
+    state = None
+    if isinstance(checkpoint, dict):
+        # common keys
+        if "state_dict" in checkpoint:
+            state = checkpoint["state_dict"]
+        elif "model_state_dict" in checkpoint:
+            state = checkpoint["model_state_dict"]
+        else:
+            # assume it's already a state dict
+            state = checkpoint
+    else:
+        state = checkpoint
+
+    try:
+        policy.load_state_dict(state)
+    except Exception:
+        # try to be forgiving: if keys are prefixed (e.g. "module."), strip them
+        try:
+            new_state = {k.replace("module.", ""): v for k, v in state.items()}
+            policy.load_state_dict(new_state)
+        except Exception:
+            print("❌ Failed to load checkpoint state_dict")
+            raise
     policy.eval()
 
     _policy = policy
@@ -4903,15 +4980,14 @@ def build_controller(policy, sim_env):
         sim_env=sim_env,
     )
 
-    controller.training_mode = False
+    controller.training_mode = True
     return controller
 
 
 # -------------------------------------------------
-# RUN 1 EPISODE (SAFE VERSION)
+# RUN 1 EPISODE
 # -------------------------------------------------
 def run_episode(_):
-
     try:
         env, sim_env = build_env()
         policy = get_policy(env)
@@ -4938,7 +5014,9 @@ def run_episode(_):
         return result, combat, advanced
 
     except Exception:
-        # multiprocessing safe fallback
+        # provide full traceback to help debugging in multiprocess
+        tb = traceback.format_exc()
+        print(f"❌ Exception in run_episode:\n{tb}")
         return None, {}, {}
 
 
@@ -4956,7 +5034,6 @@ def main():
     # AGGREGATORS
     # -------------------------------------------------
     agg = {
-        # combat
         "trade_sum": 0.0,
         "trade_count": 0,
         "bad_attacks": 0,
@@ -4964,7 +5041,6 @@ def main():
         "damage_sum": 0.0,
         "damage_taken_sum": 0.0,
 
-        # advanced
         "good_trades": 0,
         "bad_trades": 0,
         "zero_damage_attacks": 0,
@@ -4983,15 +5059,12 @@ def main():
             desc="Evaluating",
         ):
 
-            # ✅ skip broken episodes
             if result is None:
                 continue
 
             results.append(result)
 
-            # --------------------------
-            # COMBAT
-            # --------------------------
+            # ---- COMBAT
             trade_mean = combat.get("trade_mean", 0.0)
             bad_rate = combat.get("bad_attack_rate", 0.0)
             total_attacks = combat.get("total_attacks", 0)
@@ -5008,9 +5081,7 @@ def main():
             agg["damage_sum"] += damage
             agg["damage_taken_sum"] += enemy_damage
 
-            # --------------------------
-            # ADVANCED
-            # --------------------------
+            # ---- ADVANCED
             agg["good_trades"] += advanced.get("good_trades", 0)
             agg["bad_trades"] += advanced.get("bad_trades", 0)
             agg["zero_damage_attacks"] += advanced.get("zero_damage_attacks", 0)
@@ -5020,7 +5091,7 @@ def main():
     print(">>> Episodes finished ✅")
 
     # -------------------------------------------------
-    # FINAL METRICS
+    # PRINT HIGH LEVEL
     # -------------------------------------------------
     trade_mean = agg["trade_sum"] / max(1, agg["trade_count"])
     bad_attack_rate = agg["bad_attacks"] / max(1, agg["total_attacks"])
@@ -5031,9 +5102,6 @@ def main():
     print(f"bad_attack_rate: {bad_attack_rate:.3f}")
     print(f"damage_ratio:    {damage_ratio:.3f}")
 
-    # -------------------------------------------------
-    # ✅ ADVANCED METRICS (FIXED)
-    # -------------------------------------------------
     print("\n=== ADVANCED METRICS ===")
 
     total_attacks = max(1, agg["good_trades"] + agg["bad_trades"])
@@ -5045,14 +5113,52 @@ def main():
     print(f"zero_dmg_rate:    {agg['zero_damage_attacks'] / total_attacks:.3f}")
 
     # -------------------------------------------------
-    # DASHBOARD + REPORT
+    # FINAL ANALYSIS (🔥 AQUÍ ESTÁ EL CAMBIO REAL)
+    # -------------------------------------------------
+    analyzer = ResultsAnalyzer(results, RL_SIDE)
+    analyzer.print_report()
+
+    # -------------------------------------------------
+    # STRUCTURED REPORT (JSON)
+    # -------------------------------------------------
+    try:
+        report = {
+            "meta": {
+                "episodes_requested": EPISODES,
+                "episodes_collected": len(results),
+                "workers": NUM_WORKERS,
+                "timestamp": datetime.utcnow().isoformat() + "Z",
+            },
+            "summary": analyzer.summary(),
+            "combat": analyzer.combat_metrics(),
+            "advanced": analyzer.advanced_metrics(),
+            "action_execution": analyzer.action_execution(),
+            "l2_options": compute_option_performance(results),
+            "l3_formations": compute_formation_performance(results),
+            "strategy_option_map": normalize_strategy_option_map(
+                build_strategy_option_map(results)
+            ),
+            "units": aggregate_units(results),
+        }
+
+        out_name = f"metrics_report_{datetime.utcnow().strftime('%Y%m%dT%H%M%SZ')}.json"
+        out_path = os.path.join(os.getcwd(), out_name)
+
+        with open(out_path, "w", encoding="utf-8") as fh:
+            json.dump(report, fh, indent=2, ensure_ascii=False)
+
+        print(f"\n>>> Structured metrics saved to {out_path}")
+
+    except Exception:
+        print("❌ Failed to build structured JSON report")
+        print(traceback.format_exc())
+
+    # -------------------------------------------------
+    # DASHBOARD
     # -------------------------------------------------
     dashboard = EvalDashboard()
     for r in results:
         dashboard.add_episode(r)
-
-    analyzer = ResultsAnalyzer(results, RL_SIDE)
-    analyzer.print_report()
 
     dashboard.save_csv("metrics.csv")
     dashboard.plot_all()
@@ -5077,8 +5183,6 @@ import numpy as np
 
 from assault_sim.evaluation.metrics_tracker import MetricsTracker
 from assault_sim.engine.match_runner import MatchRunner
-
-# ✅ advanced metrics (correct import)
 from assault_sim.evaluation.advanced_metrics import AdvancedMetrics
 
 
@@ -5103,11 +5207,8 @@ class Evaluator:
     def run_episode(self):
 
         tracker = MetricsTracker(self.rl_side)
-        advanced_metrics = AdvancedMetrics()  # ✅ NEW
+        advanced_metrics = AdvancedMetrics()
 
-        # -------------------------------------------------
-        # EVENT BUS
-        # -------------------------------------------------
         sim = getattr(self.env, "sim", None) or getattr(self.env, "sim_env", None)
 
         if sim is not None and getattr(sim, "event_bus", None) is not None:
@@ -5122,9 +5223,11 @@ class Evaluator:
 
         reward_trace = []
 
+        # ✅ CRÍTICO → LOG REAL DE EVENTOS
+        events_log = []
+
         obs = self.env.reset()
 
-        # ✅ reset controller (important)
         if hasattr(self.controller, "reset"):
             self.controller.reset()
 
@@ -5154,48 +5257,111 @@ class Evaluator:
             sim = getattr(self.env, "sim", None) or getattr(self.env, "sim_env", None)
             state = sim.game_state if sim is not None else None
 
-            if state is not None:
-                final_state = state
+            if state is None:
+                break
+
+            final_state = state
 
             reward_trace.append(step.get("reward", 0.0))
 
             # -------------------------------------------------
-            # POLICY TRACKING (L2 / L3)
+            # ✅ EVENT CAPTURE (FIX REAL ROBUSTO)
+            # -------------------------------------------------
+            for key in ["attack_events", "events", "combat_events", "attacks"]:
+
+                if key not in info:
+                    continue
+
+                for e in info[key]:
+
+                    if not isinstance(e, dict):
+                        continue
+
+                    attack_type = (
+                        e.get("attack_type")
+                        or e.get("type")
+                        or e.get("action")
+                    )
+
+                    if attack_type is None:
+                        continue
+
+                    events_log.append({
+                        "type": "attack",
+                        "attack_type": str(attack_type),
+                        "damage": e.get("damage", 0),
+                        "attacker": e.get("attacker"),
+                        "target": e.get("target"),
+                    })
+                
+            # end for key in ...
+
+            # -------------------------------------------------
+            # FALLBACK: synthesize an event from info fields
+            # if no explicit event lists are provided by the env
+            # -------------------------------------------------
+            action_type = info.get("action_type")
+            rl_dmg = info.get("rl_damage", 0)
+            enemy_dmg = info.get("enemy_damage", 0)
+            rl_atk = info.get("rl_attacks", 0)
+            enemy_atk = info.get("enemy_attacks", 0)
+
+            is_attack_action = action_type in ("direct", "indirect", "assault")
+
+            if is_attack_action and (rl_dmg or enemy_dmg or rl_atk or enemy_atk):
+                # determine attacker side for this step
+                atk_side = side
+
+                atk_damage = 0
+                if atk_side == self.rl_side:
+                    atk_damage = rl_dmg
+                else:
+                    atk_damage = enemy_dmg
+
+                # normalize attack type
+                atk_type_norm = None
+                if action_type == "indirect":
+                    atk_type_norm = "INDIRECT"
+                elif action_type in ("direct", "assault"):
+                    atk_type_norm = "DIRECT"
+                else:
+                    atk_type_norm = str(action_type).upper() if action_type else "OTHER"
+
+                events_log.append({
+                    "type": "attack",
+                    "attack_type": atk_type_norm,
+                    "damage": atk_damage,
+                    "attacker": info.get("unit_id"),
+                    "target": info.get("target_id") or info.get("target"),
+                })
+
+            # -------------------------------------------------
+            # POLICY TRACKING
             # -------------------------------------------------
             if side == self.rl_side:
 
-                controller = self.controller
-
-                option = getattr(controller, "current_option", None)
+                option = getattr(self.controller, "current_option", None)
                 if option is not None:
                     option_counts[option.name] += 1
 
-                strategy = getattr(controller, "current_strategy", None)
-                formation = None
+                strategy = getattr(self.controller, "current_strategy", None)
 
                 if strategy is not None:
                     formation = strategy.name
                     formation_counts[formation] += 1
 
-                if option is not None and formation is not None:
-                    strategy_option_map[formation][option.name] += 1
+                    if option is not None:
+                        strategy_option_map[formation][option.name] += 1
 
             # -------------------------------------------------
-            # DISTANCE (for advanced metrics)
+            # DISTANCE
             # -------------------------------------------------
             pre_dist = None
 
-            if state is not None and hasattr(state, "units"):
+            if hasattr(state, "units"):
 
-                rl_units = [
-                    u for u in state.units
-                    if u.side == self.rl_side and u.alive
-                ]
-
-                enemy_units = [
-                    u for u in state.units
-                    if u.side != self.rl_side and u.alive
-                ]
+                rl_units = [u for u in state.units if u.side == self.rl_side and u.alive]
+                enemy_units = [u for u in state.units if u.side != self.rl_side and u.alive]
 
                 dists = []
 
@@ -5205,7 +5371,6 @@ class Evaluator:
                             dq = abs(u.position.q - e.position.q)
                             dr = abs(u.position.r - e.position.r)
                             dists.append(dq + dr)
-
 
                 if dists:
                     pre_dist = min(dists)
@@ -5218,7 +5383,7 @@ class Evaluator:
             tracker.step()
 
             # -------------------------------------------------
-            # ✅ ADVANCED METRICS
+            # ADVANCED METRICS
             # -------------------------------------------------
             advanced_metrics.update(info, pre_dist)
 
@@ -5226,7 +5391,6 @@ class Evaluator:
             steps += 1
 
             if steps >= self.max_steps:
-                done = True
                 break
 
         # -------------------------------------------------
@@ -5235,9 +5399,12 @@ class Evaluator:
         result = tracker.build_result(final_state)
 
         result["steps"] = steps
+        result["episode_length"] = steps
         result["avg_reward"] = float(np.mean(reward_trace)) if reward_trace else 0.0
 
-        # policy tracking
+        # -------------------------------------------------
+        # POLICY TRACKING
+        # -------------------------------------------------
         result["option_counts"] = dict(option_counts)
         result["formation_counts"] = dict(formation_counts)
 
@@ -5245,13 +5412,20 @@ class Evaluator:
             strat: dict(opts) for strat, opts in strategy_option_map.items()
         }
 
-        # ✅ attach advanced metrics
+        # -------------------------------------------------
+        # ✅ GUARDAR EVENTOS (CLAVE)
+        # -------------------------------------------------
+        result["events"] = events_log
+
+        # -------------------------------------------------
+        # ADVANCED METRICS
+        # -------------------------------------------------
         result["advanced"] = advanced_metrics.to_dict()
 
         return result
 
     # -------------------------------------------------
-    # MULTI EPISODE (FIX CRÍTICO)
+    # MULTI EPISODE
     # -------------------------------------------------
     def evaluate(self, episodes: int):
 
@@ -5692,7 +5866,31 @@ class MetricsTracker:
 
     # -------------------------------------------------
     def track_state(self, state):
-        pass
+        # Ensure every unit in the state has an entry in unit_stats with metadata
+        if state is None or not hasattr(state, "units"):
+            return
+
+        for u in state.units:
+            uid = getattr(u, "unit_id", None)
+            if not uid:
+                continue
+
+            side = "RL" if getattr(u, "side", None) == self.rl_side else "ENEMY"
+
+            entry = self.unit_stats[side][uid]
+
+            # populate metadata if available
+            if entry.get("unit_key") is None:
+                ut = getattr(u, "unit_type", None)
+                if ut:
+                    entry["unit_key"] = getattr(ut, "code", None)
+                    entry["category"] = getattr(ut.category, "value", None) if getattr(ut, "category", None) else None
+                    entry["classification"] = getattr(ut, "classification", None)
+
+            # ensure counts exist (default dict handles zeros)
+            _ = entry["attacks"]
+            _ = entry["damage"]
+            _ = entry["kills"]
 
     # -------------------------------------------------
     def step(self):
@@ -5796,60 +5994,92 @@ class ResultsAnalyzer:
 
         return {
             "episodes": len(self.results),
-            "win_rate": wins / len(self.results),
+            "win_rate": wins / len(self.results) if self.results else 0,
             "draws": draws,
             "avg_vp": statistics.mean(vp_list) if vp_list else 0,
             "avg_steps": statistics.mean(steps_list) if steps_list else 0,
         }
 
     # -------------------------------------------------
-    # ✅ ADVANCED METRICS
+    # COMBAT
     # -------------------------------------------------
-    def aggregate_advanced_metrics(self):
+    def combat_metrics(self):
+
+        trade_sum = 0
+        trade_count = 0
+
+        total_damage = 0
+        total_taken = 0
+
+        for r in self.results:
+            combat = r.get("combat", {})
+            side = r.get("side", {})
+
+            atk = combat.get("total_attacks", 0)
+            trade = combat.get("trade_mean", 0.0)
+
+            trade_sum += trade * atk
+            trade_count += atk
+
+            total_damage += side.get("RL", {}).get("damage", 0)
+            total_taken += side.get("ENEMY", {}).get("damage", 0)
+
+        return {
+            "trade_mean": trade_sum / max(1, trade_count),
+            "damage_ratio": total_damage / max(1, total_taken),
+        }
+
+    # -------------------------------------------------
+    # ADVANCED
+    # -------------------------------------------------
+    def advanced_metrics(self):
 
         agg = {
-            "good_trades": 0,
-            "bad_trades": 0,
-            "zero_damage_attacks": 0,
-            "turns_in_range": 0,
-            "attacks_in_range": 0,
-            "total_attacks": 0,
+            "good": 0,
+            "bad": 0,
+            "zero": 0,
+            "in_range": 0,
+            "attack_in_range": 0,
         }
 
         for r in self.results:
             adv = r.get("advanced", {})
 
-            agg["good_trades"] += adv.get("good_trades", 0)
-            agg["bad_trades"] += adv.get("bad_trades", 0)
-            agg["zero_damage_attacks"] += adv.get("zero_damage_attacks", 0)
-            agg["turns_in_range"] += adv.get("turns_in_range", 0)
-            agg["attacks_in_range"] += adv.get("attacks_in_range", 0)
-            agg["total_attacks"] += adv.get("total_attacks", 0)
+            agg["good"] += adv.get("good_trades", 0)
+            agg["bad"] += adv.get("bad_trades", 0)
+            agg["zero"] += adv.get("zero_damage_attacks", 0)
+            agg["in_range"] += adv.get("turns_in_range", 0)
+            agg["attack_in_range"] += adv.get("attacks_in_range", 0)
 
-        return agg
+        total = max(1, agg["good"] + agg["bad"])
+        range_total = max(1, agg["in_range"])
+
+        return {
+            "good_trade_rate": agg["good"] / total,
+            "bad_trade_rate": agg["bad"] / total,
+            "selectivity": agg["attack_in_range"] / range_total,
+            "zero_dmg_rate": agg["zero"] / total,
+        }
 
     # -------------------------------------------------
-    # ACTION USAGE
+    # ACTION / FORMATION
     # -------------------------------------------------
-    def aggregate_action_usage(self):
+    def action_usage(self):
 
         total_counts = defaultdict(int)
 
         for r in self.results:
-            for opt, count in r.get("option_counts", {}).items():
-                total_counts[opt] += count
+            for k, v in r.get("option_counts", {}).items():
+                total_counts[k] += v
 
         total = sum(total_counts.values())
 
         return {
-            opt: (count, count / total if total else 0)
-            for opt, count in total_counts.items()
+            k: (v, v / total if total else 0)
+            for k, v in total_counts.items()
         }
 
-    # -------------------------------------------------
-    # FORMATION USAGE
-    # -------------------------------------------------
-    def aggregate_formation_usage(self):
+    def formation_usage(self):
 
         totals = defaultdict(int)
 
@@ -5865,25 +6095,9 @@ class ResultsAnalyzer:
         }
 
     # -------------------------------------------------
-    # STRATEGY MAPPING
+    # EFFICIENCY
     # -------------------------------------------------
-    def aggregate_strategy_mapping(self):
-
-        mapping = defaultdict(lambda: defaultdict(int))
-
-        for r in self.results:
-            m = r.get("strategy_option_map", {})
-
-            for strat, opts in m.items():
-                for o, c in opts.items():
-                    mapping[strat][o] += c
-
-        return mapping
-
-    # -------------------------------------------------
-    # SIDE TOTALS
-    # -------------------------------------------------
-    def aggregate_side_stats(self):
+    def efficiency(self):
 
         agg = {
             "RL": defaultdict(int),
@@ -5894,34 +6108,6 @@ class ResultsAnalyzer:
             for side in ["RL", "ENEMY"]:
                 for k, v in r["side"][side].items():
                     agg[side][k] += v
-
-        return agg
-
-    # -------------------------------------------------
-    # L1 STATS
-    # -------------------------------------------------
-    def aggregate_l1_stats(self):
-
-        agg = {
-            "RL": defaultdict(int),
-            "ENEMY": defaultdict(int),
-        }
-
-        for r in self.results:
-            l1 = r.get("l1", {})
-
-            for side in ["RL", "ENEMY"]:
-                for k, v in l1.get(side, {}).items():
-                    agg[side][k] += v
-
-        return agg
-
-    # -------------------------------------------------
-    # EFFICIENCY
-    # -------------------------------------------------
-    def efficiency(self):
-
-        agg = self.aggregate_side_stats()
 
         def compute(side):
             a = agg[side]["attacks"]
@@ -5936,26 +6122,7 @@ class ResultsAnalyzer:
         return {"RL": compute("RL"), "ENEMY": compute("ENEMY")}
 
     # -------------------------------------------------
-    # L1 EFFICIENCY
-    # -------------------------------------------------
-    def l1_efficiency(self):
-
-        agg = self.aggregate_l1_stats()
-
-        def compute(side):
-            a = agg[side].get("attacks", 0)
-            d = agg[side].get("damage", 0)
-            k = agg[side].get("kills", 0)
-
-            return {
-                "damage_per_attack": d / a if a else 0,
-                "kills_per_attack": k / a if a else 0,
-            }
-
-        return {"RL": compute("RL"), "ENEMY": compute("ENEMY")}
-
-    # -------------------------------------------------
-    # UNIT AGGREGATION
+    # UNITS
     # -------------------------------------------------
     def aggregate_units(self):
 
@@ -5963,7 +6130,7 @@ class ResultsAnalyzer:
             "attacks": 0,
             "damage": 0,
             "kills": 0,
-            "unit_key": None,
+            "side": None,
             "category": None,
             "classification": None,
         })
@@ -5972,76 +6139,499 @@ class ResultsAnalyzer:
             for side in ["RL", "ENEMY"]:
                 for uid, stats in r.get("units", {}).get(side, {}).items():
 
-                    units[uid]["damage"] += stats.get("damage", 0)
                     units[uid]["attacks"] += stats.get("attacks", 0)
+                    units[uid]["damage"] += stats.get("damage", 0)
                     units[uid]["kills"] += stats.get("kills", 0)
 
-                    if units[uid]["unit_key"] is None:
-                        units[uid]["unit_key"] = stats.get("unit_key")
+                    if units[uid]["side"] is None:
+                        units[uid]["side"] = side
                         units[uid]["category"] = stats.get("category")
                         units[uid]["classification"] = stats.get("classification")
 
         return units
 
     # -------------------------------------------------
+    # ALL UNITS (SIN HARDCODE)
+    # -------------------------------------------------
+    def print_all_units(self):
+
+        units = self.aggregate_units()
+
+        print(f"\n=== ALL UNITS ({self.rl_side}) ===")
+        for uid, u in units.items():
+            if u["side"] == "RL":
+                print(
+                    f"{uid} | type={u['category']} | class={u['classification']} | "
+                    f"dmg={u['damage']} atk={u['attacks']} kills={u['kills']}"
+                )
+
+        print("\n=== ALL UNITS (OTHER SIDE) ===")
+        for uid, u in units.items():
+            if u["side"] != "RL":
+                print(
+                    f"{uid} | type={u['category']} | class={u['classification']} | "
+                    f"dmg={u['damage']} atk={u['attacks']} kills={u['kills']}"
+                )
+
+    # -------------------------------------------------
+    # TOP UNITS
+    # -------------------------------------------------
+    def top_units(self, n=5):
+
+        units = self.aggregate_units()
+        items = list(units.items())
+
+        items.sort(key=lambda x: x[1]["damage"], reverse=True)
+        return items[:n]
+
+    # -------------------------------------------------
     # PRINT REPORT
     # -------------------------------------------------
     def print_report(self):
 
-        summary = self.summary()
-        sides = self.aggregate_side_stats()
-        l1_stats = self.aggregate_l1_stats()
-        eff = self.efficiency()
-        l1_eff = self.l1_efficiency()
-
-        action = self.aggregate_action_usage()
-        formation = self.aggregate_formation_usage()
-        mapping = self.aggregate_strategy_mapping()
-
-        adv = self.aggregate_advanced_metrics()
-
         print("\n=== GLOBAL ===")
-        print(summary)
+        print(self.summary())
+
+        print("\n=== COMBAT ===")
+        print(self.combat_metrics())
+
+        print("\n=== ADVANCED ===")
+        for k, v in self.advanced_metrics().items():
+            print(f"{k}: {v:.3f}")
 
         print("\n=== EFFICIENCY ===")
-        print(eff)
-
-        print("\n=== L1 EFFICIENCY (REAL COMBAT) ===")
-        print(l1_eff)
-
-        print("\n=== SIDE TOTALS ===")
-        print(dict(sides["RL"]))
-        print(dict(sides["ENEMY"]))
-
-        print("\n=== L1 (REAL ACTIONS) ===")
-        print(dict(l1_stats["RL"]))
-        print(dict(l1_stats["ENEMY"]))
+        print(self.efficiency())
 
         print("\n=== ACTION USAGE ===")
-        for k, (c, r) in sorted(action.items(), key=lambda x: x[1][0], reverse=True):
+        for k, (c, r) in sorted(self.action_usage().items(), key=lambda x: x[1][0], reverse=True):
             print(f"{k}: {c} ({r:.2%})")
 
-        print("\n=== FORMATION USAGE ===")
-        for k, (c, r) in sorted(formation.items(), key=lambda x: x[1][0], reverse=True):
+        print("\n=== FORMATION ===")
+        for k, (c, r) in sorted(self.formation_usage().items(), key=lambda x: x[1][0], reverse=True):
             print(f"{k}: {c} ({r:.2%})")
 
+        print("\n=== TOP UNITS ===")
+        for uid, u in self.top_units():
+            print(f"{uid}: dmg={u['damage']} atk={u['attacks']} kills={u['kills']}")
+
+        # ✅ dinámico
+        self.print_all_units()
+
+
+================================================================================
+FILE: C:\repos\python\assault\assault_sim\evaluation\results_analyzer.py
+================================================================================
+
+import statistics
+
+from assault_sim.evaluation.policy.l2_options import compute_option_performance
+from assault_sim.evaluation.policy.l3_formations import compute_formation_performance
+from assault_sim.evaluation.policy.mapping import (
+    build_strategy_option_map,
+    normalize_strategy_option_map,
+)
+
+from assault_sim.evaluation.units.unit_aggregation import aggregate_units
+from assault_sim.evaluation.units.unit_reporting import print_all_units
+
+# ✅ NUEVO (CORRECTO)
+from collections import defaultdict
+
+
+class ResultsAnalyzer:
+
+    def __init__(self, results, rl_side):
+        self.results = results
+        self.rl_side = rl_side
+
+    # -------------------------------------------------
+    # GLOBAL
+    # -------------------------------------------------
+    def summary(self):
+
+        wins = 0.0
+        draws = 0
+
+        vp_list = []
+        steps_list = []
+
+        for r in self.results:
+
+            winner = r.get("winner")
+
+            if winner == self.rl_side:
+                wins += 1
+            elif winner is None:
+                wins += 0.5
+                draws += 1
+
+            vp_list.append(r.get("vp", 0))
+            steps_list.append(r.get("steps", 0))
+
+        return {
+            "episodes": len(self.results),
+            "win_rate": wins / len(self.results) if self.results else 0,
+            "draws": draws,
+            "avg_vp": statistics.mean(vp_list) if vp_list else 0,
+            "avg_steps": statistics.mean(steps_list) if steps_list else 0,
+        }
+
+    # -------------------------------------------------
+    # COMBAT
+    # -------------------------------------------------
+    def combat_metrics(self):
+
+        trade_sum = 0
+        trade_count = 0
+
+        total_damage = 0
+        total_taken = 0
+
+        for r in self.results:
+
+            combat = r.get("combat", {})
+            side = r.get("side", {})
+
+            atk = combat.get("total_attacks", 0)
+            trade = combat.get("trade_mean", 0.0)
+
+            trade_sum += trade * atk
+            trade_count += atk
+
+            total_damage += side.get("RL", {}).get("damage", 0)
+            total_taken += side.get("ENEMY", {}).get("damage", 0)
+
+        return {
+            "trade_mean": trade_sum / max(1, trade_count),
+            "damage_ratio": total_damage / max(1, total_taken),
+        }
+
+    # -------------------------------------------------
+    # ADVANCED
+    # -------------------------------------------------
+    def advanced_metrics(self):
+
+        agg = defaultdict(int)
+
+        for r in self.results:
+
+            adv = r.get("advanced", {})
+
+            agg["good"] += adv.get("good_trades", 0)
+            agg["bad"] += adv.get("bad_trades", 0)
+            agg["zero"] += adv.get("zero_damage_attacks", 0)
+            agg["in_range"] += adv.get("turns_in_range", 0)
+            agg["atk_range"] += adv.get("attacks_in_range", 0)
+
+        total = max(1, agg["good"] + agg["bad"])
+        range_total = max(1, agg["in_range"])
+
+        return {
+            "good_trade_rate": agg["good"] / total,
+            "bad_trade_rate": agg["bad"] / total,
+            "selectivity": agg["atk_range"] / range_total,
+            "zero_dmg_rate": agg["zero"] / total,
+        }
+
+    # -------------------------------------------------
+    # ✅ ACCIONES REALES (EVENT-BASED)
+    # -------------------------------------------------
+    def action_execution(self):
+
+        # Aggregate by side using per-episode L1 counters and L1 efficiency
+        by_side = {
+            "RL": defaultdict(lambda: {"count": 0, "damage": 0.0}),
+            "ENEMY": defaultdict(lambda: {"count": 0, "damage": 0.0}),
+        }
+
+        action_name_counts = defaultdict(int)
+
+        def map_action_type(action_class_name: str):
+            n = (action_class_name or "").lower()
+            if "wait" in n:
+                return "WAIT"
+            if "move" in n:
+                return "MOVE"
+
+            is_ranged = any(x in n for x in ("ranged", "indirect"))
+            is_direct = any(x in n for x in ("close", "direct", "assault", "attack", "fire", "shoot"))
+
+            if is_ranged and is_direct:
+                # hybrid: count in both DIRECT and INDIRECT (split damage later)
+                return ["DIRECT", "INDIRECT"]
+
+            if is_ranged:
+                return "INDIRECT"
+
+            if is_direct:
+                return "DIRECT"
+
+            return "OTHER"
+
+        for r in self.results:
+
+            l1 = r.get("l1", {})
+            l1_eff = r.get("l1_efficiency", {})
+            # collect raw action_class names for diagnostics
+            for side in ("RL", "ENEMY"):
+                for action_class in l1.get(side, {}).keys():
+                    action_name_counts[action_class] += l1.get(side, {}).get(action_class, 0)
+
+            for side in ("RL", "ENEMY"):
+                side_l1 = l1.get(side, {})
+                side_eff = l1_eff.get(side, {})
+
+                for action_class, count in side_l1.items():
+                    try:
+                        c = int(count)
+                    except Exception:
+                        c = 0
+
+                    if c <= 0:
+                        continue
+
+                    atype = map_action_type(action_class)
+
+                    dmg_per = 0.0
+                    if isinstance(side_eff, dict):
+                        dmg_per = side_eff.get(action_class, {}).get("damage_per_attack", 0.0)
+
+                    # support multiple categories (hybrid actions)
+                    if isinstance(atype, (list, tuple)):
+                        parts = len(atype)
+                        for t in atype:
+                            by_side[side][t]["count"] += c
+                            by_side[side][t]["damage"] += (dmg_per * c) / parts
+                    else:
+                        by_side[side][atype]["count"] += c
+                        by_side[side][atype]["damage"] += dmg_per * c
+
+        # Build normalized output
+        output = {}
+        for side, data in by_side.items():
+            output[side] = {}
+            for k, v in data.items():
+                c = v["count"]
+                output[side][k] = {
+                    "count": c,
+                    "damage_per_action": v["damage"] / c if c else 0.0,
+                }
+
+        # attach diagnostics of raw action class usage
+        self._action_class_counts = dict(action_name_counts)
+
+        return output
+
+    # -------------------------------------------------
+    # PRINT REPORT
+    # -------------------------------------------------
+    def print_report(self):
+
+        print("\n=== GLOBAL ===")
+        print(self.summary())
+
+        print("\n=== COMBAT ===")
+        print(self.combat_metrics())
+
+        print("\n=== ADVANCED ===")
+        for k, v in self.advanced_metrics().items():
+            print(f"{k}: {v:.3f}")
+
+        # ---------------- L2 ----------------
+        print("\n=== L2 POLICY PERFORMANCE ===")
+        for k, v in sorted(
+            compute_option_performance(self.results).items(),
+            key=lambda x: x[1]["usage"],
+            reverse=True
+        ):
+            print(f"{k}: usage={v['usage']} dmg/atk={v['damage_per_attack']:.3f}")
+
+        # ---------------- L3 ----------------
+        print("\n=== L3 POLICY PERFORMANCE ===")
+        for k, v in sorted(
+            compute_formation_performance(self.results).items(),
+            key=lambda x: x[1]["usage"],
+            reverse=True
+        ):
+            print(f"{k}: usage={v['usage']} dmg/atk={v['damage_per_attack']:.3f}")
+
+        # ---------------- mapping ----------------
         print("\n=== STRATEGY → OPTION ===")
+
+        mapping = normalize_strategy_option_map(
+            build_strategy_option_map(self.results)
+        )
+
         for strat, opts in mapping.items():
-            total = sum(opts.values())
             print(f"\n{strat}:")
-            for o, v in sorted(opts.items(), key=lambda x: x[1], reverse=True):
-                print(f"  {o}: {v} ({v/total:.2%})")
+            for opt, (count, ratio) in opts.items():
+                print(f"  {opt}: {count} ({ratio:.2%})")
 
-        # ✅ ADVANCED
-        print("\n=== ADVANCED METRICS ===")
+        # ---------------- ✅ NUEVO ----------------
+        print("\n=== ACTION EXECUTION (REAL) ===")
 
-        total_attacks = max(1, adv["total_attacks"])
-        range_total = max(1, adv["turns_in_range"])
+        actions = self.action_execution()
 
-        print(f"good_trade_rate:  {adv['good_trades'] / total_attacks:.3f}")
-        print(f"bad_trade_rate:   {adv['bad_trades'] / total_attacks:.3f}")
-        print(f"selectivity:      {adv['attacks_in_range'] / range_total:.3f}")
-        print(f"zero_dmg_rate:    {adv['zero_damage_attacks'] / total_attacks:.3f}")
+        # if structured per-side
+        if isinstance(actions, dict) and any(s in actions for s in ("RL", "ENEMY")):
+            for side in ("RL", "ENEMY"):
+                side_name = "US" if side == "RL" else "OTHER SIDE"
+                print(f"\n--- {side_name} ---")
+                side_actions = actions.get(side, {})
+                if not side_actions:
+                    print("  (no actions)")
+                    continue
+                for k, v in side_actions.items():
+                    print(
+                        f"  {k}: count={v.get('count', 0)} dmg/action={v.get('damage_per_action', 0.0):.3f}"
+                    )
+        else:
+            # legacy flat format
+            for k, v in (actions or {}).items():
+                print(
+                    f"{k}: count={v.get('count', 0)} dmg/action={v.get('damage_per_action', 0.0):.3f}"
+                )
+
+        # ----------------- DIAGNOSTIC: raw action class names -----------------
+        print("\n=== RAW ACTION_CLASS COUNTS (diagnostic) ===")
+        counts = getattr(self, "_action_class_counts", {})
+        if not counts:
+            print("(no action class data)")
+        else:
+            for k, v in sorted(counts.items(), key=lambda x: x[1], reverse=True)[:40]:
+                print(f"  {k}: {v}")
+
+        # ---------------- UNITS ----------------
+        print("\n=== UNIT ANALYSIS (L1) ===")
+
+        units = aggregate_units(self.results)
+        print_all_units(units, self.rl_side)
+
+
+================================================================================
+FILE: C:\repos\python\assault\assault_sim\evaluation\actions\attack_execution.py
+================================================================================
+
+from collections import defaultdict
+
+
+def compute_action_execution(results):
+    """
+    Real action-level execution analysis (per side)
+    """
+
+    data = defaultdict(lambda: {
+        "count": 0,
+        "damage": 0
+    })
+
+    for r in results:
+
+        side_data = r.get("side", {})
+        events = r.get("events", [])
+
+        for e in events:
+
+            if e.get("type") != "attack":
+                continue
+
+            atk_type = e.get("attack_type", "UNKNOWN")
+
+            # --------------------------
+            # NORMALIZE TYPES
+            # --------------------------
+            if atk_type is None:
+                atk_type = "UNKNOWN"
+
+            elif "INDIRECT" in atk_type.upper():
+                atk_type = "INDIRECT"
+
+            elif "DIRECT" in atk_type.upper():
+                atk_type = "DIRECT"
+
+            else:
+                atk_type = "OTHER"
+
+            data[atk_type]["count"] += 1
+            data[atk_type]["damage"] += e.get("damage", 0)
+
+        # --------------------------
+        # OPCIONAL → moves / waits
+        # --------------------------
+        # esto depende de si lo logueas en info
+        move_count = r.get("move_count", 0)
+        wait_count = r.get("wait_count", 0)
+
+        data["MOVE"]["count"] += move_count
+        data["WAIT"]["count"] += wait_count
+
+    # ---------------------------------
+    # NORMALIZE
+    # ---------------------------------
+    result = {}
+
+    for k, v in data.items():
+
+        c = v["count"]
+
+        result[k] = {
+            "count": c,
+            "damage_per_action": v["damage"] / c if c else 0
+        }
+
+    return result
+
+
+================================================================================
+FILE: C:\repos\python\assault\assault_sim\evaluation\actions\attack_types.py
+================================================================================
+
+from collections import defaultdict
+
+
+def compute_attack_type_performance(results):
+    """
+    Analyze performance by attack type (direct vs indirect)
+    """
+
+    data = defaultdict(lambda: {
+        "attacks": 0,
+        "damage": 0,
+        "kills": 0
+    })
+
+    for r in results:
+
+        units = r.get("units", {}).get("RL", {})
+
+        for uid, stats in units.items():
+
+            classification = stats.get("classification", "UNKNOWN")
+
+            attacks = stats.get("attacks", 0)
+            damage = stats.get("damage", 0)
+            kills = stats.get("kills", 0)
+
+            key = classification  # INDIRECT_FIRE_UNIT, STANDARD, etc.
+
+            data[key]["attacks"] += attacks
+            data[key]["damage"] += damage
+            data[key]["kills"] += kills
+
+    # normalize
+    result = {}
+
+    for k, v in data.items():
+
+        a = v["attacks"]
+
+        result[k] = {
+            "attacks": a,
+            "damage_per_attack": v["damage"] / a if a else 0,
+            "kills_per_attack": v["kills"] / a if a else 0
+        }
+
+    return result
 
 
 ================================================================================
@@ -6407,7 +6997,7 @@ def run_experiment():
         option_policy = OptionPolicy(policy)
 
         heuristic = TacticalPathHeuristic()
-        executor = OptionExecutor(heuristic)
+        executor = OptionExecutor(heuristic, avoid_bad_trades=False, adv_threshold=-0.5)
 
         hrl_controller = HRLController(
             option_policy=option_policy,
@@ -6517,6 +7107,231 @@ def run_experiment():
 if __name__ == "__main__":
     run_experiment()
 
+
+
+================================================================================
+FILE: C:\repos\python\assault\assault_sim\evaluation\policy\l2_options.py
+================================================================================
+
+from collections import defaultdict
+
+
+def compute_option_performance(results):
+    """
+    L2 analysis: performance per tactical option
+    """
+
+    data = defaultdict(lambda: {
+        "usage": 0,
+        "damage": 0,
+        "attacks": 0,
+        "kills": 0
+    })
+
+    for r in results:
+
+        option_counts = r.get("option_counts", {})
+        side = r.get("side", {}).get("RL", {})
+
+        dmg = side.get("damage", 0)
+        atk = side.get("attacks", 0)
+        kills = side.get("kills", 0)
+
+        total_opts = sum(option_counts.values()) or 1
+
+        for opt, count in option_counts.items():
+
+            ratio = count / total_opts
+
+            data[opt]["usage"] += count
+            data[opt]["damage"] += dmg * ratio
+            data[opt]["attacks"] += atk * ratio
+            data[opt]["kills"] += kills * ratio
+
+    # normalize
+    result = {}
+
+    for opt, v in data.items():
+
+        attacks = v["attacks"]
+
+        result[opt] = {
+            "usage": v["usage"],
+            "damage_per_attack": v["damage"] / attacks if attacks else 0,
+            "kills_per_attack": v["kills"] / attacks if attacks else 0
+        }
+
+    return result
+
+
+
+================================================================================
+FILE: C:\repos\python\assault\assault_sim\evaluation\policy\l3_formations.py
+================================================================================
+
+from collections import defaultdict
+
+
+def compute_formation_performance(results):
+    """
+    L3 analysis: performance per strategy / formation
+    """
+
+    data = defaultdict(lambda: {
+        "usage": 0,
+        "damage": 0,
+        "attacks": 0,
+        "kills": 0
+    })
+
+    for r in results:
+
+        formation_counts = r.get("formation_counts", {})
+        side = r.get("side", {}).get("RL", {})
+
+        dmg = side.get("damage", 0)
+        atk = side.get("attacks", 0)
+        kills = side.get("kills", 0)
+
+        total_forms = sum(formation_counts.values()) or 1
+
+        for f, count in formation_counts.items():
+
+            ratio = count / total_forms
+
+            data[f]["usage"] += count
+            data[f]["damage"] += dmg * ratio
+            data[f]["attacks"] += atk * ratio
+            data[f]["kills"] += kills * ratio
+
+    # normalize
+    result = {}
+
+    for f, v in data.items():
+
+        attacks = v["attacks"]
+
+        result[f] = {
+            "usage": v["usage"],
+            "damage_per_attack": v["damage"] / attacks if attacks else 0,
+            "kills_per_attack": v["kills"] / attacks if attacks else 0
+        }
+
+    return result
+
+
+================================================================================
+FILE: C:\repos\python\assault\assault_sim\evaluation\policy\mapping.py
+================================================================================
+
+from collections import defaultdict
+
+
+def build_strategy_option_map(results):
+    """
+    Mapping L3 → L2:
+    For each formation (strategy), which options are used
+    """
+
+    mapping = defaultdict(lambda: defaultdict(int))
+
+    for r in results:
+
+        strat_map = r.get("strategy_option_map", {})
+
+        for strategy, options in strat_map.items():
+            for opt, count in options.items():
+                mapping[strategy][opt] += count
+
+    return mapping
+
+
+def normalize_strategy_option_map(mapping):
+    """
+    Convert counts into percentages
+    """
+
+    normalized = {}
+
+    for strat, opts in mapping.items():
+
+        total = sum(opts.values()) or 1
+
+        normalized[strat] = {
+            opt: (count, count / total)
+            for opt, count in opts.items()
+        }
+
+    return normalized
+
+
+================================================================================
+FILE: C:\repos\python\assault\assault_sim\evaluation\units\unit_aggregation.py
+================================================================================
+
+from collections import defaultdict
+
+
+def aggregate_units(results):
+    """
+    L1: Aggregate all unit-level statistics
+    """
+
+    units = defaultdict(lambda: {
+        "attacks": 0,
+        "damage": 0,
+        "kills": 0,
+        "side": None,
+        "category": None,
+        "classification": None,
+    })
+
+    for r in results:
+        unit_data = r.get("units", {})
+
+        for side, side_units in unit_data.items():
+            for uid, stats in side_units.items():
+
+                u = units[uid]
+
+                u["attacks"] += stats.get("attacks", 0)
+                u["damage"] += stats.get("damage", 0)
+                u["kills"] += stats.get("kills", 0)
+
+                if u["side"] is None:
+                    u["side"] = side
+                    u["category"] = stats.get("category")
+                    u["classification"] = stats.get("classification")
+
+    return units
+
+
+================================================================================
+FILE: C:\repos\python\assault\assault_sim\evaluation\units\unit_reporting.py
+================================================================================
+
+def print_all_units(units, rl_side):
+    """
+    Print all units grouped by side dynamically
+    """
+
+    print(f"\n=== ALL UNITS ({rl_side}) ===")
+
+    for uid, u in sorted(units.items()):
+        if u["side"] == "RL":
+            print(
+                f"{uid} | {u['category']} | {u['classification']} | "
+                f"dmg={u['damage']} atk={u['attacks']} kills={u['kills']}"
+            )
+
+    print("\n=== ALL UNITS (OTHER SIDE) ===")
+
+    for uid, u in sorted(units.items()):
+        if u["side"] != "RL":
+            print(
+                f"{uid} | {u['category']} | {u['classification']} | "
+                f"dmg={u['damage']} atk={u['attacks']} kills={u['kills']}"
+            )
 
 
 ================================================================================
@@ -7546,6 +8361,46 @@ class ProgressiveReward(BaseReward):
         reward -= 0.02
 
         return max(min(reward, 10.0), -10.0)
+
+
+================================================================================
+FILE: C:\repos\python\assault\assault_sim\rewards\shaped_reward.py
+================================================================================
+
+from .progressive_reward import ProgressiveReward
+
+
+class ShapedReward(ProgressiveReward):
+    """Wrapper reward that composes ProgressiveReward and applies
+    additional shaping: stronger penalty for zero-damage attacks and
+    an extra bonus for clearly positive trades.
+    """
+
+    def __init__(self, rl_side=None, zero_damage_penalty=0.6, extra_good_trade_bonus=0.2):
+        super().__init__(rl_side=rl_side)
+        self.zero_damage_penalty = zero_damage_penalty
+        self.extra_good_trade_bonus = extra_good_trade_bonus
+
+    def compute(self, *args, **kwargs):
+        # base reward
+        reward = super().compute(*args, **kwargs)
+
+        info = kwargs.get("info") or (args[3] if len(args) > 3 else {})
+        damage = info.get("rl_damage", 0)
+        damage_taken = info.get("enemy_damage", 0)
+
+        trade = damage - damage_taken
+
+        # stronger penalty for zero-damage attacks
+        if trade == 0 and damage == 0 and info.get("is_wait") is False:
+            reward -= self.zero_damage_penalty
+
+        # extra bonus for clear good trades
+        if trade > 0:
+            reward += self.extra_good_trade_bonus
+
+        return reward
+
 
 
 ================================================================================
@@ -12102,12 +12957,16 @@ import torch.optim as optim
 import multiprocessing as mp
 import numpy as np
 import time
+from datetime import datetime
+import socket
+from torch.utils.tensorboard import SummaryWriter
 from pathlib import Path
 
 from assault_sim.config.ppo_config import PPOConfig
 from assault_sim.rl.policy_net import PolicyNet
 from assault_sim.rl.tactical_options import TacticalOption
 from assault_sim.engine.env_factory import make_env
+from assault_sim.rewards.shaped_reward import ShapedReward
 
 from assault_sim.train.worker import worker_loop
 from assault_sim.train.ppo_schedule import ppo_schedule
@@ -12118,7 +12977,7 @@ MODEL_DIR = Path("C:/repos/python/assault/models")
 LATEST_PATH = MODEL_DIR / "latest.pt"
 
 
-def main():
+def main(reward_fn=None):
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f">>> Using device: {device}")
@@ -12126,7 +12985,10 @@ def main():
     config_path = Path("C:/repos/python/assault/assault_sim/config/sim_config.yaml")
     scenario = "phase01_seq001_initial_contact"
 
-    env = make_env(config_path, PPOConfig.RL_SIDE, scenario)
+    # reward shaping: allow injecting a custom reward_fn (used by grid runs)
+    if reward_fn is None:
+        reward_fn = ShapedReward(rl_side=PPOConfig.RL_SIDE)
+    env = make_env(config_path, PPOConfig.RL_SIDE, scenario, reward_fn=reward_fn)
     obs = env.reset()
     input_dim = obs.shape[0]
 
@@ -12136,6 +12998,10 @@ def main():
         input_dim=input_dim,
         num_options=len(TacticalOption)
     ).to(device)
+
+    # TensorBoard writer
+    run_name = f"ppo_{datetime.utcnow().strftime('%Y%m%dT%H%M%SZ')}_{socket.gethostname()}"
+    writer = SummaryWriter(log_dir=(MODEL_DIR / "runs" / run_name))
 
     optimizer = optim.Adam(policy.parameters(), lr=PPOConfig.LR)
 
@@ -12154,7 +13020,7 @@ def main():
     for _ in range(PPOConfig.NUM_ENVS):
         p = mp.Process(
             target=worker_loop,
-            args=(rollout_queue, config_path, scenario, weights_queue, None),
+            args=(rollout_queue, config_path, scenario, weights_queue, None, reward_fn),
         )
         p.daemon = True
         p.start()
@@ -12275,8 +13141,13 @@ def main():
             )
             samples_per_sec = samples / elapsed if elapsed > 0 else 0.0
 
+            avg_reward = float(np.mean(combined['rewards']))
             print(f"[UPDATE {rollout_idx}] loss={loss:.3f}")
-            print(f"avg_reward={np.mean(combined['rewards']):.3f}")
+            print(f"avg_reward={avg_reward:.3f}")
+            # TensorBoard scalars
+            writer.add_scalar('train/loss', float(loss), rollout_idx)
+            writer.add_scalar('train/avg_reward', avg_reward, rollout_idx)
+            writer.add_scalar('train/entropy_coef', float(entropy_coef), rollout_idx)
             print(f"UPDATES/sec: {throughput:.2f}")
             print(f"SAMPLES/sec: {samples_per_sec:.0f}")
 
@@ -12286,6 +13157,7 @@ def main():
                 if stats["count"] > 0:
                     avg = stats["sum"] / stats["count"]
                     print(f"  {action}: avg={avg:.3f}")
+                    writer.add_scalar(f'reward_by_action/{action}', float(avg), rollout_idx)
 
             last_log_time = current_time
             last_update = rollout_idx
@@ -12303,6 +13175,7 @@ def main():
                 except:
                     name = str(u)
                 print(f"  {name}: {c} ({100*c/total:.1f}%)")
+                writer.add_scalar(f'action_usage/{name}', int(c), rollout_idx)
 
             # ATTACK MODES
             attack_modes = combined["attack_modes"]
@@ -12313,10 +13186,14 @@ def main():
 
             for u, c in zip(unique_a, counts_a):
                 print(f"  mode {u}: {c} ({100*c/total_a:.1f}%)")
+                writer.add_scalar(f'attack_modes/mode_{u}', int(c), rollout_idx)
 
             print("-" * 50)
 
         rollout_idx += 1
+
+    # close writer
+    writer.close()
 
 
 if __name__ == "__main__":
@@ -12351,14 +13228,17 @@ def worker_loop(
     scenario,
     weights_queue,
     progress_queue,
+    reward_fn=None,
 ):
 
+    torch.set_num_threads(1)
+    torch.set_num_interop_threads(1)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     # -------------------------------------------------
     # ENV
     # -------------------------------------------------
-    env = make_env(config_path, PPOConfig.RL_SIDE, scenario)
+    env = make_env(config_path, PPOConfig.RL_SIDE, scenario, reward_fn=reward_fn)
 
     obs = env.reset()
     input_dim = obs.shape[0]
@@ -12370,6 +13250,7 @@ def worker_loop(
         input_dim=input_dim,
         num_options=len(TacticalOption)
     ).to(device)
+    policy.eval()
 
     # -------------------------------------------------
     # CONTROLLER
@@ -12399,11 +13280,12 @@ def worker_loop(
             policy.load_state_dict(state_dict)
 
         # ✅ Rollout normal
-        rollout = collect_rollout(
-            env,
-            controller,
-            max_steps=PPOConfig.ROLLOUT_STEPS
-        )
+        with torch.no_grad():
+            rollout = collect_rollout(
+                env,
+                controller,
+                max_steps=PPOConfig.ROLLOUT_STEPS
+            )
 
         # =================================================
         # ✅ 🔥 NUEVO: REWARD POR ACCIÓN

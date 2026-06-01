@@ -182,6 +182,7 @@ class GameSession:
         self.env: Optional[SimEnv] = None
         self.scenario_id: Optional[str] = None  # ✅ nuevo
         self.sides_config = {}
+        self.last_events = []
 
     # ---------------------------------------------
     def start(self, scenario_id: str, sides: Dict[str, str]):
@@ -212,7 +213,19 @@ class GameSession:
             debug_config=DebugConfig(enabled=True)
         )
 
+        self.last_events = []
+        if self.env.event_bus:
+            def on_event(event):
+                # ✅ Only collect ACTION_EFFECT events (combat results with serializable data)
+                # UNIT_MOVED / MAP_STATE contain HexCoord objects that break JSON serialization
+                if event.get("type") == "ACTION_EFFECT":
+                    self.last_events.append(event)
+            self.env.event_bus.subscribe(on_event)
+
         self.env.reset()
+
+        # ✅ Discard startup events (contain non-JSON-serializable objects like HexCoord)
+        self.last_events.clear()
 
     # ---------------------------------------------
     def get_state(self) -> Dict[str, Any]:
@@ -297,7 +310,10 @@ class GameSession:
         activated_units = []
         if hasattr(runtime, "activated_units"):
             activated_units = list(runtime.activated_units)
-        return {
+        copied_events = self.last_events.copy()
+        self.last_events.clear()
+
+        payload = {
             "scenario_name": getattr(self.env.scenario, "name", None),
 
             "turn": getattr(state, "turn", 0),
@@ -312,7 +328,9 @@ class GameSession:
             "units": units,
             "sides": self.sides_config,
             "activated_units": activated_units,
+            "last_events": copied_events,
         }
+        return payload
 
 
 ================================================================================
@@ -406,6 +424,8 @@ app.add_middleware(
     allow_origins=[
         "http://localhost:5173",
         "http://127.0.0.1:5173",
+        "http://localhost:5174",
+        "http://127.0.0.1:5174",
     ],
     allow_credentials=True,
     allow_methods=["*"],
@@ -469,11 +489,11 @@ def explain_activation(request: ExplainActivationRequest):
 # =====================================================
 
 @app.get("/api/ui/scenarios/{scenario_id}")
-def get_scenario(scenario_id: str):
+async def get_scenario(scenario_id: str):
     try:
         # ✅ iniciar sesión
         if game_session.env is None:
-            game_session.start(scenario_id)
+            game_session.start(scenario_id, {})
 
         # ✅ devolver estado real completo
         return game_session.get_state()

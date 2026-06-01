@@ -366,3 +366,51 @@ def game_actions(req: UnitActionsRequest):
     except Exception as e:
         print("[ERROR][actions] exception:", str(e))
         raise HTTPException(status_code=500, detail=str(e))
+    
+
+@app.post("/api/game/ai-turn")
+def game_ai_turn():
+    if game_session.env is None:
+        return {"error": "no game"}
+
+    env = game_session.env
+
+    # ✅ reutilizar engine si quieres (mejor rendimiento)
+    if not hasattr(game_session, "decision_engine"):
+        game_session.decision_engine = DecisionEngine()
+
+    decision_engine = game_session.decision_engine
+
+    steps = []
+
+    while True:
+        runtime = env.runtime
+
+        active_side = getattr(runtime, "active_side", None)
+        activated = getattr(runtime, "activated_units", set())
+
+        print(f"[AI TURN] side={active_side} activated={len(activated)}")
+
+        # ✅ condición de parada:
+        # si ya no hay unidades disponibles → fin turno
+        result = decision_engine.compute_intent(env)
+
+        if result is None:
+            print("[AI TURN] no more actions → end turn")
+            break
+
+        unit, action = result
+
+        print(f"[AI] unit={unit.unit_id} action={action.__class__.__name__}")
+
+        env.step(action)
+
+        steps.append({
+            "unit": unit.unit_id,
+            "action": action.__class__.__name__
+        })
+
+    return {
+        "state": game_session.get_state(),
+        "steps": steps
+    }

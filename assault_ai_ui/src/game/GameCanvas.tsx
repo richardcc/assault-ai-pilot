@@ -50,14 +50,14 @@ export default function GameCanvas({
   const showCoordsRef = useRef(false);
 
   const [hoverHex, setHoverHex] = useState<{ q: number, r: number } | null>(null);
+  const [orderHoverTarget, setOrderHoverTarget] = useState<any>(null);
 
   const lastStateRef = useRef<any>(null);
 
-  // 💣 FIX CLAVE: refs para evitar stale state
   const selectedUnitRef = useRef<string | null>(null);
   const availableMovesRef = useRef<any[]>([]);
   const fxLayerRef = useRef<PIXI.Container | null>(null);
-  
+
   useEffect(() => {
     selectedUnitRef.current = selectedUnitId;
   }, [selectedUnitId]);
@@ -74,15 +74,12 @@ export default function GameCanvas({
       setGameData(state);
       lastStateRef.current = state;
 
-      // 💣 FIX: asegurar que Pixi sync se ejecuta en el siguiente tick
       setTimeout(() => {
         unitLayerRef.current?.sync(state);
       }, 0);
     };
 
   }, [])
-
-  
 
   // ---------------------------------------------
   // VISIBILITY
@@ -166,7 +163,7 @@ export default function GameCanvas({
       });
 
       // ---------------------------------------------
-      // 💣 CLICK MAP
+      // CLICK MAP
       // ---------------------------------------------
       world.on("pointerdown", (event: any) => {
 
@@ -204,13 +201,10 @@ export default function GameCanvas({
       app.stage.addChild(world);
       worldRef.current = world;
 
-      // 💣 FX LAYER (NUEVO)
+      // FX layer
       const fxLayer = new PIXI.Container();
       fxLayer.label = "fxLayer";
-
-      // MUY IMPORTANTE → sobre el world
       app.stage.addChild(fxLayer);
-
       fxLayerRef.current = fxLayer;
 
       const background = new PIXI.Container();
@@ -225,6 +219,13 @@ export default function GameCanvas({
       const highlightLayer = new HighlightLayer(world);
       highlightLayerRef.current = highlightLayer;
 
+      // ✅ 🔥 NUEVO: conectar con GameController
+      const controller = (window as any).gameController;
+      if (controller) {
+        controller.setHighlightLayer(highlightLayer);
+        console.log("✅ HighlightLayer connected to GameController");
+      }
+
       backgroundRef.current = background;
       gridRef.current = grid;
 
@@ -236,6 +237,30 @@ export default function GameCanvas({
       // ---------------------------------------------
       (window as any).onUnitClick = (unit: any) => {
         const data = lastStateRef.current;
+        const currentSelected = selectedUnitRef.current;
+        const currentMoves = availableMovesRef.current || [];
+
+        const attackMove = currentSelected
+          ? currentMoves.find((m: any) =>
+              m.kind === "attack" &&
+              (m.target_id === unit.id || (m.q === unit.q && m.r === unit.r))
+            )
+          : null;
+
+        if (attackMove && currentSelected) {
+          handleHexClick(
+            attackMove.q ?? unit.q,
+            attackMove.r ?? unit.r,
+            currentSelected,
+            currentMoves,
+            unitLayerRef,
+            appRef,
+            fxLayerRef,
+            setAvailableMoves,
+            setSelectedUnitId
+          );
+          return;
+        }
 
         setSelectedUnitId(unit.id);
 
@@ -247,7 +272,47 @@ export default function GameCanvas({
       };
 
       // ---------------------------------------------
-      // 💣 HEX CLICK (FIXED con refs)
+      // ORDER HOVER / EXECUTE
+      // ---------------------------------------------
+      (window as any).onOrderHover = (order: any) => {
+        setOrderHoverTarget(order);
+      };
+
+      (window as any).onOrderLeave = () => {
+        setOrderHoverTarget(null);
+      };
+
+      (window as any).executeOrder = async (order: any) => {
+        const unitId = order.unit_id || order.unitId;
+        const currentMoves = availableMovesRef.current || [];
+        const targetQ = order.target_q ?? order.q;
+        const targetR = order.target_r ?? order.r;
+
+        if (!unitId || targetQ == null || targetR == null) {
+          console.warn("⛔ Invalid order execute", order);
+          return;
+        }
+
+        if (selectedUnitRef.current !== unitId) {
+          selectedUnitRef.current = unitId;
+          setSelectedUnitId(unitId);
+        }
+
+        await handleHexClick(
+          targetQ,
+          targetR,
+          unitId,
+          currentMoves,
+          unitLayerRef,
+          appRef,
+          fxLayerRef,
+          setAvailableMoves,
+          setSelectedUnitId
+        );
+      };
+
+      // ---------------------------------------------
+      // HEX CLICK
       // ---------------------------------------------
       (window as any).onHexClick = (q: number, r: number) => {
         handleHexClick(
@@ -257,7 +322,7 @@ export default function GameCanvas({
           availableMovesRef.current,
           unitLayerRef,
           appRef,
-          fxLayerRef, // 💣 AÑADIDO
+          fxLayerRef,
           setAvailableMoves,
           setSelectedUnitId
         );
@@ -303,10 +368,11 @@ export default function GameCanvas({
       lastStateRef.current,
       selectedUnitId,
       availableMoves,
-      hoverHex
+      hoverHex,
+      orderHoverTarget
     );
 
-  }, [availableMoves, selectedUnitId, hoverHex]);
+  }, [availableMoves, selectedUnitId, hoverHex, orderHoverTarget]);
 
   return (
     <div style={{ flex: 1, width: "100%", height: "100%", minHeight: 0, position: "relative", display: "flex", flexDirection: "column" }}>

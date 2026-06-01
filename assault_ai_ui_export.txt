@@ -4584,6 +4584,190 @@ US Bazooka Team 43b.png=@US Bazooka Team 43b.png,0
 
 
 ================================================================================
+FILE: C:\repos\python\assault\assault_ai_ui\public\assets\sfx\move\stepdirt_1.wav
+================================================================================
+
+
+ERROR leyendo C:\repos\python\assault\assault_ai_ui\public\assets\sfx\move\stepdirt_1.wav: 'utf-8' codec can't decode byte 0xac in position 25: invalid start byte
+
+
+================================================================================
+FILE: C:\repos\python\assault\assault_ai_ui\public\assets\sfx\move\stepdirt_2.wav
+================================================================================
+
+
+ERROR leyendo C:\repos\python\assault\assault_ai_ui\public\assets\sfx\move\stepdirt_2.wav: 'utf-8' codec can't decode byte 0xac in position 25: invalid start byte
+
+
+================================================================================
+FILE: C:\repos\python\assault\assault_ai_ui\public\assets\sfx\move\stepdirt_3.wav
+================================================================================
+
+
+ERROR leyendo C:\repos\python\assault\assault_ai_ui\public\assets\sfx\move\stepdirt_3.wav: 'utf-8' codec can't decode byte 0xaa in position 4: invalid start byte
+
+
+================================================================================
+FILE: C:\repos\python\assault\assault_ai_ui\public\assets\sfx\move\stepdirt_4.wav
+================================================================================
+
+
+ERROR leyendo C:\repos\python\assault\assault_ai_ui\public\assets\sfx\move\stepdirt_4.wav: 'utf-8' codec can't decode byte 0xac in position 25: invalid start byte
+
+
+================================================================================
+FILE: C:\repos\python\assault\assault_ai_ui\public\assets\sfx\move\stepdirt_5.wav
+================================================================================
+
+
+ERROR leyendo C:\repos\python\assault\assault_ai_ui\public\assets\sfx\move\stepdirt_5.wav: 'utf-8' codec can't decode byte 0xac in position 25: invalid start byte
+
+
+================================================================================
+FILE: C:\repos\python\assault\assault_ai_ui\public\assets\sfx\move\stepdirt_6.wav
+================================================================================
+
+
+ERROR leyendo C:\repos\python\assault\assault_ai_ui\public\assets\sfx\move\stepdirt_6.wav: 'utf-8' codec can't decode byte 0xac in position 25: invalid start byte
+
+
+================================================================================
+FILE: C:\repos\python\assault\assault_ai_ui\public\assets\sfx\move\stepdirt_7.wav
+================================================================================
+
+
+ERROR leyendo C:\repos\python\assault\assault_ai_ui\public\assets\sfx\move\stepdirt_7.wav: 'utf-8' codec can't decode byte 0xac in position 25: invalid start byte
+
+
+================================================================================
+FILE: C:\repos\python\assault\assault_ai_ui\public\assets\sfx\move\stepdirt_8.wav
+================================================================================
+
+
+ERROR leyendo C:\repos\python\assault\assault_ai_ui\public\assets\sfx\move\stepdirt_8.wav: 'utf-8' codec can't decode byte 0xac in position 25: invalid start byte
+
+
+================================================================================
+FILE: C:\repos\python\assault\assault_ai_ui\public\assets\sfx\move\stepsnow_1.wav
+================================================================================
+
+
+ERROR leyendo C:\repos\python\assault\assault_ai_ui\public\assets\sfx\move\stepsnow_1.wav: 'utf-8' codec can't decode byte 0xac in position 25: invalid start byte
+
+
+================================================================================
+FILE: C:\repos\python\assault\assault_ai_ui\public\assets\sfx\move\stepsnow_2.wav
+================================================================================
+
+
+ERROR leyendo C:\repos\python\assault\assault_ai_ui\public\assets\sfx\move\stepsnow_2.wav: 'utf-8' codec can't decode byte 0xac in position 25: invalid start byte
+
+
+================================================================================
+FILE: C:\repos\python\assault\assault_ai_ui\public\assets\sfx\move\stepstone_1.wav
+================================================================================
+
+
+ERROR leyendo C:\repos\python\assault\assault_ai_ui\public\assets\sfx\move\stepstone_1.wav: 'utf-8' codec can't decode byte 0xac in position 25: invalid start byte
+
+
+================================================================================
+FILE: C:\repos\python\assault\assault_ai_ui\public\assets\sfx\move\stepstone_2.wav
+================================================================================
+
+
+ERROR leyendo C:\repos\python\assault\assault_ai_ui\public\assets\sfx\move\stepstone_2.wav: 'utf-8' codec can't decode byte 0xac in position 25: invalid start byte
+
+
+================================================================================
+FILE: C:\repos\python\assault\assault_ai_ui\public\assets\sfx\move\stepstone_3.wav
+================================================================================
+
+
+ERROR leyendo C:\repos\python\assault\assault_ai_ui\public\assets\sfx\move\stepstone_3.wav: 'utf-8' codec can't decode byte 0x84 in position 5: invalid start byte
+
+
+================================================================================
+FILE: C:\repos\python\assault\assault_ai_ui\public\assets\sfx\move\stepstone_4.wav
+================================================================================
+
+
+ERROR leyendo C:\repos\python\assault\assault_ai_ui\public\assets\sfx\move\stepstone_4.wav: 'utf-8' codec can't decode byte 0x84 in position 5: invalid start byte
+
+
+================================================================================
+FILE: C:\repos\python\assault\assault_ai_ui\public\assets\sfx\move\stepstone_5.wav
+================================================================================
+
+
+ERROR leyendo C:\repos\python\assault\assault_ai_ui\public\assets\sfx\move\stepstone_5.wav: 'utf-8' codec can't decode byte 0x84 in position 5: invalid start byte
+
+
+================================================================================
+FILE: C:\repos\python\assault\assault_ai_ui\public\assets\sfx\move\stepstone_6.wav
+================================================================================
+
+
+ERROR leyendo C:\repos\python\assault\assault_ai_ui\public\assets\sfx\move\stepstone_6.wav: 'utf-8' codec can't decode byte 0x84 in position 5: invalid start byte
+
+
+================================================================================
+FILE: C:\repos\python\assault\assault_ai_ui\public\assets\sfx\move\stepstone_7.wav
+================================================================================
+
+
+ERROR leyendo C:\repos\python\assault\assault_ai_ui\public\assets\sfx\move\stepstone_7.wav: 'utf-8' codec can't decode byte 0x84 in position 5: invalid start byte
+
+
+================================================================================
+FILE: C:\repos\python\assault\assault_ai_ui\public\assets\sfx\move\stepstone_8.wav
+================================================================================
+
+
+ERROR leyendo C:\repos\python\assault\assault_ai_ui\public\assets\sfx\move\stepstone_8.wav: 'utf-8' codec can't decode byte 0x84 in position 5: invalid start byte
+
+
+================================================================================
+FILE: C:\repos\python\assault\assault_ai_ui\public\assets\sfx\move\stepwater_1.wav
+================================================================================
+
+
+ERROR leyendo C:\repos\python\assault\assault_ai_ui\public\assets\sfx\move\stepwater_1.wav: 'utf-8' codec can't decode byte 0xea in position 5: invalid continuation byte
+
+
+================================================================================
+FILE: C:\repos\python\assault\assault_ai_ui\public\assets\sfx\move\stepwater_2.wav
+================================================================================
+
+
+ERROR leyendo C:\repos\python\assault\assault_ai_ui\public\assets\sfx\move\stepwater_2.wav: 'utf-8' codec can't decode byte 0xac in position 25: invalid start byte
+
+
+================================================================================
+FILE: C:\repos\python\assault\assault_ai_ui\public\assets\sfx\move\stepwood_1.wav
+================================================================================
+
+
+ERROR leyendo C:\repos\python\assault\assault_ai_ui\public\assets\sfx\move\stepwood_1.wav: 'utf-8' codec can't decode byte 0xac in position 25: invalid start byte
+
+
+================================================================================
+FILE: C:\repos\python\assault\assault_ai_ui\public\assets\sfx\move\stepwood_2.wav
+================================================================================
+
+
+ERROR leyendo C:\repos\python\assault\assault_ai_ui\public\assets\sfx\move\stepwood_2.wav: 'utf-8' codec can't decode byte 0xac in position 25: invalid start byte
+
+
+================================================================================
+FILE: C:\repos\python\assault\assault_ai_ui\public\assets\sfx\rifle-gunshot\freesound_community-rifle-gunshot-99749.mp3
+================================================================================
+
+
+ERROR leyendo C:\repos\python\assault\assault_ai_ui\public\assets\sfx\rifle-gunshot\freesound_community-rifle-gunshot-99749.mp3: 'utf-8' codec can't decode byte 0xff in position 0: invalid start byte
+
+
+================================================================================
 FILE: C:\repos\python\assault\assault_ai_ui\roadmap\01_ROADMAP.md
 ================================================================================
 
@@ -5443,6 +5627,7 @@ FILE: C:\repos\python\assault\assault_ai_ui\src\App.css
    FOOTER (ROSTER TROOP DOCK)
    ========================================================================= */
 .footer {
+  position: relative;
   height: 140px;
   background: rgba(12, 14, 23, 0.9);
   backdrop-filter: blur(14px);
@@ -5454,6 +5639,159 @@ FILE: C:\repos\python\assault\assault_ai_ui\src\App.css
   flex-direction: column;
   justify-content: center;
   z-index: 10;
+}
+
+.combat-panel {
+  position: absolute;
+  right: 24px;
+  bottom: 14px;
+  width: 280px;
+  background: rgba(10, 11, 18, 0.95);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 10px;
+  padding: 12px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
+  color: var(--text-primary);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  font-size: 12px;
+  opacity: 0;
+  transform: translateY(18px) scale(0.96);
+  transition: opacity 0.25s ease, transform 0.25s ease;
+}
+
+.combat-panel-visible {
+  opacity: 1;
+  transform: translateY(0) scale(1);
+}
+
+.combat-header {
+  margin-bottom: 8px;
+}
+
+.combat-header-title {
+  font-size: 13px;
+  font-weight: 700;
+  margin-bottom: 4px;
+  color: var(--neon-cyan);
+}
+
+.combat-focus {
+  line-height: 1.4;
+}
+
+.combat-meta {
+  font-size: 10px;
+  opacity: 0.75;
+  color: var(--text-secondary);
+}
+
+.combat-dice-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin-top: 8px;
+}
+
+.combat-dice-col {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.combat-side-title {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  color: var(--text-bright);
+}
+
+.combat-row {
+  margin-bottom: 4px;
+}
+
+.combat-row-dice {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  align-items: center;
+}
+
+.combat-die {
+  width: 22px;
+  height: 22px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  color: var(--text-bright);
+  font-size: 11px;
+  font-weight: 700;
+  overflow: hidden;
+  backface-visibility: hidden;
+  transform-style: preserve-3d;
+}
+
+.combat-die img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  display: block;
+  backface-visibility: hidden;
+}
+
+.combat-die.rolling {
+  animation: dice-roll 0.65s ease-in-out;
+  transform-origin: center;
+}
+
+.combat-die.hit {
+  box-shadow: 0 0 10px rgba(255, 204, 0, 0.35);
+}
+
+.combat-die.critical {
+  box-shadow: 0 0 10px rgba(255, 85, 85, 0.35);
+}
+
+@keyframes dice-roll {
+  0% {
+    transform: translateY(0) rotate(0deg) scale(1);
+  }
+  30% {
+    transform: translateY(-3px) rotate(20deg) scale(1.05);
+  }
+  60% {
+    transform: translateY(2px) rotate(-10deg) scale(0.98);
+  }
+  100% {
+    transform: translateY(0) rotate(0deg) scale(1);
+  }
+}
+
+.combat-body {
+  margin-top: 10px;
+}
+
+.combat-damage {
+  font-size: 11px;
+  color: #ffd63d;
+  margin-top: 4px;
+}
+
+.combat-crit {
+  font-size: 11px;
+  color: #ff9b72;
+  margin-top: 4px;
+}
+
+.combat-kill {
+  font-size: 12px;
+  font-weight: 700;
+  color: #ff6f6f;
+  margin-top: 6px;
 }
 
 /* ==========================================================================
@@ -5529,6 +5867,15 @@ FILE: C:\repos\python\assault\assault_ai_ui\src\App.css
   z-index: 1;
 }
 
+.trooper-card-img-wrapper {
+  position: relative;
+  width: 44px;
+  height: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
 .trooper-card-img {
   width: 44px;
   height: 44px;
@@ -5536,6 +5883,17 @@ FILE: C:\repos\python\assault\assault_ai_ui\src\App.css
   margin-bottom: 1px;
   filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.5));
   z-index: 2;
+}
+
+.trooper-card-dead-marker {
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  width: 28px;
+  height: 28px;
+  object-fit: contain;
+  z-index: 3;
+  pointer-events: none;
 }
 
 .trooper-card-label {
@@ -5613,6 +5971,16 @@ FILE: C:\repos\python\assault\assault_ai_ui\src\App.css
   cursor: not-allowed;
 }
 
+.trooper-card.dead {
+  border-color: rgba(255, 56, 56, 0.45);
+  background: rgba(255, 56, 56, 0.08);
+}
+
+.trooper-card.dead .trooper-card-label,
+.trooper-card.dead .trooper-card-id {
+  color: #ff9e9e;
+}
+
 .trooper-card.selected {
   border-color: var(--neon-cyan) !important;
   background: rgba(0, 240, 255, 0.1) !important;
@@ -5659,13 +6027,15 @@ FILE: C:\repos\python\assault\assault_ai_ui\src\App.css
 FILE: C:\repos\python\assault\assault_ai_ui\src\App.tsx
 ================================================================================
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import "./App.css";
 import GameCanvas from "./game/GameCanvas";
 import { gameController } from "./game/gameControllerInstance";
 import { UnitStatePanel } from "./game/ui/UnitStatePanel";
+import { CombatPanel } from "./game/ui/CombatPanel";
 import { unitImages } from "./game/config/unitImages";
 import { sides } from "./game/config/sides";
+import { formatCoords } from "./game/render/hexGridRenderer";
 
 type LogEntry = {
   type: string;
@@ -5684,6 +6054,7 @@ type Unit = {
 
 function App() {
   const [gameData, setGameData] = useState<any>(null);
+  const [deadUnits, setDeadUnits] = useState<Unit[]>([]);
   const [selectedUnitId, setSelectedUnitId] = useState<string | null>(null);
   const [availableMoves, setAvailableMoves] = useState<any[]>([]);
   const [logEvents, setLogEvents] = useState<LogEntry[]>([]);
@@ -5691,6 +6062,7 @@ function App() {
 
   const lastTurnRef = useRef<number>(-1);
   const lastActiveSideRef = useRef<string>("");
+  const prevUnitsRef = useRef<Unit[] | null>(null);
 
   // Helper to add structured log events
   const addLog = (type: string, text: string) => {
@@ -5749,11 +6121,54 @@ function App() {
     }
   }, [selectedUnitId, gameData]);
 
+  // Keep dead units visible in the roster even if they disappear from the map state
+  useEffect(() => {
+    if (!gameData?.units) return;
+
+    const currentUnits: Unit[] = gameData.units;
+    const currentDead = currentUnits.filter((u) => u.hp != null && u.hp <= 0);
+    const currentIds = new Set(currentUnits.map((u) => u.id));
+    const previousUnits = prevUnitsRef.current || [];
+
+    setDeadUnits((prev) => {
+      const nextDeadMap = new Map<string, Unit>();
+
+      // Add any units currently dead in the state
+      for (const dead of currentDead) {
+        nextDeadMap.set(dead.id, dead);
+      }
+
+      // Preserve dead units that disappeared from the current state
+      for (const prevUnit of previousUnits) {
+        if (!currentIds.has(prevUnit.id) && prevUnit.hp != null && prevUnit.hp <= 0) {
+          nextDeadMap.set(prevUnit.id, prevUnit);
+        }
+      }
+
+      return Array.from(nextDeadMap.values());
+    });
+
+    prevUnitsRef.current = currentUnits;
+  }, [gameData]);
+
   // Action card trigger handler
   const handleActionCardClick = (action: any) => {
     if (typeof (window as any).onHexClick === "function") {
-      addLog("move", `👉 Order dispatched: ${action.kind.toUpperCase()} to hex (${action.q}, ${action.r})`);
-      (window as any).onHexClick(action.q, action.r);
+      const targetQ = action.q ?? action.target_q;
+      const targetR = action.r ?? action.target_r;
+      const actionType = action.kind === "attack" 
+        ? (action.type ? action.type.toUpperCase() : "ATTACK")
+        : "MOVE";
+      const coordStr = targetQ != null && targetR != null ? formatCoords(targetQ, targetR) : "?";
+      
+      (window as any).logSystemEvent?.("move", `👤 Human Order: ${actionType} to hex ${coordStr}`);
+      addLog("move", `👉 Order dispatched: ${actionType} to hex ${coordStr}`);
+      
+      if (targetQ != null && targetR != null) {
+        (window as any).onHexClick(targetQ, targetR);
+      } else {
+        console.warn("⛔ Missing target coordinates for action", action);
+      }
     }
   };
 
@@ -5777,6 +6192,22 @@ function App() {
   const selectedUnitSpec = selectedUnit 
     ? unitImages[selectedUnit.unit_key as keyof typeof unitImages] 
     : null;
+
+  const panelUnits = useMemo(() => {
+    const liveUnits: Unit[] = gameData?.units || [];
+    const merged = [...liveUnits];
+    const liveIds = new Set(liveUnits.map((u) => u.id));
+
+    for (const dead of deadUnits) {
+      if (!liveIds.has(dead.id)) {
+        merged.push(dead);
+      }
+    }
+
+    return merged;
+  }, [gameData?.units, deadUnits]);
+
+  const latestCombatEvent = gameData?.last_events?.slice().reverse().find((event: any) => event.type === "ACTION_EFFECT");
 
   return (
     <div className="app">
@@ -5897,13 +6328,20 @@ function App() {
                       onClick={() => handleActionCardClick(action)}
                     >
                       <div className="action-header">
-                        <div className="action-type">{action.kind}</div>
-                        <div className="action-coords">Hex {action.q},{action.r}</div>
+                        <div className="action-type">
+                          {action.kind === "attack"
+                            ? (action.type ? action.type.toUpperCase() : "ATTACK")
+                            : (action.kind || "MOVE").toUpperCase()
+                          }
+                        </div>
+                        <div className="action-coords">
+                          {formatCoords(action.q ?? action.target_q ?? 0, action.r ?? action.target_r ?? 0)}
+                        </div>
                       </div>
                       <div className="action-desc">
                         {action.kind === "attack" 
-                          ? `Initiate assault against target at coordinates (${action.q}, ${action.r})`
-                          : `March troop to sector location (${action.q}, ${action.r})`
+                          ? `Initiate ${(action.type || "assault").toLowerCase()} attack against target at ${formatCoords(action.q ?? action.target_q ?? 0, action.r ?? action.target_r ?? 0)}`
+                          : `March troop to sector location ${formatCoords(action.q ?? 0, action.r ?? 0)}`
                         }
                       </div>
                     </div>
@@ -5966,7 +6404,7 @@ function App() {
       ========================= */}
       <div className="footer">
         <UnitStatePanel
-          units={gameData?.units || []}
+          units={panelUnits}
           activeSide={gameData?.active_side}
           activatedUnits={gameData?.activated_units || []}
           selectedUnitId={selectedUnitId}
@@ -5978,6 +6416,10 @@ function App() {
             }
           }}
         />
+
+        {latestCombatEvent && (
+          <CombatPanel event={latestCombatEvent} units={gameData?.units || []} />
+        )}
       </div>
     </div>
   );
@@ -6685,6 +7127,8 @@ export const gameController = new GameController();
 FILE: C:\repos\python\assault\assault_ai_ui\src\game\animation\animateMove.ts
 ================================================================================
 
+import { soundService } from "../audio/SoundService"
+
 /**
  * Smoothly animates a PixiJS container from its current position to a target
  * pixel position using requestAnimationFrame and cubic ease-in-out.
@@ -6726,7 +7170,7 @@ export function animateMove(
     onComplete?.();
     return;
   }
-
+  soundService.playMove();
   // Block double-dispatch
   container.__isMoving = true;
 
@@ -6781,6 +7225,7 @@ FILE: C:\repos\python\assault\assault_ai_ui\src\game\animation\combatFx.ts
 
 import * as PIXI from "pixi.js";
 import { axialToPixel, HEX_SIZE } from "../render/hexGridRenderer";
+import { soundService } from "../audio/SoundService";
 
 const DIE_SIZE = 36;
 const PROJECTILE_DURATION = 650;
@@ -6793,17 +7238,29 @@ function hexToPixelCenter(q: number, r: number) {
   };
 }
 
-function getDieTexture(dieName: string): string {
-  // Map dice string names (e.g. 'DAMAGE_01', 'CRITICAL_02', 'MISS') to local asset files
-  const name = dieName.toUpperCase();
+function getDieTexture(dieName: any): string {
+  const name = String(dieName || "").toUpperCase();
   if (name.includes("CRITICAL")) {
-    return "/public/assets/dice/red_03.png"; // Red die representing Critical
+    return "/assets/dice/red_03.png"; // Red die representing Critical
   } else if (name.includes("DAMAGE") || name.includes("HIT")) {
-    return "/public/assets/dice/yellow_02.png"; // Yellow die representing Hit
+    return "/assets/dice/yellow_02.png"; // Yellow die representing Hit
   } else if (name.includes("DEFENSE") || name.includes("SHIELD")) {
-    return "/public/assets/dice/blue_01.png"; // Blue die representing defense
+    return "/assets/dice/blue_01.png"; // Blue die representing defense
   } else {
-    return "/public/assets/dice/green_01.png"; // Green or default/miss die
+    return "/assets/dice/green_01.png"; // Green or default/miss die
+  }
+}
+
+function getDieRollTexture(dieName: any): string {
+  const name = String(dieName || "").toUpperCase();
+  if (name.includes("CRITICAL")) {
+    return "/assets/dice/red_00.png";
+  } else if (name.includes("DAMAGE") || name.includes("HIT")) {
+    return "/assets/dice/yellow_00.png";
+  } else if (name.includes("DEFENSE") || name.includes("SHIELD")) {
+    return "/assets/dice/blue_00.png";
+  } else {
+    return "/assets/dice/green_00.png";
   }
 }
 
@@ -6823,6 +7280,10 @@ export async function playCombatFX(
   const attackerPos = hexToPixelCenter(attackerHex.q, attackerHex.r);
   const defenderPos = hexToPixelCenter(defenderHex.q, defenderHex.r);
 
+  soundService.playAttack();
+  fxLayer.sortableChildren = true;
+  drawAttackArrow(fxLayer, attackerPos, defenderPos);
+
   const animations: Promise<void>[] = [];
 
   // 1. Process Attack Dice (fly from Attacker to Defender)
@@ -6837,7 +7298,13 @@ export async function playCombatFX(
     };
 
     animations.push(
-      animateSingleDie(fxLayer, startPos, endPos, getDieTexture(dieName))
+      animateSingleDie(
+        fxLayer,
+        startPos,
+        endPos,
+        getDieRollTexture(dieName),
+        getDieTexture(dieName)
+      )
     );
   });
 
@@ -6854,7 +7321,13 @@ export async function playCombatFX(
     };
 
     animations.push(
-      animateSingleDie(fxLayer, startPos, endPos, getDieTexture(dieName))
+      animateSingleDie(
+        fxLayer,
+        startPos,
+        endPos,
+        getDieRollTexture(dieName),
+        getDieTexture(dieName)
+      )
     );
   });
 
@@ -6866,22 +7339,83 @@ export async function playCombatFX(
 }
 
 // -------------------------------------------------------------
+// Draw a temporary attack arrow from attacker to defender
+// -------------------------------------------------------------
+function drawAttackArrow(
+  layer: PIXI.Container,
+  from: { x: number; y: number },
+  to: { x: number; y: number }
+) {
+  const dx = to.x - from.x;
+  const dy = to.y - from.y;
+  const len = Math.sqrt(dx * dx + dy * dy);
+  if (len < 1) return;
+
+  const nx = dx / len;
+  const ny = dy / len;
+  const startGap = HEX_SIZE * 0.35;
+  const endGap = HEX_SIZE * 0.5;
+  const sx = from.x + nx * startGap;
+  const sy = from.y + ny * startGap;
+  const ex = to.x - nx * endGap;
+  const ey = to.y - ny * endGap;
+
+  const color = 0xff6666;
+  const alpha = 0.95;
+  const headLen = 16;
+  const headAngle = Math.PI / 6;
+  const angle = Math.atan2(dy, dx);
+
+  const g = new PIXI.Graphics();
+  g.lineStyle(3, color, alpha);
+  g.moveTo(sx, sy);
+  g.lineTo(ex, ey);
+
+  g.moveTo(ex, ey);
+  g.lineTo(
+    ex - headLen * Math.cos(angle - headAngle),
+    ey - headLen * Math.sin(angle - headAngle)
+  );
+  g.moveTo(ex, ey);
+  g.lineTo(
+    ex - headLen * Math.cos(angle + headAngle),
+    ey - headLen * Math.sin(angle + headAngle)
+  );
+
+  g.beginFill(color, alpha);
+  g.drawCircle(ex + nx * 5, ey + ny * 5, 4);
+  g.endFill();
+
+  g.zIndex = 9;
+  layer.addChild(g);
+
+  setTimeout(() => {
+    if (!g.destroyed) {
+      g.destroy();
+    }
+  }, 900);
+}
+
+// -------------------------------------------------------------
 // Animate a single flying die using requestAnimationFrame
 // -------------------------------------------------------------
 function animateSingleDie(
   layer: PIXI.Container,
   from: { x: number; y: number },
   to: { x: number; y: number },
-  texturePath: string
+  rollTexturePath: string,
+  finalTexturePath: string
 ): Promise<void> {
   return new Promise((resolve) => {
-    const texture = PIXI.Texture.from(texturePath);
-    const sprite = new PIXI.Sprite(texture);
+    const rollTexture = PIXI.Texture.from(rollTexturePath);
+    const finalTexture = PIXI.Texture.from(finalTexturePath);
+    const sprite = new PIXI.Sprite(rollTexture);
     sprite.anchor.set(0.5);
     sprite.x = from.x;
     sprite.y = from.y;
     sprite.width = DIE_SIZE;
     sprite.height = DIE_SIZE;
+    sprite.zIndex = 10;
 
     layer.addChild(sprite);
 
@@ -6891,23 +7425,24 @@ function animateSingleDie(
       const elapsed = performance.now() - startTime;
       const t = Math.min(elapsed / PROJECTILE_DURATION, 1);
 
-      // Quadratic easing out for smooth deceleration
       const ease = 1 - (1 - t) * (1 - t);
 
       sprite.x = from.x + (to.x - from.x) * ease;
       sprite.y = from.y + (to.y - from.y) * ease;
-      sprite.rotation = t * Math.PI * 4; // Add dynamic spin
+      sprite.rotation = t * Math.PI * 4 + elapsed / 120;
 
       if (t < 1) {
         requestAnimationFrame(tick);
       } else {
-        // Impact burst particles can go here
+        sprite.texture = finalTexture;
+        sprite.rotation = 0;
+
         setTimeout(() => {
           if (!sprite.destroyed) {
             sprite.destroy();
           }
           resolve();
-        }, 300);
+        }, 700);
       }
     }
 
@@ -6943,6 +7478,110 @@ function triggerImpactFlash(layer: PIXI.Container, pos: { x: number; y: number }
   requestAnimationFrame(fade);
 }
 
+
+
+================================================================================
+FILE: C:\repos\python\assault\assault_ai_ui\src\game\animation\visuals.ts
+================================================================================
+
+import * as PIXI from "pixi.js";
+
+export function drawArrowPixels(
+  fromX: number,
+  fromY: number,
+  toX: number,
+  toY: number,
+  layer: PIXI.Container
+) {
+  const g = new PIXI.Graphics();
+
+  const dx = toX - fromX;
+  const dy = toY - fromY;
+  const angle = Math.atan2(dy, dx);
+  const headLen = 14;
+
+  // ✅ Configurar estilo de trazo
+  g.setStrokeStyle({
+    width: 3,
+    color: 0xffffff,
+    alpha: 0.9
+  });
+
+  // ✅ Dibujar línea principal
+  g.moveTo(fromX, fromY);
+  g.lineTo(toX, toY);
+  g.stroke();
+
+  // ✅ Dibujar punta izquierda
+  g.moveTo(toX, toY);
+  g.lineTo(
+    toX - headLen * Math.cos(angle - Math.PI / 6),
+    toY - headLen * Math.sin(angle - Math.PI / 6)
+  );
+  g.stroke();
+
+  // ✅ Dibujar punta derecha
+  g.moveTo(toX, toY);
+  g.lineTo(
+    toX - headLen * Math.cos(angle + Math.PI / 6),
+    toY - headLen * Math.sin(angle + Math.PI / 6)
+  );
+  g.stroke();
+
+  g.alpha = 0.8;
+  g.zIndex = 9999;
+
+  layer.addChild(g);
+
+  setTimeout(() => g.destroy(), 800);
+}
+
+
+
+================================================================================
+FILE: C:\repos\python\assault\assault_ai_ui\src\game\audio\SoundService.ts
+================================================================================
+
+class SoundService {
+  private moveSounds: HTMLAudioElement[] = [];
+  private attackSounds: HTMLAudioElement[] = [];
+
+  constructor() {
+    this.moveSounds = [
+      new Audio("/assets/sfx/move/stepdirt_1.wav"),
+      new Audio("/assets/sfx/move/stepdirt_2.wav"),
+      new Audio("/assets/sfx/move/stepdirt_3.wav"),
+      new Audio("/assets/sfx/move/stepdirt_4.wav"),
+      new Audio("/assets/sfx/move/stepdirt_5.wav"),
+      new Audio("/assets/sfx/move/stepdirt_6.wav"),
+      new Audio("/assets/sfx/move/stepdirt_7.wav"),
+      new Audio("/assets/sfx/move/stepdirt_8.wav"),
+    ];
+
+    this.attackSounds = [
+      new Audio("/assets/sfx/rifle-gunshot/freesound_community-rifle-gunshot-99749.mp3"),
+    ];
+
+    this.moveSounds.forEach((s) => (s.volume = 0.35));
+    this.attackSounds.forEach((s) => (s.volume = 0.45));
+  }
+
+  playMove() {
+    const sound =
+      this.moveSounds[Math.floor(Math.random() * this.moveSounds.length)];
+
+    sound.cloneNode().play().catch(() => {});
+  }
+
+  playAttack() {
+    const sound =
+      this.attackSounds[Math.floor(Math.random() * this.attackSounds.length)];
+
+    sound.cloneNode().play().catch(() => {});
+  }
+}
+
+export const soundService = new SoundService();
 
 
 ================================================================================
@@ -7252,6 +7891,10 @@ export function axialToPixel(q: number, r: number) {
 // ---------------------------------------------
 function axialToLabel(q: number, r: number) {
   return `${String.fromCharCode(65 + q)}${r + 1}`;
+}
+
+export function formatCoords(q: number, r: number): string {
+  return `[${axialToLabel(q, r)}]`;
 }
 
 // ---------------------------------------------
@@ -7809,24 +8452,11 @@ FILE: C:\repos\python\assault\assault_ai_ui\src\game\render\unitLayer.ts
 ================================================================================
 
 import * as PIXI from "pixi.js";
-import { unitImages } from "../config/unitImages";
-import { sides } from "../config/sides";
 import { axialToPixel, HEX_SIZE } from "./hexGridRenderer";
-
-// ✅ global hover / selection
-let highlightedUnitId: string | null = null;
-let selectedUnitId: string | null = null;
-
-// ✅ highlights separados
-const highlights = new Map<string, PIXI.Graphics>();
-
-(window as any).selectUnit = (id: string | null) => {
-  selectedUnitId = id;
-};
-
-(window as any).highlightUnit = (id: string | null) => {
-  highlightedUnitId = id;
-};
+import { initUnitLayerState, getSelectedUnitId, getHighlightedUnitId } from "./unitLayerState";
+import { createUnitSprite } from "./unitLayerSprite";
+import { updateHighlight } from "./unitLayerHighlight";
+import { moveUnit } from "./unitLayerMovement";
 
 export class UnitLayer {
   public container: PIXI.Container;
@@ -7834,209 +8464,327 @@ export class UnitLayer {
   constructor(world: PIXI.Container) {
     this.container = new PIXI.Container();
     this.container.label = "unitLayer";
-
-    // ✅ importante para layering correcto
     this.container.sortableChildren = true;
 
     world.addChild(this.container);
+    initUnitLayerState();
   }
 
+  /**
+   * Synchronize unit layer with game state
+   */
   async sync(state: any) {
     if (!state) return;
 
     const units = state.units || [];
     const activeSide = state.active_side;
     const activated = state.activated_units || [];
-
     const seen = new Set<string>();
 
     for (const unit of units) {
       const id = unit.id;
 
+      // Get or create sprite
       let sprite = this.container.children.find(
-        (c: any) =>
-          c.__unitId === id &&
-          c.__type === "unit"
+        (c: any) => c.__unitId === id && c.__type === "unit"
       ) as PIXI.Container | undefined;
 
       if (!sprite) {
-        sprite = await this.createSprite(unit);
+        sprite = await createUnitSprite(unit);
         this.container.addChild(sprite);
       }
 
-      // ✅ posición
+      // Update position (no animation - snap if not moving)
       const { x, y } = axialToPixel(unit.q, unit.r);
-
       const newX = Math.round(x);
       const newY = Math.round(y + HEX_SIZE);
 
-      const isMoving = (sprite as any).__isMoving === true;
-
-      const dx = sprite.x - newX;
-      const dy = sprite.y - newY;
-      const dist = dx * dx + dy * dy;
-
-      // If flagged as moving but already at destination — release the lock
-      if (isMoving && dist < 1) {
-        (sprite as any).__isMoving = false;
-      }
-
-      if (!isMoving || dist < 1) {
+      const isMoving = sprite.__isMoving === true;
+      if (!isMoving) {
         sprite.x = newX;
         sprite.y = newY;
       }
 
+      // Update visual state
       const base = (sprite as any).__baseScale ?? 1;
-
       const isOwn = unit.side === activeSide;
       const isAvailable =
         isOwn &&
         !activated.includes(id) &&
         !(window as any).__hiddenHighlights?.has(id);
 
-      // 💣 ✅ FIX REAL DEL BUG: reset FORZADO
-      sprite.scale.x = base;
-      sprite.scale.y = base;
+      sprite.scale.set(base);
 
-      // ✅ aplicar estados
-      if (id === selectedUnitId) {
-        sprite.scale.x = base * 1.3;
-        sprite.scale.y = base * 1.3;
-      } else if (id === highlightedUnitId) {
-        sprite.scale.x = base * 1.2;
-        sprite.scale.y = base * 1.2;
+      if (id === getSelectedUnitId()) {
+        sprite.scale.set(base * 1.3);
+      } else if (id === getHighlightedUnitId()) {
+        sprite.scale.set(base * 1.2);
       }
 
-      // ✅ alpha
       if (unit.hp <= 0) {
+        sprite.visible = false;
         sprite.alpha = 0.4;
-      } else if (!isOwn || !isAvailable) {
+        seen.add(id);
+        continue;
+      }
+
+      if (!isOwn || !isAvailable) {
         sprite.alpha = 0.7;
       } else {
         sprite.alpha = 1;
       }
 
-      // -----------------------------------------
-      // ✅ highlight separado (correcto)
-      let highlight = highlights.get(id);
-
-      if (isAvailable) {
-
-        if (!highlight) {
-          highlight = new PIXI.Graphics();
-
-          (highlight as any).__type = "fx";
-          (highlight as any).__unitId = id;
-          (highlight as any).name = "availableHighlight";
-
-          // ✅ Pixi v8 API correcta
-          highlight.circle(0, 0, HEX_SIZE * 0.8);
-          highlight.fill({ color: 0x00ff00, alpha: 0.25 });
-
-          highlight.zIndex = -1;
-          highlight.eventMode = "none";
-
-          this.container.addChild(highlight);
-          highlights.set(id, highlight);
-        }
-
-        // ✅ seguir al sprite
-        highlight.x = sprite.x;
-        highlight.y = sprite.y;
-        highlight.visible = true;
-
-        highlight.alpha = 0.5 + Math.sin(Date.now() / 300) * 0.3;
-
-      } else {
-        if (highlight) {
-          this.container.removeChild(highlight);
-          highlights.delete(id);
-        }
-      }
+      // Update highlight
+      updateHighlight(this.container, sprite, id, isAvailable);
 
       seen.add(id);
     }
 
-    // ✅ mantener visibles
+    // Cleanup stale sprites for units no longer present in state
+    const toRemove: any[] = [];
     this.container.children.forEach((child: any) => {
-      if (child.__unitId && seen.has(child.__unitId)) {
-        child.visible = true;
+      if (child.__unitId && !seen.has(child.__unitId)) {
+        toRemove.push(child);
       }
+    });
+
+    toRemove.forEach((child) => {
+      this.container.removeChild(child);
+      child.destroy({ children: true });
     });
   }
 
-  // -----------------------------------------
-  private async createSprite(unit: any): Promise<PIXI.Container> {
-    const container = new PIXI.Container();
+  /**
+   * Central movement manager for both human and AI
+   * Handles: arrow, animation, and sound
+   */
+  public async moveUnit(
+    unitId: string,
+    targetQ: number,
+    targetR: number
+  ): Promise<void> {
+    await moveUnit(this.container, unitId, targetQ, targetR);
+  }
+}
 
-    (container as any).__unitId = unit.id;
-    (container as any).__isMoving = false;
-    (container as any).__type = "unit";
 
-    const def = unitImages[unit.unit_key];
 
-    if (!def) {
-      console.warn("❌ missing sprite for", unit.unit_key);
-      return container;
+================================================================================
+FILE: C:\repos\python\assault\assault_ai_ui\src\game\render\unitLayerHighlight.ts
+================================================================================
+
+import * as PIXI from "pixi.js";
+import { HEX_SIZE } from "./hexGridRenderer";
+
+const highlights = new Map<string, PIXI.Graphics>();
+
+export function updateHighlight(
+  container: PIXI.Container,
+  sprite: any,
+  unitId: string,
+  isAvailable: boolean
+) {
+  let highlight = highlights.get(unitId);
+
+  if (isAvailable) {
+    if (!highlight) {
+      highlight = new PIXI.Graphics();
+      (highlight as any).__type = "fx";
+      (highlight as any).__unitId = unitId;
+
+      highlight.circle(0, 0, HEX_SIZE * 0.8);
+      highlight.fill({ color: 0x00ff00, alpha: 0.25 });
+
+      highlight.zIndex = -1;
+      highlight.eventMode = "none";
+
+      container.addChild(highlight);
+      highlights.set(unitId, highlight);
     }
 
-    try {
-      const texture = await PIXI.Assets.load(def.full);
+    highlight.x = sprite.x;
+    highlight.y = sprite.y;
+    highlight.visible = true;
+    highlight.alpha = 0.5 + Math.sin(Date.now() / 300) * 0.3;
+  } else if (highlight) {
+    container.removeChild(highlight);
+    highlights.delete(unitId);
+  }
+}
 
-      const sprite = new PIXI.Sprite(texture);
-      sprite.anchor.set(0.5);
 
-      const desiredSize = HEX_SIZE * 3;
-      const baseScale = desiredSize / texture.width;
 
-      sprite.scale.set(baseScale);
+================================================================================
+FILE: C:\repos\python\assault\assault_ai_ui\src\game\render\unitLayerMovement.ts
+================================================================================
 
-      (container as any).__baseScale = baseScale;
+import * as PIXI from "pixi.js";
+import { axialToPixel, HEX_SIZE } from "./hexGridRenderer";
+import { animateMove } from "../animation/animateMove";
+import { drawArrowPixels } from "../animation/visuals";
 
-      container.addChild(sprite);
+export async function moveUnit(
+  container: PIXI.Container,
+  unitId: string,
+  targetQ: number,
+  targetR: number
+): Promise<void> {
+  // Find sprite
+  const sprite = container.children.find(
+    (c: any) => c.__unitId === unitId && c.__type === "unit"
+  ) as PIXI.Container | undefined;
 
-    } catch (err) {
-      console.error("❌ error loading sprite:", def.full, err);
-    }
+  if (!sprite) {
+    console.warn("❌ moveUnit: sprite not found for", unitId);
+    return;
+  }
 
-    // ✅ etiqueta
-    const side = sides[unit.side] || { bgColor: 0x333333 };
+  // Calculate target position
+  const { x, y } = axialToPixel(targetQ, targetR);
+  const targetX = Math.round(x);
+  const targetY = Math.round(y + HEX_SIZE);
 
-    const labelContainer = new PIXI.Container();
+  // Check if already at destination
+  const dx = sprite.x - targetX;
+  const dy = sprite.y - targetY;
+  const dist = dx * dx + dy * dy;
 
-    const bg = new PIXI.Graphics();
-    bg.roundRect(-14, -7, 28, 14, 3);
-    bg.fill({ color: side.bgColor, alpha: 0.85 });
+  if (dist < 1) {
+    return;
+  }
 
-    labelContainer.addChild(bg);
+  // Step 1: Draw arrow
+  const fromPos = sprite.getGlobalPosition();
+  const tempPoint = new PIXI.Point(targetX, targetY);
+  const globalTargetPos = container.toGlobal(tempPoint);
 
-    const label = new PIXI.Text({
-      text: unit.id,
-      style: {
-        fontSize: 7,
-        fill: "#ffffff",
-      },
-      resolution: 2,
-    });
+  const stage = container.parent?.parent;
+  const fxLayer = stage?.children?.find((c: any) => c.label === "fxLayer") || stage;
 
-    label.anchor.set(0.5);
-    label.roundPixels = true;
+  if (fxLayer) {
+    drawArrowPixels(
+      fromPos.x,
+      fromPos.y,
+      globalTargetPos.x,
+      globalTargetPos.y,
+      fxLayer
+    );
+  }
 
-    labelContainer.addChild(label);
-    labelContainer.y = HEX_SIZE * 0.4;
+  // Step 2: Animate movement (includes sound in animateMove)
+  await new Promise<void>((resolve) => {
+    animateMove(sprite, { x: targetX, y: targetY }, null, 380, resolve);
+  });
+}
 
-    container.addChild(labelContainer);
 
-    container.eventMode = "static";
 
-    container.on("pointerdown", () => {
-      if ((window as any).onUnitClick) {
-        (window as any).onUnitClick(unit);
-      }
-    });
+================================================================================
+FILE: C:\repos\python\assault\assault_ai_ui\src\game\render\unitLayerSprite.ts
+================================================================================
 
+import * as PIXI from "pixi.js";
+import { unitImages } from "../config/unitImages";
+import { sides } from "../config/sides";
+import { HEX_SIZE } from "./hexGridRenderer";
+
+export async function createUnitSprite(unit: any): Promise<PIXI.Container> {
+  const container = new PIXI.Container();
+
+  (container as any).__unitId = unit.id;
+  (container as any).__isMoving = false;
+  (container as any).__type = "unit";
+
+  const def = unitImages[unit.unit_key];
+
+  if (!def) {
+    console.warn("❌ Missing sprite for", unit.unit_key);
     return container;
   }
+
+  try {
+    const texture = await PIXI.Assets.load(def.full);
+    const sprite = new PIXI.Sprite(texture);
+    sprite.anchor.set(0.5);
+
+    const scale = (HEX_SIZE * 3) / texture.width;
+    sprite.scale.set(scale);
+    (container as any).__baseScale = scale;
+
+    container.addChild(sprite);
+  } catch (err) {
+    console.error("❌ Error loading sprite:", def.full, err);
+  }
+
+  addUnitLabel(container, unit);
+  addUnitInteraction(container, unit);
+
+  return container;
+}
+
+function addUnitLabel(container: PIXI.Container, unit: any) {
+  const side = sides[unit.side] || { bgColor: 0x333333 };
+  const labelContainer = new PIXI.Container();
+
+  const bg = new PIXI.Graphics();
+  bg.roundRect(-14, -7, 28, 14, 3);
+  bg.fill({ color: side.bgColor, alpha: 0.85 });
+
+  const label = new PIXI.Text({
+    text: unit.id,
+    style: {
+      fontSize: 7,
+      fill: "#ffffff"
+    },
+    resolution: 2,
+  });
+
+  label.anchor.set(0.5);
+  label.roundPixels = true;
+
+  labelContainer.addChild(bg);
+  labelContainer.addChild(label);
+  labelContainer.y = HEX_SIZE * 0.4;
+
+  container.addChild(labelContainer);
+}
+
+function addUnitInteraction(container: PIXI.Container, unit: any) {
+  container.eventMode = "static";
+  container.on("pointerdown", () => {
+    (window as any).onUnitClick?.(unit);
+  });
+}
+
+
+
+================================================================================
+FILE: C:\repos\python\assault\assault_ai_ui\src\game\render\unitLayerState.ts
+================================================================================
+
+/**
+ * Global state management for unit selection and highlighting
+ */
+
+let highlightedUnitId: string | null = null;
+let selectedUnitId: string | null = null;
+
+export function initUnitLayerState() {
+  (window as any).selectUnit = (id: string | null) => {
+    selectedUnitId = id;
+  };
+
+  (window as any).highlightUnit = (id: string | null) => {
+    highlightedUnitId = id;
+  };
+}
+
+export function getSelectedUnitId(): string | null {
+  return selectedUnitId;
+}
+
+export function getHighlightedUnitId(): string | null {
+  return highlightedUnitId;
 }
 
 
@@ -8044,6 +8792,8 @@ export class UnitLayer {
 ================================================================================
 FILE: C:\repos\python\assault\assault_ai_ui\src\game\systems\aiTurnRunner.ts
 ================================================================================
+
+import { formatCoords } from "../render/hexGridRenderer";
 
 /**
  * aiTurnRunner.ts
@@ -8055,7 +8805,6 @@ FILE: C:\repos\python\assault\assault_ai_ui\src\game\systems\aiTurnRunner.ts
 
 import { gameController } from "../gameControllerInstance";
 import { axialToPixel, HEX_SIZE } from "../render/hexGridRenderer";
-import { animateMove } from "../animation/animateMove";
 
 const BACKEND = "http://127.0.0.1:8000";
 const AI_DELAY_MS = 800; // pause between AI actions so the user can see them
@@ -8141,29 +8890,15 @@ export async function runAiTurns(
     
     // Log selection/action choice to the System Log panel
     if (action.kind === "move") {
-      (window as any).logSystemEvent?.("move", `🤖 AI Order: Move ${aiUnit.id} to hex (${action.data.q}, ${action.data.r})`);
+      (window as any).logSystemEvent?.("move", `🤖 AI Order: Move ${aiUnit.id} to hex ${formatCoords(action.data.q, action.data.r)}`);
     } else if (action.kind === "attack") {
       (window as any).logSystemEvent?.("combat", `⚔️ AI Order: Combat attack by ${aiUnit.id} on target ${action.data.target_id}`);
     }
 
     // If it's a move, trigger the visual animation in Pixi before stepping
     if (action.kind === "move" && unitLayerRef?.current) {
-      const unitContainer = unitLayerRef.current.container?.children.find(
-        (c: any) => c.__unitId === aiUnit.id
-      );
-
-      if (unitContainer) {
-        const { q, r } = action.data;
-        const { x, y } = axialToPixel(q, r);
-        const to = {
-          x: Math.round(x),
-          y: Math.round(y + HEX_SIZE),
-        };
-        console.log(`🎬 AI Animating move for ${aiUnit.id} to (${q}, ${r})`);
-        await new Promise<void>((resolve) => {
-          animateMove(unitContainer, to, null as any, 380, resolve);
-        });
-      }
+      const { q, r } = action.data;
+      await unitLayerRef.current.moveUnit(aiUnit.id, q, r);
     } else {
       // Visual delay for attacks or actions that don't animate movement
       await new Promise(r => setTimeout(r, AI_DELAY_MS));
@@ -8458,8 +9193,7 @@ export function subscribeToGameState({
 FILE: C:\repos\python\assault\assault_ai_ui\src\game\systems\hexInteractionSystem.ts
 ================================================================================
 
-import { axialToPixel, HEX_SIZE } from "../render/hexGridRenderer";
-import { animateMove } from "../animation/animateMove";
+import { axialToPixel, HEX_SIZE, formatCoords } from "../render/hexGridRenderer";
 import { runAiTurns } from "./aiTurnRunner";
 
 export async function handleHexClick(
@@ -8486,37 +9220,20 @@ export async function handleHexClick(
 
   const actionId = move.action_id;
 
-  // Find the unit container in the Pixi scene
-  const unitContainer = unitLayerRef.current?.container?.children.find(
-    (c: any) => c.__unitId === selectedUnitId
-  );
-
-  if (!unitContainer) {
-    console.warn("❌ unit container not found:", selectedUnitId);
-    return;
-  }
-
   // Block double-dispatch while animating
-  if (unitContainer.__isMoving) {
+  if (unitLayerRef.current?.container?.children.find(
+    (c: any) => c.__unitId === selectedUnitId
+  )?.__isMoving) {
     console.warn("⛔ MOVE BLOCKED: already moving", selectedUnitId);
     return;
   }
 
-  // Convert axial hex to pixel centre
-  const { x, y } = axialToPixel(q, r);
-  const to = {
-    x: Math.round(x),
-    y: Math.round(y + HEX_SIZE),
-  };
-
-  console.log("🎬 animating move", { id: selectedUnitId, to });
+  console.log("🎬 animating move", { id: selectedUnitId, to: { q, r } });
 
   // 1. If it's a move, animate the unit visually first
   const isAttack = move.kind === "attack";
   if (!isAttack) {
-    await new Promise<void>((resolve) => {
-      animateMove(unitContainer, to, null as any, 380, resolve);
-    });
+    await unitLayerRef.current?.moveUnit(selectedUnitId, q, r);
   }
 
   console.log("✅ preparation complete, posting to backend");
@@ -8533,6 +9250,14 @@ export async function handleHexClick(
   });
   const stepData = await stepRes.json();
   const stateAfterHuman = stepData.state;
+
+  // Log human action result
+  if (isAttack) {
+    const targetUnit = stateAfterHuman?.units?.find((u: any) => u.id === move.target_id);
+    (window as any).logSystemEvent?.("combat", `👤 Human Order: Combat attack on ${move.target_id} at hex ${formatCoords(q, r)}`);
+  } else {
+    (window as any).logSystemEvent?.("move", `👤 Human Order: Move ${selectedUnitId} to hex ${formatCoords(q, r)}`);
+  }
 
   // Trigger Combat FX if there are combat events in the human's step
   if (isAttack && stateAfterHuman?.last_events && unitLayerRef?.current) {
@@ -8558,6 +9283,16 @@ export async function handleHexClick(
 
   // 4. Update the visual state
   (window as any).__setGameState?.(stateAfterHuman);
+
+  // Log action completion with outcome
+  if (!isAttack) {
+    (window as any).logSystemEvent?.("move", `✅ Movement complete: Unit at hex ${formatCoords(q, r)}`);
+  } else {
+    const defenderAfter = stateAfterHuman?.units?.find((u: any) => u.id === move.target_id);
+    const defenderDead = defenderAfter && defenderAfter.hp != null && defenderAfter.hp <= 0;
+    const resultMsg = defenderDead ? "DESTROYED" : "Wounded";
+    (window as any).logSystemEvent?.("combat", `✅ Combat complete: Target ${resultMsg}`);
+  }
 
   // 5. If the next active side belongs to AI — run all AI actions automatically
   const sides = stateAfterHuman?.sides ?? {};
@@ -8786,14 +9521,272 @@ export async function handleUnitClick(
       ...m,
       kind: "move"
     })),
-    ...(actions.attacks || []).map(a => ({
-      ...a,
-      kind: "attack"
-    }))
+    ...(actions.attacks || []).map(a => {
+      const target = state.units?.find(
+        (u: any) => u.id === a.target_id || u.unit_id === a.target_id
+      );
+
+      return {
+        ...a,
+        kind: "attack",
+        q: target?.q,
+        r: target?.r,
+      };
+    })
   ];
 
   setAvailableMoves(allActions);
 }
+
+
+================================================================================
+FILE: C:\repos\python\assault\assault_ai_ui\src\game\ui\CombatPanel.tsx
+================================================================================
+
+import { useEffect, useState } from "react";
+import { unitImages } from "../config/unitImages";
+import { sides } from "../config/sides";
+
+type Unit = {
+  id: string;
+  unit_key: string;
+  side: string;
+  hp?: number;
+  q: number;
+  r: number;
+};
+
+type Payload = {
+  attacker?: string;
+  defender?: string;
+  attacker_attack_dice?: any[];
+  attack_dice?: any[];
+  defender_defense_dice?: any[];
+  defense_dice?: any[];
+  distance?: number;
+  attack_sector?: string;
+  defender_hp_before?: number;
+  defender_hp_after?: number;
+  defender_killed?: boolean;
+  defender_destroyed?: boolean;
+  killed?: boolean;
+  attacker_effects?: { criticals?: any[] };
+  criticals?: any[];
+};
+
+type CombatEvent = {
+  type: string;
+  payload?: Payload;
+};
+
+type Props = {
+  event: CombatEvent;
+  units: Unit[];
+};
+
+function labelForUnit(unitId?: string | null, units: Unit[]) {
+  if (!unitId) return "Unknown";
+
+  const unit = units.find((u) => u.id === unitId);
+  if (unit) {
+    return unitImages[unit.unit_key as keyof typeof unitImages]?.label || unit.unit_key;
+  }
+
+  return unitId;
+}
+
+const DICE_SPRITE_MAP: Record<string, Record<string, string>> = {
+  BLUE: {
+    "": "/assets/dice/blue_01.png",
+    DAMAGE: "/assets/dice/blue_02.png",
+  },
+  GREEN: {
+    "": "/assets/dice/green_01.png",
+    DAMAGE: "/assets/dice/green_02.png",
+    "CRITICAL+DAMAGE": "/assets/dice/green_03.png",
+  },
+  RED: {
+    "": "/assets/dice/red_02.png",
+    DAMAGE: "/assets/dice/red_01.png",
+    "DAMAGE+DAMAGE": "/assets/dice/red_03.png",
+    "CRITICAL+DAMAGE": "/assets/dice/red_04.png",
+  },
+  YELLOW: {
+    "": "/assets/dice/yellow_01.png",
+    DAMAGE: "/assets/dice/yellow_02.png",
+    "DAMAGE+DAMAGE": "/assets/dice/yellow_03.png",
+    "CRITICAL+DAMAGE": "/assets/dice/yellow_04.png",
+  },
+};
+
+function normalizeFaces(faces: any): string {
+  if (!faces) return "";
+  const array = Array.isArray(faces) ? faces : [faces];
+  return array
+    .map((value) => {
+      const face = String(value || "").toUpperCase();
+      return face === "SUPPRESS" ? "CRITICAL" : face;
+    })
+    .filter(Boolean)
+    .sort()
+    .join("+");
+}
+
+function getDiceImageSrc(die: any): string | null {
+  if (die == null) return null;
+
+  if (typeof die === "string" || typeof die === "number") {
+    const name = String(die).toUpperCase();
+    if (name.includes("CRITICAL")) {
+      return "/assets/dice/red_03.png";
+    }
+    if (name.includes("DAMAGE") || name.includes("HIT")) {
+      return "/assets/dice/yellow_02.png";
+    }
+    if (name.includes("DEFENSE") || name.includes("SHIELD")) {
+      return "/assets/dice/blue_01.png";
+    }
+    return "/assets/dice/green_01.png";
+  }
+
+  const color = String(die.color || die.side || "GREEN").toUpperCase();
+  const faces = die.faces ?? die.face ?? die.value ?? die.text ?? [];
+  const key = normalizeFaces(faces);
+  const mapped = DICE_SPRITE_MAP[color]?.[key] || DICE_SPRITE_MAP[color]?.[""];
+  if (mapped) {
+    return mapped;
+  }
+
+  // Fallback if the color is unknown
+  if (key.includes("CRITICAL")) {
+    return "/assets/dice/red_03.png";
+  }
+  if (key.includes("DAMAGE") || key.includes("HIT")) {
+    return "/assets/dice/yellow_02.png";
+  }
+  if (key.includes("DEFENSE") || key.includes("SHIELD")) {
+    return "/assets/dice/blue_01.png";
+  }
+  return "/assets/dice/green_01.png";
+}
+
+function diceLabel(d: any) {
+  if (typeof d === "string" || typeof d === "number") {
+    return String(d);
+  }
+  if (d == null) {
+    return "-";
+  }
+  return String(d.value ?? d.face ?? d.text ?? d.label ?? JSON.stringify(d));
+}
+
+function renderDiceRow(dice: any[] = [], rolling = false) {
+  return (
+    <div className="combat-row">
+      <div className="combat-row-dice">
+        {dice.map((die, index) => {
+          const text = diceLabel(die);
+          const imageSrc = getDiceImageSrc(die);
+          const className = [
+            "combat-die",
+            rolling ? "rolling" : "",
+            die?.critical ? "critical" : "",
+            die?.hit ? "hit" : "",
+          ]
+            .filter(Boolean)
+            .join(" ");
+
+          return (
+            <div key={index} className={className}>
+              {imageSrc ? (
+                <img src={imageSrc} alt={text || "combat die"} />
+              ) : (
+                text
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+export function CombatPanel({ event, units }: Props) {
+  const [isVisible, setIsVisible] = useState(false);
+  const [isRolling, setIsRolling] = useState(true);
+
+  const payload = event.payload || {};
+  const attackerName = labelForUnit(payload.attacker, units);
+  const defenderName = labelForUnit(payload.defender, units);
+
+  const attackDice = payload.attacker_attack_dice || payload.attack_dice || [];
+  const defenseDice = payload.defender_defense_dice || payload.defense_dice || [];
+
+  useEffect(() => {
+    setIsVisible(false);
+    setIsRolling(true);
+    const showFrame = requestAnimationFrame(() => setIsVisible(true));
+    const rollTimer = window.setTimeout(() => setIsRolling(false), 800);
+
+    return () => {
+      window.cancelAnimationFrame(showFrame);
+      window.clearTimeout(rollTimer);
+    };
+  }, [event]);
+
+  const defenderHpBefore = payload.defender_hp_before;
+  const defenderHpAfter = payload.defender_hp_after;
+  const delta = typeof defenderHpBefore === "number" && typeof defenderHpAfter === "number"
+    ? Math.max(0, defenderHpBefore - defenderHpAfter)
+    : null;
+
+  const criticals = payload.attacker_effects?.criticals || payload.criticals || [];
+  const defenderKilled = payload.defender_killed || payload.defender_destroyed || payload.killed;
+
+  return (
+    <div className={`combat-panel ${isVisible ? "combat-panel-visible" : ""}`}>
+      <div className="combat-header">
+        <div className="combat-header-title">⚔️ Ranged Combat</div>
+        <div className="combat-focus">
+          <strong>{attackerName}</strong> → <strong>{defenderName}</strong>
+          <br />
+          <span className="combat-meta">
+            {payload.distance != null ? `Distance ${payload.distance}` : "Distance N/A"}
+            {payload.attack_sector ? ` · ${payload.attack_sector}` : ""}
+          </span>
+        </div>
+      </div>
+
+      <div className="combat-dice-grid">
+        <div className="combat-dice-col">
+          <div className="combat-side-title">ATTACK</div>
+          {renderDiceRow(attackDice, isRolling)}
+        </div>
+        <div className="combat-dice-col">
+          <div className="combat-side-title">DEFENSE</div>
+          {renderDiceRow(defenseDice, isRolling)}
+        </div>
+      </div>
+
+      <div className="combat-body">
+        {delta != null && delta > 0 && (
+          <div className="combat-damage">
+            {defenderName}: -{delta} HP ({defenderHpBefore} → {defenderHpAfter})
+          </div>
+        )}
+
+        {criticals.length > 0 && (
+          <div className="combat-crit">💥 Critical hits: {criticals.length}</div>
+        )}
+
+        {defenderKilled && (
+          <div className="combat-kill">☠️ {defenderName} DESTROYED</div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 
 
 ================================================================================
@@ -8802,6 +9795,7 @@ FILE: C:\repos\python\assault\assault_ai_ui\src\game\ui\UnitStatePanel.tsx
 
 import { unitImages } from "../config/unitImages";
 import { sides } from "../config/sides";
+import { formatCoords } from "../render/hexGridRenderer";
 
 type Unit = {
   id: string;
@@ -8875,9 +9869,11 @@ export function UnitStatePanel({
           <div className="roster-list">
             {list.map((u) => {
               const def = unitImages[u.unit_key as keyof typeof unitImages];
+              const dead = u.hp != null && u.hp <= 0;
               const isOwn = u.side === activeSide;
-              const isAvailable = isOwn && !activatedUnits.includes(u.id);
+              const isAvailable = isOwn && !activatedUnits.includes(u.id) && !dead;
               const isSelected = u.id === selectedUnitId;
+              const deadMarker = dead ? sides[u.side]?.dead_marker : undefined;
 
               // Compute CSS class names based on unit status
               let cardClass = "trooper-card";
@@ -8885,7 +9881,9 @@ export function UnitStatePanel({
                 cardClass += " selected";
               }
               
-              if (!isOwn) {
+              if (dead) {
+                cardClass += " dead";
+              } else if (!isOwn) {
                 cardClass += " enemy";
               } else if (!isAvailable) {
                 cardClass += " ally-used";
@@ -8911,15 +9909,24 @@ export function UnitStatePanel({
                   }}
                   onClick={() => handleCardClick(u)}
                   className={cardClass}
-                  title={`Coords: (${u.q}, ${u.r})`}
+                  title={`Coords: ${formatCoords(u.q, u.r)}`}
                 >
                   {/* IMAGE */}
                   {def?.full && (
-                    <img
-                      src={encodeURI(def.full)}
-                      className="trooper-card-img"
-                      alt={def.label || u.unit_key}
-                    />
+                    <div className="trooper-card-img-wrapper">
+                      <img
+                        src={encodeURI(def.full)}
+                        className={`trooper-card-img${dead ? " dead" : ""}`}
+                        alt={def?.label || u.unit_key}
+                      />
+                      {deadMarker && (
+                        <img
+                          src={encodeURI(deadMarker)}
+                          className="trooper-card-dead-marker"
+                          alt="Dead marker"
+                        />
+                      )}
+                    </div>
                   )}
 
                   {/* LABEL */}
@@ -8934,11 +9941,15 @@ export function UnitStatePanel({
 
                   {/* HP DISPLAY */}
                   <div className="trooper-card-hp">
-                    {u.hp != null
-                      ? Array.from({ length: u.hp }).map((_, i) => (
-                          <span key={i} style={{ color: "#ff3838" }}>❤️</span>
-                        ))
-                      : "-"}
+                    {dead ? (
+                      <span style={{ color: "#ff3838", fontWeight: 700 }}>DEAD</span>
+                    ) : u.hp != null ? (
+                      Array.from({ length: u.hp }).map((_, i) => (
+                        <span key={i} style={{ color: "#ff3838" }}>❤️</span>
+                      ))
+                    ) : (
+                      "-"
+                    )}
                   </div>
                 </div>
               );

@@ -1,28 +1,17 @@
 import copy
+
 from assault_model.actions.status import WaitAction
 from assault_model.actions.action_catalog import ActionCatalog
 from assault_model.map.hex_utils import hex_distance
 from assault_model.map.hex_coord import HexCoord
-from assault_sim.strategy.formation_strategy import FormationStrategyEngine
 
 
 class DecisionEngine:
-    """
-    Improved Decision Engine
-
-    ✅ Preserves original structure
-    ✅ Adds combat awareness
-    ✅ Improves action scoring
-    ✅ Keeps compatibility with PPO / HRL
-
-    Returns INTENT only (no execution)
-    """
-
     def __init__(self):
         self._unit_selection_cache = {}
 
     # --------------------------------------------------
-    # MAIN ENTRY
+    # MAIN
     # --------------------------------------------------
     def compute_intent(self, env):
         state = env.game_state
@@ -50,12 +39,8 @@ class DecisionEngine:
         best_action = None
         best_score = float("-inf")
 
-        # 🔥 NUEVO: priorización ligera de unidades útiles
-        units = sorted(
-            units,
-            key=lambda u: getattr(u, "hp", 0),
-            reverse=True
-        )
+        # Prioriza unidades sanas (pero ligero)
+        units = sorted(units, key=lambda u: getattr(u, "hp", 0), reverse=True)
 
         for unit in units:
             actions = self._get_unit_actions(env, unit)
@@ -89,38 +74,16 @@ class DecisionEngine:
         return catalog.actions()
 
     # --------------------------------------------------
-    # ✅ IMPROVED ACTION EVALUATION
+    # ✅ PRO EVALUATION
     # --------------------------------------------------
     def evaluate_action(self, env, action, side):
         try:
-            sandbox_env = copy.deepcopy(env)
+            state = env.game_state
 
-            # Disable events
-            if hasattr(sandbox_env, "event_bus"):
-                sandbox_env.event_bus = None
+            base_score = self._evaluate_state_quality(state, side)
 
-            # snapshot before
-            before_state = sandbox_env.game_state
-            before_hp = {
-                u.unit_id: getattr(u, "hp", 0)
-                for u in before_state.units
-            }
+            combat_score = self._evaluate_expected_combat(action)
 
-            sandbox_env.step(action)
-
-            after_state = sandbox_env.game_state
-
-            base_score = self._evaluate_state_quality(after_state, side)
-
-            # 🔥 NUEVO: evaluación de combate directo
-            combat_score = self._evaluate_combat_delta(
-                before_state,
-                after_state,
-                before_hp,
-                side
-            )
-
-            # 🔥 NUEVO: bonus contextual de acción
             action_bonus = self._action_bias(action)
 
             return base_score + combat_score + action_bonus
@@ -129,77 +92,87 @@ class DecisionEngine:
             return self._heuristic_score(action)
 
     # --------------------------------------------------
-    # ✅ NUEVO: COMBAT DELTA
+    # 🔥 PRO: EXPECTED COMBAT (CLAVE)
     # --------------------------------------------------
-    def _evaluate_combat_delta(self, before, after, hp_before, side):
-        friendly_loss = 0
-        enemy_loss = 0
+    def _evaluate_expected_combat(self, action):
+        unit = getattr(action, "unit", None) or getattr(action, "actor", None) or getattr(action, "attacker", None)
+        target = getattr(action, "target", None)
 
-        for u in after.units:
-            before_hp = hp_before.get(u.unit_id, 0)
-            after_hp = getattr(u, "hp", 0)
+        if unit is None or target is None:
+            return 0
 
-            delta = before_hp - after_hp
-            if delta <= 0:
-                continue
-
-            if u.side == side:
-                friendly_loss += delta
-            else:
-                enemy_loss += delta
+        if not getattr(target, "alive", True):
+            return 50  # ya muerto → ok
 
         score = 0
 
-        # 🔥 clave: premiar trades positivos
-        score += enemy_loss * 25
-        score -= friendly_loss * 30
+        # ✅ Expected damage
+        if hasattr(unit, "get_expected_damage"):
+            dmg = unit.get_expected_damage(target)
+        else:
+            dmg = 0
 
-        # 🔥 kill detection
-        for u in after.units:
-            if u.side != side and not getattr(u, "alive", True):
-                score += 80
-            if u.side == side and not getattr(u, "alive", True):
-                score -= 80
+        # ✅ Advantage
+        if hasattr(unit, "get_combat_advantage"):
+            adv = unit.get_combat_advantage(target)
+        else:
+            adv = 0
+
+        # ✅ penaliza spam inútil
+        if dmg <= 0.05:
+            return -30
+
+        score += dmg * 40
+        score += adv * 25
+
+        # ✅ matar unidades débiles
+        hp = getattr(target, "hp", 5)
+        if hp <= 1:
+            score += 60
+
+        # ✅ evitar targets frescos muy duros
+        if hp > 6 and dmg < 0.2:
+            score -= 20
+
+        # ✅ distancia
+        if unit.position and target.position:
+            dist = hex_distance(unit.position, target.position)
+
+            if dist <= 2:
+                score += 5
+            elif dist > 5:
+                score -= 10
 
         return score
 
-    # --------------------------------------------------
-    # ✅ NUEVO: ACTION BIAS
     # --------------------------------------------------
     def _action_bias(self, action):
         name = action.__class__.__name__.lower()
-
         score = 0
 
         if "attack" in name:
-            score += 10  # leve incentivo a atacar bien
+            score += 3
 
         if "assault" in name:
-            score += 25  # más risky → más reward
+            score += 20
 
         if "move" in name:
-            score += 5
+            score += 2
 
         if "wait" in name:
-            score -= 25  # ❗ penaliza pasividad
+            score -= 10
 
         return score
 
     # --------------------------------------------------
-    # STATE EVALUATION (MEJORADO)
+    # STATE QUALITY
     # --------------------------------------------------
     def _evaluate_state_quality(self, state, side):
 
-        # ------------------------
-        # VP
-        # ------------------------
         vp_score = 0
         if hasattr(state, "vp_tracker") and hasattr(state.vp_tracker, "total_points"):
             vp_score = state.vp_tracker.total_points
 
-        # ------------------------
-        # Units
-        # ------------------------
         friendly_units = [
             u for u in state.units
             if u.side == side and getattr(u, "alive", True)
@@ -216,67 +189,35 @@ class DecisionEngine:
         num_friendly = len(friendly_units)
         num_enemy = len(enemy_units)
 
-        friendly_dead = len([
-            u for u in state.units
-            if u.side == side and not getattr(u, "alive", True)
-        ])
-
-        enemy_dead = len([
-            u for u in state.units
-            if u.side != side and not getattr(u, "alive", True)
-        ])
-
         # ------------------------
-        # LOW HP PRESSURE
-        # ------------------------
-        low_enemy = sum(1 for u in enemy_units if getattr(u, "hp", 0) <= 1)
-        low_friendly = sum(1 for u in friendly_units if getattr(u, "hp", 0) <= 1)
-
-        # ------------------------
-        # VP DISTANCE
+        # PROGRESS
         # ------------------------
         progress_score = 0
-        vp_positions = []
 
+        vp_positions = []
         if hasattr(state, "game_map") and hasattr(state.game_map, "vp_positions"):
             vp_positions = state.game_map.vp_positions
 
         if vp_positions:
             for u in friendly_units:
-                if getattr(u, "position", None):
+                if u.position:
                     try:
                         min_dist = min(
                             hex_distance(
                                 u.position,
                                 HexCoord(vp[0], vp[1])
-                            )
-                            for vp in vp_positions
+                            ) for vp in vp_positions
                         )
                         progress_score -= min_dist
-                    except Exception:
+                    except:
                         pass
 
         # ------------------------
-        # FINAL SCORE
-        # ------------------------
         score = 0
 
-        # 🎯 VP (más importante ahora)
         score += vp_score * 120
-
-        # 💥 combate
-        score += (friendly_hp - enemy_hp) * 6
-        score += (num_friendly - num_enemy) * 50
-
-        # ☠ kills
-        score += enemy_dead * 90
-        score -= friendly_dead * 90
-
-        # presión
-        score += low_enemy * 30
-        score -= low_friendly * 30
-
-        # 🧭 posicionamiento
+        score += (friendly_hp - enemy_hp) * 4
+        score += (num_friendly - num_enemy) * 35
         score += progress_score * 3
 
         return score
@@ -287,12 +228,12 @@ class DecisionEngine:
         name = action.__class__.__name__.lower()
 
         if "attack" in name:
-            score += 50
+            score += 40
         if "assault" in name:
-            score += 70
+            score += 60
         if "move" in name:
-            score += 20
+            score += 15
         if "wait" in name:
-            score -= 20
+            score -= 10
 
         return score

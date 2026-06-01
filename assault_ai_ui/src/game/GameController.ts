@@ -1,5 +1,3 @@
-import { suggestMove } from "../ai/suggestMove";
-
 type ControllerType = "human" | "ai";
 type GameMode = "human" | "ai" | "ai_vs_ai" | "replay";
 type Listener = (state: any) => void;
@@ -14,6 +12,9 @@ export class GameController {
 
   private socket: WebSocket | null = null;
 
+  // ✅ NUEVO: referencia al highlight layer
+  private highlightLayer: any = null;
+
   // ----------------------------------
   async start(mode: GameMode) {
     if (this.socket && this.socket.readyState === WebSocket.OPEN) {
@@ -25,14 +26,12 @@ export class GameController {
 
     console.log("Starting mode:", mode);
 
-    // ✅ ✅ 🔥 FIX CLAVE: iniciar partida en backend con sides
+    // ✅ iniciar partida en backend
     await fetch("http://127.0.0.1:8000/api/game/start", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         scenario_id: "mettete_i_piedi_terra_1_min",
-
-        // ✅ aquí defines quién controla cada bando
         sides: {
           GE: "human",
           US: "ai"
@@ -40,14 +39,13 @@ export class GameController {
       })
     });
 
-    // ✅ luego cargas estado inicial
     await this.loadScenario();
 
     setTimeout(() => {
       this.startWebSocket();
     }, 300);
 
-    if (mode === "ai") {
+    if (mode === "ai" || mode === "ai_vs_ai") {
       this.startLoop();
     }
   }
@@ -89,7 +87,6 @@ export class GameController {
     this.socket.onmessage = (event) => {
       const msg = JSON.parse(event.data);
 
-      // ✅ ONLY accept MAP_STATE
       if (msg.type === "MAP_STATE" && msg.payload) {
         this.state = msg.payload;
         this.emit();
@@ -134,9 +131,15 @@ export class GameController {
   }
 
   // ----------------------------------
+  // ✅ NUEVO: setter para conectar Pixi layer
+  setHighlightLayer(layer: any) {
+    this.highlightLayer = layer;
+  }
+
+  // ----------------------------------
   private async sendMove(unitId: string, move: any) {
 
-    if (!move.action_id) return;
+    if (!move?.action_id) return;
 
     await fetch("http://127.0.0.1:8000/api/game/step", {
       method: "POST",
@@ -150,10 +153,12 @@ export class GameController {
   }
 
   // ----------------------------------
+  // 🔥 IA BACKEND + VISUAL HIGHLIGHTS
+  // ----------------------------------
   private startLoop() {
-    console.log("🤖 AI loop started");
+    console.log("🤖 AI loop started (backend-driven)");
 
-    const loop = () => {
+    const loop = async () => {
 
       if (!this.state) {
         setTimeout(loop, 1000);
@@ -161,7 +166,6 @@ export class GameController {
       }
 
       const data = this.state;
-
       const activeSide = data.active_side;
 
       if (!activeSide) {
@@ -169,34 +173,42 @@ export class GameController {
         return;
       }
 
+      // ✅ solo ejecuta si el lado es IA
       if (data?.sides?.[activeSide] !== "ai") {
         setTimeout(loop, 500);
         return;
       }
 
-      const units = data.units || [];
-      const activated = data.activated_units || [];
+      console.log("🤖 CALLING BACKEND AI TURN");
 
-      const availableUnits = units.filter((u: any) =>
-        u.side === activeSide &&
-        !activated.includes(u.id)
-      );
+      try {
 
-      if (availableUnits.length === 0) {
-        setTimeout(loop, 500);
-        return;
-      }
+        const res = await fetch("http://127.0.0.1:8000/api/game/ai-turn", {
+          method: "POST"
+        });
 
-      for (const unit of availableUnits) {
-        const move = suggestMove(unit, data);
+        const result = await res.json();
+        (window as any).onAIOrders?.(result.steps);
 
-        if (move) {
-          console.log("🤖 AI move:", unit.unit_id, move);
-          this.sendMove(unit.id, move);
+        // ✅ NUEVO: render visual de acciones IA
+        if (result.steps && this.highlightLayer) {
+
+          for (let i = 0; i < result.steps.length; i++) {
+
+            const step = result.steps[i];
+
+            setTimeout(() => {
+              this.highlightLayer.highlightAction(step, this.state);
+            }, i * 400); // delay animado
+          }
         }
+
+      } catch (e) {
+        console.error("❌ AI turn error", e);
       }
 
-      setTimeout(loop, 1000);
+      // ✅ dejar tiempo a websocket
+      setTimeout(loop, 800);
     };
 
     loop();

@@ -1,5 +1,3 @@
-// File: render/highlightLayer.ts
-
 import * as PIXI from "pixi.js";
 import { axialToPixel, HEX_SIZE } from "./hexGridRenderer";
 
@@ -19,13 +17,42 @@ export class HighlightLayer {
     this.container.removeChildren();
   }
 
-  // Centralised pixel centre calculation
   private getCenter(q: number, r: number) {
     const { x, y } = axialToPixel(q, r);
     return {
       x: Math.round(x),
       y: Math.round(y + HEX_SIZE),
     };
+  }
+
+  // ---------------------------------------------
+  // ✅ NUEVO: highlight unit
+  // ---------------------------------------------
+  drawUnitHighlight(unit: any, color = 0xffff00) {
+    const { x, y } = this.getCenter(unit.q, unit.r);
+
+    const g = new PIXI.Graphics();
+    g.circle(x, y, HEX_SIZE * 0.55);
+    g.fill({ color, alpha: 0.2 });
+    g.stroke({ width: 3, color, alpha: 1 });
+
+    g.zIndex = 10;
+    this.container.addChild(g);
+  }
+
+  // ---------------------------------------------
+  // ✅ NUEVO: highlight hex
+  // ---------------------------------------------
+  drawHexHighlight(q: number, r: number, color = 0x00ff00) {
+    const { x, y } = this.getCenter(q, r);
+
+    const g = new PIXI.Graphics();
+    g.circle(x, y, HEX_SIZE * 0.5);
+    g.fill({ color, alpha: 0.25 });
+    g.stroke({ width: 2, color, alpha: 0.9 });
+
+    g.zIndex = 9;
+    this.container.addChild(g);
   }
 
   // ---------------------------------------------
@@ -37,12 +64,10 @@ export class HighlightLayer {
 
       const g = new PIXI.Graphics();
 
-      // Outer glow ring
       g.circle(x, y, HEX_SIZE * 0.5);
       g.fill({ color: 0x3399ff, alpha: 0.15 });
       g.stroke({ width: 1.5, color: 0x66ccff, alpha: 0.6 });
 
-      // Inner dot
       g.circle(x, y, HEX_SIZE * 0.15);
       g.fill({ color: 0x66ccff, alpha: 0.9 });
 
@@ -77,7 +102,6 @@ export class HighlightLayer {
 
     const g = new PIXI.Graphics();
 
-    // Pulsing glow ring
     g.circle(x, y, HEX_SIZE * 0.52);
     g.fill({ color: 0x00ff88, alpha: 0.18 });
     g.stroke({ width: 2.5, color: 0x00ff88, alpha: 0.95 });
@@ -103,16 +127,42 @@ export class HighlightLayer {
   }
 
   // ---------------------------------------------
-  // Draw vector arrow from selected unit to hover destination
-  // Called when hovering over a valid move hex with a unit selected
+  // ✅ 🔥 ACTION HIGHLIGHT (LO QUE QUERÍAS)
   // ---------------------------------------------
-  drawArrow(
-    fromQ: number, fromR: number,
-    toQ: number, toR: number,
-    isAttack = false
-  ) {
+  highlightAction(action: any, state: any) {
+
+    if (!action || !state) return;
+
+    this.clear();
+
+    const unit = state.units?.find((u: any) => u.id === action.unit_id);
+    if (!unit) return;
+
+    // ---------------- MOVE ----------------
+    if (action.type === "MOVE") {
+      this.drawUnitHighlight(unit, 0x00ccff);
+      this.drawHexHighlight(action.target_q, action.target_r, 0x00ff00);
+    }
+
+    // ---------------- ATTACK ----------------
+    if (action.type === "ATTACK") {
+      const target = state.units?.find((u: any) => u.id === action.target_id);
+
+      this.drawUnitHighlight(unit, 0xff4444);
+
+      if (target) {
+        this.drawUnitHighlight(target, 0xffa500);
+      }
+    }
+  }
+
+  // ---------------------------------------------
+  // Arrow (sin cambios)
+  // ---------------------------------------------
+  drawArrow(fromQ: number, fromR: number, toQ: number, toR: number, isAttack = false) {
+
     const from = this.getCenter(fromQ, fromR);
-    const to   = this.getCenter(toQ, toR);
+    const to = this.getCenter(toQ, toR);
 
     const dx = to.x - from.x;
     const dy = to.y - from.y;
@@ -123,29 +173,26 @@ export class HighlightLayer {
     const nx = dx / len;
     const ny = dy / len;
 
-    // Shorten shaft so it doesn't overlap the unit/destination circles
     const startGap = HEX_SIZE * 0.35;
-    const endGap   = HEX_SIZE * 0.4;
+    const endGap = HEX_SIZE * 0.4;
 
     const sx = from.x + nx * startGap;
     const sy = from.y + ny * startGap;
-    const ex = to.x   - nx * endGap;
-    const ey = to.y   - ny * endGap;
+    const ex = to.x - nx * endGap;
+    const ey = to.y - ny * endGap;
 
     const arrowColor = isAttack ? 0xff4444 : 0x00f0ff;
     const arrowAlpha = 0.85;
-    const headLen    = 12;
-    const headAngle  = Math.PI / 5;
-    const angle      = Math.atan2(dy, dx);
+    const headLen = 12;
+    const headAngle = Math.PI / 5;
+    const angle = Math.atan2(dy, dx);
 
     const g = new PIXI.Graphics();
 
-    // Shaft
     g.moveTo(sx, sy);
     g.lineTo(ex, ey);
     g.stroke({ width: 2.5, color: arrowColor, alpha: arrowAlpha });
 
-    // Arrowhead (two lines)
     g.moveTo(ex, ey);
     g.lineTo(
       ex - headLen * Math.cos(angle - headAngle),
@@ -158,7 +205,6 @@ export class HighlightLayer {
     );
     g.stroke({ width: 2.5, color: arrowColor, alpha: arrowAlpha });
 
-    // Tip dot at destination
     g.circle(ex + nx * 4, ey + ny * 4, 4);
     g.fill({ color: arrowColor, alpha: 0.9 });
 
