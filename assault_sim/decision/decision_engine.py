@@ -30,6 +30,7 @@ class DecisionEngine:
         units = [
             u for u in state.units
             if u.side == active_side
+            and u.alive
             and u.unit_id not in runtime.activated_units
         ]
 

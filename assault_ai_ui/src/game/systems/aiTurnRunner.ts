@@ -14,6 +14,11 @@ import { axialToPixel, HEX_SIZE } from "../render/hexGridRenderer";
 const BACKEND = "http://127.0.0.1:8000";
 const AI_DELAY_MS = 800; // pause between AI actions so the user can see them
 
+function isUnitAlive(u: any): boolean {
+  if (u.alive === false) return false;
+  return u.hp == null || u.hp > 0;
+}
+
 // --------------------------------------------------------
 // Pick the best action from the actions response.
 // Priority: attack > move > first action available
@@ -59,7 +64,10 @@ export async function runAiTurns(
 
     // Find the first unit of the AI side that hasn't been activated yet
     const aiUnit = units.find(
-      (u: any) => u.side === activeSide && !activatedUnits.includes(u.id)
+      (u: any) =>
+        u.side === activeSide &&
+        isUnitAlive(u) &&
+        !activatedUnits.includes(u.id)
     );
 
     if (!aiUnit) {

@@ -251,6 +251,10 @@ export default function GameCanvas({
       // UNIT CLICK
       // ---------------------------------------------
       (window as any).onUnitClick = (unit: any) => {
+        if (unit?.hp != null && unit.hp <= 0) {
+          return;
+        }
+
         const data = lastStateRef.current;
         const currentSelected = selectedUnitRef.current;
         const currentMoves = availableMovesRef.current || [];

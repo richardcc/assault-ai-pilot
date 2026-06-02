@@ -56,10 +56,11 @@ class RuntimeGameState:
     # =================================================
     def _extract_sides(self):
         return sorted({
-            u.side for u in self.base_state.units
+            u.side for u in self.base_state.units if u.alive
         })
 
     def get_available_units(self, side):
+        self._sync_eliminated_activation()
         return [
             u for u in self.base_state.units
             if u.side == side
@@ -87,6 +88,7 @@ class RuntimeGameState:
 
         # --- new turn ---
         self.activated_units.clear()
+        self._sync_eliminated_activation()
         self.base_state.turn += 1
 
         self.sides = self._extract_sides()
@@ -124,12 +126,19 @@ class RuntimeGameState:
             return False
         return True
 
+    def _sync_eliminated_activation(self) -> None:
+        """Dead units never take a turn; treat them as already activated."""
+        for unit in self.base_state.units:
+            if not unit.alive:
+                self.activated_units.add(unit.unit_id)
+
     # =================================================
     # TURN CONTROL (MINIMAL EXTENSION)
     # =================================================
     def start_turn(self) -> None:
 
         self.activated_units.clear()
+        self._sync_eliminated_activation()
 
         # --- NEW: reset sides each turn ---
         self.sides = self._extract_sides()
@@ -284,6 +293,7 @@ class RuntimeGameState:
         )
 
         self.base_state = result.new_state
+        self._sync_eliminated_activation()
 
         self._check_match_end(context)
 

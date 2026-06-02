@@ -15,6 +15,15 @@ def get_unit_actions(env, unit):
     state = env.game_state
     runtime = env.runtime
 
+    if not getattr(unit, "alive", True):
+        return {
+            "unit_id": unit.unit_id,
+            "moves": [],
+            "attacks": [],
+            "abilities": [],
+            "disabled": True,
+        }
+
     # -------------------------------------------------
     # VALIDATION (runtime)
     # -------------------------------------------------

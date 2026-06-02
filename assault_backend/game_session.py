@@ -88,21 +88,21 @@ class GameSession:
 
         pieces_catalog = catalog.get("pieces", {})
 
-        # ✅ UNITS
+        # ✅ UNITS (include dead for roster; map layer hides hp <= 0)
         units = []
         for u in state.units:
-            if not getattr(u, "alive", True):
-                continue
             if not u.position:
                 continue
 
+            alive = getattr(u, "alive", True)
             units.append({
                 "id": u.unit_id,
                 "unit_key": str(u.unit_type.code),
                 "q": u.position.q,
                 "r": u.position.r,
                 "side": u.side,
-                "hp": getattr(u, "hp", None),
+                "hp": 0 if not alive else getattr(u, "hp", None),
+                "alive": alive,
             })
 
         # ✅ HEXES

@@ -42,6 +42,9 @@ class ActionCatalog:
         if active is None:
             return [WaitAction("SYSTEM")]
 
+        if not getattr(active, "alive", True):
+            return []
+
         actions = []
 
         _trace("ACTION_CATALOG_START", unit=active.unit_id)

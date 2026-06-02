@@ -6,6 +6,11 @@ export async function handleUnitClick(
 
   if (!state) return;
 
+  const hp = unit.hp;
+  if (unit.alive === false || (hp != null && hp <= 0)) {
+    return;
+  }
+
   const isHumanTurn =
     state?.sides?.[state.active_side] === "human";
 
@@ -15,7 +20,9 @@ export async function handleUnitClick(
 
   const isAvailable =
     unit.side === state.active_side &&
-    !state.activated_units?.includes(id);
+    !state.activated_units?.includes(id) &&
+    unit.alive !== false &&
+    (unit.hp == null || unit.hp > 0);
 
   if (!isAvailable) return;
 

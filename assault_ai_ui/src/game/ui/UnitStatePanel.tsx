@@ -9,6 +9,7 @@ type Unit = {
   unit_key: string;
   side: string;
   hp?: number;
+  alive?: boolean;
   q: number;
   r: number;
 };
@@ -46,12 +47,16 @@ export function UnitStatePanel({
 
   // Handle clicking a trooper card
   const handleCardClick = (u: Unit) => {
-    // Focus camera on unit first
+    const dead = u.hp != null && u.hp <= 0;
+
     if (typeof (window as any).focusUnit === "function") {
       (window as any).focusUnit(u.id);
     }
-    
-    // Select unit logic
+
+    if (dead) {
+      return;
+    }
+
     if (onSelectUnit) {
       onSelectUnit(u);
     } else if (typeof (window as any).onUnitClick === "function") {
@@ -93,7 +98,8 @@ export function UnitStatePanel({
           <div className="roster-list">
             {list.map((u) => {
               const def = unitImages[u.unit_key as keyof typeof unitImages];
-              const dead = u.hp != null && u.hp <= 0;
+              const dead =
+                u.alive === false || (u.hp != null && u.hp <= 0);
               const isOwn = u.side === activeSide;
               const isAvailable = isOwn && !activatedUnits.includes(u.id) && !dead;
               const isSelected = u.id === selectedUnitId;

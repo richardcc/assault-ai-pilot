@@ -203,6 +203,10 @@ class SimEnv:
         if unit is None:
             return None
 
+        if not getattr(unit, "alive", True):
+            print("[DEBUG] unit is dead — action rejected")
+            return None
+
         catalog = ActionCatalog(
             self.game_state,
             unit,

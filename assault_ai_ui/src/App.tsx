@@ -105,15 +105,20 @@ function App() {
     setDeadUnits((prev) => {
       const nextDeadMap = new Map<string, Unit>();
 
-      // Add any units currently dead in the state
       for (const dead of currentDead) {
         nextDeadMap.set(dead.id, dead);
       }
 
-      // Preserve dead units that disappeared from the current state
+      for (const d of prev) {
+        if (!currentIds.has(d.id)) {
+          nextDeadMap.set(d.id, d);
+        }
+      }
+
+      // Backend used to drop dead units entirely; keep last snapshot if they vanish
       for (const prevUnit of previousUnits) {
-        if (!currentIds.has(prevUnit.id) && prevUnit.hp != null && prevUnit.hp <= 0) {
-          nextDeadMap.set(prevUnit.id, prevUnit);
+        if (!currentIds.has(prevUnit.id)) {
+          nextDeadMap.set(prevUnit.id, { ...prevUnit, hp: 0 });
         }
       }
 
@@ -166,17 +171,16 @@ function App() {
     : null;
 
   const panelUnits = useMemo(() => {
-    const liveUnits: Unit[] = gameData?.units || [];
-    const merged = [...liveUnits];
-    const liveIds = new Set(liveUnits.map((u) => u.id));
-
+    const byId = new Map<string, Unit>();
+    for (const u of gameData?.units || []) {
+      byId.set(u.id, u);
+    }
     for (const dead of deadUnits) {
-      if (!liveIds.has(dead.id)) {
-        merged.push(dead);
+      if (!byId.has(dead.id)) {
+        byId.set(dead.id, { ...dead, hp: 0 });
       }
     }
-
-    return merged;
+    return Array.from(byId.values());
   }, [gameData?.units, deadUnits]);
 
   const latestCombatEvent = gameData?.last_events?.slice().reverse().find((event: any) => event.type === "ACTION_EFFECT");
