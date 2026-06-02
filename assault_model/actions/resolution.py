@@ -36,8 +36,8 @@ from assault_model.runtime.execution_context import ExecutionContext
 from assault_model.combat.close_combat_resolver import resolve_close_combat
 from assault_model.combat.ranged_combat_resolver import resolve_ranged_combat
 
-from assault_model.map.hex_utils import hex_distance
 
+from assault_model.map.hex_utils import safe_hex_distance
 
 # -------------------------------------------------
 # DEVELOPMENT TRACE (INTERNAL ONLY)
@@ -158,7 +158,7 @@ def resolve_action(
                     (u for u in new_state.units if u.unit_id == action.target_id),
                     None,
                 )
-                distance = hex_distance(attacker.position, target.position)
+                distance = safe_hex_distance(attacker.position, target.position)
 
             else:
                 # ✅ INDIRECT FIRE (target_hex)
@@ -171,7 +171,7 @@ def resolve_action(
                     # 🔥 no hay unidad → no hay combate
                     return ActionResolutionResult(new_state=new_state, combat_result=None)
 
-                distance = hex_distance(attacker.position, action.target_hex)
+                distance = safe_hex_distance(attacker.position, action.target_hex)
 
             if attacker is None or target is None:
                 raise RuntimeError(

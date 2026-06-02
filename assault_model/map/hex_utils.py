@@ -47,3 +47,25 @@ def hex_distance(a: CoordLike, b: CoordLike) -> int:
         abs(ar - br),
         abs((aq + ar) - (bq + br)),
     )
+
+def safe_hex_distance(a, b):
+    """
+    Safe wrapper around hex_distance.
+
+    Guarantees:
+    - Never crashes
+    - Returns large value if invalid input
+    """
+
+    # ✅ None check
+    if a is None or b is None:
+        return 999
+
+    # ✅ type check
+    if not hasattr(a, "q") or not hasattr(a, "r"):
+        return 999
+
+    if not hasattr(b, "q") or not hasattr(b, "r"):
+        return 999
+
+    return hex_distance(a, b)

@@ -3,7 +3,7 @@ import os
 from pathlib import Path
 
 from assault_model.actions.status import WaitAction
-from assault_model.map.hex_utils import hex_distance
+from assault_model.map.hex_utils import safe_hex_distance
 
 from assault_sim.rl.state_encoder import encode_state
 from assault_sim.rewards.progressive_reward import ProgressiveReward
@@ -23,7 +23,7 @@ def _min_dist_fast(units_a, units_b):
 
     for a in units_a:
         for b in units_b:
-            d = hex_distance(a.position, b.position)
+            d = safe_hex_distance(a.position, b.position)
             if d < best:
                 best = d
                 if best <= 1:

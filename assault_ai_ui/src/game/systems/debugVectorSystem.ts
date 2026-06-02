@@ -72,7 +72,7 @@ export async function updateDebugVector({
   g.clear();
 
   // --------------------------------------------------
-  // ✅ BACKEND QUERY (LOS + DISTANCE REAL)
+  // ✅ BACKEND QUERY (LOS + DISTANCE REAL + PATH)
   // --------------------------------------------------
   const hexKey = `${selectedUnitId}_${closestHex.q}_${closestHex.r}`;
 
@@ -80,9 +80,9 @@ export async function updateDebugVector({
     lastHexKey = hexKey;
 
     try {
-        const res = await fetch(
+      const res = await fetch(
         `http://127.0.0.1:8000/targeting?attacker_id=${selectedUnitId}&q=${closestHex.q}&r=${closestHex.r}`
-        );
+      );
 
       cachedTargeting = await res.json();
 
@@ -93,6 +93,9 @@ export async function updateDebugVector({
 
   const dist = cachedTargeting?.distance ?? "?";
   const los = cachedTargeting?.los ?? "UNKNOWN";
+  const path = cachedTargeting?.path ?? [];
+  const blocking = cachedTargeting?.blocking ?? [];
+  const hindrance = cachedTargeting?.hindrance ?? [];
 
   // --------------------------------------------------
   // ✅ COLOR SEGÚN LOS
@@ -153,6 +156,51 @@ export async function updateDebugVector({
     ey - arrowSize * Math.sin(angle + Math.PI / 5)
   );
   g.stroke({ width: 4, color });
+
+
+  // --------------------------------------------------
+  // ✅ DRAW PATH (🟣)
+  // --------------------------------------------------
+  for (let i = 0; i < path.length; i++) {
+
+    const [q, r] = path[i];
+
+    const pos = axialToPixel(q, r);
+    const p = world.toGlobal({ x: pos.x, y: pos.y + HEX_SIZE });
+
+    let c = 0xaa00ff;
+
+    if (i === 0) c = 0x0000ff;           // start
+    else if (i === path.length - 1) c = 0xff0000; // target
+
+    g.circle(p.x, p.y, 8);
+    g.fill({ color: c, alpha: 0.6 });
+  }
+
+  // --------------------------------------------------
+  // ✅ DRAW HINDRANCE (🟡)
+  // --------------------------------------------------
+  for (const [q, r] of hindrance) {
+
+    const pos = axialToPixel(q, r);
+    const p = world.toGlobal({ x: pos.x, y: pos.y + HEX_SIZE });
+
+    g.circle(p.x, p.y, 10);
+    g.stroke({ width: 3, color: 0xffff00 });
+  }
+
+  // --------------------------------------------------
+  // ✅ DRAW BLOCKING (🔴)
+  // --------------------------------------------------
+  for (const [q, r] of blocking) {
+
+    const pos = axialToPixel(q, r);
+    const p = world.toGlobal({ x: pos.x, y: pos.y + HEX_SIZE });
+
+    g.circle(p.x, p.y, 12);
+    g.stroke({ width: 4, color: 0xff0000 });
+  }
+
 
   // --------------------------------------------------
   // ✅ TEXTO

@@ -6,6 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from services.scenario_service_ui import load_ui_scenario
 from game_session import GameSession
 from assault_backend.services.targeting_service import compute_targeting_info
+from assault_sim.decision.decision_engine import DecisionEngine
 
 # ✅ sesión persistente
 game_session = GameSession()
@@ -840,7 +841,7 @@ def get_targeting(attacker_id: str, q: int, r: int):
     if game_session.env is None:
         raise HTTPException(status_code=400, detail="no game")
 
-    gs = game_session.env.game_state  # ✅ ESTE ES EL BUENO
+    gs = game_session.env.game_state
 
     result = compute_targeting_info(
         gs,
@@ -848,5 +849,8 @@ def get_targeting(attacker_id: str, q: int, r: int):
         q,
         r
     )
+
+    if result is None:
+        raise HTTPException(status_code=404, detail="invalid attacker")
 
     return result

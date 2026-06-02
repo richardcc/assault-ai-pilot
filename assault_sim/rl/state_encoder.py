@@ -1,9 +1,7 @@
 import numpy as np
-from assault_model.map.hex_utils import hex_distance
 
-# ✅ NEW IMPORT
 from assault_sim.rl.features.tactical_features import compute_tactical_features
-
+from assault_model.map.hex_utils import safe_hex_distance
 
 # =================================================
 # NUMERIC STATE (USED BY RL)
@@ -62,7 +60,7 @@ def encode_state(state, unit=None, rl_side=None, max_turns=None):
     if active is not None and enemy_units and active.position is not None:
         closest_enemy = min(
             enemy_units,
-            key=lambda e: hex_distance(active.position, e.position),
+            key=lambda e: safe_hex_distance(active.position, e.position),
         )
 
         dq = np.clip((closest_enemy.position.q - active.position.q) / 10.0, -1.0, 1.0)
@@ -79,10 +77,10 @@ def encode_state(state, unit=None, rl_side=None, max_turns=None):
         if vp_points:
             target_vp = min(
                 vp_points,
-                key=lambda p: hex_distance(active.position, p.hex_coords)
+                key=lambda p: safe_hex_distance(active.position, p.hex_coords)
             )
 
-            dist = hex_distance(active.position, target_vp.hex_coords)
+            dist = safe_hex_distance(active.position, target_vp.hex_coords)
             vp_dist = np.clip(dist / 10.0, 0.0, 1.0)
 
     # -------------------------
@@ -100,7 +98,7 @@ def encode_state(state, unit=None, rl_side=None, max_turns=None):
     enemy_dist = 0.0
 
     if active is not None and closest_enemy is not None:
-        d = hex_distance(active.position, closest_enemy.position)
+        d = safe_hex_distance(active.position, closest_enemy.position)
         enemy_dist = np.clip(d / 10.0, 0.0, 1.0)
 
     # -------------------------

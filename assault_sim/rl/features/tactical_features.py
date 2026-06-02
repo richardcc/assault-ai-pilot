@@ -1,4 +1,5 @@
-from assault_model.map.hex_utils import hex_distance
+from assault_model.map.hex_utils import safe_hex_distance
+
 
 
 def compute_tactical_features(state, rl_side):
@@ -41,7 +42,7 @@ def compute_tactical_features(state, rl_side):
     # ----------------------------------
     if enemy_units:
         min_dist = min(
-            hex_distance(unit.position, e.position)
+            safe_hex_distance(unit.position, e.position)
             for e in enemy_units
         )
     else:
@@ -54,7 +55,7 @@ def compute_tactical_features(state, rl_side):
     # ----------------------------------
     close_enemies = sum(
         1 for e in enemy_units
-        if hex_distance(unit.position, e.position) <= 3
+        if safe_hex_distance(unit.position, e.position) <= 3
     )
     threat_level = close_enemies / 5.0
 
@@ -64,7 +65,7 @@ def compute_tactical_features(state, rl_side):
     close_allies = sum(
         1 for a in own_units
         if a.unit_id != unit.unit_id and
-        hex_distance(unit.position, a.position) <= 3
+        safe_hex_distance(unit.position, a.position) <= 3
     )
     ally_support = close_allies / 5.0
 

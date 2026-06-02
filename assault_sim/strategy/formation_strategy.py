@@ -2,7 +2,7 @@ from enum import Enum
 from typing import Optional
 import random
 
-from assault_model.map.hex_utils import hex_distance
+from assault_model.map.hex_utils import safe_hex_distance
 from assault_model.map.hex_coord import HexCoord
 
 
@@ -49,7 +49,7 @@ class FormationStrategyEngine:
         # ✅ DISTANCIA ENEMIGO (mínima)
         # -------------------------------------------------
         enemy_dist = min(
-            hex_distance(u.position, e.position)
+            safe_hex_distance(u.position, e.position)
             for u in own_units
             for e in enemy_units
         )
@@ -89,7 +89,7 @@ class FormationStrategyEngine:
                 return 999
 
             return min(
-                hex_distance(u.position, HexCoord(vp[0], vp[1]))
+                safe_hex_distance(u.position, HexCoord(vp[0], vp[1]))
                 for u in own_units
                 for vp in vp_positions
             )

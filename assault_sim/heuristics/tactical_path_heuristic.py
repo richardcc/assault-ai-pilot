@@ -1,11 +1,11 @@
 from assault_model.actions.action_catalog import ActionCatalog
 from assault_model.actions.ranged_direct import RangedDirectAttack
 from assault_model.actions.ranged_indirect import RangedIndirectAttack
-from assault_model.map.hex_utils import hex_distance
 from assault_model.map.terrain_config import terrain_config
 from assault_model.actions.status import WaitAction
 from assault_sim.rl.tactical_options import TacticalOption
 
+from assault_model.map.hex_utils import safe_hex_distance
 
 class TacticalPathHeuristic:
 
@@ -71,7 +71,7 @@ class TacticalPathHeuristic:
 
         return min(
             enemies,
-            key=lambda e: hex_distance(unit.position, e.position)
+            key=lambda e: safe_hex_distance(unit.position, e.position)
         )
 
     # -------------------------------------------------
@@ -90,7 +90,7 @@ class TacticalPathHeuristic:
             if not path:
                 continue
 
-            d = hex_distance(path[-1], target.position)
+            d = safe_hex_distance(path[-1], target.position)
 
             if d < best_dist:
                 best_dist = d
@@ -141,7 +141,7 @@ class TacticalPathHeuristic:
             if not path:
                 continue
 
-            d = hex_distance(path[-1], target.position)
+            d = safe_hex_distance(path[-1], target.position)
 
             if d > best_dist:
                 best_dist = d

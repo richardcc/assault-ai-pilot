@@ -1,6 +1,6 @@
 from collections import defaultdict
 import numpy as np
-
+from assault_model.map.hex_utils import safe_hex_distance
 from assault_sim.evaluation.metrics_tracker import MetricsTracker
 from assault_sim.engine.match_runner import MatchRunner
 from assault_sim.evaluation.advanced_metrics import AdvancedMetrics
@@ -188,9 +188,7 @@ class Evaluator:
                 for u in rl_units:
                     for e in enemy_units:
                         if u.position and e.position:
-                            dq = abs(u.position.q - e.position.q)
-                            dr = abs(u.position.r - e.position.r)
-                            dists.append(dq + dr)
+                            dists.append(safe_hex_distance(u.position, e.position))
 
                 if dists:
                     pre_dist = min(dists)

@@ -57,24 +57,26 @@ http://localhost:5173/art/maps/Map%20S2.png
 http://localhost:5173/art/maps/map_s3.png
 
 
+Muestra y diseño metodológico
+Participantes
 
-Fase 1: Contexto TEA
-- Ambigüedad diagnóstica
-- Baja visibilidad física
-- Conductas disruptivas en espacios públicos
+N = 120 - 150 progenitores (objetivo de paridad madres/padres: 60-75 por grupo).
+Criterios de Inclusión: Hijos con diagnóstico TEA (3-12 años), residentes en la Comunidad de Madrid, convivencia con el menor.
+Reclutamiento: Muestreo no probabilístico por conveniencia a través de asociaciones de familias TEA.
 
-Fase 2: Juicio social
-- Atribuciones erróneas
-- Negligencia parental, mala educación o falta de normas
+Diseño del Estudio
 
-Fase 3: Estigma por asociación
-- Extensión del estigma (Goffman, 1963)
-
-Consecuencias psicológicas
-- Culpa
-- Vergüenza
-- Aislamiento social
-- Estrés crónico (Hayes & Watson, 2013)
-
-
-Modelo teórico del estigma por asociación y el bienestar psicológico
+Batería de cuestionarios estandarizados
+Variable / Escala | Ítems | Autores (Adaptación)
+Estigma: Affiliate Stigma Scale (ASS)
+22 ítems
+Mak & Cheung (Adapt. Pugh et al. 2023)
+Bienestar: General Health Questionnaire (GHQ-12)
+12 ítems
+Goldberg (Adapt. Sánchez-López, 2008)
+Autocompasión: Self-Compassion Scale (SCS)
+26 ítems
+Neff (Adapt. García-Campayo, 2014)
+Apoyo Social: Multidimensional Scale of Perceived Social Support (MSPSS)
+12 ítems
+Zimet et al. (Adapt. Calderón, 2021)

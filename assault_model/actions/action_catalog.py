@@ -6,7 +6,7 @@ from assault_model.actions.ranged_direct import RangedDirectAttack
 from assault_model.rules.movement_rules import MovementRules
 from assault_model.rules.movement_outcome import MovementOutcome
 
-from assault_model.map.hex_utils import hex_distance
+from assault_model.map.hex_utils import safe_hex_distance
 from assault_model.combat.line_of_sight import has_line_of_sight
 
 import os
@@ -134,7 +134,7 @@ class ActionCatalog:
             if other.unit_id not in getattr(active, "spotted_enemies", []):
                 continue
 
-            distance = hex_distance(active.position, other.position)
+            distance = safe_hex_distance(active.position, other.position)
 
             if not self._in_weapon_range(active, other):
                 continue
@@ -168,7 +168,7 @@ class ActionCatalog:
     # ==================================================
     def _in_weapon_range(self, attacker, target):
 
-        distance = hex_distance(attacker.position, target.position)
+        distance =safe_hex_distance(attacker.position, target.position)
         attack = attacker.unit_type._attack_raw
 
         for mode_data in attack.values():

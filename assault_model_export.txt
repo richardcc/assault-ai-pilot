@@ -38,7 +38,7 @@ from assault_model.actions.ranged_direct import RangedDirectAttack
 from assault_model.rules.movement_rules import MovementRules
 from assault_model.rules.movement_outcome import MovementOutcome
 
-from assault_model.map.hex_utils import hex_distance
+from assault_model.map.hex_utils import safe_hex_distance
 from assault_model.combat.line_of_sight import has_line_of_sight
 
 import os
@@ -166,7 +166,7 @@ class ActionCatalog:
             if other.unit_id not in getattr(active, "spotted_enemies", []):
                 continue
 
-            distance = hex_distance(active.position, other.position)
+            distance = safe_hex_distance(active.position, other.position)
 
             if not self._in_weapon_range(active, other):
                 continue
@@ -200,7 +200,7 @@ class ActionCatalog:
     # ==================================================
     def _in_weapon_range(self, attacker, target):
 
-        distance = hex_distance(attacker.position, target.position)
+        distance =safe_hex_distance(attacker.position, target.position)
         attack = attacker.unit_type._attack_raw
 
         for mode_data in attack.values():
@@ -2086,8 +2086,8 @@ FILE: C:\repos\python\assault\assault_model\combat\line_of_sight.py
 ================================================================================
 
 from enum import Enum
+import math
 
-from assault_model.map.hex_line import hex_line
 from assault_model.map.hex_coord import HexCoord
 
 
@@ -2112,37 +2112,138 @@ def _make_key(a: HexCoord, b: HexCoord):
     return (a.q, a.r, b.q, b.r)
 
 
+# -------------------------------------------------
+# HEX GEOMETRY
+# -------------------------------------------------
+
+def _hex_corners(hex_coord: HexCoord):
+    """
+    Coordenadas de los 6 vértices del hex.
+    Aproximación axial en plano continuo.
+    """
+    cx = hex_coord.q
+    cy = hex_coord.r
+
+    size = 1.0
+    corners = []
+
+    for i in range(6):
+        angle = math.pi / 3 * i
+        x = cx + size * math.cos(angle)
+        y = cy + size * math.sin(angle)
+        corners.append((x, y))
+
+    return corners
+
+
+def _ccw(a, b, c):
+    return (c[1] - a[1]) * (b[0] - a[0]) > (b[1] - a[1]) * (c[0] - a[0])
+
+
+def _segments_intersect(p1, p2, p3, p4):
+    """
+    Intersección de segmentos robusta.
+    """
+    return (_ccw(p1, p3, p4) != _ccw(p2, p3, p4) and
+            _ccw(p1, p2, p3) != _ccw(p1, p2, p4))
+
+
+def _segment_intersects_hex(start: HexCoord, end: HexCoord, hex_coord: HexCoord):
+    """
+    Devuelve True SOLO si el segmento atraviesa el hex realmente.
+    """
+
+    s = (start.q, start.r)
+    e = (end.q, end.r)
+
+    corners = _hex_corners(hex_coord)
+
+    for i in range(6):
+        c1 = corners[i]
+        c2 = corners[(i + 1) % 6]
+
+        if _segments_intersect(s, e, c1, c2):
+            return True
+
+    return False
+
+
+# -------------------------------------------------
+# RECORRIDO BASE (candidatos)
+# -------------------------------------------------
+
+def _supercover_line(a: HexCoord, b: HexCoord):
+    """
+    Genera candidatos de hex a comprobar (superset).
+    """
+    N = max(
+        abs(a.q - b.q),
+        abs(a.r - b.r),
+        abs((a.q + a.r) - (b.q + b.r)),
+    )
+
+    results = []
+
+    for i in range(N + 1):
+        t = 0 if N == 0 else i / N
+
+        q = a.q + (b.q - a.q) * t
+        r = a.r + (b.r - a.r) * t
+
+        coord = HexCoord(round(q), round(r))
+
+        if not results or coord != results[-1]:
+            results.append(coord)
+
+    return results
+
+
+# -------------------------------------------------
+# LOS CORE REAL
+# -------------------------------------------------
+
 def check_line_of_sight(attacker, target, game_map, terrain_config):
 
-    start = attacker.position
-    end = target.position
+    start = getattr(attacker, "position", None)
+    end = getattr(target, "position", None)
+
+    # ✅ protección básica
+    if start is None or end is None:
+        return LineOfSight.BLOCKED
 
     key = _make_key(start, end)
 
-    # ✅ CACHE HIT
     if key in _los_cache:
         return _los_cache[key]
 
-    line = hex_line(start, end)
+    # ✅ simetría (opcional pero útil)
+    reverse_key = (end.q, end.r, start.q, start.r)
+    if reverse_key in _los_cache:
+        return _los_cache[reverse_key]
 
-    # ignoramos origen y destino
-    path = line[1:-1]
+    candidates = _supercover_line(start, end)
+
+    path = candidates[1:-1]
 
     hindrance = 0
 
     for coord in path:
-        hex_ = game_map.get_hex(coord.q, coord.r)
 
+        # ✅ filtro geométrico real
+        if not _segment_intersects_hex(start, end, coord):
+            continue
+
+        hex_ = game_map.get_hex(coord.q, coord.r)
         if not hex_:
             continue
 
         terrain = hex_.get_terrain()
         config = terrain_config.get(terrain)
 
-        los_type = config.get("los", "CLEAR")
+        los_type = config.get("los", "CLEAR") if config else "CLEAR"
 
         # -------------------------------------------------
-        # BLOCKED → exit inmediato
+        # BLOCKED
         # -------------------------------------------------
         if los_type == "BLOCKED":
             result = LineOfSight.BLOCKED
@@ -2150,28 +2251,28 @@ def check_line_of_sight(attacker, target, game_map, terrain_config):
             return result
 
         # -------------------------------------------------
-        # HINDERED → acumulamos
+        # HINDERED
         # -------------------------------------------------
         if los_type == "HINDERED":
             hindrance += 1
 
-            # ✅ regla del manual: 3 hindrances = BLOCKED
             if hindrance >= 3:
                 result = LineOfSight.BLOCKED
                 _los_cache[key] = result
                 return result
 
     # -------------------------------------------------
-    # RESULTADO FINAL
+    # RESULT FINAL
     # -------------------------------------------------
-    if hindrance >= 1:
-        result = LineOfSight.HINDERED
-    else:
-        result = LineOfSight.CLEAR
+    result = LineOfSight.HINDERED if hindrance >= 1 else LineOfSight.CLEAR
 
     _los_cache[key] = result
     return result
 
+
+# -------------------------------------------------
+# PUBLIC API
+# -------------------------------------------------
 
 def has_line_of_sight(attacker, target, game_map, terrain_config):
     return check_line_of_sight(
@@ -2180,6 +2281,7 @@ def has_line_of_sight(attacker, target, game_map, terrain_config):
         game_map,
         terrain_config
     ) != LineOfSight.BLOCKED
+
 
 
 ================================================================================
@@ -3993,8 +4095,6 @@ class HexState:
 FILE: C:\repos\python\assault\assault_model\map\hex_utils.py
 ================================================================================
 
-# assault_model/map/hex_utils.py
-
 from typing import Tuple, Union
 from assault_model.map.hex_coord import HexCoord
 
@@ -4004,55 +4104,69 @@ CoordLike = Union[Tuple[int, int], HexCoord]
 
 def _as_qr(pos: CoordLike) -> Tuple[int, int]:
     """
-    Normalize coordinate inputs to axial (q, r).
-
-    Accepts:
-    - Legacy (q, r) tuples
-    - HexCoord objects (new architecture)
-
-    Returns:
-    - (q, r) tuple
-
-    This helper exists to allow legacy utilities to coexist
-    with the new HexCoord-based domain model.
+    Normalize coordinate inputs to (q, r).
     """
     if isinstance(pos, HexCoord):
         return pos.q, pos.r
     return pos
 
 
+# ✅ NUEVO: conversión offset (odd-r) → axial
+def _offset_to_axial(q: int, r: int) -> Tuple[int, int]:
+    """
+    Convert odd-r offset coordinates to axial coordinates.
+
+    Your movement rules use an odd-r layout, so we must
+    convert to axial before computing distance.
+    """
+    axial_q = q - ((r - (r & 1)) // 2)
+    axial_r = r
+    return axial_q, axial_r
+
+
 def hex_distance(a: CoordLike, b: CoordLike) -> int:
     """
-    Compute axial hex distance between two hex coordinates.
+    Compute hex distance for an odd-r offset grid.
 
-    Distance formula (cube projection):
-        distance = max(
-            |dq|,
-            |dr|,
-            |dq + dr|
-        )
-
-    Parameters:
-    - a, b:
-      * Either (q, r) tuples (legacy code)
-      * Or HexCoord objects (new architecture)
-
-    Returns:
-    - Integer distance in hexes
-
-    Design note:
-    - This function is intentionally permissive about input types
-      to avoid forcing domain code to downgrade to tuples.
+    Internally:
+    offset → axial → cube distance
     """
 
     aq, ar = _as_qr(a)
     bq, br = _as_qr(b)
+
+    # ✅ CONVERSIÓN CLAVE
+    aq, ar = _offset_to_axial(aq, ar)
+    bq, br = _offset_to_axial(bq, br)
 
     return max(
         abs(aq - bq),
         abs(ar - br),
         abs((aq + ar) - (bq + br)),
     )
+
+def safe_hex_distance(a, b):
+    """
+    Safe wrapper around hex_distance.
+
+    Guarantees:
+    - Never crashes
+    - Returns large value if invalid input
+    """
+
+    # ✅ None check
+    if a is None or b is None:
+        return 999
+
+    # ✅ type check
+    if not hasattr(a, "q") or not hasattr(a, "r"):
+        return 999
+
+    if not hasattr(b, "q") or not hasattr(b, "r"):
+        return 999
+
+    return hex_distance(a, b)
+
 
 
 ================================================================================
@@ -6102,6 +6216,88 @@ class UnitInstance:
         state["last_seen_turn"] = {}
 
         return state
+    
+    # ==================================================
+    # 🔥 COMBAT MODELING HELPERS
+    # ==================================================
+
+    def get_attack_power_vs(self, target: "UnitInstance") -> float:
+        """
+        Approximate offensive power based on attack dice.
+        """
+
+        dice = self.get_attack_dice(target)
+
+        # pesos simples por dado (ajustables)
+        weights = {
+            "RED": 1.0,
+            "YELLOW": 0.75,
+            "GREEN": 0.5,
+            "BLUE": 0.4,
+        }
+
+        power = 0.0
+        for d in dice:
+            power += weights.get(d.name, 0.5)
+
+        # ajustar por HP (unidad dañada pega menos)
+        hp_factor = self.hp / max(1, self.max_strength)
+
+        return power * hp_factor
+
+    # --------------------------------------------------
+    def get_expected_damage(self, target: "UnitInstance") -> float:
+        """
+        Expected damage proxy.
+        """
+
+        return self.get_attack_power_vs(target)
+
+    # --------------------------------------------------
+    def get_combat_advantage(self, target: "UnitInstance") -> float:
+
+        if target is None or not target.alive:
+            return 0.0
+
+        # --- attack power ---
+        my_attack = self.get_attack_power_vs(target)
+        enemy_attack = target.get_attack_power_vs(self)
+
+        # 💥 caso crítico: no puede hacer daño
+        if my_attack == 0:
+            return -2.0
+
+        # --- distancia ---
+        distance = self.get_distance_to(target)
+
+        range_factor = 1.0
+        if distance > 6:
+            range_factor = 0.6
+        elif distance > 3:
+            range_factor = 0.8
+
+        # --- HP ---
+        my_hp_ratio = self.hp / max(1, self.max_strength)
+        enemy_hp_ratio = target.hp / max(1, target.max_strength)
+
+        hp_advantage = (my_hp_ratio - enemy_hp_ratio) * 1.5
+
+        # --- final ---
+        advantage = (
+            my_attack * 2.0 * range_factor
+            - enemy_attack * 1.5
+            + hp_advantage
+        )
+
+        return advantage
+
+    # --------------------------------------------------
+    def is_favorable_vs(self, target: "UnitInstance") -> bool:
+        return self.get_combat_advantage(target) > 0
+
+    # --------------------------------------------------
+    def is_unfavorable_vs(self, target: "UnitInstance") -> bool:
+        return self.get_combat_advantage(target) < -1.0
 
 
 

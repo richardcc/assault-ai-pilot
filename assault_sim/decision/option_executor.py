@@ -3,10 +3,11 @@ from assault_model.actions.ranged_direct import RangedDirectAttack
 from assault_model.actions.ranged_indirect import RangedIndirectAttack
 from assault_model.actions.action_catalog import ActionCatalog
 from assault_model.actions.action_category import ActionCategory
-from assault_model.map.hex_utils import hex_distance
+
 
 from assault_sim.rl.tactical_options import TacticalOption
 from assault_model.map.terrain_config import terrain_config
+from assault_model.map.hex_utils import safe_hex_distance
 
 
 class OptionExecutor:
@@ -111,7 +112,7 @@ class OptionExecutor:
 
         target = min(
             enemies,
-            key=lambda e: hex_distance(unit.position, e.position)
+            key=lambda e: safe_hex_distance(unit.position, e.position)
         )
 
         best = None
@@ -125,7 +126,7 @@ class OptionExecutor:
             if not path:
                 continue
 
-            d = hex_distance(path[-1], target.position)
+            d = safe_hex_distance(path[-1], target.position)
 
             if best is None or d <= best_dist:
                 best = a
@@ -148,7 +149,7 @@ class OptionExecutor:
 
         target = min(
             enemies,
-            key=lambda e: hex_distance(unit.position, e.position)
+            key=lambda e: safe_hex_distance(unit.position, e.position)
         )
 
         best = None
@@ -163,7 +164,7 @@ class OptionExecutor:
                 continue
 
             new_pos = path[-1]
-            dist = hex_distance(new_pos, target.position)
+            dist = safe_hex_distance(new_pos, target.position)
 
             score = max(0, 6 - dist)
 
@@ -237,7 +238,7 @@ class OptionExecutor:
 
             # distancia
             if hasattr(unit, "position") and hasattr(target, "position"):
-                dist = hex_distance(unit.position, target.position)
+                dist = safe_hex_distance(unit.position, target.position)
 
                 if dist <= 2:
                     score += 3

@@ -317,7 +317,7 @@ import os
 from pathlib import Path
 
 from assault_model.actions.status import WaitAction
-from assault_model.map.hex_utils import hex_distance
+from assault_model.map.hex_utils import safe_hex_distance
 
 from assault_sim.rl.state_encoder import encode_state
 from assault_sim.rewards.progressive_reward import ProgressiveReward
@@ -337,7 +337,7 @@ def _min_dist_fast(units_a, units_b):
 
     for a in units_a:
         for b in units_b:
-            d = hex_distance(a.position, b.position)
+            d = safe_hex_distance(a.position, b.position)
             if d < best:
                 best = d
                 if best <= 1:
@@ -3129,30 +3129,20 @@ FILE: C:\repos\python\assault\assault_sim\decision\decision_engine.py
 ================================================================================
 
 import copy
+
 from assault_model.actions.status import WaitAction
 from assault_model.actions.action_catalog import ActionCatalog
-from assault_model.map.hex_utils import hex_distance
+from assault_model.map.hex_utils import safe_hex_distance
+
 from assault_model.map.hex_coord import HexCoord
-from assault_sim.strategy.formation_strategy import FormationStrategyEngine
 
 
 class DecisionEngine:
-    """
-    Improved Decision Engine
-
-    ✅ Preserves original structure
-    ✅ Adds combat awareness
-    ✅ Improves action scoring
-    ✅ Keeps compatibility with PPO / HRL
-
-    Returns INTENT only (no execution)
-    """
-
     def __init__(self):
         self._unit_selection_cache = {}
 
     # --------------------------------------------------
-    # MAIN ENTRY
+    # MAIN
     # --------------------------------------------------
     def compute_intent(self, env):
         state = env.game_state
@@ -3180,12 +3170,8 @@ class DecisionEngine:
         best_action = None
         best_score = float("-inf")
 
-        # 🔥 NUEVO: priorización ligera de unidades útiles
-        units = sorted(
-            units,
-            key=lambda u: getattr(u, "hp", 0),
-            reverse=True
-        )
+        # ✅ priorizar unidades sanas
+        units = sorted(units, key=lambda u: getattr(u, "hp", 0), reverse=True)
 
         for unit in units:
             actions = self._get_unit_actions(env, unit)
@@ -3219,117 +3205,166 @@ class DecisionEngine:
         return catalog.actions()
 
     # --------------------------------------------------
-    # ✅ IMPROVED ACTION EVALUATION
+    # ✅ MAIN EVALUATION
     # --------------------------------------------------
     def evaluate_action(self, env, action, side):
         try:
-            sandbox_env = copy.deepcopy(env)
+            state = env.game_state
 
-            # Disable events
-            if hasattr(sandbox_env, "event_bus"):
-                sandbox_env.event_bus = None
-
-            # snapshot before
-            before_state = sandbox_env.game_state
-            before_hp = {
-                u.unit_id: getattr(u, "hp", 0)
-                for u in before_state.units
-            }
-
-            sandbox_env.step(action)
-
-            after_state = sandbox_env.game_state
-
-            base_score = self._evaluate_state_quality(after_state, side)
-
-            # 🔥 NUEVO: evaluación de combate directo
-            combat_score = self._evaluate_combat_delta(
-                before_state,
-                after_state,
-                before_hp,
-                side
-            )
-
-            # 🔥 NUEVO: bonus contextual de acción
+            base_score = self._evaluate_state_quality(state, side)
+            combat_score = self._evaluate_expected_combat(action)
+            progress_score = self._evaluate_movement_progress(env, action, side)
             action_bonus = self._action_bias(action)
 
-            return base_score + combat_score + action_bonus
+            return base_score + combat_score + progress_score + action_bonus
 
         except Exception:
             return self._heuristic_score(action)
 
     # --------------------------------------------------
-    # ✅ NUEVO: COMBAT DELTA
+    # 🔥 MOVEMENT PROGRESS (FIX PRINCIPAL)
     # --------------------------------------------------
-    def _evaluate_combat_delta(self, before, after, hp_before, side):
-        friendly_loss = 0
-        enemy_loss = 0
+    def _evaluate_movement_progress(self, env, action, side):
 
-        for u in after.units:
-            before_hp = hp_before.get(u.unit_id, 0)
-            after_hp = getattr(u, "hp", 0)
+        unit = getattr(action, "unit", None) or getattr(action, "actor", None)
 
-            delta = before_hp - after_hp
-            if delta <= 0:
-                continue
+        if unit is None or not getattr(unit, "position", None):
+            return 0
 
-            if u.side == side:
-                friendly_loss += delta
-            else:
-                enemy_loss += delta
+        state = env.game_state
+
+        enemies = [
+            u for u in state.units
+            if u.side != side and getattr(u, "alive", True)
+        ]
+
+        if not enemies:
+            return 0
+
+        try:
+            closest = min(
+                enemies,
+                key=lambda e: safe_hex_distance(unit.position, e.position)
+            )
+        except Exception:
+            return 0
+
+        start_pos = unit.position
+
+        target_pos = None
+        target = getattr(action, "target", None)
+
+        if isinstance(target, HexCoord):
+            target_pos = target
+        elif hasattr(action, "q") and hasattr(action, "r"):
+            target_pos = HexCoord(action.q, action.r)
+
+        if target_pos is None:
+            return 0
+
+        d_before = safe_hex_distance(start_pos, closest.position)
+        d_after = safe_hex_distance(target_pos, closest.position)
 
         score = 0
 
-        # 🔥 clave: premiar trades positivos
-        score += enemy_loss * 25
-        score -= friendly_loss * 30
+        # ✅ 🔥 FUERZA AVANCE (clave real)
+        score += (d_before - d_after) * 12
 
-        # 🔥 kill detection
-        for u in after.units:
-            if u.side != side and not getattr(u, "alive", True):
-                score += 80
-            if u.side == side and not getattr(u, "alive", True):
-                score -= 80
+        # ✅ 🔥 SI ESTÁ LEJOS → EMPUJAR FUERTE
+        if d_before > 4:
+            score += 10
+
+        # ✅ penalizar huir
+        if d_after > d_before:
+            score -= 6
+
+        # ✅ contacto cercano
+        if d_after <= 2:
+            score += 10
+
+        # ✅ cohesión de grupo (más humano)
+        near_friends = sum(
+            1 for f in state.units
+            if f.side == side
+            and getattr(f, "alive", True)
+            and f != unit
+            and f.position
+            and safe_hex_distance(target_pos, f.position) <= 2
+        )
+
+        if near_friends == 0:
+            score -= 4
 
         return score
 
     # --------------------------------------------------
-    # ✅ NUEVO: ACTION BIAS
+    def _evaluate_expected_combat(self, action):
+
+        unit = getattr(action, "unit", None) or getattr(action, "actor", None) or getattr(action, "attacker", None)
+        target = getattr(action, "target", None)
+
+        if unit is None or target is None:
+            return 0
+
+        if not getattr(target, "alive", True):
+            return 50
+
+        score = 0
+
+        dmg = unit.get_expected_damage(target) if hasattr(unit, "get_expected_damage") else 0
+        adv = unit.get_combat_advantage(target) if hasattr(unit, "get_combat_advantage") else 0
+
+        # ✅ menos miedo → más humano
+        if dmg <= 0.05:
+            return -15
+
+        score += dmg * 40
+        score += adv * 25
+
+        hp = getattr(target, "hp", 5)
+
+        if hp <= 1:
+            score += 60
+
+        if hp > 6 and dmg < 0.2:
+            score -= 20
+
+        if unit.position and target.position:
+            dist = safe_hex_distance(unit.position, target.position)
+
+            if dist <= 2:
+                score += 5
+            elif dist > 5:
+                score -= 10
+
+        return score
+
     # --------------------------------------------------
     def _action_bias(self, action):
         name = action.__class__.__name__.lower()
-
         score = 0
 
         if "attack" in name:
-            score += 10  # leve incentivo a atacar bien
+            score += 12
 
         if "assault" in name:
-            score += 25  # más risky → más reward
+            score += 25
 
         if "move" in name:
-            score += 5
+            score += 2
 
         if "wait" in name:
-            score -= 25  # ❗ penaliza pasividad
+            score -= 20
 
         return score
 
     # --------------------------------------------------
-    # STATE EVALUATION (MEJORADO)
-    # --------------------------------------------------
     def _evaluate_state_quality(self, state, side):
 
-        # ------------------------
-        # VP
-        # ------------------------
         vp_score = 0
         if hasattr(state, "vp_tracker") and hasattr(state.vp_tracker, "total_points"):
             vp_score = state.vp_tracker.total_points
 
-        # ------------------------
-        # Units
-        # ------------------------
         friendly_units = [
             u for u in state.units
             if u.side == side and getattr(u, "alive", True)
@@ -3346,67 +3381,30 @@ class DecisionEngine:
         num_friendly = len(friendly_units)
         num_enemy = len(enemy_units)
 
-        friendly_dead = len([
-            u for u in state.units
-            if u.side == side and not getattr(u, "alive", True)
-        ])
-
-        enemy_dead = len([
-            u for u in state.units
-            if u.side != side and not getattr(u, "alive", True)
-        ])
-
-        # ------------------------
-        # LOW HP PRESSURE
-        # ------------------------
-        low_enemy = sum(1 for u in enemy_units if getattr(u, "hp", 0) <= 1)
-        low_friendly = sum(1 for u in friendly_units if getattr(u, "hp", 0) <= 1)
-
-        # ------------------------
-        # VP DISTANCE
-        # ------------------------
         progress_score = 0
-        vp_positions = []
 
-        if hasattr(state, "game_map") and hasattr(state.game_map, "vp_positions"):
-            vp_positions = state.game_map.vp_positions
+        vp_positions = getattr(state.game_map, "vp_positions", []) if hasattr(state, "game_map") else []
 
         if vp_positions:
             for u in friendly_units:
-                if getattr(u, "position", None):
+                if u.position:
                     try:
                         min_dist = min(
-                            hex_distance(
-                                u.position,
-                                HexCoord(vp[0], vp[1])
-                            )
+                            safe_hex_distance(u.position, HexCoord(vp[0], vp[1]))
                             for vp in vp_positions
                         )
                         progress_score -= min_dist
-                    except Exception:
+                    except:
                         pass
 
-        # ------------------------
-        # FINAL SCORE
-        # ------------------------
         score = 0
 
-        # 🎯 VP (más importante ahora)
         score += vp_score * 120
+        score += (friendly_hp - enemy_hp) * 4
 
-        # 💥 combate
-        score += (friendly_hp - enemy_hp) * 6
-        score += (num_friendly - num_enemy) * 50
+        # ✅ equilibrio humano (antes 50 → demasiado agresivo)
+        score += (num_friendly - num_enemy) * 25
 
-        # ☠ kills
-        score += enemy_dead * 90
-        score -= friendly_dead * 90
-
-        # presión
-        score += low_enemy * 30
-        score -= low_friendly * 30
-
-        # 🧭 posicionamiento
         score += progress_score * 3
 
         return score
@@ -3417,13 +3415,13 @@ class DecisionEngine:
         name = action.__class__.__name__.lower()
 
         if "attack" in name:
-            score += 50
+            score += 40
         if "assault" in name:
-            score += 70
+            score += 60
         if "move" in name:
-            score += 20
+            score += 15
         if "wait" in name:
-            score -= 20
+            score -= 10
 
         return score
 
@@ -3868,10 +3866,11 @@ from assault_model.actions.ranged_direct import RangedDirectAttack
 from assault_model.actions.ranged_indirect import RangedIndirectAttack
 from assault_model.actions.action_catalog import ActionCatalog
 from assault_model.actions.action_category import ActionCategory
-from assault_model.map.hex_utils import hex_distance
+
 
 from assault_sim.rl.tactical_options import TacticalOption
 from assault_model.map.terrain_config import terrain_config
+from assault_model.map.hex_utils import safe_hex_distance
 
 
 class OptionExecutor:
@@ -3976,7 +3975,7 @@ class OptionExecutor:
 
         target = min(
             enemies,
-            key=lambda e: hex_distance(unit.position, e.position)
+            key=lambda e: safe_hex_distance(unit.position, e.position)
         )
 
         best = None
@@ -3990,7 +3989,7 @@ class OptionExecutor:
             if not path:
                 continue
 
-            d = hex_distance(path[-1], target.position)
+            d = safe_hex_distance(path[-1], target.position)
 
             if best is None or d <= best_dist:
                 best = a
@@ -4013,7 +4012,7 @@ class OptionExecutor:
 
         target = min(
             enemies,
-            key=lambda e: hex_distance(unit.position, e.position)
+            key=lambda e: safe_hex_distance(unit.position, e.position)
         )
 
         best = None
@@ -4028,7 +4027,7 @@ class OptionExecutor:
                 continue
 
             new_pos = path[-1]
-            dist = hex_distance(new_pos, target.position)
+            dist = safe_hex_distance(new_pos, target.position)
 
             score = max(0, 6 - dist)
 
@@ -4102,7 +4101,7 @@ class OptionExecutor:
 
             # distancia
             if hasattr(unit, "position") and hasattr(target, "position"):
-                dist = hex_distance(unit.position, target.position)
+                dist = safe_hex_distance(unit.position, target.position)
 
                 if dist <= 2:
                     score += 3
@@ -4882,7 +4881,7 @@ CONFIG_PATH = Path("C:/repos/python/assault/assault_sim/config/sim_config.yaml")
 ENV_CONFIG = Path("C:/repos/python/assault/assault_sim/config/env_config.json")
 CHECKPOINT = Path("models/latest.pt")
 
-NUM_WORKERS = min(6, cpu_count())
+NUM_WORKERS = min(20, cpu_count())
 
 
 # -------------------------------------------------
@@ -4980,7 +4979,7 @@ def build_controller(policy, sim_env):
         sim_env=sim_env,
     )
 
-    controller.training_mode = True
+    controller.training_mode = False
     return controller
 
 
@@ -5180,7 +5179,7 @@ FILE: C:\repos\python\assault\assault_sim\evaluation\evaluator.py
 
 from collections import defaultdict
 import numpy as np
-
+from assault_model.map.hex_utils import safe_hex_distance
 from assault_sim.evaluation.metrics_tracker import MetricsTracker
 from assault_sim.engine.match_runner import MatchRunner
 from assault_sim.evaluation.advanced_metrics import AdvancedMetrics
@@ -5368,9 +5367,7 @@ class Evaluator:
                 for u in rl_units:
                     for e in enemy_units:
                         if u.position and e.position:
-                            dq = abs(u.position.q - e.position.q)
-                            dr = abs(u.position.r - e.position.r)
-                            dists.append(dq + dr)
+                            dists.append(safe_hex_distance(u.position, e.position))
 
                 if dists:
                     pre_dist = min(dists)
@@ -9040,11 +9037,9 @@ FILE: C:\repos\python\assault\assault_sim\rl\state_encoder.py
 ================================================================================
 
 import numpy as np
-from assault_model.map.hex_utils import hex_distance
 
-# ✅ NEW IMPORT
 from assault_sim.rl.features.tactical_features import compute_tactical_features
-
+from assault_model.map.hex_utils import safe_hex_distance
 
 # =================================================
 # NUMERIC STATE (USED BY RL)
@@ -9103,7 +9098,7 @@ def encode_state(state, unit=None, rl_side=None, max_turns=None):
     if active is not None and enemy_units and active.position is not None:
         closest_enemy = min(
             enemy_units,
-            key=lambda e: hex_distance(active.position, e.position),
+            key=lambda e: safe_hex_distance(active.position, e.position),
         )
 
         dq = np.clip((closest_enemy.position.q - active.position.q) / 10.0, -1.0, 1.0)
@@ -9120,10 +9115,10 @@ def encode_state(state, unit=None, rl_side=None, max_turns=None):
         if vp_points:
             target_vp = min(
                 vp_points,
-                key=lambda p: hex_distance(active.position, p.hex_coords)
+                key=lambda p: safe_hex_distance(active.position, p.hex_coords)
             )
 
-            dist = hex_distance(active.position, target_vp.hex_coords)
+            dist = safe_hex_distance(active.position, target_vp.hex_coords)
             vp_dist = np.clip(dist / 10.0, 0.0, 1.0)
 
     # -------------------------
@@ -9141,7 +9136,7 @@ def encode_state(state, unit=None, rl_side=None, max_turns=None):
     enemy_dist = 0.0
 
     if active is not None and closest_enemy is not None:
-        d = hex_distance(active.position, closest_enemy.position)
+        d = safe_hex_distance(active.position, closest_enemy.position)
         enemy_dist = np.clip(d / 10.0, 0.0, 1.0)
 
     # -------------------------
@@ -9295,7 +9290,8 @@ class TacticalOption(Enum):
 FILE: C:\repos\python\assault\assault_sim\rl\features\tactical_features.py
 ================================================================================
 
-from assault_model.map.hex_utils import hex_distance
+from assault_model.map.hex_utils import safe_hex_distance
+
 
 
 def compute_tactical_features(state, rl_side):
@@ -9338,7 +9334,7 @@ def compute_tactical_features(state, rl_side):
     # ----------------------------------
     if enemy_units:
         min_dist = min(
-            hex_distance(unit.position, e.position)
+            safe_hex_distance(unit.position, e.position)
             for e in enemy_units
         )
     else:
@@ -9351,7 +9347,7 @@ def compute_tactical_features(state, rl_side):
     # ----------------------------------
     close_enemies = sum(
         1 for e in enemy_units
-        if hex_distance(unit.position, e.position) <= 3
+        if safe_hex_distance(unit.position, e.position) <= 3
     )
     threat_level = close_enemies / 5.0
 
@@ -9361,7 +9357,7 @@ def compute_tactical_features(state, rl_side):
     close_allies = sum(
         1 for a in own_units
         if a.unit_id != unit.unit_id and
-        hex_distance(unit.position, a.position) <= 3
+        safe_hex_distance(unit.position, a.position) <= 3
     )
     ally_support = close_allies / 5.0
 
@@ -12651,7 +12647,7 @@ from enum import Enum
 from typing import Optional
 import random
 
-from assault_model.map.hex_utils import hex_distance
+from assault_model.map.hex_utils import safe_hex_distance
 from assault_model.map.hex_coord import HexCoord
 
 
@@ -12698,7 +12694,7 @@ class FormationStrategyEngine:
         # ✅ DISTANCIA ENEMIGO (mínima)
         # -------------------------------------------------
         enemy_dist = min(
-            hex_distance(u.position, e.position)
+            safe_hex_distance(u.position, e.position)
             for u in own_units
             for e in enemy_units
         )
@@ -12738,7 +12734,7 @@ class FormationStrategyEngine:
                 return 999
 
             return min(
-                hex_distance(u.position, HexCoord(vp[0], vp[1]))
+                safe_hex_distance(u.position, HexCoord(vp[0], vp[1]))
                 for u in own_units
                 for vp in vp_positions
             )

@@ -2,7 +2,8 @@ import copy
 
 from assault_model.actions.status import WaitAction
 from assault_model.actions.action_catalog import ActionCatalog
-from assault_model.map.hex_utils import hex_distance
+from assault_model.map.hex_utils import safe_hex_distance
+
 from assault_model.map.hex_coord import HexCoord
 
 
@@ -113,7 +114,7 @@ class DecisionEngine:
         try:
             closest = min(
                 enemies,
-                key=lambda e: hex_distance(unit.position, e.position)
+                key=lambda e: safe_hex_distance(unit.position, e.position)
             )
         except Exception:
             return 0
@@ -131,8 +132,8 @@ class DecisionEngine:
         if target_pos is None:
             return 0
 
-        d_before = hex_distance(start_pos, closest.position)
-        d_after = hex_distance(target_pos, closest.position)
+        d_before = safe_hex_distance(start_pos, closest.position)
+        d_after = safe_hex_distance(target_pos, closest.position)
 
         score = 0
 
@@ -158,7 +159,7 @@ class DecisionEngine:
             and getattr(f, "alive", True)
             and f != unit
             and f.position
-            and hex_distance(target_pos, f.position) <= 2
+            and safe_hex_distance(target_pos, f.position) <= 2
         )
 
         if near_friends == 0:
@@ -199,7 +200,7 @@ class DecisionEngine:
             score -= 20
 
         if unit.position and target.position:
-            dist = hex_distance(unit.position, target.position)
+            dist = safe_hex_distance(unit.position, target.position)
 
             if dist <= 2:
                 score += 5
@@ -259,7 +260,7 @@ class DecisionEngine:
                 if u.position:
                     try:
                         min_dist = min(
-                            hex_distance(u.position, HexCoord(vp[0], vp[1]))
+                            safe_hex_distance(u.position, HexCoord(vp[0], vp[1]))
                             for vp in vp_positions
                         )
                         progress_score -= min_dist
