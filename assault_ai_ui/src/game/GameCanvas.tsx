@@ -21,6 +21,8 @@ import { HighlightLayer } from "./render/highlightLayer";
 import { updateHighlights } from "./systems/highlightSystem";
 import { updateLayerVisibility } from "./systems/layerVisibilitySystem";
 
+import { createDebugVector, updateDebugVector } from "./systems/debugVectorSystem";
+
 export default function GameCanvas({
   setGameData,
   selectedUnitId,
@@ -79,7 +81,7 @@ export default function GameCanvas({
       }, 0);
     };
 
-  }, [])
+  }, []);
 
   // ---------------------------------------------
   // VISIBILITY
@@ -125,6 +127,13 @@ export default function GameCanvas({
       world.eventMode = "static";
       world.hitArea = app.screen;
 
+      app.stage.addChild(world);
+      worldRef.current = world;
+
+      // ✅ DEBUG VECTOR EXTERNAL
+      const debugVector = createDebugVector(app);
+      (window as any).debugVector = debugVector;
+
       // ---------------------------------------------
       // HOVER
       // ---------------------------------------------
@@ -151,14 +160,24 @@ export default function GameCanvas({
           }
         }
 
-        if (closestHex) {
-          setHoverHex(prev => {
-            if (!prev || prev.q !== closestHex.q || prev.r !== closestHex.r) {
-              return { q: closestHex.q, r: closestHex.r };
-            }
-            return prev;
-          });
-        }
+        if (!closestHex) return;
+
+        setHoverHex(prev => {
+          if (!prev || prev.q !== closestHex.q || prev.r !== closestHex.r) {
+            return { q: closestHex.q, r: closestHex.r };
+          }
+          return prev;
+        });
+
+        // ✅ DEBUG desacoplado
+        updateDebugVector({
+          world,
+          selectedUnitId: selectedUnitRef.current,
+          state: lastStateRef.current,
+          closestHex,
+          event,
+          debug: (window as any).debugVector
+        });
 
       });
 
@@ -190,20 +209,14 @@ export default function GameCanvas({
 
         if (closestHex) {
           console.log("🖱️ CLICK DETECTED", closestHex.q, closestHex.r);
-
-          (window as any).onHexClick?.(
-            closestHex.q,
-            closestHex.r
-          );
+          (window as any).onHexClick?.(closestHex.q, closestHex.r);
         }
       });
 
-      app.stage.addChild(world);
-      worldRef.current = world;
-
-      // FX layer
+      // ---------------------------------------------
+      // LAYERS
+      // ---------------------------------------------
       const fxLayer = new PIXI.Container();
-      fxLayer.label = "fxLayer";
       app.stage.addChild(fxLayer);
       fxLayerRef.current = fxLayer;
 
@@ -213,22 +226,24 @@ export default function GameCanvas({
       world.addChild(background);
       world.addChild(grid);
 
+      backgroundRef.current = background;
+      gridRef.current = grid;
+
       const unitLayer = new UnitLayer(world);
       unitLayerRef.current = unitLayer;
 
       const highlightLayer = new HighlightLayer(world);
       highlightLayerRef.current = highlightLayer;
 
-      // ✅ 🔥 NUEVO: conectar con GameController
+      // ✅ conectar con GameController
       const controller = (window as any).gameController;
       if (controller) {
         controller.setHighlightLayer(highlightLayer);
-        console.log("✅ HighlightLayer connected to GameController");
       }
 
-      backgroundRef.current = background;
-      gridRef.current = grid;
-
+      // ---------------------------------------------
+      // CAMERA
+      // ---------------------------------------------
       setupCamera(app, world, containerRef.current!);
       registerFocusUnit(worldRef, appRef, lastStateRef);
 
@@ -263,17 +278,9 @@ export default function GameCanvas({
         }
 
         setSelectedUnitId(unit.id);
-
-        handleUnitClick(
-          unit,
-          data,
-          setAvailableMoves
-        );
+        handleUnitClick(unit, data, setAvailableMoves);
       };
 
-      // ---------------------------------------------
-      // ORDER HOVER / EXECUTE
-      // ---------------------------------------------
       (window as any).onOrderHover = (order: any) => {
         setOrderHoverTarget(order);
       };
@@ -282,38 +289,6 @@ export default function GameCanvas({
         setOrderHoverTarget(null);
       };
 
-      (window as any).executeOrder = async (order: any) => {
-        const unitId = order.unit_id || order.unitId;
-        const currentMoves = availableMovesRef.current || [];
-        const targetQ = order.target_q ?? order.q;
-        const targetR = order.target_r ?? order.r;
-
-        if (!unitId || targetQ == null || targetR == null) {
-          console.warn("⛔ Invalid order execute", order);
-          return;
-        }
-
-        if (selectedUnitRef.current !== unitId) {
-          selectedUnitRef.current = unitId;
-          setSelectedUnitId(unitId);
-        }
-
-        await handleHexClick(
-          targetQ,
-          targetR,
-          unitId,
-          currentMoves,
-          unitLayerRef,
-          appRef,
-          fxLayerRef,
-          setAvailableMoves,
-          setSelectedUnitId
-        );
-      };
-
-      // ---------------------------------------------
-      // HEX CLICK
-      // ---------------------------------------------
       (window as any).onHexClick = (q: number, r: number) => {
         handleHexClick(
           q,
@@ -329,7 +304,7 @@ export default function GameCanvas({
       };
 
       // ---------------------------------------------
-      // GAME STATE
+      // GAME STATE SUB
       // ---------------------------------------------
       if (!subscribedRef.current) {
         subscribedRef.current = true;

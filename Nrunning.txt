@@ -22,6 +22,8 @@ Set-ExecutionPolicy -Scope CurrentUser -ExecutionPolicy RemoteSigned
 .\.venv\Scripts\Activate.ps1
 code .
 
+trainig LOS/Modificadores
+
 
 tree "C:\Users\Richard\OneDrive - UNED\pry_ai\assault_model" /F /A > files.txt
 
@@ -74,3 +76,5 @@ Consecuencias psicológicas
 - Aislamiento social
 - Estrés crónico (Hayes & Watson, 2013)
 
+
+Modelo teórico del estigma por asociación y el bienestar psicológico

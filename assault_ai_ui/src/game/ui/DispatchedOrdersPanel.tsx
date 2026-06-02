@@ -38,7 +38,29 @@ export function DispatchedOrdersPanel({ availableMoves = [], selectedUnitId }: D
 
   }, []);
 
-  const orders = [...availableMoves, ...aiOrders].slice(0, 20);
+  // ✅ NORMALIZAR HUMANO
+  const normalizedHuman = availableMoves.map((a: any) => ({
+    type: (a.kind === "attack"
+      ? (a.type || "ATTACK")
+      : "MOVE").toUpperCase(),
+
+    target_q: a.q ?? a.target_q,
+    target_r: a.r ?? a.target_r,
+    target_id: a.target_id,
+
+    unit_id: selectedUnitId,
+    source: "HUMAN"
+  }));
+
+  // ✅ NORMALIZAR IA
+  const normalizedAI = aiOrders.map((o: any) => ({
+    ...o,
+    source: "AI"
+  }));
+
+  // ✅ MEZCLAR
+  const orders = [...normalizedHuman, ...normalizedAI].slice(0, 20);
+
 
   return (
     <>
