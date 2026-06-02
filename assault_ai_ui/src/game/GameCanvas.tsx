@@ -329,6 +329,8 @@ export default function GameCanvas({
 
       (window as any).onUnitClick = undefined;
       (window as any).onHexClick = undefined;
+      (window as any).onOrderHover = undefined;
+      (window as any).onOrderLeave = undefined;
     };
 
   }, []);

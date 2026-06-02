@@ -15,6 +15,15 @@ type DispatchedOrdersPanelProps = {
   selectedUnitId?: string | null;
 };
 
+function isCombatAction(order: Order, actionType: string): boolean {
+  if (order.kind === "attack") return true;
+  if (actionType !== "MOVE" && /RANGED|ASSAULT|ATTACK|REACTION|COMBAT|FIRE/i.test(actionType)) {
+    return true;
+  }
+  const actionClass = ((order as any).action || "").toString().toUpperCase();
+  return /RANGED|ASSAULT|ATTACK|REACTION|COMBAT|FIRE/.test(actionClass);
+}
+
 export function DispatchedOrdersPanel({ availableMoves = [], selectedUnitId }: DispatchedOrdersPanelProps) {
 
   const [aiOrders, setAiOrders] = useState<Order[]>([]);
@@ -43,6 +52,7 @@ export function DispatchedOrdersPanel({ availableMoves = [], selectedUnitId }: D
     type: (a.kind === "attack"
       ? (a.type || "ATTACK")
       : "MOVE").toUpperCase(),
+    kind: a.kind,
 
     target_q: a.q ?? a.target_q,
     target_r: a.r ?? a.target_r,
@@ -53,10 +63,21 @@ export function DispatchedOrdersPanel({ availableMoves = [], selectedUnitId }: D
   }));
 
   // ✅ NORMALIZAR IA
-  const normalizedAI = aiOrders.map((o: any) => ({
-    ...o,
-    source: "AI"
-  }));
+  const normalizedAI = aiOrders.map((o: any) => {
+    const actionClass = (o.action || "").toString();
+    let type = o.type || o.kind;
+    if (!type && actionClass) {
+      if (/Ranged/i.test(actionClass)) type = "RANGED";
+      else if (/Assault/i.test(actionClass)) type = "ASSAULT";
+      else if (/Move/i.test(actionClass)) type = "MOVE";
+      else type = actionClass.replace(/Action$/, "");
+    }
+    return {
+      ...o,
+      type: (type || "MOVE").toString().toUpperCase(),
+      source: "AI"
+    };
+  });
 
   // ✅ MEZCLAR
   const orders = [...normalizedHuman, ...normalizedAI].slice(0, 20);
@@ -71,7 +92,7 @@ export function DispatchedOrdersPanel({ availableMoves = [], selectedUnitId }: D
           orders.map((order, i) => {
 
             const actionType = (order.type || order.kind || "MOVE").toString().toUpperCase();
-            const isAttack = actionType === "ATTACK" || order.kind === "attack";
+            const isAttack = isCombatAction(order, actionType);
 
             const targetQ = order.target_q ?? order.q;
             const targetR = order.target_r ?? order.r;
@@ -83,7 +104,12 @@ export function DispatchedOrdersPanel({ availableMoves = [], selectedUnitId }: D
                 <div
                   key={i}
                   className={`action-card ${isAttack ? "action-attack" : ""}`}
-
+                  onMouseEnter={() => {
+                    (window as any).onOrderHover?.(order);
+                  }}
+                  onMouseLeave={() => {
+                    (window as any).onOrderLeave?.();
+                  }}
                   onClick={() => {
                     const q = order.target_q ?? (order as any).q;
                     const r = order.target_r ?? (order as any).r;
@@ -113,7 +139,7 @@ export function DispatchedOrdersPanel({ availableMoves = [], selectedUnitId }: D
 
                 <div className="action-desc">
                   {isAttack
-                    ? `Attack target ${order.target_id || "unknown"}`
+                    ? `Attack ${order.target_id ? `target ${order.target_id} ` : ""}at ${coords}`
                     : `Move to ${coords}`
                   }
                 </div>

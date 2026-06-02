@@ -2,6 +2,7 @@ import math
 from enum import Enum
 
 from assault_model.map.hex_coord import HexCoord
+from assault_model.map.hex_utils import hex_distance
 
 
 # -------------------------------------------------
@@ -19,115 +20,142 @@ class LineOfSight(Enum):
 # -------------------------------------------------
 
 _los_cache = {}
+_LOS_CACHE_VERSION = 8
 
 
 def _make_key(a: HexCoord, b: HexCoord):
-    return (a.q, a.r, b.q, b.r)
+    return (_LOS_CACHE_VERSION, a.q, a.r, b.q, b.r)
 
 
-# -------------------------------------------------
-# ✅ TRANSFORMACIONES DE ESPACIO (FLAT-TOP HEX)
-# -------------------------------------------------
+def clear_los_cache():
+    """Drop cached rays after LOS path logic changes."""
+    _los_cache.clear()
 
-def _hex_to_pixel(q: int, r: int, size: float = 1.0):
-    """Convierte una coordenada axial a una posición (X, Y) cartesiana real."""
-    x = size * (3.0 / 2.0 * q)
-    y = size * (math.sqrt(3.0) * (r + q / 2.0))
+
+# Same layout as assault_ai_ui hexGridRenderer.ts (odd-r, pointy-top)
+_UI_HEX_SIZE = 30.0
+_UI_HEX_WIDTH = _UI_HEX_SIZE * math.sqrt(3.0)
+_UI_HEX_HEIGHT = _UI_HEX_SIZE * 1.5
+
+
+def _hex_to_pixel_ui(q: int, r: int) -> tuple[float, float]:
+    x = _UI_HEX_WIDTH * (q + 0.5 * (r % 2)) + _UI_HEX_WIDTH / 2.0
+    y = _UI_HEX_HEIGHT * r + _UI_HEX_SIZE
     return x, y
 
 
-def _pixel_to_hex(x: float, y: float, size: float = 1.0):
-    """Convierte una posición (X, Y) continua al hexágono correspondiente."""
-    q = (2.0 / 3.0 * x) / size
-    r = (-1.0 / 3.0 * x + math.sqrt(3.0) / 3.0 * y) / size
-    return _cube_round(q, r)
+def _pixel_to_hex_ui(x: float, y: float) -> HexCoord:
+    y_centered = y - _UI_HEX_SIZE
+    r = int(round(y_centered / _UI_HEX_HEIGHT))
+    x_col = x - _UI_HEX_WIDTH / 2.0 - _UI_HEX_WIDTH * 0.5 * (r % 2)
+    q = int(round(x_col / _UI_HEX_WIDTH))
+    return HexCoord(q, r)
 
 
-# -------------------------------------------------
-# ✅ CUBE ROUND INDISPENSABLE
-# -------------------------------------------------
-
-def _cube_round(q, r):
-    x = q
-    z = r
-    y = -x - z
-
-    rx = math.floor(x + 0.5)
-    ry = math.floor(y + 0.5)
-    rz = math.floor(z + 0.5)
-
-    dx = abs(rx - x)
-    dy = abs(ry - y)
-    dz = abs(rz - z)
-
-    if dx > dy and dx > dz:
-        rx = -ry - rz
-    elif dy > dz:
-        ry = -rx - rz
-    else:
-        rz = -rx - ry
-
-    return HexCoord(int(rx), int(rz))
+def _odd_r_neighbor_deltas(r: int) -> list[tuple[int, int]]:
+    if r % 2 == 0:
+        return [(-1, 0), (+1, 0), (0, -1), (0, +1), (-1, -1), (-1, +1)]
+    return [(-1, 0), (+1, 0), (0, -1), (0, +1), (+1, -1), (+1, +1)]
 
 
-# -------------------------------------------------
-# 🔥 NUEVO TRAZADO DE LÍNEA POR INTERPOLACIÓN DE CUBO (ALTA PRECISIÓN)
-# -------------------------------------------------
+def _hexes_at_pixel_ui(x: float, y: float) -> list[HexCoord]:
+    """When the ray lies on the edge between two hexes, return both."""
+    primary = _pixel_to_hex_ui(x, y)
+    cx, cy = _hex_to_pixel_ui(primary.q, primary.r)
+    d0 = (x - cx) ** 2 + (y - cy) ** 2
+    edge_eps_sq = (_UI_HEX_WIDTH * 0.35) ** 2
 
-def _hex_path_strict(a: HexCoord, b: HexCoord):
-    """
-    Calcula la trayectoria exacta mediante interpolación lineal directa en espacio cúbico.
-    Aplica un ligero desfase (nudge) infinitesimal para resolver limpiamente empates visuales.
-    Garantiza 0 errores de continuidad (distancia siempre igual a 1 entre hexágonos vecinos).
-    """
+    hexes = [primary]
+    for dq, dr in _odd_r_neighbor_deltas(primary.r):
+        nq, nr = primary.q + dq, primary.r + dr
+        nx, ny = _hex_to_pixel_ui(nq, nr)
+        d1 = (x - nx) ** 2 + (y - ny) ** 2
+        if abs(d1 - d0) <= edge_eps_sq:
+            neighbor = HexCoord(nq, nr)
+            if neighbor != primary:
+                hexes.append(neighbor)
+    return hexes
+
+
+def _append_hex_to_path(path: list[HexCoord], h: HexCoord) -> None:
+    if not path or path[-1] != h:
+        path.append(h)
+
+
+def _ray_sample_segments(a: HexCoord, b: HexCoord) -> list[list[HexCoord]]:
+    """One entry per sample along the ray; each entry has 1–2 hexes on an edge."""
     if a.q == b.q and a.r == b.r:
-        return [HexCoord(a.q, a.r)]
+        return [[HexCoord(a.q, a.r)]]
 
-    # 1. Calcular distancia de pasos en la cuadrícula hexagonal discreta
-    dq = b.q - a.q
-    dr = b.r - a.r
-    steps = max(abs(dq), abs(dr), abs(dq + dr))
+    dist = hex_distance(a, b)
+    if dist <= 1:
+        return [[a], [b]]
 
-    # 2. Convertir puntos de origen y destino a coordenadas tridimensionales de cubo
-    ax, az = a.q, a.r
-    ay = -ax - az
+    ax, ay = _hex_to_pixel_ui(a.q, a.r)
+    bx, by = _hex_to_pixel_ui(b.q, b.r)
+    samples = max(dist * 4, dist + 1)
 
-    bx, bz = b.q, b.r
-    by = -bx - bz
+    segments: list[list[HexCoord]] = []
+    for i in range(samples + 1):
+        t = i / samples
+        px = ax + (bx - ax) * t
+        py = ay + (by - ay) * t
+        segments.append(_hexes_at_pixel_ui(px, py))
+    return segments
 
-    # 3. Aplicar "nudge" infinitesimal para romper simetrías problemáticas en bordes/vértices
-    ax += 1e-6
-    ay += 1e-6
-    az -= 2e-6
 
-    path = []
-    
-    # 4. Muestreo exacto paso a paso coordinado con la distancia real
-    for i in range(steps + 1):
-        t = i / steps
-        lx = ax + (bx - ax) * t
-        ly = ay + (by - ay) * t
-        lz = az + (bz - az) * t
-        
-        # Redondeo tridimensional de cubo ultra preciso
-        rx = int(round(lx))
-        ry = int(round(ly))
-        rz = int(round(lz))
-        
-        x_diff = abs(rx - lx)
-        y_diff = abs(ry - ly)
-        z_diff = abs(rz - lz)
-        
-        if x_diff > y_diff and x_diff > z_diff:
-            rx = -ry - rz
-        elif y_diff > z_diff:
-            ry = -rx - rz
-        else:
-            rz = -rx - ry
-            
-        path.append(HexCoord(int(rx), int(rz)))
-
+def _flatten_ray_path(a: HexCoord, b: HexCoord, segments: list[list[HexCoord]]) -> list[HexCoord]:
+    path = [a]
+    for seg in segments:
+        for h in seg:
+            _append_hex_to_path(path, h)
+    if path[-1] != b:
+        path.append(HexCoord(b.q, b.r))
     return path
+
+
+def _terrain_los_at(coord: HexCoord, game_map, terrain_config) -> str | None:
+    hex_ = game_map.get_hex(coord.q, coord.r)
+    if not hex_:
+        return None
+    terrain = hex_.get_terrain()
+    config = terrain_config.get(terrain)
+    return config.get("los", "CLEAR") if config else "CLEAR"
+
+
+def _hex_path_ui_pixel(a: HexCoord, b: HexCoord) -> list[HexCoord]:
+    """Straight ray; includes both hexes when the line runs along a shared edge."""
+    segments = _ray_sample_segments(a, b)
+    return _flatten_ray_path(a, b, segments)
+
+
+def _primary_hex_path(a: HexCoord, b: HexCoord) -> list[HexCoord]:
+    """Ray spine: one hex per sample (the hex the pixel lies in)."""
+    segments = _ray_sample_segments(a, b)
+    path = [a]
+    for seg in segments:
+        if seg:
+            _append_hex_to_path(path, seg[0])
+    if path[-1].q != b.q or path[-1].r != b.r:
+        path.append(HexCoord(b.q, b.r))
+    return path
+
+
+def _inner_hexes_for_los(path: list[HexCoord], end: HexCoord) -> list[HexCoord]:
+    """Intermediates on the ray only, each hex once, never the target."""
+    inner: list[HexCoord] = []
+    seen: set[tuple[int, int]] = set()
+    for h in path[1:-1]:
+        key = (h.q, h.r)
+        if key == (end.q, end.r) or key in seen:
+            continue
+        seen.add(key)
+        inner.append(h)
+    return inner
+
+
+def _hex_path_strict(a: HexCoord, b: HexCoord) -> list[HexCoord]:
+    return _hex_path_ui_pixel(a, b)
 
 
 # -------------------------------------------------
@@ -148,7 +176,7 @@ def check_line_of_sight(attacker, target, game_map, terrain_config):
         attacker._los_debug = cached_debug
         return result
 
-    reverse_key = (end.q, end.r, start.q, start.r)
+    reverse_key = (_LOS_CACHE_VERSION, end.q, end.r, start.q, start.r)
     if reverse_key in _los_cache:
         result, cached_debug = _los_cache[reverse_key]
         attacker._los_debug = {
@@ -158,13 +186,13 @@ def check_line_of_sight(attacker, target, game_map, terrain_config):
         }
         return result
 
-    # Calculamos la trayectoria limpia usando el nuevo motor de cubo de alta precisión
-    path = _hex_path_strict(start, end)
+    path_full = _hex_path_strict(start, end)
 
-    if not path:
+    if not path_full:
         return LineOfSight.BLOCKED
 
-    inner_path = path[1:-1]
+    los_path = _primary_hex_path(start, end)
+    inner_path = _inner_hexes_for_los(los_path, end)
 
     hindrance = 0
     blocking_hexes = []
@@ -172,13 +200,9 @@ def check_line_of_sight(attacker, target, game_map, terrain_config):
     is_blocked = False
 
     for coord in inner_path:
-        hex_ = game_map.get_hex(coord.q, coord.r)
-        if not hex_:
+        los_type = _terrain_los_at(coord, game_map, terrain_config)
+        if los_type is None:
             continue
-
-        terrain = hex_.get_terrain()
-        config = terrain_config.get(terrain)
-        los_type = config.get("los", "CLEAR") if config else "CLEAR"
 
         if los_type == "BLOCKED":
             is_blocked = True
@@ -187,7 +211,6 @@ def check_line_of_sight(attacker, target, game_map, terrain_config):
         elif los_type == "HINDERED":
             hindrance += 1
             hindrance_hexes.append((coord.q, coord.r))
-            
             if hindrance >= 3:
                 is_blocked = True
 
@@ -207,7 +230,7 @@ def check_line_of_sight(attacker, target, game_map, terrain_config):
     debug_data = {
         "blocking": blocking_hexes,
         "hindrance": hindrance_hexes,
-        "path": [(c.q, c.r) for c in path]
+        "path": [(c.q, c.r) for c in path_full]
     }
     attacker._los_debug = debug_data
 

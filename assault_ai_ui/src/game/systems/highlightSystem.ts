@@ -56,32 +56,64 @@ export function updateHighlights(
   }
 
   // 4. Highlight dispatched order target from UI hover
-  if (orderHoverTarget && selectedUnit) {
+  if (orderHoverTarget) {
     const targetQ = orderHoverTarget.target_q ?? orderHoverTarget.q;
     const targetR = orderHoverTarget.target_r ?? orderHoverTarget.r;
-    const targetId = orderHoverTarget.target_id ?? orderHoverTarget.unit_id;
-    const isAttack = orderHoverTarget.kind === "attack" || (orderHoverTarget.type || "").toString().toUpperCase() === "ATTACK";
-
-    if (targetId) {
-      const targetUnit = data.units?.find(
-        (u: any) => u.id === targetId || u.unit_id === targetId
+    const targetId = orderHoverTarget.target_id;
+    const orderUnitId = orderHoverTarget.unit_id;
+    const isAttack =
+      orderHoverTarget.kind === "attack" ||
+      /RANGED|ASSAULT|ATTACK|REACTION|COMBAT|FIRE/i.test(
+        (orderHoverTarget.type || "").toString()
       );
 
+    const sourceUnit =
+      (orderUnitId
+        ? data.units?.find(
+            (u: any) => u.id === orderUnitId || u.unit_id === orderUnitId
+          )
+        : null) ?? selectedUnit;
+
+    const targetUnitById = targetId
+      ? data.units?.find(
+          (u: any) => u.id === targetId || u.unit_id === targetId
+        )
+      : null;
+
+    const unitsAtHex =
+      targetQ != null && targetR != null
+        ? (data.units ?? []).filter(
+            (u: any) => u.q === targetQ && u.r === targetR
+          )
+        : [];
+
+    const targetUnit = targetUnitById ?? unitsAtHex[0] ?? null;
+    const destQ = targetUnit?.q ?? targetQ;
+    const destR = targetUnit?.r ?? targetR;
+
+    if (destQ != null && destR != null) {
+      const destColor = isAttack ? 0xff6644 : 0x00f0ff;
+      layer.drawHexHighlight(destQ, destR, destColor);
+
       if (targetUnit) {
-        layer.drawUnitHighlight(targetUnit, 0xffaa22);
+        layer.drawUnitHighlight(targetUnit, isAttack ? 0xffaa22 : 0x44ddff);
+      }
+
+      for (const u of unitsAtHex) {
+        if (u !== targetUnit) {
+          layer.drawUnitHighlight(u, 0x88aaff);
+        }
+      }
+
+      if (sourceUnit) {
         layer.drawArrow(
-          selectedUnit.q, selectedUnit.r,
-          targetUnit.q, targetUnit.r,
+          sourceUnit.q,
+          sourceUnit.r,
+          destQ,
+          destR,
           isAttack
         );
       }
-    } else if (targetQ != null && targetR != null) {
-      layer.drawHover(targetQ, targetR);
-      layer.drawArrow(
-        selectedUnit.q, selectedUnit.r,
-        targetQ, targetR,
-        isAttack
-      );
     }
   }
 }

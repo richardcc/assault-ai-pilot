@@ -1,9 +1,6 @@
 from assault_model.map.hex_utils import safe_hex_distance
 from assault_model.map.hex_coord import HexCoord
-from assault_model.combat.line_of_sight import (
-    check_line_of_sight,
-    _hex_path_strict
-)
+from assault_model.combat.line_of_sight import check_line_of_sight
 
 
 def compute_targeting_info(game_state, attacker_id: str, target_q: int, target_r: int):
@@ -49,22 +46,11 @@ def compute_targeting_info(game_state, attacker_id: str, target_q: int, target_r
     )
 
     # -------------------------------------------------
-    # ✅ PATH REAL (MISMO QUE LOS)
-    # -------------------------------------------------
-    path_coords = _hex_path_strict(
-        attacker.position,
-        target_pos
-    )
-
-    # ignorar start y end si quieres coherencia con LOS
-    path_coords = path_coords[1:-1] if path_coords else []
-
-    path = [(h.q, h.r) for h in path_coords]
-
-    # -------------------------------------------------
-    # ✅ DEBUG LOS (bloqueos y hindrance)
+    # ✅ PATH (same ray as LOS terrain check)
     # -------------------------------------------------
     los_debug = getattr(attacker, "_los_debug", {})
+    full_path = los_debug.get("path", [])
+    path = full_path[1:-1] if len(full_path) > 2 else []
 
     blocking = los_debug.get("blocking", [])
     hindrance = los_debug.get("hindrance", [])
@@ -76,6 +62,7 @@ def compute_targeting_info(game_state, attacker_id: str, target_q: int, target_r
         "distance": distance,
         "los": los.name,
         "path": path,
+        "path_full": full_path,
         "blocking": blocking,
         "hindrance": hindrance,
     }

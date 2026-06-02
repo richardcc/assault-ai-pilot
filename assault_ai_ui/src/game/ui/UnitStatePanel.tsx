@@ -1,4 +1,6 @@
+import { useState } from "react";
 import { unitImages } from "../config/unitImages";
+import { UnitCardTooltip } from "./UnitCardTooltip";
 import { sides } from "../config/sides";
 import { formatCoords } from "../render/hexGridRenderer";
 
@@ -27,6 +29,12 @@ export function UnitStatePanel({
   onSelectUnit
 }: Props) {
 
+  const [cardPreview, setCardPreview] = useState<{
+    unit: Unit;
+    x: number;
+    y: number;
+  } | null>(null);
+
   const unitsBySide: Record<string, Unit[]> = {};
 
   for (const u of units) {
@@ -52,6 +60,17 @@ export function UnitStatePanel({
   };
 
   return (
+  <>
+    {cardPreview && (
+      <UnitCardTooltip
+        key={cardPreview.unit.id}
+        unitKey={cardPreview.unit.unit_key}
+        hp={cardPreview.unit.hp}
+        anchorX={cardPreview.x}
+        anchorY={cardPreview.y}
+      />
+    )}
+
     <div className="roster-container">
       {Object.entries(unitsBySide).map(([side, list]) => (
         <div key={side} className="roster-side-group">
@@ -102,12 +121,19 @@ export function UnitStatePanel({
               return (
                 <div
                   key={u.id}
-                  onMouseEnter={() => {
+                  onMouseEnter={(e) => {
+                    const rect = e.currentTarget.getBoundingClientRect();
+                    setCardPreview({
+                      unit: u,
+                      x: rect.left + rect.width / 2,
+                      y: rect.top,
+                    });
                     if (typeof (window as any).highlightUnit === "function") {
                       (window as any).highlightUnit(u.id);
                     }
                   }}
                   onMouseLeave={() => {
+                    setCardPreview(null);
                     if (typeof (window as any).highlightUnit === "function") {
                       (window as any).highlightUnit(null);
                     }
@@ -163,5 +189,6 @@ export function UnitStatePanel({
         </div>
       ))}
     </div>
+  </>
   );
 }

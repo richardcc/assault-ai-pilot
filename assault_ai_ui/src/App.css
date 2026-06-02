@@ -307,6 +307,10 @@
   border-radius: 10px;
 }
 
+.action-card.action-attack .action-type {
+  color: var(--neon-red);
+}
+
 .action-card.action-attack .action-coords {
   color: var(--neon-red);
   background: rgba(255, 56, 56, 0.08);
@@ -449,6 +453,7 @@
   flex-direction: column;
   justify-content: center;
   z-index: 10;
+  overflow: visible;
 }
 
 .combat-panel {
@@ -607,6 +612,33 @@
 /* ==========================================================================
    TROOP CARD ROSTER CLASSES
    ========================================================================= */
+#overlay-root {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 10000;
+}
+
+.unit-card-hover-preview {
+  position: fixed;
+  transform: translateX(-50%);
+  pointer-events: none;
+  padding: 6px;
+  background: rgba(8, 10, 18, 0.96);
+  border: 1px solid rgba(0, 240, 255, 0.35);
+  border-radius: 8px;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.55), 0 0 24px rgba(0, 240, 255, 0.12);
+}
+
+.unit-card-hover-preview img {
+  display: block;
+  width: 280px;
+  height: auto;
+  max-height: min(360px, 55vh);
+  object-fit: contain;
+  border-radius: 4px;
+}
+
 .roster-container {
   display: flex;
   overflow-x: auto;

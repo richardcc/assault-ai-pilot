@@ -93,7 +93,8 @@ export async function updateDebugVector({
 
   const dist = cachedTargeting?.distance ?? "?";
   const los = cachedTargeting?.los ?? "UNKNOWN";
-  const path = cachedTargeting?.path ?? [];
+  const pathFull: [number, number][] =
+    cachedTargeting?.path_full ?? cachedTargeting?.path ?? [];
   const blocking = cachedTargeting?.blocking ?? [];
   const hindrance = cachedTargeting?.hindrance ?? [];
 
@@ -107,7 +108,7 @@ export async function updateDebugVector({
   else if (los === "BLOCKED") color = 0xff0000;
 
   // --------------------------------------------------
-  // ✅ VECTOR
+  // ✅ FLECHA RECTA (centro a centro; el rayo no es polilínea)
   // --------------------------------------------------
   const dx = ex - sx;
   const dy = ey - sy;
@@ -117,29 +118,22 @@ export async function updateDebugVector({
 
   const nx = dx / length;
   const ny = dy / length;
-
   const mx = (sx + ex) / 2;
   const my = (sy + ey) / 2;
-
   const gap = 40;
-
   const gapStartX = mx - nx * gap;
   const gapStartY = my - ny * gap;
-
   const gapEndX = mx + nx * gap;
   const gapEndY = my + ny * gap;
 
-  // línea 1
   g.moveTo(sx, sy);
   g.lineTo(gapStartX, gapStartY);
   g.stroke({ width: 4, color });
 
-  // línea 2
   g.moveTo(gapEndX, gapEndY);
   g.lineTo(ex, ey);
   g.stroke({ width: 4, color });
 
-  // flecha
   const angle = Math.atan2(ey - gapEndY, ex - gapEndX);
   const arrowSize = 18;
 
@@ -157,46 +151,28 @@ export async function updateDebugVector({
   );
   g.stroke({ width: 4, color });
 
-
   // --------------------------------------------------
-  // ✅ DRAW PATH (🟣)
+  // ✅ TODOS los hexes del rayo (🟣), bloqueados o no
   // --------------------------------------------------
-  for (let i = 0; i < path.length; i++) {
-
-    const [q, r] = path[i];
-
+  for (let i = 0; i < pathFull.length; i++) {
+    const [q, r] = pathFull[i];
     const pos = axialToPixel(q, r);
     const p = world.toGlobal({ x: pos.x, y: pos.y + HEX_SIZE });
-
-    let c = 0xaa00ff;
-
-    if (i === 0) c = 0x0000ff;           // start
-    else if (i === path.length - 1) c = 0xff0000; // target
 
     g.circle(p.x, p.y, 8);
-    g.fill({ color: c, alpha: 0.6 });
+    g.fill({ color: 0xaa00ff, alpha: 0.55 });
   }
 
-  // --------------------------------------------------
-  // ✅ DRAW HINDRANCE (🟡)
-  // --------------------------------------------------
   for (const [q, r] of hindrance) {
-
     const pos = axialToPixel(q, r);
     const p = world.toGlobal({ x: pos.x, y: pos.y + HEX_SIZE });
-
     g.circle(p.x, p.y, 10);
     g.stroke({ width: 3, color: 0xffff00 });
   }
 
-  // --------------------------------------------------
-  // ✅ DRAW BLOCKING (🔴)
-  // --------------------------------------------------
   for (const [q, r] of blocking) {
-
     const pos = axialToPixel(q, r);
     const p = world.toGlobal({ x: pos.x, y: pos.y + HEX_SIZE });
-
     g.circle(p.x, p.y, 12);
     g.stroke({ width: 4, color: 0xff0000 });
   }

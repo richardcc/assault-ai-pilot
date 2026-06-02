@@ -27,6 +27,11 @@ def _offset_to_axial(q: int, r: int) -> Tuple[int, int]:
     return axial_q, axial_r
 
 
+def _axial_to_offset(aq: int, ar: int) -> Tuple[int, int]:
+    """Inverse of _offset_to_axial for odd-r storage (q=column, r=row)."""
+    return aq + ((ar - (ar & 1)) // 2), ar
+
+
 def hex_distance(a: CoordLike, b: CoordLike) -> int:
     """
     Compute hex distance for an odd-r offset grid.

@@ -61,3 +61,10 @@ export const unitImages = {
     card_half: "/art/counters/US Unit 81mm Mortarb.jpg"
   }
 };
+
+export function getUnitCardArt(unitKey: string, hp?: number): string | undefined {
+  const def = unitImages[unitKey as keyof typeof unitImages];
+  if (!def) return undefined;
+  if (hp === 1 && def.card_half) return def.card_half;
+  return def.card;
+}
