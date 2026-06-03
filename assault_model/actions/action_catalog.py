@@ -8,6 +8,7 @@ from assault_model.rules.movement_outcome import MovementOutcome
 
 from assault_model.map.hex_utils import safe_hex_distance
 from assault_model.combat.line_of_sight import has_line_of_sight
+from assault_model.actions.ranged_indirect import RangedIndirectAttack
 
 import os
 

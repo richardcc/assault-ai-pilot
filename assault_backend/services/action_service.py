@@ -1,6 +1,7 @@
 from assault_model.actions.movement import MoveAction
 from assault_model.actions.assault import AssaultAction
 from assault_model.actions.ranged_direct import RangedDirectAttack
+from assault_model.actions.ranged_indirect import RangedIndirectAttack  # ✅ NUEVO
 from assault_model.actions.action_catalog import ActionCatalog
 
 import json
@@ -59,7 +60,7 @@ def get_unit_actions(env, unit):
     attacks = []
 
     # -------------------------------------------------
-    # PROCESS ACTIONS (FIXED ✅)
+    # PROCESS ACTIONS
     # -------------------------------------------------
     for action in actions:
 
@@ -72,8 +73,6 @@ def get_unit_actions(env, unit):
                 moves.append({
                     "q": last.q,
                     "r": last.r,
-
-                    # ✅ 💣 CLAVE
                     "action_id": action.action_id
                 })
 
@@ -84,8 +83,6 @@ def get_unit_actions(env, unit):
             attacks.append({
                 "type": "assault",
                 "target_id": action.target_id,
-
-                # ✅ 💣 CLAVE
                 "action_id": action.action_id
             })
 
@@ -96,10 +93,24 @@ def get_unit_actions(env, unit):
             attacks.append({
                 "type": "ranged",
                 "target_id": action.target_id,
-
-                # ✅ 💣 CLAVE
                 "action_id": action.action_id
             })
+
+        # -------------------------
+        # RANGED INDIRECT ✅ NUEVO
+        # -------------------------
+        elif isinstance(action, RangedIndirectAttack):
+            attacks.append({
+                "type": "ranged_indirect",
+                "target_id": action.target_id,
+                "action_id": action.action_id
+            })
+
+        # -------------------------
+        # DEBUG UNKNOWN (MUY ÚTIL)
+        # -------------------------
+        else:
+            print("[WARNING] Unknown action type:", type(action))
 
     # -------------------------------------------------
     # RESULT

@@ -69,6 +69,10 @@ class GameSession:
             self.env.event_bus.subscribe(on_event)
 
         self.env.reset()
+        try:
+            self.env.step(None)
+        except Exception:
+            pass
 
         # ✅ Discard startup events (contain non-JSON-serializable objects like HexCoord)
         self.last_events.clear()
