@@ -847,6 +847,36 @@
   z-index: 3;
 }
 
+.trooper-card.target-highlight {
+  border-color: var(--neon-red) !important;
+  background: rgba(255, 56, 56, 0.12) !important;
+  box-shadow: 0 0 16px rgba(255, 56, 56, 0.6) !important;
+  transform: scale(1.05) translateY(-2px);
+  z-index: 6;
+  animation: target-pulse 0.9s ease-in-out infinite;
+}
+
+.trooper-card.target-highlight::before {
+  content: "TARGET";
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  background: var(--neon-red);
+  color: #000;
+  font-family: var(--font-tech);
+  font-weight: 700;
+  font-size: 6px;
+  padding: 1px 3px;
+  border-radius: 2px;
+  letter-spacing: 0.5px;
+  z-index: 4;
+}
+
+@keyframes target-pulse {
+  0%, 100% { box-shadow: 0 0 12px rgba(255, 56, 56, 0.45); }
+  50% { box-shadow: 0 0 22px rgba(255, 56, 56, 0.8); }
+}
+
 .trooper-card.ally-used::before {
   content: "DONE";
   position: absolute;

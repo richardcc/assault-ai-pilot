@@ -2,6 +2,7 @@ from assault_model.combat.modifiers.terrain_modifier import TerrainModifier
 from assault_model.combat.attack_dice_pool import AttackDicePool
 from assault_model.combat.defense_dice_pool import DefenseDicePool
 from assault_model.combat.unit_class import UnitClass
+from assault_model.combat.dice_color import DiceColor
 from assault_model.combat.dice_face import DiceFace
 from assault_model.map.combat_geometry import determine_attack_sector
 from assault_model.runtime.execution_context import ExecutionContext
@@ -60,6 +61,12 @@ def resolve_ranged_combat(
     terrain_cfg = context.terrain_config if context and hasattr(context, "terrain_config") else terrain_config
 
     # =================================================
+    # FIRE MODE (consistent with ActionCatalog)
+    # =================================================
+    attack_mode = attacker.unit_type._resolve_attack_mode(distance)
+    is_indirect = attack_mode == "INDIRECT_FIRE"
+
+    # =================================================
     # LOS
     # =================================================
     los = LineOfSight.CLEAR
@@ -77,9 +84,11 @@ def resolve_ranged_combat(
         attacker=attacker.unit_id,
         defender=target.unit_id,
         los=los.name,
+        indirect=is_indirect,
     )
 
-    if los == LineOfSight.BLOCKED:
+    # Direct fire requires LOS; indirect fire (mortar/artillery) ignores it.
+    if not is_indirect and los == LineOfSight.BLOCKED:
         _trace(
             "RANGED_BLOCKED",
             attacker=attacker.unit_id,
@@ -89,16 +98,20 @@ def resolve_ranged_combat(
 
     # =================================================
     # INDIRECT RESTRICTIONS
+    # A unit standing in no_indirect_from terrain (e.g. inside a building,
+    # heavy forest) cannot lob indirect fire from there.
     # =================================================
-    if game_map:
-        attacker_hex = game_map.get_hex(attacker.position)
+    if game_map and is_indirect:
+        attacker_hex = game_map.get_hex(
+            attacker.position.q, attacker.position.r
+        )
 
         if attacker_hex is not None:
             terrain_name = attacker_hex.get_terrain()
 
             if terrain_cfg.get(terrain_name, {}).get("no_indirect_from", False):
-                if getattr(action, "combat_mode", None) == CombatMode.RANGED_INDIRECT:
-                    return CombatResolutionResult([], [], [])
+                _trace("INDIRECT_BLOCKED_FROM_TERRAIN", terrain=terrain_name)
+                return CombatResolutionResult([], [], [])
 
     # ---------------- ATTACK ----------------
     attack_colors = list(
@@ -109,7 +122,9 @@ def resolve_ranged_combat(
     )
 
     if getattr(attacker, "suppressed", False) and attack_colors:
-        attack_colors = attack_colors[:-1]
+        # Rulebook 10.8.1: a suppressed attacker loses its WEAKEST attack die.
+        weakest = min(attack_colors, key=lambda c: int(c))
+        attack_colors.remove(weakest)
 
     attack_results = AttackDicePool(attack_colors).roll()
 
@@ -126,12 +141,14 @@ def resolve_ranged_combat(
     )
 
     if game_map:
-        hex_ = game_map.get_hex(target.position)
+        hex_ = game_map.get_hex(target.position.q, target.position.r)
         if hex_:
+            # Indirect fire has no LOS line → no HINDERED defense die,
+            # but terrain cover dice still apply.
             terrain_mod = TerrainModifier.from_hex(
                 hex_,
                 target,
-                los=los   # ✅ ÚNICO sitio donde se aplica LOS
+                los=(None if is_indirect else los)
             )
             defense_colors = terrain_mod.modify_defense(defense_colors)
 

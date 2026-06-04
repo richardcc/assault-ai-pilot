@@ -19,6 +19,7 @@ type Props = {
   activeSide?: string;
   activatedUnits?: string[];
   selectedUnitId?: string | null;
+  targetUnitId?: string | null;
   onSelectUnit?: (unit: Unit) => void;
 };
 
@@ -27,6 +28,7 @@ export function UnitStatePanel({
   activeSide,
   activatedUnits = [],
   selectedUnitId,
+  targetUnitId,
   onSelectUnit
 }: Props) {
 
@@ -103,12 +105,16 @@ export function UnitStatePanel({
               const isOwn = u.side === activeSide;
               const isAvailable = isOwn && !activatedUnits.includes(u.id) && !dead;
               const isSelected = u.id === selectedUnitId;
+              const isTarget = targetUnitId != null && u.id === targetUnitId;
               const deadMarker = dead ? sides[u.side]?.dead_marker : undefined;
 
               // Compute CSS class names based on unit status
               let cardClass = "trooper-card";
               if (isSelected) {
                 cardClass += " selected";
+              }
+              if (isTarget) {
+                cardClass += " target-highlight";
               }
               
               if (dead) {

@@ -1,3 +1,5 @@
+import { logCombatEvents } from "./systems/combatLog";
+
 type ControllerType = "human" | "ai";
 type GameMode = "human" | "ai" | "ai_vs_ai" | "replay";
 type Listener = (state: any) => void;
@@ -189,6 +191,10 @@ export class GameController {
 
         const result = await res.json();
         (window as any).onAIOrders?.(result.steps);
+
+        // Log AI combat results to the System Log (the websocket MAP_STATE
+        // payload does not carry last_events, so do it from the ai-turn result).
+        logCombatEvents(result.state?.last_events, result.state?.units || []);
 
         // ✅ NUEVO: render visual de acciones IA
         if (result.steps && this.highlightLayer) {

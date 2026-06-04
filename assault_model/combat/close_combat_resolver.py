@@ -5,6 +5,7 @@ from assault_model.combat.defense_dice_pool import DefenseDicePool
 from assault_model.combat.dice_face import DiceFace
 from assault_model.combat.battle_die import DiceResult
 from assault_model.combat.dice_comparison import compare_dice
+from assault_model.combat.dice_color import DiceColor
 from assault_model.runtime.execution_context import ExecutionContext
 
 import os
@@ -72,6 +73,52 @@ def resolve_close_combat(
     ctx.round_number = 1
     MAX_ROUNDS = 10
 
+    game_map = (
+        context.game_map
+        if context and getattr(context, "game_map", None)
+        else None
+    )
+
+    # Rulebook 11.1.3: the close-combat ("target") hex is the DEFENDER's hex.
+    # Both units use the terrain bonus of THAT hex, but only the STRONGEST
+    # single terrain die. Vehicles get no terrain defense bonus in close combat.
+    # Close combat is melee → no LOS hindrance is ever applied.
+    def _strongest_terrain_die(unit):
+        if unit.unit_type.category.name == "VEHICLE":
+            return None
+        if not game_map or ctx.defender.position is None:
+            return None
+        hex_ = game_map.get_hex(ctx.defender.position.q, ctx.defender.position.r)
+        if not hex_:
+            return None
+        names = game_map.terrain_config.get_defense_dice(
+            hex_.get_terrain(),
+            unit.unit_type.category.name,
+        )
+        colors = [DiceColor[n] for n in names if n in DiceColor.__members__]
+        if not colors:
+            return None
+        return max(colors, key=lambda c: int(c))
+
+    def _defender_defense_colors():
+        colors = list(ctx.defender.unit_type.get_defense_dice(ctx.attack_sector))
+        strongest = _strongest_terrain_die(ctx.defender)
+        if strongest is not None:
+            colors.append(strongest)
+        return colors
+
+    def _attacker_defense_colors():
+        colors = list(ctx.attacker.unit_type.get_defense_dice(ctx.attack_sector))
+        if ctx.round_number == 1:
+            # Initial round (11.1.3.2): the assaulting unit gets NO terrain
+            # bonus, but instead one blue defense die.
+            colors.append(DiceColor.BLUE)
+        else:
+            strongest = _strongest_terrain_die(ctx.attacker)
+            if strongest is not None:
+                colors.append(strongest)
+        return colors
+
     while ctx.attacker.alive and ctx.defender.alive:
         rr = CloseCombatRoundResult(ctx.round_number)
 
@@ -86,9 +133,7 @@ def resolve_close_combat(
                 )
             ),
             "attacker_defense": DefenseDicePool(
-                ctx.attacker.unit_type.get_defense_dice(
-                    ctx.attack_sector
-                )
+                _attacker_defense_colors()
             ),
             "defender_attack": AttackDicePool(
                 ctx.defender.unit_type.get_close_combat_attack_dice(
@@ -96,9 +141,7 @@ def resolve_close_combat(
                 )
             ),
             "defender_defense": DefenseDicePool(
-                ctx.defender.unit_type.get_defense_dice(
-                    ctx.attack_sector
-                )
+                _defender_defense_colors()
             ),
         }
 

@@ -135,7 +135,10 @@ class SimEnv:
                 }
             })
 
-        context = ExecutionContext(event_bus=self.event_bus)
+        context = ExecutionContext(
+            event_bus=self.event_bus,
+            game_map=self.game_state.game_map,
+        )
 
         prev_turn = self.game_state.turn
 

@@ -26,10 +26,17 @@ class TerrainModifier(DiceModifier):
 
         terrain_name = hex_.get_terrain()
 
+        # ✅ unit class name (INFANTRY / VEHICLE / ARTILLERY)
+        # UnitInstance has no `unit_class`; derive it from the unit type category.
+        unit_class = getattr(unit, "unit_class", None)
+        class_name = getattr(unit_class, "name", None)
+        if class_name is None:
+            class_name = unit.unit_type.category.name
+
         # ✅ base defense from terrain
         dice_names = terrain_config.get_defense_dice(
             terrain_name,
-            unit.unit_class.name
+            class_name
         )
 
         dice = []

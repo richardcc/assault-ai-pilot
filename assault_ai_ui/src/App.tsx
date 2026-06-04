@@ -8,6 +8,7 @@ import { unitImages } from "./game/config/unitImages";
 import { sides } from "./game/config/sides";
 import { formatCoords } from "./game/render/hexGridRenderer";
 import { DispatchedOrdersPanel } from "./game/ui/DispatchedOrdersPanel";
+import { logCombatEvents } from "./game/systems/combatLog";
 
 type LogEntry = {
   type: string;
@@ -28,6 +29,7 @@ function App() {
   const [gameData, setGameData] = useState<any>(null);
   const [deadUnits, setDeadUnits] = useState<Unit[]>([]);
   const [selectedUnitId, setSelectedUnitId] = useState<string | null>(null);
+  const [hoveredTargetId, setHoveredTargetId] = useState<string | null>(null);
   const [availableMoves, setAvailableMoves] = useState<any[]>([]);
   const [logEvents, setLogEvents] = useState<LogEntry[]>([]);
   const [activeMode, setActiveMode] = useState<string | null>(null);
@@ -93,6 +95,13 @@ function App() {
     }
   }, [selectedUnitId, gameData]);
 
+  // Log combat results (damage + dice used) to the System Log.
+  // Logging is deduped by event id in combatLog, so it is safe even if the
+  // same events arrive through multiple state updates.
+  useEffect(() => {
+    logCombatEvents(gameData?.last_events, gameData?.units || []);
+  }, [gameData]);
+
   // Keep dead units visible in the roster even if they disappear from the map state
   useEffect(() => {
     if (!gameData?.units) return;
@@ -127,6 +136,28 @@ function App() {
 
     prevUnitsRef.current = currentUnits;
   }, [gameData]);
+
+  // Resolve which enemy unit an attack order is targeting, so we can
+  // highlight it in the roster on hover.
+  const resolveOrderTargetId = (order: any): string | null => {
+    if (!order) return null;
+    const actionType = String(order.type || order.kind || "").toUpperCase();
+    const isAttack =
+      order.kind === "attack" ||
+      /RANGED|ASSAULT|ATTACK|REACTION|COMBAT|FIRE/.test(actionType);
+    if (!isAttack) return null;
+
+    if (order.target_id) return order.target_id;
+
+    const q = order.target_q ?? order.q;
+    const r = order.target_r ?? order.r;
+    if (q == null || r == null) return null;
+
+    const unit = (gameData?.units || []).find(
+      (u: any) => u.q === q && u.r === r
+    );
+    return unit?.id ?? null;
+  };
 
   // Action card trigger handler
   const handleActionCardClick = (action: any) => {
@@ -297,6 +328,8 @@ function App() {
               <DispatchedOrdersPanel
                 availableMoves={availableMoves}
                 selectedUnitId={selectedUnitId}
+                onHoverOrder={(order) => setHoveredTargetId(resolveOrderTargetId(order))}
+                onLeaveOrder={() => setHoveredTargetId(null)}
               />
             </div>
           ) : (
@@ -354,6 +387,7 @@ function App() {
           activeSide={gameData?.active_side}
           activatedUnits={gameData?.activated_units || []}
           selectedUnitId={selectedUnitId}
+          targetUnitId={hoveredTargetId}
           onSelectUnit={(unit: Unit) => {
             // Direct callback helper triggered from troop dock cards
             setSelectedUnitId(unit.id);

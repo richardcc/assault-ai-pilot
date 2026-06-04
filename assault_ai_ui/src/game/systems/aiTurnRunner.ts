@@ -10,6 +10,7 @@ import { formatCoords } from "../render/hexGridRenderer";
 
 import { gameController } from "../gameControllerInstance";
 import { axialToPixel, HEX_SIZE } from "../render/hexGridRenderer";
+import { logCombatEvents } from "./combatLog";
 
 const BACKEND = "http://127.0.0.1:8000";
 const AI_DELAY_MS = 800; // pause between AI actions so the user can see them
@@ -128,7 +129,11 @@ export async function runAiTurns(
         body: JSON.stringify({ action_id: action.id }),
       });
       stepData = await stepRes.json();
-      
+
+      // Log AI combat results (damage + dice) straight from the step response,
+      // so they are not lost to React batching when the state is pushed below.
+      logCombatEvents(stepData?.state?.last_events, stepData?.state?.units || []);
+
       // Update local state directly with step response if available
       state = stepData.state || await fetchState();
     } catch (err) {

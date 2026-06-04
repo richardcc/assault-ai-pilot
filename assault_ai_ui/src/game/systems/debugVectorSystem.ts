@@ -20,10 +20,17 @@ export function createDebugVector(app: PIXI.Application) {
     fontSize: 16
   });
 
+  // Container for dice sprites (same art as the combat panel)
+  const diceContainer = new PIXI.Container();
+
   app.stage.addChild(graphics);
+  app.stage.addChild(diceContainer);
   app.stage.addChild(text);
 
-  return { graphics, text };
+  // Preload dice textures so sprites don't render as empty/gray squares
+  preloadDiceTextures();
+
+  return { graphics, text, diceContainer };
 }
 
 
@@ -45,12 +52,14 @@ export async function updateDebugVector({
   if (!event.originalEvent?.ctrlKey) {
     debug.graphics.clear();
     debug.text.text = "";
+    clearDiceContainer(debug.diceContainer);
     return;
   }
 
   if (!selectedUnitId || !state?.units || !closestHex) {
     debug.graphics.clear();
     debug.text.text = "";
+    clearDiceContainer(debug.diceContainer);
     return;
   }
 
@@ -97,13 +106,16 @@ export async function updateDebugVector({
     cachedTargeting?.path_full ?? cachedTargeting?.path ?? [];
   const blocking = cachedTargeting?.blocking ?? [];
   const hindrance = cachedTargeting?.hindrance ?? [];
+  const dice = cachedTargeting?.dice ?? null;
 
   // --------------------------------------------------
-  // ✅ COLOR SEGÚN LOS
+  // ✅ COLOR SEGÚN LOS (el fuego indirecto ignora el LOS)
   // --------------------------------------------------
+  const isIndirect = dice?.indirect === true;
   let color = 0xff0000;
 
-  if (los === "CLEAR") color = 0x00ff00;
+  if (isIndirect) color = 0x00ccff;
+  else if (los === "CLEAR") color = 0x00ff00;
   else if (los === "HINDERED") color = 0xffaa00;
   else if (los === "BLOCKED") color = 0xff0000;
 
@@ -179,9 +191,250 @@ export async function updateDebugVector({
 
 
   // --------------------------------------------------
-  // ✅ TEXTO
+  // ✅ TEXTO (distancia + LOS)
   // --------------------------------------------------
-  debug.text.text = `d=${dist} | LOS=${los}`;
+  debug.text.style.align = "center";
+  debug.text.text = isIndirect
+    ? `d=${dist} | INDIRECTO (ignora LOS)`
+    : `d=${dist} | LOS=${los}`;
   debug.text.x = mx - debug.text.width / 2;
-  debug.text.y = my - debug.text.height / 2;
+  debug.text.y = my - debug.text.height / 2 - (dice ? 34 : 0);
+
+  // --------------------------------------------------
+  // ✅ DADOS (imágenes, base → con modificadores)
+  // --------------------------------------------------
+  const diceContainer: PIXI.Container = debug.diceContainer;
+  clearDiceContainer(diceContainer);
+
+  if (dice) {
+    const rowGap = 26;
+    const baseY = my + 2;
+
+    buildDiceRow(
+      diceContainer,
+      `ATK${dice.suppressed ? " (supr)" : ""}`,
+      dice.attack,
+      mx,
+      baseY,
+    );
+    buildDiceRow(
+      diceContainer,
+      `DEF${dice.hindered ? " (hind)" : ""}`,
+      dice.defense,
+      mx,
+      baseY + rowGap,
+    );
+  }
+}
+
+// --------------------------------------------------
+// Dice sprite helpers (same art as the combat panel)
+// --------------------------------------------------
+const DIE_BASE_SRC: Record<string, string> = {
+  RED: "/assets/dice/red_02.png",
+  YELLOW: "/assets/dice/yellow_01.png",
+  GREEN: "/assets/dice/green_01.png",
+  BLUE: "/assets/dice/blue_01.png",
+};
+
+const DIE_SIZE = 22;
+const DIE_SPACING = 3;
+const _textureCache: Record<string, PIXI.Texture> = {};
+let _dicePreloadStarted = false;
+
+async function preloadDiceTextures() {
+  if (_dicePreloadStarted) return;
+  _dicePreloadStarted = true;
+
+  await Promise.all(
+    Object.values(DIE_BASE_SRC).map(async (src) => {
+      try {
+        const tex = await PIXI.Assets.load(src);
+        _textureCache[src] = tex;
+      } catch (e) {
+        console.warn("[debugVector] failed to load die texture", src, e);
+      }
+    })
+  );
+}
+
+function getDieTexture(color: string): PIXI.Texture | null {
+  const src = DIE_BASE_SRC[color];
+  if (!src) return null;
+  return _textureCache[src] ?? null;
+}
+
+function clearDiceContainer(container: PIXI.Container | undefined) {
+  if (!container) return;
+  const children = [...container.children];
+  for (const child of children) {
+    container.removeChild(child);
+    // Keep shared textures alive; only destroy the display object
+    (child as any).destroy?.({ children: true, texture: false });
+  }
+}
+
+function makeLabel(textValue: string): PIXI.Text {
+  return new PIXI.Text(textValue, {
+    fill: "#ffffff",
+    fontSize: 13,
+    fontWeight: "bold",
+  });
+}
+
+function makeCaption(textValue: string): PIXI.Text {
+  return new PIXI.Text(textValue, {
+    fill: "#cccccc",
+    fontSize: 10,
+    fontStyle: "italic",
+  });
+}
+
+type DieMark = "none" | "added" | "removed";
+
+function makeDieCell(color: string, mark: DieMark = "none"): PIXI.Container {
+  const cell = new PIXI.Container();
+
+  const tex = getDieTexture(color);
+  const sprite = new PIXI.Sprite(tex ?? PIXI.Texture.EMPTY);
+  sprite.width = DIE_SIZE;
+  sprite.height = DIE_SIZE;
+  cell.addChild(sprite);
+
+  // Texture not cached yet → load it and assign once ready
+  if (!tex) {
+    const src = DIE_BASE_SRC[color];
+    if (src) {
+      PIXI.Assets.load(src)
+        .then((loaded: PIXI.Texture) => {
+          _textureCache[src] = loaded;
+          if (!(sprite as any).destroyed) {
+            sprite.texture = loaded;
+            sprite.width = DIE_SIZE;
+            sprite.height = DIE_SIZE;
+          }
+        })
+        .catch(() => {});
+    }
+  }
+
+  // Highlight dice changed by modifiers
+  if (mark === "added") {
+    const border = new PIXI.Graphics();
+    border.roundRect(-2, -2, DIE_SIZE + 4, DIE_SIZE + 4, 4);
+    border.stroke({ width: 2.5, color: 0x00ff66 });
+    cell.addChild(border);
+  } else if (mark === "removed") {
+    sprite.alpha = 0.3;
+    const border = new PIXI.Graphics();
+    border.roundRect(-2, -2, DIE_SIZE + 4, DIE_SIZE + 4, 4);
+    border.stroke({ width: 2.5, color: 0xff3333 });
+    // diagonal strike to signal removal
+    border.moveTo(0, DIE_SIZE);
+    border.lineTo(DIE_SIZE, 0);
+    border.stroke({ width: 2, color: 0xff3333 });
+    cell.addChild(border);
+  }
+
+  return cell;
+}
+
+function countByColor(arr: string[]): Record<string, number> {
+  const out: Record<string, number> = {};
+  for (const c of arr) out[c] = (out[c] ?? 0) + 1;
+  return out;
+}
+
+/**
+ * Lay out one row centered at (centerX, centerY):
+ *   LABEL  base [dice]   →   final [dice]
+ * - When modifiers change the pool, both groups are shown with "base"/"final"
+ *   captions; added dice get a green border, removed dice a red strike.
+ * - When nothing changes, only a single (unlabeled) pool is shown.
+ */
+function buildDiceRow(
+  container: PIXI.Container,
+  label: string,
+  pair: { base?: string[]; modified?: string[] } | undefined,
+  centerX: number,
+  centerY: number,
+) {
+  if (!pair) return;
+
+  const base = pair.base ?? [];
+  const modified = pair.modified ?? [];
+  const changed = base.join(",") !== modified.join(",");
+
+  const baseCounts = countByColor(base);
+  const modCounts = countByColor(modified);
+
+  type Item = { obj: PIXI.Container; w: number };
+  const items: Item[] = [];
+
+  const pushObj = (obj: PIXI.Container, pad: number) =>
+    items.push({ obj, w: (obj.width || 0) + pad });
+
+  const pushCaption = (txt: string) => pushObj(makeCaption(txt), 4);
+  const pushDie = (color: string, mark: DieMark) =>
+    items.push({ obj: makeDieCell(color, mark), w: DIE_SIZE + DIE_SPACING });
+
+  // Row label (ATK / DEF ...)
+  pushObj(makeLabel(label), 8);
+
+  if (!changed) {
+    if (base.length === 0) pushObj(makeLabel("-"), 6);
+    else base.forEach((c) => pushDie(c, "none"));
+  } else {
+    // ---- base group (mark removed dice) ----
+    pushCaption("base");
+    if (base.length === 0) {
+      pushObj(makeLabel("-"), 6);
+    } else {
+      const removedLeft = { ...baseCounts };
+      for (const c of Object.keys(removedLeft)) {
+        removedLeft[c] = Math.max(0, baseCounts[c] - (modCounts[c] ?? 0));
+      }
+      base.forEach((c) => {
+        let mark: DieMark = "none";
+        if (removedLeft[c] > 0) {
+          mark = "removed";
+          removedLeft[c] -= 1;
+        }
+        pushDie(c, mark);
+      });
+    }
+
+    // ---- arrow ----
+    pushObj(makeLabel("→"), 8);
+
+    // ---- final group (mark added dice) ----
+    pushCaption("final");
+    if (modified.length === 0) {
+      pushObj(makeLabel("-"), 6);
+    } else {
+      const addedLeft = { ...modCounts };
+      for (const c of Object.keys(addedLeft)) {
+        addedLeft[c] = Math.max(0, modCounts[c] - (baseCounts[c] ?? 0));
+      }
+      modified.forEach((c) => {
+        let mark: DieMark = "none";
+        if (addedLeft[c] > 0) {
+          mark = "added";
+          addedLeft[c] -= 1;
+        }
+        pushDie(c, mark);
+      });
+    }
+  }
+
+  const totalW = items.reduce((sum, it) => sum + it.w, 0);
+  let x = centerX - totalW / 2;
+
+  for (const it of items) {
+    const h = (it.obj as any).height ?? DIE_SIZE;
+    it.obj.x = x;
+    it.obj.y = centerY - h / 2;
+    container.addChild(it.obj);
+    x += it.w;
+  }
 }

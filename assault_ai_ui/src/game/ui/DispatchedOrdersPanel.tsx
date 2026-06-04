@@ -13,6 +13,8 @@ type Order = {
 type DispatchedOrdersPanelProps = {
   availableMoves?: Order[];
   selectedUnitId?: string | null;
+  onHoverOrder?: (order: Order) => void;
+  onLeaveOrder?: () => void;
 };
 
 function isCombatAction(order: Order, actionType: string): boolean {
@@ -24,7 +26,7 @@ function isCombatAction(order: Order, actionType: string): boolean {
   return /RANGED|ASSAULT|ATTACK|REACTION|COMBAT|FIRE/.test(actionClass);
 }
 
-export function DispatchedOrdersPanel({ availableMoves = [], selectedUnitId }: DispatchedOrdersPanelProps) {
+export function DispatchedOrdersPanel({ availableMoves = [], selectedUnitId, onHoverOrder, onLeaveOrder }: DispatchedOrdersPanelProps) {
 
   const [aiOrders, setAiOrders] = useState<Order[]>([]);
 
@@ -106,9 +108,11 @@ export function DispatchedOrdersPanel({ availableMoves = [], selectedUnitId }: D
                   className={`action-card ${isAttack ? "action-attack" : ""}`}
                   onMouseEnter={() => {
                     (window as any).onOrderHover?.(order);
+                    onHoverOrder?.(order);
                   }}
                   onMouseLeave={() => {
                     (window as any).onOrderLeave?.();
+                    onLeaveOrder?.();
                   }}
                   onClick={() => {
                     const q = order.target_q ?? (order as any).q;
@@ -161,4 +165,3 @@ export function DispatchedOrdersPanel({ availableMoves = [], selectedUnitId }: D
     </>
   );
 }
-``

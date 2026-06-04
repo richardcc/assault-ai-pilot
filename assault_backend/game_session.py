@@ -29,6 +29,7 @@ class GameSession:
         self.scenario_id: Optional[str] = None  # ✅ nuevo
         self.sides_config = {}
         self.last_events = []
+        self._event_seq = 0
 
     # ---------------------------------------------
     def start(self, scenario_id: str, sides: Dict[str, str]):
@@ -65,6 +66,10 @@ class GameSession:
                 # ✅ Only collect ACTION_EFFECT events (combat results with serializable data)
                 # UNIT_MOVED / MAP_STATE contain HexCoord objects that break JSON serialization
                 if event.get("type") == "ACTION_EFFECT":
+                    # Stable id lets the frontend dedupe combat log entries
+                    # regardless of which endpoint (step / ai-turn / state) delivers them.
+                    self._event_seq += 1
+                    event["id"] = self._event_seq
                     self.last_events.append(event)
             self.env.event_bus.subscribe(on_event)
 
