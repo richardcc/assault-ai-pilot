@@ -120,9 +120,19 @@ def evaluate_sb3(episodes: int = 100):
         ) from exc
 
     repo_root = Path(__file__).resolve().parents[2]
-    model_path = repo_root / "models" / "sb3_latest.zip"
-    if not model_path.exists():
-        raise SystemExit(f"SB3 model not found: {model_path}")
+    model_candidates = [
+        repo_root / "models" / "sb3_latest.zip",
+        repo_root / "models" / "sb3_best" / "best_model.zip",
+    ]
+    model_path = next((p for p in model_candidates if p.exists()), None)
+    if model_path is None:
+        tried = "\n".join(f" - {p}" for p in model_candidates)
+        raise SystemExit(
+            "SB3 model not found. Tried:\n"
+            f"{tried}\n"
+            "Tip: if training is still running, wait for first eval checkpoint "
+            "(best_model.zip) or training end (sb3_latest.zip)."
+        )
     vecnorm_path = repo_root / "models" / "sb3_vecnormalize.pkl"
 
     env = make_env(

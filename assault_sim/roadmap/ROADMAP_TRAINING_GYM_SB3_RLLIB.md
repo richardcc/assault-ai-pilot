@@ -314,12 +314,18 @@ Estado actual:
 - backend integrado para inferencia SB3 con fallback heuristico
 - reproducibilidad base validada en corridas cortas (seed fija)
 - operacion diaria estandarizada en comandos SB3 (`train_sb3.py` + `eval_sb3.py`)
+- fine-tune post-1M configurado (LR menor + reward anti-ataques de bajo valor) para mejorar `damage_ratio` y reducir `zero_dmg_rate`
 
 Brechas pendientes (prioridad):
 - P2 RLlib-ready: contratos tipados, config centralizada, checkpoint/eval gate neutrales
 - smoke de integracion RLlib (registro de entorno + rollout corto)
 - panel de analisis de alignment por opcion/unidad
 - P3 escalado: profiling + tuning de throughput para mapas x4 / 20v20
+
+Ajuste activo de entrenamiento (SB3):
+- `train_config.json`: `sb3_learning_rate` bajado a `0.0002` y bloque de fine-tune a `500000` timesteps
+- `reward_config.json`: refuerzo de castigo a malos intercambios y ataques sin dano (`bad_trade_penalty`, `zero_damage_attack_penalty`, `shaped_zero_damage_penalty`)
+- objetivo del bloque: mantener `win_rate` y elevar `damage_ratio` con menor `zero_dmg_rate`
 
 Riesgos activos:
 - costo de simulacion puede dominar el tiempo total al escalar escenarios

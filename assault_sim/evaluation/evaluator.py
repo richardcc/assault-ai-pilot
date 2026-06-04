@@ -80,6 +80,25 @@ class Evaluator:
             obs = step.get("obs")
             done = step.get("done", False)
             side = step.get("side")
+            action = step.get("action")
+
+            # If env info is sparse/empty, synthesize minimal action telemetry
+            # so L1/action-execution metrics are still populated.
+            if not info and side is not None and action is not None:
+                action_class = action.__class__.__name__
+                action_upper = action_class.upper()
+                is_attack = any(k in action_upper for k in ("ATTACK", "ASSAULT", "FIRE", "SHOOT"))
+                synthetic = {
+                    "action_class": action_class,
+                    "actor_side": side,
+                    "unit_id": getattr(action, "unit_id", None),
+                }
+                if is_attack:
+                    if side == self.rl_side:
+                        synthetic["rl_attacks"] = 1
+                    else:
+                        synthetic["enemy_attacks"] = 1
+                info = synthetic
 
             sim = getattr(self.env, "sim", None) or getattr(self.env, "sim_env", None)
             state = sim.game_state if sim is not None else None

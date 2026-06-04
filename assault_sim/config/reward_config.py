@@ -53,7 +53,10 @@ class RewardConfig:
 
 
 def load_reward_config(path: Path | None = None) -> RewardConfig:
-    if path is None or not path.exists():
+    if path is None:
+        repo_root = Path(__file__).resolve().parents[2]
+        path = repo_root / "assault_sim" / "config" / "reward_config.json"
+    if not path.exists():
         return RewardConfig()
     with open(path, "r", encoding="utf-8") as f:
         data = json.load(f)
