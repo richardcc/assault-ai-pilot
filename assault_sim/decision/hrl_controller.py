@@ -1,5 +1,5 @@
 from assault_sim.rl.tactical_options import TacticalOption
-from assault_sim.rl.state_encoder import explainable_context
+from assault_sim.rl.state_encoder import explainable_context, encode_state
 
 from assault_sim.strategy.formation_strategy import (
     FormationStrategy,
@@ -34,6 +34,9 @@ class HRLController:
         self.current_option = None
         self.current_attack_mode = None
         self.steps_remaining = -1
+
+        # ✅ Observación por-unidad realmente consumida por la política.
+        self.last_obs = None
 
         self.formation_engine = FormationStrategyEngine()
         self.last_payload = None
@@ -131,6 +134,17 @@ class HRLController:
         strategy = self.formation_engine.update(state, self.rl_side)
         if strategy is None:
             strategy = FormationStrategy.ATTACK
+
+        # ✅ OBSERVACIÓN POR-UNIDAD (CLAVE)
+        # Re-codificamos usando la unidad activa para que la política
+        # perciba dirección/distancia al enemigo.
+        obs = encode_state(
+            state,
+            unit=unit,
+            rl_side=self.rl_side,
+            max_turns=getattr(state, "max_turns", None),
+        )
+        self.last_obs = obs
 
         ppo_option, attack_mode = self._sample_policy(obs)
 

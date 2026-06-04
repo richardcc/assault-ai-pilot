@@ -1,4 +1,6 @@
 import torch
+import random
+import numpy as np
 
 from assault_sim.engine.env_factory import make_env
 from assault_sim.engine.rollout import collect_rollout
@@ -17,21 +19,35 @@ from assault_sim.decision.decision_engine_controller import DecisionEngineContro
 
 def worker_loop(
     rollout_queue,
-    config_path,
+    sim_config_path,
+    env_config_path,
     scenario,
     weights_queue,
     progress_queue,
     reward_fn=None,
+    base_seed: int = 42,
+    worker_id: int = 0,
 ):
 
     torch.set_num_threads(1)
     torch.set_num_interop_threads(1)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    worker_seed = int(base_seed) + int(worker_id)
+    random.seed(worker_seed)
+    np.random.seed(worker_seed)
+    torch.manual_seed(worker_seed)
 
     # -------------------------------------------------
     # ENV
     # -------------------------------------------------
-    env = make_env(config_path, PPOConfig.RL_SIDE, scenario, reward_fn=reward_fn)
+    env = make_env(
+        config_path=sim_config_path,
+        env_config_path=env_config_path,
+        rl_side=PPOConfig.RL_SIDE,
+        scenario=scenario,
+        reward_fn=reward_fn,
+        seed=worker_seed,
+    )
 
     obs = env.reset()
     input_dim = obs.shape[0]

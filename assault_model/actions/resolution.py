@@ -137,7 +137,20 @@ def resolve_action(
         # ------------------------------
         if action.combat_mode == CombatMode.ASSAULT:
             ctx = new_state.create_combat_context(action)
+
+            # Hex objetivo del asalto (hex del defensor). Reglamento 11.1:
+            # el atacante entra en el hex enemigo para iniciar el close
+            # combat y lo OCUPA si elimina al defensor.
+            target_hex = ctx.defender.position
+
             result_combat = resolve_close_combat(ctx, context)
+
+            if (
+                target_hex is not None
+                and ctx.attacker.alive
+                and not ctx.defender.alive
+            ):
+                ctx.attacker.position = target_hex
 
         # ------------------------------
         # RANGED DIRECT + INDIRECT FIRE

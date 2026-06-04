@@ -18,6 +18,8 @@ class OptionPolicy:
         self.last_value = None
 
         self.last_decision_info = None
+        self.last_option_logits = None
+        self.last_attack_logits = None
 
         # ✅ configurable
         self.exploration_rate = 0.25
@@ -44,6 +46,8 @@ class OptionPolicy:
             obs,
             self.hidden
         )
+        self.last_option_logits = option_logits.detach()
+        self.last_attack_logits = attack_logits.detach()
 
         # ✅ cortar gradiente temporal
         self.hidden = (
@@ -107,3 +111,22 @@ class OptionPolicy:
 
         # ✅ CRÍTICO
         return option, attack_mode, self.last_log_prob, self.last_value
+
+    def log_prob_for(self, option: TacticalOption, attack_mode: int = 0):
+        """
+        Recompute log-prob for an externally resolved/executed option
+        using the latest logits from choose_option.
+        """
+        if self.last_option_logits is None:
+            return torch.zeros(1, dtype=torch.float32, device=self.device)
+
+        option_dist = dist.Categorical(logits=self.last_option_logits)
+        option_idx = torch.tensor([option.value], device=self.device)
+        logp = option_dist.log_prob(option_idx)
+
+        if option == TacticalOption.ATTACK and self.last_attack_logits is not None:
+            attack_dist = dist.Categorical(logits=self.last_attack_logits)
+            attack_idx = torch.tensor([int(attack_mode)], device=self.device)
+            logp = logp + attack_dist.log_prob(attack_idx)
+
+        return logp.detach()

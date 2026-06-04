@@ -3,6 +3,8 @@ import torch.optim as optim
 import multiprocessing as mp
 import numpy as np
 import time
+import json
+import random
 from datetime import datetime
 import socket
 from torch.utils.tensorboard import SummaryWriter
@@ -17,24 +19,102 @@ from assault_sim.rewards.shaped_reward import ShapedReward
 from assault_sim.train.worker import worker_loop
 from assault_sim.train.ppo_schedule import ppo_schedule
 from assault_sim.train.ppo_trainer import ppo_update, compute_gae
+from assault_sim.rl.option_policy import OptionPolicy
+from assault_sim.decision.decision_engine import DecisionEngine
+from assault_sim.decision.decision_engine_controller import DecisionEngineController
+from assault_sim.heuristics.tactical_path_heuristic import TacticalPathHeuristic
+from assault_sim.evaluation.evaluator import Evaluator
 
 
-MODEL_DIR = Path("C:/repos/python/assault/models")
+REPO_ROOT = Path(__file__).resolve().parents[2]
+MODEL_DIR = REPO_ROOT / "models"
 LATEST_PATH = MODEL_DIR / "latest.pt"
+SIM_CONFIG_PATH = REPO_ROOT / "assault_sim" / "config" / "sim_config.yaml"
+ENV_CONFIG_PATH = REPO_ROOT / "assault_sim" / "config" / "env_config.json"
+
+
+def set_global_seed(seed: int):
+    random.seed(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+
+
+def load_model_state(path: Path, device: torch.device):
+    data = torch.load(path, map_location=device)
+    if isinstance(data, dict) and "model_state_dict" in data:
+        return data["model_state_dict"], data
+    return data, None
+
+
+def evaluate_policy_snapshot(policy: PolicyNet, reward_fn=None):
+    eval_env = make_env(
+        config_path=SIM_CONFIG_PATH,
+        env_config_path=ENV_CONFIG_PATH,
+        rl_side=PPOConfig.RL_SIDE,
+        scenario=PPOConfig.SCENARIO,
+        reward_fn=reward_fn,
+        seed=PPOConfig.SEED,
+    )
+    controller = DecisionEngineController(
+        rl_side=PPOConfig.RL_SIDE,
+        decision_engine=DecisionEngine(),
+        option_policy=OptionPolicy(policy),
+        heuristic=TacticalPathHeuristic(),
+        sim_env=eval_env.sim,
+    )
+    controller.training_mode = False
+    evaluator = Evaluator(
+        env=eval_env,
+        rl_controller=controller,
+        enemy_controller=None,
+        rl_side=PPOConfig.RL_SIDE,
+    )
+    results = evaluator.evaluate(PPOConfig.EVAL_EPISODES)
+    if not results:
+        return {"win_rate": 0.0, "damage_ratio": 0.0, "episodes": 0}
+    wins = 0.0
+    rl_damage = 0.0
+    enemy_damage = 0.0
+    for r in results:
+        winner = r.get("winner")
+        if winner == PPOConfig.RL_SIDE:
+            wins += 1.0
+        elif winner is None:
+            wins += 0.5
+        rl_damage += r.get("side", {}).get("RL", {}).get("damage", 0)
+        enemy_damage += r.get("side", {}).get("ENEMY", {}).get("damage", 0)
+    return {
+        "win_rate": float(wins / len(results)),
+        "damage_ratio": float(rl_damage / max(1.0, enemy_damage)),
+        "episodes": len(results),
+    }
 
 
 def main(reward_fn=None):
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    set_global_seed(PPOConfig.SEED)
     print(f">>> Using device: {device}")
 
-    config_path = Path("C:/repos/python/assault/assault_sim/config/sim_config.yaml")
-    scenario = "phase01_seq001_initial_contact"
+    scenario = PPOConfig.SCENARIO
+    print(">>> Effective train config:")
+    print(f"    seed={PPOConfig.SEED} scenario={scenario} rl_side={PPOConfig.RL_SIDE}")
+    print(f"    sim_config={SIM_CONFIG_PATH}")
+    print(f"    env_config={ENV_CONFIG_PATH}")
+    print(f"    model_dir={MODEL_DIR}")
 
     # reward shaping: allow injecting a custom reward_fn (used by grid runs)
     if reward_fn is None:
         reward_fn = ShapedReward(rl_side=PPOConfig.RL_SIDE)
-    env = make_env(config_path, PPOConfig.RL_SIDE, scenario, reward_fn=reward_fn)
+    env = make_env(
+        config_path=SIM_CONFIG_PATH,
+        env_config_path=ENV_CONFIG_PATH,
+        rl_side=PPOConfig.RL_SIDE,
+        scenario=scenario,
+        reward_fn=reward_fn,
+        seed=PPOConfig.SEED,
+    )
+    print(f"    max_steps={env.max_steps}")
     obs = env.reset()
     input_dim = obs.shape[0]
 
@@ -54,7 +134,8 @@ def main(reward_fn=None):
     if LATEST_PATH.exists():
         try:
             print(f">>> Loading existing model: {LATEST_PATH}")
-            policy.load_state_dict(torch.load(LATEST_PATH, map_location=device))
+            state_dict, _ = load_model_state(LATEST_PATH, device)
+            policy.load_state_dict(state_dict)
         except Exception as e:
             print(f"⚠️ Could not load model: {e}")
             print(">>> Starting from scratch")
@@ -63,10 +144,20 @@ def main(reward_fn=None):
     weights_queue = mp.Queue(maxsize=1)
 
     workers = []
-    for _ in range(PPOConfig.NUM_ENVS):
+    for worker_id in range(PPOConfig.NUM_ENVS):
         p = mp.Process(
             target=worker_loop,
-            args=(rollout_queue, config_path, scenario, weights_queue, None, reward_fn),
+            args=(
+                rollout_queue,
+                SIM_CONFIG_PATH,
+                ENV_CONFIG_PATH,
+                scenario,
+                weights_queue,
+                None,
+                reward_fn,
+                PPOConfig.SEED,
+                worker_id,
+            ),
         )
         p.daemon = True
         p.start()
@@ -78,6 +169,7 @@ def main(reward_fn=None):
     start_time = time.time()
     last_log_time = start_time
     last_update = 0
+    best_eval_score = -1e9
 
     while rollout_idx < PPOConfig.TOTAL_UPDATES:
 
@@ -133,6 +225,7 @@ def main(reward_fn=None):
             "returns": returns,
             "advantages": advantages,
             "teacher": torch.tensor(np.array(combined["teacher_actions"]), dtype=torch.long).to(device),
+            "dones": torch.tensor(np.array(combined["dones"]), dtype=torch.float32).to(device),
         }
 
         schedule = ppo_schedule(rollout_idx)
@@ -142,7 +235,7 @@ def main(reward_fn=None):
         )
         entropy_coef = max(entropy_coef, 0.01)
 
-        loss = ppo_update(
+        train_stats = ppo_update(
             policy,
             optimizer,
             batch,
@@ -160,15 +253,50 @@ def main(reward_fn=None):
         # ---------------- SAVE ----------------
 
         MODEL_DIR.mkdir(parents=True, exist_ok=True)
+        checkpoint_payload = {
+            "model_state_dict": policy.state_dict(),
+            "optimizer_state_dict": optimizer.state_dict(),
+            "meta": {
+                "rollout_idx": rollout_idx,
+                "timestamp_utc": datetime.utcnow().isoformat() + "Z",
+                "seed": PPOConfig.SEED,
+                "scenario": scenario,
+                "rl_side": PPOConfig.RL_SIDE,
+                "hostname": socket.gethostname(),
+                "sim_config_path": str(SIM_CONFIG_PATH),
+                "env_config_path": str(ENV_CONFIG_PATH),
+                "ppo_config": {
+                    k: v for k, v in PPOConfig.__dict__.items()
+                    if k.isupper() and isinstance(v, (int, float, str, bool))
+                },
+                "train_stats": train_stats,
+            },
+        }
 
         if rollout_idx % 100 == 0:
-            torch.save(policy.state_dict(), LATEST_PATH)
+            torch.save(checkpoint_payload, LATEST_PATH)
             print(f"✅ Saved latest → {LATEST_PATH}")
+            meta_path = MODEL_DIR / "latest.meta.json"
+            with open(meta_path, "w", encoding="utf-8") as f:
+                json.dump(checkpoint_payload["meta"], f, indent=2)
 
         if rollout_idx % 500 == 0:
             ckpt_path = MODEL_DIR / f"checkpoint_{rollout_idx}.pt"
-            torch.save(policy.state_dict(), ckpt_path)
+            torch.save(checkpoint_payload, ckpt_path)
             print(f"📦 Saved checkpoint → {ckpt_path}")
+
+        if rollout_idx > 0 and rollout_idx % PPOConfig.EVAL_INTERVAL == 0:
+            eval_stats = evaluate_policy_snapshot(policy, reward_fn=reward_fn)
+            eval_score = eval_stats["win_rate"] + 0.25 * eval_stats["damage_ratio"]
+            writer.add_scalar("eval/win_rate", eval_stats["win_rate"], rollout_idx)
+            writer.add_scalar("eval/damage_ratio", eval_stats["damage_ratio"], rollout_idx)
+            writer.add_scalar("eval/score", eval_score, rollout_idx)
+            print(f"EVAL win_rate={eval_stats['win_rate']:.3f} damage_ratio={eval_stats['damage_ratio']:.3f} score={eval_score:.3f}")
+            if eval_score >= best_eval_score + PPOConfig.EVAL_MIN_IMPROVEMENT:
+                best_eval_score = eval_score
+                best_path = MODEL_DIR / "best.pt"
+                torch.save(checkpoint_payload, best_path)
+                print(f"🏆 Promoted best checkpoint → {best_path}")
 
         # ---------------- LOGGING ----------------
 
@@ -188,10 +316,18 @@ def main(reward_fn=None):
             samples_per_sec = samples / elapsed if elapsed > 0 else 0.0
 
             avg_reward = float(np.mean(combined['rewards']))
-            print(f"[UPDATE {rollout_idx}] loss={loss:.3f}")
+            print(f"[UPDATE {rollout_idx}] loss={train_stats['loss']:.3f}")
             print(f"avg_reward={avg_reward:.3f}")
             # TensorBoard scalars
-            writer.add_scalar('train/loss', float(loss), rollout_idx)
+            writer.add_scalar('train/loss', float(train_stats["loss"]), rollout_idx)
+            writer.add_scalar('train/policy_loss', float(train_stats["policy_loss"]), rollout_idx)
+            writer.add_scalar('train/value_loss', float(train_stats["value_loss"]), rollout_idx)
+            writer.add_scalar('train/entropy', float(train_stats["entropy"]), rollout_idx)
+            writer.add_scalar('train/approx_kl', float(train_stats["approx_kl"]), rollout_idx)
+            writer.add_scalar('train/clip_fraction', float(train_stats["clip_fraction"]), rollout_idx)
+            writer.add_scalar('train/imitation_loss', float(train_stats["imitation_loss"]), rollout_idx)
+            writer.add_scalar('train/grad_norm', float(train_stats["grad_norm"]), rollout_idx)
+            writer.add_scalar('train/samples_used', int(train_stats["samples_used"]), rollout_idx)
             writer.add_scalar('train/avg_reward', avg_reward, rollout_idx)
             writer.add_scalar('train/entropy_coef', float(entropy_coef), rollout_idx)
             print(f"UPDATES/sec: {throughput:.2f}")
@@ -204,6 +340,15 @@ def main(reward_fn=None):
                     avg = stats["sum"] / stats["count"]
                     print(f"  {action}: avg={avg:.3f}")
                     writer.add_scalar(f'reward_by_action/{action}', float(avg), rollout_idx)
+
+            if "l2_sampled" in combined and len(combined["l2_sampled"]) == len(combined["l2"]):
+                forced = sum(
+                    1 for s, e in zip(combined["l2_sampled"], combined["l2"])
+                    if s != e
+                )
+                forced_ratio = forced / max(1, len(combined["l2"]))
+                writer.add_scalar("policy/forced_option_ratio", float(forced_ratio), rollout_idx)
+                print(f"forced_option_ratio={forced_ratio:.3f}")
 
             last_log_time = current_time
             last_update = rollout_idx

@@ -65,6 +65,16 @@ function App() {
     };
   }, []);
 
+  // Auto-start a default session so the map is visible on app load.
+  useEffect(() => {
+    if (activeMode || gameData) return;
+    setActiveMode("human");
+    gameController.start("human").catch((err) => {
+      console.error("❌ Auto-start failed", err);
+      addLog("system", `❌ Auto-start failed: ${String(err)}`);
+    });
+  }, [activeMode, gameData]);
+
   // Monitor game state changes to output beautiful terminal logs
   useEffect(() => {
     if (!gameData) return;

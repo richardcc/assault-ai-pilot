@@ -88,9 +88,18 @@ class MetricsTracker:
         if not unit_id:
             unit_id = info.get("actor_id") or info.get("source_id") or "UNKNOWN"
 
-        # SIDE DETECTION
-        is_rl = unit_id.startswith("US")
-        side = "RL" if is_rl else "ENEMY"
+        # SIDE DETECTION (no hardcoded prefixes)
+        side = None
+        if state is not None and hasattr(state, "units"):
+            actor = next((u for u in state.units if u.unit_id == unit_id), None)
+            if actor is not None:
+                side = "RL" if getattr(actor, "side", None) == self.rl_side else "ENEMY"
+        if side is None:
+            actor_side = info.get("actor_side")
+            if actor_side is not None:
+                side = "RL" if actor_side == self.rl_side else "ENEMY"
+        if side is None:
+            side = "RL" if info.get("rl_attacks", 0) > 0 else "ENEMY"
 
         # -------------------------------
         # RAW VALUES

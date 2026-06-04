@@ -42,6 +42,12 @@ class Evaluator:
         strategy_option_map = defaultdict(lambda: defaultdict(int))
 
         reward_trace = []
+        decision_trace_counts = defaultdict(int)
+        sampled_option_counts = defaultdict(int)
+        resolved_option_counts = defaultdict(int)
+        forced_steps = 0
+        rl_decisions = 0
+        schema_version = None
 
         # ✅ CRÍTICO → LOG REAL DE EVENTOS
         events_log = []
@@ -164,6 +170,16 @@ class Evaluator:
                 if option is not None:
                     option_counts[option.name] += 1
 
+                trace = getattr(self.controller, "last_decision_trace", None)
+                if trace is not None:
+                    rl_decisions += 1
+                    sampled_option_counts[trace.sampled_option] += 1
+                    resolved_option_counts[trace.resolved_option] += 1
+                    decision_trace_counts[f"{trace.sampled_option}->{trace.executed_option}"] += 1
+                    schema_version = getattr(trace, "schema_version", None)
+                    if trace.was_forced:
+                        forced_steps += 1
+
                 strategy = getattr(self.controller, "current_strategy", None)
 
                 if strategy is not None:
@@ -228,6 +244,15 @@ class Evaluator:
 
         result["strategy_option_map"] = {
             strat: dict(opts) for strat, opts in strategy_option_map.items()
+        }
+        result["decision_alignment"] = {
+            "trace_schema_version": schema_version if rl_decisions > 0 else None,
+            "forced_steps": forced_steps,
+            "rl_decisions": rl_decisions,
+            "forced_ratio": (forced_steps / max(1, rl_decisions)),
+            "sampled_option_counts": dict(sampled_option_counts),
+            "resolved_option_counts": dict(resolved_option_counts),
+            "sampled_to_executed_counts": dict(decision_trace_counts),
         }
 
         # -------------------------------------------------

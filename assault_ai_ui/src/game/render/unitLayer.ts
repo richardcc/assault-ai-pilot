@@ -7,11 +7,15 @@ import { moveUnit } from "./unitLayerMovement";
 
 export class UnitLayer {
   public container: PIXI.Container;
+  private spritesById: Map<string, PIXI.Container>;
+  private pendingCreateById: Map<string, Promise<PIXI.Container>>;
 
   constructor(world: PIXI.Container) {
     this.container = new PIXI.Container();
     this.container.label = "unitLayer";
     this.container.sortableChildren = true;
+    this.spritesById = new Map();
+    this.pendingCreateById = new Map();
 
     world.addChild(this.container);
     initUnitLayerState();
@@ -28,17 +32,53 @@ export class UnitLayer {
     const activated = state.activated_units || [];
     const seen = new Set<string>();
 
+    // Defensive cleanup for historical duplicate sprites:
+    // keep only one unit sprite per __unitId.
+    const keepFirst = new Set<string>();
+    const duplicateSprites: PIXI.Container[] = [];
+    this.container.children.forEach((child: any) => {
+      if (child.__type !== "unit" || !child.__unitId) return;
+      if (keepFirst.has(child.__unitId)) {
+        duplicateSprites.push(child as PIXI.Container);
+      } else {
+        keepFirst.add(child.__unitId);
+      }
+    });
+    duplicateSprites.forEach((child) => {
+      this.container.removeChild(child);
+      child.destroy({ children: true });
+    });
+
     for (const unit of units) {
       const id = unit.id;
 
       // Get or create sprite
-      let sprite = this.container.children.find(
-        (c: any) => c.__unitId === id && c.__type === "unit"
-      ) as PIXI.Container | undefined;
+      let sprite = this.spritesById.get(id);
+      if (sprite && sprite.parent !== this.container) {
+        this.spritesById.delete(id);
+        sprite = undefined;
+      }
 
       if (!sprite) {
-        sprite = await createUnitSprite(unit);
-        this.container.addChild(sprite);
+        let pending = this.pendingCreateById.get(id);
+        if (!pending) {
+          pending = createUnitSprite(unit);
+          this.pendingCreateById.set(id, pending);
+        }
+        sprite = await pending;
+        this.pendingCreateById.delete(id);
+
+        const current = this.spritesById.get(id);
+        if (current) {
+          // Another sync already resolved and registered this unit.
+          if (sprite !== current) {
+            sprite.destroy({ children: true });
+          }
+          sprite = current;
+        } else {
+          this.spritesById.set(id, sprite);
+          this.container.addChild(sprite);
+        }
       }
 
       // Update position (no animation - snap if not moving)
@@ -74,6 +114,7 @@ export class UnitLayer {
         seen.add(id);
         continue;
       }
+      sprite.visible = true;
 
       if (!isOwn || !isAvailable) {
         sprite.alpha = 0.7;
@@ -90,12 +131,13 @@ export class UnitLayer {
     // Cleanup stale sprites for units no longer present in state
     const toRemove: any[] = [];
     this.container.children.forEach((child: any) => {
-      if (child.__unitId && !seen.has(child.__unitId)) {
+      if (child.__type === "unit" && child.__unitId && !seen.has(child.__unitId)) {
         toRemove.push(child);
       }
     });
 
     toRemove.forEach((child) => {
+      this.spritesById.delete((child as any).__unitId);
       this.container.removeChild(child);
       child.destroy({ children: true });
     });

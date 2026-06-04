@@ -25,7 +25,8 @@ from assault_sim.debug.replay_utils import extract_initial_state
 
 
 RL_SIDE = "US"
-CHECKPOINT = Path("models/latest.pt")
+REPO_ROOT = Path(__file__).resolve().parents[2]
+CHECKPOINT = REPO_ROOT / "models" / "latest.pt"
 
 DEBUG_L3 = False  # ✅ activar si quieres ver estrategias
 
@@ -44,7 +45,7 @@ def main():
     # ENV
     # -------------------------------------------------
     sim_config = load_sim_config(
-        Path("C:/repos/python/assault/assault_sim/config/sim_config.yaml")
+        REPO_ROOT / "assault_sim" / "config" / "sim_config.yaml"
     )
 
     sim_config.scenario_name = "phase01_seq001_initial_contact"
@@ -58,7 +59,7 @@ def main():
 
     env = TrainingEnv(
         sim_env,
-        env_config_path=Path("C:/repos/python/assault/assault_sim/config/env_config.json"),
+        env_config_path=REPO_ROOT / "assault_sim" / "config" / "env_config.json",
         rl_side=rl_side,
     )
 
@@ -76,7 +77,10 @@ def main():
     )
 
     checkpoint = torch.load(CHECKPOINT, map_location="cpu")
-    policy.load_state_dict(checkpoint)
+    if isinstance(checkpoint, dict) and "model_state_dict" in checkpoint:
+        policy.load_state_dict(checkpoint["model_state_dict"])
+    else:
+        policy.load_state_dict(checkpoint)
     policy.eval()
 
     print(">>> PPO model loaded [OK]")
@@ -172,7 +176,7 @@ def main():
     # -------------------------------------------------
     # SAVE REPLAY
     # -------------------------------------------------
-    replay_dir = Path("C:/repos/python/assault/assault_sim/session/replays")
+    replay_dir = REPO_ROOT / "assault_sim" / "session" / "replays"
     replay_dir.mkdir(parents=True, exist_ok=True)
 
     replay_path = replay_dir / (

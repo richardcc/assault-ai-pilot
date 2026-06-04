@@ -1,6 +1,10 @@
+import json
+import random
 import yaml
 import os
 from pathlib import Path
+import numpy as np
+import torch
 
 from assault_model.actions.status import WaitAction
 from assault_model.map.hex_utils import safe_hex_distance
@@ -40,16 +44,22 @@ class TrainingEnv:
         env_config_path: Path,
         rl_side: str,
         scenario_override=None,
-        reward_fn=None   # ✅ NUEVO
+        reward_fn=None,   # ✅ NUEVO
+        seed: int | None = None,
     ):
         self.sim = sim_env
         self.rl_side = rl_side
+        self.base_seed = seed
+        self.reset_count = 0
 
         with open(env_config_path, "r", encoding="utf-8") as f:
-            self.env_config = yaml.safe_load(f)
+            if str(env_config_path).lower().endswith(".json"):
+                self.env_config = json.load(f)
+            else:
+                self.env_config = yaml.safe_load(f)
 
         env_cfg = self.env_config.get("environment", {})
-        self.max_steps = env_cfg.get("max_steps", None)
+        self.max_steps = env_cfg.get("max_steps", self.env_config.get("max_steps", None))
 
         self.scenario_override = scenario_override
         self.current_step = 0
@@ -73,6 +83,12 @@ class TrainingEnv:
 
     # -------------------------------------------------
     def reset(self):
+        if self.base_seed is not None:
+            current_seed = int(self.base_seed) + self.reset_count
+            random.seed(current_seed)
+            np.random.seed(current_seed)
+            torch.manual_seed(current_seed)
+            self.reset_count += 1
 
         state = self.sim.reset()
 
@@ -157,6 +173,7 @@ class TrainingEnv:
         info = {
             "unit_id": action.unit_id if hasattr(action, "unit_id") else None,
             "action_id": getattr(action, "action_id", None),  # ✅ 💣 NUEVO
+            "actor_side": actor_side,
 
             "rl_damage": 0,
             "rl_attacks": 0,
@@ -215,6 +232,44 @@ class TrainingEnv:
                         info["enemy_kills"] += 1
 
         # -------------------------------------------------
+        # ✅ DISTANCIA AL ENEMIGO (antes/después)
+        # Reactiva el shaping de aproximación/presión en la recompensa.
+        # Se mide la distancia de la unidad que actúa a su enemigo más
+        # cercano, antes y después de aplicar la acción.
+        # -------------------------------------------------
+        pre_dist = None
+        post_dist = None
+
+        if actor is not None and actor_side == self.rl_side:
+            enemies_before = [
+                u for u in state.units
+                if u.alive and u.side != self.rl_side and u.position is not None
+            ]
+            if actor.position is not None and enemies_before:
+                pre_dist = min(
+                    safe_hex_distance(actor.position, e.position)
+                    for e in enemies_before
+                )
+
+            actor_after = next(
+                (u for u in next_state.units if u.unit_id == actor.unit_id),
+                None,
+            )
+            enemies_after = [
+                u for u in next_state.units
+                if u.alive and u.side != self.rl_side and u.position is not None
+            ]
+            if (
+                actor_after is not None
+                and actor_after.position is not None
+                and enemies_after
+            ):
+                post_dist = min(
+                    safe_hex_distance(actor_after.position, e.position)
+                    for e in enemies_after
+                )
+
+        # -------------------------------------------------
         # REWARD
         # -------------------------------------------------
         if actor_side == self.rl_side:
@@ -224,8 +279,8 @@ class TrainingEnv:
                 action=action,
                 active=actor,
                 info=info,
-                pre_dist=None,
-                post_dist=None,
+                pre_dist=pre_dist,
+                post_dist=post_dist,
             )
         else:
             reward = 0.0

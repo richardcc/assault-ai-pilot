@@ -43,6 +43,7 @@ def collect_rollout(env, controller, max_steps, seq_len=8):
     values_buf, rewards_buf, dones_buf = [], [], []
     teacher_actions_buf = []
     l2_buf = []  # ✅ NUEVO
+    l2_sampled_buf = []
 
     sequence = []
 
@@ -57,6 +58,7 @@ def collect_rollout(env, controller, max_steps, seq_len=8):
     last_value = torch.zeros(1, dtype=torch.float32)
     last_teacher = 0
     last_l2 = "UNKNOWN"  # ✅ NUEVO
+    last_l2_sampled = "UNKNOWN"
 
     decision_engine = DecisionEngine()
 
@@ -78,7 +80,13 @@ def collect_rollout(env, controller, max_steps, seq_len=8):
         if side == controller.rl_side:
 
             if turn_start_obs is None:
-                turn_start_obs = obs
+                # ✅ Usar el obs por-unidad realmente consumido por la
+                # política (re-codificado dentro del controller). Esto
+                # mantiene PPO consistente con la entrada de la red.
+                controller_obs = getattr(controller, "last_obs", None)
+                turn_start_obs = (
+                    controller_obs if controller_obs is not None else obs
+                )
 
             # TEACHER
             teacher_idx = 0
@@ -94,6 +102,7 @@ def collect_rollout(env, controller, max_steps, seq_len=8):
 
             # CONTROLLER OUTPUT
             option = getattr(controller, "current_option", None)
+            sampled_option = getattr(controller, "current_option_sampled", None)
             logp = getattr(controller, "last_logp", None)
             value = getattr(controller, "last_value", None)
             attack_mode = getattr(controller, "current_attack_mode", 0)
@@ -106,6 +115,11 @@ def collect_rollout(env, controller, max_steps, seq_len=8):
                     last_l2 = option.name
                 else:
                     last_l2 = str(option)
+            if sampled_option is not None:
+                if hasattr(sampled_option, "name"):
+                    last_l2_sampled = sampled_option.name
+                else:
+                    last_l2_sampled = str(sampled_option)
 
             last_attack_mode = attack_mode if attack_mode is not None else 0
 
@@ -136,6 +150,7 @@ def collect_rollout(env, controller, max_steps, seq_len=8):
                 "done": done,
                 "teacher": last_teacher,
                 "l2": last_l2,  # ✅ NUEVO
+                "l2_sampled": last_l2_sampled,
             })
 
             turn_start_obs = None
@@ -158,6 +173,7 @@ def collect_rollout(env, controller, max_steps, seq_len=8):
                 dones_buf.extend(x["done"] for x in chunk)
                 teacher_actions_buf.extend(x["teacher"] for x in chunk)
                 l2_buf.extend(x["l2"] for x in chunk)  # ✅ NUEVO
+                l2_sampled_buf.extend(x["l2_sampled"] for x in chunk)
 
         # STEP
         obs = next_obs
@@ -190,6 +206,7 @@ def collect_rollout(env, controller, max_steps, seq_len=8):
         dones_buf.append(x["done"])
         teacher_actions_buf.append(x["teacher"])
         l2_buf.append(x["l2"])  # ✅ NUEVO
+        l2_sampled_buf.append(x["l2_sampled"])
 
     return {
         "obs": obs_buf,
@@ -201,4 +218,5 @@ def collect_rollout(env, controller, max_steps, seq_len=8):
         "dones": dones_buf,
         "teacher_actions": teacher_actions_buf,
         "l2": l2_buf,  # ✅ NUEVO
+        "l2_sampled": l2_sampled_buf,
     }

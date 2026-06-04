@@ -1,5 +1,5 @@
-from cache_hrl import HRLCache
-from cache_tactical import TacticalCache
+from assault_backend.cache_hrl import HRLCache
+from assault_backend.cache_tactical import TacticalCache
 
 
 class ExplainableEngine:

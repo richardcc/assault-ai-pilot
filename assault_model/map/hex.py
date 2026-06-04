@@ -1,10 +1,11 @@
 from assault_model.map.terrain import Terrain
 from assault_model.map.hex_direction import HexDirection
+from assault_model.map.hex_utils import neighbors as _odd_r_neighbors
 
 
 class Hex:
     """
-    Atomic spatial element using axial hex coordinates (q, r).
+    Atomic spatial element using odd-r offset hex coordinates (q, r).
 
     Supports movement in 6 directions.
     """
@@ -22,7 +23,13 @@ class Hex:
         )
 
     def neighbors(self) -> list["Hex"]:
-        return [self.neighbor(d) for d in HexDirection]
+        # Vecinos odd-r consistentes con hex_distance (fuente unica en hex_utils).
+        # NOTA: el terreno se copia como placeholder; los consumidores deben
+        # releer el hex real via game_map.get_hex(q, r).
+        return [
+            Hex(nq, nr, self.terrain)
+            for nq, nr in _odd_r_neighbors((self.q, self.r))
+        ]
 
     # -------------------------------------------------
     # ✅ SIMPLIFIED TERRAIN (FINAL FORM)

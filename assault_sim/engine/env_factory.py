@@ -13,12 +13,16 @@ def make_env(
     config_path: Path,
     rl_side: str,
     scenario: str,
+    env_config_path: Path | None = None,
     controller=None,
     reward_fn=None,
+    seed: int | None = None,
 ) -> TrainingEnv:
 
     # ✅ cargar config
     config = load_sim_config(config_path)
+    if scenario:
+        config.scenario_name = scenario
 
     # ✅ crear SimEnv
     sim_env = SimEnv(
@@ -33,9 +37,11 @@ def make_env(
     # ✅ TrainingEnv con reward explícito
     env = TrainingEnv(
         sim_env,
-        config_path,
+        env_config_path or config_path,
         rl_side,
+        scenario_override=scenario,
         reward_fn=reward_fn,
+        seed=seed,
     )
 
     return env
@@ -48,10 +54,16 @@ def make_envs(
     config_path: Path,
     rl_side: str,
     scenario: str,
+    env_config_path: Path | None = None,
     n_envs: int = 4,
 ):
     return [
-        make_env(config_path, rl_side, scenario)
+        make_env(
+            config_path=config_path,
+            rl_side=rl_side,
+            scenario=scenario,
+            env_config_path=env_config_path,
+        )
         for _ in range(n_envs)
     ]
 

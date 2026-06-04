@@ -43,6 +43,7 @@ class UnitType:
         base_defense: Dict[str, List[str]],
         attack: Dict,
         traits: List[str],
+        movement_type: str = "foot",
     ) -> None:
         self.code = code
         self.side = side
@@ -51,6 +52,8 @@ class UnitType:
         self.classification = classification
         self.cost = cost
         self.movement = movement
+        # Movement type for terrain cost lookup (foot / artillery / wheeled / track).
+        self.movement_type = movement_type
         self.max_strength = max_strength
 
         self._base_defense_raw = base_defense

@@ -1,4 +1,6 @@
 {
+  "_comment": "move_cost = puntos de movimiento (MP) para ENTRAR en el hex, por tipo de movimiento de la unidad. Tipos (reglamento 9.4 y 9.10): foot (infanteria, icono botas), artillery (icono canon), wheeled (vehiculo de rueda, anillo simple), track (vehiculo de oruga, anillo doble). Orden de columnas igual que la tabla del player aid: foot | artillery | wheeled | track. Rellena los 'null' con la tabla de terreno. Convenciones: entero >= 1 = transitable; usa null SOLO si es impasable/'Blocked' para ese tipo (el motor lo tratara como prohibido para ese movimiento). Si el coste de entrada supera la movement allowance de la unidad, aplicar harsh terrain (9.5: max 1 hex desde adyacente). NOTA: cada vehiculo debe declarar en unit_catalog si es 'wheeled' o 'track'; infanteria=foot, canones remolcados=artillery.",
+
   "terrain": {
 
     "clear": {
@@ -7,7 +9,13 @@
         "VEHICLE": [],
         "ARTILLERY": []
       },
-      "los": "CLEAR"
+      "los": "CLEAR",
+      "move_cost": {
+        "foot": 1,
+        "artillery": 1,
+        "wheeled": 1,
+        "track": 1
+      }
     },
 
     "water": {
@@ -17,7 +25,13 @@
         "ARTILLERY": []
       },
       "los": "CLEAR",
-      "impassable": true
+      "impassable": true,
+      "move_cost": {
+        "foot": null,
+        "artillery": null,
+        "wheeled": null,
+        "track": null
+      }
     },
 
     "rocky": {
@@ -26,7 +40,13 @@
         "VEHICLE": ["GREEN"],
         "ARTILLERY": ["GREEN"]
       },
-      "los": "CLEAR"
+      "los": "CLEAR",
+      "move_cost": {
+        "foot": null,
+        "artillery": null,
+        "wheeled": null,
+        "track": null
+      }
     },
 
     "olive_vine_grove": {
@@ -35,7 +55,13 @@
         "VEHICLE": ["BLUE"],
         "ARTILLERY": ["BLUE"]
       },
-      "los": "HINDERED"
+      "los": "HINDERED",
+      "move_cost": {
+        "foot": null,
+        "artillery": null,
+        "wheeled": null,
+        "track": null
+      }
     },
 
     "light_forest": {
@@ -44,7 +70,13 @@
         "VEHICLE": ["GREEN"],
         "ARTILLERY": ["BLUE"]
       },
-      "los": "HINDERED"
+      "los": "HINDERED",
+      "move_cost": {
+        "foot": null,
+        "artillery": null,
+        "wheeled": null,
+        "track": null
+      }
     },
 
     "brush": {
@@ -53,7 +85,13 @@
         "VEHICLE": ["GREEN"],
         "ARTILLERY": ["GREEN"]
       },
-      "los": "HINDERED"
+      "los": "HINDERED",
+      "move_cost": {
+        "foot": null,
+        "artillery": null,
+        "wheeled": null,
+        "track": null
+      }
     },
 
     "heavy_forest": {
@@ -63,7 +101,13 @@
         "ARTILLERY": ["GREEN"]
       },
       "los": "BLOCKED",
-      "no_indirect_from": true
+      "no_indirect_from": true,
+      "move_cost": {
+        "foot": null,
+        "artillery": null,
+        "wheeled": null,
+        "track": null
+      }
     },
 
     "building_single": {
@@ -74,7 +118,13 @@
       },
       "los": "BLOCKED",
       "no_indirect_from": true,
-      "elevation": 0
+      "elevation": 0,
+      "move_cost": {
+        "foot": null,
+        "artillery": null,
+        "wheeled": null,
+        "track": null
+      }
     },
 
     "building_multi": {
@@ -85,7 +135,13 @@
       },
       "los": "BLOCKED",
       "no_indirect_from": true,
-      "elevation": 1
+      "elevation": 1,
+      "move_cost": {
+        "foot": null,
+        "artillery": null,
+        "wheeled": null,
+        "track": null
+      }
     }
 
   }

@@ -42,7 +42,7 @@ class GameSession:
             / "sim_config.yaml"
         )
 
-        config = load_sim_config(str(config_path))
+        config = load_sim_config(config_path)
 
         config.data_root = (
             base_path

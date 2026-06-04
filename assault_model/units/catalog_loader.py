@@ -95,6 +95,7 @@ def load_unit_catalog(path: Path) -> Dict[str, UnitType]:
                 classification=data.get("classification", ""),
                 cost=int(data.get("cost", 0)),
                 movement=int(data.get("movement", 0)),
+                movement_type=data.get("movement_type", "foot"),
                 max_strength=int(data.get("max_strength", 0)),
                 base_defense=data.get("base_defense", {}),
                 attack=attack_data,

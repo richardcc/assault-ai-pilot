@@ -29,7 +29,7 @@ export class GameController {
     console.log("Starting mode:", mode);
 
     // ✅ iniciar partida en backend
-    await fetch("http://127.0.0.1:8000/api/game/start", {
+    const startRes = await fetch("http://127.0.0.1:8000/api/game/start", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -40,6 +40,10 @@ export class GameController {
         }
       })
     });
+    if (!startRes.ok) {
+      const detail = await startRes.text();
+      throw new Error(`Backend start failed (${startRes.status}): ${detail}`);
+    }
 
     await this.loadScenario();
 

@@ -1,5 +1,5 @@
 {
-  "_comment": "Core unit definitions (no render, derived strictly from unit cards)",
+  "_comment": "Core unit definitions (no render, derived strictly from unit cards). movement_type (reglamento 9.4/9.10): foot=infanteria, artillery=canones remolcados, wheeled=vehiculo de rueda, track=vehiculo de oruga. Debe coincidir con el icono de la carta de unidad y se usa para leer move_cost en terrain_modifiers.json. NOTA: los morteros aqui son equipos de infanteria (a pie); si la carta muestra el icono de artilleria, cambia su movement_type a 'artillery'.",
 
   "units": {
 
@@ -12,6 +12,7 @@
       "card_id": "Pr43",
       "cost": 8,
       "movement": 2,
+      "movement_type": "foot",
       "max_strength": 4,
       "has_counter_flip": true,
 
@@ -59,6 +60,7 @@
       "card_id": "S43",
       "cost": 6,
       "movement": 2,
+      "movement_type": "foot",
       "max_strength": 3,
       "has_counter_flip": true,
 
@@ -102,6 +104,7 @@
       "card_id": "Pr43_MORTAR",
       "cost": 7,
       "movement": 1,
+      "movement_type": "foot",
 
       "max_strength": 2,
       "has_counter_flip": true,
@@ -151,6 +154,7 @@
       "card_id": "S43_MG42",
       "cost": 6,
       "movement": 2,
+      "movement_type": "foot",
       "max_strength": 3,
       "has_counter_flip": true,
 
@@ -191,6 +195,7 @@
       "card_id": "S43",
       "cost": 6,
       "movement": 2,
+      "movement_type": "foot",
       "max_strength": 4,
       "has_counter_flip": true,
 
@@ -231,6 +236,7 @@
       "card_id": "S43_MORTAR_US",
       "cost": 7,
       "movement": 1,
+      "movement_type": "foot",
       "max_strength": 2,
       "has_counter_flip": true,
 
@@ -278,6 +284,7 @@
       "card_id": "S43_BAZOOKA",
       "cost": 3,
       "movement": 2,
+      "movement_type": "foot",
       "max_strength": 2,
       "has_counter_flip": true,
 
@@ -322,6 +329,7 @@
       "card_id": "S43",
       "cost": 7,
       "movement": 2,
+      "movement_type": "foot",
       "max_strength": 4,
       "has_counter_flip": true,
 

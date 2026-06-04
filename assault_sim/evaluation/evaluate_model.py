@@ -43,11 +43,28 @@ from assault_sim.debug.debug_config import DebugConfig
 RL_SIDE = "US"
 EPISODES = 500
 
-CONFIG_PATH = Path("C:/repos/python/assault/assault_sim/config/sim_config.yaml")
-ENV_CONFIG = Path("C:/repos/python/assault/assault_sim/config/env_config.json")
-CHECKPOINT = Path("models/latest.pt")
+REPO_ROOT = Path(__file__).resolve().parents[2]
+CONFIG_PATH = REPO_ROOT / "assault_sim" / "config" / "sim_config.yaml"
+ENV_CONFIG = REPO_ROOT / "assault_sim" / "config" / "env_config.json"
+CHECKPOINT = REPO_ROOT / "models" / "latest.pt"
 
 NUM_WORKERS = min(20, cpu_count())
+
+
+def resolve_checkpoint_path() -> Path:
+    candidates = [
+        CHECKPOINT,
+        REPO_ROOT / "models" / "best.pt",
+        Path.cwd() / "models" / "latest.pt",
+        Path.cwd() / "models" / "best.pt",
+    ]
+    for p in candidates:
+        if p.exists():
+            return p
+    raise FileNotFoundError(
+        "No checkpoint found. Tried:\n"
+        + "\n".join(f" - {str(p)}" for p in candidates)
+    )
 
 
 # -------------------------------------------------
@@ -73,7 +90,8 @@ def get_policy(env):
         num_options=len(TacticalOption),
     )
 
-    checkpoint = torch.load(CHECKPOINT, map_location="cpu")
+    checkpoint_path = resolve_checkpoint_path()
+    checkpoint = torch.load(checkpoint_path, map_location="cpu")
 
     # checkpoint can be either a raw state_dict or a dict with keys
     state = None
@@ -192,6 +210,12 @@ def main():
 
     print(f">>> Parallel evaluation ({EPISODES} episodes)")
     print(f">>> Workers: {NUM_WORKERS}")
+    try:
+        ckpt = resolve_checkpoint_path()
+        print(f">>> Checkpoint: {ckpt}")
+    except FileNotFoundError as e:
+        print(f"❌ {e}")
+        return
 
     results = []
 
@@ -297,6 +321,7 @@ def main():
             "summary": analyzer.summary(),
             "combat": analyzer.combat_metrics(),
             "advanced": analyzer.advanced_metrics(),
+            "policy_alignment": analyzer.policy_alignment(),
             "action_execution": analyzer.action_execution(),
             "l2_options": compute_option_performance(results),
             "l3_formations": compute_formation_performance(results),

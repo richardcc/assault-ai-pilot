@@ -110,6 +110,27 @@ class ResultsAnalyzer:
         }
 
     # -------------------------------------------------
+    # POLICY ALIGNMENT
+    # -------------------------------------------------
+    def policy_alignment(self):
+        forced_steps = 0
+        decisions = 0
+        sampled_to_executed = defaultdict(int)
+        for r in self.results:
+            align = r.get("decision_alignment", {})
+            forced_steps += int(align.get("forced_steps", 0))
+            decisions += int(align.get("rl_decisions", 0))
+            for k, v in align.get("sampled_to_executed_counts", {}).items():
+                sampled_to_executed[k] += int(v)
+        top_paths = dict(sorted(sampled_to_executed.items(), key=lambda kv: kv[1], reverse=True)[:10])
+        return {
+            "forced_steps": forced_steps,
+            "decisions": decisions,
+            "forced_ratio": forced_steps / max(1, decisions),
+            "top_sampled_to_executed": top_paths,
+        }
+
+    # -------------------------------------------------
     # ✅ ACCIONES REALES (EVENT-BASED)
     # -------------------------------------------------
     def action_execution(self):
@@ -129,18 +150,15 @@ class ResultsAnalyzer:
             if "move" in n:
                 return "MOVE"
 
-            is_ranged = any(x in n for x in ("ranged", "indirect"))
-            is_direct = any(x in n for x in ("close", "direct", "assault", "attack", "fire", "shoot"))
-
-            if is_ranged and is_direct:
-                # hybrid: count in both DIRECT and INDIRECT (split damage later)
-                return ["DIRECT", "INDIRECT"]
-
-            if is_ranged:
+            # Prioritize explicit class semantics to avoid double-counting.
+            if "indirect" in n:
                 return "INDIRECT"
-
-            if is_direct:
+            if "rangeddirect" in n:
                 return "DIRECT"
+            if any(x in n for x in ("close", "direct", "assault", "attack", "fire", "shoot")):
+                return "DIRECT"
+            if "ranged" in n:
+                return "INDIRECT"
 
             return "OTHER"
 
@@ -172,15 +190,8 @@ class ResultsAnalyzer:
                     if isinstance(side_eff, dict):
                         dmg_per = side_eff.get(action_class, {}).get("damage_per_attack", 0.0)
 
-                    # support multiple categories (hybrid actions)
-                    if isinstance(atype, (list, tuple)):
-                        parts = len(atype)
-                        for t in atype:
-                            by_side[side][t]["count"] += c
-                            by_side[side][t]["damage"] += (dmg_per * c) / parts
-                    else:
-                        by_side[side][atype]["count"] += c
-                        by_side[side][atype]["damage"] += dmg_per * c
+                    by_side[side][atype]["count"] += c
+                    by_side[side][atype]["damage"] += dmg_per * c
 
         # Build normalized output
         output = {}
@@ -212,6 +223,10 @@ class ResultsAnalyzer:
         print("\n=== ADVANCED ===")
         for k, v in self.advanced_metrics().items():
             print(f"{k}: {v:.3f}")
+
+        print("\n=== POLICY ALIGNMENT ===")
+        align = self.policy_alignment()
+        print(f"forced_ratio: {align['forced_ratio']:.3f} ({align['forced_steps']}/{align['decisions']})")
 
         # ---------------- L2 ----------------
         print("\n=== L2 POLICY PERFORMANCE ===")

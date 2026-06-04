@@ -32,6 +32,26 @@ def _axial_to_offset(aq: int, ar: int) -> Tuple[int, int]:
     return aq + ((ar - (ar & 1)) // 2), ar
 
 
+def neighbors(pos: CoordLike) -> list:
+    """
+    Devuelve los 6 vecinos de un hex como tuplas (q, r).
+
+    Usa el MISMO modelo de coordenadas odd-r que hex_distance(), de modo
+    que cada vecino devuelto cumple hex_distance(pos, vecino) == 1.
+    Esta es la unica fuente de verdad para la adyacencia: no dupliques
+    deltas en otros modulos (ver discrepancia con HexDirection, que usa
+    direcciones axiales y NO es consistente con hex_distance).
+    """
+    q, r = _as_qr(pos)
+
+    if r % 2 == 0:
+        deltas = [(-1, 0), (+1, 0), (0, -1), (0, +1), (-1, -1), (-1, +1)]
+    else:
+        deltas = [(-1, 0), (+1, 0), (0, -1), (0, +1), (+1, -1), (+1, +1)]
+
+    return [(q + dq, r + dr) for dq, dr in deltas]
+
+
 def hex_distance(a: CoordLike, b: CoordLike) -> int:
     """
     Compute hex distance for an odd-r offset grid.

@@ -1,0 +1,232 @@
+from __future__ import annotations
+
+from pathlib import Path
+from typing import Any
+
+import numpy as np
+
+try:
+    import gymnasium as gym
+    from gymnasium import spaces
+except ImportError:  # pragma: no cover
+    import gym as gym  # type: ignore
+    from gym import spaces  # type: ignore
+
+from assault_model.actions.status import WaitAction
+from assault_sim.config.ppo_config import PPOConfig
+from assault_sim.decision.action_bridge import ActionBridge
+from assault_sim.decision.option_executor import OptionExecutor
+from assault_sim.engine.env_factory import make_env
+from assault_sim.engine.match_runner import MatchRunner
+from assault_sim.heuristics.tactical_path_heuristic import TacticalPathHeuristic
+from assault_sim.rl.tactical_options import TacticalOption
+from assault_sim.rewards.shaped_reward import ShapedReward
+
+
+class _GymActionController:
+    """
+    Controller used by GymAssaultEnv.
+    - RL side consumes external action set by env.step(action)
+    - Enemy side keeps heuristic policy
+    """
+
+    def __init__(self, rl_side: str, sim_env):
+        self.rl_side = rl_side
+        self.sim_env = sim_env
+        self.heuristic = TacticalPathHeuristic()
+        self.executor = OptionExecutor(self.heuristic, avoid_bad_trades=False, adv_threshold=-0.5)
+        self.action_bridge = ActionBridge()
+        self.pending_action: tuple[int, int] | None = None
+
+        self.current_option = None
+        self.current_option_sampled = None
+        self.current_option_resolved = None
+        self.current_attack_mode = 0
+        self.last_decision_trace = None
+        self.last_logp = None
+        self.last_value = None
+        self.current_strategy = None
+        self.training_mode = False
+
+    def reset(self):
+        self.pending_action = None
+        self.current_option = None
+        self.current_option_sampled = None
+        self.current_option_resolved = None
+        self.current_attack_mode = 0
+        self.last_decision_trace = None
+
+    def set_action(self, action: tuple[int, int]):
+        self.pending_action = action
+
+    def _decode_action(self) -> tuple[TacticalOption, int]:
+        if self.pending_action is None:
+            return TacticalOption.HOLD, 0
+        option_idx, attack_mode = int(self.pending_action[0]), int(self.pending_action[1])
+        option = TacticalOption(option_idx)
+        return option, attack_mode
+
+    def act(self, state, side, unit, obs):
+        if side == self.rl_side:
+            sampled_option, attack_mode = self._decode_action()
+            resolved_option = sampled_option
+
+            action = self.executor.execute(
+                state=state,
+                unit=unit,
+                option=resolved_option,
+                attack_mode=attack_mode,
+            )
+            if action is None:
+                action = WaitAction(unit.unit_id)
+
+            executed_option = self.action_bridge.infer_executed_option(action, resolved_option)
+            self.current_option_sampled = sampled_option
+            self.current_option_resolved = resolved_option
+            self.current_option = executed_option
+            self.current_attack_mode = attack_mode if executed_option == TacticalOption.ATTACK else 0
+            self.last_decision_trace = self.action_bridge.build_trace(
+                sampled_option=sampled_option,
+                resolved_option=resolved_option,
+                executed_option=executed_option,
+                strategy_name=None,
+            )
+            self.pending_action = None
+
+            action.unit_id = unit.unit_id
+            self.sim_env.runtime.activated_units.add(unit.unit_id)
+            return action
+
+        # Enemy heuristic behavior.
+        for opt in (
+            TacticalOption.ATTACK,
+            TacticalOption.FLANK,
+            TacticalOption.ADVANCE,
+            TacticalOption.RETREAT,
+            TacticalOption.HOLD,
+        ):
+            action = self.heuristic.choose_action(state, unit, opt)
+            if action is not None:
+                action.unit_id = unit.unit_id
+                self.sim_env.runtime.activated_units.add(unit.unit_id)
+                return action
+
+        action = WaitAction(unit.unit_id)
+        action.unit_id = unit.unit_id
+        self.sim_env.runtime.activated_units.add(unit.unit_id)
+        return action
+
+
+class GymAssaultEnv(gym.Env):
+    metadata = {"render_modes": []}
+
+    def __init__(
+        self,
+        sim_config_path: Path | None = None,
+        env_config_path: Path | None = None,
+        scenario: str | None = None,
+        rl_side: str | None = None,
+        seed: int | None = None,
+        max_decisions: int = 400,
+    ):
+        super().__init__()
+
+        repo_root = Path(__file__).resolve().parents[2]
+        self.sim_config_path = sim_config_path or (repo_root / "assault_sim" / "config" / "sim_config.yaml")
+        self.env_config_path = env_config_path or (repo_root / "assault_sim" / "config" / "env_config.json")
+        self.scenario = scenario or PPOConfig.SCENARIO
+        self.rl_side = rl_side or PPOConfig.RL_SIDE
+        self.base_seed = seed if seed is not None else PPOConfig.SEED
+        self.max_decisions = max_decisions
+
+        self._decision_count = 0
+
+        self._build_runtime(seed=self.base_seed)
+        obs = self._runner.reset()
+        self._last_obs = np.asarray(obs, dtype=np.float32)
+        obs_dim = int(self._last_obs.shape[0])
+
+        self.observation_space = spaces.Box(
+            low=-np.inf,
+            high=np.inf,
+            shape=(obs_dim,),
+            dtype=np.float32,
+        )
+        # [L2 option, attack_mode]
+        self.action_space = spaces.MultiDiscrete([len(TacticalOption), 2])
+
+    def _build_runtime(self, seed: int):
+        self._train_env = make_env(
+            config_path=self.sim_config_path,
+            env_config_path=self.env_config_path,
+            rl_side=self.rl_side,
+            scenario=self.scenario,
+            reward_fn=ShapedReward(rl_side=self.rl_side),
+            seed=seed,
+        )
+        # MatchRunner/ActivationManager require an initialized game_state.
+        self._train_env.reset()
+        self._controller = _GymActionController(self.rl_side, self._train_env.sim)
+        self._runner = MatchRunner(self._train_env, controller=self._controller)
+
+    def _decision_alignment_info(self) -> dict[str, Any]:
+        trace = self._controller.last_decision_trace
+        if trace is None:
+            return {}
+        return {
+            "trace_schema_version": trace.schema_version,
+            "sampled_option": trace.sampled_option,
+            "resolved_option": trace.resolved_option,
+            "executed_option": trace.executed_option,
+            "forced": bool(trace.was_forced),
+        }
+
+    def reset(self, *, seed: int | None = None, options: dict | None = None):
+        super().reset(seed=seed)
+        effective_seed = self.base_seed if seed is None else int(seed)
+        self._build_runtime(seed=effective_seed)
+        self._controller.reset()
+        self._decision_count = 0
+
+        obs = self._runner.reset()
+        self._last_obs = np.asarray(obs, dtype=np.float32)
+        info = {
+            "rl_side": self.rl_side,
+            "scenario": self.scenario,
+            "decision_count": self._decision_count,
+        }
+        return self._last_obs, info
+
+    def step(self, action):
+        option_idx = int(action[0])
+        attack_mode = int(action[1])
+        self._controller.set_action((option_idx, attack_mode))
+
+        total_reward = 0.0
+        terminated = False
+        truncated = False
+        step_info: dict[str, Any] = {}
+
+        rl_consumed = False
+        obs = self._last_obs
+        # advance match until one RL activation is consumed or episode ends
+        while not terminated and not rl_consumed:
+            step = self._runner.step(self._controller, obs)
+            obs = np.asarray(step["obs"], dtype=np.float32)
+            total_reward += float(step.get("reward", 0.0))
+            terminated = bool(step.get("done", False))
+            step_info = dict(step.get("info", {}) or {})
+            rl_consumed = step.get("side") == self.rl_side
+
+        self._last_obs = obs
+        self._decision_count += 1
+        if self._decision_count >= self.max_decisions and not terminated:
+            truncated = True
+
+        info = {
+            **step_info,
+            **self._decision_alignment_info(),
+            "decision_count": self._decision_count,
+        }
+        return obs, total_reward, terminated, truncated, info
+

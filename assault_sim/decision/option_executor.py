@@ -153,7 +153,7 @@ class OptionExecutor:
         )
 
         best = None
-        best_score = -999
+        best_score = float("-inf")
 
         for a in actions:
             if a.action_type.category != ActionCategory.MOVEMENT:
@@ -166,7 +166,15 @@ class OptionExecutor:
             new_pos = path[-1]
             dist = safe_hex_distance(new_pos, target.position)
 
-            score = max(0, 6 - dist)
+            # ✅ Siempre preferir acercarse (antes: todas las casillas a
+            # >6 hex puntuaban 0 y se elegía el primer movimiento del
+            # catálogo → deriva horizontal sin avanzar).
+            score = -dist
+
+            # Bonus de flanqueo: posiciones en el "anillo" de combate
+            # (cerca pero sin pegarse de frente al objetivo).
+            if 1 < dist <= 3:
+                score += 3
 
             if score > best_score:
                 best_score = score

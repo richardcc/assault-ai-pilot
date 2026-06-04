@@ -42,22 +42,35 @@ class PolicyNet(nn.Module):
             x = x.unsqueeze(0)
 
         # ✅ hidden init
+        if x.dim() == 2:
+            batch_size = x.shape[0]
+        elif x.dim() == 3:
+            batch_size = x.shape[0]
+        else:
+            raise ValueError(f"Unsupported input rank for PolicyNet: {x.dim()}")
+
         if hidden is None:
-            hidden = self.init_hidden(x.shape[0], device=x.device)
+            hidden = self.init_hidden(batch_size, device=x.device)
 
         # encoder
-        features = self.backbone(x)
-
-        # LSTM [B, T, F]
-        features = features.unsqueeze(1)
+        if x.dim() == 2:
+            features = self.backbone(x)
+            features = features.unsqueeze(1)  # [B, 1, F]
+            squeeze_time = True
+        else:
+            b, t, f = x.shape
+            features = self.backbone(x.reshape(b * t, f)).reshape(b, t, -1)
+            squeeze_time = False
 
         out, hidden = self.lstm(features, hidden)
-
-        out = out.squeeze(1)
-
         option_logits = self.option_head(out)
         attack_mode_logits = self.attack_mode_head(out)
         value = self.value_head(out).squeeze(-1)
+
+        if squeeze_time:
+            option_logits = option_logits.squeeze(1)
+            attack_mode_logits = attack_mode_logits.squeeze(1)
+            value = value.squeeze(1)
 
         return option_logits, attack_mode_logits, value, hidden
 
