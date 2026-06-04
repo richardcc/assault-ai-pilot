@@ -3,6 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 from pathlib import Path
 import json
+import numpy as np
 
 from assault_model.actions.status import WaitAction
 from assault_sim.config.ppo_config import PPOConfig
@@ -18,10 +19,11 @@ from assault_sim.rewards.shaped_reward import ShapedReward
 
 
 class SB3EvalController:
-    def __init__(self, model, rl_side: str, sim_env):
+    def __init__(self, model, rl_side: str, sim_env, obs_normalizer=None):
         self.model = model
         self.rl_side = rl_side
         self.sim_env = sim_env
+        self.obs_normalizer = obs_normalizer
         self.heuristic = TacticalPathHeuristic()
         self.executor = OptionExecutor(self.heuristic, avoid_bad_trades=False, adv_threshold=-0.5)
         self.action_bridge = ActionBridge()
@@ -62,7 +64,10 @@ class SB3EvalController:
             self.sim_env.runtime.activated_units.add(unit.unit_id)
             return action
 
-        action_pair, _ = self.model.predict(obs, deterministic=True)
+        model_obs = obs
+        if self.obs_normalizer is not None:
+            model_obs = self.obs_normalizer(obs)
+        action_pair, _ = self.model.predict(model_obs, deterministic=True)
         option_idx = int(action_pair[0])
         attack_mode = int(action_pair[1])
         sampled_option = TacticalOption(option_idx)
@@ -107,6 +112,8 @@ class SB3EvalController:
 def evaluate_sb3(episodes: int = 100):
     try:
         from stable_baselines3 import PPO
+        from stable_baselines3.common.monitor import Monitor
+        from stable_baselines3.common.vec_env import DummyVecEnv, VecNormalize
     except ImportError as exc:  # pragma: no cover
         raise SystemExit(
             "stable-baselines3 is not installed. Install with: pip install stable-baselines3 gymnasium"
@@ -116,6 +123,7 @@ def evaluate_sb3(episodes: int = 100):
     model_path = repo_root / "models" / "sb3_latest.zip"
     if not model_path.exists():
         raise SystemExit(f"SB3 model not found: {model_path}")
+    vecnorm_path = repo_root / "models" / "sb3_vecnormalize.pkl"
 
     env = make_env(
         config_path=repo_root / "assault_sim" / "config" / "sim_config.yaml",
@@ -127,7 +135,37 @@ def evaluate_sb3(episodes: int = 100):
     )
 
     model = PPO.load(str(model_path), device="cpu")
-    controller = SB3EvalController(model, PPOConfig.RL_SIDE, env.sim)
+    obs_normalizer = None
+    if vecnorm_path.exists():
+        try:
+            from assault_sim.envs.gym_assault_env import GymAssaultEnv
+
+            def make_norm_env():
+                return Monitor(
+                    GymAssaultEnv(
+                        scenario=PPOConfig.SCENARIO,
+                        rl_side=PPOConfig.RL_SIDE,
+                        seed=PPOConfig.SEED,
+                    )
+                )
+
+            norm_env = DummyVecEnv([make_norm_env])
+            vecnorm = VecNormalize.load(str(vecnorm_path), norm_env)
+            vecnorm.training = False
+            vecnorm.norm_reward = False
+
+            def _normalize_obs(obs):
+                arr = np.asarray(obs, dtype=np.float32)
+                return vecnorm.normalize_obs(arr.reshape(1, -1))[0]
+
+            obs_normalizer = _normalize_obs
+            print(f"Loaded VecNormalize stats: {vecnorm_path}")
+        except Exception as e:
+            print(f"⚠️ Could not load VecNormalize stats, continuing without normalization: {e}")
+    else:
+        print("⚠️ VecNormalize stats not found, evaluating without obs normalization")
+
+    controller = SB3EvalController(model, PPOConfig.RL_SIDE, env.sim, obs_normalizer=obs_normalizer)
     evaluator = Evaluator(
         env=env,
         rl_controller=controller,
@@ -150,6 +188,8 @@ def evaluate_sb3(episodes: int = 100):
             "timestamp": datetime.utcnow().isoformat() + "Z",
             "model": str(model_path),
             "scenario": PPOConfig.SCENARIO,
+            "vecnormalize_path": str(vecnorm_path) if vecnorm_path.exists() else None,
+            "obs_normalized": bool(obs_normalizer is not None),
         },
         "summary": analyzer.summary(),
         "combat": analyzer.combat_metrics(),

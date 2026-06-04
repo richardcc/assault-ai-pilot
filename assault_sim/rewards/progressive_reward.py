@@ -1,13 +1,16 @@
 from .base_reward import BaseReward
 from assault_model.actions.status import WaitAction
+from pathlib import Path
+from assault_sim.config.reward_config import RewardConfig, load_reward_config
 
 
 class ProgressiveReward(BaseReward):
 
-    def __init__(self, rl_side=None):
+    def __init__(self, rl_side=None, config: RewardConfig | None = None, config_path: Path | None = None):
         super().__init__(rl_side)
         self.rl_side = rl_side
         self.last_action = None
+        self.cfg = config or load_reward_config(config_path)
 
         # -------------------------------
         # METRICS (DEBUG / ANALYTICS)
@@ -47,7 +50,7 @@ class ProgressiveReward(BaseReward):
         action_class = info.get("action_class", "")
         l2 = info.get("l2_option", "")
 
-        is_attack = "ATTACK" in action_class.upper()
+        is_attack = bool(info.get("is_attack", False)) or l2 == "ATTACK" or "ATTACK" in action_class.upper()
 
         # =================================================
         # METRICS TRACKING (no reward impact)
@@ -72,33 +75,33 @@ class ProgressiveReward(BaseReward):
         if is_attack:
 
             # Main signal (stable scaling)
-            reward += trade * 1.0
+            reward += trade * self.cfg.trade_weight
 
             # Penalize bad trades
             if trade < 0:
-                reward -= 0.5
+                reward -= self.cfg.bad_trade_penalty
 
             # Reward good trades (controlled)
             elif trade > 0:
-                reward += 0.4 + (trade * 0.25)
+                reward += self.cfg.good_trade_base_bonus + (trade * self.cfg.good_trade_scale_bonus)
 
             # Avoid useless attacks
             if damage == 0:
-                reward -= 0.4
+                reward -= self.cfg.zero_damage_attack_penalty
 
             # 🔥 small base cost to attack (encourage selectivity)
-            reward -= 0.1
+            reward -= self.cfg.attack_base_cost
 
         else:
             # Reward avoiding bad combat
             if trade < 0:
-                reward += 0.2
+                reward += self.cfg.non_attack_bad_trade_bonus
 
         # =================================================
         # ✅ KILL
         # =================================================
         if killed:
-            reward += 3.0
+            reward += self.cfg.kill_bonus
 
         # =================================================
         # ✅ POSITIONING
@@ -106,46 +109,46 @@ class ProgressiveReward(BaseReward):
         if pre_dist is not None and post_dist is not None:
 
             if post_dist < pre_dist:
-                reward += 0.05
+                reward += self.cfg.move_closer_bonus
 
             if post_dist <= 2:
-                reward += 0.05
+                reward += self.cfg.in_range_bonus
 
         # =================================================
         # ✅ RETREAT (important under disadvantage)
         # =================================================
         if l2 == "RETREAT":
 
-            reward += 0.6
+            reward += self.cfg.retreat_bonus
 
             if damage_taken == 0:
-                reward += 0.6
+                reward += self.cfg.retreat_no_damage_bonus
 
         # =================================================
         # ✅ PASSIVITY CONTROL
         # =================================================
         if l2 == "HOLD" and not is_attack:
-            reward -= 0.15
+            reward -= self.cfg.hold_non_attack_penalty
 
         # =================================================
         # ✅ PRESSURE CONTROL (forces decisions)
         # =================================================
         if (
             pre_dist is not None
-            and pre_dist <= 3
+            and pre_dist <= self.cfg.pressure_distance_threshold
             and not is_attack
             and l2 != "RETREAT"
         ):
-            reward -= 0.3
+            reward -= self.cfg.pressure_penalty
 
         # =================================================
         # ✅ ACTION PENALTIES
         # =================================================
         if isinstance(action, WaitAction):
-            reward -= 0.25
+            reward -= self.cfg.wait_penalty
 
         if self.last_action == action_class:
-            reward -= 0.05
+            reward -= self.cfg.repeat_action_penalty
 
         self.last_action = action_class
 
@@ -158,7 +161,7 @@ class ProgressiveReward(BaseReward):
                 prev_vp = state.vp_tracker.score.get(self.rl_side, 0)
                 new_vp = next_state.vp_tracker.score.get(self.rl_side, 0)
 
-                reward += (new_vp - prev_vp) * 1.5
+                reward += (new_vp - prev_vp) * self.cfg.vp_delta_weight
 
         # =================================================
         # ✅ ENDGAME
@@ -167,13 +170,13 @@ class ProgressiveReward(BaseReward):
             winner = getattr(next_state, "winner", None)
 
             if winner == self.rl_side:
-                reward += 5.0
+                reward += self.cfg.win_bonus
             elif winner is not None:
-                reward -= 5.0
+                reward -= self.cfg.lose_penalty
 
         # =================================================
         # ✅ TIME PENALTY
         # =================================================
-        reward -= 0.02
+        reward -= self.cfg.time_penalty
 
-        return max(min(reward, 10.0), -10.0)
+        return max(min(reward, self.cfg.max_reward), self.cfg.min_reward)

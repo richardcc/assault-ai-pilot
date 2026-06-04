@@ -27,7 +27,12 @@ def worker_loop(
     reward_fn=None,
     base_seed: int = 42,
     worker_id: int = 0,
+    rl_side: str | None = None,
+    rollout_steps: int | None = None,
 ):
+    effective_rl_side = rl_side or PPOConfig.RL_SIDE
+    effective_rollout_steps = int(rollout_steps or PPOConfig.ROLLOUT_STEPS)
+
 
     torch.set_num_threads(1)
     torch.set_num_interop_threads(1)
@@ -43,7 +48,7 @@ def worker_loop(
     env = make_env(
         config_path=sim_config_path,
         env_config_path=env_config_path,
-        rl_side=PPOConfig.RL_SIDE,
+        rl_side=effective_rl_side,
         scenario=scenario,
         reward_fn=reward_fn,
         seed=worker_seed,
@@ -69,7 +74,7 @@ def worker_loop(
     heuristic = TacticalPathHeuristic()
 
     controller = DecisionEngineController(
-        rl_side=PPOConfig.RL_SIDE,
+        rl_side=effective_rl_side,
         decision_engine=decision_engine,
         option_policy=option_policy,
         heuristic=heuristic,
@@ -93,7 +98,7 @@ def worker_loop(
             rollout = collect_rollout(
                 env,
                 controller,
-                max_steps=PPOConfig.ROLLOUT_STEPS
+                max_steps=effective_rollout_steps
             )
 
         # =================================================

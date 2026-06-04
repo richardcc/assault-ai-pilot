@@ -128,6 +128,8 @@ class GymAssaultEnv(gym.Env):
         rl_side: str | None = None,
         seed: int | None = None,
         max_decisions: int = 400,
+        zero_damage_penalty: float = 0.6,
+        extra_good_trade_bonus: float = 0.2,
     ):
         super().__init__()
 
@@ -138,6 +140,8 @@ class GymAssaultEnv(gym.Env):
         self.rl_side = rl_side or PPOConfig.RL_SIDE
         self.base_seed = seed if seed is not None else PPOConfig.SEED
         self.max_decisions = max_decisions
+        self.zero_damage_penalty = float(zero_damage_penalty)
+        self.extra_good_trade_bonus = float(extra_good_trade_bonus)
 
         self._decision_count = 0
 
@@ -161,7 +165,11 @@ class GymAssaultEnv(gym.Env):
             env_config_path=self.env_config_path,
             rl_side=self.rl_side,
             scenario=self.scenario,
-            reward_fn=ShapedReward(rl_side=self.rl_side),
+            reward_fn=ShapedReward(
+                rl_side=self.rl_side,
+                zero_damage_penalty=self.zero_damage_penalty,
+                extra_good_trade_bonus=self.extra_good_trade_bonus,
+            ),
             seed=seed,
         )
         # MatchRunner/ActivationManager require an initialized game_state.

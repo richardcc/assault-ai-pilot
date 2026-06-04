@@ -280,9 +280,9 @@ Se considera exitoso cuando:
 - [x] Ejecutar benchmark comparativo inicial (win_rate, damage_ratio, forced_ratio, zero_dmg_rate, samples/sec).
 
 ### P2 - RLlib-ready (2-3 semanas)
-- [ ] Introducir contratos tipados (`Trajectory`, `Batch`, `EvalResult`) en modulo dedicado.
-- [ ] Extraer `checkpointing.py` y `eval_gate.py` neutrales al framework.
-- [ ] Centralizar configuracion en `TrainConfig` (archivo + dataclass).
+- [x] Introducir contratos tipados (`Trajectory`, `Batch`, `EvalResult`) en modulo dedicado.
+- [x] Extraer `checkpointing.py` y `eval_gate.py` neutrales al framework.
+- [x] Centralizar configuracion en `TrainConfig` (archivo + dataclass).
 - [ ] Implementar smoke de integracion RLlib (registro env + rollout corto).
 - [ ] Documentar mapping de config SB3 -> RLlib (horizonte, batch, workers, eval cadence).
 - [ ] Definir criterio de migracion oficial (cuando RLlib reemplaza trainer actual).
@@ -301,6 +301,47 @@ Se considera exitoso cuando:
 - [ ] P3 Done: entrenamiento estable y tacticamente competitivo en mapas grandes.
 
 ### Decision de arquitectura (2026-06-05)
-- [x] SB3 se adopta como ruta principal de entrenamiento (Gym + SB3 PPO).
-- [x] Trainer custom queda como ruta secundaria para experimentos y validacion cruzada.
+- [x] SB3 se adopta como ruta oficial y unica de entrenamiento (Gym + SB3 PPO).
+- [x] Trainer custom (`train_ppo.py`) queda deshabilitado por defecto (solo override explicito).
+
+---
+
+## Resumen ejecutivo (1 pagina)
+
+Estado actual:
+- ruta principal de entrenamiento operativa con Gym + SB3 PPO
+- pipeline de evaluacion funcional con reportes JSON/CSV y metricas de alineacion
+- backend integrado para inferencia SB3 con fallback heuristico
+- reproducibilidad base validada en corridas cortas (seed fija)
+- operacion diaria estandarizada en comandos SB3 (`train_sb3.py` + `eval_sb3.py`)
+
+Brechas pendientes (prioridad):
+- P2 RLlib-ready: contratos tipados, config centralizada, checkpoint/eval gate neutrales
+- smoke de integracion RLlib (registro de entorno + rollout corto)
+- panel de analisis de alignment por opcion/unidad
+- P3 escalado: profiling + tuning de throughput para mapas x4 / 20v20
+
+Riesgos activos:
+- costo de simulacion puede dominar el tiempo total al escalar escenarios
+- falta de contratos tipados aumenta riesgo de regresiones al migrar de framework
+- degradacion silenciosa de calidad tactica bajo tuning agresivo de performance
+
+Mitigaciones:
+- mantener gates de promocion por calidad (win_rate, damage_ratio, forced_ratio)
+- exigir smoke RLlib antes de cualquier migracion formal
+- introducir perfiles de carga por tamano de mapa y numero de unidades
+
+Recomendacion de secuencia:
+- opcion recomendada: cerrar P2 primero (2-3 semanas), luego atacar P3
+- razon: reduce costo/riesgo de cambios estructurales antes de optimizar gran escala
+
+ETA orientativa:
+- P2 RLlib-ready: 2-3 semanas
+- P3 escalado x4 / 20v20: 2-4 semanas
+- horizonte total a "RLlib-ready + escalado inicial": 4-7 semanas
+
+Criterio de avance a produccion interna:
+- smoke RLlib en verde
+- entrenamiento 24h estable sin crash
+- metricas tacticas no inferiores a baseline SB3 actual en escenarios objetivo
 

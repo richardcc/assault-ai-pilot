@@ -2,6 +2,7 @@ import torch
 
 from assault_sim.engine.match_runner import MatchRunner
 from assault_sim.decision.decision_engine import DecisionEngine
+from assault_sim.contracts.training_contracts import RolloutBatch, TrajectoryStep
 
 from assault_model.actions.ranged_direct import RangedDirectAttack
 from assault_model.actions.ranged_indirect import RangedIndirectAttack
@@ -27,7 +28,7 @@ def action_to_index(action):
 # -------------------------------------------------
 # ✅ ROLLOUT
 # -------------------------------------------------
-def collect_rollout(env, controller, max_steps, seq_len=8):
+def collect_rollout(env, controller, max_steps, seq_len=8) -> dict:
 
     runner = MatchRunner(env, controller=controller)
 
@@ -140,18 +141,20 @@ def collect_rollout(env, controller, max_steps, seq_len=8):
         # ----------------------------------------
         if step.get("is_rl_turn_end", False) and turn_start_obs is not None:
 
-            sequence.append({
-                "obs": turn_start_obs,
-                "action": last_action,
-                "attack_mode": last_attack_mode,
-                "logp": last_logp,
-                "value": last_value,
-                "reward": turn_reward,
-                "done": done,
-                "teacher": last_teacher,
-                "l2": last_l2,  # ✅ NUEVO
-                "l2_sampled": last_l2_sampled,
-            })
+            sequence.append(
+                TrajectoryStep(
+                    obs=turn_start_obs,
+                    action=last_action,
+                    attack_mode=last_attack_mode,
+                    logp=last_logp,
+                    value=last_value,
+                    reward=turn_reward,
+                    done=done,
+                    teacher=last_teacher,
+                    l2=last_l2,
+                    l2_sampled=last_l2_sampled,
+                )
+            )
 
             turn_start_obs = None
             turn_reward = 0.0
@@ -164,16 +167,16 @@ def collect_rollout(env, controller, max_steps, seq_len=8):
                 chunk = sequence[:seq_len]
                 sequence = sequence[1:]
 
-                obs_buf.extend(x["obs"] for x in chunk)
-                actions_buf.extend(x["action"] for x in chunk)
-                attack_modes_buf.extend(x["attack_mode"] for x in chunk)
-                logp_buf.extend(x["logp"] for x in chunk)
-                values_buf.extend(x["value"] for x in chunk)
-                rewards_buf.extend(x["reward"] for x in chunk)
-                dones_buf.extend(x["done"] for x in chunk)
-                teacher_actions_buf.extend(x["teacher"] for x in chunk)
-                l2_buf.extend(x["l2"] for x in chunk)  # ✅ NUEVO
-                l2_sampled_buf.extend(x["l2_sampled"] for x in chunk)
+                obs_buf.extend(x.obs for x in chunk)
+                actions_buf.extend(x.action for x in chunk)
+                attack_modes_buf.extend(x.attack_mode for x in chunk)
+                logp_buf.extend(x.logp for x in chunk)
+                values_buf.extend(x.value for x in chunk)
+                rewards_buf.extend(x.reward for x in chunk)
+                dones_buf.extend(x.done for x in chunk)
+                teacher_actions_buf.extend(x.teacher for x in chunk)
+                l2_buf.extend(x.l2 for x in chunk)
+                l2_sampled_buf.extend(x.l2_sampled for x in chunk)
 
         # STEP
         obs = next_obs
@@ -197,26 +200,27 @@ def collect_rollout(env, controller, max_steps, seq_len=8):
     # ✅ FINAL FLUSH
     # ----------------------------------------
     for x in sequence:
-        obs_buf.append(x["obs"])
-        actions_buf.append(x["action"])
-        attack_modes_buf.append(x["attack_mode"])
-        logp_buf.append(x["logp"])
-        values_buf.append(x["value"])
-        rewards_buf.append(x["reward"])
-        dones_buf.append(x["done"])
-        teacher_actions_buf.append(x["teacher"])
-        l2_buf.append(x["l2"])  # ✅ NUEVO
-        l2_sampled_buf.append(x["l2_sampled"])
+        obs_buf.append(x.obs)
+        actions_buf.append(x.action)
+        attack_modes_buf.append(x.attack_mode)
+        logp_buf.append(x.logp)
+        values_buf.append(x.value)
+        rewards_buf.append(x.reward)
+        dones_buf.append(x.done)
+        teacher_actions_buf.append(x.teacher)
+        l2_buf.append(x.l2)
+        l2_sampled_buf.append(x.l2_sampled)
 
-    return {
-        "obs": obs_buf,
-        "actions": actions_buf,
-        "attack_modes": attack_modes_buf,
-        "logp": logp_buf,
-        "values": values_buf,
-        "rewards": rewards_buf,
-        "dones": dones_buf,
-        "teacher_actions": teacher_actions_buf,
-        "l2": l2_buf,  # ✅ NUEVO
-        "l2_sampled": l2_sampled_buf,
-    }
+    batch = RolloutBatch(
+        obs=obs_buf,
+        actions=actions_buf,
+        attack_modes=attack_modes_buf,
+        logp=logp_buf,
+        values=values_buf,
+        rewards=rewards_buf,
+        dones=dones_buf,
+        teacher_actions=teacher_actions_buf,
+        l2=l2_buf,
+        l2_sampled=l2_sampled_buf,
+    )
+    return batch.to_dict()

@@ -3,14 +3,15 @@ import torch.optim as optim
 import multiprocessing as mp
 import numpy as np
 import time
-import json
 import random
+import os
 from datetime import datetime
 import socket
 from torch.utils.tensorboard import SummaryWriter
 from pathlib import Path
 
 from assault_sim.config.ppo_config import PPOConfig
+from assault_sim.config.train_config import load_train_config
 from assault_sim.rl.policy_net import PolicyNet
 from assault_sim.rl.tactical_options import TacticalOption
 from assault_sim.engine.env_factory import make_env
@@ -19,6 +20,13 @@ from assault_sim.rewards.shaped_reward import ShapedReward
 from assault_sim.train.worker import worker_loop
 from assault_sim.train.ppo_schedule import ppo_schedule
 from assault_sim.train.ppo_trainer import ppo_update, compute_gae
+from assault_sim.train.checkpointing import (
+    build_checkpoint_payload,
+    load_model_state,
+    save_latest,
+    save_numbered,
+)
+from assault_sim.train.eval_gate import composite_eval_score, should_promote_best
 from assault_sim.rl.option_policy import OptionPolicy
 from assault_sim.decision.decision_engine import DecisionEngine
 from assault_sim.decision.decision_engine_controller import DecisionEngineController
@@ -31,6 +39,7 @@ MODEL_DIR = REPO_ROOT / "models"
 LATEST_PATH = MODEL_DIR / "latest.pt"
 SIM_CONFIG_PATH = REPO_ROOT / "assault_sim" / "config" / "sim_config.yaml"
 ENV_CONFIG_PATH = REPO_ROOT / "assault_sim" / "config" / "env_config.json"
+TRAIN_CONFIG_PATH = REPO_ROOT / "assault_sim" / "config" / "train_config.json"
 
 
 def set_global_seed(seed: int):
@@ -39,24 +48,17 @@ def set_global_seed(seed: int):
     torch.manual_seed(seed)
 
 
-def load_model_state(path: Path, device: torch.device):
-    data = torch.load(path, map_location=device)
-    if isinstance(data, dict) and "model_state_dict" in data:
-        return data["model_state_dict"], data
-    return data, None
-
-
-def evaluate_policy_snapshot(policy: PolicyNet, reward_fn=None):
+def evaluate_policy_snapshot(policy: PolicyNet, cfg, reward_fn=None):
     eval_env = make_env(
         config_path=SIM_CONFIG_PATH,
         env_config_path=ENV_CONFIG_PATH,
-        rl_side=PPOConfig.RL_SIDE,
-        scenario=PPOConfig.SCENARIO,
+        rl_side=cfg.rl_side,
+        scenario=cfg.scenario,
         reward_fn=reward_fn,
-        seed=PPOConfig.SEED,
+        seed=cfg.seed,
     )
     controller = DecisionEngineController(
-        rl_side=PPOConfig.RL_SIDE,
+        rl_side=cfg.rl_side,
         decision_engine=DecisionEngine(),
         option_policy=OptionPolicy(policy),
         heuristic=TacticalPathHeuristic(),
@@ -67,9 +69,9 @@ def evaluate_policy_snapshot(policy: PolicyNet, reward_fn=None):
         env=eval_env,
         rl_controller=controller,
         enemy_controller=None,
-        rl_side=PPOConfig.RL_SIDE,
+        rl_side=cfg.rl_side,
     )
-    results = evaluator.evaluate(PPOConfig.EVAL_EPISODES)
+    results = evaluator.evaluate(cfg.eval_episodes)
     if not results:
         return {"win_rate": 0.0, "damage_ratio": 0.0, "episodes": 0}
     wins = 0.0
@@ -77,7 +79,7 @@ def evaluate_policy_snapshot(policy: PolicyNet, reward_fn=None):
     enemy_damage = 0.0
     for r in results:
         winner = r.get("winner")
-        if winner == PPOConfig.RL_SIDE:
+        if winner == cfg.rl_side:
             wins += 1.0
         elif winner is None:
             wins += 0.5
@@ -91,28 +93,30 @@ def evaluate_policy_snapshot(policy: PolicyNet, reward_fn=None):
 
 
 def main(reward_fn=None):
+    cfg = load_train_config(TRAIN_CONFIG_PATH)
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    set_global_seed(PPOConfig.SEED)
+    set_global_seed(cfg.seed)
     print(f">>> Using device: {device}")
 
-    scenario = PPOConfig.SCENARIO
+    scenario = cfg.scenario
     print(">>> Effective train config:")
-    print(f"    seed={PPOConfig.SEED} scenario={scenario} rl_side={PPOConfig.RL_SIDE}")
+    print(f"    seed={cfg.seed} scenario={scenario} rl_side={cfg.rl_side}")
+    print(f"    train_config={TRAIN_CONFIG_PATH}")
     print(f"    sim_config={SIM_CONFIG_PATH}")
     print(f"    env_config={ENV_CONFIG_PATH}")
     print(f"    model_dir={MODEL_DIR}")
 
     # reward shaping: allow injecting a custom reward_fn (used by grid runs)
     if reward_fn is None:
-        reward_fn = ShapedReward(rl_side=PPOConfig.RL_SIDE)
+        reward_fn = ShapedReward(rl_side=cfg.rl_side)
     env = make_env(
         config_path=SIM_CONFIG_PATH,
         env_config_path=ENV_CONFIG_PATH,
-        rl_side=PPOConfig.RL_SIDE,
+        rl_side=cfg.rl_side,
         scenario=scenario,
         reward_fn=reward_fn,
-        seed=PPOConfig.SEED,
+        seed=cfg.seed,
     )
     print(f"    max_steps={env.max_steps}")
     obs = env.reset()
@@ -129,7 +133,7 @@ def main(reward_fn=None):
     run_name = f"ppo_{datetime.utcnow().strftime('%Y%m%dT%H%M%SZ')}_{socket.gethostname()}"
     writer = SummaryWriter(log_dir=(MODEL_DIR / "runs" / run_name))
 
-    optimizer = optim.Adam(policy.parameters(), lr=PPOConfig.LR)
+    optimizer = optim.Adam(policy.parameters(), lr=cfg.lr)
 
     if LATEST_PATH.exists():
         try:
@@ -144,7 +148,7 @@ def main(reward_fn=None):
     weights_queue = mp.Queue(maxsize=1)
 
     workers = []
-    for worker_id in range(PPOConfig.NUM_ENVS):
+    for worker_id in range(cfg.num_envs):
         p = mp.Process(
             target=worker_loop,
             args=(
@@ -155,8 +159,10 @@ def main(reward_fn=None):
                 weights_queue,
                 None,
                 reward_fn,
-                PPOConfig.SEED,
+                cfg.seed,
                 worker_id,
+                cfg.rl_side,
+                cfg.rollout_steps,
             ),
         )
         p.daemon = True
@@ -171,12 +177,12 @@ def main(reward_fn=None):
     last_update = 0
     best_eval_score = -1e9
 
-    while rollout_idx < PPOConfig.TOTAL_UPDATES:
+    while rollout_idx < cfg.total_updates:
 
         rollout = rollout_queue.get()
         buffer.append(rollout)
 
-        if len(buffer) < PPOConfig.BATCH_ROLLOUTS:
+        if len(buffer) < cfg.batch_rollouts:
             continue
 
         # ---------------- MERGE ----------------
@@ -231,7 +237,7 @@ def main(reward_fn=None):
         schedule = ppo_schedule(rollout_idx)
 
         entropy_coef = PPOConfig.ENTROPY_COEF * (
-            1.0 - rollout_idx / PPOConfig.TOTAL_UPDATES
+            1.0 - rollout_idx / cfg.total_updates
         )
         entropy_coef = max(entropy_coef, 0.01)
 
@@ -253,46 +259,44 @@ def main(reward_fn=None):
         # ---------------- SAVE ----------------
 
         MODEL_DIR.mkdir(parents=True, exist_ok=True)
-        checkpoint_payload = {
-            "model_state_dict": policy.state_dict(),
-            "optimizer_state_dict": optimizer.state_dict(),
-            "meta": {
-                "rollout_idx": rollout_idx,
-                "timestamp_utc": datetime.utcnow().isoformat() + "Z",
-                "seed": PPOConfig.SEED,
-                "scenario": scenario,
-                "rl_side": PPOConfig.RL_SIDE,
-                "hostname": socket.gethostname(),
-                "sim_config_path": str(SIM_CONFIG_PATH),
-                "env_config_path": str(ENV_CONFIG_PATH),
-                "ppo_config": {
-                    k: v for k, v in PPOConfig.__dict__.items()
-                    if k.isupper() and isinstance(v, (int, float, str, bool))
-                },
-                "train_stats": train_stats,
+        checkpoint_payload = build_checkpoint_payload(
+            policy=policy,
+            optimizer=optimizer,
+            rollout_idx=rollout_idx,
+            seed=cfg.seed,
+            scenario=scenario,
+            rl_side=cfg.rl_side,
+            hostname=socket.gethostname(),
+            sim_config_path=SIM_CONFIG_PATH,
+            env_config_path=ENV_CONFIG_PATH,
+            ppo_config={
+                k: v
+                for k, v in PPOConfig.__dict__.items()
+                if k.isupper() and isinstance(v, (int, float, str, bool))
             },
-        }
+            train_stats=train_stats,
+        )
 
         if rollout_idx % 100 == 0:
-            torch.save(checkpoint_payload, LATEST_PATH)
-            print(f"✅ Saved latest → {LATEST_PATH}")
-            meta_path = MODEL_DIR / "latest.meta.json"
-            with open(meta_path, "w", encoding="utf-8") as f:
-                json.dump(checkpoint_payload["meta"], f, indent=2)
+            latest_path = save_latest(checkpoint_payload, MODEL_DIR, latest_name="latest.pt")
+            print(f"✅ Saved latest → {latest_path}")
 
         if rollout_idx % 500 == 0:
-            ckpt_path = MODEL_DIR / f"checkpoint_{rollout_idx}.pt"
-            torch.save(checkpoint_payload, ckpt_path)
+            ckpt_path = save_numbered(checkpoint_payload, MODEL_DIR, rollout_idx)
             print(f"📦 Saved checkpoint → {ckpt_path}")
 
-        if rollout_idx > 0 and rollout_idx % PPOConfig.EVAL_INTERVAL == 0:
-            eval_stats = evaluate_policy_snapshot(policy, reward_fn=reward_fn)
-            eval_score = eval_stats["win_rate"] + 0.25 * eval_stats["damage_ratio"]
+        if rollout_idx > 0 and rollout_idx % cfg.eval_interval == 0:
+            eval_stats = evaluate_policy_snapshot(policy, cfg, reward_fn=reward_fn)
+            eval_score = composite_eval_score(eval_stats, damage_weight=0.25)
             writer.add_scalar("eval/win_rate", eval_stats["win_rate"], rollout_idx)
             writer.add_scalar("eval/damage_ratio", eval_stats["damage_ratio"], rollout_idx)
             writer.add_scalar("eval/score", eval_score, rollout_idx)
             print(f"EVAL win_rate={eval_stats['win_rate']:.3f} damage_ratio={eval_stats['damage_ratio']:.3f} score={eval_score:.3f}")
-            if eval_score >= best_eval_score + PPOConfig.EVAL_MIN_IMPROVEMENT:
+            if should_promote_best(
+                score=eval_score,
+                best_score=best_eval_score,
+                min_improvement=cfg.eval_min_improvement,
+            ):
                 best_eval_score = eval_score
                 best_path = MODEL_DIR / "best.pt"
                 torch.save(checkpoint_payload, best_path)
@@ -309,9 +313,9 @@ def main(reward_fn=None):
             throughput = updates_done / elapsed if elapsed > 0 else 0.0
 
             samples = (
-                PPOConfig.NUM_ENVS *
-                PPOConfig.ROLLOUT_STEPS *
-                PPOConfig.BATCH_ROLLOUTS
+                cfg.num_envs *
+                cfg.rollout_steps *
+                cfg.batch_rollouts
             )
             samples_per_sec = samples / elapsed if elapsed > 0 else 0.0
 
@@ -388,5 +392,11 @@ def main(reward_fn=None):
 
 
 if __name__ == "__main__":
+    if os.environ.get("ASSAULT_ALLOW_CUSTOM_PPO", "0") != "1":
+        raise SystemExit(
+            "train_ppo.py is disabled (project is SB3-only). "
+            "Use: python -m assault_sim.train.train_sb3\n"
+            "If you really need legacy custom PPO, run with ASSAULT_ALLOW_CUSTOM_PPO=1."
+        )
     mp.set_start_method("spawn", force=True)
     main()

@@ -1,0 +1,61 @@
+from __future__ import annotations
+
+import json
+from dataclasses import asdict, dataclass
+from pathlib import Path
+from typing import Any
+
+
+@dataclass(frozen=True)
+class RewardConfig:
+    # Core combat quality
+    trade_weight: float = 1.0
+    bad_trade_penalty: float = 0.5
+    good_trade_base_bonus: float = 0.4
+    good_trade_scale_bonus: float = 0.25
+    zero_damage_attack_penalty: float = 0.4
+    attack_base_cost: float = 0.1
+    non_attack_bad_trade_bonus: float = 0.2
+
+    # Tactical shaping
+    kill_bonus: float = 3.0
+    move_closer_bonus: float = 0.05
+    in_range_bonus: float = 0.05
+    retreat_bonus: float = 0.6
+    retreat_no_damage_bonus: float = 0.6
+    hold_non_attack_penalty: float = 0.15
+    pressure_penalty: float = 0.3
+    pressure_distance_threshold: int = 3
+
+    # Action regularization
+    wait_penalty: float = 0.25
+    repeat_action_penalty: float = 0.05
+
+    # Objectives/endgame/time
+    vp_delta_weight: float = 1.5
+    win_bonus: float = 5.0
+    lose_penalty: float = 5.0
+    time_penalty: float = 0.02
+
+    # Post-clamp
+    min_reward: float = -10.0
+    max_reward: float = 10.0
+
+    # Extra shaping layer (ShapedReward)
+    shaped_zero_damage_penalty: float = 0.6
+    shaped_good_trade_bonus: float = 0.2
+
+    @staticmethod
+    def from_dict(payload: dict[str, Any]) -> "RewardConfig":
+        base = RewardConfig()
+        merged = {**asdict(base), **payload}
+        return RewardConfig(**merged)
+
+
+def load_reward_config(path: Path | None = None) -> RewardConfig:
+    if path is None or not path.exists():
+        return RewardConfig()
+    with open(path, "r", encoding="utf-8") as f:
+        data = json.load(f)
+    return RewardConfig.from_dict(data)
+

@@ -1,6 +1,7 @@
 from collections import defaultdict
 import numpy as np
 from assault_model.map.hex_utils import safe_hex_distance
+from assault_sim.contracts.training_contracts import EvalResult
 from assault_sim.evaluation.metrics_tracker import MetricsTracker
 from assault_sim.engine.match_runner import MatchRunner
 from assault_sim.evaluation.advanced_metrics import AdvancedMetrics
@@ -265,7 +266,8 @@ class Evaluator:
         # -------------------------------------------------
         result["advanced"] = advanced_metrics.to_dict()
 
-        return result
+        typed_result = EvalResult.from_dict(result)
+        return typed_result.to_dict()
 
     # -------------------------------------------------
     # MULTI EPISODE

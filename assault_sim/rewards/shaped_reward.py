@@ -1,4 +1,6 @@
 from .progressive_reward import ProgressiveReward
+from pathlib import Path
+from assault_sim.config.reward_config import RewardConfig
 
 
 class ShapedReward(ProgressiveReward):
@@ -7,10 +9,25 @@ class ShapedReward(ProgressiveReward):
     an extra bonus for clearly positive trades.
     """
 
-    def __init__(self, rl_side=None, zero_damage_penalty=0.6, extra_good_trade_bonus=0.2):
-        super().__init__(rl_side=rl_side)
-        self.zero_damage_penalty = zero_damage_penalty
-        self.extra_good_trade_bonus = extra_good_trade_bonus
+    def __init__(
+        self,
+        rl_side=None,
+        zero_damage_penalty: float | None = None,
+        extra_good_trade_bonus: float | None = None,
+        config: RewardConfig | None = None,
+        config_path: Path | None = None,
+    ):
+        super().__init__(rl_side=rl_side, config=config, config_path=config_path)
+        self.zero_damage_penalty = (
+            self.cfg.shaped_zero_damage_penalty
+            if zero_damage_penalty is None
+            else float(zero_damage_penalty)
+        )
+        self.extra_good_trade_bonus = (
+            self.cfg.shaped_good_trade_bonus
+            if extra_good_trade_bonus is None
+            else float(extra_good_trade_bonus)
+        )
 
     def compute(self, *args, **kwargs):
         # base reward
