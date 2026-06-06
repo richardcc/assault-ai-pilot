@@ -66,6 +66,21 @@ class GameSession:
                 # ✅ Only collect ACTION_EFFECT events (combat results with serializable data)
                 # UNIT_MOVED / MAP_STATE contain HexCoord objects that break JSON serialization
                 if event.get("type") == "ACTION_EFFECT":
+                    payload = event.get("payload", {})
+                    if payload.get("action") == "RangedCombat":
+                        defender = payload.get("defender")
+                        fort = payload.get("fortification", {})
+                        breakdown = payload.get("defense_breakdown", {})
+                        print(
+                            "[FORT_DEBUG]"
+                            f" defender={defender}"
+                            f" sector={breakdown.get('sector')}"
+                            f" fort={fort.get('type')}"
+                            f" fort_bonus={fort.get('bonus_dice')}"
+                            f" base={breakdown.get('base_dice')}"
+                            f" terrain={breakdown.get('terrain_bonus_dice')}"
+                            f" fort_split={breakdown.get('fortification_bonus_dice')}"
+                        )
                     # Stable id lets the frontend dedupe combat log entries
                     # regardless of which endpoint (step / ai-turn / state) delivers them.
                     self._event_seq += 1
@@ -128,7 +143,9 @@ class GameSession:
             hex_list.append({
                 "q": q,
                 "r": r,
-                "terrain": getattr(h, "terrain", None)
+                "terrain": getattr(h, "terrain", None),
+                "fortification": game_map.get_hex_fortification(q, r),
+                "fortification_meta": game_map.get_hex_fortification_data(q, r),
             })
 
         # ✅ SHAPE
@@ -160,6 +177,11 @@ class GameSession:
                         "origin": origin,
                         "shape": pieces_catalog.get(piece_id, {}).get("shape", [1, 1]),
                     })
+                fortifications = scenario.get("map", {}).get("fortifications", [])
+            else:
+                fortifications = []
+        else:
+            fortifications = []
 
         # ✅ FINAL
         activated_units = []
@@ -177,7 +199,8 @@ class GameSession:
             "shape": shape,
             "hexes": hex_list,
             "map": {
-                "pieces": pieces
+                "pieces": pieces,
+                "fortifications": fortifications,
             },
 
             "units": units,

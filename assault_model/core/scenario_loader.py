@@ -40,6 +40,15 @@ def _offset_hex(hex_: Hex, origin: Tuple[int, int]) -> Hex:
     )
 
 
+def _is_adjacent_vertices(v_start: int, v_end: int) -> bool:
+    if not (1 <= v_start <= 6 and 1 <= v_end <= 6):
+        return False
+    if v_start == v_end:
+        return False
+    # Adjacent on circular sequence 1..6
+    return ((v_start % 6) + 1 == v_end) or ((v_end % 6) + 1 == v_start)
+
+
 # -------------------------------------------------
 # Main loader
 # -------------------------------------------------
@@ -105,6 +114,41 @@ def load_scenario(
     # =================================================
     for a, b, feature in pending_hex_edges:
         game_map.add_hex_edge_feature(a, b, feature)
+
+    # =================================================
+    # APPLY FORTIFICATIONS (optional scenario overlays)
+    # =================================================
+    for fort in raw.get("map", {}).get("fortifications", []):
+        q = int(fort["q"])
+        r = int(fort["r"])
+        fort_type = str(fort["type"])
+        vertex_start = fort.get("vertex_start")
+        vertex_end = fort.get("vertex_end")
+        if game_map.get_hex(q, r) is None:
+            raise ScenarioLoaderError(
+                f"Fortification '{fort_type}' outside map at {(q, r)}"
+            )
+        if (vertex_start is None) != (vertex_end is None):
+            raise ScenarioLoaderError(
+                f"Fortification '{fort_type}' at {(q, r)} must define both "
+                "vertex_start and vertex_end, or neither"
+            )
+        if vertex_start is not None and vertex_end is not None:
+            vertex_start = int(vertex_start)
+            vertex_end = int(vertex_end)
+            if not _is_adjacent_vertices(vertex_start, vertex_end):
+                raise ScenarioLoaderError(
+                    f"Fortification '{fort_type}' at {(q, r)} has invalid edge "
+                    f"({vertex_start},{vertex_end}). Vertices must be adjacent "
+                    "in 1..6 circular order."
+                )
+        game_map.add_hex_fortification(
+            q,
+            r,
+            fort_type,
+            vertex_start=vertex_start,
+            vertex_end=vertex_end,
+        )
 
     # =================================================
     # UNIT INSTANTIATION

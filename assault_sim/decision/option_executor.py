@@ -6,8 +6,12 @@ from assault_model.actions.action_category import ActionCategory
 
 
 from assault_sim.rl.tactical_options import TacticalOption
+from assault_sim.config.movement_tactical_config import load_movement_tactical_config
 from assault_model.map.terrain_config import terrain_config
 from assault_model.map.hex_utils import safe_hex_distance
+
+
+_MOVE_CFG = load_movement_tactical_config()
 
 
 class OptionExecutor:
@@ -18,6 +22,37 @@ class OptionExecutor:
         self.avoid_bad_trades = avoid_bad_trades
         # Minimum combat advantage required to consider an attack.
         self.adv_threshold = adv_threshold
+
+    def _unit_group(self, unit) -> str:
+        ut = getattr(unit, "unit_type", None)
+        cat = getattr(ut, "category", None)
+        val = str(getattr(cat, "value", "INFANTRY")).upper()
+        if "VEHICLE" in val:
+            return "VEHICLE"
+        if "ARTILLERY" in val:
+            return "ARTILLERY"
+        return "INFANTRY"
+
+    def _hex_terrain_name(self, state, pos) -> str:
+        game_map = getattr(state, "game_map", None)
+        if game_map is None or pos is None:
+            return "clear"
+        hx = game_map.get_hex(pos.q, pos.r)
+        if hx is None:
+            return "clear"
+        return hx.get_terrain()
+
+    def _terrain_tactical_score(self, state, unit, pos) -> float:
+        terrain_name = self._hex_terrain_name(state, pos)
+        group = self._unit_group(unit)
+        defense_score = float(len(terrain_config.get_defense_dice(terrain_name, group)))
+        los = str(terrain_config.get_los(terrain_name)).upper()
+        los_bonus = 0.0
+        if los == "HINDERED":
+            los_bonus = 0.35
+        elif los == "BLOCKED":
+            los_bonus = 0.6
+        return defense_score + los_bonus
 
     # -------------------------------------------------
     def execute(
@@ -116,7 +151,7 @@ class OptionExecutor:
         )
 
         best = None
-        best_dist = None
+        best_score = float("-inf")
 
         for a in actions:
             if a.action_type.category != ActionCategory.MOVEMENT:
@@ -126,11 +161,14 @@ class OptionExecutor:
             if not path:
                 continue
 
-            d = safe_hex_distance(path[-1], target.position)
+            new_pos = path[-1]
+            d = safe_hex_distance(new_pos, target.position)
+            terrain_score = self._terrain_tactical_score(state, unit, new_pos)
+            score = -float(d) + _MOVE_CFG.advance_terrain_weight * terrain_score
 
-            if best is None or d <= best_dist:
+            if score > best_score:
                 best = a
-                best_dist = d
+                best_score = score
 
         return best or WaitAction(unit.unit_id)
 
@@ -165,11 +203,12 @@ class OptionExecutor:
 
             new_pos = path[-1]
             dist = safe_hex_distance(new_pos, target.position)
+            terrain_score = self._terrain_tactical_score(state, unit, new_pos)
 
             # ✅ Siempre preferir acercarse (antes: todas las casillas a
             # >6 hex puntuaban 0 y se elegía el primer movimiento del
             # catálogo → deriva horizontal sin avanzar).
-            score = -dist
+            score = -dist + _MOVE_CFG.flank_terrain_weight * terrain_score
 
             # Bonus de flanqueo: posiciones en el "anillo" de combate
             # (cerca pero sin pegarse de frente al objetivo).

@@ -67,14 +67,14 @@ Principio de oro:
 
 ## Roadmap por fases
 
-## Fase A - Consolidacion tecnica (1 semana)
+## Fase A - Consolidacion tecnica (1 semana) ✅ COMPLETADA
 
 Objetivo:
 - cerrar deuda tecnica inmediata antes de introducir Gym/SB3
 
 Entregables:
 - [x] normalizar rutas absolutas en todos los scripts de train/eval
-- [ ] extraer helpers comunes de checkpoint/load/save en modulo unico
+- [x] extraer helpers comunes de checkpoint/load/save en modulo unico
 - [x] agregar validaciones de shape en ingreso a PPO update (fail-fast)
 - [x] agregar smoke tests minimos: reset/step/training one-batch/eval one-episode
 - [x] registrar config efectiva al inicio de cada run (seed, scenario, max_steps, paths)
@@ -85,7 +85,7 @@ KPI salida:
 
 ---
 
-## Fase B - Gymnasium adapter formal (1 semana)
+## Fase B - Gymnasium adapter formal (1 semana) ✅ COMPLETADA
 
 Objetivo:
 - crear interfaz estandar sin romper trainer actual
@@ -108,7 +108,7 @@ KPI salida:
 
 ---
 
-## Fase C - Baseline SB3 PPO (1 semana)
+## Fase C - Baseline SB3 PPO (1 semana) ✅ COMPLETADA
 
 Objetivo:
 - tener baseline externo robusto para comparar con trainer custom
@@ -133,17 +133,21 @@ Decision gate:
 
 ---
 
-## Fase D - RLlib readiness (1-2 semanas)
+## Fase D - RLlib readiness (1-2 semanas) 🟡 EN PROGRESO
 
 Objetivo:
 - dejar el sistema preparado para migrar a RLlib con costo medio-bajo
 
 Entregables:
-- [ ] contratos tipados `Trajectory`/`Batch` en modulo dedicado
+- [x] contratos tipados `Trajectory`/`Batch` en modulo dedicado
 - [ ] desacople final de evaluacion (runner agnostico)
-- [ ] configuracion centralizada `TrainConfig` (archivo + dataclass)
-- [ ] callbacks neutrales (checkpoint/eval/metric export)
+- [x] configuracion centralizada `TrainConfig` (archivo + dataclass)
+- [x] callbacks neutrales (checkpoint/eval/metric export)
 - [ ] guia de migracion RLlib (mapping config + policy + env registration)
+- [x] smoke de integracion RLlib (`python -m assault_sim.train.smoke_rllib`)
+
+Estado de fase:
+- P2 queda en estado **casi cerrado**: bloque tecnico principal completado; pendiente cierre formal de validacion final y runner de evaluacion totalmente agnostico.
 
 KPI salida:
 - checklist RLlib-ready completada
@@ -151,7 +155,7 @@ KPI salida:
 
 ---
 
-## Fase E - Escalado a mapas x4 y 20v20 (2-4 semanas)
+## Fase E - Escalado a mapas x4 y 20v20 (2-4 semanas) ⏳ PENDIENTE
 
 Objetivo:
 - mantener throughput y estabilidad en escenarios grandes
@@ -283,9 +287,36 @@ Se considera exitoso cuando:
 - [x] Introducir contratos tipados (`Trajectory`, `Batch`, `EvalResult`) en modulo dedicado.
 - [x] Extraer `checkpointing.py` y `eval_gate.py` neutrales al framework.
 - [x] Centralizar configuracion en `TrainConfig` (archivo + dataclass).
-- [ ] Implementar smoke de integracion RLlib (registro env + rollout corto).
-- [ ] Documentar mapping de config SB3 -> RLlib (horizonte, batch, workers, eval cadence).
-- [ ] Definir criterio de migracion oficial (cuando RLlib reemplaza trainer actual).
+- [x] Implementar smoke de integracion RLlib (registro env + rollout corto).
+- [x] Documentar mapping de config SB3 -> RLlib (horizonte, batch, workers, eval cadence).
+- [x] Definir criterio de migracion oficial (cuando RLlib reemplaza trainer actual).
+
+#### Mapping SB3 -> RLlib (referencia operativa)
+
+- `sb3_n_steps` -> `rollout_fragment_length` (steps por worker antes de enviar muestras)
+- `sb3_num_envs` -> `num_env_runners` (o `num_rollout_workers` segun API RLlib usada)
+- `sb3_batch_size` / acumulacion de muestras -> `train_batch_size` (batch total por iteracion)
+- `sb3_n_epochs` -> `num_sgd_iter` (pasadas SGD por batch)
+- `sb3_learning_rate` -> `lr`
+- `sb3_gamma` -> `gamma`
+- `sb3_gae_lambda` -> `lambda_` (GAE)
+- `sb3_clip_range` -> `clip_param`
+- `sb3_ent_coef` -> `entropy_coeff`
+- `sb3_net_arch` -> `model.fcnet_hiddens`
+- `sb3_eval_freq` + `sb3_eval_episodes` -> `evaluation_interval` + `evaluation_num_episodes`
+
+Notas:
+- RLlib maneja paralelismo por workers de rollout; en CPU-heavy envs suele escalar mejor que `DummyVecEnv`.
+- Mantener el mismo `GymAssaultEnv` registrado para evitar drift entre frameworks.
+
+#### Criterio oficial de migracion a RLlib
+
+Migrar ruta principal SB3 -> RLlib solo si se cumplen todos:
+- calidad tactica no inferior en 2 corridas consecutivas (`win_rate`, `damage_ratio`, `zero_dmg_rate`, `forced_ratio`)
+- throughput >= SB3 en hardware objetivo
+- smoke RLlib estable y sin errores de serializacion/registro de entorno
+- evaluacion multi-seed sin degradacion estadistica relevante
+- operacion diaria (train/eval/checkpoint) documentada y reproducible
 
 ### P3 - Escalado mapas x4 / 20v20
 - [ ] Profiling de hotspots de simulacion (acciones, pathfinding, combate, encoding).
@@ -299,6 +330,10 @@ Se considera exitoso cuando:
 - [x] P1 Done: baseline SB3 funcional y comparativa numerica publicada.
 - [ ] P2 Done: pipeline RLlib-ready con smoke test exitoso.
 - [ ] P3 Done: entrenamiento estable y tacticamente competitivo en mapas grandes.
+
+Prioridad de ejecucion actual:
+- foco primario: iniciar P3 (profiling + throughput + curriculum de complejidad)
+- foco secundario: cerrar remanente de P2 (runner de evaluacion agnostico + validacion final de migracion)
 
 ### Decision de arquitectura (2026-06-05)
 - [x] SB3 se adopta como ruta oficial y unica de entrenamiento (Gym + SB3 PPO).
@@ -326,6 +361,16 @@ Ajuste activo de entrenamiento (SB3):
 - `train_config.json`: `sb3_learning_rate` bajado a `0.0002` y bloque de fine-tune a `500000` timesteps
 - `reward_config.json`: refuerzo de castigo a malos intercambios y ataques sin dano (`bad_trade_penalty`, `zero_damage_attack_penalty`, `shaped_zero_damage_penalty`)
 - objetivo del bloque: mantener `win_rate` y elevar `damage_ratio` con menor `zero_dmg_rate`
+
+Checklist de validacion del fine-tune (go/no-go):
+- [ ] `win_rate` >= 0.56 (no degradar vs baseline post-1M)
+- [ ] `damage_ratio` >= 0.75 (objetivo intermedio; objetivo final > 1.00)
+- [ ] `zero_dmg_rate` <= 0.50
+- [ ] `forced_ratio` <= 0.10
+
+Decision:
+- GO si cumple al menos 3/4 criterios sin degradacion severa en `win_rate`
+- NO-GO si `win_rate` cae por debajo de 0.52 o `damage_ratio` no mejora frente al baseline
 
 Riesgos activos:
 - costo de simulacion puede dominar el tiempo total al escalar escenarios

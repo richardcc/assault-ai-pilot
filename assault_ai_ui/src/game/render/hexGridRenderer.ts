@@ -5,12 +5,66 @@ import {
   getTerrainLabel,
   getTerrainShort,
 } from "../config/terrainConfig";
+import {
+  getFortificationArt,
+  getFortificationRender,
+  getFortificationShort,
+} from "../config/fortificationConfig";
 
 // ---------------------------------------------
 export const HEX_SIZE = 30;
 
 const HEX_WIDTH = HEX_SIZE * Math.sqrt(3);
 const HEX_HEIGHT = HEX_SIZE * (3 / 2);
+const fortTextureCache = new Map<string, PIXI.Texture>();
+const fortTextureLoading = new Set<string>();
+const fortTexturePromises = new Map<string, Promise<PIXI.Texture>>();
+
+function getFortTexture(path: string): PIXI.Texture | null {
+  const cached = fortTextureCache.get(path);
+  if (cached) return cached;
+
+  if (!fortTextureLoading.has(path)) {
+    fortTextureLoading.add(path);
+    void PIXI.Assets.load(path)
+      .then((tex) => {
+        fortTextureCache.set(path, tex);
+      })
+      .catch(() => {
+        // fallback marker will be used
+      })
+      .finally(() => {
+        fortTextureLoading.delete(path);
+      });
+  }
+  return null;
+}
+
+function loadFortTexture(path: string): Promise<PIXI.Texture> {
+  const cached = fortTextureCache.get(path);
+  if (cached) return Promise.resolve(cached);
+
+  const existing = fortTexturePromises.get(path);
+  if (existing) return existing;
+
+  const p = PIXI.Assets.load(path)
+    .then((tex) => {
+      fortTextureCache.set(path, tex);
+      fortTextureLoading.delete(path);
+      return tex;
+    })
+    .catch((err) => {
+      fortTextureLoading.delete(path);
+      throw err;
+    })
+    .finally(() => {
+      fortTexturePromises.delete(path);
+    });
+
+  fortTextureLoading.add(path);
+  fortTexturePromises.set(path, p);
+  return p;
+}
 
 // ---------------------------------------------
 export function axialToPixel(q: number, r: number) {
@@ -74,7 +128,9 @@ export function drawHexGridBase(
   shape: [number, number],
   showCoords: boolean,
   hexes: { q: number; r: number; terrain: string }[] = [],
-  showMap: boolean
+  showMap: boolean,
+  fortifications: { type: string; q: number; r: number; orientation?: number; vertex_start?: number; vertex_end?: number }[] = [],
+  showGrid: boolean = true,
 ) {
   const [width, height] = shape;
 
@@ -84,6 +140,15 @@ export function drawHexGridBase(
   const terrainMap = new Map<number, string>();
   for (const h of hexes) {
     terrainMap.set(h.q * 100 + h.r, h.terrain);
+  }
+  const fortificationMap = new Map<number, { type: string; orientation?: number; vertex_start?: number; vertex_end?: number }>();
+  for (const item of fortifications) {
+    fortificationMap.set(item.q * 100 + item.r, {
+      type: item.type,
+      orientation: item.orientation,
+      vertex_start: item.vertex_start,
+      vertex_end: item.vertex_end,
+    });
   }
 
   // ---------------------------------------------
@@ -136,15 +201,19 @@ export function drawHexGridBase(
 
       const terrain = terrainMap.get(q * 100 + r) ?? "clear";
 
-      if (!showMap) {
-        drawHex(g, px, py, HEX_SIZE, getTerrainColor(terrain), 0.6);
-      } else {
-        drawHex(g, px, py, HEX_SIZE);
+      if (showGrid) {
+        if (!showMap) {
+          drawHex(g, px, py, HEX_SIZE, getTerrainColor(terrain), 0.6);
+        } else {
+          drawHex(g, px, py, HEX_SIZE);
+        }
       }
 
       const coord = axialToLabel(q, r);
       const shortLabel = `${coord}\n${getTerrainShort(terrain)}`;
-      const fullLabel = `${coord}\n${getTerrainLabel(terrain)}`;
+      const fort = fortificationMap.get(q * 100 + r);
+      const fortLabel = fort ? `\n${getFortificationShort(fort.type)}` : "";
+      const fullLabel = `${coord}\n${getTerrainLabel(terrain)}${fortLabel}`;
 
       // ---------------------------------
       // ✅ GRID TEXT (FIX NÍTIDO)
@@ -172,6 +241,111 @@ export function drawHexGridBase(
         text.y = Math.round(py - HEX_SIZE * 0.45);
 
         coordsLayer.addChild(text);
+      }
+
+      if (fort) {
+        const fortArt = getFortificationArt(fort.type);
+        const renderCfg = getFortificationRender(fort.type);
+        const orientation = fort.orientation;
+        const edgeStart = fort.vertex_start;
+        const edgeEnd = fort.vertex_end;
+        const edgeRotation = (() => {
+          if (orientation != null && orientation >= 1 && orientation <= 6) {
+            // 1 = North, then clockwise every 60 degrees.
+            return ((orientation - 1) * Math.PI) / 3;
+          }
+          if (edgeStart == null || edgeEnd == null) return 0;
+          // Vertex convention: 1 = North, clockwise.
+          // Rotation baseline: edge 1->2.
+          const a = Math.min(edgeStart, edgeEnd);
+          return ((a - 1) * Math.PI) / 3;
+        })();
+        const edgeAnchorAngle = edgeRotation - Math.PI / 6;
+        // Local edge frame so nudges remain consistent after rotation:
+        // - normal: points from hex center toward fortified edge
+        // - tangent: runs along the fortified edge
+        const nx = Math.cos(edgeAnchorAngle);
+        const ny = Math.sin(edgeAnchorAngle);
+        const tx = -ny;
+        const ty = nx;
+
+        const edgeDx = nx * HEX_SIZE * renderCfg.edgeOffset;
+        const edgeDy = ny * HEX_SIZE * renderCfg.edgeOffset;
+        const nudgeDx = tx * HEX_SIZE * renderCfg.xNudge + nx * HEX_SIZE * renderCfg.yNudge;
+        const nudgeDy = ty * HEX_SIZE * renderCfg.xNudge + ny * HEX_SIZE * renderCfg.yNudge;
+        const drawX = Math.round(px + edgeDx + nudgeDx);
+        const drawY = Math.round(py + edgeDy + nudgeDy);
+        if (fortArt) {
+          const tex = getFortTexture(fortArt);
+          if (tex) {
+            const sprite = new PIXI.Sprite(tex);
+            sprite.anchor.set(0.5);
+            sprite.x = drawX;
+            sprite.y = drawY;
+            sprite.width = HEX_SIZE * renderCfg.scaleX;
+            sprite.height = HEX_SIZE * renderCfg.scaleY;
+            sprite.alpha = 0.95;
+            sprite.rotation = edgeRotation;
+            sprite.zIndex = 5;
+            coordsLayer.addChild(sprite);
+          } else {
+            let marker: PIXI.Text | null = null;
+            if (showCoords) {
+              marker = new PIXI.Text({
+                text: getFortificationShort(fort.type),
+                style: {
+                  fill: "#ffe699",
+                  fontSize: 10,
+                  fontWeight: "bold",
+                  stroke: { color: "#000000", width: 3 },
+                },
+                resolution: 2,
+              });
+              marker.anchor.set(0.5);
+              marker.x = drawX;
+              marker.y = Math.round(drawY + HEX_SIZE * 0.08);
+              marker.zIndex = 5;
+              coordsLayer.addChild(marker);
+            }
+
+            void loadFortTexture(fortArt)
+              .then((loaded) => {
+                if (marker && !marker.parent) return;
+                const sprite = new PIXI.Sprite(loaded);
+                sprite.anchor.set(0.5);
+                sprite.x = drawX;
+                sprite.y = drawY;
+                sprite.width = HEX_SIZE * renderCfg.scaleX;
+                sprite.height = HEX_SIZE * renderCfg.scaleY;
+                sprite.alpha = 0.95;
+                sprite.rotation = edgeRotation;
+                sprite.zIndex = 5;
+                coordsLayer.addChild(sprite);
+                if (marker) marker.destroy();
+              })
+              .catch(() => {
+                // Keep marker fallback when image cannot be loaded.
+              });
+          }
+        } else {
+          if (showCoords) {
+            const marker = new PIXI.Text({
+              text: getFortificationShort(fort.type),
+              style: {
+                fill: "#ffe699",
+                fontSize: 10,
+                fontWeight: "bold",
+                stroke: { color: "#000000", width: 3 },
+              },
+              resolution: 2,
+            });
+            marker.anchor.set(0.5);
+            marker.x = drawX;
+            marker.y = Math.round(drawY + HEX_SIZE * 0.08);
+            marker.zIndex = 5;
+            coordsLayer.addChild(marker);
+          }
+        }
       }
 
       // ---------------------------------
@@ -252,5 +426,7 @@ export function drawHexGridBase(
     }
   }
 
-  container.addChild(g);
+  if (showGrid) {
+    container.addChild(g);
+  }
 }

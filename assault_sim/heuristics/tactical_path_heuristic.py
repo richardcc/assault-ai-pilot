@@ -4,10 +4,46 @@ from assault_model.actions.ranged_indirect import RangedIndirectAttack
 from assault_model.map.terrain_config import terrain_config
 from assault_model.actions.status import WaitAction
 from assault_sim.rl.tactical_options import TacticalOption
+from assault_sim.config.movement_tactical_config import load_movement_tactical_config
 
 from assault_model.map.hex_utils import safe_hex_distance
 
+
+_MOVE_CFG = load_movement_tactical_config()
+
+
 class TacticalPathHeuristic:
+    def _unit_group(self, unit) -> str:
+        ut = getattr(unit, "unit_type", None)
+        cat = getattr(ut, "category", None)
+        val = str(getattr(cat, "value", "INFANTRY")).upper()
+        if "VEHICLE" in val:
+            return "VEHICLE"
+        if "ARTILLERY" in val:
+            return "ARTILLERY"
+        return "INFANTRY"
+
+    def _hex_terrain_name(self, state, pos) -> str:
+        game_map = getattr(state, "game_map", None)
+        if game_map is None or pos is None:
+            return "clear"
+        hx = game_map.get_hex(pos.q, pos.r)
+        if hx is None:
+            return "clear"
+        return hx.get_terrain()
+
+    def _terrain_tactical_score(self, state, unit, pos) -> float:
+        terrain_name = self._hex_terrain_name(state, pos)
+        group = self._unit_group(unit)
+        # More defense dice and hindered/blocked LOS are generally safer.
+        defense_score = float(len(terrain_config.get_defense_dice(terrain_name, group)))
+        los = str(terrain_config.get_los(terrain_name)).upper()
+        los_bonus = 0.0
+        if los == "HINDERED":
+            los_bonus = 0.35
+        elif los == "BLOCKED":
+            los_bonus = 0.6
+        return defense_score + los_bonus
 
     # -------------------------------------------------
     def choose_action(self, state, unit, option):
@@ -83,17 +119,20 @@ class TacticalPathHeuristic:
             return None
 
         best = None
-        best_dist = float("inf")
+        best_score = float("-inf")
 
         for m in moves:
             path = getattr(m, "path", None)
             if not path:
                 continue
 
-            d = safe_hex_distance(path[-1], target.position)
+            new_pos = path[-1]
+            d = safe_hex_distance(new_pos, target.position)
+            terrain_score = self._terrain_tactical_score(state, unit, new_pos)
+            score = -float(d) + _MOVE_CFG.advance_terrain_weight * terrain_score
 
-            if d < best_dist:
-                best_dist = d
+            if score > best_score:
+                best_score = score
                 best = m
 
         return best
@@ -115,9 +154,9 @@ class TacticalPathHeuristic:
                 continue
 
             new_pos = path[-1]
-            dist = hex_distance(new_pos, target.position)
-
-            score = max(0, 6 - dist)
+            dist = safe_hex_distance(new_pos, target.position)
+            terrain_score = self._terrain_tactical_score(state, unit, new_pos)
+            score = max(0, 6 - dist) + _MOVE_CFG.flank_terrain_weight * terrain_score
 
             if score > best_score:
                 best_score = score
@@ -134,17 +173,20 @@ class TacticalPathHeuristic:
             return None
 
         best = None
-        best_dist = -1
+        best_score = float("-inf")
 
         for m in moves:
             path = getattr(m, "path", None)
             if not path:
                 continue
 
-            d = safe_hex_distance(path[-1], target.position)
+            new_pos = path[-1]
+            d = safe_hex_distance(new_pos, target.position)
+            terrain_score = self._terrain_tactical_score(state, unit, new_pos)
+            score = float(d) + _MOVE_CFG.retreat_terrain_weight * terrain_score
 
-            if d > best_dist:
-                best_dist = d
+            if score > best_score:
+                best_score = score
                 best = m
 
         return best

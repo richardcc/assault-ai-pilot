@@ -102,7 +102,8 @@ def load_ui_scenario(scenario_id: str) -> dict:
         "maxTurns": scenario.get("max_turns"),
         "shape": scenario.get("shape"),
         "map": {
-            "pieces": ui_pieces
+            "pieces": ui_pieces,
+            "fortifications": scenario.get("map", {}).get("fortifications", []),
         },
         "hexes": hexes,
         "units": units,  # ⚠️ solo placeholder (se sustituye luego)

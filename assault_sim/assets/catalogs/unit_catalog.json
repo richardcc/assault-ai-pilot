@@ -1,366 +1,202 @@
 {
-  "_comment": "Core unit definitions (no render, derived strictly from unit cards). movement_type (reglamento 9.4/9.10): foot=infanteria, artillery=canones remolcados, wheeled=vehiculo de rueda, track=vehiculo de oruga. Debe coincidir con el icono de la carta de unidad y se usa para leer move_cost en terrain_modifiers.json. NOTA: los morteros aqui son equipos de infanteria (a pie); si la carta muestra el icono de artilleria, cambia su movement_type a 'artillery'.",
-
+  "_comment": "Core unit definitions (no render, derived strictly from unit cards)",
   "units": {
-
     "GE_FJ_RIFLES_43": {
       "side": "GE",
       "category": "INFANTRY",
       "subtype": "FALLSCHIRMJAGER",
       "classification": "SPECIALIZED_INFANTRY",
-
       "card_id": "Pr43",
       "cost": 8,
       "movement": 2,
-      "movement_type": "foot",
       "max_strength": 4,
       "has_counter_flip": true,
-
-      "base_defense": {
-        "FRONT": ["YELLOW"],
-        "FLANK_LEFT": ["YELLOW"],
-        "FLANK_RIGHT": ["YELLOW"],
-        "REAR": ["YELLOW"]
-      },
-
+      "base_defense": { "FRONT": ["YELLOW"], "FLANK_LEFT": ["YELLOW"], "FLANK_RIGHT": ["YELLOW"], "REAR": ["YELLOW"] },
       "attack": {
         "DIRECT_FIRE": {
-          "VEHICLE": {
-            "0": { "dice": [] },
-            "1": { "dice": ["GREEN","GREEN"] },
-            "2": { "dice": ["GREEN"] }
-          },
+          "VEHICLE": { "0": { "dice": [] }, "1": { "dice": ["GREEN", "GREEN"] }, "2": { "dice": ["GREEN"] } },
           "INFANTRY": {
-            "0": { "dice": ["RED","YELLOW","YELLOW","BLUE"] },
-            "1-3": { "dice": ["RED","YELLOW","YELLOW","GREEN"] },
-            "4-7": { "dice": ["RED","YELLOW","YELLOW","BLUE"] },
-            "8-10": { "dice": ["YELLOW","YELLOW","BLUE"] }
+            "0": { "dice": ["RED", "YELLOW", "YELLOW", "BLUE"] },
+            "1-3": { "dice": ["RED", "YELLOW", "YELLOW", "GREEN"] },
+            "4-7": { "dice": ["RED", "YELLOW", "YELLOW", "BLUE"] },
+            "8-10": { "dice": ["YELLOW", "YELLOW", "BLUE"] }
           }
         }
       },
-
-      "traits": [
-        "PARATROOPS",
-        "ELITE",
-        "TOUGH",
-        "RIFLE_GRENADES",
-        "INDIRECT_FIRE",
-        "ATTACK_DIE_REROLL",
-        "IGNORE_FIRST_CC_DAMAGE",
-        "REMOVE_WEAKEST_TERRAIN_DEFENSE"
-      ]
+      "traits": ["PARATROOPS", "ELITE", "TOUGH", "RIFLE_GRENADES", "INDIRECT_FIRE", "ATTACK_DIE_REROLL", "IGNORE_FIRST_CC_DAMAGE", "REMOVE_WEAKEST_TERRAIN_DEFENSE"]
     },
-
     "GE_RIFLES_43": {
       "side": "GE",
       "category": "INFANTRY",
       "subtype": "STANDARD_INFANTRY",
       "classification": "STANDARD_INFANTRY",
-
       "card_id": "S43",
       "cost": 6,
       "movement": 2,
-      "movement_type": "foot",
       "max_strength": 3,
       "has_counter_flip": true,
-
-      "base_defense": {
-        "FRONT": ["YELLOW"],
-        "FLANK_LEFT": ["YELLOW"],
-        "FLANK_RIGHT": ["YELLOW"],
-        "REAR": ["YELLOW"]
-      },
-
+      "base_defense": { "FRONT": ["YELLOW"], "FLANK_LEFT": ["YELLOW"], "FLANK_RIGHT": ["YELLOW"], "REAR": ["YELLOW"] },
       "attack": {
         "DIRECT_FIRE": {
-          "VEHICLE": {
-            "0": { "dice": [] },
-            "1": { "dice": ["YELLOW","BLUE"] },
-            "2": { "dice": ["GREEN","BLUE"] }
-          },
+          "VEHICLE": { "0": { "dice": [] }, "1": { "dice": ["YELLOW", "BLUE"] }, "2": { "dice": ["GREEN", "BLUE"] } },
           "INFANTRY": {
-            "0": { "dice": ["RED","YELLOW","GREEN"] },
-            "1-3": { "dice": ["RED","YELLOW","BLUE"] },
-            "4-6": { "dice": ["GREEN","GREEN","YELLOW"] },
-            "7-10": { "dice": ["YELLOW","YELLOW","BLUE","BLUE"] }
+            "0": { "dice": ["RED", "YELLOW", "GREEN"] },
+            "1-3": { "dice": ["RED", "YELLOW", "BLUE"] },
+            "4-6": { "dice": ["GREEN", "GREEN", "YELLOW"] },
+            "7-10": { "dice": ["YELLOW", "YELLOW", "BLUE", "BLUE"] }
           }
         }
       },
-
-      "traits": [
-        "RIFLE_GRENADES",
-        "INDIRECT_FIRE",
-        "ATTACK_DIE_REROLL",
-        "REMOVE_WEAKEST_TERRAIN_DEFENSE"
-      ]
+      "traits": ["RIFLE_GRENADES", "INDIRECT_FIRE", "ATTACK_DIE_REROLL", "REMOVE_WEAKEST_TERRAIN_DEFENSE"]
     },
-
     "GE_50MM_MORTAR": {
       "side": "GE",
       "category": "INFANTRY",
       "subtype": "SUPPORT_MORTAR",
       "classification": "INDIRECT_FIRE_UNIT",
-
       "card_id": "Pr43_MORTAR",
       "cost": 7,
       "movement": 1,
-      "movement_type": "foot",
-
       "max_strength": 2,
       "has_counter_flip": true,
-
-      "base_defense": {
-        "FRONT": ["YELLOW"],
-        "FLANK_LEFT": ["YELLOW"],
-        "FLANK_RIGHT": ["YELLOW"],
-        "REAR": ["YELLOW"]
-      },
-
+      "base_defense": { "FRONT": ["YELLOW"], "FLANK_LEFT": ["YELLOW"], "FLANK_RIGHT": ["YELLOW"], "REAR": ["YELLOW"] },
       "attack": {
         "DIRECT_FIRE": {
-          "VEHICLE": {
-            "0-10": { "dice": [] }
-          },
+          "VEHICLE": { "0-10": { "dice": [] } },
           "INFANTRY": {
-            "0": { "dice": ["YELLOW","GREEN"] },
-            "1": { "dice": ["YELLOW","BLUE","BLUE"] },
-            "2-4": { "dice": ["GREEN","BLUE"] },
+            "0": { "dice": ["YELLOW", "GREEN"] },
+            "1": { "dice": ["YELLOW", "BLUE", "BLUE"] },
+            "2-4": { "dice": ["GREEN", "BLUE"] },
             "5-8": { "dice": ["GREEN"] }
           }
         },
-        "INDIRECT_FIRE": {
-          "INFANTRY": {
-            "3-8": { "dice": ["GREEN","GREEN","BLUE"] }
-          }
-        }
+        "INDIRECT_FIRE": { "INFANTRY": { "3-8": { "dice": ["GREEN", "GREEN", "BLUE"] } } }
       },
-
-      "traits": [
-        "INDIRECT_FIRE",
-        "NO_LINE_OF_SIGHT",
-        "CAMOUFLAGED",
-        "SMOKE",
-        "MIN_RANGE_3",
-        "MAX_RANGE_8"
-      ]
+      "traits": ["INDIRECT_FIRE", "NO_LINE_OF_SIGHT", "CAMOUFLAGED", "SMOKE", "MIN_RANGE_3", "MAX_RANGE_8"]
     },
-
     "GE_HEAVY_MG_42": {
       "side": "GE",
       "category": "INFANTRY",
       "subtype": "SUPPORT_MG",
       "classification": "SUPPORT_INFANTRY",
-
       "card_id": "S43_MG42",
       "cost": 6,
       "movement": 2,
-      "movement_type": "foot",
       "max_strength": 3,
       "has_counter_flip": true,
-
-      "base_defense": {
-        "FRONT": ["YELLOW"],
-        "FLANK_LEFT": ["YELLOW"],
-        "FLANK_RIGHT": ["YELLOW"],
-        "REAR": ["YELLOW"]
-      },
-
+      "base_defense": { "FRONT": ["YELLOW"], "FLANK_LEFT": ["YELLOW"], "FLANK_RIGHT": ["YELLOW"], "REAR": ["YELLOW"] },
       "attack": {
         "DIRECT_FIRE": {
-          "VEHICLE": {
-            "0-10": { "dice": [] }
-          },
+          "VEHICLE": { "0-10": { "dice": [] } },
           "INFANTRY": {
-            "0": { "dice": ["YELLOW","YELLOW","GREEN"] },
-            "1-5": { "dice": ["RED","RED","YELLOW","BLUE"] },
-            "6-7": { "dice": ["RED","YELLOW","GREEN","BLUE"] },
-            "8-11": { "dice": ["YELLOW","BLUE","BLUE"] }
+            "0": { "dice": ["YELLOW", "YELLOW", "GREEN"] },
+            "1-5": { "dice": ["RED", "RED", "YELLOW", "BLUE"] },
+            "6-7": { "dice": ["RED", "YELLOW", "GREEN", "BLUE"] },
+            "8-11": { "dice": ["YELLOW", "BLUE", "BLUE"] }
           }
         }
       },
-
-      "traits": [
-        "SUPPORT_FIRE",
-        "ATTACK_DIE_REROLL",
-        "SLOW_UNIT"
-      ]
+      "traits": ["SUPPORT_FIRE", "ATTACK_DIE_REROLL", "SLOW_UNIT"]
     },
-
     "US_RANGERS_43": {
       "side": "US",
       "category": "INFANTRY",
       "subtype": "RANGERS",
       "classification": "SPECIALIZED_INFANTRY",
-
       "card_id": "S43",
       "cost": 6,
       "movement": 2,
-      "movement_type": "foot",
       "max_strength": 4,
       "has_counter_flip": true,
-
-      "base_defense": {
-        "FRONT": ["YELLOW"],
-        "FLANK_LEFT": ["YELLOW"],
-        "FLANK_RIGHT": ["YELLOW"],
-        "REAR": ["YELLOW"]
-      },
-
+      "base_defense": { "FRONT": ["YELLOW"], "FLANK_LEFT": ["YELLOW"], "FLANK_RIGHT": ["YELLOW"], "REAR": ["YELLOW"] },
       "attack": {
         "DIRECT_FIRE": {
-          "VEHICLE": {
-            "0-10": { "dice": [] }
-          },
+          "VEHICLE": { "0-10": { "dice": [] } },
           "INFANTRY": {
-            "0": { "dice": ["RED","RED"] },
-            "1-3": { "dice": ["RED","YELLOW"] },
-            "4-6": { "dice": ["RED","BLUE"] },
-            "7-9": { "dice": ["GREEN","GREEN"] }
+            "0": { "dice": ["RED", "RED"] },
+            "1-3": { "dice": ["RED", "YELLOW"] },
+            "4-6": { "dice": ["RED", "BLUE"] },
+            "7-9": { "dice": ["GREEN", "GREEN"] }
           }
         }
       },
-
-      "traits": [
-        "ELITE",
-        "SCOUT",
-        "RECON_PATROL"
-      ]
+      "traits": ["ELITE", "SCOUT", "RECON_PATROL"]
     },
-
     "US_81MM_MORTAR": {
       "side": "US",
       "category": "INFANTRY",
       "subtype": "SUPPORT_MORTAR",
       "classification": "INDIRECT_FIRE_UNIT",
-
       "card_id": "S43_MORTAR_US",
       "cost": 7,
       "movement": 1,
-      "movement_type": "foot",
       "max_strength": 2,
       "has_counter_flip": true,
-
-      "base_defense": {
-        "FRONT": ["YELLOW"],
-        "FLANK_LEFT": ["YELLOW"],
-        "FLANK_RIGHT": ["YELLOW"],
-        "REAR": ["YELLOW"]
-      },
-
+      "base_defense": { "FRONT": ["YELLOW"], "FLANK_LEFT": ["YELLOW"], "FLANK_RIGHT": ["YELLOW"], "REAR": ["YELLOW"] },
       "attack": {
         "DIRECT_FIRE": {
           "INFANTRY": {
-            "0": { "dice": ["YELLOW","GREEN"] },
-            "1-3": { "dice": ["RED","BLUE"] },
-            "4-5": { "dice": ["YELLOW","BLUE"] },
-            "6-9": { "dice": ["GREEN","BLUE"] }
+            "0": { "dice": ["YELLOW", "GREEN"] },
+            "1-3": { "dice": ["RED", "BLUE"] },
+            "4-5": { "dice": ["YELLOW", "BLUE"] },
+            "6-9": { "dice": ["GREEN", "BLUE"] }
           }
         },
-
-        "INDIRECT_FIRE": {
-          "INFANTRY": {
-            "3-11": { "dice": ["GREEN","GREEN","GREEN"] }
-          }
-        }
+        "INDIRECT_FIRE": { "INFANTRY": { "3-11": { "dice": ["GREEN", "GREEN", "GREEN"] } } }
       },
-
-      "traits": [
-        "INDIRECT_FIRE",
-        "NO_LINE_OF_SIGHT",
-        "SMOKE",
-        "SLOW_UNIT",
-        "MIN_RANGE_3",
-        "MAX_RANGE_11",
-        "IGNORE_WEAK_TERRAIN_DEFENSE"
-      ]
+      "traits": ["INDIRECT_FIRE", "NO_LINE_OF_SIGHT", "SMOKE", "SLOW_UNIT", "MIN_RANGE_3", "MAX_RANGE_11", "IGNORE_WEAK_TERRAIN_DEFENSE"]
     },
-
     "US_BAZOOKA_TEAM": {
       "side": "US",
       "category": "INFANTRY",
       "subtype": "AT_SUPPORT",
       "classification": "SPECIALIZED_INFANTRY",
-
       "card_id": "S43_BAZOOKA",
       "cost": 3,
       "movement": 2,
-      "movement_type": "foot",
       "max_strength": 2,
       "has_counter_flip": true,
-
-      "base_defense": {
-        "FRONT": ["YELLOW"],
-        "FLANK_LEFT": ["YELLOW"],
-        "FLANK_RIGHT": ["YELLOW"],
-        "REAR": ["YELLOW"]
-      },
-
+      "base_defense": { "FRONT": ["YELLOW"], "FLANK_LEFT": ["YELLOW"], "FLANK_RIGHT": ["YELLOW"], "REAR": ["YELLOW"] },
       "attack": {
         "DIRECT_FIRE": {
-
           "VEHICLE": {
             "1": { "dice": ["YELLOW"] },
-            "2": { "dice": ["RED","YELLOW"] },
+            "2": { "dice": ["RED", "YELLOW"] },
             "3-5": { "dice": ["RED"] }
           },
-
           "INFANTRY": {
-            "0": { "dice": ["GREEN","BLUE"] },
-            "1-2": { "dice": ["YELLOW","YELLOW"] },
-            "3-6": { "dice": ["BLUE","BLUE"] },
+            "0": { "dice": ["GREEN", "BLUE"] },
+            "1-2": { "dice": ["YELLOW", "YELLOW"] },
+            "3-6": { "dice": ["BLUE", "BLUE"] },
             "7-9": { "dice": ["BLUE"] }
           }
         }
       },
-
-      "traits": [
-        "ANTI_TANK",
-        "FRAGILE_UNIT"
-      ]
+      "traits": ["ANTI_TANK", "FRAGILE_UNIT"]
     },
-
-
     "US_RIFLES_43": {
       "side": "US",
       "category": "INFANTRY",
       "subtype": "STANDARD_INFANTRY",
       "classification": "STANDARD_INFANTRY",
-
       "card_id": "S43",
       "cost": 7,
       "movement": 2,
-      "movement_type": "foot",
       "max_strength": 4,
       "has_counter_flip": true,
-
-      "base_defense": {
-        "FRONT": ["YELLOW"],
-        "FLANK_LEFT": ["YELLOW"],
-        "FLANK_RIGHT": ["YELLOW"],
-        "REAR": ["YELLOW"]
-      },
-
+      "base_defense": { "FRONT": ["YELLOW"], "FLANK_LEFT": ["YELLOW"], "FLANK_RIGHT": ["YELLOW"], "REAR": ["YELLOW"] },
       "attack": {
         "DIRECT_FIRE": {
-          "VEHICLE": {
-            "0-10": { "dice": [] }
-          },
+          "VEHICLE": { "0-10": { "dice": [] } },
           "INFANTRY": {
-            "0": { "dice": ["RED","RED","GREEN"] },
-            "1-3": { "dice": ["RED","RED","YELLOW"] },
-            "4-6": { "dice": ["RED","RED"] },
-            "7-10": { "dice": ["YELLOW","GREEN"] }
+            "0": { "dice": ["RED", "RED", "GREEN"] },
+            "1-3": { "dice": ["RED", "RED", "YELLOW"] },
+            "4-6": { "dice": ["RED", "RED"] },
+            "7-10": { "dice": ["YELLOW", "GREEN"] }
           }
         }
       },
-
-      "traits": [
-        "RIFLE_GRENADES",
-        "INDIRECT_FIRE",
-        "ATTACK_DIE_REROLL",
-        "REMOVE_WEAKEST_TERRAIN_DEFENSE"
-      ]
+      "traits": ["RIFLE_GRENADES", "INDIRECT_FIRE", "ATTACK_DIE_REROLL", "REMOVE_WEAKEST_TERRAIN_DEFENSE"]
     }
-
   }
 }

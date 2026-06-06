@@ -40,7 +40,7 @@ export function subscribeToGameState({
     const showMapNow = showMapRef.current;
 
     background.visible = showMapRef.current;
-    grid.visible = showGridRef.current;
+    grid.visible = showGridRef.current || showMapRef.current;
 
     background.removeChildren();
     grid.removeChildren();
@@ -58,7 +58,9 @@ export function subscribeToGameState({
       data.shape,
       showCoordsNow,
       data.hexes,
-      showMapNow
+      showMapNow,
+      data.map?.fortifications ?? [],
+      showGridRef.current
     );
 
     // ✅ UNITS

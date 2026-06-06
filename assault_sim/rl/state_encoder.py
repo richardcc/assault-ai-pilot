@@ -3,12 +3,130 @@ import numpy as np
 from assault_sim.rl.features.tactical_features import compute_tactical_features
 from assault_model.map.hex_utils import safe_hex_distance
 
+# -------------------------------------------------
+# MAP / TERRAIN FEATURE CONSTANTS
+# -------------------------------------------------
+TERRAIN_KEYS = [
+    "clear",
+    "water",
+    "light_forest",
+    "olive_vine_grove",
+    "brush",
+    "rocky",
+    "building_single",
+    "building_multi",
+]
+
+FORT_KEYS = [
+    "none",
+    "trench",
+    "bunker",
+    "casemate",
+    "gun_emplacement",
+    "barbed_wire",
+    "minefield",
+]
+
+
+def _one_hot(value: str, keys: list[str]):
+    vec = [0.0] * len(keys)
+    try:
+        idx = keys.index(value)
+        vec[idx] = 1.0
+    except ValueError:
+        pass
+    return vec
+
+
+def _terrain_name_of(state, q: int, r: int) -> str:
+    h = state.game_map.get_hex(q, r)
+    if h is None:
+        return "clear"
+    return str(h.get_terrain())
+
+
+def _fort_data_of(state, q: int, r: int):
+    get_data = getattr(state.game_map, "get_hex_fortification_data", None)
+    if callable(get_data):
+        data = get_data(q, r) or {}
+        ftype = str(data.get("type", "none")) if data else "none"
+        orient = data.get("orientation", None)
+        return ftype, orient
+    get_type = getattr(state.game_map, "get_hex_fortification", None)
+    if callable(get_type):
+        ftype = get_type(q, r) or "none"
+        return str(ftype), None
+    return "none", None
+
+
+def _encode_orientation_1_to_6(orientation):
+    if orientation is None:
+        return [0.0, 0.0]
+    try:
+        o = int(orientation)
+        if o < 1 or o > 6:
+            return [0.0, 0.0]
+        angle = (o - 1) * (2.0 * np.pi / 6.0)
+        return [float(np.cos(angle)), float(np.sin(angle))]
+    except Exception:
+        return [0.0, 0.0]
+
+
+def _local_map_features(state, center_q: int, center_r: int):
+    """
+    Compact local map summary around active unit.
+    """
+    ring_offsets = [
+        (+1, 0), (-1, 0), (0, +1), (0, -1), (+1, -1), (-1, +1),
+    ]
+    total = 0
+    rough = 0
+    blocked = 0
+    built = 0
+    fortified = 0
+
+    for dq, dr in ring_offsets:
+        q = center_q + dq
+        r = center_r + dr
+        h = state.game_map.get_hex(q, r)
+        if h is None:
+            continue
+        total += 1
+        t = str(h.get_terrain())
+        if t in ("light_forest", "olive_vine_grove", "brush", "rocky"):
+            rough += 1
+        if t == "water":
+            blocked += 1
+        if t in ("building_single", "building_multi"):
+            built += 1
+        ftype, _ = _fort_data_of(state, q, r)
+        if ftype != "none":
+            fortified += 1
+
+    denom = max(1, total)
+    return [
+        rough / denom,
+        blocked / denom,
+        built / denom,
+        fortified / denom,
+    ]
+
+
 # =================================================
 # NUMERIC STATE (USED BY RL)
 # =================================================
 def encode_state(state, unit=None, rl_side=None, max_turns=None):
 
     active = unit
+    if active is None and rl_side is not None:
+        # Fallback to first alive unit on RL side for global calls.
+        active = next(
+            (
+                u for u in (state.units or [])
+                if getattr(u, "alive", True) and u.side == rl_side and u.position is not None
+            ),
+            None,
+        )
 
     # -------------------------
     # BASIC FEATURES
@@ -122,6 +240,23 @@ def encode_state(state, unit=None, rl_side=None, max_turns=None):
         visible_enemy,
         enemy_dist,
     ]
+
+    # =================================================
+    # MAP AWARE FEATURES (terrain + fortifications)
+    # =================================================
+    if active is not None and active.position is not None:
+        aq, ar = active.position.q, active.position.r
+        terrain_here = _terrain_name_of(state, aq, ar)
+        fort_here, orient_here = _fort_data_of(state, aq, ar)
+        obs.extend(_one_hot(terrain_here, TERRAIN_KEYS))
+        obs.extend(_one_hot(fort_here if fort_here in FORT_KEYS else "none", FORT_KEYS))
+        obs.extend(_encode_orientation_1_to_6(orient_here))
+        obs.extend(_local_map_features(state, aq, ar))
+    else:
+        obs.extend([0.0] * len(TERRAIN_KEYS))
+        obs.extend([0.0] * len(FORT_KEYS))
+        obs.extend([0.0, 0.0])  # orientation cos/sin
+        obs.extend([0.0, 0.0, 0.0, 0.0])  # local map summary
 
     # =================================================
     # ✅ NEW: TACTICAL FEATURES (MODULAR)

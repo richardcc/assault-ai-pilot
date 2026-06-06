@@ -14,7 +14,7 @@ export function updateLayerVisibility(
   if (!background || !grid) return;
 
   background.visible = showMap;
-  grid.visible = showGrid;
+  grid.visible = showGrid || showMap;
 
   const data = lastStateRef.current;
   if (!data) return;
@@ -26,6 +26,8 @@ export function updateLayerVisibility(
     data.shape,
     showCoords,
     data.hexes,
-    showMap
+    showMap,
+    data.map?.fortifications ?? [],
+    showGrid
   );
 }

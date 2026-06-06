@@ -9,7 +9,7 @@
   "lr": 8e-05,
   "eval_interval": 200,
   "eval_min_improvement": 0.01,
-  "sb3_total_timesteps": 500000,
+  "sb3_total_timesteps": 1000000,
   "sb3_num_envs": 16,
   "sb3_n_steps": 2048,
   "sb3_batch_size": 1024,

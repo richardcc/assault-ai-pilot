@@ -7,6 +7,7 @@ from assault_model.map.hex_coord import HexCoord
 from assault_model.rules.movement_terrain_rules import MovementTerrainRules
 from assault_model.map.terrain_config import terrain_config
 from assault_model.map.hex_utils import neighbors as hex_neighbors
+from assault_model.rules.fortification_rules import FortificationRules
 
 
 def _is_vehicle(unit) -> bool:
@@ -97,6 +98,10 @@ class MovementRules:
                 enter_cost = terrain_config.get_move_cost(
                     tile.get_terrain(), move_type
                 )
+                fort_type = game_state.game_map.get_hex_fortification(nq, nr)
+                enter_cost = FortificationRules.movement_cost_for_fortification(
+                    fort_type, move_type, enter_cost
+                )
                 if enter_cost is None:
                     continue  # impasable para este tipo de movimiento
 
@@ -166,6 +171,10 @@ class MovementRules:
                 continue
 
             enter_cost = terrain_config.get_move_cost(tile.get_terrain(), move_type)
+            fort_type = game_state.game_map.get_hex_fortification(nq, nr)
+            enter_cost = FortificationRules.movement_cost_for_fortification(
+                fort_type, move_type, enter_cost
+            )
             if enter_cost is None:
                 continue
             if enter_cost > max_mp:

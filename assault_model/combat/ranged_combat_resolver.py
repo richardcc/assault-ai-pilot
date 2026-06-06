@@ -9,6 +9,7 @@ from assault_model.runtime.execution_context import ExecutionContext
 from assault_model.combat.battle_die import DiceResult
 from assault_model.combat.dice_comparison import compare_dice
 from assault_model.map.terrain_config import terrain_config
+from assault_model.rules.fortification_rules import FortificationRules
 
 from assault_model.actions.combat_mode import CombatMode
 
@@ -136,9 +137,11 @@ def resolve_ranged_combat(
     )
 
     # ---------------- DEFENSE ----------------
-    defense_colors = list(
+    defense_base = list(
         target.unit_type.get_defense_dice(sector=sector)
     )
+    defense_colors = list(defense_base)
+    terrain_bonus = []
 
     if game_map:
         hex_ = game_map.get_hex(target.position.q, target.position.r)
@@ -151,6 +154,28 @@ def resolve_ranged_combat(
                 los=(None if is_indirect else los)
             )
             defense_colors = terrain_mod.modify_defense(defense_colors)
+            terrain_bonus = defense_colors[len(defense_base):]
+            fort_type = game_map.get_hex_fortification(target.position.q, target.position.r)
+            fort_bonus = FortificationRules.defense_bonus(
+                fort_type=fort_type,
+                unit_category=target.unit_type.category.name,
+                sector=sector,
+            )
+            defense_colors += fort_bonus
+            _trace(
+                "FORTIFICATION_DEFENSE",
+                fort_type=fort_type,
+                sector=sector.name,
+                target=target.unit_id,
+                terrain=[d.name for d in terrain_bonus],
+                bonus=[d.name for d in fort_bonus],
+            )
+        else:
+            fort_type = None
+            fort_bonus = []
+    else:
+        fort_type = None
+        fort_bonus = []
 
     defense_results = DefenseDicePool(defense_colors).roll()
 
@@ -204,6 +229,16 @@ def resolve_ranged_combat(
                     "attack_sector": sector.name,
                     "los": los.name,
                     "attack_mode": getattr(action, "attack_mode", "DIRECT_FIRE"),
+                    "fortification": {
+                        "type": fort_type,
+                        "bonus_dice": [d.name for d in fort_bonus],
+                    },
+                    "defense_breakdown": {
+                        "sector": sector.name,
+                        "base_dice": [d.name for d in defense_base],
+                        "terrain_bonus_dice": [d.name for d in terrain_bonus],
+                        "fortification_bonus_dice": [d.name for d in fort_bonus],
+                    },
 
                     "attacker_attack_dice": [
                         {"color": d.color.name, "faces": [f.name for f in d.faces]}

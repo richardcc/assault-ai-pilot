@@ -2,6 +2,7 @@ from assault_model.map.hex_utils import safe_hex_distance
 from assault_model.map.hex_coord import HexCoord
 from assault_model.combat.line_of_sight import check_line_of_sight, LineOfSight
 from assault_model.map.combat_geometry import determine_attack_sector
+from assault_model.rules.fortification_rules import FortificationRules
 
 
 def _color_names(dice):
@@ -50,6 +51,9 @@ def _compute_combat_dice(attacker, target, distance, los, game_map):
 
     defense_base = list(target.unit_type.get_defense_dice(sector=sector))
     defense_mod = list(defense_base)
+    terrain_bonus = []
+    fort_bonus = []
+    fort_type = None
 
     hex_ = game_map.get_hex(target.position.q, target.position.r)
     if hex_:
@@ -59,6 +63,13 @@ def _compute_combat_dice(attacker, target, distance, los, game_map):
             target.unit_type.category.name,
         )
         defense_mod = defense_mod + list(terrain_bonus)
+        fort_type = game_map.get_hex_fortification(target.position.q, target.position.r)
+        fort_bonus = FortificationRules.defense_bonus(
+            fort_type=fort_type,
+            unit_category=target.unit_type.category.name,
+            sector=sector,
+        )
+        defense_mod = defense_mod + list(fort_bonus)
 
     # Indirect fire has no LOS line → no HINDERED defense die.
     hindered = (not is_indirect) and los == LineOfSight.HINDERED
@@ -73,8 +84,61 @@ def _compute_combat_dice(attacker, target, distance, los, game_map):
         "defense": {
             "base": _color_names(defense_base),
             "modified": _color_names(defense_mod),
+            "terrain_bonus": _color_names(terrain_bonus),
+            "fortification_bonus": _color_names(fort_bonus),
+            "fortification_type": fort_type,
         },
         "sector": getattr(sector, "name", str(sector)),
+        "suppressed": bool(getattr(attacker, "suppressed", False)),
+        "hindered": hindered,
+        "indirect": is_indirect,
+    }
+
+
+def _compute_empty_hex_dice_preview(attacker, target_q: int, target_r: int, distance: int, los, game_map):
+    """
+    Preview defense modifiers on an empty hex (no target unit present).
+
+    Convention:
+    - Show hex-based defensive environment as if an infantry target occupied it.
+    - No base defense dice (because there is no unit card).
+    """
+    terrain_config = game_map.terrain_config
+    attack_mode = attacker.unit_type._resolve_attack_mode(distance)
+    is_indirect = attack_mode == "INDIRECT_FIRE"
+
+    hex_ = game_map.get_hex(target_q, target_r)
+    if hex_ is None:
+        return None
+
+    terrain_name = hex_.get_terrain()
+    terrain_bonus = list(terrain_config.get_defense_dice(terrain_name, "INFANTRY"))
+    fort_type = game_map.get_hex_fortification(target_q, target_r)
+    # Sector is irrelevant without defender facing; use FRONT as stable preview convention.
+    fort_bonus = FortificationRules.defense_bonus(
+        fort_type=fort_type,
+        unit_category="INFANTRY",
+        sector=determine_attack_sector(attacker.position, HexCoord(target_q, target_r), "N"),
+    )
+
+    defense_mod = list(terrain_bonus) + list(fort_bonus)
+    hindered = (not is_indirect) and los == LineOfSight.HINDERED
+    if hindered:
+        defense_mod = defense_mod + ["GREEN"]
+
+    return {
+        "attack": {
+            "base": [],
+            "modified": [],
+        },
+        "defense": {
+            "base": [],
+            "modified": _color_names(defense_mod),
+            "terrain_bonus": _color_names(terrain_bonus),
+            "fortification_bonus": _color_names(fort_bonus),
+            "fortification_type": fort_type,
+        },
+        "sector": "PREVIEW_HEX",
         "suppressed": bool(getattr(attacker, "suppressed", False)),
         "hindered": hindered,
         "indirect": is_indirect,
@@ -165,6 +229,32 @@ def compute_targeting_info(game_state, attacker_id: str, target_q: int, target_r
         except Exception as e:
             print("[WARN][targeting] dice computation failed:", str(e))
             dice = None
+    else:
+        # Still provide terrain/fortification defense preview on empty hexes.
+        try:
+            dice = _compute_empty_hex_dice_preview(
+                attacker,
+                target_q,
+                target_r,
+                distance,
+                los,
+                game_state.game_map,
+            )
+        except Exception as e:
+            print("[WARN][targeting] empty-hex preview failed:", str(e))
+            dice = None
+
+    if dice is not None:
+        print(
+            "[FORT_HOVER_DEBUG]"
+            f" attacker={attacker.unit_id}"
+            f" target_hex=({target_q},{target_r})"
+            f" sector={dice.get('sector')}"
+            f" fort={dice.get('defense', {}).get('fortification_type')}"
+            f" fort_bonus={dice.get('defense', {}).get('fortification_bonus')}"
+            f" terrain_bonus={dice.get('defense', {}).get('terrain_bonus')}"
+            f" defense_final={dice.get('defense', {}).get('modified')}"
+        )
 
     # -------------------------------------------------
     # RETURN

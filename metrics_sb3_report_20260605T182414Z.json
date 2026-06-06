@@ -1,0 +1,59 @@
+{
+  "meta": {
+    "episodes": 100,
+    "timestamp": "2026-06-05T18:24:14.259301Z",
+    "model": "C:\\repos\\python\\assault\\models\\sb3_latest.zip",
+    "scenario": "phase01_seq001_initial_contact",
+    "vecnormalize_path": "C:\\repos\\python\\assault\\models\\sb3_vecnormalize.pkl",
+    "obs_normalized": true
+  },
+  "summary": {
+    "episodes": 100,
+    "win_rate": 0.72,
+    "draws": 34,
+    "avg_vp": 0,
+    "avg_steps": 76.72
+  },
+  "combat": {
+    "trade_mean": 0.5588904047294224,
+    "damage_ratio": 0.7010838562464347
+  },
+  "advanced": {
+    "good_trade_rate": 0.41951967296882986,
+    "bad_trade_rate": 0.5804803270311701,
+    "selectivity": 0.68827678871347,
+    "zero_dmg_rate": 0.5804803270311701
+  },
+  "policy_alignment": {
+    "forced_steps": 0,
+    "decisions": 4505,
+    "forced_ratio": 0.0,
+    "top_sampled_to_executed": {
+      "ATTACK->ATTACK": 2199,
+      "ADVANCE->ADVANCE": 1780,
+      "ATTACK->ADVANCE": 526
+    }
+  },
+  "action_execution": {
+    "RL": {
+      "MOVE": {
+        "count": 2306,
+        "damage_per_action": 0.0
+      },
+      "DIRECT": {
+        "count": 2199,
+        "damage_per_action": 0.5588904047294224
+      }
+    },
+    "ENEMY": {
+      "MOVE": {
+        "count": 562,
+        "damage_per_action": 0.0
+      },
+      "DIRECT": {
+        "count": 2605,
+        "damage_per_action": 0.672936660268714
+      }
+    }
+  }
+}

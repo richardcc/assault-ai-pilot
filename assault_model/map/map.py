@@ -27,6 +27,11 @@ class Map:
             Tuple[Tuple[int, int], Tuple[int, int]],
             HexEdgeFeature,
         ] = {}
+        # Optional per-hex fortifications (scenario-driven overlays).
+        # Stored as metadata dict, e.g.:
+        # {"type":"trench","vertex_start":1,"vertex_end":2}
+        # Vertex convention: 1=N and clockwise.
+        self.hex_fortifications: Dict[Tuple[int, int], Dict[str, object]] = {}
 
     # ---------------------------------------------------------
     # Hex retrieval
@@ -79,3 +84,29 @@ class Map:
         Retrieve the feature located on the edge between two hexes, if any.
         """
         return self.hex_edges.get((a, b))
+
+    # ---------------------------------------------------------
+    # Hex fortification handling
+    # ---------------------------------------------------------
+    def add_hex_fortification(
+        self,
+        q: int,
+        r: int,
+        fort_type: str,
+        vertex_start: int | None = None,
+        vertex_end: int | None = None,
+    ) -> None:
+        self.hex_fortifications[(q, r)] = {
+            "type": fort_type,
+            "vertex_start": vertex_start,
+            "vertex_end": vertex_end,
+        }
+
+    def get_hex_fortification(self, q: int, r: int) -> Optional[str]:
+        data = self.hex_fortifications.get((q, r))
+        if not data:
+            return None
+        return data.get("type")  # backward-compatible API
+
+    def get_hex_fortification_data(self, q: int, r: int) -> Optional[Dict[str, object]]:
+        return self.hex_fortifications.get((q, r))
