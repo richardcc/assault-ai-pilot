@@ -9,6 +9,23 @@ from assault_sim.config.train_config import load_train_config
 from assault_sim.envs.gym_assault_env import GymAssaultEnv
 
 
+def _scenario_sides(repo_root: Path, scenario_id: str) -> set[str]:
+    scenario_path = repo_root / "assault_sim" / "assets" / "scenarios" / f"{scenario_id}.json"
+    if not scenario_path.exists():
+        return set()
+    try:
+        with open(scenario_path, "r", encoding="utf-8") as f:
+            payload = json.load(f)
+    except Exception:
+        return set()
+    units = payload.get("units", [])
+    return {
+        str(u.get("side", "")).upper()
+        for u in units
+        if isinstance(u, dict) and u.get("side")
+    }
+
+
 def main():
     try:
         from stable_baselines3 import PPO
@@ -60,6 +77,13 @@ def main():
             scenario_id = phase.id
             phase_timesteps = int(phase.episodes * cfg.sb3_max_decisions)
             if phase_timesteps <= 0:
+                continue
+            sides_in_scenario = _scenario_sides(repo_root, scenario_id)
+            if rl_side not in sides_in_scenario:
+                print(
+                    f"⚠️ SKIP PHASE side={rl_side} scenario={scenario_id}: "
+                    f"side not present in scenario units (found={sorted(sides_in_scenario)})"
+                )
                 continue
 
             print(

@@ -19,6 +19,7 @@ export class GameController {
   private aiLoopToken = 0;
   private aiLoopTimer: ReturnType<typeof setTimeout> | null = null;
   private startRequestToken = 0;
+  private aiTurnInFlight = false;
 
   // ✅ NUEVO: referencia al highlight layer
   private highlightLayer: any = null;
@@ -196,6 +197,7 @@ export class GameController {
   // ----------------------------------
   private stopLoop() {
     this.aiLoopToken += 1;
+    this.aiTurnInFlight = false;
     if (this.aiLoopTimer) {
       clearTimeout(this.aiLoopTimer);
       this.aiLoopTimer = null;
@@ -232,11 +234,17 @@ export class GameController {
 
       // ✅ solo ejecuta si el lado es IA
       if (data?.sides?.[activeSide] !== "ai") {
-        this.scheduleLoop(loop, 500);
+        this.scheduleLoop(loop, 1200);
+        return;
+      }
+
+      if (this.aiTurnInFlight) {
+        this.scheduleLoop(loop, 400);
         return;
       }
 
       console.log("🤖 CALLING BACKEND AI TURN");
+      this.aiTurnInFlight = true;
 
       try {
 
@@ -245,31 +253,43 @@ export class GameController {
         });
 
         const result = await res.json();
-        (window as any).onAIOrders?.(result.steps);
+        if (result?.state) {
+          // Keep controller state in sync immediately; relying only on WS can
+          // cause stale active_side and trigger extra ai-turn calls.
+          this.updateState(result.state);
+        }
+
+        const rawSteps = Array.isArray(result?.steps) ? result.steps : [];
+        const steps = rawSteps.length > 0 ? [rawSteps[0]] : [];
+        (window as any).onAIOrders?.(steps);
 
         // Log AI combat results to the System Log (the websocket MAP_STATE
         // payload does not carry last_events, so do it from the ai-turn result).
         logCombatEvents(result.state?.last_events, result.state?.units || []);
 
         // ✅ NUEVO: render visual de acciones IA
-        if (result.steps && this.highlightLayer) {
+        if (steps.length > 0 && this.highlightLayer) {
 
-          for (let i = 0; i < result.steps.length; i++) {
+          for (let i = 0; i < steps.length; i++) {
 
-            const step = result.steps[i];
+            const step = steps[i];
 
             setTimeout(() => {
               this.highlightLayer.highlightAction(step, this.state);
             }, i * 400); // delay animado
           }
         }
+        const hasAiStep = steps.length > 0;
+        this.aiTurnInFlight = false;
+        this.scheduleLoop(loop, hasAiStep ? 1100 : 1800);
+        return;
 
       } catch (e) {
         console.error("❌ AI turn error", e);
+        this.aiTurnInFlight = false;
+        this.scheduleLoop(loop, 1800);
+        return;
       }
-
-      // ✅ dejar tiempo a websocket
-      this.scheduleLoop(loop, 800);
     };
 
     loop();

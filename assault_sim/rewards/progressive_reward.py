@@ -155,6 +155,16 @@ class ProgressiveReward(BaseReward):
         # =================================================
         # ✅ OBJECTIVES (VP)
         # =================================================
+        objective_rule_active = bool(info.get("objective_rule_active", False))
+        objective_tracked_side = str(info.get("objective_tracked_side") or "").upper()
+        objective_delta = int(info.get("objective_captured_delta", 0))
+        if objective_rule_active and objective_tracked_side:
+            # If RL trains the tracked side, reward captures; otherwise reward denying captures.
+            if str(self.rl_side).upper() == objective_tracked_side:
+                reward += objective_delta * self.cfg.vp_delta_weight
+            else:
+                reward -= objective_delta * self.cfg.vp_delta_weight
+
         if hasattr(state, "vp_tracker") and state.vp_tracker:
             if hasattr(next_state, "vp_tracker") and next_state.vp_tracker:
                 side_to_ownership_prev = getattr(state, "side_to_ownership", {}) or {}
@@ -184,6 +194,15 @@ class ProgressiveReward(BaseReward):
                 reward += self.cfg.win_bonus
             elif winner is not None:
                 reward -= self.cfg.lose_penalty
+
+            if objective_rule_active and objective_tracked_side:
+                # Terminal shaping aligned with objective-outcome winner.
+                if winner is None:
+                    reward += 0.0
+                elif str(self.rl_side).upper() == str(winner).upper():
+                    reward += self.cfg.win_bonus * 0.5
+                else:
+                    reward -= self.cfg.lose_penalty * 0.5
 
         # =================================================
         # ✅ TIME PENALTY

@@ -130,6 +130,27 @@ def _resolve_vecnorm_path_for_side(repo_root: Path, rl_side: str) -> Path | None
     return next((p for p in candidates if p.exists()), None)
 
 
+def _scenario_sides(repo_root: Path, scenario_id: str) -> set[str]:
+    scenario_path = repo_root / "assault_sim" / "assets" / "scenarios" / f"{scenario_id}.json"
+    if not scenario_path.exists():
+        return set()
+    try:
+        with open(scenario_path, "r", encoding="utf-8") as f:
+            payload = json.load(f)
+    except Exception:
+        return set()
+    units = payload.get("units", [])
+    return {
+        str(u.get("side", "")).upper()
+        for u in units
+        if isinstance(u, dict) and u.get("side")
+    }
+
+
+def _safe_name(value: str) -> str:
+    return "".join(ch if (ch.isalnum() or ch in ("-", "_")) else "_" for ch in value)
+
+
 def evaluate_sb3(episodes: int = 100):
     try:
         from stable_baselines3 import PPO
@@ -143,13 +164,14 @@ def evaluate_sb3(episodes: int = 100):
     repo_root = Path(__file__).resolve().parents[2]
     train_config_path = repo_root / "assault_sim" / "config" / "train_config.json"
     cfg = load_train_config(train_config_path)
-    scenario = cfg.scenario
+    scenario_schedule = list(cfg.scenario_schedule)
     rl_sides = list(cfg.rl_sides)
     if not rl_sides:
         rl_sides = [PPOConfig.RL_SIDE]
 
-    all_reports = {}
+    all_reports: dict[str, dict[str, dict]] = {}
     all_models = {}
+    comparison_rows = []
 
     for rl_side in rl_sides:
         model_path = _resolve_model_path_for_side(repo_root, rl_side)
@@ -158,95 +180,146 @@ def evaluate_sb3(episodes: int = 100):
             continue
 
         vecnorm_path = _resolve_vecnorm_path_for_side(repo_root, rl_side)
-        env = make_env(
-            config_path=repo_root / "assault_sim" / "config" / "sim_config.yaml",
-            env_config_path=repo_root / "assault_sim" / "config" / "env_config.json",
-            rl_side=rl_side,
-            scenario=scenario,
-            reward_fn=ShapedReward(rl_side=rl_side),
-            seed=PPOConfig.SEED,
-        )
-
         model = PPO.load(str(model_path), device="cpu")
-        obs_normalizer = None
-        if vecnorm_path is not None and vecnorm_path.exists():
-            try:
-                from assault_sim.envs.gym_assault_env import GymAssaultEnv
-
-                def make_norm_env():
-                    return Monitor(
-                        GymAssaultEnv(
-                            scenario=scenario,
-                            rl_side=rl_side,
-                            seed=PPOConfig.SEED,
-                        )
-                    )
-
-                norm_env = DummyVecEnv([make_norm_env])
-                vecnorm = VecNormalize.load(str(vecnorm_path), norm_env)
-                vecnorm.training = False
-                vecnorm.norm_reward = False
-
-                def _normalize_obs(obs):
-                    arr = np.asarray(obs, dtype=np.float32)
-                    return vecnorm.normalize_obs(arr.reshape(1, -1))[0]
-
-                obs_normalizer = _normalize_obs
-                print(f"Loaded VecNormalize stats for {rl_side}: {vecnorm_path}")
-            except Exception as e:
-                print(f"⚠️ Could not load VecNormalize stats ({rl_side}), continuing without normalization: {e}")
-        else:
-            print(f"⚠️ VecNormalize stats not found for {rl_side}, evaluating without obs normalization")
-
-        controller = SB3EvalController(model, rl_side, env.sim, obs_normalizer=obs_normalizer)
-        evaluator = Evaluator(
-            env=env,
-            rl_controller=controller,
-            enemy_controller=None,
-            rl_side=rl_side,
-        )
-        results = evaluator.evaluate(episodes)
-
-        analyzer = ResultsAnalyzer(results, rl_side)
-        analyzer.print_report()
-
-        dashboard = EvalDashboard()
-        for r in results:
-            dashboard.add_episode(r)
-        dashboard.save_csv(f"metrics_sb3_{rl_side}.csv")
-
-        side_report = {
-            "meta": {
-                "episodes": episodes,
-                "timestamp": datetime.utcnow().isoformat() + "Z",
-                "model": str(model_path),
-                "scenario": scenario,
-                "rl_side": rl_side,
-                "vecnormalize_path": str(vecnorm_path) if vecnorm_path is not None and vecnorm_path.exists() else None,
-                "obs_normalized": bool(obs_normalizer is not None),
-            },
-            "summary": analyzer.summary(),
-            "combat": analyzer.combat_metrics(),
-            "advanced": analyzer.advanced_metrics(),
-            "policy_alignment": analyzer.policy_alignment(),
-            "action_execution": analyzer.action_execution(),
-        }
-        all_reports[rl_side] = side_report
+        all_reports[rl_side] = {}
         all_models[rl_side] = str(model_path)
+
+        for phase in scenario_schedule:
+            scenario = phase.id
+            sides_in_scenario = _scenario_sides(repo_root, scenario)
+            if rl_side not in sides_in_scenario:
+                print(
+                    f"⚠️ Skip eval side={rl_side} scenario={scenario}: "
+                    f"side not present in scenario units (found={sorted(sides_in_scenario)})"
+                )
+                continue
+
+            print(f"\n=== EVAL side={rl_side} scenario={scenario} episodes={episodes} ===")
+            env = make_env(
+                config_path=repo_root / "assault_sim" / "config" / "sim_config.yaml",
+                env_config_path=repo_root / "assault_sim" / "config" / "env_config.json",
+                rl_side=rl_side,
+                scenario=scenario,
+                reward_fn=ShapedReward(rl_side=rl_side),
+                seed=PPOConfig.SEED,
+            )
+
+            obs_normalizer = None
+            if vecnorm_path is not None and vecnorm_path.exists():
+                try:
+                    from assault_sim.envs.gym_assault_env import GymAssaultEnv
+
+                    def make_norm_env():
+                        return Monitor(
+                            GymAssaultEnv(
+                                scenario=scenario,
+                                rl_side=rl_side,
+                                seed=PPOConfig.SEED,
+                            )
+                        )
+
+                    norm_env = DummyVecEnv([make_norm_env])
+                    vecnorm = VecNormalize.load(str(vecnorm_path), norm_env)
+                    vecnorm.training = False
+                    vecnorm.norm_reward = False
+
+                    def _normalize_obs(obs):
+                        arr = np.asarray(obs, dtype=np.float32)
+                        return vecnorm.normalize_obs(arr.reshape(1, -1))[0]
+
+                    obs_normalizer = _normalize_obs
+                    print(f"Loaded VecNormalize stats for {rl_side}: {vecnorm_path}")
+                except Exception as e:
+                    print(f"⚠️ Could not load VecNormalize stats ({rl_side}), continuing without normalization: {e}")
+            else:
+                print(f"⚠️ VecNormalize stats not found for {rl_side}, evaluating without obs normalization")
+
+            controller = SB3EvalController(model, rl_side, env.sim, obs_normalizer=obs_normalizer)
+            evaluator = Evaluator(
+                env=env,
+                rl_controller=controller,
+                enemy_controller=None,
+                rl_side=rl_side,
+            )
+            results = evaluator.evaluate(episodes)
+
+            analyzer = ResultsAnalyzer(results, rl_side)
+            analyzer.print_report()
+
+            dashboard = EvalDashboard()
+            for r in results:
+                dashboard.add_episode(r)
+            csv_name = f"metrics_sb3_{_safe_name(rl_side)}_{_safe_name(scenario)}.csv"
+            dashboard.save_csv(csv_name)
+
+            side_report = {
+                "meta": {
+                    "episodes": episodes,
+                    "timestamp": datetime.utcnow().isoformat() + "Z",
+                    "model": str(model_path),
+                    "scenario": scenario,
+                    "rl_side": rl_side,
+                    "vecnormalize_path": str(vecnorm_path) if vecnorm_path is not None and vecnorm_path.exists() else None,
+                    "obs_normalized": bool(obs_normalizer is not None),
+                    "csv": csv_name,
+                },
+                "summary": analyzer.summary(),
+                "combat": analyzer.combat_metrics(),
+                "advanced": analyzer.advanced_metrics(),
+                "policy_alignment": analyzer.policy_alignment(),
+                "action_execution": analyzer.action_execution(),
+            }
+            all_reports[rl_side][scenario] = side_report
+            comparison_rows.append({
+                "rl_side": rl_side,
+                "scenario": scenario,
+                "episodes": side_report["summary"].get("episodes", 0),
+                "win_rate": side_report["summary"].get("win_rate", 0.0),
+                "draws": side_report["summary"].get("draws", 0),
+                "avg_vp": side_report["summary"].get("avg_vp", 0.0),
+                "avg_steps": side_report["summary"].get("avg_steps", 0.0),
+                "end_reason_counts": side_report["summary"].get("end_reason_counts", {}),
+                "win_rate_by_end_reason": side_report["summary"].get("win_rate_by_end_reason", {}),
+                "trade_mean": side_report["combat"].get("trade_mean", 0.0),
+                "damage_ratio": side_report["combat"].get("damage_ratio", 0.0),
+            })
 
     if not all_reports:
         raise SystemExit("No SB3 model found for any configured side.")
+
+    print("\n=== COMPARATIVE SUMMARY (SIDE x SCENARIO) ===")
+    if not comparison_rows:
+        print("(no valid side/scenario combinations evaluated)")
+    else:
+        for row in comparison_rows:
+            reason_counts = row.get("end_reason_counts", {})
+            reason_rates = row.get("win_rate_by_end_reason", {})
+            reasons_str = ", ".join(
+                f"{reason}:{reason_rates.get(reason, 0.0):.2f} ({count})"
+                for reason, count in reason_counts.items()
+            ) or "-"
+            print(
+                f"side={row['rl_side']} scenario={row['scenario']} "
+                f"win_rate={row['win_rate']:.3f} avg_vp={row['avg_vp']:.3f} "
+                f"avg_steps={row['avg_steps']:.1f} trade_mean={row['trade_mean']:.3f} "
+                f"damage_ratio={row['damage_ratio']:.3f} draws={row['draws']} "
+                f"reasons=[{reasons_str}]"
+            )
 
     report = {
         "meta": {
             "episodes": episodes,
             "timestamp": datetime.utcnow().isoformat() + "Z",
-            "scenario": scenario,
+            "scenario_schedule": [
+                {"id": p.id, "episodes": p.episodes}
+                for p in scenario_schedule
+            ],
             "rl_sides": rl_sides,
             "models": all_models,
             "train_config_path": str(train_config_path),
         },
-        "by_side": all_reports,
+        "by_side_and_scenario": all_reports,
+        "comparison": comparison_rows,
     }
     out_name = f"metrics_sb3_report_{datetime.utcnow().strftime('%Y%m%dT%H%M%SZ')}.json"
     with open(out_name, "w", encoding="utf-8") as f:

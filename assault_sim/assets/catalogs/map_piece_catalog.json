@@ -57,7 +57,7 @@
         { "q": 4, "r": 7, "terrain": "building_single" },
         { "q": 7, "r": 7, "terrain": "building_single" },
         { "q": 8, "r": 2, "terrain": "heavy_forest" },
-        { "q": 1, "r": 4, "terrain": "rocky" },
+        { "q": 1, "r": 3, "terrain": "rocky" },
         { "q": 0, "r": 5, "terrain": "brush" },
         { "q": 3, "r": 0, "terrain": "olive_vine_grove" },
         { "q": 0, "r": 1, "terrain": "olive_vine_grove" },

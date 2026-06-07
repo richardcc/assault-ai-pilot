@@ -76,6 +76,21 @@ class TrainingEnv:
 
         self._vp_hexes = set()
 
+    def _objectives_captured_for_side(self, state, side: str) -> int:
+        if state is None or not side:
+            return 0
+        points = getattr(getattr(state, "victory", None), "points", []) or []
+        side_to_ownership = getattr(state, "side_to_ownership", {}) or {}
+        ownership = side_to_ownership.get(str(side).upper())
+        if ownership is None:
+            return 0
+        captured = 0
+        for vp in points:
+            hs = state.hex_states.get(vp.hex_coords)
+            if hs is not None and hs.ownership == ownership:
+                captured += 1
+        return captured
+
     # -------------------------------------------------
     @property
     def state(self):
@@ -110,6 +125,7 @@ class TrainingEnv:
             unit=None,
             rl_side=self.rl_side,
             max_turns=self.sim.scenario.max_turns,
+            scenario=self.sim.scenario,
         )
 
     # -------------------------------------------------
@@ -137,6 +153,19 @@ class TrainingEnv:
         # -------------------------------------------------
         hp_before = {u.unit_id: u.hp for u in state.units}
         alive_before = {u.unit_id: u.alive for u in state.units}
+        objective_cfg = getattr(self.sim.scenario, "victory_outcomes", None) or {}
+        tracked_side = str(objective_cfg.get("tracked_side", "")).strip().upper()
+        objective_rule_active = (
+            str(objective_cfg.get("metric", "")).strip() == "objectives_captured"
+            and str(objective_cfg.get("timing", "")).strip() == "end_of_last_turn"
+            and bool(objective_cfg.get("table"))
+            and bool(tracked_side)
+        )
+        captured_before = (
+            self._objectives_captured_for_side(state, tracked_side)
+            if objective_rule_active
+            else 0
+        )
 
         # -------------------------------------------------
         # STEP
@@ -203,6 +232,11 @@ class TrainingEnv:
         # -------------------------------------------------
         hp_after = {u.unit_id: u.hp for u in next_state.units}
         alive_after = {u.unit_id: u.alive for u in next_state.units}
+        captured_after = (
+            self._objectives_captured_for_side(next_state, tracked_side)
+            if objective_rule_active
+            else 0
+        )
 
         # -------------------------------------------------
         # DAMAGE & KILLS
@@ -295,6 +329,11 @@ class TrainingEnv:
             done = True
 
         info["done"] = done
+        info["objective_rule_active"] = objective_rule_active
+        info["objective_tracked_side"] = tracked_side if objective_rule_active else None
+        info["objective_captured_before"] = captured_before
+        info["objective_captured_after"] = captured_after
+        info["objective_captured_delta"] = captured_after - captured_before
 
         return (
             encode_state(
@@ -302,6 +341,7 @@ class TrainingEnv:
                 unit=None,
                 rl_side=self.rl_side,
                 max_turns=self.sim.scenario.max_turns,
+                scenario=self.sim.scenario,
             ),
             reward,
             done,

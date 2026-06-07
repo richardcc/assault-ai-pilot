@@ -1,0 +1,136 @@
+{
+  "meta": {
+    "episodes": 100,
+    "timestamp": "2026-06-07T16:04:18.681205Z",
+    "scenario": "mettete_i_piedi_terra_1",
+    "rl_sides": [
+      "US",
+      "IT"
+    ],
+    "models": {
+      "US": "C:\\repos\\python\\assault\\models\\sb3_latest_US.zip",
+      "IT": "C:\\repos\\python\\assault\\models\\sb3_latest.zip"
+    },
+    "train_config_path": "C:\\repos\\python\\assault\\assault_sim\\config\\train_config.json"
+  },
+  "by_side": {
+    "US": {
+      "meta": {
+        "episodes": 100,
+        "timestamp": "2026-06-07T16:04:15.787769Z",
+        "model": "C:\\repos\\python\\assault\\models\\sb3_latest_US.zip",
+        "scenario": "mettete_i_piedi_terra_1",
+        "rl_side": "US",
+        "vecnormalize_path": "C:\\repos\\python\\assault\\models\\sb3_vecnormalize_US.pkl",
+        "obs_normalized": true
+      },
+      "summary": {
+        "episodes": 100,
+        "win_rate": 0.36,
+        "draws": 52,
+        "avg_vp": 0,
+        "avg_steps": 88.12
+      },
+      "combat": {
+        "trade_mean": 0.3937238493723849,
+        "damage_ratio": 0.4502392344497608
+      },
+      "advanced": {
+        "good_trade_rate": 0.3312007874015748,
+        "bad_trade_rate": 0.6687992125984252,
+        "selectivity": 0.712130356065178,
+        "zero_dmg_rate": 0.6687992125984252
+      },
+      "policy_alignment": {
+        "forced_steps": 0,
+        "decisions": 4461,
+        "forced_ratio": 0.0,
+        "top_sampled_to_executed": {
+          "HOLD->ATTACK": 1843,
+          "HOLD->HOLD": 1127,
+          "ADVANCE->ADVANCE": 869,
+          "ATTACK->ATTACK": 547,
+          "ATTACK->ADVANCE": 51,
+          "FLANK->FLANK": 24
+        }
+      },
+      "action_execution": {
+        "RL": {
+          "MOVE": {
+            "count": 944,
+            "damage_per_action": 0.0
+          },
+          "WAIT": {
+            "count": 1127,
+            "damage_per_action": 0.0
+          },
+          "DIRECT": {
+            "count": 2390,
+            "damage_per_action": 0.3937238493723849
+          }
+        },
+        "ENEMY": {
+          "MOVE": {
+            "count": 978,
+            "damage_per_action": 0.0
+          },
+          "DIRECT": {
+            "count": 2981,
+            "damage_per_action": 0.7011070110701108
+          },
+          "WAIT": {
+            "count": 392,
+            "damage_per_action": 0.0
+          }
+        }
+      }
+    },
+    "IT": {
+      "meta": {
+        "episodes": 100,
+        "timestamp": "2026-06-07T16:04:18.680203Z",
+        "model": "C:\\repos\\python\\assault\\models\\sb3_latest.zip",
+        "scenario": "mettete_i_piedi_terra_1",
+        "rl_side": "IT",
+        "vecnormalize_path": "C:\\repos\\python\\assault\\models\\sb3_vecnormalize.pkl",
+        "obs_normalized": true
+      },
+      "summary": {
+        "episodes": 100,
+        "win_rate": 0.385,
+        "draws": 77,
+        "avg_vp": 0,
+        "avg_steps": 81.01
+      },
+      "combat": {
+        "trade_mean": 0.0,
+        "damage_ratio": 0.0
+      },
+      "advanced": {
+        "good_trade_rate": 0.0,
+        "bad_trade_rate": 1.0,
+        "selectivity": 0.0,
+        "zero_dmg_rate": 1.0
+      },
+      "policy_alignment": {
+        "forced_steps": 0,
+        "decisions": 0,
+        "forced_ratio": 0.0,
+        "top_sampled_to_executed": {}
+      },
+      "action_execution": {
+        "RL": {},
+        "ENEMY": {
+          "MOVE": {
+            "count": 1447,
+            "damage_per_action": 0.0
+          },
+          "DIRECT": {
+            "count": 6654,
+            "damage_per_action": 0.43763149984971444
+          }
+        }
+      }
+    }
+  }
+}

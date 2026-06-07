@@ -30,19 +30,29 @@ class ResultsAnalyzer:
 
         vp_list = []
         steps_list = []
+        reason_counts = defaultdict(int)
+        win_by_reason = defaultdict(float)
 
         for r in self.results:
 
             winner = r.get("winner")
+            reason = str(r.get("end_reason") or "unknown")
+            reason_counts[reason] += 1
 
             if winner == self.rl_side:
                 wins += 1
+                win_by_reason[reason] += 1
             elif winner is None:
                 wins += 0.5
                 draws += 1
+                win_by_reason[reason] += 0.5
 
             vp_list.append(r.get("vp", 0))
             steps_list.append(r.get("steps", 0))
+
+        reason_win_rate = {}
+        for reason, count in reason_counts.items():
+            reason_win_rate[reason] = win_by_reason[reason] / max(1, count)
 
         return {
             "episodes": len(self.results),
@@ -50,7 +60,18 @@ class ResultsAnalyzer:
             "draws": draws,
             "avg_vp": statistics.mean(vp_list) if vp_list else 0,
             "avg_steps": statistics.mean(steps_list) if steps_list else 0,
+            "end_reason_counts": dict(reason_counts),
+            "win_rate_by_end_reason": reason_win_rate,
+            "victory_level_counts": self.victory_level_counts(),
         }
+
+    def victory_level_counts(self):
+        counts = defaultdict(int)
+        for r in self.results:
+            lvl = r.get("victory_level") or {}
+            label = str(lvl.get("result") or "UNKNOWN")
+            counts[label] += 1
+        return dict(counts)
 
     # -------------------------------------------------
     # COMBAT
@@ -215,7 +236,15 @@ class ResultsAnalyzer:
     def print_report(self):
 
         print("\n=== GLOBAL ===")
-        print(self.summary())
+        summary = self.summary()
+        print(summary)
+        print("\n--- WIN RATE BY END REASON ---")
+        for reason, rate in summary.get("win_rate_by_end_reason", {}).items():
+            count = summary.get("end_reason_counts", {}).get(reason, 0)
+            print(f"{reason}: win_rate={rate:.3f} episodes={count}")
+        print("\n--- VICTORY LEVEL COUNTS ---")
+        for label, count in summary.get("victory_level_counts", {}).items():
+            print(f"{label}: {count}")
 
         print("\n=== COMBAT ===")
         print(self.combat_metrics())

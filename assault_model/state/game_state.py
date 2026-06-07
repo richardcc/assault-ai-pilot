@@ -135,6 +135,9 @@ class GameState:
     def recalculate_hex_control(self) -> None:
 
         units_by_hex: Dict[tuple[int, int], set[str]] = {}
+        vp_hexes = set()
+        if self.victory:
+            vp_hexes = {vp.hex_coords for vp in self.victory.points}
 
         for unit in self.units:
             if not unit.alive or not unit.position:
@@ -159,7 +162,9 @@ class GameState:
                 hex_state.contested = True
 
             else:
-                hex_state.ownership = HexOwnership.NONE
+                # VP control persists until another side occupies the hex.
+                if coords not in vp_hexes:
+                    hex_state.ownership = HexOwnership.NONE
                 hex_state.contested = False
 
     def _apply_initial_vp_control_on_start(self) -> None:

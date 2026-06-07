@@ -31,6 +31,7 @@ function App() {
   const [selectedUnitId, setSelectedUnitId] = useState<string | null>(null);
   const [hoveredTargetId, setHoveredTargetId] = useState<string | null>(null);
   const [availableMoves, setAvailableMoves] = useState<any[]>([]);
+  const [attackHint, setAttackHint] = useState<string | null>(null);
   const [logEvents, setLogEvents] = useState<LogEntry[]>([]);
   const [activeMode, setActiveMode] = useState<string | null>(null);
   const [scenarioList, setScenarioList] = useState<string[]>([]);
@@ -57,6 +58,7 @@ function App() {
     setSelectedUnitId(null);
     setHoveredTargetId(null);
     setAvailableMoves([]);
+    setAttackHint(null);
     prevUnitsRef.current = null;
   };
 
@@ -172,6 +174,19 @@ function App() {
     }
   }, [gameData]);
 
+  // If active side is not human, clear any stale human selection/orders.
+  useEffect(() => {
+    if (!gameData) return;
+    const activeSide = gameData.active_side;
+    const isHumanTurn = gameData?.sides?.[activeSide] === "human";
+    if (!isHumanTurn) {
+      setSelectedUnitId(null);
+      setAvailableMoves([]);
+      setHoveredTargetId(null);
+      setAttackHint(null);
+    }
+  }, [gameData?.active_side, gameData?.sides]);
+
   // Log selections automatically
   useEffect(() => {
     if (selectedUnitId) {
@@ -187,6 +202,26 @@ function App() {
   useEffect(() => {
     logCombatEvents(gameData?.last_events, gameData?.units || []);
   }, [gameData]);
+
+  // Log VP ownership changes.
+  useEffect(() => {
+    const events = gameData?.last_events || [];
+    for (const event of events) {
+      if (event?.type !== "VP_CAPTURED") continue;
+      const p = event.payload || {};
+      const coords =
+        p.q != null && p.r != null
+          ? formatCoords(Number(p.q), Number(p.r))
+          : "[?]";
+      const newOwner = p.new_owner || "NONE";
+      const prevOwner = p.previous_owner || "NONE";
+      const value = Number(p.value || 0);
+      addLog(
+        "turn",
+        `🏁 VP ${coords} ${prevOwner} -> ${newOwner} (+${value})`
+      );
+    }
+  }, [gameData?.last_events]);
 
   // Keep dead units visible in the roster even if they disappear from the map state
   useEffect(() => {
@@ -350,6 +385,40 @@ function App() {
           <div style={{ display: "flex", gap: "20px", fontFamily: "var(--font-tech)", fontSize: "14px", letterSpacing: "1px" }}>
             <div>SCENARIO: <span style={{ color: "var(--neon-cyan)" }}>{(gameData.scenario_name || "Initial Contact").toUpperCase()}</span></div>
             <div>TURN: <span style={{ color: "var(--neon-cyan)" }}>{gameData.turn}</span></div>
+            <div>
+              VICTORY:
+              <span style={{ color: "var(--neon-cyan)", marginLeft: 6 }}>
+                Elimination / MaxTurns by VP
+              </span>
+            </div>
+            <div>
+              VPs:
+              <span style={{ color: "var(--neon-cyan)", marginLeft: 6 }}>
+                {Object.entries(gameData?.vp_score_live || {})
+                  .map(([sideId, score]) => `${sideId} ${score}`)
+                  .join(" | ") || "-"}
+              </span>
+            </div>
+            {gameData?.victory_outcome && (
+              <div>
+                OBJECTIVES:
+                <span style={{ color: "var(--neon-cyan)", marginLeft: 6 }}>
+                  {gameData.victory_outcome.tracked_side} {gameData.victory_outcome.captured}/
+                  {gameData.victory_outcome.objectives_total}
+                  {gameData.victory_outcome?.outcome?.result
+                    ? ` (${gameData.victory_outcome.outcome.result})`
+                    : ""}
+                </span>
+              </div>
+            )}
+            {gameData?.done && (
+              <div>
+                RESULT:
+                <span style={{ color: "var(--neon-green)", marginLeft: 6 }}>
+                  {gameData?.winner ? `${gameData.winner} wins` : "Draw"} ({gameData?.end_reason || "completed"})
+                </span>
+              </div>
+            )}
             <div style={{
               color: gameData.sides?.[gameData.active_side] === "human" ? "var(--neon-green)" : "var(--neon-orange)"
             }}>
@@ -475,9 +544,26 @@ function App() {
               <DispatchedOrdersPanel
                 availableMoves={availableMoves}
                 selectedUnitId={selectedUnitId}
+                isHumanTurn={gameData?.sides?.[gameData?.active_side] === "human"}
                 onHoverOrder={(order) => setHoveredTargetId(resolveOrderTargetId(order))}
                 onLeaveOrder={() => setHoveredTargetId(null)}
               />
+              {attackHint && (
+                <div
+                  style={{
+                    marginTop: 8,
+                    padding: "8px 10px",
+                    fontSize: 11,
+                    border: "1px solid rgba(255, 80, 80, 0.35)",
+                    background: "rgba(255, 60, 60, 0.12)",
+                    color: "#ffd6d6",
+                    borderRadius: 6,
+                    fontFamily: "var(--font-mono)",
+                  }}
+                >
+                  {attackHint}
+                </div>
+              )}
             </div>
           ) : (
             /* Radar scanning placeholder when no target is locked */
@@ -502,6 +588,7 @@ function App() {
             setSelectedUnitId={setSelectedUnitId}
             availableMoves={availableMoves}
             setAvailableMoves={setAvailableMoves}
+            setAttackHint={setAttackHint}
           />
         </div>
 

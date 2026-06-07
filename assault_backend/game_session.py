@@ -63,9 +63,9 @@ class GameSession:
         self.last_events = []
         if self.env.event_bus:
             def on_event(event):
-                # ✅ Only collect ACTION_EFFECT events (combat results with serializable data)
-                # UNIT_MOVED / MAP_STATE contain HexCoord objects that break JSON serialization
-                if event.get("type") == "ACTION_EFFECT":
+                # ✅ Collect only serializable events consumed by the UI.
+                # UNIT_MOVED / MAP_STATE contain HexCoord objects that break JSON serialization.
+                if event.get("type") in {"ACTION_EFFECT", "VP_CAPTURED"}:
                     payload = event.get("payload", {})
                     if payload.get("action") == "RangedCombat":
                         defender = payload.get("defender")
@@ -160,6 +160,7 @@ class GameSession:
         # ✅ ✅ FIX REAL → PIECES DESDE SCENARIO
         # =========================================
         pieces = []
+        victory_outcomes = None
 
         if self.scenario_id:
             scenario_path = SCENARIOS_PATH / f"{self.scenario_id}.json"
@@ -180,6 +181,7 @@ class GameSession:
                         "shape": pieces_catalog.get(piece_id, {}).get("shape", [1, 1]),
                     })
                 fortifications = scenario.get("map", {}).get("fortifications", [])
+                victory_outcomes = scenario.get("victory_outcomes")
             else:
                 fortifications = []
         else:
@@ -191,6 +193,9 @@ class GameSession:
             for side, ownership in getattr(state, "side_to_ownership", {}).items()
         }
         vps = []
+        vp_score_live: dict[str, int] = {
+            side: 0 for side in getattr(state, "side_to_ownership", {}).keys()
+        }
         if getattr(state, "victory", None):
             for vp in state.victory.points:
                 q, r = vp.hex_coords
@@ -207,6 +212,31 @@ class GameSession:
                     "initial_owner": getattr(vp, "initial_owner", None),
                     "current_owner": current_owner,
                 })
+                if current_owner:
+                    vp_score_live[current_owner] = vp_score_live.get(current_owner, 0) + int(vp.per_turn)
+
+        # Scenario-level objective outcome (captured objectives table).
+        victory_outcome_state = None
+        if victory_outcomes and vps:
+            tracked_side = str(victory_outcomes.get("tracked_side", "")).strip().upper()
+            if tracked_side:
+                captured = sum(1 for vp in vps if (vp.get("current_owner") or "").upper() == tracked_side)
+                matched_row = None
+                for row in victory_outcomes.get("table", []):
+                    captured_range = row.get("captured", {}) if isinstance(row, dict) else {}
+                    min_cap = int(captured_range.get("min", -10**9))
+                    max_cap = int(captured_range.get("max", 10**9))
+                    if min_cap <= captured <= max_cap:
+                        matched_row = row
+                        break
+                victory_outcome_state = {
+                    "tracked_side": tracked_side,
+                    "metric": victory_outcomes.get("metric"),
+                    "timing": victory_outcomes.get("timing"),
+                    "captured": captured,
+                    "objectives_total": len(vps),
+                    "outcome": matched_row,
+                }
 
         # ✅ FINAL
         activated_units = []
@@ -220,6 +250,9 @@ class GameSession:
 
             "turn": getattr(state, "turn", 0),
             "active_side": getattr(runtime, "active_side", None),
+            "done": bool(getattr(state, "done", False)),
+            "winner": getattr(state, "winner", None),
+            "end_reason": getattr(state, "end_reason", None),
 
             "shape": shape,
             "hexes": hex_list,
@@ -231,6 +264,8 @@ class GameSession:
 
             "units": units,
             "sides": self.sides_config,
+            "vp_score_live": vp_score_live,
+            "victory_outcome": victory_outcome_state,
             "activated_units": activated_units,
             "last_events": copied_events,
         }

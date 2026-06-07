@@ -64,10 +64,14 @@ class RolloutBatch:
 @dataclass(frozen=True)
 class EvalResult:
     winner: str | None
+    end_reason: str | None
     vp: int
+    vp_by_side: dict[str, int]
+    vp_total_in_play: int
     steps: int
     avg_reward: float
     combat: dict[str, Any]
+    victory_level: dict[str, Any] | None
     side: dict[str, Any]
     l1: dict[str, Any]
     l1_efficiency: dict[str, Any]
@@ -82,10 +86,14 @@ class EvalResult:
     def to_dict(self) -> dict[str, Any]:
         return {
             "winner": self.winner,
+            "end_reason": self.end_reason,
             "vp": self.vp,
+            "vp_by_side": self.vp_by_side,
+            "vp_total_in_play": self.vp_total_in_play,
             "steps": self.steps,
             "avg_reward": self.avg_reward,
             "combat": self.combat,
+            "victory_level": self.victory_level,
             "side": self.side,
             "l1": self.l1,
             "l1_efficiency": self.l1_efficiency,
@@ -102,10 +110,18 @@ class EvalResult:
     def from_dict(payload: dict[str, Any]) -> "EvalResult":
         return EvalResult(
             winner=payload.get("winner"),
+            end_reason=payload.get("end_reason"),
             vp=int(payload.get("vp", 0)),
+            vp_by_side=dict(payload.get("vp_by_side", {})),
+            vp_total_in_play=int(payload.get("vp_total_in_play", 0)),
             steps=int(payload.get("steps", 0)),
             avg_reward=float(payload.get("avg_reward", 0.0)),
             combat=dict(payload.get("combat", {})),
+            victory_level=(
+                dict(payload.get("victory_level", {}))
+                if payload.get("victory_level") is not None
+                else None
+            ),
             side=dict(payload.get("side", {})),
             l1=dict(payload.get("l1", {})),
             l1_efficiency=dict(payload.get("l1_efficiency", {})),

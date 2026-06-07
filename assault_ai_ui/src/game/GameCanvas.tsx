@@ -29,6 +29,7 @@ export default function GameCanvas({
   setSelectedUnitId,
   availableMoves,
   setAvailableMoves,
+  setAttackHint,
 }: any) {
 
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -282,7 +283,7 @@ export default function GameCanvas({
         }
 
         setSelectedUnitId(unit.id);
-        handleUnitClick(unit, data, setAvailableMoves);
+        handleUnitClick(unit, data, setAvailableMoves, setAttackHint);
       };
 
       (window as any).onOrderHover = (order: any) => {

@@ -1,8 +1,8 @@
 {
-  "rl_sides": ["US", "IT"],
+  "rl_sides": ["US", "IT", "GE"],
   "scenario_schedule": [
-    { "id": "mettete_i_piedi_terra_1", "episodes": 800 },
-    { "id": "battaglia_cittadina_2_1", "episodes": 1200 }
+    { "id": "mettete_i_piedi_terra_1", "episodes": 600 },
+    { "id": "battaglia_cittadina_2_1", "episodes": 1000 }
   ],
   "seed": 42,
   "total_updates": 4000,
@@ -13,9 +13,9 @@
   "eval_interval": 200,
   "eval_min_improvement": 0.01,
   "sb3_total_timesteps": 1000000,
-  "sb3_num_envs": 16,
-  "sb3_n_steps": 2048,
-  "sb3_batch_size": 1024,
+  "sb3_num_envs": 12,
+  "sb3_n_steps": 1024,
+  "sb3_batch_size": 512,
   "sb3_n_epochs": 10,
   "sb3_gamma": 0.995,
   "sb3_gae_lambda": 0.97,
@@ -23,8 +23,8 @@
   "sb3_clip_range": 0.15,
   "sb3_learning_rate": 0.0002,
   "sb3_device": "cpu",
-  "sb3_eval_freq": 25000,
-  "sb3_eval_episodes": 20,
+  "sb3_eval_freq": 20000,
+  "sb3_eval_episodes": 12,
   "sb3_net_arch": [256, 256],
   "sb3_max_decisions": 400,
   "sb3_zero_damage_penalty": 0.8,

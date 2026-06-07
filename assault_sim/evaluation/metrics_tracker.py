@@ -3,8 +3,9 @@ from collections import defaultdict
 
 class MetricsTracker:
 
-    def __init__(self, rl_side: str):
+    def __init__(self, rl_side: str, scenario=None):
         self.rl_side = rl_side
+        self.scenario = scenario
         self.debug = True
         self.reset()
 
@@ -267,9 +268,71 @@ class MetricsTracker:
             "ENEMY": {k: dict(v) for k, v in self.unit_stats["ENEMY"].items()},
         }
 
+        vp_by_side = {}
+        vp_total_in_play = 0
+        rl_vp = 0
+        if game_state is not None:
+            victory = getattr(game_state, "victory", None)
+            hex_states = getattr(game_state, "hex_states", {}) or {}
+            side_to_ownership = getattr(game_state, "side_to_ownership", {}) or {}
+            ownership_to_side = {
+                ownership: side for side, ownership in side_to_ownership.items()
+            }
+            if victory is not None:
+                for vp in getattr(victory, "points", []):
+                    value = int(getattr(vp, "per_turn", 0))
+                    vp_total_in_play += value
+                    hs = hex_states.get(vp.hex_coords)
+                    owner = getattr(hs, "ownership", None)
+                    side = ownership_to_side.get(owner)
+                    if side:
+                        vp_by_side[side] = vp_by_side.get(side, 0) + value
+            rl_vp = int(vp_by_side.get(self.rl_side, 0))
+
+        victory_level = None
+        if self.scenario is not None:
+            outcomes = getattr(self.scenario, "victory_outcomes", None) or {}
+            if (
+                str(outcomes.get("metric", "")).strip() == "objectives_captured"
+                and str(outcomes.get("timing", "")).strip() == "end_of_last_turn"
+                and outcomes.get("table")
+            ):
+                tracked_side = str(outcomes.get("tracked_side", "")).strip().upper()
+                captured = 0
+                total_obj = 0
+                if tracked_side and game_state is not None:
+                    points = getattr(getattr(game_state, "victory", None), "points", []) or []
+                    total_obj = len(points)
+                    side_to_ownership = getattr(game_state, "side_to_ownership", {}) or {}
+                    tracked_owner = side_to_ownership.get(tracked_side)
+                    for vp in points:
+                        hs = game_state.hex_states.get(vp.hex_coords)
+                        if hs is not None and hs.ownership == tracked_owner:
+                            captured += 1
+                matched = None
+                for row in outcomes.get("table", []):
+                    cap = row.get("captured", {}) if isinstance(row, dict) else {}
+                    try:
+                        min_cap = int(cap.get("min", -10**9))
+                        max_cap = int(cap.get("max", 10**9))
+                    except Exception:
+                        continue
+                    if min_cap <= captured <= max_cap:
+                        matched = row
+                        break
+                victory_level = {
+                    "tracked_side": tracked_side,
+                    "captured": captured,
+                    "objectives_total": total_obj,
+                    "result": (matched or {}).get("result"),
+                }
+
         return {
             "winner": getattr(game_state, "winner", None),
-            "vp": getattr(game_state, "vp", 0),
+            "end_reason": getattr(game_state, "end_reason", None),
+            "vp": rl_vp,
+            "vp_by_side": vp_by_side,
+            "vp_total_in_play": vp_total_in_play,
             "steps": self.steps,
 
             "side": {
@@ -290,6 +353,7 @@ class MetricsTracker:
                 "damage_ratio": damage_ratio,
                 "total_attacks": self.total_attacks,
             },
+            "victory_level": victory_level,
 
             "units": units_output,
         }

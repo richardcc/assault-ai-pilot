@@ -255,6 +255,7 @@ def load_scenario(
             if "vp" in raw
             else None
         ),
+        victory_outcomes=raw.get("victory_outcomes"),
     )
     scenario.terrain_config = terrain_config
 

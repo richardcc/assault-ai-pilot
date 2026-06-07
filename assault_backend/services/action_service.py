@@ -2,9 +2,61 @@ from assault_model.actions.movement import MoveAction
 from assault_model.actions.assault import AssaultAction
 from assault_model.actions.ranged_direct import RangedDirectAttack
 from assault_model.actions.ranged_indirect import RangedIndirectAttack  # ✅ NUEVO
+from assault_model.actions.status import WaitAction
 from assault_model.actions.action_catalog import ActionCatalog
 
 import json
+
+
+def _build_attack_status(state, unit, attacks, catalog):
+    if attacks:
+        return {
+            "can_attack": True,
+            "reason_code": "ok",
+            "reason_text": "Attack available",
+        }
+
+    enemies = [
+        u for u in state.units
+        if getattr(u, "alive", True) and getattr(u, "side", None) != unit.side
+    ]
+    if not enemies:
+        return {
+            "can_attack": False,
+            "reason_code": "no_enemy_alive",
+            "reason_text": "No alive enemy targets",
+        }
+
+    spotted_ids = set(getattr(unit, "spotted_enemies", []) or [])
+    spotted_enemies = [u for u in enemies if u.unit_id in spotted_ids]
+    if not spotted_enemies:
+        return {
+            "can_attack": False,
+            "reason_code": "target_not_spotted",
+            "reason_text": "No spotted enemy target",
+        }
+
+    in_range = [u for u in spotted_enemies if catalog._in_weapon_range(unit, u)]
+    if not in_range:
+        return {
+            "can_attack": False,
+            "reason_code": "out_of_range",
+            "reason_text": "Spotted targets are out of weapon range",
+        }
+
+    has_los = [u for u in in_range if catalog._has_line_of_sight(unit, u)]
+    if not has_los:
+        return {
+            "can_attack": False,
+            "reason_code": "los_blocked",
+            "reason_text": "Line of sight is blocked to in-range spotted targets",
+        }
+
+    return {
+        "can_attack": False,
+        "reason_code": "no_valid_attack_action",
+        "reason_text": "No valid attack action for current state",
+    }
 
 
 def get_unit_actions(env, unit):
@@ -21,6 +73,12 @@ def get_unit_actions(env, unit):
             "unit_id": unit.unit_id,
             "moves": [],
             "attacks": [],
+            "waits": [],
+            "attack_status": {
+                "can_attack": False,
+                "reason_code": "unit_dead",
+                "reason_text": "Unit is destroyed",
+            },
             "abilities": [],
             "disabled": True,
         }
@@ -32,10 +90,22 @@ def get_unit_actions(env, unit):
     is_not_activated = (unit.unit_id not in getattr(runtime, "activated_units", set()))
 
     if not (is_active_side and is_not_activated):
+        if not is_active_side:
+            code = "not_active_side"
+            text = "Unit side is not the active side"
+        else:
+            code = "already_activated"
+            text = "Unit already activated this turn"
         return {
             "unit_id": unit.unit_id,
             "moves": [],
             "attacks": [],
+            "waits": [],
+            "attack_status": {
+                "can_attack": False,
+                "reason_code": code,
+                "reason_text": text,
+            },
             "abilities": [],
             "disabled": True
         }
@@ -58,6 +128,7 @@ def get_unit_actions(env, unit):
 
     moves = []
     attacks = []
+    waits = []
 
     # -------------------------------------------------
     # PROCESS ACTIONS
@@ -107,6 +178,15 @@ def get_unit_actions(env, unit):
             })
 
         # -------------------------
+        # WAIT
+        # -------------------------
+        elif isinstance(action, WaitAction):
+            waits.append({
+                "type": "wait",
+                "action_id": getattr(action, "action_id", f"WAIT:{unit.unit_id}")
+            })
+
+        # -------------------------
         # DEBUG UNKNOWN (MUY ÚTIL)
         # -------------------------
         else:
@@ -119,6 +199,8 @@ def get_unit_actions(env, unit):
         "unit_id": unit.unit_id,
         "moves": moves,
         "attacks": attacks,
+        "waits": waits,
+        "attack_status": _build_attack_status(state, unit, attacks, catalog),
         "abilities": [],
         "disabled": False
     }

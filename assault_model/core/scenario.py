@@ -1,4 +1,4 @@
-from typing import List, Optional, Dict
+from typing import List, Optional, Dict, Any
 
 from assault_model.map.map import Map
 from assault_model.units.unit_instance import UnitInstance
@@ -18,9 +18,11 @@ class Scenario:
         units: List[UnitInstance],
         max_turns: Optional[int] = None,
         vp_conditions: Optional[Dict] = None,
+        victory_outcomes: Optional[Dict[str, Any]] = None,
     ) -> None:
         self.name = name
         self.game_map = game_map
         self.units = units
         self.max_turns = max_turns
         self.vp_conditions = vp_conditions
+        self.victory_outcomes = victory_outcomes

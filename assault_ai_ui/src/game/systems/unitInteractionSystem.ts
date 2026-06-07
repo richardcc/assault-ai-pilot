@@ -1,20 +1,25 @@
 export async function handleUnitClick(
   unit: any,
   state: any,
-  setAvailableMoves: (moves: any[]) => void
+  setAvailableMoves: (moves: any[]) => void,
+  setAttackHint: (hint: string | null) => void
 ) {
 
   if (!state) return;
 
   const hp = unit.hp;
   if (unit.alive === false || (hp != null && hp <= 0)) {
+    setAttackHint("Unit is destroyed");
     return;
   }
 
   const isHumanTurn =
     state?.sides?.[state.active_side] === "human";
 
-  if (!isHumanTurn) return;
+  if (!isHumanTurn) {
+    setAttackHint("Not human turn");
+    return;
+  }
 
   const id = unit.unit_id ?? unit.id;
 
@@ -24,7 +29,16 @@ export async function handleUnitClick(
     unit.alive !== false &&
     (unit.hp == null || unit.hp > 0);
 
-  if (!isAvailable) return;
+  if (!isAvailable) {
+    const reason =
+      unit.side !== state.active_side
+        ? "Unit side is not active"
+        : state.activated_units?.includes(id)
+        ? "Unit already activated this turn"
+        : "Unit not available";
+    setAttackHint(reason);
+    return;
+  }
 
   console.log("✅ selected:", id);
 
@@ -32,6 +46,7 @@ export async function handleUnitClick(
 
   // ✅ clear previous
   setAvailableMoves([]);
+  setAttackHint(null);
 
   const res = await fetch("http://127.0.0.1:8000/api/game/actions", {
     method: "POST",
@@ -59,8 +74,20 @@ export async function handleUnitClick(
         q: target?.q,
         r: target?.r,
       };
-    })
+    }),
+    ...(actions.waits || []).map(w => ({
+      ...w,
+      kind: "wait"
+    }))
   ];
 
   setAvailableMoves(allActions);
+  const attackStatus = actions.attack_status;
+  if (attackStatus?.can_attack === false) {
+    setAttackHint(
+      `${attackStatus.reason_code || "no_attack"}: ${attackStatus.reason_text || "No attack available"}`
+    );
+  } else {
+    setAttackHint(null);
+  }
 }

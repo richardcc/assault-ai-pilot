@@ -27,7 +27,10 @@ class Evaluator:
     # -------------------------------------------------
     def run_episode(self):
 
-        tracker = MetricsTracker(self.rl_side)
+        scenario = None
+        if getattr(self.env, "sim", None) is not None:
+            scenario = getattr(self.env.sim, "scenario", None)
+        tracker = MetricsTracker(self.rl_side, scenario=scenario)
         advanced_metrics = AdvancedMetrics()
 
         sim = getattr(self.env, "sim", None) or getattr(self.env, "sim_env", None)

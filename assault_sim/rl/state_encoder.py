@@ -115,7 +115,64 @@ def _local_map_features(state, center_q: int, center_r: int):
 # =================================================
 # NUMERIC STATE (USED BY RL)
 # =================================================
-def encode_state(state, unit=None, rl_side=None, max_turns=None):
+def _objective_outcome_features(state, rl_side=None, scenario=None):
+    """
+    Encode scenario objective progress for RL.
+    Returns a fixed-size vector:
+      [has_rule, rl_is_tracked, captured_norm, total_norm, progress_to_next_norm, turns_pressure]
+    """
+    if scenario is None:
+        return [0.0] * 6
+    outcomes = getattr(scenario, "victory_outcomes", None) or {}
+    metric = str(outcomes.get("metric", "")).strip()
+    timing = str(outcomes.get("timing", "")).strip()
+    tracked_side = str(outcomes.get("tracked_side", "")).strip().upper()
+    table = outcomes.get("table", [])
+    if metric != "objectives_captured" or timing != "end_of_last_turn" or not tracked_side or not table:
+        return [0.0] * 6
+
+    side_to_ownership = getattr(state, "side_to_ownership", {}) or {}
+    ownership_for_tracked = side_to_ownership.get(tracked_side)
+    points = getattr(getattr(state, "victory", None), "points", []) or []
+    total = len(points)
+    captured = 0
+    for vp in points:
+        hs = state.hex_states.get(vp.hex_coords)
+        if hs is not None and hs.ownership == ownership_for_tracked:
+            captured += 1
+
+    # nearest threshold from table for normalization guidance
+    thresholds = []
+    for row in table:
+        if not isinstance(row, dict):
+            continue
+        cap = row.get("captured", {}) or {}
+        try:
+            thresholds.append(int(cap.get("min", 0)))
+        except Exception:
+            continue
+    thresholds = sorted(set(thresholds))
+    next_threshold = next((t for t in thresholds if captured < t), captured)
+    denom = max(1, total)
+    progress_to_next = (next_threshold - captured) / denom
+    progress_to_next = float(np.clip(progress_to_next, 0.0, 1.0))
+
+    max_turns = getattr(scenario, "max_turns", None) or 0
+    turns_pressure = 0.0
+    if max_turns > 0:
+        turns_pressure = float(np.clip(state.turn / max_turns, 0.0, 1.0))
+
+    return [
+        1.0,
+        1.0 if (rl_side and str(rl_side).upper() == tracked_side) else 0.0,
+        float(np.clip(captured / denom, 0.0, 1.0)),
+        float(np.clip(total / 10.0, 0.0, 1.0)),  # stable bounded scale
+        progress_to_next,
+        turns_pressure,
+    ]
+
+
+def encode_state(state, unit=None, rl_side=None, max_turns=None, scenario=None):
 
     active = unit
     if active is None and rl_side is not None:
@@ -262,6 +319,7 @@ def encode_state(state, unit=None, rl_side=None, max_turns=None):
     # ✅ NEW: TACTICAL FEATURES (MODULAR)
     # =================================================
     obs.extend(compute_tactical_features(state, rl_side))
+    obs.extend(_objective_outcome_features(state, rl_side=rl_side, scenario=scenario))
 
     # -------------------------
     # FINAL VECTOR
