@@ -1,6 +1,9 @@
 {
-  "rl_side": "US",
-  "scenario": "phase01_seq001_initial_contact",
+  "rl_sides": ["US", "IT"],
+  "scenario_schedule": [
+    { "id": "mettete_i_piedi_terra_1", "episodes": 800 },
+    { "id": "battaglia_cittadina_2_1", "episodes": 1200 }
+  ],
   "seed": 42,
   "total_updates": 4000,
   "rollout_steps": 160,

@@ -16,10 +16,14 @@ class VictoryPointTracker:
             HexOwnership.SIDE_B: 0,
         }
 
-    def apply_turn(self, hex_states: dict[tuple[int, int], HexOwnership]) -> None:
+    def finalize(self, hex_states: dict[tuple[int, int], HexOwnership]) -> None:
         """
-        Apply victory point rules for one turn.
+        Compute VP score once, using final board control.
         """
+        # Reset then assign final VP ownership totals.
+        for side in self.score:
+            self.score[side] = 0
+
         for vp in self.conditions.points:
             owner = hex_states.get(vp.hex_coords, HexOwnership.NONE)
             if owner in self.score:

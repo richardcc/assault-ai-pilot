@@ -60,6 +60,7 @@ export function subscribeToGameState({
       data.hexes,
       showMapNow,
       data.map?.fortifications ?? [],
+      data.map?.vps ?? [],
       showGridRef.current
     );
 

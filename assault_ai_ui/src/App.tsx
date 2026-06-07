@@ -33,6 +33,10 @@ function App() {
   const [availableMoves, setAvailableMoves] = useState<any[]>([]);
   const [logEvents, setLogEvents] = useState<LogEntry[]>([]);
   const [activeMode, setActiveMode] = useState<string | null>(null);
+  const [scenarioList, setScenarioList] = useState<string[]>([]);
+  const [selectedScenario, setSelectedScenario] = useState<string>("");
+  const [scenarioSides, setScenarioSides] = useState<string[]>([]);
+  const [humanSide, setHumanSide] = useState<string>("");
 
   const lastTurnRef = useRef<number>(-1);
   const lastActiveSideRef = useRef<string>("");
@@ -46,6 +50,24 @@ function App() {
       second: "2-digit" 
     });
     setLogEvents((prev) => [{ type, text, time }, ...prev].slice(0, 50));
+  };
+
+  const resetMatchUiState = () => {
+    setDeadUnits([]);
+    setSelectedUnitId(null);
+    setHoveredTargetId(null);
+    setAvailableMoves([]);
+    prevUnitsRef.current = null;
+  };
+
+  const buildSidesConfig = (mode: string): Record<string, string> => {
+    const sides = scenarioSides.length ? scenarioSides : ["GE", "US"];
+    const chosenHumanSide = humanSide || sides[0];
+    const cfg: Record<string, string> = {};
+    for (const s of sides) {
+      cfg[s] = mode === "ai_vs_ai" ? "ai" : (s === chosenHumanSide ? "human" : "ai");
+    }
+    return cfg;
   };
 
   // Subscribe to the game controller events
@@ -65,15 +87,69 @@ function App() {
     };
   }, []);
 
+  useEffect(() => {
+    const loadScenarioSides = async () => {
+      if (!selectedScenario) return;
+      try {
+        const res = await fetch(`http://127.0.0.1:8000/api/ui/scenarios/${selectedScenario}`);
+        if (!res.ok) {
+          throw new Error(`Failed to load scenario data (${res.status})`);
+        }
+        const data = await res.json();
+        const sidesFound = Array.from(
+          new Set(
+            (data?.units || [])
+              .map((u: any) => String(u?.side || "").toUpperCase())
+              .filter((s: string) => s.length > 0)
+          )
+        ) as string[];
+        const normalizedSides = sidesFound.length ? sidesFound : ["GE", "US"];
+        setScenarioSides(normalizedSides);
+        setHumanSide((prev) => (prev && normalizedSides.includes(prev) ? prev : normalizedSides[0]));
+      } catch (err) {
+        console.error("❌ Could not load scenario sides", err);
+        setScenarioSides(["GE", "US"]);
+        setHumanSide((prev) => prev || "GE");
+      }
+    };
+    loadScenarioSides();
+  }, [selectedScenario]);
+
+  useEffect(() => {
+    const loadScenarios = async () => {
+      try {
+        const res = await fetch("http://127.0.0.1:8000/api/ui/scenarios");
+        if (!res.ok) {
+          throw new Error(`Failed to load scenarios (${res.status})`);
+        }
+        const data = await res.json();
+        const scenarios = Array.isArray(data?.scenarios) ? data.scenarios : [];
+        setScenarioList(scenarios);
+        if (scenarios.length > 0) {
+          setSelectedScenario((prev) => prev || scenarios[0]);
+        }
+      } catch (err) {
+        console.error("❌ Could not load scenarios", err);
+        addLog("system", `❌ Could not load scenarios: ${String(err)}`);
+      }
+    };
+    loadScenarios();
+  }, []);
+
   // Auto-start a default session so the map is visible on app load.
   useEffect(() => {
-    if (activeMode || gameData) return;
+    if (activeMode || gameData || !selectedScenario || !humanSide) return;
     setActiveMode("human");
-    gameController.start("human").catch((err) => {
+    resetMatchUiState();
+    gameController.start(
+      "human",
+      selectedScenario,
+      buildSidesConfig("human")
+    ).catch((err) => {
       console.error("❌ Auto-start failed", err);
       addLog("system", `❌ Auto-start failed: ${String(err)}`);
     });
-  }, [activeMode, gameData]);
+  }, [activeMode, gameData, selectedScenario, humanSide]);
 
   // Monitor game state changes to output beautiful terminal logs
   useEffect(() => {
@@ -192,9 +268,42 @@ function App() {
 
   // Start a game mode safely and log it
   const handleStartGame = (mode: string) => {
+    if (!selectedScenario) {
+      addLog("system", "❌ No scenario selected");
+      return;
+    }
     setActiveMode(mode);
-    addLog("system", `🚀 Launching match mode: [${mode.toUpperCase()}]`);
-    gameController.start(mode as any);
+    addLog(
+      "system",
+      `🚀 Launching match mode: [${mode.toUpperCase()}] // Scenario: ${selectedScenario} // Human: ${humanSide || "-"}`
+    );
+    resetMatchUiState();
+    gameController.start(
+      mode as any,
+      selectedScenario,
+      buildSidesConfig(mode)
+    );
+  };
+
+  const handleScenarioChange = (scenarioId: string) => {
+    setSelectedScenario(scenarioId);
+    if (!scenarioId) return;
+
+    const modeToUse = (activeMode || "human") as any;
+    if (!activeMode) {
+      setActiveMode("human");
+    }
+
+    addLog("system", `🗺️ Scenario changed: ${scenarioId}. Reloading session...`);
+    resetMatchUiState();
+    gameController.start(
+      modeToUse,
+      scenarioId,
+      buildSidesConfig(modeToUse)
+    ).catch((err) => {
+      console.error("❌ Scenario switch failed", err);
+      addLog("system", `❌ Scenario switch failed: ${String(err)}`);
+    });
   };
 
   // Safe handler to stop and refresh the session
@@ -250,6 +359,34 @@ function App() {
         )}
 
         <div className="header-controls">
+          <select
+            className="btn-tactical"
+            value={selectedScenario}
+            onChange={(e) => handleScenarioChange(e.target.value)}
+            title="Scenario"
+            style={{ minWidth: 240 }}
+          >
+            {scenarioList.map((scenarioId) => (
+              <option key={scenarioId} value={scenarioId}>
+                {scenarioId}
+              </option>
+            ))}
+          </select>
+
+          <select
+            className="btn-tactical"
+            value={humanSide}
+            onChange={(e) => setHumanSide(e.target.value)}
+            title="Human side"
+            style={{ minWidth: 140 }}
+          >
+            {(scenarioSides.length ? scenarioSides : ["GE", "US"]).map((sideId) => (
+              <option key={sideId} value={sideId}>
+                Human: {sideId}
+              </option>
+            ))}
+          </select>
+
           <button 
             className={`btn-tactical ${activeMode === "human" ? "active" : ""}`} 
             onClick={() => handleStartGame("human")}

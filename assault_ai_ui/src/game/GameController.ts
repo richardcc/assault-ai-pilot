@@ -8,23 +8,49 @@ export class GameController {
 
   private mode: GameMode = "human";
   private state: any = null;
+  private scenarioId = "mettete_i_piedi_terra_1_min";
+  private sidesConfig: Record<string, string> = { GE: "human", US: "ai" };
 
   private listeners: Listener[] = [];
   private lastState: any = null;
 
   private socket: WebSocket | null = null;
+  private suppressReconnect = false;
+  private aiLoopToken = 0;
+  private aiLoopTimer: ReturnType<typeof setTimeout> | null = null;
+  private startRequestToken = 0;
 
   // ✅ NUEVO: referencia al highlight layer
   private highlightLayer: any = null;
 
   // ----------------------------------
-  async start(mode: GameMode) {
-    if (this.socket && this.socket.readyState === WebSocket.OPEN) {
-      console.log("⚠️ already started");
-      return;
+  async start(
+    mode: GameMode,
+    scenarioId?: string,
+    sidesConfig?: Record<string, string>
+  ) {
+    const requestToken = ++this.startRequestToken;
+    this.stopLoop();
+
+    // If a session is already running, treat start() as a full restart
+    // (needed when user switches scenario from the dropdown).
+    if (this.socket) {
+      this.suppressReconnect = true;
+      try {
+        this.socket.close();
+      } catch {
+        // ignore websocket close errors on restart
+      }
+      this.socket = null;
     }
 
     this.mode = mode;
+    if (scenarioId) {
+      this.scenarioId = scenarioId;
+    }
+    if (sidesConfig && Object.keys(sidesConfig).length > 0) {
+      this.sidesConfig = sidesConfig;
+    }
 
     console.log("Starting mode:", mode);
 
@@ -33,25 +59,26 @@ export class GameController {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        scenario_id: "mettete_i_piedi_terra_1_min",
-        sides: {
-          GE: "human",
-          US: "ai"
-        }
+        scenario_id: this.scenarioId,
+        sides: this.sidesConfig
       })
     });
     if (!startRes.ok) {
       const detail = await startRes.text();
       throw new Error(`Backend start failed (${startRes.status}): ${detail}`);
     }
+    if (requestToken !== this.startRequestToken) return;
 
     await this.loadScenario();
+    if (requestToken !== this.startRequestToken) return;
 
     setTimeout(() => {
+      if (requestToken !== this.startRequestToken) return;
       this.startWebSocket();
     }, 300);
 
-    if (mode === "ai" || mode === "ai_vs_ai") {
+    if (requestToken !== this.startRequestToken) return;
+    if (mode === "human" || mode === "ai" || mode === "ai_vs_ai") {
       this.startLoop();
     }
   }
@@ -101,6 +128,12 @@ export class GameController {
 
     this.socket.onclose = () => {
       console.log("❌ WS closed");
+      this.socket = null;
+
+      if (this.suppressReconnect) {
+        this.suppressReconnect = false;
+        return;
+      }
 
       setTimeout(() => {
         if (this.mode) {
@@ -161,13 +194,31 @@ export class GameController {
   // ----------------------------------
   // 🔥 IA BACKEND + VISUAL HIGHLIGHTS
   // ----------------------------------
+  private stopLoop() {
+    this.aiLoopToken += 1;
+    if (this.aiLoopTimer) {
+      clearTimeout(this.aiLoopTimer);
+      this.aiLoopTimer = null;
+    }
+  }
+
+  private scheduleLoop(loop: () => void, delayMs: number) {
+    if (this.aiLoopTimer) {
+      clearTimeout(this.aiLoopTimer);
+    }
+    this.aiLoopTimer = setTimeout(loop, delayMs);
+  }
+
   private startLoop() {
+    this.stopLoop();
+    const token = this.aiLoopToken;
     console.log("🤖 AI loop started (backend-driven)");
 
     const loop = async () => {
+      if (token !== this.aiLoopToken) return;
 
       if (!this.state) {
-        setTimeout(loop, 1000);
+        this.scheduleLoop(loop, 1000);
         return;
       }
 
@@ -175,13 +226,13 @@ export class GameController {
       const activeSide = data.active_side;
 
       if (!activeSide) {
-        setTimeout(loop, 1000);
+        this.scheduleLoop(loop, 1000);
         return;
       }
 
       // ✅ solo ejecuta si el lado es IA
       if (data?.sides?.[activeSide] !== "ai") {
-        setTimeout(loop, 500);
+        this.scheduleLoop(loop, 500);
         return;
       }
 
@@ -218,7 +269,7 @@ export class GameController {
       }
 
       // ✅ dejar tiempo a websocket
-      setTimeout(loop, 800);
+      this.scheduleLoop(loop, 800);
     };
 
     loop();

@@ -6,6 +6,7 @@ import json
 import numpy as np
 
 from assault_model.actions.status import WaitAction
+from assault_sim.config.train_config import load_train_config
 from assault_sim.config.ppo_config import PPOConfig
 from assault_sim.decision.action_bridge import ActionBridge
 from assault_sim.decision.option_executor import OptionExecutor
@@ -109,6 +110,26 @@ class SB3EvalController:
         return action
 
 
+def _resolve_model_path_for_side(repo_root: Path, rl_side: str) -> Path | None:
+    side = (rl_side or "").strip().upper()
+    candidates = [
+        repo_root / "models" / f"sb3_latest_{side}.zip",
+        repo_root / "models" / "sb3_latest.zip",
+        repo_root / "models" / f"sb3_best_{side}" / "best_model.zip",
+        repo_root / "models" / "sb3_best" / "best_model.zip",
+    ]
+    return next((p for p in candidates if p.exists()), None)
+
+
+def _resolve_vecnorm_path_for_side(repo_root: Path, rl_side: str) -> Path | None:
+    side = (rl_side or "").strip().upper()
+    candidates = [
+        repo_root / "models" / f"sb3_vecnormalize_{side}.pkl",
+        repo_root / "models" / "sb3_vecnormalize.pkl",
+    ]
+    return next((p for p in candidates if p.exists()), None)
+
+
 def evaluate_sb3(episodes: int = 100):
     try:
         from stable_baselines3 import PPO
@@ -120,97 +141,117 @@ def evaluate_sb3(episodes: int = 100):
         ) from exc
 
     repo_root = Path(__file__).resolve().parents[2]
-    model_candidates = [
-        repo_root / "models" / "sb3_latest.zip",
-        repo_root / "models" / "sb3_best" / "best_model.zip",
-    ]
-    model_path = next((p for p in model_candidates if p.exists()), None)
-    if model_path is None:
-        tried = "\n".join(f" - {p}" for p in model_candidates)
-        raise SystemExit(
-            "SB3 model not found. Tried:\n"
-            f"{tried}\n"
-            "Tip: if training is still running, wait for first eval checkpoint "
-            "(best_model.zip) or training end (sb3_latest.zip)."
+    train_config_path = repo_root / "assault_sim" / "config" / "train_config.json"
+    cfg = load_train_config(train_config_path)
+    scenario = cfg.scenario
+    rl_sides = list(cfg.rl_sides)
+    if not rl_sides:
+        rl_sides = [PPOConfig.RL_SIDE]
+
+    all_reports = {}
+    all_models = {}
+
+    for rl_side in rl_sides:
+        model_path = _resolve_model_path_for_side(repo_root, rl_side)
+        if model_path is None:
+            print(f"⚠️ SB3 model not found for side={rl_side}; skipping.")
+            continue
+
+        vecnorm_path = _resolve_vecnorm_path_for_side(repo_root, rl_side)
+        env = make_env(
+            config_path=repo_root / "assault_sim" / "config" / "sim_config.yaml",
+            env_config_path=repo_root / "assault_sim" / "config" / "env_config.json",
+            rl_side=rl_side,
+            scenario=scenario,
+            reward_fn=ShapedReward(rl_side=rl_side),
+            seed=PPOConfig.SEED,
         )
-    vecnorm_path = repo_root / "models" / "sb3_vecnormalize.pkl"
 
-    env = make_env(
-        config_path=repo_root / "assault_sim" / "config" / "sim_config.yaml",
-        env_config_path=repo_root / "assault_sim" / "config" / "env_config.json",
-        rl_side=PPOConfig.RL_SIDE,
-        scenario=PPOConfig.SCENARIO,
-        reward_fn=ShapedReward(rl_side=PPOConfig.RL_SIDE),
-        seed=PPOConfig.SEED,
-    )
+        model = PPO.load(str(model_path), device="cpu")
+        obs_normalizer = None
+        if vecnorm_path is not None and vecnorm_path.exists():
+            try:
+                from assault_sim.envs.gym_assault_env import GymAssaultEnv
 
-    model = PPO.load(str(model_path), device="cpu")
-    obs_normalizer = None
-    if vecnorm_path.exists():
-        try:
-            from assault_sim.envs.gym_assault_env import GymAssaultEnv
-
-            def make_norm_env():
-                return Monitor(
-                    GymAssaultEnv(
-                        scenario=PPOConfig.SCENARIO,
-                        rl_side=PPOConfig.RL_SIDE,
-                        seed=PPOConfig.SEED,
+                def make_norm_env():
+                    return Monitor(
+                        GymAssaultEnv(
+                            scenario=scenario,
+                            rl_side=rl_side,
+                            seed=PPOConfig.SEED,
+                        )
                     )
-                )
 
-            norm_env = DummyVecEnv([make_norm_env])
-            vecnorm = VecNormalize.load(str(vecnorm_path), norm_env)
-            vecnorm.training = False
-            vecnorm.norm_reward = False
+                norm_env = DummyVecEnv([make_norm_env])
+                vecnorm = VecNormalize.load(str(vecnorm_path), norm_env)
+                vecnorm.training = False
+                vecnorm.norm_reward = False
 
-            def _normalize_obs(obs):
-                arr = np.asarray(obs, dtype=np.float32)
-                return vecnorm.normalize_obs(arr.reshape(1, -1))[0]
+                def _normalize_obs(obs):
+                    arr = np.asarray(obs, dtype=np.float32)
+                    return vecnorm.normalize_obs(arr.reshape(1, -1))[0]
 
-            obs_normalizer = _normalize_obs
-            print(f"Loaded VecNormalize stats: {vecnorm_path}")
-        except Exception as e:
-            print(f"⚠️ Could not load VecNormalize stats, continuing without normalization: {e}")
-    else:
-        print("⚠️ VecNormalize stats not found, evaluating without obs normalization")
+                obs_normalizer = _normalize_obs
+                print(f"Loaded VecNormalize stats for {rl_side}: {vecnorm_path}")
+            except Exception as e:
+                print(f"⚠️ Could not load VecNormalize stats ({rl_side}), continuing without normalization: {e}")
+        else:
+            print(f"⚠️ VecNormalize stats not found for {rl_side}, evaluating without obs normalization")
 
-    controller = SB3EvalController(model, PPOConfig.RL_SIDE, env.sim, obs_normalizer=obs_normalizer)
-    evaluator = Evaluator(
-        env=env,
-        rl_controller=controller,
-        enemy_controller=None,
-        rl_side=PPOConfig.RL_SIDE,
-    )
-    results = evaluator.evaluate(episodes)
+        controller = SB3EvalController(model, rl_side, env.sim, obs_normalizer=obs_normalizer)
+        evaluator = Evaluator(
+            env=env,
+            rl_controller=controller,
+            enemy_controller=None,
+            rl_side=rl_side,
+        )
+        results = evaluator.evaluate(episodes)
 
-    analyzer = ResultsAnalyzer(results, PPOConfig.RL_SIDE)
-    analyzer.print_report()
+        analyzer = ResultsAnalyzer(results, rl_side)
+        analyzer.print_report()
 
-    dashboard = EvalDashboard()
-    for r in results:
-        dashboard.add_episode(r)
-    dashboard.save_csv("metrics_sb3.csv")
+        dashboard = EvalDashboard()
+        for r in results:
+            dashboard.add_episode(r)
+        dashboard.save_csv(f"metrics_sb3_{rl_side}.csv")
+
+        side_report = {
+            "meta": {
+                "episodes": episodes,
+                "timestamp": datetime.utcnow().isoformat() + "Z",
+                "model": str(model_path),
+                "scenario": scenario,
+                "rl_side": rl_side,
+                "vecnormalize_path": str(vecnorm_path) if vecnorm_path is not None and vecnorm_path.exists() else None,
+                "obs_normalized": bool(obs_normalizer is not None),
+            },
+            "summary": analyzer.summary(),
+            "combat": analyzer.combat_metrics(),
+            "advanced": analyzer.advanced_metrics(),
+            "policy_alignment": analyzer.policy_alignment(),
+            "action_execution": analyzer.action_execution(),
+        }
+        all_reports[rl_side] = side_report
+        all_models[rl_side] = str(model_path)
+
+    if not all_reports:
+        raise SystemExit("No SB3 model found for any configured side.")
 
     report = {
         "meta": {
             "episodes": episodes,
             "timestamp": datetime.utcnow().isoformat() + "Z",
-            "model": str(model_path),
-            "scenario": PPOConfig.SCENARIO,
-            "vecnormalize_path": str(vecnorm_path) if vecnorm_path.exists() else None,
-            "obs_normalized": bool(obs_normalizer is not None),
+            "scenario": scenario,
+            "rl_sides": rl_sides,
+            "models": all_models,
+            "train_config_path": str(train_config_path),
         },
-        "summary": analyzer.summary(),
-        "combat": analyzer.combat_metrics(),
-        "advanced": analyzer.advanced_metrics(),
-        "policy_alignment": analyzer.policy_alignment(),
-        "action_execution": analyzer.action_execution(),
+        "by_side": all_reports,
     }
     out_name = f"metrics_sb3_report_{datetime.utcnow().strftime('%Y%m%dT%H%M%SZ')}.json"
     with open(out_name, "w", encoding="utf-8") as f:
         json.dump(report, f, indent=2)
-    print(f"Saved SB3 report -> {out_name}")
+    print(f"Saved multi-side SB3 report -> {out_name}")
 
 
 if __name__ == "__main__":

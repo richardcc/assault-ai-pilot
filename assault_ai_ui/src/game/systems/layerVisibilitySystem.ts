@@ -28,6 +28,7 @@ export function updateLayerVisibility(
     data.hexes,
     showMap,
     data.map?.fortifications ?? [],
+    data.map?.vps ?? [],
     showGrid
   );
 }

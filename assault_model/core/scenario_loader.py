@@ -40,6 +40,35 @@ def _offset_hex(hex_: Hex, origin: Tuple[int, int]) -> Hex:
     )
 
 
+def _rotation_to_quarter_turns(rotation_deg: int) -> int:
+    if rotation_deg % 90 != 0:
+        raise ScenarioLoaderError(
+            f"Invalid piece rotation {rotation_deg}. "
+            "Rotation must be a multiple of 90 degrees."
+        )
+    return (rotation_deg // 90) % 4
+
+
+def _rotate_local_coord(
+    q: int,
+    r: int,
+    width: int,
+    height: int,
+    quarter_turns: int,
+) -> Tuple[int, int]:
+    """
+    Rotate local piece coordinates clockwise in 90° steps.
+    """
+    if quarter_turns == 0:
+        return q, r
+    if quarter_turns == 1:
+        return (height - 1 - r), q
+    if quarter_turns == 2:
+        return (width - 1 - q), (height - 1 - r)
+    # quarter_turns == 3
+    return r, (width - 1 - q)
+
+
 def _is_adjacent_vertices(v_start: int, v_end: int) -> bool:
     if not (1 <= v_start <= 6 and 1 <= v_end <= 6):
         return False
@@ -85,15 +114,45 @@ def load_scenario(
 
         piece = map_piece_catalog[piece_id]
         origin = tuple(entry["origin"])
+        rotation_deg = int(entry.get("rotation", 0))
+        quarter_turns = _rotation_to_quarter_turns(rotation_deg)
+        piece_width, piece_height = piece.shape
 
         # ✅ HEXES
         for h in piece.hexes:
-            global_hexes.append(_offset_hex(h, origin))
+            rq, rr = _rotate_local_coord(
+                h.q,
+                h.r,
+                piece_width,
+                piece_height,
+                quarter_turns,
+            )
+            global_hexes.append(
+                Hex(
+                    q=rq + origin[0],
+                    r=rr + origin[1],
+                    terrain=h.terrain,
+                )
+            )
 
         # ✅ EDGES
         for (a, b), feature in piece.hex_edges.items():
             aq, ar = a
             bq, br = b
+            aq, ar = _rotate_local_coord(
+                aq,
+                ar,
+                piece_width,
+                piece_height,
+                quarter_turns,
+            )
+            bq, br = _rotate_local_coord(
+                bq,
+                br,
+                piece_width,
+                piece_height,
+                quarter_turns,
+            )
             pending_hex_edges.append(
                 (
                     (aq + origin[0], ar + origin[1]),

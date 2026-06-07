@@ -18,6 +18,7 @@ def _trace(tag: str, **data):
 class UnitSide(Enum):
     GE = "GE"
     US = "US"
+    IT = "IT"
 
 
 class UnitCategory(Enum):

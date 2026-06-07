@@ -9,9 +9,15 @@ from assault_sim.config.ppo_config import PPOConfig
 
 
 @dataclass(frozen=True)
+class ScenarioScheduleEntry:
+    id: str
+    episodes: int
+
+
+@dataclass(frozen=True)
 class TrainConfig:
-    rl_side: str
-    scenario: str
+    rl_sides: tuple[str, ...]
+    scenario_schedule: tuple[ScenarioScheduleEntry, ...]
     seed: int
 
     total_updates: int
@@ -43,11 +49,21 @@ class TrainConfig:
     sb3_zero_damage_penalty: float
     sb3_extra_good_trade_bonus: float
 
+    @property
+    def scenario(self) -> str:
+        # Primary scenario reference (first phase).
+        return self.scenario_schedule[0].id
+
+    @property
+    def rl_side(self) -> str:
+        # Compatibility alias: first configured RL side.
+        return self.rl_sides[0]
+
     @staticmethod
     def from_defaults() -> "TrainConfig":
         return TrainConfig(
-            rl_side=PPOConfig.RL_SIDE,
-            scenario=PPOConfig.SCENARIO,
+            rl_sides=(PPOConfig.RL_SIDE,),
+            scenario_schedule=(ScenarioScheduleEntry(id=PPOConfig.SCENARIO, episodes=1000),),
             seed=PPOConfig.SEED,
             total_updates=PPOConfig.TOTAL_UPDATES,
             rollout_steps=PPOConfig.ROLLOUT_STEPS,
@@ -80,9 +96,34 @@ class TrainConfig:
     def from_dict(payload: dict[str, Any]) -> "TrainConfig":
         base = TrainConfig.from_defaults()
         merged = {**asdict(base), **payload}
+        raw_rl_sides = merged.get("rl_sides")
+        if isinstance(raw_rl_sides, list) and raw_rl_sides:
+            rl_sides = tuple(str(s).upper() for s in raw_rl_sides)
+        else:
+            # Compatibility/fallback path
+            rl_sides = (str(merged.get("rl_side", PPOConfig.RL_SIDE)).upper(),)
+
+        raw_schedule = merged.get("scenario_schedule")
+        if not isinstance(raw_schedule, list) or not raw_schedule:
+            raise ValueError(
+                "train_config.json requires non-empty 'scenario_schedule' list, "
+                "e.g. [{\"id\":\"scenario_name\",\"episodes\":1000}]"
+            )
+        schedule = tuple(
+            ScenarioScheduleEntry(
+                id=str(item["id"]),
+                episodes=int(item["episodes"]),
+            )
+            for item in raw_schedule
+        )
+        for entry in schedule:
+            if entry.episodes <= 0:
+                raise ValueError(
+                    f"scenario_schedule entry '{entry.id}' must have episodes > 0"
+                )
         return TrainConfig(
-            rl_side=str(merged["rl_side"]),
-            scenario=str(merged["scenario"]),
+            rl_sides=rl_sides,
+            scenario_schedule=schedule,
             seed=int(merged["seed"]),
             total_updates=int(merged["total_updates"]),
             rollout_steps=int(merged["rollout_steps"]),

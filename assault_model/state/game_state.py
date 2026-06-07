@@ -95,6 +95,7 @@ class GameState:
 
         # init
         self.recalculate_hex_control()
+        self._apply_initial_vp_control_on_start()
 
     # =================================================
     # TURN ORDER
@@ -161,19 +162,33 @@ class GameState:
                 hex_state.ownership = HexOwnership.NONE
                 hex_state.contested = False
 
+    def _apply_initial_vp_control_on_start(self) -> None:
+        """
+        VP hexes start neutral by default, unless the scenario
+        explicitly sets an initial owner for a given VP.
+        """
+        if self.turn != 1 or not self.victory:
+            return
+
+        for vp in self.victory.points:
+            hex_state = self.hex_states.get(vp.hex_coords)
+            if hex_state is None:
+                continue
+            if vp.initial_owner:
+                hex_state.ownership = self.side_to_ownership.get(
+                    vp.initial_owner,
+                    HexOwnership.NONE,
+                )
+            else:
+                hex_state.ownership = HexOwnership.NONE
+            hex_state.contested = False
+
     # =================================================
     # TURN END
     # =================================================
     def end_turn(self) -> None:
 
         self.recalculate_hex_control()
-
-        if self.vp_tracker:
-            ownership_map = {
-                coords: hs.ownership
-                for coords, hs in self.hex_states.items()
-            }
-            self.vp_tracker.apply_turn(ownership_map)
 
         self.turn += 1
         self.turn_state.advance_turn()

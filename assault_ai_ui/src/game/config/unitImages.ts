@@ -29,6 +29,62 @@ export const unitImages = {
     card_half: "/art/counters/GE Unit 50mm Mortarb.jpg"
   },
 
+  IT_RIFLES_43: {
+    label: "IT Rifles 43",
+    full: "/art/counters/IT Rifles 43.png",
+    half: "/art/counters/IT Rifles 43b.png",
+    card: "/art/counters/IT Unit Rifles 43.jpg",
+    card_half: "/art/counters/IT Unit Rifles 43b.jpg"
+  },
+
+  IT_LMG_SQUAD_43: {
+    label: "IT LMG Squad 43",
+    full: "/art/counters/IT LMG Squad 43.png",
+    half: "/art/counters/IT LMG Squad 43b.png",
+    card: "/art/counters/IT Unit LMG Squad 43.jpg",
+    card_half: "/art/counters/IT Unit LMG Squad 43b.jpg"
+  },
+
+  IT_SOLOTHURN_ATR_43: {
+    label: "IT Solothurn ATR 43",
+    full: "/art/counters/IT Solothurn ATR 43.png",
+    half: "/art/counters/IT Solothurn ATR 43b.png",
+    card: "/art/counters/IT Unit Solothurn ATR 43.jpg",
+    card_half: "/art/counters/IT Unit Solothurn ATR 43b.jpg"
+  },
+
+  IT_20MM_BREDA_AA_43: {
+    label: "IT 20mm Breda AA 43",
+    full: "/art/counters/IT 20mm Breda AA 43.png",
+    half: "/art/counters/IT 20mm Breda AAb.png",
+    card: "/art/counters/IT Unit 20mm Breda AA.jpg",
+    card_half: "/art/counters/IT Unit 20mm Breda AAb.jpg"
+  },
+
+  IT_BREDA_MMG: {
+    label: "IT Breda MMG",
+    full: "/art/counters/IT Breda MMG.png",
+    half: "/art/counters/IT Breda MMG.png",
+    card: "/art/counters/IT Unit Breda MMG.jpg",
+    card_half: "/art/counters/IT Unit Breda MMG.jpg"
+  },
+
+  IT_SNIPER_43: {
+    label: "IT Sniper 43",
+    full: "/art/counters/IT Sniper 43.png",
+    half: "/art/counters/IT Sniper 43b.png",
+    card: "/art/counters/IT Unit Sniper 43.jpg",
+    card_half: "/art/counters/IT Unit Sniper 43b.jpg"
+  },
+
+  IT_45MM_BRIXIA: {
+    label: "IT 45mm Brixia",
+    full: "/art/counters/IT 45mm Brixia Team.png",
+    half: "/art/counters/IT 45mm Brixia Teamb.png",
+    card: "/art/counters/IT Unit 45mm Brixia Mortar.jpg",
+    card_half: "/art/counters/IT Unit 45mm Brixia Mortarb.jpg"
+  },
+
   US_RIFLES_43: {
     label: "US Rifles 43",
     full: "/art/counters/US Rifles 43.png",

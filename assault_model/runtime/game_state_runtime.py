@@ -188,8 +188,18 @@ class RuntimeGameState:
         alive_sides = {u.side for u in alive_units}
 
         event_bus = context.event_bus if context else None
+
+        def _finalize_vp_if_needed():
+            if not self.base_state.vp_tracker:
+                return
+            ownership_map = {
+                coords: hs.ownership
+                for coords, hs in self.base_state.hex_states.items()
+            }
+            self.base_state.vp_tracker.finalize(ownership_map)
         
         if not alive_units:
+            _finalize_vp_if_needed()
             self.base_state.done = True
             self.base_state.winner = None
             self.base_state.end_reason = "all_units_destroyed"
@@ -209,6 +219,7 @@ class RuntimeGameState:
         if len(alive_sides) == 1:
             winner = next(iter(alive_sides))
 
+            _finalize_vp_if_needed()
             self.base_state.done = True
             self.base_state.winner = winner
             self.base_state.end_reason = "last_side_standing"
@@ -229,6 +240,7 @@ class RuntimeGameState:
             self.scenario.max_turns is not None
             and self.base_state.turn >= self.scenario.max_turns
         ):
+            _finalize_vp_if_needed()
             self.base_state.done = True
             self.base_state.winner = None
             self.base_state.end_reason = "max_turns"

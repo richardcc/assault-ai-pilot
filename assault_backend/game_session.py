@@ -171,10 +171,12 @@ class GameSession:
                 for piece in scenario.get("map", {}).get("pieces", []):
                     piece_id = piece.get("id")
                     origin = piece.get("origin", [0, 0])
+                    rotation = int(piece.get("rotation", 0))
 
                     pieces.append({
                         "id": piece_id,
                         "origin": origin,
+                        "rotation": rotation,
                         "shape": pieces_catalog.get(piece_id, {}).get("shape", [1, 1]),
                     })
                 fortifications = scenario.get("map", {}).get("fortifications", [])
@@ -182,6 +184,29 @@ class GameSession:
                 fortifications = []
         else:
             fortifications = []
+
+        # VP ownership (live) + initial owner from scenario definition.
+        ownership_to_side = {
+            ownership: side
+            for side, ownership in getattr(state, "side_to_ownership", {}).items()
+        }
+        vps = []
+        if getattr(state, "victory", None):
+            for vp in state.victory.points:
+                q, r = vp.hex_coords
+                hs = state.hex_states.get((q, r))
+                current_owner = (
+                    ownership_to_side.get(hs.ownership)
+                    if hs is not None
+                    else None
+                )
+                vps.append({
+                    "q": q,
+                    "r": r,
+                    "value": vp.per_turn,
+                    "initial_owner": getattr(vp, "initial_owner", None),
+                    "current_owner": current_owner,
+                })
 
         # ✅ FINAL
         activated_units = []
@@ -201,6 +226,7 @@ class GameSession:
             "map": {
                 "pieces": pieces,
                 "fortifications": fortifications,
+                "vps": vps,
             },
 
             "units": units,

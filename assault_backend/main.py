@@ -50,6 +50,13 @@ RULEBOOK_PATH = (
 with open(RULEBOOK_PATH, "r", encoding="utf-8") as f:
     TYPED_RULEBOOK = json.load(f)
 
+SCENARIOS_PATH = (
+    Path(__file__).resolve().parent.parent
+    / "assault_sim"
+    / "assets"
+    / "scenarios"
+)
+
 engine = ExplainableEngine(
     hrl_service=HRLService(),
     tactical_service=TacticalService(typed_rules=TYPED_RULEBOOK),
@@ -77,6 +84,21 @@ async def get_scenario(scenario_id: str):
         if game_session.env is None:
             game_session.start(scenario_id, {})
         return game_session.get_state()
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/ui/scenarios")
+def list_ui_scenarios():
+    try:
+        if not SCENARIOS_PATH.exists():
+            raise FileNotFoundError("scenarios path not found")
+        scenario_ids = sorted(
+            p.stem
+            for p in SCENARIOS_PATH.iterdir()
+            if p.is_file() and p.suffix.lower() == ".json"
+        )
+        return {"scenarios": scenario_ids}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -128,6 +150,8 @@ class UnitActionsRequest(BaseModel):
 def game_start(req: GameStartRequest):
     try:
         game_session.env = None
+        if hasattr(game_session, "sb3_ai"):
+            game_session.sb3_ai = None
         game_session.start(req.scenario_id, req.sides)
         if game_session.env is None:
             raise RuntimeError("env not initialized")
@@ -221,30 +245,26 @@ def game_ai_turn():
 
     decision_engine = game_session.decision_engine
     sb3_ai = game_session.sb3_ai
-    steps = []
+    runtime = env.runtime
+    active_side = getattr(runtime, "active_side", None)
+    result = decision_engine.compute_intent(env)
+    if result is None:
+        return {"state": game_session.get_state(), "steps": []}
 
-    while True:
-        runtime = env.runtime
-        active_side = getattr(runtime, "active_side", None)
-        result = decision_engine.compute_intent(env)
-        if result is None:
-            break
+    unit, heuristic_action = result
+    action = heuristic_action
+    source = "heuristic"
+    if sb3_ai is not None and sb3_ai.can_control_side(active_side):
+        try:
+            action, _opt = sb3_ai.choose_action(env, unit)
+            source = "sb3"
+        except Exception as e:
+            print(f"[AI TURN] SB3 inference failed, fallback heuristic: {e}")
+            action = heuristic_action
+            source = "heuristic_fallback"
 
-        unit, heuristic_action = result
-        action = heuristic_action
-        source = "heuristic"
-        if sb3_ai is not None and sb3_ai.can_control_side(active_side):
-            try:
-                action, _opt = sb3_ai.choose_action(env, unit)
-                source = "sb3"
-            except Exception as e:
-                print(f"[AI TURN] SB3 inference failed, fallback heuristic: {e}")
-                action = heuristic_action
-                source = "heuristic_fallback"
-
-        env.step(action)
-        steps.append({"unit": unit.unit_id, "action": action.__class__.__name__, "source": source})
-
+    env.step(action)
+    steps = [{"unit": unit.unit_id, "action": action.__class__.__name__, "source": source}]
     return {"state": game_session.get_state(), "steps": steps}
 
 

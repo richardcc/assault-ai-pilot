@@ -56,8 +56,9 @@
         { "q": 8, "r": 6, "terrain": "building_single" },
         { "q": 4, "r": 7, "terrain": "building_single" },
         { "q": 7, "r": 7, "terrain": "building_single" },
-        { "q": 8, "r": 2, "terrain": "light_forest" },
+        { "q": 8, "r": 2, "terrain": "heavy_forest" },
         { "q": 1, "r": 4, "terrain": "rocky" },
+        { "q": 0, "r": 5, "terrain": "brush" },
         { "q": 3, "r": 0, "terrain": "olive_vine_grove" },
         { "q": 0, "r": 1, "terrain": "olive_vine_grove" },
         { "q": 1, "r": 1, "terrain": "olive_vine_grove" },
@@ -77,6 +78,97 @@
         { "from": "2,6", "to": "3,6", "feature": "wall" },
         { "from": "5,6", "to": "6,6", "feature": "wall" }
       ]
+    },
+    "S4": {
+      "description": "Map section 9x8 (placeholder)",
+      "shape": [9, 8],
+      "hexes": [
+        { "q": 8, "r": 0, "terrain": "brush" },
+        { "q": 3, "r": 4, "terrain": "heavy_forest" },
+        { "q": 2, "r": 5, "terrain": "heavy_forest" },
+        { "q": 2, "r": 0, "terrain": "building_single" },
+        { "q": 0, "r": 1, "terrain": "building_single" },
+        { "q": 3, "r": 1, "terrain": "building_single" },
+        { "q": 4, "r": 1, "terrain": "building_single" },
+        { "q": 6, "r": 1, "terrain": "building_single" },
+        { "q": 7, "r": 1, "terrain": "building_single" },
+        { "q": 1, "r": 2, "terrain": "building_single" },
+        { "q": 2, "r": 2, "terrain": "building_single" },
+        { "q": 3, "r": 2, "terrain": "building_single" },
+        { "q": 4, "r": 4, "terrain": "building_single" },
+        { "q": 8, "r": 4, "terrain": "building_single" },
+        { "q": 0, "r": 5, "terrain": "building_single" },
+        { "q": 5, "r": 5, "terrain": "building_single" },
+        { "q": 7, "r": 5, "terrain": "building_single" },
+        { "q": 1, "r": 6, "terrain": "building_single" },
+        { "q": 3, "r": 6, "terrain": "building_single" },
+        { "q": 4, "r": 6, "terrain": "building_single" },
+        { "q": 3, "r": 0, "terrain": "building_multi" },
+        { "q": 4, "r": 0, "terrain": "building_multi" },
+        { "q": 6, "r": 0, "terrain": "building_multi" },
+        { "q": 1, "r": 1, "terrain": "building_multi" },
+        { "q": 2, "r": 1, "terrain": "building_multi" },
+        { "q": 4, "r": 2, "terrain": "building_multi" },
+        { "q": 6, "r": 2, "terrain": "building_multi" },
+        { "q": 7, "r": 2, "terrain": "building_multi" },
+        { "q": 8, "r": 2, "terrain": "building_multi" },
+        { "q": 1, "r": 4, "terrain": "building_multi" },
+        { "q": 2, "r": 4, "terrain": "building_multi" },
+        { "q": 6, "r": 4, "terrain": "building_multi" },
+        { "q": 7, "r": 4, "terrain": "building_multi" },
+        { "q": 1, "r": 5, "terrain": "building_multi" },  
+        { "q": 3, "r": 5, "terrain": "building_multi" }
+
+
+      ],
+      "hex_edges": []
+    },
+    "Z1": {
+      "description": "Map section 9x8 (placeholder)",
+      "shape": [9, 4],
+      "hexes": [
+        { "q": 0, "r": 1, "terrain": "brush" },
+        { "q": 1, "r": 1, "terrain": "brush" },
+        { "q": 1, "r": 2, "terrain": "light_forest" },
+        { "q": 3  , "r": 1, "terrain": "rocky" },
+        { "q": 5, "r": 1, "terrain": "building_single" },
+        { "q": 4  , "r": 2, "terrain": "building_single" },
+        { "q": 7, "r": 3, "terrain": "building_single" },
+        { "q": 7, "r": 2, "terrain": "olive_vine_grove" },
+        { "q": 6, "r": 2, "terrain": "olive_vine_grove" }
+
+
+      ],
+      "hex_edges": []
+    },
+    "Z2": {
+      "description": "Map section 9x8 (placeholder)",
+      "shape": [9, 4],
+      "hexes": [
+        { "q": 5, "r": 0, "terrain": "building_multi" },
+        { "q": 6, "r": 0, "terrain": "building_multi" },
+        { "q": 7, "r": 0, "terrain": "building_multi" },
+        { "q": 3, "r": 1, "terrain": "building_multi" },
+        { "q": 7, "r": 2, "terrain": "building_multi" },
+        { "q": 0, "r": 3, "terrain": "building_multi" },
+        { "q": 6, "r": 3, "terrain": "building_multi" },
+        { "q": 2, "r": 1, "terrain": "light_forest" },
+        { "q": 5, "r": 3, "terrain": "light_forest" },
+        { "q": 3, "r": 0, "terrain": "building_single" },
+        { "q": 0, "r": 1, "terrain": "building_single" },
+        { "q": 1, "r": 1, "terrain": "building_single" },
+        { "q": 6, "r": 1, "terrain": "building_single" },
+        { "q": 7, "r": 1, "terrain": "building_single" },
+        { "q": 7, "r": 1, "terrain": "building_single" },
+        { "q": 1, "r": 2, "terrain": "building_single" },
+        { "q": 2, "r": 2, "terrain": "building_single" },
+        { "q": 3, "r": 2, "terrain": "building_single" },
+        { "q": 6, "r": 2, "terrain": "building_single" },
+        { "q": 2, "r": 3, "terrain": "building_single" },
+        { "q": 3, "r": 3, "terrain": "building_single" }
+
+      ],
+      "hex_edges": []
     }
   }
 }
