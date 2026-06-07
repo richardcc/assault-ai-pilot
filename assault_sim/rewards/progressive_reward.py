@@ -157,9 +157,20 @@ class ProgressiveReward(BaseReward):
         # =================================================
         if hasattr(state, "vp_tracker") and state.vp_tracker:
             if hasattr(next_state, "vp_tracker") and next_state.vp_tracker:
-
-                prev_vp = state.vp_tracker.score.get(self.rl_side, 0)
-                new_vp = next_state.vp_tracker.score.get(self.rl_side, 0)
+                side_to_ownership_prev = getattr(state, "side_to_ownership", {}) or {}
+                side_to_ownership_next = getattr(next_state, "side_to_ownership", {}) or {}
+                prev_owner_key = side_to_ownership_prev.get(self.rl_side)
+                next_owner_key = side_to_ownership_next.get(self.rl_side)
+                prev_vp = (
+                    state.vp_tracker.score.get(prev_owner_key, 0)
+                    if prev_owner_key is not None
+                    else 0
+                )
+                new_vp = (
+                    next_state.vp_tracker.score.get(next_owner_key, 0)
+                    if next_owner_key is not None
+                    else 0
+                )
 
                 reward += (new_vp - prev_vp) * self.cfg.vp_delta_weight
 

@@ -197,6 +197,25 @@ class RuntimeGameState:
                 for coords, hs in self.base_state.hex_states.items()
             }
             self.base_state.vp_tracker.finalize(ownership_map)
+
+        def _winner_by_vp() -> str | None:
+            tracker = self.base_state.vp_tracker
+            if tracker is None:
+                return None
+            side_to_ownership = getattr(self.base_state, "side_to_ownership", {}) or {}
+            if not side_to_ownership:
+                return None
+            side_scores = {
+                side: tracker.score.get(ownership, 0)
+                for side, ownership in side_to_ownership.items()
+            }
+            if not side_scores:
+                return None
+            best_score = max(side_scores.values())
+            winners = [side for side, score in side_scores.items() if score == best_score]
+            if len(winners) != 1:
+                return None
+            return winners[0]
         
         if not alive_units:
             _finalize_vp_if_needed()
@@ -242,15 +261,15 @@ class RuntimeGameState:
         ):
             _finalize_vp_if_needed()
             self.base_state.done = True
-            self.base_state.winner = None
-            self.base_state.end_reason = "max_turns"
+            self.base_state.winner = _winner_by_vp()
+            self.base_state.end_reason = "max_turns_vp"
 
             if event_bus:
                 event_bus.emit({
                     "type": "MATCH_END",
                     "payload": {
-                        "result": "draw",
-                        "winner": None,
+                        "result": "draw" if self.base_state.winner is None else "victory",
+                        "winner": self.base_state.winner,
                         "reason": self.base_state.end_reason,
                         "turn": self.base_state.turn,
                     },
