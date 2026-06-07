@@ -65,6 +65,8 @@ class RolloutBatch:
 class EvalResult:
     winner: str | None
     end_reason: str | None
+    rl_result: str
+    tracked_result: str | None
     vp: int
     vp_by_side: dict[str, int]
     vp_total_in_play: int
@@ -87,6 +89,8 @@ class EvalResult:
         return {
             "winner": self.winner,
             "end_reason": self.end_reason,
+            "rl_result": self.rl_result,
+            "tracked_result": self.tracked_result,
             "vp": self.vp,
             "vp_by_side": self.vp_by_side,
             "vp_total_in_play": self.vp_total_in_play,
@@ -111,6 +115,8 @@ class EvalResult:
         return EvalResult(
             winner=payload.get("winner"),
             end_reason=payload.get("end_reason"),
+            rl_result=str(payload.get("rl_result", "draw")),
+            tracked_result=payload.get("tracked_result"),
             vp=int(payload.get("vp", 0)),
             vp_by_side=dict(payload.get("vp_by_side", {})),
             vp_total_in_play=int(payload.get("vp_total_in_play", 0)),

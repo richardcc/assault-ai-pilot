@@ -91,6 +91,28 @@ class TrainingEnv:
                 captured += 1
         return captured
 
+    def _objective_outcome_result(self, state):
+        outcomes = getattr(self.sim.scenario, "victory_outcomes", None) or {}
+        metric = str(outcomes.get("metric", "")).strip()
+        timing = str(outcomes.get("timing", "")).strip()
+        tracked_side = str(outcomes.get("tracked_side", "")).strip().upper()
+        table = outcomes.get("table", [])
+        if metric != "objectives_captured" or timing != "end_of_last_turn" or not tracked_side or not table:
+            return None
+        captured = self._objectives_captured_for_side(state, tracked_side)
+        for row in table:
+            if not isinstance(row, dict):
+                continue
+            cap = row.get("captured", {}) or {}
+            try:
+                min_cap = int(cap.get("min", -10**9))
+                max_cap = int(cap.get("max", 10**9))
+            except Exception:
+                continue
+            if min_cap <= captured <= max_cap:
+                return row
+        return None
+
     # -------------------------------------------------
     @property
     def state(self):
@@ -334,6 +356,20 @@ class TrainingEnv:
         info["objective_captured_before"] = captured_before
         info["objective_captured_after"] = captured_after
         info["objective_captured_delta"] = captured_after - captured_before
+        if objective_rule_active:
+            row = self._objective_outcome_result(next_state)
+            result_text = str((row or {}).get("result", "")).strip()
+            result_l = result_text.lower()
+            if "vittoria totale" in result_l or result_l == "vittoria":
+                result_kind = "victory"
+            elif "pareggio" in result_l or "draw" in result_l:
+                result_kind = "draw"
+            elif "sconfitta" in result_l or "defeat" in result_l or "lose" in result_l:
+                result_kind = "defeat"
+            else:
+                result_kind = "unknown"
+            info["objective_result_text"] = result_text
+            info["objective_result_kind"] = result_kind
 
         return (
             encode_state(

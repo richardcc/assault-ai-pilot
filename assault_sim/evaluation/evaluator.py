@@ -26,17 +26,9 @@ class Evaluator:
     # RUN SINGLE EPISODE
     # -------------------------------------------------
     def run_episode(self):
-
-        scenario = None
-        if getattr(self.env, "sim", None) is not None:
-            scenario = getattr(self.env.sim, "scenario", None)
-        tracker = MetricsTracker(self.rl_side, scenario=scenario)
         advanced_metrics = AdvancedMetrics()
 
         sim = getattr(self.env, "sim", None) or getattr(self.env, "sim_env", None)
-
-        if sim is not None and getattr(sim, "event_bus", None) is not None:
-            sim.event_bus.subscribe(tracker)
 
         # -------------------------------------------------
         # POLICY TRACKING
@@ -57,6 +49,11 @@ class Evaluator:
         events_log = []
 
         obs = self.env.reset()
+        sim = getattr(self.env, "sim", None) or getattr(self.env, "sim_env", None)
+        scenario = getattr(sim, "scenario", None) if sim is not None else None
+        tracker = MetricsTracker(self.rl_side, scenario=scenario)
+        if sim is not None and getattr(sim, "event_bus", None) is not None:
+            sim.event_bus.subscribe(tracker)
 
         if hasattr(self.controller, "reset"):
             self.controller.reset()

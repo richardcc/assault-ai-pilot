@@ -1,5 +1,45 @@
 # ROADMAP Training 2026 (Gym -> SB3 -> RLlib Ready)
 
+## Update operativo (2026-06-07)
+
+Cambios implementados y validados en esta iteracion:
+- Motor de victoria alineado con campania:
+  - si escenario define `victory_outcomes` con `metric=objectives_captured` y `timing=end_of_last_turn`, el resultado final se decide por esa tabla.
+  - semantica cerrada: victoria solo con `Vittoria` / `Vittoria totale`; `Pareggio` = empate; `Sconfitta*` = derrota del tracked side.
+- Control de VP:
+  - los VP mantienen ownership al quedar vacios hasta que otro bando los capture.
+  - evento `VP_CAPTURED` emitido en runtime cuando cambia control.
+- UI/telemetria:
+  - cabecera con `VPs` por bando y progreso de `OBJECTIVES` (capturados/total + resultado de tabla).
+  - estado de partida incluye `done`, `winner`, `end_reason`.
+- Train/Eval multi-lado y multi-escenario:
+  - `rl_sides` global (US/IT/GE) + salto automatico de combinaciones lado/escenario invalidas.
+  - reporte por combinacion `side x scenario` + comparativo consolidado.
+- Eval y metricas:
+  - desglose por `rl_result` (win/draw/loss) y `tracked_result` (resultado de tabla de campania).
+  - `end_reason` neutralizado a `objective_outcome_resolved` para comparacion cross-side.
+  - fix raiz de `UNKNOWN:1` (tracker inicializado despues de reset para tener scenario valido desde episodio 1).
+- Reward/observacion:
+  - observacion RL extendida con progreso de objetivos (`objectives_captured`) y presion temporal.
+  - shaping objetivo: tracked side aprende a capturar; no-tracked aprende a negar y tambien a capturar.
+  - shaping terminal alineado a resultado de `victory_outcomes`.
+- Politicas/heuristica:
+  - `OptionExecutor` y `TacticalPathHeuristic` priorizan mover hacia objetivos VP relevantes cuando no hay buen ataque.
+  - `HOLD` evita pasividad si existen objetivos capturables.
+- Limpieza de legado:
+  - eliminado fallback a checkpoints sin sufijo de bando (`sb3_latest.zip`, `sb3_vecnormalize.pkl`) en train/backend/eval.
+  - artefactos oficiales solo por lado: `sb3_latest_<SIDE>.zip`, `sb3_vecnormalize_<SIDE>.pkl`.
+
+Estado cuantitativo reciente (eval 100 eps por combinacion valida):
+- US vs `mettete_i_piedi_terra_1`: win_rate ~0.265.
+- US vs `battaglia_cittadina_2_1`: win_rate ~0.000.
+- IT vs `battaglia_cittadina_2_1`: win_rate ~1.000.
+- GE vs `mettete_i_piedi_terra_1`: win_rate ~0.785.
+
+Conclusion operativa:
+- pipeline y reglas estan coherentes;
+- cuello de botella principal: performance US en cumplimiento de objetivos de captura.
+
 ## Contexto y objetivo
 
 Este roadmap define la evolucion del modulo de entrenamiento para un juego por turnos con multiples activaciones por turno, con horizonte de escalado a mapas 4x y 20 unidades por bando.
@@ -41,11 +81,16 @@ Completado recientemente:
 - Fase B: adapter Gymnasium formal (`GymAssaultEnv`) operativo
 - Fase C: baseline SB3 oficial (`train_sb3.py`, `eval_sb3.py`) con export JSON/CSV
 - Integracion inferencia SB3 en backend (`SB3AIService`) con fallback heuristico
+- Victoria de campania por `victory_outcomes` integrada en runtime y UI
+- Reportes de evaluacion por `side x scenario` con `rl_result` y `tracked_result`
+- Limpieza de artefactos legacy (sin checkpoint generico sin bando)
+- Politicas/heuristica orientadas a objetivos VP (captura y negacion)
 
 Pendiente estructural:
 - contratos tipados de rollout/dataset
 - pipeline RLlib-ready
 - escalado y tuning para mapas x4 / 20v20
+- mejora de performance US en objetivos de captura (prioridad tactica activa)
 
 ---
 
@@ -196,6 +241,9 @@ KPI salida:
 `assault_sim/evaluation/*`
 - [x] unificar export de metricas en formato comun (json report + csv)
 - [ ] agregar panel de alignment por opcion y por unidad
+- [x] reporte comparativo por `side x scenario`
+- [x] desglose de resultados por `rl_result` (win/draw/loss)
+- [x] desglose de resultados por `tracked_result` de campania
 
 `assault_sim/envs/gym_assault_env.py` (nuevo)
 - [x] contrato Gym completo
@@ -324,6 +372,7 @@ Migrar ruta principal SB3 -> RLlib solo si se cumplen todos:
 - [ ] Ajuste de paralelismo/throughput (workers, fragment length, minibatches).
 - [ ] Establecer SLO de entrenamiento largo (24h sin crash, eval estable multi-seed).
 - [ ] Validacion de calidad tactica en escenarios grandes con gates de promocion.
+- [ ] Recuperacion de US por objetivos de campania (capturas) con tuning dirigido de reward/curriculum.
 
 ### Definition of Done por hito
 - [x] P0 Done: no errores de rutas/shape y run corto reproducible estable.
@@ -332,8 +381,8 @@ Migrar ruta principal SB3 -> RLlib solo si se cumplen todos:
 - [ ] P3 Done: entrenamiento estable y tacticamente competitivo en mapas grandes.
 
 Prioridad de ejecucion actual:
-- foco primario: iniciar P3 (profiling + throughput + curriculum de complejidad)
-- foco secundario: cerrar remanente de P2 (runner de evaluacion agnostico + validacion final de migracion)
+- foco primario: recuperar US en objetivos de captura (campania) sin degradar IT/GE.
+- foco secundario: iniciar P3 (profiling + throughput + curriculum de complejidad).
 
 ### Decision de arquitectura (2026-06-05)
 - [x] SB3 se adopta como ruta oficial y unica de entrenamiento (Gym + SB3 PPO).

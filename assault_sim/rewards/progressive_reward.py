@@ -158,12 +158,35 @@ class ProgressiveReward(BaseReward):
         objective_rule_active = bool(info.get("objective_rule_active", False))
         objective_tracked_side = str(info.get("objective_tracked_side") or "").upper()
         objective_delta = int(info.get("objective_captured_delta", 0))
+        rl_side_norm = str(self.rl_side).upper()
+
+        def _captured_objectives_for_side(game_state, side: str) -> int:
+            if game_state is None or not side:
+                return 0
+            points = getattr(getattr(game_state, "victory", None), "points", []) or []
+            side_to_ownership = getattr(game_state, "side_to_ownership", {}) or {}
+            ownership = side_to_ownership.get(side)
+            if ownership is None:
+                return 0
+            captured = 0
+            for vp in points:
+                hs = game_state.hex_states.get(vp.hex_coords)
+                if hs is not None and hs.ownership == ownership:
+                    captured += 1
+            return captured
+
         if objective_rule_active and objective_tracked_side:
             # If RL trains the tracked side, reward captures; otherwise reward denying captures.
-            if str(self.rl_side).upper() == objective_tracked_side:
+            if rl_side_norm == objective_tracked_side:
                 reward += objective_delta * self.cfg.vp_delta_weight
             else:
                 reward -= objective_delta * self.cfg.vp_delta_weight
+                # For non-tracked sides, also reward proactively capturing objectives,
+                # not only passively denying tracked-side captures.
+                own_before = _captured_objectives_for_side(state, rl_side_norm)
+                own_after = _captured_objectives_for_side(next_state, rl_side_norm)
+                own_delta = own_after - own_before
+                reward += own_delta * self.cfg.vp_delta_weight
 
         if hasattr(state, "vp_tracker") and state.vp_tracker:
             if hasattr(next_state, "vp_tracker") and next_state.vp_tracker:
@@ -196,13 +219,24 @@ class ProgressiveReward(BaseReward):
                 reward -= self.cfg.lose_penalty
 
             if objective_rule_active and objective_tracked_side:
-                # Terminal shaping aligned with objective-outcome winner.
-                if winner is None:
+                # Terminal shaping aligned with objective_outcomes table semantics.
+                # Uses tracked-side campaign result text, not only winner side.
+                result_kind = str(info.get("objective_result_kind") or "").lower()
+                rl_is_tracked = rl_side_norm == objective_tracked_side
+                if result_kind == "victory":
+                    reward += self.cfg.win_bonus * (0.75 if rl_is_tracked else -0.75)
+                elif result_kind == "defeat":
+                    reward += self.cfg.lose_penalty * (-0.75 if rl_is_tracked else 0.75)
+                elif result_kind == "draw":
                     reward += 0.0
-                elif str(self.rl_side).upper() == str(winner).upper():
-                    reward += self.cfg.win_bonus * 0.5
                 else:
-                    reward -= self.cfg.lose_penalty * 0.5
+                    # Keep winner-based shaping as fallback when table label is unknown.
+                    if winner is None:
+                        reward += 0.0
+                    elif str(self.rl_side).upper() == str(winner).upper():
+                        reward += self.cfg.win_bonus * 0.5
+                    else:
+                        reward -= self.cfg.lose_penalty * 0.5
 
         # =================================================
         # ✅ TIME PENALTY

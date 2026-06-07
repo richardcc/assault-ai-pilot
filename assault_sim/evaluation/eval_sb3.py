@@ -114,9 +114,7 @@ def _resolve_model_path_for_side(repo_root: Path, rl_side: str) -> Path | None:
     side = (rl_side or "").strip().upper()
     candidates = [
         repo_root / "models" / f"sb3_latest_{side}.zip",
-        repo_root / "models" / "sb3_latest.zip",
         repo_root / "models" / f"sb3_best_{side}" / "best_model.zip",
-        repo_root / "models" / "sb3_best" / "best_model.zip",
     ]
     return next((p for p in candidates if p.exists()), None)
 
@@ -125,7 +123,6 @@ def _resolve_vecnorm_path_for_side(repo_root: Path, rl_side: str) -> Path | None
     side = (rl_side or "").strip().upper()
     candidates = [
         repo_root / "models" / f"sb3_vecnormalize_{side}.pkl",
-        repo_root / "models" / "sb3_vecnormalize.pkl",
     ]
     return next((p for p in candidates if p.exists()), None)
 
@@ -280,6 +277,8 @@ def evaluate_sb3(episodes: int = 100):
                 "avg_steps": side_report["summary"].get("avg_steps", 0.0),
                 "end_reason_counts": side_report["summary"].get("end_reason_counts", {}),
                 "win_rate_by_end_reason": side_report["summary"].get("win_rate_by_end_reason", {}),
+                "rl_result_counts": side_report["summary"].get("rl_result_counts", {}),
+                "tracked_result_counts": side_report["summary"].get("tracked_result_counts", {}),
                 "trade_mean": side_report["combat"].get("trade_mean", 0.0),
                 "damage_ratio": side_report["combat"].get("damage_ratio", 0.0),
             })
@@ -298,12 +297,19 @@ def evaluate_sb3(episodes: int = 100):
                 f"{reason}:{reason_rates.get(reason, 0.0):.2f} ({count})"
                 for reason, count in reason_counts.items()
             ) or "-"
+            rl_results_str = ", ".join(
+                f"{k}:{v}" for k, v in row.get("rl_result_counts", {}).items()
+            ) or "-"
+            tracked_results_str = ", ".join(
+                f"{k}:{v}" for k, v in row.get("tracked_result_counts", {}).items()
+            ) or "-"
             print(
                 f"side={row['rl_side']} scenario={row['scenario']} "
                 f"win_rate={row['win_rate']:.3f} avg_vp={row['avg_vp']:.3f} "
                 f"avg_steps={row['avg_steps']:.1f} trade_mean={row['trade_mean']:.3f} "
                 f"damage_ratio={row['damage_ratio']:.3f} draws={row['draws']} "
-                f"reasons=[{reasons_str}]"
+                f"reasons=[{reasons_str}] rl_results=[{rl_results_str}] "
+                f"tracked_results=[{tracked_results_str}]"
             )
 
     report = {

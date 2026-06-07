@@ -155,11 +155,6 @@ def main():
         vecnorm_path = model_dir / f"sb3_vecnormalize_{rl_side}.pkl"
         train_env.save(str(vecnorm_path))
 
-        # Keep compatibility symlink/copy-style latest aliases for first side.
-        if rl_side == cfg.rl_sides[0]:
-            model.save(str(model_dir / "sb3_latest.zip"))
-            train_env.save(str(model_dir / "sb3_vecnormalize.pkl"))
-
         meta = {
             "timestamp_utc": datetime.utcnow().isoformat() + "Z",
             "algorithm": "SB3_PPO",
@@ -191,9 +186,6 @@ def main():
         }
         with open(model_dir / f"sb3_latest_{rl_side}.meta.json", "w", encoding="utf-8") as f:
             json.dump(meta, f, indent=2)
-        if rl_side == cfg.rl_sides[0]:
-            with open(model_dir / "sb3_latest.meta.json", "w", encoding="utf-8") as f:
-                json.dump(meta, f, indent=2)
 
         print(f"SB3 training complete for {rl_side} -> {out_path}")
 

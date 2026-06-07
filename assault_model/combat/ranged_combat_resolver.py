@@ -109,8 +109,14 @@ def resolve_ranged_combat(
 
         if attacker_hex is not None:
             terrain_name = attacker_hex.get_terrain()
-
-            if terrain_cfg.get(terrain_name, {}).get("no_indirect_from", False):
+            # TerrainConfig.get accepts only the terrain name.
+            # Keep compatibility in case a raw dict is passed.
+            terrain_entry = {}
+            if isinstance(terrain_cfg, dict):
+                terrain_entry = terrain_cfg.get(terrain_name, {}) or {}
+            else:
+                terrain_entry = terrain_cfg.get(terrain_name) or {}
+            if terrain_entry.get("no_indirect_from", False):
                 _trace("INDIRECT_BLOCKED_FROM_TERRAIN", terrain=terrain_name)
                 return CombatResolutionResult([], [], [])
 

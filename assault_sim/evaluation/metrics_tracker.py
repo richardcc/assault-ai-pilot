@@ -326,10 +326,20 @@ class MetricsTracker:
                     "objectives_total": total_obj,
                     "result": (matched or {}).get("result"),
                 }
+        tracked_result = (victory_level or {}).get("result")
+        winner = getattr(game_state, "winner", None)
+        if winner is None:
+            rl_result = "draw"
+        elif str(winner).upper() == str(self.rl_side).upper():
+            rl_result = "win"
+        else:
+            rl_result = "loss"
 
         return {
-            "winner": getattr(game_state, "winner", None),
+            "winner": winner,
             "end_reason": getattr(game_state, "end_reason", None),
+            "rl_result": rl_result,
+            "tracked_result": tracked_result,
             "vp": rl_vp,
             "vp_by_side": vp_by_side,
             "vp_total_in_play": vp_total_in_play,

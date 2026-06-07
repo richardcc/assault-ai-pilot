@@ -258,16 +258,22 @@ class RuntimeGameState:
                     break
 
             result_text = str((row_match or {}).get("result", "")).strip().lower()
+            # Campaign table semantics:
+            # - Victory only when result is explicitly "Vittoria" or "Vittoria totale".
+            # - Draw on "Pareggio".
+            # - Any "Sconfitta*" means tracked side loses.
             if "pareggio" in result_text or "draw" in result_text:
-                return None, "objective_outcome_draw"
+                return None, "objective_outcome_resolved"
+            if "vittoria totale" in result_text or result_text == "vittoria":
+                return tracked_side, "objective_outcome_resolved"
             if "sconfitta" in result_text or "defeat" in result_text or "lose" in result_text:
                 alive_sides_now = sorted({u.side for u in self.base_state.units if u.alive})
                 if len(alive_sides_now) == 2 and tracked_side in alive_sides_now:
                     other = [s for s in alive_sides_now if s != tracked_side]
-                    return (other[0] if other else None), "objective_outcome_defeat"
-                return None, "objective_outcome_defeat"
-            # Default to tracked side for "vittoria"/"victory" and any non-draw/non-defeat row.
-            return tracked_side, "objective_outcome_victory"
+                    return (other[0] if other else None), "objective_outcome_resolved"
+                return None, "objective_outcome_resolved"
+            # Unrecognized labels default to draw to avoid accidental wins.
+            return None, "objective_outcome_resolved"
         
         if not alive_units and not uses_objective_outcomes:
             _finalize_vp_if_needed()

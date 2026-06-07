@@ -34,10 +34,9 @@ class SB3AIService:
         any_default = self._resolve_model_path_for_side(self.default_rl_side)
         if any_default is None:
             raise FileNotFoundError(
-                "No SB3 checkpoint found. Expected one of: "
+                "No SB3 checkpoint found. Expected side-specific checkpoints, e.g.: "
                 f"{self.repo_root / 'models' / 'sb3_latest_<SIDE>.zip'} or "
-                f"{self.repo_root / 'models' / 'sb3_latest.zip'} or "
-                f"{self.repo_root / 'models' / 'sb3_best' / 'best_model.zip'}"
+                f"{self.repo_root / 'models' / 'sb3_best_<SIDE>' / 'best_model.zip'}"
             )
 
     def _resolve_model_path_for_side(self, side: str | None) -> Path | None:
@@ -45,9 +44,7 @@ class SB3AIService:
         candidates = [
             self._explicit_model_path,
             self.repo_root / "models" / f"sb3_latest_{normalized_side}.zip" if normalized_side else None,
-            self.repo_root / "models" / "sb3_latest.zip",
             self.repo_root / "models" / f"sb3_best_{normalized_side}" / "best_model.zip" if normalized_side else None,
-            self.repo_root / "models" / "sb3_best" / "best_model.zip",
         ]
         return next((p for p in candidates if p is not None and p.exists()), None)
 

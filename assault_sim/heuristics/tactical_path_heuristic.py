@@ -45,6 +45,25 @@ class TacticalPathHeuristic:
             los_bonus = 0.6
         return defense_score + los_bonus
 
+    def _objective_target_hex(self, state, unit):
+        points = getattr(getattr(state, "victory", None), "points", []) or []
+        if not points:
+            return None
+        side_to_ownership = getattr(state, "side_to_ownership", {}) or {}
+        own_ownership = side_to_ownership.get(unit.side)
+        best = None
+        best_score = float("-inf")
+        for vp in points:
+            hs = state.hex_states.get(vp.hex_coords)
+            owned_by_self = hs is not None and hs.ownership == own_ownership
+            need = 0.0 if owned_by_self else 1.0
+            dist = safe_hex_distance(unit.position, vp.hex_coords)
+            score = need * 100.0 + float(getattr(vp, "per_turn", 0)) * 2.0 - float(dist)
+            if score > best_score:
+                best_score = score
+                best = vp.hex_coords
+        return best
+
     # -------------------------------------------------
     def choose_action(self, state, unit, option):
 
@@ -112,10 +131,11 @@ class TacticalPathHeuristic:
 
     # -------------------------------------------------
     def _move_closer(self, state, unit, moves):
-
+        objective_target = self._objective_target_hex(state, unit)
         target = self._nearest_enemy(state, unit)
-
-        if target is None or not moves:
+        if objective_target is None and target is None:
+            return None
+        if not moves:
             return None
 
         best = None
@@ -127,7 +147,8 @@ class TacticalPathHeuristic:
                 continue
 
             new_pos = path[-1]
-            d = safe_hex_distance(new_pos, target.position)
+            ref = objective_target if objective_target is not None else target.position
+            d = safe_hex_distance(new_pos, ref)
             terrain_score = self._terrain_tactical_score(state, unit, new_pos)
             score = -float(d) + _MOVE_CFG.advance_terrain_weight * terrain_score
 
@@ -139,10 +160,11 @@ class TacticalPathHeuristic:
 
     # -------------------------------------------------
     def _flank_move(self, state, unit, moves):
-
+        objective_target = self._objective_target_hex(state, unit)
         target = self._nearest_enemy(state, unit)
-
-        if target is None or not moves:
+        if objective_target is None and target is None:
+            return None
+        if not moves:
             return None
 
         best = None
@@ -154,7 +176,8 @@ class TacticalPathHeuristic:
                 continue
 
             new_pos = path[-1]
-            dist = safe_hex_distance(new_pos, target.position)
+            ref = objective_target if objective_target is not None else target.position
+            dist = safe_hex_distance(new_pos, ref)
             terrain_score = self._terrain_tactical_score(state, unit, new_pos)
             score = max(0, 6 - dist) + _MOVE_CFG.flank_terrain_weight * terrain_score
 

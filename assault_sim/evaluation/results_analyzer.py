@@ -32,12 +32,18 @@ class ResultsAnalyzer:
         steps_list = []
         reason_counts = defaultdict(int)
         win_by_reason = defaultdict(float)
+        rl_result_counts = defaultdict(int)
+        tracked_result_counts = defaultdict(int)
 
         for r in self.results:
 
             winner = r.get("winner")
             reason = str(r.get("end_reason") or "unknown")
             reason_counts[reason] += 1
+            rl_result = str(r.get("rl_result") or "draw")
+            tracked_result = str(r.get("tracked_result") or "UNKNOWN")
+            rl_result_counts[rl_result] += 1
+            tracked_result_counts[tracked_result] += 1
 
             if winner == self.rl_side:
                 wins += 1
@@ -63,6 +69,8 @@ class ResultsAnalyzer:
             "end_reason_counts": dict(reason_counts),
             "win_rate_by_end_reason": reason_win_rate,
             "victory_level_counts": self.victory_level_counts(),
+            "rl_result_counts": dict(rl_result_counts),
+            "tracked_result_counts": dict(tracked_result_counts),
         }
 
     def victory_level_counts(self):
@@ -244,6 +252,12 @@ class ResultsAnalyzer:
             print(f"{reason}: win_rate={rate:.3f} episodes={count}")
         print("\n--- VICTORY LEVEL COUNTS ---")
         for label, count in summary.get("victory_level_counts", {}).items():
+            print(f"{label}: {count}")
+        print("\n--- RL RESULT COUNTS ---")
+        for label, count in summary.get("rl_result_counts", {}).items():
+            print(f"{label}: {count}")
+        print("\n--- TRACKED RESULT COUNTS ---")
+        for label, count in summary.get("tracked_result_counts", {}).items():
             print(f"{label}: {count}")
 
         print("\n=== COMBAT ===")
