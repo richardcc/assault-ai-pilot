@@ -91,14 +91,17 @@ class MetricsTracker:
 
         # SIDE DETECTION (no hardcoded prefixes)
         side = None
+        rl_side_norm = str(self.rl_side).upper()
         if state is not None and hasattr(state, "units"):
             actor = next((u for u in state.units if u.unit_id == unit_id), None)
             if actor is not None:
-                side = "RL" if getattr(actor, "side", None) == self.rl_side else "ENEMY"
+                actor_side_norm = str(getattr(getattr(actor, "side", None), "value", getattr(actor, "side", None))).upper()
+                side = "RL" if actor_side_norm == rl_side_norm else "ENEMY"
         if side is None:
             actor_side = info.get("actor_side")
             if actor_side is not None:
-                side = "RL" if actor_side == self.rl_side else "ENEMY"
+                actor_side_norm = str(getattr(actor_side, "value", actor_side)).upper()
+                side = "RL" if actor_side_norm == rl_side_norm else "ENEMY"
         if side is None:
             side = "RL" if info.get("rl_attacks", 0) > 0 else "ENEMY"
 
@@ -216,7 +219,8 @@ class MetricsTracker:
             if not uid:
                 continue
 
-            side = "RL" if getattr(u, "side", None) == self.rl_side else "ENEMY"
+            actor_side_norm = str(getattr(getattr(u, "side", None), "value", getattr(u, "side", None))).upper()
+            side = "RL" if actor_side_norm == str(self.rl_side).upper() else "ENEMY"
 
             entry = self.unit_stats[side][uid]
 

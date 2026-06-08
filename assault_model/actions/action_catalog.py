@@ -145,27 +145,34 @@ class ActionCatalog:
 
             mode = active.unit_type._resolve_attack_mode(distance)
 
-            if mode == "INDIRECT_FIRE" and distance < 3:
-                continue
-
             if mode == "DIRECT_FIRE":
                 if not self._has_line_of_sight(active, other):
                     continue
 
-            _trace(
-                "ACTION_ADD",
-                action="RangedDirectAttack",
-                attacker=active.unit_id,
-                target=other.unit_id,
-                mode=mode,
-            )
-
-            actions.append(
-                RangedDirectAttack(
-                    active.unit_id,
-                    other.unit_id,
+            if mode == "INDIRECT_FIRE":
+                _trace(
+                    "ACTION_ADD",
+                    action="RangedIndirectAttack",
+                    attacker=active.unit_id,
+                    target=other.unit_id,
+                    mode=mode,
                 )
-            )
+                act = RangedIndirectAttack(active.unit_id, (other.position.q, other.position.r))
+                # Compatibility metadata used by logs/telemetry.
+                act.target_id = other.unit_id
+                act.attack_mode = "INDIRECT_FIRE"
+                actions.append(act)
+            else:
+                _trace(
+                    "ACTION_ADD",
+                    action="RangedDirectAttack",
+                    attacker=active.unit_id,
+                    target=other.unit_id,
+                    mode=mode,
+                )
+                act = RangedDirectAttack(active.unit_id, other.unit_id)
+                act.attack_mode = "DIRECT_FIRE"
+                actions.append(act)
 
         return actions
 

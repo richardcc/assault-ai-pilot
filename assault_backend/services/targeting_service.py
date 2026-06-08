@@ -14,6 +14,27 @@ def _color_names(dice):
     return names
 
 
+def _has_trait(unit, trait_name: str) -> bool:
+    traits = getattr(getattr(unit, "unit_type", None), "traits", []) or []
+    return str(trait_name).upper() in {str(t).upper() for t in traits}
+
+
+def _remove_weakest_die(dice: list):
+    if not dice:
+        return None
+    weakest = min(dice, key=lambda c: int(c))
+    dice.remove(weakest)
+    return weakest
+
+
+def _remove_strongest_die(dice: list):
+    if not dice:
+        return None
+    strongest = max(dice, key=lambda c: int(c))
+    dice.remove(strongest)
+    return strongest
+
+
 def _compute_combat_dice(attacker, target, distance, los, game_map):
     """
     Compute attack/defense dice BEFORE and AFTER modifiers.
@@ -62,6 +83,14 @@ def _compute_combat_dice(attacker, target, distance, los, game_map):
             terrain_name,
             target.unit_type.category.name,
         )
+        if is_indirect and _has_trait(attacker, "REMOVE_WEAKEST_TERRAIN_DEFENSE") and terrain_bonus:
+            _remove_weakest_die(terrain_bonus)
+        if (
+            _has_trait(attacker, "REMOVE_STRONGEST_TERRAIN_DEFENSE")
+            and str(getattr(target.unit_type.category, "value", target.unit_type.category)).upper() != "VEHICLE"
+            and terrain_bonus
+        ):
+            _remove_strongest_die(terrain_bonus)
         defense_mod = defense_mod + list(terrain_bonus)
         fort_type = game_map.get_hex_fortification(target.position.q, target.position.r)
         fort_bonus = FortificationRules.defense_bonus(
@@ -113,6 +142,10 @@ def _compute_empty_hex_dice_preview(attacker, target_q: int, target_r: int, dist
 
     terrain_name = hex_.get_terrain()
     terrain_bonus = list(terrain_config.get_defense_dice(terrain_name, "INFANTRY"))
+    if is_indirect and _has_trait(attacker, "REMOVE_WEAKEST_TERRAIN_DEFENSE") and terrain_bonus:
+        _remove_weakest_die(terrain_bonus)
+    if _has_trait(attacker, "REMOVE_STRONGEST_TERRAIN_DEFENSE") and terrain_bonus:
+        _remove_strongest_die(terrain_bonus)
     fort_type = game_map.get_hex_fortification(target_q, target_r)
     # Sector is irrelevant without defender facing; use FRONT as stable preview convention.
     fort_bonus = FortificationRules.defense_bonus(

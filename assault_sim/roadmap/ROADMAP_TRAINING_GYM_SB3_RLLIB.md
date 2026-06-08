@@ -1,3 +1,174 @@
+# ROADMAP Training 2026 (Pendiente)
+
+## Estado actual (solo pendientes)
+
+Este roadmap mantiene unicamente trabajo abierto. Se eliminaron items completados para evitar ruido operativo.
+
+Prioridad vigente:
+- recuperar performance US en objetivos de captura sin degradar IT/GE;
+- cerrar P2 (RLlib-ready real, no solo parcial);
+- iniciar P3 (escalado x4/20v20) con foco en throughput y estabilidad.
+
+---
+
+## Objetivo operativo
+
+Objetivos principales pendientes:
+- estabilidad PPO sostenida en corridas largas y multi-seed;
+- evaluacion totalmente agnostica al framework;
+- pipeline RLlib-ready con validacion formal de salida;
+- escalado a mapas x4 y 20 unidades por bando sin perdida tactica.
+
+Principio de oro:
+- el trainer nunca asume reglas del juego; solo consume contratos estables.
+
+---
+
+## Fase P2 - RLlib readiness (en cierre)
+
+Objetivo:
+- dejar el sistema preparado para migrar a RLlib con costo medio-bajo.
+
+Pendientes:
+- [ ] cerrar desacople final de evaluacion (runner agnostico completo);
+- [ ] publicar guia final de migracion RLlib (config + policy + env registration + operacion diaria);
+- [ ] validar checklist RLlib-ready end-to-end con evidencia reproducible;
+- [ ] ejecutar smoke RLlib final en pipeline real (registro entorno + rollout corto + export metricas);
+- [ ] definir decision final: RLlib como ruta activa o contingencia tecnica documentada.
+
+Definition of Done P2:
+- [ ] checklist RLlib-ready en verde;
+- [ ] smoke RLlib estable y repetible;
+- [ ] evaluacion agnostica confirmada para SB3 y RLlib;
+- [ ] documentacion operativa completa (train/eval/checkpoint/reporte).
+
+---
+
+## Fase P3 - Escalado mapas x4 / 20v20
+
+Objetivo:
+- mantener throughput y estabilidad en escenarios grandes.
+
+Pendientes:
+- [ ] profiling de hotspots de simulacion (acciones, pathfinding, combate, encoding);
+- [ ] curriculum de complejidad (tamano mapa, numero de unidades, horizonte);
+- [ ] tuning de paralelismo/throughput (workers, fragment length, minibatches);
+- [ ] definir y validar SLO de entrenamiento largo (24h sin crash, eval estable multi-seed);
+- [ ] validar calidad tactica en escenarios grandes con gates de promocion;
+- [ ] recuperar US por objetivos de campania con tuning dirigido de reward/curriculum.
+
+Definition of Done P3:
+- [ ] entrenamiento estable 24h sin crash;
+- [ ] evaluacion multi-seed sin degradacion relevante;
+- [ ] metricas tacticas no inferiores al baseline actual en escenarios objetivo;
+- [ ] throughput objetivo alcanzado en hardware objetivo.
+
+---
+
+## Backlog tecnico abierto (archivo por archivo)
+
+`assault_sim/train/train_ppo.py`
+- [ ] mover utilidades de checkpoint/eval a modulos dedicados pendientes;
+- [ ] separar orchestration del loop de update;
+- [ ] logging estructurado (JSONL opcional).
+
+`assault_sim/train/ppo_trainer.py`
+- [ ] masks explicitas para attack head segun opcion.
+
+`assault_sim/training_env.py`
+- [ ] mantener como legacy adapter interno;
+- [ ] extraer traduccion de `action_type` y `info` en helper compartido.
+
+`assault_sim/decision/action_bridge.py`
+- [ ] exposicion explicita de reglas de resolve para train vs eval.
+
+`assault_sim/evaluation/*`
+- [ ] agregar panel de alignment por opcion y por unidad;
+- [ ] cerrar runner 100% agnostico para comparacion cross-framework.
+
+`assault_sim/envs/gym_assault_env.py`
+- [ ] wrappers opcionales de observacion/reward.
+
+---
+
+## Guardrails y gates vigentes
+
+Guardrails online:
+- `approx_kl <= MAX_KL` con early-stop de update;
+- `clip_fraction` en rango estable;
+- `grad_norm` sin explosiones;
+- detector `nan/inf` en batch y loss.
+
+Gates de promocion:
+- score compuesto (`win_rate` + `damage_ratio` ponderado);
+- mejora minima `EVAL_MIN_IMPROVEMENT`;
+- no degradar `forced_ratio` por encima del umbral.
+
+Gates por combinacion critica (`side x scenario`):
+- [ ] definir umbral minimo por combinacion (especialmente US);
+- [ ] bloquear promocion global si una combinacion critica cae bajo umbral.
+
+---
+
+## Foco tactico activo: recuperacion US
+
+Problema:
+- US mantiene brecha en cumplimiento de objetivos de captura.
+
+Plan pendiente:
+- [ ] tuning dirigido de reward de objetivos (captura/negacion);
+- [ ] ajuste de curriculum para priorizar presion de VP;
+- [ ] validacion A/B contra baseline por `side x scenario`;
+- [ ] no degradar rendimiento IT/GE mientras sube US.
+
+Go / No-Go de iteracion:
+- GO si mejora US en objetivos de captura sin degradacion severa en IT/GE;
+- NO-GO si US no mejora o si cae calidad tactica global.
+
+---
+
+## Riesgos activos y mitigacion
+
+Riesgo: desalineacion accion sampleada vs ejecutada.
+- Mitigacion: seguimiento de alignment y `forced_ratio` como KPI de control.
+
+Riesgo: regresiones silenciosas por cambios de contrato/shape.
+- Mitigacion: validadores de batch + smoke tests + eval comparativa automatizada.
+
+Riesgo: costo de simulacion dominante en mapas grandes.
+- Mitigacion: profiling temprano + tuning de paralelismo + curriculum.
+
+Riesgo: ambiguedad estrategica SB3 vs RLlib.
+- Mitigacion: decision formal al cierre de P2 con criterios medibles.
+
+---
+
+## Plan de ejecucion (proximo ciclo)
+
+Semana 1:
+- cerrar runner de evaluacion agnostico;
+- ejecutar smoke RLlib final y consolidar evidencia;
+- definir decision formal SB3-only vs RLlib activo.
+
+Semana 2:
+- iniciar profiling P3 y establecer throughput objetivo;
+- lanzar primer ciclo de curriculum para escenarios grandes;
+- correr validacion multi-seed base.
+
+Semana 3+:
+- iterar tuning de escalado;
+- cerrar gates por `side x scenario`;
+- completar recuperacion US en objetivos de campania.
+
+---
+
+## Criterio de exito final (pendiente)
+
+Se considera exitoso cuando:
+- [ ] P2 queda cerrado formalmente con evidencia reproducible;
+- [ ] entrenamiento escala a x4/20v20 manteniendo estabilidad;
+- [ ] quality gates se cumplen por combinacion critica (`side x scenario`);
+- [ ] US mejora captura de objetivos sin degradar IT/GE.
 # ROADMAP Training 2026 (Gym -> SB3 -> RLlib Ready)
 
 ## Update operativo (2026-06-07)

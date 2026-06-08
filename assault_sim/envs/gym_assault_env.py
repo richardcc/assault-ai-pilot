@@ -20,6 +20,7 @@ from assault_sim.engine.env_factory import make_env
 from assault_sim.engine.match_runner import MatchRunner
 from assault_sim.heuristics.tactical_path_heuristic import TacticalPathHeuristic
 from assault_sim.rl.tactical_options import TacticalOption
+from assault_sim.rl.strategic_intents import StrategicIntent
 from assault_sim.rewards.shaped_reward import ShapedReward
 
 
@@ -36,7 +37,7 @@ class _GymActionController:
         self.heuristic = TacticalPathHeuristic()
         self.executor = OptionExecutor(self.heuristic, avoid_bad_trades=False, adv_threshold=-0.5)
         self.action_bridge = ActionBridge()
-        self.pending_action: tuple[int, int] | None = None
+        self.pending_action: tuple[int, int, int] | None = None
 
         self.current_option = None
         self.current_option_sampled = None
@@ -47,6 +48,8 @@ class _GymActionController:
         self.last_value = None
         self.current_strategy = None
         self.training_mode = False
+        self._locked_strategy: StrategicIntent | None = None
+        self._locked_strategy_turn: int | None = None
 
     def reset(self):
         self.pending_action = None
@@ -55,20 +58,30 @@ class _GymActionController:
         self.current_option_resolved = None
         self.current_attack_mode = 0
         self.last_decision_trace = None
+        self._locked_strategy = None
+        self._locked_strategy_turn = None
 
-    def set_action(self, action: tuple[int, int]):
+    def set_action(self, action: tuple[int, int, int]):
         self.pending_action = action
 
-    def _decode_action(self) -> tuple[TacticalOption, int]:
+    def _decode_action(self) -> tuple[StrategicIntent, TacticalOption, int]:
         if self.pending_action is None:
-            return TacticalOption.HOLD, 0
-        option_idx, attack_mode = int(self.pending_action[0]), int(self.pending_action[1])
+            return StrategicIntent.CAPTURE, TacticalOption.HOLD, 0
+        strategy_idx = int(self.pending_action[0])
+        option_idx = int(self.pending_action[1])
+        attack_mode = int(self.pending_action[2])
+        strategy = StrategicIntent(strategy_idx)
         option = TacticalOption(option_idx)
-        return option, attack_mode
+        return strategy, option, attack_mode
 
     def act(self, state, side, unit, obs):
         if side == self.rl_side:
-            sampled_option, attack_mode = self._decode_action()
+            sampled_strategy, sampled_option, attack_mode = self._decode_action()
+            turn_now = int(getattr(state, "turn", 0))
+            if self._locked_strategy is None or self._locked_strategy_turn != turn_now:
+                self._locked_strategy = sampled_strategy
+                self._locked_strategy_turn = turn_now
+            effective_strategy = self._locked_strategy
             resolved_option = sampled_option
 
             action = self.executor.execute(
@@ -76,6 +89,7 @@ class _GymActionController:
                 unit=unit,
                 option=resolved_option,
                 attack_mode=attack_mode,
+                strategy=effective_strategy,
             )
             if action is None:
                 action = WaitAction(unit.unit_id)
@@ -85,11 +99,12 @@ class _GymActionController:
             self.current_option_resolved = resolved_option
             self.current_option = executed_option
             self.current_attack_mode = attack_mode if executed_option == TacticalOption.ATTACK else 0
+            self.current_strategy = type("Strategy", (), {"name": effective_strategy.name})()
             self.last_decision_trace = self.action_bridge.build_trace(
                 sampled_option=sampled_option,
                 resolved_option=resolved_option,
                 executed_option=executed_option,
-                strategy_name=None,
+                strategy_name=effective_strategy.name,
             )
             self.pending_action = None
 
@@ -156,8 +171,8 @@ class GymAssaultEnv(gym.Env):
             shape=(obs_dim,),
             dtype=np.float32,
         )
-        # [L2 option, attack_mode]
-        self.action_space = spaces.MultiDiscrete([len(TacticalOption), 2])
+        # [L3 strategy, L2 option, attack_mode]
+        self.action_space = spaces.MultiDiscrete([len(StrategicIntent), len(TacticalOption), 2])
 
     def _build_runtime(self, seed: int):
         self._train_env = make_env(
@@ -206,9 +221,10 @@ class GymAssaultEnv(gym.Env):
         return self._last_obs, info
 
     def step(self, action):
-        option_idx = int(action[0])
-        attack_mode = int(action[1])
-        self._controller.set_action((option_idx, attack_mode))
+        strategy_idx = int(action[0])
+        option_idx = int(action[1])
+        attack_mode = int(action[2])
+        self._controller.set_action((strategy_idx, option_idx, attack_mode))
 
         total_reward = 0.0
         terminated = False

@@ -113,6 +113,28 @@ class TrainingEnv:
                 return row
         return None
 
+    def _nearest_unsecured_objective_distance(self, state, unit, tracked_side: str):
+        if state is None or unit is None or unit.position is None or not tracked_side:
+            return None
+        points = getattr(getattr(state, "victory", None), "points", []) or []
+        if not points:
+            return None
+        side_to_ownership = getattr(state, "side_to_ownership", {}) or {}
+        tracked_ownership = side_to_ownership.get(str(tracked_side).upper())
+        if tracked_ownership is None:
+            return None
+
+        best = None
+        for vp in points:
+            hs = state.hex_states.get(vp.hex_coords)
+            # "Unsecured" for tracked side = VP not currently owned by tracked side.
+            if hs is not None and hs.ownership == tracked_ownership:
+                continue
+            d = safe_hex_distance(unit.position, vp.hex_coords)
+            if best is None or d < best:
+                best = d
+        return best
+
     # -------------------------------------------------
     @property
     def state(self):
@@ -157,6 +179,7 @@ class TrainingEnv:
 
         actor = None
         actor_side = None
+        rl_side_norm = str(self.rl_side).upper()
 
         if action is not None and hasattr(action, "unit_id"):
             actor = next(
@@ -164,6 +187,7 @@ class TrainingEnv:
                 None,
             )
             actor_side = actor.side if actor else None
+        actor_side_norm = str(getattr(actor_side, "value", actor_side)).upper() if actor_side is not None else None
 
         if action is None:
             action = WaitAction("SYSTEM")
@@ -175,6 +199,21 @@ class TrainingEnv:
         # -------------------------------------------------
         hp_before = {u.unit_id: u.hp for u in state.units}
         alive_before = {u.unit_id: u.alive for u in state.units}
+        side_to_ownership_before = getattr(state, "side_to_ownership", {}) or {}
+        rl_ownership_before = side_to_ownership_before.get(str(self.rl_side).upper())
+        vp_points_before = getattr(getattr(state, "victory", None), "points", []) or []
+        vp_hexes_before = {vp.hex_coords for vp in vp_points_before}
+        actor_pos_before = None
+        actor_on_vp_before = False
+        actor_vp_owned_by_rl_before = False
+        if actor is not None and actor.position is not None:
+            actor_pos_before = (actor.position.q, actor.position.r)
+            actor_on_vp_before = actor_pos_before in vp_hexes_before
+            if actor_on_vp_before:
+                hs_before = state.hex_states.get(actor_pos_before)
+                actor_vp_owned_by_rl_before = (
+                    hs_before is not None and hs_before.ownership == rl_ownership_before
+                )
         objective_cfg = getattr(self.sim.scenario, "victory_outcomes", None) or {}
         tracked_side = str(objective_cfg.get("tracked_side", "")).strip().upper()
         objective_rule_active = (
@@ -224,7 +263,9 @@ class TrainingEnv:
         info = {
             "unit_id": action.unit_id if hasattr(action, "unit_id") else None,
             "action_id": getattr(action, "action_id", None),  # ✅ 💣 NUEVO
-            "actor_side": actor_side,
+            "actor_side": actor_side_norm,
+            "l2_option": getattr(action, "rl_l2_option", ""),
+            "l3_strategy": getattr(action, "rl_l3_strategy", ""),
 
             "rl_damage": 0,
             "rl_attacks": 0,
@@ -242,7 +283,7 @@ class TrainingEnv:
         # ATTACKS
         # -------------------------------------------------
         if is_attack:
-            if actor_side == self.rl_side:
+            if actor_side_norm == rl_side_norm:
                 self.rl_attacks += 1
                 info["rl_attacks"] += 1
             else:
@@ -254,6 +295,40 @@ class TrainingEnv:
         # -------------------------------------------------
         hp_after = {u.unit_id: u.hp for u in next_state.units}
         alive_after = {u.unit_id: u.alive for u in next_state.units}
+        side_to_ownership_after = getattr(next_state, "side_to_ownership", {}) or {}
+        rl_ownership_after = side_to_ownership_after.get(str(self.rl_side).upper())
+        vp_points_after = getattr(getattr(next_state, "victory", None), "points", []) or []
+        vp_hexes_after = {vp.hex_coords for vp in vp_points_after}
+        actor_after = next(
+            (u for u in next_state.units if actor is not None and u.unit_id == actor.unit_id),
+            None,
+        )
+        actor_pos_after = None
+        actor_on_vp_after = False
+        actor_vp_owned_by_rl_after = False
+        if actor_after is not None and actor_after.position is not None:
+            actor_pos_after = (actor_after.position.q, actor_after.position.r)
+            actor_on_vp_after = actor_pos_after in vp_hexes_after
+            if actor_on_vp_after:
+                hs_after = next_state.hex_states.get(actor_pos_after)
+                actor_vp_owned_by_rl_after = (
+                    hs_after is not None and hs_after.ownership == rl_ownership_after
+                )
+        actor_captured_vp_now = (
+            actor_on_vp_after
+            and actor_vp_owned_by_rl_after
+            and not actor_vp_owned_by_rl_before
+        )
+        objective_dist_before = (
+            self._nearest_unsecured_objective_distance(state, actor, tracked_side)
+            if objective_rule_active
+            else None
+        )
+        objective_dist_after = (
+            self._nearest_unsecured_objective_distance(next_state, actor_after, tracked_side)
+            if objective_rule_active
+            else None
+        )
         captured_after = (
             self._objectives_captured_for_side(next_state, tracked_side)
             if objective_rule_active
@@ -296,7 +371,7 @@ class TrainingEnv:
         pre_dist = None
         post_dist = None
 
-        if actor is not None and actor_side == self.rl_side:
+        if actor is not None and actor_side_norm == rl_side_norm:
             enemies_before = [
                 u for u in state.units
                 if u.alive and u.side != self.rl_side and u.position is not None
@@ -328,7 +403,7 @@ class TrainingEnv:
         # -------------------------------------------------
         # REWARD
         # -------------------------------------------------
-        if actor_side == self.rl_side:
+        if actor_side_norm == rl_side_norm:
             reward = self.reward_fn.compute(
                 state=state,
                 next_state=next_state,
@@ -356,6 +431,13 @@ class TrainingEnv:
         info["objective_captured_before"] = captured_before
         info["objective_captured_after"] = captured_after
         info["objective_captured_delta"] = captured_after - captured_before
+        info["actor_on_vp_before"] = actor_on_vp_before
+        info["actor_on_vp_after"] = actor_on_vp_after
+        info["actor_vp_owned_by_rl_before"] = actor_vp_owned_by_rl_before
+        info["actor_vp_owned_by_rl_after"] = actor_vp_owned_by_rl_after
+        info["actor_captured_vp_now"] = actor_captured_vp_now
+        info["objective_dist_before"] = objective_dist_before
+        info["objective_dist_after"] = objective_dist_after
         if objective_rule_active:
             row = self._objective_outcome_result(next_state)
             result_text = str((row or {}).get("result", "")).strip()

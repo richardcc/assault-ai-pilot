@@ -23,6 +23,13 @@ class ProgressiveReward(BaseReward):
 
         self.damage_given_total = 0
         self.damage_taken_total = 0
+        self.vp_hold_streak_by_unit = {}
+
+    # -------------------------------------------------
+    def reset(self, state):
+        super().reset(state)
+        self.last_action = None
+        self.vp_hold_streak_by_unit = {}
 
     # -------------------------------------------------
     def compute(
@@ -49,6 +56,7 @@ class ProgressiveReward(BaseReward):
 
         action_class = info.get("action_class", "")
         l2 = info.get("l2_option", "")
+        l3 = str(info.get("l3_strategy", "") or "").upper()
 
         is_attack = bool(info.get("is_attack", False)) or l2 == "ATTACK" or "ATTACK" in action_class.upper()
 
@@ -179,6 +187,38 @@ class ProgressiveReward(BaseReward):
             # If RL trains the tracked side, reward captures; otherwise reward denying captures.
             if rl_side_norm == objective_tracked_side:
                 reward += objective_delta * self.cfg.vp_delta_weight
+                points = getattr(getattr(next_state, "victory", None), "points", []) or []
+                total_objectives = len(points)
+                captured_after = _captured_objectives_for_side(next_state, objective_tracked_side)
+                objectives_pending = total_objectives > 0 and captured_after < total_objectives
+                if l3 == "CAPTURE" and objectives_pending:
+                    reward += self.cfg.capture_strategy_bonus
+                elif l3 == "PRESERVE" and objectives_pending:
+                    reward -= self.cfg.preserve_when_objectives_pending_penalty
+                if l3 == "CAPTURE":
+                    if l2 == "RETREAT":
+                        reward -= self.cfg.capture_retreat_penalty
+                    elif l2 in {"ADVANCE", "FLANK"}:
+                        reward += self.cfg.capture_advance_bonus
+                objective_dist_before = info.get("objective_dist_before")
+                objective_dist_after = info.get("objective_dist_after")
+                if objective_dist_before is not None and objective_dist_after is not None:
+                    try:
+                        d_before = float(objective_dist_before)
+                        d_after = float(objective_dist_after)
+                        if d_after < d_before:
+                            reward += (d_before - d_after) * self.cfg.objective_approach_bonus
+                        elif d_after > d_before:
+                            reward -= (d_after - d_before) * self.cfg.objective_move_away_penalty
+                    except Exception:
+                        pass
+                if (
+                    l2 == "HOLD"
+                    and not bool(info.get("actor_captured_vp_now", False))
+                    and info.get("objective_dist_after") is not None
+                    and float(info.get("objective_dist_after")) <= 2.0
+                ):
+                    reward -= self.cfg.objective_near_hold_penalty
             else:
                 reward -= objective_delta * self.cfg.vp_delta_weight
                 # For non-tracked sides, also reward proactively capturing objectives,
@@ -187,6 +227,28 @@ class ProgressiveReward(BaseReward):
                 own_after = _captured_objectives_for_side(next_state, rl_side_norm)
                 own_delta = own_after - own_before
                 reward += own_delta * self.cfg.vp_delta_weight
+
+        # Dense objective shaping: immediate local signal around VP interaction.
+        # Helps avoid "good combat but no captures" plateaus.
+        if bool(info.get("actor_captured_vp_now", False)):
+            reward += self.cfg.vp_delta_weight * 0.5
+        elif bool(info.get("actor_vp_owned_by_rl_after", False)) and bool(info.get("actor_on_vp_after", False)):
+            reward += self.cfg.vp_delta_weight * self.cfg.capture_vp_presence_bonus
+            unit_id = info.get("unit_id")
+            if unit_id:
+                prev = int(self.vp_hold_streak_by_unit.get(unit_id, 0))
+                streak = prev + 1
+                self.vp_hold_streak_by_unit[unit_id] = streak
+                reward += min(3, streak) * self.cfg.capture_vp_hold_streak_bonus
+        elif bool(info.get("actor_vp_owned_by_rl_before", False)) and not bool(info.get("actor_vp_owned_by_rl_after", False)):
+            reward -= self.cfg.vp_delta_weight * 0.25
+            unit_id = info.get("unit_id")
+            if unit_id:
+                self.vp_hold_streak_by_unit[unit_id] = 0
+        else:
+            unit_id = info.get("unit_id")
+            if unit_id:
+                self.vp_hold_streak_by_unit[unit_id] = 0
 
         if hasattr(state, "vp_tracker") and state.vp_tracker:
             if hasattr(next_state, "vp_tracker") and next_state.vp_tracker:

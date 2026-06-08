@@ -45,6 +45,11 @@
             "4-6": { "dice": ["GREEN", "GREEN", "YELLOW"] },
             "7-10": { "dice": ["YELLOW", "YELLOW", "BLUE", "BLUE"] }
           }
+        },
+        "INDIRECT_FIRE": {
+          "INFANTRY": {
+            "1-3": { "dice": ["GREEN", "GREEN"] }
+          }
         }
       },
       "traits": ["RIFLE_GRENADES", "INDIRECT_FIRE", "ATTACK_DIE_REROLL", "REMOVE_WEAKEST_TERRAIN_DEFENSE"]
@@ -348,6 +353,30 @@
       },
       "traits": ["ANTI_TANK", "FRAGILE_UNIT"]
     },
+    "US_SNIPER_43": {
+      "side": "US",
+      "category": "INFANTRY",
+      "subtype": "SNIPER",
+      "classification": "SUPPORT_INFANTRY",
+      "card_id": "S43_SNIPER_US",
+      "cost": 4,
+      "movement": 2,
+      "max_strength": 2,
+      "has_counter_flip": true,
+      "base_defense": { "FRONT": ["YELLOW"], "FLANK_LEFT": ["YELLOW"], "FLANK_RIGHT": ["YELLOW"], "REAR": ["YELLOW"] },
+      "attack": {
+        "DIRECT_FIRE": {
+          "VEHICLE": { "0-10": { "dice": [] } },
+          "INFANTRY": {
+            "0": { "dice": ["YELLOW", "GREEN"] },
+            "1-4": { "dice": ["YELLOW", "YELLOW"] },
+            "5-7": { "dice": ["YELLOW", "BLUE"] },
+            "8-10": { "dice": ["GREEN", "BLUE"] }
+          }
+        }
+      },
+      "traits": ["SNIPER", "HIDDEN", "REMOVE_STRONGEST_TERRAIN_DEFENSE"]
+    },
     "US_RIFLES_43": {
       "side": "US",
       "category": "INFANTRY",
@@ -367,6 +396,11 @@
             "1-3": { "dice": ["RED", "RED", "YELLOW"] },
             "4-6": { "dice": ["RED", "RED"] },
             "7-10": { "dice": ["YELLOW", "GREEN"] }
+          }
+        },
+        "INDIRECT_FIRE": {
+          "INFANTRY": {
+            "1-3": { "dice": ["GREEN", "GREEN"] }
           }
         }
       },

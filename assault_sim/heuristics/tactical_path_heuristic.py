@@ -64,6 +64,20 @@ class TacticalPathHeuristic:
                 best = vp.hex_coords
         return best
 
+    def _has_uncaptured_objective(self, state, unit) -> bool:
+        points = getattr(getattr(state, "victory", None), "points", []) or []
+        if not points:
+            return False
+        side_to_ownership = getattr(state, "side_to_ownership", {}) or {}
+        own_ownership = side_to_ownership.get(unit.side)
+        for vp in points:
+            hs = state.hex_states.get(vp.hex_coords)
+            if hs is None:
+                continue
+            if hs.ownership != own_ownership:
+                return True
+        return False
+
     # -------------------------------------------------
     def choose_action(self, state, unit, option):
 
@@ -106,6 +120,9 @@ class TacticalPathHeuristic:
             return self._flank_move(state, unit, moves)
 
         if option == TacticalOption.HOLD:
+            # Avoid passive HOLD loops while objectives are still uncaptured.
+            if self._has_uncaptured_objective(state, unit):
+                return self._move_closer(state, unit, moves)
             return WaitAction(unit.unit_id)
 
         if option == TacticalOption.RETREAT:

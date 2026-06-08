@@ -6,6 +6,7 @@ from assault_model.actions.action_category import ActionCategory
 
 
 from assault_sim.rl.tactical_options import TacticalOption
+from assault_sim.rl.strategic_intents import StrategicIntent
 from assault_sim.config.movement_tactical_config import load_movement_tactical_config
 from assault_model.map.terrain_config import terrain_config
 from assault_model.map.hex_utils import safe_hex_distance
@@ -15,6 +16,13 @@ _MOVE_CFG = load_movement_tactical_config()
 
 
 class OptionExecutor:
+    _ALLOWED_OPTIONS_BY_STRATEGY = {
+        StrategicIntent.CAPTURE: {TacticalOption.ADVANCE, TacticalOption.FLANK, TacticalOption.ATTACK},
+        StrategicIntent.DENY: {TacticalOption.ADVANCE, TacticalOption.ATTACK, TacticalOption.HOLD},
+        StrategicIntent.ATTRIT: {TacticalOption.ATTACK, TacticalOption.FLANK, TacticalOption.ADVANCE},
+        StrategicIntent.PRESERVE: {TacticalOption.RETREAT, TacticalOption.HOLD, TacticalOption.ADVANCE},
+    }
+
 
     def __init__(self, heuristic_controller, avoid_bad_trades: bool = False, adv_threshold: float = -0.5):
         self.heuristic = heuristic_controller
@@ -74,31 +82,95 @@ class OptionExecutor:
                 best = vp.hex_coords
         return best
 
+    def _has_uncaptured_objective(self, state, unit) -> bool:
+        points = getattr(getattr(state, "victory", None), "points", []) or []
+        if not points:
+            return False
+        side_to_ownership = getattr(state, "side_to_ownership", {}) or {}
+        own_ownership = side_to_ownership.get(unit.side)
+        for vp in points:
+            hs = state.hex_states.get(vp.hex_coords)
+            if hs is None:
+                continue
+            if hs.ownership != own_ownership:
+                return True
+        return False
+
+    def _is_target_on_enemy_or_neutral_vp(self, state, unit, target) -> bool:
+        if target is None or getattr(target, "position", None) is None:
+            return False
+        points = getattr(getattr(state, "victory", None), "points", []) or []
+        if not points:
+            return False
+        pos = (target.position.q, target.position.r)
+        vp_hexes = {vp.hex_coords for vp in points}
+        if pos not in vp_hexes:
+            return False
+        side_to_ownership = getattr(state, "side_to_ownership", {}) or {}
+        own_ownership = side_to_ownership.get(unit.side)
+        hs = state.hex_states.get(pos)
+        return hs is None or hs.ownership != own_ownership
+
+    def _is_capture_emergency(self, state, unit) -> bool:
+        if unit is None:
+            return False
+        hp = float(getattr(unit, "hp", 0) or 0)
+        max_hp = float(getattr(getattr(unit, "unit_type", None), "max_strength", 0) or 0)
+        suppressed = bool(getattr(unit, "suppressed", False))
+        enemies = [
+            u for u in getattr(state, "units", [])
+            if getattr(u, "alive", False)
+            and getattr(u, "side", None) != getattr(unit, "side", None)
+            and getattr(u, "position", None) is not None
+            and getattr(unit, "position", None) is not None
+        ]
+        close_threat = any(safe_hex_distance(unit.position, e.position) <= 2 for e in enemies)
+        low_hp = hp <= max(1.0, max_hp * 0.34) if max_hp > 0 else hp <= 1.0
+        return bool(suppressed or (low_hp and close_threat))
+
+    def _tag_action(self, action, option: TacticalOption, strategy: StrategicIntent | None):
+        if action is None:
+            return None
+        action.rl_l2_option = option.name
+        action.rl_l3_strategy = strategy.name if strategy is not None else None
+        return action
+
     # -------------------------------------------------
     def execute(
         self,
         state,
         unit,
         option: TacticalOption,
-        attack_mode: int | None = None
+        attack_mode: int | None = None,
+        strategy: StrategicIntent | None = None,
     ):
 
         if unit is None:
             return WaitAction("SYSTEM")
 
+        option = self._resolve_option_for_strategy(state, unit, option, strategy)
+        option = self._apply_local_role_bias(state, unit, option, strategy)
+        if (
+            strategy == StrategicIntent.CAPTURE
+            and option == TacticalOption.RETREAT
+            and self._has_uncaptured_objective(state, unit)
+            and not self._is_capture_emergency(state, unit)
+        ):
+            option = TacticalOption.ADVANCE
+
         # -------------------------------------------------
         # ✅ ATTACK
         # -------------------------------------------------
         if option == TacticalOption.ATTACK:
-            return self._execute_attack(state, unit, attack_mode)
+            return self._tag_action(self._execute_attack(state, unit, attack_mode), option, strategy)
 
         # -------------------------------------------------
         if option == TacticalOption.ADVANCE:
-            return self._move_closer(state, unit)
+            return self._tag_action(self._move_closer(state, unit), option, strategy)
 
         # -------------------------------------------------
         if option == TacticalOption.FLANK:
-            return self._flank_move(state, unit)
+            return self._tag_action(self._flank_move(state, unit), option, strategy)
 
         # -------------------------------------------------
         # ✅ RETREAT (NO ATAQUE)
@@ -108,9 +180,9 @@ class OptionExecutor:
             action = self.heuristic.choose_action(state, unit, option)
 
             if isinstance(action, (RangedDirectAttack, RangedIndirectAttack)):
-                return WaitAction(unit.unit_id)
+                return self._tag_action(WaitAction(unit.unit_id), option, strategy)
 
-            return action or WaitAction(unit.unit_id)
+            return self._tag_action(action or WaitAction(unit.unit_id), option, strategy)
 
         # -------------------------------------------------
         # ✅ HOLD (MEJORADO CON FALLBACK)
@@ -125,14 +197,73 @@ class OptionExecutor:
             ]
 
             if attacks:
-                best = self._best_attack(attacks)
-                return best if best else attacks[0]
+                best = self._best_attack(attacks, state=state, unit=unit)
+                return self._tag_action(best if best else attacks[0], option, strategy)
             # If there are relevant objectives to capture, avoid pure passivity.
             if self._objective_target_hex(state, unit) is not None:
-                return self._move_closer(state, unit)
-            return WaitAction(unit.unit_id)
+                return self._tag_action(self._move_closer(state, unit), option, strategy)
+            return self._tag_action(WaitAction(unit.unit_id), option, strategy)
 
-        return WaitAction(unit.unit_id)
+        return self._tag_action(WaitAction(unit.unit_id), option, strategy)
+
+    def _resolve_option_for_strategy(self, state, unit, option: TacticalOption, strategy: StrategicIntent | None):
+        if strategy is None:
+            return option
+        allowed = self._ALLOWED_OPTIONS_BY_STRATEGY.get(strategy)
+        if not allowed or option in allowed:
+            return option
+
+        # Strategy-constrained fallback option (deterministic).
+        if strategy == StrategicIntent.CAPTURE:
+            if self._has_uncaptured_objective(state, unit):
+                return TacticalOption.ADVANCE
+            return TacticalOption.ATTACK
+        if strategy == StrategicIntent.DENY:
+            return TacticalOption.ATTACK if self._has_uncaptured_objective(state, unit) else TacticalOption.HOLD
+        if strategy == StrategicIntent.ATTRIT:
+            return TacticalOption.ATTACK
+        if strategy == StrategicIntent.PRESERVE:
+            return TacticalOption.RETREAT
+        return option
+
+    def _local_role_kind(self, state, unit) -> str:
+        classification = str(getattr(getattr(unit, "unit_type", None), "classification", "")).upper()
+        if "INDIRECT" in classification or "SUPPORT" in classification:
+            return "SUPPORT"
+        enemies = [u for u in state.units if u.alive and u.side != unit.side and u.position is not None]
+        if not enemies or getattr(unit, "position", None) is None:
+            return "MANEUVER"
+        dmin = min(safe_hex_distance(unit.position, e.position) for e in enemies)
+        if dmin <= 2:
+            return "ASSAULT"
+        return "MANEUVER"
+
+    def _apply_local_role_bias(self, state, unit, option: TacticalOption, strategy: StrategicIntent | None) -> TacticalOption:
+        if strategy is None:
+            return option
+        allowed = self._ALLOWED_OPTIONS_BY_STRATEGY.get(strategy, set())
+        role = self._local_role_kind(state, unit)
+
+        preferred = option
+        if role == "SUPPORT":
+            if strategy in (StrategicIntent.CAPTURE, StrategicIntent.DENY, StrategicIntent.ATTRIT):
+                preferred = TacticalOption.ATTACK
+            elif strategy == StrategicIntent.PRESERVE:
+                preferred = TacticalOption.HOLD
+        elif role == "ASSAULT":
+            if strategy == StrategicIntent.PRESERVE:
+                preferred = TacticalOption.RETREAT
+            elif strategy in (StrategicIntent.CAPTURE, StrategicIntent.ATTRIT):
+                preferred = TacticalOption.ATTACK
+        else:  # MANEUVER
+            if strategy == StrategicIntent.CAPTURE:
+                preferred = TacticalOption.ADVANCE
+            elif strategy == StrategicIntent.ATTRIT:
+                preferred = TacticalOption.FLANK
+
+        if preferred in allowed:
+            return preferred
+        return option if option in allowed else self._resolve_option_for_strategy(state, unit, option, strategy)
 
     # -------------------------------------------------
     # ✅ ATTACK (MEJORADO CON FALLBACK)
@@ -149,7 +280,7 @@ class OptionExecutor:
         if not attacks:
             return self._move_closer(state, unit)
 
-        best = self._best_attack(attacks)
+        best = self._best_attack(attacks, state=state, unit=unit)
 
         # ✅ fallback crítico (SIEMPRE dispara)
         return best if best else attacks[0]
@@ -250,7 +381,7 @@ class OptionExecutor:
     # -------------------------------------------------
     # ✅ TARGET SELECTION (FIX SUAVE + FALLBACK)
     # -------------------------------------------------
-    def _best_attack(self, attacks):
+    def _best_attack(self, attacks, state=None, unit=None):
 
         best = None
         best_score = float("-inf")
@@ -308,6 +439,11 @@ class OptionExecutor:
 
             # ✅ sesgo ofensivo
             score += 5
+
+            # Objective-aware priority:
+            # if target is on a VP not controlled by our side, prioritize this attack.
+            if state is not None and unit is not None and self._is_target_on_enemy_or_neutral_vp(state, unit, target):
+                score += 35
 
             # distancia
             if hasattr(unit, "position") and hasattr(target, "position"):

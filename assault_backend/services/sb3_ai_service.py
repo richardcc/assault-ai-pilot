@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+import numpy as np
 
 from assault_model.actions.status import WaitAction
 from assault_sim.config.ppo_config import PPOConfig
@@ -8,6 +9,7 @@ from assault_sim.decision.option_executor import OptionExecutor
 from assault_sim.heuristics.tactical_path_heuristic import TacticalPathHeuristic
 from assault_sim.rl.state_encoder import encode_state
 from assault_sim.rl.tactical_options import TacticalOption
+from assault_sim.rl.strategic_intents import StrategicIntent
 
 
 class SB3AIService:
@@ -30,6 +32,7 @@ class SB3AIService:
         self._explicit_model_path = model_path
         self._models_by_side: dict[str, object] = {}
         self._model_path_by_side: dict[str, Path] = {}
+        self._strategy_lock_by_side: dict[str, tuple[int, StrategicIntent]] = {}
 
         any_default = self._resolve_model_path_for_side(self.default_rl_side)
         if any_default is None:
@@ -79,19 +82,31 @@ class SB3AIService:
             return action, "WAIT_NO_MODEL"
         obs = encode_state(state, unit=unit, rl_side=rl_side, max_turns=max_turns)
         action_pair, _ = model.predict(obs, deterministic=True)
-        option_idx = int(action_pair[0])
-        attack_mode = int(action_pair[1])
+        action_vec = np.asarray(action_pair).reshape(-1)
+        if action_vec.size != 3:
+            raise RuntimeError(
+                f"Expected 3-dim action [strategy, option, attack_mode], got shape={action_vec.shape}"
+            )
+        strategy_idx = int(action_vec[0])
+        option_idx = int(action_vec[1])
+        attack_mode = int(action_vec[2])
 
-        try:
-            option = TacticalOption(option_idx)
-        except Exception:
-            option = TacticalOption.HOLD
+        sampled_strategy = StrategicIntent(strategy_idx)
+        turn_now = int(getattr(state, "turn", 0))
+        prev = self._strategy_lock_by_side.get(rl_side)
+        if prev is None or prev[0] != turn_now:
+            self._strategy_lock_by_side[rl_side] = (turn_now, sampled_strategy)
+            strategy = sampled_strategy
+        else:
+            strategy = prev[1]
+        option = TacticalOption(option_idx)
 
         action = self.executor.execute(
             state=state,
             unit=unit,
             option=option,
             attack_mode=attack_mode,
+            strategy=strategy,
         )
         if action is None:
             action = WaitAction(unit.unit_id)

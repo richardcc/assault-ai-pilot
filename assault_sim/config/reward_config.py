@@ -33,6 +33,15 @@ class RewardConfig:
 
     # Objectives/endgame/time
     vp_delta_weight: float = 1.5
+    objective_approach_bonus: float = 0.25
+    objective_move_away_penalty: float = 0.12
+    objective_near_hold_penalty: float = 0.2
+    capture_retreat_penalty: float = 0.8
+    capture_advance_bonus: float = 0.2
+    capture_strategy_bonus: float = 0.12
+    preserve_when_objectives_pending_penalty: float = 0.08
+    capture_vp_presence_bonus: float = 0.15
+    capture_vp_hold_streak_bonus: float = 0.1
     win_bonus: float = 5.0
     lose_penalty: float = 5.0
     time_penalty: float = 0.02

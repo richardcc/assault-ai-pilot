@@ -16,6 +16,7 @@ from assault_sim.evaluation.evaluator import Evaluator
 from assault_sim.evaluation.results_analyzer import ResultsAnalyzer
 from assault_sim.heuristics.tactical_path_heuristic import TacticalPathHeuristic
 from assault_sim.rl.tactical_options import TacticalOption
+from assault_sim.rl.strategic_intents import StrategicIntent
 from assault_sim.rewards.shaped_reward import ShapedReward
 
 
@@ -37,6 +38,8 @@ class SB3EvalController:
         self.current_strategy = None
         self.training_mode = False
         self._strategy_stub = type("SB3Strategy", (), {})
+        self._locked_strategy = None
+        self._locked_strategy_turn = None
 
     def reset(self):
         self.current_option = None
@@ -44,6 +47,8 @@ class SB3EvalController:
         self.current_option_resolved = None
         self.current_attack_mode = 0
         self.last_decision_trace = None
+        self._locked_strategy = None
+        self._locked_strategy_turn = None
 
     def _enemy_action(self, state, unit):
         for opt in (
@@ -69,18 +74,23 @@ class SB3EvalController:
         if self.obs_normalizer is not None:
             model_obs = self.obs_normalizer(obs)
         action_pair, _ = self.model.predict(model_obs, deterministic=True)
-        option_idx = int(action_pair[0])
-        attack_mode = int(action_pair[1])
+        action_vec = np.asarray(action_pair).reshape(-1)
+        if action_vec.size != 3:
+            raise RuntimeError(
+                f"Expected 3-dim action [strategy, option, attack_mode], got shape={action_vec.shape}"
+            )
+        strategy_idx = int(action_vec[0])
+        option_idx = int(action_vec[1])
+        attack_mode = int(action_vec[2])
+        sampled_strategy = StrategicIntent(strategy_idx)
+        turn_now = int(getattr(state, "turn", 0))
+        if self._locked_strategy is None or self._locked_strategy_turn != turn_now:
+            self._locked_strategy = sampled_strategy
+            self._locked_strategy_turn = turn_now
+        effective_strategy = self._locked_strategy
         sampled_option = TacticalOption(option_idx)
         resolved_option = sampled_option
-        # Expose a synthetic L3 label so L3 metrics are not empty in SB3 eval.
-        strategy_name = (
-            "ATTACK"
-            if sampled_option == TacticalOption.ATTACK
-            else "MANEUVER"
-            if sampled_option in (TacticalOption.ADVANCE, TacticalOption.FLANK)
-            else "HOLD"
-        )
+        strategy_name = effective_strategy.name
         self.current_strategy = self._strategy_stub()
         self.current_strategy.name = strategy_name
 
@@ -89,6 +99,7 @@ class SB3EvalController:
             unit=unit,
             option=resolved_option,
             attack_mode=attack_mode,
+            strategy=effective_strategy,
         )
         if action is None:
             action = WaitAction(unit.unit_id)

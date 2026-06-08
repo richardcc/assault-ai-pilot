@@ -35,6 +35,27 @@ def _trace(tag: str, **data):
     print(f"[TRACE][{tag}] {payload}")
 
 
+def _has_trait(unit, trait_name: str) -> bool:
+    traits = getattr(getattr(unit, "unit_type", None), "traits", []) or []
+    return str(trait_name).upper() in {str(t).upper() for t in traits}
+
+
+def _remove_weakest_die(dice: list):
+    if not dice:
+        return None
+    weakest = min(dice, key=lambda c: int(c))
+    dice.remove(weakest)
+    return weakest
+
+
+def _remove_strongest_die(dice: list):
+    if not dice:
+        return None
+    strongest = max(dice, key=lambda c: int(c))
+    dice.remove(strongest)
+    return strongest
+
+
 class CombatResolutionResult:
     def __init__(self, attack_roll, defense_roll, criticals):
         self.attack_roll = attack_roll
@@ -161,6 +182,31 @@ def resolve_ranged_combat(
             )
             defense_colors = terrain_mod.modify_defense(defense_colors)
             terrain_bonus = defense_colors[len(defense_base):]
+            if is_indirect and _has_trait(attacker, "REMOVE_WEAKEST_TERRAIN_DEFENSE") and terrain_bonus:
+                removed = _remove_weakest_die(terrain_bonus)
+                # Keep effective defense pool consistent with updated terrain bonus.
+                defense_colors = list(defense_base) + list(terrain_bonus)
+                _trace(
+                    "TRAIT_REMOVE_WEAKEST_TERRAIN_DEFENSE",
+                    attacker=attacker.unit_id,
+                    defender=target.unit_id,
+                    removed=getattr(removed, "name", str(removed)),
+                )
+            target_cat = getattr(getattr(target, "unit_type", None), "category", None)
+            target_cat_value = str(getattr(target_cat, "value", target_cat)).upper()
+            if (
+                _has_trait(attacker, "REMOVE_STRONGEST_TERRAIN_DEFENSE")
+                and target_cat_value != "VEHICLE"
+                and terrain_bonus
+            ):
+                removed = _remove_strongest_die(terrain_bonus)
+                defense_colors = list(defense_base) + list(terrain_bonus)
+                _trace(
+                    "TRAIT_REMOVE_STRONGEST_TERRAIN_DEFENSE",
+                    attacker=attacker.unit_id,
+                    defender=target.unit_id,
+                    removed=getattr(removed, "name", str(removed)),
+                )
             fort_type = game_map.get_hex_fortification(target.position.q, target.position.r)
             fort_bonus = FortificationRules.defense_bonus(
                 fort_type=fort_type,

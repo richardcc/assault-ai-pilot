@@ -1,0 +1,230 @@
+{
+  "meta": {
+    "episodes": 100,
+    "timestamp": "2026-06-08T09:42:05.618101Z",
+    "scenario_schedule": [
+      {
+        "id": "mettete_i_piedi_terra_1",
+        "episodes": 900
+      },
+      {
+        "id": "battaglia_cittadina_2_1",
+        "episodes": 1400
+      }
+    ],
+    "rl_sides": [
+      "US"
+    ],
+    "models": {
+      "US": "C:\\repos\\python\\assault\\models\\sb3_best_US\\best_model.zip"
+    },
+    "train_config_path": "C:\\repos\\python\\assault\\assault_sim\\config\\train_config.json"
+  },
+  "by_side_and_scenario": {
+    "US": {
+      "mettete_i_piedi_terra_1": {
+        "meta": {
+          "episodes": 100,
+          "timestamp": "2026-06-08T09:41:50.049234Z",
+          "model": "C:\\repos\\python\\assault\\models\\sb3_best_US\\best_model.zip",
+          "scenario": "mettete_i_piedi_terra_1",
+          "rl_side": "US",
+          "vecnormalize_path": null,
+          "obs_normalized": false,
+          "csv": "metrics_sb3_US_mettete_i_piedi_terra_1.csv"
+        },
+        "summary": {
+          "episodes": 100,
+          "win_rate": 0.04,
+          "draws": 8,
+          "avg_vp": 0,
+          "avg_steps": 99.94,
+          "end_reason_counts": {
+            "objective_outcome_resolved": 100
+          },
+          "win_rate_by_end_reason": {
+            "objective_outcome_resolved": 0.04
+          },
+          "victory_level_counts": {
+            "Sconfitta totale": 100
+          },
+          "rl_result_counts": {
+            "loss": 92,
+            "draw": 8
+          },
+          "tracked_result_counts": {
+            "Sconfitta totale": 100
+          }
+        },
+        "combat": {
+          "trade_mean": 0.2711864406779661,
+          "damage_ratio": 0.01638504864311316
+        },
+        "advanced": {
+          "good_trade_rate": 0.018459069020866775,
+          "bad_trade_rate": 0.9815409309791332,
+          "selectivity": 0.22185586434291096,
+          "zero_dmg_rate": 0.9815409309791332
+        },
+        "policy_alignment": {
+          "forced_steps": 0,
+          "decisions": 4490,
+          "forced_ratio": 0.0,
+          "top_sampled_to_executed": {
+            "ADVANCE->ADVANCE": 2371,
+            "HOLD->ADVANCE": 2001,
+            "HOLD->ATTACK": 116,
+            "ADVANCE->ATTACK": 2
+          }
+        },
+        "action_execution": {
+          "RL": {
+            "MOVE": {
+              "count": 4372,
+              "damage_per_action": 0.0
+            },
+            "DIRECT": {
+              "count": 118,
+              "damage_per_action": 0.2711864406779661
+            }
+          },
+          "ENEMY": {
+            "MOVE": {
+              "count": 3143,
+              "damage_per_action": 0.0
+            },
+            "DIRECT": {
+              "count": 2361,
+              "damage_per_action": 0.8271918678526048
+            }
+          }
+        }
+      },
+      "battaglia_cittadina_2_1": {
+        "meta": {
+          "episodes": 100,
+          "timestamp": "2026-06-08T09:42:05.616103Z",
+          "model": "C:\\repos\\python\\assault\\models\\sb3_best_US\\best_model.zip",
+          "scenario": "battaglia_cittadina_2_1",
+          "rl_side": "US",
+          "vecnormalize_path": null,
+          "obs_normalized": false,
+          "csv": "metrics_sb3_US_battaglia_cittadina_2_1.csv"
+        },
+        "summary": {
+          "episodes": 100,
+          "win_rate": 0.0,
+          "draws": 0,
+          "avg_vp": 5,
+          "avg_steps": 96.66,
+          "end_reason_counts": {
+            "objective_outcome_resolved": 100
+          },
+          "win_rate_by_end_reason": {
+            "objective_outcome_resolved": 0.0
+          },
+          "victory_level_counts": {
+            "Sconfitta": 100
+          },
+          "rl_result_counts": {
+            "loss": 100
+          },
+          "tracked_result_counts": {
+            "Sconfitta": 100
+          }
+        },
+        "combat": {
+          "trade_mean": 0.4383561643835616,
+          "damage_ratio": 0.0570409982174688
+        },
+        "advanced": {
+          "good_trade_rate": 0.05714285714285714,
+          "bad_trade_rate": 0.9428571428571428,
+          "selectivity": 0.11560251110090339,
+          "zero_dmg_rate": 0.9428571428571428
+        },
+        "policy_alignment": {
+          "forced_steps": 0,
+          "decisions": 4761,
+          "forced_ratio": 0.0,
+          "top_sampled_to_executed": {
+            "ADVANCE->ADVANCE": 2821,
+            "HOLD->ADVANCE": 1867,
+            "HOLD->ATTACK": 73
+          }
+        },
+        "action_execution": {
+          "RL": {
+            "MOVE": {
+              "count": 4688,
+              "damage_per_action": 0.0
+            },
+            "DIRECT": {
+              "count": 73,
+              "damage_per_action": 0.4383561643835616
+            }
+          },
+          "ENEMY": {
+            "MOVE": {
+              "count": 3802,
+              "damage_per_action": 0.0
+            },
+            "DIRECT": {
+              "count": 1103,
+              "damage_per_action": 0.5086128739800544
+            }
+          }
+        }
+      }
+    }
+  },
+  "comparison": [
+    {
+      "rl_side": "US",
+      "scenario": "mettete_i_piedi_terra_1",
+      "episodes": 100,
+      "win_rate": 0.04,
+      "draws": 8,
+      "avg_vp": 0,
+      "avg_steps": 99.94,
+      "end_reason_counts": {
+        "objective_outcome_resolved": 100
+      },
+      "win_rate_by_end_reason": {
+        "objective_outcome_resolved": 0.04
+      },
+      "rl_result_counts": {
+        "loss": 92,
+        "draw": 8
+      },
+      "tracked_result_counts": {
+        "Sconfitta totale": 100
+      },
+      "trade_mean": 0.2711864406779661,
+      "damage_ratio": 0.01638504864311316
+    },
+    {
+      "rl_side": "US",
+      "scenario": "battaglia_cittadina_2_1",
+      "episodes": 100,
+      "win_rate": 0.0,
+      "draws": 0,
+      "avg_vp": 5,
+      "avg_steps": 96.66,
+      "end_reason_counts": {
+        "objective_outcome_resolved": 100
+      },
+      "win_rate_by_end_reason": {
+        "objective_outcome_resolved": 0.0
+      },
+      "rl_result_counts": {
+        "loss": 100
+      },
+      "tracked_result_counts": {
+        "Sconfitta": 100
+      },
+      "trade_mean": 0.4383561643835616,
+      "damage_ratio": 0.0570409982174688
+    }
+  ]
+}

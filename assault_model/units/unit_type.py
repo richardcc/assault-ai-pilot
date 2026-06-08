@@ -68,6 +68,30 @@ class UnitType:
         """
         Decide which attack mode to use based on actual attack tables.
         """
+        def _mode_has_distance(mode_name: str) -> bool:
+            mode_payload = self._attack_raw.get(mode_name, {}) or {}
+            for table in mode_payload.values():
+                for key in table.keys():
+                    if "-" in key:
+                        start, end = map(int, key.split("-"))
+                        if start <= distance <= end:
+                            return True
+                    else:
+                        if int(key) == distance:
+                            return True
+            return False
+
+        # Rifle-grenade style units should prefer indirect profile when available
+        # at the same range band, so indirect-only effects are applied correctly.
+        traits_u = {str(t).upper() for t in (self.traits or [])}
+        classification_u = str(self.classification or "").upper()
+        prefer_indirect = (
+            "REMOVE_WEAKEST_TERRAIN_DEFENSE" in traits_u
+            or "NO_LINE_OF_SIGHT" in traits_u
+            or "INDIRECT_FIRE_UNIT" in classification_u
+        )
+        if prefer_indirect and _mode_has_distance("INDIRECT_FIRE"):
+            return "INDIRECT_FIRE"
 
         for mode, targets in self._attack_raw.items():
 

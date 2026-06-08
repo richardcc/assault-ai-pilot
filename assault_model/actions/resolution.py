@@ -175,8 +175,15 @@ def resolve_action(
 
             else:
                 # ✅ INDIRECT FIRE (target_hex)
+                tq, tr = action.target_hex
                 target = next(
-                    (u for u in new_state.units if u.position == action.target_hex and u.alive),
+                    (
+                        u for u in new_state.units
+                        if u.alive
+                        and u.position is not None
+                        and u.position.q == tq
+                        and u.position.r == tr
+                    ),
                     None,
                 )
 
