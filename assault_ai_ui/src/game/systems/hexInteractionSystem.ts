@@ -1,5 +1,6 @@
 import { axialToPixel, HEX_SIZE, formatCoords } from "../render/hexGridRenderer";
 import { runAiTurns } from "./aiTurnRunner";
+import { resolveActionMarker, setUnitActionMarker } from "../state/actionMarkers";
 
 export async function handleHexClick(
   q: number,
@@ -24,6 +25,7 @@ export async function handleHexClick(
   }
 
   const actionId = move.action_id;
+  setUnitActionMarker(selectedUnitId, resolveActionMarker(move));
 
   // Block double-dispatch while animating
   if (unitLayerRef.current?.container?.children.find(

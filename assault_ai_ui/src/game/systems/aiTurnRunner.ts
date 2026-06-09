@@ -11,6 +11,7 @@ import { formatCoords } from "../render/hexGridRenderer";
 import { gameController } from "../gameControllerInstance";
 import { axialToPixel, HEX_SIZE } from "../render/hexGridRenderer";
 import { logCombatEvents } from "./combatLog";
+import { resolveActionMarker, setUnitActionMarker } from "../state/actionMarkers";
 
 const BACKEND = "http://127.0.0.1:8000";
 const AI_DELAY_MS = 800; // pause between AI actions so the user can see them
@@ -101,6 +102,7 @@ export async function runAiTurns(
     }
 
     console.log(`🤖 AI: selected action=${action.id} (${action.kind}) for ${aiUnit.id}`);
+    setUnitActionMarker(aiUnit.id, resolveActionMarker(action.data));
     
     // Log selection/action choice to the System Log panel
     if (action.kind === "move") {

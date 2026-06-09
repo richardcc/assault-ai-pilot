@@ -38,12 +38,17 @@ Pendientes:
 - [ ] reducir `strategy_stuck_ratio`;
 - [ ] mejorar conversion `captured=3 -> captured=4/5`;
 - [ ] revisar/coherenciar `vp_entry_missed_rate` (actualmente inconsistente con wins observados).
-- [ ] incorporar reglas de `reaction_fire` y `move/fire` del reglamento para evitar sobre-optimismo de movimiento.
+- [ ] consolidar baseline sin degradacion antes de activar reglas nuevas (`reaction_fire`).
 
 Guardrails:
 - [ ] evitar loops de `RETREAT` fuera de emergencia;
 - [ ] evitar oscilacion posicional A->B->A;
 - [ ] mantener excepciones de emergencia (hp/suppression/amenaza cercana).
+
+Plan de recuperacion baseline (3 iteraciones cortas):
+- [ ] Iteracion 1: reducir sesgo `PRESERVE/RETREAT`, priorizar `ATTACK` util cuando exista tiro legal.
+- [ ] Iteracion 2: recalibrar scoring de compuestas (`move/fire`) para mantener uso >0 sin hundir `damage_ratio`.
+- [ ] Iteracion 3: cerrar con eval multi-seed (42/43/44, 100 eps) y fijar nuevo baseline minimo.
 
 ---
 
@@ -101,7 +106,7 @@ Objetivo:
 
 Secuencia aprobada (2026-06-09):
 - [x] decision: implementar primero `move_and_fire` / `fire_and_move` en MVP controlado.
-- [ ] despues habilitar `reaction_fire` por fases.
+- [ ] mantener `reaction_fire` desactivado temporalmente hasta recuperar baseline (`true_win_rate` y `damage_ratio`).
 
 MVP inmediato (siguiente iteracion):
 - [ ] `move_then_fire`: mover hasta mitad de MA (ceil) y luego disparar.
@@ -111,7 +116,7 @@ MVP inmediato (siguiente iteracion):
 - [ ] no marcar spotted automatico en `fire_then_move` (segun regla).
 - [ ] evaluacion A/B contra baseline estable actual antes de activar reaction fire.
 
-MVP (primera entrega):
+MVP `reaction_fire` (postergado):
 - [ ] `reaction_fire` en `Action Phase` (no en `Support Phase`).
 - [ ] trigger inicial: `MoveAction` (normal/fast) del bando activo.
 - [ ] una sola unidad reactora por lado y turno (si no fue activada).
@@ -154,5 +159,11 @@ Activar cuando P0 esté estable:
   - `loss_rate`: 0.20
   - `captured_final_counts`: `5:23, 4:26, 3:31, 2:14, 1:6`
   - Nota: fix de distancia + seleccion de unidad por policy desbloquearon captura real; siguiente foco es bajar draws.
+
+- 2026-06-09 (seed=44, eval 100eps):
+  - `true_win_rate`: 0.12 -> 0.03 (regresion tras sesgo de compuestas)
+  - `damage_ratio`: 0.515 -> 0.016 (colapso ofensivo RL)
+  - `composite_usage`: `available_actions=40342, selected=156, select_rate_when_available=0.076`
+  - Decision operativa: mantener `reaction_fire` OFF; priorizar recuperacion de baseline con `move/fire` conservador.
 
 

@@ -527,9 +527,9 @@ function App() {
                     </div>
                   </div>
 
-                  <div className="spec-stat-item" style={{ gridColumn: "span 2" }}>
+                  <div className="spec-stat-item">
                     <div className="spec-stat-label">Health</div>
-                    <div className="spec-stat-val" style={{ display: "flex", gap: "2px", fontSize: "12px", marginTop: "2px" }}>
+                    <div className="spec-stat-val" style={{ display: "flex", gap: "1px", fontSize: "11px", marginTop: "2px" }}>
                       {selectedUnit.hp != null
                         ? Array.from({ length: selectedUnit.hp }).map((_, i) => (
                             <span key={i} style={{ color: "#ff3838" }}>❤️</span>

@@ -1,7 +1,7 @@
 import * as PIXI from "pixi.js";
 import { axialToPixel, HEX_SIZE } from "./hexGridRenderer";
 import { initUnitLayerState, getSelectedUnitId, getHighlightedUnitId } from "./unitLayerState";
-import { createUnitSprite } from "./unitLayerSprite";
+import { createUnitSprite, updateUnitActionMarker } from "./unitLayerSprite";
 import { updateHighlight } from "./unitLayerHighlight";
 import { moveUnit } from "./unitLayerMovement";
 
@@ -121,6 +121,8 @@ export class UnitLayer {
       } else {
         sprite.alpha = 1;
       }
+
+      await updateUnitActionMarker(sprite, id);
 
       // Update highlight
       updateHighlight(this.container, sprite, id, isAvailable);

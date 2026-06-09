@@ -14,6 +14,7 @@ import { UnitLayer } from "./render/unitLayer";
 import { handleUnitClick } from "./systems/unitInteractionSystem";
 import { handleHexClick } from "./systems/hexInteractionSystem";
 import { runAiTurns } from "./systems/aiTurnRunner";
+import { clearUnitActionMarkers, resolveActionMarker, setUnitActionMarker } from "./state/actionMarkers";
 
 import { subscribeToGameState } from "./systems/gameStateSystem";
 import { registerFocusUnit } from "./systems/cameraSystem";
@@ -63,6 +64,7 @@ export default function GameCanvas({
   const [orderHoverTarget, setOrderHoverTarget] = useState<any>(null);
 
   const lastStateRef = useRef<any>(null);
+  const lastTurnRef = useRef<number | null>(null);
 
   const selectedUnitRef = useRef<string | null>(null);
   const availableMovesRef = useRef<any[]>([]);
@@ -80,6 +82,17 @@ export default function GameCanvas({
 
     (window as any).__setGameState = (state: any) => {
       console.log("💣 applying full state", state);
+      const nextTurn = Number.isFinite(state?.turn) ? Number(state.turn) : null;
+      if (
+        nextTurn != null &&
+        lastTurnRef.current != null &&
+        nextTurn !== lastTurnRef.current
+      ) {
+        clearUnitActionMarkers();
+      }
+      if (nextTurn != null) {
+        lastTurnRef.current = nextTurn;
+      }
 
       setGameData(state);
       lastStateRef.current = state;
@@ -326,6 +339,7 @@ export default function GameCanvas({
         const moveR = order?.move_r ?? order?.move_to?.r;
         const isMoveThenFire = actionType === "MOVE_THEN_FIRE";
         const isFireThenMove = actionType === "FIRE_THEN_MOVE";
+        setUnitActionMarker(unitId, resolveActionMarker(order));
 
         // Composite animation: move first for MOVE_THEN_FIRE.
         if (isMoveThenFire && moveQ != null && moveR != null) {

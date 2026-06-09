@@ -168,10 +168,16 @@ class ResultsAnalyzer:
         forced_steps = 0
         decisions = 0
         sampled_to_executed = defaultdict(int)
+        composite_available_count = 0
+        composite_selected_count = 0
+        composite_available_decisions = 0
         for r in self.results:
             align = r.get("decision_alignment", {})
             forced_steps += int(align.get("forced_steps", 0))
             decisions += int(align.get("rl_decisions", 0))
+            composite_available_count += int(align.get("composite_available_count", 0))
+            composite_selected_count += int(align.get("composite_selected_count", 0))
+            composite_available_decisions += int(align.get("composite_available_decisions", 0))
             for k, v in align.get("sampled_to_executed_counts", {}).items():
                 sampled_to_executed[k] += int(v)
         top_paths = dict(sorted(sampled_to_executed.items(), key=lambda kv: kv[1], reverse=True)[:10])
@@ -180,6 +186,12 @@ class ResultsAnalyzer:
             "decisions": decisions,
             "forced_ratio": forced_steps / max(1, decisions),
             "top_sampled_to_executed": top_paths,
+            "composite_available_count": composite_available_count,
+            "composite_selected_count": composite_selected_count,
+            "composite_available_decisions": composite_available_decisions,
+            "composite_selection_rate_when_available": (
+                composite_selected_count / max(1, composite_available_decisions)
+            ),
         }
 
     # -------------------------------------------------
@@ -445,6 +457,11 @@ class ResultsAnalyzer:
 
         def map_action_type(action_class_name: str):
             n = (action_class_name or "").lower()
+            # Composite move/fire actions must be detected before generic "move".
+            if "movethenfire" in n or "move_then_fire" in n:
+                return "MOVE_THEN_FIRE"
+            if "firethenmove" in n or "fire_then_move" in n:
+                return "FIRE_THEN_MOVE"
             if "wait" in n:
                 return "WAIT"
             if "move" in n:
@@ -555,6 +572,13 @@ class ResultsAnalyzer:
         print("\n=== POLICY ALIGNMENT ===")
         align = self.policy_alignment()
         print(f"forced_ratio: {align['forced_ratio']:.3f} ({align['forced_steps']}/{align['decisions']})")
+        print(
+            "composite_usage:"
+            f" available_actions={align.get('composite_available_count', 0)}"
+            f" selected={align.get('composite_selected_count', 0)}"
+            f" available_decisions={align.get('composite_available_decisions', 0)}"
+            f" select_rate_when_available={align.get('composite_selection_rate_when_available', 0.0):.3f}"
+        )
 
         print("\n=== MISSION METRICS ===")
         mission = self.mission_metrics()

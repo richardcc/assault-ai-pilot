@@ -3,6 +3,7 @@ import numpy as np
 from assault_model.map.hex_utils import safe_hex_distance
 from assault_model.actions.action_catalog import ActionCatalog
 from assault_model.actions.action_category import ActionCategory
+from assault_model.actions.composite_fire import MoveThenFireAction, FireThenMoveAction
 from assault_model.map.terrain_config import terrain_config
 from assault_sim.contracts.training_contracts import EvalResult
 from assault_sim.evaluation.metrics_tracker import MetricsTracker
@@ -102,6 +103,9 @@ class Evaluator:
         near_vp_progress_move_decisions = 0
         vp_control_count_sum = 0
         vp_control_count_steps = 0
+        composite_available_count = 0
+        composite_selected_count = 0
+        composite_available_decisions = 0
 
         # ✅ CRÍTICO → LOG REAL DE EVENTOS
         events_log = []
@@ -289,6 +293,22 @@ class Evaluator:
                     if trace.was_forced:
                         forced_steps += 1
 
+                # Composite action diagnostics: availability vs selection.
+                if actor_before is not None and prev_state is not None:
+                    try:
+                        avail_actions = ActionCatalog(prev_state, actor_before, terrain_config).actions()
+                        available_now = sum(
+                            1 for a in avail_actions
+                            if isinstance(a, (MoveThenFireAction, FireThenMoveAction))
+                        )
+                        composite_available_count += int(available_now)
+                        if available_now > 0:
+                            composite_available_decisions += 1
+                    except Exception:
+                        pass
+                if isinstance(action, (MoveThenFireAction, FireThenMoveAction)):
+                    composite_selected_count += 1
+
                 strategy = getattr(self.controller, "current_strategy", None)
 
                 if strategy is not None:
@@ -465,6 +485,12 @@ class Evaluator:
             "sampled_option_counts": dict(sampled_option_counts),
             "resolved_option_counts": dict(resolved_option_counts),
             "sampled_to_executed_counts": dict(decision_trace_counts),
+            "composite_available_count": int(composite_available_count),
+            "composite_selected_count": int(composite_selected_count),
+            "composite_available_decisions": int(composite_available_decisions),
+            "composite_selection_rate_when_available": (
+                float(composite_selected_count) / max(1, int(composite_available_decisions))
+            ),
         }
 
         # -------------------------------------------------

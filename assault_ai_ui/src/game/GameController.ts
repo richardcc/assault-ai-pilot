@@ -1,4 +1,5 @@
 import { logCombatEvents } from "./systems/combatLog";
+import { clearUnitActionMarkers, resolveActionMarker, setUnitActionMarker } from "./state/actionMarkers";
 
 type ControllerType = "human" | "ai";
 type GameMode = "human" | "ai" | "ai_vs_ai" | "replay";
@@ -46,6 +47,7 @@ export class GameController {
     }
 
     this.mode = mode;
+    clearUnitActionMarkers();
     if (scenarioId) {
       this.scenarioId = scenarioId;
     }
@@ -261,6 +263,13 @@ export class GameController {
 
         const rawSteps = Array.isArray(result?.steps) ? result.steps : [];
         const steps = rawSteps.length > 0 ? [rawSteps[0]] : [];
+        if (steps.length > 0) {
+          const step0 = steps[0];
+          const unitId = step0?.unit_id || step0?.unit;
+          if (unitId) {
+            setUnitActionMarker(unitId, resolveActionMarker(step0));
+          }
+        }
         (window as any).onAIOrders?.(steps);
 
         // Log AI combat results to the System Log (the websocket MAP_STATE

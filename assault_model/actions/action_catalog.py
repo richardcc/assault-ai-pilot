@@ -47,6 +47,31 @@ class ActionCatalog:
         if not getattr(active, "alive", True):
             return []
 
+        # Short-lived cache keyed by state version + unit tactical snapshot.
+        state_version = int(getattr(self.gs, "_cache_version", 0))
+        pos = getattr(active, "position", None)
+        spotted = tuple(sorted(getattr(active, "spotted_enemies", []) or []))
+        cache_key = (
+            state_version,
+            getattr(active, "unit_id", None),
+            getattr(pos, "q", None),
+            getattr(pos, "r", None),
+            bool(getattr(active, "alive", True)),
+            bool(getattr(active, "can_fire", True)),
+            bool(getattr(active, "suppressed", False)),
+            bool(getattr(active, "fallback", False)),
+            spotted,
+        )
+        cache = getattr(self.gs, "_action_catalog_cache", None)
+        if cache is None:
+            cache = {}
+            self.gs._action_catalog_cache = cache
+        cached_actions = cache.get(cache_key)
+        if cached_actions is not None:
+            # Return a fresh list container; action objects are treated as read-only
+            # by catalog consumers and tagged on selected copies downstream.
+            return list(cached_actions)
+
         actions = []
 
         _trace("ACTION_CATALOG_START", unit=active.unit_id)
@@ -120,6 +145,8 @@ class ActionCatalog:
                     action=getattr(a, "action_id", None)
                 )
 
+        # Cache immutable tuple container for repeated lookups in same state version.
+        cache[cache_key] = tuple(actions)
         return actions
 
     # ==================================================

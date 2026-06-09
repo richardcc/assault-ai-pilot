@@ -45,6 +45,26 @@ class MovementRules:
 
     @staticmethod
     def get_legal_paths(game_state, unit):
+        # Short-lived cache keyed by authoritative state version.
+        state_version = int(getattr(game_state, "_cache_version", 0))
+        pos = getattr(unit, "position", None)
+        cache_key = (
+            state_version,
+            getattr(unit, "unit_id", None),
+            getattr(pos, "q", None),
+            getattr(pos, "r", None),
+            getattr(unit, "side", None),
+            int(getattr(getattr(unit, "unit_type", None), "movement", 0) or 0),
+            str(getattr(getattr(unit, "unit_type", None), "movement_type", "foot")),
+        )
+        cache = getattr(game_state, "_movement_paths_cache", None)
+        if cache is None:
+            cache = {}
+            game_state._movement_paths_cache = cache
+        cached = cache.get(cache_key)
+        if cached is not None:
+            # Shallow copy list container to avoid accidental caller mutation.
+            return list(cached)
 
         paths: list[MovementPath] = []
 
@@ -213,4 +233,5 @@ class MovementRules:
                 )
             )
 
-        return paths
+        cache[cache_key] = tuple(paths)
+        return list(paths)

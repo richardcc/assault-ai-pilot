@@ -11,6 +11,7 @@ from assault_sim.rl.strategic_intents import StrategicIntent
 from assault_sim.config.movement_tactical_config import load_movement_tactical_config
 from assault_model.map.terrain_config import terrain_config
 from assault_model.map.hex_utils import safe_hex_distance
+import copy
 
 
 _MOVE_CFG = load_movement_tactical_config()
@@ -267,6 +268,21 @@ class OptionExecutor:
                 best_score = score
                 best = a
         return best
+
+    def _is_uncaptured_vp_hex(self, state, side: str, pos) -> bool:
+        if pos is None or not side:
+            return False
+        points = getattr(getattr(state, "victory", None), "points", []) or []
+        if not points:
+            return False
+        vp_hexes = {vp.hex_coords for vp in points}
+        key = (getattr(pos, "q", None), getattr(pos, "r", None))
+        if key not in vp_hexes:
+            return False
+        side_to_ownership = getattr(state, "side_to_ownership", {}) or {}
+        own_ownership = side_to_ownership.get(side)
+        hs = state.hex_states.get(key)
+        return hs is None or hs.ownership != own_ownership
 
     def _nearest_uncaptured_vp_dist(self, state, unit):
         points = getattr(getattr(state, "victory", None), "points", []) or []
@@ -525,6 +541,8 @@ class OptionExecutor:
     def _tag_action(self, action, option: TacticalOption, strategy: StrategicIntent | None):
         if action is None:
             return None
+        # Copy only the chosen action to keep ActionCatalog cache objects immutable.
+        action = copy.deepcopy(action)
         action.rl_l2_option = option.name
         action.rl_l3_strategy = strategy.name if strategy is not None else None
         if not hasattr(action, "rl_capture_fallback_to_attack"):
@@ -631,6 +649,14 @@ class OptionExecutor:
             and not self._is_capture_emergency(state, unit)
         ):
             option = TacticalOption.ADVANCE
+        if (
+            strategy == StrategicIntent.PRESERVE
+            and option in (TacticalOption.RETREAT, TacticalOption.HOLD, TacticalOption.ADVANCE)
+            and not self._is_capture_emergency(state, unit)
+            and self._has_immediate_attack(state, unit)
+        ):
+            # Keep PRESERVE, but avoid zero-pressure loops when a legal shot exists.
+            option = TacticalOption.ATTACK
         # Hard stop to retreat loops: max 1 consecutive retreat per unit.
         uid = getattr(unit, "unit_id", None)
         if (
@@ -752,7 +778,8 @@ class OptionExecutor:
             if strategy == StrategicIntent.CAPTURE:
                 preferred = TacticalOption.ADVANCE
             elif strategy == StrategicIntent.ATTRIT:
-                preferred = TacticalOption.FLANK
+                # Reduce passive drift under ATTRIT.
+                preferred = TacticalOption.ATTACK
 
         if preferred in allowed:
             return preferred
@@ -777,6 +804,10 @@ class OptionExecutor:
 
         # ✅ fallback crítico (SIEMPRE dispara)
         return best if best else attacks[0]
+
+    def _has_immediate_attack(self, state, unit) -> bool:
+        actions = ActionCatalog(state, unit, terrain_config).actions()
+        return any(self._is_attack_action(a) for a in actions)
 
     # -------------------------------------------------
     def _move_closer(self, state, unit):
@@ -813,6 +844,10 @@ class OptionExecutor:
             d = safe_hex_distance(new_pos, objective_target)
             terrain_score = self._terrain_tactical_score(state, unit, new_pos)
             score = -float(d) + _MOVE_CFG.advance_terrain_weight * terrain_score
+            # Small isolated VP-conversion boost:
+            # when a legal move can step into an uncaptured VP, prioritize it.
+            if self._is_uncaptured_vp_hex(state, unit.side, new_pos):
+                score += 120.0
             if self._is_reversal_move(unit, new_pos):
                 score -= 8.0
 
@@ -904,6 +939,27 @@ class OptionExecutor:
             # expected damage proxy (optional further gating)
             exp_dmg = getattr(unit_obj, "get_expected_damage", lambda t: 0.0)(target)
             hp = getattr(target, "hp", 10)
+            is_move_then_fire = isinstance(a, MoveThenFireAction)
+            is_fire_then_move = isinstance(a, FireThenMoveAction)
+
+            # Composite-aware guardrail:
+            # keep composite actions enabled, but avoid forcing low-quality shots.
+            # If a composite shot has near-zero expected output, skip it.
+            if (is_move_then_fire or is_fire_then_move) and exp_dmg <= 0.02 and hp > 2:
+                continue
+            if is_move_then_fire or is_fire_then_move:
+                target_on_vp = (
+                    state is not None
+                    and unit_obj is not None
+                    and self._is_target_on_enemy_or_neutral_vp(state, unit_obj, target)
+                )
+                # Keep composites available, but only when they are meaningfully good
+                # or have direct VP impact.
+                if not target_on_vp:
+                    if adv < 0.15:
+                        continue
+                    if exp_dmg < 0.10:
+                        continue
 
             # If configured, block attacks that look like bad trades.
             if self.avoid_bad_trades:
@@ -941,6 +997,12 @@ class OptionExecutor:
             # ✅ sesgo ofensivo
             score += 5
 
+            # Composite actions remain available with a tiny tie-break bonus only.
+            if is_move_then_fire:
+                score += 1
+            elif is_fire_then_move:
+                score += 0.5
+
             # Objective-aware priority:
             # if target is on a VP not controlled by our side, prioritize this attack.
             if state is not None and unit_obj is not None and self._is_target_on_enemy_or_neutral_vp(state, unit_obj, target):
@@ -954,6 +1016,13 @@ class OptionExecutor:
                     score += 3
                 elif dist > 6:
                     score -= 5
+
+            # If composite has a movement destination, prefer safer destinations.
+            if state is not None and (is_move_then_fire or is_fire_then_move):
+                move_path = getattr(a, "move_path", None) or []
+                if move_path:
+                    end = move_path[-1]
+                    score += 0.2 * self._terrain_tactical_score(state, unit_obj, end)
 
             if score > best_score:
                 best_score = score

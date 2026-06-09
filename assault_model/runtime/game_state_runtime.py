@@ -44,6 +44,10 @@ class RuntimeGameState:
         self.base_state = base_state
         self.scenario = scenario
         self.turn = TurnState(turn_number=base_state.turn)
+        # Monotonic state version for short-lived caches (action catalog, movement paths).
+        # Must be bumped every time an action mutates the authoritative state.
+        if not hasattr(self.base_state, "_cache_version"):
+            self.base_state._cache_version = 0
 
         # activation tracking (existing)
         self.activated_units = set()
@@ -404,7 +408,9 @@ class RuntimeGameState:
             context=context,
         )
 
+        prev_cache_version = int(getattr(self.base_state, "_cache_version", 0))
         self.base_state = result.new_state
+        self.base_state._cache_version = prev_cache_version + 1
         # Keep hex ownership (and VP current_owner in UI payload) in sync
         # immediately after actions that can change occupancy.
         self.base_state.recalculate_hex_control()

@@ -3,6 +3,7 @@ import { unitImages } from "../config/unitImages";
 import { UnitCardTooltip } from "./UnitCardTooltip";
 import { sides } from "../config/sides";
 import { formatCoords } from "../render/hexGridRenderer";
+import { actionMarkerImages, getUnitActionMarker } from "../state/actionMarkers";
 
 type Unit = {
   id: string;
@@ -81,23 +82,21 @@ export function UnitStatePanel({
     <div className="roster-container">
       {Object.entries(unitsBySide).map(([side, list]) => (
         <div key={side} className="roster-side-group">
-          {/* HEADER */}
-          <div className="roster-side-header">
-            {sides[side]?.marker && (
-              <img
-                src={encodeURI(sides[side].marker)}
-                className="roster-side-flag"
-                alt={side}
-              />
-            )}
-
-            <div className="roster-side-name">
-              {sides[side]?.short_label || side}
-            </div>
-          </div>
-
-          {/* UNITS */}
+          {/* FLAG + UNITS IN SAME ROW */}
           <div className="roster-list">
+            <div className="roster-side-badge" title={sides[side]?.short_label || side}>
+              {sides[side]?.marker && (
+                <img
+                  src={encodeURI(sides[side].marker)}
+                  className="roster-side-flag"
+                  alt={side}
+                />
+              )}
+              <div className="roster-side-name">
+                {sides[side]?.short_label || side}
+              </div>
+            </div>
+            <div className="roster-side-units">
             {list.map((u) => {
               const def = unitImages[u.unit_key as keyof typeof unitImages];
               const dead =
@@ -107,6 +106,7 @@ export function UnitStatePanel({
               const isSelected = u.id === selectedUnitId;
               const isTarget = targetUnitId != null && u.id === targetUnitId;
               const deadMarker = dead ? sides[u.side]?.dead_marker : undefined;
+              const actionMarker = getUnitActionMarker(u.id);
 
               // Compute CSS class names based on unit status
               let cardClass = "trooper-card";
@@ -169,6 +169,13 @@ export function UnitStatePanel({
                           alt="Dead marker"
                         />
                       )}
+                      {!dead && actionMarker && (
+                        <img
+                          src={encodeURI(actionMarkerImages[actionMarker])}
+                          className="trooper-card-action-marker"
+                          alt={`Action marker ${actionMarker}`}
+                        />
+                      )}
                     </div>
                   )}
 
@@ -197,6 +204,7 @@ export function UnitStatePanel({
                 </div>
               );
             })}
+            </div>
           </div>
         </div>
       ))}

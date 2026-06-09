@@ -2,6 +2,7 @@ import * as PIXI from "pixi.js";
 import { unitImages } from "../config/unitImages";
 import { sides } from "../config/sides";
 import { HEX_SIZE } from "./hexGridRenderer";
+import { actionMarkerImages, getUnitActionMarker } from "../state/actionMarkers";
 
 export async function createUnitSprite(unit: any): Promise<PIXI.Container> {
   const container = new PIXI.Container();
@@ -33,9 +34,44 @@ export async function createUnitSprite(unit: any): Promise<PIXI.Container> {
   }
 
   addUnitLabel(container, unit);
+  await updateUnitActionMarker(container, unit.id);
   addUnitInteraction(container, unit);
 
   return container;
+}
+
+export async function updateUnitActionMarker(container: PIXI.Container, unitId: string): Promise<void> {
+  const marker = getUnitActionMarker(unitId);
+  const existing = container.getChildByName("action-marker") as PIXI.Sprite | null;
+  if (!marker) {
+    if (existing) {
+      container.removeChild(existing);
+      existing.destroy();
+    }
+    return;
+  }
+
+  const markerPath = actionMarkerImages[marker];
+  let sprite = existing;
+  if (!sprite) {
+    sprite = new PIXI.Sprite();
+    sprite.name = "action-marker";
+    sprite.anchor.set(0.5);
+    sprite.zIndex = 50;
+    container.addChild(sprite);
+  }
+
+  try {
+    const texture = await PIXI.Assets.load(markerPath);
+    sprite.texture = texture;
+    sprite.width = 20;
+    sprite.height = 20;
+    sprite.x = HEX_SIZE * 0.5;
+    sprite.y = -HEX_SIZE * 0.55;
+    sprite.alpha = 0.95;
+  } catch (err) {
+    console.error("❌ Error loading action marker:", markerPath, err);
+  }
 }
 
 function addUnitLabel(container: PIXI.Container, unit: any) {
