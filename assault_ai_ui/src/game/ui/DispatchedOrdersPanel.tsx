@@ -9,6 +9,10 @@ type Order = {
   target_q?: number;
   target_r?: number;
   target_id?: string;
+  move_q?: number;
+  move_r?: number;
+  move_to?: { q?: number; r?: number } | null;
+  action_id?: string;
 };
 
 type DispatchedOrdersPanelProps = {
@@ -48,7 +52,7 @@ export function DispatchedOrdersPanel({
       setAiOrders(prev => [
         ...steps,
         ...prev
-      ].slice(0, 20));
+      ].slice(0, 40));
     };
 
     return () => {
@@ -69,6 +73,9 @@ export function DispatchedOrdersPanel({
     target_q: a.q ?? a.target_q,
     target_r: a.r ?? a.target_r,
     target_id: a.target_id,
+    move_q: a.move_q,
+    move_r: a.move_r,
+    move_to: a.move_to,
     action_id: (a as any).action_id,
 
     unit_id: selectedUnitId,
@@ -93,10 +100,14 @@ export function DispatchedOrdersPanel({
   });
 
   // ✅ MEZCLAR
-  const orders = [...normalizedHuman, ...normalizedAI].slice(0, 20);
+  const orders = [...normalizedHuman, ...normalizedAI];
 
-  const executeActionById = async (actionId: string) => {
+  const executeActionById = async (actionId: string, order?: Order) => {
     try {
+      const executed = await (window as any).onExecuteOrder?.(order);
+      if (executed) {
+        return;
+      }
       const res = await fetch("http://127.0.0.1:8000/api/game/step", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -108,7 +119,7 @@ export function DispatchedOrdersPanel({
         gameController.updateState(data.state);
       }
     } catch (err) {
-      console.error("❌ WAIT action failed", err);
+      console.error("❌ Action by id failed", err);
     }
   };
 
@@ -129,8 +140,32 @@ export function DispatchedOrdersPanel({
             const coords = targetQ != null && targetR != null
               ? formatCoords(targetQ, targetR)
               : "?";
+            const moveQ = (order as any).move_q ?? (order as any).move_to?.q;
+            const moveR = (order as any).move_r ?? (order as any).move_to?.r;
+            const moveCoords = moveQ != null && moveR != null
+              ? formatCoords(moveQ, moveR)
+              : null;
 
             const canExecute = order.source === "HUMAN" && isHumanTurn;
+            const buildDescription = () => {
+              if (actionType === "WAIT") return "Wait / End activation";
+              if (!isAttack) return `Move to ${coords}`;
+
+              const targetText = `${order.target_id ? `target ${order.target_id} ` : ""}at ${coords}`;
+              if (actionType === "MOVE_THEN_FIRE") {
+                return moveCoords
+                  ? `Move to ${moveCoords} then attack ${targetText}`
+                  : `Move then attack ${targetText}`;
+              }
+              if (actionType === "FIRE_THEN_MOVE") {
+                return moveCoords
+                  ? `Attack ${targetText} then move to ${moveCoords}`
+                  : `Attack ${targetText} then move`;
+              }
+              return moveCoords
+                ? `Attack ${targetText} then move to ${moveCoords}`
+                : `Attack ${targetText}`;
+            };
             return (
                 <div
                   key={i}
@@ -145,6 +180,13 @@ export function DispatchedOrdersPanel({
                   }}
                   onClick={() => {
                     if (!canExecute) return;
+                    (window as any).onOrderLeave?.();
+                    onLeaveOrder?.();
+                    const actionId = (order as any).action_id;
+                    if (actionId) {
+                      void executeActionById(actionId, order);
+                      return;
+                    }
                     const q = order.target_q ?? (order as any).q;
                     const r = order.target_r ?? (order as any).r;
 
@@ -175,12 +217,7 @@ export function DispatchedOrdersPanel({
                 </div>
 
                 <div className="action-desc">
-                  {actionType === "WAIT"
-                    ? "Wait / End activation"
-                    : isAttack
-                    ? `Attack ${order.target_id ? `target ${order.target_id} ` : ""}at ${coords}`
-                    : `Move to ${coords}`
-                  }
+                  {buildDescription()}
                 </div>
               </div>
             );

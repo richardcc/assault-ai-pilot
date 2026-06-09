@@ -29,6 +29,7 @@ from assault_model.actions.action import Action
 from assault_model.actions.movement import MoveAction
 from assault_model.actions.base import CombatAction
 from assault_model.actions.combat_mode import CombatMode
+from assault_model.actions.composite_fire import MoveThenFireAction, FireThenMoveAction
 
 from assault_model.state.game_state import GameState
 from assault_model.runtime.execution_context import ExecutionContext
@@ -122,6 +123,57 @@ def resolve_action(
             if unit:
                 # Keep HexCoord object intact
                 unit.position = action.path[-1]
+
+    # ----------------------------------
+    # COMPOSITE MOVE/FIRE ACTIONS (MVP 9.3)
+    # ----------------------------------
+    elif isinstance(action, MoveThenFireAction):
+        _trace("RESOLVE_MOVE_THEN_FIRE", unit=action.unit_id)
+        new_state = state
+        # 1) move segment
+        if action.move_path:
+            move_action = MoveAction(action.unit_id, action.move_path)
+            move_result = resolve_action(
+                state=new_state,
+                action=move_action,
+                combat_result=combat_result,
+                context=context,
+            )
+            new_state = move_result.new_state
+        # 2) fire segment
+        if action.fire_action is not None:
+            fire_result = resolve_action(
+                state=new_state,
+                action=action.fire_action,
+                combat_result=combat_result,
+                context=context,
+            )
+            new_state = fire_result.new_state
+            result_combat = fire_result.combat_result
+
+    elif isinstance(action, FireThenMoveAction):
+        _trace("RESOLVE_FIRE_THEN_MOVE", unit=action.unit_id)
+        new_state = state
+        # 1) fire segment
+        if action.fire_action is not None:
+            fire_result = resolve_action(
+                state=new_state,
+                action=action.fire_action,
+                combat_result=combat_result,
+                context=context,
+            )
+            new_state = fire_result.new_state
+            result_combat = fire_result.combat_result
+        # 2) move segment
+        if action.move_path:
+            move_action = MoveAction(action.unit_id, action.move_path)
+            move_result = resolve_action(
+                state=new_state,
+                action=move_action,
+                combat_result=combat_result,
+                context=context,
+            )
+            new_state = move_result.new_state
 
     # ----------------------------------
     # COMBAT ACTIONS

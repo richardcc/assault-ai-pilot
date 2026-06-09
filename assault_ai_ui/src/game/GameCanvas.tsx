@@ -13,6 +13,7 @@ import { UnitLayer } from "./render/unitLayer";
 
 import { handleUnitClick } from "./systems/unitInteractionSystem";
 import { handleHexClick } from "./systems/hexInteractionSystem";
+import { runAiTurns } from "./systems/aiTurnRunner";
 
 import { subscribeToGameState } from "./systems/gameStateSystem";
 import { registerFocusUnit } from "./systems/cameraSystem";
@@ -22,6 +23,12 @@ import { updateHighlights } from "./systems/highlightSystem";
 import { updateLayerVisibility } from "./systems/layerVisibilitySystem";
 
 import { createDebugVector, updateDebugVector } from "./systems/debugVectorSystem";
+
+function isCombatOrder(order: any): boolean {
+  const actionType = (order?.type || order?.kind || "").toString().toUpperCase();
+  if (order?.kind === "attack") return true;
+  return /RANGED|ASSAULT|ATTACK|REACTION|COMBAT|FIRE/.test(actionType);
+}
 
 export default function GameCanvas({
   setGameData,
@@ -308,6 +315,75 @@ export default function GameCanvas({
         );
       };
 
+      (window as any).onExecuteOrder = async (order: any) => {
+        const actionId = order?.action_id;
+        const unitId = order?.unit_id || selectedUnitRef.current;
+        if (!actionId || !unitId) return false;
+
+        const actionType = (order?.type || order?.kind || "").toString().toUpperCase();
+        const isAttack = isCombatOrder(order);
+        const moveQ = order?.move_q ?? order?.move_to?.q;
+        const moveR = order?.move_r ?? order?.move_to?.r;
+        const isMoveThenFire = actionType === "MOVE_THEN_FIRE";
+        const isFireThenMove = actionType === "FIRE_THEN_MOVE";
+
+        // Composite animation: move first for MOVE_THEN_FIRE.
+        if (isMoveThenFire && moveQ != null && moveR != null) {
+          await unitLayerRef.current?.moveUnit(unitId, moveQ, moveR);
+        }
+
+        setSelectedUnitId(null);
+        setAvailableMoves([]);
+
+        const stepRes = await fetch("http://127.0.0.1:8000/api/game/step", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action_id: actionId }),
+        });
+        const stepData = await stepRes.json();
+        const stateAfter = stepData?.state;
+
+        // Combat FX for attack orders.
+        if (isAttack && stateAfter?.last_events && unitLayerRef?.current) {
+          const combatEvent = stateAfter.last_events.find((e: any) => e.type === "ACTION_EFFECT");
+          const fxLayer = unitLayerRef.current.container?.parent?.children.find(
+            (c: any) => c.label === "fxLayer"
+          ) || unitLayerRef.current.container?.parent;
+          const attackerUnit = stateAfter.units?.find(
+            (u: any) => u.id === unitId || u.unit_id === unitId
+          );
+          const targetId = order?.target_id;
+          const defenderUnit = targetId
+            ? stateAfter.units?.find((u: any) => u.id === targetId || u.unit_id === targetId)
+            : null;
+
+          if (combatEvent && fxLayer && attackerUnit && defenderUnit) {
+            const { playCombatFX } = await import("./animation/combatFx");
+            await playCombatFX(
+              fxLayer,
+              { q: attackerUnit.q, r: attackerUnit.r },
+              { q: defenderUnit.q, r: defenderUnit.r },
+              combatEvent.payload?.attack_dice || ["DAMAGE"],
+              combatEvent.payload?.defense_dice || []
+            );
+          }
+        }
+
+        // Composite animation: move after fire for FIRE_THEN_MOVE.
+        if (isFireThenMove && moveQ != null && moveR != null) {
+          await unitLayerRef.current?.moveUnit(unitId, moveQ, moveR);
+        }
+
+        (window as any).__setGameState?.(stateAfter);
+
+        const sides = stateAfter?.sides ?? {};
+        const activeSide = stateAfter?.active_side;
+        if (activeSide && sides[activeSide] === "ai") {
+          await runAiTurns(unitLayerRef);
+        }
+        return true;
+      };
+
       // ---------------------------------------------
       // GAME STATE SUB
       // ---------------------------------------------
@@ -336,6 +412,7 @@ export default function GameCanvas({
       (window as any).onHexClick = undefined;
       (window as any).onOrderHover = undefined;
       (window as any).onOrderLeave = undefined;
+      (window as any).onExecuteOrder = undefined;
     };
 
   }, []);

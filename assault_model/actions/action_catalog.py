@@ -9,6 +9,7 @@ from assault_model.rules.movement_outcome import MovementOutcome
 from assault_model.map.hex_utils import safe_hex_distance
 from assault_model.combat.line_of_sight import has_line_of_sight
 from assault_model.actions.ranged_indirect import RangedIndirectAttack
+from assault_model.actions.composite_fire import MoveThenFireAction, FireThenMoveAction
 
 import os
 
@@ -90,6 +91,10 @@ class ActionCatalog:
         # RANGED FIRE
         # ----------------------------------
         actions.extend(self._ranged_fire_actions(active))
+        # ----------------------------------
+        # MOVE/FIRE COMPOSITES (MVP)
+        # ----------------------------------
+        actions.extend(self._move_fire_actions(active, movement_paths))
 
         # ----------------------------------
         # WAIT
@@ -207,3 +212,121 @@ class ActionCatalog:
             self.gs.game_map,
             self.terrain_config
         )
+
+    # ==================================================
+    # MOVE/FIRE COMPOSITES (MVP 9.3)
+    # ==================================================
+    def _is_artillery_like(self, unit) -> bool:
+        classification = str(getattr(getattr(unit, "unit_type", None), "classification", "") or "").upper()
+        return "INDIRECT_FIRE_UNIT" in classification or "ARTILLERY" in classification
+
+    def _half_move_limit(self, unit) -> int:
+        movement = int(getattr(getattr(unit, "unit_type", None), "movement", 0) or 0)
+        return max(1, (movement + 1) // 2)
+
+    def _half_move_actions(self, movement_paths, unit):
+        limit = self._half_move_limit(unit)
+        moves = []
+        seen_dest = set()
+        cur = getattr(unit, "position", None)
+        for mp in movement_paths:
+            if mp.outcome != MovementOutcome.END_IN_EMPTY_HEX:
+                continue
+            path = list(getattr(mp, "path", []) or [])
+            if not path:
+                continue
+            if len(path) <= limit:
+                dest = path[-1]
+                # Skip no-op "moves" that keep the unit in the same hex.
+                if cur is not None and getattr(dest, "q", None) == getattr(cur, "q", None) and getattr(dest, "r", None) == getattr(cur, "r", None):
+                    continue
+                # Deduplicate by destination hex to avoid repeated entries in UI.
+                key = (getattr(dest, "q", None), getattr(dest, "r", None))
+                if key in seen_dest:
+                    continue
+                seen_dest.add(key)
+                moves.append(MoveAction(unit_id=unit.unit_id, path=path))
+        return moves
+
+    def _ranged_fire_actions_from_position(self, active, position):
+        if position is None:
+            return []
+        original_pos = active.position
+        try:
+            active.position = position
+            return self._ranged_fire_actions(active)
+        finally:
+            active.position = original_pos
+
+    def _trace_move_then_fire_diagnostics(self, active, end_pos):
+        if not DEBUG_TRACE or end_pos is None:
+            return
+        original_pos = active.position
+        try:
+            active.position = end_pos
+            for other in self.gs.units:
+                if other.side == active.side or not other.alive:
+                    continue
+                spotted = other.unit_id in getattr(active, "spotted_enemies", [])
+                in_range = self._in_weapon_range(active, other) if spotted else False
+                los_ok = self._has_line_of_sight(active, other) if (spotted and in_range) else False
+                _trace(
+                    "MOVE_THEN_FIRE_CANDIDATE",
+                    unit=active.unit_id,
+                    move_q=getattr(end_pos, "q", None),
+                    move_r=getattr(end_pos, "r", None),
+                    target=other.unit_id,
+                    spotted=spotted,
+                    in_range=in_range,
+                    los_ok=los_ok,
+                )
+        finally:
+            active.position = original_pos
+
+    def _move_fire_actions(self, active, movement_paths):
+        if not getattr(active, "can_fire", True):
+            return []
+        if self._is_artillery_like(active):
+            return []
+        half_moves = self._half_move_actions(movement_paths, active)
+        if not half_moves:
+            return []
+
+        composites = []
+        seen = set()
+        current_fires = self._ranged_fire_actions(active)
+        # fire_then_move (fire first, then half move)
+        for fire in current_fires:
+            for move in half_moves:
+                move_end = move.path[-1] if move.path else None
+                key = (
+                    "fire_then_move",
+                    getattr(fire, "target_id", None),
+                    getattr(fire, "target_hex", None),
+                    getattr(move_end, "q", None),
+                    getattr(move_end, "r", None),
+                )
+                if key in seen:
+                    continue
+                seen.add(key)
+                composites.append(FireThenMoveAction(active.unit_id, fire, move.path))
+
+        # move_then_fire (half move first, then fire from destination)
+        for move in half_moves:
+            end_pos = move.path[-1] if move.path else None
+            self._trace_move_then_fire_diagnostics(active, end_pos)
+            fires_after_move = self._ranged_fire_actions_from_position(active, end_pos)
+            for fire in fires_after_move:
+                key = (
+                    "move_then_fire",
+                    getattr(fire, "target_id", None),
+                    getattr(fire, "target_hex", None),
+                    getattr(end_pos, "q", None),
+                    getattr(end_pos, "r", None),
+                )
+                if key in seen:
+                    continue
+                seen.add(key)
+                composites.append(MoveThenFireAction(active.unit_id, move.path, fire))
+
+        return composites

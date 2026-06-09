@@ -1,6 +1,7 @@
 from assault_model.actions.status import WaitAction
 from assault_model.actions.ranged_direct import RangedDirectAttack
 from assault_model.actions.ranged_indirect import RangedIndirectAttack
+from assault_model.actions.composite_fire import MoveThenFireAction, FireThenMoveAction
 from assault_model.actions.action_catalog import ActionCatalog
 from assault_model.actions.action_category import ActionCategory
 
@@ -359,14 +360,37 @@ class OptionExecutor:
         if unit is None:
             return False
         actions = ActionCatalog(state, unit, terrain_config).actions()
-        attacks = [a for a in actions if isinstance(a, (RangedDirectAttack, RangedIndirectAttack))]
+        attacks = [a for a in actions if self._is_attack_action(a)]
         if not attacks:
             return False
         for a in attacks:
-            target = getattr(a, "target", None)
+            target = self._resolve_action_target(state, a)
             if self._is_target_on_enemy_or_neutral_vp(state, unit, target):
                 return True
         return False
+
+    def _is_attack_action(self, action) -> bool:
+        return isinstance(
+            action,
+            (
+                RangedDirectAttack,
+                RangedIndirectAttack,
+                MoveThenFireAction,
+                FireThenMoveAction,
+            ),
+        )
+
+    def _resolve_action_target(self, state, action):
+        target = getattr(action, "target", None)
+        if target is not None:
+            return target
+        target_id = getattr(action, "target_id", None)
+        if target_id:
+            return next(
+                (u for u in getattr(state, "units", []) if getattr(u, "unit_id", None) == target_id),
+                None,
+            )
+        return None
 
     def _capture_priority_action(self, state, unit, attack_mode):
         # 1) Emergency handling: allow retreat.
@@ -399,7 +423,7 @@ class OptionExecutor:
         actions = ActionCatalog(state, unit, terrain_config).actions()
         attacks = [
             a for a in actions
-            if isinstance(a, (RangedDirectAttack, RangedIndirectAttack))
+            if self._is_attack_action(a)
         ]
         # Hard anti-staging break:
         # if CAPTURE keeps staging near VP without progress, force a useful attack
@@ -423,7 +447,7 @@ class OptionExecutor:
             gated_score = float("-inf")
             gated_reason = ""
             for a in attacks:
-                target = getattr(a, "target", None)
+                target = self._resolve_action_target(state, a)
                 if target is None or not getattr(target, "alive", False):
                     continue
                 adv = float(getattr(unit, "get_combat_advantage", lambda t: 0.0)(target))
@@ -662,7 +686,7 @@ class OptionExecutor:
 
             attacks = [
                 a for a in actions
-                if isinstance(a, RangedDirectAttack)
+                if self._is_attack_action(a)
             ]
 
             if attacks:
@@ -743,7 +767,7 @@ class OptionExecutor:
 
         attacks = [
             a for a in actions
-            if isinstance(a, (RangedDirectAttack, RangedIndirectAttack))
+            if self._is_attack_action(a)
         ]
 
         if not attacks:
@@ -861,20 +885,24 @@ class OptionExecutor:
 
         for a in attacks:
 
-            target = getattr(a, "target", None)
+            target = self._resolve_action_target(state, a)
 
             if target is None or not target.alive:
                 continue
 
             # robustly obtain the acting unit from the action object
-            unit = getattr(a, "unit", None) or getattr(a, "actor", None) or getattr(a, "attacker", None)
-            if unit is None:
-                # cannot score this attack without a unit reference
+            unit_obj = (
+                getattr(a, "unit", None)
+                or getattr(a, "actor", None)
+                or getattr(a, "attacker", None)
+                or unit
+            )
+            if unit_obj is None:
                 continue
 
-            adv = unit.get_combat_advantage(target)
+            adv = unit_obj.get_combat_advantage(target)
             # expected damage proxy (optional further gating)
-            exp_dmg = getattr(unit, "get_expected_damage", lambda t: 0.0)(target)
+            exp_dmg = getattr(unit_obj, "get_expected_damage", lambda t: 0.0)(target)
             hp = getattr(target, "hp", 10)
 
             # If configured, block attacks that look like bad trades.
@@ -915,12 +943,12 @@ class OptionExecutor:
 
             # Objective-aware priority:
             # if target is on a VP not controlled by our side, prioritize this attack.
-            if state is not None and unit is not None and self._is_target_on_enemy_or_neutral_vp(state, unit, target):
+            if state is not None and unit_obj is not None and self._is_target_on_enemy_or_neutral_vp(state, unit_obj, target):
                 score += 35
 
             # distancia
-            if hasattr(unit, "position") and hasattr(target, "position"):
-                dist = safe_hex_distance(unit.position, target.position)
+            if hasattr(unit_obj, "position") and hasattr(target, "position"):
+                dist = safe_hex_distance(unit_obj.position, target.position)
 
                 if dist <= 2:
                     score += 3

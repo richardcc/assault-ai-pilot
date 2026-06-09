@@ -9,6 +9,7 @@ from assault_model.state.turn import TurnState
 from assault_model.actions.action import Action
 from assault_model.actions.movement import MoveAction
 from assault_model.actions.status import WaitAction
+from assault_model.actions.composite_fire import MoveThenFireAction, FireThenMoveAction
 from assault_model.actions.resolution import resolve_action
 
 from assault_model.combat.combat_resolution import CombatResolutionResult
@@ -450,7 +451,7 @@ class RuntimeGameState:
         if self.base_state.done:
             return result
 
-        if event_bus and prev_position and isinstance(action, MoveAction):
+        if event_bus and prev_position and isinstance(action, (MoveAction, MoveThenFireAction, FireThenMoveAction)):
             unit_after = next(
                 (u for u in self.base_state.units if u.unit_id == action.unit_id),
                 None,

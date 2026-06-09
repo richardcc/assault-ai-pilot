@@ -1,6 +1,7 @@
 from assault_model.actions.action_catalog import ActionCatalog
 from assault_model.actions.ranged_direct import RangedDirectAttack
 from assault_model.actions.ranged_indirect import RangedIndirectAttack
+from assault_model.actions.composite_fire import MoveThenFireAction, FireThenMoveAction
 from assault_model.map.terrain_config import terrain_config
 from assault_model.actions.status import WaitAction
 from assault_sim.rl.tactical_options import TacticalOption
@@ -96,7 +97,7 @@ class TacticalPathHeuristic:
         # ------------------------------------------
         attacks = [
             a for a in actions
-            if isinstance(a, (RangedDirectAttack, RangedIndirectAttack))
+            if isinstance(a, (RangedDirectAttack, RangedIndirectAttack, MoveThenFireAction, FireThenMoveAction))
         ]
 
         moves = [

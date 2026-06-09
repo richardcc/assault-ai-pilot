@@ -267,7 +267,31 @@ def game_ai_turn():
             source = "heuristic_fallback"
 
     env.step(action)
-    steps = [{"unit": unit.unit_id, "action": action.__class__.__name__, "source": source}]
+
+    def _step_payload(unit_obj, action_obj, src: str):
+        payload = {
+            "unit": unit_obj.unit_id if unit_obj is not None else None,
+            "unit_id": unit_obj.unit_id if unit_obj is not None else None,
+            "action": action_obj.__class__.__name__,
+            "action_id": getattr(action_obj, "action_id", None),
+            "source": src,
+        }
+        target_id = getattr(action_obj, "target_id", None)
+        if target_id is not None:
+            payload["target_id"] = target_id
+        target_hex = getattr(action_obj, "target_hex", None)
+        if target_hex is not None and isinstance(target_hex, (tuple, list)) and len(target_hex) >= 2:
+            payload["target_q"] = target_hex[0]
+            payload["target_r"] = target_hex[1]
+        move_path = getattr(action_obj, "move_path", None)
+        if move_path:
+            end = move_path[-1]
+            payload["move_q"] = getattr(end, "q", None)
+            payload["move_r"] = getattr(end, "r", None)
+            payload["move_to"] = {"q": payload["move_q"], "r": payload["move_r"]}
+        return payload
+
+    steps = [_step_payload(unit, action, source)]
     return {"state": game_session.get_state(), "steps": steps}
 
 

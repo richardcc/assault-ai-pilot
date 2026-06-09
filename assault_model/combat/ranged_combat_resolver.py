@@ -167,6 +167,10 @@ def resolve_ranged_combat(
     defense_base = list(
         target.unit_type.get_defense_dice(sector=sector)
     )
+    # Rule 9.3 (MVP): defender gains extra defense when attacker uses
+    # move&fire / fire&move composite actions.
+    if bool(getattr(action, "move_fire_defense_bonus", False)):
+        defense_base.append(DiceColor.GREEN)
     defense_colors = list(defense_base)
     terrain_bonus = []
 

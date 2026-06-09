@@ -90,6 +90,8 @@ export function updateHighlights(
     const targetUnit = targetUnitById ?? unitsAtHex[0] ?? null;
     const destQ = targetUnit?.q ?? targetQ;
     const destR = targetUnit?.r ?? targetR;
+    const moveQ = orderHoverTarget.move_q ?? orderHoverTarget.move_to?.q;
+    const moveR = orderHoverTarget.move_r ?? orderHoverTarget.move_to?.r;
 
     if (destQ != null && destR != null) {
       const destColor = isAttack ? 0xff6644 : 0x00f0ff;
@@ -114,6 +116,20 @@ export function updateHighlights(
           isAttack
         );
       }
+    }
+
+    // Composite move/fire actions: also show movement destination.
+    if (moveQ != null && moveR != null) {
+        layer.drawHexHighlight(moveQ, moveR, 0x44ddff);
+        if (sourceUnit) {
+          layer.drawArrow(
+            sourceUnit.q,
+            sourceUnit.r,
+            moveQ,
+            moveR,
+            false
+          );
+        }
     }
   }
 }

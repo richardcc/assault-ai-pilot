@@ -99,6 +99,18 @@ Nota:
 Objetivo:
 - alinear simulacion con reglas de reaccion y movimiento+fuego para mejorar realismo tactico y evitar rutas de captura "gratis".
 
+Secuencia aprobada (2026-06-09):
+- [x] decision: implementar primero `move_and_fire` / `fire_and_move` en MVP controlado.
+- [ ] despues habilitar `reaction_fire` por fases.
+
+MVP inmediato (siguiente iteracion):
+- [ ] `move_then_fire`: mover hasta mitad de MA (ceil) y luego disparar.
+- [ ] `fire_then_move`: disparar y luego mover hasta mitad de MA (ceil).
+- [ ] restriccion: artilleria no puede usar acciones compuestas de move/fire.
+- [ ] aplicar bonus defensivo al defensor durante `move/fire`.
+- [ ] no marcar spotted automatico en `fire_then_move` (segun regla).
+- [ ] evaluacion A/B contra baseline estable actual antes de activar reaction fire.
+
 MVP (primera entrega):
 - [ ] `reaction_fire` en `Action Phase` (no en `Support Phase`).
 - [ ] trigger inicial: `MoveAction` (normal/fast) del bando activo.

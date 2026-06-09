@@ -1,4 +1,5 @@
 from assault_model.units.unit_type import UnitType
+from assault_model.map.hex_utils import safe_hex_distance
 import os
 
 DEBUG_TRACE = os.getenv("ASSAULT_DEBUG_TRACE", "0") == "1"
@@ -83,10 +84,7 @@ class UnitInstance:
     def get_distance_to(self, other: "UnitInstance") -> int:
         if self.position is None or other.position is None:
             return 999
-
-        q1, r1 = self.position
-        q2, r2 = other.position
-        return abs(q1 - q2) + abs(r1 - r2)
+        return safe_hex_distance(self.position, other.position)
 
     # ----------------------------
     def get_attack_dice(self, target: "UnitInstance"):

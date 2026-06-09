@@ -3,6 +3,7 @@ from assault_model.actions.assault import AssaultAction
 from assault_model.actions.ranged_direct import RangedDirectAttack
 from assault_model.actions.ranged_indirect import RangedIndirectAttack  # ✅ NUEVO
 from assault_model.actions.status import WaitAction
+from assault_model.actions.composite_fire import MoveThenFireAction, FireThenMoveAction
 from assault_model.actions.action_catalog import ActionCatalog
 
 import json
@@ -175,6 +176,32 @@ def get_unit_actions(env, unit):
                 "type": "ranged_indirect",
                 "target_id": action.target_id,
                 "action_id": action.action_id
+            })
+
+        # -------------------------
+        # MOVE THEN FIRE (MVP 9.3)
+        # -------------------------
+        elif isinstance(action, MoveThenFireAction):
+            dst = action.move_path[-1] if getattr(action, "move_path", None) else None
+            attacks.append({
+                "type": "move_then_fire",
+                "target_id": getattr(action, "target_id", None),
+                "target_hex": getattr(action.fire_action, "target_hex", None),
+                "move_to": {"q": getattr(dst, "q", None), "r": getattr(dst, "r", None)} if dst is not None else None,
+                "action_id": action.action_id,
+            })
+
+        # -------------------------
+        # FIRE THEN MOVE (MVP 9.3)
+        # -------------------------
+        elif isinstance(action, FireThenMoveAction):
+            dst = action.move_path[-1] if getattr(action, "move_path", None) else None
+            attacks.append({
+                "type": "fire_then_move",
+                "target_id": getattr(action, "target_id", None),
+                "target_hex": getattr(action.fire_action, "target_hex", None),
+                "move_to": {"q": getattr(dst, "q", None), "r": getattr(dst, "r", None)} if dst is not None else None,
+                "action_id": action.action_id,
             })
 
         # -------------------------

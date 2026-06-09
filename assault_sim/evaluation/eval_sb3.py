@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import argparse
 from datetime import datetime
 from pathlib import Path
 import json
@@ -219,7 +220,7 @@ def _safe_name(value: str) -> str:
     return "".join(ch if (ch.isalnum() or ch in ("-", "_")) else "_" for ch in value)
 
 
-def evaluate_sb3(episodes: int = 100):
+def evaluate_sb3(episodes: int = 100, seed: int | None = None):
     try:
         from stable_baselines3 import PPO
         from stable_baselines3.common.monitor import Monitor
@@ -234,6 +235,7 @@ def evaluate_sb3(episodes: int = 100):
     cfg = load_train_config(train_config_path)
     scenario_schedule = list(cfg.scenario_schedule)
     rl_sides = list(cfg.rl_sides)
+    eval_seed = int(PPOConfig.SEED if seed is None else seed)
     if not rl_sides:
         rl_sides = [PPOConfig.RL_SIDE]
 
@@ -275,7 +277,7 @@ def evaluate_sb3(episodes: int = 100):
                 rl_side=rl_side,
                 scenario=scenario,
                 reward_fn=ShapedReward(rl_side=rl_side),
-                seed=PPOConfig.SEED,
+                seed=eval_seed,
             )
 
             obs_normalizer = None
@@ -288,7 +290,7 @@ def evaluate_sb3(episodes: int = 100):
                             GymAssaultEnv(
                                 scenario=scenario,
                                 rl_side=rl_side,
-                                seed=PPOConfig.SEED,
+                                seed=eval_seed,
                             )
                         )
 
@@ -403,6 +405,7 @@ def evaluate_sb3(episodes: int = 100):
         "meta": {
             "episodes": episodes,
             "timestamp": datetime.utcnow().isoformat() + "Z",
+            "seed": eval_seed,
             "scenario_schedule": [
                 {"id": p.id, "episodes": p.episodes}
                 for p in scenario_schedule
@@ -421,5 +424,9 @@ def evaluate_sb3(episodes: int = 100):
 
 
 if __name__ == "__main__":
-    evaluate_sb3()
+    parser = argparse.ArgumentParser(description="Evaluate SB3 model(s) and print report.")
+    parser.add_argument("--episodes", type=int, default=100, help="Number of episodes per side/scenario")
+    parser.add_argument("--seed", type=int, default=None, help="Evaluation seed override")
+    args = parser.parse_args()
+    evaluate_sb3(episodes=args.episodes, seed=args.seed)
 

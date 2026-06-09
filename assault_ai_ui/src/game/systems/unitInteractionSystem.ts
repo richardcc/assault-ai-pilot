@@ -59,22 +59,26 @@ export async function handleUnitClick(
   console.log("🎯 actions:", actions);
 
   const allActions = [
-    ...(actions.moves || []).map(m => ({
-      ...m,
-      kind: "move"
-    })),
     ...(actions.attacks || []).map(a => {
       const target = state.units?.find(
         (u: any) => u.id === a.target_id || u.unit_id === a.target_id
       );
+      const targetHex = (a as any).target_hex;
+      const moveTo = (a as any).move_to;
 
       return {
         ...a,
         kind: "attack",
-        q: target?.q,
-        r: target?.r,
+        q: target?.q ?? targetHex?.[0],
+        r: target?.r ?? targetHex?.[1],
+        move_q: moveTo?.q,
+        move_r: moveTo?.r,
       };
     }),
+    ...(actions.moves || []).map(m => ({
+      ...m,
+      kind: "move"
+    })),
     ...(actions.waits || []).map(w => ({
       ...w,
       kind: "wait"
