@@ -30,6 +30,65 @@ class OptionExecutor:
         self.avoid_bad_trades = avoid_bad_trades
         # Minimum combat advantage required to consider an attack.
         self.adv_threshold = adv_threshold
+        # Position history per unit to reduce A->B->A oscillations.
+        self._prev_pos_by_unit = {}
+        self._prevprev_pos_by_unit = {}
+        # Per-unit retreat streak guardrail.
+        self._retreat_streak_by_unit = {}
+        # Per-unit CAPTURE staging streak (used to break lateral loops).
+        self._capture_staging_streak_by_unit = {}
+
+    def _update_position_history(self, unit):
+        if unit is None or getattr(unit, "position", None) is None:
+            return
+        uid = getattr(unit, "unit_id", None)
+        if not uid:
+            return
+        pos_now = (unit.position.q, unit.position.r)
+        prev = self._prev_pos_by_unit.get(uid)
+        if prev != pos_now:
+            self._prevprev_pos_by_unit[uid] = prev
+            self._prev_pos_by_unit[uid] = pos_now
+
+    def _is_reversal_move(self, unit, new_pos) -> bool:
+        uid = getattr(unit, "unit_id", None)
+        if not uid or new_pos is None:
+            return False
+        prevprev = self._prevprev_pos_by_unit.get(uid)
+        if prevprev is None:
+            return False
+        return (new_pos.q, new_pos.r) == prevprev
+
+    def _captured_objectives_for_side(self, state, side: str) -> int:
+        points = getattr(getattr(state, "victory", None), "points", []) or []
+        if not points or not side:
+            return 0
+        side_to_ownership = getattr(state, "side_to_ownership", {}) or {}
+        own_ownership = side_to_ownership.get(side)
+        if own_ownership is None:
+            return 0
+        captured = 0
+        for vp in points:
+            hs = state.hex_states.get(vp.hex_coords)
+            if hs is not None and hs.ownership == own_ownership:
+                captured += 1
+        return captured
+
+    def _is_behind_on_objectives(self, state, side: str) -> bool:
+        if not side:
+            return False
+        points = getattr(getattr(state, "victory", None), "points", []) or []
+        if not points:
+            return False
+        own = self._captured_objectives_for_side(state, side)
+        side_to_ownership = getattr(state, "side_to_ownership", {}) or {}
+        others = [
+            self._captured_objectives_for_side(state, s)
+            for s in side_to_ownership.keys()
+            if s != side
+        ]
+        best_other = max(others) if others else 0
+        return own < best_other
 
     def _unit_group(self, unit) -> str:
         ut = getattr(unit, "unit_type", None)
@@ -70,13 +129,29 @@ class OptionExecutor:
         own_ownership = side_to_ownership.get(unit.side)
         best = None
         best_score = float("-inf")
+        allies = [
+            u for u in getattr(state, "units", [])
+            if getattr(u, "alive", False)
+            and getattr(u, "side", None) == getattr(unit, "side", None)
+            and getattr(u, "position", None) is not None
+            and getattr(u, "unit_id", None) != getattr(unit, "unit_id", None)
+        ]
         for vp in points:
             hs = state.hex_states.get(vp.hex_coords)
             owned_by_self = hs is not None and hs.ownership == own_ownership
             # Prioritize uncaptured objectives; deprioritize already owned.
             need = 0.0 if owned_by_self else 1.0
             dist = safe_hex_distance(unit.position, vp.hex_coords)
-            score = need * 100.0 + float(getattr(vp, "per_turn", 0)) * 2.0 - float(dist)
+            # Anti-congestion: avoid sending all units to the same VP lane.
+            ally_pressure = sum(
+                1 for a in allies if safe_hex_distance(a.position, vp.hex_coords) <= 2
+            )
+            score = need * 120.0 + float(getattr(vp, "per_turn", 0)) * 2.0 - float(dist)
+            score -= 2.5 * float(ally_pressure)
+            # If this VP is already owned and the unit is sitting on it,
+            # strongly encourage rotating to another pending objective.
+            if owned_by_self and dist == 0:
+                score -= 6.0
             if score > best_score:
                 best_score = score
                 best = vp.hex_coords
@@ -88,6 +163,20 @@ class OptionExecutor:
             return False
         side_to_ownership = getattr(state, "side_to_ownership", {}) or {}
         own_ownership = side_to_ownership.get(unit.side)
+        for vp in points:
+            hs = state.hex_states.get(vp.hex_coords)
+            if hs is None:
+                continue
+            if hs.ownership != own_ownership:
+                return True
+        return False
+
+    def _has_uncaptured_objective_for_side(self, state, side: str) -> bool:
+        points = getattr(getattr(state, "victory", None), "points", []) or []
+        if not points or not side:
+            return False
+        side_to_ownership = getattr(state, "side_to_ownership", {}) or {}
+        own_ownership = side_to_ownership.get(side)
         for vp in points:
             hs = state.hex_states.get(vp.hex_coords)
             if hs is None:
@@ -111,6 +200,21 @@ class OptionExecutor:
         hs = state.hex_states.get(pos)
         return hs is None or hs.ownership != own_ownership
 
+    def _is_target_on_owned_vp(self, state, unit, target) -> bool:
+        if target is None or getattr(target, "position", None) is None:
+            return False
+        points = getattr(getattr(state, "victory", None), "points", []) or []
+        if not points:
+            return False
+        pos = (target.position.q, target.position.r)
+        vp_hexes = {vp.hex_coords for vp in points}
+        if pos not in vp_hexes:
+            return False
+        side_to_ownership = getattr(state, "side_to_ownership", {}) or {}
+        own_ownership = side_to_ownership.get(unit.side)
+        hs = state.hex_states.get(pos)
+        return hs is not None and hs.ownership == own_ownership
+
     def _is_capture_emergency(self, state, unit) -> bool:
         if unit is None:
             return False
@@ -125,14 +229,292 @@ class OptionExecutor:
             and getattr(unit, "position", None) is not None
         ]
         close_threat = any(safe_hex_distance(unit.position, e.position) <= 2 for e in enemies)
-        low_hp = hp <= max(1.0, max_hp * 0.34) if max_hp > 0 else hp <= 1.0
-        return bool(suppressed or (low_hp and close_threat))
+        # Be stricter with CAPTURE emergencies: avoid over-triggering retreats
+        # when objectives are still pending.
+        critical_hp = hp <= max(1.0, max_hp * 0.20) if max_hp > 0 else hp <= 1.0
+        return bool(suppressed or (critical_hp and close_threat))
+
+    def _best_step_into_uncaptured_vp(self, state, unit):
+        if unit is None or getattr(unit, "position", None) is None:
+            return None
+        points = getattr(getattr(state, "victory", None), "points", []) or []
+        if not points:
+            return None
+        side_to_ownership = getattr(state, "side_to_ownership", {}) or {}
+        own_ownership = side_to_ownership.get(unit.side)
+        vp_hexes = {vp.hex_coords for vp in points}
+        actions = ActionCatalog(state, unit, terrain_config).actions()
+        best = None
+        best_score = float("-inf")
+        for a in actions:
+            if a.action_type.category != ActionCategory.MOVEMENT:
+                continue
+            path = getattr(a, "path", None)
+            if not path:
+                continue
+            new_pos = path[-1]
+            pos_t = (new_pos.q, new_pos.r)
+            if pos_t not in vp_hexes:
+                continue
+            hs = state.hex_states.get(pos_t)
+            # Capture-eligible VP: currently not owned by this side.
+            if hs is not None and hs.ownership == own_ownership:
+                continue
+            terrain_score = self._terrain_tactical_score(state, unit, new_pos)
+            score = 1000.0 + terrain_score
+            if score > best_score:
+                best_score = score
+                best = a
+        return best
+
+    def _nearest_uncaptured_vp_dist(self, state, unit):
+        points = getattr(getattr(state, "victory", None), "points", []) or []
+        if not points or unit is None or getattr(unit, "position", None) is None:
+            return None
+        side_to_ownership = getattr(state, "side_to_ownership", {}) or {}
+        own_ownership = side_to_ownership.get(unit.side)
+        best = None
+        for vp in points:
+            hs = state.hex_states.get(vp.hex_coords)
+            if hs is not None and hs.ownership == own_ownership:
+                continue
+            d = safe_hex_distance(unit.position, vp.hex_coords)
+            if best is None or d < best:
+                best = d
+        return best
+
+    def _nearest_uncaptured_vp_dist_from_pos(self, state, side: str, pos):
+        points = getattr(getattr(state, "victory", None), "points", []) or []
+        if not points or pos is None or not side:
+            return None
+        side_to_ownership = getattr(state, "side_to_ownership", {}) or {}
+        own_ownership = side_to_ownership.get(side)
+        best = None
+        for vp in points:
+            hs = state.hex_states.get(vp.hex_coords)
+            if hs is not None and hs.ownership == own_ownership:
+                continue
+            d = safe_hex_distance(pos, vp.hex_coords)
+            if best is None or d < best:
+                best = d
+        return best
+
+    def _best_capture_staging_move(self, state, unit):
+        actions = ActionCatalog(state, unit, terrain_config).actions()
+        moves = [a for a in actions if getattr(getattr(a, "action_type", None), "category", None) == ActionCategory.MOVEMENT]
+        if not moves:
+            return None, "no_movement_actions", None, None
+
+        dist_before = self._nearest_uncaptured_vp_dist(state, unit)
+        best_any = None
+        best_any_score = float("-inf")
+        best_non_worse = None
+        best_non_worse_score = float("-inf")
+        saw_equal = False
+        saw_increase_only = True
+
+        for m in moves:
+            path = getattr(m, "path", None)
+            if not path:
+                continue
+            end = path[-1]
+            dist_after = self._nearest_uncaptured_vp_dist_from_pos(state, unit.side, end)
+            if dist_after is None:
+                continue
+            terrain_score = self._terrain_tactical_score(state, unit, end)
+            score = -float(dist_after) + 0.3 * terrain_score
+            if self._is_reversal_move(unit, end):
+                score -= 8.0
+            if score > best_any_score:
+                best_any_score = score
+                best_any = (m, dist_after, score)
+            if dist_before is not None and dist_after < dist_before:
+                saw_increase_only = False
+                if score > best_non_worse_score:
+                    best_non_worse_score = score
+                    best_non_worse = (m, dist_after, score)
+            elif dist_before is not None and dist_after == dist_before:
+                saw_equal = True
+                saw_increase_only = False
+                # Allow lateral staging moves if not getting worse.
+                if score > best_non_worse_score:
+                    best_non_worse_score = score
+                    best_non_worse = (m, dist_after, score)
+
+        if best_non_worse is not None:
+            move, dist_after, _ = best_non_worse
+            if dist_before is not None and dist_after < dist_before:
+                return move, "objective_progress_move", dist_before, dist_after
+            return move, "objective_staging_move", dist_before, dist_after
+        if best_any is not None:
+            move, dist_after, _ = best_any
+            if saw_increase_only and dist_before is not None:
+                return move, "all_moves_increase_distance", dist_before, dist_after
+            if saw_equal:
+                return move, "only_equal_distance_moves", dist_before, dist_after
+            return move, "no_progress_move_available", dist_before, dist_after
+        return None, "no_movement_actions", dist_before, None
+
+    def _has_vp_attack_opportunity(self, state, unit) -> bool:
+        if unit is None:
+            return False
+        actions = ActionCatalog(state, unit, terrain_config).actions()
+        attacks = [a for a in actions if isinstance(a, (RangedDirectAttack, RangedIndirectAttack))]
+        if not attacks:
+            return False
+        for a in attacks:
+            target = getattr(a, "target", None)
+            if self._is_target_on_enemy_or_neutral_vp(state, unit, target):
+                return True
+        return False
+
+    def _capture_priority_action(self, state, unit, attack_mode):
+        # 1) Emergency handling: allow retreat.
+        if self._is_capture_emergency(state, unit):
+            action = self.heuristic.choose_action(state, unit, TacticalOption.RETREAT)
+            if isinstance(action, (RangedDirectAttack, RangedIndirectAttack)):
+                action = WaitAction(unit.unit_id)
+            if action is not None:
+                action.rl_capture_fallback_reason = "capture_emergency"
+                action.rl_capture_move_block_profile = "emergency_blocked"
+            return action or WaitAction(unit.unit_id), TacticalOption.RETREAT
+
+        # 2) If we can occupy an uncaptured VP now, do it immediately.
+        step_into_vp = self._best_step_into_uncaptured_vp(state, unit)
+        if step_into_vp is not None:
+            step_into_vp.rl_capture_fallback_reason = "step_into_uncaptured_vp"
+            step_into_vp.rl_capture_move_block_profile = "step_into_uncaptured_vp"
+            return step_into_vp, TacticalOption.ADVANCE
+
+        # 3) Evaluate movement and attacks jointly near VP.
+        move, move_reason, _, _ = self._best_capture_staging_move(state, unit)
+        nearest_vp_d = self._nearest_uncaptured_vp_dist(state, unit)
+        uid = getattr(unit, "unit_id", None)
+        if uid and move_reason == "objective_staging_move":
+            self._capture_staging_streak_by_unit[uid] = int(self._capture_staging_streak_by_unit.get(uid, 0)) + 1
+        elif uid:
+            self._capture_staging_streak_by_unit[uid] = 0
+
+        # 4) Attack under tactical gate: VP pressure/defense or decent local advantage.
+        actions = ActionCatalog(state, unit, terrain_config).actions()
+        attacks = [
+            a for a in actions
+            if isinstance(a, (RangedDirectAttack, RangedIndirectAttack))
+        ]
+        # Hard anti-staging break:
+        # if CAPTURE keeps staging near VP without progress, force a useful attack
+        # instead of another lateral move.
+        if attacks and uid:
+            staging_streak = int(self._capture_staging_streak_by_unit.get(uid, 0))
+            vp_dist_unknown = nearest_vp_d is None or float(nearest_vp_d) >= 999.0
+            if (
+                move_reason == "objective_staging_move"
+                and (vp_dist_unknown or float(nearest_vp_d) <= 3.0)
+                and staging_streak >= 2
+            ):
+                forced = self._best_attack(attacks, state=state, unit=unit)
+                if forced is not None:
+                    forced.rl_capture_fallback_to_attack = True
+                    forced.rl_capture_fallback_reason = "forced_attack_after_staging_loop"
+                    forced.rl_capture_move_block_profile = move_reason
+                    return forced, TacticalOption.ATTACK
+        if attacks:
+            gated = None
+            gated_score = float("-inf")
+            gated_reason = ""
+            for a in attacks:
+                target = getattr(a, "target", None)
+                if target is None or not getattr(target, "alive", False):
+                    continue
+                adv = float(getattr(unit, "get_combat_advantage", lambda t: 0.0)(target))
+                target_on_vp = self._is_target_on_enemy_or_neutral_vp(state, unit, target)
+                target_threatens_owned_vp = self._is_target_on_owned_vp(state, unit, target)
+                near_vp_pressure = nearest_vp_d is not None and nearest_vp_d <= 2 and adv >= -0.05
+
+                if not (target_on_vp or target_threatens_owned_vp or near_vp_pressure or adv >= 0.25):
+                    continue
+                score = adv
+                if target_on_vp:
+                    score += 1.0
+                if target_threatens_owned_vp:
+                    score += 0.8
+                if near_vp_pressure:
+                    score += 0.5
+                if score > gated_score:
+                    gated_score = score
+                    gated = a
+                    if target_on_vp:
+                        gated_reason = "attack_gate_vp_target"
+                    elif target_threatens_owned_vp:
+                        gated_reason = "attack_gate_defend_owned_vp"
+                    elif near_vp_pressure:
+                        gated_reason = "attack_gate_near_vp_pressure"
+                    else:
+                        gated_reason = "attack_gate_high_adv"
+            if gated is not None:
+                # Near VP, prefer useful attacks over endless lateral staging.
+                should_take_attack = (
+                    move_reason in {"all_moves_increase_distance", "no_progress_move_available"}
+                    or (move_reason == "objective_staging_move" and nearest_vp_d is not None and nearest_vp_d <= 2)
+                    or (nearest_vp_d is not None and nearest_vp_d <= 1)
+                )
+                # Hard break for repeated staging loops near VP.
+                if (
+                    uid
+                    and move_reason == "objective_staging_move"
+                    and nearest_vp_d is not None
+                    and nearest_vp_d <= 3
+                    and int(self._capture_staging_streak_by_unit.get(uid, 0)) >= 2
+                ):
+                    should_take_attack = True
+                if should_take_attack:
+                    gated.rl_capture_fallback_to_attack = True
+                    gated.rl_capture_fallback_reason = gated_reason
+                    gated.rl_capture_move_block_profile = move_reason
+                    return gated, TacticalOption.ATTACK
+
+        # 5) Prefer movement if it does not worsen VP progress.
+        if move is not None and move_reason in {"objective_progress_move", "objective_staging_move"}:
+            move.rl_capture_fallback_reason = move_reason
+            move.rl_capture_move_block_profile = move_reason
+            return move, TacticalOption.ADVANCE
+
+        # 6) If attacks are gated and movement is poor, still allow attack fallback.
+        if attacks:
+            best = self._best_attack(attacks, state=state, unit=unit)
+            if best is not None:
+                best.rl_capture_fallback_to_attack = True
+                best.rl_capture_fallback_reason = "attack_gate_relaxed_fallback"
+                best.rl_capture_move_block_profile = move_reason
+                return best, TacticalOption.ATTACK
+
+        # 7) Fallback movement / hold.
+        if move is not None:
+            move.rl_capture_fallback_reason = "fallback_move_even_if_no_progress"
+            move.rl_capture_move_block_profile = move_reason
+            return move, TacticalOption.ADVANCE
+        hold = WaitAction(unit.unit_id)
+        hold.rl_capture_fallback_reason = "no_move_no_attack_hold"
+        hold.rl_capture_move_block_profile = move_reason
+        return hold, TacticalOption.HOLD
 
     def _tag_action(self, action, option: TacticalOption, strategy: StrategicIntent | None):
         if action is None:
             return None
         action.rl_l2_option = option.name
         action.rl_l3_strategy = strategy.name if strategy is not None else None
+        if not hasattr(action, "rl_capture_fallback_to_attack"):
+            action.rl_capture_fallback_to_attack = False
+        if not hasattr(action, "rl_capture_fallback_reason"):
+            action.rl_capture_fallback_reason = ""
+        if not hasattr(action, "rl_capture_move_block_profile"):
+            action.rl_capture_move_block_profile = ""
+        uid = getattr(action, "unit_id", None)
+        if uid:
+            if option == TacticalOption.RETREAT:
+                self._retreat_streak_by_unit[uid] = int(self._retreat_streak_by_unit.get(uid, 0)) + 1
+            else:
+                self._retreat_streak_by_unit[uid] = 0
         return action
 
     # -------------------------------------------------
@@ -143,16 +525,94 @@ class OptionExecutor:
         option: TacticalOption,
         attack_mode: int | None = None,
         strategy: StrategicIntent | None = None,
+        objective_tracked_side: str | None = None,
     ):
 
         if unit is None:
             return WaitAction("SYSTEM")
+        self._update_position_history(unit)
+        tracked_side_norm = str(objective_tracked_side or "").upper()
+        unit_side_norm = str(getattr(unit, "side", "")).upper()
+        attacker_context = bool(tracked_side_norm) and unit_side_norm == tracked_side_norm
+        defender_context = bool(tracked_side_norm) and unit_side_norm != tracked_side_norm
+
+        # Mission guardrail: when objectives are still pending, avoid being stuck
+        # in PRESERVE unless this unit is in a genuine emergency.
+        if (
+            strategy == StrategicIntent.PRESERVE
+            and self._has_uncaptured_objective_for_side(state, unit.side)
+            and not self._is_capture_emergency(state, unit)
+            and (not tracked_side_norm or attacker_context)
+        ):
+            strategy = StrategicIntent.CAPTURE
+        # If we're behind on objectives, force CAPTURE intent (unless emergency).
+        if (
+            strategy in (StrategicIntent.PRESERVE, StrategicIntent.ATTRIT, StrategicIntent.DENY)
+            and self._has_uncaptured_objective_for_side(state, unit.side)
+            and self._is_behind_on_objectives(state, unit.side)
+            and not self._is_capture_emergency(state, unit)
+            and (not tracked_side_norm or attacker_context)
+        ):
+            strategy = StrategicIntent.CAPTURE
+        # If objectives are still pending, avoid over-defensive DENY loops and
+        # push capture intent unless this unit is in a genuine emergency.
+        if (
+            strategy == StrategicIntent.DENY
+            and self._has_uncaptured_objective_for_side(state, unit.side)
+            and not self._is_capture_emergency(state, unit)
+            and (not tracked_side_norm or attacker_context)
+        ):
+            strategy = StrategicIntent.CAPTURE
+        # Scenario role guardrail:
+        # if this side is the defender (not tracked in objective table),
+        # avoid CAPTURE loops and bias to DENY.
+        if defender_context and strategy == StrategicIntent.CAPTURE:
+            strategy = StrategicIntent.DENY
+
+        # Deterministic CAPTURE controller to avoid reward-driven local loops.
+        if (
+            strategy == StrategicIntent.CAPTURE
+            and self._has_uncaptured_objective_for_side(state, unit.side)
+        ):
+            action, chosen_option = self._capture_priority_action(state, unit, attack_mode)
+            return self._tag_action(action, chosen_option, strategy)
 
         option = self._resolve_option_for_strategy(state, unit, option, strategy)
         option = self._apply_local_role_bias(state, unit, option, strategy)
+
+        if (
+            self._has_uncaptured_objective(state, unit)
+            and not self._is_capture_emergency(state, unit)
+        ):
+            # Hard priority: if a VP can be occupied now, do it before shooting.
+            step_into_vp = self._best_step_into_uncaptured_vp(state, unit)
+            if step_into_vp is not None:
+                return self._tag_action(step_into_vp, TacticalOption.ADVANCE, strategy)
+        # Hard temporal capture curriculum:
+        # while objectives are pending, early episode/turn CAPTURE should advance
+        # toward VP unless there is an emergency or a high-value VP attack.
+        turn_now = int(getattr(state, "turn", 0))
         if (
             strategy == StrategicIntent.CAPTURE
+            and self._has_uncaptured_objective(state, unit)
+            and not self._is_capture_emergency(state, unit)
+            and turn_now <= 8
+            and not self._has_vp_attack_opportunity(state, unit)
+        ):
+            option = TacticalOption.ADVANCE
+        if (
+            strategy in (StrategicIntent.CAPTURE, StrategicIntent.DENY)
             and option == TacticalOption.RETREAT
+            and self._has_uncaptured_objective(state, unit)
+            and not self._is_capture_emergency(state, unit)
+        ):
+            option = TacticalOption.ADVANCE
+        # Hard stop to retreat loops: max 1 consecutive retreat per unit.
+        uid = getattr(unit, "unit_id", None)
+        if (
+            option == TacticalOption.RETREAT
+            and uid is not None
+            and int(self._retreat_streak_by_unit.get(uid, 0)) >= 1
             and self._has_uncaptured_objective(state, unit)
             and not self._is_capture_emergency(state, unit)
         ):
@@ -162,6 +622,15 @@ class OptionExecutor:
         # ✅ ATTACK
         # -------------------------------------------------
         if option == TacticalOption.ATTACK:
+            if (
+                strategy == StrategicIntent.CAPTURE
+                and self._has_uncaptured_objective(state, unit)
+                and not self._is_capture_emergency(state, unit)
+            ):
+                nearest_vp_d = self._nearest_uncaptured_vp_dist(state, unit)
+                # If close to VP and trying to camp-attack, force movement toward capture.
+                if nearest_vp_d is not None and nearest_vp_d <= 2:
+                    return self._tag_action(self._move_closer(state, unit), TacticalOption.ADVANCE, strategy)
             return self._tag_action(self._execute_attack(state, unit, attack_mode), option, strategy)
 
         # -------------------------------------------------
@@ -320,6 +789,8 @@ class OptionExecutor:
             d = safe_hex_distance(new_pos, objective_target)
             terrain_score = self._terrain_tactical_score(state, unit, new_pos)
             score = -float(d) + _MOVE_CFG.advance_terrain_weight * terrain_score
+            if self._is_reversal_move(unit, new_pos):
+                score -= 8.0
 
             if score > best_score:
                 best = a
@@ -366,6 +837,8 @@ class OptionExecutor:
             # >6 hex puntuaban 0 y se elegía el primer movimiento del
             # catálogo → deriva horizontal sin avanzar).
             score = -dist + _MOVE_CFG.flank_terrain_weight * terrain_score
+            if self._is_reversal_move(unit, new_pos):
+                score -= 8.0
 
             # Bonus de flanqueo: posiciones en el "anillo" de combate
             # (cerca pero sin pegarse de frente al objetivo).

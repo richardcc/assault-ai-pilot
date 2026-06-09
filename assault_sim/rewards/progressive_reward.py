@@ -24,12 +24,24 @@ class ProgressiveReward(BaseReward):
         self.damage_given_total = 0
         self.damage_taken_total = 0
         self.vp_hold_streak_by_unit = {}
+        self.capture_no_progress_streak_by_unit = {}
+        self.attack_count_by_unit = {}
+        self.damage_by_unit = {}
+        self.strategy_counts = {}
+        self.strategy_total = 0
+        self.capture_staging_streak_by_unit = {}
 
     # -------------------------------------------------
     def reset(self, state):
         super().reset(state)
         self.last_action = None
         self.vp_hold_streak_by_unit = {}
+        self.capture_no_progress_streak_by_unit = {}
+        self.attack_count_by_unit = {}
+        self.damage_by_unit = {}
+        self.strategy_counts = {}
+        self.strategy_total = 0
+        self.capture_staging_streak_by_unit = {}
 
     # -------------------------------------------------
     def compute(
@@ -57,8 +69,15 @@ class ProgressiveReward(BaseReward):
         action_class = info.get("action_class", "")
         l2 = info.get("l2_option", "")
         l3 = str(info.get("l3_strategy", "") or "").upper()
+        if l3:
+            self.strategy_total += 1
+            self.strategy_counts[l3] = int(self.strategy_counts.get(l3, 0)) + 1
 
         is_attack = bool(info.get("is_attack", False)) or l2 == "ATTACK" or "ATTACK" in action_class.upper()
+        action_class_u = str(action_class).upper()
+        is_indirect_attack = "INDIRECT" in action_class_u
+        unit_id = info.get("unit_id")
+        unit_classification = str(info.get("actor_unit_classification", "") or "").upper()
 
         # =================================================
         # METRICS TRACKING (no reward impact)
@@ -76,6 +95,9 @@ class ProgressiveReward(BaseReward):
                 self.bad_attacks += 1
 
             self.total_attacks += 1
+            if unit_id:
+                self.attack_count_by_unit[unit_id] = int(self.attack_count_by_unit.get(unit_id, 0)) + 1
+                self.damage_by_unit[unit_id] = float(self.damage_by_unit.get(unit_id, 0.0)) + float(damage)
 
         # =================================================
         # 🔥 CORE: COMBAT QUALITY (balanced)
@@ -99,6 +121,10 @@ class ProgressiveReward(BaseReward):
 
             # 🔥 small base cost to attack (encourage selectivity)
             reward -= self.cfg.attack_base_cost
+            if "INDIRECT_FIRE_UNIT" in unit_classification:
+                reward += self.cfg.indirect_attack_bonus
+                if is_indirect_attack and damage > 0:
+                    reward += self.cfg.indirect_effective_hit_bonus
 
         else:
             # Reward avoiding bad combat
@@ -200,6 +226,12 @@ class ProgressiveReward(BaseReward):
                         reward -= self.cfg.capture_retreat_penalty
                     elif l2 in {"ADVANCE", "FLANK"}:
                         reward += self.cfg.capture_advance_bonus
+                    # Penalize CAPTURE plans that collapse into attack due to no move progress.
+                    if (
+                        bool(info.get("capture_fallback_to_attack", False))
+                        and str(info.get("capture_fallback_reason", "") or "") == "no_progress_move_available"
+                    ):
+                        reward -= self.cfg.capture_fallback_attack_penalty
                 objective_dist_before = info.get("objective_dist_before")
                 objective_dist_after = info.get("objective_dist_after")
                 if objective_dist_before is not None and objective_dist_after is not None:
@@ -208,8 +240,71 @@ class ProgressiveReward(BaseReward):
                         d_after = float(objective_dist_after)
                         if d_after < d_before:
                             reward += (d_before - d_after) * self.cfg.objective_approach_bonus
+                            if l3 == "CAPTURE" and unit_id:
+                                self.capture_no_progress_streak_by_unit[unit_id] = 0
                         elif d_after > d_before:
                             reward -= (d_after - d_before) * self.cfg.objective_move_away_penalty
+                            if l3 == "CAPTURE" and unit_id:
+                                streak = int(self.capture_no_progress_streak_by_unit.get(unit_id, 0)) + 1
+                                self.capture_no_progress_streak_by_unit[unit_id] = streak
+                                reward -= min(4, streak) * self.cfg.capture_no_progress_penalty
+                        elif l3 == "CAPTURE" and unit_id:
+                            streak = int(self.capture_no_progress_streak_by_unit.get(unit_id, 0)) + 1
+                            self.capture_no_progress_streak_by_unit[unit_id] = streak
+                            reward -= min(3, streak) * (self.cfg.capture_no_progress_penalty * 0.75)
+                    except Exception:
+                        pass
+                # Staging bonus: reward phased approach when CAPTURE advances unit into
+                # short objective distance, even before immediate capture.
+                if (
+                    l3 == "CAPTURE"
+                    and objective_dist_after is not None
+                    and float(objective_dist_after) <= 2.0
+                    and not bool(info.get("actor_captured_vp_now", False))
+                ):
+                    reward += self.cfg.capture_staging_bonus
+                if l3 == "CAPTURE" and unit_id:
+                    move_profile = str(info.get("capture_move_block_profile", "") or "")
+                    no_progress = (
+                        int(info.get("objective_captured_delta", 0)) <= 0
+                        and not bool(info.get("actor_captured_vp_now", False))
+                        and objective_dist_before is not None
+                        and objective_dist_after is not None
+                        and float(objective_dist_after) >= float(objective_dist_before)
+                    )
+                    if move_profile == "objective_staging_move" and no_progress:
+                        s = int(self.capture_staging_streak_by_unit.get(unit_id, 0)) + 1
+                        self.capture_staging_streak_by_unit[unit_id] = s
+                        reward -= min(5, s) * self.cfg.capture_staging_repeat_penalty
+                    else:
+                        self.capture_staging_streak_by_unit[unit_id] = 0
+                # Mild anti-passivity when CAPTURE keeps moving/holding without
+                # damage nor objective progress for consecutive decisions.
+                if l3 == "CAPTURE" and unit_id:
+                    made_progress = int(info.get("objective_captured_delta", 0)) > 0
+                    if objective_dist_before is not None and objective_dist_after is not None:
+                        try:
+                            made_progress = made_progress or (float(objective_dist_after) < float(objective_dist_before))
+                        except Exception:
+                            pass
+                    dealt_damage = float(damage) > 0.0
+                    if (not made_progress) and (not dealt_damage) and (not bool(info.get("actor_captured_vp_now", False))):
+                        idle_streak = int(self.capture_no_progress_streak_by_unit.get(unit_id, 0)) + 1
+                        self.capture_no_progress_streak_by_unit[unit_id] = idle_streak
+                        reward -= min(4, idle_streak) * self.cfg.capture_idle_no_progress_penalty
+                    else:
+                        self.capture_no_progress_streak_by_unit[unit_id] = 0
+                # Late-turn pressure: if tracked side still below campaign target
+                # captures in late game, apply growing penalty.
+                if (
+                    l3 == "CAPTURE"
+                    and int(info.get("turn", 0)) >= int(self.cfg.late_capture_turn_threshold)
+                ):
+                    try:
+                        target_min = int(self.cfg.late_capture_target_min)
+                        shortfall = max(0, target_min - int(captured_after))
+                        if shortfall > 0:
+                            reward -= shortfall * self.cfg.late_capture_penalty
                     except Exception:
                         pass
                 if (
@@ -232,6 +327,8 @@ class ProgressiveReward(BaseReward):
         # Helps avoid "good combat but no captures" plateaus.
         if bool(info.get("actor_captured_vp_now", False)):
             reward += self.cfg.vp_delta_weight * 0.5
+            if unit_id:
+                self.capture_no_progress_streak_by_unit[unit_id] = 0
         elif bool(info.get("actor_vp_owned_by_rl_after", False)) and bool(info.get("actor_on_vp_after", False)):
             reward += self.cfg.vp_delta_weight * self.cfg.capture_vp_presence_bonus
             unit_id = info.get("unit_id")
@@ -268,6 +365,37 @@ class ProgressiveReward(BaseReward):
                 )
 
                 reward += (new_vp - prev_vp) * self.cfg.vp_delta_weight
+
+        # Reward early entry into VP tiles to break late-entry draw lock.
+        if (
+            bool(info.get("actor_on_vp_after", False))
+            and not bool(info.get("actor_on_vp_before", False))
+            and int(info.get("turn", 9999)) <= int(self.cfg.early_vp_entry_turn_bonus_cutoff)
+        ):
+            reward += self.cfg.early_vp_entry_bonus
+
+        # Penalize collapse to a single L3 strategy for long stretches.
+        if self.strategy_total >= int(self.cfg.strategy_dominance_min_decisions):
+            dominant = max(self.strategy_counts.values()) if self.strategy_counts else 0
+            dominance_share = dominant / max(1, self.strategy_total)
+            if dominance_share > float(self.cfg.strategy_dominance_threshold):
+                excess = dominance_share - float(self.cfg.strategy_dominance_threshold)
+                reward -= excess * self.cfg.strategy_dominance_penalty
+
+        # Anti-concentration: gently reward contributions from units that are
+        # currently not dominating total RL damage output.
+        if is_attack and damage > 0 and unit_id:
+            total_dmg = sum(float(v) for v in self.damage_by_unit.values())
+            unit_dmg = float(self.damage_by_unit.get(unit_id, 0.0))
+            if total_dmg > 0:
+                share = unit_dmg / total_dmg
+                if share < 0.55:
+                    reward += self.cfg.anti_concentration_bonus * (0.55 - share)
+                if share > float(self.cfg.dominant_unit_share_threshold):
+                    reward -= (
+                        (share - float(self.cfg.dominant_unit_share_threshold))
+                        * self.cfg.dominant_unit_share_penalty
+                    )
 
         # =================================================
         # ✅ ENDGAME

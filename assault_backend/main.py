@@ -256,8 +256,11 @@ def game_ai_turn():
     source = "heuristic"
     if sb3_ai is not None and sb3_ai.can_control_side(active_side):
         try:
-            action, _opt = sb3_ai.choose_action(env, unit)
-            source = "sb3"
+            sb3_unit, sb3_action, _opt = sb3_ai.choose_unit_and_action(env, active_side)
+            if sb3_action is not None:
+                unit = sb3_unit or unit
+                action = sb3_action
+                source = "sb3"
         except Exception as e:
             print(f"[AI TURN] SB3 inference failed, fallback heuristic: {e}")
             action = heuristic_action

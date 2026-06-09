@@ -118,6 +118,9 @@ class ConsoleObserver:
             if result != "victory" or not winner:
                 self.turns.add_line("🤝 MATCH FINISHED — DRAW")
                 self.turns.add_line(f"    Ended at turn: {turn}")
+                if reason:
+                    pretty_reason = str(reason).replace("_", " ").capitalize()
+                    self.turns.add_line(f"    Reason: {pretty_reason}")
 
             # -------- VICTORY --------
             else:
@@ -156,5 +159,5 @@ class ConsoleObserver:
                     pretty_reason = reason.replace("_", " ").capitalize()
                     self.turns.add_line(f"    Reason: {pretty_reason}")
 
-                # Force final print
-                self.turns.close_turn()
+            # Force final print (both draw and victory branches)
+            self.turns.close_turn()

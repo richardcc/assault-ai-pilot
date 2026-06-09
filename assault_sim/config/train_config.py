@@ -82,7 +82,7 @@ class TrainConfig:
             sb3_gae_lambda=0.97,
             sb3_ent_coef=0.01,
             sb3_clip_range=0.15,
-            sb3_learning_rate=2.5e-4,
+            sb3_learning_rate=1e-4,
             sb3_device="cpu",
             sb3_eval_freq=25_000,
             sb3_eval_episodes=20,

@@ -263,6 +263,10 @@ class RuntimeGameState:
             # - Draw on "Pareggio".
             # - Any "Sconfitta*" means tracked side loses.
             if "pareggio" in result_text or "draw" in result_text:
+                # Experimental override for curriculum tuning:
+                # treat campaign draw as tracked-side win.
+                if os.getenv("ASSAULT_OBJECTIVE_PAREGGIO_IS_WIN", "0") == "1":
+                    return tracked_side, "objective_outcome_resolved_draw_as_win"
                 return None, "objective_outcome_resolved"
             if "vittoria totale" in result_text or result_text == "vittoria":
                 return tracked_side, "objective_outcome_resolved"
@@ -315,7 +319,7 @@ class RuntimeGameState:
 
         if (
             self.scenario.max_turns is not None
-            and self.base_state.turn >= self.scenario.max_turns
+            and self.base_state.turn > self.scenario.max_turns
         ):
             _finalize_vp_if_needed()
             self.base_state.done = True
@@ -436,11 +440,12 @@ class RuntimeGameState:
                 })
         self._sync_eliminated_activation()
 
-        self._check_match_end(context)
-
         # --- NEW: activation step ---
         if attacker:
             self.next_activation()
+        # Objective outcomes with timing=end_of_last_turn should be evaluated
+        # after activation progression (turn rollover), not mid-turn.
+        self._check_match_end(context)
 
         if self.base_state.done:
             return result

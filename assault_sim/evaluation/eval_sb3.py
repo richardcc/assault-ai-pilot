@@ -3,6 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 from pathlib import Path
 import json
+import os
 import numpy as np
 
 from assault_model.actions.status import WaitAction
@@ -17,6 +18,7 @@ from assault_sim.evaluation.results_analyzer import ResultsAnalyzer
 from assault_sim.heuristics.tactical_path_heuristic import TacticalPathHeuristic
 from assault_sim.rl.tactical_options import TacticalOption
 from assault_sim.rl.strategic_intents import StrategicIntent
+from assault_sim.rl.state_encoder import encode_state
 from assault_sim.rewards.shaped_reward import ShapedReward
 
 
@@ -40,6 +42,7 @@ class SB3EvalController:
         self._strategy_stub = type("SB3Strategy", (), {})
         self._locked_strategy = None
         self._locked_strategy_turn = None
+        self._cached_action_vec_by_turn = {}
 
     def reset(self):
         self.current_option = None
@@ -49,6 +52,47 @@ class SB3EvalController:
         self.last_decision_trace = None
         self._locked_strategy = None
         self._locked_strategy_turn = None
+        self._cached_action_vec_by_turn = {}
+
+    def _predict_action_vec(self, state, obs=None):
+        model_obs = obs
+        if model_obs is None:
+            model_obs = encode_state(
+                state,
+                unit=None,
+                rl_side=self.rl_side,
+                max_turns=getattr(getattr(self.sim_env, "scenario", None), "max_turns", None),
+                scenario=getattr(self.sim_env, "scenario", None),
+            )
+        if self.obs_normalizer is not None:
+            model_obs = self.obs_normalizer(model_obs)
+        action_pair, _ = self.model.predict(model_obs, deterministic=True)
+        return np.asarray(action_pair).reshape(-1)
+
+    def _candidate_units_for_side(self, side, state, blocked_units):
+        blocked = blocked_units or set()
+        side_norm = str(side).upper()
+        units = [
+            u for u in getattr(state, "units", [])
+            if getattr(u, "alive", False)
+            and str(getattr(u, "side", "")).upper() == side_norm
+            and getattr(u, "unit_id", None) not in blocked
+        ]
+        return sorted(units, key=lambda u: str(getattr(u, "unit_id", "")))
+
+    def select_best_unit(self, side, state, blocked_units):
+        if str(side).upper() != str(self.rl_side).upper():
+            return None
+        candidates = self._candidate_units_for_side(side, state, blocked_units)
+        if not candidates:
+            return None
+        action_vec = self._predict_action_vec(state, obs=None)
+        turn_now = int(getattr(state, "turn", 0))
+        self._cached_action_vec_by_turn[turn_now] = action_vec
+        if action_vec.size < 4:
+            return None
+        unit_slot = int(action_vec[3])
+        return candidates[unit_slot % len(candidates)]
 
     def _enemy_action(self, state, unit):
         for opt in (
@@ -63,6 +107,15 @@ class SB3EvalController:
                 return action
         return WaitAction(unit.unit_id)
 
+    def _objective_tracked_side(self) -> str | None:
+        outcomes = getattr(getattr(self.sim_env, "scenario", None), "victory_outcomes", None) or {}
+        metric = str(outcomes.get("metric", "")).strip()
+        timing = str(outcomes.get("timing", "")).strip()
+        tracked = str(outcomes.get("tracked_side", "")).strip().upper()
+        if metric == "objectives_captured" and timing == "end_of_last_turn" and tracked:
+            return tracked
+        return None
+
     def act(self, state, side, unit, obs):
         if side != self.rl_side:
             action = self._enemy_action(state, unit)
@@ -70,20 +123,18 @@ class SB3EvalController:
             self.sim_env.runtime.activated_units.add(unit.unit_id)
             return action
 
-        model_obs = obs
-        if self.obs_normalizer is not None:
-            model_obs = self.obs_normalizer(obs)
-        action_pair, _ = self.model.predict(model_obs, deterministic=True)
-        action_vec = np.asarray(action_pair).reshape(-1)
-        if action_vec.size != 3:
+        turn_now = int(getattr(state, "turn", 0))
+        action_vec = self._cached_action_vec_by_turn.pop(turn_now, None)
+        if action_vec is None:
+            action_vec = self._predict_action_vec(state, obs=obs)
+        if action_vec.size not in (3, 4):
             raise RuntimeError(
-                f"Expected 3-dim action [strategy, option, attack_mode], got shape={action_vec.shape}"
+                f"Expected action [strategy, option, attack_mode(, unit_slot)], got shape={action_vec.shape}"
             )
         strategy_idx = int(action_vec[0])
         option_idx = int(action_vec[1])
         attack_mode = int(action_vec[2])
         sampled_strategy = StrategicIntent(strategy_idx)
-        turn_now = int(getattr(state, "turn", 0))
         if self._locked_strategy is None or self._locked_strategy_turn != turn_now:
             self._locked_strategy = sampled_strategy
             self._locked_strategy_turn = turn_now
@@ -100,6 +151,7 @@ class SB3EvalController:
             option=resolved_option,
             attack_mode=attack_mode,
             strategy=effective_strategy,
+            objective_tracked_side=self._objective_tracked_side(),
         )
         if action is None:
             action = WaitAction(unit.unit_id)
@@ -135,7 +187,15 @@ def _resolve_vecnorm_path_for_side(repo_root: Path, rl_side: str) -> Path | None
     candidates = [
         repo_root / "models" / f"sb3_vecnormalize_{side}.pkl",
     ]
-    return next((p for p in candidates if p.exists()), None)
+    exact = next((p for p in candidates if p.exists()), None)
+    if exact is not None:
+        return exact
+
+    # Fallback discovery for renamed/moved artifacts.
+    alt_candidates = sorted((repo_root / "models").glob(f"*vecnormalize*{side}*.pkl"))
+    if alt_candidates:
+        return alt_candidates[0]
+    return None
 
 
 def _scenario_sides(repo_root: Path, scenario_id: str) -> set[str]:
@@ -181,6 +241,7 @@ def evaluate_sb3(episodes: int = 100):
     all_models = {}
     comparison_rows = []
 
+    allow_unnormalized_eval = os.getenv("ASSAULT_ALLOW_EVAL_WITHOUT_VECNORM", "0") == "1"
     for rl_side in rl_sides:
         model_path = _resolve_model_path_for_side(repo_root, rl_side)
         if model_path is None:
@@ -188,6 +249,11 @@ def evaluate_sb3(episodes: int = 100):
             continue
 
         vecnorm_path = _resolve_vecnorm_path_for_side(repo_root, rl_side)
+        if vecnorm_path is None and not allow_unnormalized_eval:
+            raise RuntimeError(
+                f"VecNormalize stats not found for side={rl_side}. "
+                "Refusing unnormalized eval. Set ASSAULT_ALLOW_EVAL_WITHOUT_VECNORM=1 to override."
+            )
         model = PPO.load(str(model_path), device="cpu")
         all_reports[rl_side] = {}
         all_models[rl_side] = str(model_path)
@@ -275,6 +341,7 @@ def evaluate_sb3(episodes: int = 100):
                 "combat": analyzer.combat_metrics(),
                 "advanced": analyzer.advanced_metrics(),
                 "policy_alignment": analyzer.policy_alignment(),
+                "mission": analyzer.mission_metrics(),
                 "action_execution": analyzer.action_execution(),
             }
             all_reports[rl_side][scenario] = side_report
@@ -283,7 +350,12 @@ def evaluate_sb3(episodes: int = 100):
                 "scenario": scenario,
                 "episodes": side_report["summary"].get("episodes", 0),
                 "win_rate": side_report["summary"].get("win_rate", 0.0),
+                "win_score_rate": side_report["summary"].get("win_score_rate", side_report["summary"].get("win_rate", 0.0)),
+                "true_win_rate": side_report["summary"].get("true_win_rate", 0.0),
+                "draw_rate": side_report["summary"].get("draw_rate", 0.0),
+                "loss_rate": side_report["summary"].get("loss_rate", 0.0),
                 "draws": side_report["summary"].get("draws", 0),
+                "losses": side_report["summary"].get("losses", 0),
                 "avg_vp": side_report["summary"].get("avg_vp", 0.0),
                 "avg_steps": side_report["summary"].get("avg_steps", 0.0),
                 "end_reason_counts": side_report["summary"].get("end_reason_counts", {}),
@@ -316,7 +388,11 @@ def evaluate_sb3(episodes: int = 100):
             ) or "-"
             print(
                 f"side={row['rl_side']} scenario={row['scenario']} "
-                f"win_rate={row['win_rate']:.3f} avg_vp={row['avg_vp']:.3f} "
+                f"score_win_rate(draw=0.5)={row.get('win_score_rate', row['win_rate']):.3f} "
+                f"true_win_rate(only_wins)={row.get('true_win_rate', 0.0):.3f} "
+                f"draw_rate={row.get('draw_rate', 0.0):.3f} "
+                f"loss_rate={row.get('loss_rate', 0.0):.3f} "
+                f"avg_vp={row['avg_vp']:.3f} "
                 f"avg_steps={row['avg_steps']:.1f} trade_mean={row['trade_mean']:.3f} "
                 f"damage_ratio={row['damage_ratio']:.3f} draws={row['draws']} "
                 f"reasons=[{reasons_str}] rl_results=[{rl_results_str}] "

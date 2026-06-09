@@ -84,6 +84,7 @@ class EvalResult:
     decision_alignment: dict[str, Any]
     events: list[dict[str, Any]]
     advanced: dict[str, Any]
+    mission: dict[str, Any]
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -108,6 +109,7 @@ class EvalResult:
             "decision_alignment": self.decision_alignment,
             "events": self.events,
             "advanced": self.advanced,
+            "mission": self.mission,
         }
 
     @staticmethod
@@ -138,4 +140,5 @@ class EvalResult:
             decision_alignment=dict(payload.get("decision_alignment", {})),
             events=list(payload.get("events", [])),
             advanced=dict(payload.get("advanced", {})),
+            mission=dict(payload.get("mission", {})),
         )

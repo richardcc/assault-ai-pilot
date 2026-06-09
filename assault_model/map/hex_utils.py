@@ -86,11 +86,18 @@ def safe_hex_distance(a, b):
     if a is None or b is None:
         return 999
 
-    # ✅ type check
-    if not hasattr(a, "q") or not hasattr(a, "r"):
+    def _is_coord_like(x):
+        if hasattr(x, "q") and hasattr(x, "r"):
+            return True
+        if isinstance(x, tuple) and len(x) == 2:
+            return True
+        return False
+
+    # ✅ type check (accept HexCoord and (q, r) tuples)
+    if not _is_coord_like(a):
         return 999
 
-    if not hasattr(b, "q") or not hasattr(b, "r"):
+    if not _is_coord_like(b):
         return 999
 
     return hex_distance(a, b)

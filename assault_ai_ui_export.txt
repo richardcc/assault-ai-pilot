@@ -75,6 +75,7 @@ FILE: C:\repos\python\assault\assault_ai_ui\index.html
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&family=Rajdhani:wght@500;600;700&display=swap" rel="stylesheet">
   </head>
   <body>
+    <div id="overlay-root"></div>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
@@ -4564,6 +4565,35 @@ FILE: C:\repos\python\assault\assault_ai_ui\public\icons.svg
 
 
 ================================================================================
+FILE: C:\repos\python\assault\assault_ai_ui\public\art\desktop.ini
+================================================================================
+
+[LocalizedFileNames]
+GE Unit Heavy MG42b.jpg=@GE Unit Heavy MG42b.jpg,0
+Tactical Divisional Assets.jpg=@Tactical Divisional Assets.jpg,0
+GE 15th PG Division Assault Tank Sec III.jpg=@GE 15th PG Division Assault Tank Sec III.jpg,0
+GE 1st FJ Division Airlanding Support Sec II.jpg=@GE 1st FJ Division Airlanding Support Sec II.jpg,0
+GE 1st FJ Division Airlanding Support Sec.jpg=@GE 1st FJ Division Airlanding Support Sec.jpg,0
+GE 15th PG Division Med AT Gun Sec III.jpg=@GE 15th PG Division Med AT Gun Sec III.jpg,0
+GE 1st FJ Division Infantry Support Plt III.jpg=@GE 1st FJ Division Infantry Support Plt III.jpg,0
+GE 1st FJ Division Machinegun Plt II.jpg=@GE 1st FJ Division Machinegun Plt II.jpg,0
+GE 15th PG Division Rifle Plt VI.jpg=@GE 15th PG Division Rifle Plt VI.jpg,0
+GE 15th PG Division PG Plt III.jpg=@GE 15th PG Division PG Plt III.jpg,0
+GE 15th PG Division Rifle Plt V.jpg=@GE 15th PG Division Rifle Plt V.jpg,0
+GE 15th PG Division Staff Plt II.jpg=@GE 15th PG Division Staff Plt II.jpg,0
+GE 15th PG Division Staff Plt III.jpg=@GE 15th PG Division Staff Plt III.jpg,0
+GE 1st FJ Division Infantry AT Plt III.jpg=@GE 1st FJ Division Infantry AT Plt III.jpg,0
+GE 1st FJ Division Infantry Support Plt II.jpg=@GE 1st FJ Division Infantry Support Plt II.jpg,0
+GE 1st FJ Division Rifle Plt IV.jpg=@GE 1st FJ Division Rifle Plt IV.jpg,0
+GE 1st FJ Division Infantry AT Plt II.jpg=@GE 1st FJ Division Infantry AT Plt II.jpg,0
+GE 1st FJ Division Infantry Support Plt.jpg=@GE 1st FJ Division Infantry Support Plt.jpg,0
+GE 15th PG Division PG Plt II.jpg=@GE 15th PG Division PG Plt II.jpg,0
+GE 15th PG Division Staff Plt.jpg=@GE 15th PG Division Staff Plt.jpg,0
+GE 1st FJ Division Rifle Plt VII.jpg=@GE 1st FJ Division Rifle Plt VII.jpg,0
+
+
+
+================================================================================
 FILE: C:\repos\python\assault\assault_ai_ui\public\art\counters\desktop.ini
 ================================================================================
 
@@ -4580,6 +4610,59 @@ IT 81mm Mortarb.png=@IT 81mm Mortarb.png,0
 US 81mm Mortar.png=@US 81mm Mortar.png,0
 US Bazooka Team 43.png=@US Bazooka Team 43.png,0
 US Bazooka Team 43b.png=@US Bazooka Team 43b.png,0
+
+
+
+================================================================================
+FILE: C:\repos\python\assault\assault_ai_ui\public\art\formations\desktop.ini
+================================================================================
+
+[LocalizedFileNames]
+US Inf 1st Inf Rifle Platoon.jpg=@US Inf 1st Inf Rifle Platoon.jpg,0
+
+
+
+================================================================================
+FILE: C:\repos\python\assault\assault_ai_ui\public\art\unit_cards\desktop.ini
+================================================================================
+
+[LocalizedFileNames]
+GE Unit Fallschirmjager Rifles 43b.jpg=@GE Unit Fallschirmjager Rifles 43b.jpg,0
+GE Unit Rifles 43.jpg=@GE Unit Rifles 43.jpg,0
+GE Unit Rifles 43b.jpg=@GE Unit Rifles 43b.jpg,0
+US Unit Rifles 43.jpg=@US Unit Rifles 43.jpg,0
+US Unit Rifles 43b.jpg=@US Unit Rifles 43b.jpg,0
+GE Unit 50mm Mortarb.jpg=@GE Unit 50mm Mortarb.jpg,0
+GE Unit 50mm Mortar.jpg=@GE Unit 50mm Mortar.jpg,0
+GE Unit Heavy MG42b.jpg=@GE Unit Heavy MG42b.jpg,0
+GE Unit Heavy MG42.jpg=@GE Unit Heavy MG42.jpg,0
+US Unit 81mm Mortarb.jpg=@US Unit 81mm Mortarb.jpg,0
+US Unit 81mm Mortar.jpg=@US Unit 81mm Mortar.jpg,0
+US Unit Bazooka Team 43b.jpg=@US Unit Bazooka Team 43b.jpg,0
+US Unit Bazooka Team 43.jpg=@US Unit Bazooka Team 43.jpg,0
+IT Unit 81mm Mortar.jpg=@IT Unit 81mm Mortar.jpg,0
+IT Unit 81mm Mortarb.jpg=@IT Unit 81mm Mortarb.jpg,0
+US Inf 1st Inf Rifle Platoon.jpg=@US Inf 1st Inf Rifle Platoon.jpg,0
+GE Unit 81mm Mortar.jpg=@GE Unit 81mm Mortar.jpg,0
+GE Unit 81mm Mortarb.jpg=@GE Unit 81mm Mortarb.jpg,0
+IT Unit Rifles 43b.jpg=@IT Unit Rifles 43b.jpg,0
+IT Unit Rifles 43.jpg=@IT Unit Rifles 43.jpg,0
+IT Unit LMG Squad 43b.jpg=@IT Unit LMG Squad 43b.jpg,0
+IT Unit LMG Squad 43.jpg=@IT Unit LMG Squad 43.jpg,0
+IT Unit Solothurn AT Rifleb.jpg=@IT Unit Solothurn AT Rifleb.jpg,0
+IT Unit Solothurn AT Rifle.jpg=@IT Unit Solothurn AT Rifle.jpg,0
+IT Unit 20mm Breda AA.jpg=@IT Unit 20mm Breda AA.jpg,0
+IT Unit 20mm Breda AAb.jpg=@IT Unit 20mm Breda AAb.jpg,0
+IT Unit Breda MMG.jpg=@IT Unit Breda MMG.jpg,0
+IT Unit Breda MMGb.jpg=@IT Unit Breda MMGb.jpg,0
+IT Unit Sniper 43.jpg=@IT Unit Sniper 43.jpg,0
+IT Unit Sniper 43b.jpg=@IT Unit Sniper 43b.jpg,0
+IT Unit 45mm Brixia Mortar.jpg=@IT Unit 45mm Brixia Mortar.jpg,0
+IT Unit 45mm Brixia Mortarb.jpg=@IT Unit 45mm Brixia Mortarb.jpg,0
+GE Unit Sniper 43b.jpg=@GE Unit Sniper 43b.jpg,0
+GE Unit Sniper 43.jpg=@GE Unit Sniper 43.jpg,0
+US Unit Sniper 43.jpg=@US Unit Sniper 43.jpg,0
+US Unit Sniper 43b.jpg=@US Unit Sniper 43b.jpg,0
 
 
 
@@ -5497,6 +5580,10 @@ FILE: C:\repos\python\assault\assault_ai_ui\src\App.css
   border-radius: 10px;
 }
 
+.action-card.action-attack .action-type {
+  color: var(--neon-red);
+}
+
 .action-card.action-attack .action-coords {
   color: var(--neon-red);
   background: rgba(255, 56, 56, 0.08);
@@ -5639,6 +5726,7 @@ FILE: C:\repos\python\assault\assault_ai_ui\src\App.css
   flex-direction: column;
   justify-content: center;
   z-index: 10;
+  overflow: visible;
 }
 
 .combat-panel {
@@ -5797,6 +5885,33 @@ FILE: C:\repos\python\assault\assault_ai_ui\src\App.css
 /* ==========================================================================
    TROOP CARD ROSTER CLASSES
    ========================================================================= */
+#overlay-root {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 10000;
+}
+
+.unit-card-hover-preview {
+  position: fixed;
+  transform: translateX(-50%);
+  pointer-events: none;
+  padding: 6px;
+  background: rgba(8, 10, 18, 0.96);
+  border: 1px solid rgba(0, 240, 255, 0.35);
+  border-radius: 8px;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.55), 0 0 24px rgba(0, 240, 255, 0.12);
+}
+
+.unit-card-hover-preview img {
+  display: block;
+  width: 280px;
+  height: auto;
+  max-height: min(360px, 55vh);
+  object-fit: contain;
+  border-radius: 4px;
+}
+
 .roster-container {
   display: flex;
   overflow-x: auto;
@@ -6005,6 +6120,36 @@ FILE: C:\repos\python\assault\assault_ai_ui\src\App.css
   z-index: 3;
 }
 
+.trooper-card.target-highlight {
+  border-color: var(--neon-red) !important;
+  background: rgba(255, 56, 56, 0.12) !important;
+  box-shadow: 0 0 16px rgba(255, 56, 56, 0.6) !important;
+  transform: scale(1.05) translateY(-2px);
+  z-index: 6;
+  animation: target-pulse 0.9s ease-in-out infinite;
+}
+
+.trooper-card.target-highlight::before {
+  content: "TARGET";
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  background: var(--neon-red);
+  color: #000;
+  font-family: var(--font-tech);
+  font-weight: 700;
+  font-size: 6px;
+  padding: 1px 3px;
+  border-radius: 2px;
+  letter-spacing: 0.5px;
+  z-index: 4;
+}
+
+@keyframes target-pulse {
+  0%, 100% { box-shadow: 0 0 12px rgba(255, 56, 56, 0.45); }
+  50% { box-shadow: 0 0 22px rgba(255, 56, 56, 0.8); }
+}
+
 .trooper-card.ally-used::before {
   content: "DONE";
   position: absolute;
@@ -6036,6 +6181,8 @@ import { CombatPanel } from "./game/ui/CombatPanel";
 import { unitImages } from "./game/config/unitImages";
 import { sides } from "./game/config/sides";
 import { formatCoords } from "./game/render/hexGridRenderer";
+import { DispatchedOrdersPanel } from "./game/ui/DispatchedOrdersPanel";
+import { logCombatEvents } from "./game/systems/combatLog";
 
 type LogEntry = {
   type: string;
@@ -6056,9 +6203,15 @@ function App() {
   const [gameData, setGameData] = useState<any>(null);
   const [deadUnits, setDeadUnits] = useState<Unit[]>([]);
   const [selectedUnitId, setSelectedUnitId] = useState<string | null>(null);
+  const [hoveredTargetId, setHoveredTargetId] = useState<string | null>(null);
   const [availableMoves, setAvailableMoves] = useState<any[]>([]);
+  const [attackHint, setAttackHint] = useState<string | null>(null);
   const [logEvents, setLogEvents] = useState<LogEntry[]>([]);
   const [activeMode, setActiveMode] = useState<string | null>(null);
+  const [scenarioList, setScenarioList] = useState<string[]>([]);
+  const [selectedScenario, setSelectedScenario] = useState<string>("");
+  const [scenarioSides, setScenarioSides] = useState<string[]>([]);
+  const [humanSide, setHumanSide] = useState<string>("");
 
   const lastTurnRef = useRef<number>(-1);
   const lastActiveSideRef = useRef<string>("");
@@ -6072,6 +6225,25 @@ function App() {
       second: "2-digit" 
     });
     setLogEvents((prev) => [{ type, text, time }, ...prev].slice(0, 50));
+  };
+
+  const resetMatchUiState = () => {
+    setDeadUnits([]);
+    setSelectedUnitId(null);
+    setHoveredTargetId(null);
+    setAvailableMoves([]);
+    setAttackHint(null);
+    prevUnitsRef.current = null;
+  };
+
+  const buildSidesConfig = (mode: string): Record<string, string> => {
+    const sides = scenarioSides.length ? scenarioSides : ["GE", "US"];
+    const chosenHumanSide = humanSide || sides[0];
+    const cfg: Record<string, string> = {};
+    for (const s of sides) {
+      cfg[s] = mode === "ai_vs_ai" ? "ai" : (s === chosenHumanSide ? "human" : "ai");
+    }
+    return cfg;
   };
 
   // Subscribe to the game controller events
@@ -6090,6 +6262,70 @@ function App() {
       (window as any).logSystemEvent = undefined;
     };
   }, []);
+
+  useEffect(() => {
+    const loadScenarioSides = async () => {
+      if (!selectedScenario) return;
+      try {
+        const res = await fetch(`http://127.0.0.1:8000/api/ui/scenarios/${selectedScenario}`);
+        if (!res.ok) {
+          throw new Error(`Failed to load scenario data (${res.status})`);
+        }
+        const data = await res.json();
+        const sidesFound = Array.from(
+          new Set(
+            (data?.units || [])
+              .map((u: any) => String(u?.side || "").toUpperCase())
+              .filter((s: string) => s.length > 0)
+          )
+        ) as string[];
+        const normalizedSides = sidesFound.length ? sidesFound : ["GE", "US"];
+        setScenarioSides(normalizedSides);
+        setHumanSide((prev) => (prev && normalizedSides.includes(prev) ? prev : normalizedSides[0]));
+      } catch (err) {
+        console.error("❌ Could not load scenario sides", err);
+        setScenarioSides(["GE", "US"]);
+        setHumanSide((prev) => prev || "GE");
+      }
+    };
+    loadScenarioSides();
+  }, [selectedScenario]);
+
+  useEffect(() => {
+    const loadScenarios = async () => {
+      try {
+        const res = await fetch("http://127.0.0.1:8000/api/ui/scenarios");
+        if (!res.ok) {
+          throw new Error(`Failed to load scenarios (${res.status})`);
+        }
+        const data = await res.json();
+        const scenarios = Array.isArray(data?.scenarios) ? data.scenarios : [];
+        setScenarioList(scenarios);
+        if (scenarios.length > 0) {
+          setSelectedScenario((prev) => prev || scenarios[0]);
+        }
+      } catch (err) {
+        console.error("❌ Could not load scenarios", err);
+        addLog("system", `❌ Could not load scenarios: ${String(err)}`);
+      }
+    };
+    loadScenarios();
+  }, []);
+
+  // Auto-start a default session so the map is visible on app load.
+  useEffect(() => {
+    if (activeMode || gameData || !selectedScenario || !humanSide) return;
+    setActiveMode("human");
+    resetMatchUiState();
+    gameController.start(
+      "human",
+      selectedScenario,
+      buildSidesConfig("human")
+    ).catch((err) => {
+      console.error("❌ Auto-start failed", err);
+      addLog("system", `❌ Auto-start failed: ${String(err)}`);
+    });
+  }, [activeMode, gameData, selectedScenario, humanSide]);
 
   // Monitor game state changes to output beautiful terminal logs
   useEffect(() => {
@@ -6112,6 +6348,19 @@ function App() {
     }
   }, [gameData]);
 
+  // If active side is not human, clear any stale human selection/orders.
+  useEffect(() => {
+    if (!gameData) return;
+    const activeSide = gameData.active_side;
+    const isHumanTurn = gameData?.sides?.[activeSide] === "human";
+    if (!isHumanTurn) {
+      setSelectedUnitId(null);
+      setAvailableMoves([]);
+      setHoveredTargetId(null);
+      setAttackHint(null);
+    }
+  }, [gameData?.active_side, gameData?.sides]);
+
   // Log selections automatically
   useEffect(() => {
     if (selectedUnitId) {
@@ -6120,6 +6369,33 @@ function App() {
       addLog("select", `🟢 Target locked: ${selectedUnitId} [${label}]`);
     }
   }, [selectedUnitId, gameData]);
+
+  // Log combat results (damage + dice used) to the System Log.
+  // Logging is deduped by event id in combatLog, so it is safe even if the
+  // same events arrive through multiple state updates.
+  useEffect(() => {
+    logCombatEvents(gameData?.last_events, gameData?.units || []);
+  }, [gameData]);
+
+  // Log VP ownership changes.
+  useEffect(() => {
+    const events = gameData?.last_events || [];
+    for (const event of events) {
+      if (event?.type !== "VP_CAPTURED") continue;
+      const p = event.payload || {};
+      const coords =
+        p.q != null && p.r != null
+          ? formatCoords(Number(p.q), Number(p.r))
+          : "[?]";
+      const newOwner = p.new_owner || "NONE";
+      const prevOwner = p.previous_owner || "NONE";
+      const value = Number(p.value || 0);
+      addLog(
+        "turn",
+        `🏁 VP ${coords} ${prevOwner} -> ${newOwner} (+${value})`
+      );
+    }
+  }, [gameData?.last_events]);
 
   // Keep dead units visible in the roster even if they disappear from the map state
   useEffect(() => {
@@ -6133,15 +6409,20 @@ function App() {
     setDeadUnits((prev) => {
       const nextDeadMap = new Map<string, Unit>();
 
-      // Add any units currently dead in the state
       for (const dead of currentDead) {
         nextDeadMap.set(dead.id, dead);
       }
 
-      // Preserve dead units that disappeared from the current state
+      for (const d of prev) {
+        if (!currentIds.has(d.id)) {
+          nextDeadMap.set(d.id, d);
+        }
+      }
+
+      // Backend used to drop dead units entirely; keep last snapshot if they vanish
       for (const prevUnit of previousUnits) {
-        if (!currentIds.has(prevUnit.id) && prevUnit.hp != null && prevUnit.hp <= 0) {
-          nextDeadMap.set(prevUnit.id, prevUnit);
+        if (!currentIds.has(prevUnit.id)) {
+          nextDeadMap.set(prevUnit.id, { ...prevUnit, hp: 0 });
         }
       }
 
@@ -6150,6 +6431,28 @@ function App() {
 
     prevUnitsRef.current = currentUnits;
   }, [gameData]);
+
+  // Resolve which enemy unit an attack order is targeting, so we can
+  // highlight it in the roster on hover.
+  const resolveOrderTargetId = (order: any): string | null => {
+    if (!order) return null;
+    const actionType = String(order.type || order.kind || "").toUpperCase();
+    const isAttack =
+      order.kind === "attack" ||
+      /RANGED|ASSAULT|ATTACK|REACTION|COMBAT|FIRE/.test(actionType);
+    if (!isAttack) return null;
+
+    if (order.target_id) return order.target_id;
+
+    const q = order.target_q ?? order.q;
+    const r = order.target_r ?? order.r;
+    if (q == null || r == null) return null;
+
+    const unit = (gameData?.units || []).find(
+      (u: any) => u.q === q && u.r === r
+    );
+    return unit?.id ?? null;
+  };
 
   // Action card trigger handler
   const handleActionCardClick = (action: any) => {
@@ -6174,9 +6477,42 @@ function App() {
 
   // Start a game mode safely and log it
   const handleStartGame = (mode: string) => {
+    if (!selectedScenario) {
+      addLog("system", "❌ No scenario selected");
+      return;
+    }
     setActiveMode(mode);
-    addLog("system", `🚀 Launching match mode: [${mode.toUpperCase()}]`);
-    gameController.start(mode as any);
+    addLog(
+      "system",
+      `🚀 Launching match mode: [${mode.toUpperCase()}] // Scenario: ${selectedScenario} // Human: ${humanSide || "-"}`
+    );
+    resetMatchUiState();
+    gameController.start(
+      mode as any,
+      selectedScenario,
+      buildSidesConfig(mode)
+    );
+  };
+
+  const handleScenarioChange = (scenarioId: string) => {
+    setSelectedScenario(scenarioId);
+    if (!scenarioId) return;
+
+    const modeToUse = (activeMode || "human") as any;
+    if (!activeMode) {
+      setActiveMode("human");
+    }
+
+    addLog("system", `🗺️ Scenario changed: ${scenarioId}. Reloading session...`);
+    resetMatchUiState();
+    gameController.start(
+      modeToUse,
+      scenarioId,
+      buildSidesConfig(modeToUse)
+    ).catch((err) => {
+      console.error("❌ Scenario switch failed", err);
+      addLog("system", `❌ Scenario switch failed: ${String(err)}`);
+    });
   };
 
   // Safe handler to stop and refresh the session
@@ -6194,17 +6530,16 @@ function App() {
     : null;
 
   const panelUnits = useMemo(() => {
-    const liveUnits: Unit[] = gameData?.units || [];
-    const merged = [...liveUnits];
-    const liveIds = new Set(liveUnits.map((u) => u.id));
-
+    const byId = new Map<string, Unit>();
+    for (const u of gameData?.units || []) {
+      byId.set(u.id, u);
+    }
     for (const dead of deadUnits) {
-      if (!liveIds.has(dead.id)) {
-        merged.push(dead);
+      if (!byId.has(dead.id)) {
+        byId.set(dead.id, { ...dead, hp: 0 });
       }
     }
-
-    return merged;
+    return Array.from(byId.values());
   }, [gameData?.units, deadUnits]);
 
   const latestCombatEvent = gameData?.last_events?.slice().reverse().find((event: any) => event.type === "ACTION_EFFECT");
@@ -6224,6 +6559,40 @@ function App() {
           <div style={{ display: "flex", gap: "20px", fontFamily: "var(--font-tech)", fontSize: "14px", letterSpacing: "1px" }}>
             <div>SCENARIO: <span style={{ color: "var(--neon-cyan)" }}>{(gameData.scenario_name || "Initial Contact").toUpperCase()}</span></div>
             <div>TURN: <span style={{ color: "var(--neon-cyan)" }}>{gameData.turn}</span></div>
+            <div>
+              VICTORY:
+              <span style={{ color: "var(--neon-cyan)", marginLeft: 6 }}>
+                Elimination / MaxTurns by VP
+              </span>
+            </div>
+            <div>
+              VPs:
+              <span style={{ color: "var(--neon-cyan)", marginLeft: 6 }}>
+                {Object.entries(gameData?.vp_score_live || {})
+                  .map(([sideId, score]) => `${sideId} ${score}`)
+                  .join(" | ") || "-"}
+              </span>
+            </div>
+            {gameData?.victory_outcome && (
+              <div>
+                OBJECTIVES:
+                <span style={{ color: "var(--neon-cyan)", marginLeft: 6 }}>
+                  {gameData.victory_outcome.tracked_side} {gameData.victory_outcome.captured}/
+                  {gameData.victory_outcome.objectives_total}
+                  {gameData.victory_outcome?.outcome?.result
+                    ? ` (${gameData.victory_outcome.outcome.result})`
+                    : ""}
+                </span>
+              </div>
+            )}
+            {gameData?.done && (
+              <div>
+                RESULT:
+                <span style={{ color: "var(--neon-green)", marginLeft: 6 }}>
+                  {gameData?.winner ? `${gameData.winner} wins` : "Draw"} ({gameData?.end_reason || "completed"})
+                </span>
+              </div>
+            )}
             <div style={{
               color: gameData.sides?.[gameData.active_side] === "human" ? "var(--neon-green)" : "var(--neon-orange)"
             }}>
@@ -6233,6 +6602,34 @@ function App() {
         )}
 
         <div className="header-controls">
+          <select
+            className="btn-tactical"
+            value={selectedScenario}
+            onChange={(e) => handleScenarioChange(e.target.value)}
+            title="Scenario"
+            style={{ minWidth: 240 }}
+          >
+            {scenarioList.map((scenarioId) => (
+              <option key={scenarioId} value={scenarioId}>
+                {scenarioId}
+              </option>
+            ))}
+          </select>
+
+          <select
+            className="btn-tactical"
+            value={humanSide}
+            onChange={(e) => setHumanSide(e.target.value)}
+            title="Human side"
+            style={{ minWidth: 140 }}
+          >
+            {(scenarioSides.length ? scenarioSides : ["GE", "US"]).map((sideId) => (
+              <option key={sideId} value={sideId}>
+                Human: {sideId}
+              </option>
+            ))}
+          </select>
+
           <button 
             className={`btn-tactical ${activeMode === "human" ? "active" : ""}`} 
             onClick={() => handleStartGame("human")}
@@ -6318,40 +6715,29 @@ function App() {
               </div>
 
               {/* Dynamic Actions readout list */}
-              <div className="panel-title">Dispatched Orders</div>
-              <div className="actions-list">
-                {availableMoves.length > 0 ? (
-                  availableMoves.map((action, i) => (
-                    <div
-                      key={i}
-                      className={`action-card ${action.kind === "attack" ? "action-attack" : ""}`}
-                      onClick={() => handleActionCardClick(action)}
-                    >
-                      <div className="action-header">
-                        <div className="action-type">
-                          {action.kind === "attack"
-                            ? (action.type ? action.type.toUpperCase() : "ATTACK")
-                            : (action.kind || "MOVE").toUpperCase()
-                          }
-                        </div>
-                        <div className="action-coords">
-                          {formatCoords(action.q ?? action.target_q ?? 0, action.r ?? action.target_r ?? 0)}
-                        </div>
-                      </div>
-                      <div className="action-desc">
-                        {action.kind === "attack" 
-                          ? `Initiate ${(action.type || "assault").toLowerCase()} attack against target at ${formatCoords(action.q ?? action.target_q ?? 0, action.r ?? action.target_r ?? 0)}`
-                          : `March troop to sector location ${formatCoords(action.q ?? 0, action.r ?? 0)}`
-                        }
-                      </div>
-                    </div>
-                  ))
-                ) : (
-                  <div style={{ fontSize: "12px", color: "var(--text-muted)", fontStyle: "italic", textAlign: "center", padding: "10px" }}>
-                    No valid operations available for this unit.
-                  </div>
-                )}
-              </div>
+              <DispatchedOrdersPanel
+                availableMoves={availableMoves}
+                selectedUnitId={selectedUnitId}
+                isHumanTurn={gameData?.sides?.[gameData?.active_side] === "human"}
+                onHoverOrder={(order) => setHoveredTargetId(resolveOrderTargetId(order))}
+                onLeaveOrder={() => setHoveredTargetId(null)}
+              />
+              {attackHint && (
+                <div
+                  style={{
+                    marginTop: 8,
+                    padding: "8px 10px",
+                    fontSize: 11,
+                    border: "1px solid rgba(255, 80, 80, 0.35)",
+                    background: "rgba(255, 60, 60, 0.12)",
+                    color: "#ffd6d6",
+                    borderRadius: 6,
+                    fontFamily: "var(--font-mono)",
+                  }}
+                >
+                  {attackHint}
+                </div>
+              )}
             </div>
           ) : (
             /* Radar scanning placeholder when no target is locked */
@@ -6376,6 +6762,7 @@ function App() {
             setSelectedUnitId={setSelectedUnitId}
             availableMoves={availableMoves}
             setAvailableMoves={setAvailableMoves}
+            setAttackHint={setAttackHint}
           />
         </div>
 
@@ -6408,6 +6795,7 @@ function App() {
           activeSide={gameData?.active_side}
           activatedUnits={gameData?.activated_units || []}
           selectedUnitId={selectedUnitId}
+          targetUnitId={hoveredTargetId}
           onSelectUnit={(unit: Unit) => {
             // Direct callback helper triggered from troop dock cards
             setSelectedUnitId(unit.id);
@@ -6595,12 +6983,15 @@ import { HighlightLayer } from "./render/highlightLayer";
 import { updateHighlights } from "./systems/highlightSystem";
 import { updateLayerVisibility } from "./systems/layerVisibilitySystem";
 
+import { createDebugVector, updateDebugVector } from "./systems/debugVectorSystem";
+
 export default function GameCanvas({
   setGameData,
   selectedUnitId,
   setSelectedUnitId,
   availableMoves,
   setAvailableMoves,
+  setAttackHint,
 }: any) {
 
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -6624,14 +7015,14 @@ export default function GameCanvas({
   const showCoordsRef = useRef(false);
 
   const [hoverHex, setHoverHex] = useState<{ q: number, r: number } | null>(null);
+  const [orderHoverTarget, setOrderHoverTarget] = useState<any>(null);
 
   const lastStateRef = useRef<any>(null);
 
-  // 💣 FIX CLAVE: refs para evitar stale state
   const selectedUnitRef = useRef<string | null>(null);
   const availableMovesRef = useRef<any[]>([]);
   const fxLayerRef = useRef<PIXI.Container | null>(null);
-  
+
   useEffect(() => {
     selectedUnitRef.current = selectedUnitId;
   }, [selectedUnitId]);
@@ -6648,15 +7039,12 @@ export default function GameCanvas({
       setGameData(state);
       lastStateRef.current = state;
 
-      // 💣 FIX: asegurar que Pixi sync se ejecuta en el siguiente tick
       setTimeout(() => {
         unitLayerRef.current?.sync(state);
       }, 0);
     };
 
-  }, [])
-
-  
+  }, []);
 
   // ---------------------------------------------
   // VISIBILITY
@@ -6702,6 +7090,13 @@ export default function GameCanvas({
       world.eventMode = "static";
       world.hitArea = app.screen;
 
+      app.stage.addChild(world);
+      worldRef.current = world;
+
+      // ✅ DEBUG VECTOR EXTERNAL
+      const debugVector = createDebugVector(app);
+      (window as any).debugVector = debugVector;
+
       // ---------------------------------------------
       // HOVER
       // ---------------------------------------------
@@ -6728,19 +7123,29 @@ export default function GameCanvas({
           }
         }
 
-        if (closestHex) {
-          setHoverHex(prev => {
-            if (!prev || prev.q !== closestHex.q || prev.r !== closestHex.r) {
-              return { q: closestHex.q, r: closestHex.r };
-            }
-            return prev;
-          });
-        }
+        if (!closestHex) return;
+
+        setHoverHex(prev => {
+          if (!prev || prev.q !== closestHex.q || prev.r !== closestHex.r) {
+            return { q: closestHex.q, r: closestHex.r };
+          }
+          return prev;
+        });
+
+        // ✅ DEBUG desacoplado
+        updateDebugVector({
+          world,
+          selectedUnitId: selectedUnitRef.current,
+          state: lastStateRef.current,
+          closestHex,
+          event,
+          debug: (window as any).debugVector
+        });
 
       });
 
       // ---------------------------------------------
-      // 💣 CLICK MAP
+      // CLICK MAP
       // ---------------------------------------------
       world.on("pointerdown", (event: any) => {
 
@@ -6767,24 +7172,15 @@ export default function GameCanvas({
 
         if (closestHex) {
           console.log("🖱️ CLICK DETECTED", closestHex.q, closestHex.r);
-
-          (window as any).onHexClick?.(
-            closestHex.q,
-            closestHex.r
-          );
+          (window as any).onHexClick?.(closestHex.q, closestHex.r);
         }
       });
 
-      app.stage.addChild(world);
-      worldRef.current = world;
-
-      // 💣 FX LAYER (NUEVO)
+      // ---------------------------------------------
+      // LAYERS
+      // ---------------------------------------------
       const fxLayer = new PIXI.Container();
-      fxLayer.label = "fxLayer";
-
-      // MUY IMPORTANTE → sobre el world
       app.stage.addChild(fxLayer);
-
       fxLayerRef.current = fxLayer;
 
       const background = new PIXI.Container();
@@ -6793,15 +7189,24 @@ export default function GameCanvas({
       world.addChild(background);
       world.addChild(grid);
 
+      backgroundRef.current = background;
+      gridRef.current = grid;
+
       const unitLayer = new UnitLayer(world);
       unitLayerRef.current = unitLayer;
 
       const highlightLayer = new HighlightLayer(world);
       highlightLayerRef.current = highlightLayer;
 
-      backgroundRef.current = background;
-      gridRef.current = grid;
+      // ✅ conectar con GameController
+      const controller = (window as any).gameController;
+      if (controller) {
+        controller.setHighlightLayer(highlightLayer);
+      }
 
+      // ---------------------------------------------
+      // CAMERA
+      // ---------------------------------------------
       setupCamera(app, world, containerRef.current!);
       registerFocusUnit(worldRef, appRef, lastStateRef);
 
@@ -6809,20 +7214,48 @@ export default function GameCanvas({
       // UNIT CLICK
       // ---------------------------------------------
       (window as any).onUnitClick = (unit: any) => {
+        if (unit?.hp != null && unit.hp <= 0) {
+          return;
+        }
+
         const data = lastStateRef.current;
+        const currentSelected = selectedUnitRef.current;
+        const currentMoves = availableMovesRef.current || [];
+
+        const attackMove = currentSelected
+          ? currentMoves.find((m: any) =>
+              m.kind === "attack" &&
+              (m.target_id === unit.id || (m.q === unit.q && m.r === unit.r))
+            )
+          : null;
+
+        if (attackMove && currentSelected) {
+          handleHexClick(
+            attackMove.q ?? unit.q,
+            attackMove.r ?? unit.r,
+            currentSelected,
+            currentMoves,
+            unitLayerRef,
+            appRef,
+            fxLayerRef,
+            setAvailableMoves,
+            setSelectedUnitId
+          );
+          return;
+        }
 
         setSelectedUnitId(unit.id);
-
-        handleUnitClick(
-          unit,
-          data,
-          setAvailableMoves
-        );
+        handleUnitClick(unit, data, setAvailableMoves, setAttackHint);
       };
 
-      // ---------------------------------------------
-      // 💣 HEX CLICK (FIXED con refs)
-      // ---------------------------------------------
+      (window as any).onOrderHover = (order: any) => {
+        setOrderHoverTarget(order);
+      };
+
+      (window as any).onOrderLeave = () => {
+        setOrderHoverTarget(null);
+      };
+
       (window as any).onHexClick = (q: number, r: number) => {
         handleHexClick(
           q,
@@ -6831,14 +7264,14 @@ export default function GameCanvas({
           availableMovesRef.current,
           unitLayerRef,
           appRef,
-          fxLayerRef, // 💣 AÑADIDO
+          fxLayerRef,
           setAvailableMoves,
           setSelectedUnitId
         );
       };
 
       // ---------------------------------------------
-      // GAME STATE
+      // GAME STATE SUB
       // ---------------------------------------------
       if (!subscribedRef.current) {
         subscribedRef.current = true;
@@ -6863,6 +7296,8 @@ export default function GameCanvas({
 
       (window as any).onUnitClick = undefined;
       (window as any).onHexClick = undefined;
+      (window as any).onOrderHover = undefined;
+      (window as any).onOrderLeave = undefined;
     };
 
   }, []);
@@ -6877,10 +7312,11 @@ export default function GameCanvas({
       lastStateRef.current,
       selectedUnitId,
       availableMoves,
-      hoverHex
+      hoverHex,
+      orderHoverTarget
     );
 
-  }, [availableMoves, selectedUnitId, hoverHex]);
+  }, [availableMoves, selectedUnitId, hoverHex, orderHoverTarget]);
 
   return (
     <div style={{ flex: 1, width: "100%", height: "100%", minHeight: 0, position: "relative", display: "flex", flexDirection: "column" }}>
@@ -6903,7 +7339,7 @@ export default function GameCanvas({
 FILE: C:\repos\python\assault\assault_ai_ui\src\game\GameController.ts
 ================================================================================
 
-import { suggestMove } from "../ai/suggestMove";
+import { logCombatEvents } from "./systems/combatLog";
 
 type ControllerType = "human" | "ai";
 type GameMode = "human" | "ai" | "ai_vs_ai" | "replay";
@@ -6913,46 +7349,78 @@ export class GameController {
 
   private mode: GameMode = "human";
   private state: any = null;
+  private scenarioId = "mettete_i_piedi_terra_1_min";
+  private sidesConfig: Record<string, string> = { GE: "human", US: "ai" };
 
   private listeners: Listener[] = [];
   private lastState: any = null;
 
   private socket: WebSocket | null = null;
+  private suppressReconnect = false;
+  private aiLoopToken = 0;
+  private aiLoopTimer: ReturnType<typeof setTimeout> | null = null;
+  private startRequestToken = 0;
+  private aiTurnInFlight = false;
+
+  // ✅ NUEVO: referencia al highlight layer
+  private highlightLayer: any = null;
 
   // ----------------------------------
-  async start(mode: GameMode) {
-    if (this.socket && this.socket.readyState === WebSocket.OPEN) {
-      console.log("⚠️ already started");
-      return;
+  async start(
+    mode: GameMode,
+    scenarioId?: string,
+    sidesConfig?: Record<string, string>
+  ) {
+    const requestToken = ++this.startRequestToken;
+    this.stopLoop();
+
+    // If a session is already running, treat start() as a full restart
+    // (needed when user switches scenario from the dropdown).
+    if (this.socket) {
+      this.suppressReconnect = true;
+      try {
+        this.socket.close();
+      } catch {
+        // ignore websocket close errors on restart
+      }
+      this.socket = null;
     }
 
     this.mode = mode;
+    if (scenarioId) {
+      this.scenarioId = scenarioId;
+    }
+    if (sidesConfig && Object.keys(sidesConfig).length > 0) {
+      this.sidesConfig = sidesConfig;
+    }
 
     console.log("Starting mode:", mode);
 
-    // ✅ ✅ 🔥 FIX CLAVE: iniciar partida en backend con sides
-    await fetch("http://127.0.0.1:8000/api/game/start", {
+    // ✅ iniciar partida en backend
+    const startRes = await fetch("http://127.0.0.1:8000/api/game/start", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        scenario_id: "mettete_i_piedi_terra_1_min",
-
-        // ✅ aquí defines quién controla cada bando
-        sides: {
-          GE: "human",
-          US: "ai"
-        }
+        scenario_id: this.scenarioId,
+        sides: this.sidesConfig
       })
     });
+    if (!startRes.ok) {
+      const detail = await startRes.text();
+      throw new Error(`Backend start failed (${startRes.status}): ${detail}`);
+    }
+    if (requestToken !== this.startRequestToken) return;
 
-    // ✅ luego cargas estado inicial
     await this.loadScenario();
+    if (requestToken !== this.startRequestToken) return;
 
     setTimeout(() => {
+      if (requestToken !== this.startRequestToken) return;
       this.startWebSocket();
     }, 300);
 
-    if (mode === "ai") {
+    if (requestToken !== this.startRequestToken) return;
+    if (mode === "human" || mode === "ai" || mode === "ai_vs_ai") {
       this.startLoop();
     }
   }
@@ -6994,7 +7462,6 @@ export class GameController {
     this.socket.onmessage = (event) => {
       const msg = JSON.parse(event.data);
 
-      // ✅ ONLY accept MAP_STATE
       if (msg.type === "MAP_STATE" && msg.payload) {
         this.state = msg.payload;
         this.emit();
@@ -7003,6 +7470,12 @@ export class GameController {
 
     this.socket.onclose = () => {
       console.log("❌ WS closed");
+      this.socket = null;
+
+      if (this.suppressReconnect) {
+        this.suppressReconnect = false;
+        return;
+      }
 
       setTimeout(() => {
         if (this.mode) {
@@ -7039,9 +7512,15 @@ export class GameController {
   }
 
   // ----------------------------------
+  // ✅ NUEVO: setter para conectar Pixi layer
+  setHighlightLayer(layer: any) {
+    this.highlightLayer = layer;
+  }
+
+  // ----------------------------------
   private async sendMove(unitId: string, move: any) {
 
-    if (!move.action_id) return;
+    if (!move?.action_id) return;
 
     await fetch("http://127.0.0.1:8000/api/game/step", {
       method: "POST",
@@ -7055,53 +7534,103 @@ export class GameController {
   }
 
   // ----------------------------------
-  private startLoop() {
-    console.log("🤖 AI loop started");
+  // 🔥 IA BACKEND + VISUAL HIGHLIGHTS
+  // ----------------------------------
+  private stopLoop() {
+    this.aiLoopToken += 1;
+    this.aiTurnInFlight = false;
+    if (this.aiLoopTimer) {
+      clearTimeout(this.aiLoopTimer);
+      this.aiLoopTimer = null;
+    }
+  }
 
-    const loop = () => {
+  private scheduleLoop(loop: () => void, delayMs: number) {
+    if (this.aiLoopTimer) {
+      clearTimeout(this.aiLoopTimer);
+    }
+    this.aiLoopTimer = setTimeout(loop, delayMs);
+  }
+
+  private startLoop() {
+    this.stopLoop();
+    const token = this.aiLoopToken;
+    console.log("🤖 AI loop started (backend-driven)");
+
+    const loop = async () => {
+      if (token !== this.aiLoopToken) return;
 
       if (!this.state) {
-        setTimeout(loop, 1000);
+        this.scheduleLoop(loop, 1000);
         return;
       }
 
       const data = this.state;
-
       const activeSide = data.active_side;
 
       if (!activeSide) {
-        setTimeout(loop, 1000);
+        this.scheduleLoop(loop, 1000);
         return;
       }
 
+      // ✅ solo ejecuta si el lado es IA
       if (data?.sides?.[activeSide] !== "ai") {
-        setTimeout(loop, 500);
+        this.scheduleLoop(loop, 1200);
         return;
       }
 
-      const units = data.units || [];
-      const activated = data.activated_units || [];
-
-      const availableUnits = units.filter((u: any) =>
-        u.side === activeSide &&
-        !activated.includes(u.id)
-      );
-
-      if (availableUnits.length === 0) {
-        setTimeout(loop, 500);
+      if (this.aiTurnInFlight) {
+        this.scheduleLoop(loop, 400);
         return;
       }
 
-      for (const unit of availableUnits) {
-        const move = suggestMove(unit, data);
+      console.log("🤖 CALLING BACKEND AI TURN");
+      this.aiTurnInFlight = true;
 
-        if (move) {
-          console.log("🤖 AI move:", unit.unit_id, move);
-          this.sendMove(unit.id, move);
+      try {
+
+        const res = await fetch("http://127.0.0.1:8000/api/game/ai-turn", {
+          method: "POST"
+        });
+
+        const result = await res.json();
+        if (result?.state) {
+          // Keep controller state in sync immediately; relying only on WS can
+          // cause stale active_side and trigger extra ai-turn calls.
+          this.updateState(result.state);
         }
-      }
 
-      setTimeout(loop, 1000);
+        const rawSteps = Array.isArray(result?.steps) ? result.steps : [];
+        const steps = rawSteps.length > 0 ? [rawSteps[0]] : [];
+        (window as any).onAIOrders?.(steps);
+
+        // Log AI combat results to the System Log (the websocket MAP_STATE
+        // payload does not carry last_events, so do it from the ai-turn result).
+        logCombatEvents(result.state?.last_events, result.state?.units || []);
+
+        // ✅ NUEVO: render visual de acciones IA
+        if (steps.length > 0 && this.highlightLayer) {
+
+          for (let i = 0; i < steps.length; i++) {
+
+            const step = steps[i];
+
+            setTimeout(() => {
+              this.highlightLayer.highlightAction(step, this.state);
+            }, i * 400); // delay animado
+          }
+        }
+        const hasAiStep = steps.length > 0;
+        this.aiTurnInFlight = false;
+        this.scheduleLoop(loop, hasAiStep ? 1100 : 1800);
+        return;
+
+      } catch (e) {
+        console.error("❌ AI turn error", e);
+        this.aiTurnInFlight = false;
+        this.scheduleLoop(loop, 1800);
+        return;
+      }
     };
 
     loop();
@@ -7585,6 +8114,95 @@ export const soundService = new SoundService();
 
 
 ================================================================================
+FILE: C:\repos\python\assault\assault_ai_ui\src\game\config\fortificationConfig.ts
+================================================================================
+
+// ---------------------------------------------
+// Fortification configuration
+// ---------------------------------------------
+
+export type FortificationType =
+  | "trench"
+  | "bunker"
+  | "casemate"
+  | "pillbox"
+  | "gun_emplacement"
+  | "barbed_wire"
+  | "sandbag"
+  | "tank_barricades"
+  | "minefield";
+
+export const FORTIFICATION_RENDER_DEFAULTS = {
+  scaleX: 1.7,
+  scaleY: 1.5,
+  edgeOffset: 0.,
+  xNudge: -0.26,
+  yNudge: .10,
+} as const;
+
+export const FORTIFICATION_CONFIG = {
+  trench: {
+    label: "trench",
+    short: "TR",
+    art: "/art/terrain/Terrain Trenches.png",
+  },
+  bunker: {
+    label: "bunker",
+    short: "BK",
+    art: "/art/terrain/Terrain Bunker.png",
+  },
+  casemate: {
+    label: "casemate",
+    short: "CS",
+    art: "/art/terrain/Terrain Pillbox.png",
+  },
+  pillbox: {
+    label: "pillbox",
+    short: "PB",
+    art: "/art/terrain/Terrain Pillbox.png",
+  },
+  gun_emplacement: {
+    label: "gun emplacement",
+    short: "GN",
+    art: "/art/terrain/Terrain Gun Emplacement.png",
+  },
+  barbed_wire: {
+    label: "barbed wire",
+    short: "WR",
+    art: "/art/terrain/Terrain Barbed Wire.png",
+  },
+  sandbag: {
+    label: "sandbag",
+    short: "SB",
+    art: "/art/terrain/Terrain Sandbag Position.png",
+  },
+  tank_barricades: {
+    label: "tank barricades",
+    short: "TB",
+    art: "/art/terrain/Terrain Tank Barricades.png",
+  },
+  minefield: {
+    label: "minefield",
+    short: "MN",
+    art: "",
+  },
+} as const;
+
+export function getFortificationArt(type: string): string {
+  return FORTIFICATION_CONFIG[type as keyof typeof FORTIFICATION_CONFIG]?.art ?? "";
+}
+
+export function getFortificationShort(type: string): string {
+  return FORTIFICATION_CONFIG[type as keyof typeof FORTIFICATION_CONFIG]?.short ?? type.slice(0, 2).toUpperCase();
+}
+
+export function getFortificationRender(type: string) {
+  return FORTIFICATION_RENDER_DEFAULTS;
+}
+
+
+
+================================================================================
 FILE: C:\repos\python\assault\assault_ai_ui\src\game\config\sides.ts
 ================================================================================
 
@@ -7757,6 +8375,62 @@ export const unitImages = {
     card_half: "/art/counters/GE Unit 50mm Mortarb.jpg"
   },
 
+  IT_RIFLES_43: {
+    label: "IT Rifles 43",
+    full: "/art/counters/IT Rifles 43.png",
+    half: "/art/counters/IT Rifles 43b.png",
+    card: "/art/counters/IT Unit Rifles 43.jpg",
+    card_half: "/art/counters/IT Unit Rifles 43b.jpg"
+  },
+
+  IT_LMG_SQUAD_43: {
+    label: "IT LMG Squad 43",
+    full: "/art/counters/IT LMG Squad 43.png",
+    half: "/art/counters/IT LMG Squad 43b.png",
+    card: "/art/counters/IT Unit LMG Squad 43.jpg",
+    card_half: "/art/counters/IT Unit LMG Squad 43b.jpg"
+  },
+
+  IT_SOLOTHURN_ATR_43: {
+    label: "IT Solothurn ATR 43",
+    full: "/art/counters/IT Solothurn ATR 43.png",
+    half: "/art/counters/IT Solothurn ATR 43b.png",
+    card: "/art/counters/IT Unit Solothurn ATR 43.jpg",
+    card_half: "/art/counters/IT Unit Solothurn ATR 43b.jpg"
+  },
+
+  IT_20MM_BREDA_AA_43: {
+    label: "IT 20mm Breda AA 43",
+    full: "/art/counters/IT 20mm Breda AA 43.png",
+    half: "/art/counters/IT 20mm Breda AAb.png",
+    card: "/art/counters/IT Unit 20mm Breda AA.jpg",
+    card_half: "/art/counters/IT Unit 20mm Breda AAb.jpg"
+  },
+
+  IT_BREDA_MMG: {
+    label: "IT Breda MMG",
+    full: "/art/counters/IT Breda MMG.png",
+    half: "/art/counters/IT Breda MMG.png",
+    card: "/art/counters/IT Unit Breda MMG.jpg",
+    card_half: "/art/counters/IT Unit Breda MMG.jpg"
+  },
+
+  IT_SNIPER_43: {
+    label: "IT Sniper 43",
+    full: "/art/counters/IT Sniper 43.png",
+    half: "/art/counters/IT Sniper 43b.png",
+    card: "/art/counters/IT Unit Sniper 43.jpg",
+    card_half: "/art/counters/IT Unit Sniper 43b.jpg"
+  },
+
+  IT_45MM_BRIXIA: {
+    label: "IT 45mm Brixia",
+    full: "/art/counters/IT 45mm Brixia Team.png",
+    half: "/art/counters/IT 45mm Brixia Teamb.png",
+    card: "/art/counters/IT Unit 45mm Brixia Mortar.jpg",
+    card_half: "/art/counters/IT Unit 45mm Brixia Mortarb.jpg"
+  },
+
   US_RIFLES_43: {
     label: "US Rifles 43",
     full: "/art/counters/US Rifles 43.png",
@@ -7789,6 +8463,14 @@ export const unitImages = {
     card_half: "/art/counters/US Unit 81mm Mortarb.jpg"
   }
 };
+
+export function getUnitCardArt(unitKey: string, hp?: number): string | undefined {
+  const def = unitImages[unitKey as keyof typeof unitImages];
+  if (!def) return undefined;
+  if (hp === 1 && def.card_half) return def.card_half;
+  return def.card;
+}
+
 
 
 ================================================================================
@@ -7872,12 +8554,87 @@ import {
   getTerrainLabel,
   getTerrainShort,
 } from "../config/terrainConfig";
+import {
+  getFortificationArt,
+  getFortificationRender,
+  getFortificationShort,
+} from "../config/fortificationConfig";
+import { sides } from "../config/sides";
 
 // ---------------------------------------------
 export const HEX_SIZE = 30;
 
 const HEX_WIDTH = HEX_SIZE * Math.sqrt(3);
 const HEX_HEIGHT = HEX_SIZE * (3 / 2);
+const fortTextureCache = new Map<string, PIXI.Texture>();
+const fortTextureLoading = new Set<string>();
+const fortTexturePromises = new Map<string, Promise<PIXI.Texture>>();
+const sideMarkerTextureCache = new Map<string, PIXI.Texture>();
+const sideMarkerTexturePromises = new Map<string, Promise<PIXI.Texture>>();
+
+function getFortTexture(path: string): PIXI.Texture | null {
+  const cached = fortTextureCache.get(path);
+  if (cached) return cached;
+
+  if (!fortTextureLoading.has(path)) {
+    fortTextureLoading.add(path);
+    void PIXI.Assets.load(path)
+      .then((tex) => {
+        fortTextureCache.set(path, tex);
+      })
+      .catch(() => {
+        // fallback marker will be used
+      })
+      .finally(() => {
+        fortTextureLoading.delete(path);
+      });
+  }
+  return null;
+}
+
+function loadFortTexture(path: string): Promise<PIXI.Texture> {
+  const cached = fortTextureCache.get(path);
+  if (cached) return Promise.resolve(cached);
+
+  const existing = fortTexturePromises.get(path);
+  if (existing) return existing;
+
+  const p = PIXI.Assets.load(path)
+    .then((tex) => {
+      fortTextureCache.set(path, tex);
+      fortTextureLoading.delete(path);
+      return tex;
+    })
+    .catch((err) => {
+      fortTextureLoading.delete(path);
+      throw err;
+    })
+    .finally(() => {
+      fortTexturePromises.delete(path);
+    });
+
+  fortTextureLoading.add(path);
+  fortTexturePromises.set(path, p);
+  return p;
+}
+
+function loadSideMarkerTexture(path: string): Promise<PIXI.Texture> {
+  const cached = sideMarkerTextureCache.get(path);
+  if (cached) return Promise.resolve(cached);
+  const existing = sideMarkerTexturePromises.get(path);
+  if (existing) return existing;
+
+  const p = PIXI.Assets.load(path)
+    .then((tex) => {
+      sideMarkerTextureCache.set(path, tex);
+      return tex;
+    })
+    .finally(() => {
+      sideMarkerTexturePromises.delete(path);
+    });
+  sideMarkerTexturePromises.set(path, p);
+  return p;
+}
 
 // ---------------------------------------------
 export function axialToPixel(q: number, r: number) {
@@ -7941,7 +8698,10 @@ export function drawHexGridBase(
   shape: [number, number],
   showCoords: boolean,
   hexes: { q: number; r: number; terrain: string }[] = [],
-  showMap: boolean
+  showMap: boolean,
+  fortifications: { type: string; q: number; r: number; orientation?: number; vertex_start?: number; vertex_end?: number }[] = [],
+  vps: { q: number; r: number; value?: number; current_owner?: string | null }[] = [],
+  showGrid: boolean = true,
 ) {
   const [width, height] = shape;
 
@@ -7951,6 +8711,19 @@ export function drawHexGridBase(
   const terrainMap = new Map<number, string>();
   for (const h of hexes) {
     terrainMap.set(h.q * 100 + h.r, h.terrain);
+  }
+  const fortificationMap = new Map<number, { type: string; orientation?: number; vertex_start?: number; vertex_end?: number }>();
+  for (const item of fortifications) {
+    fortificationMap.set(item.q * 100 + item.r, {
+      type: item.type,
+      orientation: item.orientation,
+      vertex_start: item.vertex_start,
+      vertex_end: item.vertex_end,
+    });
+  }
+  const vpMap = new Map<number, { value?: number; current_owner?: string | null }>();
+  for (const vp of vps) {
+    vpMap.set(vp.q * 100 + vp.r, { value: vp.value, current_owner: vp.current_owner });
   }
 
   // ---------------------------------------------
@@ -8003,15 +8776,20 @@ export function drawHexGridBase(
 
       const terrain = terrainMap.get(q * 100 + r) ?? "clear";
 
-      if (!showMap) {
-        drawHex(g, px, py, HEX_SIZE, getTerrainColor(terrain), 0.6);
-      } else {
-        drawHex(g, px, py, HEX_SIZE);
+      if (showGrid) {
+        if (!showMap) {
+          drawHex(g, px, py, HEX_SIZE, getTerrainColor(terrain), 0.6);
+        } else {
+          drawHex(g, px, py, HEX_SIZE);
+        }
       }
 
       const coord = axialToLabel(q, r);
       const shortLabel = `${coord}\n${getTerrainShort(terrain)}`;
-      const fullLabel = `${coord}\n${getTerrainLabel(terrain)}`;
+      const fort = fortificationMap.get(q * 100 + r);
+      const vp = vpMap.get(q * 100 + r);
+      const fortLabel = fort ? `\n${getFortificationShort(fort.type)}` : "";
+      const fullLabel = `${coord}\n${getTerrainLabel(terrain)}${fortLabel}`;
 
       // ---------------------------------
       // ✅ GRID TEXT (FIX NÍTIDO)
@@ -8039,6 +8817,213 @@ export function drawHexGridBase(
         text.y = Math.round(py - HEX_SIZE * 0.45);
 
         coordsLayer.addChild(text);
+      }
+
+      if (fort) {
+        const fortArt = getFortificationArt(fort.type);
+        const renderCfg = getFortificationRender(fort.type);
+        const orientation = fort.orientation;
+        const edgeStart = fort.vertex_start;
+        const edgeEnd = fort.vertex_end;
+        const edgeRotation = (() => {
+          if (orientation != null && orientation >= 1 && orientation <= 6) {
+            // 1 = North, then clockwise every 60 degrees.
+            return ((orientation - 1) * Math.PI) / 3;
+          }
+          if (edgeStart == null || edgeEnd == null) return 0;
+          // Vertex convention: 1 = North, clockwise.
+          // Rotation baseline: edge 1->2.
+          const a = Math.min(edgeStart, edgeEnd);
+          return ((a - 1) * Math.PI) / 3;
+        })();
+        const edgeAnchorAngle = edgeRotation - Math.PI / 6;
+        // Local edge frame so nudges remain consistent after rotation:
+        // - normal: points from hex center toward fortified edge
+        // - tangent: runs along the fortified edge
+        const nx = Math.cos(edgeAnchorAngle);
+        const ny = Math.sin(edgeAnchorAngle);
+        const tx = -ny;
+        const ty = nx;
+
+        const edgeDx = nx * HEX_SIZE * renderCfg.edgeOffset;
+        const edgeDy = ny * HEX_SIZE * renderCfg.edgeOffset;
+        const nudgeDx = tx * HEX_SIZE * renderCfg.xNudge + nx * HEX_SIZE * renderCfg.yNudge;
+        const nudgeDy = ty * HEX_SIZE * renderCfg.xNudge + ny * HEX_SIZE * renderCfg.yNudge;
+        const drawX = Math.round(px + edgeDx + nudgeDx);
+        const drawY = Math.round(py + edgeDy + nudgeDy);
+        if (fortArt) {
+          const tex = getFortTexture(fortArt);
+          if (tex) {
+            const sprite = new PIXI.Sprite(tex);
+            sprite.anchor.set(0.5);
+            sprite.x = drawX;
+            sprite.y = drawY;
+            sprite.width = HEX_SIZE * renderCfg.scaleX;
+            sprite.height = HEX_SIZE * renderCfg.scaleY;
+            sprite.alpha = 0.95;
+            sprite.rotation = edgeRotation;
+            sprite.zIndex = 5;
+            coordsLayer.addChild(sprite);
+          } else {
+            let marker: PIXI.Text | null = null;
+            if (showCoords) {
+              marker = new PIXI.Text({
+                text: getFortificationShort(fort.type),
+                style: {
+                  fill: "#ffe699",
+                  fontSize: 10,
+                  fontWeight: "bold",
+                  stroke: { color: "#000000", width: 3 },
+                },
+                resolution: 2,
+              });
+              marker.anchor.set(0.5);
+              marker.x = drawX;
+              marker.y = Math.round(drawY + HEX_SIZE * 0.08);
+              marker.zIndex = 5;
+              coordsLayer.addChild(marker);
+            }
+
+            void loadFortTexture(fortArt)
+              .then((loaded) => {
+                if (marker && !marker.parent) return;
+                const sprite = new PIXI.Sprite(loaded);
+                sprite.anchor.set(0.5);
+                sprite.x = drawX;
+                sprite.y = drawY;
+                sprite.width = HEX_SIZE * renderCfg.scaleX;
+                sprite.height = HEX_SIZE * renderCfg.scaleY;
+                sprite.alpha = 0.95;
+                sprite.rotation = edgeRotation;
+                sprite.zIndex = 5;
+                coordsLayer.addChild(sprite);
+                if (marker) marker.destroy();
+              })
+              .catch(() => {
+                // Keep marker fallback when image cannot be loaded.
+              });
+          }
+        } else {
+          if (showCoords) {
+            const marker = new PIXI.Text({
+              text: getFortificationShort(fort.type),
+              style: {
+                fill: "#ffe699",
+                fontSize: 10,
+                fontWeight: "bold",
+                stroke: { color: "#000000", width: 3 },
+              },
+              resolution: 2,
+            });
+            marker.anchor.set(0.5);
+            marker.x = drawX;
+            marker.y = Math.round(drawY + HEX_SIZE * 0.08);
+            marker.zIndex = 5;
+            coordsLayer.addChild(marker);
+          }
+        }
+      }
+
+      if (vp) {
+        const owner = (vp.current_owner || "").toUpperCase();
+        const sideDef = owner ? sides[owner] : null;
+        const markerPath = sideDef?.marker as string | undefined;
+        const markerX = Math.round(px + HEX_SIZE * 0.58);
+        const markerY = Math.round(py - HEX_SIZE * 0.62);
+        const vpValueText = String(vp.value ?? "");
+
+        const addFallbackOwnerBadge = () => {
+          if (!owner) return;
+          const badge = new PIXI.Graphics();
+          const fillColor = typeof sideDef?.bgColor === "number" ? sideDef.bgColor : 0x333333;
+          badge.circle(markerX, markerY, HEX_SIZE * 0.27);
+          badge.fill({ color: fillColor, alpha: 0.95 });
+          badge.stroke({ color: 0xffffff, width: 1.5, alpha: 0.9 });
+          badge.zIndex = 7;
+          coordsLayer.addChild(badge);
+
+          const ownerText = new PIXI.Text({
+            text: sideDef?.short_label || owner,
+            style: {
+              fill: "#ffffff",
+              fontSize: 7,
+              fontWeight: "bold",
+              stroke: { color: "#000000", width: 2 },
+            },
+            resolution: 2,
+          });
+          ownerText.anchor.set(0.5);
+          ownerText.x = markerX;
+          ownerText.y = markerY + 1;
+          ownerText.zIndex = 8;
+          coordsLayer.addChild(ownerText);
+        };
+
+        if (markerPath) {
+          void loadSideMarkerTexture(markerPath)
+            .then((tex) => {
+              const sprite = new PIXI.Sprite(tex);
+              sprite.anchor.set(0.5);
+              sprite.x = markerX;
+              sprite.y = markerY;
+              sprite.width = HEX_SIZE * 0.52;
+              sprite.height = HEX_SIZE * 0.52;
+              sprite.alpha = 0.95;
+              sprite.zIndex = 7;
+              coordsLayer.addChild(sprite);
+            })
+            .catch(() => {
+              addFallbackOwnerBadge();
+            });
+        } else {
+          addFallbackOwnerBadge();
+        }
+
+        if (!markerPath || showCoords) {
+          const vpText = new PIXI.Text({
+            text: markerPath ? owner : "VP",
+            style: {
+              fill: markerPath ? "#ffffff" : "#ffe699",
+              fontSize: 9,
+              fontWeight: "bold",
+              stroke: { color: "#000000", width: 3 },
+            },
+            resolution: 2,
+          });
+          vpText.anchor.set(0.5);
+          vpText.x = markerX;
+          vpText.y = markerY;
+          vpText.zIndex = 8;
+          coordsLayer.addChild(vpText);
+        }
+
+        if (vpValueText) {
+          const valueX = Math.round(markerX + HEX_SIZE * 0.23);
+          const valueY = Math.round(markerY - HEX_SIZE * 0.23);
+
+          const valueBadge = new PIXI.Graphics();
+          valueBadge.circle(valueX, valueY, HEX_SIZE * 0.18);
+          valueBadge.fill({ color: 0x000000, alpha: 0.9 });
+          valueBadge.stroke({ color: 0xffffff, width: 1.5, alpha: 0.95 });
+          valueBadge.zIndex = 9;
+          coordsLayer.addChild(valueBadge);
+
+          const valueText = new PIXI.Text({
+            text: vpValueText,
+            style: {
+              fill: "#ffffff",
+              fontSize: 9,
+              fontWeight: "bold",
+              stroke: { color: "#000000", width: 2 },
+            },
+            resolution: 2,
+          });
+          valueText.anchor.set(0.5);
+          valueText.x = valueX;
+          valueText.y = valueY;
+          valueText.zIndex = 10;
+          coordsLayer.addChild(valueText);
+        }
       }
 
       // ---------------------------------
@@ -8119,15 +9104,15 @@ export function drawHexGridBase(
     }
   }
 
-  container.addChild(g);
+  if (showGrid) {
+    container.addChild(g);
+  }
 }
 
 
 ================================================================================
 FILE: C:\repos\python\assault\assault_ai_ui\src\game\render\highlightLayer.ts
 ================================================================================
-
-// File: render/highlightLayer.ts
 
 import * as PIXI from "pixi.js";
 import { axialToPixel, HEX_SIZE } from "./hexGridRenderer";
@@ -8148,13 +9133,42 @@ export class HighlightLayer {
     this.container.removeChildren();
   }
 
-  // Centralised pixel centre calculation
   private getCenter(q: number, r: number) {
     const { x, y } = axialToPixel(q, r);
     return {
       x: Math.round(x),
       y: Math.round(y + HEX_SIZE),
     };
+  }
+
+  // ---------------------------------------------
+  // ✅ NUEVO: highlight unit
+  // ---------------------------------------------
+  drawUnitHighlight(unit: any, color = 0xffff00) {
+    const { x, y } = this.getCenter(unit.q, unit.r);
+
+    const g = new PIXI.Graphics();
+    g.circle(x, y, HEX_SIZE * 0.55);
+    g.fill({ color, alpha: 0.2 });
+    g.stroke({ width: 3, color, alpha: 1 });
+
+    g.zIndex = 10;
+    this.container.addChild(g);
+  }
+
+  // ---------------------------------------------
+  // ✅ NUEVO: highlight hex
+  // ---------------------------------------------
+  drawHexHighlight(q: number, r: number, color = 0x00ff00) {
+    const { x, y } = this.getCenter(q, r);
+
+    const g = new PIXI.Graphics();
+    g.circle(x, y, HEX_SIZE * 0.5);
+    g.fill({ color, alpha: 0.25 });
+    g.stroke({ width: 2, color, alpha: 0.9 });
+
+    g.zIndex = 9;
+    this.container.addChild(g);
   }
 
   // ---------------------------------------------
@@ -8166,12 +9180,10 @@ export class HighlightLayer {
 
       const g = new PIXI.Graphics();
 
-      // Outer glow ring
       g.circle(x, y, HEX_SIZE * 0.5);
       g.fill({ color: 0x3399ff, alpha: 0.15 });
       g.stroke({ width: 1.5, color: 0x66ccff, alpha: 0.6 });
 
-      // Inner dot
       g.circle(x, y, HEX_SIZE * 0.15);
       g.fill({ color: 0x66ccff, alpha: 0.9 });
 
@@ -8206,7 +9218,6 @@ export class HighlightLayer {
 
     const g = new PIXI.Graphics();
 
-    // Pulsing glow ring
     g.circle(x, y, HEX_SIZE * 0.52);
     g.fill({ color: 0x00ff88, alpha: 0.18 });
     g.stroke({ width: 2.5, color: 0x00ff88, alpha: 0.95 });
@@ -8232,16 +9243,42 @@ export class HighlightLayer {
   }
 
   // ---------------------------------------------
-  // Draw vector arrow from selected unit to hover destination
-  // Called when hovering over a valid move hex with a unit selected
+  // ✅ 🔥 ACTION HIGHLIGHT (LO QUE QUERÍAS)
   // ---------------------------------------------
-  drawArrow(
-    fromQ: number, fromR: number,
-    toQ: number, toR: number,
-    isAttack = false
-  ) {
+  highlightAction(action: any, state: any) {
+
+    if (!action || !state) return;
+
+    this.clear();
+
+    const unit = state.units?.find((u: any) => u.id === action.unit_id);
+    if (!unit) return;
+
+    // ---------------- MOVE ----------------
+    if (action.type === "MOVE") {
+      this.drawUnitHighlight(unit, 0x00ccff);
+      this.drawHexHighlight(action.target_q, action.target_r, 0x00ff00);
+    }
+
+    // ---------------- ATTACK ----------------
+    if (action.type === "ATTACK") {
+      const target = state.units?.find((u: any) => u.id === action.target_id);
+
+      this.drawUnitHighlight(unit, 0xff4444);
+
+      if (target) {
+        this.drawUnitHighlight(target, 0xffa500);
+      }
+    }
+  }
+
+  // ---------------------------------------------
+  // Arrow (sin cambios)
+  // ---------------------------------------------
+  drawArrow(fromQ: number, fromR: number, toQ: number, toR: number, isAttack = false) {
+
     const from = this.getCenter(fromQ, fromR);
-    const to   = this.getCenter(toQ, toR);
+    const to = this.getCenter(toQ, toR);
 
     const dx = to.x - from.x;
     const dy = to.y - from.y;
@@ -8252,29 +9289,26 @@ export class HighlightLayer {
     const nx = dx / len;
     const ny = dy / len;
 
-    // Shorten shaft so it doesn't overlap the unit/destination circles
     const startGap = HEX_SIZE * 0.35;
-    const endGap   = HEX_SIZE * 0.4;
+    const endGap = HEX_SIZE * 0.4;
 
     const sx = from.x + nx * startGap;
     const sy = from.y + ny * startGap;
-    const ex = to.x   - nx * endGap;
-    const ey = to.y   - ny * endGap;
+    const ex = to.x - nx * endGap;
+    const ey = to.y - ny * endGap;
 
     const arrowColor = isAttack ? 0xff4444 : 0x00f0ff;
     const arrowAlpha = 0.85;
-    const headLen    = 12;
-    const headAngle  = Math.PI / 5;
-    const angle      = Math.atan2(dy, dx);
+    const headLen = 12;
+    const headAngle = Math.PI / 5;
+    const angle = Math.atan2(dy, dx);
 
     const g = new PIXI.Graphics();
 
-    // Shaft
     g.moveTo(sx, sy);
     g.lineTo(ex, ey);
     g.stroke({ width: 2.5, color: arrowColor, alpha: arrowAlpha });
 
-    // Arrowhead (two lines)
     g.moveTo(ex, ey);
     g.lineTo(
       ex - headLen * Math.cos(angle - headAngle),
@@ -8287,7 +9321,6 @@ export class HighlightLayer {
     );
     g.stroke({ width: 2.5, color: arrowColor, alpha: arrowAlpha });
 
-    // Tip dot at destination
     g.circle(ex + nx * 4, ey + ny * 4, 4);
     g.fill({ color: arrowColor, alpha: 0.9 });
 
@@ -8297,15 +9330,18 @@ export class HighlightLayer {
 }
 
 
-
 ================================================================================
 FILE: C:\repos\python\assault\assault_ai_ui\src\game\render\mapPieceMapping.ts
 ================================================================================
 
-export const mapPieceImages = {
+const mapPieceImageOverrides: Record<string, string> = {
   S2: "/art/maps/Map S2.png",
   S3: "/art/maps/Map S3.png",
 };
+
+export function getMapPieceImage(pieceId: string): string {
+  return mapPieceImageOverrides[pieceId] || `/art/maps/Map ${pieceId}.png`;
+}
 
 
 ================================================================================
@@ -8314,11 +9350,20 @@ FILE: C:\repos\python\assault\assault_ai_ui\src\game\render\mapPieceRenderer.ts
 
 import * as PIXI from "pixi.js";
 import { axialToPixel, HEX_SIZE } from "./hexGridRenderer";
-import { mapPieceImages } from "./mapPieceMapping";
+import { getMapPieceImage } from "./mapPieceMapping";
 
 // ---------------------------------------------
 const HEX_WIDTH = HEX_SIZE * Math.sqrt(3);
 const HEX_HEIGHT = HEX_SIZE * (3 / 2);
+
+function normalizeQuarterTurns(rotationDeg: number): number {
+  if (!Number.isFinite(rotationDeg)) return 0;
+  if (rotationDeg % 90 !== 0) {
+    console.warn(`Invalid map piece rotation ${rotationDeg}; expected multiple of 90.`);
+    return 0;
+  }
+  return ((rotationDeg / 90) % 4 + 4) % 4;
+}
 
 // ---------------------------------------------
 export async function drawMapPieces(
@@ -8326,51 +9371,51 @@ export async function drawMapPieces(
   pieces: any[]
 ) {
   for (const piece of pieces) {
-
-    const texturePath = mapPieceImages[piece.id];
-    if (!texturePath) continue;
-
-    const texture = await PIXI.Assets.load(texturePath);
+    const texturePath = getMapPieceImage(piece.id);
+    let texture: PIXI.Texture;
+    try {
+      texture = await PIXI.Assets.load(texturePath);
+    } catch (err) {
+      console.warn(`Map piece texture not found for ${piece.id}: ${texturePath}`, err);
+      continue;
+    }
     const sprite = new PIXI.Sprite(texture);
     // grid origin
     const [q, r] = piece.origin;
     const { x, y } = axialToPixel(q, r);
 
     const [hexW, hexH] = piece.shape;
-    
+    const quarterTurns = normalizeQuarterTurns(Number(piece.rotation ?? 0));
+
     console.log("PIECE:", piece);
-    console.log("IMAGE:", piece.id, mapPieceImages[piece.id]);
+    console.log("IMAGE:", piece.id, texturePath);
 
-    // ✅ width FIX correcto (esto sí era clave)
-    const targetWidth = (hexW + 0.5) * HEX_WIDTH;
+    // Base size for an unrotated piece image.
+    const baseWidth = (hexW + 0.5) * HEX_WIDTH;
+    const baseHeight = (hexH - 1) * HEX_HEIGHT + HEX_SIZE * 2;
 
-    const targetHeight =
-      (hexH - 1) * HEX_HEIGHT + HEX_SIZE * 2;
-
-    const scaleX = targetWidth / texture.width;
-    const scaleY = targetHeight / texture.height;
+    const scaleX = baseWidth / texture.width;
+    const scaleY = baseHeight / texture.height;
 
     sprite.scale.set(scaleX, scaleY);
+    sprite.anchor.set(0, 0);
+    sprite.rotation = quarterTurns * (Math.PI / 2);
 
-    // ---------------------------------------------
-    // ✅ ALIGNMENT FINAL CORRECTO
-    // ---------------------------------------------
-
-    // ✅ X YA CORRECTO (grid xmin = borde del hex)
-    // ---------------------------------------------
-    // ✅ CORRECT GRID ALIGNMENT (true Ymin)
-    // ---------------------------------------------
+    // Rotation is applied around top-left; compensate so the rotated bbox
+    // starts at the same map origin cell.
+    const rotationOffsetX =
+      quarterTurns === 1 ? baseHeight :
+      quarterTurns === 2 ? baseWidth :
+      0;
+    const rotationOffsetY =
+      quarterTurns === 2 ? baseHeight :
+      quarterTurns === 3 ? baseWidth :
+      0;
 
     const offsetX = -HEX_WIDTH / 2;
-
-    // ✅ EXACT MATCH WITH GRID RENDERING
-    const offsetY = 0 ;
-
-    sprite.x = x + offsetX;
-    sprite.y = y + offsetY;
-
-
-    sprite.anchor.set(0, 0);
+    const offsetY = 0;
+    sprite.x = x + offsetX + rotationOffsetX;
+    sprite.y = y + offsetY + rotationOffsetY;
 
     container.addChild(sprite);
   }
@@ -8460,11 +9505,15 @@ import { moveUnit } from "./unitLayerMovement";
 
 export class UnitLayer {
   public container: PIXI.Container;
+  private spritesById: Map<string, PIXI.Container>;
+  private pendingCreateById: Map<string, Promise<PIXI.Container>>;
 
   constructor(world: PIXI.Container) {
     this.container = new PIXI.Container();
     this.container.label = "unitLayer";
     this.container.sortableChildren = true;
+    this.spritesById = new Map();
+    this.pendingCreateById = new Map();
 
     world.addChild(this.container);
     initUnitLayerState();
@@ -8481,17 +9530,53 @@ export class UnitLayer {
     const activated = state.activated_units || [];
     const seen = new Set<string>();
 
+    // Defensive cleanup for historical duplicate sprites:
+    // keep only one unit sprite per __unitId.
+    const keepFirst = new Set<string>();
+    const duplicateSprites: PIXI.Container[] = [];
+    this.container.children.forEach((child: any) => {
+      if (child.__type !== "unit" || !child.__unitId) return;
+      if (keepFirst.has(child.__unitId)) {
+        duplicateSprites.push(child as PIXI.Container);
+      } else {
+        keepFirst.add(child.__unitId);
+      }
+    });
+    duplicateSprites.forEach((child) => {
+      this.container.removeChild(child);
+      child.destroy({ children: true });
+    });
+
     for (const unit of units) {
       const id = unit.id;
 
       // Get or create sprite
-      let sprite = this.container.children.find(
-        (c: any) => c.__unitId === id && c.__type === "unit"
-      ) as PIXI.Container | undefined;
+      let sprite = this.spritesById.get(id);
+      if (sprite && sprite.parent !== this.container) {
+        this.spritesById.delete(id);
+        sprite = undefined;
+      }
 
       if (!sprite) {
-        sprite = await createUnitSprite(unit);
-        this.container.addChild(sprite);
+        let pending = this.pendingCreateById.get(id);
+        if (!pending) {
+          pending = createUnitSprite(unit);
+          this.pendingCreateById.set(id, pending);
+        }
+        sprite = await pending;
+        this.pendingCreateById.delete(id);
+
+        const current = this.spritesById.get(id);
+        if (current) {
+          // Another sync already resolved and registered this unit.
+          if (sprite !== current) {
+            sprite.destroy({ children: true });
+          }
+          sprite = current;
+        } else {
+          this.spritesById.set(id, sprite);
+          this.container.addChild(sprite);
+        }
       }
 
       // Update position (no animation - snap if not moving)
@@ -8527,6 +9612,7 @@ export class UnitLayer {
         seen.add(id);
         continue;
       }
+      sprite.visible = true;
 
       if (!isOwn || !isAvailable) {
         sprite.alpha = 0.7;
@@ -8543,12 +9629,13 @@ export class UnitLayer {
     // Cleanup stale sprites for units no longer present in state
     const toRemove: any[] = [];
     this.container.children.forEach((child: any) => {
-      if (child.__unitId && !seen.has(child.__unitId)) {
+      if (child.__type === "unit" && child.__unitId && !seen.has(child.__unitId)) {
         toRemove.push(child);
       }
     });
 
     toRemove.forEach((child) => {
+      this.spritesById.delete((child as any).__unitId);
       this.container.removeChild(child);
       child.destroy({ children: true });
     });
@@ -8805,9 +9892,15 @@ import { formatCoords } from "../render/hexGridRenderer";
 
 import { gameController } from "../gameControllerInstance";
 import { axialToPixel, HEX_SIZE } from "../render/hexGridRenderer";
+import { logCombatEvents } from "./combatLog";
 
 const BACKEND = "http://127.0.0.1:8000";
 const AI_DELAY_MS = 800; // pause between AI actions so the user can see them
+
+function isUnitAlive(u: any): boolean {
+  if (u.alive === false) return false;
+  return u.hp == null || u.hp > 0;
+}
 
 // --------------------------------------------------------
 // Pick the best action from the actions response.
@@ -8854,7 +9947,10 @@ export async function runAiTurns(
 
     // Find the first unit of the AI side that hasn't been activated yet
     const aiUnit = units.find(
-      (u: any) => u.side === activeSide && !activatedUnits.includes(u.id)
+      (u: any) =>
+        u.side === activeSide &&
+        isUnitAlive(u) &&
+        !activatedUnits.includes(u.id)
     );
 
     if (!aiUnit) {
@@ -8915,7 +10011,11 @@ export async function runAiTurns(
         body: JSON.stringify({ action_id: action.id }),
       });
       stepData = await stepRes.json();
-      
+
+      // Log AI combat results (damage + dice) straight from the step response,
+      // so they are not lost to React batching when the state is pushed below.
+      logCombatEvents(stepData?.state?.last_events, stepData?.state?.units || []);
+
       // Update local state directly with step response if available
       state = stepData.state || await fetchState();
     } catch (err) {
@@ -9114,6 +10214,589 @@ export function registerFocusUnit(worldRef: any, appRef: any, lastStateRef: any)
 
 
 ================================================================================
+FILE: C:\repos\python\assault\assault_ai_ui\src\game\systems\combatLog.ts
+================================================================================
+
+import { unitImages } from "../config/unitImages";
+
+/**
+ * combatLog.ts
+ *
+ * Shared formatting + de-duplicated logging for combat ACTION_EFFECT events.
+ *
+ * Combat events can reach the frontend through several paths (human step,
+ * AI step runner, ai-turn endpoint, websocket). React batching can drop the
+ * intermediate state that carries `last_events`, so we log directly from the
+ * backend responses instead of relying on a render effect, and dedupe by the
+ * stable event id assigned on the backend.
+ */
+
+const loggedIds = new Set<string>();
+
+const COLOR_SQ: Record<string, string> = {
+  RED: "🟥",
+  YELLOW: "🟨",
+  GREEN: "🟩",
+  BLUE: "🟦",
+};
+
+const FACE_SYM: Record<string, string> = {
+  CRITICAL: "💥",
+  DAMAGE: "🩸",
+  SUPPRESS: "💨",
+};
+
+function faceStr(faces: any): string {
+  const arr = Array.isArray(faces) ? faces : faces ? [faces] : [];
+  if (!arr.length) return "▫️"; // blank face
+  return arr
+    .map((f: any) => FACE_SYM[String(f || "").toUpperCase()] || "")
+    .join("");
+}
+
+function diceStr(dice: any[] = []): string {
+  return (
+    (dice || [])
+      .map((d) => {
+        const color = COLOR_SQ[String(d?.color || "").toUpperCase()] || "⬜";
+        return color + faceStr(d?.faces);
+      })
+      .join(" ") || "—"
+  );
+}
+
+function labelFor(id: string | null | undefined, units: any[]): string {
+  if (!id) return "Unknown";
+  const u = units?.find((x: any) => x.id === id);
+  return u
+    ? unitImages[u.unit_key as keyof typeof unitImages]?.label || u.unit_key
+    : id;
+}
+
+export function formatCombatEvent(
+  ev: any,
+  units: any[] = []
+): { type: string; text: string } | null {
+  const p = ev?.payload || {};
+  const atk = labelFor(p.attacker, units);
+  const def = labelFor(p.defender, units);
+
+  if (p.action === "CloseCombat") {
+    let atkDmg = 0;
+    let defDmg = 0;
+    for (const r of p.rounds || []) {
+      if (typeof r.attacker_hp_before === "number" && typeof r.attacker_hp_after === "number") {
+        atkDmg += Math.max(0, r.attacker_hp_before - r.attacker_hp_after);
+      }
+      if (typeof r.defender_hp_before === "number" && typeof r.defender_hp_after === "number") {
+        defDmg += Math.max(0, r.defender_hp_before - r.defender_hp_after);
+      }
+    }
+    let text = `⚔️ Close combat ${atk} ↔ ${def} — ${atk}: -${atkDmg} HP / ${def}: -${defDmg} HP${p.outcome ? ` (${p.outcome})` : ""}`;
+    const r0 = (p.rounds || [])[0];
+    if (r0) {
+      text += ` | R1 ${atk} ATK ${diceStr(r0.attacker_attack_dice)} DEF ${diceStr(r0.attacker_defense_dice)} · ${def} ATK ${diceStr(r0.defender_attack_dice)} DEF ${diceStr(r0.defender_defense_dice)}`;
+    }
+    return { type: "combat", text };
+  }
+
+  const before = p.defender_hp_before;
+  const after = p.defender_hp_after;
+  const dmg =
+    typeof before === "number" && typeof after === "number"
+      ? Math.max(0, before - after)
+      : null;
+  if (dmg == null) return null;
+
+  const crits = (p.attacker_effects?.criticals || p.criticals || []).length;
+  const suppress = p.attacker_effects?.suppress || 0;
+  const killed = p.defender_killed || p.defender_destroyed || p.killed;
+
+  let text = `🎯 ${atk} → ${def}: ${dmg > 0 ? `-${dmg} HP` : "no damage"}`;
+  if (crits > 0) text += ` · 💥 ${crits} crit`;
+  if (suppress > 0) text += ` · 😰 suppressed`;
+  if (killed) text += ` · ☠️ ${def} destroyed`;
+  text += ` | ATK ${diceStr(p.attacker_attack_dice)} · DEF ${diceStr(p.defender_defense_dice)}`;
+  return { type: "combat", text };
+}
+
+/**
+ * Log all combat events from a `last_events` array, skipping any already logged.
+ */
+export function logCombatEvents(
+  events: any[] | undefined | null,
+  units: any[] = []
+): void {
+  if (!events?.length) return;
+
+  for (const ev of events) {
+    if (ev?.type !== "ACTION_EFFECT") continue;
+
+    const id =
+      ev.id != null ? `id:${ev.id}` : `sig:${JSON.stringify(ev.payload || {})}`;
+    if (loggedIds.has(id)) continue;
+    loggedIds.add(id);
+
+    const formatted = formatCombatEvent(ev, units);
+    if (formatted) {
+      (window as any).logSystemEvent?.(formatted.type, formatted.text);
+    }
+  }
+
+  if (loggedIds.size > 1000) {
+    loggedIds.clear();
+  }
+}
+
+
+
+================================================================================
+FILE: C:\repos\python\assault\assault_ai_ui\src\game\systems\debugVectorSystem.ts
+================================================================================
+
+import * as PIXI from "pixi.js";
+import { axialToPixel, HEX_SIZE } from "../render/hexGridRenderer";
+
+// --------------------------------------------------
+// CACHE (NO SPAM AL BACKEND)
+// --------------------------------------------------
+let lastHexKey = "";
+let cachedTargeting: any = null;
+
+
+// --------------------------------------------------
+// CREATE
+// --------------------------------------------------
+export function createDebugVector(app: PIXI.Application) {
+
+  const graphics = new PIXI.Graphics();
+
+  const text = new PIXI.Text("", {
+    fill: "#ff0000",
+    fontSize: 16
+  });
+
+  // Container for dice sprites (same art as the combat panel)
+  const diceContainer = new PIXI.Container();
+
+  app.stage.addChild(graphics);
+  app.stage.addChild(diceContainer);
+  app.stage.addChild(text);
+
+  // Preload dice textures so sprites don't render as empty/gray squares
+  preloadDiceTextures();
+
+  return { graphics, text, diceContainer };
+}
+
+
+// --------------------------------------------------
+// UPDATE
+// --------------------------------------------------
+export async function updateDebugVector({
+  world,
+  selectedUnitId,
+  state,
+  closestHex,
+  event,
+  debug
+}: any) {
+
+  if (!debug) return;
+
+  // ✅ solo cuando CTRL está pulsado
+  if (!event.originalEvent?.ctrlKey) {
+    debug.graphics.clear();
+    debug.text.text = "";
+    clearDiceContainer(debug.diceContainer);
+    return;
+  }
+
+  if (!selectedUnitId || !state?.units || !closestHex) {
+    debug.graphics.clear();
+    debug.text.text = "";
+    clearDiceContainer(debug.diceContainer);
+    return;
+  }
+
+  const unit = state.units.find((u: any) => u.id === selectedUnitId);
+  if (!unit) return;
+
+  const start = axialToPixel(unit.q, unit.r);
+  const end = axialToPixel(closestHex.q, closestHex.r);
+
+  const p1 = world.toGlobal({ x: start.x, y: start.y + HEX_SIZE });
+  const p2 = world.toGlobal({ x: end.x, y: end.y + HEX_SIZE });
+
+  const sx = p1.x;
+  const sy = p1.y;
+  const ex = p2.x;
+  const ey = p2.y;
+
+  const g = debug.graphics;
+  g.clear();
+
+  // --------------------------------------------------
+  // ✅ BACKEND QUERY (LOS + DISTANCE REAL + PATH)
+  // --------------------------------------------------
+  const hexKey = `${selectedUnitId}_${closestHex.q}_${closestHex.r}`;
+
+  if (hexKey !== lastHexKey) {
+    lastHexKey = hexKey;
+
+    try {
+      const res = await fetch(
+        `http://127.0.0.1:8000/targeting?attacker_id=${selectedUnitId}&q=${closestHex.q}&r=${closestHex.r}`
+      );
+
+      cachedTargeting = await res.json();
+
+    } catch (e) {
+      cachedTargeting = null;
+    }
+  }
+
+  const dist = cachedTargeting?.distance ?? "?";
+  const los = cachedTargeting?.los ?? "UNKNOWN";
+  const pathFull: [number, number][] =
+    cachedTargeting?.path_full ?? cachedTargeting?.path ?? [];
+  const blocking = cachedTargeting?.blocking ?? [];
+  const hindrance = cachedTargeting?.hindrance ?? [];
+  const dice = cachedTargeting?.dice ?? null;
+
+  // --------------------------------------------------
+  // ✅ COLOR SEGÚN LOS (el fuego indirecto ignora el LOS)
+  // --------------------------------------------------
+  const isIndirect = dice?.indirect === true;
+  let color = 0xff0000;
+
+  if (isIndirect) color = 0x00ccff;
+  else if (los === "CLEAR") color = 0x00ff00;
+  else if (los === "HINDERED") color = 0xffaa00;
+  else if (los === "BLOCKED") color = 0xff0000;
+
+  // --------------------------------------------------
+  // ✅ FLECHA RECTA (centro a centro; el rayo no es polilínea)
+  // --------------------------------------------------
+  const dx = ex - sx;
+  const dy = ey - sy;
+  const length = Math.sqrt(dx * dx + dy * dy);
+
+  if (length === 0) return;
+
+  const nx = dx / length;
+  const ny = dy / length;
+  const mx = (sx + ex) / 2;
+  const my = (sy + ey) / 2;
+  const gap = 40;
+  const gapStartX = mx - nx * gap;
+  const gapStartY = my - ny * gap;
+  const gapEndX = mx + nx * gap;
+  const gapEndY = my + ny * gap;
+
+  g.moveTo(sx, sy);
+  g.lineTo(gapStartX, gapStartY);
+  g.stroke({ width: 4, color });
+
+  g.moveTo(gapEndX, gapEndY);
+  g.lineTo(ex, ey);
+  g.stroke({ width: 4, color });
+
+  const angle = Math.atan2(ey - gapEndY, ex - gapEndX);
+  const arrowSize = 18;
+
+  g.moveTo(ex, ey);
+  g.lineTo(
+    ex - arrowSize * Math.cos(angle - Math.PI / 5),
+    ey - arrowSize * Math.sin(angle - Math.PI / 5)
+  );
+  g.stroke({ width: 4, color });
+
+  g.moveTo(ex, ey);
+  g.lineTo(
+    ex - arrowSize * Math.cos(angle + Math.PI / 5),
+    ey - arrowSize * Math.sin(angle + Math.PI / 5)
+  );
+  g.stroke({ width: 4, color });
+
+  // --------------------------------------------------
+  // ✅ TODOS los hexes del rayo (🟣), bloqueados o no
+  // --------------------------------------------------
+  for (let i = 0; i < pathFull.length; i++) {
+    const [q, r] = pathFull[i];
+    const pos = axialToPixel(q, r);
+    const p = world.toGlobal({ x: pos.x, y: pos.y + HEX_SIZE });
+
+    g.circle(p.x, p.y, 8);
+    g.fill({ color: 0xaa00ff, alpha: 0.55 });
+  }
+
+  for (const [q, r] of hindrance) {
+    const pos = axialToPixel(q, r);
+    const p = world.toGlobal({ x: pos.x, y: pos.y + HEX_SIZE });
+    g.circle(p.x, p.y, 10);
+    g.stroke({ width: 3, color: 0xffff00 });
+  }
+
+  for (const [q, r] of blocking) {
+    const pos = axialToPixel(q, r);
+    const p = world.toGlobal({ x: pos.x, y: pos.y + HEX_SIZE });
+    g.circle(p.x, p.y, 12);
+    g.stroke({ width: 4, color: 0xff0000 });
+  }
+
+
+  // --------------------------------------------------
+  // ✅ TEXTO (distancia + LOS)
+  // --------------------------------------------------
+  debug.text.style.align = "center";
+  debug.text.text = isIndirect
+    ? `d=${dist} | INDIRECTO (ignora LOS)`
+    : `d=${dist} | LOS=${los}`;
+  debug.text.x = mx - debug.text.width / 2;
+  debug.text.y = my - debug.text.height / 2 - (dice ? 34 : 0);
+
+  // --------------------------------------------------
+  // ✅ DADOS (imágenes, base → con modificadores)
+  // --------------------------------------------------
+  const diceContainer: PIXI.Container = debug.diceContainer;
+  clearDiceContainer(diceContainer);
+
+  if (dice) {
+    const rowGap = 26;
+    const baseY = my + 2;
+
+    buildDiceRow(
+      diceContainer,
+      `ATK${dice.suppressed ? " (supr)" : ""}`,
+      dice.attack,
+      mx,
+      baseY,
+    );
+    buildDiceRow(
+      diceContainer,
+      `DEF${dice.hindered ? " (hind)" : ""}`,
+      dice.defense,
+      mx,
+      baseY + rowGap,
+    );
+  }
+}
+
+// --------------------------------------------------
+// Dice sprite helpers (same art as the combat panel)
+// --------------------------------------------------
+const DIE_BASE_SRC: Record<string, string> = {
+  RED: "/assets/dice/red_02.png",
+  YELLOW: "/assets/dice/yellow_01.png",
+  GREEN: "/assets/dice/green_01.png",
+  BLUE: "/assets/dice/blue_01.png",
+};
+
+const DIE_SIZE = 22;
+const DIE_SPACING = 3;
+const _textureCache: Record<string, PIXI.Texture> = {};
+let _dicePreloadStarted = false;
+
+async function preloadDiceTextures() {
+  if (_dicePreloadStarted) return;
+  _dicePreloadStarted = true;
+
+  await Promise.all(
+    Object.values(DIE_BASE_SRC).map(async (src) => {
+      try {
+        const tex = await PIXI.Assets.load(src);
+        _textureCache[src] = tex;
+      } catch (e) {
+        console.warn("[debugVector] failed to load die texture", src, e);
+      }
+    })
+  );
+}
+
+function getDieTexture(color: string): PIXI.Texture | null {
+  const src = DIE_BASE_SRC[color];
+  if (!src) return null;
+  return _textureCache[src] ?? null;
+}
+
+function clearDiceContainer(container: PIXI.Container | undefined) {
+  if (!container) return;
+  const children = [...container.children];
+  for (const child of children) {
+    container.removeChild(child);
+    // Keep shared textures alive; only destroy the display object
+    (child as any).destroy?.({ children: true, texture: false });
+  }
+}
+
+function makeLabel(textValue: string): PIXI.Text {
+  return new PIXI.Text(textValue, {
+    fill: "#ffffff",
+    fontSize: 13,
+    fontWeight: "bold",
+  });
+}
+
+function makeCaption(textValue: string): PIXI.Text {
+  return new PIXI.Text(textValue, {
+    fill: "#cccccc",
+    fontSize: 10,
+    fontStyle: "italic",
+  });
+}
+
+type DieMark = "none" | "added" | "removed";
+
+function makeDieCell(color: string, mark: DieMark = "none"): PIXI.Container {
+  const cell = new PIXI.Container();
+
+  const tex = getDieTexture(color);
+  const sprite = new PIXI.Sprite(tex ?? PIXI.Texture.EMPTY);
+  sprite.width = DIE_SIZE;
+  sprite.height = DIE_SIZE;
+  cell.addChild(sprite);
+
+  // Texture not cached yet → load it and assign once ready
+  if (!tex) {
+    const src = DIE_BASE_SRC[color];
+    if (src) {
+      PIXI.Assets.load(src)
+        .then((loaded: PIXI.Texture) => {
+          _textureCache[src] = loaded;
+          if (!(sprite as any).destroyed) {
+            sprite.texture = loaded;
+            sprite.width = DIE_SIZE;
+            sprite.height = DIE_SIZE;
+          }
+        })
+        .catch(() => {});
+    }
+  }
+
+  // Highlight dice changed by modifiers
+  if (mark === "added") {
+    const border = new PIXI.Graphics();
+    border.roundRect(-2, -2, DIE_SIZE + 4, DIE_SIZE + 4, 4);
+    border.stroke({ width: 2.5, color: 0x00ff66 });
+    cell.addChild(border);
+  } else if (mark === "removed") {
+    sprite.alpha = 0.3;
+    const border = new PIXI.Graphics();
+    border.roundRect(-2, -2, DIE_SIZE + 4, DIE_SIZE + 4, 4);
+    border.stroke({ width: 2.5, color: 0xff3333 });
+    // diagonal strike to signal removal
+    border.moveTo(0, DIE_SIZE);
+    border.lineTo(DIE_SIZE, 0);
+    border.stroke({ width: 2, color: 0xff3333 });
+    cell.addChild(border);
+  }
+
+  return cell;
+}
+
+function countByColor(arr: string[]): Record<string, number> {
+  const out: Record<string, number> = {};
+  for (const c of arr) out[c] = (out[c] ?? 0) + 1;
+  return out;
+}
+
+/**
+ * Lay out one row centered at (centerX, centerY):
+ *   LABEL  base [dice]   →   final [dice]
+ * - When modifiers change the pool, both groups are shown with "base"/"final"
+ *   captions; added dice get a green border, removed dice a red strike.
+ * - When nothing changes, only a single (unlabeled) pool is shown.
+ */
+function buildDiceRow(
+  container: PIXI.Container,
+  label: string,
+  pair: { base?: string[]; modified?: string[] } | undefined,
+  centerX: number,
+  centerY: number,
+) {
+  if (!pair) return;
+
+  const base = pair.base ?? [];
+  const modified = pair.modified ?? [];
+  const changed = base.join(",") !== modified.join(",");
+
+  const baseCounts = countByColor(base);
+  const modCounts = countByColor(modified);
+
+  type Item = { obj: PIXI.Container; w: number };
+  const items: Item[] = [];
+
+  const pushObj = (obj: PIXI.Container, pad: number) =>
+    items.push({ obj, w: (obj.width || 0) + pad });
+
+  const pushCaption = (txt: string) => pushObj(makeCaption(txt), 4);
+  const pushDie = (color: string, mark: DieMark) =>
+    items.push({ obj: makeDieCell(color, mark), w: DIE_SIZE + DIE_SPACING });
+
+  // Row label (ATK / DEF ...)
+  pushObj(makeLabel(label), 8);
+
+  if (!changed) {
+    if (base.length === 0) pushObj(makeLabel("-"), 6);
+    else base.forEach((c) => pushDie(c, "none"));
+  } else {
+    // ---- base group (mark removed dice) ----
+    pushCaption("base");
+    if (base.length === 0) {
+      pushObj(makeLabel("-"), 6);
+    } else {
+      const removedLeft = { ...baseCounts };
+      for (const c of Object.keys(removedLeft)) {
+        removedLeft[c] = Math.max(0, baseCounts[c] - (modCounts[c] ?? 0));
+      }
+      base.forEach((c) => {
+        let mark: DieMark = "none";
+        if (removedLeft[c] > 0) {
+          mark = "removed";
+          removedLeft[c] -= 1;
+        }
+        pushDie(c, mark);
+      });
+    }
+
+    // ---- arrow ----
+    pushObj(makeLabel("→"), 8);
+
+    // ---- final group (mark added dice) ----
+    pushCaption("final");
+    if (modified.length === 0) {
+      pushObj(makeLabel("-"), 6);
+    } else {
+      const addedLeft = { ...modCounts };
+      for (const c of Object.keys(addedLeft)) {
+        addedLeft[c] = Math.max(0, modCounts[c] - (baseCounts[c] ?? 0));
+      }
+      modified.forEach((c) => {
+        let mark: DieMark = "none";
+        if (addedLeft[c] > 0) {
+          mark = "added";
+          addedLeft[c] -= 1;
+        }
+        pushDie(c, mark);
+      });
+    }
+  }
+
+  const totalW = items.reduce((sum, it) => sum + it.w, 0);
+  let x = centerX - totalW / 2;
+
+  for (const it of items) {
+    const h = (it.obj as any).height ?? DIE_SIZE;
+    it.obj.x = x;
+    it.obj.y = centerY - h / 2;
+    container.addChild(it.obj);
+    x += it.w;
+  }
+}
+
+
+================================================================================
 FILE: C:\repos\python\assault\assault_ai_ui\src\game\systems\gameStateSystem.ts
 ================================================================================
 
@@ -9159,7 +10842,7 @@ export function subscribeToGameState({
     const showMapNow = showMapRef.current;
 
     background.visible = showMapRef.current;
-    grid.visible = showGridRef.current;
+    grid.visible = showGridRef.current || showMapRef.current;
 
     background.removeChildren();
     grid.removeChildren();
@@ -9177,7 +10860,10 @@ export function subscribeToGameState({
       data.shape,
       showCoordsNow,
       data.hexes,
-      showMapNow
+      showMapNow,
+      data.map?.fortifications ?? [],
+      data.map?.vps ?? [],
+      showGridRef.current
     );
 
     // ✅ UNITS
@@ -9320,7 +11006,8 @@ export function updateHighlights(
   data: any,
   selectedUnitId: string | null,
   availableMoves: any[],
-  hoverHex: { q: number; r: number } | null
+  hoverHex: { q: number; r: number } | null,
+  orderHoverTarget: any | null
 ) {
   if (!layer || !data) return;
 
@@ -9344,21 +11031,94 @@ export function updateHighlights(
   if (moves.length > 0)   layer.drawMoves(moves);
   if (attacks.length > 0) layer.drawAttacks(attacks);
 
-  // 3. Draw hover highlight + directional arrow from unit to hovered hex
+  // 3. Draw hover highlight + directional arrow from unit to hovered hex or hovered attack target unit
   if (hoverHex && selectedUnit) {
-    const isValidMove   = moves.some(  (m: any) => m.q === hoverHex.q && m.r === hoverHex.r);
-    const isValidAttack = attacks.some((a: any) => a.q === hoverHex.q && a.r === hoverHex.r);
+    const hoverMove = moves.find((m: any) => m.q === hoverHex.q && m.r === hoverHex.r);
+    const hoverAttack = attacks.find((a: any) => a.q === hoverHex.q && a.r === hoverHex.r);
 
-    if (isValidMove || isValidAttack) {
+    if (hoverMove || hoverAttack) {
       layer.drawHover(hoverHex.q, hoverHex.r);
       layer.drawArrow(
         selectedUnit.q, selectedUnit.r,
         hoverHex.q,     hoverHex.r,
-        isValidAttack
+        !!hoverAttack
       );
+
+      if (hoverAttack && hoverAttack.target_id) {
+        const targetUnit = data.units?.find(
+          (u: any) => u.id === hoverAttack.target_id || u.unit_id === hoverAttack.target_id
+        );
+
+        if (targetUnit) {
+          layer.drawUnitHighlight(targetUnit, 0xffcc44);
+        }
+      }
+    }
+  }
+
+  // 4. Highlight dispatched order target from UI hover
+  if (orderHoverTarget) {
+    const targetQ = orderHoverTarget.target_q ?? orderHoverTarget.q;
+    const targetR = orderHoverTarget.target_r ?? orderHoverTarget.r;
+    const targetId = orderHoverTarget.target_id;
+    const orderUnitId = orderHoverTarget.unit_id;
+    const isAttack =
+      orderHoverTarget.kind === "attack" ||
+      /RANGED|ASSAULT|ATTACK|REACTION|COMBAT|FIRE/i.test(
+        (orderHoverTarget.type || "").toString()
+      );
+
+    const sourceUnit =
+      (orderUnitId
+        ? data.units?.find(
+            (u: any) => u.id === orderUnitId || u.unit_id === orderUnitId
+          )
+        : null) ?? selectedUnit;
+
+    const targetUnitById = targetId
+      ? data.units?.find(
+          (u: any) => u.id === targetId || u.unit_id === targetId
+        )
+      : null;
+
+    const unitsAtHex =
+      targetQ != null && targetR != null
+        ? (data.units ?? []).filter(
+            (u: any) => u.q === targetQ && u.r === targetR
+          )
+        : [];
+
+    const targetUnit = targetUnitById ?? unitsAtHex[0] ?? null;
+    const destQ = targetUnit?.q ?? targetQ;
+    const destR = targetUnit?.r ?? targetR;
+
+    if (destQ != null && destR != null) {
+      const destColor = isAttack ? 0xff6644 : 0x00f0ff;
+      layer.drawHexHighlight(destQ, destR, destColor);
+
+      if (targetUnit) {
+        layer.drawUnitHighlight(targetUnit, isAttack ? 0xffaa22 : 0x44ddff);
+      }
+
+      for (const u of unitsAtHex) {
+        if (u !== targetUnit) {
+          layer.drawUnitHighlight(u, 0x88aaff);
+        }
+      }
+
+      if (sourceUnit) {
+        layer.drawArrow(
+          sourceUnit.q,
+          sourceUnit.r,
+          destQ,
+          destR,
+          isAttack
+        );
+      }
     }
   }
 }
+
 
 
 ================================================================================
@@ -9456,7 +11216,7 @@ export function updateLayerVisibility(
   if (!background || !grid) return;
 
   background.visible = showMap;
-  grid.visible = showGrid;
+  grid.visible = showGrid || showMap;
 
   const data = lastStateRef.current;
   if (!data) return;
@@ -9468,7 +11228,10 @@ export function updateLayerVisibility(
     data.shape,
     showCoords,
     data.hexes,
-    showMap
+    showMap,
+    data.map?.fortifications ?? [],
+    data.map?.vps ?? [],
+    showGrid
   );
 }
 
@@ -9481,23 +11244,44 @@ FILE: C:\repos\python\assault\assault_ai_ui\src\game\systems\unitInteractionSyst
 export async function handleUnitClick(
   unit: any,
   state: any,
-  setAvailableMoves: (moves: any[]) => void
+  setAvailableMoves: (moves: any[]) => void,
+  setAttackHint: (hint: string | null) => void
 ) {
 
   if (!state) return;
 
+  const hp = unit.hp;
+  if (unit.alive === false || (hp != null && hp <= 0)) {
+    setAttackHint("Unit is destroyed");
+    return;
+  }
+
   const isHumanTurn =
     state?.sides?.[state.active_side] === "human";
 
-  if (!isHumanTurn) return;
+  if (!isHumanTurn) {
+    setAttackHint("Not human turn");
+    return;
+  }
 
   const id = unit.unit_id ?? unit.id;
 
   const isAvailable =
     unit.side === state.active_side &&
-    !state.activated_units?.includes(id);
+    !state.activated_units?.includes(id) &&
+    unit.alive !== false &&
+    (unit.hp == null || unit.hp > 0);
 
-  if (!isAvailable) return;
+  if (!isAvailable) {
+    const reason =
+      unit.side !== state.active_side
+        ? "Unit side is not active"
+        : state.activated_units?.includes(id)
+        ? "Unit already activated this turn"
+        : "Unit not available";
+    setAttackHint(reason);
+    return;
+  }
 
   console.log("✅ selected:", id);
 
@@ -9505,6 +11289,7 @@ export async function handleUnitClick(
 
   // ✅ clear previous
   setAvailableMoves([]);
+  setAttackHint(null);
 
   const res = await fetch("http://127.0.0.1:8000/api/game/actions", {
     method: "POST",
@@ -9532,10 +11317,22 @@ export async function handleUnitClick(
         q: target?.q,
         r: target?.r,
       };
-    })
+    }),
+    ...(actions.waits || []).map(w => ({
+      ...w,
+      kind: "wait"
+    }))
   ];
 
   setAvailableMoves(allActions);
+  const attackStatus = actions.attack_status;
+  if (attackStatus?.can_attack === false) {
+    setAttackHint(
+      `${attackStatus.reason_code || "no_attack"}: ${attackStatus.reason_text || "No attack available"}`
+    );
+  } else {
+    setAttackHint(null);
+  }
 }
 
 
@@ -9790,10 +11587,268 @@ export function CombatPanel({ event, units }: Props) {
 
 
 ================================================================================
+FILE: C:\repos\python\assault\assault_ai_ui\src\game\ui\DispatchedOrdersPanel.tsx
+================================================================================
+
+import { useEffect, useState } from "react";
+import { formatCoords } from "../render/hexGridRenderer";
+import { gameController } from "../gameControllerInstance";
+
+type Order = {
+  type?: string;
+  kind?: string;
+  unit_id?: string;
+  target_q?: number;
+  target_r?: number;
+  target_id?: string;
+};
+
+type DispatchedOrdersPanelProps = {
+  availableMoves?: Order[];
+  selectedUnitId?: string | null;
+  isHumanTurn?: boolean;
+  onHoverOrder?: (order: Order) => void;
+  onLeaveOrder?: () => void;
+};
+
+function isCombatAction(order: Order, actionType: string): boolean {
+  if (order.kind === "attack") return true;
+  if (actionType !== "MOVE" && /RANGED|ASSAULT|ATTACK|REACTION|COMBAT|FIRE/i.test(actionType)) {
+    return true;
+  }
+  const actionClass = ((order as any).action || "").toString().toUpperCase();
+  return /RANGED|ASSAULT|ATTACK|REACTION|COMBAT|FIRE/.test(actionClass);
+}
+
+export function DispatchedOrdersPanel({
+  availableMoves = [],
+  selectedUnitId,
+  isHumanTurn = false,
+  onHoverOrder,
+  onLeaveOrder
+}: DispatchedOrdersPanelProps) {
+
+  const [aiOrders, setAiOrders] = useState<Order[]>([]);
+
+  useEffect(() => {
+
+    // 🔥 escuchar órdenes del GameController
+    (window as any).onAIOrders = (steps: Order[]) => {
+
+      console.log("📥 AI ORDERS RECEIVED", steps);
+
+      setAiOrders(prev => [
+        ...steps,
+        ...prev
+      ].slice(0, 20));
+    };
+
+    return () => {
+      (window as any).onAIOrders = undefined;
+    };
+
+  }, []);
+
+  // ✅ NORMALIZAR HUMANO
+  const normalizedHuman = availableMoves.map((a: any) => ({
+    type: (a.kind === "attack"
+      ? (a.type || "ATTACK")
+      : a.kind === "wait"
+      ? "WAIT"
+      : "MOVE").toUpperCase(),
+    kind: a.kind,
+
+    target_q: a.q ?? a.target_q,
+    target_r: a.r ?? a.target_r,
+    target_id: a.target_id,
+    action_id: (a as any).action_id,
+
+    unit_id: selectedUnitId,
+    source: "HUMAN"
+  }));
+
+  // ✅ NORMALIZAR IA
+  const normalizedAI = aiOrders.map((o: any) => {
+    const actionClass = (o.action || "").toString();
+    let type = o.type || o.kind;
+    if (!type && actionClass) {
+      if (/Ranged/i.test(actionClass)) type = "RANGED";
+      else if (/Assault/i.test(actionClass)) type = "ASSAULT";
+      else if (/Move/i.test(actionClass)) type = "MOVE";
+      else type = actionClass.replace(/Action$/, "");
+    }
+    return {
+      ...o,
+      type: (type || "MOVE").toString().toUpperCase(),
+      source: "AI"
+    };
+  });
+
+  // ✅ MEZCLAR
+  const orders = [...normalizedHuman, ...normalizedAI].slice(0, 20);
+
+  const executeActionById = async (actionId: string) => {
+    try {
+      const res = await fetch("http://127.0.0.1:8000/api/game/step", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action_id: actionId }),
+      });
+      const data = await res.json();
+      if (data?.state && typeof (window as any).__setGameState === "function") {
+        (window as any).__setGameState(data.state);
+        gameController.updateState(data.state);
+      }
+    } catch (err) {
+      console.error("❌ WAIT action failed", err);
+    }
+  };
+
+
+  return (
+    <>
+      <div className="panel-title">Dispatched Orders</div>
+
+      <div className="actions-list">
+        {orders.length > 0 ? (
+          orders.map((order, i) => {
+
+            const actionType = (order.type || order.kind || "MOVE").toString().toUpperCase();
+            const isAttack = isCombatAction(order, actionType);
+
+            const targetQ = order.target_q ?? order.q;
+            const targetR = order.target_r ?? order.r;
+            const coords = targetQ != null && targetR != null
+              ? formatCoords(targetQ, targetR)
+              : "?";
+
+            const canExecute = order.source === "HUMAN" && isHumanTurn;
+            return (
+                <div
+                  key={i}
+                  className={`action-card ${isAttack ? "action-attack" : ""}`}
+                  onMouseEnter={() => {
+                    (window as any).onOrderHover?.(order);
+                    onHoverOrder?.(order);
+                  }}
+                  onMouseLeave={() => {
+                    (window as any).onOrderLeave?.();
+                    onLeaveOrder?.();
+                  }}
+                  onClick={() => {
+                    if (!canExecute) return;
+                    const q = order.target_q ?? (order as any).q;
+                    const r = order.target_r ?? (order as any).r;
+
+                    if (q != null && r != null) {
+
+                      console.log("🖱️ EXECUTING ORDER", order);
+
+                      // ✅ Ejecutar acción en el mapa (igual que humano)
+                      (window as any).onHexClick?.(q, r);
+
+                    } else if (actionType === "WAIT" && (order as any).action_id) {
+                      void executeActionById((order as any).action_id);
+                    } else {
+                      console.warn("⛔ Order sin coordenadas", order);
+                    }
+                  }}
+                  style={{ opacity: canExecute ? 1 : 0.7, cursor: canExecute ? "pointer" : "default" }}
+                >
+
+                <div className="action-header">
+                  <div className="action-type">
+                    {actionType}
+                  </div>
+
+                  <div className="action-coords">
+                    {coords}
+                  </div>
+                </div>
+
+                <div className="action-desc">
+                  {actionType === "WAIT"
+                    ? "Wait / End activation"
+                    : isAttack
+                    ? `Attack ${order.target_id ? `target ${order.target_id} ` : ""}at ${coords}`
+                    : `Move to ${coords}`
+                  }
+                </div>
+              </div>
+            );
+          })
+        ) : (
+          <div style={{
+            fontSize: "12px",
+            color: "var(--text-muted)",
+            fontStyle: "italic",
+            textAlign: "center",
+            padding: "10px"
+          }}>
+            Awaiting dispatched orders...
+          </div>
+        )}
+      </div>
+    </>
+  );
+}
+
+
+================================================================================
+FILE: C:\repos\python\assault\assault_ai_ui\src\game\ui\UnitCardTooltip.tsx
+================================================================================
+
+import { useState } from "react";
+import { createPortal } from "react-dom";
+import { getUnitCardArt, unitImages } from "../config/unitImages";
+
+const overlayRoot = () =>
+  document.getElementById("overlay-root") ?? document.body;
+
+type UnitCardTooltipProps = {
+  unitKey: string;
+  hp?: number;
+  anchorX: number;
+  anchorY: number;
+};
+
+export function UnitCardTooltip({ unitKey, hp, anchorX, anchorY }: UnitCardTooltipProps) {
+  const art = getUnitCardArt(unitKey, hp);
+  const [src, setSrc] = useState(art);
+
+  if (!art) return null;
+
+  const label = unitImages[unitKey as keyof typeof unitImages]?.label || unitKey;
+  const bottom = window.innerHeight - anchorY + 10;
+
+  return createPortal(
+    <div
+      className="unit-card-hover-preview"
+      style={{ left: anchorX, bottom }}
+    >
+      <img
+        src={encodeURI(src || art)}
+        alt={label}
+        onError={() => {
+          if (src?.includes("/art/counters/")) {
+            setSrc(src.replace("/art/counters/", "/art/unit_cards/"));
+          }
+        }}
+      />
+    </div>,
+    overlayRoot()
+  );
+}
+
+
+
+================================================================================
 FILE: C:\repos\python\assault\assault_ai_ui\src\game\ui\UnitStatePanel.tsx
 ================================================================================
 
+import { useState } from "react";
 import { unitImages } from "../config/unitImages";
+import { UnitCardTooltip } from "./UnitCardTooltip";
 import { sides } from "../config/sides";
 import { formatCoords } from "../render/hexGridRenderer";
 
@@ -9802,6 +11857,7 @@ type Unit = {
   unit_key: string;
   side: string;
   hp?: number;
+  alive?: boolean;
   q: number;
   r: number;
 };
@@ -9811,6 +11867,7 @@ type Props = {
   activeSide?: string;
   activatedUnits?: string[];
   selectedUnitId?: string | null;
+  targetUnitId?: string | null;
   onSelectUnit?: (unit: Unit) => void;
 };
 
@@ -9819,8 +11876,15 @@ export function UnitStatePanel({
   activeSide,
   activatedUnits = [],
   selectedUnitId,
+  targetUnitId,
   onSelectUnit
 }: Props) {
+
+  const [cardPreview, setCardPreview] = useState<{
+    unit: Unit;
+    x: number;
+    y: number;
+  } | null>(null);
 
   const unitsBySide: Record<string, Unit[]> = {};
 
@@ -9833,12 +11897,16 @@ export function UnitStatePanel({
 
   // Handle clicking a trooper card
   const handleCardClick = (u: Unit) => {
-    // Focus camera on unit first
+    const dead = u.hp != null && u.hp <= 0;
+
     if (typeof (window as any).focusUnit === "function") {
       (window as any).focusUnit(u.id);
     }
-    
-    // Select unit logic
+
+    if (dead) {
+      return;
+    }
+
     if (onSelectUnit) {
       onSelectUnit(u);
     } else if (typeof (window as any).onUnitClick === "function") {
@@ -9847,6 +11915,17 @@ export function UnitStatePanel({
   };
 
   return (
+  <>
+    {cardPreview && (
+      <UnitCardTooltip
+        key={cardPreview.unit.id}
+        unitKey={cardPreview.unit.unit_key}
+        hp={cardPreview.unit.hp}
+        anchorX={cardPreview.x}
+        anchorY={cardPreview.y}
+      />
+    )}
+
     <div className="roster-container">
       {Object.entries(unitsBySide).map(([side, list]) => (
         <div key={side} className="roster-side-group">
@@ -9869,16 +11948,21 @@ export function UnitStatePanel({
           <div className="roster-list">
             {list.map((u) => {
               const def = unitImages[u.unit_key as keyof typeof unitImages];
-              const dead = u.hp != null && u.hp <= 0;
+              const dead =
+                u.alive === false || (u.hp != null && u.hp <= 0);
               const isOwn = u.side === activeSide;
               const isAvailable = isOwn && !activatedUnits.includes(u.id) && !dead;
               const isSelected = u.id === selectedUnitId;
+              const isTarget = targetUnitId != null && u.id === targetUnitId;
               const deadMarker = dead ? sides[u.side]?.dead_marker : undefined;
 
               // Compute CSS class names based on unit status
               let cardClass = "trooper-card";
               if (isSelected) {
                 cardClass += " selected";
+              }
+              if (isTarget) {
+                cardClass += " target-highlight";
               }
               
               if (dead) {
@@ -9897,12 +11981,19 @@ export function UnitStatePanel({
               return (
                 <div
                   key={u.id}
-                  onMouseEnter={() => {
+                  onMouseEnter={(e) => {
+                    const rect = e.currentTarget.getBoundingClientRect();
+                    setCardPreview({
+                      unit: u,
+                      x: rect.left + rect.width / 2,
+                      y: rect.top,
+                    });
                     if (typeof (window as any).highlightUnit === "function") {
                       (window as any).highlightUnit(u.id);
                     }
                   }}
                   onMouseLeave={() => {
+                    setCardPreview(null);
                     if (typeof (window as any).highlightUnit === "function") {
                       (window as any).highlightUnit(null);
                     }
@@ -9958,6 +12049,7 @@ export function UnitStatePanel({
         </div>
       ))}
     </div>
+  </>
   );
 }
 

@@ -29,7 +29,7 @@ def _scenario_sides(repo_root: Path, scenario_id: str) -> set[str]:
 def main():
     try:
         from stable_baselines3 import PPO
-        from stable_baselines3.common.callbacks import EvalCallback
+        from stable_baselines3.common.callbacks import EvalCallback, BaseCallback
         from stable_baselines3.common.vec_env import DummyVecEnv
         from stable_baselines3.common.monitor import Monitor
         from stable_baselines3.common.vec_env import VecNormalize
@@ -49,6 +49,29 @@ def main():
         effective_device = "cpu"
     else:
         effective_device = requested_device
+
+    class PeriodicArtifactCallback(BaseCallback):
+        """Periodic saver for model + VecNormalize stats."""
+
+        def __init__(self, save_freq: int, model_path: Path, vecnorm_path: Path):
+            super().__init__(verbose=0)
+            self.save_freq = max(1, int(save_freq))
+            self.model_path = model_path
+            self.vecnorm_path = vecnorm_path
+            self._last_save_step = 0
+
+        def _on_step(self) -> bool:
+            try:
+                cur_steps = int(getattr(self.model, "num_timesteps", 0))
+                if cur_steps - self._last_save_step >= self.save_freq:
+                    self.model.save(str(self.model_path))
+                    vec = self.model.get_vec_normalize_env()
+                    if vec is not None:
+                        vec.save(str(self.vecnorm_path))
+                    self._last_save_step = cur_steps
+            except Exception as exc:
+                print(f"⚠️ periodic artifact save failed: {exc}")
+            return True
 
     def make_env_for_scenario(scenario_id: str, rl_side: str):
         env = GymAssaultEnv(
@@ -71,6 +94,8 @@ def main():
         train_env = None
         total_timesteps = 0
         final_scenario = None
+        out_path = model_dir / f"sb3_latest_{rl_side}.zip"
+        vecnorm_path = model_dir / f"sb3_vecnormalize_{rl_side}.pkl"
         print(f"=== TRAIN SIDE {rl_side} ===")
 
         for phase_idx, phase in enumerate(cfg.scenario_schedule, start=1):
@@ -142,7 +167,12 @@ def main():
                 n_eval_episodes=cfg.sb3_eval_episodes,
             )
 
-            model.learn(total_timesteps=phase_timesteps, callback=eval_cb)
+            periodic_cb = PeriodicArtifactCallback(
+                save_freq=cfg.sb3_eval_freq,
+                model_path=out_path,
+                vecnorm_path=vecnorm_path,
+            )
+            model.learn(total_timesteps=phase_timesteps, callback=[eval_cb, periodic_cb])
             total_timesteps += phase_timesteps
             final_scenario = scenario_id
 
@@ -150,9 +180,8 @@ def main():
             continue
         trained_any = True
 
-        out_path = model_dir / f"sb3_latest_{rl_side}.zip"
+        # Final save (periodic saves already created interim artifacts).
         model.save(str(out_path))
-        vecnorm_path = model_dir / f"sb3_vecnormalize_{rl_side}.pkl"
         train_env.save(str(vecnorm_path))
 
         meta = {

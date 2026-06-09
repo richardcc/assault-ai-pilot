@@ -10,10 +10,11 @@ export async function createUnitSprite(unit: any): Promise<PIXI.Container> {
   (container as any).__isMoving = false;
   (container as any).__type = "unit";
 
-  const def = unitImages[unit.unit_key];
+  const unitKey = unit.unit_key || unit.type;
+  const def = unitImages[unitKey as keyof typeof unitImages];
 
   if (!def) {
-    console.warn("❌ Missing sprite for", unit.unit_key);
+    console.warn("❌ Missing sprite for", unitKey);
     return container;
   }
 

@@ -37,7 +37,7 @@ class _GymActionController:
         self.heuristic = TacticalPathHeuristic()
         self.executor = OptionExecutor(self.heuristic, avoid_bad_trades=False, adv_threshold=-0.5)
         self.action_bridge = ActionBridge()
-        self.pending_action: tuple[int, int, int] | None = None
+        self.pending_action: tuple[int, ...] | None = None
 
         self.current_option = None
         self.current_option_sampled = None
@@ -61,22 +61,64 @@ class _GymActionController:
         self._locked_strategy = None
         self._locked_strategy_turn = None
 
-    def set_action(self, action: tuple[int, int, int]):
+    def set_action(self, action: tuple[int, ...]):
         self.pending_action = action
 
-    def _decode_action(self) -> tuple[StrategicIntent, TacticalOption, int]:
+    def _candidate_units_for_side(self, state, side, blocked_units):
+        blocked = blocked_units or set()
+        side_norm = str(side).upper()
+        units = [
+            u for u in getattr(state, "units", [])
+            if getattr(u, "alive", False)
+            and str(getattr(u, "side", "")).upper() == side_norm
+            and getattr(u, "unit_id", None) not in blocked
+        ]
+        # Stable ordering: fixed by unit_id (US_1, US_2, ...)
+        return sorted(units, key=lambda u: str(getattr(u, "unit_id", "")))
+
+    def select_best_unit(self, side, state, blocked_units):
+        # Let enemy side keep default selection behavior.
+        if str(side).upper() != str(self.rl_side).upper():
+            return None
         if self.pending_action is None:
-            return StrategicIntent.CAPTURE, TacticalOption.HOLD, 0
+            return None
+        units = self._candidate_units_for_side(state, side, blocked_units)
+        if not units:
+            return None
+        slot = 0
+        if len(self.pending_action) >= 4:
+            try:
+                slot = int(self.pending_action[3])
+            except Exception:
+                return None
+        if slot < 0:
+            return None
+        idx = slot % len(units)
+        return units[idx]
+
+    def _decode_action(self) -> tuple[StrategicIntent, TacticalOption, int, int]:
+        if self.pending_action is None:
+            return StrategicIntent.CAPTURE, TacticalOption.HOLD, 0, 0
         strategy_idx = int(self.pending_action[0])
         option_idx = int(self.pending_action[1])
         attack_mode = int(self.pending_action[2])
+        unit_slot = int(self.pending_action[3]) if len(self.pending_action) >= 4 else 0
         strategy = StrategicIntent(strategy_idx)
         option = TacticalOption(option_idx)
-        return strategy, option, attack_mode
+        return strategy, option, attack_mode, unit_slot
+
+    def _objective_tracked_side(self) -> str | None:
+        outcomes = getattr(getattr(self.sim_env, "scenario", None), "victory_outcomes", None) or {}
+        metric = str(outcomes.get("metric", "")).strip()
+        timing = str(outcomes.get("timing", "")).strip()
+        tracked = str(outcomes.get("tracked_side", "")).strip().upper()
+        if metric == "objectives_captured" and timing == "end_of_last_turn" and tracked:
+            return tracked
+        return None
 
     def act(self, state, side, unit, obs):
         if side == self.rl_side:
-            sampled_strategy, sampled_option, attack_mode = self._decode_action()
+            sampled_strategy, sampled_option, attack_mode, _unit_slot = self._decode_action()
             turn_now = int(getattr(state, "turn", 0))
             if self._locked_strategy is None or self._locked_strategy_turn != turn_now:
                 self._locked_strategy = sampled_strategy
@@ -90,6 +132,7 @@ class _GymActionController:
                 option=resolved_option,
                 attack_mode=attack_mode,
                 strategy=effective_strategy,
+                objective_tracked_side=self._objective_tracked_side(),
             )
             if action is None:
                 action = WaitAction(unit.unit_id)
@@ -171,8 +214,9 @@ class GymAssaultEnv(gym.Env):
             shape=(obs_dim,),
             dtype=np.float32,
         )
-        # [L3 strategy, L2 option, attack_mode]
-        self.action_space = spaces.MultiDiscrete([len(StrategicIntent), len(TacticalOption), 2])
+        # [L3 strategy, L2 option, attack_mode, unit_slot]
+        self.max_unit_slots = max(1, len(getattr(self._train_env.sim.game_state, "units", []) or []))
+        self.action_space = spaces.MultiDiscrete([len(StrategicIntent), len(TacticalOption), 2, self.max_unit_slots])
 
     def _build_runtime(self, seed: int):
         self._train_env = make_env(
@@ -224,7 +268,8 @@ class GymAssaultEnv(gym.Env):
         strategy_idx = int(action[0])
         option_idx = int(action[1])
         attack_mode = int(action[2])
-        self._controller.set_action((strategy_idx, option_idx, attack_mode))
+        unit_slot = int(action[3]) if len(action) >= 4 else 0
+        self._controller.set_action((strategy_idx, option_idx, attack_mode, unit_slot))
 
         total_reward = 0.0
         terminated = False

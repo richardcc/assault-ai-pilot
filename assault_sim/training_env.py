@@ -266,6 +266,14 @@ class TrainingEnv:
             "actor_side": actor_side_norm,
             "l2_option": getattr(action, "rl_l2_option", ""),
             "l3_strategy": getattr(action, "rl_l3_strategy", ""),
+            "capture_fallback_to_attack": bool(getattr(action, "rl_capture_fallback_to_attack", False)),
+            "capture_fallback_reason": str(getattr(action, "rl_capture_fallback_reason", "") or ""),
+            "capture_move_block_profile": str(getattr(action, "rl_capture_move_block_profile", "") or ""),
+            "actor_unit_classification": (
+                str(getattr(getattr(actor, "unit_type", None), "classification", ""))
+                if actor is not None
+                else ""
+            ),
 
             "rl_damage": 0,
             "rl_attacks": 0,

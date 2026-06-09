@@ -40,6 +40,7 @@ from assault_model.rules.movement_outcome import MovementOutcome
 
 from assault_model.map.hex_utils import safe_hex_distance
 from assault_model.combat.line_of_sight import has_line_of_sight
+from assault_model.actions.ranged_indirect import RangedIndirectAttack
 
 import os
 
@@ -73,6 +74,9 @@ class ActionCatalog:
 
         if active is None:
             return [WaitAction("SYSTEM")]
+
+        if not getattr(active, "alive", True):
+            return []
 
         actions = []
 
@@ -173,27 +177,34 @@ class ActionCatalog:
 
             mode = active.unit_type._resolve_attack_mode(distance)
 
-            if mode == "INDIRECT_FIRE" and distance < 3:
-                continue
-
             if mode == "DIRECT_FIRE":
                 if not self._has_line_of_sight(active, other):
                     continue
 
-            _trace(
-                "ACTION_ADD",
-                action="RangedDirectAttack",
-                attacker=active.unit_id,
-                target=other.unit_id,
-                mode=mode,
-            )
-
-            actions.append(
-                RangedDirectAttack(
-                    active.unit_id,
-                    other.unit_id,
+            if mode == "INDIRECT_FIRE":
+                _trace(
+                    "ACTION_ADD",
+                    action="RangedIndirectAttack",
+                    attacker=active.unit_id,
+                    target=other.unit_id,
+                    mode=mode,
                 )
-            )
+                act = RangedIndirectAttack(active.unit_id, (other.position.q, other.position.r))
+                # Compatibility metadata used by logs/telemetry.
+                act.target_id = other.unit_id
+                act.attack_mode = "INDIRECT_FIRE"
+                actions.append(act)
+            else:
+                _trace(
+                    "ACTION_ADD",
+                    action="RangedDirectAttack",
+                    attacker=active.unit_id,
+                    target=other.unit_id,
+                    mode=mode,
+                )
+                act = RangedDirectAttack(active.unit_id, other.unit_id)
+                act.attack_mode = "DIRECT_FIRE"
+                actions.append(act)
 
         return actions
 
@@ -643,8 +654,8 @@ from assault_model.runtime.execution_context import ExecutionContext
 from assault_model.combat.close_combat_resolver import resolve_close_combat
 from assault_model.combat.ranged_combat_resolver import resolve_ranged_combat
 
-from assault_model.map.hex_utils import hex_distance
 
+from assault_model.map.hex_utils import safe_hex_distance
 
 # -------------------------------------------------
 # DEVELOPMENT TRACE (INTERNAL ONLY)
@@ -744,7 +755,20 @@ def resolve_action(
         # ------------------------------
         if action.combat_mode == CombatMode.ASSAULT:
             ctx = new_state.create_combat_context(action)
+
+            # Hex objetivo del asalto (hex del defensor). Reglamento 11.1:
+            # el atacante entra en el hex enemigo para iniciar el close
+            # combat y lo OCUPA si elimina al defensor.
+            target_hex = ctx.defender.position
+
             result_combat = resolve_close_combat(ctx, context)
+
+            if (
+                target_hex is not None
+                and ctx.attacker.alive
+                and not ctx.defender.alive
+            ):
+                ctx.attacker.position = target_hex
 
         # ------------------------------
         # RANGED DIRECT + INDIRECT FIRE
@@ -765,12 +789,19 @@ def resolve_action(
                     (u for u in new_state.units if u.unit_id == action.target_id),
                     None,
                 )
-                distance = hex_distance(attacker.position, target.position)
+                distance = safe_hex_distance(attacker.position, target.position)
 
             else:
                 # ✅ INDIRECT FIRE (target_hex)
+                tq, tr = action.target_hex
                 target = next(
-                    (u for u in new_state.units if u.position == action.target_hex and u.alive),
+                    (
+                        u for u in new_state.units
+                        if u.alive
+                        and u.position is not None
+                        and u.position.q == tq
+                        and u.position.r == tr
+                    ),
                     None,
                 )
 
@@ -778,7 +809,7 @@ def resolve_action(
                     # 🔥 no hay unidad → no hay combate
                     return ActionResolutionResult(new_state=new_state, combat_result=None)
 
-                distance = hex_distance(attacker.position, action.target_hex)
+                distance = safe_hex_distance(attacker.position, action.target_hex)
 
             if attacker is None or target is None:
                 raise RuntimeError(
@@ -1170,6 +1201,7 @@ from assault_model.combat.defense_dice_pool import DefenseDicePool
 from assault_model.combat.dice_face import DiceFace
 from assault_model.combat.battle_die import DiceResult
 from assault_model.combat.dice_comparison import compare_dice
+from assault_model.combat.dice_color import DiceColor
 from assault_model.runtime.execution_context import ExecutionContext
 
 import os
@@ -1237,6 +1269,52 @@ def resolve_close_combat(
     ctx.round_number = 1
     MAX_ROUNDS = 10
 
+    game_map = (
+        context.game_map
+        if context and getattr(context, "game_map", None)
+        else None
+    )
+
+    # Rulebook 11.1.3: the close-combat ("target") hex is the DEFENDER's hex.
+    # Both units use the terrain bonus of THAT hex, but only the STRONGEST
+    # single terrain die. Vehicles get no terrain defense bonus in close combat.
+    # Close combat is melee → no LOS hindrance is ever applied.
+    def _strongest_terrain_die(unit):
+        if unit.unit_type.category.name == "VEHICLE":
+            return None
+        if not game_map or ctx.defender.position is None:
+            return None
+        hex_ = game_map.get_hex(ctx.defender.position.q, ctx.defender.position.r)
+        if not hex_:
+            return None
+        names = game_map.terrain_config.get_defense_dice(
+            hex_.get_terrain(),
+            unit.unit_type.category.name,
+        )
+        colors = [DiceColor[n] for n in names if n in DiceColor.__members__]
+        if not colors:
+            return None
+        return max(colors, key=lambda c: int(c))
+
+    def _defender_defense_colors():
+        colors = list(ctx.defender.unit_type.get_defense_dice(ctx.attack_sector))
+        strongest = _strongest_terrain_die(ctx.defender)
+        if strongest is not None:
+            colors.append(strongest)
+        return colors
+
+    def _attacker_defense_colors():
+        colors = list(ctx.attacker.unit_type.get_defense_dice(ctx.attack_sector))
+        if ctx.round_number == 1:
+            # Initial round (11.1.3.2): the assaulting unit gets NO terrain
+            # bonus, but instead one blue defense die.
+            colors.append(DiceColor.BLUE)
+        else:
+            strongest = _strongest_terrain_die(ctx.attacker)
+            if strongest is not None:
+                colors.append(strongest)
+        return colors
+
     while ctx.attacker.alive and ctx.defender.alive:
         rr = CloseCombatRoundResult(ctx.round_number)
 
@@ -1251,9 +1329,7 @@ def resolve_close_combat(
                 )
             ),
             "attacker_defense": DefenseDicePool(
-                ctx.attacker.unit_type.get_defense_dice(
-                    ctx.attack_sector
-                )
+                _attacker_defense_colors()
             ),
             "defender_attack": AttackDicePool(
                 ctx.defender.unit_type.get_close_combat_attack_dice(
@@ -1261,9 +1337,7 @@ def resolve_close_combat(
                 )
             ),
             "defender_defense": DefenseDicePool(
-                ctx.defender.unit_type.get_defense_dice(
-                    ctx.attack_sector
-                )
+                _defender_defense_colors()
             ),
         }
 
@@ -2085,10 +2159,11 @@ class FlankModifier(DiceModifier):
 FILE: C:\repos\python\assault\assault_model\combat\line_of_sight.py
 ================================================================================
 
-from enum import Enum
 import math
+from enum import Enum
 
 from assault_model.map.hex_coord import HexCoord
+from assault_model.map.hex_utils import hex_distance
 
 
 # -------------------------------------------------
@@ -2106,167 +2181,221 @@ class LineOfSight(Enum):
 # -------------------------------------------------
 
 _los_cache = {}
+_LOS_CACHE_VERSION = 8
 
 
 def _make_key(a: HexCoord, b: HexCoord):
-    return (a.q, a.r, b.q, b.r)
+    return (_LOS_CACHE_VERSION, a.q, a.r, b.q, b.r)
+
+
+def clear_los_cache():
+    """Drop cached rays after LOS path logic changes."""
+    _los_cache.clear()
+
+
+# Same layout as assault_ai_ui hexGridRenderer.ts (odd-r, pointy-top)
+_UI_HEX_SIZE = 30.0
+_UI_HEX_WIDTH = _UI_HEX_SIZE * math.sqrt(3.0)
+_UI_HEX_HEIGHT = _UI_HEX_SIZE * 1.5
+
+
+def _hex_to_pixel_ui(q: int, r: int) -> tuple[float, float]:
+    x = _UI_HEX_WIDTH * (q + 0.5 * (r % 2)) + _UI_HEX_WIDTH / 2.0
+    y = _UI_HEX_HEIGHT * r + _UI_HEX_SIZE
+    return x, y
+
+
+def _pixel_to_hex_ui(x: float, y: float) -> HexCoord:
+    y_centered = y - _UI_HEX_SIZE
+    r = int(round(y_centered / _UI_HEX_HEIGHT))
+    x_col = x - _UI_HEX_WIDTH / 2.0 - _UI_HEX_WIDTH * 0.5 * (r % 2)
+    q = int(round(x_col / _UI_HEX_WIDTH))
+    return HexCoord(q, r)
+
+
+def _odd_r_neighbor_deltas(r: int) -> list[tuple[int, int]]:
+    if r % 2 == 0:
+        return [(-1, 0), (+1, 0), (0, -1), (0, +1), (-1, -1), (-1, +1)]
+    return [(-1, 0), (+1, 0), (0, -1), (0, +1), (+1, -1), (+1, +1)]
+
+
+def _hexes_at_pixel_ui(x: float, y: float) -> list[HexCoord]:
+    """When the ray lies on the edge between two hexes, return both."""
+    primary = _pixel_to_hex_ui(x, y)
+    cx, cy = _hex_to_pixel_ui(primary.q, primary.r)
+    d0 = (x - cx) ** 2 + (y - cy) ** 2
+    edge_eps_sq = (_UI_HEX_WIDTH * 0.35) ** 2
+
+    hexes = [primary]
+    for dq, dr in _odd_r_neighbor_deltas(primary.r):
+        nq, nr = primary.q + dq, primary.r + dr
+        nx, ny = _hex_to_pixel_ui(nq, nr)
+        d1 = (x - nx) ** 2 + (y - ny) ** 2
+        if abs(d1 - d0) <= edge_eps_sq:
+            neighbor = HexCoord(nq, nr)
+            if neighbor != primary:
+                hexes.append(neighbor)
+    return hexes
+
+
+def _append_hex_to_path(path: list[HexCoord], h: HexCoord) -> None:
+    if not path or path[-1] != h:
+        path.append(h)
+
+
+def _ray_sample_segments(a: HexCoord, b: HexCoord) -> list[list[HexCoord]]:
+    """One entry per sample along the ray; each entry has 1–2 hexes on an edge."""
+    if a.q == b.q and a.r == b.r:
+        return [[HexCoord(a.q, a.r)]]
+
+    dist = hex_distance(a, b)
+    if dist <= 1:
+        return [[a], [b]]
+
+    ax, ay = _hex_to_pixel_ui(a.q, a.r)
+    bx, by = _hex_to_pixel_ui(b.q, b.r)
+    samples = max(dist * 4, dist + 1)
+
+    segments: list[list[HexCoord]] = []
+    for i in range(samples + 1):
+        t = i / samples
+        px = ax + (bx - ax) * t
+        py = ay + (by - ay) * t
+        segments.append(_hexes_at_pixel_ui(px, py))
+    return segments
+
+
+def _flatten_ray_path(a: HexCoord, b: HexCoord, segments: list[list[HexCoord]]) -> list[HexCoord]:
+    path = [a]
+    for seg in segments:
+        for h in seg:
+            _append_hex_to_path(path, h)
+    if path[-1] != b:
+        path.append(HexCoord(b.q, b.r))
+    return path
+
+
+def _terrain_los_at(coord: HexCoord, game_map, terrain_config) -> str | None:
+    hex_ = game_map.get_hex(coord.q, coord.r)
+    if not hex_:
+        return None
+    terrain = hex_.get_terrain()
+    config = terrain_config.get(terrain)
+    return config.get("los", "CLEAR") if config else "CLEAR"
+
+
+def _hex_path_ui_pixel(a: HexCoord, b: HexCoord) -> list[HexCoord]:
+    """Straight ray; includes both hexes when the line runs along a shared edge."""
+    segments = _ray_sample_segments(a, b)
+    return _flatten_ray_path(a, b, segments)
+
+
+def _primary_hex_path(a: HexCoord, b: HexCoord) -> list[HexCoord]:
+    """Ray spine: one hex per sample (the hex the pixel lies in)."""
+    segments = _ray_sample_segments(a, b)
+    path = [a]
+    for seg in segments:
+        if seg:
+            _append_hex_to_path(path, seg[0])
+    if path[-1].q != b.q or path[-1].r != b.r:
+        path.append(HexCoord(b.q, b.r))
+    return path
+
+
+def _inner_hexes_for_los(path: list[HexCoord], end: HexCoord) -> list[HexCoord]:
+    """Intermediates on the ray only, each hex once, never the target."""
+    inner: list[HexCoord] = []
+    seen: set[tuple[int, int]] = set()
+    for h in path[1:-1]:
+        key = (h.q, h.r)
+        if key == (end.q, end.r) or key in seen:
+            continue
+        seen.add(key)
+        inner.append(h)
+    return inner
+
+
+def _hex_path_strict(a: HexCoord, b: HexCoord) -> list[HexCoord]:
+    return _hex_path_ui_pixel(a, b)
 
 
 # -------------------------------------------------
-# HEX GEOMETRY
-# -------------------------------------------------
-
-def _hex_corners(hex_coord: HexCoord):
-    """
-    Coordenadas de los 6 vértices del hex.
-    Aproximación axial en plano continuo.
-    """
-    cx = hex_coord.q
-    cy = hex_coord.r
-
-    size = 1.0
-    corners = []
-
-    for i in range(6):
-        angle = math.pi / 3 * i
-        x = cx + size * math.cos(angle)
-        y = cy + size * math.sin(angle)
-        corners.append((x, y))
-
-    return corners
-
-
-def _ccw(a, b, c):
-    return (c[1] - a[1]) * (b[0] - a[0]) > (b[1] - a[1]) * (c[0] - a[0])
-
-
-def _segments_intersect(p1, p2, p3, p4):
-    """
-    Intersección de segmentos robusta.
-    """
-    return (_ccw(p1, p3, p4) != _ccw(p2, p3, p4) and
-            _ccw(p1, p2, p3) != _ccw(p1, p2, p4))
-
-
-def _segment_intersects_hex(start: HexCoord, end: HexCoord, hex_coord: HexCoord):
-    """
-    Devuelve True SOLO si el segmento atraviesa el hex realmente.
-    """
-
-    s = (start.q, start.r)
-    e = (end.q, end.r)
-
-    corners = _hex_corners(hex_coord)
-
-    for i in range(6):
-        c1 = corners[i]
-        c2 = corners[(i + 1) % 6]
-
-        if _segments_intersect(s, e, c1, c2):
-            return True
-
-    return False
-
-
-# -------------------------------------------------
-# RECORRIDO BASE (candidatos)
-# -------------------------------------------------
-
-def _supercover_line(a: HexCoord, b: HexCoord):
-    """
-    Genera candidatos de hex a comprobar (superset).
-    """
-    N = max(
-        abs(a.q - b.q),
-        abs(a.r - b.r),
-        abs((a.q + a.r) - (b.q + b.r)),
-    )
-
-    results = []
-
-    for i in range(N + 1):
-        t = 0 if N == 0 else i / N
-
-        q = a.q + (b.q - a.q) * t
-        r = a.r + (b.r - a.r) * t
-
-        coord = HexCoord(round(q), round(r))
-
-        if not results or coord != results[-1]:
-            results.append(coord)
-
-    return results
-
-
-# -------------------------------------------------
-# LOS CORE REAL
+# LOS CORE
 # -------------------------------------------------
 
 def check_line_of_sight(attacker, target, game_map, terrain_config):
-
     start = getattr(attacker, "position", None)
     end = getattr(target, "position", None)
 
-    # ✅ protección básica
     if start is None or end is None:
         return LineOfSight.BLOCKED
 
     key = _make_key(start, end)
 
     if key in _los_cache:
-        return _los_cache[key]
+        result, cached_debug = _los_cache[key]
+        attacker._los_debug = cached_debug
+        return result
 
-    # ✅ simetría (opcional pero útil)
-    reverse_key = (end.q, end.r, start.q, start.r)
+    reverse_key = (_LOS_CACHE_VERSION, end.q, end.r, start.q, start.r)
     if reverse_key in _los_cache:
-        return _los_cache[reverse_key]
+        result, cached_debug = _los_cache[reverse_key]
+        attacker._los_debug = {
+            "blocking": cached_debug["blocking"],
+            "hindrance": cached_debug["hindrance"],
+            "path": list(reversed(cached_debug["path"]))
+        }
+        return result
 
-    candidates = _supercover_line(start, end)
+    path_full = _hex_path_strict(start, end)
 
-    path = candidates[1:-1]
+    if not path_full:
+        return LineOfSight.BLOCKED
+
+    los_path = _primary_hex_path(start, end)
+    inner_path = _inner_hexes_for_los(los_path, end)
 
     hindrance = 0
+    blocking_hexes = []
+    hindrance_hexes = []
+    is_blocked = False
 
-    for coord in path:
-
-        # ✅ filtro geométrico real
-        if not _segment_intersects_hex(start, end, coord):
+    for coord in inner_path:
+        los_type = _terrain_los_at(coord, game_map, terrain_config)
+        if los_type is None:
             continue
 
-        hex_ = game_map.get_hex(coord.q, coord.r)
-        if not hex_:
-            continue
-
-        terrain = hex_.get_terrain()
-        config = terrain_config.get(terrain)
-
-        los_type = config.get("los", "CLEAR") if config else "CLEAR"
-
-        # -------------------------------------------------
-        # BLOCKED
-        # -------------------------------------------------
         if los_type == "BLOCKED":
-            result = LineOfSight.BLOCKED
-            _los_cache[key] = result
-            return result
+            is_blocked = True
+            blocking_hexes.append((coord.q, coord.r))
 
-        # -------------------------------------------------
-        # HINDERED
-        # -------------------------------------------------
-        if los_type == "HINDERED":
+        elif los_type == "HINDERED":
             hindrance += 1
-
+            hindrance_hexes.append((coord.q, coord.r))
             if hindrance >= 3:
-                result = LineOfSight.BLOCKED
-                _los_cache[key] = result
-                return result
+                is_blocked = True
 
-    # -------------------------------------------------
-    # RESULT FINAL
-    # -------------------------------------------------
-    result = LineOfSight.HINDERED if hindrance >= 1 else LineOfSight.CLEAR
+    if hindrance >= 3:
+        for h_coord in hindrance_hexes:
+            if h_coord not in blocking_hexes:
+                blocking_hexes.append(h_coord)
 
-    _los_cache[key] = result
+    if is_blocked:
+        result = LineOfSight.BLOCKED
+    elif hindrance >= 1:
+        result = LineOfSight.HINDERED
+    else:
+        result = LineOfSight.CLEAR
+
+    # Datos limpios y ordenados secuencialmente para pintar las flechas en el Frontend
+    debug_data = {
+        "blocking": blocking_hexes,
+        "hindrance": hindrance_hexes,
+        "path": [(c.q, c.r) for c in path_full]
+    }
+    attacker._los_debug = debug_data
+
+    _los_cache[key] = (result, debug_data)
     return result
 
 
@@ -2281,7 +2410,6 @@ def has_line_of_sight(attacker, target, game_map, terrain_config):
         game_map,
         terrain_config
     ) != LineOfSight.BLOCKED
-
 
 
 ================================================================================
@@ -2472,12 +2600,14 @@ from assault_model.combat.modifiers.terrain_modifier import TerrainModifier
 from assault_model.combat.attack_dice_pool import AttackDicePool
 from assault_model.combat.defense_dice_pool import DefenseDicePool
 from assault_model.combat.unit_class import UnitClass
+from assault_model.combat.dice_color import DiceColor
 from assault_model.combat.dice_face import DiceFace
 from assault_model.map.combat_geometry import determine_attack_sector
 from assault_model.runtime.execution_context import ExecutionContext
 from assault_model.combat.battle_die import DiceResult
 from assault_model.combat.dice_comparison import compare_dice
 from assault_model.map.terrain_config import terrain_config
+from assault_model.rules.fortification_rules import FortificationRules
 
 from assault_model.actions.combat_mode import CombatMode
 
@@ -2501,6 +2631,27 @@ def _trace(tag: str, **data):
         return
     payload = " ".join(f"{k}={v}" for k, v in data.items())
     print(f"[TRACE][{tag}] {payload}")
+
+
+def _has_trait(unit, trait_name: str) -> bool:
+    traits = getattr(getattr(unit, "unit_type", None), "traits", []) or []
+    return str(trait_name).upper() in {str(t).upper() for t in traits}
+
+
+def _remove_weakest_die(dice: list):
+    if not dice:
+        return None
+    weakest = min(dice, key=lambda c: int(c))
+    dice.remove(weakest)
+    return weakest
+
+
+def _remove_strongest_die(dice: list):
+    if not dice:
+        return None
+    strongest = max(dice, key=lambda c: int(c))
+    dice.remove(strongest)
+    return strongest
 
 
 class CombatResolutionResult:
@@ -2530,6 +2681,12 @@ def resolve_ranged_combat(
     terrain_cfg = context.terrain_config if context and hasattr(context, "terrain_config") else terrain_config
 
     # =================================================
+    # FIRE MODE (consistent with ActionCatalog)
+    # =================================================
+    attack_mode = attacker.unit_type._resolve_attack_mode(distance)
+    is_indirect = attack_mode == "INDIRECT_FIRE"
+
+    # =================================================
     # LOS
     # =================================================
     los = LineOfSight.CLEAR
@@ -2547,9 +2704,11 @@ def resolve_ranged_combat(
         attacker=attacker.unit_id,
         defender=target.unit_id,
         los=los.name,
+        indirect=is_indirect,
     )
 
-    if los == LineOfSight.BLOCKED:
+    # Direct fire requires LOS; indirect fire (mortar/artillery) ignores it.
+    if not is_indirect and los == LineOfSight.BLOCKED:
         _trace(
             "RANGED_BLOCKED",
             attacker=attacker.unit_id,
@@ -2559,16 +2718,26 @@ def resolve_ranged_combat(
 
     # =================================================
     # INDIRECT RESTRICTIONS
+    # A unit standing in no_indirect_from terrain (e.g. inside a building,
+    # heavy forest) cannot lob indirect fire from there.
     # =================================================
-    if game_map:
-        attacker_hex = game_map.get_hex(attacker.position)
+    if game_map and is_indirect:
+        attacker_hex = game_map.get_hex(
+            attacker.position.q, attacker.position.r
+        )
 
         if attacker_hex is not None:
             terrain_name = attacker_hex.get_terrain()
-
-            if terrain_cfg.get(terrain_name, {}).get("no_indirect_from", False):
-                if getattr(action, "combat_mode", None) == CombatMode.RANGED_INDIRECT:
-                    return CombatResolutionResult([], [], [])
+            # TerrainConfig.get accepts only the terrain name.
+            # Keep compatibility in case a raw dict is passed.
+            terrain_entry = {}
+            if isinstance(terrain_cfg, dict):
+                terrain_entry = terrain_cfg.get(terrain_name, {}) or {}
+            else:
+                terrain_entry = terrain_cfg.get(terrain_name) or {}
+            if terrain_entry.get("no_indirect_from", False):
+                _trace("INDIRECT_BLOCKED_FROM_TERRAIN", terrain=terrain_name)
+                return CombatResolutionResult([], [], [])
 
     # ---------------- ATTACK ----------------
     attack_colors = list(
@@ -2579,7 +2748,9 @@ def resolve_ranged_combat(
     )
 
     if getattr(attacker, "suppressed", False) and attack_colors:
-        attack_colors = attack_colors[:-1]
+        # Rulebook 10.8.1: a suppressed attacker loses its WEAKEST attack die.
+        weakest = min(attack_colors, key=lambda c: int(c))
+        attack_colors.remove(weakest)
 
     attack_results = AttackDicePool(attack_colors).roll()
 
@@ -2591,19 +2762,70 @@ def resolve_ranged_combat(
     )
 
     # ---------------- DEFENSE ----------------
-    defense_colors = list(
+    defense_base = list(
         target.unit_type.get_defense_dice(sector=sector)
     )
+    defense_colors = list(defense_base)
+    terrain_bonus = []
 
     if game_map:
-        hex_ = game_map.get_hex(target.position)
+        hex_ = game_map.get_hex(target.position.q, target.position.r)
         if hex_:
+            # Indirect fire has no LOS line → no HINDERED defense die,
+            # but terrain cover dice still apply.
             terrain_mod = TerrainModifier.from_hex(
                 hex_,
                 target,
-                los=los   # ✅ ÚNICO sitio donde se aplica LOS
+                los=(None if is_indirect else los)
             )
             defense_colors = terrain_mod.modify_defense(defense_colors)
+            terrain_bonus = defense_colors[len(defense_base):]
+            if is_indirect and _has_trait(attacker, "REMOVE_WEAKEST_TERRAIN_DEFENSE") and terrain_bonus:
+                removed = _remove_weakest_die(terrain_bonus)
+                # Keep effective defense pool consistent with updated terrain bonus.
+                defense_colors = list(defense_base) + list(terrain_bonus)
+                _trace(
+                    "TRAIT_REMOVE_WEAKEST_TERRAIN_DEFENSE",
+                    attacker=attacker.unit_id,
+                    defender=target.unit_id,
+                    removed=getattr(removed, "name", str(removed)),
+                )
+            target_cat = getattr(getattr(target, "unit_type", None), "category", None)
+            target_cat_value = str(getattr(target_cat, "value", target_cat)).upper()
+            if (
+                _has_trait(attacker, "REMOVE_STRONGEST_TERRAIN_DEFENSE")
+                and target_cat_value != "VEHICLE"
+                and terrain_bonus
+            ):
+                removed = _remove_strongest_die(terrain_bonus)
+                defense_colors = list(defense_base) + list(terrain_bonus)
+                _trace(
+                    "TRAIT_REMOVE_STRONGEST_TERRAIN_DEFENSE",
+                    attacker=attacker.unit_id,
+                    defender=target.unit_id,
+                    removed=getattr(removed, "name", str(removed)),
+                )
+            fort_type = game_map.get_hex_fortification(target.position.q, target.position.r)
+            fort_bonus = FortificationRules.defense_bonus(
+                fort_type=fort_type,
+                unit_category=target.unit_type.category.name,
+                sector=sector,
+            )
+            defense_colors += fort_bonus
+            _trace(
+                "FORTIFICATION_DEFENSE",
+                fort_type=fort_type,
+                sector=sector.name,
+                target=target.unit_id,
+                terrain=[d.name for d in terrain_bonus],
+                bonus=[d.name for d in fort_bonus],
+            )
+        else:
+            fort_type = None
+            fort_bonus = []
+    else:
+        fort_type = None
+        fort_bonus = []
 
     defense_results = DefenseDicePool(defense_colors).roll()
 
@@ -2657,6 +2879,16 @@ def resolve_ranged_combat(
                     "attack_sector": sector.name,
                     "los": los.name,
                     "attack_mode": getattr(action, "attack_mode", "DIRECT_FIRE"),
+                    "fortification": {
+                        "type": fort_type,
+                        "bonus_dice": [d.name for d in fort_bonus],
+                    },
+                    "defense_breakdown": {
+                        "sector": sector.name,
+                        "base_dice": [d.name for d in defense_base],
+                        "terrain_bonus_dice": [d.name for d in terrain_bonus],
+                        "fortification_bonus_dice": [d.name for d in fort_bonus],
+                    },
 
                     "attacker_attack_dice": [
                         {"color": d.color.name, "faces": [f.name for f in d.faces]}
@@ -3160,10 +3392,17 @@ class TerrainModifier(DiceModifier):
 
         terrain_name = hex_.get_terrain()
 
+        # ✅ unit class name (INFANTRY / VEHICLE / ARTILLERY)
+        # UnitInstance has no `unit_class`; derive it from the unit type category.
+        unit_class = getattr(unit, "unit_class", None)
+        class_name = getattr(unit_class, "name", None)
+        if class_name is None:
+            class_name = unit.unit_type.category.name
+
         # ✅ base defense from terrain
         dice_names = terrain_config.get_defense_dice(
             terrain_name,
-            unit.unit_class.name
+            class_name
         )
 
         dice = []
@@ -3329,7 +3568,7 @@ FILE: C:\repos\python\assault\assault_model\core\replay.py
 FILE: C:\repos\python\assault\assault_model\core\scenario.py
 ================================================================================
 
-from typing import List, Optional, Dict
+from typing import List, Optional, Dict, Any
 
 from assault_model.map.map import Map
 from assault_model.units.unit_instance import UnitInstance
@@ -3349,12 +3588,14 @@ class Scenario:
         units: List[UnitInstance],
         max_turns: Optional[int] = None,
         vp_conditions: Optional[Dict] = None,
+        victory_outcomes: Optional[Dict[str, Any]] = None,
     ) -> None:
         self.name = name
         self.game_map = game_map
         self.units = units
         self.max_turns = max_turns
         self.vp_conditions = vp_conditions
+        self.victory_outcomes = victory_outcomes
 
 
 ================================================================================
@@ -3403,6 +3644,44 @@ def _offset_hex(hex_: Hex, origin: Tuple[int, int]) -> Hex:
     )
 
 
+def _rotation_to_quarter_turns(rotation_deg: int) -> int:
+    if rotation_deg % 90 != 0:
+        raise ScenarioLoaderError(
+            f"Invalid piece rotation {rotation_deg}. "
+            "Rotation must be a multiple of 90 degrees."
+        )
+    return (rotation_deg // 90) % 4
+
+
+def _rotate_local_coord(
+    q: int,
+    r: int,
+    width: int,
+    height: int,
+    quarter_turns: int,
+) -> Tuple[int, int]:
+    """
+    Rotate local piece coordinates clockwise in 90° steps.
+    """
+    if quarter_turns == 0:
+        return q, r
+    if quarter_turns == 1:
+        return (height - 1 - r), q
+    if quarter_turns == 2:
+        return (width - 1 - q), (height - 1 - r)
+    # quarter_turns == 3
+    return r, (width - 1 - q)
+
+
+def _is_adjacent_vertices(v_start: int, v_end: int) -> bool:
+    if not (1 <= v_start <= 6 and 1 <= v_end <= 6):
+        return False
+    if v_start == v_end:
+        return False
+    # Adjacent on circular sequence 1..6
+    return ((v_start % 6) + 1 == v_end) or ((v_end % 6) + 1 == v_start)
+
+
 # -------------------------------------------------
 # Main loader
 # -------------------------------------------------
@@ -3439,15 +3718,45 @@ def load_scenario(
 
         piece = map_piece_catalog[piece_id]
         origin = tuple(entry["origin"])
+        rotation_deg = int(entry.get("rotation", 0))
+        quarter_turns = _rotation_to_quarter_turns(rotation_deg)
+        piece_width, piece_height = piece.shape
 
         # ✅ HEXES
         for h in piece.hexes:
-            global_hexes.append(_offset_hex(h, origin))
+            rq, rr = _rotate_local_coord(
+                h.q,
+                h.r,
+                piece_width,
+                piece_height,
+                quarter_turns,
+            )
+            global_hexes.append(
+                Hex(
+                    q=rq + origin[0],
+                    r=rr + origin[1],
+                    terrain=h.terrain,
+                )
+            )
 
         # ✅ EDGES
         for (a, b), feature in piece.hex_edges.items():
             aq, ar = a
             bq, br = b
+            aq, ar = _rotate_local_coord(
+                aq,
+                ar,
+                piece_width,
+                piece_height,
+                quarter_turns,
+            )
+            bq, br = _rotate_local_coord(
+                bq,
+                br,
+                piece_width,
+                piece_height,
+                quarter_turns,
+            )
             pending_hex_edges.append(
                 (
                     (aq + origin[0], ar + origin[1]),
@@ -3468,6 +3777,41 @@ def load_scenario(
     # =================================================
     for a, b, feature in pending_hex_edges:
         game_map.add_hex_edge_feature(a, b, feature)
+
+    # =================================================
+    # APPLY FORTIFICATIONS (optional scenario overlays)
+    # =================================================
+    for fort in raw.get("map", {}).get("fortifications", []):
+        q = int(fort["q"])
+        r = int(fort["r"])
+        fort_type = str(fort["type"])
+        vertex_start = fort.get("vertex_start")
+        vertex_end = fort.get("vertex_end")
+        if game_map.get_hex(q, r) is None:
+            raise ScenarioLoaderError(
+                f"Fortification '{fort_type}' outside map at {(q, r)}"
+            )
+        if (vertex_start is None) != (vertex_end is None):
+            raise ScenarioLoaderError(
+                f"Fortification '{fort_type}' at {(q, r)} must define both "
+                "vertex_start and vertex_end, or neither"
+            )
+        if vertex_start is not None and vertex_end is not None:
+            vertex_start = int(vertex_start)
+            vertex_end = int(vertex_end)
+            if not _is_adjacent_vertices(vertex_start, vertex_end):
+                raise ScenarioLoaderError(
+                    f"Fortification '{fort_type}' at {(q, r)} has invalid edge "
+                    f"({vertex_start},{vertex_end}). Vertices must be adjacent "
+                    "in 1..6 circular order."
+                )
+        game_map.add_hex_fortification(
+            q,
+            r,
+            fort_type,
+            vertex_start=vertex_start,
+            vertex_end=vertex_end,
+        )
 
     # =================================================
     # UNIT INSTANTIATION
@@ -3515,6 +3859,7 @@ def load_scenario(
             if "vp" in raw
             else None
         ),
+        victory_outcomes=raw.get("victory_outcomes"),
     )
     scenario.terrain_config = terrain_config
 
@@ -3539,7 +3884,7 @@ def load_scenario(
 FILE: C:\repos\python\assault\assault_model\core\victory_conditions.py
 ================================================================================
 
-from typing import List, Dict, Tuple
+from typing import List, Dict, Any
 from assault_model.core.victory_point import VictoryPoint
 
 
@@ -3605,14 +3950,52 @@ class VictoryConditions:
         # Points awarded per VP hex per turn
         value = raw.get("value_per_hex", 0)
 
-        # Create VictoryPoint objects for each specified hex
-        points = [
-            VictoryPoint(
-                hex_coords=(q, r),
-                per_turn=value
+        def _normalize_hex_entry(
+            entry: Any,
+            default_value: int,
+        ) -> tuple[tuple[int, int], str | None, int]:
+            # Backward-compatible format: [q, r]
+            if isinstance(entry, (list, tuple)) and len(entry) == 2:
+                q, r = entry
+                return (int(q), int(r)), None, default_value
+
+            # Extended format:
+            # { "q": 4, "r": 8, "initial_owner": "GE" }
+            # { "coords": [4, 8], "owner": "US" }
+            if isinstance(entry, dict):
+                if "coords" in entry:
+                    q, r = entry["coords"]
+                elif "hex" in entry:
+                    q, r = entry["hex"]
+                else:
+                    q = entry.get("q")
+                    r = entry.get("r")
+                if q is None or r is None:
+                    raise ValueError(f"Invalid VP hex entry: {entry}")
+                owner = (
+                    entry.get("initial_owner")
+                    or entry.get("owner")
+                    or entry.get("occupied_by")
+                )
+                owner = str(owner).strip().upper() if owner else None
+                per_turn = entry.get("value", entry.get("per_turn", default_value))
+                return (int(q), int(r)), owner, int(per_turn)
+
+            raise ValueError(f"Invalid VP hex entry: {entry}")
+
+        points: List[VictoryPoint] = []
+        for hex_entry in raw.get("hexes", []):
+            coords, initial_owner, per_turn = _normalize_hex_entry(
+                hex_entry,
+                value,
             )
-            for q, r in raw.get("hexes", [])
-        ]
+            points.append(
+                VictoryPoint(
+                    hex_coords=coords,
+                    per_turn=per_turn,
+                    initial_owner=initial_owner,
+                )
+            )
 
         return cls(points)
 
@@ -3623,9 +4006,15 @@ FILE: C:\repos\python\assault\assault_model\core\victory_point.py
 
 # assault_model/core/victory_point.py
 class VictoryPoint:
-    def __init__(self, per_turn: int, hex_coords: tuple[int, int]):
+    def __init__(
+        self,
+        per_turn: int,
+        hex_coords: tuple[int, int],
+        initial_owner: str | None = None,
+    ):
         self.per_turn = per_turn
         self.hex_coords = hex_coords
+        self.initial_owner = initial_owner
 
 
 ================================================================================
@@ -3650,10 +4039,14 @@ class VictoryPointTracker:
             HexOwnership.SIDE_B: 0,
         }
 
-    def apply_turn(self, hex_states: dict[tuple[int, int], HexOwnership]) -> None:
+    def finalize(self, hex_states: dict[tuple[int, int], HexOwnership]) -> None:
         """
-        Apply victory point rules for one turn.
+        Compute VP score once, using final board control.
         """
+        # Reset then assign final VP ownership totals.
+        for side in self.score:
+            self.score[side] = 0
+
         for vp in self.conditions.points:
             owner = hex_states.get(vp.hex_coords, HexOwnership.NONE)
             if owner in self.score:
@@ -3803,16 +4196,263 @@ def determine_attack_sector(
 
 
 ================================================================================
+FILE: C:\repos\python\assault\assault_model\map\fortification_config.py
+================================================================================
+
+import json
+from pathlib import Path
+
+from assault_model.combat.attack_sector import AttackSector
+from assault_model.combat.dice_color import DiceColor
+
+
+class FortificationConfig:
+    def __init__(self, config_path=None):
+        if config_path is None:
+            config_path = Path(__file__).parent / "fortification_modifiers.json"
+        with open(config_path, "r", encoding="utf-8") as f:
+            self.data = json.load(f)
+
+    def _entry(self, fort_type: str):
+        return self.data.get("fortifications", {}).get(fort_type, {})
+
+    def get_defense_bonus(self, fort_type: str | None, unit_category: str, sector: AttackSector):
+        if not fort_type:
+            return []
+        by_category = self._entry(fort_type).get("defense_bonus", {})
+        by_sector = by_category.get(unit_category, {})
+        names = by_sector.get(sector.name, [])
+        result = []
+        for name in names:
+            normalized = str(name).strip().upper()
+            if normalized in DiceColor.__members__:
+                result.append(DiceColor[normalized])
+        return result
+
+    def apply_movement_delta(self, fort_type: str | None, move_type: str, base_cost: int | None):
+        if base_cost is None or not fort_type:
+            return base_cost
+        delta_map = self._entry(fort_type).get("movement_delta", {})
+        delta = delta_map.get(move_type, 0)
+        if delta is None:
+            return None
+        return base_cost + int(delta)
+
+
+fortification_config = FortificationConfig()
+
+
+
+================================================================================
+FILE: C:\repos\python\assault\assault_model\map\fortification_modifiers.json
+================================================================================
+
+{
+  "_comment": "Fortification modifiers by type. defense_bonus values are extra defense dice by target category and attack sector. movement_delta adds to terrain move_cost; null means blocked for that movement type.",
+  "fortifications": {
+    "trench": {
+      "defense_bonus": {
+        "INFANTRY": {
+          "FRONT": ["YELLOW"],
+          "FLANK_LEFT": ["YELLOW"],
+          "FLANK_RIGHT": ["YELLOW"],
+          "REAR": ["GREEN"],
+          "ABOVE": ["GREEN"]
+        },
+        "ARTILLERY": {
+          "FRONT": ["YELLOW"],
+          "FLANK_LEFT": ["YELLOW"],
+          "FLANK_RIGHT": ["YELLOW"],
+          "REAR": ["GREEN"],
+          "ABOVE": ["GREEN"]
+        },
+        "VEHICLE": {
+          "FRONT": [],
+          "FLANK_LEFT": [],
+          "FLANK_RIGHT": [],
+          "REAR": [],
+          "ABOVE": []
+        }
+      },
+      "movement_delta": {
+        "foot": 1,
+        "artillery": 1,
+        "wheeled": null,
+        "track": null
+      }
+    },
+    "bunker": {
+      "defense_bonus": {
+        "INFANTRY": {
+          "FRONT": ["RED","RED", "YELLOW"],
+          "FLANK_LEFT": ["RED","YELLOW", "YELLOW"],
+          "FLANK_RIGHT": ["RED","YELLOW", "YELLOW"],
+          "REAR": ["RED", "RED"],
+          "ABOVE": ["RED","RED", "YELLOW"
+]        },
+        "ARTILLERY": {
+          "FRONT": ["RED", "YELLOW"],
+          "FLANK_LEFT": ["RED", "YELLOW"],
+          "FLANK_RIGHT": ["RED", "YELLOW"],
+          "REAR": ["RED", "YELLOW"],
+          "ABOVE": ["RED", "YELLOW"]
+        },
+        "VEHICLE": {
+          "FRONT": [],
+          "FLANK_LEFT": [],
+          "FLANK_RIGHT": [],
+          "REAR": [],
+          "ABOVE": []
+        }
+      },
+      "movement_delta": {
+        "foot": 1,
+        "artillery": 1,
+        "wheeled": 1,
+        "track": 1
+      }
+    },
+    "casemate": {
+      "defense_bonus": {
+        "INFANTRY": {
+          "FRONT": ["RED", "YELLOW"],
+          "FLANK_LEFT": ["RED", "YELLOW"],
+          "FLANK_RIGHT": ["RED", "YELLOW"],
+          "REAR": ["RED", "YELLOW"],
+          "ABOVE": ["RED", "YELLOW"]
+        },
+        "ARTILLERY": {
+          "FRONT": ["RED", "YELLOW"],
+          "FLANK_LEFT": ["RED", "YELLOW"],
+          "FLANK_RIGHT": ["RED", "YELLOW"],
+          "REAR": ["RED", "YELLOW"],
+          "ABOVE": ["RED", "YELLOW"]
+        },
+        "VEHICLE": {
+          "FRONT": [],
+          "FLANK_LEFT": [],
+          "FLANK_RIGHT": [],
+          "REAR": [],
+          "ABOVE": []
+        }
+      },
+      "movement_delta": {
+        "foot": 1,
+        "artillery": 1,
+        "wheeled": 1,
+        "track": 1
+      }
+    },
+    "gun_emplacement": {
+      "defense_bonus": {
+        "INFANTRY": {
+          "FRONT": ["YELLOW", "GREEN"],
+          "FLANK_LEFT": ["YELLOW", "GREEN"],
+          "FLANK_RIGHT": ["YELLOW", "GREEN"],
+          "REAR": ["YELLOW", "GREEN"],
+          "ABOVE": ["YELLOW", "GREEN"]
+        },
+        "ARTILLERY": {
+          "FRONT": ["YELLOW", "GREEN"],
+          "FLANK_LEFT": ["YELLOW", "GREEN"],
+          "FLANK_RIGHT": ["YELLOW", "GREEN"],
+          "REAR": ["YELLOW", "GREEN"],
+          "ABOVE": ["YELLOW", "GREEN"]
+        },
+        "VEHICLE": {
+          "FRONT": [],
+          "FLANK_LEFT": [],
+          "FLANK_RIGHT": [],
+          "REAR": [],
+          "ABOVE": []
+        }
+      },
+      "movement_delta": {
+        "foot": 0,
+        "artillery": 0,
+        "wheeled": 1,
+        "track": 1
+      }
+    },
+    "barbed_wire": {
+      "defense_bonus": {
+        "INFANTRY": {
+          "FRONT": [],
+          "FLANK_LEFT": [],
+          "FLANK_RIGHT": [],
+          "REAR": [],
+          "ABOVE": []
+        },
+        "ARTILLERY": {
+          "FRONT": [],
+          "FLANK_LEFT": [],
+          "FLANK_RIGHT": [],
+          "REAR": [],
+          "ABOVE": []
+        },
+        "VEHICLE": {
+          "FRONT": [],
+          "FLANK_LEFT": [],
+          "FLANK_RIGHT": [],
+          "REAR": [],
+          "ABOVE": []
+        }
+      },
+      "movement_delta": {
+        "foot": 1,
+        "artillery": 1,
+        "wheeled": null,
+        "track": null
+      }
+    },
+    "minefield": {
+      "defense_bonus": {
+        "INFANTRY": {
+          "FRONT": [],
+          "FLANK_LEFT": [],
+          "FLANK_RIGHT": [],
+          "REAR": [],
+          "ABOVE": []
+        },
+        "ARTILLERY": {
+          "FRONT": [],
+          "FLANK_LEFT": [],
+          "FLANK_RIGHT": [],
+          "REAR": [],
+          "ABOVE": []
+        },
+        "VEHICLE": {
+          "FRONT": [],
+          "FLANK_LEFT": [],
+          "FLANK_RIGHT": [],
+          "REAR": [],
+          "ABOVE": []
+        }
+      },
+      "movement_delta": {
+        "foot": 1,
+        "artillery": 1,
+        "wheeled": 1,
+        "track": 1
+      }
+    }
+  }
+}
+
+
+
+================================================================================
 FILE: C:\repos\python\assault\assault_model\map\hex.py
 ================================================================================
 
 from assault_model.map.terrain import Terrain
 from assault_model.map.hex_direction import HexDirection
+from assault_model.map.hex_utils import neighbors as _odd_r_neighbors
 
 
 class Hex:
     """
-    Atomic spatial element using axial hex coordinates (q, r).
+    Atomic spatial element using odd-r offset hex coordinates (q, r).
 
     Supports movement in 6 directions.
     """
@@ -3830,7 +4470,13 @@ class Hex:
         )
 
     def neighbors(self) -> list["Hex"]:
-        return [self.neighbor(d) for d in HexDirection]
+        # Vecinos odd-r consistentes con hex_distance (fuente unica en hex_utils).
+        # NOTA: el terreno se copia como placeholder; los consumidores deben
+        # releer el hex real via game_map.get_hex(q, r).
+        return [
+            Hex(nq, nr, self.terrain)
+            for nq, nr in _odd_r_neighbors((self.q, self.r))
+        ]
 
     # -------------------------------------------------
     # ✅ SIMPLIFIED TERRAIN (FINAL FORM)
@@ -4124,6 +4770,31 @@ def _offset_to_axial(q: int, r: int) -> Tuple[int, int]:
     return axial_q, axial_r
 
 
+def _axial_to_offset(aq: int, ar: int) -> Tuple[int, int]:
+    """Inverse of _offset_to_axial for odd-r storage (q=column, r=row)."""
+    return aq + ((ar - (ar & 1)) // 2), ar
+
+
+def neighbors(pos: CoordLike) -> list:
+    """
+    Devuelve los 6 vecinos de un hex como tuplas (q, r).
+
+    Usa el MISMO modelo de coordenadas odd-r que hex_distance(), de modo
+    que cada vecino devuelto cumple hex_distance(pos, vecino) == 1.
+    Esta es la unica fuente de verdad para la adyacencia: no dupliques
+    deltas en otros modulos (ver discrepancia con HexDirection, que usa
+    direcciones axiales y NO es consistente con hex_distance).
+    """
+    q, r = _as_qr(pos)
+
+    if r % 2 == 0:
+        deltas = [(-1, 0), (+1, 0), (0, -1), (0, +1), (-1, -1), (-1, +1)]
+    else:
+        deltas = [(-1, 0), (+1, 0), (0, -1), (0, +1), (+1, -1), (+1, +1)]
+
+    return [(q + dq, r + dr) for dq, dr in deltas]
+
+
 def hex_distance(a: CoordLike, b: CoordLike) -> int:
     """
     Compute hex distance for an odd-r offset grid.
@@ -4202,6 +4873,11 @@ class Map:
             Tuple[Tuple[int, int], Tuple[int, int]],
             HexEdgeFeature,
         ] = {}
+        # Optional per-hex fortifications (scenario-driven overlays).
+        # Stored as metadata dict, e.g.:
+        # {"type":"trench","vertex_start":1,"vertex_end":2}
+        # Vertex convention: 1=N and clockwise.
+        self.hex_fortifications: Dict[Tuple[int, int], Dict[str, object]] = {}
 
     # ---------------------------------------------------------
     # Hex retrieval
@@ -4254,6 +4930,32 @@ class Map:
         Retrieve the feature located on the edge between two hexes, if any.
         """
         return self.hex_edges.get((a, b))
+
+    # ---------------------------------------------------------
+    # Hex fortification handling
+    # ---------------------------------------------------------
+    def add_hex_fortification(
+        self,
+        q: int,
+        r: int,
+        fort_type: str,
+        vertex_start: int | None = None,
+        vertex_end: int | None = None,
+    ) -> None:
+        self.hex_fortifications[(q, r)] = {
+            "type": fort_type,
+            "vertex_start": vertex_start,
+            "vertex_end": vertex_end,
+        }
+
+    def get_hex_fortification(self, q: int, r: int) -> Optional[str]:
+        data = self.hex_fortifications.get((q, r))
+        if not data:
+            return None
+        return data.get("type")  # backward-compatible API
+
+    def get_hex_fortification_data(self, q: int, r: int) -> Optional[Dict[str, object]]:
+        return self.hex_fortifications.get((q, r))
 
 
 
@@ -4491,6 +5193,43 @@ class TerrainConfig:
         return entry.get("defense", {}).get(unit_type, [])
 
     # -----------------------------
+    # MOVEMENT COST (reglamento 9.4 / 9.10)
+    # -----------------------------
+    def get_move_cost(self, terrain_name, movement_type, default=1):
+        """
+        Puntos de movimiento para ENTRAR en el hex con ese tipo de movimiento.
+
+        Devuelve:
+        - int >= 1  -> coste de entrada
+        - None      -> impasable / 'Blocked' para ese tipo de movimiento
+
+        Convenciones de datos (terrain_modifiers.json):
+        - terreno con flag "impassable": true -> impasable para todos
+        - move_cost[movement_type] entero >= 1 -> coste
+        - move_cost[movement_type] == 0 / negativo / "blocked" -> impasable
+        - ausente o null -> aun sin rellenar, se usa `default` para no
+          bloquear el juego mientras se completa la tabla
+        """
+        entry = self.get(terrain_name)
+
+        if entry.get("impassable"):
+            return None
+
+        move_cost = entry.get("move_cost") or {}
+        val = move_cost.get(movement_type, None)
+
+        if val is None:
+            return default
+
+        if isinstance(val, str):
+            return None
+
+        if val <= 0:
+            return None
+
+        return int(val)
+
+    # -----------------------------
     # LOS
     # -----------------------------
     def get_los(self, terrain_name):
@@ -4515,6 +5254,8 @@ FILE: C:\repos\python\assault\assault_model\map\terrain_modifiers.json
 ================================================================================
 
 {
+  "_comment": "move_cost = puntos de movimiento (MP) para ENTRAR en el hex, por tipo de movimiento de la unidad. Tipos (reglamento 9.4 y 9.10): foot (infanteria, icono botas), artillery (icono canon), wheeled (vehiculo de rueda, anillo simple), track (vehiculo de oruga, anillo doble). Orden de columnas igual que la tabla del player aid: foot | artillery | wheeled | track. Rellena los 'null' con la tabla de terreno. Convenciones: entero >= 1 = transitable; usa null SOLO si es impasable/'Blocked' para ese tipo (el motor lo tratara como prohibido para ese movimiento). Si el coste de entrada supera la movement allowance de la unidad, aplicar harsh terrain (9.5: max 1 hex desde adyacente). NOTA: cada vehiculo debe declarar en unit_catalog si es 'wheeled' o 'track'; infanteria=foot, canones remolcados=artillery.",
+
   "terrain": {
 
     "clear": {
@@ -4523,7 +5264,13 @@ FILE: C:\repos\python\assault\assault_model\map\terrain_modifiers.json
         "VEHICLE": [],
         "ARTILLERY": []
       },
-      "los": "CLEAR"
+      "los": "CLEAR",
+      "move_cost": {
+        "foot": 1,
+        "artillery": 1,
+        "wheeled": 1,
+        "track": 1
+      }
     },
 
     "water": {
@@ -4533,7 +5280,13 @@ FILE: C:\repos\python\assault\assault_model\map\terrain_modifiers.json
         "ARTILLERY": []
       },
       "los": "CLEAR",
-      "impassable": true
+      "impassable": true,
+      "move_cost": {
+        "foot": null,
+        "artillery": null,
+        "wheeled": null,
+        "track": null
+      }
     },
 
     "rocky": {
@@ -4542,7 +5295,13 @@ FILE: C:\repos\python\assault\assault_model\map\terrain_modifiers.json
         "VEHICLE": ["GREEN"],
         "ARTILLERY": ["GREEN"]
       },
-      "los": "CLEAR"
+      "los": "CLEAR",
+      "move_cost": {
+        "foot": null,
+        "artillery": null,
+        "wheeled": null,
+        "track": null
+      }
     },
 
     "olive_vine_grove": {
@@ -4551,7 +5310,13 @@ FILE: C:\repos\python\assault\assault_model\map\terrain_modifiers.json
         "VEHICLE": ["BLUE"],
         "ARTILLERY": ["BLUE"]
       },
-      "los": "HINDERED"
+      "los": "HINDERED",
+      "move_cost": {
+        "foot": null,
+        "artillery": null,
+        "wheeled": null,
+        "track": null
+      }
     },
 
     "light_forest": {
@@ -4560,7 +5325,13 @@ FILE: C:\repos\python\assault\assault_model\map\terrain_modifiers.json
         "VEHICLE": ["GREEN"],
         "ARTILLERY": ["BLUE"]
       },
-      "los": "HINDERED"
+      "los": "HINDERED",
+      "move_cost": {
+        "foot": null,
+        "artillery": null,
+        "wheeled": null,
+        "track": null
+      }
     },
 
     "brush": {
@@ -4569,7 +5340,13 @@ FILE: C:\repos\python\assault\assault_model\map\terrain_modifiers.json
         "VEHICLE": ["GREEN"],
         "ARTILLERY": ["GREEN"]
       },
-      "los": "HINDERED"
+      "los": "HINDERED",
+      "move_cost": {
+        "foot": null,
+        "artillery": null,
+        "wheeled": null,
+        "track": null
+      }
     },
 
     "heavy_forest": {
@@ -4579,7 +5356,13 @@ FILE: C:\repos\python\assault\assault_model\map\terrain_modifiers.json
         "ARTILLERY": ["GREEN"]
       },
       "los": "BLOCKED",
-      "no_indirect_from": true
+      "no_indirect_from": true,
+      "move_cost": {
+        "foot": null,
+        "artillery": null,
+        "wheeled": null,
+        "track": null
+      }
     },
 
     "building_single": {
@@ -4590,7 +5373,13 @@ FILE: C:\repos\python\assault\assault_model\map\terrain_modifiers.json
       },
       "los": "BLOCKED",
       "no_indirect_from": true,
-      "elevation": 0
+      "elevation": 0,
+      "move_cost": {
+        "foot": null,
+        "artillery": null,
+        "wheeled": null,
+        "track": null
+      }
     },
 
     "building_multi": {
@@ -4601,11 +5390,18 @@ FILE: C:\repos\python\assault\assault_model\map\terrain_modifiers.json
       },
       "los": "BLOCKED",
       "no_indirect_from": true,
-      "elevation": 1
+      "elevation": 1,
+      "move_cost": {
+        "foot": null,
+        "artillery": null,
+        "wheeled": null,
+        "track": null
+      }
     }
 
   }
 }
+
 
 
 ================================================================================
@@ -4840,6 +5636,45 @@ pressure → dispara estados (retirada, rotta, resa)
 
 
 ================================================================================
+FILE: C:\repos\python\assault\assault_model\rules\fortification_rules.py
+================================================================================
+
+from assault_model.combat.attack_sector import AttackSector
+from assault_model.map.fortification_config import fortification_config
+
+
+class FortificationRules:
+    """
+    Minimal fortification rules for scenario overlays.
+
+    Scope:
+    - Defensive bonus dice for ranged defense.
+    - Movement cost overrides/penalties by movement type.
+    """
+
+    @staticmethod
+    def defense_bonus(fort_type: str | None, unit_category: str, sector: AttackSector):
+        return fortification_config.get_defense_bonus(
+            fort_type=fort_type,
+            unit_category=unit_category,
+            sector=sector,
+        )
+
+    @staticmethod
+    def movement_cost_for_fortification(
+        fort_type: str | None,
+        move_type: str,
+        base_cost: int | None,
+    ):
+        return fortification_config.apply_movement_delta(
+            fort_type=fort_type,
+            move_type=move_type,
+            base_cost=base_cost,
+        )
+
+
+
+================================================================================
 FILE: C:\repos\python\assault\assault_model\rules\movement_outcome.py
 ================================================================================
 
@@ -4884,97 +5719,223 @@ class MovementPath:
 FILE: C:\repos\python\assault\assault_model\rules\movement_rules.py
 ================================================================================
 
+import heapq
+
 from assault_model.rules.movement_path import MovementPath
 from assault_model.rules.movement_outcome import MovementOutcome
 from assault_model.map.hex_coord import HexCoord
 
 from assault_model.rules.movement_terrain_rules import MovementTerrainRules
+from assault_model.map.terrain_config import terrain_config
+from assault_model.map.hex_utils import neighbors as hex_neighbors
+from assault_model.rules.fortification_rules import FortificationRules
+
+
+def _is_vehicle(unit) -> bool:
+    flag = getattr(unit, "is_vehicle", None)
+    if flag is not None:
+        return bool(flag)
+    try:
+        return unit.unit_type.category.name == "VEHICLE"
+    except Exception:
+        return False
+
+
+def _reconstruct(came_from, key):
+    """Ruta de HexCoord desde el primer paso (excluyendo el origen) hasta `key`."""
+    seq = []
+    cur = key
+    while cur is not None and came_from.get(cur) is not None:
+        seq.append(HexCoord(cur[0], cur[1]))
+        cur = came_from[cur]
+    seq.reverse()
+    return seq
 
 
 class MovementRules:
+    """
+    Genera los movimientos legales de una unidad respetando:
+    - allowance de movimiento de la unidad (unit_type.movement)
+    - coste de terreno por tipo de movimiento (terrain_config.get_move_cost)
+    - paso a traves de unidades amigas (stacking solo se aplica al terminar)
+    - hex enemigo -> asalto (END_IN_ENEMY_HEX)
+    - terreno impasable y harsh terrain (9.5)
+
+    Reglamento: 9.1 (Normal Movement), 9.4 (Terrain Costs), 9.5 (Harsh Terrain).
+    """
 
     @staticmethod
     def get_legal_paths(game_state, unit):
 
         paths: list[MovementPath] = []
 
-        pos: HexCoord = unit.position
-        q = pos.q
-        r = pos.r
+        start = getattr(unit, "position", None)
+        if start is None:
+            return paths
 
-        # ✅ FIX: vecinos correctos según tu grid (odd-r)
-        if r % 2 == 0:
-            neighbors = [
-                (-1,  0),
-                (+1,  0),
-                ( 0, -1),
-                ( 0, +1),
-                (-1, -1),
-                (-1, +1),
-            ]
-        else:
-            neighbors = [
-                (-1,  0),
-                (+1,  0),
-                ( 0, -1),
-                ( 0, +1),
-                (+1, -1),
-                (+1, +1),
-            ]
+        max_mp = getattr(unit.unit_type, "movement", 0) or 0
+        if max_mp <= 0:
+            return paths
 
-        for dq, dr in neighbors:
+        move_type = getattr(unit.unit_type, "movement_type", "foot")
 
-            target_q = q + dq
-            target_r = r + dr
+        # -------------------------------------------------
+        # ocupantes (vivos) indexados por coordenada
+        # -------------------------------------------------
+        occupants = {}
+        for u in game_state.units:
+            if u.alive and u.position is not None:
+                occupants[(u.position.q, u.position.r)] = u
 
-            hex_tile = game_state.game_map.get_hex(target_q, target_r)
-            if hex_tile is None:
+        start_key = (start.q, start.r)
+
+        best_cost = {start_key: 0}
+        came_from = {start_key: None}
+
+        empty_dests = set()          # key -> destino vacio
+        enemy_dests = {}             # key -> (coste, target_id, path)
+        vehicle_dests = {}           # key -> (coste, vehicle_id, path)
+
+        frontier = [(0, start.q, start.r)]
+
+        # -------------------------------------------------
+        # DIJKSTRA por presupuesto de puntos de movimiento
+        # -------------------------------------------------
+        while frontier:
+            cost, q, r = heapq.heappop(frontier)
+
+            if cost > best_cost.get((q, r), float("inf")):
                 continue
 
-            if not MovementTerrainRules.can_enter_hex(unit, hex_tile):
+            for nq, nr in hex_neighbors((q, r)):
+
+                tile = game_state.game_map.get_hex(nq, nr)
+                if tile is None:
+                    continue
+
+                if not MovementTerrainRules.can_enter_hex(unit, tile):
+                    continue
+
+                enter_cost = terrain_config.get_move_cost(
+                    tile.get_terrain(), move_type
+                )
+                fort_type = game_state.game_map.get_hex_fortification(nq, nr)
+                enter_cost = FortificationRules.movement_cost_for_fortification(
+                    fort_type, move_type, enter_cost
+                )
+                if enter_cost is None:
+                    continue  # impasable para este tipo de movimiento
+
+                new_cost = cost + enter_cost
+                if new_cost > max_mp:
+                    continue
+
+                key = (nq, nr)
+                occ = occupants.get(key)
+
+                # -----------------------------------------
+                # HEX ENEMIGO -> ASALTO (no transitable)
+                # -----------------------------------------
+                if occ is not None and occ.side != unit.side:
+                    prev = enemy_dests.get(key)
+                    if prev is None or new_cost < prev[0]:
+                        path = _reconstruct(came_from, (q, r)) + [HexCoord(nq, nr)]
+                        enemy_dests[key] = (new_cost, occ.unit_id, path)
+                    continue
+
+                # -----------------------------------------
+                # HEX AMIGO
+                # -----------------------------------------
+                if occ is not None and occ.side == unit.side:
+                    if _is_vehicle(occ):
+                        # cargar en vehiculo: destino, no transitable
+                        prev = vehicle_dests.get(key)
+                        if prev is None or new_cost < prev[0]:
+                            path = _reconstruct(came_from, (q, r)) + [HexCoord(nq, nr)]
+                            vehicle_dests[key] = (new_cost, occ.unit_id, path)
+                        continue
+                    # infanteria/artilleria amiga: se puede ATRAVESAR,
+                    # pero no TERMINAR encima (stacking).
+                    if new_cost < best_cost.get(key, float("inf")):
+                        best_cost[key] = new_cost
+                        came_from[key] = (q, r)
+                        heapq.heappush(frontier, (new_cost, nq, nr))
+                    continue
+
+                # -----------------------------------------
+                # HEX VACIO -> destino valido + transitable
+                # -----------------------------------------
+                if new_cost < best_cost.get(key, float("inf")):
+                    best_cost[key] = new_cost
+                    came_from[key] = (q, r)
+                    empty_dests.add(key)
+                    heapq.heappush(frontier, (new_cost, nq, nr))
+
+        # -------------------------------------------------
+        # HARSH TERRAIN (9.5): vecino inmediato cuyo coste de
+        # entrada supera la allowance -> 1 hex desde adyacente,
+        # gasta todo el MP. Solo hexes vacios.
+        # -------------------------------------------------
+        for nq, nr in hex_neighbors((start.q, start.r)):
+            key = (nq, nr)
+            if key in best_cost or key in empty_dests:
+                continue
+            if key in enemy_dests or key in vehicle_dests:
                 continue
 
-            dest_hex = HexCoord(target_q, target_r)
+            tile = game_state.game_map.get_hex(nq, nr)
+            if tile is None:
+                continue
+            if not MovementTerrainRules.can_enter_hex(unit, tile):
+                continue
+            if occupants.get(key) is not None:
+                continue
 
-            occupant = next(
-                (
-                    u
-                    for u in game_state.units
-                    if u.alive and u.position == dest_hex
-                ),
-                None,
+            enter_cost = terrain_config.get_move_cost(tile.get_terrain(), move_type)
+            fort_type = game_state.game_map.get_hex_fortification(nq, nr)
+            enter_cost = FortificationRules.movement_cost_for_fortification(
+                fort_type, move_type, enter_cost
+            )
+            if enter_cost is None:
+                continue
+            if enter_cost > max_mp:
+                empty_dests.add(key)
+                came_from[key] = start_key
+
+        # -------------------------------------------------
+        # CONSTRUIR MovementPaths
+        # -------------------------------------------------
+        for key in empty_dests:
+            path = _reconstruct(came_from, key)
+            if not path:
+                continue
+            paths.append(
+                MovementPath(
+                    path=path,
+                    outcome=MovementOutcome.END_IN_EMPTY_HEX,
+                )
             )
 
-            if occupant is None:
-                paths.append(
-                    MovementPath(
-                        path=[dest_hex],
-                        outcome=MovementOutcome.END_IN_EMPTY_HEX,
-                    )
+        for key, (_, target_id, path) in enemy_dests.items():
+            paths.append(
+                MovementPath(
+                    path=path,
+                    outcome=MovementOutcome.END_IN_ENEMY_HEX,
+                    target_unit_id=target_id,
                 )
-                continue
+            )
 
-            if occupant.side != unit.side:
-                paths.append(
-                    MovementPath(
-                        path=[dest_hex],
-                        outcome=MovementOutcome.END_IN_ENEMY_HEX,
-                        target_unit_id=occupant.unit_id,
-                    )
+        for key, (_, vehicle_id, path) in vehicle_dests.items():
+            paths.append(
+                MovementPath(
+                    path=path,
+                    outcome=MovementOutcome.END_IN_FRIENDLY_VEHICLE,
+                    target_unit_id=vehicle_id,
                 )
-                continue
-
-            if getattr(occupant, "is_vehicle", False):
-                paths.append(
-                    MovementPath(
-                        path=[dest_hex],
-                        outcome=MovementOutcome.END_IN_FRIENDLY_VEHICLE,
-                        target_unit_id=occupant.unit_id,
-                    )
-                )
-                continue
+            )
 
         return paths
+
 
 
 ================================================================================
@@ -5266,10 +6227,11 @@ class RuntimeGameState:
     # =================================================
     def _extract_sides(self):
         return sorted({
-            u.side for u in self.base_state.units
+            u.side for u in self.base_state.units if u.alive
         })
 
     def get_available_units(self, side):
+        self._sync_eliminated_activation()
         return [
             u for u in self.base_state.units
             if u.side == side
@@ -5297,6 +6259,7 @@ class RuntimeGameState:
 
         # --- new turn ---
         self.activated_units.clear()
+        self._sync_eliminated_activation()
         self.base_state.turn += 1
 
         self.sides = self._extract_sides()
@@ -5334,12 +6297,19 @@ class RuntimeGameState:
             return False
         return True
 
+    def _sync_eliminated_activation(self) -> None:
+        """Dead units never take a turn; treat them as already activated."""
+        for unit in self.base_state.units:
+            if not unit.alive:
+                self.activated_units.add(unit.unit_id)
+
     # =================================================
     # TURN CONTROL (MINIMAL EXTENSION)
     # =================================================
     def start_turn(self) -> None:
 
         self.activated_units.clear()
+        self._sync_eliminated_activation()
 
         # --- NEW: reset sides each turn ---
         self.sides = self._extract_sides()
@@ -5387,10 +6357,97 @@ class RuntimeGameState:
 
         alive_units = [u for u in self.base_state.units if u.alive]
         alive_sides = {u.side for u in alive_units}
+        outcomes = getattr(self.scenario, "victory_outcomes", None) or {}
+        uses_objective_outcomes = (
+            str(outcomes.get("metric", "")).strip() == "objectives_captured"
+            and str(outcomes.get("timing", "")).strip() == "end_of_last_turn"
+            and bool(outcomes.get("table"))
+        )
 
         event_bus = context.event_bus if context else None
+
+        def _finalize_vp_if_needed():
+            if not self.base_state.vp_tracker:
+                return
+            ownership_map = {
+                coords: hs.ownership
+                for coords, hs in self.base_state.hex_states.items()
+            }
+            self.base_state.vp_tracker.finalize(ownership_map)
+
+        def _winner_by_vp() -> str | None:
+            tracker = self.base_state.vp_tracker
+            if tracker is None:
+                return None
+            side_to_ownership = getattr(self.base_state, "side_to_ownership", {}) or {}
+            if not side_to_ownership:
+                return None
+            side_scores = {
+                side: tracker.score.get(ownership, 0)
+                for side, ownership in side_to_ownership.items()
+            }
+            if not side_scores:
+                return None
+            best_score = max(side_scores.values())
+            winners = [side for side, score in side_scores.items() if score == best_score]
+            if len(winners) != 1:
+                return None
+            return winners[0]
+
+        def _objective_outcome_winner() -> tuple[str | None, str]:
+            outcomes = getattr(self.scenario, "victory_outcomes", None) or {}
+            tracked_side = str(outcomes.get("tracked_side", "")).strip().upper()
+            if not tracked_side:
+                return None, "objective_outcome_invalid"
+
+            points = getattr(self.base_state.victory, "points", []) if self.base_state.victory else []
+            captured = 0
+            for vp in points:
+                hs = self.base_state.hex_states.get(vp.hex_coords)
+                if hs is None:
+                    continue
+                owner_side = None
+                for side, ownership in getattr(self.base_state, "side_to_ownership", {}).items():
+                    if ownership == hs.ownership:
+                        owner_side = side
+                        break
+                if owner_side == tracked_side:
+                    captured += 1
+
+            row_match = None
+            for row in outcomes.get("table", []):
+                if not isinstance(row, dict):
+                    continue
+                captured_range = row.get("captured", {}) or {}
+                try:
+                    min_cap = int(captured_range.get("min", -10**9))
+                    max_cap = int(captured_range.get("max", 10**9))
+                except Exception:
+                    continue
+                if min_cap <= captured <= max_cap:
+                    row_match = row
+                    break
+
+            result_text = str((row_match or {}).get("result", "")).strip().lower()
+            # Campaign table semantics:
+            # - Victory only when result is explicitly "Vittoria" or "Vittoria totale".
+            # - Draw on "Pareggio".
+            # - Any "Sconfitta*" means tracked side loses.
+            if "pareggio" in result_text or "draw" in result_text:
+                return None, "objective_outcome_resolved"
+            if "vittoria totale" in result_text or result_text == "vittoria":
+                return tracked_side, "objective_outcome_resolved"
+            if "sconfitta" in result_text or "defeat" in result_text or "lose" in result_text:
+                alive_sides_now = sorted({u.side for u in self.base_state.units if u.alive})
+                if len(alive_sides_now) == 2 and tracked_side in alive_sides_now:
+                    other = [s for s in alive_sides_now if s != tracked_side]
+                    return (other[0] if other else None), "objective_outcome_resolved"
+                return None, "objective_outcome_resolved"
+            # Unrecognized labels default to draw to avoid accidental wins.
+            return None, "objective_outcome_resolved"
         
-        if not alive_units:
+        if not alive_units and not uses_objective_outcomes:
+            _finalize_vp_if_needed()
             self.base_state.done = True
             self.base_state.winner = None
             self.base_state.end_reason = "all_units_destroyed"
@@ -5407,9 +6464,10 @@ class RuntimeGameState:
                 })
             return
 
-        if len(alive_sides) == 1:
+        if len(alive_sides) == 1 and not uses_objective_outcomes:
             winner = next(iter(alive_sides))
 
+            _finalize_vp_if_needed()
             self.base_state.done = True
             self.base_state.winner = winner
             self.base_state.end_reason = "last_side_standing"
@@ -5430,16 +6488,22 @@ class RuntimeGameState:
             self.scenario.max_turns is not None
             and self.base_state.turn >= self.scenario.max_turns
         ):
+            _finalize_vp_if_needed()
             self.base_state.done = True
-            self.base_state.winner = None
-            self.base_state.end_reason = "max_turns"
+            if uses_objective_outcomes:
+                winner, reason = _objective_outcome_winner()
+                self.base_state.winner = winner
+                self.base_state.end_reason = reason
+            else:
+                self.base_state.winner = _winner_by_vp()
+                self.base_state.end_reason = "max_turns_vp"
 
             if event_bus:
                 event_bus.emit({
                     "type": "MATCH_END",
                     "payload": {
-                        "result": "draw",
-                        "winner": None,
+                        "result": "draw" if self.base_state.winner is None else "victory",
+                        "winner": self.base_state.winner,
                         "reason": self.base_state.end_reason,
                         "turn": self.base_state.turn,
                     },
@@ -5479,8 +6543,21 @@ class RuntimeGameState:
         prev_position = None
         if attacker and attacker.position:
             prev_position = HexCoord(attacker.position.q, attacker.position.r)
+        vp_hexes = set()
+        prev_vp_owners = {}
+        if self.base_state.victory:
+            vp_hexes = {vp.hex_coords for vp in self.base_state.victory.points}
+            prev_vp_owners = {
+                coords: self.base_state.hex_states.get(coords).ownership
+                for coords in vp_hexes
+                if self.base_state.hex_states.get(coords) is not None
+            }
 
         if isinstance(action, WaitAction):
+            if attacker:
+                self.activated_units.add(attacker.unit_id)
+                self.next_activation()
+            self._check_match_end(context)
             return {
                 "type": "WAIT",
                 "unit": attacker.unit_id if attacker else None
@@ -5494,6 +6571,41 @@ class RuntimeGameState:
         )
 
         self.base_state = result.new_state
+        # Keep hex ownership (and VP current_owner in UI payload) in sync
+        # immediately after actions that can change occupancy.
+        self.base_state.recalculate_hex_control()
+        if event_bus and vp_hexes:
+            side_to_ownership = getattr(self.base_state, "side_to_ownership", {}) or {}
+            ownership_to_side = {
+                ownership: side
+                for side, ownership in side_to_ownership.items()
+            }
+            vp_values = {
+                vp.hex_coords: vp.per_turn
+                for vp in self.base_state.victory.points
+            } if self.base_state.victory else {}
+            for coords in vp_hexes:
+                hs = self.base_state.hex_states.get(coords)
+                if hs is None:
+                    continue
+                before = prev_vp_owners.get(coords)
+                after = hs.ownership
+                if before == after:
+                    continue
+                prev_side = ownership_to_side.get(before)
+                new_side = ownership_to_side.get(after)
+                q, r = coords
+                event_bus.emit({
+                    "type": "VP_CAPTURED",
+                    "payload": {
+                        "q": q,
+                        "r": r,
+                        "value": int(vp_values.get(coords, 0)),
+                        "previous_owner": prev_side,
+                        "new_owner": new_side,
+                    },
+                })
+        self._sync_eliminated_activation()
 
         self._check_match_end(context)
 
@@ -5628,6 +6740,7 @@ class GameState:
 
         # init
         self.recalculate_hex_control()
+        self._apply_initial_vp_control_on_start()
 
     # =================================================
     # TURN ORDER
@@ -5667,6 +6780,9 @@ class GameState:
     def recalculate_hex_control(self) -> None:
 
         units_by_hex: Dict[tuple[int, int], set[str]] = {}
+        vp_hexes = set()
+        if self.victory:
+            vp_hexes = {vp.hex_coords for vp in self.victory.points}
 
         for unit in self.units:
             if not unit.alive or not unit.position:
@@ -5691,8 +6807,31 @@ class GameState:
                 hex_state.contested = True
 
             else:
-                hex_state.ownership = HexOwnership.NONE
+                # VP control persists until another side occupies the hex.
+                if coords not in vp_hexes:
+                    hex_state.ownership = HexOwnership.NONE
                 hex_state.contested = False
+
+    def _apply_initial_vp_control_on_start(self) -> None:
+        """
+        VP hexes start neutral by default, unless the scenario
+        explicitly sets an initial owner for a given VP.
+        """
+        if self.turn != 1 or not self.victory:
+            return
+
+        for vp in self.victory.points:
+            hex_state = self.hex_states.get(vp.hex_coords)
+            if hex_state is None:
+                continue
+            if vp.initial_owner:
+                hex_state.ownership = self.side_to_ownership.get(
+                    vp.initial_owner,
+                    HexOwnership.NONE,
+                )
+            else:
+                hex_state.ownership = HexOwnership.NONE
+            hex_state.contested = False
 
     # =================================================
     # TURN END
@@ -5700,13 +6839,6 @@ class GameState:
     def end_turn(self) -> None:
 
         self.recalculate_hex_control()
-
-        if self.vp_tracker:
-            ownership_map = {
-                coords: hs.ownership
-                for coords, hs in self.hex_states.items()
-            }
-            self.vp_tracker.apply_turn(ownership_map)
 
         self.turn += 1
         self.turn_state.advance_turn()
@@ -5901,6 +7033,7 @@ def load_unit_catalog(path: Path) -> Dict[str, UnitType]:
                 classification=data.get("classification", ""),
                 cost=int(data.get("cost", 0)),
                 movement=int(data.get("movement", 0)),
+                movement_type=data.get("movement_type", "foot"),
                 max_strength=int(data.get("max_strength", 0)),
                 base_defense=data.get("base_defense", {}),
                 attack=attack_data,
@@ -6325,6 +7458,7 @@ def _trace(tag: str, **data):
 class UnitSide(Enum):
     GE = "GE"
     US = "US"
+    IT = "IT"
 
 
 class UnitCategory(Enum):
@@ -6350,6 +7484,7 @@ class UnitType:
         base_defense: Dict[str, List[str]],
         attack: Dict,
         traits: List[str],
+        movement_type: str = "foot",
     ) -> None:
         self.code = code
         self.side = side
@@ -6358,6 +7493,8 @@ class UnitType:
         self.classification = classification
         self.cost = cost
         self.movement = movement
+        # Movement type for terrain cost lookup (foot / artillery / wheeled / track).
+        self.movement_type = movement_type
         self.max_strength = max_strength
 
         self._base_defense_raw = base_defense
@@ -6371,6 +7508,30 @@ class UnitType:
         """
         Decide which attack mode to use based on actual attack tables.
         """
+        def _mode_has_distance(mode_name: str) -> bool:
+            mode_payload = self._attack_raw.get(mode_name, {}) or {}
+            for table in mode_payload.values():
+                for key in table.keys():
+                    if "-" in key:
+                        start, end = map(int, key.split("-"))
+                        if start <= distance <= end:
+                            return True
+                    else:
+                        if int(key) == distance:
+                            return True
+            return False
+
+        # Rifle-grenade style units should prefer indirect profile when available
+        # at the same range band, so indirect-only effects are applied correctly.
+        traits_u = {str(t).upper() for t in (self.traits or [])}
+        classification_u = str(self.classification or "").upper()
+        prefer_indirect = (
+            "REMOVE_WEAKEST_TERRAIN_DEFENSE" in traits_u
+            or "NO_LINE_OF_SIGHT" in traits_u
+            or "INDIRECT_FIRE_UNIT" in classification_u
+        )
+        if prefer_indirect and _mode_has_distance("INDIRECT_FIRE"):
+            return "INDIRECT_FIRE"
 
         for mode, targets in self._attack_raw.items():
 

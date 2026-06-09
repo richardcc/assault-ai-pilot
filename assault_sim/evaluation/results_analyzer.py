@@ -25,8 +25,10 @@ class ResultsAnalyzer:
     # -------------------------------------------------
     def summary(self):
 
-        wins = 0.0
+        score_wins = 0.0
+        true_wins = 0
         draws = 0
+        losses = 0
 
         vp_list = []
         steps_list = []
@@ -34,6 +36,7 @@ class ResultsAnalyzer:
         win_by_reason = defaultdict(float)
         rl_result_counts = defaultdict(int)
         tracked_result_counts = defaultdict(int)
+        captured_final_counts = defaultdict(int)
 
         for r in self.results:
 
@@ -44,14 +47,24 @@ class ResultsAnalyzer:
             tracked_result = str(r.get("tracked_result") or "UNKNOWN")
             rl_result_counts[rl_result] += 1
             tracked_result_counts[tracked_result] += 1
+            victory_level = r.get("victory_level") or {}
+            try:
+                captured_final = int(victory_level.get("captured", -1))
+                if captured_final >= 0:
+                    captured_final_counts[str(captured_final)] += 1
+            except Exception:
+                pass
 
             if winner == self.rl_side:
-                wins += 1
+                score_wins += 1
+                true_wins += 1
                 win_by_reason[reason] += 1
             elif winner is None:
-                wins += 0.5
+                score_wins += 0.5
                 draws += 1
                 win_by_reason[reason] += 0.5
+            else:
+                losses += 1
 
             vp_list.append(r.get("vp", 0))
             steps_list.append(r.get("steps", 0))
@@ -62,8 +75,14 @@ class ResultsAnalyzer:
 
         return {
             "episodes": len(self.results),
-            "win_rate": wins / len(self.results) if self.results else 0,
+            # Legacy score-style metric (draw=0.5) kept for backward compatibility.
+            "win_rate": score_wins / len(self.results) if self.results else 0,
+            "win_score_rate": score_wins / len(self.results) if self.results else 0,
+            "true_win_rate": true_wins / len(self.results) if self.results else 0,
+            "draw_rate": draws / len(self.results) if self.results else 0,
+            "loss_rate": losses / len(self.results) if self.results else 0,
             "draws": draws,
+            "losses": losses,
             "avg_vp": statistics.mean(vp_list) if vp_list else 0,
             "avg_steps": statistics.mean(steps_list) if steps_list else 0,
             "end_reason_counts": dict(reason_counts),
@@ -71,6 +90,7 @@ class ResultsAnalyzer:
             "victory_level_counts": self.victory_level_counts(),
             "rl_result_counts": dict(rl_result_counts),
             "tracked_result_counts": dict(tracked_result_counts),
+            "captured_final_counts": dict(captured_final_counts),
         }
 
     def victory_level_counts(self):
@@ -109,6 +129,9 @@ class ResultsAnalyzer:
         return {
             "trade_mean": trade_sum / max(1, trade_count),
             "damage_ratio": total_damage / max(1, total_taken),
+            "total_damage_rl": total_damage,
+            "total_damage_enemy": total_taken,
+            "trade_samples": trade_count,
         }
 
     # -------------------------------------------------
@@ -160,6 +183,254 @@ class ResultsAnalyzer:
         }
 
     # -------------------------------------------------
+    # MISSION METRICS (capture-focused)
+    # -------------------------------------------------
+    def mission_metrics(self):
+        def _percentile(values, q):
+            if not values:
+                return None
+            xs = sorted(float(v) for v in values)
+            if len(xs) == 1:
+                return xs[0]
+            pos = (len(xs) - 1) * q
+            lo = int(pos)
+            hi = min(lo + 1, len(xs) - 1)
+            frac = pos - lo
+            return xs[lo] * (1.0 - frac) + xs[hi] * frac
+
+        total_contact_steps = 0
+        total_hold_steps = 0
+        total_decisions = 0
+        first_contact_turns = []
+        first_vp_entry_turns = []
+        stuck_ratios = []
+        concentration = []
+        vp_entry_opportunities = 0
+        vp_entries_taken = 0
+        vp_entry_missed_rates = []
+        vp_net_progress_vals = []
+        reversal_rates = []
+        near_vp_attack_missed_rates = []
+        vp_control_turns_share_vals = []
+        capture_attempt_success_rates = []
+        fallback_to_attack_capture_rates = []
+        capture_conversion_after_contact_rates = []
+        capture_intent_persistence_rates = []
+        attack_opportunity_cost_near_vp_rates = []
+        vp_control_auc_vals = []
+        contributing_attack_units = []
+        contributing_damage_units = []
+        strategy_option_totals = defaultdict(lambda: defaultdict(int))
+        capture_fallback_reason_totals = defaultdict(int)
+        capture_move_block_profile_totals = defaultdict(int)
+
+        for r in self.results:
+            mission = r.get("mission", {}) or {}
+            total_contact_steps += int(mission.get("vp_contact_steps", 0))
+            total_hold_steps += int(mission.get("vp_hold_steps", 0))
+            align = r.get("decision_alignment", {}) or {}
+            decisions = int(align.get("rl_decisions", 0))
+            total_decisions += decisions
+            first_turn = mission.get("first_vp_contact_turn")
+            if isinstance(first_turn, (int, float)) and first_turn > 0:
+                first_contact_turns.append(float(first_turn))
+
+            formation_counts = r.get("formation_counts", {}) or {}
+            if decisions > 0 and formation_counts:
+                dominant = max(int(v) for v in formation_counts.values())
+                stuck_ratios.append(dominant / decisions)
+
+            units_rl = (r.get("units", {}) or {}).get("RL", {}) or {}
+            dmg_vals = [float((stats or {}).get("damage", 0)) for stats in units_rl.values()]
+            total_dmg = sum(dmg_vals)
+            if total_dmg > 0:
+                concentration.append(max(dmg_vals) / total_dmg)
+            vp_entry_opportunities += int(mission.get("vp_entry_opportunities", 0))
+            vp_entries_taken += int(mission.get("vp_entries_taken", 0))
+            if "vp_entry_missed_rate" in mission:
+                try:
+                    vp_entry_missed_rates.append(float(mission.get("vp_entry_missed_rate", 0.0)))
+                except Exception:
+                    pass
+            if "vp_net_progress" in mission:
+                try:
+                    vp_net_progress_vals.append(float(mission.get("vp_net_progress", 0.0)))
+                except Exception:
+                    pass
+            if "position_reversal_rate" in mission:
+                try:
+                    reversal_rates.append(float(mission.get("position_reversal_rate", 0.0)))
+                except Exception:
+                    pass
+            if "attack_near_vp_instead_of_capture_rate" in mission:
+                try:
+                    near_vp_attack_missed_rates.append(float(mission.get("attack_near_vp_instead_of_capture_rate", 0.0)))
+                except Exception:
+                    pass
+            if "vp_control_turns_share" in mission:
+                try:
+                    vp_control_turns_share_vals.append(float(mission.get("vp_control_turns_share", 0.0)))
+                except Exception:
+                    pass
+            if "capture_attempt_success_rate" in mission:
+                try:
+                    capture_attempt_success_rates.append(float(mission.get("capture_attempt_success_rate", 0.0)))
+                except Exception:
+                    pass
+            if "first_vp_entry_turn" in mission:
+                first_entry = mission.get("first_vp_entry_turn")
+                if isinstance(first_entry, (int, float)) and first_entry > 0:
+                    first_vp_entry_turns.append(float(first_entry))
+            if "capture_conversion_after_contact" in mission:
+                try:
+                    capture_conversion_after_contact_rates.append(float(mission.get("capture_conversion_after_contact", 0.0)))
+                except Exception:
+                    pass
+            if "capture_intent_persistence" in mission:
+                try:
+                    capture_intent_persistence_rates.append(float(mission.get("capture_intent_persistence", 0.0)))
+                except Exception:
+                    pass
+            if "attack_opportunity_cost_near_vp" in mission:
+                try:
+                    attack_opportunity_cost_near_vp_rates.append(float(mission.get("attack_opportunity_cost_near_vp", 0.0)))
+                except Exception:
+                    pass
+            if "vp_control_auc" in mission:
+                try:
+                    vp_control_auc_vals.append(float(mission.get("vp_control_auc", 0.0)))
+                except Exception:
+                    pass
+            if "fallback_to_attack_rate_in_capture" in mission:
+                try:
+                    fallback_to_attack_capture_rates.append(float(mission.get("fallback_to_attack_rate_in_capture", 0.0)))
+                except Exception:
+                    pass
+            for reason, count in (mission.get("capture_fallback_reason_counts", {}) or {}).items():
+                try:
+                    capture_fallback_reason_totals[str(reason)] += int(count)
+                except Exception:
+                    pass
+            for reason, count in (mission.get("capture_move_block_profile", {}) or {}).items():
+                try:
+                    capture_move_block_profile_totals[str(reason)] += int(count)
+                except Exception:
+                    pass
+
+            atk_units = 0
+            dmg_units = 0
+            for stats in units_rl.values():
+                if int((stats or {}).get("attacks", 0)) > 0:
+                    atk_units += 1
+                if float((stats or {}).get("damage", 0)) > 0:
+                    dmg_units += 1
+            contributing_attack_units.append(atk_units)
+            contributing_damage_units.append(dmg_units)
+
+            mapping = r.get("strategy_option_map", {}) or {}
+            for strat, opts in mapping.items():
+                for opt, count in (opts or {}).items():
+                    strategy_option_totals[str(strat)][str(opt)] += int(count)
+
+        transition_matrix = {
+            strat: dict(opts) for strat, opts in strategy_option_totals.items()
+        }
+        vp_contact_rate = (total_contact_steps + total_hold_steps) / max(1, total_decisions)
+        capture_pressure_turn = statistics.mean(first_contact_turns) if first_contact_turns else None
+        strategy_stuck_ratio = statistics.mean(stuck_ratios) if stuck_ratios else 0.0
+        unit_concentration_index = statistics.mean(concentration) if concentration else 0.0
+
+        checks = {
+            "strategy_stuck_ok": strategy_stuck_ratio < 0.90,
+            "unit_concentration_ok": unit_concentration_index < 0.80,
+            "vp_contact_ok": vp_contact_rate > 0.15,
+        }
+        passed = sum(1 for ok in checks.values() if ok)
+        if passed == 3:
+            stability_status = "green"
+        elif passed >= 1:
+            stability_status = "yellow"
+        else:
+            stability_status = "red"
+
+        vp_entry_missed_rate = (
+            (vp_entry_opportunities - vp_entries_taken) / max(1, vp_entry_opportunities)
+        )
+        capture_attempt_success_rate = (
+            statistics.mean(capture_attempt_success_rates) if capture_attempt_success_rates else 0.0
+        )
+        fallback_to_attack_rate_in_capture = (
+            statistics.mean(fallback_to_attack_capture_rates) if fallback_to_attack_capture_rates else 0.0
+        )
+
+        capture_checks = {
+            "vp_contact_min": vp_contact_rate > 0.20,
+            "pressure_turn_set": capture_pressure_turn is not None,
+            "concentration_ok": unit_concentration_index < 0.80,
+            "vp_entry_missed_ok": vp_entry_missed_rate < 0.90,
+            "capture_success_ok": capture_attempt_success_rate >= 0.05,
+            "capture_fallback_ok": fallback_to_attack_rate_in_capture < 0.55,
+        }
+        capture_readiness = all(capture_checks.values())
+        # Final status must reflect both behavioral stability and capture readiness.
+        if passed == 3 and capture_readiness:
+            stability_status = "green"
+        elif passed >= 1:
+            stability_status = "yellow"
+        else:
+            stability_status = "red"
+
+        return {
+            "vp_contact_rate": vp_contact_rate,
+            "capture_pressure_turn": capture_pressure_turn,
+            "strategy_stuck_ratio": strategy_stuck_ratio,
+            "unit_concentration_index": unit_concentration_index,
+            "objective_transition_matrix": transition_matrix,
+            "vp_entry_missed_rate": vp_entry_missed_rate,
+            "vp_net_progress": statistics.mean(vp_net_progress_vals) if vp_net_progress_vals else 0.0,
+            "position_reversal_rate": statistics.mean(reversal_rates) if reversal_rates else 0.0,
+            "attack_near_vp_instead_of_capture_rate": (
+                statistics.mean(near_vp_attack_missed_rates) if near_vp_attack_missed_rates else 0.0
+            ),
+            "vp_control_turns_share": (
+                statistics.mean(vp_control_turns_share_vals) if vp_control_turns_share_vals else 0.0
+            ),
+            "capture_attempt_success_rate": capture_attempt_success_rate,
+            "first_vp_entry_turn_p50": _percentile(first_vp_entry_turns, 0.50),
+            "first_vp_entry_turn_p90": _percentile(first_vp_entry_turns, 0.90),
+            "capture_conversion_after_contact": (
+                statistics.mean(capture_conversion_after_contact_rates)
+                if capture_conversion_after_contact_rates else 0.0
+            ),
+            "capture_intent_persistence": (
+                statistics.mean(capture_intent_persistence_rates)
+                if capture_intent_persistence_rates else 0.0
+            ),
+            "attack_opportunity_cost_near_vp": (
+                statistics.mean(attack_opportunity_cost_near_vp_rates)
+                if attack_opportunity_cost_near_vp_rates else 0.0
+            ),
+            "vp_control_auc": (
+                statistics.mean(vp_control_auc_vals) if vp_control_auc_vals else 0.0
+            ),
+            "fallback_to_attack_rate_in_capture": fallback_to_attack_rate_in_capture,
+            "capture_fallback_reason_counts": dict(capture_fallback_reason_totals),
+            "capture_move_block_profile": dict(capture_move_block_profile_totals),
+            "multi_unit_contribution": {
+                "attack_units_mean": (
+                    statistics.mean(contributing_attack_units) if contributing_attack_units else 0.0
+                ),
+                "damage_units_mean": (
+                    statistics.mean(contributing_damage_units) if contributing_damage_units else 0.0
+                ),
+            },
+            "stability_checks": checks,
+            "stability_status": stability_status,
+            "capture_checks": capture_checks,
+            "capture_readiness": capture_readiness,
+        }
+
+    # -------------------------------------------------
     # ✅ ACCIONES REALES (EVENT-BASED)
     # -------------------------------------------------
     def action_execution(self):
@@ -180,12 +451,16 @@ class ResultsAnalyzer:
                 return "MOVE"
 
             # Prioritize explicit class semantics to avoid double-counting.
+            if "assault" in n or "closecombat" in n or "close_combat" in n:
+                return "ASSAULT_MELEE"
             if "indirect" in n:
                 return "INDIRECT"
-            if "rangeddirect" in n:
-                return "DIRECT"
-            if any(x in n for x in ("close", "direct", "assault", "attack", "fire", "shoot")):
-                return "DIRECT"
+            if "rangeddirect" in n or "ranged_direct" in n:
+                return "DIRECT_RANGED"
+            if "direct" in n:
+                return "DIRECT_RANGED"
+            if any(x in n for x in ("attack", "fire", "shoot")):
+                return "DIRECT_RANGED"
             if "ranged" in n:
                 return "INDIRECT"
 
@@ -246,10 +521,17 @@ class ResultsAnalyzer:
         print("\n=== GLOBAL ===")
         summary = self.summary()
         print(summary)
+        print(
+            "interpreted_rates:"
+            f" score_win_rate(draw=0.5)={summary.get('win_score_rate', summary.get('win_rate', 0.0)):.3f}"
+            f" true_win_rate(only_wins)={summary.get('true_win_rate', 0.0):.3f}"
+            f" draw_rate={summary.get('draw_rate', 0.0):.3f}"
+            f" loss_rate={summary.get('loss_rate', 0.0):.3f}"
+        )
         print("\n--- WIN RATE BY END REASON ---")
         for reason, rate in summary.get("win_rate_by_end_reason", {}).items():
             count = summary.get("end_reason_counts", {}).get(reason, 0)
-            print(f"{reason}: win_rate={rate:.3f} episodes={count}")
+            print(f"{reason}: score_win_rate(draw=0.5)={rate:.3f} episodes={count}")
         print("\n--- VICTORY LEVEL COUNTS ---")
         for label, count in summary.get("victory_level_counts", {}).items():
             print(f"{label}: {count}")
@@ -259,6 +541,9 @@ class ResultsAnalyzer:
         print("\n--- TRACKED RESULT COUNTS ---")
         for label, count in summary.get("tracked_result_counts", {}).items():
             print(f"{label}: {count}")
+        print("\n--- CAPTURED OBJECTIVES (FINAL) ---")
+        for captured, count in summary.get("captured_final_counts", {}).items():
+            print(f"captured={captured}: {count}")
 
         print("\n=== COMBAT ===")
         print(self.combat_metrics())
@@ -270,6 +555,43 @@ class ResultsAnalyzer:
         print("\n=== POLICY ALIGNMENT ===")
         align = self.policy_alignment()
         print(f"forced_ratio: {align['forced_ratio']:.3f} ({align['forced_steps']}/{align['decisions']})")
+
+        print("\n=== MISSION METRICS ===")
+        mission = self.mission_metrics()
+        print(f"vp_contact_rate: {mission['vp_contact_rate']:.3f}")
+        cpt = mission.get("capture_pressure_turn")
+        print(f"capture_pressure_turn: {cpt:.2f}" if isinstance(cpt, (int, float)) else "capture_pressure_turn: n/a")
+        print(f"strategy_stuck_ratio: {mission['strategy_stuck_ratio']:.3f}")
+        print(f"unit_concentration_index: {mission['unit_concentration_index']:.3f}")
+        print(f"vp_entry_missed_rate: {mission.get('vp_entry_missed_rate', 0.0):.3f}")
+        print(f"vp_net_progress: {mission.get('vp_net_progress', 0.0):.3f}")
+        print(f"position_reversal_rate: {mission.get('position_reversal_rate', 0.0):.3f}")
+        print(f"vp_control_turns_share: {mission.get('vp_control_turns_share', 0.0):.3f}")
+        print(f"capture_attempt_success_rate: {mission.get('capture_attempt_success_rate', 0.0):.3f}")
+        p50 = mission.get("first_vp_entry_turn_p50")
+        p90 = mission.get("first_vp_entry_turn_p90")
+        print(f"first_vp_entry_turn_p50: {p50:.2f}" if isinstance(p50, (int, float)) else "first_vp_entry_turn_p50: n/a")
+        print(f"first_vp_entry_turn_p90: {p90:.2f}" if isinstance(p90, (int, float)) else "first_vp_entry_turn_p90: n/a")
+        print(f"capture_conversion_after_contact: {mission.get('capture_conversion_after_contact', 0.0):.3f}")
+        print(f"capture_intent_persistence: {mission.get('capture_intent_persistence', 0.0):.3f}")
+        print(f"attack_opportunity_cost_near_vp: {mission.get('attack_opportunity_cost_near_vp', 0.0):.3f}")
+        print(f"vp_control_auc: {mission.get('vp_control_auc', 0.0):.3f}")
+        print(f"fallback_to_attack_rate_in_capture: {mission.get('fallback_to_attack_rate_in_capture', 0.0):.3f}")
+        reasons = mission.get("capture_fallback_reason_counts", {}) or {}
+        if reasons:
+            pretty = ", ".join(f"{k}:{v}" for k, v in sorted(reasons.items(), key=lambda kv: kv[1], reverse=True))
+            print(f"capture_fallback_reasons: {pretty}")
+        block_profile = mission.get("capture_move_block_profile", {}) or {}
+        if block_profile:
+            pretty_block = ", ".join(f"{k}:{v}" for k, v in sorted(block_profile.items(), key=lambda kv: kv[1], reverse=True))
+            print(f"capture_move_block_profile: {pretty_block}")
+        print(
+            "multi_unit_contribution:"
+            f" atk_units_mean={mission.get('multi_unit_contribution', {}).get('attack_units_mean', 0.0):.2f}"
+            f" dmg_units_mean={mission.get('multi_unit_contribution', {}).get('damage_units_mean', 0.0):.2f}"
+        )
+        print(f"stability_status: {mission.get('stability_status', 'unknown')}")
+        print(f"capture_readiness: {mission.get('capture_readiness', False)}")
 
         # ---------------- L2 ----------------
         print("\n=== L2 POLICY PERFORMANCE ===")

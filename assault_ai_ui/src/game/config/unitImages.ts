@@ -100,6 +100,14 @@ export const unitImages = {
     card: "/art/counters/US Unit Rangers 43.jpg",
     card_half: "/art/counters/US Unit Rangers 43b.jpg"
   },
+  US_SNIPER_43: {
+    label: "US Sniper 43",
+    // Temporary alias art so sniper counters are always visible.
+    full: "/art/counters/US Sniper 43.png",
+    half: "/art/counters/US Sniper 43b.png",
+    card: "/art/counters/US Unit Sniper 43.jpg",
+    card_half: "/art/counters/US Unit Sniper 43b.jpg"
+  },
 
   US_BAZOOKA_TEAM: {
     label: "US Bazooka Team 43",

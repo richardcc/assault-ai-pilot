@@ -151,7 +151,8 @@ class SimEnv:
 
         # END MATCH
         if self.game_state.done:
-            self._emit_match_end()
+            # RuntimeGameState already emits MATCH_END through event_bus.
+            # Avoid duplicate terminal notifications in console/replay.
             return self.game_state, 0.0, True, {}
 
         # TURN CHANGE
@@ -166,7 +167,7 @@ class SimEnv:
             self._emit_map_state()
 
             if self.game_state.done:
-                self._emit_match_end()
+                # RuntimeGameState already emitted MATCH_END.
                 return self.game_state, 0.0, True, {}
 
             self.runtime.start_turn()
@@ -304,10 +305,12 @@ class SimEnv:
         if not self.event_bus:
             return
 
+        winner = self.game_state.winner
         self.event_bus.emit({
             "type": "MATCH_END",
             "payload": {
-                "winner": self.game_state.winner,
+                "result": "victory" if winner else "draw",
+                "winner": winner,
                 "reason": self.game_state.end_reason,
                 "turn": self.game_state.turn,
             },
