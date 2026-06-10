@@ -276,6 +276,8 @@ class TrainingEnv:
             "capture_fallback_to_attack": bool(getattr(action, "rl_capture_fallback_to_attack", False)),
             "capture_fallback_reason": str(getattr(action, "rl_capture_fallback_reason", "") or ""),
             "capture_move_block_profile": str(getattr(action, "rl_capture_move_block_profile", "") or ""),
+            "capture_target_dist_before": getattr(action, "rl_capture_target_dist_before", None),
+            "capture_target_dist_after": getattr(action, "rl_capture_target_dist_after", None),
             "actor_unit_classification": (
                 str(getattr(getattr(actor, "unit_type", None), "classification", ""))
                 if actor is not None

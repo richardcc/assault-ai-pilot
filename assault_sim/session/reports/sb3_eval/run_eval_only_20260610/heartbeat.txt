@@ -1,0 +1,6 @@
+status=error
+step=EVAL seed 42
+started_at=2026-06-10T19:36:26
+last_update=2026-06-10T19:36:44
+elapsed_seconds=18
+error=Fallo en paso: EVAL seed 42 (exit=1)

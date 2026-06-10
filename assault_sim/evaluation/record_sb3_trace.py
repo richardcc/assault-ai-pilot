@@ -153,6 +153,8 @@ def record_trace(
                         "objective_after": info.get("objective_captured_after"),
                         "objective_dist_before": info.get("objective_dist_before"),
                         "objective_dist_after": info.get("objective_dist_after"),
+                        "capture_target_dist_before": info.get("capture_target_dist_before"),
+                        "capture_target_dist_after": info.get("capture_target_dist_after"),
                     },
                     "reward": float(reward),
                     "done": bool(done),

@@ -65,8 +65,7 @@ class OptionExecutor:
         points = getattr(getattr(state, "victory", None), "points", []) or []
         if not points or not side:
             return 0
-        side_to_ownership = getattr(state, "side_to_ownership", {}) or {}
-        own_ownership = side_to_ownership.get(side)
+        own_ownership = self._ownership_for_side(state, side)
         if own_ownership is None:
             return 0
         captured = 0
@@ -75,6 +74,24 @@ class OptionExecutor:
             if hs is not None and hs.ownership == own_ownership:
                 captured += 1
         return captured
+
+    def _normalize_side_key(self, side) -> str:
+        return str(getattr(side, "value", side) or "").upper()
+
+    def _ownership_for_side(self, state, side):
+        side_to_ownership = getattr(state, "side_to_ownership", {}) or {}
+        key = self._normalize_side_key(side)
+        if not key:
+            return None
+        # Primary lookup with normalized key.
+        own = side_to_ownership.get(key)
+        if own is not None:
+            return own
+        # Fallback: defensive scan if map keys are not normalized.
+        for k, v in side_to_ownership.items():
+            if self._normalize_side_key(k) == key:
+                return v
+        return None
 
     def _is_behind_on_objectives(self, state, side: str) -> bool:
         if not side:
@@ -127,8 +144,7 @@ class OptionExecutor:
         points = getattr(getattr(state, "victory", None), "points", []) or []
         if not points:
             return None
-        side_to_ownership = getattr(state, "side_to_ownership", {}) or {}
-        own_ownership = side_to_ownership.get(unit.side)
+        own_ownership = self._ownership_for_side(state, unit.side)
         best = None
         best_score = float("-inf")
         allies = [
@@ -163,8 +179,7 @@ class OptionExecutor:
         points = getattr(getattr(state, "victory", None), "points", []) or []
         if not points:
             return False
-        side_to_ownership = getattr(state, "side_to_ownership", {}) or {}
-        own_ownership = side_to_ownership.get(unit.side)
+        own_ownership = self._ownership_for_side(state, unit.side)
         for vp in points:
             hs = state.hex_states.get(vp.hex_coords)
             if hs is None:
@@ -177,8 +192,7 @@ class OptionExecutor:
         points = getattr(getattr(state, "victory", None), "points", []) or []
         if not points or not side:
             return False
-        side_to_ownership = getattr(state, "side_to_ownership", {}) or {}
-        own_ownership = side_to_ownership.get(side)
+        own_ownership = self._ownership_for_side(state, side)
         for vp in points:
             hs = state.hex_states.get(vp.hex_coords)
             if hs is None:
@@ -197,8 +211,7 @@ class OptionExecutor:
         vp_hexes = {vp.hex_coords for vp in points}
         if pos not in vp_hexes:
             return False
-        side_to_ownership = getattr(state, "side_to_ownership", {}) or {}
-        own_ownership = side_to_ownership.get(unit.side)
+        own_ownership = self._ownership_for_side(state, unit.side)
         hs = state.hex_states.get(pos)
         return hs is None or hs.ownership != own_ownership
 
@@ -212,8 +225,7 @@ class OptionExecutor:
         vp_hexes = {vp.hex_coords for vp in points}
         if pos not in vp_hexes:
             return False
-        side_to_ownership = getattr(state, "side_to_ownership", {}) or {}
-        own_ownership = side_to_ownership.get(unit.side)
+        own_ownership = self._ownership_for_side(state, unit.side)
         hs = state.hex_states.get(pos)
         return hs is not None and hs.ownership == own_ownership
 
@@ -245,8 +257,7 @@ class OptionExecutor:
         points = getattr(getattr(state, "victory", None), "points", []) or []
         if not points:
             return None
-        side_to_ownership = getattr(state, "side_to_ownership", {}) or {}
-        own_ownership = side_to_ownership.get(unit.side)
+        own_ownership = self._ownership_for_side(state, unit.side)
         vp_hexes = {vp.hex_coords for vp in points}
         actions = ActionCatalog(state, unit, terrain_config).actions()
         best = None
@@ -282,8 +293,7 @@ class OptionExecutor:
         key = (getattr(pos, "q", None), getattr(pos, "r", None))
         if key not in vp_hexes:
             return False
-        side_to_ownership = getattr(state, "side_to_ownership", {}) or {}
-        own_ownership = side_to_ownership.get(side)
+        own_ownership = self._ownership_for_side(state, side)
         hs = state.hex_states.get(key)
         return hs is None or hs.ownership != own_ownership
 
@@ -291,8 +301,7 @@ class OptionExecutor:
         points = getattr(getattr(state, "victory", None), "points", []) or []
         if not points or unit is None or getattr(unit, "position", None) is None:
             return None
-        side_to_ownership = getattr(state, "side_to_ownership", {}) or {}
-        own_ownership = side_to_ownership.get(unit.side)
+        own_ownership = self._ownership_for_side(state, unit.side)
         best = None
         for vp in points:
             hs = state.hex_states.get(vp.hex_coords)
@@ -307,8 +316,7 @@ class OptionExecutor:
         points = getattr(getattr(state, "victory", None), "points", []) or []
         if not points or pos is None or not side:
             return None
-        side_to_ownership = getattr(state, "side_to_ownership", {}) or {}
-        own_ownership = side_to_ownership.get(side)
+        own_ownership = self._ownership_for_side(state, side)
         best = None
         for vp in points:
             hs = state.hex_states.get(vp.hex_coords)
@@ -368,6 +376,8 @@ class OptionExecutor:
             move, dist_after, _ = best_non_worse
             if dist_before is not None and dist_after < dist_before:
                 return move, "objective_progress_move", dist_before, dist_after
+            if dist_before is not None and dist_after == dist_before:
+                return move, "objective_staging_move", dist_before, dist_after
             return move, "objective_staging_move", dist_before, dist_after
         if best_any is not None:
             move, dist_after, _ = best_any
@@ -428,12 +438,15 @@ class OptionExecutor:
         # 2) If we can occupy an uncaptured VP now, do it immediately.
         step_into_vp = self._best_step_into_uncaptured_vp(state, unit)
         if step_into_vp is not None:
+            d_before = self._nearest_uncaptured_vp_dist(state, unit)
             step_into_vp.rl_capture_fallback_reason = "step_into_uncaptured_vp"
             step_into_vp.rl_capture_move_block_profile = "step_into_uncaptured_vp"
+            step_into_vp.rl_capture_target_dist_before = d_before
+            step_into_vp.rl_capture_target_dist_after = 0
             return step_into_vp, TacticalOption.ADVANCE
 
         # 3) Evaluate movement and attacks jointly near VP.
-        move, move_reason, _, _ = self._best_capture_staging_move(state, unit)
+        move, move_reason, dist_before, dist_after = self._best_capture_staging_move(state, unit)
         nearest_vp_d = self._nearest_uncaptured_vp_dist(state, unit)
         uid = getattr(unit, "unit_id", None)
         if uid and move_reason == "objective_staging_move":
@@ -463,6 +476,8 @@ class OptionExecutor:
                     forced.rl_capture_fallback_to_attack = True
                     forced.rl_capture_fallback_reason = "forced_attack_after_staging_loop"
                     forced.rl_capture_move_block_profile = move_reason
+                    forced.rl_capture_target_dist_before = dist_before
+                    forced.rl_capture_target_dist_after = dist_after
                     return forced, TacticalOption.ATTACK
         if attacks:
             gated = None
@@ -498,11 +513,10 @@ class OptionExecutor:
                     else:
                         gated_reason = "attack_gate_high_adv"
             if gated is not None:
-                # Near VP, prefer useful attacks over endless lateral staging.
+                # In CAPTURE, prioritize VP progress over opportunistic fire.
+                # Only take attack fallback when movement is genuinely blocked.
                 should_take_attack = (
                     move_reason in {"all_moves_increase_distance", "no_progress_move_available"}
-                    or (move_reason == "objective_staging_move" and nearest_vp_d is not None and nearest_vp_d <= 2)
-                    or (nearest_vp_d is not None and nearest_vp_d <= 1)
                 )
                 # Hard break for repeated staging loops near VP.
                 if (
@@ -510,19 +524,23 @@ class OptionExecutor:
                     and move_reason == "objective_staging_move"
                     and nearest_vp_d is not None
                     and nearest_vp_d <= 3
-                    and int(self._capture_staging_streak_by_unit.get(uid, 0)) >= 2
+                    and int(self._capture_staging_streak_by_unit.get(uid, 0)) >= 3
                 ):
                     should_take_attack = True
                 if should_take_attack:
                     gated.rl_capture_fallback_to_attack = True
                     gated.rl_capture_fallback_reason = gated_reason
                     gated.rl_capture_move_block_profile = move_reason
+                    gated.rl_capture_target_dist_before = dist_before
+                    gated.rl_capture_target_dist_after = dist_after
                     return gated, TacticalOption.ATTACK
 
         # 5) Prefer movement if it does not worsen VP progress.
         if move is not None and move_reason in {"objective_progress_move", "objective_staging_move"}:
             move.rl_capture_fallback_reason = move_reason
             move.rl_capture_move_block_profile = move_reason
+            move.rl_capture_target_dist_before = dist_before
+            move.rl_capture_target_dist_after = dist_after
             return move, TacticalOption.ADVANCE
 
         # 6) If attacks are gated and movement is poor, still allow attack fallback.
@@ -532,12 +550,16 @@ class OptionExecutor:
                 best.rl_capture_fallback_to_attack = True
                 best.rl_capture_fallback_reason = "attack_gate_relaxed_fallback"
                 best.rl_capture_move_block_profile = move_reason
+                best.rl_capture_target_dist_before = dist_before
+                best.rl_capture_target_dist_after = dist_after
                 return best, TacticalOption.ATTACK
 
         # 7) Fallback movement / hold.
         if move is not None:
             move.rl_capture_fallback_reason = "fallback_move_even_if_no_progress"
             move.rl_capture_move_block_profile = move_reason
+            move.rl_capture_target_dist_before = dist_before
+            move.rl_capture_target_dist_after = dist_after
             return move, TacticalOption.ADVANCE
         hold = WaitAction(unit.unit_id)
         hold.rl_capture_fallback_reason = "no_move_no_attack_hold"
@@ -557,6 +579,10 @@ class OptionExecutor:
             action.rl_capture_fallback_reason = ""
         if not hasattr(action, "rl_capture_move_block_profile"):
             action.rl_capture_move_block_profile = ""
+        if not hasattr(action, "rl_capture_target_dist_before"):
+            action.rl_capture_target_dist_before = None
+        if not hasattr(action, "rl_capture_target_dist_after"):
+            action.rl_capture_target_dist_after = None
         uid = getattr(action, "unit_id", None)
         if uid:
             if option == TacticalOption.RETREAT:
@@ -579,8 +605,8 @@ class OptionExecutor:
         if unit is None:
             return WaitAction("SYSTEM")
         self._update_position_history(unit)
-        tracked_side_norm = str(objective_tracked_side or "").upper()
-        unit_side_norm = str(getattr(unit, "side", "")).upper()
+        tracked_side_norm = self._normalize_side_key(objective_tracked_side)
+        unit_side_norm = self._normalize_side_key(getattr(unit, "side", None))
         attacker_context = bool(tracked_side_norm) and unit_side_norm == tracked_side_norm
         defender_context = bool(tracked_side_norm) and unit_side_norm != tracked_side_norm
 

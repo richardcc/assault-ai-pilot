@@ -1,0 +1,33 @@
+---
+description: Enforce model-to-doc traceability and mandatory doc updates
+alwaysApply: true
+---
+
+# Model-Doc Traceability Rule
+
+When modifying gameplay/model behavior, documentation must be updated in the same task.
+
+## Scope
+
+This rule is mandatory whenever changes touch:
+- `assault_model/**`
+- `assault_sim/**`
+- `docs/**`
+
+## Required actions for any model/rules logic change
+
+1. Update the corresponding chapter in `docs/game_rules/`.
+2. Update traceability references in `docs/game_rules/annexes/B_PDF_TRACEABILITY.md` if affected.
+3. Update `docs/GAP_ANALYSIS.md` status when a gap is opened, reduced, or closed.
+4. Mark validation state (`Pending Validation` or validated) explicitly when tables/rules change.
+
+## PR/checkpoint requirements
+
+- No model/rules behavior change is considered complete without doc delta.
+- If exact PDF values are unknown, keep placeholder rows and mark as pending (never silently assume).
+- Include rule-to-code mapping in docs (`rule -> file/function -> test`).
+
+## Response behavior for the assistant
+
+- If asked to change model logic without docs update, do the docs update proactively.
+- If docs cannot be updated due to missing source details, state the blocker and add pending validation notes.

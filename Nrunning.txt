@@ -64,3 +64,33 @@ python -m assault_sim.train.simulate_sb3_match --side US --scenario battaglia_ci
 
 
 python -m assault_sim.evaluation.record_sb3_trace --side US --scenario battaglia_cittadina_2_1 --episodes 1 --seed 42
+
+.\run_train_eval.ps1
+.\run_train_eval.ps1 -SkipTrain -Seeds 42,43,44 -Episodes 100
+.\run_train_eval.ps1 -OutDir "C:\repos\python\assault\assault_sim\session\reports\sb3_eval\run_manual"
+.\run_train_eval.ps1 -Seeds 42,43,44 -ContinueOnEvalError
+
+Get-Content .\assault_sim\session\reports\sb3_eval\run_YYYYMMDD_HHMMSS\heartbeat.txt -Wait
+
+
+
+TESTS:
+python -m pytest .\assault_model\tests\test_runtime_activation_multiside.py -q
+python -m pytest .\assault_model\tests\test_runtime_activation_multiside.py -vv
+python -m pytest .\assault_model\tests -q
+
+python -m pytest .\assault_model\tests\test_runtime_activation_multiside.py -vv -q
+
+
+Open:
+
+python -m mkdocs serve -a 127.0.0.1:8001
+http://127.0.0.1:8000
+Or use the helper script:
+
+.\build_docs.ps1
+
+python -m mkdocs serve -a 127.0.0.1:8001
+
+http://127.0.0.1:8000
+

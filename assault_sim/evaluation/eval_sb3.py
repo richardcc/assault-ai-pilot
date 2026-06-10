@@ -230,7 +230,7 @@ def _safe_name(value: str) -> str:
     return "".join(ch if (ch.isalnum() or ch in ("-", "_")) else "_" for ch in value)
 
 
-def evaluate_sb3(episodes: int = 100, seed: int | None = None):
+def evaluate_sb3(episodes: int = 100, seed: int | None = None, out_dir: str | None = None):
     try:
         from stable_baselines3 import PPO
         from stable_baselines3.common.monitor import Monitor
@@ -241,6 +241,8 @@ def evaluate_sb3(episodes: int = 100, seed: int | None = None):
         ) from exc
 
     repo_root = Path(__file__).resolve().parents[2]
+    reports_dir = Path(out_dir) if out_dir else (repo_root / "assault_sim" / "session" / "reports" / "sb3_eval")
+    reports_dir.mkdir(parents=True, exist_ok=True)
     train_config_path = repo_root / "assault_sim" / "config" / "train_config.json"
     cfg = load_train_config(train_config_path)
     scenario_schedule = list(cfg.scenario_schedule)
@@ -336,7 +338,8 @@ def evaluate_sb3(episodes: int = 100, seed: int | None = None):
             for r in results:
                 dashboard.add_episode(r)
             csv_name = f"metrics_sb3_{_safe_name(rl_side)}_{_safe_name(scenario)}.csv"
-            dashboard.save_csv(csv_name)
+            csv_path = reports_dir / csv_name
+            dashboard.save_csv(str(csv_path))
 
             side_report = {
                 "meta": {
@@ -347,7 +350,7 @@ def evaluate_sb3(episodes: int = 100, seed: int | None = None):
                     "rl_side": rl_side,
                     "vecnormalize_path": str(vecnorm_path) if vecnorm_path is not None and vecnorm_path.exists() else None,
                     "obs_normalized": bool(obs_normalizer is not None),
-                    "csv": csv_name,
+                    "csv": str(csv_path),
                 },
                 "summary": analyzer.summary(),
                 "combat": analyzer.combat_metrics(),
@@ -416,6 +419,7 @@ def evaluate_sb3(episodes: int = 100, seed: int | None = None):
             "episodes": episodes,
             "timestamp": datetime.utcnow().isoformat() + "Z",
             "seed": eval_seed,
+            "output_dir": str(reports_dir),
             "scenario_schedule": [
                 {"id": p.id, "episodes": p.episodes}
                 for p in scenario_schedule
@@ -428,15 +432,17 @@ def evaluate_sb3(episodes: int = 100, seed: int | None = None):
         "comparison": comparison_rows,
     }
     out_name = f"metrics_sb3_report_{datetime.utcnow().strftime('%Y%m%dT%H%M%SZ')}.json"
-    with open(out_name, "w", encoding="utf-8") as f:
+    out_path = reports_dir / out_name
+    with open(out_path, "w", encoding="utf-8") as f:
         json.dump(report, f, indent=2)
-    print(f"Saved multi-side SB3 report -> {out_name}")
+    print(f"Saved multi-side SB3 report -> {out_path}")
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Evaluate SB3 model(s) and print report.")
     parser.add_argument("--episodes", type=int, default=100, help="Number of episodes per side/scenario")
     parser.add_argument("--seed", type=int, default=None, help="Evaluation seed override")
+    parser.add_argument("--out-dir", type=str, default=None, help="Directory to store report and CSV outputs")
     args = parser.parse_args()
-    evaluate_sb3(episodes=args.episodes, seed=args.seed)
+    evaluate_sb3(episodes=args.episodes, seed=args.seed, out_dir=args.out_dir)
 

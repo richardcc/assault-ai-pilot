@@ -219,14 +219,14 @@ class ResultsAnalyzer:
         concentration = []
         vp_entry_opportunities = 0
         vp_entries_taken = 0
-        vp_entry_missed_rates = []
+        contact_events_total = 0
+        contact_to_capture_success_total = 0
         vp_net_progress_vals = []
         reversal_rates = []
         near_vp_attack_missed_rates = []
         vp_control_turns_share_vals = []
         capture_attempt_success_rates = []
         fallback_to_attack_capture_rates = []
-        capture_conversion_after_contact_rates = []
         capture_intent_persistence_rates = []
         attack_opportunity_cost_near_vp_rates = []
         vp_control_auc_vals = []
@@ -259,11 +259,6 @@ class ResultsAnalyzer:
                 concentration.append(max(dmg_vals) / total_dmg)
             vp_entry_opportunities += int(mission.get("vp_entry_opportunities", 0))
             vp_entries_taken += int(mission.get("vp_entries_taken", 0))
-            if "vp_entry_missed_rate" in mission:
-                try:
-                    vp_entry_missed_rates.append(float(mission.get("vp_entry_missed_rate", 0.0)))
-                except Exception:
-                    pass
             if "vp_net_progress" in mission:
                 try:
                     vp_net_progress_vals.append(float(mission.get("vp_net_progress", 0.0)))
@@ -293,11 +288,8 @@ class ResultsAnalyzer:
                 first_entry = mission.get("first_vp_entry_turn")
                 if isinstance(first_entry, (int, float)) and first_entry > 0:
                     first_vp_entry_turns.append(float(first_entry))
-            if "capture_conversion_after_contact" in mission:
-                try:
-                    capture_conversion_after_contact_rates.append(float(mission.get("capture_conversion_after_contact", 0.0)))
-                except Exception:
-                    pass
+            contact_events_total += int(mission.get("contact_events", 0))
+            contact_to_capture_success_total += int(mission.get("contact_to_capture_success", 0))
             if "capture_intent_persistence" in mission:
                 try:
                     capture_intent_persistence_rates.append(float(mission.get("capture_intent_persistence", 0.0)))
@@ -365,8 +357,17 @@ class ResultsAnalyzer:
         else:
             stability_status = "red"
 
+        vp_entry_conversion_rate = (
+            (vp_entries_taken / vp_entry_opportunities)
+            if vp_entry_opportunities > 0 else None
+        )
         vp_entry_missed_rate = (
-            (vp_entry_opportunities - vp_entries_taken) / max(1, vp_entry_opportunities)
+            1.0 - vp_entry_conversion_rate
+            if vp_entry_conversion_rate is not None else None
+        )
+        capture_conversion_after_contact = (
+            (contact_to_capture_success_total / contact_events_total)
+            if contact_events_total > 0 else 0.0
         )
         capture_attempt_success_rate = (
             statistics.mean(capture_attempt_success_rates) if capture_attempt_success_rates else 0.0
@@ -379,7 +380,7 @@ class ResultsAnalyzer:
             "vp_contact_min": vp_contact_rate > 0.20,
             "pressure_turn_set": capture_pressure_turn is not None,
             "concentration_ok": unit_concentration_index < 0.80,
-            "vp_entry_missed_ok": vp_entry_missed_rate < 0.90,
+            "vp_entry_missed_ok": (vp_entry_missed_rate is not None) and (vp_entry_missed_rate < 0.90),
             "capture_success_ok": capture_attempt_success_rate >= 0.05,
             "capture_fallback_ok": fallback_to_attack_rate_in_capture < 0.55,
         }
@@ -398,6 +399,9 @@ class ResultsAnalyzer:
             "strategy_stuck_ratio": strategy_stuck_ratio,
             "unit_concentration_index": unit_concentration_index,
             "objective_transition_matrix": transition_matrix,
+            "vp_entry_opportunities": vp_entry_opportunities,
+            "vp_entries_taken": vp_entries_taken,
+            "vp_entry_conversion_rate": vp_entry_conversion_rate,
             "vp_entry_missed_rate": vp_entry_missed_rate,
             "vp_net_progress": statistics.mean(vp_net_progress_vals) if vp_net_progress_vals else 0.0,
             "position_reversal_rate": statistics.mean(reversal_rates) if reversal_rates else 0.0,
@@ -410,10 +414,7 @@ class ResultsAnalyzer:
             "capture_attempt_success_rate": capture_attempt_success_rate,
             "first_vp_entry_turn_p50": _percentile(first_vp_entry_turns, 0.50),
             "first_vp_entry_turn_p90": _percentile(first_vp_entry_turns, 0.90),
-            "capture_conversion_after_contact": (
-                statistics.mean(capture_conversion_after_contact_rates)
-                if capture_conversion_after_contact_rates else 0.0
-            ),
+            "capture_conversion_after_contact": capture_conversion_after_contact,
             "capture_intent_persistence": (
                 statistics.mean(capture_intent_persistence_rates)
                 if capture_intent_persistence_rates else 0.0
@@ -587,7 +588,20 @@ class ResultsAnalyzer:
         print(f"capture_pressure_turn: {cpt:.2f}" if isinstance(cpt, (int, float)) else "capture_pressure_turn: n/a")
         print(f"strategy_stuck_ratio: {mission['strategy_stuck_ratio']:.3f}")
         print(f"unit_concentration_index: {mission['unit_concentration_index']:.3f}")
-        print(f"vp_entry_missed_rate: {mission.get('vp_entry_missed_rate', 0.0):.3f}")
+        vp_entry_opps = mission.get("vp_entry_opportunities", 0)
+        vp_entry_taken = mission.get("vp_entries_taken", 0)
+        vp_entry_conv = mission.get("vp_entry_conversion_rate")
+        vp_entry_miss = mission.get("vp_entry_missed_rate")
+        print(f"vp_entry_opportunities: {vp_entry_opps}")
+        print(f"vp_entries_taken: {vp_entry_taken}")
+        print(
+            f"vp_entry_conversion_rate: {vp_entry_conv:.3f}"
+            if isinstance(vp_entry_conv, (int, float)) else "vp_entry_conversion_rate: n/a"
+        )
+        print(
+            f"vp_entry_missed_rate: {vp_entry_miss:.3f}"
+            if isinstance(vp_entry_miss, (int, float)) else "vp_entry_missed_rate: n/a"
+        )
         print(f"vp_net_progress: {mission.get('vp_net_progress', 0.0):.3f}")
         print(f"position_reversal_rate: {mission.get('position_reversal_rate', 0.0):.3f}")
         print(f"vp_control_turns_share: {mission.get('vp_control_turns_share', 0.0):.3f}")
@@ -636,7 +650,7 @@ class ResultsAnalyzer:
             print(f"{k}: usage={v['usage']} dmg/atk={v['damage_per_attack']:.3f}")
 
         # ---------------- mapping ----------------
-        print("\n=== STRATEGY → OPTION ===")
+        print("\n=== STRATEGY -> OPTION ===")
 
         mapping = normalize_strategy_option_map(
             build_strategy_option_map(self.results)

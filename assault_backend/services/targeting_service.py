@@ -1,6 +1,7 @@
 from assault_model.map.hex_utils import safe_hex_distance
 from assault_model.map.hex_coord import HexCoord
 from assault_model.combat.line_of_sight import check_line_of_sight, LineOfSight
+from assault_model.combat.dice_color import DiceColor
 from assault_model.map.combat_geometry import determine_attack_sector
 from assault_model.rules.fortification_rules import FortificationRules
 
@@ -22,7 +23,7 @@ def _has_trait(unit, trait_name: str) -> bool:
 def _remove_weakest_die(dice: list):
     if not dice:
         return None
-    weakest = min(dice, key=lambda c: int(c))
+    weakest = min(dice, key=_die_strength)
     dice.remove(weakest)
     return weakest
 
@@ -30,9 +31,25 @@ def _remove_weakest_die(dice: list):
 def _remove_strongest_die(dice: list):
     if not dice:
         return None
-    strongest = max(dice, key=lambda c: int(c))
+    strongest = max(dice, key=_die_strength)
     dice.remove(strongest)
     return strongest
+
+
+def _die_strength(color) -> int:
+    """
+    Normaliza la fuerza del dado para soportar enum/int/string.
+    """
+    if isinstance(color, str):
+        name = color.strip().upper()
+        try:
+            return int(DiceColor[name])
+        except KeyError:
+            return 0
+    try:
+        return int(color)
+    except Exception:
+        return 0
 
 
 def _compute_combat_dice(attacker, target, distance, los, game_map):
@@ -103,7 +120,7 @@ def _compute_combat_dice(attacker, target, distance, los, game_map):
     # Indirect fire has no LOS line → no HINDERED defense die.
     hindered = (not is_indirect) and los == LineOfSight.HINDERED
     if hindered:
-        defense_mod = defense_mod + ["GREEN"]
+        defense_mod = defense_mod + [DiceColor.GREEN]
 
     return {
         "attack": {
@@ -157,7 +174,7 @@ def _compute_empty_hex_dice_preview(attacker, target_q: int, target_r: int, dist
     defense_mod = list(terrain_bonus) + list(fort_bonus)
     hindered = (not is_indirect) and los == LineOfSight.HINDERED
     if hindered:
-        defense_mod = defense_mod + ["GREEN"]
+        defense_mod = defense_mod + [DiceColor.GREEN]
 
     return {
         "attack": {

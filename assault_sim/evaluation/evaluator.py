@@ -35,8 +35,7 @@ class Evaluator:
         points = getattr(getattr(state, "victory", None), "points", []) or []
         if not points:
             return False
-        side_to_ownership = getattr(state, "side_to_ownership", {}) or {}
-        own_ownership = side_to_ownership.get(unit.side)
+        own_ownership = self._ownership_for_side(state, getattr(unit, "side", None))
         vp_hexes = {vp.hex_coords for vp in points}
         actions = ActionCatalog(state, unit, terrain_config).actions()
         for a in actions:
@@ -53,6 +52,23 @@ class Evaluator:
             if hs is None or hs.ownership != own_ownership:
                 return True
         return False
+
+    def _normalize_side_key(self, value) -> str:
+        raw = getattr(value, "value", value)
+        return str(raw or "").strip().upper()
+
+    def _ownership_for_side(self, state, side):
+        side_to_ownership = getattr(state, "side_to_ownership", {}) or {}
+        key = self._normalize_side_key(side)
+        if not key:
+            return None
+        direct = side_to_ownership.get(key)
+        if direct is not None:
+            return direct
+        for k, v in side_to_ownership.items():
+            if self._normalize_side_key(k) == key:
+                return v
+        return None
 
     def run_episode(self):
         advanced_metrics = AdvancedMetrics()
@@ -405,7 +421,7 @@ class Evaluator:
                 if state is not None:
                     side_to_ownership = getattr(state, "side_to_ownership", {}) or {}
                     points = getattr(getattr(state, "victory", None), "points", []) or []
-                    own_ownership = side_to_ownership.get(self.rl_side)
+                    own_ownership = self._ownership_for_side(state, self.rl_side)
                     own = 0
                     other = 0
                     for vp in points:
@@ -503,6 +519,14 @@ class Evaluator:
         # -------------------------------------------------
         result["advanced"] = advanced_metrics.to_dict()
         total_contacts = vp_contact_steps + vp_hold_steps
+        vp_entry_conversion_rate = (
+            (vp_entries_taken / vp_entry_opportunities)
+            if vp_entry_opportunities > 0 else None
+        )
+        vp_entry_missed_rate = (
+            1.0 - vp_entry_conversion_rate
+            if vp_entry_conversion_rate is not None else None
+        )
         result["mission"] = {
             "vp_contact_steps": vp_contact_steps,
             "vp_hold_steps": vp_hold_steps,
@@ -510,9 +534,8 @@ class Evaluator:
             "first_vp_contact_turn": first_vp_contact_step,
             "vp_entry_opportunities": vp_entry_opportunities,
             "vp_entries_taken": vp_entries_taken,
-            "vp_entry_missed_rate": (
-                (vp_entry_opportunities - vp_entries_taken) / max(1, vp_entry_opportunities)
-            ),
+            "vp_entry_conversion_rate": vp_entry_conversion_rate,
+            "vp_entry_missed_rate": vp_entry_missed_rate,
             "vp_net_progress": (vp_progress_sum / max(1, vp_progress_count)),
             "position_reversal_rate": (reversal_events / max(1, reversal_checks)),
             "attack_near_vp_instead_of_capture_rate": (
@@ -526,6 +549,8 @@ class Evaluator:
             "capture_fallback_reason_counts": dict(capture_fallback_reason_counts),
             "capture_move_block_profile": dict(capture_move_block_profile_counts),
             "first_vp_entry_turn": first_vp_entry_step,
+            "contact_events": contact_events,
+            "contact_to_capture_success": contact_to_capture_success,
             "capture_conversion_after_contact": (
                 contact_to_capture_success / max(1, contact_events)
             ),
