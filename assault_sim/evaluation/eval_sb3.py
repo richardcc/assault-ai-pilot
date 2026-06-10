@@ -291,6 +291,17 @@ def evaluate_sb3(episodes: int = 100, seed: int | None = None, out_dir: str | No
                 reward_fn=ShapedReward(rl_side=rl_side),
                 seed=eval_seed,
             )
+            # Fail fast on observation-shape mismatch to avoid noisy per-episode errors.
+            model_obs_shape = tuple(getattr(getattr(model, "observation_space", None), "shape", ()) or ())
+            env_obs = env.reset()
+            env_obs_shape = tuple(np.asarray(env_obs, dtype=np.float32).shape)
+            if model_obs_shape and env_obs_shape and model_obs_shape != env_obs_shape:
+                raise RuntimeError(
+                    "Observation shape mismatch between model and current encoder. "
+                    f"model_obs_shape={model_obs_shape}, env_obs_shape={env_obs_shape}. "
+                    "This usually means the observation vector changed (e.g. 70 -> 74). "
+                    "Retrain model and VecNormalize with current code before running eval."
+                )
 
             obs_normalizer = None
             if vecnorm_path is not None and vecnorm_path.exists():

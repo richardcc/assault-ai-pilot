@@ -11,6 +11,7 @@ from assault_model.map.hex_utils import safe_hex_distance
 
 from assault_sim.rl.state_encoder import encode_state
 from assault_sim.rewards.progressive_reward import ProgressiveReward
+from assault_sim.contracts.training_contracts import normalize_plan_state
 
 
 DEBUG_TRACE = os.getenv("ASSAULT_DEBUG_TRACE", "0") == "1"
@@ -76,6 +77,62 @@ class TrainingEnv:
 
         self._vp_hexes = set()
         self._last_action_type = "wait"
+        self._unit_stuck_steps = {}
+        self._unit_last_focus_vp = {}
+        self._unit_plan_commitment_age = {}
+        self._unit_intent_alignment_hist = {}
+        self._unit_last_failure_reason = {}
+
+    def _lote_d_failure_onehot(self, reason: str):
+        r = str(reason or "").lower()
+        blocked = 1.0 if ("blocked" in r or "no_move" in r or "no_progress" in r) else 0.0
+        high_risk = 1.0 if ("risk" in r) else 0.0
+        forced = 1.0 if ("forced" in r or "hard_gate" in r) else 0.0
+        no_legal_progress = 1.0 if ("no_legal_progress" in r or "all_moves_increase_distance" in r) else 0.0
+        return [blocked, high_risk, forced, no_legal_progress]
+
+    def _update_lote_d_memory(self, info: dict):
+        unit_id = str(info.get("unit_id") or "")
+        if not unit_id:
+            return 0.0, 0.0, 0.0, [0.0, 0.0, 0.0, 0.0]
+
+        progress = float(info.get("plan_progress_stub", 0.0) or 0.0)
+        prev_stuck = int(self._unit_stuck_steps.get(unit_id, 0))
+        stuck_now = 0 if progress > 0.0 else prev_stuck + 1
+        self._unit_stuck_steps[unit_id] = stuck_now
+        unit_stuck_steps_norm = float(np.clip(stuck_now / 5.0, 0.0, 1.0))
+
+        focus_now = str(info.get("plan_focus_vp_id") or "")
+        focus_prev = str(self._unit_last_focus_vp.get(unit_id, ""))
+        if focus_now and focus_now == focus_prev:
+            age = int(self._unit_plan_commitment_age.get(unit_id, 0)) + 1
+        elif focus_now:
+            age = 1
+        else:
+            age = 0
+        self._unit_plan_commitment_age[unit_id] = age
+        self._unit_last_focus_vp[unit_id] = focus_now
+        plan_commitment_age_norm = float(np.clip(age / 5.0, 0.0, 1.0))
+
+        align = 1.0 if float(info.get("intent_alignment_stub", 0.0) or 0.0) >= 1.0 else 0.0
+        hist = list(self._unit_intent_alignment_hist.get(unit_id, []))
+        hist.append(align)
+        if len(hist) > 4:
+            hist = hist[-4:]
+        self._unit_intent_alignment_hist[unit_id] = hist
+        intent_alignment_last_k = float(sum(hist)) / float(max(1, len(hist)))
+
+        last_reason = str(info.get("capture_fallback_reason", "") or self._unit_last_failure_reason.get(unit_id, ""))
+        if str(info.get("capture_fallback_reason", "")).strip():
+            self._unit_last_failure_reason[unit_id] = str(info.get("capture_fallback_reason"))
+        last_failure_reason_onehot = self._lote_d_failure_onehot(last_reason)
+
+        return (
+            unit_stuck_steps_norm,
+            plan_commitment_age_norm,
+            intent_alignment_last_k,
+            last_failure_reason_onehot,
+        )
 
     def _objectives_captured_for_side(self, state, side: str) -> int:
         if state is None or not side:
@@ -165,6 +222,11 @@ class TrainingEnv:
 
         self._vp_hexes.clear()
         self._last_action_type = "wait"
+        self._unit_stuck_steps.clear()
+        self._unit_last_focus_vp.clear()
+        self._unit_plan_commitment_age.clear()
+        self._unit_intent_alignment_hist.clear()
+        self._unit_last_failure_reason.clear()
 
         own_activated_ratio, enemy_activated_ratio = self._activation_ratios(state)
 
@@ -177,6 +239,13 @@ class TrainingEnv:
             own_activated_ratio=own_activated_ratio,
             enemy_activated_ratio=enemy_activated_ratio,
             last_action_type=self._last_action_type,
+            focus_vp_progress_last_step=0.0,
+            focus_vp_id=None,
+            role_quota_remaining_norm=1.0,
+            unit_stuck_steps_norm=0.0,
+            plan_commitment_age_norm=0.0,
+            intent_alignment_last_k=0.0,
+            last_failure_reason_onehot=[0.0, 0.0, 0.0, 0.0],
         )
 
     # -------------------------------------------------
@@ -294,6 +363,13 @@ class TrainingEnv:
             "action_type": action_type,
             "action_class": action.__class__.__name__,
             "turn": next_state.turn,
+            "plan_intent": str(getattr(action, "rl_plan_intent", "UNKNOWN") or "UNKNOWN"),
+            "plan_unit_role": str(getattr(action, "rl_plan_unit_role", "UNKNOWN") or "UNKNOWN"),
+            "plan_focus_vp_id": getattr(action, "rl_plan_focus_vp_id", None),
+            "plan_step_id": int(getattr(action, "rl_plan_step_id", 0) or 0),
+            "plan_budget_state": str(getattr(action, "rl_plan_budget_state", "UNBOUNDED") or "UNBOUNDED"),
+            "plan_progress_stub": float(getattr(action, "rl_plan_progress_stub", 0.0) or 0.0),
+            "intent_alignment_stub": float(getattr(action, "rl_plan_intent_alignment_stub", 0.0) or 0.0),
         }
 
         # -------------------------------------------------
@@ -455,6 +531,72 @@ class TrainingEnv:
         info["actor_captured_vp_now"] = actor_captured_vp_now
         info["objective_dist_before"] = objective_dist_before
         info["objective_dist_after"] = objective_dist_after
+        if objective_dist_before is not None and objective_dist_after is not None:
+            try:
+                plan_progress = float(objective_dist_before) - float(objective_dist_after)
+            except Exception:
+                plan_progress = 0.0
+        else:
+            plan_progress = 0.0
+        info["plan_progress_stub"] = max(-1.0, min(1.0, plan_progress))
+        strategy_name = str(info.get("l3_strategy", "") or "").upper()
+        plan_intent = str(info.get("plan_intent", "UNKNOWN") or "UNKNOWN").upper()
+        info["intent_alignment_stub"] = 1.0 if (strategy_name and strategy_name == plan_intent) else 0.0
+        (
+            unit_stuck_steps_norm,
+            plan_commitment_age_norm,
+            intent_alignment_last_k,
+            last_failure_reason_onehot,
+        ) = self._update_lote_d_memory(info)
+        info["unit_stuck_steps_norm"] = unit_stuck_steps_norm
+        info["plan_commitment_age_norm"] = plan_commitment_age_norm
+        info["intent_alignment_last_k"] = intent_alignment_last_k
+        info["last_failure_reason_onehot"] = list(last_failure_reason_onehot)
+        info["plan_state"] = normalize_plan_state(
+            {
+                "intent": info.get("plan_intent"),
+                "unit_role": info.get("plan_unit_role"),
+                "focus_vp_id": info.get("plan_focus_vp_id"),
+                "plan_step_id": info.get("plan_step_id"),
+                "budget_state": info.get("plan_budget_state"),
+                "plan_progress_stub": info.get("plan_progress_stub"),
+                "intent_alignment_stub": info.get("intent_alignment_stub"),
+            }
+        )
+        # P4.2 Lote E (observability-only): lightweight diagnostics for eval reports.
+        try:
+            expected_vp_swing_if_advance = 0.0
+            if objective_dist_before is not None and objective_dist_after is not None:
+                expected_vp_swing_if_advance = max(-1.0, min(1.0, (float(objective_dist_before) - float(objective_dist_after)) / 3.0))
+            expected_trade_if_attack = 0.0
+            if is_attack:
+                expected_trade_if_attack = max(
+                    -1.0,
+                    min(1.0, (float(info.get("rl_damage", 0) or 0) - float(info.get("enemy_damage", 0) or 0)) / 5.0),
+                )
+            if objective_dist_before is not None and float(objective_dist_before) <= 2.0:
+                attack_opportunity_cost_near_vp_norm = max(
+                    0.0,
+                    min(1.0, (expected_vp_swing_if_advance - expected_trade_if_attack + 1.0) / 2.0),
+                )
+            else:
+                attack_opportunity_cost_near_vp_norm = 0.0
+            capture_window_open = 1.0 if (
+                bool(info.get("actor_captured_vp_now", False))
+                or (
+                    bool(info.get("actor_on_vp_after", False))
+                    and not bool(info.get("actor_vp_owned_by_rl_before", False))
+                )
+            ) else 0.0
+            info["attack_opportunity_cost_near_vp_norm"] = float(attack_opportunity_cost_near_vp_norm)
+            info["capture_window_open"] = float(capture_window_open)
+            info["expected_vp_swing_if_advance"] = float(expected_vp_swing_if_advance)
+            info["expected_trade_if_attack"] = float(expected_trade_if_attack)
+        except Exception:
+            info["attack_opportunity_cost_near_vp_norm"] = 0.0
+            info["capture_window_open"] = 0.0
+            info["expected_vp_swing_if_advance"] = 0.0
+            info["expected_trade_if_attack"] = 0.0
         if objective_rule_active:
             row = self._objective_outcome_result(next_state)
             result_text = str((row or {}).get("result", "")).strip()
@@ -483,6 +625,13 @@ class TrainingEnv:
                 own_activated_ratio=own_activated_ratio,
                 enemy_activated_ratio=enemy_activated_ratio,
                 last_action_type=self._last_action_type,
+                focus_vp_progress_last_step=float(info.get("plan_progress_stub", 0.0) or 0.0),
+                focus_vp_id=info.get("plan_focus_vp_id"),
+                role_quota_remaining_norm=1.0,
+                unit_stuck_steps_norm=float(info.get("unit_stuck_steps_norm", 0.0) or 0.0),
+                plan_commitment_age_norm=float(info.get("plan_commitment_age_norm", 0.0) or 0.0),
+                intent_alignment_last_k=float(info.get("intent_alignment_last_k", 0.0) or 0.0),
+                last_failure_reason_onehot=list(info.get("last_failure_reason_onehot", [0.0, 0.0, 0.0, 0.0]) or [0.0, 0.0, 0.0, 0.0]),
             ),
             reward,
             done,

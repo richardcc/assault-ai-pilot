@@ -232,6 +232,13 @@ class ResultsAnalyzer:
         vp_control_auc_vals = []
         contributing_attack_units = []
         contributing_damage_units = []
+        intent_commitment_stub_rates = []
+        role_diversity_stub_vals = []
+        plan_role_counts_totals = defaultdict(int)
+        lote_e_attack_cost_vals = []
+        lote_e_capture_window_vals = []
+        lote_e_expected_vp_swing_vals = []
+        lote_e_expected_trade_vals = []
         strategy_option_totals = defaultdict(lambda: defaultdict(int))
         capture_fallback_reason_totals = defaultdict(int)
         capture_move_block_profile_totals = defaultdict(int)
@@ -303,6 +310,41 @@ class ResultsAnalyzer:
             if "vp_control_auc" in mission:
                 try:
                     vp_control_auc_vals.append(float(mission.get("vp_control_auc", 0.0)))
+                except Exception:
+                    pass
+            if "intent_commitment_rate_stub" in mission:
+                try:
+                    intent_commitment_stub_rates.append(float(mission.get("intent_commitment_rate_stub", 0.0)))
+                except Exception:
+                    pass
+            if "role_diversity_index_stub" in mission:
+                try:
+                    role_diversity_stub_vals.append(float(mission.get("role_diversity_index_stub", 0.0)))
+                except Exception:
+                    pass
+            for role, count in (mission.get("plan_role_counts_stub", {}) or {}).items():
+                try:
+                    plan_role_counts_totals[str(role)] += int(count)
+                except Exception:
+                    pass
+            if "lote_e_attack_opportunity_cost_near_vp_norm" in mission:
+                try:
+                    lote_e_attack_cost_vals.append(float(mission.get("lote_e_attack_opportunity_cost_near_vp_norm", 0.0)))
+                except Exception:
+                    pass
+            if "lote_e_capture_window_open_rate" in mission:
+                try:
+                    lote_e_capture_window_vals.append(float(mission.get("lote_e_capture_window_open_rate", 0.0)))
+                except Exception:
+                    pass
+            if "lote_e_expected_vp_swing_if_advance" in mission:
+                try:
+                    lote_e_expected_vp_swing_vals.append(float(mission.get("lote_e_expected_vp_swing_if_advance", 0.0)))
+                except Exception:
+                    pass
+            if "lote_e_expected_trade_if_attack" in mission:
+                try:
+                    lote_e_expected_trade_vals.append(float(mission.get("lote_e_expected_trade_if_attack", 0.0)))
                 except Exception:
                     pass
             if "fallback_to_attack_rate_in_capture" in mission:
@@ -425,6 +467,25 @@ class ResultsAnalyzer:
             ),
             "vp_control_auc": (
                 statistics.mean(vp_control_auc_vals) if vp_control_auc_vals else 0.0
+            ),
+            "intent_commitment_rate_stub": (
+                statistics.mean(intent_commitment_stub_rates) if intent_commitment_stub_rates else 0.0
+            ),
+            "role_diversity_index_stub": (
+                statistics.mean(role_diversity_stub_vals) if role_diversity_stub_vals else 0.0
+            ),
+            "plan_role_counts_stub": dict(plan_role_counts_totals),
+            "lote_e_attack_opportunity_cost_near_vp_norm": (
+                statistics.mean(lote_e_attack_cost_vals) if lote_e_attack_cost_vals else 0.0
+            ),
+            "lote_e_capture_window_open_rate": (
+                statistics.mean(lote_e_capture_window_vals) if lote_e_capture_window_vals else 0.0
+            ),
+            "lote_e_expected_vp_swing_if_advance": (
+                statistics.mean(lote_e_expected_vp_swing_vals) if lote_e_expected_vp_swing_vals else 0.0
+            ),
+            "lote_e_expected_trade_if_attack": (
+                statistics.mean(lote_e_expected_trade_vals) if lote_e_expected_trade_vals else 0.0
             ),
             "fallback_to_attack_rate_in_capture": fallback_to_attack_rate_in_capture,
             "capture_fallback_reason_counts": dict(capture_fallback_reason_totals),
@@ -630,6 +691,20 @@ class ResultsAnalyzer:
         )
         print(f"stability_status: {mission.get('stability_status', 'unknown')}")
         print(f"capture_readiness: {mission.get('capture_readiness', False)}")
+        print("\n=== PLANNING (P4.1 diagnostics) ===")
+        print(f"intent_commitment_rate_stub: {mission.get('intent_commitment_rate_stub', 0.0):.3f}")
+        print(f"role_diversity_index_stub: {mission.get('role_diversity_index_stub', 0.0):.3f}")
+        plan_roles = mission.get("plan_role_counts_stub", {}) or {}
+        if plan_roles:
+            pretty_roles = ", ".join(f"{k}:{v}" for k, v in sorted(plan_roles.items(), key=lambda kv: kv[1], reverse=True))
+            print(f"plan_role_counts_stub: {pretty_roles}")
+        print(
+            "lote_e:"
+            f" attack_cost_near_vp={mission.get('lote_e_attack_opportunity_cost_near_vp_norm', 0.0):.3f}"
+            f" capture_window_open_rate={mission.get('lote_e_capture_window_open_rate', 0.0):.3f}"
+            f" expected_vp_swing={mission.get('lote_e_expected_vp_swing_if_advance', 0.0):.3f}"
+            f" expected_trade_attack={mission.get('lote_e_expected_trade_if_attack', 0.0):.3f}"
+        )
 
         # ---------------- L2 ----------------
         print("\n=== L2 POLICY PERFORMANCE ===")

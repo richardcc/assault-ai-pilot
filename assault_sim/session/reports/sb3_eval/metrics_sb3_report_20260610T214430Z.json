@@ -1,0 +1,151 @@
+{
+  "meta": {
+    "episodes": 100,
+    "timestamp": "2026-06-10T21:44:30.874567Z",
+    "seed": 42,
+    "output_dir": "C:\\repos\\python\\assault\\assault_sim\\session\\reports\\sb3_eval",
+    "scenario_schedule": [
+      {
+        "id": "battaglia_cittadina_2_1",
+        "episodes": 1800
+      }
+    ],
+    "rl_sides": [
+      "US"
+    ],
+    "models": {
+      "US": "C:\\repos\\python\\assault\\models\\sb3_latest_US.zip"
+    },
+    "train_config_path": "C:\\repos\\python\\assault\\assault_sim\\config\\train_config.json"
+  },
+  "by_side_and_scenario": {
+    "US": {
+      "battaglia_cittadina_2_1": {
+        "meta": {
+          "episodes": 100,
+          "timestamp": "2026-06-10T21:44:30.874567Z",
+          "model": "C:\\repos\\python\\assault\\models\\sb3_latest_US.zip",
+          "scenario": "battaglia_cittadina_2_1",
+          "rl_side": "US",
+          "vecnormalize_path": "C:\\repos\\python\\assault\\models\\sb3_vecnormalize_US.pkl",
+          "obs_normalized": false,
+          "csv": "C:\\repos\\python\\assault\\assault_sim\\session\\reports\\sb3_eval\\metrics_sb3_US_battaglia_cittadina_2_1.csv"
+        },
+        "summary": {
+          "episodes": 0,
+          "win_rate": 0,
+          "win_score_rate": 0,
+          "true_win_rate": 0,
+          "draw_rate": 0,
+          "loss_rate": 0,
+          "draws": 0,
+          "losses": 0,
+          "avg_vp": 0,
+          "avg_steps": 0,
+          "end_reason_counts": {},
+          "win_rate_by_end_reason": {},
+          "victory_level_counts": {},
+          "rl_result_counts": {},
+          "tracked_result_counts": {},
+          "captured_final_counts": {}
+        },
+        "combat": {
+          "trade_mean": 0.0,
+          "damage_ratio": 0.0,
+          "total_damage_rl": 0,
+          "total_damage_enemy": 0,
+          "trade_samples": 0
+        },
+        "advanced": {
+          "good_trade_rate": 0.0,
+          "bad_trade_rate": 0.0,
+          "selectivity": 0.0,
+          "zero_dmg_rate": 0.0
+        },
+        "policy_alignment": {
+          "forced_steps": 0,
+          "decisions": 0,
+          "forced_ratio": 0.0,
+          "top_sampled_to_executed": {},
+          "composite_available_count": 0,
+          "composite_selected_count": 0,
+          "composite_available_decisions": 0,
+          "composite_selection_rate_when_available": 0.0
+        },
+        "mission": {
+          "vp_contact_rate": 0.0,
+          "capture_pressure_turn": null,
+          "strategy_stuck_ratio": 0.0,
+          "unit_concentration_index": 0.0,
+          "objective_transition_matrix": {},
+          "vp_entry_opportunities": 0,
+          "vp_entries_taken": 0,
+          "vp_entry_conversion_rate": null,
+          "vp_entry_missed_rate": null,
+          "vp_net_progress": 0.0,
+          "position_reversal_rate": 0.0,
+          "attack_near_vp_instead_of_capture_rate": 0.0,
+          "vp_control_turns_share": 0.0,
+          "capture_attempt_success_rate": 0.0,
+          "first_vp_entry_turn_p50": null,
+          "first_vp_entry_turn_p90": null,
+          "capture_conversion_after_contact": 0.0,
+          "capture_intent_persistence": 0.0,
+          "attack_opportunity_cost_near_vp": 0.0,
+          "vp_control_auc": 0.0,
+          "intent_commitment_rate_stub": 0.0,
+          "role_diversity_index_stub": 0.0,
+          "plan_role_counts_stub": {},
+          "fallback_to_attack_rate_in_capture": 0.0,
+          "capture_fallback_reason_counts": {},
+          "capture_move_block_profile": {},
+          "multi_unit_contribution": {
+            "attack_units_mean": 0.0,
+            "damage_units_mean": 0.0
+          },
+          "stability_checks": {
+            "strategy_stuck_ok": true,
+            "unit_concentration_ok": true,
+            "vp_contact_ok": false
+          },
+          "stability_status": "yellow",
+          "capture_checks": {
+            "vp_contact_min": false,
+            "pressure_turn_set": false,
+            "concentration_ok": true,
+            "vp_entry_missed_ok": false,
+            "capture_success_ok": false,
+            "capture_fallback_ok": true
+          },
+          "capture_readiness": false
+        },
+        "action_execution": {
+          "RL": {},
+          "ENEMY": {}
+        }
+      }
+    }
+  },
+  "comparison": [
+    {
+      "rl_side": "US",
+      "scenario": "battaglia_cittadina_2_1",
+      "episodes": 0,
+      "win_rate": 0,
+      "win_score_rate": 0,
+      "true_win_rate": 0,
+      "draw_rate": 0,
+      "loss_rate": 0,
+      "draws": 0,
+      "losses": 0,
+      "avg_vp": 0,
+      "avg_steps": 0,
+      "end_reason_counts": {},
+      "win_rate_by_end_reason": {},
+      "rl_result_counts": {},
+      "tracked_result_counts": {},
+      "trade_mean": 0.0,
+      "damage_ratio": 0.0
+    }
+  ]
+}

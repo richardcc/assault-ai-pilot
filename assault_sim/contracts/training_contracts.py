@@ -1,7 +1,68 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Literal, TypedDict
+
+
+PlanIntent = Literal["CAPTURE", "DENY", "ATTRIT", "PRESERVE", "UNKNOWN"]
+UnitRole = Literal["ASSAULT", "SUPPORT_FIRE", "SCREEN", "HOLD_VP", "RESERVE", "UNKNOWN"]
+PlanBudgetState = Literal["UNBOUNDED", "BUDGETED", "EXHAUSTED", "UNKNOWN"]
+
+
+class PlanStateContract(TypedDict):
+    intent: PlanIntent
+    unit_role: UnitRole
+    focus_vp_id: str | None
+    plan_step_id: int
+    budget_state: PlanBudgetState
+    plan_progress_stub: float
+    intent_alignment_stub: float
+
+
+def normalize_plan_state(payload: dict[str, Any] | None) -> PlanStateContract:
+    data = dict(payload or {})
+
+    valid_intents = {"CAPTURE", "DENY", "ATTRIT", "PRESERVE", "UNKNOWN"}
+    valid_roles = {"ASSAULT", "SUPPORT_FIRE", "SCREEN", "HOLD_VP", "RESERVE", "UNKNOWN"}
+    valid_budget = {"UNBOUNDED", "BUDGETED", "EXHAUSTED", "UNKNOWN"}
+
+    intent_raw = str(data.get("intent", "UNKNOWN") or "UNKNOWN").upper()
+    role_raw = str(data.get("unit_role", "UNKNOWN") or "UNKNOWN").upper()
+    budget_raw = str(data.get("budget_state", "UNBOUNDED") or "UNBOUNDED").upper()
+
+    intent: PlanIntent = intent_raw if intent_raw in valid_intents else "UNKNOWN"
+    unit_role: UnitRole = role_raw if role_raw in valid_roles else "UNKNOWN"
+    budget_state: PlanBudgetState = budget_raw if budget_raw in valid_budget else "UNKNOWN"
+
+    focus_vp_id_raw = data.get("focus_vp_id")
+    focus_vp_id = str(focus_vp_id_raw) if focus_vp_id_raw not in (None, "") else None
+
+    try:
+        plan_step_id = max(0, int(data.get("plan_step_id", 0)))
+    except Exception:
+        plan_step_id = 0
+
+    try:
+        plan_progress_stub = float(data.get("plan_progress_stub", 0.0))
+    except Exception:
+        plan_progress_stub = 0.0
+    plan_progress_stub = max(-1.0, min(1.0, plan_progress_stub))
+
+    try:
+        intent_alignment_stub = float(data.get("intent_alignment_stub", 0.0))
+    except Exception:
+        intent_alignment_stub = 0.0
+    intent_alignment_stub = max(0.0, min(1.0, intent_alignment_stub))
+
+    return {
+        "intent": intent,
+        "unit_role": unit_role,
+        "focus_vp_id": focus_vp_id,
+        "plan_step_id": plan_step_id,
+        "budget_state": budget_state,
+        "plan_progress_stub": plan_progress_stub,
+        "intent_alignment_stub": intent_alignment_stub,
+    }
 
 
 @dataclass(frozen=True)

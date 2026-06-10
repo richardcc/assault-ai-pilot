@@ -70,6 +70,22 @@ class Evaluator:
                 return v
         return None
 
+    def _captured_objectives_for_side(self, state, side) -> int:
+        if state is None or not side:
+            return 0
+        points = getattr(getattr(state, "victory", None), "points", []) or []
+        if not points:
+            return 0
+        own_ownership = self._ownership_for_side(state, side)
+        if own_ownership is None:
+            return 0
+        captured = 0
+        for vp in points:
+            hs = state.hex_states.get(vp.hex_coords)
+            if hs is not None and hs.ownership == own_ownership:
+                captured += 1
+        return captured
+
     def run_episode(self):
         advanced_metrics = AdvancedMetrics()
 
@@ -122,6 +138,13 @@ class Evaluator:
         composite_available_count = 0
         composite_selected_count = 0
         composite_available_decisions = 0
+        plan_stub_decisions = 0
+        plan_stub_intent_aligned = 0
+        plan_role_counts = defaultdict(int)
+        lote_e_attack_cost_vals = []
+        lote_e_capture_window_vals = []
+        lote_e_expected_vp_swing_vals = []
+        lote_e_expected_trade_vals = []
 
         # ✅ CRÍTICO → LOG REAL DE EVENTOS
         events_log = []
@@ -276,22 +299,32 @@ class Evaluator:
                         (u for u in getattr(state, "units", []) if u.unit_id == unit_id),
                         None,
                     )
+                captured_before_cnt = self._captured_objectives_for_side(prev_state, self.rl_side)
+                captured_after_cnt = self._captured_objectives_for_side(state, self.rl_side)
+                objective_delta_real = captured_after_cnt - captured_before_cnt
                 can_enter_vp_now = bool(actor_before is not None and self._can_enter_uncaptured_vp_now(prev_state, actor_before))
                 if can_enter_vp_now:
                     vp_entry_opportunities += 1
-                    if (
-                        bool(info.get("actor_captured_vp_now", False))
-                        or int(info.get("objective_captured_delta", 0)) > 0
+                # Count taken entries from real objective-control delta first.
+                if (
+                    objective_delta_real > 0
+                    or int(info.get("objective_captured_delta", 0)) > 0
+                    or bool(info.get("actor_captured_vp_now", False))
+                    or (
+                        bool(info.get("actor_on_vp_after", False))
+                        and not bool(info.get("actor_vp_owned_by_rl_before", False))
+                    )
+                ):
+                    vp_entries_taken += 1
+                if (
+                    first_vp_entry_step is None
+                    and (
+                        objective_delta_real > 0
                         or (
                             bool(info.get("actor_on_vp_after", False))
                             and not bool(info.get("actor_vp_owned_by_rl_before", False))
                         )
-                    ):
-                        vp_entries_taken += 1
-                if (
-                    first_vp_entry_step is None
-                    and bool(info.get("actor_on_vp_after", False))
-                    and not bool(info.get("actor_vp_owned_by_rl_before", False))
+                    )
                 ):
                     first_vp_entry_step = steps + 1
 
@@ -333,6 +366,20 @@ class Evaluator:
 
                     if option is not None:
                         strategy_option_map[formation][option.name] += 1
+                plan_role = str(info.get("plan_unit_role", "") or "UNKNOWN").upper()
+                plan_role_counts[plan_role] += 1
+                try:
+                    plan_stub_intent_aligned += int(float(info.get("intent_alignment_stub", 0.0)) >= 1.0)
+                except Exception:
+                    pass
+                plan_stub_decisions += 1
+                try:
+                    lote_e_attack_cost_vals.append(float(info.get("attack_opportunity_cost_near_vp_norm", 0.0) or 0.0))
+                    lote_e_capture_window_vals.append(float(info.get("capture_window_open", 0.0) or 0.0))
+                    lote_e_expected_vp_swing_vals.append(float(info.get("expected_vp_swing_if_advance", 0.0) or 0.0))
+                    lote_e_expected_trade_vals.append(float(info.get("expected_trade_if_attack", 0.0) or 0.0))
+                except Exception:
+                    pass
                 if str(info.get("l3_strategy", "") or "").upper() == "CAPTURE":
                     capture_attempts += 1
                     if (
@@ -518,6 +565,14 @@ class Evaluator:
         # ADVANCED METRICS
         # -------------------------------------------------
         result["advanced"] = advanced_metrics.to_dict()
+        role_total = sum(int(v) for v in plan_role_counts.values())
+        role_diversity_index_stub = 0.0
+        if role_total > 0:
+            hhi = 0.0
+            for count in plan_role_counts.values():
+                p = float(count) / float(role_total)
+                hhi += p * p
+            role_diversity_index_stub = max(0.0, 1.0 - hhi)
         total_contacts = vp_contact_steps + vp_hold_steps
         vp_entry_conversion_rate = (
             (vp_entries_taken / vp_entry_opportunities)
@@ -562,6 +617,23 @@ class Evaluator:
             ),
             "vp_control_auc": (
                 vp_control_count_sum / max(1, vp_control_count_steps)
+            ),
+            "intent_commitment_rate_stub": (
+                plan_stub_intent_aligned / max(1, plan_stub_decisions)
+            ),
+            "role_diversity_index_stub": role_diversity_index_stub,
+            "plan_role_counts_stub": dict(plan_role_counts),
+            "lote_e_attack_opportunity_cost_near_vp_norm": (
+                float(np.mean(lote_e_attack_cost_vals)) if lote_e_attack_cost_vals else 0.0
+            ),
+            "lote_e_capture_window_open_rate": (
+                float(np.mean(lote_e_capture_window_vals)) if lote_e_capture_window_vals else 0.0
+            ),
+            "lote_e_expected_vp_swing_if_advance": (
+                float(np.mean(lote_e_expected_vp_swing_vals)) if lote_e_expected_vp_swing_vals else 0.0
+            ),
+            "lote_e_expected_trade_if_attack": (
+                float(np.mean(lote_e_expected_trade_vals)) if lote_e_expected_trade_vals else 0.0
             ),
         }
 

@@ -39,6 +39,47 @@ class OptionExecutor:
         self._retreat_streak_by_unit = {}
         # Per-unit CAPTURE staging streak (used to break lateral loops).
         self._capture_staging_streak_by_unit = {}
+        # Monotonic step id to trace plan evolution.
+        self._plan_step_seq = 0
+
+    def _plan_intent_name(self, strategy: StrategicIntent | None) -> str:
+        if strategy is None:
+            return "UNKNOWN"
+        return str(getattr(strategy, "name", "UNKNOWN") or "UNKNOWN").upper()
+
+    def _plan_focus_vp_id(self, state, unit) -> str | None:
+        if state is None or unit is None:
+            return None
+        target = self._objective_target_hex(state, unit)
+        if target is None:
+            return None
+        return f"{target[0]},{target[1]}"
+
+    def _plan_unit_role(self, state, unit, strategy: StrategicIntent | None) -> str:
+        if unit is None:
+            return "UNKNOWN"
+        if state is None:
+            if strategy == StrategicIntent.PRESERVE:
+                return "RESERVE"
+            if strategy == StrategicIntent.DENY:
+                return "HOLD_VP"
+            return "UNKNOWN"
+        local_role = self._local_role_kind(state, unit)
+        if local_role == "SUPPORT":
+            return "SUPPORT_FIRE"
+        if local_role == "ASSAULT":
+            return "ASSAULT"
+        if strategy == StrategicIntent.PRESERVE:
+            return "RESERVE"
+        if strategy == StrategicIntent.DENY:
+            return "HOLD_VP"
+        if strategy == StrategicIntent.CAPTURE:
+            return "SCREEN"
+        return "UNKNOWN"
+
+    def _next_plan_step_id(self) -> int:
+        self._plan_step_seq += 1
+        return int(self._plan_step_seq)
 
     def _update_position_history(self, unit):
         if unit is None or getattr(unit, "position", None) is None:
@@ -566,7 +607,7 @@ class OptionExecutor:
         hold.rl_capture_move_block_profile = move_reason
         return hold, TacticalOption.HOLD
 
-    def _tag_action(self, action, option: TacticalOption, strategy: StrategicIntent | None):
+    def _tag_action(self, action, option: TacticalOption, strategy: StrategicIntent | None, state=None, unit=None):
         if action is None:
             return None
         # Copy only the chosen action to keep ActionCatalog cache objects immutable.
@@ -583,6 +624,17 @@ class OptionExecutor:
             action.rl_capture_target_dist_before = None
         if not hasattr(action, "rl_capture_target_dist_after"):
             action.rl_capture_target_dist_after = None
+        plan_unit = unit
+        if plan_unit is None and getattr(action, "unit_id", None) and state is not None:
+            uid = getattr(action, "unit_id", None)
+            plan_unit = next((u for u in getattr(state, "units", []) if getattr(u, "unit_id", None) == uid), None)
+        action.rl_plan_intent = self._plan_intent_name(strategy)
+        action.rl_plan_unit_role = self._plan_unit_role(state, plan_unit, strategy)
+        action.rl_plan_focus_vp_id = self._plan_focus_vp_id(state, plan_unit)
+        action.rl_plan_step_id = self._next_plan_step_id()
+        action.rl_plan_budget_state = "UNBOUNDED"
+        action.rl_plan_progress_stub = 0.0
+        action.rl_plan_intent_alignment_stub = 0.0
         uid = getattr(action, "unit_id", None)
         if uid:
             if option == TacticalOption.RETREAT:
@@ -644,12 +696,27 @@ class OptionExecutor:
             strategy = StrategicIntent.DENY
 
         # Deterministic CAPTURE controller to avoid reward-driven local loops.
+        # Hard gate: in CAPTURE, if a VP entry is immediately available, force it.
+        if (
+            strategy == StrategicIntent.CAPTURE
+            and self._has_uncaptured_objective_for_side(state, unit.side)
+            and not self._is_capture_emergency(state, unit)
+        ):
+            step_into_vp = self._best_step_into_uncaptured_vp(state, unit)
+            if step_into_vp is not None:
+                d_before = self._nearest_uncaptured_vp_dist(state, unit)
+                step_into_vp.rl_capture_fallback_reason = "hard_gate_step_into_uncaptured_vp"
+                step_into_vp.rl_capture_move_block_profile = "hard_gate_step_into_uncaptured_vp"
+                step_into_vp.rl_capture_target_dist_before = d_before
+                step_into_vp.rl_capture_target_dist_after = 0
+                return self._tag_action(step_into_vp, TacticalOption.ADVANCE, strategy, state=state, unit=unit)
+
         if (
             strategy == StrategicIntent.CAPTURE
             and self._has_uncaptured_objective_for_side(state, unit.side)
         ):
             action, chosen_option = self._capture_priority_action(state, unit, attack_mode)
-            return self._tag_action(action, chosen_option, strategy)
+            return self._tag_action(action, chosen_option, strategy, state=state, unit=unit)
 
         option = self._resolve_option_for_strategy(state, unit, option, strategy)
         option = self._apply_local_role_bias(state, unit, option, strategy)
@@ -661,7 +728,7 @@ class OptionExecutor:
             # Hard priority: if a VP can be occupied now, do it before shooting.
             step_into_vp = self._best_step_into_uncaptured_vp(state, unit)
             if step_into_vp is not None:
-                return self._tag_action(step_into_vp, TacticalOption.ADVANCE, strategy)
+                return self._tag_action(step_into_vp, TacticalOption.ADVANCE, strategy, state=state, unit=unit)
         # Hard temporal capture curriculum:
         # while objectives are pending, early episode/turn CAPTURE should advance
         # toward VP unless there is an emergency or a high-value VP attack.
@@ -712,16 +779,16 @@ class OptionExecutor:
                 nearest_vp_d = self._nearest_uncaptured_vp_dist(state, unit)
                 # If close to VP and trying to camp-attack, force movement toward capture.
                 if nearest_vp_d is not None and nearest_vp_d <= 2:
-                    return self._tag_action(self._move_closer(state, unit), TacticalOption.ADVANCE, strategy)
-            return self._tag_action(self._execute_attack(state, unit, attack_mode), option, strategy)
+                    return self._tag_action(self._move_closer(state, unit), TacticalOption.ADVANCE, strategy, state=state, unit=unit)
+            return self._tag_action(self._execute_attack(state, unit, attack_mode), option, strategy, state=state, unit=unit)
 
         # -------------------------------------------------
         if option == TacticalOption.ADVANCE:
-            return self._tag_action(self._move_closer(state, unit), option, strategy)
+            return self._tag_action(self._move_closer(state, unit), option, strategy, state=state, unit=unit)
 
         # -------------------------------------------------
         if option == TacticalOption.FLANK:
-            return self._tag_action(self._flank_move(state, unit), option, strategy)
+            return self._tag_action(self._flank_move(state, unit), option, strategy, state=state, unit=unit)
 
         # -------------------------------------------------
         # ✅ RETREAT (NO ATAQUE)
@@ -731,9 +798,9 @@ class OptionExecutor:
             action = self.heuristic.choose_action(state, unit, option)
 
             if isinstance(action, (RangedDirectAttack, RangedIndirectAttack)):
-                return self._tag_action(WaitAction(unit.unit_id), option, strategy)
+                return self._tag_action(WaitAction(unit.unit_id), option, strategy, state=state, unit=unit)
 
-            return self._tag_action(action or WaitAction(unit.unit_id), option, strategy)
+            return self._tag_action(action or WaitAction(unit.unit_id), option, strategy, state=state, unit=unit)
 
         # -------------------------------------------------
         # ✅ HOLD (MEJORADO CON FALLBACK)
@@ -749,13 +816,13 @@ class OptionExecutor:
 
             if attacks:
                 best = self._best_attack(attacks, state=state, unit=unit)
-                return self._tag_action(best if best else attacks[0], option, strategy)
+                return self._tag_action(best if best else attacks[0], option, strategy, state=state, unit=unit)
             # If there are relevant objectives to capture, avoid pure passivity.
             if self._objective_target_hex(state, unit) is not None:
-                return self._tag_action(self._move_closer(state, unit), option, strategy)
-            return self._tag_action(WaitAction(unit.unit_id), option, strategy)
+                return self._tag_action(self._move_closer(state, unit), option, strategy, state=state, unit=unit)
+            return self._tag_action(WaitAction(unit.unit_id), option, strategy, state=state, unit=unit)
 
-        return self._tag_action(WaitAction(unit.unit_id), option, strategy)
+        return self._tag_action(WaitAction(unit.unit_id), option, strategy, state=state, unit=unit)
 
     def _resolve_option_for_strategy(self, state, unit, option: TacticalOption, strategy: StrategicIntent | None):
         if strategy is None:

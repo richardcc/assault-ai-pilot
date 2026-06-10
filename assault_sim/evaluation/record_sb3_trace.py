@@ -74,6 +74,68 @@ def _resolve_side(cfg, explicit: str | None) -> str:
     return str(cfg.rl_side).upper()
 
 
+def _build_step_trace_entry(
+    *,
+    step_idx: int,
+    info: dict[str, Any],
+    strategy_idx: int,
+    option_idx: int,
+    attack_mode: int,
+    unit_slot: int,
+    reward: float,
+    done: bool,
+    truncated: bool,
+) -> dict[str, Any]:
+    info = dict(info or {})
+    return {
+        "step": step_idx,
+        "turn": info.get("turn"),
+        "decision_action": {
+            "strategy_idx": strategy_idx,
+            "strategy": _safe_enum_name(StrategicIntent, strategy_idx),
+            "option_idx": option_idx,
+            "option": _safe_enum_name(TacticalOption, option_idx),
+            "attack_mode": attack_mode,
+            "unit_slot": unit_slot,
+        },
+        "executed": {
+            "unit_id": info.get("unit_id"),
+            "action_id": info.get("action_id"),
+            "action_class": info.get("action_class"),
+            "sampled_option": info.get("sampled_option"),
+            "resolved_option": info.get("resolved_option"),
+            "executed_option": info.get("executed_option"),
+            "forced": bool(info.get("forced", False)),
+        },
+        "capture_debug": {
+            "l3_strategy": info.get("l3_strategy"),
+            "l2_option": info.get("l2_option"),
+            "fallback_to_attack": bool(info.get("capture_fallback_to_attack", False)),
+            "fallback_reason": info.get("capture_fallback_reason"),
+            "move_block_profile": info.get("capture_move_block_profile"),
+            "objective_delta": info.get("objective_captured_delta"),
+            "objective_before": info.get("objective_captured_before"),
+            "objective_after": info.get("objective_captured_after"),
+            "objective_dist_before": info.get("objective_dist_before"),
+            "objective_dist_after": info.get("objective_dist_after"),
+            "capture_target_dist_before": info.get("capture_target_dist_before"),
+            "capture_target_dist_after": info.get("capture_target_dist_after"),
+        },
+        "plan_debug": {
+            "intent": info.get("plan_intent"),
+            "unit_role": info.get("plan_unit_role"),
+            "focus_vp_id": info.get("plan_focus_vp_id"),
+            "plan_step_id": info.get("plan_step_id"),
+            "budget_state": info.get("plan_budget_state"),
+            "plan_progress_stub": info.get("plan_progress_stub"),
+            "intent_alignment_stub": info.get("intent_alignment_stub"),
+        },
+        "reward": float(reward),
+        "done": bool(done),
+        "truncated": bool(truncated),
+    }
+
+
 def record_trace(
     *,
     rl_side: str | None = None,
@@ -122,44 +184,17 @@ def record_trace(
             info = dict(info or {})
 
             ep_trace.append(
-                {
-                    "step": step_idx,
-                    "turn": info.get("turn"),
-                    "decision_action": {
-                        "strategy_idx": strategy_idx,
-                        "strategy": _safe_enum_name(StrategicIntent, strategy_idx),
-                        "option_idx": option_idx,
-                        "option": _safe_enum_name(TacticalOption, option_idx),
-                        "attack_mode": attack_mode,
-                        "unit_slot": unit_slot,
-                    },
-                    "executed": {
-                        "unit_id": info.get("unit_id"),
-                        "action_id": info.get("action_id"),
-                        "action_class": info.get("action_class"),
-                        "sampled_option": info.get("sampled_option"),
-                        "resolved_option": info.get("resolved_option"),
-                        "executed_option": info.get("executed_option"),
-                        "forced": bool(info.get("forced", False)),
-                    },
-                    "capture_debug": {
-                        "l3_strategy": info.get("l3_strategy"),
-                        "l2_option": info.get("l2_option"),
-                        "fallback_to_attack": bool(info.get("capture_fallback_to_attack", False)),
-                        "fallback_reason": info.get("capture_fallback_reason"),
-                        "move_block_profile": info.get("capture_move_block_profile"),
-                        "objective_delta": info.get("objective_captured_delta"),
-                        "objective_before": info.get("objective_captured_before"),
-                        "objective_after": info.get("objective_captured_after"),
-                        "objective_dist_before": info.get("objective_dist_before"),
-                        "objective_dist_after": info.get("objective_dist_after"),
-                        "capture_target_dist_before": info.get("capture_target_dist_before"),
-                        "capture_target_dist_after": info.get("capture_target_dist_after"),
-                    },
-                    "reward": float(reward),
-                    "done": bool(done),
-                    "truncated": bool(truncated),
-                }
+                _build_step_trace_entry(
+                    step_idx=step_idx,
+                    info=info,
+                    strategy_idx=strategy_idx,
+                    option_idx=option_idx,
+                    attack_mode=attack_mode,
+                    unit_slot=unit_slot,
+                    reward=reward,
+                    done=done,
+                    truncated=truncated,
+                )
             )
             step_idx += 1
 

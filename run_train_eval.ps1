@@ -92,6 +92,44 @@ function Run-Step {
   }
 }
 
+function Test-ObsShapeCompatibility {
+  param(
+    [string]$RepoRoot,
+    [string]$LogPath
+  )
+  $probe = @"
+from pathlib import Path
+import numpy as np
+from stable_baselines3 import PPO
+from assault_sim.config.train_config import load_train_config
+from assault_sim.envs.gym_assault_env import GymAssaultEnv
+from assault_sim.evaluation.eval_sb3 import _resolve_model_path_for_side
+
+repo = Path(r"$RepoRoot")
+cfg = load_train_config(repo / "assault_sim" / "config" / "train_config.json")
+side = (list(getattr(cfg, "rl_sides", [])) or [getattr(cfg, "rl_side", "US")])[0]
+scenario = (list(getattr(cfg, "scenario_schedule", []))[0].id if getattr(cfg, "scenario_schedule", None) else str(getattr(cfg, "scenario", "")))
+model_path = _resolve_model_path_for_side(repo, side)
+if model_path is None:
+    print("precheck: model not found -> skip")
+    raise SystemExit(0)
+model = PPO.load(str(model_path), device="cpu")
+env = GymAssaultEnv(scenario=scenario, rl_side=side, seed=int(getattr(cfg, "seed", 42)))
+obs, _ = env.reset()
+model_shape = tuple(getattr(getattr(model, "observation_space", None), "shape", ()) or ())
+env_shape = tuple(np.asarray(obs, dtype=np.float32).shape)
+print(f"precheck: model_obs_shape={model_shape} env_obs_shape={env_shape}")
+raise SystemExit(0 if model_shape == env_shape else 3)
+"@
+  Write-Log "Running precheck: model/env observation shape compatibility" $LogPath
+  $tmp = Join-Path $env:TEMP "assault_obs_shape_precheck.py"
+  Set-Content -Path $tmp -Value $probe -Encoding UTF8
+  & python $tmp 2>&1 | Tee-Object -FilePath $LogPath -Append
+  if ($LASTEXITCODE -eq 3) {
+    throw "Obs shape mismatch detected in precheck. Retrain model/VecNormalize before eval."
+  }
+}
+
 if (-not (Test-Path -Path $RepoPath -PathType Container)) {
   throw "RepoPath no existe: $RepoPath"
 }
@@ -131,6 +169,8 @@ try {
     Write-Log "TRAIN omitido por -SkipTrain." $logFile
     Set-Content -Path $heartbeatFile -Value ("status=running`nstep=EVAL`nstarted_at={0}`nlast_update={0}`nelapsed_seconds=0" -f (Get-Date).ToString("s"))
   }
+
+  Test-ObsShapeCompatibility -RepoRoot $RepoPath -LogPath $logFile
 
   foreach ($seed in $Seeds) {
     $title = "EVAL seed $seed"
