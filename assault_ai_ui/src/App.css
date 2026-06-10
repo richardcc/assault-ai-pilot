@@ -190,8 +190,8 @@
 }
 
 .spec-avatar {
-  width: 48px;
-  height: 48px;
+  width: 68px;
+  height: 68px;
   object-fit: contain;
   background: rgba(255, 255, 255, 0.04);
   border: 1px solid rgba(255, 255, 255, 0.1);
@@ -241,9 +241,42 @@
   color: var(--text-bright);
 }
 
-.actions-list {
+.spec-wait-btn {
+  border: 1px solid rgba(0, 240, 255, 0.55);
+  background: rgba(0, 240, 255, 0.12);
+  color: var(--neon-cyan);
+  font-family: var(--font-tech);
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1;
+  padding: 4px 10px;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.spec-wait-btn:hover {
+  background: rgba(0, 240, 255, 0.2);
+  box-shadow: 0 0 8px rgba(0, 240, 255, 0.25);
+}
+
+.spec-inline-health-row {
   display: flex;
-  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  margin-top: 6px;
+}
+
+.spec-inline-health-hearts {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  font-size: 21px;
+  line-height: 1;
+}
+
+.actions-list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 6px;
 }
 
@@ -815,6 +848,15 @@
   z-index: 2;
 }
 
+.trooper-card-hp-row {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 12px;
+  z-index: 2;
+}
+
 .trooper-card-hp {
   font-size: 10px;
   display: flex;
@@ -823,6 +865,15 @@
   align-items: center;
   height: 12px;
   z-index: 2;
+}
+
+.trooper-card-action-text {
+  font-family: var(--font-tech);
+  font-size: 9px;
+  font-weight: 700;
+  line-height: 1;
+  color: var(--neon-cyan);
+  letter-spacing: 0.04em;
 }
 
 /* Cyber States */

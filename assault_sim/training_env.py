@@ -75,6 +75,7 @@ class TrainingEnv:
         self.enemy_kills = 0
 
         self._vp_hexes = set()
+        self._last_action_type = "wait"
 
     def _objectives_captured_for_side(self, state, side: str) -> int:
         if state is None or not side:
@@ -163,6 +164,9 @@ class TrainingEnv:
         self.enemy_kills = 0
 
         self._vp_hexes.clear()
+        self._last_action_type = "wait"
+
+        own_activated_ratio, enemy_activated_ratio = self._activation_ratios(state)
 
         return encode_state(
             state,
@@ -170,6 +174,9 @@ class TrainingEnv:
             rl_side=self.rl_side,
             max_turns=self.sim.scenario.max_turns,
             scenario=self.sim.scenario,
+            own_activated_ratio=own_activated_ratio,
+            enemy_activated_ratio=enemy_activated_ratio,
+            last_action_type=self._last_action_type,
         )
 
     # -------------------------------------------------
@@ -461,6 +468,9 @@ class TrainingEnv:
             info["objective_result_text"] = result_text
             info["objective_result_kind"] = result_kind
 
+        self._last_action_type = action_type
+        own_activated_ratio, enemy_activated_ratio = self._activation_ratios(next_state)
+
         return (
             encode_state(
                 next_state,
@@ -468,8 +478,32 @@ class TrainingEnv:
                 rl_side=self.rl_side,
                 max_turns=self.sim.scenario.max_turns,
                 scenario=self.sim.scenario,
+                own_activated_ratio=own_activated_ratio,
+                enemy_activated_ratio=enemy_activated_ratio,
+                last_action_type=self._last_action_type,
             ),
             reward,
             done,
             info,
         )
+
+    def _activation_ratios(self, state):
+        runtime = getattr(self.sim, "runtime", None)
+        activated_units = getattr(runtime, "activated_units", set()) or set()
+        rl_side_norm = str(self.rl_side).upper()
+
+        own_alive = [
+            u for u in (state.units or [])
+            if getattr(u, "alive", True) and str(getattr(u, "side", "")).upper() == rl_side_norm
+        ]
+        enemy_alive = [
+            u for u in (state.units or [])
+            if getattr(u, "alive", True) and str(getattr(u, "side", "")).upper() != rl_side_norm
+        ]
+
+        own_activated = sum(1 for u in own_alive if u.unit_id in activated_units)
+        enemy_activated = sum(1 for u in enemy_alive if u.unit_id in activated_units)
+
+        own_ratio = own_activated / max(1, len(own_alive))
+        enemy_ratio = enemy_activated / max(1, len(enemy_alive))
+        return float(own_ratio), float(enemy_ratio)

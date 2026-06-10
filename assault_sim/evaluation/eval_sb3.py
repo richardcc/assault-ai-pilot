@@ -117,6 +117,15 @@ class SB3EvalController:
             return tracked
         return None
 
+    def _option_from_action_tag(self, action, fallback: TacticalOption) -> TacticalOption:
+        tagged = str(getattr(action, "rl_l2_option", "") or "").strip().upper()
+        if not tagged:
+            return fallback
+        try:
+            return TacticalOption[tagged]
+        except KeyError:
+            return fallback
+
     def act(self, state, side, unit, obs):
         if side != self.rl_side:
             action = self._enemy_action(state, unit)
@@ -157,14 +166,15 @@ class SB3EvalController:
         if action is None:
             action = WaitAction(unit.unit_id)
 
-        executed_option = self.action_bridge.infer_executed_option(action, resolved_option)
+        resolved_from_action = self._option_from_action_tag(action, resolved_option)
+        executed_option = self.action_bridge.infer_executed_option(action, resolved_from_action)
         self.current_option_sampled = sampled_option
-        self.current_option_resolved = resolved_option
+        self.current_option_resolved = resolved_from_action
         self.current_option = executed_option
         self.current_attack_mode = attack_mode if executed_option == TacticalOption.ATTACK else 0
         self.last_decision_trace = self.action_bridge.build_trace(
             sampled_option=sampled_option,
-            resolved_option=resolved_option,
+            resolved_option=resolved_from_action,
             executed_option=executed_option,
             strategy_name=strategy_name,
         )

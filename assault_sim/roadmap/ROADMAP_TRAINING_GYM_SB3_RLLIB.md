@@ -39,6 +39,7 @@ Pendientes:
 - [ ] mejorar conversion `captured=3 -> captured=4/5`;
 - [ ] revisar/coherenciar `vp_entry_missed_rate` (actualmente inconsistente con wins observados).
 - [ ] consolidar baseline sin degradacion antes de activar reglas nuevas (`reaction_fire`).
+- [ ] mejorar observabilidad RL de forma incremental (memoria de activaciones/ultima accion/contexto VP) como linea principal de mejora de winrate.
 
 Guardrails:
 - [ ] evitar loops de `RETREAT` fuera de emergencia;
@@ -49,6 +50,12 @@ Plan de recuperacion baseline (3 iteraciones cortas):
 - [ ] Iteracion 1: reducir sesgo `PRESERVE/RETREAT`, priorizar `ATTACK` util cuando exista tiro legal.
 - [ ] Iteracion 2: recalibrar scoring de compuestas (`move/fire`) para mantener uso >0 sin hundir `damage_ratio`.
 - [ ] Iteracion 3: cerrar con eval multi-seed (42/43/44, 100 eps) y fijar nuevo baseline minimo.
+
+Linea operativa acordada (observabilidad primero):
+- [x] Fase 1 minima: `own_activated_ratio`, `enemy_activated_ratio`, `last_action_type_onehot(5)`.
+- [ ] Fase 2 (incremental): contexto VP inmediato por unidad (puede entrar/capturar este turno, distancia a VP no asegurado).
+- [ ] Fase 3 (post-baseline estable): riesgo tactico por ruta/hex para preparar activacion futura de `reaction_fire`.
+- [ ] Regla de adopcion: introducir 2-4 features por iteracion y validar siempre con eval multi-seed antes de acumular cambios.
 
 ---
 
@@ -148,6 +155,30 @@ Activar cuando P0 esté estable:
 - [ ] curriculum de complejidad (mapa/unidades/horizonte);
 - [ ] tuning throughput/paralelismo;
 - [ ] SLO 24h + eval multi-seed.
+
+---
+
+## Riesgos y validacion (optimizacion rendimiento)
+
+Objetivo:
+- acelerar entrenamiento (paralelismo/vectorizacion/cache) sin degradar calidad tactica ni estabilidad.
+
+Riesgos principales:
+- [ ] no determinismo adicional por `n_envs` y orden de eventos;
+- [ ] desalineacion de observacion/recompensa por estado compartido entre envs;
+- [ ] inestabilidad PPO al cambiar batch efectivo (`n_envs * n_steps`);
+- [ ] bugs silenciosos: sube FPS pero cae desempeno en metrics de juego.
+
+Protocolo obligatorio antes de adoptar optimizaciones:
+- [ ] mantener baseline congelado (`1 env`) con seed fija y config fija;
+- [ ] ejecutar A/B corto (>=100k steps) en `1 env`, `4 envs`, `8 envs`;
+- [ ] checks de sanidad: sin NaN/inf, reward acotada, `explained_variance` no colapsa;
+- [ ] comparar gates de calidad vs baseline: `true_win_rate`, `vp_entry_missed_rate`, `damage_ratio`, `draw_rate`;
+- [ ] si se cambia `n_envs`, ajustar `n_steps`/`batch_size` para mantener lote efectivo comparable.
+
+Criterio de adopcion:
+- [ ] GO solo si mejora throughput material (>= +30%) sin regresion material en metrics P0;
+- [ ] NO-GO si la mejora de FPS viene con deterioro consistente en win/captura/damage.
 
 ---
 

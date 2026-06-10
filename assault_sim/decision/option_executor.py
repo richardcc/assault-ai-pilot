@@ -234,7 +234,10 @@ class OptionExecutor:
         # Be stricter with CAPTURE emergencies: avoid over-triggering retreats
         # when objectives are still pending.
         critical_hp = hp <= max(1.0, max_hp * 0.20) if max_hp > 0 else hp <= 1.0
-        return bool(suppressed or (critical_hp and close_threat))
+        # Retreat in CAPTURE only under hard emergency:
+        # - critical HP with nearby threat, OR
+        # - suppressed and nearby threat.
+        return bool((critical_hp and close_threat) or (suppressed and close_threat))
 
     def _best_step_into_uncaptured_vp(self, state, unit):
         if unit is None or getattr(unit, "position", None) is None:
@@ -335,6 +338,9 @@ class OptionExecutor:
             if not path:
                 continue
             end = path[-1]
+            if self._is_reversal_move(unit, end) and not self._is_uncaptured_vp_hex(state, unit.side, end):
+                # Hard stop to A->B->A oscillations during CAPTURE staging.
+                continue
             dist_after = self._nearest_uncaptured_vp_dist_from_pos(state, unit.side, end)
             if dist_after is None:
                 continue
@@ -841,6 +847,9 @@ class OptionExecutor:
                 continue
 
             new_pos = path[-1]
+            if self._is_reversal_move(unit, new_pos) and not self._is_uncaptured_vp_hex(state, unit.side, new_pos):
+                # Hard stop to immediate reversal unless it converts an uncaptured VP.
+                continue
             d = safe_hex_distance(new_pos, objective_target)
             terrain_score = self._terrain_tactical_score(state, unit, new_pos)
             score = -float(d) + _MOVE_CFG.advance_terrain_weight * terrain_score
@@ -889,6 +898,9 @@ class OptionExecutor:
                 continue
 
             new_pos = path[-1]
+            if self._is_reversal_move(unit, new_pos) and not self._is_uncaptured_vp_hex(state, unit.side, new_pos):
+                # Prevent flank ping-pong behavior when no net progress is made.
+                continue
             dist = safe_hex_distance(new_pos, objective_target)
             terrain_score = self._terrain_tactical_score(state, unit, new_pos)
 
@@ -956,9 +968,9 @@ class OptionExecutor:
                 # Keep composites available, but only when they are meaningfully good
                 # or have direct VP impact.
                 if not target_on_vp:
-                    if adv < 0.15:
+                    if adv < 0.25:
                         continue
-                    if exp_dmg < 0.10:
+                    if exp_dmg < 0.15:
                         continue
 
             # If configured, block attacks that look like bad trades.

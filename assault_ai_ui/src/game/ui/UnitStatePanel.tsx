@@ -189,17 +189,22 @@ export function UnitStatePanel({
                     {u.id}
                   </div>
 
-                  {/* HP DISPLAY */}
-                  <div className="trooper-card-hp">
-                    {dead ? (
-                      <span style={{ color: "#ff3838", fontWeight: 700 }}>DEAD</span>
-                    ) : u.hp != null ? (
-                      Array.from({ length: u.hp }).map((_, i) => (
-                        <span key={i} style={{ color: "#ff3838" }}>❤️</span>
-                      ))
-                    ) : (
-                      "-"
-                    )}
+                  {/* HP + compact action display */}
+                  <div className="trooper-card-hp-row">
+                    <div className="trooper-card-hp">
+                      {dead ? (
+                        <span style={{ color: "#ff3838", fontWeight: 700 }}>DEAD</span>
+                      ) : u.hp != null ? (
+                        Array.from({ length: u.hp }).map((_, i) => (
+                          <span key={i} style={{ color: "#ff3838" }}>❤️</span>
+                        ))
+                      ) : (
+                        "-"
+                      )}
+                    </div>
+                    {!dead && actionMarker === "normal" ? (
+                      <div className="trooper-card-action-text">WAIT</div>
+                    ) : null}
                   </div>
                 </div>
               );

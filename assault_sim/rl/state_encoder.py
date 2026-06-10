@@ -172,7 +172,19 @@ def _objective_outcome_features(state, rl_side=None, scenario=None):
     ]
 
 
-def encode_state(state, unit=None, rl_side=None, max_turns=None, scenario=None):
+LAST_ACTION_KEYS = ["wait", "move", "direct", "indirect", "assault"]
+
+
+def encode_state(
+    state,
+    unit=None,
+    rl_side=None,
+    max_turns=None,
+    scenario=None,
+    own_activated_ratio: float = 0.0,
+    enemy_activated_ratio: float = 0.0,
+    last_action_type: str | None = None,
+):
 
     active = unit
     if active is None and rl_side is not None:
@@ -320,6 +332,11 @@ def encode_state(state, unit=None, rl_side=None, max_turns=None, scenario=None):
     # =================================================
     obs.extend(compute_tactical_features(state, rl_side))
     obs.extend(_objective_outcome_features(state, rl_side=rl_side, scenario=scenario))
+    obs.extend([
+        float(np.clip(own_activated_ratio, 0.0, 1.0)),
+        float(np.clip(enemy_activated_ratio, 0.0, 1.0)),
+    ])
+    obs.extend(_one_hot(str(last_action_type or ""), LAST_ACTION_KEYS))
 
     # -------------------------
     # FINAL VECTOR

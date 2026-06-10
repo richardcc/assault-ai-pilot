@@ -62,7 +62,9 @@ export function DispatchedOrdersPanel({
   }, []);
 
   // ✅ NORMALIZAR HUMANO
-  const normalizedHuman = availableMoves.map((a: any) => ({
+  const normalizedHuman = availableMoves
+    .filter((a: any) => a.kind !== "wait")
+    .map((a: any) => ({
     type: (a.kind === "attack"
       ? (a.type || "ATTACK")
       : a.kind === "wait"

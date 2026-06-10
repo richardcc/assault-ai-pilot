@@ -9,6 +9,7 @@ import { sides } from "./game/config/sides";
 import { formatCoords } from "./game/render/hexGridRenderer";
 import { DispatchedOrdersPanel } from "./game/ui/DispatchedOrdersPanel";
 import { logCombatEvents } from "./game/systems/combatLog";
+import { getUnitActionMarker } from "./game/state/actionMarkers";
 
 type LogEntry = {
   type: string;
@@ -354,6 +355,31 @@ function App() {
   const selectedUnitSpec = selectedUnit 
     ? unitImages[selectedUnit.unit_key as keyof typeof unitImages] 
     : null;
+  const selectedUnitActionMarker = selectedUnit
+    ? getUnitActionMarker(selectedUnit.id)
+    : null;
+  const selectedWaitOrder = selectedUnit
+    ? (availableMoves || []).find((m: any) => m?.kind === "wait" && m?.action_id)
+    : null;
+
+  const executeActionById = async (actionId: string, order?: any) => {
+    try {
+      const executed = await (window as any).onExecuteOrder?.(order || { action_id: actionId });
+      if (executed) return;
+      const res = await fetch("http://127.0.0.1:8000/api/game/step", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action_id: actionId }),
+      });
+      const data = await res.json();
+      if (data?.state && typeof (window as any).__setGameState === "function") {
+        (window as any).__setGameState(data.state);
+        gameController.updateState(data.state);
+      }
+    } catch (err) {
+      console.error("❌ Action by id failed", err);
+    }
+  };
 
   const panelUnits = useMemo(() => {
     const byId = new Map<string, Unit>();
@@ -509,6 +535,24 @@ function App() {
                   <div>
                     <div className="spec-title">{selectedUnitSpec?.label || selectedUnit.unit_key}</div>
                     <div className="spec-subtitle">ID: {selectedUnit.id}</div>
+                    <div className="spec-inline-health-row">
+                      <span className="spec-inline-health-hearts">
+                        {selectedUnit.hp != null
+                          ? Array.from({ length: selectedUnit.hp }).map((_, i) => (
+                              <span key={i} style={{ color: "#ff3838" }}>❤️</span>
+                            ))
+                          : "-"}
+                      </span>
+                      {(selectedUnitActionMarker == null || selectedUnitActionMarker === "normal") && selectedWaitOrder && (
+                        <button
+                          className="spec-wait-btn"
+                          onClick={() => void executeActionById(selectedWaitOrder.action_id, selectedWaitOrder)}
+                          title="Wait / End activation"
+                        >
+                          WAIT
+                        </button>
+                      )}
+                    </div>
                   </div>
                 </div>
                 
@@ -527,16 +571,6 @@ function App() {
                     </div>
                   </div>
 
-                  <div className="spec-stat-item">
-                    <div className="spec-stat-label">Health</div>
-                    <div className="spec-stat-val" style={{ display: "flex", gap: "1px", fontSize: "11px", marginTop: "2px" }}>
-                      {selectedUnit.hp != null
-                        ? Array.from({ length: selectedUnit.hp }).map((_, i) => (
-                            <span key={i} style={{ color: "#ff3838" }}>❤️</span>
-                          ))
-                        : "-"}
-                    </div>
-                  </div>
                 </div>
               </div>
 

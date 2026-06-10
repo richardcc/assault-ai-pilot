@@ -9,6 +9,13 @@ from assault_model.actions.action_catalog import ActionCatalog
 import json
 
 
+def _normalize_side(value):
+    if value is None:
+        return ""
+    raw = getattr(value, "value", value)
+    return str(raw).strip().upper()
+
+
 def _build_attack_status(state, unit, attacks, catalog):
     if attacks:
         return {
@@ -87,7 +94,9 @@ def get_unit_actions(env, unit):
     # -------------------------------------------------
     # VALIDATION (runtime)
     # -------------------------------------------------
-    is_active_side = (unit.side == getattr(runtime, "active_side", None))
+    unit_side = _normalize_side(getattr(unit, "side", None))
+    active_side = _normalize_side(getattr(runtime, "active_side", None))
+    is_active_side = bool(unit_side) and unit_side == active_side
     is_not_activated = (unit.unit_id not in getattr(runtime, "activated_units", set()))
 
     if not (is_active_side and is_not_activated):
