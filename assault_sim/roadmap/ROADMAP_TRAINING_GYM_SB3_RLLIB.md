@@ -742,6 +742,61 @@ Checklist de seguridad (obligatorio por iteración):
 - [ ] revisar `true_win_rate`, `loss_rate`, `captured=4/5`, `vp_entry_missed_rate`, `strategy_stuck_ratio`.
 - [ ] si hay degradación táctica: revertir optimización y pasar a siguiente hipótesis.
 
+## 🧹 Simplificación de código (sin compat legacy)
+
+Objetivo:
+- reducir complejidad y overhead eliminando rutas legacy que ya no aplican al baseline actual.
+
+Principios:
+- mantener comportamiento táctico vigente (sin cambios funcionales no intencionales).
+- simplificar primero, optimizar después.
+- cada simplificación debe tener cobertura de tests + smoke eval.
+
+Paquetes de simplificación:
+- [ ] S1 — Observación/encoder:
+  - remover compat de shape antiguo y defaults redundantes.
+  - consolidar layout canónico del vector en una única referencia.
+- [ ] S2 — Evaluación/reporting:
+  - unificar cálculo de métricas en una sola ruta (evitar duplicaciones/fallbacks innecesarios).
+  - reducir conversiones defensivas repetidas cuando el contrato ya es estable.
+- [ ] S3 — OptionExecutor:
+  - podar branches históricos/fallbacks no usados.
+  - conservar solo guardrails activos y rutas verificadas por tests.
+- [ ] S4 — Train lean mode:
+  - telemetría mínima en train, completa en eval/debug.
+  - flags explícitos para instrumentación pesada.
+
+Gates de simplificación:
+- [ ] tests existentes en verde.
+- [ ] sin regresión en smoke eval.
+- [ ] mejora o mantenimiento de FPS.
+
+## 🗑️ Eliminación de ficheros no usados
+
+Objetivo:
+- limpiar deuda técnica de archivos huérfanos/duplicados/obsoletos sin riesgo de romper pipeline.
+
+Proceso obligatorio (4 pasos):
+1) Inventario:
+   - listar ficheros candidatos (scripts viejos, exports temporales, artefactos duplicados).
+2) Verificación de uso:
+   - confirmar referencias en código, scripts y docs.
+3) Borrado controlado:
+   - eliminar en lotes pequeños (no masivo).
+4) Validación:
+   - tests + comando principal de train/eval smoke.
+
+Checklist de borrado seguro:
+- [ ] no borrar modelos/reportes activos del experimento en curso.
+- [ ] no borrar archivos de config usados por `run_train_eval.ps1`.
+- [ ] documentar cada borrado relevante en bitácora.
+- [ ] si hay duda de uso, mover a carpeta `deprecated/` temporal antes de borrar definitivo.
+
+Estado inicial:
+- [ ] preparar inventario de candidatos.
+- [ ] clasificar por tipo: `legacy_code`, `temp_exports`, `old_reports`, `unused_scripts`.
+- [ ] ejecutar primera limpieza controlada post-run.
+
 ## 🛠️ Runbook de incidentes (train/eval)
 
 Incidente: mismatch de observación (`(70,) != (74,)`)
