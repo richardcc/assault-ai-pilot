@@ -17,6 +17,7 @@ def make_env(
     controller=None,
     reward_fn=None,
     seed: int | None = None,
+    train_lean: bool = False,
 ) -> TrainingEnv:
 
     # ✅ cargar config
@@ -42,6 +43,7 @@ def make_env(
         scenario_override=scenario,
         reward_fn=reward_fn,
         seed=seed,
+        train_lean=train_lean,
     )
 
     return env

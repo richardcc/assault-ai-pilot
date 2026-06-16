@@ -1,0 +1,38 @@
+{
+    "run_dir":  "C:\\repos\\python\\assault\\assault_sim\\session\\reports\\sb3_eval\\r2_3_batch256_s424344_smoke",
+    "report_path":  "C:\\repos\\python\\assault\\assault_sim\\session\\reports\\sb3_eval\\r2_3_batch256_s424344_smoke\\parallel_eval_seeds\\seed_44\\metrics_sb3_report_20260612T075612Z.json",
+    "decision":  "NO-GO",
+    "gate_thresholds":  {
+                            "true_win_rate_min":  0.1,
+                            "loss_rate_max":  0.6,
+                            "strategy_stuck_max":  0.7,
+                            "vp_entry_missed_max_strict":  1,
+                            "position_reversal_max":  0.05,
+                            "captured_4_5_min_episodes":  1
+                        },
+    "metrics":  {
+                    "rl_side":  "US",
+                    "scenario":  "battaglia_cittadina_2_1",
+                    "true_win_rate":  0,
+                    "loss_rate":  0.93333333333333324,
+                    "strategy_stuck_ratio":  0.68377454188736031,
+                    "vp_entry_missed_rate":  0.97741935483870956,
+                    "position_reversal_rate":  0.0019047619047619048,
+                    "captured_4_5_episodes":  0
+                },
+    "checks":  {
+                   "true_win_rate_min":  false,
+                   "loss_rate_max":  false,
+                   "strategy_stuck_max":  true,
+                   "vp_entry_missed_max":  true,
+                   "position_reversal_max":  true,
+                   "captured_4_5_min_episode":  false
+               },
+    "failed_checks":  [
+                          "true_win_rate_min",
+                          "loss_rate_max",
+                          "captured_4_5_min_episode"
+                      ],
+    "promoted_baseline_dir":  null,
+    "decided_at_utc":  "2026-06-12T07:56:12Z"
+}

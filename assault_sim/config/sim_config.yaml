@@ -13,7 +13,7 @@ catalogs:
   scenario_folder: scenarios                      # Scenario JSON folder
 
 scenario:
-  name: mettete_i_piedi_terra_1_min               # Scenario to load
+  name: battaglia_cittadina                        # Scenario to load
 
 # -------------------------------------------------
 # OBSERVABILITY (high-level, structured events)

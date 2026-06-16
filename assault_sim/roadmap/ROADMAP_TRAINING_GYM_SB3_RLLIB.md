@@ -1,10 +1,10 @@
 # 🚀 ASSAULT SIM — ROADMAP OPERATIVO COMPLETO
 
 ==================================================
-## ⚡ PANEL OPERATIVO (P0 / P0.1)
+## ⚡ PANEL OPERATIVO (estado resumido)
 
-Objetivo de la iteración:
-- recuperar baseline competitivo en US sin abrir nuevas líneas de riesgo.
+Objetivo operativo actual:
+- mantener baseline táctico estable y avanzar optimización de rendimiento sin degradar gates.
 
 Gates de decisión (GO/NO-GO):
 - `true_win_rate` no cae y preferiblemente sube
@@ -13,18 +13,18 @@ Gates de decisión (GO/NO-GO):
 - masa en `captured=4/5` se mantiene o mejora
 
 Checklist inmediato:
-- [ ] cerrar definición consistente de `vp_entry_missed_rate` vs `capture_conversion_after_contact`
-- [ ] reducir `forced_ratio` en CAPTURE sin aumentar `loss_rate`
-- [ ] mejorar conversión `captured=3 -> captured=4/5`
-- [ ] completar ciclo corto: `train -> eval 42/43/44 -> decisión única`
+- [x] cerrar definición consistente de `vp_entry_missed_rate` vs `capture_conversion_after_contact`
+- [x] completar ciclo corto: `train -> eval 42/43/44 -> decisión única`
+- [x] validar P4.3c en multi-seed (`CONDITIONAL GO`)
+- [ ] cerrar A/B de R1 (`dummy` vs `subproc`) sin degradar primarias tácticas
 
 Regla operativa:
 - un solo ajuste por iteración, misma batería multi-seed, comparación contra baseline congelado.
 
 Estado de ejecución actual:
-- RUN en curso: `train_sb3 -> eval seed 42/43/44 (100 eps)`
-- salida esperada: carpeta `assault_sim/session/reports/sb3_eval/run_*`
-- monitor: `pipeline.log` + `heartbeat.txt` (con `elapsed_seconds`)
+- baseline táctico congelado: `p43c_main_s424344`
+- experimento de rendimiento en curso por ramas A/B (`dummy|subproc`)
+- evidencia reciente: `subproc` con `num_envs=12` = `NO-GO` táctico
 
 ==================================================
 ## 🧭 VISIÓN
@@ -107,122 +107,19 @@ Guardrail clave actual:
 - Anti-ping-pong `A->B->A` (permitido solo si entra a VP no capturado)
 
 ==================================================
-## 📅 FASE P0 — US Objetivos (CERRADA ✅)
+## 🗂️ HISTÓRICO RESUMIDO (P0-P3)
 
-Objetivo:
-- estabilizar `true_win_rate >= 0.50` multi-seed sin degradar control de VP.
+Estado consolidado:
+- [x] P0 cerrado para baseline operativo.
+- [x] P0.1/P0.2 cerradas (observabilidad y trazabilidad mínimas completas).
+- [x] fórmula única de métricas de VP-entry consolidada en evaluator/analyzer.
+- [x] guardrail anti-ping-pong activo y validado.
+- [ ] `reaction_fire` se mantiene OFF hasta cerrar estabilidad post-R1.
 
-Pendientes:
-- [ ] bajar `draw_rate` sin subir `loss_rate`
-- [ ] reducir `strategy_stuck_ratio`
-- [ ] mejorar conversión `captured=3 -> captured=4/5`
-- [ ] coherenciar/corregir `vp_entry_missed_rate`
-- [ ] consolidar baseline antes de activar `reaction_fire`
-
-Pendientes inmediatos (prioridad de ejecución):
-1) `vp_entry_missed_rate`: cerrar definición y consistencia con `capture_conversion_after_contact`.
-2) bajar `forced_ratio` en CAPTURE sin subir `loss_rate`.
-3) subir masa en `captured=4/5` manteniendo `damage_ratio`.
-
-Guardrails P0:
-- [ ] evitar loops de `RETREAT` fuera de emergencia
-- [x] evitar oscilación posicional `A->B->A`
-- [ ] mantener excepción de emergencia real (hp/suppression/amenaza cercana)
-- [ ] revisar cálculo de distancias y vecinos (posible inconsistencia) y generalizar lógica de movimiento
-
-### Bloque técnico: Distancias y vecinos (`MovementRules`)
-- [ ] auditar cálculo de distancia/vecinos en todo el pipeline (`MovementRules`, heurísticas, reward, evaluator)
-- [ ] unificar helpers de distancia/vecindad para evitar divergencia entre módulos
-- [ ] generalizar cálculo de vecinos/paths para que no dependa de supuestos de escenario
-- [ ] añadir tests de contrato:
-  - [x] distancia simétrica y estable
-  - [x] vecinos válidos en bordes/mapas irregulares
-  - [x] consistencia entre acciones legales y métricas de misión
-
-==================================================
-## 📅 FASE P0.1 — Observabilidad RL (en curso)
-
-Línea acordada:
-- [x] `own_activated_ratio`
-- [x] `enemy_activated_ratio`
-- [x] `last_action_type_onehot(5)`
-- [ ] Fase 2: contexto VP inmediato por unidad (spec lista)
-- [ ] Fase 3: riesgo táctico por ruta/hex (pre-`reaction_fire`)
-
-Regla:
-- introducir 2-4 features por iteración + validación multi-seed obligatoria.
-
-Fase 2 (spec propuesta, sin activar todavía):
-- `unit_can_enter_uncaptured_vp_now` (0/1): existe movimiento legal del actor a VP no controlado por RL en este paso.
-- `unit_nearest_uncaptured_vp_dist_norm` ([0,1]): distancia del actor al VP no capturado más cercano, normalizada por constante de escenario.
-- `unit_progress_to_vp_last_step` ([-1,1] clip): `dist_before - dist_after` del actor respecto a objetivo VP local.
-- `unit_on_contestable_vp_now` (0/1): actor termina sobre VP no controlado por RL tras la acción.
-
-Criterios de aceptación de Fase 2:
-- `vp_entry_missed_rate` baja vs baseline congelado.
-- `capture_attempt_success_rate` sube o se mantiene.
-- `loss_rate` no empeora materialmente.
-
-==================================================
-## 📅 FASE P0.2 — Trazabilidad/Debug (hecho + pendiente)
-
-Hecho:
-- [x] Instrumentación corregida: `resolved/executed` reflejan tags reales del `action`
-- [x] Nuevos campos de trace:
-  - `capture_target_dist_before`
-  - `capture_target_dist_after`
-- [x] Distinción clara entre distancia global y distancia táctica local
-
-Pendiente:
-- [x] cerrar interpretación de `vp_entry_missed_rate` con fórmula única
-
-Definición operativa (única):
-- `vp_entry_conversion_rate = vp_entries_taken / vp_entry_opportunities` (si `opportunities > 0`, si no `n/a`)
-- `vp_entry_missed_rate = 1 - vp_entry_conversion_rate` (mismo denominador)
-- `capture_conversion_after_contact` se calcula aparte sobre eventos de contacto (`contact_to_capture_success / contact_events`)
-
-Tabla de trazabilidad (métrica -> fórmula -> fuente):
-- `vp_entry_conversion_rate` -> `vp_entries_taken / vp_entry_opportunities` -> `Evaluator.mission` (agregado en `ResultsAnalyzer.mission_metrics`)
-- `vp_entry_missed_rate` -> `1 - vp_entry_conversion_rate` -> `Evaluator.mission` (agregado en `ResultsAnalyzer.mission_metrics`)
-- `capture_conversion_after_contact` -> `contact_to_capture_success / contact_events` -> `Evaluator.mission` (agregado en `ResultsAnalyzer.mission_metrics`)
-- `forced_ratio` -> `forced_steps / rl_decisions` -> `decision_alignment` (`ActionDecisionTrace.was_forced`)
-
-==================================================
-## 📅 FASE P1 — Reglas tácticas (post-P0 estable)
-
-`move/fire`:
-- [x] MVP integrado
-- [ ] seguir recalibrando para uso útil sin hundir `damage_ratio`
-
-`reaction_fire`:
-- [ ] mantener OFF hasta recuperación estable de baseline
-- [ ] activar por fases tras gates de P0
-
-==================================================
-## 📅 FASE P2 — LOS / Spotting (consolidado)
-
-Estado:
-- en progreso (no finalizado)
-
-Fases:
-- [x] Fase 1: LOS terreno (`CLEAR/HINDERED/BLOCKED`) integrado
-- [ ] Fase 2: ray tracing LOS + acumulación de hindrance
-- [ ] Fase 3: interacciones avanzadas de terreno + LOS direccional
-- [ ] Fase 4: spotting desacoplado de LOS (Rule 10.5)
-- [ ] Fase 5: elevation + indirect LOS + smoke dinámico
-
-Próximos pasos:
-- [ ] spotting decay
-- [ ] trait `SCOUT` mejora spotting
-- [ ] modelo de elevación + hooks LOS
-
-==================================================
-## 📅 FASE P3 — Escalado (post-P0)
-
-- [ ] profiling hotspots simulador
-- [ ] curriculum de complejidad
-- [ ] tuning throughput/paralelismo
-- [ ] SLO 24h + eval multi-seed
+Notas de mantenimiento (no bloqueantes):
+- revisión de distancias/vecinos en `MovementRules` (deuda técnica controlada).
+- evolución de LOS/Spotting pausada mientras P4/R1 estén activos.
+- escalado histórico P3 absorbido por el plan R1-R4.
 
 ==================================================
 ## 📅 FASE P4 — Agente planificador híbrido (NUEVO)
@@ -571,10 +468,11 @@ Ya tienes:
 
 Estado de transición:
 - P0 cerrada; baseline congelado para comparación.
-- fase activa actual: P4.1 (contratos + trazabilidad de planificación).
-- fase activa operativa: rebaseline post-P4.2 (retrain + eval multi-seed).
-- ejecución en curso: train principal P4.2 (`seed 42/43/44`, encoder `shape=(74,)`).
-- estado esperado al cierre de run: decisión GO/NO-GO + siguiente palanca única.
+- fase táctica activa: P4.3c (hard budget ligero) validada en multi-seed.
+- resultado táctico vigente: `CONDITIONAL GO` (primarias sólidas; `vp_contact_rate` ~`0.197` < `0.20`).
+- fase operativa activa: R1 performance (paralelismo de entornos).
+- estado R1 actual: `NO-GO` táctico con `SubprocVecEnv` (`num_envs=12`) por regresión severa de calidad.
+- estado esperado al cierre de la siguiente iteración: fijar switch `dummy|subproc` por config y ejecutar A/B corto (`4` vs `8`) sin degradar gates.
 
 ==================================================
 ## 📊 MÉTRICAS DE GATE
@@ -653,23 +551,24 @@ Gate P4.3a:
 - [ ] reportes y trazas completos.
 
 ### P4.3b — Soft budget (penalización leve / prioridad suave)
-- [ ] prioridad suave a acciones de entrada VP cuando presupuesto de avance está disponible.
-- [ ] penalización suave a ataques oportunistas cuando hay ventana de captura.
-- [ ] mantener fallback por emergencia.
+- [x] prioridad suave a acciones de entrada VP cuando presupuesto de avance está disponible.
+- [x] penalización suave a ataques oportunistas cuando hay ventana de captura.
+- [x] mantener fallback por emergencia.
 
 Gate P4.3b:
-- [ ] `vp_entry_conversion_rate` sube o `vp_entry_missed_rate` baja.
-- [ ] `loss_rate` no empeora materialmente.
+- [x] `vp_entry_conversion_rate` sube o `vp_entry_missed_rate` baja.
+- [x] `loss_rate` no empeora materialmente.
 
 ### P4.3c — Hard budget (cuotas duras con escape)
-- [ ] activar cuotas mínimas por intención/rol por ventana táctica.
-- [ ] escape hatch por emergencia y bloqueo legal.
+- [x] activar cuotas mínimas por intención/rol por ventana táctica.
+- [x] escape hatch por emergencia y bloqueo legal.
 - [ ] registro explícito de overrides (`emergency_override`, `legal_override`).
 
 Gate P4.3c:
-- [ ] sube masa en `captured=4/5`.
-- [ ] no colapsa `damage_ratio`.
-- [ ] `strategy_stuck_ratio` no empeora.
+- [x] sube masa en `captured=4/5`.
+- [x] no colapsa `damage_ratio`.
+- [x] `strategy_stuck_ratio` no empeora.
+- [ ] **GO pleno pendiente**: `vp_contact_rate >= 0.20` en agregado multi-seed.
 
 ==================================================
 ## 🧪 Riesgos y validación de rendimiento
@@ -700,14 +599,19 @@ Orden de ejecución recomendado:
 5) Perfilado dirigido + micro-optimizaciones finales.
 
 ### Iteración R1 — Escalado por paralelismo
-- [ ] correr matriz A/B: `n_envs in {1, 4, 8}` con misma semilla/protocolo.
-- [ ] medir `fps`, `time_elapsed`, `approx_kl`, `explained_variance`.
-- [ ] registrar varianza entre seeds para detectar inestabilidad.
+- [x] correr A/B inicial `dummy12` vs `subproc4` con misma semilla/protocolo.
+- [x] medir `fps`, `time_elapsed`, `approx_kl`, `explained_variance`.
+- [x] registrar varianza inicial y verificar estabilidad de train.
+- [x] prueba exploratoria `SubprocVecEnv` (`num_envs=12`) ejecutada.
+- [x] prueba de seedfix ejecutada (workers con misma seed base).
+- [x] switch por config implementado: `sb3_vec_env_type: dummy|subproc`.
 
 Gate R1:
-- [ ] `fps` mejora materialmente.
+- [x] `fps` mejora materialmente.
 - [ ] `true_win_rate` no cae materialmente.
 - [ ] `loss_rate` no sube materialmente.
+- estado final iteración: **NO-GO táctico** (`subproc12`, `subproc12 seedfix`, `subproc4`).
+- baseline operativo confirmado: `dummy12` (`r1_ab_dummy12_s42`).
 
 ### Iteración R2 — Hotspots del simulador
 - [ ] perfilar train loop (`cProfile`) para top hotspots reales.
@@ -741,6 +645,30 @@ Checklist de seguridad (obligatorio por iteración):
 - [ ] ejecutar eval multi-seed (`42/43/44`).
 - [ ] revisar `true_win_rate`, `loss_rate`, `captured=4/5`, `vp_entry_missed_rate`, `strategy_stuck_ratio`.
 - [ ] si hay degradación táctica: revertir optimización y pasar a siguiente hipótesis.
+
+### Ejecución paralela configurable (aceleración segura)
+
+Objetivo:
+- acelerar throughput operativo sin contaminar decisiones de gate.
+
+Reglas:
+- `train` principal se mantiene secuencial por defecto.
+- paralelizar solo `eval` multi-seed con aislamiento por seed (carpetas separadas).
+- no promover baseline si faltan reportes de alguna seed.
+
+Configuración operativa (`run_train_eval.ps1`):
+- `-ParallelEvalSeeds` activa eval en paralelo por seed.
+- `-EvalParallelJobs <N>` limita concurrencia (recomendado `2` en CPU local).
+- `-AutoGateAndPromoteBaseline` decide `GO/NO-GO` y promociona baseline si cumple gates.
+
+Gates específicos para modo paralelo:
+- [ ] todos los jobs de seed terminan `exit=0`.
+- [ ] se generan reportes JSON para todas las seeds pedidas.
+- [ ] consolidado final mantiene primarias tácticas.
+
+Estado:
+- [x] soporte implementado en pipeline.
+- [ ] validación operativa multi-seed en curso (`Pending Validation`).
 
 ## 🧹 Simplificación de código (sin compat legacy)
 
@@ -832,14 +760,29 @@ Incidente: run detenido o degradación fuerte en train
   - pico histórico US ~0.46-0.49 (`100 eps`)
   - posterior regresión por sesgo de compuestas
 
+- 2026-06-11 (P4.3c main `p43c_main_s424344`):
+  - `true_win_rate`: `0.320 / 0.320 / 0.330` (avg `0.323`)
+  - `loss_rate`: `0.430 / 0.420 / 0.420` (avg `0.423`)
+  - `captured=4/5`: `32 / 32 / 33` (consistente)
+  - veredicto: `CONDITIONAL GO` (falla solo `vp_contact_rate` ~`0.197` < `0.20`)
+
+- 2026-06-11 (R1 performance `SubprocVecEnv`):
+  - `fps`: ~`500-660` (mejora ~`3x-4x`)
+  - `p43c_perf_smoke_s42`: `true_win_rate=0.10`, `loss_rate=0.69` -> `NO-GO`
+  - `p43c_perf_smoke_s42_seedfix`: `true_win_rate=0.11`, `loss_rate=0.70` -> `NO-GO`
+  - `r1_ab_subproc4_s42`: `true_win_rate=0.04`, `loss_rate=0.72` -> `NO-GO`
+  - `r1_ab_dummy12_s42`: `true_win_rate=0.32`, `loss_rate=0.43` -> baseline estable
+  - conclusión: en esta configuración, `subproc` degrada táctica; mantener `dummy` en producción.
+
 ==================================================
 ## 🎯 SIGUIENTE PASO
 
-Mientras corre el entrenamiento:
-- mantener ajustes actuales (sin meter ruido nuevo)
-- ejecutar eval completa `seed 42/43/44` (100 eps cada una, misma snapshot)
-- comparar contra baseline congelado y decidir GO/NO-GO
-- si NO-GO: aplicar un único ajuste orientado a VP-entry y repetir ciclo corto
+Roadmap inmediato (sin mezclar táctico y performance):
+- congelar baseline táctico: `p43c_main_s424344` como referencia oficial.
+- [x] switch por config `sb3_vec_env_type: dummy|subproc` implementado.
+- decisión vigente: mantener `dummy` para runs productivos.
+- próximo experimento: volver a performance vía R2 (hotspots/caching) sin cambiar backend de vec env.
+- promover cambios de rendimiento solo si preservan primarias tácticas (`true_win_rate`, `loss_rate`, `captured=4/5`).
 
 Bloqueo conocido resuelto por proceso (no por hotfix):
 - `eval_sb3` con modelo viejo falla con:
@@ -853,7 +796,7 @@ Trabajo paralelo recomendado (sin contaminar el run):
 - añadir test de regresión de activación multi-bando (Paso 4 de activaciones flexibles)
 
 Checklist rebaseline P4.2:
-- [ ] smoke train/eval (`seed 42`, `episodes 30`)
-- [ ] run principal (`seed 42/43/44`, `episodes 100`)
-- [ ] confirmar gates (`true_win_rate`, `loss_rate`, `captured=4/5`, `vp_entry_missed_rate`, `strategy_stuck_ratio`)
-- [ ] si GO: pasar a P4.3 (Action Budget, activación gradual)
+- [x] smoke train/eval (`seed 42`, `episodes 30`)
+- [x] run principal (`seed 42/43/44`, `episodes 100`)
+- [x] confirmar gates (`true_win_rate`, `loss_rate`, `captured=4/5`, `vp_entry_missed_rate`, `strategy_stuck_ratio`)
+- [x] pasar a P4.3 (Action Budget, activación gradual)

@@ -14,6 +14,7 @@ except ImportError:  # pragma: no cover
 
 from assault_model.actions.status import WaitAction
 from assault_sim.config.ppo_config import PPOConfig
+from assault_sim.config.train_config import load_train_config
 from assault_sim.decision.action_bridge import ActionBridge
 from assault_sim.decision.option_executor import OptionExecutor
 from assault_sim.engine.env_factory import make_env
@@ -35,7 +36,15 @@ class _GymActionController:
         self.rl_side = rl_side
         self.sim_env = sim_env
         self.heuristic = TacticalPathHeuristic()
-        self.executor = OptionExecutor(self.heuristic, avoid_bad_trades=False, adv_threshold=-0.5)
+        repo_root = Path(__file__).resolve().parents[2]
+        cfg = load_train_config(repo_root / "assault_sim" / "config" / "train_config.json")
+        self.executor = OptionExecutor(
+            self.heuristic,
+            avoid_bad_trades=False,
+            adv_threshold=-0.5,
+            capture_guardrails_enabled=bool(getattr(cfg, "capture_guardrails_enabled", True)),
+            diagnostic_force_capture_only=bool(getattr(cfg, "diagnostic_force_capture_only", False)),
+        )
         self.action_bridge = ActionBridge()
         self.pending_action: tuple[int, ...] | None = None
 
@@ -48,8 +57,6 @@ class _GymActionController:
         self.last_value = None
         self.current_strategy = None
         self.training_mode = False
-        self._locked_strategy: StrategicIntent | None = None
-        self._locked_strategy_turn: int | None = None
 
     def reset(self):
         self.pending_action = None
@@ -58,8 +65,6 @@ class _GymActionController:
         self.current_option_resolved = None
         self.current_attack_mode = 0
         self.last_decision_trace = None
-        self._locked_strategy = None
-        self._locked_strategy_turn = None
 
     def set_action(self, action: tuple[int, ...]):
         self.pending_action = action
@@ -128,11 +133,9 @@ class _GymActionController:
     def act(self, state, side, unit, obs):
         if side == self.rl_side:
             sampled_strategy, sampled_option, attack_mode, _unit_slot = self._decode_action()
-            turn_now = int(getattr(state, "turn", 0))
-            if self._locked_strategy is None or self._locked_strategy_turn != turn_now:
-                self._locked_strategy = sampled_strategy
-                self._locked_strategy_turn = turn_now
-            effective_strategy = self._locked_strategy
+            # Strategy is evaluated per activation to avoid turn-wide lock-in
+            # that can freeze all units into a weak intent for the full turn.
+            effective_strategy = sampled_strategy
             resolved_option = sampled_option
 
             action = self.executor.execute(
@@ -198,6 +201,7 @@ class GymAssaultEnv(gym.Env):
         max_decisions: int = 400,
         zero_damage_penalty: float = 0.6,
         extra_good_trade_bonus: float = 0.2,
+        train_lean: bool = False,
     ):
         super().__init__()
 
@@ -210,6 +214,7 @@ class GymAssaultEnv(gym.Env):
         self.max_decisions = max_decisions
         self.zero_damage_penalty = float(zero_damage_penalty)
         self.extra_good_trade_bonus = float(extra_good_trade_bonus)
+        self.train_lean = bool(train_lean)
 
         self._decision_count = 0
 
@@ -240,6 +245,7 @@ class GymAssaultEnv(gym.Env):
                 extra_good_trade_bonus=self.extra_good_trade_bonus,
             ),
             seed=seed,
+            train_lean=self.train_lean,
         )
         # MatchRunner/ActivationManager require an initialized game_state.
         self._train_env.reset()

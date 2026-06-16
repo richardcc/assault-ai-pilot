@@ -47,6 +47,7 @@ class TrainingEnv:
         scenario_override=None,
         reward_fn=None,   # ✅ NUEVO
         seed: int | None = None,
+        train_lean: bool = False,
     ):
         self.sim = sim_env
         self.rl_side = rl_side
@@ -66,6 +67,7 @@ class TrainingEnv:
         self.current_step = 0
 
         self.reward_fn = reward_fn or ProgressiveReward(rl_side)
+        self.train_lean = bool(train_lean)
 
         self.rl_attacks = 0
         self.rl_damage = 0
@@ -347,6 +349,23 @@ class TrainingEnv:
             "capture_move_block_profile": str(getattr(action, "rl_capture_move_block_profile", "") or ""),
             "capture_target_dist_before": getattr(action, "rl_capture_target_dist_before", None),
             "capture_target_dist_after": getattr(action, "rl_capture_target_dist_after", None),
+            "capture_move_candidates_total": int(getattr(action, "rl_capture_move_candidates_total", 0) or 0),
+            "capture_progress_candidates": int(getattr(action, "rl_capture_progress_candidates", 0) or 0),
+            "capture_equal_candidates": int(getattr(action, "rl_capture_equal_candidates", 0) or 0),
+            "capture_increase_candidates": int(getattr(action, "rl_capture_increase_candidates", 0) or 0),
+            "capture_reversal_filtered": int(getattr(action, "rl_capture_reversal_filtered", 0) or 0),
+            "capture_progress_available": bool(getattr(action, "rl_capture_progress_available", False)),
+            "capture_selected_move_reason": str(getattr(action, "rl_capture_selected_move_reason", "") or ""),
+            "capture_selected_dist_delta": getattr(action, "rl_capture_selected_dist_delta", None),
+            "capture_suspected_progress_miss": bool(getattr(action, "rl_capture_suspected_progress_miss", False)),
+            "vp_stepin_legal": bool(getattr(action, "rl_vp_stepin_legal", False)),
+            "vp_stepin_selected": bool(getattr(action, "rl_vp_stepin_selected", False)),
+            "vp_stepin_block_reason": str(getattr(action, "rl_vp_stepin_block_reason", "") or ""),
+            "vp_nearest_uncaptured_dist": getattr(action, "rl_vp_nearest_uncaptured_dist", None),
+            "vp_opening_attack_candidates_count": int(getattr(action, "rl_vp_opening_attack_candidates_count", 0) or 0),
+            "capture_emergency_override": bool(getattr(action, "rl_capture_emergency_override", False)),
+            "capture_legal_override": bool(getattr(action, "rl_capture_legal_override", False)),
+            "capture_override_reason": str(getattr(action, "rl_capture_override_reason", "") or ""),
             "actor_unit_classification": (
                 str(getattr(getattr(actor, "unit_type", None), "classification", ""))
                 if actor is not None
@@ -519,18 +538,19 @@ class TrainingEnv:
             done = True
 
         info["done"] = done
-        info["objective_rule_active"] = objective_rule_active
-        info["objective_tracked_side"] = tracked_side if objective_rule_active else None
-        info["objective_captured_before"] = captured_before
-        info["objective_captured_after"] = captured_after
         info["objective_captured_delta"] = captured_after - captured_before
-        info["actor_on_vp_before"] = actor_on_vp_before
         info["actor_on_vp_after"] = actor_on_vp_after
         info["actor_vp_owned_by_rl_before"] = actor_vp_owned_by_rl_before
-        info["actor_vp_owned_by_rl_after"] = actor_vp_owned_by_rl_after
         info["actor_captured_vp_now"] = actor_captured_vp_now
         info["objective_dist_before"] = objective_dist_before
         info["objective_dist_after"] = objective_dist_after
+        if not self.train_lean:
+            info["objective_rule_active"] = objective_rule_active
+            info["objective_tracked_side"] = tracked_side if objective_rule_active else None
+            info["objective_captured_before"] = captured_before
+            info["objective_captured_after"] = captured_after
+            info["actor_on_vp_before"] = actor_on_vp_before
+            info["actor_vp_owned_by_rl_after"] = actor_vp_owned_by_rl_after
         if objective_dist_before is not None and objective_dist_after is not None:
             try:
                 plan_progress = float(objective_dist_before) - float(objective_dist_after)
@@ -552,65 +572,66 @@ class TrainingEnv:
         info["plan_commitment_age_norm"] = plan_commitment_age_norm
         info["intent_alignment_last_k"] = intent_alignment_last_k
         info["last_failure_reason_onehot"] = list(last_failure_reason_onehot)
-        info["plan_state"] = normalize_plan_state(
-            {
-                "intent": info.get("plan_intent"),
-                "unit_role": info.get("plan_unit_role"),
-                "focus_vp_id": info.get("plan_focus_vp_id"),
-                "plan_step_id": info.get("plan_step_id"),
-                "budget_state": info.get("plan_budget_state"),
-                "plan_progress_stub": info.get("plan_progress_stub"),
-                "intent_alignment_stub": info.get("intent_alignment_stub"),
-            }
-        )
-        # P4.2 Lote E (observability-only): lightweight diagnostics for eval reports.
-        try:
-            expected_vp_swing_if_advance = 0.0
-            if objective_dist_before is not None and objective_dist_after is not None:
-                expected_vp_swing_if_advance = max(-1.0, min(1.0, (float(objective_dist_before) - float(objective_dist_after)) / 3.0))
-            expected_trade_if_attack = 0.0
-            if is_attack:
-                expected_trade_if_attack = max(
-                    -1.0,
-                    min(1.0, (float(info.get("rl_damage", 0) or 0) - float(info.get("enemy_damage", 0) or 0)) / 5.0),
-                )
-            if objective_dist_before is not None and float(objective_dist_before) <= 2.0:
-                attack_opportunity_cost_near_vp_norm = max(
-                    0.0,
-                    min(1.0, (expected_vp_swing_if_advance - expected_trade_if_attack + 1.0) / 2.0),
-                )
-            else:
-                attack_opportunity_cost_near_vp_norm = 0.0
-            capture_window_open = 1.0 if (
-                bool(info.get("actor_captured_vp_now", False))
-                or (
-                    bool(info.get("actor_on_vp_after", False))
-                    and not bool(info.get("actor_vp_owned_by_rl_before", False))
-                )
-            ) else 0.0
-            info["attack_opportunity_cost_near_vp_norm"] = float(attack_opportunity_cost_near_vp_norm)
-            info["capture_window_open"] = float(capture_window_open)
-            info["expected_vp_swing_if_advance"] = float(expected_vp_swing_if_advance)
-            info["expected_trade_if_attack"] = float(expected_trade_if_attack)
-        except Exception:
-            info["attack_opportunity_cost_near_vp_norm"] = 0.0
-            info["capture_window_open"] = 0.0
-            info["expected_vp_swing_if_advance"] = 0.0
-            info["expected_trade_if_attack"] = 0.0
-        if objective_rule_active:
-            row = self._objective_outcome_result(next_state)
-            result_text = str((row or {}).get("result", "")).strip()
-            result_l = result_text.lower()
-            if "vittoria totale" in result_l or result_l == "vittoria":
-                result_kind = "victory"
-            elif "pareggio" in result_l or "draw" in result_l:
-                result_kind = "draw"
-            elif "sconfitta" in result_l or "defeat" in result_l or "lose" in result_l:
-                result_kind = "defeat"
-            else:
-                result_kind = "unknown"
-            info["objective_result_text"] = result_text
-            info["objective_result_kind"] = result_kind
+        if not self.train_lean:
+            info["plan_state"] = normalize_plan_state(
+                {
+                    "intent": info.get("plan_intent"),
+                    "unit_role": info.get("plan_unit_role"),
+                    "focus_vp_id": info.get("plan_focus_vp_id"),
+                    "plan_step_id": info.get("plan_step_id"),
+                    "budget_state": info.get("plan_budget_state"),
+                    "plan_progress_stub": info.get("plan_progress_stub"),
+                    "intent_alignment_stub": info.get("intent_alignment_stub"),
+                }
+            )
+            # P4.2 Lote E (observability-only): lightweight diagnostics for eval reports.
+            try:
+                expected_vp_swing_if_advance = 0.0
+                if objective_dist_before is not None and objective_dist_after is not None:
+                    expected_vp_swing_if_advance = max(-1.0, min(1.0, (float(objective_dist_before) - float(objective_dist_after)) / 3.0))
+                expected_trade_if_attack = 0.0
+                if is_attack:
+                    expected_trade_if_attack = max(
+                        -1.0,
+                        min(1.0, (float(info.get("rl_damage", 0) or 0) - float(info.get("enemy_damage", 0) or 0)) / 5.0),
+                    )
+                if objective_dist_before is not None and float(objective_dist_before) <= 2.0:
+                    attack_opportunity_cost_near_vp_norm = max(
+                        0.0,
+                        min(1.0, (expected_vp_swing_if_advance - expected_trade_if_attack + 1.0) / 2.0),
+                    )
+                else:
+                    attack_opportunity_cost_near_vp_norm = 0.0
+                capture_window_open = 1.0 if (
+                    bool(info.get("actor_captured_vp_now", False))
+                    or (
+                        bool(info.get("actor_on_vp_after", False))
+                        and not bool(info.get("actor_vp_owned_by_rl_before", False))
+                    )
+                ) else 0.0
+                info["attack_opportunity_cost_near_vp_norm"] = float(attack_opportunity_cost_near_vp_norm)
+                info["capture_window_open"] = float(capture_window_open)
+                info["expected_vp_swing_if_advance"] = float(expected_vp_swing_if_advance)
+                info["expected_trade_if_attack"] = float(expected_trade_if_attack)
+            except Exception:
+                info["attack_opportunity_cost_near_vp_norm"] = 0.0
+                info["capture_window_open"] = 0.0
+                info["expected_vp_swing_if_advance"] = 0.0
+                info["expected_trade_if_attack"] = 0.0
+            if objective_rule_active:
+                row = self._objective_outcome_result(next_state)
+                result_text = str((row or {}).get("result", "")).strip()
+                result_l = result_text.lower()
+                if "vittoria totale" in result_l or result_l == "vittoria":
+                    result_kind = "victory"
+                elif "pareggio" in result_l or "draw" in result_l:
+                    result_kind = "draw"
+                elif "sconfitta" in result_l or "defeat" in result_l or "lose" in result_l:
+                    result_kind = "defeat"
+                else:
+                    result_kind = "unknown"
+                info["objective_result_text"] = result_text
+                info["objective_result_kind"] = result_kind
 
         self._last_action_type = action_type
         own_activated_ratio, enemy_activated_ratio = self._activation_ratios(next_state)

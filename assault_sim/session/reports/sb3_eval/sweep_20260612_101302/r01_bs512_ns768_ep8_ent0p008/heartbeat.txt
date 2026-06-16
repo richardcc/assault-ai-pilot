@@ -1,0 +1,5 @@
+status=finished
+step=ALL
+started_at=20260612_101302
+last_update=2026-06-12T11:08:31
+elapsed_seconds=0

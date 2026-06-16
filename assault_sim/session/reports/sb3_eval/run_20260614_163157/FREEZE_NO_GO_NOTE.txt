@@ -1,0 +1,13 @@
+Status: FROZEN_NO_GO
+Run: run_20260614_163157
+DateUTC: 2026-06-14T15:05:00Z
+
+Reason:
+- true_win_rate_delta_min_ok = false
+- captured_4_5_delta_min_ok = false
+- vp_entry_missed_rate_delta_max_ok = false
+
+Summary:
+- This run is frozen as a tactical NO-GO checkpoint.
+- Subsequent experiments should branch from stable baseline reference:
+  r1_ab_dummy12_s42 / metrics_sb3_report_20260611T154815Z.json

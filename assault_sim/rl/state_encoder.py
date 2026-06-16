@@ -222,7 +222,7 @@ def _focus_vp_from_plan_or_nearest(state, active, rl_side, focus_vp_id: str | No
     return min(uncaptured, key=lambda p: safe_hex_distance(active.position, p))
 
 
-def _lote_a_macro_vp_features(state, active, rl_side, focus_vp_id: str | None):
+def _lote_a_macro_vp_features(state, active, rl_side, focus_vp_id: str | None, precomputed_actions=None):
     if active is None or getattr(active, "position", None) is None or rl_side is None:
         return 0.0, 0.0, 0.0
 
@@ -233,7 +233,7 @@ def _lote_a_macro_vp_features(state, active, rl_side, focus_vp_id: str | None):
     dist = safe_hex_distance(active.position, focus_vp)
     focus_vp_dist_norm = float(np.clip(dist / 10.0, 0.0, 1.0))
 
-    actions = ActionCatalog(state, active, terrain_config).actions()
+    actions = precomputed_actions if precomputed_actions is not None else ActionCatalog(state, active, terrain_config).actions()
     reachable_now = 0.0
     enterable_now = 0.0
     uncaptured = set(_uncaptured_vp_hexes(state, rl_side))
@@ -331,7 +331,7 @@ def _movement_type_for_unit(active) -> str:
     return "infantry"
 
 
-def _lote_b_risk_terrain_features(state, active, rl_side, focus_vp_id: str | None):
+def _lote_b_risk_terrain_features(state, active, rl_side, focus_vp_id: str | None, precomputed_actions=None):
     if active is None or getattr(active, "position", None) is None or rl_side is None:
         return 0.0, 0.0, 0.0, 0.0
 
@@ -348,7 +348,7 @@ def _lote_b_risk_terrain_features(state, active, rl_side, focus_vp_id: str | Non
     move_type = _movement_type_for_unit(active)
     best_move = None
     best_dist = None
-    actions = ActionCatalog(state, active, terrain_config).actions()
+    actions = precomputed_actions if precomputed_actions is not None else ActionCatalog(state, active, terrain_config).actions()
     for action in actions:
         if getattr(getattr(action, "action_type", None), "category", None) != ActionCategory.MOVEMENT:
             continue
@@ -384,7 +384,7 @@ def _is_attack_like_action(action) -> bool:
     return any(k in name for k in ("attack", "assault", "fire", "shoot"))
 
 
-def _lote_e_opportunity_features(state, active, rl_side, focus_vp_id: str | None):
+def _lote_e_opportunity_features(state, active, rl_side, focus_vp_id: str | None, precomputed_actions=None):
     if active is None or getattr(active, "position", None) is None or rl_side is None:
         return 0.0, 0.0, 0.0, 0.0
 
@@ -394,7 +394,7 @@ def _lote_e_opportunity_features(state, active, rl_side, focus_vp_id: str | None
 
     dist_now = safe_hex_distance(active.position, focus_vp)
     own_ownership = _ownership_for_side(state, rl_side)
-    actions = ActionCatalog(state, active, terrain_config).actions()
+    actions = precomputed_actions if precomputed_actions is not None else ActionCatalog(state, active, terrain_config).actions()
 
     best_advance_score = -1.0
     capture_window_open = 0.0
@@ -598,6 +598,10 @@ def encode_state(
         enemy_dist,
     ]
 
+    precomputed_actions = None
+    if active is not None and getattr(active, "position", None) is not None:
+        precomputed_actions = ActionCatalog(state, active, terrain_config).actions()
+
     # =================================================
     # MAP AWARE FEATURES (terrain + fortifications)
     # =================================================
@@ -634,6 +638,7 @@ def encode_state(
         active=active,
         rl_side=rl_side,
         focus_vp_id=focus_vp_id,
+        precomputed_actions=precomputed_actions,
     )
     obs.extend(
         [
@@ -683,6 +688,7 @@ def encode_state(
         active=active,
         rl_side=rl_side,
         focus_vp_id=focus_vp_id,
+        precomputed_actions=precomputed_actions,
     )
     obs.extend(
         [
@@ -726,6 +732,7 @@ def encode_state(
         active=active,
         rl_side=rl_side,
         focus_vp_id=focus_vp_id,
+        precomputed_actions=precomputed_actions,
     )
     obs.extend(
         [

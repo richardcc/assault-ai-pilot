@@ -1,0 +1,5 @@
+status=running
+step=TRAIN
+started_at=2026-06-13T08:59:43
+last_update=2026-06-13T09:06:14
+elapsed_seconds=392

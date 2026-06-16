@@ -47,3 +47,18 @@ Create and maintain `docs/GAP_ANALYSIS.md` with:
 - current implementation status,
 - gap severity (high/medium/low),
 - owner and target milestone.
+
+## 6. Runtime Reproducibility Mapping (Non-PDF)
+
+Validation state: **Pending Validation**.
+
+| Operational rule | File/function | Test/status |
+| --- | --- | --- |
+| Start each SB3 run from a clean transient model workspace | `assault_sim/train/train_sb3.py` -> `_cleanup_model_workspace()` and `main()` cleanup gate | Pending dedicated regression test (`train startup cleanup`) |
+| Run multi-seed eval in parallel with isolated per-seed outputs | `run_train_eval.ps1` -> `-ParallelEvalSeeds` and `-EvalParallelJobs` | Pending operational validation on `42/43/44` |
+| CAPTURE guardrail overrides are explicitly traceable | `assault_sim/decision/option_executor.py` -> `_tag_action()` override fields | Covered by trace backward-compat tests; pending full episode validation |
+| CAPTURE progress-vs-staging diagnostics and anti-lateralization guardrails are explicitly traceable | `assault_sim/decision/option_executor.py` -> `_best_capture_staging_move()` now includes VP-adjacent-ring distance shaping + enemy-pressure-aware scoring + stronger near-VP lateral-loop penalties, `_move_closer(capture_strict=True)`, near-VP fallbacks (`forced_attack_near_vp_staging`, `forced_attack_open_vp_window` now `<=3` and lane-opening targets adjacent to uncaptured VP), VP-relevant-only relaxed fallback, per-unit CAPTURE focus lock (`_capture_focus_lock_by_unit`), per-unit near-VP no-step-in streak, opening-window anti-spam throttle (per-unit decision spacing), aggressive L3 CAPTURE force (`aggressive_l3_capture_force`), and `_tag_action()` fields; all gated by `capture_guardrails_enabled` from `assault_sim/config/train_config.json`; propagated via `training_env/evaluator/results_analyzer` | Pending validation on smoke eval (`capture_suspected_progress_miss_rate`, `objective_progress_move` share, fallback reason mix, VP focus stability) |
+| SB3 eval strategy sampling parity with runtime | `assault_sim/evaluation/eval_sb3.py` -> `SB3EvalController.act` evaluates `StrategicIntent` per activation (turn lock removed) | Pending validation on smoke eval (`L3 policy distribution` shift, VP entry metrics) |
+| CAPTURE-only diagnostic mode for L3 isolation | `assault_sim/config/train_config.json` -> `diagnostic_force_capture_only`; wired through `assault_sim/evaluation/eval_sb3.py`, `assault_sim/envs/gym_assault_env.py`, and `assault_sim/decision/option_executor.py` | Pending validation on smoke eval (`L3 CAPTURE share`, `vp_entries_taken`) |
+| VP-entry funnel observability (legal -> selected -> sustained control) | `assault_sim/decision/option_executor.py` step-in flags/reasons + `assault_sim/training_env.py` info propagation + `assault_sim/evaluation/evaluator.py` mission counters + `assault_sim/evaluation/results_analyzer.py` aggregates/percentiles + `assault_sim/evaluation/record_sb3_trace.py` trace fields | Pending validation on smoke eval (`vp_stepin_selection_rate`, `vp_stepin_block_reason_counts`, `vp_no_legal_stepin_near_count`, `vp_control_after_entry_turns_p50/p90`, per-unit entry success) |
+| Gym controller avoids turn-wide intent lock | `assault_sim/envs/gym_assault_env.py` -> `_GymActionController.act` | Pending smoke validation (`seed=42`, `episodes=30`) |

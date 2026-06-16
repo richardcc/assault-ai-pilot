@@ -1,0 +1,47 @@
+{
+    "run_dir":  "C:\\repos\\python\\assault\\assault_sim\\session\\reports\\sb3_eval\\run_20260613_173922",
+    "baseline_report_path":  "C:\\repos\\python\\assault\\assault_sim\\session\\reports\\sb3_eval\\r1_ab_dummy12_s42\\metrics_sb3_report_20260611T154815Z.json",
+    "candidate_report_path":  "C:\\repos\\python\\assault\\assault_sim\\session\\reports\\sb3_eval\\run_20260613_173922\\metrics_sb3_report_20260613T153946Z.json",
+    "decision":  "NO-GO",
+    "thresholds":  {
+                       "true_win_rate_delta_min":  -0.1,
+                       "captured_4_5_delta_min":  -5,
+                       "vp_entry_missed_rate_delta_max":  0.15
+                   },
+    "baseline_metrics":  {
+                             "rl_side":  "US",
+                             "scenario":  "battaglia_cittadina_2_1",
+                             "true_win_rate":  0.32,
+                             "loss_rate":  0.43,
+                             "strategy_stuck_ratio":  0.64604365750685466,
+                             "vp_entry_missed_rate":  0.189795918367347,
+                             "position_reversal_rate":  0.045265546610733585,
+                             "captured_4_5_episodes":  32
+                         },
+    "candidate_metrics":  {
+                              "rl_side":  "US",
+                              "scenario":  "battaglia_cittadina_2_1",
+                              "true_win_rate":  0,
+                              "loss_rate":  0.8833333333333333,
+                              "strategy_stuck_ratio":  0.60471174105531655,
+                              "vp_entry_missed_rate":  0.9342105263157896,
+                              "position_reversal_rate":  0.019331426102494352,
+                              "captured_4_5_episodes":  0
+                          },
+    "deltas":  {
+                   "true_win_rate_delta":  -0.32,
+                   "captured_4_5_delta":  -32,
+                   "vp_entry_missed_rate_delta":  0.74441460794844261
+               },
+    "checks":  {
+                   "true_win_rate_delta_min_ok":  false,
+                   "captured_4_5_delta_min_ok":  false,
+                   "vp_entry_missed_rate_delta_max_ok":  false
+               },
+    "failed_checks":  [
+                          "true_win_rate_delta_min_ok",
+                          "captured_4_5_delta_min_ok",
+                          "vp_entry_missed_rate_delta_max_ok"
+                      ],
+    "decided_at_utc":  "2026-06-13T15:39:47Z"
+}

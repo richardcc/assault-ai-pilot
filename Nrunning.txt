@@ -94,3 +94,41 @@ python -m mkdocs serve -a 127.0.0.1:8001
 
 http://127.0.0.1:8000
 
+.\run_train_eval.ps1 `
+  -RepoPath "C:\repos\python\assault" `
+  -Seeds 42 `
+  -Episodes 100 `
+  -OutDir "C:\repos\python\assault\assault_sim\session\reports\sb3_eval\r2_auto_s42" `
+  -AutoGateAndPromoteBaseline
+  
+ Set-Location "C:\repos\python\assault"
+.\compare_runs.ps1
+
+Set-Location "C:\repos\python\assault"
+
+Set-Location "C:\repos\python\assault"
+
+.\run_train_eval.ps1 `
+  -RepoPath "C:\repos\python\assault" `
+  -Seeds 42 `
+  -Episodes 100 `
+  -AutoCompareAgainstBaseline `
+  -FailOnCompareNoGo
+  
+  Set-Location "C:\repos\python\assault"
+.\run_train_eval.ps1 -AutoCompareAgainstBaseline -FailOnCompareNoGo
+
+
+
+
+
+=== L3 POLICY PERFORMANCE ===
+PRESERVE: usage=4049 dmg/atk=0.121
+CAPTURE: usage=657 dmg/atk=0.119
+
+
+=== L3 POLICY PERFORMANCE ===
+PRESERVE: usage=2140 dmg/atk=0.136
+CAPTURE: usage=594 dmg/atk=0.125
+ATTRIT: usage=16 dmg/atk=0.000
+

@@ -24,13 +24,27 @@ from assault_sim.rewards.shaped_reward import ShapedReward
 
 
 class SB3EvalController:
-    def __init__(self, model, rl_side: str, sim_env, obs_normalizer=None):
+    def __init__(
+        self,
+        model,
+        rl_side: str,
+        sim_env,
+        obs_normalizer=None,
+        capture_guardrails_enabled: bool = True,
+        diagnostic_force_capture_only: bool = False,
+    ):
         self.model = model
         self.rl_side = rl_side
         self.sim_env = sim_env
         self.obs_normalizer = obs_normalizer
         self.heuristic = TacticalPathHeuristic()
-        self.executor = OptionExecutor(self.heuristic, avoid_bad_trades=False, adv_threshold=-0.5)
+        self.executor = OptionExecutor(
+            self.heuristic,
+            avoid_bad_trades=False,
+            adv_threshold=-0.5,
+            capture_guardrails_enabled=capture_guardrails_enabled,
+            diagnostic_force_capture_only=diagnostic_force_capture_only,
+        )
         self.action_bridge = ActionBridge()
 
         self.current_option = None
@@ -41,8 +55,6 @@ class SB3EvalController:
         self.current_strategy = None
         self.training_mode = False
         self._strategy_stub = type("SB3Strategy", (), {})
-        self._locked_strategy = None
-        self._locked_strategy_turn = None
         self._cached_action_vec_by_turn = {}
 
     def reset(self):
@@ -51,8 +63,6 @@ class SB3EvalController:
         self.current_option_resolved = None
         self.current_attack_mode = 0
         self.last_decision_trace = None
-        self._locked_strategy = None
-        self._locked_strategy_turn = None
         self._cached_action_vec_by_turn = {}
 
     def _predict_action_vec(self, state, obs=None):
@@ -145,10 +155,8 @@ class SB3EvalController:
         option_idx = int(action_vec[1])
         attack_mode = int(action_vec[2])
         sampled_strategy = StrategicIntent(strategy_idx)
-        if self._locked_strategy is None or self._locked_strategy_turn != turn_now:
-            self._locked_strategy = sampled_strategy
-            self._locked_strategy_turn = turn_now
-        effective_strategy = self._locked_strategy
+        # Evaluate strategy per activation to avoid turn-wide lock-in.
+        effective_strategy = sampled_strategy
         sampled_option = TacticalOption(option_idx)
         resolved_option = sampled_option
         strategy_name = effective_strategy.name
@@ -333,7 +341,14 @@ def evaluate_sb3(episodes: int = 100, seed: int | None = None, out_dir: str | No
             else:
                 print(f"⚠️ VecNormalize stats not found for {rl_side}, evaluating without obs normalization")
 
-            controller = SB3EvalController(model, rl_side, env.sim, obs_normalizer=obs_normalizer)
+            controller = SB3EvalController(
+                model,
+                rl_side,
+                env.sim,
+                obs_normalizer=obs_normalizer,
+                capture_guardrails_enabled=bool(getattr(cfg, "capture_guardrails_enabled", True)),
+                diagnostic_force_capture_only=bool(getattr(cfg, "diagnostic_force_capture_only", False)),
+            )
             evaluator = Evaluator(
                 env=env,
                 rl_controller=controller,

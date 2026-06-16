@@ -42,12 +42,17 @@ class TrainConfig:
     sb3_clip_range: float
     sb3_learning_rate: float
     sb3_device: str
+    sb3_vec_env_type: str
+    sb3_clean_models_before_train: bool
+    sb3_train_lean: bool
     sb3_eval_freq: int
     sb3_eval_episodes: int
     sb3_net_arch: tuple[int, ...]
     sb3_max_decisions: int
     sb3_zero_damage_penalty: float
     sb3_extra_good_trade_bonus: float
+    capture_guardrails_enabled: bool
+    diagnostic_force_capture_only: bool
 
     @property
     def scenario(self) -> str:
@@ -84,12 +89,17 @@ class TrainConfig:
             sb3_clip_range=0.15,
             sb3_learning_rate=1e-4,
             sb3_device="cpu",
+            sb3_vec_env_type="dummy",
+            sb3_clean_models_before_train=True,
+            sb3_train_lean=True,
             sb3_eval_freq=25_000,
             sb3_eval_episodes=20,
             sb3_net_arch=(256, 256),
             sb3_max_decisions=400,
             sb3_zero_damage_penalty=0.8,
             sb3_extra_good_trade_bonus=0.3,
+            capture_guardrails_enabled=True,
+            diagnostic_force_capture_only=False,
         )
 
     @staticmethod
@@ -121,6 +131,9 @@ class TrainConfig:
                 raise ValueError(
                     f"scenario_schedule entry '{entry.id}' must have episodes > 0"
                 )
+        sb3_vec_env_type = str(merged.get("sb3_vec_env_type", "dummy")).strip().lower()
+        if sb3_vec_env_type not in {"dummy", "subproc"}:
+            raise ValueError("sb3_vec_env_type must be one of: 'dummy', 'subproc'")
         return TrainConfig(
             rl_sides=rl_sides,
             scenario_schedule=schedule,
@@ -144,12 +157,17 @@ class TrainConfig:
             sb3_clip_range=float(merged["sb3_clip_range"]),
             sb3_learning_rate=float(merged["sb3_learning_rate"]),
             sb3_device=str(merged["sb3_device"]),
+            sb3_vec_env_type=sb3_vec_env_type,
+            sb3_clean_models_before_train=bool(merged.get("sb3_clean_models_before_train", True)),
+            sb3_train_lean=bool(merged.get("sb3_train_lean", True)),
             sb3_eval_freq=int(merged["sb3_eval_freq"]),
             sb3_eval_episodes=int(merged["sb3_eval_episodes"]),
             sb3_net_arch=tuple(int(x) for x in merged["sb3_net_arch"]),
             sb3_max_decisions=int(merged["sb3_max_decisions"]),
             sb3_zero_damage_penalty=float(merged["sb3_zero_damage_penalty"]),
             sb3_extra_good_trade_bonus=float(merged["sb3_extra_good_trade_bonus"]),
+            capture_guardrails_enabled=bool(merged.get("capture_guardrails_enabled", True)),
+            diagnostic_force_capture_only=bool(merged.get("diagnostic_force_capture_only", False)),
         )
 
     def to_dict(self) -> dict[str, Any]:

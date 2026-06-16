@@ -2,11 +2,38 @@ from __future__ import annotations
 
 from pathlib import Path
 from datetime import datetime
+import shutil
 import json
 import torch
 
 from assault_sim.config.train_config import load_train_config
 from assault_sim.envs.gym_assault_env import GymAssaultEnv
+
+
+def _make_env_factory(
+    scenario_id: str,
+    rl_side: str,
+    seed: int,
+    max_decisions: int,
+    zero_damage_penalty: float,
+    extra_good_trade_bonus: float,
+    train_lean: bool,
+):
+    def _init():
+        from stable_baselines3.common.monitor import Monitor
+
+        env = GymAssaultEnv(
+            scenario=scenario_id,
+            rl_side=rl_side,
+            seed=seed,
+            max_decisions=max_decisions,
+            zero_damage_penalty=zero_damage_penalty,
+            extra_good_trade_bonus=extra_good_trade_bonus,
+            train_lean=train_lean,
+        )
+        return Monitor(env)
+
+    return _init
 
 
 def _scenario_sides(repo_root: Path, scenario_id: str) -> set[str]:
@@ -26,12 +53,43 @@ def _scenario_sides(repo_root: Path, scenario_id: str) -> set[str]:
     }
 
 
+def _cleanup_model_workspace(model_dir: Path) -> None:
+    """Remove prior training artifacts inside models/ before a new run."""
+    file_patterns = (
+        "sb3_latest_*.zip",
+        "sb3_vecnormalize_*.pkl",
+        "sb3_latest_*.meta.json",
+    )
+    dir_patterns = (
+        "sb3_best_*",
+        "sb3_eval_*",
+    )
+    removed_files = 0
+    removed_dirs = 0
+    for pattern in file_patterns:
+        for path in model_dir.glob(pattern):
+            if path.is_file():
+                path.unlink(missing_ok=True)
+                removed_files += 1
+    for pattern in dir_patterns:
+        for path in model_dir.glob(pattern):
+            if path.is_dir():
+                shutil.rmtree(path, ignore_errors=True)
+                removed_dirs += 1
+    runs_dir = model_dir / "runs"
+    if runs_dir.exists() and runs_dir.is_dir():
+        shutil.rmtree(runs_dir, ignore_errors=True)
+        removed_dirs += 1
+    print(
+        f"[cleanup] model workspace cleaned: files={removed_files} dirs={removed_dirs} under {model_dir}"
+    )
+
+
 def main():
     try:
         from stable_baselines3 import PPO
         from stable_baselines3.common.callbacks import EvalCallback, BaseCallback
-        from stable_baselines3.common.vec_env import DummyVecEnv
-        from stable_baselines3.common.monitor import Monitor
+        from stable_baselines3.common.vec_env import DummyVecEnv, SubprocVecEnv
         from stable_baselines3.common.vec_env import VecNormalize
     except ImportError as exc:  # pragma: no cover
         raise SystemExit(
@@ -43,6 +101,10 @@ def main():
     model_dir.mkdir(parents=True, exist_ok=True)
     train_config_path = repo_root / "assault_sim" / "config" / "train_config.json"
     cfg = load_train_config(train_config_path)
+    if bool(getattr(cfg, "sb3_clean_models_before_train", True)):
+        _cleanup_model_workspace(model_dir)
+    else:
+        print("ℹ️ model workspace cleanup skipped (sb3_clean_models_before_train=false).")
     requested_device = cfg.sb3_device.strip().lower()
     if requested_device == "cuda" and not torch.cuda.is_available():
         print("⚠️ sb3_device='cuda' but CUDA is not available. Falling back to CPU.")
@@ -73,18 +135,8 @@ def main():
                 print(f"⚠️ periodic artifact save failed: {exc}")
             return True
 
-    def make_env_for_scenario(scenario_id: str, rl_side: str):
-        env = GymAssaultEnv(
-            scenario=scenario_id,
-            rl_side=rl_side,
-            seed=cfg.seed,
-            max_decisions=cfg.sb3_max_decisions,
-            zero_damage_penalty=cfg.sb3_zero_damage_penalty,
-            extra_good_trade_bonus=cfg.sb3_extra_good_trade_bonus,
-        )
-        return Monitor(env)
-
     num_envs = cfg.sb3_num_envs
+    vec_env_type = str(getattr(cfg, "sb3_vec_env_type", "dummy")).strip().lower()
 
     run_id = datetime.utcnow().strftime("%Y%m%dT%H%M%SZ")
     tb_log = repo_root / "models" / "runs" / f"sb3_{run_id}"
@@ -117,9 +169,32 @@ def main():
                 f"timesteps={phase_timesteps} ==="
             )
 
-            train_env = DummyVecEnv(
-                [lambda sid=scenario_id, side=rl_side: make_env_for_scenario(sid, side) for _ in range(num_envs)]
-            )
+            train_fns = [
+                _make_env_factory(
+                    scenario_id=scenario_id,
+                    rl_side=rl_side,
+                    # Keep worker seeds aligned with previous behavior to avoid
+                    # introducing an unintended exploration distribution shift.
+                    seed=cfg.seed,
+                    max_decisions=cfg.sb3_max_decisions,
+                    zero_damage_penalty=cfg.sb3_zero_damage_penalty,
+                    extra_good_trade_bonus=cfg.sb3_extra_good_trade_bonus,
+                    train_lean=bool(getattr(cfg, "sb3_train_lean", True)),
+                )
+                for _env_idx in range(num_envs)
+            ]
+            if vec_env_type == "subproc" and num_envs > 1:
+                try:
+                    train_vec = SubprocVecEnv(train_fns, start_method="spawn")
+                    print(f"Using SubprocVecEnv with num_envs={num_envs}")
+                except Exception as exc:
+                    print(f"⚠️ SubprocVecEnv unavailable ({exc}); falling back to DummyVecEnv.")
+                    train_vec = DummyVecEnv(train_fns)
+            else:
+                train_vec = DummyVecEnv(train_fns)
+                print(f"Using DummyVecEnv with num_envs={num_envs}")
+
+            train_env = train_vec
             train_env = VecNormalize(
                 train_env,
                 norm_obs=True,
@@ -127,7 +202,17 @@ def main():
                 clip_obs=10.0,
             )
             eval_env = DummyVecEnv(
-                [lambda sid=scenario_id, side=rl_side: make_env_for_scenario(sid, side)]
+                [
+                    _make_env_factory(
+                        scenario_id=scenario_id,
+                        rl_side=rl_side,
+                        seed=cfg.seed,
+                        max_decisions=cfg.sb3_max_decisions,
+                        zero_damage_penalty=cfg.sb3_zero_damage_penalty,
+                        extra_good_trade_bonus=cfg.sb3_extra_good_trade_bonus,
+                        train_lean=False,
+                    )
+                ]
             )
             eval_env = VecNormalize(
                 eval_env,
@@ -200,6 +285,11 @@ def main():
             "model_path": str(out_path),
             "vecnormalize_path": str(vecnorm_path),
             "num_envs": num_envs,
+            "vec_env_type": vec_env_type,
+            "clean_models_before_train": bool(
+                getattr(cfg, "sb3_clean_models_before_train", True)
+            ),
+            "train_lean": bool(getattr(cfg, "sb3_train_lean", True)),
             "n_steps": cfg.sb3_n_steps,
             "batch_size": cfg.sb3_batch_size,
             "n_epochs": cfg.sb3_n_epochs,

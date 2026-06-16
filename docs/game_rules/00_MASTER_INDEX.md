@@ -22,3 +22,11 @@ the PDFs in `docs/pdfs/` as canonical source.
 1. PDFs in `docs/pdfs/` are the source of truth.
 2. These markdown files are operational consolidations.
 3. If there is any conflict, the PDF prevails.
+
+## Simulation Training Operational Note
+
+Validation state: **Pending Validation**.
+
+- `assault_sim/train/train_sb3.py` now cleans transient artifacts under `models/` at run start to avoid cross-run contamination (`sb3_latest_*`, `sb3_vecnormalize_*`, `sb3_best_*`, `sb3_eval_*`, `models/runs/`).
+- This does not define game rules; it is a reproducibility guardrail for RL train/eval workflow.
+- `run_train_eval.ps1` supports configurable parallel eval by seed (`-ParallelEvalSeeds`, `-EvalParallelJobs`) with isolated output folders per seed.

@@ -1,0 +1,3 @@
+Status: FROZEN_NO_GO
+Run: run_20260614_170239
+Reason: compare_gate=NO-GO (true_win_rate_delta, captured_4_5_delta, vp_entry_missed_rate_delta)

@@ -58,6 +58,8 @@ def test_option_executor_tags_plan_fields_on_action(monkeypatch):
     assert getattr(action, "rl_plan_focus_vp_id", None) is None
     assert int(getattr(action, "rl_plan_step_id", 0)) >= 1
     assert getattr(action, "rl_plan_budget_state", "") == "UNBOUNDED"
+    assert getattr(action, "rl_capture_emergency_override", False) is False
+    assert getattr(action, "rl_capture_legal_override", False) is False
 
 
 def test_option_executor_plan_step_id_monotonic(monkeypatch):
