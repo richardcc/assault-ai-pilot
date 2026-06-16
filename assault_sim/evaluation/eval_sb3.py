@@ -56,6 +56,9 @@ class SB3EvalController:
         self.training_mode = False
         self._strategy_stub = type("SB3Strategy", (), {})
         self._cached_action_vec_by_turn = {}
+        # R4 skeleton: step-in mask telemetry for legal VP-entry opportunities.
+        self.current_stepin_legal = False
+        self.current_stepin_forced_option = False
 
     def reset(self):
         self.current_option = None
@@ -64,6 +67,8 @@ class SB3EvalController:
         self.current_attack_mode = 0
         self.last_decision_trace = None
         self._cached_action_vec_by_turn = {}
+        self.current_stepin_legal = False
+        self.current_stepin_forced_option = False
 
     def _predict_action_vec(self, state, obs=None):
         model_obs = obs
@@ -159,6 +164,18 @@ class SB3EvalController:
         effective_strategy = sampled_strategy
         sampled_option = TacticalOption(option_idx)
         resolved_option = sampled_option
+        self.current_stepin_legal = False
+        self.current_stepin_forced_option = False
+        # R4 skeleton: "entry head" proxy for eval parity.
+        if effective_strategy == StrategicIntent.CAPTURE:
+            try:
+                legal_stepin = self.executor._best_step_into_uncaptured_vp(state, unit) is not None
+            except Exception:
+                legal_stepin = False
+            self.current_stepin_legal = bool(legal_stepin)
+            if legal_stepin and resolved_option != TacticalOption.ADVANCE:
+                resolved_option = TacticalOption.ADVANCE
+                self.current_stepin_forced_option = True
         strategy_name = effective_strategy.name
         self.current_strategy = self._strategy_stub()
         self.current_strategy.name = strategy_name
@@ -186,6 +203,11 @@ class SB3EvalController:
             executed_option=executed_option,
             strategy_name=strategy_name,
         )
+        try:
+            setattr(action, "rl_stepin_legal_mask", bool(self.current_stepin_legal))
+            setattr(action, "rl_stepin_forced_option", bool(self.current_stepin_forced_option))
+        except Exception:
+            pass
 
         action.unit_id = unit.unit_id
         self.sim_env.runtime.activated_units.add(unit.unit_id)

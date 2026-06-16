@@ -57,6 +57,9 @@ class _GymActionController:
         self.last_value = None
         self.current_strategy = None
         self.training_mode = False
+        # R4 skeleton: step-in mask telemetry for legal VP-entry opportunities.
+        self.current_stepin_legal = False
+        self.current_stepin_forced_option = False
 
     def reset(self):
         self.pending_action = None
@@ -65,6 +68,8 @@ class _GymActionController:
         self.current_option_resolved = None
         self.current_attack_mode = 0
         self.last_decision_trace = None
+        self.current_stepin_legal = False
+        self.current_stepin_forced_option = False
 
     def set_action(self, action: tuple[int, ...]):
         self.pending_action = action
@@ -137,6 +142,19 @@ class _GymActionController:
             # that can freeze all units into a weak intent for the full turn.
             effective_strategy = sampled_strategy
             resolved_option = sampled_option
+            self.current_stepin_legal = False
+            self.current_stepin_forced_option = False
+            # R4 skeleton: lightweight "entry head" proxy.
+            # If CAPTURE has a legal immediate step-in VP move, bias option to ADVANCE.
+            if effective_strategy == StrategicIntent.CAPTURE:
+                try:
+                    legal_stepin = self.executor._best_step_into_uncaptured_vp(state, unit) is not None
+                except Exception:
+                    legal_stepin = False
+                self.current_stepin_legal = bool(legal_stepin)
+                if legal_stepin and resolved_option != TacticalOption.ADVANCE:
+                    resolved_option = TacticalOption.ADVANCE
+                    self.current_stepin_forced_option = True
 
             action = self.executor.execute(
                 state=state,
@@ -162,6 +180,12 @@ class _GymActionController:
                 executed_option=executed_option,
                 strategy_name=effective_strategy.name,
             )
+            # expose policy-side mask/bias for debugging in env info
+            try:
+                setattr(action, "rl_stepin_legal_mask", bool(self.current_stepin_legal))
+                setattr(action, "rl_stepin_forced_option", bool(self.current_stepin_forced_option))
+            except Exception:
+                pass
             self.pending_action = None
 
             action.unit_id = unit.unit_id

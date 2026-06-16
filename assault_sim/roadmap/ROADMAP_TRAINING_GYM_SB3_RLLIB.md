@@ -16,15 +16,22 @@ Checklist inmediato:
 - [x] cerrar definición consistente de `vp_entry_missed_rate` vs `capture_conversion_after_contact`
 - [x] completar ciclo corto: `train -> eval 42/43/44 -> decisión única`
 - [x] validar P4.3c en multi-seed (`CONDITIONAL GO`)
-- [ ] cerrar A/B de R1 (`dummy` vs `subproc`) sin degradar primarias tácticas
+- [x] cerrar A/B de R1 (`dummy` vs `subproc`) sin degradar primarias tácticas
+- [x] validar observabilidad embudo VP (`vp_stepin_*`, `vp_control_after_entry_*`, `per_unit_vp_entry_*`)
+- [x] validar P4.5 ejecución post-apertura (`post_open_window_followup_*`)
+- [ ] abrir R2.1 de entrenamiento/reward (salir de techo de guardrails)
 
 Regla operativa:
 - un solo ajuste por iteración, misma batería multi-seed, comparación contra baseline congelado.
 
 Estado de ejecución actual:
 - baseline táctico congelado: `p43c_main_s424344`
-- experimento de rendimiento en curso por ramas A/B (`dummy|subproc`)
-- evidencia reciente: `subproc` con `num_envs=12` = `NO-GO` táctico
+- experimento de rendimiento A/B cerrado (`dummy|subproc`)
+- evidencia consolidada: `subproc` con `num_envs=12` = `NO-GO` táctico
+- estado táctico actual (`battaglia_cittadina_2_1`, `120 eps`, `seed 42`):
+  - `true_win_rate=0.000`, `loss_rate=0.983`, `NO-GO`
+  - embudo VP mejorado pero insuficiente (`vp_stepin_legal_count~73-76`, `vp_stepin_selection_rate=1.0`, `vp_entry_missed_rate~0.877`)
+  - conclusión operativa: techo de guardrails; pasar a cambios de entrenamiento/reward
 
 ==================================================
 ## 🧭 VISIÓN
@@ -774,6 +781,20 @@ Incidente: run detenido o degradación fuerte en train
   - `r1_ab_dummy12_s42`: `true_win_rate=0.32`, `loss_rate=0.43` -> baseline estable
   - conclusión: en esta configuración, `subproc` degrada táctica; mantener `dummy` en producción.
 
+- 2026-06-16 (P4.3d/P4.4/P4.5 + validación extendida):
+  - guardrails implementados/activos:
+    - shaping de movimiento CAPTURE hacia anillo VP + presión enemiga
+    - apertura de ventana VP (`forced_attack_open_vp_window`) y seguimiento `post_open_window_followup_advance`
+    - acoplamiento soporte (`attack_gate_support_open_lane`)
+    - cuota mínima L3 CAPTURE (`minimum_capture_intent_quota`) + telemetría (`l3_capture_forced_*`)
+  - señales positivas (táctica local):
+    - en smoke 20ep: `vp_stepin_legal` sube (`+16`), `forced_attack_open_vp_window` sube (`+14`), `no_legal_stepin_near_vp` baja (`-60`)
+    - en 120ep: `post_open_window_followup_success_rate ~0.95`
+  - resultado global:
+    - `true_win_rate=0.000`, `loss_rate~0.983`, `AUTO-COMPARE-GATE=NO-GO`
+  - diagnóstico final:
+    - ejecución táctica local mejora, pero no traduce a victoria global; cuello en aprendizaje/política/reward (no en guardrails adicionales).
+
 ==================================================
 ## 🎯 SIGUIENTE PASO
 
@@ -781,8 +802,12 @@ Roadmap inmediato (sin mezclar táctico y performance):
 - congelar baseline táctico: `p43c_main_s424344` como referencia oficial.
 - [x] switch por config `sb3_vec_env_type: dummy|subproc` implementado.
 - decisión vigente: mantener `dummy` para runs productivos.
-- próximo experimento: volver a performance vía R2 (hotspots/caching) sin cambiar backend de vec env.
-- promover cambios de rendimiento solo si preservan primarias tácticas (`true_win_rate`, `loss_rate`, `captured=4/5`).
+- próximo experimento principal: **R2.1 entrenamiento/reward** (dejar de iterar micro-guardrails).
+- foco R2.1:
+  - premiar conversión post-contacto/control sostenido VP,
+  - penalizar concentración excesiva (`unit_concentration_index`),
+  - reforzar contribución de soporte en ventanas de captura.
+- promover cambios solo si preservan/mejoran primarias tácticas (`true_win_rate`, `loss_rate`, `captured=4/5`) y reducen `vp_entry_missed_rate`.
 
 Bloqueo conocido resuelto por proceso (no por hotfix):
 - `eval_sb3` con modelo viejo falla con:
@@ -800,3 +825,20 @@ Checklist rebaseline P4.2:
 - [x] run principal (`seed 42/43/44`, `episodes 100`)
 - [x] confirmar gates (`true_win_rate`, `loss_rate`, `captured=4/5`, `vp_entry_missed_rate`, `strategy_stuck_ratio`)
 - [x] pasar a P4.3 (Action Budget, activación gradual)
+
+==================================================
+## 📌 CIERRE EXPERIMENTAL 2026-06-16 (R2.2/R2.3/R4)
+
+Estado: **NO-GO definitivo** en línea incremental de guardrails/reward-local/policy-skeleton.
+
+Evidencia final:
+- run_20260616_161120 (micro-benchmark R4, 20 eps, seed42)
+- true_win_rate=0.000
+- loss_rate=1.000
+- AUTO-COMPARE-GATE=NO-GO
+- checks fallidos: true_win_rate_delta_min_ok, captured_4_5_delta_min_ok, vp_entry_missed_rate_delta_max_ok
+
+Decisión:
+- no continuar con Run2/Run3 en esta línea.
+- volver a baseline operativo.
+- próximos esfuerzos solo en rediseño mayor (arquitectura policy / enfoque alternativo), fuera de parches incrementales.

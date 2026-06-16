@@ -111,8 +111,12 @@ Validation state: **Pending Validation**.
   - per-unit CAPTURE focus lock (short TTL) keeps the same VP target for a few activations to reduce target ping-pong when no progress is available.
   - all CAPTURE guardrails are gated by `capture_guardrails_enabled` (train config) to support A/B validation against non-guardrail behavior.
   - aggressive L3 enforcement: with pending objectives and no emergency, attacker-side intent is forced to `CAPTURE` (`aggressive_l3_capture_force`) to prevent collapse into `PRESERVE`.
+  - L3 CAPTURE quota guardrail: per side/turn, enforce a minimum CAPTURE-intent quota (`minimum_capture_intent_quota`) under pending objectives and no emergency; telemetry includes `l3_capture_forced_count/rate` and reason histogram.
   - near-VP conversion guardrail: with `nearest_vp_d <= 2`, CAPTURE prioritizes movement progression/entry and blocks non-VP attack drift unless explicitly opening VP lane.
   - CAPTURE movement selector now optimizes toward the uncaptured VP **adjacent ring** (not only VP center), with enemy-pressure-aware scoring and stronger anti-lateral penalty near VP.
+  - CAPTURE + fire-support coupling: support-class units near VP (`dist 2..3`) can prioritize lane-opening attacks on threats adjacent to uncaptured VP (`attack_gate_support_open_lane`), while low-value non-lane high-adv attacks are de-prioritized to reduce attrition drift.
+  - Post-opening conversion guardrail: after `forced_attack_open_vp_window`, next CAPTURE decision for that unit prioritizes a non-worsening follow-up advance (`post_open_window_followup_advance`) with success telemetry (`post_open_window_followup_success_rate`); low-quality opening attacks trigger short cooldown.
+  - R4 policy-redesign skeleton: Gym/SB3 eval controllers expose a legal step-in mask proxy (`stepin_legal_mask`) and optional option bias (`stepin_forced_option`) that nudges `ADVANCE` when CAPTURE has an immediate legal VP entry.
   - CAPTURE `move_block_profile` is always populated (no `unknown`) for traceability.
   - diagnostic mode: `diagnostic_force_capture_only=true` forces attacker-side L3 to `CAPTURE` (unless emergency) to isolate whether failures come from strategic intent collapse.
   - VP entry observability captures:

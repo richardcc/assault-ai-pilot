@@ -366,6 +366,12 @@ class TrainingEnv:
             "capture_emergency_override": bool(getattr(action, "rl_capture_emergency_override", False)),
             "capture_legal_override": bool(getattr(action, "rl_capture_legal_override", False)),
             "capture_override_reason": str(getattr(action, "rl_capture_override_reason", "") or ""),
+            "l3_capture_forced": bool(getattr(action, "rl_l3_capture_forced", False)),
+            "l3_capture_force_reason": str(getattr(action, "rl_l3_capture_force_reason", "") or ""),
+            "post_open_window_followup_advance": bool(getattr(action, "rl_post_open_window_followup_advance", False)),
+            "post_open_window_followup_success": bool(getattr(action, "rl_post_open_window_followup_success", False)),
+            "stepin_legal_mask": bool(getattr(action, "rl_stepin_legal_mask", False)),
+            "stepin_forced_option": bool(getattr(action, "rl_stepin_forced_option", False)),
             "actor_unit_classification": (
                 str(getattr(getattr(actor, "unit_type", None), "classification", ""))
                 if actor is not None

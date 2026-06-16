@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import argparse
 from pathlib import Path
 from datetime import datetime
 import shutil
@@ -86,6 +87,16 @@ def _cleanup_model_workspace(model_dir: Path) -> None:
 
 
 def main():
+    parser = argparse.ArgumentParser(
+        description="Train SB3 PPO for configured sides/scenarios."
+    )
+    parser.add_argument(
+        "--config",
+        default=None,
+        help="Optional path to train_config.json (defaults to assault_sim/config/train_config.json)",
+    )
+    args = parser.parse_args()
+
     try:
         from stable_baselines3 import PPO
         from stable_baselines3.common.callbacks import EvalCallback, BaseCallback
@@ -99,7 +110,11 @@ def main():
     repo_root = Path(__file__).resolve().parents[2]
     model_dir = repo_root / "models"
     model_dir.mkdir(parents=True, exist_ok=True)
-    train_config_path = repo_root / "assault_sim" / "config" / "train_config.json"
+    train_config_path = (
+        Path(args.config).expanduser().resolve()
+        if args.config
+        else (repo_root / "assault_sim" / "config" / "train_config.json")
+    )
     cfg = load_train_config(train_config_path)
     if bool(getattr(cfg, "sb3_clean_models_before_train", True)):
         _cleanup_model_workspace(model_dir)

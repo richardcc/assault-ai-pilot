@@ -124,6 +124,10 @@ class Evaluator:
         capture_emergency_override_count = 0
         capture_legal_override_count = 0
         capture_override_reason_counts = defaultdict(int)
+        l3_capture_forced_count = 0
+        l3_capture_force_reason_counts = defaultdict(int)
+        post_open_window_followup_advance_count = 0
+        post_open_window_followup_success_count = 0
         capture_progress_available_count = 0
         capture_suspected_progress_miss_count = 0
         capture_progress_candidate_total = 0
@@ -136,6 +140,8 @@ class Evaluator:
         vp_stepin_selected_count = 0
         vp_stepin_block_reason_counts = defaultdict(int)
         vp_no_legal_stepin_near_count = 0
+        stepin_legal_mask_count = 0
+        stepin_forced_option_count = 0
         vp_opening_attack_candidates_total = 0
         per_unit_vp_entry_attempts = defaultdict(int)
         per_unit_vp_entry_success = defaultdict(int)
@@ -431,6 +437,15 @@ class Evaluator:
                     override_reason = str(info.get("capture_override_reason", "") or "")
                     if override_reason:
                         capture_override_reason_counts[override_reason] += 1
+                    if bool(info.get("l3_capture_forced", False)):
+                        l3_capture_forced_count += 1
+                    l3_force_reason = str(info.get("l3_capture_force_reason", "") or "")
+                    if l3_force_reason:
+                        l3_capture_force_reason_counts[l3_force_reason] += 1
+                    if bool(info.get("post_open_window_followup_advance", False)):
+                        post_open_window_followup_advance_count += 1
+                    if bool(info.get("post_open_window_followup_success", False)):
+                        post_open_window_followup_success_count += 1
                     if bool(info.get("capture_progress_available", False)):
                         capture_progress_available_count += 1
                     if bool(info.get("capture_suspected_progress_miss", False)):
@@ -452,6 +467,10 @@ class Evaluator:
                         vp_stepin_block_reason_counts[stepin_reason] += 1
                     if stepin_reason == "no_legal_stepin_near_vp":
                         vp_no_legal_stepin_near_count += 1
+                    if bool(info.get("stepin_legal_mask", False)):
+                        stepin_legal_mask_count += 1
+                    if bool(info.get("stepin_forced_option", False)):
+                        stepin_forced_option_count += 1
                     vp_opening_attack_candidates_total += int(info.get("vp_opening_attack_candidates_count", 0) or 0)
                 if unit_id:
                     curr_l3 = str(info.get("l3_strategy", "") or "").upper()
@@ -677,6 +696,16 @@ class Evaluator:
                 capture_legal_override_count / max(1, capture_attempts)
             ),
             "capture_override_reason_counts": dict(capture_override_reason_counts),
+            "l3_capture_forced_count": int(l3_capture_forced_count),
+            "l3_capture_forced_rate": (
+                l3_capture_forced_count / max(1, rl_decisions)
+            ),
+            "l3_capture_force_reason_counts": dict(l3_capture_force_reason_counts),
+            "post_open_window_followup_advance_count": int(post_open_window_followup_advance_count),
+            "post_open_window_followup_success_count": int(post_open_window_followup_success_count),
+            "post_open_window_followup_success_rate": (
+                post_open_window_followup_success_count / max(1, post_open_window_followup_advance_count)
+            ),
             "capture_progress_available_count": int(capture_progress_available_count),
             "capture_suspected_progress_miss_count": int(capture_suspected_progress_miss_count),
             "capture_progress_candidate_total": int(capture_progress_candidate_total),
@@ -701,6 +730,8 @@ class Evaluator:
             ),
             "vp_stepin_block_reason_counts": dict(vp_stepin_block_reason_counts),
             "vp_no_legal_stepin_near_count": int(vp_no_legal_stepin_near_count),
+            "stepin_legal_mask_count": int(stepin_legal_mask_count),
+            "stepin_forced_option_count": int(stepin_forced_option_count),
             "vp_opening_attack_candidates_total": int(vp_opening_attack_candidates_total),
             "vp_control_after_entry_turns": list(vp_control_after_entry_turns),
             "per_unit_vp_entry_attempts": dict(per_unit_vp_entry_attempts),

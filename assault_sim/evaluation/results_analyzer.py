@@ -243,6 +243,11 @@ class ResultsAnalyzer:
         capture_fallback_reason_totals = defaultdict(int)
         capture_move_block_profile_totals = defaultdict(int)
         capture_override_reason_totals = defaultdict(int)
+        l3_capture_forced_total = 0
+        l3_capture_forced_rates = []
+        l3_capture_force_reason_totals = defaultdict(int)
+        post_open_window_followup_advance_total = 0
+        post_open_window_followup_success_total = 0
         capture_emergency_override_rates = []
         capture_legal_override_rates = []
         capture_emergency_override_total = 0
@@ -262,6 +267,8 @@ class ResultsAnalyzer:
         vp_stepin_block_reason_totals = defaultdict(int)
         vp_no_legal_stepin_near_total = 0
         vp_opening_attack_candidates_total = 0
+        stepin_legal_mask_total = 0
+        stepin_forced_option_total = 0
         vp_control_after_entry_turns_all = []
         per_unit_vp_entry_attempts_totals = defaultdict(int)
         per_unit_vp_entry_success_totals = defaultdict(int)
@@ -391,6 +398,25 @@ class ResultsAnalyzer:
                 except Exception:
                     pass
             try:
+                l3_capture_forced_total += int(mission.get("l3_capture_forced_count", 0))
+            except Exception:
+                pass
+            if "l3_capture_forced_rate" in mission:
+                try:
+                    l3_capture_forced_rates.append(float(mission.get("l3_capture_forced_rate", 0.0)))
+                except Exception:
+                    pass
+            for reason, count in (mission.get("l3_capture_force_reason_counts", {}) or {}).items():
+                try:
+                    l3_capture_force_reason_totals[str(reason)] += int(count)
+                except Exception:
+                    pass
+            try:
+                post_open_window_followup_advance_total += int(mission.get("post_open_window_followup_advance_count", 0))
+                post_open_window_followup_success_total += int(mission.get("post_open_window_followup_success_count", 0))
+            except Exception:
+                pass
+            try:
                 capture_emergency_override_total += int(mission.get("capture_emergency_override_count", 0))
                 capture_legal_override_total += int(mission.get("capture_legal_override_count", 0))
                 capture_progress_available_total += int(mission.get("capture_progress_available_count", 0))
@@ -443,6 +469,11 @@ class ResultsAnalyzer:
                 pass
             try:
                 vp_opening_attack_candidates_total += int(mission.get("vp_opening_attack_candidates_total", 0))
+            except Exception:
+                pass
+            try:
+                stepin_legal_mask_total += int(mission.get("stepin_legal_mask_count", 0))
+                stepin_forced_option_total += int(mission.get("stepin_forced_option_count", 0))
             except Exception:
                 pass
             for v in (mission.get("vp_control_after_entry_turns", []) or []):
@@ -589,6 +620,16 @@ class ResultsAnalyzer:
             "capture_fallback_reason_counts": dict(capture_fallback_reason_totals),
             "capture_move_block_profile": dict(capture_move_block_profile_totals),
             "capture_override_reason_counts": dict(capture_override_reason_totals),
+            "l3_capture_forced_count": int(l3_capture_forced_total),
+            "l3_capture_forced_rate": (
+                statistics.mean(l3_capture_forced_rates) if l3_capture_forced_rates else 0.0
+            ),
+            "l3_capture_force_reason_counts": dict(l3_capture_force_reason_totals),
+            "post_open_window_followup_advance_count": int(post_open_window_followup_advance_total),
+            "post_open_window_followup_success_count": int(post_open_window_followup_success_total),
+            "post_open_window_followup_success_rate": (
+                post_open_window_followup_success_total / max(1, post_open_window_followup_advance_total)
+            ),
             "capture_emergency_override_count": int(capture_emergency_override_total),
             "capture_legal_override_count": int(capture_legal_override_total),
             "capture_progress_available_count": int(capture_progress_available_total),
@@ -607,6 +648,8 @@ class ResultsAnalyzer:
             "vp_stepin_block_reason_counts": dict(vp_stepin_block_reason_totals),
             "vp_no_legal_stepin_near_count": int(vp_no_legal_stepin_near_total),
             "vp_opening_attack_candidates_total": int(vp_opening_attack_candidates_total),
+            "stepin_legal_mask_count": int(stepin_legal_mask_total),
+            "stepin_forced_option_count": int(stepin_forced_option_total),
             "vp_control_after_entry_turns_p50": _percentile(vp_control_after_entry_turns_all, 0.50),
             "vp_control_after_entry_turns_p90": _percentile(vp_control_after_entry_turns_all, 0.90),
             "per_unit_vp_entry_attempts": dict(per_unit_vp_entry_attempts_totals),
@@ -843,6 +886,8 @@ class ResultsAnalyzer:
             print(f"vp_stepin_block_reasons: {pretty_stepin}")
         print(f"vp_no_legal_stepin_near_count: {mission.get('vp_no_legal_stepin_near_count', 0)}")
         print(f"vp_opening_attack_candidates_total: {mission.get('vp_opening_attack_candidates_total', 0)}")
+        print(f"stepin_legal_mask_count: {mission.get('stepin_legal_mask_count', 0)}")
+        print(f"stepin_forced_option_count: {mission.get('stepin_forced_option_count', 0)}")
         selected_move_reasons = mission.get("capture_selected_move_reason_counts", {}) or {}
         if selected_move_reasons:
             pretty_selected = ", ".join(f"{k}:{v}" for k, v in sorted(selected_move_reasons.items(), key=lambda kv: kv[1], reverse=True))
@@ -861,6 +906,15 @@ class ResultsAnalyzer:
         if override_reasons:
             pretty_override = ", ".join(f"{k}:{v}" for k, v in sorted(override_reasons.items(), key=lambda kv: kv[1], reverse=True))
             print(f"capture_override_reasons: {pretty_override}")
+        print(f"l3_capture_forced_rate: {mission.get('l3_capture_forced_rate', 0.0):.3f}")
+        print(f"l3_capture_forced_count: {mission.get('l3_capture_forced_count', 0)}")
+        l3_force_reasons = mission.get("l3_capture_force_reason_counts", {}) or {}
+        if l3_force_reasons:
+            pretty_l3 = ", ".join(f"{k}:{v}" for k, v in sorted(l3_force_reasons.items(), key=lambda kv: kv[1], reverse=True))
+            print(f"l3_capture_force_reasons: {pretty_l3}")
+        print(f"post_open_window_followup_advance_count: {mission.get('post_open_window_followup_advance_count', 0)}")
+        print(f"post_open_window_followup_success_count: {mission.get('post_open_window_followup_success_count', 0)}")
+        print(f"post_open_window_followup_success_rate: {mission.get('post_open_window_followup_success_rate', 0.0):.3f}")
         print(
             "multi_unit_contribution:"
             f" atk_units_mean={mission.get('multi_unit_contribution', {}).get('attack_units_mean', 0.0):.2f}"
