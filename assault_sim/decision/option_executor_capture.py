@@ -9,6 +9,109 @@ from assault_sim.rl.tactical_options import TacticalOption
 
 
 class OptionExecutorCaptureMixin:
+    def _owned_vp_hexes_for_side(self, state, side: str):
+        points = getattr(getattr(state, "victory", None), "points", []) or []
+        if not points or not side:
+            return set()
+        own_ownership = self._ownership_for_side(state, side)
+        owned = set()
+        for vp in points:
+            hs = state.hex_states.get(vp.hex_coords)
+            if hs is not None and hs.ownership == own_ownership:
+                owned.add(vp.hex_coords)
+        return owned
+
+    def _threatened_owned_vp_hexes(self, state, side: str, threat_radius: int = 1):
+        owned = self._owned_vp_hexes_for_side(state, side)
+        if not owned:
+            return set()
+        enemies = [
+            u
+            for u in getattr(state, "units", [])
+            if getattr(u, "alive", False)
+            and getattr(u, "side", None) != side
+            and getattr(u, "position", None) is not None
+        ]
+        threatened = set()
+        for vp_hex in owned:
+            for e in enemies:
+                if safe_hex_distance(e.position, vp_hex) <= int(threat_radius):
+                    threatened.add(vp_hex)
+                    break
+        return threatened
+
+    def _best_defend_owned_vp_action(self, state, unit, attack_mode):
+        if unit is None or getattr(unit, "position", None) is None:
+            return None, None
+        threatened_vps = self._threatened_owned_vp_hexes(state, getattr(unit, "side", None), threat_radius=1)
+        if not threatened_vps:
+            return None, None
+        # Soft guardrail: only defend with this unit if it is locally relevant
+        # (close enough to intervene) and threat is critical.
+        nearest_threatened = min(safe_hex_distance(unit.position, vp) for vp in threatened_vps)
+        if nearest_threatened > 2:
+            return None, None
+        enemies = [
+            u
+            for u in getattr(state, "units", [])
+            if getattr(u, "alive", False)
+            and getattr(u, "side", None) != getattr(unit, "side", None)
+            and getattr(u, "position", None) is not None
+        ]
+        critical_threat = any(
+            safe_hex_distance(e.position, vp) <= 0
+            for vp in threatened_vps
+            for e in enemies
+        )
+        if not critical_threat:
+            return None, None
+
+        actions = self._get_unit_actions(state, unit)
+        best_move = None
+        best_move_score = float("-inf")
+        for a in actions:
+            if getattr(getattr(a, "action_type", None), "category", None) != ActionCategory.MOVEMENT:
+                continue
+            path = getattr(a, "path", None)
+            if not path:
+                continue
+            end = path[-1]
+            end_t = (end.q, end.r)
+            d_before = min(safe_hex_distance(unit.position, vp) for vp in threatened_vps)
+            d_after = min(safe_hex_distance(end, vp) for vp in threatened_vps)
+            if d_after >= d_before and end_t not in threatened_vps:
+                continue
+            terrain_score = self._terrain_tactical_score(state, unit, end)
+            score = (50.0 if end_t in threatened_vps else 0.0) + (d_before - d_after) * 8.0 + 0.2 * float(terrain_score)
+            if score > best_move_score:
+                best_move_score = score
+                best_move = a
+
+        attacks = [a for a in actions if self._is_attack_action(a)]
+        defend_attacks = []
+        for a in attacks:
+            target = self._resolve_action_target(state, a)
+            if target is None or not getattr(target, "alive", False) or getattr(target, "position", None) is None:
+                continue
+            if any(safe_hex_distance(target.position, vp) <= 1 for vp in threatened_vps):
+                defend_attacks.append(a)
+        best_attack = self._best_attack(defend_attacks, state=state, unit=unit) if defend_attacks else None
+
+        if best_move is not None and best_move_score >= 58.0:
+            best_move.rl_capture_fallback_reason = "defend_owned_vp_move"
+            best_move.rl_capture_move_block_profile = "owned_vp_threatened"
+            return best_move, TacticalOption.ADVANCE
+        if best_attack is not None:
+            best_attack.rl_capture_fallback_to_attack = True
+            best_attack.rl_capture_fallback_reason = "defend_owned_vp_attack"
+            best_attack.rl_capture_move_block_profile = "owned_vp_threatened"
+            return best_attack, TacticalOption.ATTACK
+        if best_move is not None:
+            best_move.rl_capture_fallback_reason = "defend_owned_vp_reposition"
+            best_move.rl_capture_move_block_profile = "owned_vp_threatened"
+            return best_move, TacticalOption.ADVANCE
+        return None, None
+
     def _objective_target_hex(self, state, unit):
         points = getattr(getattr(state, "victory", None), "points", []) or []
         if not points:
@@ -33,7 +136,11 @@ class OptionExecutorCaptureMixin:
             dist = safe_hex_distance(unit.position, vp.hex_coords)
             ally_pressure = sum(1 for a in allies if safe_hex_distance(a.position, vp.hex_coords) <= 2)
             score = need * 120.0 + float(getattr(vp, "per_turn", 0)) * 2.0 - float(dist)
-            score -= 2.5 * float(ally_pressure)
+            # Stronger anti-concentration near the same VP to reduce local jams
+            # and increase legal step-in opportunities across multiple fronts.
+            score -= 6.0 * float(ally_pressure)
+            if ally_pressure >= 2:
+                score -= 10.0
             if owned_by_self and dist == 0:
                 score -= 6.0
             if score > best_score:
@@ -148,6 +255,50 @@ class OptionExecutorCaptureMixin:
                 best_score = score
                 best = a
         return best
+
+    def _best_stepin_setup_move(self, state, unit):
+        """Pick a movement that prepares a legal VP step-in next activation."""
+        if unit is None or getattr(unit, "position", None) is None:
+            return None, None
+        dist_before = self._nearest_uncaptured_vp_dist(state, unit)
+        actions = self._get_unit_actions(state, unit)
+        best = None
+        best_score = float("-inf")
+        best_after = None
+        for m in actions:
+            if getattr(getattr(m, "action_type", None), "category", None) != ActionCategory.MOVEMENT:
+                continue
+            path = getattr(m, "path", None)
+            if not path:
+                continue
+            end = path[-1]
+            if self._is_reversal_move(unit, end) and not self._is_uncaptured_vp_hex(state, unit.side, end):
+                continue
+            dist_after = self._nearest_uncaptured_vp_dist_from_pos(state, unit.side, end)
+            if dist_after is None:
+                continue
+            # Primary goal: be adjacent (dist=1) to enable step-in on next action.
+            score = -10.0 * abs(float(dist_after) - 1.0)
+            if dist_before is not None and float(dist_after) < float(dist_before):
+                score += 2.5
+            elif dist_before is not None and float(dist_after) == float(dist_before):
+                score -= 0.8
+            terrain_score = self._terrain_tactical_score(state, unit, end)
+            enemy_pressure = self._enemy_pressure_at_pos(state, unit.side, end, radius=3)
+            score += 0.2 * float(terrain_score) - 0.5 * float(enemy_pressure)
+            if self._is_uncaptured_vp_hex(state, unit.side, end):
+                score += 20.0
+            if score > best_score:
+                best_score = score
+                best = m
+                best_after = dist_after
+        if best is None:
+            return None, None
+        # Hard validity gate: setup is only valid if we end adjacent to an
+        # uncaptured VP (distance 1), otherwise this is just lateral staging.
+        if best_after is None or float(best_after) > 1.0:
+            return None, None
+        return best, best_after
 
     def _is_uncaptured_vp_hex(self, state, side: str, pos) -> bool:
         if pos is None or not side:
@@ -514,6 +665,28 @@ class OptionExecutorCaptureMixin:
         if not move_reason:
             move_reason = "no_movement_actions"
         if (
+            not has_legal_stepin
+            and nearest_vp_d is not None
+            and 2.0 <= float(nearest_vp_d) <= 3.0
+            and move_reason in {"objective_staging_move", "all_moves_increase_distance", "no_progress_move_available"}
+        ):
+            setup_move, setup_after = self._best_stepin_setup_move(state, unit)
+            if setup_move is not None:
+                setup_move.rl_capture_fallback_reason = "forced_stepin_setup_move"
+                setup_move.rl_capture_move_block_profile = move_reason or "no_progress_move_available"
+                setup_move.rl_capture_target_dist_before = dist_before
+                setup_move.rl_capture_target_dist_after = setup_after
+                self._attach_capture_progress_debug(setup_move, move_debug)
+                self._attach_vp_entry_debug(
+                    setup_move,
+                    has_legal_stepin,
+                    False,
+                    default_block_reason or move_reason or "forced_stepin_setup_move",
+                )
+                setup_move.rl_vp_nearest_uncaptured_dist = nearest_vp_d
+                setup_move.rl_vp_opening_attack_candidates_count = 0
+                return setup_move, TacticalOption.ADVANCE
+        if (
             uid
             and bool(self._capture_open_window_pending_followup_by_unit.get(uid, False))
             and move is not None
@@ -540,6 +713,11 @@ class OptionExecutorCaptureMixin:
 
         actions = ActionCatalog(state, unit, terrain_config).actions()
         attacks = [a for a in actions if self._is_attack_action(a)]
+        prefer_mobility_near_vp = (
+            nearest_vp_d is not None
+            and float(nearest_vp_d) <= 3.0
+            and move is not None
+        )
         if attacks and uid:
             staging_streak = int(self._capture_staging_streak_by_unit.get(uid, 0))
             vp_dist_unknown = nearest_vp_d is None or float(nearest_vp_d) >= 999.0
@@ -547,6 +725,7 @@ class OptionExecutorCaptureMixin:
                 move_reason == "objective_staging_move"
                 and (vp_dist_unknown or float(nearest_vp_d) <= 3.0)
                 and staging_streak >= 2
+                and not prefer_mobility_near_vp
             ):
                 forced = self._best_attack(attacks, state=state, unit=unit)
                 if forced is not None:
@@ -605,7 +784,9 @@ class OptionExecutorCaptureMixin:
                             self._capture_open_window_cooldown_until_seq_by_unit[uid] = decision_seq + int(self._capture_open_window_cooldown_steps)
                     return open_window, TacticalOption.ATTACK
             if nearest_vp_d is not None and float(nearest_vp_d) <= 2.0:
-                if move is not None and move_reason in {"objective_progress_move", "objective_staging_move"}:
+                # Near VP, do not accept lateral/no-progress staging as "good enough".
+                # Keep only objective_progress_move in this strict close-range band.
+                if move is not None and move_reason == "objective_progress_move":
                     move.rl_capture_fallback_reason = move_reason
                     move.rl_capture_move_block_profile = move_reason
                     move.rl_capture_target_dist_before = dist_before
@@ -619,6 +800,7 @@ class OptionExecutorCaptureMixin:
                 move_reason == "objective_staging_move"
                 and nearest_vp_d is not None
                 and float(nearest_vp_d) <= 2.0
+                and int(self._capture_staging_streak_by_unit.get(uid, 0) if uid else 0) >= 2
             ):
                 forced_near_vp_pool = vp_relevant_attacks if vp_relevant_attacks else attacks
                 forced_near_vp = self._best_attack(forced_near_vp_pool, state=state, unit=unit)
@@ -687,6 +869,23 @@ class OptionExecutorCaptureMixin:
                         gated_reason = "attack_gate_high_adv"
             if gated is not None:
                 should_take_attack = move_reason in {"all_moves_increase_distance", "no_progress_move_available"}
+                # Near VP, default to mobility unless attack is explicitly VP-relevant.
+                if prefer_mobility_near_vp and gated_reason not in {
+                    "attack_gate_vp_target",
+                    "attack_gate_defend_owned_vp",
+                    "attack_gate_support_open_lane",
+                }:
+                    should_take_attack = False
+                # If we are stalled near VP for multiple consecutive decisions,
+                # allow tactical attacks again to avoid zero-damage deadlocks.
+                if (
+                    uid
+                    and move_reason == "objective_staging_move"
+                    and nearest_vp_d is not None
+                    and float(nearest_vp_d) <= 3.0
+                    and int(self._capture_staging_streak_by_unit.get(uid, 0)) >= 2
+                ):
+                    should_take_attack = True
                 if (
                     uid
                     and move_reason == "objective_staging_move"
@@ -707,7 +906,11 @@ class OptionExecutorCaptureMixin:
                     gated.rl_vp_nearest_uncaptured_dist = nearest_vp_d
                     return gated, TacticalOption.ATTACK
 
-        if move is not None and move_reason in {"objective_progress_move", "objective_staging_move"}:
+        near_vp = nearest_vp_d is not None and float(nearest_vp_d) <= 3.0
+        if move is not None and (
+            move_reason == "objective_progress_move"
+            or (move_reason == "objective_staging_move" and not near_vp)
+        ):
             move.rl_capture_fallback_reason = move_reason
             move.rl_capture_move_block_profile = move_reason
             move.rl_capture_target_dist_before = dist_before
@@ -752,6 +955,30 @@ class OptionExecutorCaptureMixin:
             move.rl_vp_nearest_uncaptured_dist = nearest_vp_d
             move.rl_vp_opening_attack_candidates_count = 0
             return move, TacticalOption.ADVANCE
+        # Last-resort anti-passivity close to objectives:
+        # if we are near uncaptured VP and capture logic cannot find progress,
+        # try heuristic movement options before holding.
+        if near_vp:
+            for fallback_option, fallback_reason in (
+                (TacticalOption.ADVANCE, "forced_near_vp_no_hold_advance"),
+                (TacticalOption.FLANK, "forced_near_vp_no_hold_flank"),
+            ):
+                fallback_action = self.heuristic.choose_action(state, unit, fallback_option)
+                if fallback_action is not None and not self._is_attack_action(fallback_action):
+                    fallback_action.rl_capture_fallback_reason = fallback_reason
+                    fallback_action.rl_capture_move_block_profile = move_reason or "no_progress_move_available"
+                    fallback_action.rl_capture_target_dist_before = dist_before
+                    fallback_action.rl_capture_target_dist_after = dist_after
+                    self._attach_capture_progress_debug(fallback_action, move_debug)
+                    self._attach_vp_entry_debug(
+                        fallback_action,
+                        has_legal_stepin,
+                        False,
+                        default_block_reason or move_reason or fallback_reason,
+                    )
+                    fallback_action.rl_vp_nearest_uncaptured_dist = nearest_vp_d
+                    fallback_action.rl_vp_opening_attack_candidates_count = 0
+                    return fallback_action, fallback_option
         hold = WaitAction(unit.unit_id)
         hold.rl_capture_fallback_reason = "no_move_no_attack_hold"
         hold.rl_capture_move_block_profile = move_reason or "no_movement_actions"

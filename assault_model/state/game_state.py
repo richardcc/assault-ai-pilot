@@ -107,7 +107,9 @@ class GameState:
     # SIDE → OWNERSHIP
     # =================================================
     def _build_side_ownership(self) -> Dict[str, HexOwnership]:
-        ownership_values = list(HexOwnership)
+        # IMPORTANT: NONE is a neutral/uncontrolled sentinel and must never be
+        # assigned to a real side. Only controlled ownership values are valid.
+        ownership_values = [o for o in HexOwnership if o.is_controlled()]
 
         if len(self.turn_order) > len(ownership_values):
             raise ValueError("More sides than HexOwnership values")

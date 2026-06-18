@@ -8,6 +8,7 @@ import os
 import numpy as np
 
 from assault_model.actions.status import WaitAction
+from assault_model.map.hex_utils import safe_hex_distance
 from assault_sim.config.train_config import load_train_config
 from assault_sim.config.ppo_config import PPOConfig
 from assault_sim.decision.action_bridge import ActionBridge
@@ -96,6 +97,49 @@ class SB3EvalController:
         ]
         return sorted(units, key=lambda u: str(getattr(u, "unit_id", "")))
 
+    def _capture_unit_sort_key(self, state, unit):
+        try:
+            can_stepin = self.executor._best_step_into_uncaptured_vp(state, unit) is not None
+        except Exception:
+            can_stepin = False
+        try:
+            nearest_vp_d = self.executor._nearest_uncaptured_vp_dist(state, unit)
+        except Exception:
+            nearest_vp_d = None
+        dist = float(nearest_vp_d) if nearest_vp_d is not None else 999.0
+        uid = str(getattr(unit, "unit_id", ""))
+        return (0 if can_stepin else 1, dist, uid)
+
+    def _defense_intercept_unit(self, state, candidates):
+        """
+        Local CAPTURE-only defense selector:
+        when an owned VP is threatened (enemy at distance <=1), pick the closest
+        available unit to that VP for one activation (no global strategy override).
+        """
+        try:
+            threatened = self.executor._threatened_owned_vp_hexes(state, self.rl_side, threat_radius=1)
+        except Exception:
+            threatened = set()
+        if not threatened or not candidates:
+            return None
+        best = None
+        best_key = None
+        for u in candidates:
+            pos = getattr(u, "position", None)
+            if pos is None:
+                continue
+            d_threat = min(
+                safe_hex_distance(pos, vp)
+                for vp in threatened
+            )
+            key = (d_threat, str(getattr(u, "unit_id", "")))
+            if best_key is None or key < best_key:
+                best_key = key
+                best = u
+        if best is not None and best_key is not None and best_key[0] <= 3:
+            return best
+        return None
+
     def select_best_unit(self, side, state, blocked_units):
         if str(side).upper() != str(self.rl_side).upper():
             return None
@@ -108,6 +152,19 @@ class SB3EvalController:
         if action_vec.size < 4:
             return None
         unit_slot = int(action_vec[3])
+        strategy = None
+        if action_vec.size >= 1:
+            try:
+                strategy = StrategicIntent(int(action_vec[0]))
+            except Exception:
+                strategy = None
+        if strategy == StrategicIntent.CAPTURE:
+            intercept = self._defense_intercept_unit(state, candidates)
+            if intercept is not None:
+                return intercept
+            ranked = sorted(candidates, key=lambda u: self._capture_unit_sort_key(state, u))
+            top_k = min(3, len(ranked))
+            return ranked[unit_slot % top_k]
         return candidates[unit_slot % len(candidates)]
 
     def _enemy_action(self, state, unit):
@@ -176,6 +233,26 @@ class SB3EvalController:
             if legal_stepin and resolved_option != TacticalOption.ADVANCE:
                 resolved_option = TacticalOption.ADVANCE
                 self.current_stepin_forced_option = True
+        # Mission-priority override during eval parity:
+        # if objectives are pending and no emergency, force CAPTURE intent.
+        try:
+            objectives_pending = self.executor._has_uncaptured_objective_for_side(state, unit.side)
+            capture_emergency = self.executor._is_capture_emergency(state, unit)
+            nearest_vp_d = self.executor._nearest_uncaptured_vp_dist(state, unit)
+        except Exception:
+            objectives_pending = False
+            capture_emergency = False
+            nearest_vp_d = None
+        near_objective_pressure = nearest_vp_d is not None and float(nearest_vp_d) <= 2.0
+        if (
+            objectives_pending
+            and not capture_emergency
+            and effective_strategy != StrategicIntent.CAPTURE
+            and (self.current_stepin_legal or near_objective_pressure)
+        ):
+            effective_strategy = StrategicIntent.CAPTURE
+            if resolved_option in (TacticalOption.RETREAT, TacticalOption.HOLD):
+                resolved_option = TacticalOption.ADVANCE
         strategy_name = effective_strategy.name
         self.current_strategy = self._strategy_stub()
         self.current_strategy.name = strategy_name

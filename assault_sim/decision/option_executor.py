@@ -531,6 +531,30 @@ class OptionExecutor(OptionExecutorCaptureMixin, OptionExecutorCombatMixin, Opti
             if isinstance(action, (RangedDirectAttack, RangedIndirectAttack)):
                 return _tag_with_budget(WaitAction(unit.unit_id), option)
 
+            # Anti-oscillation guardrail for Human-vs-AI feel:
+            # block immediate A->B->A retreat reversals when there is no emergency
+            # and no close threat pressure. Prefer advancing instead.
+            if (
+                action is not None
+                and objectives_pending
+                and not capture_emergency
+            ):
+                path = getattr(action, "path", None)
+                end = path[-1] if path else None
+                reversal = bool(end is not None and self._is_reversal_move(unit, end))
+                low_threat = self._enemy_count_within(state, unit, radius=2) == 0
+                if reversal and low_threat:
+                    legal_override_applied = True
+                    override_reason = "retreat_reversal_blocked_low_threat"
+                    return _tag_with_budget(
+                        self._move_closer(
+                            state,
+                            unit,
+                            capture_strict=(strategy == StrategicIntent.CAPTURE),
+                        ),
+                        TacticalOption.ADVANCE,
+                    )
+
             return _tag_with_budget(action or WaitAction(unit.unit_id), option)
 
         # -------------------------------------------------
@@ -572,6 +596,9 @@ class OptionExecutor(OptionExecutorCaptureMixin, OptionExecutorCombatMixin, Opti
         if strategy == StrategicIntent.ATTRIT:
             return TacticalOption.ATTACK
         if strategy == StrategicIntent.PRESERVE:
+            # Avoid endless fallback-retreat loops while objectives are pending.
+            if self._has_uncaptured_objective(state, unit):
+                return TacticalOption.ADVANCE
             return TacticalOption.RETREAT
         return option
 
@@ -601,7 +628,7 @@ class OptionExecutor(OptionExecutorCaptureMixin, OptionExecutorCombatMixin, Opti
                 preferred = TacticalOption.HOLD
         elif role == "ASSAULT":
             if strategy == StrategicIntent.PRESERVE:
-                preferred = TacticalOption.RETREAT
+                preferred = TacticalOption.ADVANCE if self._has_uncaptured_objective(state, unit) else TacticalOption.RETREAT
             elif strategy in (StrategicIntent.CAPTURE, StrategicIntent.ATTRIT):
                 preferred = TacticalOption.ATTACK
         else:  # MANEUVER
@@ -614,6 +641,21 @@ class OptionExecutor(OptionExecutorCaptureMixin, OptionExecutorCombatMixin, Opti
         if preferred in allowed:
             return preferred
         return option if option in allowed else self._resolve_option_for_strategy(state, unit, option, strategy)
+
+    def _enemy_count_within(self, state, unit, radius: int = 2) -> int:
+        if state is None or unit is None or getattr(unit, "position", None) is None:
+            return 0
+        cnt = 0
+        for e in getattr(state, "units", []):
+            if not getattr(e, "alive", False):
+                continue
+            if getattr(e, "side", None) == getattr(unit, "side", None):
+                continue
+            if getattr(e, "position", None) is None:
+                continue
+            if safe_hex_distance(unit.position, e.position) <= int(radius):
+                cnt += 1
+        return cnt
 
     pass
 

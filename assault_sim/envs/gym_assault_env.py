@@ -13,6 +13,7 @@ except ImportError:  # pragma: no cover
     from gym import spaces  # type: ignore
 
 from assault_model.actions.status import WaitAction
+from assault_model.map.hex_utils import safe_hex_distance
 from assault_sim.config.ppo_config import PPOConfig
 from assault_sim.config.train_config import load_train_config
 from assault_sim.decision.action_bridge import ActionBridge
@@ -86,6 +87,53 @@ class _GymActionController:
         # Stable ordering: fixed by unit_id (US_1, US_2, ...)
         return sorted(units, key=lambda u: str(getattr(u, "unit_id", "")))
 
+    def _capture_unit_sort_key(self, state, unit):
+        # Prioritize units that can immediately step into uncaptured VP,
+        # then units closest to uncaptured VP.
+        try:
+            can_stepin = self.executor._best_step_into_uncaptured_vp(state, unit) is not None
+        except Exception:
+            can_stepin = False
+        try:
+            nearest_vp_d = self.executor._nearest_uncaptured_vp_dist(state, unit)
+        except Exception:
+            nearest_vp_d = None
+        dist = float(nearest_vp_d) if nearest_vp_d is not None else 999.0
+        uid = str(getattr(unit, "unit_id", ""))
+        return (0 if can_stepin else 1, dist, uid)
+
+    def _defense_intercept_unit(self, state, candidates):
+        """
+        Local CAPTURE-only defense selector:
+        when an owned VP is threatened (enemy at distance <=1), pick the closest
+        available unit to that VP for one activation (no global strategy override).
+        """
+        try:
+            threatened = self.executor._threatened_owned_vp_hexes(state, self.rl_side, threat_radius=1)
+        except Exception:
+            threatened = set()
+        if not threatened or not candidates:
+            return None
+        best = None
+        best_key = None
+        for u in candidates:
+            pos = getattr(u, "position", None)
+            if pos is None:
+                continue
+            # Direct distance to threatened owned VP is primary signal.
+            d_threat = min(
+                safe_hex_distance(pos, vp)
+                for vp in threatened
+            )
+            key = (d_threat, str(getattr(u, "unit_id", "")))
+            if best_key is None or key < best_key:
+                best_key = key
+                best = u
+        # Keep scope narrow: only intercept with locally relevant unit.
+        if best is not None and best_key is not None and best_key[0] <= 3:
+            return best
+        return None
+
     def select_best_unit(self, side, state, blocked_units):
         # Let enemy side keep default selection behavior.
         if str(side).upper() != str(self.rl_side).upper():
@@ -103,6 +151,21 @@ class _GymActionController:
                 return None
         if slot < 0:
             return None
+        # During CAPTURE intent, avoid concentration on a fixed subset of units:
+        # choose among units with strongest VP-entry potential first.
+        strategy = None
+        if len(self.pending_action) >= 1:
+            try:
+                strategy = StrategicIntent(int(self.pending_action[0]))
+            except Exception:
+                strategy = None
+        if strategy == StrategicIntent.CAPTURE:
+            intercept = self._defense_intercept_unit(state, units)
+            if intercept is not None:
+                return intercept
+            ranked = sorted(units, key=lambda u: self._capture_unit_sort_key(state, u))
+            top_k = min(3, len(ranked))
+            return ranked[slot % top_k]
         idx = slot % len(units)
         return units[idx]
 
@@ -155,6 +218,27 @@ class _GymActionController:
                 if legal_stepin and resolved_option != TacticalOption.ADVANCE:
                     resolved_option = TacticalOption.ADVANCE
                     self.current_stepin_forced_option = True
+            # Mission-priority override: if objectives are still pending and the
+            # acting unit is not in an emergency state, force CAPTURE intent.
+            try:
+                objectives_pending = self.executor._has_uncaptured_objective_for_side(state, unit.side)
+                capture_emergency = self.executor._is_capture_emergency(state, unit)
+                nearest_vp_d = self.executor._nearest_uncaptured_vp_dist(state, unit)
+            except Exception:
+                objectives_pending = False
+                capture_emergency = False
+                nearest_vp_d = None
+            near_objective_pressure = nearest_vp_d is not None and float(nearest_vp_d) <= 2.0
+            if (
+                objectives_pending
+                and not capture_emergency
+                and effective_strategy != StrategicIntent.CAPTURE
+                and (self.current_stepin_legal or near_objective_pressure)
+            ):
+                effective_strategy = StrategicIntent.CAPTURE
+                # Keep policy-side option simple under forced CAPTURE.
+                if resolved_option in (TacticalOption.RETREAT, TacticalOption.HOLD):
+                    resolved_option = TacticalOption.ADVANCE
 
             action = self.executor.execute(
                 state=state,

@@ -4,6 +4,7 @@ import { axialToPixel, HEX_SIZE } from "./hexGridRenderer";
 export class HighlightLayer {
 
   private container: PIXI.Container;
+  private holdClearUntilMs = 0;
 
   constructor(world: PIXI.Container) {
     this.container = new PIXI.Container();
@@ -13,7 +14,10 @@ export class HighlightLayer {
     world.sortableChildren = true;
   }
 
-  clear() {
+  clear(force: boolean = false) {
+    if (!force && Date.now() < this.holdClearUntilMs) {
+      return;
+    }
     this.container.removeChildren();
   }
 
@@ -133,27 +137,81 @@ export class HighlightLayer {
 
     if (!action || !state) return;
 
-    this.clear();
+    // Keep action highlight visible briefly even if reactive hover/selection
+    // updates trigger frequent clear() calls.
+    this.holdClearUntilMs = Date.now() + 900;
+    this.clear(true);
 
-    const unit = state.units?.find((u: any) => u.id === action.unit_id);
+    const actorId =
+      action.unit_id ??
+      action.unit ??
+      action.actor_id ??
+      action.attacker_id ??
+      action.source_id;
+    const targetId =
+      action.target_id ??
+      action.target?.id ??
+      action.defender_id ??
+      action.enemy_id;
+    const unit = state.units?.find(
+      (u: any) => u.id === actorId || u.unit_id === actorId
+    );
     if (!unit) return;
 
+    const type = String(action.type || action.kind || action.action || "").toUpperCase();
+    const targetQ = action.target_q ?? action.move_q ?? action.q ?? action.target?.q ?? action.move_to?.q;
+    const targetR = action.target_r ?? action.move_r ?? action.r ?? action.target?.r ?? action.move_to?.r;
+    const hasTargetUnit = Boolean(targetId);
+    const attackQ =
+      action.attack_q ??
+      action.target_q ??
+      action.target?.q ??
+      action.q;
+    const attackR =
+      action.attack_r ??
+      action.target_r ??
+      action.target?.r ??
+      action.r;
+    const isMove =
+      type === "MOVE" ||
+      type.includes("MOVE") ||
+      (!hasTargetUnit && targetQ != null && targetR != null);
+    const isAttack =
+      type === "ATTACK" ||
+      type.includes("ATTACK") ||
+      type.includes("RANGED") ||
+      type.includes("ASSAULT") ||
+      type.includes("FIRE") ||
+      hasTargetUnit;
+
     // ---------------- MOVE ----------------
-    if (action.type === "MOVE") {
+    if (isMove && targetQ != null && targetR != null) {
       this.drawUnitHighlight(unit, 0x00ccff);
-      this.drawHexHighlight(action.target_q, action.target_r, 0x00ff00);
+      this.drawHexHighlight(targetQ, targetR, 0x00ff00);
+      this.drawArrow(unit.q, unit.r, targetQ, targetR, false);
     }
 
     // ---------------- ATTACK ----------------
-    if (action.type === "ATTACK") {
-      const target = state.units?.find((u: any) => u.id === action.target_id);
+    if (isAttack) {
+      const target = state.units?.find(
+        (u: any) => u.id === targetId || u.unit_id === targetId
+      );
 
       this.drawUnitHighlight(unit, 0xff4444);
 
       if (target) {
         this.drawUnitHighlight(target, 0xffa500);
+        this.drawArrow(unit.q, unit.r, target.q, target.r, true);
+      } else if (attackQ != null && attackR != null) {
+        this.drawHexHighlight(attackQ, attackR, 0xff6644);
+        this.drawArrow(unit.q, unit.r, attackQ, attackR, true);
       }
     }
+
+    // Release hold slightly after visuals are drawn.
+    setTimeout(() => {
+      this.holdClearUntilMs = 0;
+    }, 950);
   }
 
   // ---------------------------------------------

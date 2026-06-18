@@ -1,3 +1,4 @@
+import { formatCoords } from "./render/hexGridRenderer";
 import { logCombatEvents } from "./systems/combatLog";
 import { clearUnitActionMarkers, resolveActionMarker, setUnitActionMarker } from "./state/actionMarkers";
 
@@ -170,6 +171,14 @@ export class GameController {
   updateState(newState: any) {
     this.state = newState;
     this.emit();
+    // Keep GameCanvas turn-transition hooks in sync (marker reset, unit sync).
+    // Some flows (backend ai-turn loop) update controller state directly and
+    // otherwise skip __setGameState, leaving activation markers stale.
+    try {
+      (window as any).__setGameState?.(newState);
+    } catch {
+      // ignore UI bridge failures
+    }
   }
 
   // ----------------------------------
@@ -261,16 +270,34 @@ export class GameController {
           this.updateState(result.state);
         }
 
-        const rawSteps = Array.isArray(result?.steps) ? result.steps : [];
-        const steps = rawSteps.length > 0 ? [rawSteps[0]] : [];
+        const steps = Array.isArray(result?.steps) ? result.steps : [];
         if (steps.length > 0) {
           const step0 = steps[0];
           const unitId = step0?.unit_id || step0?.unit;
           if (unitId) {
             setUnitActionMarker(unitId, resolveActionMarker(step0));
           }
+          const stepType = String(step0?.type || step0?.kind || "").toUpperCase();
+          const moveQ = step0?.move_q ?? step0?.move_to?.q ?? step0?.q;
+          const moveR = step0?.move_r ?? step0?.move_to?.r ?? step0?.r;
+          if (stepType === "MOVE" || step0?.kind === "move") {
+            const coordStr = moveQ != null && moveR != null ? formatCoords(moveQ, moveR) : "?";
+            (window as any).logSystemEvent?.("move", `🤖 AI Order: Move ${unitId || "?"} to hex ${coordStr}`);
+          } else {
+            (window as any).logSystemEvent?.("combat", `⚔️ AI Order: Combat attack by ${unitId || "?"} on target ${step0?.target_id || "?"}`);
+          }
         }
         (window as any).onAIOrders?.(steps);
+        const animateOrder = (window as any).onAIAnimateOrder;
+        if (typeof animateOrder === "function") {
+          for (const step of steps) {
+            try {
+              await animateOrder(step);
+            } catch {
+              // keep loop resilient even if animation callback fails
+            }
+          }
+        }
 
         // Log AI combat results to the System Log (the websocket MAP_STATE
         // payload does not carry last_events, so do it from the ai-turn result).
