@@ -462,6 +462,16 @@
   background: rgba(255, 56, 56, 0.04);
 }
 
+.log-entry.log-alert {
+  border-left-color: var(--neon-red);
+  background: rgba(255, 56, 56, 0.12);
+}
+
+.log-entry.log-heuristic {
+  border-left-color: #f59e0b;
+  background: rgba(245, 158, 11, 0.14);
+}
+
 .log-time {
   font-size: 9px;
   color: var(--text-muted);

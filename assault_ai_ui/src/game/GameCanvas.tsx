@@ -13,8 +13,7 @@ import { UnitLayer } from "./render/unitLayer";
 
 import { handleUnitClick } from "./systems/unitInteractionSystem";
 import { handleHexClick } from "./systems/hexInteractionSystem";
-import { runAiTurns } from "./systems/aiTurnRunner";
-import { clearUnitActionMarkers, resolveActionMarker, setUnitActionMarker } from "./state/actionMarkers";
+import { clearUnitActionMarkers, resolveActionMarker, setUnitActionMarker, syncUnitActionMarkers } from "./state/actionMarkers";
 
 import { subscribeToGameState } from "./systems/gameStateSystem";
 import { registerFocusUnit } from "./systems/cameraSystem";
@@ -24,11 +23,28 @@ import { updateHighlights } from "./systems/highlightSystem";
 import { updateLayerVisibility } from "./systems/layerVisibilitySystem";
 
 import { createDebugVector, updateDebugVector } from "./systems/debugVectorSystem";
+import { drawAttackIndicatorPixels } from "./animation/visuals";
+import { soundService } from "./audio/SoundService";
+import { gameController } from "./gameControllerInstance";
 
 function isCombatOrder(order: any): boolean {
   const actionType = (order?.type || order?.kind || "").toString().toUpperCase();
   if (order?.kind === "attack") return true;
   return /RANGED|ASSAULT|ATTACK|REACTION|COMBAT|FIRE/.test(actionType);
+}
+
+function resolveAttackTargetHex(order: any, state: any): { q: number; r: number } | null {
+  if (!order) return null;
+  const q = order?.target_q ?? order?.q;
+  const r = order?.target_r ?? order?.r;
+  if (q != null && r != null) {
+    return { q: Number(q), r: Number(r) };
+  }
+  const targetId = order?.target_id;
+  if (!targetId || !Array.isArray(state?.units)) return null;
+  const target = state.units.find((u: any) => u.id === targetId || u.unit_id === targetId);
+  if (!target) return null;
+  return { q: Number(target.q), r: Number(target.r) };
 }
 
 export default function GameCanvas({
@@ -96,6 +112,12 @@ export default function GameCanvas({
 
       setGameData(state);
       lastStateRef.current = state;
+      // Source of truth: keep markers aligned with runtime activated_units.
+      // Some intermediate payloads (e.g. websocket MAP_STATE) may not include
+      // activated_units; do not treat missing field as "clear all".
+      if (Array.isArray(state?.activated_units)) {
+        syncUnitActionMarkers(state.activated_units);
+      }
 
       setTimeout(() => {
         unitLayerRef.current?.sync(state);
@@ -257,10 +279,7 @@ export default function GameCanvas({
       highlightLayerRef.current = highlightLayer;
 
       // ✅ conectar con GameController
-      const controller = (window as any).gameController;
-      if (controller) {
-        controller.setHighlightLayer(highlightLayer);
-      }
+      gameController.setHighlightLayer(highlightLayer);
 
       // ---------------------------------------------
       // CAMERA
@@ -315,6 +334,10 @@ export default function GameCanvas({
       };
 
       (window as any).onHexClick = (q: number, r: number) => {
+        const current = lastStateRef.current;
+        const activeSide = current?.active_side;
+        const isHumanTurn = current?.sides?.[activeSide] === "human";
+        if (!isHumanTurn) return;
         handleHexClick(
           q,
           r,
@@ -328,7 +351,61 @@ export default function GameCanvas({
         );
       };
 
+      (window as any).onAIAnimateOrder = async (order: any) => {
+        if (!order) return;
+        const unitId = order?.unit_id || order?.unit;
+        const moveQ = order?.move_q ?? order?.move_to?.q ?? order?.q;
+        const moveR = order?.move_r ?? order?.move_to?.r ?? order?.r;
+        const actionType = String(order?.type || order?.kind || "").toUpperCase();
+        const rawAction = String(order?.action || "").toUpperCase();
+        const isMove = actionType === "MOVE" || order?.kind === "move";
+        const isAttack = isCombatOrder(order);
+        const isMoveThenFire =
+          actionType === "MOVE_THEN_FIRE" ||
+          rawAction.includes("MOVETHENFIRE");
+        const isFireThenMove =
+          actionType === "FIRE_THEN_MOVE" ||
+          rawAction.includes("FIRETHENMOVE");
+
+        // Composite animation parity with human orders.
+        if (isMoveThenFire && unitId && moveQ != null && moveR != null) {
+          await unitLayerRef.current?.moveUnit(unitId, moveQ, moveR);
+        }
+
+        if (isAttack && unitId && unitLayerRef.current) {
+          soundService.playAttack();
+          const preState = lastStateRef.current;
+          const attacker = preState?.units?.find((u: any) => u.id === unitId || u.unit_id === unitId);
+          const targetHex = resolveAttackTargetHex(order, preState);
+          const fxLayer =
+            unitLayerRef.current.container?.parent?.children.find((c: any) => c.label === "fxLayer") ||
+            unitLayerRef.current.container?.parent;
+          if (attacker && targetHex && fxLayer) {
+            const from = axialToPixel(attacker.q, attacker.r);
+            const to = axialToPixel(targetHex.q, targetHex.r);
+            drawAttackIndicatorPixels(
+              from.x,
+              from.y + HEX_SIZE,
+              to.x,
+              to.y + HEX_SIZE,
+              fxLayer
+            );
+            await new Promise((r) => setTimeout(r, 420));
+          }
+        }
+
+        if (isFireThenMove && unitId && moveQ != null && moveR != null) {
+          await unitLayerRef.current?.moveUnit(unitId, moveQ, moveR);
+        } else if (isMove && unitId && moveQ != null && moveR != null) {
+          await unitLayerRef.current?.moveUnit(unitId, moveQ, moveR);
+        }
+      };
+
       (window as any).onExecuteOrder = async (order: any) => {
+        const current = lastStateRef.current;
+        const activeSide = current?.active_side;
+        const isHumanTurn = current?.sides?.[activeSide] === "human";
+        if (!isHumanTurn) return false;
         const actionId = order?.action_id;
         const unitId = order?.unit_id || selectedUnitRef.current;
         if (!actionId || !unitId) return false;
@@ -346,6 +423,27 @@ export default function GameCanvas({
           await unitLayerRef.current?.moveUnit(unitId, moveQ, moveR);
         }
 
+        if (isAttack && unitLayerRef.current) {
+          const preState = lastStateRef.current;
+          const attacker = preState?.units?.find((u: any) => u.id === unitId || u.unit_id === unitId);
+          const targetHex = resolveAttackTargetHex(order, preState);
+          const fxLayer =
+            unitLayerRef.current.container?.parent?.children.find((c: any) => c.label === "fxLayer") ||
+            unitLayerRef.current.container?.parent;
+          if (attacker && targetHex && fxLayer) {
+            const from = axialToPixel(attacker.q, attacker.r);
+            const to = axialToPixel(targetHex.q, targetHex.r);
+            drawAttackIndicatorPixels(
+              from.x,
+              from.y + HEX_SIZE,
+              to.x,
+              to.y + HEX_SIZE,
+              fxLayer
+            );
+            await new Promise((r) => setTimeout(r, 420));
+          }
+        }
+
         setSelectedUnitId(null);
         setAvailableMoves([]);
 
@@ -356,6 +454,11 @@ export default function GameCanvas({
         });
         const stepData = await stepRes.json();
         const stateAfter = stepData?.state;
+        if (!stateAfter || typeof stateAfter !== "object") {
+          console.error("❌ Invalid step response: missing state", stepData);
+          (window as any).logSystemEvent?.("system", "❌ Invalid backend step response (no state).");
+          return false;
+        }
 
         // Combat FX for attack orders.
         if (isAttack && stateAfter?.last_events && unitLayerRef?.current) {
@@ -389,12 +492,15 @@ export default function GameCanvas({
         }
 
         (window as any).__setGameState?.(stateAfter);
-
-        const sides = stateAfter?.sides ?? {};
-        const activeSide = stateAfter?.active_side;
-        if (activeSide && sides[activeSide] === "ai") {
-          await runAiTurns(unitLayerRef);
+        try {
+          // Keep GameController loop state in sync after human actions.
+          // If controller.state lags behind, AI turn ownership checks can skip
+          // backend ai-turn calls and animations after first cycle.
+          gameController.updateState(stateAfter);
+        } catch {
+          // Ignore bridge failures; __setGameState already updated canvas state.
         }
+
         return true;
       };
 
@@ -427,6 +533,7 @@ export default function GameCanvas({
       (window as any).onOrderHover = undefined;
       (window as any).onOrderLeave = undefined;
       (window as any).onExecuteOrder = undefined;
+      (window as any).onAIAnimateOrder = undefined;
     };
 
   }, []);

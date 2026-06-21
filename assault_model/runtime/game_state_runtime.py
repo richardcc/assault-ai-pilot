@@ -55,6 +55,8 @@ class RuntimeGameState:
         # --- NEW: dynamic sides ---
         self.sides = self._extract_sides()
         self.active_side = self.sides[0] if self.sides else None
+        # Keep a stable "first player" anchor across turns.
+        self.first_player_side = self.active_side
 
     # =================================================
     # SIDES (NEW)
@@ -79,6 +81,21 @@ class RuntimeGameState:
         idx = self.sides.index(current)
         return self.sides[(idx + 1) % len(self.sides)]
 
+    def _start_side_for_new_turn(self):
+        if not self.sides:
+            return None
+        anchor = self.first_player_side
+        if anchor in self.sides and self.get_available_units(anchor):
+            return anchor
+        side = anchor if anchor in self.sides else self.sides[0]
+        # Fall forward in side order until a side has available units.
+        for _ in range(len(self.sides)):
+            if side in self.sides and self.get_available_units(side):
+                return side
+            side = self._next_side(side if side in self.sides else self.sides[0])
+        # If no side has available units, keep deterministic anchor.
+        return anchor if anchor in self.sides else self.sides[0]
+
     def next_activation(self):
         if not self.active_side:
             return
@@ -97,7 +114,7 @@ class RuntimeGameState:
         self.base_state.turn += 1
 
         self.sides = self._extract_sides()
-        self.active_side = self.sides[0] if self.sides else None
+        self.active_side = self._start_side_for_new_turn()
 
     # =================================================
     # TURN END (UNCHANGED - compatibility)
@@ -147,7 +164,7 @@ class RuntimeGameState:
 
         # --- NEW: reset sides each turn ---
         self.sides = self._extract_sides()
-        self.active_side = self.sides[0] if self.sides else None
+        self.active_side = self._start_side_for_new_turn()
 
         for unit in self.base_state.units:
 
@@ -394,7 +411,10 @@ class RuntimeGameState:
         if isinstance(action, WaitAction):
             if attacker:
                 self.activated_units.add(attacker.unit_id)
-                self.next_activation()
+            # System-level WAIT (no attacker) is used as explicit pass/end-activation
+            # control path by higher-level orchestrators. It must still advance
+            # activation order to avoid turn lock and stale activation markers.
+            self.next_activation()
             self._check_match_end(context)
             return {
                 "type": "WAIT",

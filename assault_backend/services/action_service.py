@@ -6,9 +6,6 @@ from assault_model.actions.status import WaitAction
 from assault_model.actions.composite_fire import MoveThenFireAction, FireThenMoveAction
 from assault_model.actions.action_catalog import ActionCatalog
 
-import json
-
-
 def _normalize_side(value):
     if value is None:
         return ""
@@ -244,7 +241,24 @@ def get_unit_actions(env, unit):
     # -------------------------------------------------
     # DEBUG
     # -------------------------------------------------
-    print("[DEBUG][get_unit_actions]")
-    print(json.dumps(result, indent=2))
+    move_ids = [str(m.get("action_id", "")) for m in moves]
+    attack_ids = [str(a.get("action_id", "")) for a in attacks]
+    wait_ids = [str(w.get("action_id", "")) for w in waits]
+
+    def _preview(ids: list[str], limit: int = 4) -> str:
+        head = ids[:limit]
+        suffix = ", ..." if len(ids) > limit else ""
+        return f"[{', '.join(head)}{suffix}]"
+
+    atk_status = result.get("attack_status", {}) or {}
+    print(
+        "[DEBUG][get_unit_actions]"
+        f" unit={unit.unit_id}"
+        f" moves={len(move_ids)} preview={_preview(move_ids)}"
+        f" attacks={len(attack_ids)} preview={_preview(attack_ids)}"
+        f" waits={len(wait_ids)} preview={_preview(wait_ids)}"
+        f" can_attack={atk_status.get('can_attack')}"
+        f" reason={atk_status.get('reason_code')}"
+    )
 
     return result

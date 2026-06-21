@@ -116,11 +116,9 @@ export class UnitLayer {
       }
       sprite.visible = true;
 
-      if (!isOwn || !isAvailable) {
-        sprite.alpha = 0.7;
-      } else {
-        sprite.alpha = 1;
-      }
+      // Keep unit readability stable; consumed-state is shown by action marker,
+      // not by fading/tinting the unit counter sprite.
+      sprite.alpha = 1;
 
       await updateUnitActionMarker(sprite, id);
 

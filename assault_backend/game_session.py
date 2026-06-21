@@ -1,10 +1,12 @@
 from typing import Optional, Dict, Any
 from pathlib import Path
 import json
+from datetime import datetime
 
 from assault_sim.sim_env import SimEnv
 from assault_sim.debug.debug_config import DebugConfig
 from assault_sim.config.config_loader import load_sim_config
+from assault_sim.decision.mission_planner import MissionPlanner
 
 
 MAP_PIECE_CATALOG_PATH = (
@@ -30,6 +32,48 @@ class GameSession:
         self.sides_config = {}
         self.last_events = []
         self._event_seq = 0
+        self.trace_events: list[dict] = []
+        self.trace_path: Optional[Path] = None
+        self.last_backend_ai_decision: Optional[dict] = None
+        self.mission_planner: Optional[MissionPlanner] = None
+
+    def _trace_file_path(self, scenario_id: str) -> Path:
+        base_path = Path(__file__).resolve().parents[1]
+        replay_dir = base_path / "assault_sim" / "session" / "replays"
+        replay_dir.mkdir(parents=True, exist_ok=True)
+        safe_scenario = "".join(ch if (ch.isalnum() or ch in ("-", "_")) else "_" for ch in str(scenario_id or "unknown"))
+        stamp = datetime.utcnow().strftime("%Y%m%dT%H%M%SZ")
+        return replay_dir / f"live_match_{safe_scenario}_{stamp}.jsonl"
+
+    def _to_jsonable(self, obj):
+        if obj is None or isinstance(obj, (str, int, float, bool)):
+            return obj
+        if isinstance(obj, dict):
+            return {str(k): self._to_jsonable(v) for k, v in obj.items()}
+        if isinstance(obj, (list, tuple, set)):
+            return [self._to_jsonable(v) for v in obj]
+        if hasattr(obj, "q") and hasattr(obj, "r"):
+            return {"q": getattr(obj, "q", None), "r": getattr(obj, "r", None)}
+        if hasattr(obj, "__dict__"):
+            try:
+                return self._to_jsonable(vars(obj))
+            except Exception:
+                pass
+        return str(obj)
+
+    def _append_trace_event(self, event_type: str, payload: dict | None):
+        trace_event = {
+            "timestamp": datetime.utcnow().isoformat() + "Z",
+            "seq": int(self._event_seq),
+            "type": str(event_type or ""),
+            "turn": int(getattr(getattr(self.env, "game_state", None), "turn", 0) or 0),
+            "active_side": str(getattr(getattr(self.env, "runtime", None), "active_side", "") or ""),
+            "payload": self._to_jsonable(payload or {}),
+        }
+        self.trace_events.append(trace_event)
+        if self.trace_path is not None:
+            with open(self.trace_path, "a", encoding="utf-8") as f:
+                f.write(json.dumps(trace_event, ensure_ascii=False) + "\n")
 
     # ---------------------------------------------
     def start(self, scenario_id: str, sides: Dict[str, str]):
@@ -61,11 +105,29 @@ class GameSession:
         )
 
         self.last_events = []
+        self.trace_events = []
+        self.trace_path = self._trace_file_path(scenario_id)
+        self.last_backend_ai_decision = None
+        self.mission_planner = MissionPlanner()
+        with open(self.trace_path, "w", encoding="utf-8") as f:
+            header = {
+                "type": "MATCH_START",
+                "timestamp": datetime.utcnow().isoformat() + "Z",
+                "scenario_id": scenario_id,
+                "sides_config": sides,
+            }
+            f.write(json.dumps(header, ensure_ascii=False) + "\n")
         if self.env.event_bus:
             def on_event(event):
                 # ✅ Collect only serializable events consumed by the UI.
                 # UNIT_MOVED / MAP_STATE contain HexCoord objects that break JSON serialization.
-                if event.get("type") in {"ACTION_EFFECT", "VP_CAPTURED"}:
+                event_type = event.get("type")
+                should_emit_ui = event_type in {"ACTION_EFFECT", "VP_CAPTURED"}
+                should_trace = event_type in {"ACTION", "ACTION_EFFECT", "VP_CAPTURED", "TURN_END", "MATCH_END"}
+                if not (should_emit_ui or should_trace):
+                    return
+                self._event_seq += 1
+                if event_type in {"ACTION_EFFECT", "VP_CAPTURED"}:
                     payload = event.get("payload", {})
                     if payload.get("action") == "RangedCombat":
                         defender = payload.get("defender")
@@ -83,16 +145,13 @@ class GameSession:
                         )
                     # Stable id lets the frontend dedupe combat log entries
                     # regardless of which endpoint (step / ai-turn / state) delivers them.
-                    self._event_seq += 1
                     event["id"] = self._event_seq
                     self.last_events.append(event)
+                if should_trace:
+                    self._append_trace_event(event_type, event.get("payload", {}))
             self.env.event_bus.subscribe(on_event)
 
         self.env.reset()
-        try:
-            self.env.step(None)
-        except Exception:
-            pass
 
         # ✅ Discard startup events (contain non-JSON-serializable objects like HexCoord)
         self.last_events.clear()
@@ -268,5 +327,6 @@ class GameSession:
             "victory_outcome": victory_outcome_state,
             "activated_units": activated_units,
             "last_events": copied_events,
+            "trace_path": str(self.trace_path) if self.trace_path is not None else None,
         }
         return payload

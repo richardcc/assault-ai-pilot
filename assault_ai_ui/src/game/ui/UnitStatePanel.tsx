@@ -202,9 +202,8 @@ export function UnitStatePanel({
                         "-"
                       )}
                     </div>
-                    {!dead && actionMarker === "normal" ? (
-                      <div className="trooper-card-action-text">WAIT</div>
-                    ) : null}
+                    {/* Keep marker-only visualization for consumed actions;
+                        avoid forcing WAIT text for all normal markers. */}
                   </div>
                 </div>
               );

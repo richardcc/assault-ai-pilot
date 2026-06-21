@@ -161,6 +161,20 @@ Validation state: **Pending Validation**.
   - file/function: `assault_sim/evaluation/eval_sb3.py` -> CAPTURE unit selection baseline path
   - test: Re-enable only with dedicated tactical regression
 
+### 6.7 R2.1-A Reward Retune (VP conversion pressure)
+
+Validation state: **Pending Validation**.
+
+- Reward tuning iteration R2.1-A targets better VP conversion after contact by:
+  - increasing immediate VP entry reward,
+  - increasing short retention reward after entry,
+  - increasing penalties for CAPTURE no-progress/staging loops.
+- Scope is reward coefficients only (no new guardrails/selectors).
+- Rule-to-code mapping:
+  - file/function: `assault_sim/config/reward_config.py` -> `RewardConfig` coefficients
+  - file/function: `assault_sim/config/reward_config.json` -> runtime coefficient values
+  - test: Pending train/eval regression validation
+
 ## 7. Compliance Checklist (Core)
 
 - [ ] Phase machine strictly follows Rulebook chapter 6.

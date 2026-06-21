@@ -136,6 +136,8 @@ class Evaluator:
         capture_move_candidates_total = 0
         capture_reversal_filtered_total = 0
         capture_selected_move_reason_counts = defaultdict(int)
+        attack_fallback_to_move_count = 0
+        attack_fallback_reason_counts = defaultdict(int)
         vp_stepin_legal_count = 0
         vp_stepin_selected_count = 0
         vp_stepin_block_reason_counts = defaultdict(int)
@@ -167,6 +169,11 @@ class Evaluator:
         plan_stub_decisions = 0
         plan_stub_intent_aligned = 0
         plan_role_counts = defaultdict(int)
+        plan_focus_switch_count = 0
+        plan_replan_reason_counts = defaultdict(int)
+        plan_stage_counts = defaultdict(int)
+        action_finalize_reason_counts = defaultdict(int)
+        l3_transition_counts = defaultdict(int)
         lote_e_attack_cost_vals = []
         lote_e_capture_window_vals = []
         lote_e_expected_vp_swing_vals = []
@@ -401,6 +408,21 @@ class Evaluator:
                         strategy_option_map[formation][option.name] += 1
                 plan_role = str(info.get("plan_unit_role", "") or "UNKNOWN").upper()
                 plan_role_counts[plan_role] += 1
+                if bool(info.get("plan_focus_switched", False)):
+                    plan_focus_switch_count += 1
+                stage = str(info.get("plan_stage", "") or "UNKNOWN").upper()
+                plan_stage_counts[stage] += 1
+                replan_reason = str(info.get("plan_replan_reason", "") or "")
+                if replan_reason:
+                    plan_replan_reason_counts[replan_reason] += 1
+                finalize_reason = str(info.get("action_finalized_reason", "") or "")
+                if finalize_reason:
+                    action_finalize_reason_counts[finalize_reason] += 1
+                l3_sampled = str(info.get("l3_sampled", "") or "")
+                l3_effective = str(info.get("l3_effective", "") or "")
+                l3_executed = str(info.get("l3_executed", "") or "")
+                if l3_sampled or l3_effective or l3_executed:
+                    l3_transition_counts[f"{l3_sampled}->{l3_effective}->{l3_executed}"] += 1
                 try:
                     plan_stub_intent_aligned += int(float(info.get("intent_alignment_stub", 0.0)) >= 1.0)
                 except Exception:
@@ -458,6 +480,11 @@ class Evaluator:
                     selected_reason = str(info.get("capture_selected_move_reason", "") or "")
                     if selected_reason:
                         capture_selected_move_reason_counts[selected_reason] += 1
+                if bool(info.get("attack_fallback_to_move", False)):
+                    attack_fallback_to_move_count += 1
+                af_reason = str(info.get("attack_fallback_reason", "") or "")
+                if af_reason:
+                    attack_fallback_reason_counts[af_reason] += 1
                     if bool(info.get("vp_stepin_legal", False)):
                         vp_stepin_legal_count += 1
                     if bool(info.get("vp_stepin_selected", False)):
@@ -638,6 +665,7 @@ class Evaluator:
             "composite_selection_rate_when_available": (
                 float(composite_selected_count) / max(1, int(composite_available_decisions))
             ),
+            "l3_transition_counts": dict(l3_transition_counts),
         }
 
         # -------------------------------------------------
@@ -719,10 +747,28 @@ class Evaluator:
             "capture_suspected_progress_miss_rate": (
                 capture_suspected_progress_miss_count / max(1, capture_attempts)
             ),
+            "plan_commit_rate": (
+                1.0 - (float(plan_focus_switch_count) / max(1, float(plan_stub_decisions)))
+            ),
+            "focus_switch_rate": (
+                float(plan_focus_switch_count) / max(1, float(plan_stub_decisions))
+            ),
+            "plan_focus_switch_count": int(plan_focus_switch_count),
+            "plan_stage_counts": dict(plan_stage_counts),
+            "plan_replan_reason_counts": dict(plan_replan_reason_counts),
+            "action_finalize_reason_counts": dict(action_finalize_reason_counts),
+            "plan_success_k": (
+                float(vp_entries_taken) / max(1.0, float(vp_entry_opportunities))
+            ),
+            "plan_latency_to_progress": (
+                float(first_vp_entry_step) if first_vp_entry_step is not None else None
+            ),
             "capture_progress_candidate_mean": (
                 capture_progress_candidate_total / max(1, capture_attempts)
             ),
             "capture_selected_move_reason_counts": dict(capture_selected_move_reason_counts),
+            "attack_fallback_to_move_count": int(attack_fallback_to_move_count),
+            "attack_fallback_reason_counts": dict(attack_fallback_reason_counts),
             "vp_stepin_legal_count": int(vp_stepin_legal_count),
             "vp_stepin_selected_count": int(vp_stepin_selected_count),
             "vp_stepin_selection_rate": (

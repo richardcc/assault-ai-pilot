@@ -124,11 +124,22 @@ class DecisionEngine:
 
         target_pos = None
         target = getattr(action, "target", None)
+        move_path = getattr(action, "move_path", None) or getattr(action, "path", None)
 
-        if isinstance(target, HexCoord):
-            target_pos = target
-        elif hasattr(action, "q") and hasattr(action, "r"):
-            target_pos = HexCoord(action.q, action.r)
+        # Prefer the authoritative destination from the action path.
+        if move_path:
+            try:
+                end = move_path[-1]
+                if end is not None and hasattr(end, "q") and hasattr(end, "r"):
+                    target_pos = HexCoord(end.q, end.r)
+            except Exception:
+                target_pos = None
+
+        if target_pos is None:
+            if isinstance(target, HexCoord):
+                target_pos = target
+            elif hasattr(action, "q") and hasattr(action, "r"):
+                target_pos = HexCoord(action.q, action.r)
 
         if target_pos is None:
             return 0

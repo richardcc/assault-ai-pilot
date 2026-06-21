@@ -37,6 +37,16 @@ export function setUnitActionMarker(unitId: string, marker: ActionMarkerType): v
   store[unitId] = marker;
 }
 
+export function syncUnitActionMarkers(activeUnitIds: string[]): void {
+  const allowed = new Set((activeUnitIds || []).map((u) => String(u)));
+  const store = getStore();
+  for (const key of Object.keys(store)) {
+    if (!allowed.has(String(key))) {
+      delete store[key];
+    }
+  }
+}
+
 export function getUnitActionMarker(unitId: string): ActionMarkerType | null {
   if (!unitId) return null;
   const store = getStore();
@@ -67,6 +77,15 @@ export function resolveActionMarker(actionLike: any): ActionMarkerType {
   }
   if (type.includes("FAST") || actionId.includes(":FAST")) {
     return "fast_action";
+  }
+  // Plain MOVE / WAIT consume activation; render with normal marker asset.
+  if (
+    type === "MOVE" ||
+    actionId.startsWith("MOVE:") ||
+    type === "WAIT" ||
+    actionId.startsWith("WAIT:")
+  ) {
+    return "normal";
   }
   return "normal";
 }

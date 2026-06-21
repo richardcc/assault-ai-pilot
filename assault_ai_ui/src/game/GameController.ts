@@ -7,6 +7,15 @@ type GameMode = "human" | "ai" | "ai_vs_ai" | "replay";
 type Listener = (state: any) => void;
 
 export class GameController {
+  private actionIdToAx(actionId: string | null | undefined): string {
+    const raw = String(actionId || "");
+    const parts = raw.split(":");
+    if (parts.length < 4) return "[]";
+    const q = Number(parts[parts.length - 2]);
+    const r = Number(parts[parts.length - 1]);
+    if (!Number.isFinite(q) || !Number.isFinite(r)) return "[]";
+    return formatCoords(q, r);
+  }
 
   private mode: GameMode = "human";
   private state: any = null;
@@ -22,6 +31,7 @@ export class GameController {
   private aiLoopTimer: ReturnType<typeof setTimeout> | null = null;
   private startRequestToken = 0;
   private aiTurnInFlight = false;
+  private pendingWsState: any = null;
 
   // ✅ NUEVO: referencia al highlight layer
   private highlightLayer: any = null;
@@ -125,6 +135,13 @@ export class GameController {
       const msg = JSON.parse(event.data);
 
       if (msg.type === "MAP_STATE" && msg.payload) {
+        // During backend-driven AI turn animation, defer websocket sync.
+        // Applying state immediately can snap units to final hexes and make
+        // animation callbacks look like no-op after first turns.
+        if (this.aiTurnInFlight) {
+          this.pendingWsState = msg.payload;
+          return;
+        }
         this.state = msg.payload;
         this.emit();
       }
@@ -169,6 +186,9 @@ export class GameController {
 
   // ----------------------------------
   updateState(newState: any) {
+    if (!newState || typeof newState !== "object") {
+      return;
+    }
     this.state = newState;
     this.emit();
     // Keep GameCanvas turn-transition hooks in sync (marker reset, unit sync).
@@ -209,6 +229,7 @@ export class GameController {
   private stopLoop() {
     this.aiLoopToken += 1;
     this.aiTurnInFlight = false;
+    this.pendingWsState = null;
     if (this.aiLoopTimer) {
       clearTimeout(this.aiLoopTimer);
       this.aiLoopTimer = null;
@@ -264,16 +285,37 @@ export class GameController {
         });
 
         const result = await res.json();
-        if (result?.state) {
-          // Keep controller state in sync immediately; relying only on WS can
-          // cause stale active_side and trigger extra ai-turn calls.
-          this.updateState(result.state);
-        }
+        console.log("🤖 /api/game/ai-turn response:", result);
 
         const steps = Array.isArray(result?.steps) ? result.steps : [];
         if (steps.length > 0) {
           const step0 = steps[0];
           const unitId = step0?.unit_id || step0?.unit;
+          const aiSource = String(step0?.source || "").toLowerCase();
+          if (aiSource.startsWith("heuristic")) {
+            const actionId = step0?.action_id || "?";
+            const ax = this.actionIdToAx(actionId);
+            (window as any).logSystemEvent?.(
+              "heuristic",
+              `🧠 Heuristic AI (${unitId || "?"}): ${actionId} ${ax} [${aiSource}]`
+            );
+          }
+          const corrected = !!step0?.corrected;
+          if (corrected) {
+            const proposed = step0?.proposed_action_id || "?";
+            const executed = step0?.action_id || "?";
+            const proposedAx = this.actionIdToAx(proposed);
+            const executedAx = this.actionIdToAx(executed);
+            const reason = step0?.corrected_reason || "backend_recovery";
+            console.warn(
+              "🤖 AI action corrected before execution",
+              { unitId, proposed, executed, reason, source: step0?.source }
+            );
+            (window as any).logSystemEvent?.(
+              "alert",
+              `⚠️ AI corrected (${unitId || "?"}): ${proposed} ${proposedAx} -> ${executed} ${executedAx} [${reason}]`
+            );
+          }
           if (unitId) {
             setUnitActionMarker(unitId, resolveActionMarker(step0));
           }
@@ -299,6 +341,12 @@ export class GameController {
           }
         }
 
+        if (result?.state) {
+          // Apply backend state after animating AI steps. If we sync first, unit
+          // sprites snap to final coordinates and movement animations become no-op.
+          this.updateState(result.state);
+        }
+
         // Log AI combat results to the System Log (the websocket MAP_STATE
         // payload does not carry last_events, so do it from the ai-turn result).
         logCombatEvents(result.state?.last_events, result.state?.units || []);
@@ -317,12 +365,20 @@ export class GameController {
         }
         const hasAiStep = steps.length > 0;
         this.aiTurnInFlight = false;
+        if (this.pendingWsState) {
+          this.updateState(this.pendingWsState);
+          this.pendingWsState = null;
+        }
         this.scheduleLoop(loop, hasAiStep ? 1100 : 1800);
         return;
 
       } catch (e) {
         console.error("❌ AI turn error", e);
         this.aiTurnInFlight = false;
+        if (this.pendingWsState) {
+          this.updateState(this.pendingWsState);
+          this.pendingWsState = null;
+        }
         this.scheduleLoop(loop, 1800);
         return;
       }

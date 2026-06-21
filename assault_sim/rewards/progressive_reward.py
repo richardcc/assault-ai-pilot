@@ -1,3 +1,5 @@
+import math
+
 from .base_reward import BaseReward
 from assault_model.actions.status import WaitAction
 from pathlib import Path
@@ -181,6 +183,23 @@ class ProgressiveReward(BaseReward):
         if isinstance(action, WaitAction):
             reward -= self.cfg.wait_penalty
 
+        # =================================================
+        # ✅ L3/L2 COHERENCE SHAPING (anti-collapse)
+        # =================================================
+        if l3 == "ATTRIT":
+            if is_attack:
+                reward += self.cfg.l3_attrit_attack_bonus
+            elif l2 == "ADVANCE":
+                reward -= self.cfg.l3_attrit_advance_penalty
+
+        if l3 == "DENY":
+            if is_attack:
+                reward += self.cfg.l3_deny_attack_bonus
+            elif l2 == "ADVANCE":
+                close_pressure = pre_dist is not None and float(pre_dist) <= float(self.cfg.pressure_distance_threshold)
+                if close_pressure:
+                    reward -= self.cfg.l3_deny_advance_penalty
+
         if self.last_action == action_class:
             reward -= self.cfg.repeat_action_penalty
 
@@ -217,6 +236,12 @@ class ProgressiveReward(BaseReward):
                 total_objectives = len(points)
                 captured_after = _captured_objectives_for_side(next_state, objective_tracked_side)
                 objectives_pending = total_objectives > 0 and captured_after < total_objectives
+                if total_objectives > 0:
+                    target_ratio = max(0.0, min(1.0, float(self.cfg.objective_control_target_ratio)))
+                    target_min = max(1, int(math.ceil(float(total_objectives) * target_ratio)))
+                    shortfall = max(0, target_min - int(captured_after))
+                    if shortfall > 0:
+                        reward -= shortfall * self.cfg.objective_shortfall_step_penalty
                 if l3 == "CAPTURE" and objectives_pending:
                     reward += self.cfg.capture_strategy_bonus
                 elif l3 == "PRESERVE" and objectives_pending:
@@ -314,6 +339,11 @@ class ProgressiveReward(BaseReward):
                     and float(info.get("objective_dist_after")) <= 2.0
                 ):
                     reward -= self.cfg.objective_near_hold_penalty
+                # Explicit VP-entry shaping to avoid repeated "near but no step-in".
+                if bool(info.get("vp_stepin_selected", False)):
+                    reward += self.cfg.vp_stepin_selected_bonus
+                if str(info.get("vp_stepin_block_reason", "") or "") == "no_legal_stepin_near_vp":
+                    reward -= self.cfg.vp_stepin_missed_near_penalty
             else:
                 reward -= objective_delta * self.cfg.vp_delta_weight
                 # For non-tracked sides, also reward proactively capturing objectives,
@@ -337,6 +367,7 @@ class ProgressiveReward(BaseReward):
                 streak = prev + 1
                 self.vp_hold_streak_by_unit[unit_id] = streak
                 reward += min(3, streak) * self.cfg.capture_vp_hold_streak_bonus
+                reward += self.cfg.vp_control_after_entry_bonus
         elif bool(info.get("actor_vp_owned_by_rl_before", False)) and not bool(info.get("actor_vp_owned_by_rl_after", False)):
             reward -= self.cfg.vp_delta_weight * 0.25
             unit_id = info.get("unit_id")
@@ -417,6 +448,16 @@ class ProgressiveReward(BaseReward):
                     reward += self.cfg.win_bonus * (0.75 if rl_is_tracked else -0.75)
                 elif result_kind == "defeat":
                     reward += self.cfg.lose_penalty * (-0.75 if rl_is_tracked else 0.75)
+                    if rl_is_tracked:
+                        points = getattr(getattr(next_state, "victory", None), "points", []) or []
+                        total_objectives = len(points)
+                        if total_objectives > 0:
+                            captured_after = _captured_objectives_for_side(next_state, objective_tracked_side)
+                            target_ratio = max(0.0, min(1.0, float(self.cfg.objective_control_target_ratio)))
+                            target_min = max(1, int(math.ceil(float(total_objectives) * target_ratio)))
+                            shortfall = max(0, target_min - int(captured_after))
+                            if shortfall > 0:
+                                reward -= shortfall * self.cfg.objective_shortfall_terminal_penalty
                 elif result_kind == "draw":
                     reward += 0.0
                 else:

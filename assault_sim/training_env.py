@@ -358,6 +358,8 @@ class TrainingEnv:
             "capture_selected_move_reason": str(getattr(action, "rl_capture_selected_move_reason", "") or ""),
             "capture_selected_dist_delta": getattr(action, "rl_capture_selected_dist_delta", None),
             "capture_suspected_progress_miss": bool(getattr(action, "rl_capture_suspected_progress_miss", False)),
+            "attack_fallback_to_move": bool(getattr(action, "rl_attack_fallback_to_move", False)),
+            "attack_fallback_reason": str(getattr(action, "rl_attack_fallback_reason", "") or ""),
             "vp_stepin_legal": bool(getattr(action, "rl_vp_stepin_legal", False)),
             "vp_stepin_selected": bool(getattr(action, "rl_vp_stepin_selected", False)),
             "vp_stepin_block_reason": str(getattr(action, "rl_vp_stepin_block_reason", "") or ""),
@@ -391,11 +393,23 @@ class TrainingEnv:
             "plan_intent": str(getattr(action, "rl_plan_intent", "UNKNOWN") or "UNKNOWN"),
             "plan_unit_role": str(getattr(action, "rl_plan_unit_role", "UNKNOWN") or "UNKNOWN"),
             "plan_focus_vp_id": getattr(action, "rl_plan_focus_vp_id", None),
+            "plan_stage": str(getattr(action, "rl_plan_stage", "EXECUTE") or "EXECUTE"),
+            "plan_replan_reason": str(getattr(action, "rl_plan_replan_reason", "") or ""),
+            "plan_commitment_age": int(getattr(action, "rl_plan_commitment_age", 0) or 0),
+            "plan_focus_switched": bool(getattr(action, "rl_plan_focus_switched", False)),
             "plan_step_id": int(getattr(action, "rl_plan_step_id", 0) or 0),
             "plan_budget_state": str(getattr(action, "rl_plan_budget_state", "UNBOUNDED") or "UNBOUNDED"),
             "plan_progress_stub": float(getattr(action, "rl_plan_progress_stub", 0.0) or 0.0),
             "intent_alignment_stub": float(getattr(action, "rl_plan_intent_alignment_stub", 0.0) or 0.0),
+            "action_finalized_reason": str(
+                getattr(action, "rl_training_finalized_reason", "")
+                or getattr(action, "rl_eval_finalized_reason", "")
+                or ""
+            ),
         }
+        info["l3_sampled"] = str(getattr(action, "rl_l3_strategy", "") or "")
+        info["l3_effective"] = str(getattr(action, "rl_l3_strategy", "") or "")
+        info["l3_executed"] = str(getattr(action, "rl_l3_strategy", "") or "")
 
         # -------------------------------------------------
         # ATTACKS

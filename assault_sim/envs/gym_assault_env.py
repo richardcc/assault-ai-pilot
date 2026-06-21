@@ -13,10 +13,12 @@ except ImportError:  # pragma: no cover
     from gym import spaces  # type: ignore
 
 from assault_model.actions.status import WaitAction
+from assault_model.actions.action_catalog import ActionCatalog
 from assault_model.map.hex_utils import safe_hex_distance
 from assault_sim.config.ppo_config import PPOConfig
 from assault_sim.config.train_config import load_train_config
 from assault_sim.decision.action_bridge import ActionBridge
+from assault_sim.decision.mission_planner import MissionPlanner
 from assault_sim.decision.option_executor import OptionExecutor
 from assault_sim.engine.env_factory import make_env
 from assault_sim.engine.match_runner import MatchRunner
@@ -47,6 +49,7 @@ class _GymActionController:
             diagnostic_force_capture_only=bool(getattr(cfg, "diagnostic_force_capture_only", False)),
         )
         self.action_bridge = ActionBridge()
+        self.mission_planner = MissionPlanner()
         self.pending_action: tuple[int, ...] | None = None
 
         self.current_option = None
@@ -71,6 +74,7 @@ class _GymActionController:
         self.last_decision_trace = None
         self.current_stepin_legal = False
         self.current_stepin_forced_option = False
+        self.mission_planner.reset()
 
     def set_action(self, action: tuple[int, ...]):
         self.pending_action = action
@@ -189,6 +193,98 @@ class _GymActionController:
             return tracked
         return None
 
+    def _is_non_displacement_move(self, action, unit) -> bool:
+        if action is None or unit is None:
+            return False
+        unit_pos = getattr(unit, "position", None)
+        if unit_pos is None:
+            return False
+        path = getattr(action, "move_path", None) or getattr(action, "path", None)
+        if not path:
+            return False
+        end = path[-1]
+        if end is None:
+            return False
+        return (
+            getattr(end, "q", None) == getattr(unit_pos, "q", None)
+            and getattr(end, "r", None) == getattr(unit_pos, "r", None)
+        )
+
+    def _is_uncaptured_vp_hex_for_side(self, state, side: str | None, end_pos) -> bool:
+        if state is None or not side or end_pos is None:
+            return False
+        coords = (getattr(end_pos, "q", None), getattr(end_pos, "r", None))
+        if coords[0] is None or coords[1] is None:
+            return False
+        points = getattr(getattr(state, "victory", None), "points", []) or []
+        vp_coords = {tuple(getattr(vp, "hex_coords", (None, None))) for vp in points}
+        if coords not in vp_coords:
+            return False
+        side_to_ownership = getattr(state, "side_to_ownership", {}) or {}
+        own_ownership = side_to_ownership.get(str(side).upper())
+        hs = getattr(state, "hex_states", {}).get(coords)
+        if hs is None:
+            return False
+        return getattr(hs, "ownership", None) != own_ownership
+
+    def _catalog_priority_action(self, state, unit):
+        try:
+            legal_actions = ActionCatalog(
+                state,
+                unit,
+                terrain_config=state.game_map.terrain_config,
+            ).actions()
+        except Exception:
+            return WaitAction(getattr(unit, "unit_id", "SYSTEM")), "catalog_error"
+        if not legal_actions:
+            return WaitAction(getattr(unit, "unit_id", "SYSTEM")), "catalog_empty"
+
+        side = getattr(unit, "side", None)
+
+        def _score(a):
+            aid = str(getattr(a, "action_id", "") or "").upper()
+            name = str(getattr(a, "__class__", type("X", (), {})).__name__ or "").upper()
+            path = getattr(a, "move_path", None) or getattr(a, "path", None)
+            end = path[-1] if path else None
+            if path and self._is_uncaptured_vp_hex_for_side(state, side, end):
+                return (4, 0)
+            is_attack = ("ATTACK" in name) or ("FIRE" in name) or ("RANGED" in aid)
+            if is_attack:
+                return (3, 0)
+            if self._is_non_displacement_move(a, unit):
+                return (0, -999)
+            if aid.startswith("WAIT:") or "WAIT" in name:
+                return (1, 0)
+            return (2, 0)
+
+        return max(legal_actions, key=_score), "catalog_priority"
+
+    def _finalize_rl_action(self, state, unit, action):
+        if action is None:
+            fallback, reason = self._catalog_priority_action(state, unit)
+            return fallback, f"executor_none->{reason}"
+        try:
+            legal_actions = ActionCatalog(
+                state,
+                unit,
+                terrain_config=state.game_map.terrain_config,
+            ).actions()
+            legal_ids = {str(getattr(a, "action_id", "") or "") for a in legal_actions}
+            aid = str(getattr(action, "action_id", "") or "")
+            if not aid:
+                fallback, reason = self._catalog_priority_action(state, unit)
+                return fallback, f"empty_action_id->{reason}"
+            if aid not in legal_ids:
+                fallback, reason = self._catalog_priority_action(state, unit)
+                return fallback, f"not_in_catalog->{reason}"
+            if self._is_non_displacement_move(action, unit):
+                fallback, reason = self._catalog_priority_action(state, unit)
+                return fallback, f"non_displacement->{reason}"
+            return action, "ok"
+        except Exception:
+            fallback, reason = self._catalog_priority_action(state, unit)
+            return fallback, f"catalog_validation_error->{reason}"
+
     def _option_from_action_tag(self, action, fallback: TacticalOption) -> TacticalOption:
         tagged = str(getattr(action, "rl_l2_option", "") or "").strip().upper()
         if not tagged:
@@ -240,6 +336,7 @@ class _GymActionController:
                 if resolved_option in (TacticalOption.RETREAT, TacticalOption.HOLD):
                     resolved_option = TacticalOption.ADVANCE
 
+            planner_context = self.mission_planner.build_context(state, unit, side)
             action = self.executor.execute(
                 state=state,
                 unit=unit,
@@ -247,9 +344,17 @@ class _GymActionController:
                 attack_mode=attack_mode,
                 strategy=effective_strategy,
                 objective_tracked_side=self._objective_tracked_side(),
+                planner_context=planner_context,
             )
-            if action is None:
-                action = WaitAction(unit.unit_id)
+            action, finalize_reason = self._finalize_rl_action(state, unit, action)
+            try:
+                setattr(action, "rl_training_finalized_reason", str(finalize_reason))
+            except Exception:
+                pass
+            try:
+                self.mission_planner.register_outcome(state, planner_context, action)
+            except Exception:
+                pass
 
             resolved_from_action = self._option_from_action_tag(action, resolved_option)
             executed_option = self.action_bridge.infer_executed_option(action, resolved_from_action)

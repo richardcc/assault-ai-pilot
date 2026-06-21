@@ -12,14 +12,18 @@ Gates de decisión (GO/NO-GO):
 - `vp_entry_missed_rate` baja de `1.000`
 - masa en `captured=4/5` se mantiene o mejora
 
-Checklist inmediato:
-- [x] cerrar definición consistente de `vp_entry_missed_rate` vs `capture_conversion_after_contact`
-- [x] completar ciclo corto: `train -> eval 42/43/44 -> decisión única`
-- [x] validar P4.3c en multi-seed (`CONDITIONAL GO`)
-- [x] cerrar A/B de R1 (`dummy` vs `subproc`) sin degradar primarias tácticas
-- [x] validar observabilidad embudo VP (`vp_stepin_*`, `vp_control_after_entry_*`, `per_unit_vp_entry_*`)
-- [x] validar P4.5 ejecución post-apertura (`post_open_window_followup_*`)
+Checklist inmediato (activo):
 - [ ] abrir R2.1 de entrenamiento/reward (salir de techo de guardrails)
+- [ ] validar v21 (Mission Planner) con smoke + multi-seed y gate GO/NO-GO
+- [ ] ejecutar R1.b (A/B `dummy|subproc`, `num_envs=4|8`) y decidir configuración final de rendimiento
+
+Completado recientemente (resumen):
+- [x] definición consistente de `vp_entry_missed_rate` vs `capture_conversion_after_contact`
+- [x] ciclo corto `train -> eval 42/43/44 -> decisión única`
+- [x] validación P4.3c multi-seed (`CONDITIONAL GO`)
+- [x] A/B R1 (`dummy` vs `subproc`) de primera pasada
+- [x] observabilidad embudo VP y métricas post-apertura
+- [x] incorporación arquitectura Mission Planner multi-turno (v21) en runtime/train/eval
 
 Regla operativa:
 - un solo ajuste por iteración, misma batería multi-seed, comparación contra baseline congelado.
@@ -76,7 +80,7 @@ Objetivo:
 - Sistema de turnos runtime-driven
 - Compatible con training RL, match runner y Web UI
 
-Principios:
+Principios (completado):
 - [x] No hardcodear lados (`US`/`GE`) en lógica de turno
 - [x] Frontend no decide reglas
 - [x] Todo basado en `GameState` + runtime
@@ -89,7 +93,7 @@ Distribución de responsabilidades:
 - `Controller/Runner`: elegir acción (AI/humano), sin reglas de turno
 - `Frontend`: representar estado y aceptar input válido, sin reglas
 
-Implementación:
+Implementación (completado):
 - [x] Paso 1: `RuntimeGameState` con `sides`, `active_side`, `activated_units`
 - [x] Paso 2: alternancia por activación y salto de lado sin unidades activables
 - [x] Paso 3: integración con `GymAssaultEnv`/`MatchRunner`/backend UI
@@ -217,6 +221,34 @@ Solo si P4.1-P4.5 cumplen gates:
 - [ ] evaluar “macro planner” de horizonte 2-3 turnos (beam/MCTS liviano) como teacher o prior.
 - [ ] distillation: usar recomendaciones del planner para acelerar entrenamiento de policy.
 - [ ] mantener modo fallback al híbrido si el planner falla latencia/estabilidad.
+
+### P4.7 — Mission Planner multi-turno (v21, implementado / pendiente validación)
+
+Objetivo:
+- consolidar un contrato explícito de planificación multi-turno (`SETUP`, `STEP_IN`, `HOLD`) compartido entre runtime, train y eval.
+
+Implementado:
+- [x] nuevo módulo `MissionPlanner` + `PlannerContext` en `assault_sim/decision/mission_planner.py`.
+- [x] inyección de `planner_context` en runtime (`assault_backend/main.py`) antes de selección SB3.
+- [x] integración en `SB3AIService` (`assault_backend/services/sb3_ai_service.py`) para ajustar estrategia/opción por etapa de plan.
+- [x] integración en controllers de train/eval (`assault_sim/envs/gym_assault_env.py`, `assault_sim/evaluation/eval_sb3.py`).
+- [x] propagación de tags de plan en `OptionExecutor` (`plan_stage`, `plan_replan_reason`, `plan_focus_switched`, `plan_commitment_age`).
+- [x] KPIs nuevos en evaluación/analyzer:
+  - `plan_commit_rate`
+  - `focus_switch_rate`
+  - `plan_success_k`
+  - `plan_latency_to_progress`
+  - `action_finalize_reason_counts`
+
+Pendiente de validación (gates):
+- [ ] smoke train/eval (`seed=42`, `episodes=20`) sin degradación primaria.
+- [ ] multi-seed (`42/43/44`) con mejora o estabilidad de:
+  - `vp_entry_conversion_rate`
+  - `true_win_rate`
+  - `loss_rate`
+- [ ] reducción de churn:
+  - `focus_switch_rate` a la baja
+  - `plan_commit_rate` al alza
 
 Métricas nuevas requeridas en `results_analyzer`:
 - [ ] `role_diversity_index` (distribución de roles por episodio).
@@ -619,6 +651,38 @@ Gate R1:
 - [ ] `loss_rate` no sube materialmente.
 - estado final iteración: **NO-GO táctico** (`subproc12`, `subproc12 seedfix`, `subproc4`).
 - baseline operativo confirmado: `dummy12` (`r1_ab_dummy12_s42`).
+
+### R1.b — Protocolo inmediato para subir FPS (sin degradación táctica)
+
+Objetivo:
+- elevar `fps` de entrenamiento aprovechando CPU multi-core sin romper métricas de misión.
+
+Hipótesis de trabajo:
+- la máquina está infrautilizada en CPU total; el cuello es paralelización/overhead del loop.
+
+Matriz A/B corta (orden obligatorio):
+1) `dummy`, `num_envs=4` (baseline corto de control)
+2) `subproc`, `num_envs=4`
+3) `dummy`, `num_envs=8`
+4) `subproc`, `num_envs=8`
+
+Reglas de ejecución:
+- misma seed y mismo presupuesto por corrida (recomendado `seed=42`, `episodes=20` en eval).
+- no tocar reward/guardrails/policy entre corridas A/B.
+- registrar siempre: `fps`, `time_elapsed`, `true_win_rate`, `loss_rate`, `vp_entry_conversion_rate`.
+
+Gate de promoción:
+- [ ] `fps` sube materialmente (>= +25% vs control equivalente)
+- [ ] `true_win_rate` no cae materialmente
+- [ ] `loss_rate` no sube materialmente
+- [ ] `vp_entry_conversion_rate` no empeora claramente
+
+NO-GO automático:
+- [ ] mejora de `fps` con degradación táctica consistente en cualquiera de primarias (`true_win_rate`, `loss_rate`)
+
+Decisión final R1.b:
+- si `subproc` pasa gates en `4` y `8`: promover mejor configuración.
+- si falla: mantener `dummy` y pasar a optimización interna (R2/R3) sin cambiar vec env.
 
 ### Iteración R2 — Hotspots del simulador
 - [ ] perfilar train loop (`cProfile`) para top hotspots reales.

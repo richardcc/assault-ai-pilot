@@ -219,11 +219,19 @@ class SimEnv:
 
         actions = catalog.actions()
 
-        print(f"[DEBUG] available actions:")
+        normalized_action_ids = []
         for a in actions:
             if getattr(a, "action_id", None) is None and isinstance(a, WaitAction):
                 a.action_id = f"WAIT:{getattr(a, 'unit_id', unit_id)}"
-            print("   ", getattr(a, "action_id", None))
+            normalized_action_ids.append(str(getattr(a, "action_id", None) or ""))
+        preview = ", ".join(normalized_action_ids[:8])
+        if len(normalized_action_ids) > 8:
+            preview = f"{preview}, ..."
+        print(
+            "[DEBUG] available actions:"
+            f" count={len(normalized_action_ids)}"
+            f" preview=[{preview}]"
+        )
 
         for a in actions:
             if getattr(a, "action_id", None) is None and isinstance(a, WaitAction):

@@ -1,6 +1,7 @@
 import { axialToPixel, HEX_SIZE, formatCoords } from "../render/hexGridRenderer";
-import { runAiTurns } from "./aiTurnRunner";
 import { resolveActionMarker, setUnitActionMarker } from "../state/actionMarkers";
+import { drawAttackIndicatorPixels } from "../animation/visuals";
+import { gameController } from "../gameControllerInstance";
 
 export async function handleHexClick(
   q: number,
@@ -41,6 +42,25 @@ export async function handleHexClick(
   const isAttack = move.kind === "attack";
   if (!isAttack) {
     await unitLayerRef.current?.moveUnit(selectedUnitId, q, r);
+  } else {
+    const attackerSprite = unitLayerRef.current?.container?.children?.find(
+      (c: any) => c.__unitId === selectedUnitId && c.__type === "unit"
+    );
+    const fxLayer =
+      _fxLayerRef?.current ||
+      unitLayerRef.current?.container?.parent?.children?.find((c: any) => c.label === "fxLayer") ||
+      unitLayerRef.current?.container?.parent;
+    if (attackerSprite && fxLayer) {
+      const to = axialToPixel(q, r);
+      drawAttackIndicatorPixels(
+        attackerSprite.x,
+        attackerSprite.y,
+        to.x,
+        to.y + HEX_SIZE,
+        fxLayer
+      );
+      await new Promise((r) => setTimeout(r, 420));
+    }
   }
 
   console.log("✅ preparation complete, posting to backend");
@@ -57,6 +77,11 @@ export async function handleHexClick(
   });
   const stepData = await stepRes.json();
   const stateAfterHuman = stepData.state;
+  if (!stateAfterHuman || typeof stateAfterHuman !== "object") {
+    console.error("❌ Invalid step response: missing state", stepData);
+    (window as any).logSystemEvent?.("system", "❌ Invalid backend step response (no state).");
+    return;
+  }
 
   // Log human action result
   if (isAttack) {
@@ -90,6 +115,12 @@ export async function handleHexClick(
 
   // 4. Update the visual state
   (window as any).__setGameState?.(stateAfterHuman);
+  try {
+    // Keep authoritative controller state aligned for loop ownership checks.
+    gameController.updateState(stateAfterHuman);
+  } catch {
+    // ignore bridge failures
+  }
 
   // Log action completion with outcome
   if (!isAttack) {
@@ -101,15 +132,5 @@ export async function handleHexClick(
     (window as any).logSystemEvent?.("combat", `✅ Combat complete: Target ${resultMsg}`);
   }
 
-  // 5. If the next active side belongs to AI — run all AI actions automatically
-  const sides = stateAfterHuman?.sides ?? {};
-  const activeSide = stateAfterHuman?.active_side;
-
-  if (activeSide && sides[activeSide] === "ai") {
-    console.log(`🤖 AI turn starts (side: ${activeSide})`);
-
-    await runAiTurns(unitLayerRef);
-
-    console.log("🤖 AI turn complete — human can move");
-  }
+  // 5. AI execution is handled by GameController backend loop only.
 }

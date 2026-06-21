@@ -75,6 +75,7 @@ function App() {
 
   // Subscribe to the game controller events
   useEffect(() => {
+    (window as any).gameController = gameController;
     gameController.subscribe((state: any) => {
       setGameData(state);
     });
@@ -87,6 +88,7 @@ function App() {
 
     return () => {
       (window as any).logSystemEvent = undefined;
+      (window as any).gameController = undefined;
     };
   }, []);
 
@@ -350,6 +352,32 @@ function App() {
     }, 800);
   };
 
+  const handleExportTrace = async () => {
+    try {
+      const res = await fetch("http://127.0.0.1:8000/api/game/trace?limit=50000");
+      if (!res.ok) {
+        throw new Error(`Trace export failed (${res.status})`);
+      }
+      const payload = await res.json();
+      const stamp = new Date().toISOString().replace(/[:.]/g, "-");
+      const scenario = String(gameData?.scenario_name || selectedScenario || "scenario");
+      const fileName = `trace_export_${scenario}_${stamp}.json`;
+      const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json;charset=utf-8" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = fileName;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      addLog("system", `💾 Trace exported: ${fileName}`);
+    } catch (err) {
+      console.error("❌ Trace export failed", err);
+      addLog("system", `❌ Trace export failed: ${String(err)}`);
+    }
+  };
+
   // Find active specifications of the selected troop
   const selectedUnit = gameData?.units?.find((u: Unit) => u.id === selectedUnitId);
   const selectedUnitSpec = selectedUnit 
@@ -363,9 +391,20 @@ function App() {
     : null;
 
   const executeActionById = async (actionId: string, order?: any) => {
+    const activeSideNow = gameData?.active_side;
+    const isHumanTurnNow = gameData?.sides?.[activeSideNow] === "human";
+    if (!isHumanTurnNow) {
+      return;
+    }
     try {
       const executed = await (window as any).onExecuteOrder?.(order || { action_id: actionId });
       if (executed) return;
+      // Safety: never POST manual step outside human turn.
+      const activeSideAfterCb = gameData?.active_side;
+      const isHumanTurnAfterCb = gameData?.sides?.[activeSideAfterCb] === "human";
+      if (!isHumanTurnAfterCb) {
+        return;
+      }
       const res = await fetch("http://127.0.0.1:8000/api/game/step", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -501,6 +540,14 @@ function App() {
             onClick={() => handleStartGame("replay")}
           >
             🔁 Replay
+          </button>
+
+          <button
+            className="btn-tactical"
+            onClick={handleExportTrace}
+            title="Download backend trace JSON"
+          >
+            💾 Export Trace
           </button>
 
           <button 

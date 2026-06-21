@@ -1,0 +1,1350 @@
+{
+  "episodes": 20,
+  "seed_start": 42,
+  "scenario": "battaglia_cittadina_2_1",
+  "rl_side": "US",
+  "results": [
+    {
+      "seed": 42,
+      "first_us_vp_loss": {
+        "seed": 42,
+        "step": 69,
+        "turn": 6,
+        "vp_coords": [
+          8,
+          9
+        ],
+        "vp_label": "I10",
+        "owner_before": "US",
+        "owner_after": "IT",
+        "actor_side": "IT",
+        "actor_id": "IT_1",
+        "action": "MoveAction",
+        "pos_before": [
+          7,
+          7
+        ],
+        "pos_after": [
+          8,
+          9
+        ],
+        "pos_before_label": "H8",
+        "pos_after_label": "I10",
+        "actor_route_recent": [
+          [
+            4,
+            2
+          ],
+          [
+            5,
+            4
+          ],
+          [
+            6,
+            5
+          ],
+          [
+            7,
+            7
+          ],
+          [
+            8,
+            9
+          ]
+        ],
+        "actor_route_recent_labels": [
+          "E3",
+          "F5",
+          "G6",
+          "H8",
+          "I10"
+        ]
+      },
+      "initial_owners": {
+        "(16, 1)": "IT",
+        "(9, 1)": "IT",
+        "(2, 6)": "IT",
+        "(8, 9)": "US",
+        "(16, 8)": "US"
+      },
+      "final_owners": {
+        "(16, 1)": "IT",
+        "(9, 1)": "IT",
+        "(2, 6)": "IT",
+        "(8, 9)": "IT",
+        "(16, 8)": "US"
+      }
+    },
+    {
+      "seed": 43,
+      "first_us_vp_loss": {
+        "seed": 43,
+        "step": 92,
+        "turn": 8,
+        "vp_coords": [
+          8,
+          9
+        ],
+        "vp_label": "I10",
+        "owner_before": "US",
+        "owner_after": "IT",
+        "actor_side": "IT",
+        "actor_id": "IT_2",
+        "action": "MoveAction",
+        "pos_before": [
+          8,
+          8
+        ],
+        "pos_after": [
+          8,
+          9
+        ],
+        "pos_before_label": "I9",
+        "pos_after_label": "I10",
+        "actor_route_recent": [
+          [
+            6,
+            2
+          ],
+          [
+            7,
+            4
+          ],
+          [
+            7,
+            6
+          ],
+          [
+            8,
+            8
+          ],
+          [
+            8,
+            9
+          ]
+        ],
+        "actor_route_recent_labels": [
+          "G3",
+          "H5",
+          "H7",
+          "I9",
+          "I10"
+        ]
+      },
+      "initial_owners": {
+        "(16, 1)": "IT",
+        "(9, 1)": "IT",
+        "(2, 6)": "IT",
+        "(8, 9)": "US",
+        "(16, 8)": "US"
+      },
+      "final_owners": {
+        "(16, 1)": "IT",
+        "(9, 1)": "IT",
+        "(2, 6)": "IT",
+        "(8, 9)": "IT",
+        "(16, 8)": "US"
+      }
+    },
+    {
+      "seed": 44,
+      "first_us_vp_loss": {
+        "seed": 44,
+        "step": 65,
+        "turn": 5,
+        "vp_coords": [
+          8,
+          9
+        ],
+        "vp_label": "I10",
+        "owner_before": "US",
+        "owner_after": "IT",
+        "actor_side": "IT",
+        "actor_id": "IT_5",
+        "action": "MoveAction",
+        "pos_before": [
+          8,
+          7
+        ],
+        "pos_after": [
+          8,
+          9
+        ],
+        "pos_before_label": "I8",
+        "pos_after_label": "I10",
+        "actor_route_recent": [
+          [
+            9,
+            1
+          ],
+          [
+            8,
+            3
+          ],
+          [
+            9,
+            5
+          ],
+          [
+            8,
+            7
+          ],
+          [
+            8,
+            9
+          ]
+        ],
+        "actor_route_recent_labels": [
+          "J2",
+          "I4",
+          "J6",
+          "I8",
+          "I10"
+        ]
+      },
+      "initial_owners": {
+        "(16, 1)": "IT",
+        "(9, 1)": "IT",
+        "(2, 6)": "IT",
+        "(8, 9)": "US",
+        "(16, 8)": "US"
+      },
+      "final_owners": {
+        "(16, 1)": "IT",
+        "(9, 1)": "IT",
+        "(2, 6)": "US",
+        "(8, 9)": "IT",
+        "(16, 8)": "US"
+      }
+    },
+    {
+      "seed": 45,
+      "first_us_vp_loss": {
+        "seed": 45,
+        "step": 86,
+        "turn": 7,
+        "vp_coords": [
+          8,
+          9
+        ],
+        "vp_label": "I10",
+        "owner_before": "US",
+        "owner_after": "IT",
+        "actor_side": "IT",
+        "actor_id": "IT_3",
+        "action": "MoveAction",
+        "pos_before": [
+          7,
+          8
+        ],
+        "pos_after": [
+          8,
+          9
+        ],
+        "pos_before_label": "H9",
+        "pos_after_label": "I10",
+        "actor_route_recent": [
+          [
+            3,
+            3
+          ],
+          [
+            4,
+            5
+          ],
+          [
+            6,
+            6
+          ],
+          [
+            7,
+            8
+          ],
+          [
+            8,
+            9
+          ]
+        ],
+        "actor_route_recent_labels": [
+          "D4",
+          "E6",
+          "G7",
+          "H9",
+          "I10"
+        ]
+      },
+      "initial_owners": {
+        "(16, 1)": "IT",
+        "(9, 1)": "IT",
+        "(2, 6)": "IT",
+        "(8, 9)": "US",
+        "(16, 8)": "US"
+      },
+      "final_owners": {
+        "(16, 1)": "IT",
+        "(9, 1)": "IT",
+        "(2, 6)": "IT",
+        "(8, 9)": "IT",
+        "(16, 8)": "US"
+      }
+    },
+    {
+      "seed": 46,
+      "first_us_vp_loss": {
+        "seed": 46,
+        "step": 81,
+        "turn": 7,
+        "vp_coords": [
+          8,
+          9
+        ],
+        "vp_label": "I10",
+        "owner_before": "US",
+        "owner_after": "IT",
+        "actor_side": "IT",
+        "actor_id": "IT_7",
+        "action": "MoveAction",
+        "pos_before": [
+          9,
+          7
+        ],
+        "pos_after": [
+          8,
+          9
+        ],
+        "pos_before_label": "J8",
+        "pos_after_label": "I10",
+        "actor_route_recent": [
+          [
+            9,
+            3
+          ],
+          [
+            10,
+            5
+          ],
+          [
+            9,
+            7
+          ],
+          [
+            8,
+            9
+          ]
+        ],
+        "actor_route_recent_labels": [
+          "J4",
+          "K6",
+          "J8",
+          "I10"
+        ]
+      },
+      "initial_owners": {
+        "(16, 1)": "IT",
+        "(9, 1)": "IT",
+        "(2, 6)": "IT",
+        "(8, 9)": "US",
+        "(16, 8)": "US"
+      },
+      "final_owners": {
+        "(16, 1)": "IT",
+        "(9, 1)": "IT",
+        "(2, 6)": "IT",
+        "(8, 9)": "IT",
+        "(16, 8)": "US"
+      }
+    },
+    {
+      "seed": 47,
+      "first_us_vp_loss": {
+        "seed": 47,
+        "step": 73,
+        "turn": 7,
+        "vp_coords": [
+          8,
+          9
+        ],
+        "vp_label": "I10",
+        "owner_before": "US",
+        "owner_after": "IT",
+        "actor_side": "IT",
+        "actor_id": "IT_7",
+        "action": "MoveAction",
+        "pos_before": [
+          9,
+          7
+        ],
+        "pos_after": [
+          8,
+          9
+        ],
+        "pos_before_label": "J8",
+        "pos_after_label": "I10",
+        "actor_route_recent": [
+          [
+            9,
+            3
+          ],
+          [
+            10,
+            5
+          ],
+          [
+            9,
+            7
+          ],
+          [
+            8,
+            9
+          ]
+        ],
+        "actor_route_recent_labels": [
+          "J4",
+          "K6",
+          "J8",
+          "I10"
+        ]
+      },
+      "initial_owners": {
+        "(16, 1)": "IT",
+        "(9, 1)": "IT",
+        "(2, 6)": "IT",
+        "(8, 9)": "US",
+        "(16, 8)": "US"
+      },
+      "final_owners": {
+        "(16, 1)": "IT",
+        "(9, 1)": "IT",
+        "(2, 6)": "IT",
+        "(8, 9)": "IT",
+        "(16, 8)": "US"
+      }
+    },
+    {
+      "seed": 48,
+      "first_us_vp_loss": {
+        "seed": 48,
+        "step": 74,
+        "turn": 7,
+        "vp_coords": [
+          8,
+          9
+        ],
+        "vp_label": "I10",
+        "owner_before": "US",
+        "owner_after": "IT",
+        "actor_side": "IT",
+        "actor_id": "IT_7",
+        "action": "MoveAction",
+        "pos_before": [
+          9,
+          7
+        ],
+        "pos_after": [
+          8,
+          9
+        ],
+        "pos_before_label": "J8",
+        "pos_after_label": "I10",
+        "actor_route_recent": [
+          [
+            9,
+            3
+          ],
+          [
+            10,
+            5
+          ],
+          [
+            9,
+            7
+          ],
+          [
+            8,
+            9
+          ]
+        ],
+        "actor_route_recent_labels": [
+          "J4",
+          "K6",
+          "J8",
+          "I10"
+        ]
+      },
+      "initial_owners": {
+        "(16, 1)": "IT",
+        "(9, 1)": "IT",
+        "(2, 6)": "IT",
+        "(8, 9)": "US",
+        "(16, 8)": "US"
+      },
+      "final_owners": {
+        "(16, 1)": "IT",
+        "(9, 1)": "IT",
+        "(2, 6)": "IT",
+        "(8, 9)": "IT",
+        "(16, 8)": "US"
+      }
+    },
+    {
+      "seed": 49,
+      "first_us_vp_loss": {
+        "seed": 49,
+        "step": 81,
+        "turn": 7,
+        "vp_coords": [
+          8,
+          9
+        ],
+        "vp_label": "I10",
+        "owner_before": "US",
+        "owner_after": "IT",
+        "actor_side": "IT",
+        "actor_id": "IT_3",
+        "action": "MoveAction",
+        "pos_before": [
+          7,
+          7
+        ],
+        "pos_after": [
+          8,
+          9
+        ],
+        "pos_before_label": "H8",
+        "pos_after_label": "I10",
+        "actor_route_recent": [
+          [
+            3,
+            3
+          ],
+          [
+            4,
+            5
+          ],
+          [
+            6,
+            5
+          ],
+          [
+            7,
+            7
+          ],
+          [
+            8,
+            9
+          ]
+        ],
+        "actor_route_recent_labels": [
+          "D4",
+          "E6",
+          "G6",
+          "H8",
+          "I10"
+        ]
+      },
+      "initial_owners": {
+        "(16, 1)": "IT",
+        "(9, 1)": "IT",
+        "(2, 6)": "IT",
+        "(8, 9)": "US",
+        "(16, 8)": "US"
+      },
+      "final_owners": {
+        "(16, 1)": "IT",
+        "(9, 1)": "IT",
+        "(2, 6)": "IT",
+        "(8, 9)": "IT",
+        "(16, 8)": "US"
+      }
+    },
+    {
+      "seed": 50,
+      "first_us_vp_loss": {
+        "seed": 50,
+        "step": 89,
+        "turn": 7,
+        "vp_coords": [
+          8,
+          9
+        ],
+        "vp_label": "I10",
+        "owner_before": "US",
+        "owner_after": "IT",
+        "actor_side": "IT",
+        "actor_id": "IT_5",
+        "action": "MoveAction",
+        "pos_before": [
+          8,
+          7
+        ],
+        "pos_after": [
+          8,
+          9
+        ],
+        "pos_before_label": "I8",
+        "pos_after_label": "I10",
+        "actor_route_recent": [
+          [
+            9,
+            1
+          ],
+          [
+            8,
+            3
+          ],
+          [
+            9,
+            5
+          ],
+          [
+            8,
+            7
+          ],
+          [
+            8,
+            9
+          ]
+        ],
+        "actor_route_recent_labels": [
+          "J2",
+          "I4",
+          "J6",
+          "I8",
+          "I10"
+        ]
+      },
+      "initial_owners": {
+        "(16, 1)": "IT",
+        "(9, 1)": "IT",
+        "(2, 6)": "IT",
+        "(8, 9)": "US",
+        "(16, 8)": "US"
+      },
+      "final_owners": {
+        "(16, 1)": "IT",
+        "(9, 1)": "IT",
+        "(2, 6)": "IT",
+        "(8, 9)": "IT",
+        "(16, 8)": "US"
+      }
+    },
+    {
+      "seed": 51,
+      "first_us_vp_loss": {
+        "seed": 51,
+        "step": 61,
+        "turn": 5,
+        "vp_coords": [
+          8,
+          9
+        ],
+        "vp_label": "I10",
+        "owner_before": "US",
+        "owner_after": "IT",
+        "actor_side": "IT",
+        "actor_id": "IT_5",
+        "action": "MoveAction",
+        "pos_before": [
+          8,
+          7
+        ],
+        "pos_after": [
+          8,
+          9
+        ],
+        "pos_before_label": "I8",
+        "pos_after_label": "I10",
+        "actor_route_recent": [
+          [
+            9,
+            1
+          ],
+          [
+            8,
+            3
+          ],
+          [
+            9,
+            5
+          ],
+          [
+            8,
+            7
+          ],
+          [
+            8,
+            9
+          ]
+        ],
+        "actor_route_recent_labels": [
+          "J2",
+          "I4",
+          "J6",
+          "I8",
+          "I10"
+        ]
+      },
+      "initial_owners": {
+        "(16, 1)": "IT",
+        "(9, 1)": "IT",
+        "(2, 6)": "IT",
+        "(8, 9)": "US",
+        "(16, 8)": "US"
+      },
+      "final_owners": {
+        "(16, 1)": "IT",
+        "(9, 1)": "IT",
+        "(2, 6)": "US",
+        "(8, 9)": "IT",
+        "(16, 8)": "US"
+      }
+    },
+    {
+      "seed": 52,
+      "first_us_vp_loss": {
+        "seed": 52,
+        "step": 53,
+        "turn": 5,
+        "vp_coords": [
+          8,
+          9
+        ],
+        "vp_label": "I10",
+        "owner_before": "US",
+        "owner_after": "IT",
+        "actor_side": "IT",
+        "actor_id": "IT_7",
+        "action": "MoveAction",
+        "pos_before": [
+          9,
+          7
+        ],
+        "pos_after": [
+          8,
+          9
+        ],
+        "pos_before_label": "J8",
+        "pos_after_label": "I10",
+        "actor_route_recent": [
+          [
+            9,
+            3
+          ],
+          [
+            10,
+            5
+          ],
+          [
+            9,
+            7
+          ],
+          [
+            8,
+            9
+          ]
+        ],
+        "actor_route_recent_labels": [
+          "J4",
+          "K6",
+          "J8",
+          "I10"
+        ]
+      },
+      "initial_owners": {
+        "(16, 1)": "IT",
+        "(9, 1)": "IT",
+        "(2, 6)": "IT",
+        "(8, 9)": "US",
+        "(16, 8)": "US"
+      },
+      "final_owners": {
+        "(16, 1)": "IT",
+        "(9, 1)": "IT",
+        "(2, 6)": "IT",
+        "(8, 9)": "IT",
+        "(16, 8)": "US"
+      }
+    },
+    {
+      "seed": 53,
+      "first_us_vp_loss": {
+        "seed": 53,
+        "step": 80,
+        "turn": 7,
+        "vp_coords": [
+          8,
+          9
+        ],
+        "vp_label": "I10",
+        "owner_before": "US",
+        "owner_after": "IT",
+        "actor_side": "IT",
+        "actor_id": "IT_1",
+        "action": "MoveAction",
+        "pos_before": [
+          7,
+          7
+        ],
+        "pos_after": [
+          8,
+          9
+        ],
+        "pos_before_label": "H8",
+        "pos_after_label": "I10",
+        "actor_route_recent": [
+          [
+            4,
+            2
+          ],
+          [
+            5,
+            4
+          ],
+          [
+            6,
+            5
+          ],
+          [
+            7,
+            7
+          ],
+          [
+            8,
+            9
+          ]
+        ],
+        "actor_route_recent_labels": [
+          "E3",
+          "F5",
+          "G6",
+          "H8",
+          "I10"
+        ]
+      },
+      "initial_owners": {
+        "(16, 1)": "IT",
+        "(9, 1)": "IT",
+        "(2, 6)": "IT",
+        "(8, 9)": "US",
+        "(16, 8)": "US"
+      },
+      "final_owners": {
+        "(16, 1)": "IT",
+        "(9, 1)": "IT",
+        "(2, 6)": "IT",
+        "(8, 9)": "IT",
+        "(16, 8)": "US"
+      }
+    },
+    {
+      "seed": 54,
+      "first_us_vp_loss": {
+        "seed": 54,
+        "step": 67,
+        "turn": 6,
+        "vp_coords": [
+          8,
+          9
+        ],
+        "vp_label": "I10",
+        "owner_before": "US",
+        "owner_after": "IT",
+        "actor_side": "IT",
+        "actor_id": "IT_7",
+        "action": "MoveAction",
+        "pos_before": [
+          9,
+          7
+        ],
+        "pos_after": [
+          8,
+          9
+        ],
+        "pos_before_label": "J8",
+        "pos_after_label": "I10",
+        "actor_route_recent": [
+          [
+            9,
+            3
+          ],
+          [
+            10,
+            5
+          ],
+          [
+            9,
+            7
+          ],
+          [
+            8,
+            9
+          ]
+        ],
+        "actor_route_recent_labels": [
+          "J4",
+          "K6",
+          "J8",
+          "I10"
+        ]
+      },
+      "initial_owners": {
+        "(16, 1)": "IT",
+        "(9, 1)": "IT",
+        "(2, 6)": "IT",
+        "(8, 9)": "US",
+        "(16, 8)": "US"
+      },
+      "final_owners": {
+        "(16, 1)": "IT",
+        "(9, 1)": "IT",
+        "(2, 6)": "IT",
+        "(8, 9)": "IT",
+        "(16, 8)": "US"
+      }
+    },
+    {
+      "seed": 55,
+      "first_us_vp_loss": {
+        "seed": 55,
+        "step": 93,
+        "turn": 8,
+        "vp_coords": [
+          8,
+          9
+        ],
+        "vp_label": "I10",
+        "owner_before": "US",
+        "owner_after": "IT",
+        "actor_side": "IT",
+        "actor_id": "IT_1",
+        "action": "MoveAction",
+        "pos_before": [
+          7,
+          7
+        ],
+        "pos_after": [
+          8,
+          9
+        ],
+        "pos_before_label": "H8",
+        "pos_after_label": "I10",
+        "actor_route_recent": [
+          [
+            4,
+            2
+          ],
+          [
+            5,
+            4
+          ],
+          [
+            6,
+            5
+          ],
+          [
+            7,
+            7
+          ],
+          [
+            8,
+            9
+          ]
+        ],
+        "actor_route_recent_labels": [
+          "E3",
+          "F5",
+          "G6",
+          "H8",
+          "I10"
+        ]
+      },
+      "initial_owners": {
+        "(16, 1)": "IT",
+        "(9, 1)": "IT",
+        "(2, 6)": "IT",
+        "(8, 9)": "US",
+        "(16, 8)": "US"
+      },
+      "final_owners": {
+        "(16, 1)": "IT",
+        "(9, 1)": "IT",
+        "(2, 6)": "IT",
+        "(8, 9)": "IT",
+        "(16, 8)": "US"
+      }
+    },
+    {
+      "seed": 56,
+      "first_us_vp_loss": {
+        "seed": 56,
+        "step": 94,
+        "turn": 8,
+        "vp_coords": [
+          8,
+          9
+        ],
+        "vp_label": "I10",
+        "owner_before": "US",
+        "owner_after": "IT",
+        "actor_side": "IT",
+        "actor_id": "IT_5",
+        "action": "MoveAction",
+        "pos_before": [
+          8,
+          7
+        ],
+        "pos_after": [
+          8,
+          9
+        ],
+        "pos_before_label": "I8",
+        "pos_after_label": "I10",
+        "actor_route_recent": [
+          [
+            9,
+            1
+          ],
+          [
+            8,
+            3
+          ],
+          [
+            9,
+            5
+          ],
+          [
+            8,
+            7
+          ],
+          [
+            8,
+            9
+          ]
+        ],
+        "actor_route_recent_labels": [
+          "J2",
+          "I4",
+          "J6",
+          "I8",
+          "I10"
+        ]
+      },
+      "initial_owners": {
+        "(16, 1)": "IT",
+        "(9, 1)": "IT",
+        "(2, 6)": "IT",
+        "(8, 9)": "US",
+        "(16, 8)": "US"
+      },
+      "final_owners": {
+        "(16, 1)": "IT",
+        "(9, 1)": "IT",
+        "(2, 6)": "IT",
+        "(8, 9)": "IT",
+        "(16, 8)": "US"
+      }
+    },
+    {
+      "seed": 57,
+      "first_us_vp_loss": {
+        "seed": 57,
+        "step": 93,
+        "turn": 8,
+        "vp_coords": [
+          8,
+          9
+        ],
+        "vp_label": "I10",
+        "owner_before": "US",
+        "owner_after": "IT",
+        "actor_side": "IT",
+        "actor_id": "IT_2",
+        "action": "MoveAction",
+        "pos_before": [
+          8,
+          8
+        ],
+        "pos_after": [
+          8,
+          9
+        ],
+        "pos_before_label": "I9",
+        "pos_after_label": "I10",
+        "actor_route_recent": [
+          [
+            6,
+            2
+          ],
+          [
+            7,
+            4
+          ],
+          [
+            7,
+            6
+          ],
+          [
+            8,
+            8
+          ],
+          [
+            8,
+            9
+          ]
+        ],
+        "actor_route_recent_labels": [
+          "G3",
+          "H5",
+          "H7",
+          "I9",
+          "I10"
+        ]
+      },
+      "initial_owners": {
+        "(16, 1)": "IT",
+        "(9, 1)": "IT",
+        "(2, 6)": "IT",
+        "(8, 9)": "US",
+        "(16, 8)": "US"
+      },
+      "final_owners": {
+        "(16, 1)": "IT",
+        "(9, 1)": "IT",
+        "(2, 6)": "IT",
+        "(8, 9)": "IT",
+        "(16, 8)": "US"
+      }
+    },
+    {
+      "seed": 58,
+      "first_us_vp_loss": {
+        "seed": 58,
+        "step": 63,
+        "turn": 5,
+        "vp_coords": [
+          8,
+          9
+        ],
+        "vp_label": "I10",
+        "owner_before": "US",
+        "owner_after": "IT",
+        "actor_side": "IT",
+        "actor_id": "IT_5",
+        "action": "MoveAction",
+        "pos_before": [
+          8,
+          7
+        ],
+        "pos_after": [
+          8,
+          9
+        ],
+        "pos_before_label": "I8",
+        "pos_after_label": "I10",
+        "actor_route_recent": [
+          [
+            9,
+            1
+          ],
+          [
+            8,
+            3
+          ],
+          [
+            9,
+            5
+          ],
+          [
+            8,
+            7
+          ],
+          [
+            8,
+            9
+          ]
+        ],
+        "actor_route_recent_labels": [
+          "J2",
+          "I4",
+          "J6",
+          "I8",
+          "I10"
+        ]
+      },
+      "initial_owners": {
+        "(16, 1)": "IT",
+        "(9, 1)": "IT",
+        "(2, 6)": "IT",
+        "(8, 9)": "US",
+        "(16, 8)": "US"
+      },
+      "final_owners": {
+        "(16, 1)": "IT",
+        "(9, 1)": "IT",
+        "(2, 6)": "IT",
+        "(8, 9)": "IT",
+        "(16, 8)": "US"
+      }
+    },
+    {
+      "seed": 59,
+      "first_us_vp_loss": {
+        "seed": 59,
+        "step": 64,
+        "turn": 5,
+        "vp_coords": [
+          8,
+          9
+        ],
+        "vp_label": "I10",
+        "owner_before": "US",
+        "owner_after": "IT",
+        "actor_side": "IT",
+        "actor_id": "IT_5",
+        "action": "MoveAction",
+        "pos_before": [
+          8,
+          7
+        ],
+        "pos_after": [
+          8,
+          9
+        ],
+        "pos_before_label": "I8",
+        "pos_after_label": "I10",
+        "actor_route_recent": [
+          [
+            9,
+            1
+          ],
+          [
+            8,
+            3
+          ],
+          [
+            9,
+            5
+          ],
+          [
+            8,
+            7
+          ],
+          [
+            8,
+            9
+          ]
+        ],
+        "actor_route_recent_labels": [
+          "J2",
+          "I4",
+          "J6",
+          "I8",
+          "I10"
+        ]
+      },
+      "initial_owners": {
+        "(16, 1)": "IT",
+        "(9, 1)": "IT",
+        "(2, 6)": "IT",
+        "(8, 9)": "US",
+        "(16, 8)": "US"
+      },
+      "final_owners": {
+        "(16, 1)": "IT",
+        "(9, 1)": "IT",
+        "(2, 6)": "IT",
+        "(8, 9)": "IT",
+        "(16, 8)": "US"
+      }
+    },
+    {
+      "seed": 60,
+      "first_us_vp_loss": {
+        "seed": 60,
+        "step": 76,
+        "turn": 6,
+        "vp_coords": [
+          8,
+          9
+        ],
+        "vp_label": "I10",
+        "owner_before": "US",
+        "owner_after": "IT",
+        "actor_side": "IT",
+        "actor_id": "IT_5",
+        "action": "MoveAction",
+        "pos_before": [
+          8,
+          7
+        ],
+        "pos_after": [
+          8,
+          9
+        ],
+        "pos_before_label": "I8",
+        "pos_after_label": "I10",
+        "actor_route_recent": [
+          [
+            9,
+            1
+          ],
+          [
+            8,
+            3
+          ],
+          [
+            9,
+            5
+          ],
+          [
+            8,
+            7
+          ],
+          [
+            8,
+            9
+          ]
+        ],
+        "actor_route_recent_labels": [
+          "J2",
+          "I4",
+          "J6",
+          "I8",
+          "I10"
+        ]
+      },
+      "initial_owners": {
+        "(16, 1)": "IT",
+        "(9, 1)": "IT",
+        "(2, 6)": "IT",
+        "(8, 9)": "US",
+        "(16, 8)": "US"
+      },
+      "final_owners": {
+        "(16, 1)": "IT",
+        "(9, 1)": "IT",
+        "(2, 6)": "IT",
+        "(8, 9)": "IT",
+        "(16, 8)": "US"
+      }
+    },
+    {
+      "seed": 61,
+      "first_us_vp_loss": null,
+      "initial_owners": {
+        "(16, 1)": "IT",
+        "(9, 1)": "IT",
+        "(2, 6)": "IT",
+        "(8, 9)": "US",
+        "(16, 8)": "US"
+      },
+      "final_owners": {
+        "(16, 1)": "IT",
+        "(9, 1)": "IT",
+        "(2, 6)": "IT",
+        "(8, 9)": "US",
+        "(16, 8)": "US"
+      }
+    }
+  ]
+}

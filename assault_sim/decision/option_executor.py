@@ -72,6 +72,11 @@ class OptionExecutor(OptionExecutorCaptureMixin, OptionExecutorCombatMixin, Opti
         # Short-lived CAPTURE focus lock to reduce VP target ping-pong.
         self._capture_focus_lock_by_unit = {}
         self._capture_focus_ttl_steps = 3
+        # Per-turn cap for non-progress ATTACK fallback reposition (v6):
+        # allow only a small number to avoid reopening ATTACK->ADVANCE drift.
+        self._attack_reposition_budget_by_side_turn = {}
+        self._attack_reposition_budget_per_turn = 1
+        self._attack_reposition_budget_near_vp_per_turn = 3
 
     def _plan_unit_role(self, state, unit, strategy: StrategicIntent | None) -> str:
         if unit is None:
@@ -100,6 +105,7 @@ class OptionExecutor(OptionExecutorCaptureMixin, OptionExecutorCombatMixin, Opti
         action,
         option: TacticalOption,
         strategy: StrategicIntent | None,
+        planner_context=None,
         state=None,
         unit=None,
         budget_state: str = "UNBOUNDED",
@@ -145,6 +151,10 @@ class OptionExecutor(OptionExecutorCaptureMixin, OptionExecutorCombatMixin, Opti
             action.rl_capture_selected_move_reason = ""
         if not hasattr(action, "rl_capture_selected_dist_delta"):
             action.rl_capture_selected_dist_delta = None
+        if not hasattr(action, "rl_attack_fallback_to_move"):
+            action.rl_attack_fallback_to_move = False
+        if not hasattr(action, "rl_attack_fallback_reason"):
+            action.rl_attack_fallback_reason = ""
         if not hasattr(action, "rl_capture_suspected_progress_miss"):
             action.rl_capture_suspected_progress_miss = False
         if not hasattr(action, "rl_vp_stepin_legal"):
@@ -177,13 +187,26 @@ class OptionExecutor(OptionExecutorCaptureMixin, OptionExecutorCombatMixin, Opti
         if plan_unit is None and getattr(action, "unit_id", None) and state is not None:
             uid = getattr(action, "unit_id", None)
             plan_unit = next((u for u in getattr(state, "units", []) if getattr(u, "unit_id", None) == uid), None)
-        action.rl_plan_intent = self._plan_intent_name(strategy)
+        planner_intent = str(getattr(planner_context, "intent", "") or "").upper()
+        planner_stage = str(getattr(planner_context, "stage", "") or "").upper()
+        planner_focus_vp = getattr(planner_context, "focus_vp_id", None)
+        planner_replan_reason = str(getattr(planner_context, "replan_reason", "") or "")
+        planner_commit_age = int(getattr(planner_context, "commitment_age", 0) or 0)
+        planner_focus_switched = bool(getattr(planner_context, "focus_switched", False))
+        planner_side = str(getattr(planner_context, "side", "") or "")
+        action.rl_plan_intent = planner_intent or self._plan_intent_name(strategy)
         action.rl_plan_unit_role = self._plan_unit_role(state, plan_unit, strategy)
-        action.rl_plan_focus_vp_id = self._plan_focus_vp_id(state, plan_unit)
+        action.rl_plan_focus_vp_id = planner_focus_vp if planner_focus_vp else self._plan_focus_vp_id(state, plan_unit)
         action.rl_plan_step_id = self._next_plan_step_id()
+        action.rl_plan_stage = planner_stage or "EXECUTE"
+        action.rl_plan_side = planner_side
+        action.rl_plan_replan_reason = planner_replan_reason
+        action.rl_plan_commitment_age = planner_commit_age
+        action.rl_plan_focus_switched = planner_focus_switched
         action.rl_plan_budget_state = str(budget_state or "UNBOUNDED")
         action.rl_plan_progress_stub = 0.0
-        action.rl_plan_intent_alignment_stub = 0.0
+        l3 = str(getattr(action, "rl_l3_strategy", "") or "").upper()
+        action.rl_plan_intent_alignment_stub = 1.0 if (l3 and action.rl_plan_intent == l3) else 0.0
         # Keep short-lived target commitment during CAPTURE to reduce target ping-pong.
         if strategy == StrategicIntent.CAPTURE and unit is not None:
             focus_hex = self._objective_target_hex(state, unit)
@@ -214,6 +237,7 @@ class OptionExecutor(OptionExecutorCaptureMixin, OptionExecutorCombatMixin, Opti
         attack_mode: int | None = None,
         strategy: StrategicIntent | None = None,
         objective_tracked_side: str | None = None,
+        planner_context=None,
     ):
 
         if unit is None:
@@ -221,12 +245,25 @@ class OptionExecutor(OptionExecutorCaptureMixin, OptionExecutorCombatMixin, Opti
         self._tick_capture_focus_lock(unit)
         self._update_position_history(unit)
         self._prepare_action_cache(state)
+        planner_managed = planner_context is not None
+        planner_stage = str(getattr(planner_context, "stage", "") or "").upper()
+        if planner_stage == "STEP_IN" and strategy != StrategicIntent.CAPTURE:
+            strategy = StrategicIntent.CAPTURE
+            if option in (TacticalOption.HOLD, TacticalOption.RETREAT):
+                option = TacticalOption.ADVANCE
+        elif planner_stage == "HOLD" and strategy == StrategicIntent.CAPTURE and option == TacticalOption.RETREAT:
+            option = TacticalOption.HOLD
         tracked_side_norm = self._normalize_side_key(objective_tracked_side)
         unit_side_norm = self._normalize_side_key(getattr(unit, "side", None))
         attacker_context = bool(tracked_side_norm) and unit_side_norm == tracked_side_norm
         defender_context = bool(tracked_side_norm) and unit_side_norm != tracked_side_norm
         objectives_pending = self._has_uncaptured_objective_for_side(state, unit.side)
         capture_emergency = self._is_capture_emergency(state, unit)
+        nearest_vp_d_for_force = self._nearest_uncaptured_vp_dist(state, unit)
+        near_objective_force_ctx = (
+            nearest_vp_d_for_force is not None
+            and float(nearest_vp_d_for_force) <= 2.0
+        )
         aggressive_l3_forced = False
         l3_capture_forced_reason = ""
         if (
@@ -241,6 +278,8 @@ class OptionExecutor(OptionExecutorCaptureMixin, OptionExecutorCombatMixin, Opti
             objectives_pending
             and not capture_emergency
             and (not tracked_side_norm or attacker_context)
+            and near_objective_force_ctx
+            and strategy == StrategicIntent.PRESERVE
             and strategy != StrategicIntent.CAPTURE
         ):
             strategy = StrategicIntent.CAPTURE
@@ -252,11 +291,12 @@ class OptionExecutor(OptionExecutorCaptureMixin, OptionExecutorCombatMixin, Opti
             objectives_pending
             and not capture_emergency
             and (not tracked_side_norm or attacker_context)
+            and near_objective_force_ctx
         ):
             quota = self._l3_capture_quota_slot(unit.side, turn_now)
             quota["decision_count"] = int(quota.get("decision_count", 0)) + 1
             need_capture = int(quota.get("capture_count", 0)) < int(quota.get("required_capture", 0))
-            if need_capture and strategy != StrategicIntent.CAPTURE:
+            if need_capture and strategy in (StrategicIntent.PRESERVE, StrategicIntent.CAPTURE):
                 strategy = StrategicIntent.CAPTURE
                 aggressive_l3_forced = True
                 l3_capture_forced_reason = "minimum_capture_intent_quota"
@@ -272,6 +312,7 @@ class OptionExecutor(OptionExecutorCaptureMixin, OptionExecutorCombatMixin, Opti
                     action_to_tag,
                     chosen_option,
                     strategy,
+                    planner_context=planner_context,
                     state=state,
                     unit=unit,
                     budget_state="UNBOUNDED",
@@ -283,7 +324,13 @@ class OptionExecutor(OptionExecutorCaptureMixin, OptionExecutorCombatMixin, Opti
                 )
 
             if option == TacticalOption.ATTACK:
-                return _tag_no_guard(self._execute_attack(state, unit, attack_mode), option)
+                allow_move_fallback = bool(
+                    strategy == StrategicIntent.CAPTURE and self._has_uncaptured_objective(state, unit)
+                )
+                return _tag_no_guard(
+                    self._execute_attack(state, unit, attack_mode, allow_move_fallback=allow_move_fallback),
+                    option
+                )
             if option == TacticalOption.ADVANCE:
                 return _tag_no_guard(self._move_closer(state, unit, capture_strict=False), option)
             if option == TacticalOption.FLANK:
@@ -308,7 +355,9 @@ class OptionExecutor(OptionExecutorCaptureMixin, OptionExecutorCombatMixin, Opti
             strategy == StrategicIntent.PRESERVE
             and objectives_pending
             and not capture_emergency
+            and not planner_managed
             and (not tracked_side_norm or attacker_context)
+            and near_objective_force_ctx
         ):
             strategy = StrategicIntent.CAPTURE
         # If we're behind on objectives, force CAPTURE intent (unless emergency).
@@ -317,6 +366,7 @@ class OptionExecutor(OptionExecutorCaptureMixin, OptionExecutorCombatMixin, Opti
             and objectives_pending
             and self._is_behind_on_objectives(state, unit.side)
             and not capture_emergency
+            and not planner_managed
             and (not tracked_side_norm or attacker_context)
         ):
             strategy = StrategicIntent.CAPTURE
@@ -326,7 +376,10 @@ class OptionExecutor(OptionExecutorCaptureMixin, OptionExecutorCombatMixin, Opti
             strategy == StrategicIntent.DENY
             and objectives_pending
             and not capture_emergency
+            and not planner_managed
             and (not tracked_side_norm or attacker_context)
+            and near_objective_force_ctx
+            and not self._has_immediate_attack(state, unit)
         ):
             strategy = StrategicIntent.CAPTURE
         # Scenario role guardrail:
@@ -354,6 +407,7 @@ class OptionExecutor(OptionExecutorCaptureMixin, OptionExecutorCombatMixin, Opti
                     step_into_vp,
                     TacticalOption.ADVANCE,
                     strategy,
+                    planner_context=planner_context,
                     state=state,
                     unit=unit,
                     legal_override=True,
@@ -371,6 +425,7 @@ class OptionExecutor(OptionExecutorCaptureMixin, OptionExecutorCombatMixin, Opti
                 action,
                 chosen_option,
                 strategy,
+                planner_context=planner_context,
                 state=state,
                 unit=unit,
                 l3_capture_forced=bool(aggressive_l3_forced),
@@ -382,12 +437,24 @@ class OptionExecutor(OptionExecutorCaptureMixin, OptionExecutorCombatMixin, Opti
         turn_now = int(getattr(state, "turn", 0))
         nearest_vp_d = self._nearest_uncaptured_vp_dist(state, unit)
         budgeted_context = (
-            objectives_pending
+            strategy == StrategicIntent.CAPTURE
+            and objectives_pending
             and not capture_emergency
             and (not tracked_side_norm or attacker_context)
             and nearest_vp_d is not None
             and nearest_vp_d <= 3
         )
+        # ATTRIT/DENY anti-collapse: if strategy asks for pressure and a legal
+        # attack exists, avoid drifting to ADVANCE by default (outside strict
+        # near-objective CAPTURE pressure contexts).
+        if (
+            strategy in (StrategicIntent.ATTRIT, StrategicIntent.DENY)
+            and option == TacticalOption.ADVANCE
+            and self._has_immediate_attack(state, unit)
+            and not planner_managed
+            and not budgeted_context
+        ):
+            option = TacticalOption.ATTACK
 
         legal_override_applied = False
         emergency_override_applied = bool(capture_emergency)
@@ -405,6 +472,7 @@ class OptionExecutor(OptionExecutorCaptureMixin, OptionExecutorCombatMixin, Opti
                 action_to_tag,
                 chosen_option,
                 strategy,
+                planner_context=planner_context,
                 state=state,
                 unit=unit,
                 budget_state=budget_state,
@@ -414,6 +482,84 @@ class OptionExecutor(OptionExecutorCaptureMixin, OptionExecutorCombatMixin, Opti
                 l3_capture_forced=bool(aggressive_l3_forced),
                 l3_capture_force_reason=(l3_capture_forced_reason if aggressive_l3_forced else ""),
             )
+
+        def _stabilize_non_retreat_move(action_to_tag, chosen_option: TacticalOption):
+            if action_to_tag is None:
+                return action_to_tag
+            if (
+                chosen_option not in (TacticalOption.ADVANCE, TacticalOption.FLANK)
+                or not objectives_pending
+                or capture_emergency
+            ):
+                return action_to_tag
+            path = getattr(action_to_tag, "path", None)
+            end = path[-1] if path else None
+            reversal = bool(end is not None and self._is_reversal_move(unit, end))
+            low_threat = self._enemy_count_within(state, unit, radius=2) == 0
+            if reversal and low_threat:
+                nonlocal legal_override_applied, override_reason
+                legal_override_applied = True
+                override_reason = "advance_flank_reversal_blocked_low_threat"
+                # Avoid returning WAIT here: in some runtime flows this can stall
+                # AI progression. Prefer an alternative non-reversal movement.
+                actions = self._get_unit_actions(state, unit)
+                unit_pos = getattr(unit, "position", None)
+                unit_pos_t = (
+                    (getattr(unit_pos, "q", None), getattr(unit_pos, "r", None))
+                    if unit_pos is not None
+                    else None
+                )
+                moves = [a for a in actions if getattr(a, "path", None)]
+                best_cand = None
+                best_cand_dist = None
+                for cand in moves:
+                    cpath = getattr(cand, "path", None)
+                    cend = cpath[-1] if cpath else None
+                    if cend is None:
+                        continue
+                    cend_t = (getattr(cend, "q", None), getattr(cend, "r", None))
+                    # Real displacement only; avoid pseudo-moves that keep position.
+                    if unit_pos_t is not None and cend_t == unit_pos_t:
+                        continue
+                    if self._is_reversal_move(unit, cend):
+                        continue
+                    d_obj = self._nearest_uncaptured_vp_dist_from_pos(
+                        state,
+                        getattr(unit, "side", None),
+                        cend,
+                    )
+                    d_val = float(d_obj) if d_obj is not None else 999.0
+                    if best_cand is None or d_val < float(best_cand_dist):
+                        best_cand = cand
+                        best_cand_dist = d_val
+                if best_cand is not None:
+                    return best_cand
+                # If no safe alternative exists, keep original action instead of WAIT
+                # to preserve turn progression.
+                return action_to_tag
+            return action_to_tag
+
+        def _replace_non_displacement_move(action_to_tag, chosen_option: TacticalOption):
+            if action_to_tag is None:
+                return action_to_tag
+            if chosen_option not in (TacticalOption.ADVANCE, TacticalOption.FLANK, TacticalOption.RETREAT):
+                return action_to_tag
+            unit_pos = getattr(unit, "position", None)
+            path = getattr(action_to_tag, "path", None)
+            end = path[-1] if path else None
+            if unit_pos is None or end is None:
+                return action_to_tag
+            same_hex = (
+                getattr(end, "q", None) == getattr(unit_pos, "q", None)
+                and getattr(end, "r", None) == getattr(unit_pos, "r", None)
+            )
+            if not same_hex:
+                return action_to_tag
+
+            nonlocal legal_override_applied, override_reason
+            legal_override_applied = True
+            override_reason = "non_displacement_move_wait_fallback"
+            return WaitAction(unit.unit_id)
 
         if (
             self._has_uncaptured_objective(state, unit)
@@ -475,6 +621,28 @@ class OptionExecutor(OptionExecutorCaptureMixin, OptionExecutorCombatMixin, Opti
             override_reason = "retreat_blocked_pending_objectives"
             option = TacticalOption.ADVANCE
         if (
+            option == TacticalOption.RETREAT
+            and objectives_pending
+            and not capture_emergency
+            and self._enemy_count_within(state, unit, radius=2) <= 1
+        ):
+            # v16: avoid passive drift in Human-vs-AI when objectives are still
+            # open and local pressure is low (even if opponent is also retreating).
+            legal_override_applied = True
+            override_reason = "retreat_blocked_low_threat_objective_pressure"
+            option = TacticalOption.ADVANCE
+        if (
+            option == TacticalOption.RETREAT
+            and objectives_pending
+            and not capture_emergency
+            and int(getattr(state, "turn", 0) or 0) <= 3
+        ):
+            # v18: opening-turn pressure lock. In early turns, do not retreat
+            # while objectives remain pending unless there is a real emergency.
+            legal_override_applied = True
+            override_reason = "retreat_blocked_opening_turn_pressure"
+            option = TacticalOption.ADVANCE
+        if (
             strategy == StrategicIntent.PRESERVE
             and option in (TacticalOption.RETREAT, TacticalOption.HOLD, TacticalOption.ADVANCE)
             and not capture_emergency
@@ -508,18 +676,30 @@ class OptionExecutor(OptionExecutorCaptureMixin, OptionExecutorCombatMixin, Opti
                 # If close to VP and trying to camp-attack, force movement toward capture.
                 if nearest_vp_d is not None and nearest_vp_d <= 2:
                     return _tag_with_budget(self._move_closer(state, unit, capture_strict=True), TacticalOption.ADVANCE)
-            return _tag_with_budget(self._execute_attack(state, unit, attack_mode), option)
+            allow_move_fallback = bool(
+                strategy == StrategicIntent.CAPTURE and self._has_uncaptured_objective(state, unit)
+            )
+            return _tag_with_budget(
+                self._execute_attack(state, unit, attack_mode, allow_move_fallback=allow_move_fallback),
+                option
+            )
 
         # -------------------------------------------------
         if option == TacticalOption.ADVANCE:
+            advance_action = self._move_closer(state, unit, capture_strict=(strategy == StrategicIntent.CAPTURE))
+            advance_action = _stabilize_non_retreat_move(advance_action, TacticalOption.ADVANCE)
+            advance_action = _replace_non_displacement_move(advance_action, TacticalOption.ADVANCE)
             return _tag_with_budget(
-                self._move_closer(state, unit, capture_strict=(strategy == StrategicIntent.CAPTURE)),
+                advance_action,
                 option,
             )
 
         # -------------------------------------------------
         if option == TacticalOption.FLANK:
-            return _tag_with_budget(self._flank_move(state, unit), option)
+            flank_action = self._flank_move(state, unit)
+            flank_action = _stabilize_non_retreat_move(flank_action, TacticalOption.FLANK)
+            flank_action = _replace_non_displacement_move(flank_action, TacticalOption.FLANK)
+            return _tag_with_budget(flank_action, option)
 
         # -------------------------------------------------
         # ✅ RETREAT (NO ATAQUE)
@@ -555,7 +735,8 @@ class OptionExecutor(OptionExecutorCaptureMixin, OptionExecutorCombatMixin, Opti
                         TacticalOption.ADVANCE,
                     )
 
-            return _tag_with_budget(action or WaitAction(unit.unit_id), option)
+            final_retreat = _replace_non_displacement_move(action or WaitAction(unit.unit_id), TacticalOption.RETREAT)
+            return _tag_with_budget(final_retreat, option)
 
         # -------------------------------------------------
         # ✅ HOLD (MEJORADO CON FALLBACK)
@@ -656,6 +837,34 @@ class OptionExecutor(OptionExecutorCaptureMixin, OptionExecutorCombatMixin, Opti
             if safe_hex_distance(unit.position, e.position) <= int(radius):
                 cnt += 1
         return cnt
+
+    def _attack_reposition_slot(self, side, turn: int, near_vp: bool = False):
+        side_key = self._normalize_side_key(side)
+        key = (side_key, int(turn))
+        slot = self._attack_reposition_budget_by_side_turn.get(key)
+        desired_limit = int(
+            self._attack_reposition_budget_near_vp_per_turn
+            if near_vp
+            else self._attack_reposition_budget_per_turn
+        )
+        if slot is None:
+            slot = {
+                "used": 0,
+                "limit": desired_limit,
+            }
+            self._attack_reposition_budget_by_side_turn[key] = slot
+        else:
+            # Dynamic budget can only widen in near-VP contexts during the same turn.
+            slot["limit"] = max(int(slot.get("limit", 0)), desired_limit)
+        return slot
+
+    def _can_consume_attack_reposition_budget(self, side, turn: int, near_vp: bool = False) -> bool:
+        slot = self._attack_reposition_slot(side, turn, near_vp=near_vp)
+        return int(slot.get("used", 0)) < int(slot.get("limit", 0))
+
+    def _consume_attack_reposition_budget(self, side, turn: int, near_vp: bool = False) -> None:
+        slot = self._attack_reposition_slot(side, turn, near_vp=near_vp)
+        slot["used"] = int(slot.get("used", 0)) + 1
 
     pass
 

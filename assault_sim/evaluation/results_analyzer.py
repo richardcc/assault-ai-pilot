@@ -235,6 +235,10 @@ class ResultsAnalyzer:
         intent_commitment_stub_rates = []
         role_diversity_stub_vals = []
         plan_role_counts_totals = defaultdict(int)
+        plan_focus_switch_total = 0
+        plan_stage_counts_totals = defaultdict(int)
+        plan_replan_reason_totals = defaultdict(int)
+        action_finalize_reason_totals = defaultdict(int)
         lote_e_attack_cost_vals = []
         lote_e_capture_window_vals = []
         lote_e_expected_vp_swing_vals = []
@@ -262,6 +266,8 @@ class ResultsAnalyzer:
         capture_move_candidates_totals = 0
         capture_reversal_filtered_totals = 0
         capture_selected_move_reason_totals = defaultdict(int)
+        attack_fallback_to_move_total = 0
+        attack_fallback_reason_totals = defaultdict(int)
         vp_stepin_legal_total = 0
         vp_stepin_selected_total = 0
         vp_stepin_block_reason_totals = defaultdict(int)
@@ -272,6 +278,8 @@ class ResultsAnalyzer:
         vp_control_after_entry_turns_all = []
         per_unit_vp_entry_attempts_totals = defaultdict(int)
         per_unit_vp_entry_success_totals = defaultdict(int)
+        plan_success_k_vals = []
+        plan_latency_to_progress_vals = []
 
         for r in self.results:
             mission = r.get("mission", {}) or {}
@@ -355,6 +363,25 @@ class ResultsAnalyzer:
             for role, count in (mission.get("plan_role_counts_stub", {}) or {}).items():
                 try:
                     plan_role_counts_totals[str(role)] += int(count)
+                except Exception:
+                    pass
+            try:
+                plan_focus_switch_total += int(mission.get("plan_focus_switch_count", 0))
+            except Exception:
+                pass
+            for stage, count in (mission.get("plan_stage_counts", {}) or {}).items():
+                try:
+                    plan_stage_counts_totals[str(stage)] += int(count)
+                except Exception:
+                    pass
+            for reason, count in (mission.get("plan_replan_reason_counts", {}) or {}).items():
+                try:
+                    plan_replan_reason_totals[str(reason)] += int(count)
+                except Exception:
+                    pass
+            for reason, count in (mission.get("action_finalize_reason_counts", {}) or {}).items():
+                try:
+                    action_finalize_reason_totals[str(reason)] += int(count)
                 except Exception:
                     pass
             if "lote_e_attack_opportunity_cost_near_vp_norm" in mission:
@@ -454,6 +481,15 @@ class ResultsAnalyzer:
                 except Exception:
                     pass
             try:
+                attack_fallback_to_move_total += int(mission.get("attack_fallback_to_move_count", 0))
+            except Exception:
+                pass
+            for reason, count in (mission.get("attack_fallback_reason_counts", {}) or {}).items():
+                try:
+                    attack_fallback_reason_totals[str(reason)] += int(count)
+                except Exception:
+                    pass
+            try:
                 vp_stepin_legal_total += int(mission.get("vp_stepin_legal_count", 0))
                 vp_stepin_selected_total += int(mission.get("vp_stepin_selected_count", 0))
             except Exception:
@@ -489,6 +525,16 @@ class ResultsAnalyzer:
             for uid, count in (mission.get("per_unit_vp_entry_success", {}) or {}).items():
                 try:
                     per_unit_vp_entry_success_totals[str(uid)] += int(count)
+                except Exception:
+                    pass
+            if "plan_success_k" in mission:
+                try:
+                    plan_success_k_vals.append(float(mission.get("plan_success_k", 0.0)))
+                except Exception:
+                    pass
+            if mission.get("plan_latency_to_progress") is not None:
+                try:
+                    plan_latency_to_progress_vals.append(float(mission.get("plan_latency_to_progress")))
                 except Exception:
                     pass
 
@@ -604,6 +650,22 @@ class ResultsAnalyzer:
                 statistics.mean(role_diversity_stub_vals) if role_diversity_stub_vals else 0.0
             ),
             "plan_role_counts_stub": dict(plan_role_counts_totals),
+            "plan_focus_switch_count": int(plan_focus_switch_total),
+            "plan_commit_rate": (
+                1.0 - (float(plan_focus_switch_total) / max(1.0, float(total_decisions)))
+            ),
+            "focus_switch_rate": (
+                float(plan_focus_switch_total) / max(1.0, float(total_decisions))
+            ),
+            "plan_stage_counts": dict(plan_stage_counts_totals),
+            "plan_replan_reason_counts": dict(plan_replan_reason_totals),
+            "action_finalize_reason_counts": dict(action_finalize_reason_totals),
+            "plan_success_k": (
+                statistics.mean(plan_success_k_vals) if plan_success_k_vals else 0.0
+            ),
+            "plan_latency_to_progress": (
+                statistics.mean(plan_latency_to_progress_vals) if plan_latency_to_progress_vals else None
+            ),
             "lote_e_attack_opportunity_cost_near_vp_norm": (
                 statistics.mean(lote_e_attack_cost_vals) if lote_e_attack_cost_vals else 0.0
             ),
@@ -640,6 +702,8 @@ class ResultsAnalyzer:
             "capture_move_candidates_total": int(capture_move_candidates_totals),
             "capture_reversal_filtered_total": int(capture_reversal_filtered_totals),
             "capture_selected_move_reason_counts": dict(capture_selected_move_reason_totals),
+            "attack_fallback_to_move_count": int(attack_fallback_to_move_total),
+            "attack_fallback_reason_counts": dict(attack_fallback_reason_totals),
             "vp_stepin_legal_count": int(vp_stepin_legal_total),
             "vp_stepin_selected_count": int(vp_stepin_selected_total),
             "vp_stepin_selection_rate": (
@@ -892,6 +956,11 @@ class ResultsAnalyzer:
         if selected_move_reasons:
             pretty_selected = ", ".join(f"{k}:{v}" for k, v in sorted(selected_move_reasons.items(), key=lambda kv: kv[1], reverse=True))
             print(f"capture_selected_move_reasons: {pretty_selected}")
+        print(f"attack_fallback_to_move_count: {mission.get('attack_fallback_to_move_count', 0)}")
+        attack_fallback_reasons = mission.get("attack_fallback_reason_counts", {}) or {}
+        if attack_fallback_reasons:
+            pretty_attack_fallback = ", ".join(f"{k}:{v}" for k, v in sorted(attack_fallback_reasons.items(), key=lambda kv: kv[1], reverse=True))
+            print(f"attack_fallback_reasons: {pretty_attack_fallback}")
         per_unit_attempts = mission.get("per_unit_vp_entry_attempts", {}) or {}
         per_unit_success = mission.get("per_unit_vp_entry_success", {}) or {}
         if per_unit_attempts:

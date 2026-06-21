@@ -19,7 +19,7 @@ class PPOConfig:
 
     # Loss
     VALUE_COEF = 0.5
-    ENTROPY_COEF = 0.05        # 👇 lo bajamos dinámico luego
+    ENTROPY_COEF = 0.07        # v4: bump exploration to break policy plateau
 
     # Parallelism
     NUM_ENVS = 22

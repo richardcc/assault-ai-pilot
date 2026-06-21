@@ -6,6 +6,7 @@ import { axialToPixel, HEX_SIZE } from "../render/hexGridRenderer";
 // --------------------------------------------------
 let lastHexKey = "";
 let cachedTargeting: any = null;
+let targetingRequestSeq = 0;
 
 
 // --------------------------------------------------
@@ -85,18 +86,38 @@ export async function updateDebugVector({
   // --------------------------------------------------
   const hexKey = `${selectedUnitId}_${closestHex.q}_${closestHex.r}`;
 
+  const attackerId = unit.unit_id ?? unit.id ?? selectedUnitId;
   if (hexKey !== lastHexKey) {
     lastHexKey = hexKey;
+    // Drop stale payload immediately so UI never shows previous
+    // target's distance/LOS while a new request is in flight.
+    cachedTargeting = null;
+    const reqSeq = ++targetingRequestSeq;
 
     try {
       const res = await fetch(
-        `http://127.0.0.1:8000/targeting?attacker_id=${selectedUnitId}&q=${closestHex.q}&r=${closestHex.r}`
+        `http://127.0.0.1:8000/targeting?attacker_id=${attackerId}&q=${closestHex.q}&r=${closestHex.r}`
       );
-
-      cachedTargeting = await res.json();
+      const payload = await res.json();
+      // Ignore out-of-order responses from older requests.
+      if (reqSeq !== targetingRequestSeq) return;
+      if (!res.ok) {
+        cachedTargeting = null;
+      } else if (
+        payload
+        && typeof payload.distance === "number"
+        && typeof payload.los === "string"
+      ) {
+        cachedTargeting = payload;
+      } else {
+        cachedTargeting = null;
+      }
 
     } catch (e) {
-      cachedTargeting = null;
+      // Ignore out-of-order failures as well.
+      if (reqSeq === targetingRequestSeq) {
+        cachedTargeting = null;
+      }
     }
   }
 
