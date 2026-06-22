@@ -30,6 +30,10 @@ class RewardConfig:
     # Action regularization
     wait_penalty: float = 0.25
     repeat_action_penalty: float = 0.05
+    action_finalization_fallback_penalty: float = 0.08
+    invalid_action_finalization_penalty: float = 0.20
+    wait_recovery_backstep_setup_penalty: float = 0.25
+    setup_progress_bonus: float = 0.12
 
     # Objectives/endgame/time
     vp_delta_weight: float = 1.5

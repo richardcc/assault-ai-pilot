@@ -153,6 +153,7 @@ class Evaluator:
         capture_success = 0
         vp_control_advantage_steps = 0
         first_vp_entry_step = None
+        first_progress_step = None
         contact_events = 0
         contact_to_capture_success = 0
         last_l3_by_unit = {}
@@ -169,8 +170,17 @@ class Evaluator:
         plan_stub_decisions = 0
         plan_stub_intent_aligned = 0
         plan_role_counts = defaultdict(int)
+        plan_role_unknown_reason_counts = defaultdict(int)
+        capture_branch_counts = defaultdict(int)
+        near_vp_l2_transition_counts = defaultdict(int)
+        near_vp_l2_transition_by_l3_counts = defaultdict(int)
         plan_focus_switch_count = 0
         plan_replan_reason_counts = defaultdict(int)
+        plan_fallback_reason_counts = defaultdict(int)
+        budget_remaining_by_role_last = {}
+        budget_violation_count_last = 0
+        budget_violation_total = 0
+        budget_decision_count = 0
         plan_stage_counts = defaultdict(int)
         action_finalize_reason_counts = defaultdict(int)
         l3_transition_counts = defaultdict(int)
@@ -178,6 +188,9 @@ class Evaluator:
         lote_e_capture_window_vals = []
         lote_e_expected_vp_swing_vals = []
         lote_e_expected_trade_vals = []
+        invalid_action_count = 0
+        fallback_action_count = 0
+        wait_recovery_sb3_backstep_count = 0
 
         # ✅ CRÍTICO → LOG REAL DE EVENTOS
         events_log = []
@@ -378,6 +391,19 @@ class Evaluator:
                     sampled_option_counts[trace.sampled_option] += 1
                     resolved_option_counts[trace.resolved_option] += 1
                     decision_trace_counts[f"{trace.sampled_option}->{trace.executed_option}"] += 1
+                    try:
+                        near_vp_dist = info.get("objective_dist_before", None)
+                        if near_vp_dist is not None and float(near_vp_dist) <= 2.0:
+                            action_class = str(info.get("action_class", "") or "UNKNOWN")
+                            l3_name = str(info.get("l3_strategy", "") or "UNKNOWN").upper()
+                            near_vp_l2_transition_counts[
+                                f"{trace.sampled_option}->{trace.resolved_option}->{action_class}"
+                            ] += 1
+                            near_vp_l2_transition_by_l3_counts[
+                                f"{l3_name}:{trace.sampled_option}->{trace.resolved_option}->{action_class}"
+                            ] += 1
+                    except Exception:
+                        pass
                     schema_version = getattr(trace, "schema_version", None)
                     if trace.was_forced:
                         forced_steps += 1
@@ -408,6 +434,12 @@ class Evaluator:
                         strategy_option_map[formation][option.name] += 1
                 plan_role = str(info.get("plan_unit_role", "") or "UNKNOWN").upper()
                 plan_role_counts[plan_role] += 1
+                role_unknown_reason = str(info.get("plan_role_unknown_reason", "") or "")
+                if role_unknown_reason:
+                    plan_role_unknown_reason_counts[role_unknown_reason] += 1
+                capture_branch = str(info.get("capture_branch", "") or "")
+                if capture_branch:
+                    capture_branch_counts[capture_branch] += 1
                 if bool(info.get("plan_focus_switched", False)):
                     plan_focus_switch_count += 1
                 stage = str(info.get("plan_stage", "") or "UNKNOWN").upper()
@@ -415,9 +447,28 @@ class Evaluator:
                 replan_reason = str(info.get("plan_replan_reason", "") or "")
                 if replan_reason:
                     plan_replan_reason_counts[replan_reason] += 1
+                fallback_reason = str(info.get("plan_fallback_reason", "") or "")
+                if fallback_reason:
+                    plan_fallback_reason_counts[fallback_reason] += 1
+                plan_budget_state = str(info.get("plan_budget_state", "UNBOUNDED") or "UNBOUNDED").upper()
+                if plan_budget_state in {"BUDGETED", "EXHAUSTED"}:
+                    budget_decision_count += 1
+                remaining_raw = info.get("plan_budget_remaining_by_role", {}) or {}
+                if isinstance(remaining_raw, dict):
+                    budget_remaining_by_role_last = {
+                        str(k): int(v) for k, v in remaining_raw.items() if isinstance(v, (int, float))
+                    }
+                budget_violation_count_last = int(info.get("plan_budget_violation_count", 0) or 0)
+                budget_violation_total += int(info.get("plan_budget_violation_delta", 0) or 0)
                 finalize_reason = str(info.get("action_finalized_reason", "") or "")
                 if finalize_reason:
                     action_finalize_reason_counts[finalize_reason] += 1
+                    if finalize_reason != "ok":
+                        fallback_action_count += 1
+                    if finalize_reason in {"not_in_catalog", "empty_action_id", "non_displacement"}:
+                        invalid_action_count += 1
+                    if finalize_reason == "wait_recovery_sb3_backstep":
+                        wait_recovery_sb3_backstep_count += 1
                 l3_sampled = str(info.get("l3_sampled", "") or "")
                 l3_effective = str(info.get("l3_effective", "") or "")
                 l3_executed = str(info.get("l3_executed", "") or "")
@@ -480,6 +531,8 @@ class Evaluator:
                     selected_reason = str(info.get("capture_selected_move_reason", "") or "")
                     if selected_reason:
                         capture_selected_move_reason_counts[selected_reason] += 1
+                        if first_progress_step is None and selected_reason == "objective_progress_move":
+                            first_progress_step = steps + 1
                 if bool(info.get("attack_fallback_to_move", False)):
                     attack_fallback_to_move_count += 1
                 af_reason = str(info.get("attack_fallback_reason", "") or "")
@@ -533,6 +586,8 @@ class Evaluator:
                     try:
                         vp_progress_sum += float(dist_before) - float(dist_after)
                         vp_progress_count += 1
+                        if first_progress_step is None and float(dist_after) < float(dist_before):
+                            first_progress_step = steps + 1
                     except Exception:
                         pass
 
@@ -756,12 +811,50 @@ class Evaluator:
             "plan_focus_switch_count": int(plan_focus_switch_count),
             "plan_stage_counts": dict(plan_stage_counts),
             "plan_replan_reason_counts": dict(plan_replan_reason_counts),
+            "plan_fallback_reason_counts": dict(plan_fallback_reason_counts),
+            "plan_role_unknown_reason_counts": dict(plan_role_unknown_reason_counts),
+            "capture_branch_counts": dict(capture_branch_counts),
+            "near_vp_l2_transition_counts": dict(near_vp_l2_transition_counts),
+            "near_vp_l2_transition_by_l3_counts": dict(near_vp_l2_transition_by_l3_counts),
+            "budget_remaining_by_role": dict(budget_remaining_by_role_last),
+            "budget_violation_count": int(max(budget_violation_count_last, budget_violation_total)),
+            "budget_violation_rate": (
+                float(budget_violation_total) / max(1.0, float(budget_decision_count))
+            ),
+            "budget_compliance_rate": (
+                1.0 - (float(budget_violation_total) / max(1.0, float(budget_decision_count)))
+            ),
             "action_finalize_reason_counts": dict(action_finalize_reason_counts),
+            "invalid_action_count": int(invalid_action_count),
+            "fallback_action_count": int(fallback_action_count),
+            "wait_recovery_sb3_backstep_count": int(wait_recovery_sb3_backstep_count),
+            "invalid_action_rate": (
+                float(invalid_action_count) / max(1.0, float(rl_decisions))
+            ),
+            "fallback_rate": (
+                float(fallback_action_count) / max(1.0, float(rl_decisions))
+            ),
+            "wait_recovery_sb3_backstep_rate": (
+                float(wait_recovery_sb3_backstep_count) / max(1.0, float(rl_decisions))
+            ),
             "plan_success_k": (
                 float(vp_entries_taken) / max(1.0, float(vp_entry_opportunities))
             ),
             "plan_latency_to_progress": (
                 float(first_vp_entry_step) if first_vp_entry_step is not None else None
+            ),
+            "turn_first_contact": int(first_vp_contact_step) if first_vp_contact_step is not None else None,
+            "turn_first_progress": int(first_progress_step) if first_progress_step is not None else None,
+            "turn_first_capture": int(first_vp_entry_step) if first_vp_entry_step is not None else None,
+            "contact_to_progress_delay": (
+                int(first_progress_step - first_vp_contact_step)
+                if first_progress_step is not None and first_vp_contact_step is not None
+                else None
+            ),
+            "progress_to_capture_delay": (
+                int(first_vp_entry_step - first_progress_step)
+                if first_vp_entry_step is not None and first_progress_step is not None
+                else None
             ),
             "capture_progress_candidate_mean": (
                 capture_progress_candidate_total / max(1, capture_attempts)

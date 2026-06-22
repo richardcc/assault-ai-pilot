@@ -9,6 +9,7 @@ from assault_sim.config.movement_tactical_config import load_movement_tactical_c
 from assault_sim.decision.option_executor.combat import OptionExecutorCombatMixin
 from assault_sim.decision.option_executor.capture import OptionExecutorCaptureMixin
 from assault_sim.decision.option_executor.state import OptionExecutorStateMixin
+from assault_sim.decision.role_mapper import assign_role
 from assault_model.map.hex_utils import safe_hex_distance
 import copy
 
@@ -79,26 +80,19 @@ class OptionExecutor(OptionExecutorCaptureMixin, OptionExecutorCombatMixin, Opti
         self._attack_reposition_budget_near_vp_per_turn = 3
 
     def _plan_unit_role(self, state, unit, strategy: StrategicIntent | None) -> str:
-        if unit is None:
-            return "UNKNOWN"
-        if state is None:
-            if strategy == StrategicIntent.PRESERVE:
-                return "RESERVE"
-            if strategy == StrategicIntent.DENY:
-                return "HOLD_VP"
-            return "UNKNOWN"
-        local_role = self._local_role_kind(state, unit)
-        if local_role == "SUPPORT":
-            return "SUPPORT_FIRE"
-        if local_role == "ASSAULT":
-            return "ASSAULT"
+        role = assign_role(state, unit, self._plan_intent_name(strategy))
+        if role != "UNKNOWN":
+            return role
+        # Never emit UNKNOWN for normal planning flow; keep deterministic fallback.
         if strategy == StrategicIntent.PRESERVE:
             return "RESERVE"
         if strategy == StrategicIntent.DENY:
             return "HOLD_VP"
         if strategy == StrategicIntent.CAPTURE:
             return "SCREEN"
-        return "UNKNOWN"
+        if strategy == StrategicIntent.ATTRIT:
+            return "ASSAULT"
+        return "SCREEN"
 
     def _tag_action(
         self,
@@ -114,6 +108,11 @@ class OptionExecutor(OptionExecutorCaptureMixin, OptionExecutorCombatMixin, Opti
         override_reason: str = "",
         l3_capture_forced: bool = False,
         l3_capture_force_reason: str = "",
+        plan_fallback_reason: str = "",
+        budget_remaining_by_role: dict | None = None,
+        budget_violation_count: int = 0,
+        budget_violation_delta: int = 0,
+        capture_branch: str = "",
     ):
         if action is None:
             return None
@@ -195,7 +194,21 @@ class OptionExecutor(OptionExecutorCaptureMixin, OptionExecutorCombatMixin, Opti
         planner_focus_switched = bool(getattr(planner_context, "focus_switched", False))
         planner_side = str(getattr(planner_context, "side", "") or "")
         action.rl_plan_intent = planner_intent or self._plan_intent_name(strategy)
-        action.rl_plan_unit_role = self._plan_unit_role(state, plan_unit, strategy)
+        role_unknown_reason = ""
+        resolved_role = self._plan_unit_role(state, plan_unit, strategy)
+        if str(resolved_role or "").upper() == "UNKNOWN":
+            if state is None:
+                role_unknown_reason = "no_state"
+            elif plan_unit is None:
+                role_unknown_reason = "no_unit"
+            else:
+                role_unknown_reason = "mapper_unknown"
+            fallback_role = self._plan_unit_role(None, None, strategy)
+            if str(fallback_role or "").upper() != "UNKNOWN":
+                resolved_role = fallback_role
+                role_unknown_reason = "fallback_strategy"
+        action.rl_plan_unit_role = str(resolved_role or "UNKNOWN")
+        action.rl_plan_role_unknown_reason = str(role_unknown_reason)
         action.rl_plan_focus_vp_id = planner_focus_vp if planner_focus_vp else self._plan_focus_vp_id(state, plan_unit)
         action.rl_plan_step_id = self._next_plan_step_id()
         action.rl_plan_stage = planner_stage or "EXECUTE"
@@ -204,9 +217,15 @@ class OptionExecutor(OptionExecutorCaptureMixin, OptionExecutorCombatMixin, Opti
         action.rl_plan_commitment_age = planner_commit_age
         action.rl_plan_focus_switched = planner_focus_switched
         action.rl_plan_budget_state = str(budget_state or "UNBOUNDED")
+        action.rl_plan_budget_remaining_by_role = dict(budget_remaining_by_role or {})
+        action.rl_plan_budget_violation_count = int(max(0, budget_violation_count))
+        action.rl_plan_budget_violation_delta = int(max(0, budget_violation_delta))
         action.rl_plan_progress_stub = 0.0
+        action.rl_plan_fallback_reason = str(plan_fallback_reason or "")
+        action.rl_capture_branch = str(capture_branch or getattr(action, "rl_capture_branch", "") or "")
         l3 = str(getattr(action, "rl_l3_strategy", "") or "").upper()
-        action.rl_plan_intent_alignment_stub = 1.0 if (l3 and action.rl_plan_intent == l3) else 0.0
+        plan_intent_for_alignment = self._plan_intent_alignment_label(action.rl_plan_intent)
+        action.rl_plan_intent_alignment_stub = 1.0 if (l3 and plan_intent_for_alignment == l3) else 0.0
         # Keep short-lived target commitment during CAPTURE to reduce target ping-pong.
         if strategy == StrategicIntent.CAPTURE and unit is not None:
             focus_hex = self._objective_target_hex(state, unit)
@@ -247,12 +266,28 @@ class OptionExecutor(OptionExecutorCaptureMixin, OptionExecutorCombatMixin, Opti
         self._prepare_action_cache(state)
         planner_managed = planner_context is not None
         planner_stage = str(getattr(planner_context, "stage", "") or "").upper()
+        planner_intent = str(getattr(planner_context, "intent", "") or "").upper()
         if planner_stage == "STEP_IN" and strategy != StrategicIntent.CAPTURE:
             strategy = StrategicIntent.CAPTURE
             if option in (TacticalOption.HOLD, TacticalOption.RETREAT):
                 option = TacticalOption.ADVANCE
         elif planner_stage == "HOLD" and strategy == StrategicIntent.CAPTURE and option == TacticalOption.RETREAT:
             option = TacticalOption.HOLD
+        # P4 hybrid planner contract:
+        # when planner intent is capture-oriented, avoid drifting into passive
+        # options before tactical guardrails are applied.
+        if planner_managed and planner_intent in {"CAPTURE", "SETUP_CAPTURE"}:
+            if strategy in (None, StrategicIntent.PRESERVE, StrategicIntent.DENY):
+                strategy = StrategicIntent.CAPTURE
+            # v24-a: keep HOLD available in setup contexts to avoid over-forcing
+            # movement and regressing tactical loss rate.
+            if option == TacticalOption.RETREAT:
+                option = TacticalOption.ADVANCE
+        elif planner_managed and planner_intent == "ATTRIT":
+            if strategy is None:
+                strategy = StrategicIntent.ATTRIT
+            if option == TacticalOption.RETREAT:
+                option = TacticalOption.ATTACK
         tracked_side_norm = self._normalize_side_key(objective_tracked_side)
         unit_side_norm = self._normalize_side_key(getattr(unit, "side", None))
         attacker_context = bool(tracked_side_norm) and unit_side_norm == tracked_side_norm
@@ -304,8 +339,14 @@ class OptionExecutor(OptionExecutorCaptureMixin, OptionExecutorCombatMixin, Opti
                 quota["capture_count"] = int(quota.get("capture_count", 0)) + 1
 
         if not self.capture_guardrails_enabled:
+            sampled_option = option
             option = self._resolve_option_for_strategy(state, unit, option, strategy)
             option = self._apply_local_role_bias(state, unit, option, strategy)
+            plan_fallback_reason = (
+                "intent_blocked"
+                if option != sampled_option
+                else ""
+            )
 
             def _tag_no_guard(action_to_tag, chosen_option: TacticalOption):
                 return self._tag_action(
@@ -321,6 +362,8 @@ class OptionExecutor(OptionExecutorCaptureMixin, OptionExecutorCombatMixin, Opti
                     override_reason=(l3_capture_forced_reason if aggressive_l3_forced else ""),
                     l3_capture_forced=bool(aggressive_l3_forced),
                     l3_capture_force_reason=(l3_capture_forced_reason if aggressive_l3_forced else ""),
+                    plan_fallback_reason=plan_fallback_reason,
+                    capture_branch=("no_guard" if strategy == StrategicIntent.CAPTURE else ""),
                 )
 
             if option == TacticalOption.ATTACK:
@@ -414,6 +457,8 @@ class OptionExecutor(OptionExecutorCaptureMixin, OptionExecutorCombatMixin, Opti
                     override_reason="hard_gate_step_into_uncaptured_vp",
                     l3_capture_forced=bool(aggressive_l3_forced),
                     l3_capture_force_reason=(l3_capture_forced_reason if aggressive_l3_forced else ""),
+                    plan_fallback_reason="",
+                    capture_branch="stepin_hard_gate",
                 )
 
         if (
@@ -430,8 +475,10 @@ class OptionExecutor(OptionExecutorCaptureMixin, OptionExecutorCombatMixin, Opti
                 unit=unit,
                 l3_capture_forced=bool(aggressive_l3_forced),
                 l3_capture_force_reason=(l3_capture_forced_reason if aggressive_l3_forced else ""),
+                capture_branch="capture_priority_action",
             )
 
+        sampled_option = option
         option = self._resolve_option_for_strategy(state, unit, option, strategy)
         option = self._apply_local_role_bias(state, unit, option, strategy)
         turn_now = int(getattr(state, "turn", 0))
@@ -455,19 +502,51 @@ class OptionExecutor(OptionExecutorCaptureMixin, OptionExecutorCombatMixin, Opti
             and not budgeted_context
         ):
             option = TacticalOption.ATTACK
+        # v25-b: near VP CAPTURE should strongly prefer progress move over ATTACK,
+        # unless immediate emergency constraints apply.
+        if (
+            strategy == StrategicIntent.CAPTURE
+            and objectives_pending
+            and not capture_emergency
+            and option == TacticalOption.ATTACK
+            and nearest_vp_d is not None
+            and nearest_vp_d <= 3
+        ):
+            option = TacticalOption.ADVANCE
 
         legal_override_applied = False
         emergency_override_applied = bool(capture_emergency)
         override_reason = ""
+        budget_violation_delta = 0
+        plan_fallback_reason = (
+            "intent_blocked"
+            if option != sampled_option
+            else ""
+        )
 
         def _tag_with_budget(action_to_tag, chosen_option: TacticalOption):
             budget_state = "UNBOUNDED"
+            budget_remaining_by_role = {}
+            budget_violation_count = 0
+            capture_branch = ""
             if budgeted_context:
                 slot = self._capture_budget_slot(unit.side, turn_now)
                 slot["decision_count"] = int(slot.get("decision_count", 0)) + 1
                 if chosen_option == TacticalOption.ADVANCE:
                     slot["advance_count"] = int(slot.get("advance_count", 0)) + 1
                 budget_state = self._capture_budget_state_label(unit.side, turn_now, True)
+                budget_violation_count = int(slot.get("violation_count", 0))
+                remaining_adv = max(0, int(slot.get("required_advances", 0)) - int(slot.get("advance_count", 0)))
+                budget_remaining_by_role = {"ADVANCE": int(remaining_adv)}
+            if strategy == StrategicIntent.CAPTURE:
+                if bool(getattr(action_to_tag, "rl_capture_fallback_to_attack", False)):
+                    capture_branch = "attack_fallback"
+                elif legal_override_applied and "budget" in str(override_reason or "").lower():
+                    capture_branch = "budget_override"
+                elif chosen_option == TacticalOption.ADVANCE:
+                    capture_branch = "budget_or_progress_move"
+                else:
+                    capture_branch = "capture_default"
             return self._tag_action(
                 action_to_tag,
                 chosen_option,
@@ -481,6 +560,15 @@ class OptionExecutor(OptionExecutorCaptureMixin, OptionExecutorCombatMixin, Opti
                 override_reason=override_reason,
                 l3_capture_forced=bool(aggressive_l3_forced),
                 l3_capture_force_reason=(l3_capture_forced_reason if aggressive_l3_forced else ""),
+                budget_remaining_by_role=budget_remaining_by_role,
+                budget_violation_count=budget_violation_count,
+                budget_violation_delta=budget_violation_delta,
+                capture_branch=capture_branch,
+                plan_fallback_reason=(
+                    "emergency_override"
+                    if emergency_override_applied
+                    else ("budget_exhausted" if legal_override_applied and "budget" in str(override_reason or "").lower() else plan_fallback_reason)
+                ),
             )
 
         def _stabilize_non_retreat_move(action_to_tag, chosen_option: TacticalOption):
@@ -610,6 +698,8 @@ class OptionExecutor(OptionExecutorCaptureMixin, OptionExecutorCombatMixin, Opti
             ):
                 legal_override_applied = True
                 override_reason = "hard_budget_min_advances"
+                slot["violation_count"] = int(slot.get("violation_count", 0)) + 1
+                budget_violation_delta = 1
                 option = TacticalOption.ADVANCE
         if (
             strategy in (StrategicIntent.CAPTURE, StrategicIntent.DENY)
@@ -799,26 +889,38 @@ class OptionExecutor(OptionExecutorCaptureMixin, OptionExecutorCombatMixin, Opti
         if strategy is None:
             return option
         allowed = self._ALLOWED_OPTIONS_BY_STRATEGY.get(strategy, set())
-        role = self._local_role_kind(state, unit)
-
-        preferred = option
-        if role == "SUPPORT":
-            if strategy in (StrategicIntent.CAPTURE, StrategicIntent.DENY, StrategicIntent.ATTRIT):
-                preferred = TacticalOption.ATTACK
-            elif strategy == StrategicIntent.PRESERVE:
-                preferred = TacticalOption.HOLD
+        intent = self._plan_intent_name(strategy)
+        role = assign_role(state, unit, intent)
+        option_scores = {o: 0.0 for o in allowed}
+        if option in option_scores:
+            option_scores[option] += 0.2
+        if role == "SUPPORT_FIRE":
+            option_scores[TacticalOption.ATTACK] = option_scores.get(TacticalOption.ATTACK, -99.0) + 0.6
+            option_scores[TacticalOption.HOLD] = option_scores.get(TacticalOption.HOLD, -99.0) + 0.2
         elif role == "ASSAULT":
-            if strategy == StrategicIntent.PRESERVE:
-                preferred = TacticalOption.ADVANCE if self._has_uncaptured_objective(state, unit) else TacticalOption.RETREAT
-            elif strategy in (StrategicIntent.CAPTURE, StrategicIntent.ATTRIT):
-                preferred = TacticalOption.ATTACK
-        else:  # MANEUVER
-            if strategy == StrategicIntent.CAPTURE:
-                preferred = TacticalOption.ADVANCE
-            elif strategy == StrategicIntent.ATTRIT:
-                # Reduce passive drift under ATTRIT.
-                preferred = TacticalOption.ATTACK
+            option_scores[TacticalOption.ATTACK] = option_scores.get(TacticalOption.ATTACK, -99.0) + 0.5
+            option_scores[TacticalOption.ADVANCE] = option_scores.get(TacticalOption.ADVANCE, -99.0) + 0.25
+        elif role == "HOLD_VP":
+            option_scores[TacticalOption.HOLD] = option_scores.get(TacticalOption.HOLD, -99.0) + 0.5
+            option_scores[TacticalOption.ATTACK] = option_scores.get(TacticalOption.ATTACK, -99.0) + 0.2
+        elif role == "RESERVE":
+            option_scores[TacticalOption.HOLD] = option_scores.get(TacticalOption.HOLD, -99.0) + 0.25
+            option_scores[TacticalOption.RETREAT] = option_scores.get(TacticalOption.RETREAT, -99.0) + 0.25
+        else:  # SCREEN/default maneuver
+            option_scores[TacticalOption.ADVANCE] = option_scores.get(TacticalOption.ADVANCE, -99.0) + 0.45
+            option_scores[TacticalOption.ATTACK] = option_scores.get(TacticalOption.ATTACK, -99.0) + 0.15
 
+        if intent in {"CAPTURE", "SETUP_CAPTURE"}:
+            option_scores[TacticalOption.ADVANCE] = option_scores.get(TacticalOption.ADVANCE, -99.0) + 0.35
+            option_scores[TacticalOption.ATTACK] = option_scores.get(TacticalOption.ATTACK, -99.0) + 0.1
+            option_scores[TacticalOption.RETREAT] = option_scores.get(TacticalOption.RETREAT, -99.0) - 0.5
+        elif intent == "DENY":
+            option_scores[TacticalOption.ATTACK] = option_scores.get(TacticalOption.ATTACK, -99.0) + 0.35
+            option_scores[TacticalOption.HOLD] = option_scores.get(TacticalOption.HOLD, -99.0) + 0.2
+        elif intent == "ATTRIT":
+            option_scores[TacticalOption.ATTACK] = option_scores.get(TacticalOption.ATTACK, -99.0) + 0.4
+
+        preferred = max(option_scores.items(), key=lambda kv: kv[1])[0]
         if preferred in allowed:
             return preferred
         return option if option in allowed else self._resolve_option_for_strategy(state, unit, option, strategy)

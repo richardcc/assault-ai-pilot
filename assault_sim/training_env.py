@@ -16,6 +16,55 @@ from assault_sim.contracts.training_contracts import normalize_plan_state
 
 DEBUG_TRACE = os.getenv("ASSAULT_DEBUG_TRACE", "0") == "1"
 
+_TRAIN_LEAN_INFO_KEYS = {
+    "unit_id",
+    "actor_side",
+    "l2_option",
+    "l3_strategy",
+    "action_class",
+    "action_type",
+    "is_wait",
+    "turn",
+    "rl_damage",
+    "enemy_damage",
+    "rl_kills",
+    "enemy_kills",
+    "rl_attacks",
+    "enemy_attacks",
+    "objective_captured_delta",
+    "objective_dist_before",
+    "objective_dist_after",
+    "actor_on_vp_after",
+    "actor_vp_owned_by_rl_before",
+    "actor_captured_vp_now",
+    "plan_intent",
+    "plan_unit_role",
+    "plan_role_unknown_reason",
+    "capture_branch",
+    "plan_focus_vp_id",
+    "plan_stage",
+    "plan_replan_reason",
+    "plan_commitment_age",
+    "plan_focus_switched",
+    "plan_step_id",
+    "plan_budget_state",
+    "plan_budget_remaining_by_role",
+    "plan_budget_violation_count",
+    "plan_budget_violation_delta",
+    "plan_fallback_reason",
+    "plan_progress_stub",
+    "intent_alignment_stub",
+    "action_finalized_reason",
+    "l3_sampled",
+    "l3_effective",
+    "l3_executed",
+    "unit_stuck_steps_norm",
+    "plan_commitment_age_norm",
+    "intent_alignment_last_k",
+    "last_failure_reason_onehot",
+    "done",
+}
+
 
 def _trace(tag: str, **data):
     if not DEBUG_TRACE:
@@ -392,6 +441,8 @@ class TrainingEnv:
             "turn": next_state.turn,
             "plan_intent": str(getattr(action, "rl_plan_intent", "UNKNOWN") or "UNKNOWN"),
             "plan_unit_role": str(getattr(action, "rl_plan_unit_role", "UNKNOWN") or "UNKNOWN"),
+            "plan_role_unknown_reason": str(getattr(action, "rl_plan_role_unknown_reason", "") or ""),
+            "capture_branch": str(getattr(action, "rl_capture_branch", "") or ""),
             "plan_focus_vp_id": getattr(action, "rl_plan_focus_vp_id", None),
             "plan_stage": str(getattr(action, "rl_plan_stage", "EXECUTE") or "EXECUTE"),
             "plan_replan_reason": str(getattr(action, "rl_plan_replan_reason", "") or ""),
@@ -399,6 +450,10 @@ class TrainingEnv:
             "plan_focus_switched": bool(getattr(action, "rl_plan_focus_switched", False)),
             "plan_step_id": int(getattr(action, "rl_plan_step_id", 0) or 0),
             "plan_budget_state": str(getattr(action, "rl_plan_budget_state", "UNBOUNDED") or "UNBOUNDED"),
+            "plan_budget_remaining_by_role": dict(getattr(action, "rl_plan_budget_remaining_by_role", {}) or {}),
+            "plan_budget_violation_count": int(getattr(action, "rl_plan_budget_violation_count", 0) or 0),
+            "plan_budget_violation_delta": int(getattr(action, "rl_plan_budget_violation_delta", 0) or 0),
+            "plan_fallback_reason": str(getattr(action, "rl_plan_fallback_reason", "") or ""),
             "plan_progress_stub": float(getattr(action, "rl_plan_progress_stub", 0.0) or 0.0),
             "intent_alignment_stub": float(getattr(action, "rl_plan_intent_alignment_stub", 0.0) or 0.0),
             "action_finalized_reason": str(
@@ -600,6 +655,8 @@ class TrainingEnv:
                     "focus_vp_id": info.get("plan_focus_vp_id"),
                     "plan_step_id": info.get("plan_step_id"),
                     "budget_state": info.get("plan_budget_state"),
+                    "budget_remaining_by_role": info.get("plan_budget_remaining_by_role"),
+                    "budget_violation_count": info.get("plan_budget_violation_count"),
                     "plan_progress_stub": info.get("plan_progress_stub"),
                     "intent_alignment_stub": info.get("intent_alignment_stub"),
                 }
@@ -652,6 +709,10 @@ class TrainingEnv:
                     result_kind = "unknown"
                 info["objective_result_text"] = result_text
                 info["objective_result_kind"] = result_kind
+
+        if self.train_lean:
+            # Keep only fields required by reward/obs shaping and core training telemetry.
+            info = {k: v for k, v in info.items() if k in _TRAIN_LEAN_INFO_KEYS}
 
         self._last_action_type = action_type
         own_activated_ratio, enemy_activated_ratio = self._activation_ratios(next_state)

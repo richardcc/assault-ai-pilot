@@ -214,7 +214,10 @@ class ResultsAnalyzer:
         total_hold_steps = 0
         total_decisions = 0
         first_contact_turns = []
+        first_progress_turns = []
         first_vp_entry_turns = []
+        contact_to_progress_delays = []
+        progress_to_capture_delays = []
         stuck_ratios = []
         concentration = []
         vp_entry_opportunities = 0
@@ -238,6 +241,15 @@ class ResultsAnalyzer:
         plan_focus_switch_total = 0
         plan_stage_counts_totals = defaultdict(int)
         plan_replan_reason_totals = defaultdict(int)
+        plan_fallback_reason_totals = defaultdict(int)
+        plan_role_unknown_reason_totals = defaultdict(int)
+        capture_branch_totals = defaultdict(int)
+        near_vp_l2_transition_totals = defaultdict(int)
+        near_vp_l2_transition_by_l3_totals = defaultdict(int)
+        budget_remaining_by_role_totals = defaultdict(int)
+        budget_violation_total = 0
+        budget_violation_rates = []
+        budget_compliance_rates = []
         action_finalize_reason_totals = defaultdict(int)
         lote_e_attack_cost_vals = []
         lote_e_capture_window_vals = []
@@ -280,6 +292,9 @@ class ResultsAnalyzer:
         per_unit_vp_entry_success_totals = defaultdict(int)
         plan_success_k_vals = []
         plan_latency_to_progress_vals = []
+        invalid_action_total = 0
+        fallback_action_total = 0
+        wait_recovery_sb3_backstep_total = 0
 
         for r in self.results:
             mission = r.get("mission", {}) or {}
@@ -291,6 +306,9 @@ class ResultsAnalyzer:
             first_turn = mission.get("first_vp_contact_turn")
             if isinstance(first_turn, (int, float)) and first_turn > 0:
                 first_contact_turns.append(float(first_turn))
+            first_progress = mission.get("turn_first_progress")
+            if isinstance(first_progress, (int, float)) and first_progress > 0:
+                first_progress_turns.append(float(first_progress))
 
             formation_counts = r.get("formation_counts", {}) or {}
             if decisions > 0 and formation_counts:
@@ -333,6 +351,12 @@ class ResultsAnalyzer:
                 first_entry = mission.get("first_vp_entry_turn")
                 if isinstance(first_entry, (int, float)) and first_entry > 0:
                     first_vp_entry_turns.append(float(first_entry))
+            c2p = mission.get("contact_to_progress_delay")
+            if isinstance(c2p, (int, float)):
+                contact_to_progress_delays.append(float(c2p))
+            p2c = mission.get("progress_to_capture_delay")
+            if isinstance(p2c, (int, float)):
+                progress_to_capture_delays.append(float(p2c))
             contact_events_total += int(mission.get("contact_events", 0))
             contact_to_capture_success_total += int(mission.get("contact_to_capture_success", 0))
             if "capture_intent_persistence" in mission:
@@ -377,6 +401,50 @@ class ResultsAnalyzer:
             for reason, count in (mission.get("plan_replan_reason_counts", {}) or {}).items():
                 try:
                     plan_replan_reason_totals[str(reason)] += int(count)
+                except Exception:
+                    pass
+            for reason, count in (mission.get("plan_fallback_reason_counts", {}) or {}).items():
+                try:
+                    plan_fallback_reason_totals[str(reason)] += int(count)
+                except Exception:
+                    pass
+            for reason, count in (mission.get("plan_role_unknown_reason_counts", {}) or {}).items():
+                try:
+                    plan_role_unknown_reason_totals[str(reason)] += int(count)
+                except Exception:
+                    pass
+            for branch, count in (mission.get("capture_branch_counts", {}) or {}).items():
+                try:
+                    capture_branch_totals[str(branch)] += int(count)
+                except Exception:
+                    pass
+            for key, count in (mission.get("near_vp_l2_transition_counts", {}) or {}).items():
+                try:
+                    near_vp_l2_transition_totals[str(key)] += int(count)
+                except Exception:
+                    pass
+            for key, count in (mission.get("near_vp_l2_transition_by_l3_counts", {}) or {}).items():
+                try:
+                    near_vp_l2_transition_by_l3_totals[str(key)] += int(count)
+                except Exception:
+                    pass
+            for role, remaining in (mission.get("budget_remaining_by_role", {}) or {}).items():
+                try:
+                    budget_remaining_by_role_totals[str(role)] += int(remaining)
+                except Exception:
+                    pass
+            try:
+                budget_violation_total += int(mission.get("budget_violation_count", 0))
+            except Exception:
+                pass
+            if "budget_violation_rate" in mission:
+                try:
+                    budget_violation_rates.append(float(mission.get("budget_violation_rate", 0.0)))
+                except Exception:
+                    pass
+            if "budget_compliance_rate" in mission:
+                try:
+                    budget_compliance_rates.append(float(mission.get("budget_compliance_rate", 1.0)))
                 except Exception:
                     pass
             for reason, count in (mission.get("action_finalize_reason_counts", {}) or {}).items():
@@ -537,6 +605,12 @@ class ResultsAnalyzer:
                     plan_latency_to_progress_vals.append(float(mission.get("plan_latency_to_progress")))
                 except Exception:
                     pass
+            try:
+                invalid_action_total += int(mission.get("invalid_action_count", 0))
+                fallback_action_total += int(mission.get("fallback_action_count", 0))
+                wait_recovery_sb3_backstep_total += int(mission.get("wait_recovery_sb3_backstep_count", 0))
+            except Exception:
+                pass
 
             atk_units = 0
             dmg_units = 0
@@ -631,6 +705,11 @@ class ResultsAnalyzer:
             "capture_attempt_success_rate": capture_attempt_success_rate,
             "first_vp_entry_turn_p50": _percentile(first_vp_entry_turns, 0.50),
             "first_vp_entry_turn_p90": _percentile(first_vp_entry_turns, 0.90),
+            "turn_first_contact": _percentile(first_contact_turns, 0.50),
+            "turn_first_progress": _percentile(first_progress_turns, 0.50),
+            "turn_first_capture": _percentile(first_vp_entry_turns, 0.50),
+            "contact_to_progress_delay": _percentile(contact_to_progress_delays, 0.50),
+            "progress_to_capture_delay": _percentile(progress_to_capture_delays, 0.50),
             "capture_conversion_after_contact": capture_conversion_after_contact,
             "capture_intent_persistence": (
                 statistics.mean(capture_intent_persistence_rates)
@@ -659,7 +738,32 @@ class ResultsAnalyzer:
             ),
             "plan_stage_counts": dict(plan_stage_counts_totals),
             "plan_replan_reason_counts": dict(plan_replan_reason_totals),
+            "plan_fallback_reason_counts": dict(plan_fallback_reason_totals),
+            "plan_role_unknown_reason_counts": dict(plan_role_unknown_reason_totals),
+            "capture_branch_counts": dict(capture_branch_totals),
+            "near_vp_l2_transition_counts": dict(near_vp_l2_transition_totals),
+            "near_vp_l2_transition_by_l3_counts": dict(near_vp_l2_transition_by_l3_totals),
+            "budget_remaining_by_role": dict(budget_remaining_by_role_totals),
+            "budget_violation_count": int(budget_violation_total),
+            "budget_violation_rate": (
+                statistics.mean(budget_violation_rates) if budget_violation_rates else 0.0
+            ),
+            "budget_compliance_rate": (
+                statistics.mean(budget_compliance_rates) if budget_compliance_rates else 1.0
+            ),
             "action_finalize_reason_counts": dict(action_finalize_reason_totals),
+            "invalid_action_count": int(invalid_action_total),
+            "fallback_action_count": int(fallback_action_total),
+            "wait_recovery_sb3_backstep_count": int(wait_recovery_sb3_backstep_total),
+            "invalid_action_rate": (
+                float(invalid_action_total) / max(1.0, float(total_decisions))
+            ),
+            "fallback_rate": (
+                float(fallback_action_total) / max(1.0, float(total_decisions))
+            ),
+            "wait_recovery_sb3_backstep_rate": (
+                float(wait_recovery_sb3_backstep_total) / max(1.0, float(total_decisions))
+            ),
             "plan_success_k": (
                 statistics.mean(plan_success_k_vals) if plan_success_k_vals else 0.0
             ),
@@ -903,6 +1007,9 @@ class ResultsAnalyzer:
             f"vp_entry_missed_rate: {vp_entry_miss:.3f}"
             if isinstance(vp_entry_miss, (int, float)) else "vp_entry_missed_rate: n/a"
         )
+        print(f"invalid_action_rate: {mission.get('invalid_action_rate', 0.0):.3f}")
+        print(f"fallback_rate: {mission.get('fallback_rate', 0.0):.3f}")
+        print(f"wait_recovery_sb3_backstep_rate: {mission.get('wait_recovery_sb3_backstep_rate', 0.0):.3f}")
         print(f"vp_net_progress: {mission.get('vp_net_progress', 0.0):.3f}")
         print(f"position_reversal_rate: {mission.get('position_reversal_rate', 0.0):.3f}")
         print(f"vp_control_turns_share: {mission.get('vp_control_turns_share', 0.0):.3f}")
@@ -998,6 +1105,42 @@ class ResultsAnalyzer:
         if plan_roles:
             pretty_roles = ", ".join(f"{k}:{v}" for k, v in sorted(plan_roles.items(), key=lambda kv: kv[1], reverse=True))
             print(f"plan_role_counts_stub: {pretty_roles}")
+        plan_fallback = mission.get("plan_fallback_reason_counts", {}) or {}
+        if plan_fallback:
+            pretty_fallback = ", ".join(f"{k}:{v}" for k, v in sorted(plan_fallback.items(), key=lambda kv: kv[1], reverse=True))
+            print(f"plan_fallback_reason_counts: {pretty_fallback}")
+        role_unknown = mission.get("plan_role_unknown_reason_counts", {}) or {}
+        if role_unknown:
+            pretty_unknown = ", ".join(f"{k}:{v}" for k, v in sorted(role_unknown.items(), key=lambda kv: kv[1], reverse=True))
+            print(f"plan_role_unknown_reason_counts: {pretty_unknown}")
+        capture_branches = mission.get("capture_branch_counts", {}) or {}
+        if capture_branches:
+            pretty_branch = ", ".join(f"{k}:{v}" for k, v in sorted(capture_branches.items(), key=lambda kv: kv[1], reverse=True))
+            print(f"capture_branch_counts: {pretty_branch}")
+        near_vp_l2 = mission.get("near_vp_l2_transition_counts", {}) or {}
+        if near_vp_l2:
+            top = sorted(near_vp_l2.items(), key=lambda kv: kv[1], reverse=True)[:8]
+            pretty_l2 = ", ".join(f"{k}:{v}" for k, v in top)
+            print(f"near_vp_l2_transition_counts(top): {pretty_l2}")
+        near_vp_l2_by_l3 = mission.get("near_vp_l2_transition_by_l3_counts", {}) or {}
+        if near_vp_l2_by_l3:
+            top_l3 = sorted(near_vp_l2_by_l3.items(), key=lambda kv: kv[1], reverse=True)[:8]
+            pretty_l3 = ", ".join(f"{k}:{v}" for k, v in top_l3)
+            print(f"near_vp_l2_transition_by_l3_counts(top): {pretty_l3}")
+        print(f"budget_compliance_rate: {mission.get('budget_compliance_rate', 1.0):.3f}")
+        print(f"budget_violation_rate: {mission.get('budget_violation_rate', 0.0):.3f}")
+        print(f"budget_violation_count: {mission.get('budget_violation_count', 0)}")
+        budget_remaining = mission.get("budget_remaining_by_role", {}) or {}
+        if budget_remaining:
+            pretty_budget_remaining = ", ".join(
+                f"{k}:{v}" for k, v in sorted(budget_remaining.items(), key=lambda kv: str(kv[0]))
+            )
+            print(f"budget_remaining_by_role: {pretty_budget_remaining}")
+        print(f"turn_first_contact: {mission.get('turn_first_contact', None)}")
+        print(f"turn_first_progress: {mission.get('turn_first_progress', None)}")
+        print(f"turn_first_capture: {mission.get('turn_first_capture', None)}")
+        print(f"contact_to_progress_delay: {mission.get('contact_to_progress_delay', None)}")
+        print(f"progress_to_capture_delay: {mission.get('progress_to_capture_delay', None)}")
         print(
             "lote_e:"
             f" attack_cost_near_vp={mission.get('lote_e_attack_opportunity_cost_near_vp_norm', 0.0):.3f}"

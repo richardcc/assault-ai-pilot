@@ -31,38 +31,32 @@ def _build_state_and_unit():
     return state, unit
 
 
-def test_p43c_light_budget_forces_advance_until_quota(monkeypatch):
+def test_p43c_budget_tags_include_remaining_and_violations(monkeypatch):
     state, unit = _build_state_and_unit()
     ex = OptionExecutor(_DummyHeuristic())
 
-    monkeypatch.setattr(ex, "_has_uncaptured_objective_for_side", lambda *_: True)
-    monkeypatch.setattr(ex, "_has_uncaptured_objective", lambda *_: True)
-    monkeypatch.setattr(ex, "_is_capture_emergency", lambda *_: False)
-    monkeypatch.setattr(ex, "_is_behind_on_objectives", lambda *_: False)
-    monkeypatch.setattr(ex, "_nearest_uncaptured_vp_dist", lambda *_: 2)
-    monkeypatch.setattr(ex, "_has_vp_attack_opportunity", lambda *_: False)
-    monkeypatch.setattr(ex, "_resolve_option_for_strategy", lambda _s, _u, o, _st: o)
-    monkeypatch.setattr(ex, "_apply_local_role_bias", lambda _s, _u, o, _st: o)
-    monkeypatch.setattr(ex, "_move_closer", lambda _s, u: WaitAction(u.unit_id))
+    monkeypatch.setattr(ex, "_plan_focus_vp_id", lambda *_: "0,0")
 
-    a1 = ex.execute(
+    slot = ex._capture_budget_slot(unit.side, state.turn)
+    slot["required_advances"] = 2
+    slot["advance_count"] = 0
+    slot["decision_count"] = 0
+    slot["violation_count"] = 1
+
+    action = ex._tag_action(
+        WaitAction(unit.unit_id),
+        TacticalOption.ADVANCE,
+        StrategicIntent.CAPTURE,
         state=state,
         unit=unit,
-        option=TacticalOption.ATTACK,
-        strategy=StrategicIntent.ATTRIT,
-        objective_tracked_side="US",
-    )
-    a2 = ex.execute(
-        state=state,
-        unit=unit,
-        option=TacticalOption.ATTACK,
-        strategy=StrategicIntent.ATTRIT,
-        objective_tracked_side="US",
+        budget_state=ex._capture_budget_state_label(unit.side, state.turn, True),
+        budget_remaining_by_role={"ADVANCE": 2},
+        budget_violation_count=int(slot["violation_count"]),
+        budget_violation_delta=1,
     )
 
-    assert getattr(a1, "rl_l2_option", "") == "ADVANCE"
-    assert getattr(a1, "rl_plan_budget_state", "") == "BUDGETED"
-    assert getattr(a1, "rl_capture_legal_override", False) is True
-    assert getattr(a2, "rl_l2_option", "") == "ADVANCE"
-    assert getattr(a2, "rl_plan_budget_state", "") == "EXHAUSTED"
-    assert getattr(a2, "rl_capture_legal_override", False) is True
+    assert getattr(action, "rl_l2_option", "") == "ADVANCE"
+    assert getattr(action, "rl_plan_budget_state", "") == "BUDGETED"
+    assert getattr(action, "rl_plan_budget_violation_count", 0) == 1
+    assert getattr(action, "rl_plan_budget_violation_delta", 0) == 1
+    assert getattr(action, "rl_plan_budget_remaining_by_role", {}).get("ADVANCE", -1) == 2

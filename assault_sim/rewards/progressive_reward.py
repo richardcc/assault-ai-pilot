@@ -183,6 +183,17 @@ class ProgressiveReward(BaseReward):
         if isinstance(action, WaitAction):
             reward -= self.cfg.wait_penalty
 
+        # Penalize action finalization fallout so policy learns to stay legal/useful.
+        finalize_reason = str(info.get("action_finalized_reason", "") or "").strip().lower()
+        plan_stage = str(info.get("plan_stage", "") or "").strip().upper()
+        invalid_finalize_reasons = {"not_in_catalog", "empty_action_id", "non_displacement"}
+        if finalize_reason and finalize_reason != "ok":
+            reward -= self.cfg.action_finalization_fallback_penalty
+            if finalize_reason in invalid_finalize_reasons:
+                reward -= self.cfg.invalid_action_finalization_penalty
+        if finalize_reason == "wait_recovery_sb3_backstep" and plan_stage == "SETUP":
+            reward -= self.cfg.wait_recovery_backstep_setup_penalty
+
         # =================================================
         # ✅ L3/L2 COHERENCE SHAPING (anti-collapse)
         # =================================================
@@ -265,6 +276,8 @@ class ProgressiveReward(BaseReward):
                         d_after = float(objective_dist_after)
                         if d_after < d_before:
                             reward += (d_before - d_after) * self.cfg.objective_approach_bonus
+                            if plan_stage == "SETUP":
+                                reward += self.cfg.setup_progress_bonus
                             if l3 == "CAPTURE" and unit_id:
                                 self.capture_no_progress_streak_by_unit[unit_id] = 0
                         elif d_after > d_before:

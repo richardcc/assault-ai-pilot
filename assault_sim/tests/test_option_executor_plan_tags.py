@@ -39,7 +39,7 @@ def _build_state_and_unit():
 
 
 def test_option_executor_tags_plan_fields_on_action(monkeypatch):
-    monkeypatch.setattr("assault_sim.decision.option_executor.ActionCatalog", _DummyCatalog)
+    monkeypatch.setattr("assault_sim.decision.option_executor.state.ActionCatalog", _DummyCatalog)
     state, unit = _build_state_and_unit()
     ex = OptionExecutor(_DummyHeuristic())
 
@@ -63,7 +63,7 @@ def test_option_executor_tags_plan_fields_on_action(monkeypatch):
 
 
 def test_option_executor_plan_step_id_monotonic(monkeypatch):
-    monkeypatch.setattr("assault_sim.decision.option_executor.ActionCatalog", _DummyCatalog)
+    monkeypatch.setattr("assault_sim.decision.option_executor.state.ActionCatalog", _DummyCatalog)
     state, unit = _build_state_and_unit()
     ex = OptionExecutor(_DummyHeuristic())
 
@@ -71,3 +71,31 @@ def test_option_executor_plan_step_id_monotonic(monkeypatch):
     a2 = ex.execute(state, unit, TacticalOption.HOLD, strategy=StrategicIntent.DENY)
 
     assert int(getattr(a2, "rl_plan_step_id", 0)) > int(getattr(a1, "rl_plan_step_id", 0))
+
+
+def test_option_executor_setup_capture_intent_aligns_with_capture_l3(monkeypatch):
+    monkeypatch.setattr("assault_sim.decision.option_executor.state.ActionCatalog", _DummyCatalog)
+    state, unit = _build_state_and_unit()
+    ex = OptionExecutor(_DummyHeuristic())
+
+    planner_context = SimpleNamespace(
+        intent="SETUP_CAPTURE",
+        stage="SETUP",
+        focus_vp_id="1,1",
+        replan_reason="init",
+        commitment_age=1,
+        focus_switched=False,
+        side="US",
+    )
+
+    action = ex.execute(
+        state=state,
+        unit=unit,
+        option=TacticalOption.ADVANCE,
+        strategy=StrategicIntent.CAPTURE,
+        planner_context=planner_context,
+        objective_tracked_side="US",
+    )
+
+    assert getattr(action, "rl_plan_intent", "") == "SETUP_CAPTURE"
+    assert float(getattr(action, "rl_plan_intent_alignment_stub", 0.0)) == 1.0

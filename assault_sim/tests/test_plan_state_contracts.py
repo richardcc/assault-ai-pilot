@@ -10,6 +10,8 @@ def test_normalize_plan_state_defaults_and_ranges():
     assert plan["focus_vp_id"] is None
     assert plan["plan_step_id"] == 0
     assert plan["budget_state"] == "UNBOUNDED"
+    assert plan["budget_remaining_by_role"] == {}
+    assert plan["budget_violation_count"] == 0
     assert plan["plan_progress_stub"] == 0.0
     assert plan["intent_alignment_stub"] == 0.0
 
@@ -22,6 +24,8 @@ def test_normalize_plan_state_clamps_values_and_serializes():
             "focus_vp_id": "4,7",
             "plan_step_id": "12",
             "budget_state": "budgeted",
+            "budget_remaining_by_role": {"ADVANCE": "2", "ATTACK": "bad"},
+            "budget_violation_count": "3",
             "plan_progress_stub": 9.5,
             "intent_alignment_stub": -2.0,
         }
@@ -31,6 +35,8 @@ def test_normalize_plan_state_clamps_values_and_serializes():
     assert plan["focus_vp_id"] == "4,7"
     assert plan["plan_step_id"] == 12
     assert plan["budget_state"] == "BUDGETED"
+    assert plan["budget_remaining_by_role"] == {"ADVANCE": 2}
+    assert plan["budget_violation_count"] == 3
     assert plan["plan_progress_stub"] == 1.0
     assert plan["intent_alignment_stub"] == 0.0
     assert json.loads(json.dumps(plan))["intent"] == "CAPTURE"

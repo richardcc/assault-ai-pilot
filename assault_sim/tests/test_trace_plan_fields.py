@@ -10,6 +10,10 @@ def test_trace_entry_includes_plan_fields():
             "plan_focus_vp_id": "5,8",
             "plan_step_id": 9,
             "plan_budget_state": "UNBOUNDED",
+            "plan_budget_remaining_by_role": {"ADVANCE": 1},
+            "plan_budget_violation_count": 2,
+            "plan_budget_violation_delta": 1,
+            "plan_fallback_reason": "intent_blocked",
             "plan_progress_stub": 1.0,
             "intent_alignment_stub": 1.0,
             "capture_emergency_override": True,
@@ -30,6 +34,10 @@ def test_trace_entry_includes_plan_fields():
     assert plan["unit_role"] == "ASSAULT"
     assert plan["focus_vp_id"] == "5,8"
     assert plan["plan_step_id"] == 9
+    assert plan["budget_remaining_by_role"] == {"ADVANCE": 1}
+    assert plan["budget_violation_count"] == 2
+    assert plan["budget_violation_delta"] == 1
+    assert plan["fallback_reason"] == "intent_blocked"
     assert capture["emergency_override"] is True
     assert capture["legal_override"] is False
     assert capture["override_reason"] == "capture_emergency"

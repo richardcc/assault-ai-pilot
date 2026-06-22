@@ -1,5 +1,5 @@
-status=running
-step=TRAIN
-started_at=2026-06-21T09:52:40
-last_update=2026-06-21T11:01:26
-elapsed_seconds=4126
+status=finished
+step=ALL
+started_at=20260621_095240
+last_update=2026-06-21T11:44:59
+elapsed_seconds=0

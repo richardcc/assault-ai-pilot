@@ -104,6 +104,37 @@ class MissionPlanner:
                 return True
         return False
 
+    def _captured_for_side(self, state, side: str | None) -> int:
+        if state is None or not side:
+            return 0
+        points = getattr(getattr(state, "victory", None), "points", []) or []
+        own_ownership = self._ownership_for_side(state, side)
+        if own_ownership is None:
+            return 0
+        captured = 0
+        for vp in points:
+            hs = getattr(state, "hex_states", {}).get(getattr(vp, "hex_coords", None))
+            if hs is not None and getattr(hs, "ownership", None) == own_ownership:
+                captured += 1
+        return captured
+
+    def _enemy_pressure_near_unit(self, state, unit, side: str | None, radius: int = 2) -> int:
+        if state is None or unit is None or getattr(unit, "position", None) is None or not side:
+            return 0
+        side_key = str(side).upper()
+        cnt = 0
+        for e in getattr(state, "units", []) or []:
+            if not getattr(e, "alive", False) or getattr(e, "position", None) is None:
+                continue
+            if str(getattr(e, "side", "")).upper() == side_key:
+                continue
+            try:
+                if safe_hex_distance(unit.position, e.position) <= int(radius):
+                    cnt += 1
+            except Exception:
+                continue
+        return cnt
+
     def build_context(self, state, unit, side: str | None) -> PlannerContext:
         side_key = str(side or "").upper()
         unit_id = str(getattr(unit, "unit_id", "") or "")
@@ -159,11 +190,25 @@ class MissionPlanner:
         else:
             slot.stage = "SETUP"
 
+        own_cap = self._captured_for_side(state, side_key)
+        side_to_ownership = getattr(state, "side_to_ownership", {}) or {}
+        other_caps = [
+            self._captured_for_side(state, str(s))
+            for s in side_to_ownership.keys()
+            if str(s).upper() != side_key
+        ]
+        best_other = max(other_caps) if other_caps else 0
+        pressure = self._enemy_pressure_near_unit(state, unit, side_key, radius=2)
+
         intent = "CAPTURE"
         if nearest_dist is None:
             intent = "ATTRIT"
         elif nearest_dist > 4:
             intent = "SETUP_CAPTURE"
+        elif pressure >= 2 and own_cap >= best_other:
+            intent = "DENY"
+        elif pressure == 0 and own_cap > best_other + 1:
+            intent = "PRESERVE"
 
         self._global_step += 1
         slot.last_step_id = self._global_step

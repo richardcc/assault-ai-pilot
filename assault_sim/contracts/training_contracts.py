@@ -15,6 +15,8 @@ class PlanStateContract(TypedDict):
     focus_vp_id: str | None
     plan_step_id: int
     budget_state: PlanBudgetState
+    budget_remaining_by_role: dict[str, int]
+    budget_violation_count: int
     plan_progress_stub: float
     intent_alignment_stub: float
 
@@ -41,6 +43,18 @@ def normalize_plan_state(payload: dict[str, Any] | None) -> PlanStateContract:
         plan_step_id = max(0, int(data.get("plan_step_id", 0)))
     except Exception:
         plan_step_id = 0
+    budget_remaining_raw = data.get("budget_remaining_by_role", {}) or {}
+    budget_remaining_by_role: dict[str, int] = {}
+    if isinstance(budget_remaining_raw, dict):
+        for k, v in budget_remaining_raw.items():
+            try:
+                budget_remaining_by_role[str(k)] = max(0, int(v))
+            except Exception:
+                continue
+    try:
+        budget_violation_count = max(0, int(data.get("budget_violation_count", 0)))
+    except Exception:
+        budget_violation_count = 0
 
     try:
         plan_progress_stub = float(data.get("plan_progress_stub", 0.0))
@@ -60,6 +74,8 @@ def normalize_plan_state(payload: dict[str, Any] | None) -> PlanStateContract:
         "focus_vp_id": focus_vp_id,
         "plan_step_id": plan_step_id,
         "budget_state": budget_state,
+        "budget_remaining_by_role": budget_remaining_by_role,
+        "budget_violation_count": budget_violation_count,
         "plan_progress_stub": plan_progress_stub,
         "intent_alignment_stub": intent_alignment_stub,
     }

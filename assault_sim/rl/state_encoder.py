@@ -177,6 +177,26 @@ def _objective_outcome_features(state, rl_side=None, scenario=None):
 
 LAST_ACTION_KEYS = ["wait", "move", "direct", "indirect", "assault"]
 
+# Canonical observation layout (single source of truth).
+# Keep section order aligned with encode_state() appends.
+STATE_VECTOR_LAYOUT = (
+    ("core_base", 12),
+    ("map_terrain", len(TERRAIN_KEYS) + len(FORT_KEYS) + 2 + 4),
+    ("tactical_features", 5),
+    ("objective_outcome", 6),
+    ("activation_ratios", 2),
+    ("last_action_onehot", len(LAST_ACTION_KEYS)),
+    ("lot_a_macro_vp", 4),
+    ("lot_c_coordination", 4),
+    ("lot_b_risk_terrain", 4),
+    ("lot_d_plan_memory", 7),
+    ("lot_e_opportunity", 4),
+)
+
+
+def expected_obs_dim() -> int:
+    return int(sum(size for _, size in STATE_VECTOR_LAYOUT))
+
 
 def _ownership_for_side(state, side):
     side_to_ownership = getattr(state, "side_to_ownership", {}) or {}

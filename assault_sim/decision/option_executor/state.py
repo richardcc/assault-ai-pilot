@@ -41,7 +41,12 @@ class OptionExecutorStateMixin:
         key = self._capture_budget_key(side, turn_now)
         slot = self._capture_budget_by_side_turn.get(key)
         if slot is None:
-            slot = {"required_advances": int(self._capture_budget_required_advances), "advance_count": 0, "decision_count": 0}
+            slot = {
+                "required_advances": int(self._capture_budget_required_advances),
+                "advance_count": 0,
+                "decision_count": 0,
+                "violation_count": 0,
+            }
             self._capture_budget_by_side_turn[key] = slot
         return slot
 
@@ -65,6 +70,14 @@ class OptionExecutorStateMixin:
         if strategy is None:
             return "UNKNOWN"
         return str(getattr(strategy, "name", "UNKNOWN") or "UNKNOWN").upper()
+
+    def _plan_intent_alignment_label(self, plan_intent: str) -> str:
+        intent = str(plan_intent or "").upper().strip()
+        if not intent:
+            return "UNKNOWN"
+        if intent == "SETUP_CAPTURE":
+            return "CAPTURE"
+        return intent
 
     def _plan_focus_vp_id(self, state, unit) -> str | None:
         if state is None or unit is None:
