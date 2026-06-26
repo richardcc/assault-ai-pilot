@@ -48,7 +48,7 @@
     "capture_guardrails_enabled":  true,
     "diagnostic_force_capture_only":  false,
     "finalizer_override_profile":  "soft",
-    "sb3_profile_train":  true,
+    "sb3_profile_train":  false,
     "sb3_profile_sort":  "cumulative",
     "sb3_profile_top_n":  60
 }

@@ -8848,3 +8848,416 @@ Logging to C:\repos\python\assault\models\scenario_battaglia_cittadina_2_1\side_
 |    policy_gradient_loss | -0.0164      |
 |    value_loss           | 0.146        |
 ------------------------------------------
+-----------------------------------------
+| rollout/                |             |
+|    ep_len_mean          | 41.4        |
+|    ep_rew_mean          | -27.8       |
+| time/                   |             |
+|    fps                  | 10          |
+|    iterations           | 68          |
+|    time_elapsed         | 1633        |
+|    total_timesteps      | 17408       |
+| train/                  |             |
+|    approx_kl            | 0.001333216 |
+|    clip_fraction        | 0           |
+|    clip_range           | 0.15        |
+|    entropy_loss         | -4.6        |
+|    explained_variance   | 0.847       |
+|    learning_rate        | 0.0001      |
+|    loss                 | 0.0119      |
+|    n_updates            | 1257        |
+|    policy_gradient_loss | -0.019      |
+|    value_loss           | 0.135       |
+-----------------------------------------
+-------------------------------------------
+| rollout/                |               |
+|    ep_len_mean          | 41.7          |
+|    ep_rew_mean          | -28.2         |
+| time/                   |               |
+|    fps                  | 10            |
+|    iterations           | 69            |
+|    time_elapsed         | 1650          |
+|    total_timesteps      | 17664         |
+| train/                  |               |
+|    approx_kl            | 0.00080239144 |
+|    clip_fraction        | 0             |
+|    clip_range           | 0.15          |
+|    entropy_loss         | -4.69         |
+|    explained_variance   | 0.546         |
+|    learning_rate        | 0.0001        |
+|    loss                 | 0.192         |
+|    n_updates            | 1260          |
+|    policy_gradient_loss | -0.00584      |
+|    value_loss           | 0.483         |
+-------------------------------------------
+------------------------------------------
+| rollout/                |              |
+|    ep_len_mean          | 42.1         |
+|    ep_rew_mean          | -28.5        |
+| time/                   |              |
+|    fps                  | 10           |
+|    iterations           | 70           |
+|    time_elapsed         | 1668         |
+|    total_timesteps      | 17920        |
+| train/                  |              |
+|    approx_kl            | 0.0006530322 |
+|    clip_fraction        | 0            |
+|    clip_range           | 0.15         |
+|    entropy_loss         | -4.5         |
+|    explained_variance   | 0.842        |
+|    learning_rate        | 0.0001       |
+|    loss                 | 0.0864       |
+|    n_updates            | 1263         |
+|    policy_gradient_loss | -0.0091      |
+|    value_loss           | 0.249        |
+------------------------------------------
+[PERF][GymAssaultEnv] pid=52252 decisions=50 step_avg_ms=32342.66 runner_step_avg_ms=40.36 controller_act_avg_ms=69.45 executor_avg_ms=68.96 finalize_avg_ms=0.01 catalog_avg_ms=0.00
+[PERF][GymAssaultEnv] pid=52252 decisions=50 step_avg_ms=32418.82 runner_step_avg_ms=40.35 controller_act_avg_ms=68.82 executor_avg_ms=68.34 finalize_avg_ms=0.01 catalog_avg_ms=0.00
+[PERF][GymAssaultEnv] pid=52252 decisions=50 step_avg_ms=32498.09 runner_step_avg_ms=40.36 controller_act_avg_ms=72.01 executor_avg_ms=71.55 finalize_avg_ms=0.02 catalog_avg_ms=0.01
+[PERF][GymAssaultEnv] pid=52252 decisions=50 step_avg_ms=32574.91 runner_step_avg_ms=40.35 controller_act_avg_ms=69.30 executor_avg_ms=68.82 finalize_avg_ms=0.02 catalog_avg_ms=0.00
+------------------------------------------
+| rollout/                |              |
+|    ep_len_mean          | 42.6         |
+|    ep_rew_mean          | -28.9        |
+| time/                   |              |
+|    fps                  | 10           |
+|    iterations           | 71           |
+|    time_elapsed         | 1691         |
+|    total_timesteps      | 18176        |
+| train/                  |              |
+|    approx_kl            | 0.0013306735 |
+|    clip_fraction        | 0            |
+|    clip_range           | 0.15         |
+|    entropy_loss         | -4.5         |
+|    explained_variance   | 0.864        |
+|    learning_rate        | 0.0001       |
+|    loss                 | 0.0455       |
+|    n_updates            | 1266         |
+|    policy_gradient_loss | -0.0168      |
+|    value_loss           | 0.199        |
+------------------------------------------
+[PERF][GymAssaultEnv] pid=52252 decisions=50 step_avg_ms=32654.02 runner_step_avg_ms=40.36 controller_act_avg_ms=69.03 executor_avg_ms=68.53 finalize_avg_ms=0.02 catalog_avg_ms=0.00
+[PERF][GymAssaultEnv] pid=52252 decisions=50 step_avg_ms=32685.66 runner_step_avg_ms=40.30 controller_act_avg_ms=23.28 executor_avg_ms=22.81 finalize_avg_ms=0.02 catalog_avg_ms=0.01
+[PERF][GymAssaultEnv] pid=52252 decisions=50 step_avg_ms=32717.26 runner_step_avg_ms=40.24 controller_act_avg_ms=23.36 executor_avg_ms=22.90 finalize_avg_ms=0.01 catalog_avg_ms=0.01
+[PERF][GymAssaultEnv] pid=52252 decisions=50 step_avg_ms=32749.07 runner_step_avg_ms=40.18 controller_act_avg_ms=23.61 executor_avg_ms=23.11 finalize_avg_ms=0.01 catalog_avg_ms=0.01
+[PERF][GymAssaultEnv] pid=52252 decisions=50 step_avg_ms=32780.48 runner_step_avg_ms=40.12 controller_act_avg_ms=22.97 executor_avg_ms=22.50 finalize_avg_ms=0.02 catalog_avg_ms=0.01
+[PERF][GymAssaultEnv] pid=52252 decisions=50 step_avg_ms=32812.24 runner_step_avg_ms=40.06 controller_act_avg_ms=23.44 executor_avg_ms=22.93 finalize_avg_ms=0.02 catalog_avg_ms=0.01
+-------------------------------------------
+| rollout/                |               |
+|    ep_len_mean          | 43.2          |
+|    ep_rew_mean          | -29.8         |
+| time/                   |               |
+|    fps                  | 10            |
+|    iterations           | 72            |
+|    time_elapsed         | 1699          |
+|    total_timesteps      | 18432         |
+| train/                  |               |
+|    approx_kl            | 0.00053185713 |
+|    clip_fraction        | 0             |
+|    clip_range           | 0.15          |
+|    entropy_loss         | -4.71         |
+|    explained_variance   | 0.511         |
+|    learning_rate        | 0.0001        |
+|    loss                 | 0.325         |
+|    n_updates            | 1269          |
+|    policy_gradient_loss | -0.000476     |
+|    value_loss           | 0.693         |
+-------------------------------------------
+[PERF][GymAssaultEnv] pid=52252 decisions=50 step_avg_ms=32843.65 runner_step_avg_ms=40.00 controller_act_avg_ms=23.10 executor_avg_ms=22.63 finalize_avg_ms=0.02 catalog_avg_ms=0.00
+[PERF][GymAssaultEnv] pid=52252 decisions=50 step_avg_ms=32874.91 runner_step_avg_ms=39.95 controller_act_avg_ms=22.92 executor_avg_ms=22.42 finalize_avg_ms=0.02 catalog_avg_ms=0.01
+[PERF][GymAssaultEnv] pid=52252 decisions=50 step_avg_ms=32908.95 runner_step_avg_ms=39.89 controller_act_avg_ms=20.59 executor_avg_ms=20.11 finalize_avg_ms=0.02 catalog_avg_ms=0.01
+[PERF][GymAssaultEnv] pid=52252 decisions=50 step_avg_ms=32940.92 runner_step_avg_ms=39.83 controller_act_avg_ms=23.65 executor_avg_ms=23.19 finalize_avg_ms=0.02 catalog_avg_ms=0.01
+[PERF][GymAssaultEnv] pid=52252 decisions=50 step_avg_ms=32972.60 runner_step_avg_ms=39.78 controller_act_avg_ms=23.35 executor_avg_ms=22.89 finalize_avg_ms=0.01 catalog_avg_ms=0.00
+-------------------------------------------
+| rollout/                |               |
+|    ep_len_mean          | 43.8          |
+|    ep_rew_mean          | -30.7         |
+| time/                   |               |
+|    fps                  | 10            |
+|    iterations           | 73            |
+|    time_elapsed         | 1708          |
+|    total_timesteps      | 18688         |
+| train/                  |               |
+|    approx_kl            | 0.00035061524 |
+|    clip_fraction        | 0             |
+|    clip_range           | 0.15          |
+|    entropy_loss         | -4.34         |
+|    explained_variance   | 0.611         |
+|    learning_rate        | 0.0001        |
+|    loss                 | 0.537         |
+|    n_updates            | 1272          |
+|    policy_gradient_loss | -0.000401     |
+|    value_loss           | 1.19          |
+-------------------------------------------
+[PERF][GymAssaultEnv] pid=52252 decisions=50 step_avg_ms=33004.21 runner_step_avg_ms=39.72 controller_act_avg_ms=23.13 executor_avg_ms=22.65 finalize_avg_ms=0.02 catalog_avg_ms=0.01
+[PERF][GymAssaultEnv] pid=52252 decisions=50 step_avg_ms=33035.60 runner_step_avg_ms=39.66 controller_act_avg_ms=23.09 executor_avg_ms=22.63 finalize_avg_ms=0.02 catalog_avg_ms=0.01
+[PERF][GymAssaultEnv] pid=52252 decisions=50 step_avg_ms=33067.04 runner_step_avg_ms=39.61 controller_act_avg_ms=23.08 executor_avg_ms=22.63 finalize_avg_ms=0.02 catalog_avg_ms=0.01
+[PERF][GymAssaultEnv] pid=52252 decisions=50 step_avg_ms=33098.35 runner_step_avg_ms=39.55 controller_act_avg_ms=22.94 executor_avg_ms=22.48 finalize_avg_ms=0.02 catalog_avg_ms=0.01
+[PERF][GymAssaultEnv] pid=52252 decisions=50 step_avg_ms=33129.88 runner_step_avg_ms=39.49 controller_act_avg_ms=23.02 executor_avg_ms=22.54 finalize_avg_ms=0.02 catalog_avg_ms=0.01
+-------------------------------------------
+| rollout/                |               |
+|    ep_len_mean          | 44.3          |
+|    ep_rew_mean          | -31.8         |
+| time/                   |               |
+|    fps                  | 11            |
+|    iterations           | 74            |
+|    time_elapsed         | 1717          |
+|    total_timesteps      | 18944         |
+| train/                  |               |
+|    approx_kl            | 0.00024400931 |
+|    clip_fraction        | 0             |
+|    clip_range           | 0.15          |
+|    entropy_loss         | -4.33         |
+|    explained_variance   | 0.683         |
+|    learning_rate        | 0.0001        |
+|    loss                 | 0.378         |
+|    n_updates            | 1275          |
+|    policy_gradient_loss | -0.00442      |
+|    value_loss           | 0.925         |
+-------------------------------------------
+[PERF][GymAssaultEnv] pid=52252 decisions=50 step_avg_ms=33161.47 runner_step_avg_ms=39.44 controller_act_avg_ms=23.28 executor_avg_ms=22.82 finalize_avg_ms=0.02 catalog_avg_ms=0.01
+[PERF][GymAssaultEnv] pid=52252 decisions=50 step_avg_ms=33192.68 runner_step_avg_ms=39.38 controller_act_avg_ms=22.84 executor_avg_ms=22.33 finalize_avg_ms=0.02 catalog_avg_ms=0.01
+[PERF][GymAssaultEnv] pid=52252 decisions=50 step_avg_ms=33223.78 runner_step_avg_ms=39.33 controller_act_avg_ms=22.86 executor_avg_ms=22.40 finalize_avg_ms=0.01 catalog_avg_ms=0.00
+[PERF][GymAssaultEnv] pid=52252 decisions=50 step_avg_ms=33254.94 runner_step_avg_ms=39.27 controller_act_avg_ms=22.78 executor_avg_ms=22.28 finalize_avg_ms=0.02 catalog_avg_ms=0.01
+[PERF][GymAssaultEnv] pid=52252 decisions=50 step_avg_ms=33286.11 runner_step_avg_ms=39.22 controller_act_avg_ms=23.09 executor_avg_ms=22.61 finalize_avg_ms=0.01 catalog_avg_ms=0.00
+-------------------------------------------
+| rollout/                |               |
+|    ep_len_mean          | 44.9          |
+|    ep_rew_mean          | -33           |
+| time/                   |               |
+|    fps                  | 11            |
+|    iterations           | 75            |
+|    time_elapsed         | 1726          |
+|    total_timesteps      | 19200         |
+| train/                  |               |
+|    approx_kl            | 0.00028159562 |
+|    clip_fraction        | 0             |
+|    clip_range           | 0.15          |
+|    entropy_loss         | -4.33         |
+|    explained_variance   | 0.811         |
+|    learning_rate        | 0.0001        |
+|    loss                 | 0.253         |
+|    n_updates            | 1278          |
+|    policy_gradient_loss | -0.00592      |
+|    value_loss           | 0.666         |
+-------------------------------------------
+[PERF][GymAssaultEnv] pid=52252 decisions=50 step_avg_ms=33317.39 runner_step_avg_ms=39.16 controller_act_avg_ms=22.98 executor_avg_ms=22.52 finalize_avg_ms=0.02 catalog_avg_ms=0.01
+[PERF][GymAssaultEnv] pid=52252 decisions=50 step_avg_ms=33348.81 runner_step_avg_ms=39.11 controller_act_avg_ms=23.13 executor_avg_ms=22.62 finalize_avg_ms=0.02 catalog_avg_ms=0.01
+[PERF][GymAssaultEnv] pid=52252 decisions=50 step_avg_ms=33380.40 runner_step_avg_ms=39.06 controller_act_avg_ms=23.14 executor_avg_ms=22.62 finalize_avg_ms=0.02 catalog_avg_ms=0.01
+[PERF][GymAssaultEnv] pid=52252 decisions=50 step_avg_ms=33412.07 runner_step_avg_ms=39.00 controller_act_avg_ms=23.18 executor_avg_ms=22.70 finalize_avg_ms=0.02 catalog_avg_ms=0.01
+[PERF][GymAssaultEnv] pid=52252 decisions=50 step_avg_ms=33443.16 runner_step_avg_ms=38.95 controller_act_avg_ms=22.85 executor_avg_ms=22.35 finalize_avg_ms=0.02 catalog_avg_ms=0.01
+------------------------------------------
+| rollout/                |              |
+|    ep_len_mean          | 45.4         |
+|    ep_rew_mean          | -34.1        |
+| time/                   |              |
+|    fps                  | 11           |
+|    iterations           | 76           |
+|    time_elapsed         | 1735         |
+|    total_timesteps      | 19456        |
+| train/                  |              |
+|    approx_kl            | 0.0003277755 |
+|    clip_fraction        | 0            |
+|    clip_range           | 0.15         |
+|    entropy_loss         | -4.32        |
+|    explained_variance   | 0.887        |
+|    learning_rate        | 0.0001       |
+|    loss                 | 0.194        |
+|    n_updates            | 1281         |
+|    policy_gradient_loss | -0.00454     |
+|    value_loss           | 0.499        |
+------------------------------------------
+[PERF][GymAssaultEnv] pid=52252 decisions=50 step_avg_ms=33474.50 runner_step_avg_ms=38.90 controller_act_avg_ms=23.04 executor_avg_ms=22.53 finalize_avg_ms=0.02 catalog_avg_ms=0.01
+-------------------------------------------
+| rollout/                |               |
+|    ep_len_mean          | 45.6          |
+|    ep_rew_mean          | -34.9         |
+| time/                   |               |
+|    fps                  | 11            |
+|    iterations           | 77            |
+|    time_elapsed         | 1757          |
+|    total_timesteps      | 19712         |
+| train/                  |               |
+|    approx_kl            | 0.00030795974 |
+|    clip_fraction        | 0             |
+|    clip_range           | 0.15          |
+|    entropy_loss         | -4.32         |
+|    explained_variance   | 0.871         |
+|    learning_rate        | 0.0001        |
+|    loss                 | 0.195         |
+|    n_updates            | 1284          |
+|    policy_gradient_loss | -0.00409      |
+|    value_loss           | 0.461         |
+-------------------------------------------
+------------------------------------------
+| rollout/                |              |
+|    ep_len_mean          | 45.6         |
+|    ep_rew_mean          | -35.8        |
+| time/                   |              |
+|    fps                  | 11           |
+|    iterations           | 78           |
+|    time_elapsed         | 1784         |
+|    total_timesteps      | 19968        |
+| train/                  |              |
+|    approx_kl            | 0.0001015272 |
+|    clip_fraction        | 0            |
+|    clip_range           | 0.15         |
+|    entropy_loss         | -4.42        |
+|    explained_variance   | 0.678        |
+|    learning_rate        | 0.0001       |
+|    loss                 | 0.273        |
+|    n_updates            | 1287         |
+|    policy_gradient_loss | -0.00158     |
+|    value_loss           | 0.572        |
+------------------------------------------
+-------------------------------------------
+| rollout/                |               |
+|    ep_len_mean          | 45.9          |
+|    ep_rew_mean          | -36           |
+| time/                   |               |
+|    fps                  | 11            |
+|    iterations           | 79            |
+|    time_elapsed         | 1804          |
+|    total_timesteps      | 20224         |
+| train/                  |               |
+|    approx_kl            | 0.00019337074 |
+|    clip_fraction        | 0             |
+|    clip_range           | 0.15          |
+|    entropy_loss         | -4.44         |
+|    explained_variance   | 0.671         |
+|    learning_rate        | 0.0001        |
+|    loss                 | 0.242         |
+|    n_updates            | 1290          |
+|    policy_gradient_loss | -0.00689      |
+|    value_loss           | 0.565         |
+-------------------------------------------
+[PERF][GymAssaultEnv] pid=52252 decisions=50 step_avg_ms=34873.02 runner_step_avg_ms=38.89 controller_act_avg_ms=24.13 executor_avg_ms=23.61 finalize_avg_ms=0.02 catalog_avg_ms=0.01
+[PERF][GymAssaultEnv] pid=52252 decisions=50 step_avg_ms=34907.13 runner_step_avg_ms=38.84 controller_act_avg_ms=26.13 executor_avg_ms=25.65 finalize_avg_ms=0.02 catalog_avg_ms=0.01
+[PERF][GymAssaultEnv] pid=52252 decisions=50 step_avg_ms=34938.76 runner_step_avg_ms=38.79 controller_act_avg_ms=23.72 executor_avg_ms=23.26 finalize_avg_ms=0.01 catalog_avg_ms=0.00
+[PERF][GymAssaultEnv] pid=52252 decisions=50 step_avg_ms=34970.41 runner_step_avg_ms=38.74 controller_act_avg_ms=23.64 executor_avg_ms=23.14 finalize_avg_ms=0.02 catalog_avg_ms=0.01
+-------------------------------------------
+| rollout/                |               |
+|    ep_len_mean          | 46.3          |
+|    ep_rew_mean          | -36.4         |
+| time/                   |               |
+|    fps                  | 11            |
+|    iterations           | 80            |
+|    time_elapsed         | 1814          |
+|    total_timesteps      | 20480         |
+| train/                  |               |
+|    approx_kl            | 0.00041463273 |
+|    clip_fraction        | 0             |
+|    clip_range           | 0.15          |
+|    entropy_loss         | -4.45         |
+|    explained_variance   | 0.691         |
+|    learning_rate        | 0.0001        |
+|    loss                 | 0.198         |
+|    n_updates            | 1293          |
+|    policy_gradient_loss | -0.00982      |
+|    value_loss           | 0.509         |
+-------------------------------------------
+-------------------------------------------
+| rollout/                |               |
+|    ep_len_mean          | 46.6          |
+|    ep_rew_mean          | -36.5         |
+| time/                   |               |
+|    fps                  | 11            |
+|    iterations           | 81            |
+|    time_elapsed         | 1833          |
+|    total_timesteps      | 20736         |
+| train/                  |               |
+|    approx_kl            | 0.00033873692 |
+|    clip_fraction        | 0             |
+|    clip_range           | 0.15          |
+|    entropy_loss         | -4.51         |
+|    explained_variance   | 0.772         |
+|    learning_rate        | 0.0001        |
+|    loss                 | 0.15          |
+|    n_updates            | 1296          |
+|    policy_gradient_loss | -0.00541      |
+|    value_loss           | 0.404         |
+-------------------------------------------
+-------------------------------------------
+| rollout/                |               |
+|    ep_len_mean          | 46            |
+|    ep_rew_mean          | -37           |
+| time/                   |               |
+|    fps                  | 11            |
+|    iterations           | 82            |
+|    time_elapsed         | 1849          |
+|    total_timesteps      | 20992         |
+| train/                  |               |
+|    approx_kl            | 0.00044451933 |
+|    clip_fraction        | 0             |
+|    clip_range           | 0.15          |
+|    entropy_loss         | -4.51         |
+|    explained_variance   | 0.671         |
+|    learning_rate        | 0.0001        |
+|    loss                 | 0.151         |
+|    n_updates            | 1299          |
+|    policy_gradient_loss | -0.00895      |
+|    value_loss           | 0.429         |
+-------------------------------------------
+------------------------------------------
+| rollout/                |              |
+|    ep_len_mean          | 45.2         |
+|    ep_rew_mean          | -37.7        |
+| time/                   |              |
+|    fps                  | 11           |
+|    iterations           | 83           |
+|    time_elapsed         | 1864         |
+|    total_timesteps      | 21248        |
+| train/                  |              |
+|    approx_kl            | 0.0001596103 |
+|    clip_fraction        | 0            |
+|    clip_range           | 0.15         |
+|    entropy_loss         | -4.5         |
+|    explained_variance   | 0.373        |
+|    learning_rate        | 0.0001       |
+|    loss                 | 0.378        |
+|    n_updates            | 1302         |
+|    policy_gradient_loss | -0.00021     |
+|    value_loss           | 0.818        |
+------------------------------------------
+------------------------------------------
+| rollout/                |              |
+|    ep_len_mean          | 44.4         |
+|    ep_rew_mean          | -38.5        |
+| time/                   |              |
+|    fps                  | 11           |
+|    iterations           | 84           |
+|    time_elapsed         | 1879         |
+|    total_timesteps      | 21504        |
+| train/                  |              |
+|    approx_kl            | 0.0002916134 |
+|    clip_fraction        | 0            |
+|    clip_range           | 0.15         |
+|    entropy_loss         | -4.5         |
+|    explained_variance   | 0.355        |
+|    learning_rate        | 0.0001       |
+|    loss                 | 0.321        |
+|    n_updates            | 1305         |
+|    policy_gradient_loss | -0.00552     |
+|    value_loss           | 0.765        |
+------------------------------------------
+-------------------------------------------
+| rollout/                |               |
+|    ep_len_mean          | 44            |
+|    ep_rew_mean          | -39.3         |
+| time/                   |               |
+|    fps                  | 11            |
+|    iterations           | 85            |
+|    time_elapsed         | 1895          |
+|    total_timesteps      | 21760         |
+| train/                  |               |
+|    approx_kl            | 0.00035357312 |
+|    clip_fraction        | 0             |
+|    clip_range           | 0.15          |
+|    entropy_loss         | -4.49         |
+|    explained_variance   | 0.476         |
+|    learning_rate        | 0.0001        |
+|    loss                 | 0.219         |
+|    n_updates            | 1308          |
+|    policy_gradient_loss | -0.00795      |
+|    value_loss           | 0.583         |
+-------------------------------------------

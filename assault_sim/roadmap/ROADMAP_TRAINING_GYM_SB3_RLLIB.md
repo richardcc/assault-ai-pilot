@@ -7,7 +7,7 @@ Resumen ejecutivo:
 - train estable en Windows con `DummyVecEnv` + `num_envs=1`; throughput observado muy superior a perfiles previos lentos.
 - limpieza `train_lean` aplicada: `TrainingEnv` ahora usa `info` compacto y `OptionExecutor` tagging ligero en ruta de entrenamiento.
 - `deepcopy` caliente ya recortado en rutas criticas (fallback a shallow copy donde es seguro).
-- R2.a avanzado: vectorizacion NumPy parcial en hotspots (cache geometrica por estado, distancias batch `enemy/vp`, y scoring batch en rutas de movimiento CAPTURE/ADVANCE/FLANK).
+- R2.a avanzado: vectorizacion NumPy parcial en hotspots (cache geometrica por estado, distancias batch `enemy/vp`, scoring batch en rutas CAPTURE/ADVANCE/FLANK, y recorte de deepcopy dominante en `step-in lookahead` para train lean).
 - scripts de benchmark creados en FS: `benchmark_train_perf.ps1` y `benchmark_train_perf_ab.ps1`.
 - primer A/B ejecutado, pero invalido para cierre de gate de performance interno (`PerfSamples=0`); requiere rerun con captura PERF valida.
 - unificacion train/eval del finalizer de acciones en modulo comun (`assault_sim/decision/action_finalizer.py`) para reducir deuda y evitar divergencia.
@@ -22,7 +22,7 @@ Proximos pasos inmediatos:
 Semaforo operativo:
 
 - GREEN: estabilidad de arranque/ejecucion en Windows (`dummy + env1`) y limpieza `train_lean` aplicada.
-- YELLOW: R2.a en progreso (F1 aplicado parcialmente; falta cierre F0/F1 con baseline PERF valido).
+- YELLOW: R2.a en progreso (mejora de throughput observada con `fps~33`; `step_avg_ms` corregido por ventana y util para lectura; falta cierre formal de gates funcionales multi-seed).
 - RED: gate tactico aun abierto hasta confirmar no-regresion en smoke eval post-optimizacion.
 
 ## Panel operativo (activo)
@@ -303,9 +303,10 @@ Objetivo:
 
 Alcance (sin cambiar logica de juego):
 
-- [~] F0 baseline: guardar `step_avg_ms`, `runner_step_avg_ms`, `executor_avg_ms`, `finalize_avg_ms`, `catalog_avg_ms` con `ASSAULT_PERF_PROFILE=1`
+- [x] F0 baseline: guardar `step_avg_ms`, `runner_step_avg_ms`, `executor_avg_ms`, `finalize_avg_ms`, `catalog_avg_ms` con `ASSAULT_PERF_PROFILE=1`
   - [x] scripts de benchmark en FS: `benchmark_train_perf.ps1` y `benchmark_train_perf_ab.ps1`
-  - [~] pendiente: repetir A/B con `PerfSamples > 0` estable en ambas corridas para comparacion limpia
+  - [x] `PerfSamples > 0` validado en corridas limpias (ventana `ASSAULT_PERF_EVERY=10`)
+  - [x] `step_avg_ms` corregido a ventana fija (evita deriva acumulada y lecturas infladas)
 - [~] F1 distancias/nearest vectorizado:
   - [x] construir arrays `(q,r)` por unidades/objetivos por tick (cache geometrica por estado en `OptionExecutor`)
   - [x] calcular distancias en batch (unit->enemy, unit->vp) en una pasada (NumPy)
@@ -314,10 +315,11 @@ Alcance (sin cambiar logica de juego):
   - [x] extraer destinos candidatos a arrays
   - [x] puntuar candidatos (`objective_progress`, `terrain_score`, distancias) con operaciones vectorizadas en rutas `capture_staging`, `move_closer`, `flank_move`
   - [~] pendiente: extender batch scoring a rutas secundarias fuera de CAPTURE si siguen en hotspot
-- [ ] F2 ActionCatalog vector-friendly:
-  - [ ] snapshot por tick (`state._cache_version`) con arrays compactos
-  - [ ] filtros por mascaras booleanas para candidatos de ataque/movimiento
-  - [ ] invalidacion estricta por version para evitar acciones stale
+- [~] F2 ActionCatalog vector-friendly:
+  - [x] snapshot por tick (`state._cache_version`) y cache particionado por unidad (`actions/moves/attacks`)
+  - [x] filtros reutilizables para candidatos de ataque/movimiento en rutas calientes
+  - [x] invalidacion estricta por version/estado para evitar acciones stale
+  - [~] pendiente: extender masks compactas a rutas secundarias y validar impacto final
 - [ ] F3 LOS/geometria (solo si sigue siendo hotspot):
   - [ ] precalculo/lookup de ray paths relevantes
   - [ ] reducir recomputo LOS por accion
@@ -325,7 +327,7 @@ Alcance (sin cambiar logica de juego):
 Gates R2.a:
 
 - [ ] mejora minima de `catalog_avg_ms` >= 25% vs baseline F0
-- [ ] mejora de `step_avg_ms` >= 20% vs baseline F0
+- [x] mejora de `step_avg_ms` >= 20% vs baseline F0 (validado tras correccion de medicion por ventana y rerun limpio)
 - [ ] sin regresion funcional: mismas acciones legales en tests deterministas (seed fija) para estados de referencia
 - [ ] sin degradacion tactica material en smoke eval (`loss_rate`, `vp_entry_conversion_rate`, `capture_conversion_after_contact`)
 
@@ -369,6 +371,11 @@ Checklist de seguridad:
 - [ ] ejecutar eval multi-seed (`42/43/44`)
 - [ ] revisar `true_win_rate`, `loss_rate`, `captured=4/5`, `vp_entry_missed_rate`, `strategy_stuck_ratio`
 - [ ] si hay degradacion tactica: revertir optimizacion y pasar a siguiente hipotesis
+
+Bloqueador actual de ejecucion:
+
+- [~] falta artefacto `models/scenario_battaglia_cittadina_2_1/side_US/sb3_latest_US.zip` para habilitar smoke eval.
+- [x] script operativo listo: `run_eval_multiseed_smoke.ps1` (valida artefacto y corre seeds `42/43/44`).
 
 ### Ejecucion paralela configurable (aceleracion segura)
 

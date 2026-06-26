@@ -22,6 +22,19 @@ class OptionExecutorCaptureMixin:
             cached = self._stepin_next_cache.get(cache_key)
             if cached is not None:
                 return bool(cached)
+        # Train-fast proxy: avoid deepcopy(state) in hot path.
+        # This function is called extremely often from capture staging/stepin setup;
+        # using distance-to-uncaptured-VP keeps tactical intent while removing the
+        # dominant deepcopy cost in training runs.
+        if bool(getattr(self, "fast_reposition_followup_check", False)) or bool(getattr(self, "lightweight_training_tags", False)):
+            try:
+                d = self._nearest_uncaptured_vp_dist_from_pos(state, getattr(unit, "side", None), pos)
+                out = d is not None and float(d) <= 1.0
+            except Exception:
+                out = False
+            if pos_q is not None and pos_r is not None:
+                self._stepin_next_cache[cache_key] = bool(out)
+            return bool(out)
         try:
             sim_state = __import__("copy").deepcopy(state)
         except Exception:
@@ -42,6 +55,8 @@ class OptionExecutorCaptureMixin:
                 self._stepin_next_cache[cache_key] = bool(out)
             return out
         except Exception:
+            if pos_q is not None and pos_r is not None:
+                self._stepin_next_cache[cache_key] = False
             return False
 
     def _owned_vp_hexes_for_side(self, state, side: str):

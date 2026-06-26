@@ -536,6 +536,20 @@ class GymAssaultEnv(gym.Env):
         self._build_runtime(seed=effective_seed)
         self._controller.reset()
         self._decision_count = 0
+        if self._perf_enabled:
+            self._perf_stats = {
+                "runner_step_calls": 0.0,
+                "runner_step_s": 0.0,
+                "step_total_s": 0.0,
+                "step_loops": 0.0,
+            }
+            self._controller.perf_stats = {
+                "controller_act_calls": 0.0,
+                "controller_act_s": 0.0,
+                "executor_execute_s": 0.0,
+                "finalize_s": 0.0,
+                "catalog_actions_s": 0.0,
+            }
 
         obs = self._runner.reset()
         self._last_obs = np.asarray(obs, dtype=np.float32)
@@ -591,16 +605,26 @@ class GymAssaultEnv(gym.Env):
             if self._decision_count % self._perf_every == 0:
                 calls = max(1.0, self._perf_stats["runner_step_calls"])
                 act_calls = max(1.0, self._controller.perf_stats.get("controller_act_calls", 0.0))
+                window_decisions = float(self._perf_every)
                 print(
                     "[PERF][GymAssaultEnv]"
                     f" pid={os.getpid()}"
                     f" decisions={self._decision_count}"
-                    f" step_avg_ms={(self._perf_stats['step_total_s'] / max(1.0, float(self._decision_count))) * 1000.0:.2f}"
+                    f" step_avg_ms={(self._perf_stats['step_total_s'] / max(1.0, window_decisions)) * 1000.0:.2f}"
                     f" runner_step_avg_ms={(self._perf_stats['runner_step_s'] / calls) * 1000.0:.2f}"
                     f" controller_act_avg_ms={(self._controller.perf_stats.get('controller_act_s', 0.0) / act_calls) * 1000.0:.2f}"
                     f" executor_avg_ms={(self._controller.perf_stats.get('executor_execute_s', 0.0) / act_calls) * 1000.0:.2f}"
                     f" finalize_avg_ms={(self._controller.perf_stats.get('finalize_s', 0.0) / act_calls) * 1000.0:.2f}"
                     f" catalog_avg_ms={(self._controller.perf_stats.get('catalog_actions_s', 0.0) / act_calls) * 1000.0:.2f}"
                 )
+                self._perf_stats["runner_step_calls"] = 0.0
+                self._perf_stats["runner_step_s"] = 0.0
+                self._perf_stats["step_total_s"] = 0.0
+                self._perf_stats["step_loops"] = 0.0
+                self._controller.perf_stats["controller_act_calls"] = 0.0
+                self._controller.perf_stats["controller_act_s"] = 0.0
+                self._controller.perf_stats["executor_execute_s"] = 0.0
+                self._controller.perf_stats["finalize_s"] = 0.0
+                self._controller.perf_stats["catalog_actions_s"] = 0.0
         return obs, total_reward, terminated, truncated, info
 
