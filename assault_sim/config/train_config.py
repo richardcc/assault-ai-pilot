@@ -53,6 +53,12 @@ class TrainConfig:
     sb3_extra_good_trade_bonus: float
     capture_guardrails_enabled: bool
     diagnostic_force_capture_only: bool
+    finalizer_override_profile: str
+    sb3_models_subdir: str
+    sb3_models_subdir_template: str
+    sb3_profile_train: bool
+    sb3_profile_sort: str
+    sb3_profile_top_n: int
 
     @property
     def scenario(self) -> str:
@@ -63,6 +69,33 @@ class TrainConfig:
     def rl_side(self) -> str:
         # Compatibility alias: first configured RL side.
         return self.rl_sides[0]
+
+    @staticmethod
+    def _safe_token(value: str | None) -> str:
+        raw = str(value or "").strip()
+        return "".join(ch if (ch.isalnum() or ch in ("-", "_")) else "_" for ch in raw)
+
+    def resolve_models_subdir(self, scenario_id: str | None = None, side: str | None = None) -> str:
+        explicit = str(self.sb3_models_subdir or "").strip()
+        if explicit:
+            return explicit.strip("/\\")
+
+        template = str(self.sb3_models_subdir_template or "").strip()
+        if not template:
+            return ""
+
+        scenario_token = self._safe_token(scenario_id or self.scenario)
+        side_token = self._safe_token(str(side or self.rl_side).upper())
+        if "{" in template and "}" in template:
+            try:
+                rendered = template.format(
+                    scenario=scenario_token,
+                    side=side_token,
+                )
+            except Exception:
+                rendered = template
+            return str(rendered).strip().strip("/\\")
+        return template.strip("/\\")
 
     @staticmethod
     def from_defaults() -> "TrainConfig":
@@ -100,6 +133,12 @@ class TrainConfig:
             sb3_extra_good_trade_bonus=0.3,
             capture_guardrails_enabled=True,
             diagnostic_force_capture_only=False,
+            finalizer_override_profile="strict",
+            sb3_models_subdir="",
+            sb3_models_subdir_template="",
+            sb3_profile_train=False,
+            sb3_profile_sort="cumulative",
+            sb3_profile_top_n=40,
         )
 
     @staticmethod
@@ -134,6 +173,11 @@ class TrainConfig:
         sb3_vec_env_type = str(merged.get("sb3_vec_env_type", "dummy")).strip().lower()
         if sb3_vec_env_type not in {"dummy", "subproc"}:
             raise ValueError("sb3_vec_env_type must be one of: 'dummy', 'subproc'")
+        finalizer_override_profile = str(
+            merged.get("finalizer_override_profile", "strict") or "strict"
+        ).strip().lower()
+        if finalizer_override_profile not in {"strict", "soft"}:
+            raise ValueError("finalizer_override_profile must be one of: 'strict', 'soft'")
         return TrainConfig(
             rl_sides=rl_sides,
             scenario_schedule=schedule,
@@ -168,6 +212,12 @@ class TrainConfig:
             sb3_extra_good_trade_bonus=float(merged["sb3_extra_good_trade_bonus"]),
             capture_guardrails_enabled=bool(merged.get("capture_guardrails_enabled", True)),
             diagnostic_force_capture_only=bool(merged.get("diagnostic_force_capture_only", False)),
+            finalizer_override_profile=finalizer_override_profile,
+            sb3_models_subdir=str(merged.get("sb3_models_subdir", "") or "").strip(),
+            sb3_models_subdir_template=str(merged.get("sb3_models_subdir_template", "") or "").strip(),
+            sb3_profile_train=bool(merged.get("sb3_profile_train", False)),
+            sb3_profile_sort=str(merged.get("sb3_profile_sort", "cumulative") or "cumulative"),
+            sb3_profile_top_n=int(merged.get("sb3_profile_top_n", 40)),
         )
 
     def to_dict(self) -> dict[str, Any]:
@@ -177,7 +227,8 @@ class TrainConfig:
 def load_train_config(path: Path | None) -> TrainConfig:
     if path is None or not path.exists():
         return TrainConfig.from_defaults()
-    with open(path, "r", encoding="utf-8") as f:
+    # Accept both plain UTF-8 and UTF-8 with BOM (common from PowerShell Set-Content).
+    with open(path, "r", encoding="utf-8-sig") as f:
         data = json.load(f)
     return TrainConfig.from_dict(data)
 

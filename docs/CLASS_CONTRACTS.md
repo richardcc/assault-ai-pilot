@@ -384,8 +384,8 @@ Notes:
 
 ### `Evaluator` (`assault_sim/evaluation/evaluator.py`)
 
-- **`__init__(env, rl_controller, enemy_controller, rl_side, max_steps=300)`**
-  - Input: evaluation environment and controller(s).
+- **`__init__(env, rl_controller, rl_side, max_steps=300)`**
+  - Input: evaluation environment and RL controller.
   - Output: evaluator configured for multi-episode rollout.
 - **`run_episode()`**
   - Input: current evaluator context.

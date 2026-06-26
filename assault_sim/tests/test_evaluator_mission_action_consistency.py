@@ -40,7 +40,7 @@ def test_vp_entry_opportunity_depends_on_legal_movement_actions(monkeypatch):
     # actions ending in uncaptured VP hexes.
     state = _build_state()
     unit = _build_unit()
-    ev = Evaluator(env=None, rl_controller=None, enemy_controller=None, rl_side="US")
+    ev = Evaluator(env=None, rl_controller=None, rl_side="US")
 
     class _CatalogWithVP(_DummyCatalog):
         def actions(self):

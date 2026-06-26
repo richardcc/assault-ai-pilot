@@ -7,6 +7,7 @@ import os
 from assault_model.actions.status import WaitAction
 from assault_model.actions.action_catalog import ActionCatalog
 from assault_sim.config.ppo_config import PPOConfig
+from assault_sim.config.train_config import load_train_config
 from assault_sim.decision.option_executor import OptionExecutor
 from assault_sim.heuristics.tactical_path_heuristic import TacticalPathHeuristic
 from assault_sim.rl.state_encoder import encode_state
@@ -32,35 +33,106 @@ class SB3AIService:
         self.executor = OptionExecutor(self.heuristic, avoid_bad_trades=False, adv_threshold=-0.5)
         self.repo_root = Path(__file__).resolve().parents[2]
         self._explicit_model_path = model_path
-        self._models_by_side: dict[str, object] = {}
-        self._model_path_by_side: dict[str, Path] = {}
+        self._models_by_key: dict[tuple[str, str], object] = {}
+        self._model_path_by_key: dict[tuple[str, str], Path] = {}
         self._strategy_lock_by_side: dict[str, tuple[int, StrategicIntent]] = {}
-        self._vecnorm_by_side: dict[str, object] = {}
+        self._vecnorm_by_key: dict[tuple[str, str], object] = {}
+        self._train_cfg = load_train_config(self.repo_root / "assault_sim" / "config" / "train_config.json")
+        self._models_subdir_template = str(
+            getattr(self._train_cfg, "sb3_models_subdir_template", "")
+            or getattr(self._train_cfg, "sb3_models_subdir", "")
+            or ""
+        ).strip()
+        self._default_scenario = str(getattr(self._train_cfg, "scenario", "") or "").strip()
 
-        any_default = self._resolve_model_path_for_side(self.default_rl_side)
-        if any_default is None:
-            raise FileNotFoundError(
-                "No SB3 checkpoint found. Expected side-specific checkpoints, e.g.: "
-                f"{self.repo_root / 'models' / 'sb3_latest_<SIDE>.zip'} or "
-                f"{self.repo_root / 'models' / 'sb3_best_<SIDE>' / 'best_model.zip'}"
-            )
-        # Backward-compatible attribute used by backend startup logs.
+        any_default = self._resolve_model_path_for_side(
+            self.default_rl_side,
+            scenario_id=self._default_scenario,
+        )
+        # Runtime now resolves models lazily per scenario+side.
+        # Do not fail service construction if the default pair is absent.
         self.model_path = any_default
 
-    def _resolve_model_path_for_side(self, side: str | None) -> Path | None:
+    def _safe_token(self, value: str | None) -> str:
+        raw = str(value or "").strip()
+        return "".join(ch if (ch.isalnum() or ch in ("-", "_")) else "_" for ch in raw)
+
+    def _scenario_id_from_env(self, env) -> str:
+        scenario = getattr(env, "scenario", None)
+        raw = (
+            getattr(scenario, "scenario_id", None)
+            or getattr(scenario, "id", None)
+            or getattr(scenario, "name", None)
+            or getattr(getattr(env, "game_state", None), "scenario_name", None)
+            or self._default_scenario
+            or ""
+        )
+        return self._safe_token(str(raw))
+
+    def _model_cache_key(self, side: str | None, scenario_id: str | None) -> tuple[str, str]:
+        return ((side or "").strip().upper(), self._safe_token(scenario_id))
+
+    def _candidate_model_subdirs(self, side: str | None, scenario_id: str | None) -> list[str]:
+        normalized_side = self._safe_token((side or "").strip().upper())
+        normalized_scenario = self._safe_token(scenario_id or self._default_scenario)
+        result: list[str] = []
+        seen: set[str] = set()
+
+        def _push(value: str | None) -> None:
+            text = str(value or "").strip().strip("/\\")
+            if text in seen:
+                return
+            seen.add(text)
+            result.append(text)
+
+        if self._models_subdir_template:
+            if "{" in self._models_subdir_template and "}" in self._models_subdir_template:
+                try:
+                    rendered = self._models_subdir_template.format(
+                        scenario=normalized_scenario,
+                        side=normalized_side,
+                    )
+                    _push(rendered)
+                except Exception:
+                    _push(self._models_subdir_template)
+            else:
+                _push(self._models_subdir_template)
+
+        if normalized_scenario and normalized_side:
+            _push(f"scenario_{normalized_scenario}/side_{normalized_side}")
+        if normalized_scenario:
+            _push(f"scenario_{normalized_scenario}")
+        if normalized_side:
+            _push(f"side_{normalized_side}")
+        _push("")
+        return result
+
+    def _resolve_model_path_for_side(self, side: str | None, scenario_id: str | None = None) -> Path | None:
         normalized_side = (side or "").strip().upper()
-        candidates = [
-            self._explicit_model_path,
-            self.repo_root / "models" / f"sb3_latest_{normalized_side}.zip" if normalized_side else None,
-            self.repo_root / "models" / f"sb3_best_{normalized_side}" / "best_model.zip" if normalized_side else None,
-        ]
+        candidates = [self._explicit_model_path]
+        for subdir in self._candidate_model_subdirs(normalized_side, scenario_id):
+            base_dir = (self.repo_root / "models" / subdir) if subdir else (self.repo_root / "models")
+            candidates.extend(
+                [
+                    base_dir / f"sb3_latest_{normalized_side}.zip" if normalized_side else None,
+                    base_dir / f"sb3_best_{normalized_side}" / "best_model.zip" if normalized_side else None,
+                ]
+            )
         return next((p for p in candidates if p is not None and p.exists()), None)
 
-    def _get_model_for_side(self, side: str | None):
+    def _get_model_for_side(self, side: str | None, scenario_id: str | None = None):
         normalized_side = (side or "").strip().upper()
-        if normalized_side in self._models_by_side:
-            return self._models_by_side[normalized_side]
-        chosen = self._resolve_model_path_for_side(normalized_side)
+        cache_key = self._model_cache_key(normalized_side, scenario_id)
+        if cache_key in self._models_by_key:
+            return self._models_by_key[cache_key]
+        chosen = self._resolve_model_path_for_side(normalized_side, scenario_id=scenario_id)
+        if chosen is None and scenario_id:
+            # Runtime can expose scenario ids/names with minor variations.
+            # Fallback to default scenario workspace before giving up.
+            chosen = self._resolve_model_path_for_side(
+                normalized_side,
+                scenario_id=self._default_scenario,
+            )
         if chosen is None:
             return None
         try:
@@ -68,42 +140,48 @@ class SB3AIService:
             model = PPO.load(str(chosen), device="cpu")
         except Exception:
             return None
-        self._models_by_side[normalized_side] = model
-        self._model_path_by_side[normalized_side] = chosen
+        self._models_by_key[cache_key] = model
+        self._model_path_by_key[cache_key] = chosen
         return model
 
-    def can_control_side(self, side: str | None) -> bool:
-        return self._get_model_for_side(side) is not None
+    def can_control_side(self, side: str | None, scenario_id: str | None = None) -> bool:
+        return self._get_model_for_side(side, scenario_id=scenario_id or self._default_scenario) is not None
 
-    def _resolve_vecnormalize_path_for_side(self, side: str | None) -> Path | None:
+    def _resolve_vecnormalize_path_for_side(self, side: str | None, scenario_id: str | None = None) -> Path | None:
         normalized_side = (side or "").strip().upper()
-        candidates = [
-            self.repo_root / "models" / f"sb3_vecnormalize_{normalized_side}.pkl" if normalized_side else None,
-            self.repo_root / "models" / "sb3_vecnormalize.pkl",
-        ]
+        candidates = []
+        for subdir in self._candidate_model_subdirs(normalized_side, scenario_id):
+            base_dir = (self.repo_root / "models" / subdir) if subdir else (self.repo_root / "models")
+            candidates.extend(
+                [
+                    base_dir / f"sb3_vecnormalize_{normalized_side}.pkl" if normalized_side else None,
+                    base_dir / "sb3_vecnormalize.pkl",
+                ]
+            )
         return next((p for p in candidates if p is not None and p.exists()), None)
 
-    def _build_obs_normalizer_for_side(self, side: str | None):
+    def _build_obs_normalizer_for_side(self, side: str | None, scenario_id: str | None = None):
         normalized_side = (side or "").strip().upper()
-        if normalized_side in self._vecnorm_by_side:
-            return self._vecnorm_by_side[normalized_side]
-        vecnorm_path = self._resolve_vecnormalize_path_for_side(normalized_side)
+        cache_key = self._model_cache_key(normalized_side, scenario_id)
+        if cache_key in self._vecnorm_by_key:
+            return self._vecnorm_by_key[cache_key]
+        vecnorm_path = self._resolve_vecnormalize_path_for_side(normalized_side, scenario_id=scenario_id)
         if vecnorm_path is None:
-            self._vecnorm_by_side[normalized_side] = None
+            self._vecnorm_by_key[cache_key] = None
             return None
         try:
             from stable_baselines3.common.monitor import Monitor
             from stable_baselines3.common.vec_env import DummyVecEnv, VecNormalize
             from assault_sim.envs.gym_assault_env import GymAssaultEnv
         except Exception:
-            self._vecnorm_by_side[normalized_side] = None
+            self._vecnorm_by_key[cache_key] = None
             return None
         try:
             # Seed is only required to build a shape-compatible env for loading stats.
             def _make_env():
                 return Monitor(
                     GymAssaultEnv(
-                        scenario=getattr(PPOConfig, "SCENARIO", None),
+                        scenario=scenario_id or getattr(PPOConfig, "SCENARIO", None),
                         rl_side=normalized_side or PPOConfig.RL_SIDE,
                         seed=int(os.getenv("ASSAULT_UI_SB3_SEED", "42")),
                     )
@@ -112,14 +190,14 @@ class SB3AIService:
             vecnorm = VecNormalize.load(str(vecnorm_path), norm_env)
             vecnorm.training = False
             vecnorm.norm_reward = False
-            self._vecnorm_by_side[normalized_side] = vecnorm
+            self._vecnorm_by_key[cache_key] = vecnorm
             return vecnorm
         except Exception:
-            self._vecnorm_by_side[normalized_side] = None
+            self._vecnorm_by_key[cache_key] = None
             return None
 
-    def _normalize_obs(self, side: str | None, obs: np.ndarray) -> np.ndarray:
-        vecnorm = self._build_obs_normalizer_for_side(side)
+    def _normalize_obs(self, side: str | None, obs: np.ndarray, scenario_id: str | None = None) -> np.ndarray:
+        vecnorm = self._build_obs_normalizer_for_side(side, scenario_id=scenario_id)
         if vecnorm is None:
             return obs
         arr = np.asarray(obs, dtype=np.float32)
@@ -224,7 +302,8 @@ class SB3AIService:
     def choose_unit_and_action(self, env, side: str | None, planner_context=None):
         rl_side = (side or "").upper()
         state = env.game_state
-        model = self._get_model_for_side(rl_side)
+        scenario_id = self._scenario_id_from_env(env)
+        model = self._get_model_for_side(rl_side, scenario_id=scenario_id)
         if model is None:
             return None, None, "WAIT_NO_MODEL"
         candidates = sorted(
@@ -241,7 +320,7 @@ class SB3AIService:
         scenario = getattr(env, "scenario", None)
         max_turns = getattr(scenario, "max_turns", None)
         obs = encode_state(state, unit=None, rl_side=rl_side, max_turns=max_turns, scenario=scenario)
-        obs = self._normalize_obs(rl_side, obs)
+        obs = self._normalize_obs(rl_side, obs, scenario_id=scenario_id)
         action_pair, _ = model.predict(obs, deterministic=True)
         action_vec = np.asarray(action_pair).reshape(-1)
         if action_vec.size not in (3, 4):
@@ -332,14 +411,15 @@ class SB3AIService:
         rl_side = unit.side
         state = env.game_state
         scenario = getattr(env, "scenario", None)
+        scenario_id = self._scenario_id_from_env(env)
         max_turns = getattr(scenario, "max_turns", None)
-        model = self._get_model_for_side(rl_side)
+        model = self._get_model_for_side(rl_side, scenario_id=scenario_id)
         if model is None:
             action = WaitAction(unit.unit_id)
             action.unit_id = unit.unit_id
             return action, "WAIT_NO_MODEL"
         obs = encode_state(state, unit=unit, rl_side=rl_side, max_turns=max_turns, scenario=scenario)
-        obs = self._normalize_obs(rl_side, obs)
+        obs = self._normalize_obs(rl_side, obs, scenario_id=scenario_id)
         action_pair, _ = model.predict(obs, deterministic=True)
         action_vec = np.asarray(action_pair).reshape(-1)
         if action_vec.size not in (3, 4):

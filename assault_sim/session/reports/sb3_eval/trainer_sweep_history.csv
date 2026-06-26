@@ -1,0 +1,2 @@
+﻿"timestamp","run_dir","global_decision","promotion_allowed","rollback_required","winner_config","winner_true_win_rate_objective","winner_loss_rate","winner_vp_entry_missed_rate","winner_captured_4_5"
+"2026-06-24 10:53:14","C:\repos\python\assault\assault_sim\session\reports\sb3_eval\trainer_sweep_it_battaglia_20260624_100610","GO","yes","no","train_config_it_sweep_B.run.json","55","0","0","11"

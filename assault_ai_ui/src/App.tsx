@@ -10,6 +10,7 @@ import { formatCoords } from "./game/render/hexGridRenderer";
 import { DispatchedOrdersPanel } from "./game/ui/DispatchedOrdersPanel";
 import { logCombatEvents } from "./game/systems/combatLog";
 import { getUnitActionMarker } from "./game/state/actionMarkers";
+import { apiUrl } from "./config/backend";
 
 type LogEntry = {
   type: string;
@@ -42,6 +43,7 @@ function App() {
 
   const lastTurnRef = useRef<number>(-1);
   const lastActiveSideRef = useRef<string>("");
+  const lastDoneRef = useRef<boolean>(false);
   const prevUnitsRef = useRef<Unit[] | null>(null);
 
   // Helper to add structured log events
@@ -64,7 +66,8 @@ function App() {
   };
 
   const buildSidesConfig = (mode: string): Record<string, string> => {
-    const sides = scenarioSides.length ? scenarioSides : ["GE", "US"];
+    const sides = scenarioSides;
+    if (!sides.length) return {};
     const chosenHumanSide = humanSide || sides[0];
     const cfg: Record<string, string> = {};
     for (const s of sides) {
@@ -96,7 +99,7 @@ function App() {
     const loadScenarioSides = async () => {
       if (!selectedScenario) return;
       try {
-        const res = await fetch(`http://127.0.0.1:8000/api/ui/scenarios/${selectedScenario}`);
+        const res = await fetch(apiUrl(`/api/ui/scenarios/${selectedScenario}`));
         if (!res.ok) {
           throw new Error(`Failed to load scenario data (${res.status})`);
         }
@@ -123,7 +126,7 @@ function App() {
   useEffect(() => {
     const loadScenarios = async () => {
       try {
-        const res = await fetch("http://127.0.0.1:8000/api/ui/scenarios");
+        const res = await fetch(apiUrl("/api/ui/scenarios"));
         if (!res.ok) {
           throw new Error(`Failed to load scenarios (${res.status})`);
         }
@@ -140,21 +143,6 @@ function App() {
     };
     loadScenarios();
   }, []);
-
-  // Auto-start a default session so the map is visible on app load.
-  useEffect(() => {
-    if (activeMode || gameData || !selectedScenario || !humanSide) return;
-    setActiveMode("human");
-    resetMatchUiState();
-    gameController.start(
-      "human",
-      selectedScenario,
-      buildSidesConfig("human")
-    ).catch((err) => {
-      console.error("❌ Auto-start failed", err);
-      addLog("system", `❌ Auto-start failed: ${String(err)}`);
-    });
-  }, [activeMode, gameData, selectedScenario, humanSide]);
 
   // Monitor game state changes to output beautiful terminal logs
   useEffect(() => {
@@ -176,6 +164,18 @@ function App() {
       );
     }
   }, [gameData]);
+
+  // Emit a single explicit end-of-match log when done flips false -> true.
+  useEffect(() => {
+    if (!gameData) return;
+    const doneNow = Boolean(gameData?.done);
+    if (doneNow && !lastDoneRef.current) {
+      const winner = gameData?.winner ? String(gameData.winner) : "Draw";
+      const reason = String(gameData?.end_reason || "completed");
+      addLog("system", `🏁 Match ended: ${winner} (${reason})`);
+    }
+    lastDoneRef.current = doneNow;
+  }, [gameData?.done, gameData?.winner, gameData?.end_reason]);
 
   // If active side is not human, clear any stale human selection/orders.
   useEffect(() => {
@@ -310,6 +310,14 @@ function App() {
       addLog("system", "❌ No scenario selected");
       return;
     }
+    if (!scenarioSides.length) {
+      addLog("system", "❌ Scenario sides are still loading. Please wait.");
+      return;
+    }
+    if (!humanSide || !scenarioSides.includes(humanSide)) {
+      addLog("system", "❌ Invalid human side for selected scenario.");
+      return;
+    }
     setActiveMode(mode);
     addLog(
       "system",
@@ -325,23 +333,12 @@ function App() {
 
   const handleScenarioChange = (scenarioId: string) => {
     setSelectedScenario(scenarioId);
+    // Avoid showing stale side options while new scenario metadata is loading.
+    setScenarioSides([]);
+    setHumanSide("");
     if (!scenarioId) return;
-
-    const modeToUse = (activeMode || "human") as any;
-    if (!activeMode) {
-      setActiveMode("human");
-    }
-
-    addLog("system", `🗺️ Scenario changed: ${scenarioId}. Reloading session...`);
+    addLog("system", `🗺️ Scenario changed: ${scenarioId}. Loading scenario metadata...`);
     resetMatchUiState();
-    gameController.start(
-      modeToUse,
-      scenarioId,
-      buildSidesConfig(modeToUse)
-    ).catch((err) => {
-      console.error("❌ Scenario switch failed", err);
-      addLog("system", `❌ Scenario switch failed: ${String(err)}`);
-    });
   };
 
   // Safe handler to stop and refresh the session
@@ -352,9 +349,21 @@ function App() {
     }, 800);
   };
 
+  const handleStartSelectedMode = () => {
+    const modeToUse = activeMode || "human";
+    handleStartGame(modeToUse);
+  };
+
+  const canStartGame = Boolean(
+    selectedScenario &&
+    scenarioSides.length > 0 &&
+    humanSide &&
+    scenarioSides.includes(humanSide)
+  );
+
   const handleExportTrace = async () => {
     try {
-      const res = await fetch("http://127.0.0.1:8000/api/game/trace?limit=50000");
+      const res = await fetch(apiUrl("/api/game/trace?limit=50000"));
       if (!res.ok) {
         throw new Error(`Trace export failed (${res.status})`);
       }
@@ -405,7 +414,7 @@ function App() {
       if (!isHumanTurnAfterCb) {
         return;
       }
-      const res = await fetch("http://127.0.0.1:8000/api/game/step", {
+      const res = await fetch(apiUrl("/api/game/step"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ action_id: actionId }),
@@ -513,8 +522,12 @@ function App() {
             onChange={(e) => setHumanSide(e.target.value)}
             title="Human side"
             style={{ minWidth: 140 }}
+            disabled={!scenarioSides.length}
           >
-            {(scenarioSides.length ? scenarioSides : ["GE", "US"]).map((sideId) => (
+            {!scenarioSides.length && (
+              <option value="">Loading sides...</option>
+            )}
+            {scenarioSides.map((sideId) => (
               <option key={sideId} value={sideId}>
                 Human: {sideId}
               </option>
@@ -548,6 +561,15 @@ function App() {
             title="Download backend trace JSON"
           >
             💾 Export Trace
+          </button>
+
+          <button
+            className="btn-tactical btn-tactical-start"
+            onClick={handleStartSelectedMode}
+            title="Start selected mode"
+            disabled={!canStartGame}
+          >
+            ▶ Start
           </button>
 
           <button 

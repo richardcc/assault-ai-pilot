@@ -96,6 +96,18 @@
   border-color: rgba(255, 56, 56, 0.3);
 }
 
+.btn-tactical-start {
+  color: var(--neon-green);
+  border-color: rgba(0, 255, 136, 0.35);
+}
+
+.btn-tactical-start:hover {
+  background: rgba(0, 255, 136, 0.08);
+  border-color: var(--neon-green);
+  color: var(--text-bright);
+  box-shadow: 0 0 12px rgba(0, 255, 136, 0.35);
+}
+
 .btn-tactical-stop:hover {
   background: rgba(255, 56, 56, 0.08);
   border-color: var(--neon-red);

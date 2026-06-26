@@ -1,14 +1,53 @@
 from __future__ import annotations
 
 import argparse
+import cProfile
+import os
 from pathlib import Path
 from datetime import datetime
 import shutil
 import json
+import pstats
+import io
 import torch
 
 from assault_sim.config.train_config import load_train_config
 from assault_sim.envs.gym_assault_env import GymAssaultEnv
+
+
+def _env_int(name: str, default: int) -> int:
+    raw = os.getenv(name)
+    if raw is None:
+        return int(default)
+    try:
+        return int(raw)
+    except Exception:
+        return int(default)
+
+
+def _configure_torch_threads_for_cpu() -> tuple[int, int]:
+    # Prefer explicit env overrides, otherwise use a high-utilization default.
+    cpu_total = int(os.cpu_count() or 8)
+    default_threads = max(1, min(20, cpu_total))
+    default_interop = max(1, min(8, max(2, cpu_total // 3)))
+    num_threads = max(1, _env_int("ASSAULT_TORCH_NUM_THREADS", default_threads))
+    interop_threads = max(1, _env_int("ASSAULT_TORCH_INTEROP_THREADS", default_interop))
+
+    try:
+        torch.set_num_threads(num_threads)
+    except Exception as exc:
+        print(f"[WARN] torch.set_num_threads({num_threads}) failed: {exc}")
+    try:
+        torch.set_num_interop_threads(interop_threads)
+    except Exception as exc:
+        print(f"[WARN] torch.set_num_interop_threads({interop_threads}) failed: {exc}")
+
+    actual_num_threads = int(torch.get_num_threads())
+    try:
+        actual_interop = int(torch.get_num_interop_threads())
+    except Exception:
+        actual_interop = interop_threads
+    return actual_num_threads, actual_interop
 
 
 def _make_env_factory(
@@ -54,16 +93,25 @@ def _scenario_sides(repo_root: Path, scenario_id: str) -> set[str]:
     }
 
 
-def _cleanup_model_workspace(model_dir: Path) -> None:
-    """Remove prior training artifacts inside models/ before a new run."""
-    file_patterns = (
-        "sb3_latest_*.zip",
-        "sb3_vecnormalize_*.pkl",
-        "sb3_latest_*.meta.json",
+def _cleanup_model_workspace(model_dir: Path, rl_sides: tuple[str, ...]) -> None:
+    """Remove prior artifacts only for requested RL sides."""
+    side_keys = tuple(str(s).upper() for s in (rl_sides or ()))
+    file_patterns = tuple(
+        p
+        for side in side_keys
+        for p in (
+            f"sb3_latest_{side}.zip",
+            f"sb3_vecnormalize_{side}.pkl",
+            f"sb3_latest_{side}.meta.json",
+        )
     )
-    dir_patterns = (
-        "sb3_best_*",
-        "sb3_eval_*",
+    dir_patterns = tuple(
+        p
+        for side in side_keys
+        for p in (
+            f"sb3_best_{side}",
+            f"sb3_eval_{side}",
+        )
     )
     removed_files = 0
     removed_dirs = 0
@@ -77,10 +125,6 @@ def _cleanup_model_workspace(model_dir: Path) -> None:
             if path.is_dir():
                 shutil.rmtree(path, ignore_errors=True)
                 removed_dirs += 1
-    runs_dir = model_dir / "runs"
-    if runs_dir.exists() and runs_dir.is_dir():
-        shutil.rmtree(runs_dir, ignore_errors=True)
-        removed_dirs += 1
     print(
         f"[cleanup] model workspace cleaned: files={removed_files} dirs={removed_dirs} under {model_dir}"
     )
@@ -108,24 +152,27 @@ def main():
         ) from exc
 
     repo_root = Path(__file__).resolve().parents[2]
-    model_dir = repo_root / "models"
-    model_dir.mkdir(parents=True, exist_ok=True)
     train_config_path = (
         Path(args.config).expanduser().resolve()
         if args.config
         else (repo_root / "assault_sim" / "config" / "train_config.json")
     )
     cfg = load_train_config(train_config_path)
-    if bool(getattr(cfg, "sb3_clean_models_before_train", True)):
-        _cleanup_model_workspace(model_dir)
-    else:
-        print("ℹ️ model workspace cleanup skipped (sb3_clean_models_before_train=false).")
+    models_root = repo_root / "models"
     requested_device = cfg.sb3_device.strip().lower()
     if requested_device == "cuda" and not torch.cuda.is_available():
-        print("⚠️ sb3_device='cuda' but CUDA is not available. Falling back to CPU.")
+        print("[WARN] sb3_device='cuda' but CUDA is not available. Falling back to CPU.")
         effective_device = "cpu"
     else:
         effective_device = requested_device
+    if effective_device == "cpu":
+        t_num, t_interop = _configure_torch_threads_for_cpu()
+        print(
+            "[perf] torch thread config:"
+            f" num_threads={t_num}"
+            f" interop_threads={t_interop}"
+            f" cpu_count={os.cpu_count() or 'n/a'}"
+        )
 
     class PeriodicArtifactCallback(BaseCallback):
         """Periodic saver for model + VecNormalize stats."""
@@ -147,33 +194,60 @@ def main():
                         vec.save(str(self.vecnorm_path))
                     self._last_save_step = cur_steps
             except Exception as exc:
-                print(f"⚠️ periodic artifact save failed: {exc}")
+                print(f"[WARN] periodic artifact save failed: {exc}")
             return True
 
     num_envs = cfg.sb3_num_envs
     vec_env_type = str(getattr(cfg, "sb3_vec_env_type", "dummy")).strip().lower()
 
     run_id = datetime.utcnow().strftime("%Y%m%dT%H%M%SZ")
-    tb_log = repo_root / "models" / "runs" / f"sb3_{run_id}"
     trained_any = False
     for rl_side in cfg.rl_sides:
+        side_scenario = str(cfg.scenario or "").strip()
+        models_subdir = cfg.resolve_models_subdir(
+            scenario_id=side_scenario,
+            side=rl_side,
+        )
+        model_dir = (models_root / models_subdir) if models_subdir else models_root
+        model_dir.mkdir(parents=True, exist_ok=True)
+        if bool(getattr(cfg, "sb3_clean_models_before_train", True)):
+            _cleanup_model_workspace(model_dir, (rl_side,))
+        else:
+            print(
+                f"[INFO] model workspace cleanup skipped for side={rl_side} "
+                "(sb3_clean_models_before_train=false)."
+            )
+        tb_log = model_dir / "runs" / f"sb3_{run_id}"
         model = None
         train_env = None
         total_timesteps = 0
         final_scenario = None
         out_path = model_dir / f"sb3_latest_{rl_side}.zip"
         vecnorm_path = model_dir / f"sb3_vecnormalize_{rl_side}.pkl"
-        print(f"=== TRAIN SIDE {rl_side} ===")
+        print(f"=== TRAIN SIDE {rl_side} (models_subdir='{models_subdir or '.'}') ===")
 
         for phase_idx, phase in enumerate(cfg.scenario_schedule, start=1):
             scenario_id = phase.id
             phase_timesteps = int(phase.episodes * cfg.sb3_max_decisions)
             if phase_timesteps <= 0:
                 continue
+            warmup_capture_phase = len(cfg.scenario_schedule) > 1 and phase_idx == 1
+            phase_force_capture = (
+                True if warmup_capture_phase else bool(getattr(cfg, "diagnostic_force_capture_only", False))
+            )
+            os.environ["ASSAULT_CAPTURE_GUARDRAILS_ENABLED"] = (
+                "1" if bool(getattr(cfg, "capture_guardrails_enabled", True)) else "0"
+            )
+            os.environ["ASSAULT_DIAGNOSTIC_FORCE_CAPTURE_ONLY"] = (
+                "1" if phase_force_capture else "0"
+            )
+            os.environ["ASSAULT_FINALIZER_OVERRIDE_PROFILE"] = str(
+                getattr(cfg, "finalizer_override_profile", "strict") or "strict"
+            ).strip().lower()
             sides_in_scenario = _scenario_sides(repo_root, scenario_id)
             if rl_side not in sides_in_scenario:
                 print(
-                    f"⚠️ SKIP PHASE side={rl_side} scenario={scenario_id}: "
+                    f"[WARN] SKIP PHASE side={rl_side} scenario={scenario_id}: "
                     f"side not present in scenario units (found={sorted(sides_in_scenario)})"
                 )
                 continue
@@ -183,6 +257,8 @@ def main():
                 f"side={rl_side} scenario={scenario_id} episodes={phase.episodes} "
                 f"timesteps={phase_timesteps} ==="
             )
+            if warmup_capture_phase:
+                print("Curriculum warmup: forcing CAPTURE intent for phase 1.")
 
             train_fns = [
                 _make_env_factory(
@@ -203,7 +279,7 @@ def main():
                     train_vec = SubprocVecEnv(train_fns, start_method="spawn")
                     print(f"Using SubprocVecEnv with num_envs={num_envs}")
                 except Exception as exc:
-                    print(f"⚠️ SubprocVecEnv unavailable ({exc}); falling back to DummyVecEnv.")
+                    print(f"[WARN] SubprocVecEnv unavailable ({exc}); falling back to DummyVecEnv.")
                     train_vec = DummyVecEnv(train_fns)
             else:
                 train_vec = DummyVecEnv(train_fns)
@@ -272,7 +348,25 @@ def main():
                 model_path=out_path,
                 vecnorm_path=vecnorm_path,
             )
-            model.learn(total_timesteps=phase_timesteps, callback=[eval_cb, periodic_cb])
+            if bool(getattr(cfg, "sb3_profile_train", False)):
+                profiler = cProfile.Profile()
+                profiler.enable()
+                model.learn(total_timesteps=phase_timesteps, callback=[eval_cb, periodic_cb])
+                profiler.disable()
+                profile_base = model_dir / (
+                    f"sb3_profile_{rl_side}_{scenario_id}_phase{phase_idx}_{run_id}"
+                )
+                profiler.dump_stats(str(profile_base.with_suffix(".prof")))
+                s = io.StringIO()
+                stats = pstats.Stats(profiler, stream=s).sort_stats(
+                    str(getattr(cfg, "sb3_profile_sort", "cumulative") or "cumulative")
+                )
+                stats.print_stats(int(getattr(cfg, "sb3_profile_top_n", 40) or 40))
+                profile_base.with_suffix(".txt").write_text(s.getvalue(), encoding="utf-8")
+                print(f"[PROFILE] Saved cProfile stats -> {profile_base.with_suffix('.prof')}")
+                print(f"[PROFILE] Saved cProfile summary -> {profile_base.with_suffix('.txt')}")
+            else:
+                model.learn(total_timesteps=phase_timesteps, callback=[eval_cb, periodic_cb])
             total_timesteps += phase_timesteps
             final_scenario = scenario_id
 
@@ -299,6 +393,7 @@ def main():
             "train_config_path": str(train_config_path),
             "model_path": str(out_path),
             "vecnormalize_path": str(vecnorm_path),
+            "models_subdir": models_subdir,
             "num_envs": num_envs,
             "vec_env_type": vec_env_type,
             "clean_models_before_train": bool(
@@ -317,6 +412,9 @@ def main():
             "max_decisions": cfg.sb3_max_decisions,
             "zero_damage_penalty": cfg.sb3_zero_damage_penalty,
             "extra_good_trade_bonus": cfg.sb3_extra_good_trade_bonus,
+            "finalizer_override_profile": str(
+                getattr(cfg, "finalizer_override_profile", "strict") or "strict"
+            ).strip().lower(),
         }
         with open(model_dir / f"sb3_latest_{rl_side}.meta.json", "w", encoding="utf-8") as f:
             json.dump(meta, f, indent=2)

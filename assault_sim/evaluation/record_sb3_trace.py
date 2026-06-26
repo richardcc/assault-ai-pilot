@@ -26,7 +26,9 @@ def _build_obs_normalizer(scenario: str, rl_side: str, seed: int):
     from stable_baselines3.common.monitor import Monitor
     from stable_baselines3.common.vec_env import DummyVecEnv, VecNormalize
 
-    vecnorm_path = _resolve_vecnorm_path_for_side(REPO_ROOT, rl_side)
+    cfg = load_train_config(TRAIN_CONFIG_PATH)
+    models_subdir = cfg.resolve_models_subdir(scenario_id=scenario, side=rl_side)
+    vecnorm_path = _resolve_vecnorm_path_for_side(REPO_ROOT, rl_side, models_subdir=models_subdir)
     if vecnorm_path is None or not vecnorm_path.exists():
         return None, None
 
@@ -174,7 +176,8 @@ def record_trace(
     scenario = _resolve_scenario(cfg, scenario)
     base_seed = int(seed if seed is not None else cfg.seed)
 
-    model_path = _resolve_model_path_for_side(REPO_ROOT, rl_side)
+    models_subdir = cfg.resolve_models_subdir(scenario_id=scenario, side=rl_side)
+    model_path = _resolve_model_path_for_side(REPO_ROOT, rl_side, models_subdir=models_subdir)
     if model_path is None:
         raise SystemExit(f"SB3 model not found for side={rl_side}.")
     model = PPO.load(str(model_path), device="cpu")

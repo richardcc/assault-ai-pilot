@@ -3,11 +3,32 @@ import copy
 from assault_model.actions.status import WaitAction
 from assault_model.actions.ranged_direct import RangedDirectAttack
 from assault_model.actions.ranged_indirect import RangedIndirectAttack
+from assault_model.actions.assault import AssaultAction
 from assault_model.actions.composite_fire import MoveThenFireAction, FireThenMoveAction
 from assault_model.map.hex_utils import safe_hex_distance
 
 
 class OptionExecutorCombatMixin:
+    _MELEE_ADV_MIN = 0.35
+
+    def _enemy_min_dist_for_pos(self, state, side, pos):
+        try:
+            enemies = self._enemy_positions_array(state, side)  # type: ignore[attr-defined]
+            d = self._min_hex_distance_to_coords(pos, enemies)  # type: ignore[attr-defined]
+            if d is not None:
+                return d
+        except Exception:
+            pass
+        enemy_units = [
+            e for e in getattr(state, "units", [])
+            if getattr(e, "alive", False)
+            and getattr(e, "side", None) != side
+            and getattr(e, "position", None) is not None
+        ]
+        if not enemy_units:
+            return None
+        return min(safe_hex_distance(pos, e.position) for e in enemy_units)
+
     def _attack_reposition_improves_fire_window(self, state, unit, action) -> bool:
         if state is None or unit is None or action is None:
             return False
@@ -18,21 +39,26 @@ class OptionExecutorCombatMixin:
         end = path[-1]
         if end is None:
             return False
-        enemies = [
-            e for e in getattr(state, "units", [])
-            if getattr(e, "alive", False)
-            and getattr(e, "side", None) != getattr(unit, "side", None)
-            and getattr(e, "position", None) is not None
-        ]
-        if not enemies:
+        before_enemy = self._enemy_min_dist_for_pos(state, getattr(unit, "side", None), unit_pos)
+        after_enemy = self._enemy_min_dist_for_pos(state, getattr(unit, "side", None), end)
+        if before_enemy is None or after_enemy is None:
             return False
-        before_enemy = min(safe_hex_distance(unit_pos, e.position) for e in enemies)
-        after_enemy = min(safe_hex_distance(end, e.position) for e in enemies)
         # Fire-window proxy: improves shortest enemy distance and reaches likely
         # next-turn firing geometry even without immediate legal shot now.
         return float(after_enemy) <= 3.0 and float(after_enemy) < float(before_enemy)
 
     def _attack_reposition_legal_followup_status(self, state, unit, action) -> tuple[bool, str]:
+        if bool(getattr(self, "fast_reposition_followup_check", False)):
+            # Fast proxy for train_lean: avoid deepcopy(state) and approximate follow-up
+            # using geometric/contact signals already computed on current state.
+            try:
+                if self._attack_reposition_improves_fire_window(state, unit, action):
+                    return True, "fast_proxy_fire_window"
+                if self._attack_reposition_enables_contact_proxy(state, unit, action):
+                    return True, "fast_proxy_contact"
+            except Exception:
+                pass
+            return False, "fast_proxy_no_followup"
         if state is None or unit is None or action is None:
             return False, "invalid_inputs"
         path = getattr(action, "path", None)
@@ -99,16 +125,10 @@ class OptionExecutorCombatMixin:
         end = path[-1]
         if end is None:
             return False
-        enemies = [
-            e for e in getattr(state, "units", [])
-            if getattr(e, "alive", False)
-            and getattr(e, "side", None) != getattr(unit, "side", None)
-            and getattr(e, "position", None) is not None
-        ]
-        if not enemies:
+        before_enemy = self._enemy_min_dist_for_pos(state, getattr(unit, "side", None), unit_pos)
+        after_enemy = self._enemy_min_dist_for_pos(state, getattr(unit, "side", None), end)
+        if before_enemy is None or after_enemy is None:
             return False
-        before_enemy = min(safe_hex_distance(unit_pos, e.position) for e in enemies)
-        after_enemy = min(safe_hex_distance(end, e.position) for e in enemies)
         # One-turn contact proxy: step into likely next-turn fire geometry.
         return float(after_enemy) <= 2.0 and float(after_enemy) < float(before_enemy)
 
@@ -153,13 +173,9 @@ class OptionExecutorCombatMixin:
             if after < before:
                 return True
 
-        enemies = [
-            e for e in getattr(state, "units", [])
-            if getattr(e, "alive", False)
-            and getattr(e, "side", None) != getattr(unit, "side", None)
-            and getattr(e, "position", None) is not None
-        ]
-        if not enemies:
+        before_enemy = self._enemy_min_dist_for_pos(state, getattr(unit, "side", None), unit_pos)
+        after_enemy = self._enemy_min_dist_for_pos(state, getattr(unit, "side", None), end)
+        if before_enemy is None or after_enemy is None:
             try:
                 terrain_gain = float(self._terrain_tactical_score(state, unit, end)) - float(
                     self._terrain_tactical_score(state, unit, unit_pos)
@@ -167,8 +183,6 @@ class OptionExecutorCombatMixin:
                 return terrain_gain >= 1.0
             except Exception:
                 return False
-        before_enemy = min(safe_hex_distance(unit_pos, e.position) for e in enemies)
-        after_enemy = min(safe_hex_distance(end, e.position) for e in enemies)
         if after_enemy < before_enemy:
             return True
 
@@ -189,6 +203,7 @@ class OptionExecutorCombatMixin:
         return isinstance(
             action,
             (
+                AssaultAction,
                 RangedDirectAttack,
                 RangedIndirectAttack,
                 MoveThenFireAction,
@@ -197,20 +212,32 @@ class OptionExecutorCombatMixin:
         )
 
     def _resolve_action_target(self, state, action):
+        key = (
+            "attack_target",
+            self._action_catalog_cache_state_key,  # type: ignore[attr-defined]
+            id(action),
+            getattr(action, "target_id", None),
+        )
+        cached = self._target_cache.get(key)  # type: ignore[attr-defined]
+        if cached is not None:
+            return cached
         target = getattr(action, "target", None)
         if target is not None:
+            self._target_cache[key] = target  # type: ignore[attr-defined]
             return target
         target_id = getattr(action, "target_id", None)
         if target_id:
-            return next(
+            out = next(
                 (u for u in getattr(state, "units", []) if getattr(u, "unit_id", None) == target_id),
                 None,
             )
+            self._target_cache[key] = out  # type: ignore[attr-defined]
+            return out
+        self._target_cache[key] = None  # type: ignore[attr-defined]
         return None
 
     def _execute_attack(self, state, unit, attack_mode, allow_move_fallback: bool = False):
-        actions = self._get_unit_actions(state, unit)
-        attacks = [a for a in actions if self._is_attack_action(a)]
+        _actions, _moves, attacks = self._get_unit_actions_partitioned(state, unit)
         if not attacks:
             if allow_move_fallback:
                 fallback = self._move_closer(state, unit)
@@ -341,8 +368,8 @@ class OptionExecutorCombatMixin:
         return chosen
 
     def _has_immediate_attack(self, state, unit) -> bool:
-        actions = self._get_unit_actions(state, unit)
-        return any(self._is_attack_action(a) for a in actions)
+        _actions, _moves, attacks = self._get_unit_actions_partitioned(state, unit)
+        return bool(attacks)
 
     def _best_attack(self, attacks, state=None, unit=None):
         best = None
@@ -366,6 +393,12 @@ class OptionExecutorCombatMixin:
             hp = getattr(target, "hp", 10)
             is_move_then_fire = isinstance(a, MoveThenFireAction)
             is_fire_then_move = isinstance(a, FireThenMoveAction)
+            is_assault = isinstance(a, AssaultAction)
+
+            # Conservative melee gate: only engage close combat on clearly favorable
+            # combat advantage so we avoid suicidal hex-entry charges.
+            if is_assault and adv < float(self._MELEE_ADV_MIN):
+                continue
 
             if (is_move_then_fire or is_fire_then_move) and exp_dmg <= 0.02 and hp > 2:
                 continue
@@ -403,6 +436,8 @@ class OptionExecutorCombatMixin:
                 score += 1
             elif is_fire_then_move:
                 score += 0.5
+            elif is_assault:
+                score += 20
 
             if state is not None and unit_obj is not None and self._is_target_on_enemy_or_neutral_vp(state, unit_obj, target):
                 score += 35

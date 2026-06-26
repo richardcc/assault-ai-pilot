@@ -115,6 +115,7 @@ Set-Location "C:\repos\python\assault"
   -AutoCompareAgainstBaseline `
   -FailOnCompareNoGo
   
+  
   Set-Location "C:\repos\python\assault"
 .\run_train_eval.ps1 -AutoCompareAgainstBaseline -FailOnCompareNoGo
 
@@ -122,13 +123,83 @@ Set-Location "C:\repos\python\assault"
 
 
 
-=== L3 POLICY PERFORMANCE ===
-PRESERVE: usage=4049 dmg/atk=0.121
-CAPTURE: usage=657 dmg/atk=0.119
+
+PowerShell: $env:NO_COLOR=1
+luego ejecutas: python -m assault_sim.evaluation.eval_sb3
 
 
-=== L3 POLICY PERFORMANCE ===
-PRESERVE: usage=2140 dmg/atk=0.136
-CAPTURE: usage=594 dmg/atk=0.125
-ATTRIT: usage=16 dmg/atk=0.000
 
+* python -m assault_sim.train.train_sb3 --config assault_sim/config/train_config.json
+python -m assault_sim.evaluation.eval_sb3 --episodes 10 --seed 42
+python -m assault_sim.evaluation.results_analyzer --input assault_sim/session/reports/sb3_eval --baseline-tag P0
+
+
+python -m assault_sim.evaluation.eval_sb3 --episodes 10 --seed 42
+python -m assault_sim.evaluation.eval_sb3 --episodes 10 --seed 42 --diagnostic-min-overrides
+
+
+python -m assault_sim.train.train_sb3 --config assault_sim/config/train_config_us.json
+python -m assault_sim.train.train_sb3 --config assault_sim/config/train_config_it.json
+
+
+Get-Job | Select Id,Name,State,HasMoreData
+	
+	
+Get-Job | Select Id,Name,State,HasMoreData
+Receive-Job -Id 1,3,5,11 -Keep
+
+python -m assault_sim.evaluation.eval_sb3 --episodes 20 --seed 42 --out-dir "assault_sim/session/reports/sb3_eval/parallel_2x2"
+
+
+python -m assault_sim.evaluation.eval_sb3 `
+  --config "C:\repos\python\assault\assault_sim\session\tmp_parallel\train_config_battaglia_cittadina_2_1_us.parallel.json" `
+  --episodes 20 --seed 42 `
+  --out-dir "C:\repos\python\assault\assault_sim\session\reports\sb3_eval\battaglia_us"
+  
+  
+ .\scripts\run_eval_parallel_configs.ps1
+ 
+ .\scripts\run_eval_parallel_configs.ps1 `
+  -Episodes 20 `
+  -Seed 42 `
+  -MaxParallel 4 `
+  -OutRoot "C:\repos\python\assault\assault_sim\session\reports\sb3_eval\parallel_2x2_eval"
+  
+ .\scripts\run_eval_parallel_configs.ps1 `
+  -Configs @(
+    "C:\repos\python\assault\assault_sim\session\tmp_parallel\train_config_battaglia_cittadina_2_1_us.parallel.json",
+    "C:\repos\python\assault\assault_sim\session\tmp_parallel\train_config_battaglia_cittadina_2_1_it.parallel.json",
+    "C:\repos\python\assault\assault_sim\session\tmp_parallel\train_config_mettete_i_piedi_terra_1_us.parallel.json",
+    "C:\repos\python\assault\assault_sim\session\tmp_parallel\train_config_mettete_i_piedi_terra_1_ge.parallel.json"
+  )
+  
+  
+  .\scripts\check_latest_eval_gates.ps1 -Side US -Scenario battaglia_cittadina_2_1
+  .\scripts\check_latest_eval_gates.ps1 -ReportPath "C:\...\metrics_sb3_report_*.json" -Side IT
+  .\scripts\check_latest_eval_gates.ps1 -Scenario battaglia_cittadina_2_1
+  
+  
+  
+ python .\scripts\sb3_eval_viewer.py
+ http://127.0.0.1:8765
+ python .\scripts\sb3_eval_viewer.py --host 127.0.0.1 --port 8765
+ 
+ 
+ ***************************
+ # CPU threading/runtime
+$env:OMP_NUM_THREADS="20"
+$env:MKL_NUM_THREADS="20"
+$env:NUMEXPR_NUM_THREADS="20"
+$env:OPENBLAS_NUM_THREADS="20"
+$env:PYTHONUNBUFFERED="1"
+
+# Menos ruido en vec env
+$env:ASSAULT_DEBUG_TRACE="0"
+$env:ASSAULT_DEBUG_FINALIZER="0"
+
+python -m assault_sim.train.train_sb3
+
+*****************************
+$env:ASSAULT_PERF_PROFILE="1"
+$env:ASSAULT_PERF_EVERY="200"
+python -m assault_sim.train.train_sb3

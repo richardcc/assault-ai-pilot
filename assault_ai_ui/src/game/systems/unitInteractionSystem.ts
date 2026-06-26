@@ -1,3 +1,12 @@
+import { apiUrl } from "../../config/backend";
+
+function resolveUnitHex(unit: any): { q?: number; r?: number } {
+  if (!unit) return {};
+  const q = unit.q ?? unit.position?.q;
+  const r = unit.r ?? unit.position?.r;
+  return { q, r };
+}
+
 export async function handleUnitClick(
   unit: any,
   state: any,
@@ -30,9 +39,10 @@ export async function handleUnitClick(
     (unit.hp == null || unit.hp > 0);
 
   if (!isAvailable) {
+    const activeSide = String(state?.active_side || "");
     const reason =
       unit.side !== state.active_side
-        ? "Unit side is not active"
+        ? `Not this side's turn (active: ${activeSide || "?"})`
         : state.activated_units?.includes(id)
         ? "Unit already activated this turn"
         : "Unit not available";
@@ -48,7 +58,7 @@ export async function handleUnitClick(
   setAvailableMoves([]);
   setAttackHint(null);
 
-  const res = await fetch("http://127.0.0.1:8000/api/game/actions", {
+  const res = await fetch(apiUrl("/api/game/actions"), {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ unit_id: id })
@@ -63,14 +73,15 @@ export async function handleUnitClick(
       const target = state.units?.find(
         (u: any) => u.id === a.target_id || u.unit_id === a.target_id
       );
+      const targetPos = resolveUnitHex(target);
       const targetHex = (a as any).target_hex;
       const moveTo = (a as any).move_to;
 
       return {
         ...a,
         kind: "attack",
-        q: target?.q ?? targetHex?.[0],
-        r: target?.r ?? targetHex?.[1],
+        q: targetPos.q ?? targetHex?.[0],
+        r: targetPos.r ?? targetHex?.[1],
         move_q: moveTo?.q,
         move_r: moveTo?.r,
       };

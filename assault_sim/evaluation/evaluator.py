@@ -1,4 +1,5 @@
 from collections import defaultdict
+import time
 import numpy as np
 from assault_model.map.hex_utils import safe_hex_distance
 from assault_model.actions.action_catalog import ActionCatalog
@@ -17,7 +18,6 @@ class Evaluator:
         self,
         env,
         rl_controller,
-        enemy_controller,  # legacy (not used)
         rl_side: str,
         max_steps: int = 300,
     ):
@@ -151,9 +151,16 @@ class Evaluator:
         _vp_control_streak_after_entry = None
         capture_attempts = 0
         capture_success = 0
+        capture_attempted_total = 0
+        capture_committed_total = 0
+        capture_cancelled_by_finalizer_total = 0
+        capture_cancelled_by_finalizer_reason_counts = defaultdict(int)
         vp_control_advantage_steps = 0
         first_vp_entry_step = None
         first_progress_step = None
+        latency_invalid_order_count = 0
+        latency_missing_progress_count = 0
+        latency_missing_capture_count = 0
         contact_events = 0
         contact_to_capture_success = 0
         last_l3_by_unit = {}
@@ -191,6 +198,13 @@ class Evaluator:
         invalid_action_count = 0
         fallback_action_count = 0
         wait_recovery_sb3_backstep_count = 0
+        reward_component_sums = defaultdict(float)
+        reward_component_counts = defaultdict(int)
+        source_mix_counts = defaultdict(int)
+        source_mix_capture_events = defaultdict(int)
+        legal_actions_total_by_side = defaultdict(int)
+        legal_actions_decisions_by_side = defaultdict(int)
+        legal_actions_gen_time_ms_total_by_side = defaultdict(float)
 
         # ✅ CRÍTICO → LOG REAL DE EVENTOS
         events_log = []
@@ -256,6 +270,24 @@ class Evaluator:
             final_state = state
 
             reward_trace.append(step.get("reward", 0.0))
+            # Side asymmetry diagnostics: measure legal action catalog load by side.
+            unit_id_for_diag = info.get("unit_id")
+            if side is not None and unit_id_for_diag and prev_state is not None:
+                try:
+                    actor_before_diag = next(
+                        (u for u in getattr(prev_state, "units", []) if u.unit_id == unit_id_for_diag),
+                        None,
+                    )
+                    if actor_before_diag is not None:
+                        side_key = str(getattr(side, "value", side) or "").upper() or "UNKNOWN"
+                        t0 = time.perf_counter()
+                        legal_actions = ActionCatalog(prev_state, actor_before_diag, terrain_config).actions()
+                        elapsed_ms = (time.perf_counter() - t0) * 1000.0
+                        legal_actions_total_by_side[side_key] += int(len(legal_actions or []))
+                        legal_actions_decisions_by_side[side_key] += 1
+                        legal_actions_gen_time_ms_total_by_side[side_key] += float(elapsed_ms)
+                except Exception:
+                    pass
 
             # -------------------------------------------------
             # ✅ EVENT CAPTURE (FIX REAL ROBUSTO)
@@ -450,6 +482,14 @@ class Evaluator:
                 fallback_reason = str(info.get("plan_fallback_reason", "") or "")
                 if fallback_reason:
                     plan_fallback_reason_counts[fallback_reason] += 1
+                reward_components = info.get("reward_components", {}) or {}
+                if isinstance(reward_components, dict):
+                    for k, v in reward_components.items():
+                        try:
+                            reward_component_sums[str(k)] += float(v)
+                            reward_component_counts[str(k)] += 1
+                        except Exception:
+                            continue
                 plan_budget_state = str(info.get("plan_budget_state", "UNBOUNDED") or "UNBOUNDED").upper()
                 if plan_budget_state in {"BUDGETED", "EXHAUSTED"}:
                     budget_decision_count += 1
@@ -474,6 +514,18 @@ class Evaluator:
                 l3_executed = str(info.get("l3_executed", "") or "")
                 if l3_sampled or l3_effective or l3_executed:
                     l3_transition_counts[f"{l3_sampled}->{l3_effective}->{l3_executed}"] += 1
+                planner_overrode = bool(info.get("stepin_forced_option", False)) or bool(
+                    info.get("l3_capture_forced", False)
+                )
+                if finalize_reason and finalize_reason != "ok":
+                    source_bucket = "finalizer_override"
+                elif planner_overrode:
+                    source_bucket = "planner_override"
+                else:
+                    source_bucket = "sb3_kept"
+                source_mix_counts[source_bucket] += 1
+                if int(objective_delta_real) > 0:
+                    source_mix_capture_events[source_bucket] += 1
                 try:
                     plan_stub_intent_aligned += int(float(info.get("intent_alignment_stub", 0.0)) >= 1.0)
                 except Exception:
@@ -487,8 +539,19 @@ class Evaluator:
                 except Exception:
                     pass
                 if str(info.get("l3_strategy", "") or "").upper() == "CAPTURE":
+                    capture_attempted_total += 1
+                    if finalize_reason == "ok":
+                        capture_committed_total += 1
+                    else:
+                        capture_cancelled_by_finalizer_total += 1
+                        cancel_reason = str(finalize_reason or "unknown")
+                        if "->" in cancel_reason:
+                            cancel_reason = cancel_reason.split("->", 1)[0]
+                        capture_cancelled_by_finalizer_reason_counts[cancel_reason] += 1
                     capture_attempts += 1
                     if (
+                        objective_delta_real > 0
+                        or
                         int(info.get("objective_captured_delta", 0)) > 0
                         or bool(info.get("actor_captured_vp_now", False))
                         or (
@@ -531,7 +594,11 @@ class Evaluator:
                     selected_reason = str(info.get("capture_selected_move_reason", "") or "")
                     if selected_reason:
                         capture_selected_move_reason_counts[selected_reason] += 1
-                        if first_progress_step is None and selected_reason == "objective_progress_move":
+                        if (
+                            first_progress_step is None
+                            and first_vp_contact_step is not None
+                            and selected_reason == "objective_progress_move"
+                        ):
                             first_progress_step = steps + 1
                 if bool(info.get("attack_fallback_to_move", False)):
                     attack_fallback_to_move_count += 1
@@ -586,7 +653,11 @@ class Evaluator:
                     try:
                         vp_progress_sum += float(dist_before) - float(dist_after)
                         vp_progress_count += 1
-                        if first_progress_step is None and float(dist_after) < float(dist_before):
+                        if (
+                            first_progress_step is None
+                            and first_vp_contact_step is not None
+                            and float(dist_after) < float(dist_before)
+                        ):
                             first_progress_step = steps + 1
                     except Exception:
                         pass
@@ -749,6 +820,26 @@ class Evaluator:
             1.0 - vp_entry_conversion_rate
             if vp_entry_conversion_rate is not None else None
         )
+        contact_to_progress_delay = None
+        progress_to_capture_delay = None
+        if first_vp_contact_step is None:
+            latency_missing_progress_count += 1
+            latency_missing_capture_count += 1
+        else:
+            if first_progress_step is None:
+                latency_missing_progress_count += 1
+            elif first_progress_step < first_vp_contact_step:
+                latency_invalid_order_count += 1
+            else:
+                contact_to_progress_delay = int(first_progress_step - first_vp_contact_step)
+            if first_vp_entry_step is None:
+                latency_missing_capture_count += 1
+            elif first_progress_step is None:
+                latency_missing_progress_count += 1
+            elif first_vp_entry_step < first_progress_step:
+                latency_invalid_order_count += 1
+            else:
+                progress_to_capture_delay = int(first_vp_entry_step - first_progress_step)
         result["mission"] = {
             "vp_contact_steps": vp_contact_steps,
             "vp_hold_steps": vp_hold_steps,
@@ -765,6 +856,13 @@ class Evaluator:
             ),
             "vp_control_turns_share": (vp_control_advantage_steps / max(1, rl_decisions)),
             "capture_attempt_success_rate": (capture_success / max(1, capture_attempts)),
+            "capture_attempted": int(capture_attempted_total),
+            "capture_committed": int(capture_committed_total),
+            "capture_cancelled_by_finalizer": int(capture_cancelled_by_finalizer_total),
+            "capture_cancelled_by_finalizer_rate": (
+                float(capture_cancelled_by_finalizer_total) / max(1.0, float(capture_attempted_total))
+            ),
+            "capture_cancelled_by_finalizer_reason_counts": dict(capture_cancelled_by_finalizer_reason_counts),
             "fallback_to_attack_rate_in_capture": (
                 fallback_to_attack_in_capture / max(1, capture_attempts)
             ),
@@ -837,6 +935,20 @@ class Evaluator:
             "wait_recovery_sb3_backstep_rate": (
                 float(wait_recovery_sb3_backstep_count) / max(1.0, float(rl_decisions))
             ),
+            "source_mix_counts": dict(source_mix_counts),
+            "source_mix_rates": {
+                k: (float(v) / max(1.0, float(rl_decisions)))
+                for k, v in source_mix_counts.items()
+            },
+            "source_mix_capture_event_counts": dict(source_mix_capture_events),
+            "source_mix_capture_event_rates": {
+                k: (float(source_mix_capture_events.get(k, 0)) / max(1.0, float(source_mix_counts.get(k, 0))))
+                for k in source_mix_counts.keys()
+            },
+            "reward_component_means": {
+                k: (float(reward_component_sums[k]) / max(1, int(reward_component_counts.get(k, 0))))
+                for k in reward_component_sums.keys()
+            },
             "plan_success_k": (
                 float(vp_entries_taken) / max(1.0, float(vp_entry_opportunities))
             ),
@@ -846,16 +958,11 @@ class Evaluator:
             "turn_first_contact": int(first_vp_contact_step) if first_vp_contact_step is not None else None,
             "turn_first_progress": int(first_progress_step) if first_progress_step is not None else None,
             "turn_first_capture": int(first_vp_entry_step) if first_vp_entry_step is not None else None,
-            "contact_to_progress_delay": (
-                int(first_progress_step - first_vp_contact_step)
-                if first_progress_step is not None and first_vp_contact_step is not None
-                else None
-            ),
-            "progress_to_capture_delay": (
-                int(first_vp_entry_step - first_progress_step)
-                if first_vp_entry_step is not None and first_progress_step is not None
-                else None
-            ),
+            "contact_to_progress_delay": contact_to_progress_delay,
+            "progress_to_capture_delay": progress_to_capture_delay,
+            "latency_invalid_order_count": int(latency_invalid_order_count),
+            "latency_missing_progress_count": int(latency_missing_progress_count),
+            "latency_missing_capture_count": int(latency_missing_capture_count),
             "capture_progress_candidate_mean": (
                 capture_progress_candidate_total / max(1, capture_attempts)
             ),
@@ -881,6 +988,13 @@ class Evaluator:
             "capture_conversion_after_contact": (
                 contact_to_capture_success / max(1, contact_events)
             ),
+            "plan_progress_rate": (
+                capture_progress_available_count / max(1, capture_attempts)
+            ),
+            "coordination_gain": (
+                (contact_to_capture_success / max(1, contact_events))
+                - (near_vp_attack_decisions / max(1, near_vp_attack_decisions + near_vp_progress_move_decisions))
+            ),
             "capture_intent_persistence": (
                 capture_persistence_num / max(1, capture_persistence_den)
             ),
@@ -890,10 +1004,33 @@ class Evaluator:
             "vp_control_auc": (
                 vp_control_count_sum / max(1, vp_control_count_steps)
             ),
+            "avg_legal_actions_per_decision_by_side": {
+                k: (float(legal_actions_total_by_side.get(k, 0)) / max(1.0, float(legal_actions_decisions_by_side.get(k, 0))))
+                for k in legal_actions_decisions_by_side.keys()
+            },
+            "mean_action_catalog_gen_ms_by_side": {
+                k: (
+                    float(legal_actions_gen_time_ms_total_by_side.get(k, 0.0))
+                    / max(1.0, float(legal_actions_decisions_by_side.get(k, 0)))
+                )
+                for k in legal_actions_decisions_by_side.keys()
+            },
+            "avg_legal_actions_per_decision": (
+                float(sum(legal_actions_total_by_side.values()))
+                / max(1.0, float(sum(legal_actions_decisions_by_side.values())))
+            ),
+            "mean_action_catalog_gen_ms": (
+                float(sum(legal_actions_gen_time_ms_total_by_side.values()))
+                / max(1.0, float(sum(legal_actions_decisions_by_side.values())))
+            ),
             "intent_commitment_rate_stub": (
                 plan_stub_intent_aligned / max(1, plan_stub_decisions)
             ),
             "role_diversity_index_stub": role_diversity_index_stub,
+            "intent_commitment_rate": (
+                plan_stub_intent_aligned / max(1, plan_stub_decisions)
+            ),
+            "role_diversity_index": role_diversity_index_stub,
             "plan_role_counts_stub": dict(plan_role_counts),
             "lote_e_attack_opportunity_cost_near_vp_norm": (
                 float(np.mean(lote_e_attack_cost_vals)) if lote_e_attack_cost_vals else 0.0

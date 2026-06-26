@@ -9,7 +9,7 @@ from assault_sim.config.movement_tactical_config import load_movement_tactical_c
 from assault_sim.decision.option_executor.combat import OptionExecutorCombatMixin
 from assault_sim.decision.option_executor.capture import OptionExecutorCaptureMixin
 from assault_sim.decision.option_executor.state import OptionExecutorStateMixin
-from assault_sim.decision.role_mapper import assign_role
+from assault_sim.decision.role_mapper import assign_role, resolve_role_with_reason
 from assault_model.map.hex_utils import safe_hex_distance
 import copy
 
@@ -33,6 +33,8 @@ class OptionExecutor(OptionExecutorCaptureMixin, OptionExecutorCombatMixin, Opti
         adv_threshold: float = -0.5,
         capture_guardrails_enabled: bool = True,
         diagnostic_force_capture_only: bool = False,
+        fast_reposition_followup_check: bool = False,
+        lightweight_training_tags: bool = False,
     ):
         self.heuristic = heuristic_controller
         self._MOVE_CFG = _MOVE_CFG
@@ -42,6 +44,10 @@ class OptionExecutor(OptionExecutorCaptureMixin, OptionExecutorCombatMixin, Opti
         self.adv_threshold = adv_threshold
         self.capture_guardrails_enabled = bool(capture_guardrails_enabled)
         self.diagnostic_force_capture_only = bool(diagnostic_force_capture_only)
+        # Train-fast mode: avoid expensive deepcopy simulation in reposition checks.
+        self.fast_reposition_followup_check = bool(fast_reposition_followup_check)
+        # Train-lean mode: keep only minimum action telemetry required by training.
+        self.lightweight_training_tags = bool(lightweight_training_tags)
         # Position history per unit to reduce A->B->A oscillations.
         self._prev_pos_by_unit = {}
         self._prevprev_pos_by_unit = {}
@@ -70,6 +76,8 @@ class OptionExecutor(OptionExecutorCaptureMixin, OptionExecutorCombatMixin, Opti
         # Per-state action catalog cache to avoid repeated legal-path recomputation.
         self._action_catalog_cache_state_key = None
         self._action_catalog_cache = {}
+        # Per-state geometry cache (enemy/vp coords) for vectorized distance queries.
+        self._geom_cache = {}
         # Short-lived CAPTURE focus lock to reduce VP target ping-pong.
         self._capture_focus_lock_by_unit = {}
         self._capture_focus_ttl_steps = 3
@@ -80,19 +88,8 @@ class OptionExecutor(OptionExecutorCaptureMixin, OptionExecutorCombatMixin, Opti
         self._attack_reposition_budget_near_vp_per_turn = 3
 
     def _plan_unit_role(self, state, unit, strategy: StrategicIntent | None) -> str:
-        role = assign_role(state, unit, self._plan_intent_name(strategy))
-        if role != "UNKNOWN":
-            return role
-        # Never emit UNKNOWN for normal planning flow; keep deterministic fallback.
-        if strategy == StrategicIntent.PRESERVE:
-            return "RESERVE"
-        if strategy == StrategicIntent.DENY:
-            return "HOLD_VP"
-        if strategy == StrategicIntent.CAPTURE:
-            return "SCREEN"
-        if strategy == StrategicIntent.ATTRIT:
-            return "ASSAULT"
-        return "SCREEN"
+        role, _ = resolve_role_with_reason(state, unit, self._plan_intent_name(strategy))
+        return str(role or "SCREEN")
 
     def _tag_action(
         self,
@@ -116,60 +113,72 @@ class OptionExecutor(OptionExecutorCaptureMixin, OptionExecutorCombatMixin, Opti
     ):
         if action is None:
             return None
-        # Copy only the chosen action to keep ActionCatalog cache objects immutable.
-        action = copy.deepcopy(action)
+        # Hot path: deepcopy here is expensive and can stall training throughput.
+        # We only annotate top-level fields on the action, so a shallow copy is enough.
+        try:
+            action = copy.copy(action)
+        except Exception:
+            action = copy.deepcopy(action)
         action.rl_l2_option = option.name
         action.rl_l3_strategy = strategy.name if strategy is not None else None
-        if not hasattr(action, "rl_l3_capture_forced"):
-            action.rl_l3_capture_forced = False
-        if not hasattr(action, "rl_l3_capture_force_reason"):
-            action.rl_l3_capture_force_reason = ""
-        if not hasattr(action, "rl_capture_fallback_to_attack"):
-            action.rl_capture_fallback_to_attack = False
-        if not hasattr(action, "rl_capture_fallback_reason"):
-            action.rl_capture_fallback_reason = ""
-        if not hasattr(action, "rl_capture_move_block_profile"):
-            action.rl_capture_move_block_profile = ""
-        if not hasattr(action, "rl_capture_target_dist_before"):
-            action.rl_capture_target_dist_before = None
-        if not hasattr(action, "rl_capture_target_dist_after"):
-            action.rl_capture_target_dist_after = None
-        if not hasattr(action, "rl_capture_move_candidates_total"):
-            action.rl_capture_move_candidates_total = 0
-        if not hasattr(action, "rl_capture_progress_candidates"):
-            action.rl_capture_progress_candidates = 0
-        if not hasattr(action, "rl_capture_equal_candidates"):
-            action.rl_capture_equal_candidates = 0
-        if not hasattr(action, "rl_capture_increase_candidates"):
-            action.rl_capture_increase_candidates = 0
-        if not hasattr(action, "rl_capture_reversal_filtered"):
-            action.rl_capture_reversal_filtered = 0
-        if not hasattr(action, "rl_capture_progress_available"):
-            action.rl_capture_progress_available = False
-        if not hasattr(action, "rl_capture_selected_move_reason"):
-            action.rl_capture_selected_move_reason = ""
-        if not hasattr(action, "rl_capture_selected_dist_delta"):
-            action.rl_capture_selected_dist_delta = None
-        if not hasattr(action, "rl_attack_fallback_to_move"):
-            action.rl_attack_fallback_to_move = False
-        if not hasattr(action, "rl_attack_fallback_reason"):
-            action.rl_attack_fallback_reason = ""
-        if not hasattr(action, "rl_capture_suspected_progress_miss"):
-            action.rl_capture_suspected_progress_miss = False
-        if not hasattr(action, "rl_vp_stepin_legal"):
-            action.rl_vp_stepin_legal = False
-        if not hasattr(action, "rl_vp_stepin_selected"):
-            action.rl_vp_stepin_selected = False
-        if not hasattr(action, "rl_vp_stepin_block_reason"):
-            action.rl_vp_stepin_block_reason = ""
-        if not hasattr(action, "rl_vp_nearest_uncaptured_dist"):
-            action.rl_vp_nearest_uncaptured_dist = None
-        if not hasattr(action, "rl_vp_opening_attack_candidates_count"):
-            action.rl_vp_opening_attack_candidates_count = 0
-        if not hasattr(action, "rl_post_open_window_followup_advance"):
-            action.rl_post_open_window_followup_advance = False
-        if not hasattr(action, "rl_post_open_window_followup_success"):
-            action.rl_post_open_window_followup_success = False
+        if self.lightweight_training_tags:
+            plan_intent = self._plan_intent_name(strategy)
+            action.rl_plan_intent = plan_intent
+            action.rl_plan_unit_role = "SCREEN"
+            action.rl_plan_role_unknown_reason = "lean_default"
+            action.rl_capture_branch = str(capture_branch or "")
+            action.rl_plan_focus_vp_id = None
+            action.rl_plan_stage = "EXECUTE"
+            action.rl_plan_replan_reason = ""
+            action.rl_plan_commitment_age = 0
+            action.rl_plan_focus_switched = False
+            action.rl_plan_step_id = self._next_plan_step_id()
+            action.rl_plan_budget_state = str(budget_state or "UNBOUNDED")
+            action.rl_plan_budget_remaining_by_role = {}
+            action.rl_plan_budget_violation_count = int(max(0, budget_violation_count))
+            action.rl_plan_budget_violation_delta = int(max(0, budget_violation_delta))
+            action.rl_plan_progress_stub = 0.0
+            action.rl_plan_fallback_reason = str(plan_fallback_reason or "")
+            l3 = str(getattr(action, "rl_l3_strategy", "") or "").upper()
+            plan_intent_for_alignment = self._plan_intent_alignment_label(plan_intent)
+            action.rl_plan_intent_alignment_stub = 1.0 if (l3 and plan_intent_for_alignment == l3) else 0.0
+            uid = getattr(action, "unit_id", None)
+            if uid:
+                if option == TacticalOption.RETREAT:
+                    self._retreat_streak_by_unit[uid] = int(self._retreat_streak_by_unit.get(uid, 0)) + 1
+                else:
+                    self._retreat_streak_by_unit[uid] = 0
+            return action
+        action_defaults = {
+            "rl_l3_capture_forced": False,
+            "rl_l3_capture_force_reason": "",
+            "rl_capture_fallback_to_attack": False,
+            "rl_capture_fallback_reason": "",
+            "rl_capture_move_block_profile": "",
+            "rl_capture_target_dist_before": None,
+            "rl_capture_target_dist_after": None,
+            "rl_capture_move_candidates_total": 0,
+            "rl_capture_progress_candidates": 0,
+            "rl_capture_equal_candidates": 0,
+            "rl_capture_increase_candidates": 0,
+            "rl_capture_reversal_filtered": 0,
+            "rl_capture_progress_available": False,
+            "rl_capture_selected_move_reason": "",
+            "rl_capture_selected_dist_delta": None,
+            "rl_attack_fallback_to_move": False,
+            "rl_attack_fallback_reason": "",
+            "rl_capture_suspected_progress_miss": False,
+            "rl_vp_stepin_legal": False,
+            "rl_vp_stepin_selected": False,
+            "rl_vp_stepin_block_reason": "",
+            "rl_vp_nearest_uncaptured_dist": None,
+            "rl_vp_opening_attack_candidates_count": 0,
+            "rl_post_open_window_followup_advance": False,
+            "rl_post_open_window_followup_success": False,
+        }
+        for attr_name, default_value in action_defaults.items():
+            if not hasattr(action, attr_name):
+                setattr(action, attr_name, default_value)
         prev_emergency = bool(getattr(action, "rl_capture_emergency_override", False))
         prev_legal = bool(getattr(action, "rl_capture_legal_override", False))
         prev_reason = str(getattr(action, "rl_capture_override_reason", "") or "")
@@ -194,20 +203,15 @@ class OptionExecutor(OptionExecutorCaptureMixin, OptionExecutorCombatMixin, Opti
         planner_focus_switched = bool(getattr(planner_context, "focus_switched", False))
         planner_side = str(getattr(planner_context, "side", "") or "")
         action.rl_plan_intent = planner_intent or self._plan_intent_name(strategy)
+        resolved_role, role_resolve_reason = resolve_role_with_reason(
+            state,
+            plan_unit,
+            self._plan_intent_name(strategy),
+        )
         role_unknown_reason = ""
-        resolved_role = self._plan_unit_role(state, plan_unit, strategy)
-        if str(resolved_role or "").upper() == "UNKNOWN":
-            if state is None:
-                role_unknown_reason = "no_state"
-            elif plan_unit is None:
-                role_unknown_reason = "no_unit"
-            else:
-                role_unknown_reason = "mapper_unknown"
-            fallback_role = self._plan_unit_role(None, None, strategy)
-            if str(fallback_role or "").upper() != "UNKNOWN":
-                resolved_role = fallback_role
-                role_unknown_reason = "fallback_strategy"
-        action.rl_plan_unit_role = str(resolved_role or "UNKNOWN")
+        if str(role_resolve_reason).startswith("fallback"):
+            role_unknown_reason = str(role_resolve_reason)
+        action.rl_plan_unit_role = str(resolved_role or "SCREEN")
         action.rl_plan_role_unknown_reason = str(role_unknown_reason)
         action.rl_plan_focus_vp_id = planner_focus_vp if planner_focus_vp else self._plan_focus_vp_id(state, plan_unit)
         action.rl_plan_step_id = self._next_plan_step_id()
@@ -967,6 +971,4 @@ class OptionExecutor(OptionExecutorCaptureMixin, OptionExecutorCombatMixin, Opti
     def _consume_attack_reposition_budget(self, side, turn: int, near_vp: bool = False) -> None:
         slot = self._attack_reposition_slot(side, turn, near_vp=near_vp)
         slot["used"] = int(slot.get("used", 0)) + 1
-
-    pass
 

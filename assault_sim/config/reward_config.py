@@ -9,7 +9,7 @@ from typing import Any
 @dataclass(frozen=True)
 class RewardConfig:
     # Core combat quality
-    trade_weight: float = 1.0
+    trade_weight: float = 0.8
     bad_trade_penalty: float = 0.5
     good_trade_base_bonus: float = 0.4
     good_trade_scale_bonus: float = 0.25
@@ -31,18 +31,18 @@ class RewardConfig:
     wait_penalty: float = 0.25
     repeat_action_penalty: float = 0.05
     action_finalization_fallback_penalty: float = 0.08
-    invalid_action_finalization_penalty: float = 0.20
+    invalid_action_finalization_penalty: float = 0.50
     wait_recovery_backstep_setup_penalty: float = 0.25
     setup_progress_bonus: float = 0.12
 
     # Objectives/endgame/time
-    vp_delta_weight: float = 1.5
+    vp_delta_weight: float = 12.0
     objective_approach_bonus: float = 0.25
     objective_move_away_penalty: float = 0.12
     objective_near_hold_penalty: float = 0.2
     capture_retreat_penalty: float = 0.5
     capture_advance_bonus: float = 0.2
-    capture_strategy_bonus: float = 0.12
+    capture_strategy_bonus: float = 0.90
     preserve_when_objectives_pending_penalty: float = 0.08
     capture_vp_presence_bonus: float = 0.15
     capture_vp_hold_streak_bonus: float = 0.14
@@ -53,6 +53,10 @@ class RewardConfig:
     capture_staging_repeat_penalty: float = 0.12
     vp_stepin_selected_bonus: float = 0.60
     vp_stepin_missed_near_penalty: float = 0.18
+    capture_near_vp_advance_no_conversion_penalty: float = 0.14
+    capture_post_contact_progress_move_bonus: float = 1.00
+    capture_support_fire_window_bonus: float = 0.16
+    non_capture_near_vp_penalty: float = 0.14
     vp_control_after_entry_bonus: float = 0.32
     early_vp_entry_turn_bonus_cutoff: int = 15
     early_vp_entry_bonus: float = 0.4

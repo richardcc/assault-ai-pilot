@@ -26,6 +26,7 @@ import { createDebugVector, updateDebugVector } from "./systems/debugVectorSyste
 import { drawAttackIndicatorPixels } from "./animation/visuals";
 import { soundService } from "./audio/SoundService";
 import { gameController } from "./gameControllerInstance";
+import { apiUrl } from "../config/backend";
 
 function isCombatOrder(order: any): boolean {
   const actionType = (order?.type || order?.kind || "").toString().toUpperCase();
@@ -447,7 +448,7 @@ export default function GameCanvas({
         setSelectedUnitId(null);
         setAvailableMoves([]);
 
-        const stepRes = await fetch("http://127.0.0.1:8000/api/game/step", {
+        const stepRes = await fetch(apiUrl("/api/game/step"), {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ action_id: actionId }),

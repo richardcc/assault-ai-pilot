@@ -1,3 +1,4 @@
+import os
 import statistics
 
 from assault_sim.evaluation.policy.l2_options import compute_option_performance
@@ -19,6 +20,34 @@ class ResultsAnalyzer:
     def __init__(self, results, rl_side):
         self.results = results
         self.rl_side = rl_side
+        self._use_color = os.getenv("NO_COLOR") is None
+
+    def _c(self, text, color=None, bold=False):
+        if not self._use_color:
+            return str(text)
+        codes = []
+        if bold:
+            codes.append("1")
+        palette = {
+            "red": "31",
+            "green": "32",
+            "yellow": "33",
+            "blue": "34",
+            "magenta": "35",
+            "cyan": "36",
+            "gray": "90",
+        }
+        if color in palette:
+            codes.append(palette[color])
+        if not codes:
+            return str(text)
+        return f"\033[{';'.join(codes)}m{text}\033[0m"
+
+    def _section(self, title, color="cyan"):
+        print(f"\n{self._c(f'=== {title} ===', color=color, bold=True)}")
+
+    def _subsection(self, title, color="blue"):
+        print(f"\n{self._c(f'--- {title} ---', color=color, bold=True)}")
 
     # -------------------------------------------------
     # GLOBAL
@@ -26,7 +55,7 @@ class ResultsAnalyzer:
     def summary(self):
 
         score_wins = 0.0
-        true_wins = 0
+        objective_wins = 0
         draws = 0
         losses = 0
 
@@ -40,11 +69,11 @@ class ResultsAnalyzer:
 
         for r in self.results:
 
-            winner = r.get("winner")
             reason = str(r.get("end_reason") or "unknown")
             reason_counts[reason] += 1
             rl_result = str(r.get("rl_result") or "draw")
             tracked_result = str(r.get("tracked_result") or "UNKNOWN")
+            tracked_result_norm = tracked_result.strip().upper()
             rl_result_counts[rl_result] += 1
             tracked_result_counts[tracked_result] += 1
             victory_level = r.get("victory_level") or {}
@@ -55,11 +84,13 @@ class ResultsAnalyzer:
             except Exception:
                 pass
 
-            if winner == self.rl_side:
+            is_objective_win = tracked_result_norm.startswith("VITTORIA")
+            is_draw = tracked_result_norm == "PAREGGIO"
+            if is_objective_win:
                 score_wins += 1
-                true_wins += 1
+                objective_wins += 1
                 win_by_reason[reason] += 1
-            elif winner is None:
+            elif is_draw:
                 score_wins += 0.5
                 draws += 1
                 win_by_reason[reason] += 0.5
@@ -75,10 +106,11 @@ class ResultsAnalyzer:
 
         return {
             "episodes": len(self.results),
-            # Legacy score-style metric (draw=0.5) kept for backward compatibility.
+            # Objective-based score metric (draw=0.5): derived from tracked_result.
             "win_rate": score_wins / len(self.results) if self.results else 0,
             "win_score_rate": score_wins / len(self.results) if self.results else 0,
-            "true_win_rate": true_wins / len(self.results) if self.results else 0,
+            # Canonical win criterion: scenario objective outcome (tracked_result startswith "Vittoria").
+            "true_win_rate": objective_wins / len(self.results) if self.results else 0,
             "draw_rate": draws / len(self.results) if self.results else 0,
             "loss_rate": losses / len(self.results) if self.results else 0,
             "draws": draws,
@@ -218,6 +250,9 @@ class ResultsAnalyzer:
         first_vp_entry_turns = []
         contact_to_progress_delays = []
         progress_to_capture_delays = []
+        latency_invalid_order_total = 0
+        latency_missing_progress_total = 0
+        latency_missing_capture_total = 0
         stuck_ratios = []
         concentration = []
         vp_entry_opportunities = 0
@@ -229,6 +264,10 @@ class ResultsAnalyzer:
         near_vp_attack_missed_rates = []
         vp_control_turns_share_vals = []
         capture_attempt_success_rates = []
+        capture_attempted_total = 0
+        capture_committed_total = 0
+        capture_cancelled_by_finalizer_total = 0
+        capture_cancelled_by_finalizer_reason_totals = defaultdict(int)
         fallback_to_attack_capture_rates = []
         capture_intent_persistence_rates = []
         attack_opportunity_cost_near_vp_rates = []
@@ -295,6 +334,17 @@ class ResultsAnalyzer:
         invalid_action_total = 0
         fallback_action_total = 0
         wait_recovery_sb3_backstep_total = 0
+        reward_component_values = defaultdict(list)
+        source_mix_counts_totals = defaultdict(int)
+        source_mix_capture_event_totals = defaultdict(int)
+        plan_progress_rates = []
+        coordination_gain_vals = []
+        avg_legal_actions_vals = []
+        action_catalog_gen_ms_vals = []
+        avg_legal_actions_by_side_totals = defaultdict(float)
+        avg_legal_actions_by_side_counts = defaultdict(int)
+        action_catalog_gen_ms_by_side_totals = defaultdict(float)
+        action_catalog_gen_ms_by_side_counts = defaultdict(int)
 
         for r in self.results:
             mission = r.get("mission", {}) or {}
@@ -347,6 +397,19 @@ class ResultsAnalyzer:
                     capture_attempt_success_rates.append(float(mission.get("capture_attempt_success_rate", 0.0)))
                 except Exception:
                     pass
+            try:
+                capture_attempted_total += int(mission.get("capture_attempted", 0) or 0)
+                capture_committed_total += int(mission.get("capture_committed", 0) or 0)
+                capture_cancelled_by_finalizer_total += int(
+                    mission.get("capture_cancelled_by_finalizer", 0) or 0
+                )
+            except Exception:
+                pass
+            for reason, count in (mission.get("capture_cancelled_by_finalizer_reason_counts", {}) or {}).items():
+                try:
+                    capture_cancelled_by_finalizer_reason_totals[str(reason)] += int(count)
+                except Exception:
+                    pass
             if "first_vp_entry_turn" in mission:
                 first_entry = mission.get("first_vp_entry_turn")
                 if isinstance(first_entry, (int, float)) and first_entry > 0:
@@ -357,6 +420,9 @@ class ResultsAnalyzer:
             p2c = mission.get("progress_to_capture_delay")
             if isinstance(p2c, (int, float)):
                 progress_to_capture_delays.append(float(p2c))
+            latency_invalid_order_total += int(mission.get("latency_invalid_order_count", 0) or 0)
+            latency_missing_progress_total += int(mission.get("latency_missing_progress_count", 0) or 0)
+            latency_missing_capture_total += int(mission.get("latency_missing_capture_count", 0) or 0)
             contact_events_total += int(mission.get("contact_events", 0))
             contact_to_capture_success_total += int(mission.get("contact_to_capture_success", 0))
             if "capture_intent_persistence" in mission:
@@ -611,6 +677,53 @@ class ResultsAnalyzer:
                 wait_recovery_sb3_backstep_total += int(mission.get("wait_recovery_sb3_backstep_count", 0))
             except Exception:
                 pass
+            for k, v in (mission.get("reward_component_means", {}) or {}).items():
+                try:
+                    reward_component_values[str(k)].append(float(v))
+                except Exception:
+                    pass
+            for k, v in (mission.get("source_mix_counts", {}) or {}).items():
+                try:
+                    source_mix_counts_totals[str(k)] += int(v)
+                except Exception:
+                    pass
+            for k, v in (mission.get("source_mix_capture_event_counts", {}) or {}).items():
+                try:
+                    source_mix_capture_event_totals[str(k)] += int(v)
+                except Exception:
+                    pass
+            if "plan_progress_rate" in mission:
+                try:
+                    plan_progress_rates.append(float(mission.get("plan_progress_rate", 0.0)))
+                except Exception:
+                    pass
+            if "coordination_gain" in mission:
+                try:
+                    coordination_gain_vals.append(float(mission.get("coordination_gain", 0.0)))
+                except Exception:
+                    pass
+            if "avg_legal_actions_per_decision" in mission:
+                try:
+                    avg_legal_actions_vals.append(float(mission.get("avg_legal_actions_per_decision", 0.0)))
+                except Exception:
+                    pass
+            if "mean_action_catalog_gen_ms" in mission:
+                try:
+                    action_catalog_gen_ms_vals.append(float(mission.get("mean_action_catalog_gen_ms", 0.0)))
+                except Exception:
+                    pass
+            for k, v in (mission.get("avg_legal_actions_per_decision_by_side", {}) or {}).items():
+                try:
+                    avg_legal_actions_by_side_totals[str(k)] += float(v)
+                    avg_legal_actions_by_side_counts[str(k)] += 1
+                except Exception:
+                    pass
+            for k, v in (mission.get("mean_action_catalog_gen_ms_by_side", {}) or {}).items():
+                try:
+                    action_catalog_gen_ms_by_side_totals[str(k)] += float(v)
+                    action_catalog_gen_ms_by_side_counts[str(k)] += 1
+                except Exception:
+                    pass
 
             atk_units = 0
             dmg_units = 0
@@ -703,6 +816,15 @@ class ResultsAnalyzer:
                 statistics.mean(vp_control_turns_share_vals) if vp_control_turns_share_vals else 0.0
             ),
             "capture_attempt_success_rate": capture_attempt_success_rate,
+            "capture_attempted": int(capture_attempted_total),
+            "capture_committed": int(capture_committed_total),
+            "capture_cancelled_by_finalizer": int(capture_cancelled_by_finalizer_total),
+            "capture_cancelled_by_finalizer_rate": (
+                float(capture_cancelled_by_finalizer_total) / max(1.0, float(capture_attempted_total))
+            ),
+            "capture_cancelled_by_finalizer_reason_counts": dict(
+                capture_cancelled_by_finalizer_reason_totals
+            ),
             "first_vp_entry_turn_p50": _percentile(first_vp_entry_turns, 0.50),
             "first_vp_entry_turn_p90": _percentile(first_vp_entry_turns, 0.90),
             "turn_first_contact": _percentile(first_contact_turns, 0.50),
@@ -710,6 +832,9 @@ class ResultsAnalyzer:
             "turn_first_capture": _percentile(first_vp_entry_turns, 0.50),
             "contact_to_progress_delay": _percentile(contact_to_progress_delays, 0.50),
             "progress_to_capture_delay": _percentile(progress_to_capture_delays, 0.50),
+            "latency_invalid_order_count": int(latency_invalid_order_total),
+            "latency_missing_progress_count": int(latency_missing_progress_total),
+            "latency_missing_capture_count": int(latency_missing_capture_total),
             "capture_conversion_after_contact": capture_conversion_after_contact,
             "capture_intent_persistence": (
                 statistics.mean(capture_intent_persistence_rates)
@@ -726,6 +851,12 @@ class ResultsAnalyzer:
                 statistics.mean(intent_commitment_stub_rates) if intent_commitment_stub_rates else 0.0
             ),
             "role_diversity_index_stub": (
+                statistics.mean(role_diversity_stub_vals) if role_diversity_stub_vals else 0.0
+            ),
+            "intent_commitment_rate": (
+                statistics.mean(intent_commitment_stub_rates) if intent_commitment_stub_rates else 0.0
+            ),
+            "role_diversity_index": (
                 statistics.mean(role_diversity_stub_vals) if role_diversity_stub_vals else 0.0
             ),
             "plan_role_counts_stub": dict(plan_role_counts_totals),
@@ -764,6 +895,61 @@ class ResultsAnalyzer:
             "wait_recovery_sb3_backstep_rate": (
                 float(wait_recovery_sb3_backstep_total) / max(1.0, float(total_decisions))
             ),
+            "reward_component_means": {
+                k: statistics.mean(vals) for k, vals in reward_component_values.items() if vals
+            },
+            "source_mix_counts": dict(source_mix_counts_totals),
+            "source_mix_rates": {
+                k: (float(v) / max(1.0, float(total_decisions)))
+                for k, v in source_mix_counts_totals.items()
+            },
+            "source_mix_capture_event_counts": dict(source_mix_capture_event_totals),
+            "source_mix_capture_event_rates": {
+                k: (
+                    float(source_mix_capture_event_totals.get(k, 0))
+                    / max(1.0, float(source_mix_counts_totals.get(k, 0)))
+                )
+                for k in source_mix_counts_totals.keys()
+            },
+            "finalizer_override_reason_counts": {
+                k: int(v)
+                for k, v in action_finalize_reason_totals.items()
+                if str(k) != "ok"
+            },
+            "finalizer_override_reason_rates": {
+                k: (
+                    float(v)
+                    / max(1.0, float(source_mix_counts_totals.get("finalizer_override", 0)))
+                )
+                for k, v in action_finalize_reason_totals.items()
+                if str(k) != "ok"
+            },
+            "plan_progress_rate": (
+                statistics.mean(plan_progress_rates) if plan_progress_rates else 0.0
+            ),
+            "coordination_gain": (
+                statistics.mean(coordination_gain_vals) if coordination_gain_vals else 0.0
+            ),
+            "avg_legal_actions_per_decision": (
+                statistics.mean(avg_legal_actions_vals) if avg_legal_actions_vals else 0.0
+            ),
+            "mean_action_catalog_gen_ms": (
+                statistics.mean(action_catalog_gen_ms_vals) if action_catalog_gen_ms_vals else 0.0
+            ),
+            "avg_legal_actions_per_decision_by_side": {
+                k: (
+                    float(avg_legal_actions_by_side_totals.get(k, 0.0))
+                    / max(1.0, float(avg_legal_actions_by_side_counts.get(k, 0)))
+                )
+                for k in avg_legal_actions_by_side_totals.keys()
+            },
+            "mean_action_catalog_gen_ms_by_side": {
+                k: (
+                    float(action_catalog_gen_ms_by_side_totals.get(k, 0.0))
+                    / max(1.0, float(action_catalog_gen_ms_by_side_counts.get(k, 0)))
+                )
+                for k in action_catalog_gen_ms_by_side_totals.keys()
+            },
             "plan_success_k": (
                 statistics.mean(plan_success_k_vals) if plan_success_k_vals else 0.0
             ),
@@ -936,46 +1122,114 @@ class ResultsAnalyzer:
 
         return output
 
+    def unit_analysis(self):
+        units = aggregate_units(self.results)
+        grouped = {"RL": [], "ENEMY": []}
+        for uid, stats in units.items():
+            side = "RL" if str(stats.get("side", "")).upper() == "RL" else "ENEMY"
+            attacks = int(stats.get("attacks", 0) or 0)
+            damage = float(stats.get("damage", 0) or 0.0)
+            kills = int(stats.get("kills", 0) or 0)
+            grouped[side].append(
+                {
+                    "unit_id": str(uid),
+                    "category": str(stats.get("category") or ""),
+                    "classification": str(stats.get("classification") or ""),
+                    "attacks": attacks,
+                    "damage": damage,
+                    "kills": kills,
+                    "damage_per_attack": (damage / attacks) if attacks > 0 else 0.0,
+                    "kills_per_attack": (float(kills) / attacks) if attacks > 0 else 0.0,
+                }
+            )
+        for side in ("RL", "ENEMY"):
+            grouped[side].sort(
+                key=lambda x: (float(x.get("damage", 0.0)), int(x.get("kills", 0))),
+                reverse=True,
+            )
+
+        by_side = {}
+        for side in ("RL", "ENEMY"):
+            entries = grouped[side]
+            total_attacks = sum(int(u.get("attacks", 0)) for u in entries)
+            total_damage = sum(float(u.get("damage", 0.0)) for u in entries)
+            total_kills = sum(int(u.get("kills", 0)) for u in entries)
+            by_side[side] = {
+                "unit_count": len(entries),
+                "total_attacks": total_attacks,
+                "total_damage": total_damage,
+                "total_kills": total_kills,
+                "damage_per_attack": (total_damage / total_attacks) if total_attacks > 0 else 0.0,
+            }
+
+        return {
+            "by_side": by_side,
+            "by_unit": grouped,
+        }
+
+    def strategy_analysis(self):
+        l2 = compute_option_performance(self.results) or {}
+        l3 = compute_formation_performance(self.results) or {}
+        mapping = normalize_strategy_option_map(
+            build_strategy_option_map(self.results)
+        ) or {}
+        objective_transition_matrix = (
+            self.mission_metrics().get("objective_transition_matrix", {}) or {}
+        )
+        return {
+            "l2_policy_performance": l2,
+            "l3_policy_performance": l3,
+            "strategy_to_option_map": mapping,
+            "objective_transition_matrix": objective_transition_matrix,
+        }
+
     # -------------------------------------------------
     # PRINT REPORT
     # -------------------------------------------------
     def print_report(self):
 
-        print("\n=== GLOBAL ===")
+        self._section("GLOBAL", color="cyan")
         summary = self.summary()
-        print(summary)
-        print(
-            "interpreted_rates:"
-            f" score_win_rate(draw=0.5)={summary.get('win_score_rate', summary.get('win_rate', 0.0)):.3f}"
-            f" true_win_rate(only_wins)={summary.get('true_win_rate', 0.0):.3f}"
-            f" draw_rate={summary.get('draw_rate', 0.0):.3f}"
-            f" loss_rate={summary.get('loss_rate', 0.0):.3f}"
-        )
-        print("\n--- WIN RATE BY END REASON ---")
+        score_win_rate = summary.get("win_score_rate", summary.get("win_rate", 0.0))
+        true_win_rate = summary.get("true_win_rate", 0.0)
+        draw_rate = summary.get("draw_rate", 0.0)
+        loss_rate = summary.get("loss_rate", 0.0)
+        print(f"episodes: {summary.get('episodes', 0)}")
+        print(f"score_win_rate_objective(draw=0.5): {score_win_rate:.3f}")
+        print(f"true_win_rate_objective(only_vittoria): {true_win_rate:.3f}")
+        print(f"draw_rate: {draw_rate:.3f}")
+        print(f"loss_rate: {loss_rate:.3f}")
+        print(f"draws: {summary.get('draws', 0)}")
+        print(f"losses: {summary.get('losses', 0)}")
+        print(f"avg_vp: {summary.get('avg_vp', 0.0):.3f}")
+        print(f"avg_steps: {summary.get('avg_steps', 0.0):.1f}")
+
+        self._subsection("WIN RATE BY END REASON", color="blue")
         for reason, rate in summary.get("win_rate_by_end_reason", {}).items():
             count = summary.get("end_reason_counts", {}).get(reason, 0)
-            print(f"{reason}: score_win_rate(draw=0.5)={rate:.3f} episodes={count}")
-        print("\n--- VICTORY LEVEL COUNTS ---")
-        for label, count in summary.get("victory_level_counts", {}).items():
-            print(f"{label}: {count}")
-        print("\n--- RL RESULT COUNTS ---")
+            print(f"{reason}: score_win_rate_objective(draw=0.5)={rate:.3f} episodes={count}")
+
+        self._subsection("RL RESULT COUNTS", color="blue")
         for label, count in summary.get("rl_result_counts", {}).items():
             print(f"{label}: {count}")
-        print("\n--- TRACKED RESULT COUNTS ---")
+
+        # Canonical categorical outcome bucket (avoids duplicate with victory_level_counts).
+        self._subsection("TRACKED RESULT COUNTS", color="blue")
         for label, count in summary.get("tracked_result_counts", {}).items():
             print(f"{label}: {count}")
-        print("\n--- CAPTURED OBJECTIVES (FINAL) ---")
+
+        self._subsection("CAPTURED OBJECTIVES (FINAL)", color="blue")
         for captured, count in summary.get("captured_final_counts", {}).items():
             print(f"captured={captured}: {count}")
 
-        print("\n=== COMBAT ===")
+        self._section("COMBAT", color="magenta")
         print(self.combat_metrics())
 
-        print("\n=== ADVANCED ===")
+        self._section("ADVANCED", color="magenta")
         for k, v in self.advanced_metrics().items():
             print(f"{k}: {v:.3f}")
 
-        print("\n=== POLICY ALIGNMENT ===")
+        self._section("POLICY ALIGNMENT", color="magenta")
         align = self.policy_alignment()
         print(f"forced_ratio: {align['forced_ratio']:.3f} ({align['forced_steps']}/{align['decisions']})")
         print(
@@ -986,7 +1240,7 @@ class ResultsAnalyzer:
             f" select_rate_when_available={align.get('composite_selection_rate_when_available', 0.0):.3f}"
         )
 
-        print("\n=== MISSION METRICS ===")
+        self._section("MISSION METRICS", color="yellow")
         mission = self.mission_metrics()
         print(f"vp_contact_rate: {mission['vp_contact_rate']:.3f}")
         cpt = mission.get("capture_pressure_turn")
@@ -1010,15 +1264,86 @@ class ResultsAnalyzer:
         print(f"invalid_action_rate: {mission.get('invalid_action_rate', 0.0):.3f}")
         print(f"fallback_rate: {mission.get('fallback_rate', 0.0):.3f}")
         print(f"wait_recovery_sb3_backstep_rate: {mission.get('wait_recovery_sb3_backstep_rate', 0.0):.3f}")
+        source_mix_counts = mission.get("source_mix_counts", {}) or {}
+        source_mix_rates = mission.get("source_mix_rates", {}) or {}
+        if source_mix_counts:
+            print(
+                "source_mix_counts: "
+                + ", ".join(
+                    f"{k}:{source_mix_counts.get(k, 0)}"
+                    for k in ("sb3_kept", "planner_override", "finalizer_override")
+                    if k in source_mix_counts
+                )
+            )
+            print(
+                "source_mix_rates: "
+                + ", ".join(
+                    f"{k}:{float(source_mix_rates.get(k, 0.0)):.3f}"
+                    for k in ("sb3_kept", "planner_override", "finalizer_override")
+                    if k in source_mix_rates
+                )
+            )
+            source_mix_capture_rates = mission.get("source_mix_capture_event_rates", {}) or {}
+            if source_mix_capture_rates:
+                print(
+                    "source_mix_capture_event_rates: "
+                    + ", ".join(
+                        f"{k}:{float(source_mix_capture_rates.get(k, 0.0)):.3f}"
+                        for k in ("sb3_kept", "planner_override", "finalizer_override")
+                        if k in source_mix_capture_rates
+                    )
+                )
+            finalizer_reason_counts = mission.get("finalizer_override_reason_counts", {}) or {}
+            finalizer_reason_rates = mission.get("finalizer_override_reason_rates", {}) or {}
+            if finalizer_reason_counts:
+                top_reasons = sorted(
+                    finalizer_reason_counts.items(),
+                    key=lambda kv: int(kv[1]),
+                    reverse=True,
+                )[:10]
+                pretty_reasons = ", ".join(
+                    f"{k}:{int(v)} ({float(finalizer_reason_rates.get(k, 0.0)):.3f})"
+                    for k, v in top_reasons
+                )
+                print(f"finalizer_override_reasons(top): {pretty_reasons}")
+        print(f"avg_legal_actions_per_decision: {mission.get('avg_legal_actions_per_decision', 0.0):.3f}")
+        print(f"mean_action_catalog_gen_ms: {mission.get('mean_action_catalog_gen_ms', 0.0):.3f}")
+        legal_by_side = mission.get("avg_legal_actions_per_decision_by_side", {}) or {}
+        if legal_by_side:
+            pretty_legal = ", ".join(
+                f"{k}:{float(v):.2f}" for k, v in sorted(legal_by_side.items(), key=lambda kv: str(kv[0]))
+            )
+            print(f"avg_legal_actions_per_decision_by_side: {pretty_legal}")
+        gen_ms_by_side = mission.get("mean_action_catalog_gen_ms_by_side", {}) or {}
+        if gen_ms_by_side:
+            pretty_gen = ", ".join(
+                f"{k}:{float(v):.3f}" for k, v in sorted(gen_ms_by_side.items(), key=lambda kv: str(kv[0]))
+            )
+            print(f"mean_action_catalog_gen_ms_by_side: {pretty_gen}")
         print(f"vp_net_progress: {mission.get('vp_net_progress', 0.0):.3f}")
         print(f"position_reversal_rate: {mission.get('position_reversal_rate', 0.0):.3f}")
         print(f"vp_control_turns_share: {mission.get('vp_control_turns_share', 0.0):.3f}")
         print(f"capture_attempt_success_rate: {mission.get('capture_attempt_success_rate', 0.0):.3f}")
+        print(f"capture_attempted: {mission.get('capture_attempted', 0)}")
+        print(f"capture_committed: {mission.get('capture_committed', 0)}")
+        print(f"capture_cancelled_by_finalizer: {mission.get('capture_cancelled_by_finalizer', 0)}")
+        print(
+            f"capture_cancelled_by_finalizer_rate: "
+            f"{mission.get('capture_cancelled_by_finalizer_rate', 0.0):.3f}"
+        )
+        cancel_reasons = mission.get("capture_cancelled_by_finalizer_reason_counts", {}) or {}
+        if cancel_reasons:
+            pretty_cancel = ", ".join(
+                f"{k}:{v}" for k, v in sorted(cancel_reasons.items(), key=lambda kv: kv[1], reverse=True)
+            )
+            print(f"capture_cancelled_by_finalizer_reasons: {pretty_cancel}")
         p50 = mission.get("first_vp_entry_turn_p50")
         p90 = mission.get("first_vp_entry_turn_p90")
         print(f"first_vp_entry_turn_p50: {p50:.2f}" if isinstance(p50, (int, float)) else "first_vp_entry_turn_p50: n/a")
         print(f"first_vp_entry_turn_p90: {p90:.2f}" if isinstance(p90, (int, float)) else "first_vp_entry_turn_p90: n/a")
         print(f"capture_conversion_after_contact: {mission.get('capture_conversion_after_contact', 0.0):.3f}")
+        print(f"plan_progress_rate: {mission.get('plan_progress_rate', 0.0):.3f}")
+        print(f"coordination_gain: {mission.get('coordination_gain', 0.0):.3f}")
         print(f"capture_intent_persistence: {mission.get('capture_intent_persistence', 0.0):.3f}")
         print(f"attack_opportunity_cost_near_vp: {mission.get('attack_opportunity_cost_near_vp', 0.0):.3f}")
         print(f"vp_control_auc: {mission.get('vp_control_auc', 0.0):.3f}")
@@ -1096,11 +1421,16 @@ class ResultsAnalyzer:
             f" atk_units_mean={mission.get('multi_unit_contribution', {}).get('attack_units_mean', 0.0):.2f}"
             f" dmg_units_mean={mission.get('multi_unit_contribution', {}).get('damage_units_mean', 0.0):.2f}"
         )
-        print(f"stability_status: {mission.get('stability_status', 'unknown')}")
-        print(f"capture_readiness: {mission.get('capture_readiness', False)}")
-        print("\n=== PLANNING (P4.1 diagnostics) ===")
-        print(f"intent_commitment_rate_stub: {mission.get('intent_commitment_rate_stub', 0.0):.3f}")
-        print(f"role_diversity_index_stub: {mission.get('role_diversity_index_stub', 0.0):.3f}")
+        stability = str(mission.get("stability_status", "unknown")).lower()
+        stability_color = "green" if stability == "green" else ("yellow" if stability == "yellow" else "red")
+        print(f"stability_status: {self._c(stability, color=stability_color, bold=True)}")
+        capture_ready = bool(mission.get("capture_readiness", False))
+        readiness_txt = "true" if capture_ready else "false"
+        readiness_color = "green" if capture_ready else "red"
+        print(f"capture_readiness: {self._c(readiness_txt, color=readiness_color, bold=True)}")
+        self._section("PLANNING (P4.1 diagnostics)", color="yellow")
+        print(f"intent_commitment_rate: {mission.get('intent_commitment_rate', mission.get('intent_commitment_rate_stub', 0.0)):.3f}")
+        print(f"role_diversity_index: {mission.get('role_diversity_index', mission.get('role_diversity_index_stub', 0.0)):.3f}")
         plan_roles = mission.get("plan_role_counts_stub", {}) or {}
         if plan_roles:
             pretty_roles = ", ".join(f"{k}:{v}" for k, v in sorted(plan_roles.items(), key=lambda kv: kv[1], reverse=True))
@@ -1141,6 +1471,18 @@ class ResultsAnalyzer:
         print(f"turn_first_capture: {mission.get('turn_first_capture', None)}")
         print(f"contact_to_progress_delay: {mission.get('contact_to_progress_delay', None)}")
         print(f"progress_to_capture_delay: {mission.get('progress_to_capture_delay', None)}")
+        print(f"latency_invalid_order_count: {mission.get('latency_invalid_order_count', 0)}")
+        print(f"latency_missing_progress_count: {mission.get('latency_missing_progress_count', 0)}")
+        print(f"latency_missing_capture_count: {mission.get('latency_missing_capture_count', 0)}")
+        reward_components = mission.get("reward_component_means", {}) or {}
+        if reward_components:
+            top_reward_components = sorted(
+                reward_components.items(),
+                key=lambda kv: abs(float(kv[1])),
+                reverse=True,
+            )[:10]
+            pretty_reward = ", ".join(f"{k}:{float(v):.3f}" for k, v in top_reward_components)
+            print(f"reward_component_means(top): {pretty_reward}")
         print(
             "lote_e:"
             f" attack_cost_near_vp={mission.get('lote_e_attack_opportunity_cost_near_vp_norm', 0.0):.3f}"
@@ -1150,7 +1492,7 @@ class ResultsAnalyzer:
         )
 
         # ---------------- L2 ----------------
-        print("\n=== L2 POLICY PERFORMANCE ===")
+        self._section("L2 POLICY PERFORMANCE", color="cyan")
         for k, v in sorted(
             compute_option_performance(self.results).items(),
             key=lambda x: x[1]["usage"],
@@ -1159,7 +1501,7 @@ class ResultsAnalyzer:
             print(f"{k}: usage={v['usage']} dmg/atk={v['damage_per_attack']:.3f}")
 
         # ---------------- L3 ----------------
-        print("\n=== L3 POLICY PERFORMANCE ===")
+        self._section("L3 POLICY PERFORMANCE", color="cyan")
         for k, v in sorted(
             compute_formation_performance(self.results).items(),
             key=lambda x: x[1]["usage"],
@@ -1168,7 +1510,7 @@ class ResultsAnalyzer:
             print(f"{k}: usage={v['usage']} dmg/atk={v['damage_per_attack']:.3f}")
 
         # ---------------- mapping ----------------
-        print("\n=== STRATEGY -> OPTION ===")
+        self._section("STRATEGY -> OPTION", color="cyan")
 
         mapping = normalize_strategy_option_map(
             build_strategy_option_map(self.results)
@@ -1180,32 +1522,24 @@ class ResultsAnalyzer:
                 print(f"  {opt}: {count} ({ratio:.2%})")
 
         # ---------------- ✅ NUEVO ----------------
-        print("\n=== ACTION EXECUTION (REAL) ===")
+        self._section("ACTION EXECUTION (REAL)", color="blue")
 
         actions = self.action_execution()
 
-        # if structured per-side
-        if isinstance(actions, dict) and any(s in actions for s in ("RL", "ENEMY")):
-            for side in ("RL", "ENEMY"):
-                side_name = "US" if side == "RL" else "OTHER SIDE"
-                print(f"\n--- {side_name} ---")
-                side_actions = actions.get(side, {})
-                if not side_actions:
-                    print("  (no actions)")
-                    continue
-                for k, v in side_actions.items():
-                    print(
-                        f"  {k}: count={v.get('count', 0)} dmg/action={v.get('damage_per_action', 0.0):.3f}"
-                    )
-        else:
-            # legacy flat format
-            for k, v in (actions or {}).items():
+        for side in ("RL", "ENEMY"):
+            side_name = "US" if side == "RL" else "OTHER SIDE"
+            print(f"\n--- {side_name} ---")
+            side_actions = actions.get(side, {})
+            if not side_actions:
+                print("  (no actions)")
+                continue
+            for k, v in side_actions.items():
                 print(
-                    f"{k}: count={v.get('count', 0)} dmg/action={v.get('damage_per_action', 0.0):.3f}"
+                    f"  {k}: count={v.get('count', 0)} dmg/action={v.get('damage_per_action', 0.0):.3f}"
                 )
 
         # ----------------- DIAGNOSTIC: raw action class names -----------------
-        print("\n=== RAW ACTION_CLASS COUNTS (diagnostic) ===")
+        self._section("RAW ACTION_CLASS COUNTS (diagnostic)", color="gray")
         counts = getattr(self, "_action_class_counts", {})
         if not counts:
             print("(no action class data)")
@@ -1214,7 +1548,7 @@ class ResultsAnalyzer:
                 print(f"  {k}: {v}")
 
         # ---------------- UNITS ----------------
-        print("\n=== UNIT ANALYSIS (L1) ===")
+        self._section("UNIT ANALYSIS (L1)", color="blue")
 
         units = aggregate_units(self.results)
         print_all_units(units, self.rl_side)

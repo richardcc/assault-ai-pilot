@@ -1,0 +1,29 @@
+{
+  "meta": {
+    "episodes": 3,
+    "timestamp": "2026-06-26T07:26:19.429945Z",
+    "seed": 44,
+    "output_dir": "C:\\repos\\python\\assault\\assault_sim\\session\\reports\\sb3_eval",
+    "scenario_schedule": [
+      {
+        "id": "battaglia_cittadina_2_1",
+        "episodes": 300
+      }
+    ],
+    "rl_sides": [
+      "US"
+    ],
+    "models": {
+      "US": {}
+    },
+    "train_config_path": "C:\\repos\\python\\assault\\assault_sim\\config\\train_config.json",
+    "diagnostic_min_overrides": false,
+    "finalizer_override_profile": "soft",
+    "models_subdir": "",
+    "models_subdir_template": "scenario_{scenario}/side_{side}"
+  },
+  "by_side_and_scenario": {
+    "US": {}
+  },
+  "comparison": []
+}

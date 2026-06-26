@@ -1,0 +1,50 @@
+{
+  "rl_sides": [
+    "IT"
+  ],
+  "scenario_schedule": [
+    {
+      "id": "mettete_i_piedi_terra_1",
+      "episodes": 300
+    },
+    {
+      "id": "mettete_i_piedi_terra_1",
+      "episodes": 700
+    }
+  ],
+  "seed": 42,
+  "total_updates": 4000,
+  "rollout_steps": 160,
+  "num_envs": 22,
+  "batch_rollouts": 4,
+  "lr": 8e-05,
+  "eval_interval": 200,
+  "eval_min_improvement": 0.01,
+  "sb3_total_timesteps": 320000,
+  "sb3_num_envs": 4,
+  "sb3_n_steps": 1024,
+  "sb3_batch_size": 512,
+  "sb3_n_epochs": 10,
+  "sb3_gamma": 0.995,
+  "sb3_gae_lambda": 0.97,
+  "sb3_ent_coef": 0.003,
+  "sb3_clip_range": 0.15,
+  "sb3_learning_rate": 0.0001,
+  "sb3_device": "cpu",
+  "sb3_vec_env_type": "subproc",
+  "sb3_models_subdir": "",
+  "sb3_models_subdir_template": "scenario_{scenario}/side_{side}",
+  "sb3_clean_models_before_train": true,
+  "sb3_train_lean": false,
+  "sb3_eval_freq": 5000,
+  "sb3_eval_episodes": 20,
+  "sb3_net_arch": [
+    256,
+    256
+  ],
+  "sb3_max_decisions": 300,
+  "sb3_zero_damage_penalty": 0.8,
+  "sb3_extra_good_trade_bonus": 0.3,
+  "capture_guardrails_enabled": true,
+  "diagnostic_force_capture_only": false
+}

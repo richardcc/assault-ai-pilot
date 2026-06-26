@@ -45,6 +45,8 @@ function Get-LastEvalSideLine {
     param([string]$EvalLog)
     if (!(Test-Path $EvalLog)) { return $null }
 
+    $match = Select-String -Path $EvalLog -Pattern "^side=.*true_win_rate_(objective|runtime)\(" | Select-Object -Last 1
+    if ($match) { return $match.Line.Trim() }
     $match = Select-String -Path $EvalLog -Pattern "^side=.*true_win_rate\(only_wins\)=" | Select-Object -Last 1
     if ($match) { return $match.Line.Trim() }
 
@@ -182,7 +184,10 @@ function Run-Variant {
     $epRew = Get-LastMetricFromLog -LogPath $trainLog -MetricName "ep_rew_mean"
 
     $evalLine = Get-LastEvalSideLine -EvalLog $evalLog
-    $trueWin = Parse-EvalMetric -Line $evalLine -Name "true_win_rate\(only_wins\)"
+    $trueWin = Parse-EvalMetric -Line $evalLine -Name "true_win_rate_objective\(only_vittoria\)"
+    if ($null -eq $trueWin) {
+        $trueWin = Parse-EvalMetric -Line $evalLine -Name "true_win_rate\(only_wins\)"
+    }
     $lossRate = Parse-EvalMetric -Line $evalLine -Name "loss_rate"
 
     if (-not $KeepTempConfigs) {
@@ -245,7 +250,7 @@ $md += "## Raw eval lines"
 foreach ($r in $results) {
     $md += "- **$($r.Run)**: $($r.EvalSummary)"
 }
-Set-Content -Path $mdPath -Value ($md -join "`r`n") -Encoding UTF8
+[System.IO.File]::WriteAllText($mdPath, ($md -join "`r`n"), (New-Object System.Text.UTF8Encoding($false)))
 
 Write-Host ""
 Write-Host "✅ Listo"

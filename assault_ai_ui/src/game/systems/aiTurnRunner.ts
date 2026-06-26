@@ -12,8 +12,8 @@ import { gameController } from "../gameControllerInstance";
 import { axialToPixel, HEX_SIZE } from "../render/hexGridRenderer";
 import { logCombatEvents } from "./combatLog";
 import { resolveActionMarker, setUnitActionMarker } from "../state/actionMarkers";
+import { apiUrl } from "../../config/backend";
 
-const BACKEND = "http://127.0.0.1:8000";
 const AI_DELAY_MS = 800; // pause between AI actions so the user can see them
 
 function isUnitAlive(u: any): boolean {
@@ -44,7 +44,7 @@ function pickAction(actions: any): any | null {
 // Fetch state helper
 // --------------------------------------------------------
 async function fetchState(): Promise<any> {
-  const res = await fetch(`${BACKEND}/api/game/state`);
+  const res = await fetch(apiUrl("/api/game/state"));
   return res.json();
 }
 
@@ -83,7 +83,7 @@ export async function runAiTurns(
     // Fetch available actions for this unit
     let actions: any = { moves: [], attacks: [] };
     try {
-      const res = await fetch(`${BACKEND}/api/game/actions`, {
+      const res = await fetch(apiUrl("/api/game/actions"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ unit_id: aiUnit.id }),
@@ -125,7 +125,7 @@ export async function runAiTurns(
     try {
       console.log(`🤖 AI stepping backend with action=${action.id}`);
       (window as any).logSystemEvent?.("system", `⚙️ AI step executed: Action ID ${action.id}`);
-      const stepRes = await fetch(`${BACKEND}/api/game/step`, {
+      const stepRes = await fetch(apiUrl("/api/game/step"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ action_id: action.id }),

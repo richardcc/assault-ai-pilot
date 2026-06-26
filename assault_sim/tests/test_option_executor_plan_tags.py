@@ -54,7 +54,7 @@ def test_option_executor_tags_plan_fields_on_action(monkeypatch):
 
     assert action.__class__.__name__ == "WaitAction"
     assert getattr(action, "rl_plan_intent", "") == "CAPTURE"
-    assert getattr(action, "rl_plan_unit_role", "") in {"SCREEN", "ASSAULT", "SUPPORT_FIRE", "UNKNOWN"}
+    assert getattr(action, "rl_plan_unit_role", "") in {"SCREEN", "ASSAULT", "SUPPORT_FIRE", "HOLD_VP", "RESERVE"}
     assert getattr(action, "rl_plan_focus_vp_id", None) is None
     assert int(getattr(action, "rl_plan_step_id", 0)) >= 1
     assert getattr(action, "rl_plan_budget_state", "") == "UNBOUNDED"

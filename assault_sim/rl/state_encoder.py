@@ -19,6 +19,7 @@ TERRAIN_KEYS = [
     "building_single",
     "building_multi",
 ]
+TERRAIN_INDEX = {name: idx for idx, name in enumerate(TERRAIN_KEYS)}
 
 FORT_KEYS = [
     "none",
@@ -29,14 +30,15 @@ FORT_KEYS = [
     "barbed_wire",
     "minefield",
 ]
+FORT_INDEX = {name: idx for idx, name in enumerate(FORT_KEYS)}
 
 
-def _one_hot(value: str, keys: list[str]):
+def _one_hot(value: str, keys: list[str], index_map: dict[str, int] | None = None):
     vec = [0.0] * len(keys)
     try:
-        idx = keys.index(value)
+        idx = index_map[value] if index_map is not None else keys.index(value)
         vec[idx] = 1.0
-    except ValueError:
+    except (ValueError, KeyError):
         pass
     return vec
 
@@ -629,8 +631,8 @@ def encode_state(
         aq, ar = active.position.q, active.position.r
         terrain_here = _terrain_name_of(state, aq, ar)
         fort_here, orient_here = _fort_data_of(state, aq, ar)
-        obs.extend(_one_hot(terrain_here, TERRAIN_KEYS))
-        obs.extend(_one_hot(fort_here if fort_here in FORT_KEYS else "none", FORT_KEYS))
+        obs.extend(_one_hot(terrain_here, TERRAIN_KEYS, TERRAIN_INDEX))
+        obs.extend(_one_hot(fort_here if fort_here in FORT_KEYS else "none", FORT_KEYS, FORT_INDEX))
         obs.extend(_encode_orientation_1_to_6(orient_here))
         obs.extend(_local_map_features(state, aq, ar))
     else:

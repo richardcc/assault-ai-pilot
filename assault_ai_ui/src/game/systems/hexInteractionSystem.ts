@@ -2,6 +2,7 @@ import { axialToPixel, HEX_SIZE, formatCoords } from "../render/hexGridRenderer"
 import { resolveActionMarker, setUnitActionMarker } from "../state/actionMarkers";
 import { drawAttackIndicatorPixels } from "../animation/visuals";
 import { gameController } from "../gameControllerInstance";
+import { apiUrl } from "../../config/backend";
 
 export async function handleHexClick(
   q: number,
@@ -70,7 +71,7 @@ export async function handleHexClick(
   setAvailableMoves([]);
 
   // 3. POST human step to backend
-  const stepRes = await fetch("http://127.0.0.1:8000/api/game/step", {
+  const stepRes = await fetch(apiUrl("/api/game/step"), {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ action_id: actionId }),

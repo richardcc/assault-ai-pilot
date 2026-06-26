@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import os
+import time
 from pathlib import Path
 from typing import Any
 
@@ -13,11 +15,11 @@ except ImportError:  # pragma: no cover
     from gym import spaces  # type: ignore
 
 from assault_model.actions.status import WaitAction
-from assault_model.actions.action_catalog import ActionCatalog
 from assault_model.map.hex_utils import safe_hex_distance
 from assault_sim.config.ppo_config import PPOConfig
 from assault_sim.config.train_config import load_train_config
 from assault_sim.decision.action_bridge import ActionBridge
+from assault_sim.decision.action_finalizer import catalog_priority_action, finalize_action
 from assault_sim.decision.mission_planner import MissionPlanner
 from assault_sim.decision.option_executor import OptionExecutor
 from assault_sim.engine.env_factory import make_env
@@ -26,6 +28,30 @@ from assault_sim.heuristics.tactical_path_heuristic import TacticalPathHeuristic
 from assault_sim.rl.tactical_options import TacticalOption
 from assault_sim.rl.strategic_intents import StrategicIntent
 from assault_sim.rewards.shaped_reward import ShapedReward
+
+
+def _env_bool(name: str, default: bool) -> bool:
+    raw = os.getenv(name)
+    if raw is None:
+        return bool(default)
+    return str(raw).strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _env_str(name: str, default: str) -> str:
+    raw = os.getenv(name)
+    if raw is None:
+        return str(default or "").strip()
+    return str(raw).strip()
+
+
+def _env_int(name: str, default: int) -> int:
+    raw = os.getenv(name)
+    if raw is None:
+        return int(default)
+    try:
+        return int(raw)
+    except Exception:
+        return int(default)
 
 
 class _GymActionController:
@@ -41,12 +67,29 @@ class _GymActionController:
         self.heuristic = TacticalPathHeuristic()
         repo_root = Path(__file__).resolve().parents[2]
         cfg = load_train_config(repo_root / "assault_sim" / "config" / "train_config.json")
+        capture_guardrails_enabled = _env_bool(
+            "ASSAULT_CAPTURE_GUARDRAILS_ENABLED",
+            bool(getattr(cfg, "capture_guardrails_enabled", True)),
+        )
+        diagnostic_force_capture_only = _env_bool(
+            "ASSAULT_DIAGNOSTIC_FORCE_CAPTURE_ONLY",
+            bool(getattr(cfg, "diagnostic_force_capture_only", False)),
+        )
+        finalizer_override_profile = _env_str(
+            "ASSAULT_FINALIZER_OVERRIDE_PROFILE",
+            str(getattr(cfg, "finalizer_override_profile", "strict") or "strict"),
+        ).lower()
+        if finalizer_override_profile not in {"strict", "soft"}:
+            finalizer_override_profile = "strict"
+        self.finalizer_override_profile = finalizer_override_profile
         self.executor = OptionExecutor(
             self.heuristic,
             avoid_bad_trades=False,
             adv_threshold=-0.5,
-            capture_guardrails_enabled=bool(getattr(cfg, "capture_guardrails_enabled", True)),
-            diagnostic_force_capture_only=bool(getattr(cfg, "diagnostic_force_capture_only", False)),
+            capture_guardrails_enabled=capture_guardrails_enabled,
+            diagnostic_force_capture_only=diagnostic_force_capture_only,
+            fast_reposition_followup_check=bool(getattr(sim_env, "train_lean", False)),
+            lightweight_training_tags=bool(getattr(sim_env, "train_lean", False)),
         )
         self.action_bridge = ActionBridge()
         self.mission_planner = MissionPlanner()
@@ -64,6 +107,16 @@ class _GymActionController:
         # R4 skeleton: step-in mask telemetry for legal VP-entry opportunities.
         self.current_stepin_legal = False
         self.current_stepin_forced_option = False
+        self.finalizer_debug = str(os.getenv("ASSAULT_DEBUG_FINALIZER", "0")).strip().lower() in {"1", "true", "yes", "on"}
+        self._finalizer_debug_budget = 40
+        self.perf_enabled = _env_bool("ASSAULT_PERF_PROFILE", False)
+        self.perf_stats: dict[str, float] = {
+            "controller_act_calls": 0.0,
+            "controller_act_s": 0.0,
+            "executor_execute_s": 0.0,
+            "finalize_s": 0.0,
+            "catalog_actions_s": 0.0,
+        }
 
     def reset(self):
         self.pending_action = None
@@ -228,62 +281,44 @@ class _GymActionController:
         return getattr(hs, "ownership", None) != own_ownership
 
     def _catalog_priority_action(self, state, unit):
-        try:
-            legal_actions = ActionCatalog(
-                state,
-                unit,
-                terrain_config=state.game_map.terrain_config,
-            ).actions()
-        except Exception:
-            return WaitAction(getattr(unit, "unit_id", "SYSTEM")), "catalog_error"
-        if not legal_actions:
-            return WaitAction(getattr(unit, "unit_id", "SYSTEM")), "catalog_empty"
+        def _record_catalog_time(dt: float):
+            self.perf_stats["catalog_actions_s"] = self.perf_stats.get("catalog_actions_s", 0.0) + float(dt)
 
-        side = getattr(unit, "side", None)
-
-        def _score(a):
-            aid = str(getattr(a, "action_id", "") or "").upper()
-            name = str(getattr(a, "__class__", type("X", (), {})).__name__ or "").upper()
-            path = getattr(a, "move_path", None) or getattr(a, "path", None)
-            end = path[-1] if path else None
-            if path and self._is_uncaptured_vp_hex_for_side(state, side, end):
-                return (4, 0)
-            is_attack = ("ATTACK" in name) or ("FIRE" in name) or ("RANGED" in aid)
-            if is_attack:
-                return (3, 0)
-            if self._is_non_displacement_move(a, unit):
-                return (0, -999)
-            if aid.startswith("WAIT:") or "WAIT" in name:
-                return (1, 0)
-            return (2, 0)
-
-        return max(legal_actions, key=_score), "catalog_priority"
+        return catalog_priority_action(
+            state,
+            unit,
+            is_non_displacement_move=self._is_non_displacement_move,
+            is_uncaptured_vp_hex_for_side=self._is_uncaptured_vp_hex_for_side,
+            record_catalog_time=_record_catalog_time if self.perf_enabled else None,
+        )
 
     def _finalize_rl_action(self, state, unit, action):
-        if action is None:
-            fallback, reason = self._catalog_priority_action(state, unit)
-            return fallback, f"executor_none->{reason}"
-        try:
-            legal_actions = ActionCatalog(
-                state,
-                unit,
-                terrain_config=state.game_map.terrain_config,
-            ).actions()
-            legal_ids = {str(getattr(a, "action_id", "") or "") for a in legal_actions}
-            aid = str(getattr(action, "action_id", "") or "")
-            if not aid:
-                fallback, reason = self._catalog_priority_action(state, unit)
-                return fallback, f"empty_action_id->{reason}"
-            if aid not in legal_ids:
-                fallback, reason = self._catalog_priority_action(state, unit)
-                return fallback, f"not_in_catalog->{reason}"
-            if self._is_non_displacement_move(action, unit):
-                fallback, reason = self._catalog_priority_action(state, unit)
-                return fallback, f"non_displacement->{reason}"
-            return action, "ok"
-        except Exception:
-            fallback, reason = self._catalog_priority_action(state, unit)
-            return fallback, f"catalog_validation_error->{reason}"
+        t_fin = time.perf_counter() if self.perf_enabled else 0.0
+        def _record_catalog_time(dt: float):
+            self.perf_stats["catalog_actions_s"] = self.perf_stats.get("catalog_actions_s", 0.0) + float(dt)
+
+        action_out, reason, budget = finalize_action(
+            state,
+            unit,
+            action,
+            is_non_displacement_move=self._is_non_displacement_move,
+            is_uncaptured_vp_hex_for_side=self._is_uncaptured_vp_hex_for_side,
+            finalizer_override_profile=self.finalizer_override_profile,
+            finalizer_debug=self.finalizer_debug,
+            finalizer_debug_budget=self._finalizer_debug_budget,
+            decision_context={
+                "strategy": getattr(getattr(self, "current_strategy", None), "name", None),
+                "sampled": getattr(self.current_option_sampled, "name", None),
+                "resolved": getattr(self.current_option_resolved, "name", None),
+                "executed": getattr(self.current_option, "name", None),
+            },
+            record_catalog_time=_record_catalog_time if self.perf_enabled else None,
+        )
+        self._finalizer_debug_budget = int(budget)
+        out = (action_out, reason)
+        if self.perf_enabled:
+            self.perf_stats["finalize_s"] += (time.perf_counter() - t_fin)
+        return out
 
     def _option_from_action_tag(self, action, fallback: TacticalOption) -> TacticalOption:
         tagged = str(getattr(action, "rl_l2_option", "") or "").strip().upper()
@@ -295,6 +330,7 @@ class _GymActionController:
             return fallback
 
     def act(self, state, side, unit, obs):
+        t_act = time.perf_counter() if self.perf_enabled else 0.0
         if side == self.rl_side:
             sampled_strategy, sampled_option, attack_mode, _unit_slot = self._decode_action()
             # Strategy is evaluated per activation to avoid turn-wide lock-in
@@ -337,6 +373,7 @@ class _GymActionController:
                     resolved_option = TacticalOption.ADVANCE
 
             planner_context = self.mission_planner.build_context(state, unit, side)
+            t_exec = time.perf_counter() if self.perf_enabled else 0.0
             action = self.executor.execute(
                 state=state,
                 unit=unit,
@@ -346,6 +383,8 @@ class _GymActionController:
                 objective_tracked_side=self._objective_tracked_side(),
                 planner_context=planner_context,
             )
+            if self.perf_enabled:
+                self.perf_stats["executor_execute_s"] += (time.perf_counter() - t_exec)
             action, finalize_reason = self._finalize_rl_action(state, unit, action)
             try:
                 setattr(action, "rl_training_finalized_reason", str(finalize_reason))
@@ -379,6 +418,9 @@ class _GymActionController:
 
             action.unit_id = unit.unit_id
             self.sim_env.runtime.activated_units.add(unit.unit_id)
+            if self.perf_enabled:
+                self.perf_stats["controller_act_calls"] += 1.0
+                self.perf_stats["controller_act_s"] += (time.perf_counter() - t_act)
             return action
 
         # Enemy heuristic behavior.
@@ -398,6 +440,9 @@ class _GymActionController:
         action = WaitAction(unit.unit_id)
         action.unit_id = unit.unit_id
         self.sim_env.runtime.activated_units.add(unit.unit_id)
+        if self.perf_enabled:
+            self.perf_stats["controller_act_calls"] += 1.0
+            self.perf_stats["controller_act_s"] += (time.perf_counter() - t_act)
         return action
 
 
@@ -430,6 +475,14 @@ class GymAssaultEnv(gym.Env):
         self.train_lean = bool(train_lean)
 
         self._decision_count = 0
+        self._perf_enabled = _env_bool("ASSAULT_PERF_PROFILE", False)
+        self._perf_every = max(1, _env_int("ASSAULT_PERF_EVERY", 200))
+        self._perf_stats: dict[str, float] = {
+            "runner_step_calls": 0.0,
+            "runner_step_s": 0.0,
+            "step_total_s": 0.0,
+            "step_loops": 0.0,
+        }
 
         self._build_runtime(seed=self.base_seed)
         obs = self._runner.reset()
@@ -494,6 +547,7 @@ class GymAssaultEnv(gym.Env):
         return self._last_obs, info
 
     def step(self, action):
+        t_step = time.perf_counter() if self._perf_enabled else 0.0
         strategy_idx = int(action[0])
         option_idx = int(action[1])
         attack_mode = int(action[2])
@@ -509,12 +563,18 @@ class GymAssaultEnv(gym.Env):
         obs = self._last_obs
         # advance match until one RL activation is consumed or episode ends
         while not terminated and not rl_consumed:
+            t_runner = time.perf_counter() if self._perf_enabled else 0.0
             step = self._runner.step(self._controller, obs)
+            if self._perf_enabled:
+                self._perf_stats["runner_step_calls"] += 1.0
+                self._perf_stats["runner_step_s"] += (time.perf_counter() - t_runner)
             obs = np.asarray(step["obs"], dtype=np.float32)
             total_reward += float(step.get("reward", 0.0))
             terminated = bool(step.get("done", False))
             step_info = dict(step.get("info", {}) or {})
             rl_consumed = step.get("side") == self.rl_side
+            if self._perf_enabled:
+                self._perf_stats["step_loops"] += 1.0
 
         self._last_obs = obs
         self._decision_count += 1
@@ -526,5 +586,21 @@ class GymAssaultEnv(gym.Env):
             **self._decision_alignment_info(),
             "decision_count": self._decision_count,
         }
+        if self._perf_enabled:
+            self._perf_stats["step_total_s"] += (time.perf_counter() - t_step)
+            if self._decision_count % self._perf_every == 0:
+                calls = max(1.0, self._perf_stats["runner_step_calls"])
+                act_calls = max(1.0, self._controller.perf_stats.get("controller_act_calls", 0.0))
+                print(
+                    "[PERF][GymAssaultEnv]"
+                    f" pid={os.getpid()}"
+                    f" decisions={self._decision_count}"
+                    f" step_avg_ms={(self._perf_stats['step_total_s'] / max(1.0, float(self._decision_count))) * 1000.0:.2f}"
+                    f" runner_step_avg_ms={(self._perf_stats['runner_step_s'] / calls) * 1000.0:.2f}"
+                    f" controller_act_avg_ms={(self._controller.perf_stats.get('controller_act_s', 0.0) / act_calls) * 1000.0:.2f}"
+                    f" executor_avg_ms={(self._controller.perf_stats.get('executor_execute_s', 0.0) / act_calls) * 1000.0:.2f}"
+                    f" finalize_avg_ms={(self._controller.perf_stats.get('finalize_s', 0.0) / act_calls) * 1000.0:.2f}"
+                    f" catalog_avg_ms={(self._controller.perf_stats.get('catalog_actions_s', 0.0) / act_calls) * 1000.0:.2f}"
+                )
         return obs, total_reward, terminated, truncated, info
 

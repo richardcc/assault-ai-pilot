@@ -1,14 +1,49 @@
 from assault_model.actions.status import WaitAction
-from assault_model.actions.action_catalog import ActionCatalog
 from assault_model.actions.action_category import ActionCategory
 from assault_model.actions.ranged_direct import RangedDirectAttack
 from assault_model.actions.ranged_indirect import RangedIndirectAttack
-from assault_model.map.terrain_config import terrain_config
 from assault_model.map.hex_utils import safe_hex_distance
 from assault_sim.rl.tactical_options import TacticalOption
+import numpy as np
 
 
 class OptionExecutorCaptureMixin:
+    def _enables_stepin_next_from_pos(self, state, unit, pos) -> bool:
+        """One-step lookahead: after moving to `pos`, is there a legal VP step-in?"""
+        if state is None or unit is None or pos is None:
+            return False
+        uid = getattr(unit, "unit_id", None)
+        if not uid:
+            return False
+        pos_q = getattr(pos, "q", None)
+        pos_r = getattr(pos, "r", None)
+        if pos_q is not None and pos_r is not None:
+            cache_key = ("stepin_next", self._action_catalog_cache_state_key, str(uid), int(pos_q), int(pos_r))
+            cached = self._stepin_next_cache.get(cache_key)
+            if cached is not None:
+                return bool(cached)
+        try:
+            sim_state = __import__("copy").deepcopy(state)
+        except Exception:
+            return False
+        sim_unit = next(
+            (u for u in getattr(sim_state, "units", []) if getattr(u, "unit_id", None) == uid),
+            None,
+        )
+        if sim_unit is None:
+            return False
+        try:
+            sim_unit.position = pos
+        except Exception:
+            return False
+        try:
+            out = self._best_step_into_uncaptured_vp(sim_state, sim_unit) is not None
+            if pos_q is not None and pos_r is not None:
+                self._stepin_next_cache[cache_key] = bool(out)
+            return out
+        except Exception:
+            return False
+
     def _owned_vp_hexes_for_side(self, state, side: str):
         points = getattr(getattr(state, "victory", None), "points", []) or []
         if not points or not side:
@@ -66,12 +101,10 @@ class OptionExecutorCaptureMixin:
         if not critical_threat:
             return None, None
 
-        actions = self._get_unit_actions(state, unit)
+        _actions, moves, attacks = self._get_unit_actions_partitioned(state, unit)
         best_move = None
         best_move_score = float("-inf")
-        for a in actions:
-            if getattr(getattr(a, "action_type", None), "category", None) != ActionCategory.MOVEMENT:
-                continue
+        for a in moves:
             path = getattr(a, "path", None)
             if not path:
                 continue
@@ -87,7 +120,6 @@ class OptionExecutorCaptureMixin:
                 best_move_score = score
                 best_move = a
 
-        attacks = [a for a in actions if self._is_attack_action(a)]
         defend_attacks = []
         for a in attacks:
             target = self._resolve_action_target(state, a)
@@ -233,12 +265,10 @@ class OptionExecutorCaptureMixin:
             return None
         own_ownership = self._ownership_for_side(state, unit.side)
         vp_hexes = {vp.hex_coords for vp in points}
-        actions = self._get_unit_actions(state, unit)
+        _actions, moves, _attacks = self._get_unit_actions_partitioned(state, unit)
         best = None
         best_score = float("-inf")
-        for a in actions:
-            if a.action_type.category != ActionCategory.MOVEMENT:
-                continue
+        for a in moves:
             path = getattr(a, "path", None)
             if not path:
                 continue
@@ -261,13 +291,13 @@ class OptionExecutorCaptureMixin:
         if unit is None or getattr(unit, "position", None) is None:
             return None, None
         dist_before = self._nearest_uncaptured_vp_dist(state, unit)
-        actions = self._get_unit_actions(state, unit)
+        _actions, moves, _attacks = self._get_unit_actions_partitioned(state, unit)
         best = None
         best_score = float("-inf")
         best_after = None
-        for m in actions:
-            if getattr(getattr(m, "action_type", None), "category", None) != ActionCategory.MOVEMENT:
-                continue
+        best_enables_stepin = False
+        stepin_next_cache = {}
+        for m in moves:
             path = getattr(m, "path", None)
             if not path:
                 continue
@@ -277,8 +307,21 @@ class OptionExecutorCaptureMixin:
             dist_after = self._nearest_uncaptured_vp_dist_from_pos(state, unit.side, end)
             if dist_after is None:
                 continue
+            end_key = (getattr(end, "q", None), getattr(end, "r", None))
+            # Expensive lookahead only when candidate is already in useful ring.
+            if float(dist_after) <= 2.0:
+                if end_key in stepin_next_cache:
+                    enables_stepin_next = bool(stepin_next_cache[end_key])
+                else:
+                    enables_stepin_next = self._enables_stepin_next_from_pos(state, unit, end)
+                    stepin_next_cache[end_key] = bool(enables_stepin_next)
+            else:
+                enables_stepin_next = False
             # Primary goal: be adjacent (dist=1) to enable step-in on next action.
             score = -10.0 * abs(float(dist_after) - 1.0)
+            if enables_stepin_next:
+                # Strong bias toward setup positions that actually open legal entry.
+                score += 10.0
             if dist_before is not None and float(dist_after) < float(dist_before):
                 score += 2.5
             elif dist_before is not None and float(dist_after) == float(dist_before):
@@ -292,11 +335,15 @@ class OptionExecutorCaptureMixin:
                 best_score = score
                 best = m
                 best_after = dist_after
+                best_enables_stepin = bool(enables_stepin_next)
         if best is None:
             return None, None
-        # Hard validity gate: setup is only valid if we end adjacent to an
-        # uncaptured VP (distance 1), otherwise this is just lateral staging.
-        if best_after is None or float(best_after) > 1.0:
+        # Valid setup if either:
+        # - we end adjacent to VP (distance 1), or
+        # - one-step lookahead confirms legal step-in next activation.
+        if best_after is None:
+            return None, None
+        if float(best_after) > 1.0 and not best_enables_stepin:
             return None, None
         return best, best_after
 
@@ -352,6 +399,18 @@ class OptionExecutorCaptureMixin:
     def _enemy_pressure_at_pos(self, state, side: str, pos, radius: int = 3) -> float:
         if pos is None or not side:
             return 0.0
+        enemies = self._enemy_positions_array(state, side)
+        if int(getattr(enemies, "size", 0)) > 0:
+            q0 = int(getattr(pos, "q", 0))
+            r0 = int(getattr(pos, "r", 0))
+            dq = np.abs(enemies[:, 0].astype(np.int32) - q0)
+            dr = np.abs(enemies[:, 1].astype(np.int32) - r0)
+            ds = np.abs((enemies[:, 0].astype(np.int32) + enemies[:, 1].astype(np.int32)) - (q0 + r0))
+            d = np.maximum(np.maximum(dq, dr), ds)
+            in_radius = d <= int(radius)
+            if bool(np.any(in_radius)):
+                vals = d[in_radius].astype(np.float32)
+                return float(np.sum(1.0 / np.maximum(1.0, vals)))
         pressure = 0.0
         for e in getattr(state, "units", []) or []:
             if not getattr(e, "alive", False):
@@ -368,8 +427,7 @@ class OptionExecutorCaptureMixin:
         return float(pressure)
 
     def _best_capture_staging_move(self, state, unit):
-        actions = self._get_unit_actions(state, unit)
-        moves = [a for a in actions if getattr(getattr(a, "action_type", None), "category", None) == ActionCategory.MOVEMENT]
+        _actions, moves, _attacks = self._get_unit_actions_partitioned(state, unit)
         if not moves:
             debug = {
                 "move_candidates_total": 0,
@@ -399,28 +457,109 @@ class OptionExecutorCaptureMixin:
         progress_candidates = 0
         equal_candidates = 0
         increase_candidates = 0
+        stepin_enabling_candidates = 0
         reversal_filtered = 0
         legal_move_candidates = 0
-
+        stepin_next_cache = {}
+        move_rows = []
         for m in moves:
             path = getattr(m, "path", None)
             if not path:
                 continue
             end = path[-1]
-            if self._is_reversal_move(unit, end) and not self._is_uncaptured_vp_hex(state, unit.side, end):
+            if end is None:
+                continue
+            end_q = getattr(end, "q", None)
+            end_r = getattr(end, "r", None)
+            if end_q is None or end_r is None:
+                continue
+            reversal = bool(self._is_reversal_move(unit, end))
+            if reversal and not self._is_uncaptured_vp_hex(state, unit.side, end):
                 reversal_filtered += 1
                 continue
-            dist_after = self._nearest_uncaptured_vp_dist_from_pos(state, unit.side, end)
-            if dist_after is None:
-                continue
+            move_rows.append((m, end, int(end_q), int(end_r), reversal))
+
+        if not move_rows:
+            return None, "no_movement_actions", dist_before, None, {
+                "move_candidates_total": 0,
+                "progress_candidates": 0,
+                "equal_candidates": 0,
+                "increase_candidates": 0,
+                "stepin_enabling_candidates": 0,
+                "reversal_filtered": int(reversal_filtered),
+                "progress_available": False,
+                "selected_reason": "no_movement_actions",
+                "selected_dist_delta": None,
+                "suspected_progress_miss": False,
+            }
+
+        ends_qr = np.asarray([(row[2], row[3]) for row in move_rows], dtype=np.int32)
+        vp_coords = self._uncaptured_vp_coords_array(state, unit.side)
+        if int(getattr(vp_coords, "size", 0)) == 0:
+            return None, "no_movement_actions", dist_before, None, {
+                "move_candidates_total": 0,
+                "progress_candidates": 0,
+                "equal_candidates": 0,
+                "increase_candidates": 0,
+                "stepin_enabling_candidates": 0,
+                "reversal_filtered": int(reversal_filtered),
+                "progress_available": False,
+                "selected_reason": "no_movement_actions",
+                "selected_dist_delta": None,
+                "suspected_progress_miss": False,
+            }
+
+        dq_vp = np.abs(ends_qr[:, None, 0] - vp_coords[None, :, 0].astype(np.int32))
+        dr_vp = np.abs(ends_qr[:, None, 1] - vp_coords[None, :, 1].astype(np.int32))
+        ds_vp = np.abs(
+            (ends_qr[:, None, 0] + ends_qr[:, None, 1])
+            - (vp_coords[None, :, 0].astype(np.int32) + vp_coords[None, :, 1].astype(np.int32))
+        )
+        dist_after_arr = np.min(np.maximum(np.maximum(dq_vp, dr_vp), ds_vp), axis=1).astype(np.float32)
+        ring_after_arr = np.maximum(0.0, dist_after_arr - 1.0)
+
+        enemy_coords = self._enemy_positions_array(state, unit.side)
+        if int(getattr(enemy_coords, "size", 0)) > 0:
+            dq_e = np.abs(ends_qr[:, None, 0] - enemy_coords[None, :, 0].astype(np.int32))
+            dr_e = np.abs(ends_qr[:, None, 1] - enemy_coords[None, :, 1].astype(np.int32))
+            ds_e = np.abs(
+                (ends_qr[:, None, 0] + ends_qr[:, None, 1])
+                - (enemy_coords[None, :, 0].astype(np.int32) + enemy_coords[None, :, 1].astype(np.int32))
+            )
+            d_enemy = np.maximum(np.maximum(dq_e, dr_e), ds_e).astype(np.float32)
+            in_radius = d_enemy <= 3.0
+            enemy_pressure_arr = np.sum(
+                np.where(in_radius, 1.0 / np.maximum(1.0, d_enemy), 0.0),
+                axis=1,
+                dtype=np.float32,
+            )
+        else:
+            enemy_pressure_arr = np.zeros((ends_qr.shape[0],), dtype=np.float32)
+
+        for idx, (m, end, end_q, end_r, is_reversal) in enumerate(move_rows):
+            dist_after = float(dist_after_arr[idx])
             legal_move_candidates += 1
-            ring_after = self._nearest_uncaptured_vp_ring_dist_from_pos(state, unit.side, end)
-            enemy_pressure = self._enemy_pressure_at_pos(state, unit.side, end, radius=3)
+            end_key = (end_q, end_r)
+            # Keep lookahead cheap: only near objective pressure and useful ring.
+            near_objective_ctx = dist_before is not None and float(dist_before) <= 3.0
+            if near_objective_ctx and float(dist_after) <= 2.0:
+                if end_key in stepin_next_cache:
+                    enables_stepin_next = bool(stepin_next_cache[end_key])
+                else:
+                    enables_stepin_next = self._enables_stepin_next_from_pos(state, unit, end)
+                    stepin_next_cache[end_key] = bool(enables_stepin_next)
+            else:
+                enables_stepin_next = False
+            if enables_stepin_next:
+                stepin_enabling_candidates += 1
+            ring_after = float(ring_after_arr[idx])
+            enemy_pressure = float(enemy_pressure_arr[idx])
             terrain_score = self._terrain_tactical_score(state, unit, end)
             score = -float(dist_after) + 0.3 * terrain_score - 0.35 * float(enemy_pressure)
-            if ring_after is not None:
-                score -= 0.8 * float(ring_after)
-            if ring_before is not None and ring_after is not None:
+            if enables_stepin_next:
+                score += 6.0
+            score -= 0.8 * float(ring_after)
+            if ring_before is not None:
                 if float(ring_after) < float(ring_before):
                     score += 2.0
                 elif float(ring_after) == float(ring_before):
@@ -431,10 +570,10 @@ class OptionExecutorCaptureMixin:
                 and float(dist_after) == float(dist_before)
             ):
                 score -= 1.5
-                end_t = (getattr(end, "q", None), getattr(end, "r", None))
+                end_t = (end_q, end_r)
                 if prev_pos is not None and end_t == prev_pos:
                     score -= 1.5
-            if self._is_reversal_move(unit, end):
+            if is_reversal:
                 score -= 8.0
             if score > best_any_score:
                 best_any_score = score
@@ -469,6 +608,7 @@ class OptionExecutorCaptureMixin:
                 "progress_candidates": int(progress_candidates),
                 "equal_candidates": int(equal_candidates),
                 "increase_candidates": int(increase_candidates),
+                "stepin_enabling_candidates": int(stepin_enabling_candidates),
                 "reversal_filtered": int(reversal_filtered),
                 "progress_available": bool(progress_available),
                 "selected_reason": str(selected_reason or ""),
@@ -523,8 +663,7 @@ class OptionExecutorCaptureMixin:
     def _has_vp_attack_opportunity(self, state, unit) -> bool:
         if unit is None:
             return False
-        actions = self._get_unit_actions(state, unit)
-        attacks = [a for a in actions if self._is_attack_action(a)]
+        _actions, _moves, attacks = self._get_unit_actions_partitioned(state, unit)
         if not attacks:
             return False
         for a in attacks:
@@ -534,7 +673,7 @@ class OptionExecutorCaptureMixin:
         return False
 
     def _move_closer(self, state, unit, capture_strict: bool = False):
-        actions = self._get_unit_actions(state, unit)
+        _actions, moves, _attacks = self._get_unit_actions_partitioned(state, unit)
         objective_target = self._objective_target_hex(state, unit)
         enemies = [u for u in state.units if u.side != unit.side and u.alive]
         if objective_target is None and not enemies:
@@ -549,17 +688,40 @@ class OptionExecutorCaptureMixin:
         dist_before_target = None
         if objective_target is not None and getattr(unit, "position", None) is not None:
             dist_before_target = safe_hex_distance(unit.position, objective_target)
-
-        for a in actions:
-            if a.action_type.category != ActionCategory.MOVEMENT:
-                continue
+        move_rows = []
+        for a in moves:
             path = getattr(a, "path", None)
             if not path:
                 continue
             new_pos = path[-1]
-            if self._is_reversal_move(unit, new_pos) and not self._is_uncaptured_vp_hex(state, unit.side, new_pos):
+            if new_pos is None:
                 continue
-            d = safe_hex_distance(new_pos, objective_target)
+            q = getattr(new_pos, "q", None)
+            r = getattr(new_pos, "r", None)
+            if q is None or r is None:
+                continue
+            is_reversal = bool(self._is_reversal_move(unit, new_pos))
+            if is_reversal and not self._is_uncaptured_vp_hex(state, unit.side, new_pos):
+                continue
+            move_rows.append((a, new_pos, int(q), int(r), is_reversal))
+
+        if move_rows:
+            ends_qr = np.asarray([(row[2], row[3]) for row in move_rows], dtype=np.int32)
+            if hasattr(objective_target, "q") and hasattr(objective_target, "r"):
+                target_q = int(getattr(objective_target, "q"))
+                target_r = int(getattr(objective_target, "r"))
+            else:
+                target_q = int(objective_target[0])
+                target_r = int(objective_target[1])
+            dq = np.abs(ends_qr[:, 0] - target_q)
+            dr = np.abs(ends_qr[:, 1] - target_r)
+            ds = np.abs((ends_qr[:, 0] + ends_qr[:, 1]) - (target_q + target_r))
+            d_arr = np.maximum(np.maximum(dq, dr), ds).astype(np.float32)
+        else:
+            d_arr = np.empty((0,), dtype=np.float32)
+
+        for idx, (a, new_pos, _q, _r, is_reversal) in enumerate(move_rows):
+            d = float(d_arr[idx])
             terrain_score = self._terrain_tactical_score(state, unit, new_pos)
             if capture_strict:
                 score = -100.0 * float(d) + 0.1 * self._MOVE_CFG.advance_terrain_weight * terrain_score
@@ -567,7 +729,7 @@ class OptionExecutorCaptureMixin:
                 score = -float(d) + self._MOVE_CFG.advance_terrain_weight * terrain_score
             if self._is_uncaptured_vp_hex(state, unit.side, new_pos):
                 score += 120.0
-            if self._is_reversal_move(unit, new_pos):
+            if is_reversal:
                 score -= 8.0
             if score > best_score:
                 best = a
@@ -581,7 +743,7 @@ class OptionExecutorCaptureMixin:
         return best or WaitAction(unit.unit_id)
 
     def _flank_move(self, state, unit):
-        actions = self._get_unit_actions(state, unit)
+        _actions, moves, _attacks = self._get_unit_actions_partitioned(state, unit)
         objective_target = self._objective_target_hex(state, unit)
         enemies = [u for u in state.units if u.side != unit.side and u.alive]
         if objective_target is None and not enemies:
@@ -591,19 +753,43 @@ class OptionExecutorCaptureMixin:
 
         best = None
         best_score = float("-inf")
-        for a in actions:
-            if a.action_type.category != ActionCategory.MOVEMENT:
-                continue
+        move_rows = []
+        for a in moves:
             path = getattr(a, "path", None)
             if not path:
                 continue
             new_pos = path[-1]
-            if self._is_reversal_move(unit, new_pos) and not self._is_uncaptured_vp_hex(state, unit.side, new_pos):
+            if new_pos is None:
                 continue
-            dist = safe_hex_distance(new_pos, objective_target)
+            q = getattr(new_pos, "q", None)
+            r = getattr(new_pos, "r", None)
+            if q is None or r is None:
+                continue
+            is_reversal = bool(self._is_reversal_move(unit, new_pos))
+            if is_reversal and not self._is_uncaptured_vp_hex(state, unit.side, new_pos):
+                continue
+            move_rows.append((a, new_pos, int(q), int(r), is_reversal))
+
+        if move_rows:
+            ends_qr = np.asarray([(row[2], row[3]) for row in move_rows], dtype=np.int32)
+            if hasattr(objective_target, "q") and hasattr(objective_target, "r"):
+                target_q = int(getattr(objective_target, "q"))
+                target_r = int(getattr(objective_target, "r"))
+            else:
+                target_q = int(objective_target[0])
+                target_r = int(objective_target[1])
+            dq = np.abs(ends_qr[:, 0] - target_q)
+            dr = np.abs(ends_qr[:, 1] - target_r)
+            ds = np.abs((ends_qr[:, 0] + ends_qr[:, 1]) - (target_q + target_r))
+            dist_arr = np.maximum(np.maximum(dq, dr), ds).astype(np.float32)
+        else:
+            dist_arr = np.empty((0,), dtype=np.float32)
+
+        for idx, (a, new_pos, _q, _r, is_reversal) in enumerate(move_rows):
+            dist = float(dist_arr[idx])
             terrain_score = self._terrain_tactical_score(state, unit, new_pos)
             score = -dist + self._MOVE_CFG.flank_terrain_weight * terrain_score
-            if self._is_reversal_move(unit, new_pos):
+            if is_reversal:
                 score -= 8.0
             if 1 < dist <= 3:
                 score += 3
@@ -711,8 +897,7 @@ class OptionExecutorCaptureMixin:
         elif uid:
             self._capture_staging_streak_by_unit[uid] = 0
 
-        actions = ActionCatalog(state, unit, terrain_config).actions()
-        attacks = [a for a in actions if self._is_attack_action(a)]
+        _actions, _moves, attacks = self._get_unit_actions_partitioned(state, unit)
         prefer_mobility_near_vp = (
             nearest_vp_d is not None
             and float(nearest_vp_d) <= 3.0
@@ -764,6 +949,7 @@ class OptionExecutorCaptureMixin:
                 and vp_opening_attacks
                 and open_window_throttle_ok
                 and open_window_quality_ok
+                and not bool((move_debug or {}).get("progress_available", False))
             ):
                 open_window = self._best_attack(vp_opening_attacks, state=state, unit=unit)
                 if open_window is not None:
@@ -800,7 +986,9 @@ class OptionExecutorCaptureMixin:
                 move_reason == "objective_staging_move"
                 and nearest_vp_d is not None
                 and float(nearest_vp_d) <= 2.0
-                and int(self._capture_staging_streak_by_unit.get(uid, 0) if uid else 0) >= 2
+                and int(self._capture_staging_streak_by_unit.get(uid, 0) if uid else 0) >= 4
+                and not bool((move_debug or {}).get("progress_available", False))
+                and default_block_reason == "no_legal_stepin_near_vp"
             ):
                 forced_near_vp_pool = vp_relevant_attacks if vp_relevant_attacks else attacks
                 forced_near_vp = self._best_attack(forced_near_vp_pool, state=state, unit=unit)
@@ -883,7 +1071,8 @@ class OptionExecutorCaptureMixin:
                     and move_reason == "objective_staging_move"
                     and nearest_vp_d is not None
                     and float(nearest_vp_d) <= 3.0
-                    and int(self._capture_staging_streak_by_unit.get(uid, 0)) >= 2
+                    and int(self._capture_staging_streak_by_unit.get(uid, 0)) >= 4
+                    and default_block_reason == "no_legal_stepin_near_vp"
                 ):
                     should_take_attack = True
                 if (
@@ -891,9 +1080,30 @@ class OptionExecutorCaptureMixin:
                     and move_reason == "objective_staging_move"
                     and nearest_vp_d is not None
                     and nearest_vp_d <= 3
-                    and int(self._capture_staging_streak_by_unit.get(uid, 0)) >= 3
+                    and int(self._capture_staging_streak_by_unit.get(uid, 0)) >= 5
+                    and default_block_reason == "no_legal_stepin_near_vp"
                 ):
                     should_take_attack = True
+                if (
+                    nearest_vp_d is not None
+                    and float(nearest_vp_d) <= 3.0
+                    and gated_reason == "attack_gate_high_adv"
+                    and (
+                        int(self._capture_staging_streak_by_unit.get(uid, 0) if uid else 0) < 5
+                        or default_block_reason != "no_legal_stepin_near_vp"
+                        or bool((move_debug or {}).get("progress_available", False))
+                    )
+                ):
+                    should_take_attack = False
+                if (
+                    bool((move_debug or {}).get("progress_available", False))
+                    and gated_reason not in {
+                        "attack_gate_vp_target",
+                        "attack_gate_defend_owned_vp",
+                        "attack_gate_support_open_lane",
+                    }
+                ):
+                    should_take_attack = False
                 if should_take_attack:
                     gated.rl_capture_fallback_to_attack = True
                     gated.rl_capture_fallback_reason = gated_reason

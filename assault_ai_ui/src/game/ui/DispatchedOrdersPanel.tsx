@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { formatCoords } from "../render/hexGridRenderer";
 import { gameController } from "../gameControllerInstance";
+import { apiUrl } from "../../config/backend";
 
 type Order = {
   type?: string;
@@ -110,7 +111,7 @@ export function DispatchedOrdersPanel({
       if (executed) {
         return;
       }
-      const res = await fetch("http://127.0.0.1:8000/api/game/step", {
+      const res = await fetch(apiUrl("/api/game/step"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ action_id: actionId }),

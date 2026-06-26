@@ -12,7 +12,7 @@ def _load_report(path: Path) -> dict:
 
 def _extract_rows(report: dict) -> list[dict]:
     rows = []
-    by_side = report.get("by_side", {}) or {}
+    by_side = report.get("by_side_and_scenario", {}) or report.get("by_side", {}) or {}
     for side, scenarios in by_side.items():
         for scenario, payload in (scenarios or {}).items():
             summary = payload.get("summary", {}) or {}

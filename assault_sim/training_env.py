@@ -12,6 +12,7 @@ from assault_model.map.hex_utils import safe_hex_distance
 from assault_sim.rl.state_encoder import encode_state
 from assault_sim.rewards.progressive_reward import ProgressiveReward
 from assault_sim.contracts.training_contracts import normalize_plan_state
+from assault_sim.decision.role_mapper import resolve_role_with_reason
 
 
 DEBUG_TRACE = os.getenv("ASSAULT_DEBUG_TRACE", "0") == "1"
@@ -48,7 +49,6 @@ _TRAIN_LEAN_INFO_KEYS = {
     "plan_focus_switched",
     "plan_step_id",
     "plan_budget_state",
-    "plan_budget_remaining_by_role",
     "plan_budget_violation_count",
     "plan_budget_violation_delta",
     "plan_fallback_reason",
@@ -63,6 +63,9 @@ _TRAIN_LEAN_INFO_KEYS = {
     "intent_alignment_last_k",
     "last_failure_reason_onehot",
     "done",
+    # Keep objective outcome essentials for lightweight post-train diagnostics.
+    "objective_result_kind",
+    "objective_result_text",
 }
 
 
@@ -387,81 +390,127 @@ class TrainingEnv:
         # -------------------------------------------------
         # ✅ INFO (FIX AÑADIDO)
         # -------------------------------------------------
-        info = {
-            "unit_id": action.unit_id if hasattr(action, "unit_id") else None,
-            "action_id": getattr(action, "action_id", None),  # ✅ 💣 NUEVO
-            "actor_side": actor_side_norm,
-            "l2_option": getattr(action, "rl_l2_option", ""),
-            "l3_strategy": getattr(action, "rl_l3_strategy", ""),
-            "capture_fallback_to_attack": bool(getattr(action, "rl_capture_fallback_to_attack", False)),
-            "capture_fallback_reason": str(getattr(action, "rl_capture_fallback_reason", "") or ""),
-            "capture_move_block_profile": str(getattr(action, "rl_capture_move_block_profile", "") or ""),
-            "capture_target_dist_before": getattr(action, "rl_capture_target_dist_before", None),
-            "capture_target_dist_after": getattr(action, "rl_capture_target_dist_after", None),
-            "capture_move_candidates_total": int(getattr(action, "rl_capture_move_candidates_total", 0) or 0),
-            "capture_progress_candidates": int(getattr(action, "rl_capture_progress_candidates", 0) or 0),
-            "capture_equal_candidates": int(getattr(action, "rl_capture_equal_candidates", 0) or 0),
-            "capture_increase_candidates": int(getattr(action, "rl_capture_increase_candidates", 0) or 0),
-            "capture_reversal_filtered": int(getattr(action, "rl_capture_reversal_filtered", 0) or 0),
-            "capture_progress_available": bool(getattr(action, "rl_capture_progress_available", False)),
-            "capture_selected_move_reason": str(getattr(action, "rl_capture_selected_move_reason", "") or ""),
-            "capture_selected_dist_delta": getattr(action, "rl_capture_selected_dist_delta", None),
-            "capture_suspected_progress_miss": bool(getattr(action, "rl_capture_suspected_progress_miss", False)),
-            "attack_fallback_to_move": bool(getattr(action, "rl_attack_fallback_to_move", False)),
-            "attack_fallback_reason": str(getattr(action, "rl_attack_fallback_reason", "") or ""),
-            "vp_stepin_legal": bool(getattr(action, "rl_vp_stepin_legal", False)),
-            "vp_stepin_selected": bool(getattr(action, "rl_vp_stepin_selected", False)),
-            "vp_stepin_block_reason": str(getattr(action, "rl_vp_stepin_block_reason", "") or ""),
-            "vp_nearest_uncaptured_dist": getattr(action, "rl_vp_nearest_uncaptured_dist", None),
-            "vp_opening_attack_candidates_count": int(getattr(action, "rl_vp_opening_attack_candidates_count", 0) or 0),
-            "capture_emergency_override": bool(getattr(action, "rl_capture_emergency_override", False)),
-            "capture_legal_override": bool(getattr(action, "rl_capture_legal_override", False)),
-            "capture_override_reason": str(getattr(action, "rl_capture_override_reason", "") or ""),
-            "l3_capture_forced": bool(getattr(action, "rl_l3_capture_forced", False)),
-            "l3_capture_force_reason": str(getattr(action, "rl_l3_capture_force_reason", "") or ""),
-            "post_open_window_followup_advance": bool(getattr(action, "rl_post_open_window_followup_advance", False)),
-            "post_open_window_followup_success": bool(getattr(action, "rl_post_open_window_followup_success", False)),
-            "stepin_legal_mask": bool(getattr(action, "rl_stepin_legal_mask", False)),
-            "stepin_forced_option": bool(getattr(action, "rl_stepin_forced_option", False)),
-            "actor_unit_classification": (
-                str(getattr(getattr(actor, "unit_type", None), "classification", ""))
-                if actor is not None
-                else ""
-            ),
-
-            "rl_damage": 0,
-            "rl_attacks": 0,
-            "rl_kills": 0,
-            "enemy_damage": 0,
-            "enemy_attacks": 0,
-            "enemy_kills": 0,
-            "is_wait": is_wait,
-            "action_type": action_type,
-            "action_class": action.__class__.__name__,
-            "turn": next_state.turn,
-            "plan_intent": str(getattr(action, "rl_plan_intent", "UNKNOWN") or "UNKNOWN"),
-            "plan_unit_role": str(getattr(action, "rl_plan_unit_role", "UNKNOWN") or "UNKNOWN"),
-            "plan_role_unknown_reason": str(getattr(action, "rl_plan_role_unknown_reason", "") or ""),
-            "capture_branch": str(getattr(action, "rl_capture_branch", "") or ""),
-            "plan_focus_vp_id": getattr(action, "rl_plan_focus_vp_id", None),
-            "plan_stage": str(getattr(action, "rl_plan_stage", "EXECUTE") or "EXECUTE"),
-            "plan_replan_reason": str(getattr(action, "rl_plan_replan_reason", "") or ""),
-            "plan_commitment_age": int(getattr(action, "rl_plan_commitment_age", 0) or 0),
-            "plan_focus_switched": bool(getattr(action, "rl_plan_focus_switched", False)),
-            "plan_step_id": int(getattr(action, "rl_plan_step_id", 0) or 0),
-            "plan_budget_state": str(getattr(action, "rl_plan_budget_state", "UNBOUNDED") or "UNBOUNDED"),
-            "plan_budget_remaining_by_role": dict(getattr(action, "rl_plan_budget_remaining_by_role", {}) or {}),
-            "plan_budget_violation_count": int(getattr(action, "rl_plan_budget_violation_count", 0) or 0),
-            "plan_budget_violation_delta": int(getattr(action, "rl_plan_budget_violation_delta", 0) or 0),
-            "plan_fallback_reason": str(getattr(action, "rl_plan_fallback_reason", "") or ""),
-            "plan_progress_stub": float(getattr(action, "rl_plan_progress_stub", 0.0) or 0.0),
-            "intent_alignment_stub": float(getattr(action, "rl_plan_intent_alignment_stub", 0.0) or 0.0),
-            "action_finalized_reason": str(
-                getattr(action, "rl_training_finalized_reason", "")
-                or getattr(action, "rl_eval_finalized_reason", "")
-                or ""
-            ),
-        }
+        if self.train_lean:
+            info = {
+                "unit_id": action.unit_id if hasattr(action, "unit_id") else None,
+                "actor_side": actor_side_norm,
+                "l2_option": str(getattr(action, "rl_l2_option", "") or ""),
+                "l3_strategy": str(getattr(action, "rl_l3_strategy", "") or ""),
+                "rl_damage": 0,
+                "rl_attacks": 0,
+                "rl_kills": 0,
+                "enemy_damage": 0,
+                "enemy_attacks": 0,
+                "enemy_kills": 0,
+                "is_wait": is_wait,
+                "action_type": action_type,
+                "action_class": action.__class__.__name__,
+                "turn": next_state.turn,
+                "plan_intent": str(getattr(action, "rl_plan_intent", "UNKNOWN") or "UNKNOWN"),
+                "plan_unit_role": str(getattr(action, "rl_plan_unit_role", "SCREEN") or "SCREEN"),
+                "plan_role_unknown_reason": str(getattr(action, "rl_plan_role_unknown_reason", "") or ""),
+                "capture_branch": str(getattr(action, "rl_capture_branch", "") or ""),
+                "plan_focus_vp_id": getattr(action, "rl_plan_focus_vp_id", None),
+                "plan_stage": str(getattr(action, "rl_plan_stage", "EXECUTE") or "EXECUTE"),
+                "plan_replan_reason": str(getattr(action, "rl_plan_replan_reason", "") or ""),
+                "plan_commitment_age": int(getattr(action, "rl_plan_commitment_age", 0) or 0),
+                "plan_focus_switched": bool(getattr(action, "rl_plan_focus_switched", False)),
+                "plan_step_id": int(getattr(action, "rl_plan_step_id", 0) or 0),
+                "plan_budget_state": str(getattr(action, "rl_plan_budget_state", "UNBOUNDED") or "UNBOUNDED"),
+                "plan_budget_remaining_by_role": dict(getattr(action, "rl_plan_budget_remaining_by_role", {}) or {}),
+                "plan_budget_violation_count": int(getattr(action, "rl_plan_budget_violation_count", 0) or 0),
+                "plan_budget_violation_delta": int(getattr(action, "rl_plan_budget_violation_delta", 0) or 0),
+                "plan_fallback_reason": str(getattr(action, "rl_plan_fallback_reason", "") or ""),
+                "plan_progress_stub": float(getattr(action, "rl_plan_progress_stub", 0.0) or 0.0),
+                "intent_alignment_stub": float(getattr(action, "rl_plan_intent_alignment_stub", 0.0) or 0.0),
+                "action_finalized_reason": str(
+                    getattr(action, "rl_training_finalized_reason", "")
+                    or getattr(action, "rl_eval_finalized_reason", "")
+                    or ""
+                ),
+            }
+        else:
+            info = {
+                "unit_id": action.unit_id if hasattr(action, "unit_id") else None,
+                "action_id": getattr(action, "action_id", None),  # ✅ 💣 NUEVO
+                "actor_side": actor_side_norm,
+                "l2_option": getattr(action, "rl_l2_option", ""),
+                "l3_strategy": getattr(action, "rl_l3_strategy", ""),
+                "capture_fallback_to_attack": bool(getattr(action, "rl_capture_fallback_to_attack", False)),
+                "capture_fallback_reason": str(getattr(action, "rl_capture_fallback_reason", "") or ""),
+                "capture_move_block_profile": str(getattr(action, "rl_capture_move_block_profile", "") or ""),
+                "capture_target_dist_before": getattr(action, "rl_capture_target_dist_before", None),
+                "capture_target_dist_after": getattr(action, "rl_capture_target_dist_after", None),
+                "capture_move_candidates_total": int(getattr(action, "rl_capture_move_candidates_total", 0) or 0),
+                "capture_progress_candidates": int(getattr(action, "rl_capture_progress_candidates", 0) or 0),
+                "capture_equal_candidates": int(getattr(action, "rl_capture_equal_candidates", 0) or 0),
+                "capture_increase_candidates": int(getattr(action, "rl_capture_increase_candidates", 0) or 0),
+                "capture_reversal_filtered": int(getattr(action, "rl_capture_reversal_filtered", 0) or 0),
+                "capture_progress_available": bool(getattr(action, "rl_capture_progress_available", False)),
+                "capture_selected_move_reason": str(getattr(action, "rl_capture_selected_move_reason", "") or ""),
+                "capture_selected_dist_delta": getattr(action, "rl_capture_selected_dist_delta", None),
+                "capture_suspected_progress_miss": bool(getattr(action, "rl_capture_suspected_progress_miss", False)),
+                "attack_fallback_to_move": bool(getattr(action, "rl_attack_fallback_to_move", False)),
+                "attack_fallback_reason": str(getattr(action, "rl_attack_fallback_reason", "") or ""),
+                "vp_stepin_legal": bool(getattr(action, "rl_vp_stepin_legal", False)),
+                "vp_stepin_selected": bool(getattr(action, "rl_vp_stepin_selected", False)),
+                "vp_stepin_block_reason": str(getattr(action, "rl_vp_stepin_block_reason", "") or ""),
+                "vp_nearest_uncaptured_dist": getattr(action, "rl_vp_nearest_uncaptured_dist", None),
+                "vp_opening_attack_candidates_count": int(getattr(action, "rl_vp_opening_attack_candidates_count", 0) or 0),
+                "capture_emergency_override": bool(getattr(action, "rl_capture_emergency_override", False)),
+                "capture_legal_override": bool(getattr(action, "rl_capture_legal_override", False)),
+                "capture_override_reason": str(getattr(action, "rl_capture_override_reason", "") or ""),
+                "l3_capture_forced": bool(getattr(action, "rl_l3_capture_forced", False)),
+                "l3_capture_force_reason": str(getattr(action, "rl_l3_capture_force_reason", "") or ""),
+                "post_open_window_followup_advance": bool(getattr(action, "rl_post_open_window_followup_advance", False)),
+                "post_open_window_followup_success": bool(getattr(action, "rl_post_open_window_followup_success", False)),
+                "stepin_legal_mask": bool(getattr(action, "rl_stepin_legal_mask", False)),
+                "stepin_forced_option": bool(getattr(action, "rl_stepin_forced_option", False)),
+                "actor_unit_classification": (
+                    str(getattr(getattr(actor, "unit_type", None), "classification", ""))
+                    if actor is not None
+                    else ""
+                ),
+                "rl_damage": 0,
+                "rl_attacks": 0,
+                "rl_kills": 0,
+                "enemy_damage": 0,
+                "enemy_attacks": 0,
+                "enemy_kills": 0,
+                "is_wait": is_wait,
+                "action_type": action_type,
+                "action_class": action.__class__.__name__,
+                "turn": next_state.turn,
+                "plan_intent": str(getattr(action, "rl_plan_intent", "UNKNOWN") or "UNKNOWN"),
+                "plan_unit_role": str(getattr(action, "rl_plan_unit_role", "") or ""),
+                "plan_role_unknown_reason": str(getattr(action, "rl_plan_role_unknown_reason", "") or ""),
+                "capture_branch": str(getattr(action, "rl_capture_branch", "") or ""),
+                "plan_focus_vp_id": getattr(action, "rl_plan_focus_vp_id", None),
+                "plan_stage": str(getattr(action, "rl_plan_stage", "EXECUTE") or "EXECUTE"),
+                "plan_replan_reason": str(getattr(action, "rl_plan_replan_reason", "") or ""),
+                "plan_commitment_age": int(getattr(action, "rl_plan_commitment_age", 0) or 0),
+                "plan_focus_switched": bool(getattr(action, "rl_plan_focus_switched", False)),
+                "plan_step_id": int(getattr(action, "rl_plan_step_id", 0) or 0),
+                "plan_budget_state": str(getattr(action, "rl_plan_budget_state", "UNBOUNDED") or "UNBOUNDED"),
+                "plan_budget_remaining_by_role": dict(getattr(action, "rl_plan_budget_remaining_by_role", {}) or {}),
+                "plan_budget_violation_count": int(getattr(action, "rl_plan_budget_violation_count", 0) or 0),
+                "plan_budget_violation_delta": int(getattr(action, "rl_plan_budget_violation_delta", 0) or 0),
+                "plan_fallback_reason": str(getattr(action, "rl_plan_fallback_reason", "") or ""),
+                "plan_progress_stub": float(getattr(action, "rl_plan_progress_stub", 0.0) or 0.0),
+                "intent_alignment_stub": float(getattr(action, "rl_plan_intent_alignment_stub", 0.0) or 0.0),
+                "action_finalized_reason": str(
+                    getattr(action, "rl_training_finalized_reason", "")
+                    or getattr(action, "rl_eval_finalized_reason", "")
+                    or ""
+                ),
+            }
+        if not str(info.get("plan_unit_role") or "").strip():
+            inferred_role, _ = resolve_role_with_reason(
+                state,
+                actor,
+                str(info.get("plan_intent", "UNKNOWN") or "UNKNOWN"),
+            )
+            info["plan_unit_role"] = str(inferred_role or "SCREEN")
         info["l3_sampled"] = str(getattr(action, "rl_l3_strategy", "") or "")
         info["l3_effective"] = str(getattr(action, "rl_l3_strategy", "") or "")
         info["l3_executed"] = str(getattr(action, "rl_l3_strategy", "") or "")
@@ -600,6 +649,22 @@ class TrainingEnv:
                 pre_dist=pre_dist,
                 post_dist=post_dist,
             )
+            if not self.train_lean:
+                reward_components = {}
+                try:
+                    reward_components = dict(self.reward_fn.get_last_reward_components() or {})
+                except Exception:
+                    reward_components = {}
+                info["reward_components"] = reward_components
+                info["reward_component_raw_total"] = float(reward_components.get("raw_total", 0.0) or 0.0)
+                info["reward_component_clipped_total"] = float(reward_components.get("clipped_total", reward) or reward)
+                info["reward_component_unattributed"] = float(reward_components.get("unattributed", 0.0) or 0.0)
+                info["reward_component_capture_near_vp_advance_no_conversion_penalty"] = float(
+                    reward_components.get("capture_near_vp_advance_no_conversion_penalty", 0.0) or 0.0
+                )
+                info["reward_component_capture_post_contact_progress_move_bonus"] = float(
+                    reward_components.get("capture_post_contact_progress_move_bonus", 0.0) or 0.0
+                )
         else:
             reward = 0.0
 

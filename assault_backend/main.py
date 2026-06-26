@@ -19,6 +19,7 @@ from assault_backend.services.map_piece_service import (
 )
 from assault_backend.services.targeting_service import compute_targeting_info
 from assault_backend.services.unit_service import load_unit_catalog_raw, load_unit_raw
+from assault_backend.services.scenario_service_ui import load_ui_scenario
 from assault_backend.tactical_service import TacticalService
 from assault_sim.decision.decision_engine import DecisionEngine
 from assault_model.actions.action_catalog import ActionCatalog
@@ -38,6 +39,15 @@ app.add_middleware(
         "http://localhost:5174",
         "http://127.0.0.1:5174",
     ],
+    # Allow common LAN dev hosts (e.g. http://192.168.1.28:5173)
+    allow_origin_regex=(
+        r"^https?://("
+        r"localhost|127\.0\.0\.1|"
+        r"192\.168\.\d{1,3}\.\d{1,3}|"
+        r"10\.\d{1,3}\.\d{1,3}\.\d{1,3}|"
+        r"172\.(1[6-9]|2\d|3[0-1])\.\d{1,3}\.\d{1,3}"
+        r")(:\d+)?$"
+    ),
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -85,9 +95,7 @@ def explain_activation(request: ExplainActivationRequest):
 @app.get("/api/ui/scenarios/{scenario_id}")
 async def get_scenario(scenario_id: str):
     try:
-        if game_session.env is None:
-            game_session.start(scenario_id, {})
-        return game_session.get_state()
+        return load_ui_scenario(scenario_id)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -337,9 +345,12 @@ def game_ai_turn():
         return {"error": "no game"}
 
     env = game_session.env
+    if bool(getattr(getattr(env, "game_state", None), "done", False)):
+        # Match already ended; do not execute extra AI steps.
+        return {"state": game_session.get_state(), "steps": []}
     if not hasattr(game_session, "decision_engine"):
         game_session.decision_engine = DecisionEngine()
-    if not hasattr(game_session, "sb3_ai"):
+    if not hasattr(game_session, "sb3_ai") or game_session.sb3_ai is None:
         try:
             from assault_backend.services.sb3_ai_service import SB3AIService
 
@@ -374,7 +385,10 @@ def game_ai_turn():
             planner_context = None
     sb3_status = "not_attempted"
     sb3_reason = "default_heuristic"
-    if sb3_ai is not None and sb3_ai.can_control_side(active_side):
+    runtime_scenario_id = getattr(getattr(env, "scenario", None), "id", None) or getattr(
+        getattr(env, "scenario", None), "name", None
+    )
+    if sb3_ai is not None and sb3_ai.can_control_side(active_side, scenario_id=runtime_scenario_id):
         sb3_status = "attempted"
         try:
             sb3_unit, sb3_action, _opt = sb3_ai.choose_unit_and_action(
@@ -825,17 +839,26 @@ def game_ai_turn():
 
     def _step_payload(unit_obj, action_obj, src: str):
         action_name = str(getattr(action_obj, "__class__", type("X", (), {})).__name__ or "").upper()
+        unit_id = unit_obj.unit_id if unit_obj is not None else None
+        raw_action_id = getattr(action_obj, "action_id", None)
+        is_wait = "WAIT" in action_name
+        action_id = raw_action_id
+        if not action_id and is_wait and unit_id:
+            # WaitAction currently has no explicit action_id in model classes.
+            action_id = f"WAIT:{unit_id}"
         is_attack = any(k in action_name for k in ("ATTACK", "FIRE"))
         payload = {
-            "unit": unit_obj.unit_id if unit_obj is not None else None,
-            "unit_id": unit_obj.unit_id if unit_obj is not None else None,
+            "unit": unit_id,
+            "unit_id": unit_id,
             "action": action_obj.__class__.__name__,
-            "action_id": getattr(action_obj, "action_id", None),
+            "action_id": action_id,
             "source": src,
             # Frontend highlight/log compatibility.
-            "kind": "attack" if is_attack else "move",
-            "type": "ATTACK" if is_attack else "MOVE",
+            "kind": "wait" if is_wait else ("attack" if is_attack else "move"),
+            "type": "WAIT" if is_wait else ("ATTACK" if is_attack else "MOVE"),
         }
+        payload["sb3_status"] = sb3_status
+        payload["sb3_reason"] = sb3_reason
         payload["proposed_action_id"] = proposed_action_id
         payload["proposed_source"] = proposed_source
         payload["corrected"] = corrected

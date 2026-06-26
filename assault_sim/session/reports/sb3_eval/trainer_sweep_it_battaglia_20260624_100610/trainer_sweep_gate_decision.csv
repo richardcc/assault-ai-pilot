@@ -1,0 +1,4 @@
+﻿"config","side","scenario","true_win_rate_objective","loss_rate","vp_entry_missed_rate","captured_4_5","gate_win","gate_loss","gate_vp_missed","gate_captured_45","decision","rollback_required"
+"train_config_it_sweep_C.run.json","IT","battaglia_cittadina_2_1","55","0","0","11","PASS","PASS","PASS","PASS","GO","no"
+"train_config_it_sweep_B.run.json","IT","battaglia_cittadina_2_1","55","0","0","11","PASS","PASS","PASS","PASS","GO","no"
+"train_config_it_sweep_A.run.json","IT","battaglia_cittadina_2_1","1","0","1","20","PASS","PASS","FAIL","PASS","CONDITIONAL GO","no"

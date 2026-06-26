@@ -8,11 +8,11 @@ import os
 import numpy as np
 
 from assault_model.actions.status import WaitAction
-from assault_model.actions.action_catalog import ActionCatalog
 from assault_model.map.hex_utils import safe_hex_distance
 from assault_sim.config.train_config import load_train_config
 from assault_sim.config.ppo_config import PPOConfig
 from assault_sim.decision.action_bridge import ActionBridge
+from assault_sim.decision.action_finalizer import catalog_priority_action, finalize_action
 from assault_sim.decision.mission_planner import MissionPlanner
 from assault_sim.decision.option_executor import OptionExecutor
 from assault_sim.engine.env_factory import make_env
@@ -26,6 +26,28 @@ from assault_sim.rl.state_encoder import encode_state
 from assault_sim.rewards.shaped_reward import ShapedReward
 
 
+def _ansi(text: str, color: str | None = None, bold: bool = False) -> str:
+    if os.getenv("NO_COLOR") is not None:
+        return text
+    palette = {
+        "red": "31",
+        "green": "32",
+        "yellow": "33",
+        "blue": "34",
+        "magenta": "35",
+        "cyan": "36",
+        "gray": "90",
+    }
+    codes = []
+    if bold:
+        codes.append("1")
+    if color in palette:
+        codes.append(palette[color])
+    if not codes:
+        return text
+    return f"\033[{';'.join(codes)}m{text}\033[0m"
+
+
 class SB3EvalController:
     def __init__(
         self,
@@ -35,6 +57,8 @@ class SB3EvalController:
         obs_normalizer=None,
         capture_guardrails_enabled: bool = True,
         diagnostic_force_capture_only: bool = False,
+        diagnostic_min_overrides: bool = False,
+        finalizer_override_profile: str = "strict",
     ):
         self.model = model
         self.rl_side = rl_side
@@ -48,6 +72,9 @@ class SB3EvalController:
             capture_guardrails_enabled=capture_guardrails_enabled,
             diagnostic_force_capture_only=diagnostic_force_capture_only,
         )
+        self.diagnostic_min_overrides = bool(diagnostic_min_overrides)
+        profile = str(finalizer_override_profile or "strict").strip().lower()
+        self.finalizer_override_profile = profile if profile in {"strict", "soft"} else "strict"
         self.action_bridge = ActionBridge()
         self.mission_planner = MissionPlanner()
 
@@ -63,6 +90,8 @@ class SB3EvalController:
         # R4 skeleton: step-in mask telemetry for legal VP-entry opportunities.
         self.current_stepin_legal = False
         self.current_stepin_forced_option = False
+        self.finalizer_debug = str(os.getenv("ASSAULT_DEBUG_FINALIZER", "0")).strip().lower() in {"1", "true", "yes", "on"}
+        self._finalizer_debug_budget = 40
 
     def reset(self):
         self.current_option = None
@@ -228,62 +257,32 @@ class SB3EvalController:
         return getattr(hs, "ownership", None) != own_ownership
 
     def _catalog_priority_action(self, state, unit):
-        try:
-            legal_actions = ActionCatalog(
-                state,
-                unit,
-                terrain_config=state.game_map.terrain_config,
-            ).actions()
-        except Exception:
-            return WaitAction(getattr(unit, "unit_id", "SYSTEM")), "catalog_error"
-        if not legal_actions:
-            return WaitAction(getattr(unit, "unit_id", "SYSTEM")), "catalog_empty"
-
-        side = getattr(unit, "side", None)
-
-        def _score(a):
-            aid = str(getattr(a, "action_id", "") or "").upper()
-            name = str(getattr(a, "__class__", type("X", (), {})).__name__ or "").upper()
-            path = getattr(a, "move_path", None) or getattr(a, "path", None)
-            end = path[-1] if path else None
-            if path and self._is_uncaptured_vp_hex_for_side(state, side, end):
-                return (4, 0)
-            is_attack = ("ATTACK" in name) or ("FIRE" in name) or ("RANGED" in aid)
-            if is_attack:
-                return (3, 0)
-            if self._is_non_displacement_move(a, unit):
-                return (0, -999)
-            if aid.startswith("WAIT:") or "WAIT" in name:
-                return (1, 0)
-            return (2, 0)
-
-        return max(legal_actions, key=_score), "catalog_priority"
+        return catalog_priority_action(
+            state,
+            unit,
+            is_non_displacement_move=self._is_non_displacement_move,
+            is_uncaptured_vp_hex_for_side=self._is_uncaptured_vp_hex_for_side,
+        )
 
     def _finalize_rl_action(self, state, unit, action):
-        if action is None:
-            fallback, reason = self._catalog_priority_action(state, unit)
-            return fallback, f"executor_none->{reason}"
-        try:
-            legal_actions = ActionCatalog(
-                state,
-                unit,
-                terrain_config=state.game_map.terrain_config,
-            ).actions()
-            legal_ids = {str(getattr(a, "action_id", "") or "") for a in legal_actions}
-            aid = str(getattr(action, "action_id", "") or "")
-            if not aid:
-                fallback, reason = self._catalog_priority_action(state, unit)
-                return fallback, f"empty_action_id->{reason}"
-            if aid not in legal_ids:
-                fallback, reason = self._catalog_priority_action(state, unit)
-                return fallback, f"not_in_catalog->{reason}"
-            if self._is_non_displacement_move(action, unit):
-                fallback, reason = self._catalog_priority_action(state, unit)
-                return fallback, f"non_displacement->{reason}"
-            return action, "ok"
-        except Exception:
-            fallback, reason = self._catalog_priority_action(state, unit)
-            return fallback, f"catalog_validation_error->{reason}"
+        action_out, reason, budget = finalize_action(
+            state,
+            unit,
+            action,
+            is_non_displacement_move=self._is_non_displacement_move,
+            is_uncaptured_vp_hex_for_side=self._is_uncaptured_vp_hex_for_side,
+            finalizer_override_profile=self.finalizer_override_profile,
+            finalizer_debug=self.finalizer_debug,
+            finalizer_debug_budget=self._finalizer_debug_budget,
+            decision_context={
+                "strategy": getattr(getattr(self, "current_strategy", None), "name", None),
+                "sampled": getattr(self.current_option_sampled, "name", None),
+                "resolved": getattr(self.current_option_resolved, "name", None),
+                "executed": getattr(self.current_option, "name", None),
+            },
+        )
+        self._finalizer_debug_budget = int(budget)
+        return action_out, reason
 
     def _option_from_action_tag(self, action, fallback: TacticalOption) -> TacticalOption:
         tagged = str(getattr(action, "rl_l2_option", "") or "").strip().upper()
@@ -319,36 +318,39 @@ class SB3EvalController:
         resolved_option = sampled_option
         self.current_stepin_legal = False
         self.current_stepin_forced_option = False
-        # R4 skeleton: "entry head" proxy for eval parity.
-        if effective_strategy == StrategicIntent.CAPTURE:
+        # Diagnostic mode to isolate "SB3-kept" behavior:
+        # keeps legal finalization but disables planner-like strategic coercions.
+        if not self.diagnostic_min_overrides:
+            # R4 skeleton: "entry head" proxy for eval parity.
+            if effective_strategy == StrategicIntent.CAPTURE:
+                try:
+                    legal_stepin = self.executor._best_step_into_uncaptured_vp(state, unit) is not None
+                except Exception:
+                    legal_stepin = False
+                self.current_stepin_legal = bool(legal_stepin)
+                if legal_stepin and resolved_option != TacticalOption.ADVANCE:
+                    resolved_option = TacticalOption.ADVANCE
+                    self.current_stepin_forced_option = True
+            # Mission-priority override during eval parity:
+            # if objectives are pending and no emergency, force CAPTURE intent.
             try:
-                legal_stepin = self.executor._best_step_into_uncaptured_vp(state, unit) is not None
+                objectives_pending = self.executor._has_uncaptured_objective_for_side(state, unit.side)
+                capture_emergency = self.executor._is_capture_emergency(state, unit)
+                nearest_vp_d = self.executor._nearest_uncaptured_vp_dist(state, unit)
             except Exception:
-                legal_stepin = False
-            self.current_stepin_legal = bool(legal_stepin)
-            if legal_stepin and resolved_option != TacticalOption.ADVANCE:
-                resolved_option = TacticalOption.ADVANCE
-                self.current_stepin_forced_option = True
-        # Mission-priority override during eval parity:
-        # if objectives are pending and no emergency, force CAPTURE intent.
-        try:
-            objectives_pending = self.executor._has_uncaptured_objective_for_side(state, unit.side)
-            capture_emergency = self.executor._is_capture_emergency(state, unit)
-            nearest_vp_d = self.executor._nearest_uncaptured_vp_dist(state, unit)
-        except Exception:
-            objectives_pending = False
-            capture_emergency = False
-            nearest_vp_d = None
-        near_objective_pressure = nearest_vp_d is not None and float(nearest_vp_d) <= 2.0
-        if (
-            objectives_pending
-            and not capture_emergency
-            and effective_strategy != StrategicIntent.CAPTURE
-            and (self.current_stepin_legal or near_objective_pressure)
-        ):
-            effective_strategy = StrategicIntent.CAPTURE
-            if resolved_option in (TacticalOption.RETREAT, TacticalOption.HOLD):
-                resolved_option = TacticalOption.ADVANCE
+                objectives_pending = False
+                capture_emergency = False
+                nearest_vp_d = None
+            near_objective_pressure = nearest_vp_d is not None and float(nearest_vp_d) <= 2.0
+            if (
+                objectives_pending
+                and not capture_emergency
+                and effective_strategy != StrategicIntent.CAPTURE
+                and (self.current_stepin_legal or near_objective_pressure)
+            ):
+                effective_strategy = StrategicIntent.CAPTURE
+                if resolved_option in (TacticalOption.RETREAT, TacticalOption.HOLD):
+                    resolved_option = TacticalOption.ADVANCE
         strategy_name = effective_strategy.name
         self.current_strategy = self._strategy_stub()
         self.current_strategy.name = strategy_name
@@ -396,26 +398,28 @@ class SB3EvalController:
         return action
 
 
-def _resolve_model_path_for_side(repo_root: Path, rl_side: str) -> Path | None:
+def _resolve_model_path_for_side(repo_root: Path, rl_side: str, models_subdir: str = "") -> Path | None:
+    models_dir = (repo_root / "models" / models_subdir) if models_subdir else (repo_root / "models")
     side = (rl_side or "").strip().upper()
     candidates = [
-        repo_root / "models" / f"sb3_latest_{side}.zip",
-        repo_root / "models" / f"sb3_best_{side}" / "best_model.zip",
+        models_dir / f"sb3_latest_{side}.zip",
+        models_dir / f"sb3_best_{side}" / "best_model.zip",
     ]
     return next((p for p in candidates if p.exists()), None)
 
 
-def _resolve_vecnorm_path_for_side(repo_root: Path, rl_side: str) -> Path | None:
+def _resolve_vecnorm_path_for_side(repo_root: Path, rl_side: str, models_subdir: str = "") -> Path | None:
+    models_dir = (repo_root / "models" / models_subdir) if models_subdir else (repo_root / "models")
     side = (rl_side or "").strip().upper()
     candidates = [
-        repo_root / "models" / f"sb3_vecnormalize_{side}.pkl",
+        models_dir / f"sb3_vecnormalize_{side}.pkl",
     ]
     exact = next((p for p in candidates if p.exists()), None)
     if exact is not None:
         return exact
 
     # Fallback discovery for renamed/moved artifacts.
-    alt_candidates = sorted((repo_root / "models").glob(f"*vecnormalize*{side}*.pkl"))
+    alt_candidates = sorted(models_dir.glob(f"*vecnormalize*{side}*.pkl"))
     if alt_candidates:
         return alt_candidates[0]
     return None
@@ -442,7 +446,25 @@ def _safe_name(value: str) -> str:
     return "".join(ch if (ch.isalnum() or ch in ("-", "_")) else "_" for ch in value)
 
 
-def evaluate_sb3(episodes: int = 100, seed: int | None = None, out_dir: str | None = None):
+def _dedupe_schedule_by_scenario_id(schedule):
+    seen: set[str] = set()
+    deduped = []
+    for phase in schedule:
+        sid = str(getattr(phase, "id", "") or "")
+        if not sid or sid in seen:
+            continue
+        seen.add(sid)
+        deduped.append(phase)
+    return deduped
+
+
+def evaluate_sb3(
+    episodes: int = 100,
+    seed: int | None = None,
+    out_dir: str | None = None,
+    diagnostic_min_overrides: bool = False,
+    config: str | None = None,
+):
     try:
         from stable_baselines3 import PPO
         from stable_baselines3.common.monitor import Monitor
@@ -455,9 +477,13 @@ def evaluate_sb3(episodes: int = 100, seed: int | None = None, out_dir: str | No
     repo_root = Path(__file__).resolve().parents[2]
     reports_dir = Path(out_dir) if out_dir else (repo_root / "assault_sim" / "session" / "reports" / "sb3_eval")
     reports_dir.mkdir(parents=True, exist_ok=True)
-    train_config_path = repo_root / "assault_sim" / "config" / "train_config.json"
+    train_config_path = (
+        Path(config).expanduser().resolve()
+        if config
+        else (repo_root / "assault_sim" / "config" / "train_config.json")
+    )
     cfg = load_train_config(train_config_path)
-    scenario_schedule = list(cfg.scenario_schedule)
+    scenario_schedule = _dedupe_schedule_by_scenario_id(list(cfg.scenario_schedule))
     rl_sides = list(cfg.rl_sides)
     eval_seed = int(PPOConfig.SEED if seed is None else seed)
     if not rl_sides:
@@ -469,32 +495,43 @@ def evaluate_sb3(episodes: int = 100, seed: int | None = None, out_dir: str | No
 
     allow_unnormalized_eval = os.getenv("ASSAULT_ALLOW_EVAL_WITHOUT_VECNORM", "0") == "1"
     for rl_side in rl_sides:
-        model_path = _resolve_model_path_for_side(repo_root, rl_side)
-        if model_path is None:
-            print(f"⚠️ SB3 model not found for side={rl_side}; skipping.")
-            continue
-
-        vecnorm_path = _resolve_vecnorm_path_for_side(repo_root, rl_side)
-        if vecnorm_path is None and not allow_unnormalized_eval:
-            raise RuntimeError(
-                f"VecNormalize stats not found for side={rl_side}. "
-                "Refusing unnormalized eval. Set ASSAULT_ALLOW_EVAL_WITHOUT_VECNORM=1 to override."
-            )
-        model = PPO.load(str(model_path), device="cpu")
         all_reports[rl_side] = {}
-        all_models[rl_side] = str(model_path)
+        all_models[rl_side] = {}
 
         for phase in scenario_schedule:
             scenario = phase.id
+            models_subdir = cfg.resolve_models_subdir(
+                scenario_id=scenario,
+                side=rl_side,
+            )
+            model_path = _resolve_model_path_for_side(repo_root, rl_side, models_subdir=models_subdir)
+            if model_path is None:
+                print(
+                    f"[WARN] SB3 model not found for side={rl_side} scenario={scenario} "
+                    f"(models_subdir='{models_subdir or '.'}'); skipping."
+                )
+                continue
+            vecnorm_path = _resolve_vecnorm_path_for_side(repo_root, rl_side, models_subdir=models_subdir)
+            if vecnorm_path is None and not allow_unnormalized_eval:
+                raise RuntimeError(
+                    f"VecNormalize stats not found for side={rl_side} scenario={scenario}. "
+                    "Refusing unnormalized eval. Set ASSAULT_ALLOW_EVAL_WITHOUT_VECNORM=1 to override."
+                )
+            model = PPO.load(str(model_path), device="cpu")
+            all_models[rl_side][scenario] = str(model_path)
             sides_in_scenario = _scenario_sides(repo_root, scenario)
             if rl_side not in sides_in_scenario:
                 print(
-                    f"⚠️ Skip eval side={rl_side} scenario={scenario}: "
+                    f"[WARN] Skip eval side={rl_side} scenario={scenario}: "
                     f"side not present in scenario units (found={sorted(sides_in_scenario)})"
                 )
                 continue
 
-            print(f"\n=== EVAL side={rl_side} scenario={scenario} episodes={episodes} ===")
+            print(_ansi(
+                f"\n=== EVAL side={rl_side} scenario={scenario} episodes={episodes} ===",
+                color="cyan",
+                bold=True,
+            ))
             env = make_env(
                 config_path=repo_root / "assault_sim" / "config" / "sim_config.yaml",
                 env_config_path=repo_root / "assault_sim" / "config" / "env_config.json",
@@ -541,9 +578,9 @@ def evaluate_sb3(episodes: int = 100, seed: int | None = None, out_dir: str | No
                     obs_normalizer = _normalize_obs
                     print(f"Loaded VecNormalize stats for {rl_side}: {vecnorm_path}")
                 except Exception as e:
-                    print(f"⚠️ Could not load VecNormalize stats ({rl_side}), continuing without normalization: {e}")
+                    print(f"[WARN] Could not load VecNormalize stats ({rl_side}), continuing without normalization: {e}")
             else:
-                print(f"⚠️ VecNormalize stats not found for {rl_side}, evaluating without obs normalization")
+                print(f"[WARN] VecNormalize stats not found for {rl_side}, evaluating without obs normalization")
 
             controller = SB3EvalController(
                 model,
@@ -552,11 +589,12 @@ def evaluate_sb3(episodes: int = 100, seed: int | None = None, out_dir: str | No
                 obs_normalizer=obs_normalizer,
                 capture_guardrails_enabled=bool(getattr(cfg, "capture_guardrails_enabled", True)),
                 diagnostic_force_capture_only=bool(getattr(cfg, "diagnostic_force_capture_only", False)),
+                diagnostic_min_overrides=bool(diagnostic_min_overrides),
+                finalizer_override_profile=str(getattr(cfg, "finalizer_override_profile", "strict") or "strict"),
             )
             evaluator = Evaluator(
                 env=env,
                 rl_controller=controller,
-                enemy_controller=None,
                 rl_side=rl_side,
             )
             results = evaluator.evaluate(episodes)
@@ -580,6 +618,9 @@ def evaluate_sb3(episodes: int = 100, seed: int | None = None, out_dir: str | No
                     "rl_side": rl_side,
                     "vecnormalize_path": str(vecnorm_path) if vecnorm_path is not None and vecnorm_path.exists() else None,
                     "obs_normalized": bool(obs_normalizer is not None),
+                    "diagnostic_min_overrides": bool(diagnostic_min_overrides),
+                    "finalizer_override_profile": str(getattr(cfg, "finalizer_override_profile", "strict") or "strict"),
+                    "models_subdir": models_subdir,
                     "csv": str(csv_path),
                 },
                 "summary": analyzer.summary(),
@@ -588,6 +629,8 @@ def evaluate_sb3(episodes: int = 100, seed: int | None = None, out_dir: str | No
                 "policy_alignment": analyzer.policy_alignment(),
                 "mission": analyzer.mission_metrics(),
                 "action_execution": analyzer.action_execution(),
+                "units": analyzer.unit_analysis(),
+                "strategy": analyzer.strategy_analysis(),
             }
             all_reports[rl_side][scenario] = side_report
             comparison_rows.append({
@@ -611,10 +654,13 @@ def evaluate_sb3(episodes: int = 100, seed: int | None = None, out_dir: str | No
                 "damage_ratio": side_report["combat"].get("damage_ratio", 0.0),
             })
 
-    if not all_reports:
-        raise SystemExit("No SB3 model found for any configured side.")
+    if not comparison_rows:
+        raise SystemExit(
+            "No valid side/scenario evaluations were produced. "
+            "Likely missing model artifact(s) for current train_config (sb3_latest_<SIDE>.zip)."
+        )
 
-    print("\n=== COMPARATIVE SUMMARY (SIDE x SCENARIO) ===")
+    print(_ansi("\n=== COMPARATIVE SUMMARY (SIDE x SCENARIO) ===", color="cyan", bold=True))
     if not comparison_rows:
         print("(no valid side/scenario combinations evaluated)")
     else:
@@ -628,20 +674,16 @@ def evaluate_sb3(episodes: int = 100, seed: int | None = None, out_dir: str | No
             rl_results_str = ", ".join(
                 f"{k}:{v}" for k, v in row.get("rl_result_counts", {}).items()
             ) or "-"
-            tracked_results_str = ", ".join(
-                f"{k}:{v}" for k, v in row.get("tracked_result_counts", {}).items()
-            ) or "-"
             print(
                 f"side={row['rl_side']} scenario={row['scenario']} "
-                f"score_win_rate(draw=0.5)={row.get('win_score_rate', row['win_rate']):.3f} "
-                f"true_win_rate(only_wins)={row.get('true_win_rate', 0.0):.3f} "
+                f"score_win_rate_objective(draw=0.5)={row.get('win_score_rate', row['win_rate']):.3f} "
+                f"true_win_rate_objective(only_vittoria)={row.get('true_win_rate', 0.0):.3f} "
                 f"draw_rate={row.get('draw_rate', 0.0):.3f} "
                 f"loss_rate={row.get('loss_rate', 0.0):.3f} "
                 f"avg_vp={row['avg_vp']:.3f} "
                 f"avg_steps={row['avg_steps']:.1f} trade_mean={row['trade_mean']:.3f} "
                 f"damage_ratio={row['damage_ratio']:.3f} draws={row['draws']} "
                 f"reasons=[{reasons_str}] rl_results=[{rl_results_str}] "
-                f"tracked_results=[{tracked_results_str}]"
             )
 
     report = {
@@ -657,6 +699,10 @@ def evaluate_sb3(episodes: int = 100, seed: int | None = None, out_dir: str | No
             "rl_sides": rl_sides,
             "models": all_models,
             "train_config_path": str(train_config_path),
+            "diagnostic_min_overrides": bool(diagnostic_min_overrides),
+            "finalizer_override_profile": str(getattr(cfg, "finalizer_override_profile", "strict") or "strict"),
+            "models_subdir": str(getattr(cfg, "sb3_models_subdir", "") or "").strip(),
+            "models_subdir_template": str(getattr(cfg, "sb3_models_subdir_template", "") or "").strip(),
         },
         "by_side_and_scenario": all_reports,
         "comparison": comparison_rows,
@@ -673,6 +719,23 @@ if __name__ == "__main__":
     parser.add_argument("--episodes", type=int, default=100, help="Number of episodes per side/scenario")
     parser.add_argument("--seed", type=int, default=None, help="Evaluation seed override")
     parser.add_argument("--out-dir", type=str, default=None, help="Directory to store report and CSV outputs")
+    parser.add_argument(
+        "--config",
+        type=str,
+        default=None,
+        help="Optional path to train_config.json (defaults to assault_sim/config/train_config.json)",
+    )
+    parser.add_argument(
+        "--diagnostic-min-overrides",
+        action="store_true",
+        help="Disable planner-like eval coercions (step-in/mission-priority overrides) while keeping legality finalization",
+    )
     args = parser.parse_args()
-    evaluate_sb3(episodes=args.episodes, seed=args.seed, out_dir=args.out_dir)
+    evaluate_sb3(
+        episodes=args.episodes,
+        seed=args.seed,
+        out_dir=args.out_dir,
+        diagnostic_min_overrides=bool(args.diagnostic_min_overrides),
+        config=args.config,
+    )
 

@@ -32,6 +32,7 @@ class ProgressiveReward(BaseReward):
         self.strategy_counts = {}
         self.strategy_total = 0
         self.capture_staging_streak_by_unit = {}
+        self.last_reward_components = {}
 
     # -------------------------------------------------
     def reset(self, state):
@@ -44,6 +45,10 @@ class ProgressiveReward(BaseReward):
         self.strategy_counts = {}
         self.strategy_total = 0
         self.capture_staging_streak_by_unit = {}
+        self.last_reward_components = {}
+
+    def get_last_reward_components(self) -> dict:
+        return dict(self.last_reward_components or {})
 
     # -------------------------------------------------
     def compute(
@@ -257,17 +262,40 @@ class ProgressiveReward(BaseReward):
                     reward += self.cfg.capture_strategy_bonus
                 elif l3 == "PRESERVE" and objectives_pending:
                     reward -= self.cfg.preserve_when_objectives_pending_penalty
+                # R2.1-b-retune-1: near-VP contexts must stay capture-oriented.
+                objective_dist_before = info.get("objective_dist_before")
+                if (
+                    objectives_pending
+                    and objective_dist_before is not None
+                    and float(objective_dist_before) <= 2.0
+                    and l3 != "CAPTURE"
+                ):
+                    reward -= self.cfg.non_capture_near_vp_penalty
                 if l3 == "CAPTURE":
                     if l2 == "RETREAT":
                         reward -= self.cfg.capture_retreat_penalty
                     elif l2 in {"ADVANCE", "FLANK"}:
                         reward += self.cfg.capture_advance_bonus
-                    # Penalize CAPTURE plans that collapse into attack due to no move progress.
-                    if (
-                        bool(info.get("capture_fallback_to_attack", False))
-                        and str(info.get("capture_fallback_reason", "") or "") == "no_progress_move_available"
-                    ):
-                        reward -= self.cfg.capture_fallback_attack_penalty
+                    # Penalize CAPTURE plans that collapse into ATTACK fallback.
+                    if bool(info.get("capture_fallback_to_attack", False)):
+                        fallback_penalty = float(self.cfg.capture_fallback_attack_penalty)
+                        fallback_reason = str(info.get("capture_fallback_reason", "") or "")
+                        nearest_vp_d = info.get("vp_nearest_uncaptured_dist", None)
+                        progress_available = bool(info.get("capture_progress_available", False))
+                        if fallback_reason in {
+                            "forced_attack_near_vp_staging",
+                            "forced_attack_open_vp_window",
+                            "forced_attack_after_staging_loop",
+                        }:
+                            fallback_penalty *= 1.05
+                        if (
+                            nearest_vp_d is not None
+                            and float(nearest_vp_d) <= 3.0
+                            and progress_available
+                        ):
+                            # Strongly discourage attacking when a progress move existed.
+                            fallback_penalty *= 1.15
+                        reward -= fallback_penalty
                 objective_dist_before = info.get("objective_dist_before")
                 objective_dist_after = info.get("objective_dist_after")
                 if objective_dist_before is not None and objective_dist_after is not None:
@@ -357,6 +385,63 @@ class ProgressiveReward(BaseReward):
                     reward += self.cfg.vp_stepin_selected_bonus
                 if str(info.get("vp_stepin_block_reason", "") or "") == "no_legal_stepin_near_vp":
                     reward -= self.cfg.vp_stepin_missed_near_penalty
+                # R2.1-a: discourage near-VP ADVANCE decisions that do not convert
+                # to objective control/progress in CAPTURE contexts.
+                try:
+                    near_vp = (
+                        objective_dist_before is not None
+                        and float(objective_dist_before) <= 2.0
+                    )
+                    no_conversion = (
+                        not bool(info.get("actor_captured_vp_now", False))
+                        and not bool(info.get("actor_on_vp_after", False))
+                        and int(info.get("objective_captured_delta", 0)) <= 0
+                    )
+                    no_progress = (
+                        objective_dist_before is not None
+                        and objective_dist_after is not None
+                        and float(objective_dist_after) >= float(objective_dist_before)
+                    )
+                    if (
+                        l3 == "CAPTURE"
+                        and l2 == "ADVANCE"
+                        and near_vp
+                        and no_conversion
+                        and no_progress
+                    ):
+                        reward -= self.cfg.capture_near_vp_advance_no_conversion_penalty
+                except Exception:
+                    pass
+                # R2.1-a: explicitly reinforce progress moves after first contact.
+                try:
+                    post_contact = bool(info.get("actor_on_vp_after", False)) or (
+                        objective_dist_after is not None and float(objective_dist_after) <= 1.0
+                    )
+                    selected_reason = str(info.get("capture_selected_move_reason", "") or "")
+                    progressed = (
+                        objective_dist_before is not None
+                        and objective_dist_after is not None
+                        and float(objective_dist_after) < float(objective_dist_before)
+                    )
+                    if (
+                        l3 == "CAPTURE"
+                        and post_contact
+                        and selected_reason == "objective_progress_move"
+                        and progressed
+                    ):
+                        reward += self.cfg.capture_post_contact_progress_move_bonus
+                    # R2.1-b-retune-1: reinforce support fire contributions
+                    # that help CAPTURE windows without requiring direct capture.
+                    if (
+                        l3 == "CAPTURE"
+                        and ("SUPPORT_INFANTRY" in unit_classification or "INDIRECT_FIRE_UNIT" in unit_classification)
+                        and bool(is_attack)
+                        and float(damage) > 0.0
+                        and post_contact
+                    ):
+                        reward += self.cfg.capture_support_fire_window_bonus
+                except Exception:
+                    pass
             else:
                 reward -= objective_delta * self.cfg.vp_delta_weight
                 # For non-tracked sides, also reward proactively capturing objectives,
@@ -369,7 +454,7 @@ class ProgressiveReward(BaseReward):
         # Dense objective shaping: immediate local signal around VP interaction.
         # Helps avoid "good combat but no captures" plateaus.
         if bool(info.get("actor_captured_vp_now", False)):
-            reward += self.cfg.vp_delta_weight * 0.5
+            reward += self.cfg.vp_delta_weight * 0.8
             if unit_id:
                 self.capture_no_progress_streak_by_unit[unit_id] = 0
         elif bool(info.get("actor_vp_owned_by_rl_after", False)) and bool(info.get("actor_on_vp_after", False)):
@@ -487,4 +572,74 @@ class ProgressiveReward(BaseReward):
         # =================================================
         reward -= self.cfg.time_penalty
 
-        return max(min(reward, self.cfg.max_reward), self.cfg.min_reward)
+        raw_total = float(reward)
+        clipped_total = max(min(raw_total, self.cfg.max_reward), self.cfg.min_reward)
+        # R2 helper: lightweight component logging for tuning.
+        components = {
+            "raw_total": raw_total,
+            "clipped_total": float(clipped_total),
+            "clipping_delta": float(clipped_total - raw_total),
+            "time_penalty": -float(self.cfg.time_penalty),
+            "trade_term": float((damage - damage_taken) * self.cfg.trade_weight) if is_attack else 0.0,
+            "objective_delta_term": (
+                float(objective_delta * self.cfg.vp_delta_weight)
+                if objective_rule_active and objective_tracked_side and rl_side_norm == objective_tracked_side
+                else 0.0
+            ),
+            "capture_near_vp_advance_no_conversion_penalty": 0.0,
+            "capture_post_contact_progress_move_bonus": 0.0,
+        }
+        try:
+            objective_dist_before = info.get("objective_dist_before")
+            objective_dist_after = info.get("objective_dist_after")
+            near_vp = (
+                objective_dist_before is not None
+                and float(objective_dist_before) <= 2.0
+            )
+            no_conversion = (
+                not bool(info.get("actor_captured_vp_now", False))
+                and not bool(info.get("actor_on_vp_after", False))
+                and int(info.get("objective_captured_delta", 0)) <= 0
+            )
+            no_progress = (
+                objective_dist_before is not None
+                and objective_dist_after is not None
+                and float(objective_dist_after) >= float(objective_dist_before)
+            )
+            if (
+                str(info.get("l3_strategy", "") or "").upper() == "CAPTURE"
+                and str(info.get("l2_option", "") or "").upper() == "ADVANCE"
+                and near_vp
+                and no_conversion
+                and no_progress
+            ):
+                components["capture_near_vp_advance_no_conversion_penalty"] = -float(
+                    self.cfg.capture_near_vp_advance_no_conversion_penalty
+                )
+            post_contact = bool(info.get("actor_on_vp_after", False)) or (
+                objective_dist_after is not None and float(objective_dist_after) <= 1.0
+            )
+            selected_reason = str(info.get("capture_selected_move_reason", "") or "")
+            progressed = (
+                objective_dist_before is not None
+                and objective_dist_after is not None
+                and float(objective_dist_after) < float(objective_dist_before)
+            )
+            if (
+                str(info.get("l3_strategy", "") or "").upper() == "CAPTURE"
+                and post_contact
+                and selected_reason == "objective_progress_move"
+                and progressed
+            ):
+                components["capture_post_contact_progress_move_bonus"] = float(
+                    self.cfg.capture_post_contact_progress_move_bonus
+                )
+        except Exception:
+            pass
+        tracked = sum(
+            float(v) for k, v in components.items()
+            if k not in {"raw_total", "clipped_total", "clipping_delta", "unattributed"}
+        )
+        components["unattributed"] = float(raw_total - tracked)
+        self.last_reward_components = components
+        return clipped_total

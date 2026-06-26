@@ -1,6 +1,8 @@
 from assault_model.actions.action_catalog import ActionCatalog
+from assault_model.actions.action_category import ActionCategory
 from assault_model.map.hex_utils import safe_hex_distance
 from assault_model.map.terrain_config import terrain_config
+import numpy as np
 
 
 class OptionExecutorStateMixin:
@@ -146,24 +148,123 @@ class OptionExecutorStateMixin:
             self._prev_pos_by_unit[uid] = pos_now
 
     def _prepare_action_cache(self, state):
-        state_key = id(state)
+        state_key = (id(state), int(getattr(state, "_cache_version", 0)))
         if self._action_catalog_cache_state_key != state_key:
             self._action_catalog_cache_state_key = state_key
             self._action_catalog_cache = {}
+            self._geom_cache = {}
+            self._stepin_next_cache = {}
+            self._target_cache = {}
+            self._terrain_score_cache = {}
+
+    def _enemy_positions_array(self, state, side: str):
+        if state is None or not side:
+            return np.empty((0, 2), dtype=np.int16)
+        key = ("enemy_pos", self._action_catalog_cache_state_key, self._normalize_side_key(side))
+        cached = self._geom_cache.get(key)
+        if cached is not None:
+            return cached
+        rows = []
+        for u in getattr(state, "units", []) or []:
+            if not getattr(u, "alive", False):
+                continue
+            if self._normalize_side_key(getattr(u, "side", None)) == self._normalize_side_key(side):
+                continue
+            pos = getattr(u, "position", None)
+            if pos is None:
+                continue
+            rows.append((int(pos.q), int(pos.r)))
+        arr = np.asarray(rows, dtype=np.int16) if rows else np.empty((0, 2), dtype=np.int16)
+        self._geom_cache[key] = arr
+        return arr
+
+    def _uncaptured_vp_coords_array(self, state, side: str):
+        if state is None or not side:
+            return np.empty((0, 2), dtype=np.int16)
+        key = ("uncaptured_vp", self._action_catalog_cache_state_key, self._normalize_side_key(side))
+        cached = self._geom_cache.get(key)
+        if cached is not None:
+            return cached
+        points = getattr(getattr(state, "victory", None), "points", []) or []
+        own_ownership = self._ownership_for_side(state, side)
+        rows = []
+        for vp in points:
+            hs = state.hex_states.get(vp.hex_coords)
+            if hs is not None and hs.ownership == own_ownership:
+                continue
+            rows.append((int(vp.hex_coords[0]), int(vp.hex_coords[1])))
+        arr = np.asarray(rows, dtype=np.int16) if rows else np.empty((0, 2), dtype=np.int16)
+        self._geom_cache[key] = arr
+        return arr
+
+    def _min_hex_distance_to_coords(self, pos, coords: np.ndarray):
+        if pos is None or coords is None or int(getattr(coords, "size", 0)) == 0:
+            return None
+        q0 = int(getattr(pos, "q", 0))
+        r0 = int(getattr(pos, "r", 0))
+        dq = np.abs(coords[:, 0].astype(np.int32) - q0)
+        dr = np.abs(coords[:, 1].astype(np.int32) - r0)
+        ds = np.abs((coords[:, 0].astype(np.int32) + coords[:, 1].astype(np.int32)) - (q0 + r0))
+        return int(np.min(np.maximum(np.maximum(dq, dr), ds)))
+
+    def _unit_actions_cache_key(self, state, unit):
+        if state is None or unit is None:
+            return None
+        uid = getattr(unit, "unit_id", None)
+        if not uid:
+            return None
+        pos = getattr(unit, "position", None)
+        return (
+            self._action_catalog_cache_state_key,
+            uid,
+            getattr(pos, "q", None),
+            getattr(pos, "r", None),
+            bool(getattr(unit, "alive", True)),
+            bool(getattr(unit, "can_fire", True)),
+            bool(getattr(unit, "suppressed", False)),
+            bool(getattr(unit, "fallback", False)),
+            tuple(sorted(getattr(unit, "spotted_enemies", []) or [])),
+        )
 
     def _get_unit_actions(self, state, unit):
         if state is None or unit is None:
             return []
-        uid = getattr(unit, "unit_id", None)
-        if not uid:
+        cache_key = self._unit_actions_cache_key(state, unit)
+        if cache_key is None:
             return ActionCatalog(state, unit, terrain_config).actions()
-        cache_key = (self._action_catalog_cache_state_key, uid)
         cached = self._action_catalog_cache.get(cache_key)
         if cached is not None:
             return cached
         actions = ActionCatalog(state, unit, terrain_config).actions()
         self._action_catalog_cache[cache_key] = actions
         return actions
+
+    def _get_unit_actions_partitioned(self, state, unit):
+        actions = self._get_unit_actions(state, unit)
+        cache_key = self._unit_actions_cache_key(state, unit)
+        if cache_key is None:
+            moves = []
+            attacks = []
+            for a in actions:
+                if getattr(getattr(a, "action_type", None), "category", None) == ActionCategory.MOVEMENT:
+                    moves.append(a)
+                if self._is_attack_action(a):  # type: ignore[attr-defined]
+                    attacks.append(a)
+            return actions, moves, attacks
+        part_key = ("partitioned", cache_key)
+        cached = self._action_catalog_cache.get(part_key)
+        if cached is not None:
+            return cached
+        moves = []
+        attacks = []
+        for a in actions:
+            if getattr(getattr(a, "action_type", None), "category", None) == ActionCategory.MOVEMENT:
+                moves.append(a)
+            if self._is_attack_action(a):  # type: ignore[attr-defined]
+                attacks.append(a)
+        out = (actions, moves, attacks)
+        self._action_catalog_cache[part_key] = out
+        return out
 
     def _is_reversal_move(self, unit, new_pos) -> bool:
         uid = getattr(unit, "unit_id", None)
@@ -210,8 +311,18 @@ class OptionExecutorStateMixin:
         return hx.get_terrain()
 
     def _terrain_tactical_score(self, state, unit, pos) -> float:
-        terrain_name = self._hex_terrain_name(state, pos)
+        if pos is None or unit is None:
+            return 0.0
+        q = getattr(pos, "q", None)
+        r = getattr(pos, "r", None)
+        if q is None or r is None:
+            return 0.0
         group = self._unit_group(unit)
+        key = ("terrain_score", self._action_catalog_cache_state_key, int(q), int(r), str(group))
+        cached = self._terrain_score_cache.get(key)
+        if cached is not None:
+            return float(cached)
+        terrain_name = self._hex_terrain_name(state, pos)
         defense_score = float(len(terrain_config.get_defense_dice(terrain_name, group)))
         los = str(terrain_config.get_los(terrain_name)).upper()
         los_bonus = 0.0
@@ -219,11 +330,19 @@ class OptionExecutorStateMixin:
             los_bonus = 0.35
         elif los == "BLOCKED":
             los_bonus = 0.6
-        return defense_score + los_bonus
+        score = float(defense_score + los_bonus)
+        self._terrain_score_cache[key] = score
+        return score
 
     def _nearest_uncaptured_vp_dist_from_pos(self, state, side: str, pos):
+        if pos is None or not side:
+            return None
+        vp_coords = self._uncaptured_vp_coords_array(state, side)
+        d = self._min_hex_distance_to_coords(pos, vp_coords)
+        if d is not None:
+            return d
         points = getattr(getattr(state, "victory", None), "points", []) or []
-        if not points or pos is None or not side:
+        if not points:
             return None
         own_ownership = self._ownership_for_side(state, side)
         best = None
@@ -231,9 +350,9 @@ class OptionExecutorStateMixin:
             hs = state.hex_states.get(vp.hex_coords)
             if hs is not None and hs.ownership == own_ownership:
                 continue
-            d = safe_hex_distance(pos, vp.hex_coords)
-            if best is None or d < best:
-                best = d
+            dist = safe_hex_distance(pos, vp.hex_coords)
+            if best is None or dist < best:
+                best = dist
         return best
 
 

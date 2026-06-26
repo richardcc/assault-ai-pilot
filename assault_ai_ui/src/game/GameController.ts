@@ -1,6 +1,7 @@
 import { formatCoords } from "./render/hexGridRenderer";
 import { logCombatEvents } from "./systems/combatLog";
 import { clearUnitActionMarkers, resolveActionMarker, setUnitActionMarker } from "./state/actionMarkers";
+import { apiUrl, wsUrl } from "../config/backend";
 
 type ControllerType = "human" | "ai";
 type GameMode = "human" | "ai" | "ai_vs_ai" | "replay";
@@ -69,7 +70,7 @@ export class GameController {
     console.log("Starting mode:", mode);
 
     // ✅ iniciar partida en backend
-    const startRes = await fetch("http://127.0.0.1:8000/api/game/start", {
+    const startRes = await fetch(apiUrl("/api/game/start"), {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -100,9 +101,7 @@ export class GameController {
   // ----------------------------------
   private async loadScenario() {
     try {
-      const res = await fetch(
-        "http://127.0.0.1:8000/api/game/state"
-      );
+      const res = await fetch(apiUrl("/api/game/state"));
 
       const data = await res.json();
 
@@ -121,7 +120,7 @@ export class GameController {
       return;
     }
 
-    this.socket = new WebSocket("ws://127.0.0.1:8000/ws/game");
+    this.socket = new WebSocket(wsUrl("/ws/game"));
 
     this.socket.onopen = () => {
       console.log("✅ WS connected");
@@ -212,7 +211,7 @@ export class GameController {
 
     if (!move?.action_id) return;
 
-    await fetch("http://127.0.0.1:8000/api/game/step", {
+    await fetch(apiUrl("/api/game/step"), {
       method: "POST",
       headers: {
         "Content-Type": "application/json"
@@ -257,6 +256,11 @@ export class GameController {
       }
 
       const data = this.state;
+      if (data?.done) {
+        this.aiTurnInFlight = false;
+        this.pendingWsState = null;
+        return;
+      }
       const activeSide = data.active_side;
 
       if (!activeSide) {
@@ -280,7 +284,7 @@ export class GameController {
 
       try {
 
-        const res = await fetch("http://127.0.0.1:8000/api/game/ai-turn", {
+        const res = await fetch(apiUrl("/api/game/ai-turn"), {
           method: "POST"
         });
 
@@ -292,12 +296,15 @@ export class GameController {
           const step0 = steps[0];
           const unitId = step0?.unit_id || step0?.unit;
           const aiSource = String(step0?.source || "").toLowerCase();
+          const sb3Status = String(step0?.sb3_status || "unknown");
+          const sb3Reason = String(step0?.sb3_reason || "unknown");
+          const sb3Meta = `sb3=${sb3Status}:${sb3Reason}`;
           if (aiSource.startsWith("heuristic")) {
             const actionId = step0?.action_id || "?";
             const ax = this.actionIdToAx(actionId);
             (window as any).logSystemEvent?.(
               "heuristic",
-              `🧠 Heuristic AI (${unitId || "?"}): ${actionId} ${ax} [${aiSource}]`
+              `🧠 Heuristic AI (${unitId || "?"}): ${actionId} ${ax} [${aiSource}] [${sb3Meta}]`
             );
           }
           const corrected = !!step0?.corrected;
@@ -313,7 +320,7 @@ export class GameController {
             );
             (window as any).logSystemEvent?.(
               "alert",
-              `⚠️ AI corrected (${unitId || "?"}): ${proposed} ${proposedAx} -> ${executed} ${executedAx} [${reason}]`
+              `⚠️ AI corrected (${unitId || "?"}): ${proposed} ${proposedAx} -> ${executed} ${executedAx} [${reason}] [${sb3Meta}]`
             );
           }
           if (unitId) {
@@ -341,10 +348,11 @@ export class GameController {
           }
         }
 
-        if (result?.state) {
+        const aiTurnState = result?.state || null;
+        if (aiTurnState) {
           // Apply backend state after animating AI steps. If we sync first, unit
           // sprites snap to final coordinates and movement animations become no-op.
-          this.updateState(result.state);
+          this.updateState(aiTurnState);
         }
 
         // Log AI combat results to the System Log (the websocket MAP_STATE
@@ -366,10 +374,18 @@ export class GameController {
         const hasAiStep = steps.length > 0;
         this.aiTurnInFlight = false;
         if (this.pendingWsState) {
-          this.updateState(this.pendingWsState);
+          // Never let deferred websocket state overwrite a terminal backend state.
+          // This prevents losing done/winner/end_reason flags at match end.
+          if (!aiTurnState || !aiTurnState.done) {
+            this.updateState(this.pendingWsState);
+          }
           this.pendingWsState = null;
         }
         this.scheduleLoop(loop, hasAiStep ? 1100 : 1800);
+        if (aiTurnState?.done) {
+          this.stopLoop();
+          return;
+        }
         return;
 
       } catch (e) {

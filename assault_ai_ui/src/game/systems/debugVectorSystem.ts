@@ -1,5 +1,6 @@
 import * as PIXI from "pixi.js";
 import { axialToPixel, HEX_SIZE } from "../render/hexGridRenderer";
+import { apiUrl } from "../../config/backend";
 
 // --------------------------------------------------
 // CACHE (NO SPAM AL BACKEND)
@@ -96,7 +97,7 @@ export async function updateDebugVector({
 
     try {
       const res = await fetch(
-        `http://127.0.0.1:8000/targeting?attacker_id=${attackerId}&q=${closestHex.q}&r=${closestHex.r}`
+        apiUrl(`/targeting?attacker_id=${attackerId}&q=${closestHex.q}&r=${closestHex.r}`)
       );
       const payload = await res.json();
       // Ignore out-of-order responses from older requests.
