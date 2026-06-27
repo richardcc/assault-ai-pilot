@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from typing import Dict, Tuple
+import os
 
 from assault_model.actions.action_catalog import ActionCatalog
 from assault_model.map.hex_utils import safe_hex_distance
@@ -20,6 +21,15 @@ class PlannerContext:
     replan_reason: str
     blocked_steps: int
     focus_switched: bool
+    planned_target: tuple[int, int] | None
+    last_progress: int
+    stuck_steps: int
+    last_failure_reason: str
+    team_focus_vp_id: str | None
+    team_turn_plan_progress: int
+    team_units_committed: int
+    advanced_planner_enabled: bool
+    advanced_planner_horizon: int
 
 
 @dataclass
@@ -32,6 +42,21 @@ class _UnitPlanState:
     blocked_steps: int = 0
     replan_reason: str = "init"
     last_step_id: int = 0
+    planned_target: tuple[int, int] | None = None
+    last_progress: int = 0
+    stuck_steps: int = 0
+    last_failure_reason: str = ""
+
+
+@dataclass
+class _TeamTurnState:
+    focus_vp_id: str | None = None
+    turn_plan_progress: int = 0
+    units_committed: set[str] | None = None
+
+    def __post_init__(self):
+        if self.units_committed is None:
+            self.units_committed = set()
 
 
 class MissionPlanner:
@@ -41,15 +66,40 @@ class MissionPlanner:
     - Replans only on explicit gates (captured, blocked for N steps, ttl expired)
     """
 
-    def __init__(self, default_ttl: int = 3, blocked_replan_steps: int = 2):
+    def __init__(
+        self,
+        default_ttl: int = 3,
+        blocked_replan_steps: int = 2,
+        advanced_planner_enabled: bool | None = None,
+        advanced_planner_horizon: int | None = None,
+    ):
         self.default_ttl = int(max(1, default_ttl))
         self.blocked_replan_steps = int(max(1, blocked_replan_steps))
+        if advanced_planner_enabled is None:
+            advanced_planner_enabled = str(os.getenv("ASSAULT_P4_ADVANCED_PLANNER", "0")).strip() == "1"
+        if advanced_planner_horizon is None:
+            try:
+                advanced_planner_horizon = int(os.getenv("ASSAULT_P4_ADVANCED_HORIZON", "2"))
+            except Exception:
+                advanced_planner_horizon = 2
+        self.advanced_planner_enabled = bool(advanced_planner_enabled)
+        self.advanced_planner_horizon = int(max(1, min(3, int(advanced_planner_horizon))))
         self._plans: Dict[Tuple[str, str], _UnitPlanState] = {}
+        self._team_turn: Dict[Tuple[str, int], _TeamTurnState] = {}
         self._global_step = 0
 
     def reset(self):
         self._plans.clear()
+        self._team_turn.clear()
         self._global_step = 0
+
+    def _team_turn_slot(self, side: str, turn_now: int) -> _TeamTurnState:
+        key = (str(side or "").upper(), int(turn_now))
+        slot = self._team_turn.get(key)
+        if slot is None:
+            slot = _TeamTurnState()
+            self._team_turn[key] = slot
+        return slot
 
     def _ownership_for_side(self, state, side: str | None):
         if state is None or not side:
@@ -66,6 +116,7 @@ class MissionPlanner:
         own_ownership = self._ownership_for_side(state, side)
         best_hex = None
         best_dist = None
+        best_score = None
         for vp in points:
             coords = getattr(vp, "hex_coords", None)
             if coords is None:
@@ -77,10 +128,32 @@ class MissionPlanner:
                 d = safe_hex_distance(pos, coords)
             except Exception:
                 continue
-            if best_dist is None or d < best_dist:
+            if self.advanced_planner_enabled:
+                score = self._advanced_focus_score(state, side, pos, coords, d)
+                if best_score is None or score < best_score:
+                    best_score = score
+                    best_dist = d
+                    best_hex = (int(coords[0]), int(coords[1]))
+            elif best_dist is None or d < best_dist:
                 best_dist = d
                 best_hex = (int(coords[0]), int(coords[1]))
         return best_hex, (float(best_dist) if best_dist is not None else None)
+
+    def _advanced_focus_score(self, state, side: str | None, pos, coords, dist_now: float) -> float:
+        """P4.6 prototype: lightweight lookahead teacher score behind feature-flag.
+        Lower is better. Keeps fallback path untouched when feature is disabled.
+        """
+        side_key = str(side or "").upper()
+        pressure = 0.0
+        progress = 0.0
+        try:
+            fake_unit = type("TmpUnit", (), {"position": pos})
+            pressure = float(self._enemy_pressure_near_unit(state, fake_unit, side_key, radius=2))
+        except Exception:
+            pressure = 0.0
+        horizon_bonus = float(self.advanced_planner_horizon) * 0.15
+        progress = float(max(0.0, 3.0 - float(dist_now))) * horizon_bonus
+        return float(dist_now) + (pressure * 0.45) - progress
 
     def _can_stepin_focus_vp_now(self, state, unit, focus_hex: tuple[int, int] | None) -> bool:
         if state is None or unit is None or focus_hex is None:
@@ -137,6 +210,7 @@ class MissionPlanner:
 
     def build_context(self, state, unit, side: str | None) -> PlannerContext:
         side_key = str(side or "").upper()
+        turn_now = int(getattr(state, "turn", 0) or 0)
         unit_id = str(getattr(unit, "unit_id", "") or "")
         key = (side_key, unit_id)
         slot = self._plans.get(key)
@@ -154,6 +228,10 @@ class MissionPlanner:
                 ttl_remaining=self.default_ttl,
                 blocked_steps=0,
                 replan_reason="init",
+                planned_target=nearest_hex,
+                last_progress=self._global_step,
+                stuck_steps=0,
+                last_failure_reason="",
             )
             self._plans[key] = slot
             focus_switched = bool(nearest_hex is not None)
@@ -172,10 +250,17 @@ class MissionPlanner:
                 slot.ttl_remaining = self.default_ttl
                 slot.blocked_steps = 0
                 slot.replan_reason = "blocked_or_expired"
+                slot.planned_target = nearest_hex
+                slot.last_progress = self._global_step
+                slot.stuck_steps = 0
+                slot.last_failure_reason = ""
                 focus_switched = True
             else:
                 slot.commitment_age += 1
                 slot.ttl_remaining = max(0, int(slot.ttl_remaining) - 1)
+                # P4 memory: keep a stable target commitment while focus is valid.
+                if slot.focus_hex is not None and slot.planned_target is None:
+                    slot.planned_target = slot.focus_hex
 
         on_focus = (
             slot.focus_hex is not None
@@ -210,6 +295,12 @@ class MissionPlanner:
         elif pressure == 0 and own_cap > best_other + 1:
             intent = "PRESERVE"
 
+        team_slot = self._team_turn_slot(side_key, turn_now)
+        if intent in {"CAPTURE", "SETUP_CAPTURE"}:
+            team_slot.units_committed.add(unit_id)
+            if slot.focus_vp_id and not team_slot.focus_vp_id:
+                team_slot.focus_vp_id = str(slot.focus_vp_id)
+
         self._global_step += 1
         slot.last_step_id = self._global_step
 
@@ -225,6 +316,15 @@ class MissionPlanner:
             replan_reason=str(slot.replan_reason or ""),
             blocked_steps=int(slot.blocked_steps),
             focus_switched=bool(focus_switched),
+            planned_target=slot.planned_target,
+            last_progress=int(slot.last_progress),
+            stuck_steps=int(slot.stuck_steps),
+            last_failure_reason=str(slot.last_failure_reason or ""),
+            team_focus_vp_id=team_slot.focus_vp_id,
+            team_turn_plan_progress=int(team_slot.turn_plan_progress),
+            team_units_committed=len(team_slot.units_committed),
+            advanced_planner_enabled=bool(self.advanced_planner_enabled),
+            advanced_planner_horizon=int(self.advanced_planner_horizon),
         )
 
     def register_outcome(self, state_after, context: PlannerContext, action) -> None:
@@ -250,9 +350,25 @@ class MissionPlanner:
         if progressed:
             slot.blocked_steps = 0
             slot.replan_reason = "progress"
+            slot.stuck_steps = 0
+            slot.last_progress = int(self._global_step)
+            slot.last_failure_reason = ""
+            turn_now = int(getattr(state_after, "turn", 0) or 0) if state_after is not None else 0
+            team_slot = self._team_turn_slot(context.side, turn_now)
+            team_slot.turn_plan_progress = int(team_slot.turn_plan_progress) + 1
         else:
             slot.blocked_steps += 1
             slot.replan_reason = "no_progress"
+            slot.stuck_steps = int(slot.stuck_steps) + 1
+            slot.last_failure_reason = "no_progress"
+            # P4 semantic-loop breaker: if we keep failing with same commitment,
+            # release target lock to allow a clean re-selection on next context.
+            if slot.stuck_steps >= int(self.blocked_replan_steps):
+                slot.focus_hex = None
+                slot.focus_vp_id = None
+                slot.stage = "SETUP"
+                slot.ttl_remaining = 0
+                slot.last_failure_reason = "semantic_loop_reset"
 
         if slot.focus_hex is not None and state_after is not None:
             hs = getattr(state_after, "hex_states", {}).get(slot.focus_hex)
@@ -261,3 +377,6 @@ class MissionPlanner:
                 slot.stage = "HOLD"
                 slot.replan_reason = "objective_captured"
                 slot.ttl_remaining = self.default_ttl
+                slot.planned_target = None
+                slot.stuck_steps = 0
+                slot.last_failure_reason = ""

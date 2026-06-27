@@ -483,6 +483,8 @@ def evaluate_sb3(
         else (repo_root / "assault_sim" / "config" / "train_config.json")
     )
     cfg = load_train_config(train_config_path)
+    os.environ["ASSAULT_P4_ADVANCED_PLANNER"] = "1" if bool(getattr(cfg, "p4_advanced_planner_enabled", False)) else "0"
+    os.environ["ASSAULT_P4_ADVANCED_HORIZON"] = str(int(getattr(cfg, "p4_advanced_planner_horizon", 2) or 2))
     scenario_schedule = _dedupe_schedule_by_scenario_id(list(cfg.scenario_schedule))
     rl_sides = list(cfg.rl_sides)
     eval_seed = int(PPOConfig.SEED if seed is None else seed)

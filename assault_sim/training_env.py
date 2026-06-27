@@ -47,6 +47,15 @@ _TRAIN_LEAN_INFO_KEYS = {
     "plan_replan_reason",
     "plan_commitment_age",
     "plan_focus_switched",
+    "plan_stuck_steps",
+    "plan_last_progress",
+    "plan_planned_target",
+    "plan_last_failure_reason",
+    "plan_team_focus_vp_id",
+    "plan_team_turn_plan_progress",
+    "plan_team_units_committed",
+    "plan_advanced_enabled",
+    "plan_advanced_horizon",
     "plan_step_id",
     "plan_budget_state",
     "plan_budget_violation_count",
@@ -62,6 +71,9 @@ _TRAIN_LEAN_INFO_KEYS = {
     "plan_commitment_age_norm",
     "intent_alignment_last_k",
     "last_failure_reason_onehot",
+    "team_turn_plan_progress_norm",
+    "team_units_committed_norm",
+    "team_focus_vp_set",
     "done",
     # Keep objective outcome essentials for lightweight post-train diagnostics.
     "objective_result_kind",
@@ -180,12 +192,22 @@ class TrainingEnv:
         if str(info.get("capture_fallback_reason", "")).strip():
             self._unit_last_failure_reason[unit_id] = str(info.get("capture_fallback_reason"))
         last_failure_reason_onehot = self._lote_d_failure_onehot(last_reason)
+        team_turn_plan_progress_norm = float(
+            np.clip(float(info.get("plan_team_turn_plan_progress", 0) or 0) / 3.0, 0.0, 1.0)
+        )
+        team_units_committed_norm = float(
+            np.clip(float(info.get("plan_team_units_committed", 0) or 0) / 6.0, 0.0, 1.0)
+        )
+        team_focus_vp_set = 1.0 if str(info.get("plan_team_focus_vp_id", "") or "").strip() else 0.0
 
         return (
             unit_stuck_steps_norm,
             plan_commitment_age_norm,
             intent_alignment_last_k,
             last_failure_reason_onehot,
+            team_turn_plan_progress_norm,
+            team_units_committed_norm,
+            team_focus_vp_set,
         )
 
     def _objectives_captured_for_side(self, state, side: str) -> int:
@@ -415,6 +437,15 @@ class TrainingEnv:
                 "plan_replan_reason": str(getattr(action, "rl_plan_replan_reason", "") or ""),
                 "plan_commitment_age": int(getattr(action, "rl_plan_commitment_age", 0) or 0),
                 "plan_focus_switched": bool(getattr(action, "rl_plan_focus_switched", False)),
+                "plan_stuck_steps": int(getattr(action, "rl_plan_stuck_steps", 0) or 0),
+                "plan_last_progress": int(getattr(action, "rl_plan_last_progress", 0) or 0),
+                "plan_planned_target": getattr(action, "rl_plan_planned_target", None),
+                "plan_last_failure_reason": str(getattr(action, "rl_plan_last_failure_reason", "") or ""),
+                "plan_team_focus_vp_id": getattr(action, "rl_plan_team_focus_vp_id", None),
+                "plan_team_turn_plan_progress": int(getattr(action, "rl_plan_team_turn_plan_progress", 0) or 0),
+                "plan_team_units_committed": int(getattr(action, "rl_plan_team_units_committed", 0) or 0),
+                "plan_advanced_enabled": bool(getattr(action, "rl_plan_advanced_enabled", False)),
+                "plan_advanced_horizon": int(getattr(action, "rl_plan_advanced_horizon", 0) or 0),
                 "plan_step_id": int(getattr(action, "rl_plan_step_id", 0) or 0),
                 "plan_budget_state": str(getattr(action, "rl_plan_budget_state", "UNBOUNDED") or "UNBOUNDED"),
                 "plan_budget_remaining_by_role": dict(getattr(action, "rl_plan_budget_remaining_by_role", {}) or {}),
@@ -490,6 +521,15 @@ class TrainingEnv:
                 "plan_replan_reason": str(getattr(action, "rl_plan_replan_reason", "") or ""),
                 "plan_commitment_age": int(getattr(action, "rl_plan_commitment_age", 0) or 0),
                 "plan_focus_switched": bool(getattr(action, "rl_plan_focus_switched", False)),
+                "plan_stuck_steps": int(getattr(action, "rl_plan_stuck_steps", 0) or 0),
+                "plan_last_progress": int(getattr(action, "rl_plan_last_progress", 0) or 0),
+                "plan_planned_target": getattr(action, "rl_plan_planned_target", None),
+                "plan_last_failure_reason": str(getattr(action, "rl_plan_last_failure_reason", "") or ""),
+                "plan_team_focus_vp_id": getattr(action, "rl_plan_team_focus_vp_id", None),
+                "plan_team_turn_plan_progress": int(getattr(action, "rl_plan_team_turn_plan_progress", 0) or 0),
+                "plan_team_units_committed": int(getattr(action, "rl_plan_team_units_committed", 0) or 0),
+                "plan_advanced_enabled": bool(getattr(action, "rl_plan_advanced_enabled", False)),
+                "plan_advanced_horizon": int(getattr(action, "rl_plan_advanced_horizon", 0) or 0),
                 "plan_step_id": int(getattr(action, "rl_plan_step_id", 0) or 0),
                 "plan_budget_state": str(getattr(action, "rl_plan_budget_state", "UNBOUNDED") or "UNBOUNDED"),
                 "plan_budget_remaining_by_role": dict(getattr(action, "rl_plan_budget_remaining_by_role", {}) or {}),
@@ -707,11 +747,17 @@ class TrainingEnv:
             plan_commitment_age_norm,
             intent_alignment_last_k,
             last_failure_reason_onehot,
+            team_turn_plan_progress_norm,
+            team_units_committed_norm,
+            team_focus_vp_set,
         ) = self._update_lote_d_memory(info)
         info["unit_stuck_steps_norm"] = unit_stuck_steps_norm
         info["plan_commitment_age_norm"] = plan_commitment_age_norm
         info["intent_alignment_last_k"] = intent_alignment_last_k
         info["last_failure_reason_onehot"] = list(last_failure_reason_onehot)
+        info["team_turn_plan_progress_norm"] = team_turn_plan_progress_norm
+        info["team_units_committed_norm"] = team_units_committed_norm
+        info["team_focus_vp_set"] = team_focus_vp_set
         if not self.train_lean:
             info["plan_state"] = normalize_plan_state(
                 {
@@ -799,6 +845,9 @@ class TrainingEnv:
                 plan_commitment_age_norm=float(info.get("plan_commitment_age_norm", 0.0) or 0.0),
                 intent_alignment_last_k=float(info.get("intent_alignment_last_k", 0.0) or 0.0),
                 last_failure_reason_onehot=list(info.get("last_failure_reason_onehot", [0.0, 0.0, 0.0, 0.0]) or [0.0, 0.0, 0.0, 0.0]),
+                team_turn_plan_progress_norm=float(info.get("team_turn_plan_progress_norm", 0.0) or 0.0),
+                team_units_committed_norm=float(info.get("team_units_committed_norm", 0.0) or 0.0),
+                team_focus_vp_set=float(info.get("team_focus_vp_set", 0.0) or 0.0),
             ),
             reward,
             done,

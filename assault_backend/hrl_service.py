@@ -1,27 +1,29 @@
-from assault_rag.hrl.explain import explain_hrl_decision
-
-
 class HRLService:
     def explain(self, strategic_state, unit_id, action):
         """
-        Explain the strategic decision using real HRL RAG logic
-        provided by assault_rag.
+        Local strategic explanation with no external AI dependency.
         """
 
-        # Build context for HRL RAG
-        context = {
-            "friendly_strength": strategic_state.friendly_strength,
-            "enemy_pressure": strategic_state.enemy_pressure,
-            "objective_distance": strategic_state.objective_distance,
-            "unit_id": unit_id,
-            "action": action,
-        }
+        friendly = str(getattr(strategic_state, "friendly_strength", "unknown"))
+        pressure = str(getattr(strategic_state, "enemy_pressure", "unknown"))
+        objective = str(getattr(strategic_state, "objective_distance", "unknown"))
 
-        # Delegate explanation to assault_rag
-        hrl_result = explain_hrl_decision(context)
+        option = "hold_position"
+        category = "stability"
+        if pressure.lower() in {"high", "very_high"}:
+            option = "reduce_enemy_pressure"
+            category = "survivability"
+        elif objective.lower() in {"close", "very_close"} and friendly.lower() in {"high", "medium"}:
+            option = "push_objective"
+            category = "initiative"
+
+        explanation = (
+            f"Unit {unit_id} selected '{action}' with friendly_strength={friendly}, "
+            f"enemy_pressure={pressure}, objective_distance={objective}."
+        )
 
         return {
-            "option": hrl_result["option"],
-            "category": hrl_result["category"],
-            "explanation": hrl_result["explanation"],
+            "option": option,
+            "category": category,
+            "explanation": explanation,
         }

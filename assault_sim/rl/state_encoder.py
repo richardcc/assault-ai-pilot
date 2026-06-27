@@ -191,7 +191,7 @@ STATE_VECTOR_LAYOUT = (
     ("lot_a_macro_vp", 4),
     ("lot_c_coordination", 4),
     ("lot_b_risk_terrain", 4),
-    ("lot_d_plan_memory", 7),
+    ("lot_d_plan_memory", 10),
     ("lot_e_opportunity", 4),
 )
 
@@ -494,6 +494,9 @@ def encode_state(
     plan_commitment_age_norm: float = 0.0,
     intent_alignment_last_k: float = 0.0,
     last_failure_reason_onehot: list[float] | None = None,
+    team_turn_plan_progress_norm: float = 0.0,
+    team_units_committed_norm: float = 0.0,
+    team_focus_vp_set: float = 0.0,
 ):
 
     active = unit
@@ -737,6 +740,9 @@ def encode_state(
             onehot[1],
             onehot[2],
             onehot[3],
+            float(np.clip(team_turn_plan_progress_norm, 0.0, 1.0)),
+            float(np.clip(team_units_committed_norm, 0.0, 1.0)),
+            float(np.clip(team_focus_vp_set, 0.0, 1.0)),
         ]
     )
 

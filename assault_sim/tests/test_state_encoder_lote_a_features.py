@@ -70,12 +70,12 @@ def test_lote_a_features_present_and_bounded(monkeypatch):
         focus_vp_id="2,0",
     )
 
-    # Tail layout with Lote E obs-only appended:
-    # [..., lote_a(4), lote_c(4), lote_b(4), lote_d(7), lote_e(4)]
-    assert float(obs[-23]) == pytest.approx(0.2, rel=1e-6, abs=1e-6)
-    assert float(obs[-22]) == pytest.approx(0.4, rel=1e-6, abs=1e-6)
-    assert float(obs[-21]) == 1.0
-    assert float(obs[-20]) == 1.0
+    # Tail layout with LOT D expanded:
+    # [..., lote_a(4), lote_c(4), lote_b(4), lote_d(10), lote_e(4)]
+    assert float(obs[-26]) == pytest.approx(0.2, rel=1e-6, abs=1e-6)
+    assert float(obs[-25]) == pytest.approx(0.4, rel=1e-6, abs=1e-6)
+    assert float(obs[-24]) == 1.0
+    assert float(obs[-23]) == 1.0
 
 
 def test_lote_a_features_zero_without_active_unit(monkeypatch):
@@ -88,6 +88,6 @@ def test_lote_a_features_zero_without_active_unit(monkeypatch):
         rl_side="US",
         scenario=SimpleNamespace(max_turns=20, victory_outcomes={}),
     )
+    assert float(obs[-26]) == 0.0
+    assert float(obs[-24]) == 0.0
     assert float(obs[-23]) == 0.0
-    assert float(obs[-21]) == 0.0
-    assert float(obs[-20]) == 0.0

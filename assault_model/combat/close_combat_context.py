@@ -45,6 +45,8 @@ class CombatResolutionContext:
         self.round_number: int = 1
         self.first_round: bool = True
         self.adrenaline_rush: bool = True  # ignore first suppression in round 1
+        # CC-001: attacker crossed obstacle edge into defender hex.
+        self.crossed_obstacle: bool = False
 
         _trace(
             "CC_CONTEXT_INIT",
@@ -53,5 +55,6 @@ class CombatResolutionContext:
             defender_id=getattr(defender, "unit_id", None),
             defender_code=getattr(getattr(defender, "unit_type", None), "code", None),
             sector=attack_sector.name if attack_sector else None,
+            crossed_obstacle=self.crossed_obstacle,
         )
 

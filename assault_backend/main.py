@@ -1,6 +1,6 @@
 import asyncio
-import json
 import time
+from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Dict
 
@@ -11,7 +11,10 @@ from pydantic import BaseModel
 from assault_backend.engine import ExplainableEngine
 from assault_backend.game_session import GameSession
 from assault_backend.hrl_service import HRLService
-from assault_backend.schemas.rag import ExplainActivationRequest, ExplainActivationResponse
+from assault_backend.schemas.explain import (
+    ExplainActivationRequest,
+    ExplainActivationResponse,
+)
 from assault_backend.services.action_service import get_unit_actions
 from assault_backend.services.map_piece_service import (
     load_map_piece_catalog_raw,
@@ -21,6 +24,13 @@ from assault_backend.services.targeting_service import compute_targeting_info
 from assault_backend.services.unit_service import load_unit_catalog_raw, load_unit_raw
 from assault_backend.services.scenario_service_ui import load_ui_scenario
 from assault_backend.tactical_service import TacticalService
+from assault_backend.routers.rag import router as rag_router
+from assault_rag.copilot.index_builder import (
+    ensure_game_data_chunks,
+    ensure_rule_chunks,
+    get_rule_index_status,
+    load_rule_chunks,
+)
 from assault_sim.decision.decision_engine import DecisionEngine
 from assault_model.actions.action_catalog import ActionCatalog
 from assault_model.map.hex_utils import safe_hex_distance
@@ -29,8 +39,59 @@ from assault_model.actions.status import WaitAction
 
 
 game_session = GameSession()
+RAG_STARTUP_STATUS = {
+    "ok": False,
+    "data_chunks": 0,
+    "rule_chunks": 0,
+    "rule_index_status": {},
+    "error": None,
+}
 
-app = FastAPI(title="Assault RAG Backend", version="1.0")
+@asynccontextmanager
+async def app_lifespan(_app: FastAPI):
+    """
+    Build/load RAG indexes when backend starts, instead of first query.
+    Keeps first-request latency low and surfaces ingestion issues early.
+    """
+    try:
+        # Auto-build canonical rulebook chunks from docs when missing.
+        ensure_rule_chunks()
+        rule_index_status = get_rule_index_status()
+        data_chunks = ensure_game_data_chunks()
+        rule_chunks = load_rule_chunks()
+        if not rule_chunks:
+            raise RuntimeError("Rulebook index file exists but loaded zero chunks.")
+        RAG_STARTUP_STATUS.update(
+            {
+                "ok": True,
+                "data_chunks": len(data_chunks),
+                "rule_chunks": len(rule_chunks),
+                "rule_index_status": rule_index_status,
+                "error": None,
+            }
+        )
+        print(
+            "[RAG STARTUP]"
+            f" data_chunks={len(data_chunks)}"
+            f" rule_chunks={len(rule_chunks)}"
+            f" rule_index={rule_index_status.get('active_path')}"
+        )
+    except Exception as e:
+        RAG_STARTUP_STATUS.update(
+            {
+                "ok": False,
+                "error": str(e),
+                "rule_index_status": get_rule_index_status(),
+            }
+        )
+        # Keep backend up for game frontend even if RAG preload fails.
+        # RAG endpoints will return actionable errors if invoked.
+        print(f"[RAG STARTUP] preload_failed={e}")
+
+    yield
+
+
+app = FastAPI(title="Assault Backend", version="1.0", lifespan=app_lifespan)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
@@ -53,17 +114,6 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-RULEBOOK_PATH = (
-    Path(__file__).resolve().parent.parent
-    / "assault_rag"
-    / "data"
-    / "rulebook"
-    / "typed"
-    / "rulebook_typed.json"
-)
-with open(RULEBOOK_PATH, "r", encoding="utf-8") as f:
-    TYPED_RULEBOOK = json.load(f)
-
 SCENARIOS_PATH = (
     Path(__file__).resolve().parent.parent
     / "assault_sim"
@@ -73,18 +123,25 @@ SCENARIOS_PATH = (
 
 engine = ExplainableEngine(
     hrl_service=HRLService(),
-    tactical_service=TacticalService(typed_rules=TYPED_RULEBOOK),
+    tactical_service=TacticalService(),
 )
+
+app.include_router(rag_router)
 
 
 @app.get("/api/engine/status")
 def engine_status():
     return {
         "status": "ready",
-        "engine": "assault-rag-backend",
-        "rag_enabled": True,
-        "layers": {"strategic": "assault_rag", "tactical": "rules_and_dice"},
+        "engine": "assault-backend",
+        "explanations_enabled": True,
+        "layers": {"strategic": "local_heuristic", "tactical": "event_summary"},
     }
+
+
+@app.get("/api/rag/health")
+def rag_health():
+    return RAG_STARTUP_STATUS
 
 
 @app.post("/api/explain/activation", response_model=ExplainActivationResponse)

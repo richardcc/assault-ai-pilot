@@ -4,8 +4,10 @@ from assault_model.combat.attack_dice_pool import AttackDicePool
 from assault_model.combat.defense_dice_pool import DefenseDicePool
 from assault_model.combat.dice_face import DiceFace
 from assault_model.combat.battle_die import DiceResult
+from assault_model.combat.battle_die import BattleDie
 from assault_model.combat.dice_comparison import compare_dice
 from assault_model.combat.dice_color import DiceColor
+from assault_model.combat.attack_sector import AttackSector
 from assault_model.runtime.execution_context import ExecutionContext
 
 import os
@@ -119,6 +121,75 @@ def resolve_close_combat(
                 colors.append(strongest)
         return colors
 
+    def _apply_cc001_obstacle_crossing_penalty(attack_colors):
+        if not attack_colors:
+            return attack_colors
+        # CC-001: in round 1, obstacle-crossing assault removes weakest attack die.
+        weakest = min(attack_colors, key=lambda c: int(c))
+        attack_colors.remove(weakest)
+        _trace(
+            "CC001_OBSTACLE_CROSSING_PENALTY",
+            removed=getattr(weakest, "name", str(weakest)),
+        )
+        return attack_colors
+
+    def _apply_cc003_activated_penalty(attack_colors):
+        if not attack_colors:
+            return attack_colors
+        weakest = min(attack_colors, key=lambda c: int(c))
+        attack_colors.remove(weakest)
+        _trace(
+            "CC003_ACTIVATED_PENALTY",
+            removed=getattr(weakest, "name", str(weakest)),
+        )
+        return attack_colors
+
+    def _apply_cc004_suppression_penalty(attack_colors, unit_label: str):
+        if not attack_colors:
+            return attack_colors
+        weakest = min(attack_colors, key=lambda c: int(c))
+        attack_colors.remove(weakest)
+        _trace(
+            "CC004_SUPPRESSION_PENALTY",
+            unit=unit_label,
+            removed=getattr(weakest, "name", str(weakest)),
+        )
+        return attack_colors
+
+    def _apply_cc005_ambush_bonus(attack_colors):
+        # Current behavior: ambush grants +1 GREEN attack die in round 1.
+        attack_colors.append(DiceColor.GREEN)
+        _trace("CC005_AMBUSH_BONUS", added="GREEN")
+        return attack_colors
+
+    def _dice_result_score(result: DiceResult) -> int:
+        # Prefer more symbols; critical gets extra weight.
+        score = len(result.faces)
+        if any(f == DiceFace.CRITICAL for f in result.faces):
+            score += 2
+        return score
+
+    def _apply_cc002_outflank_reroll(results):
+        if not results:
+            return results
+        # Reroll the weakest current die once; keep best of old/new.
+        weakest_idx = min(range(len(results)), key=lambda i: _dice_result_score(results[i]))
+        weakest_result = results[weakest_idx]
+        rerolled = BattleDie(weakest_result.color).roll()
+        if _dice_result_score(rerolled) >= _dice_result_score(weakest_result):
+            results[weakest_idx] = rerolled
+            chosen = "rerolled"
+        else:
+            chosen = "kept"
+        _trace(
+            "CC002_OUTFLANK_REROLL",
+            color=weakest_result.color.name,
+            prior=[f.name for f in weakest_result.faces],
+            rerolled=[f.name for f in rerolled.faces],
+            decision=chosen,
+        )
+        return results
+
     while ctx.attacker.alive and ctx.defender.alive:
         rr = CloseCombatRoundResult(ctx.round_number)
 
@@ -126,19 +197,36 @@ def resolve_close_combat(
         rr.defender_hp_before = ctx.defender.hp
 
         # ---------------- DICE POOLS ----------------
+        attacker_attack_colors = list(
+            ctx.attacker.unit_type.get_close_combat_attack_dice(
+                ctx.defender.unit_type.category
+            )
+        )
+        defender_attack_colors = list(
+            ctx.defender.unit_type.get_close_combat_attack_dice(
+                ctx.attacker.unit_type.category
+            )
+        )
+        if ctx.round_number == 1 and bool(getattr(ctx, "crossed_obstacle", False)):
+            attacker_attack_colors = _apply_cc001_obstacle_crossing_penalty(attacker_attack_colors)
+        if ctx.round_number == 1 and bool(getattr(ctx.attacker, "activated", False)):
+            attacker_attack_colors = _apply_cc003_activated_penalty(attacker_attack_colors)
+        if bool(getattr(ctx.attacker, "suppressed", False)):
+            attacker_attack_colors = _apply_cc004_suppression_penalty(attacker_attack_colors, "attacker")
+        if bool(getattr(ctx.defender, "suppressed", False)):
+            defender_attack_colors = _apply_cc004_suppression_penalty(defender_attack_colors, "defender")
+        if ctx.round_number == 1 and bool(getattr(ctx.attacker, "ambush", False)):
+            attacker_attack_colors = _apply_cc005_ambush_bonus(attacker_attack_colors)
+
         dice_pools = {
             "attacker_attack": AttackDicePool(
-                ctx.attacker.unit_type.get_close_combat_attack_dice(
-                    ctx.defender.unit_type.category
-                )
+                attacker_attack_colors
             ),
             "attacker_defense": DefenseDicePool(
                 _attacker_defense_colors()
             ),
             "defender_attack": AttackDicePool(
-                ctx.defender.unit_type.get_close_combat_attack_dice(
-                    ctx.attacker.unit_type.category
-                )
+                defender_attack_colors
             ),
             "defender_defense": DefenseDicePool(
                 _defender_defense_colors()
@@ -148,6 +236,11 @@ def resolve_close_combat(
         dice_results = {k: v.roll() for k, v in dice_pools.items()}
 
         rr.attacker_attack_dice = dice_results["attacker_attack"]
+        if (
+            ctx.round_number == 1
+            and getattr(ctx.attack_sector, "name", None) in {AttackSector.FLANK_LEFT.name, AttackSector.FLANK_RIGHT.name, AttackSector.REAR.name}
+        ):
+            rr.attacker_attack_dice = _apply_cc002_outflank_reroll(rr.attacker_attack_dice)
         rr.attacker_defense_dice = dice_results["attacker_defense"]
         rr.defender_attack_dice = dice_results["defender_attack"]
         rr.defender_defense_dice = dice_results["defender_defense"]

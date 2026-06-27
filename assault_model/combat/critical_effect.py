@@ -9,4 +9,3 @@ class CriticalEffect(Enum):
     RETREAT = "RETREAT"
     DAMAGED = "DAMAGED"
     NO_EFFECT = "NO_EFFECT"
-``

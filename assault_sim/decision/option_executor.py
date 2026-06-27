@@ -202,6 +202,15 @@ class OptionExecutor(OptionExecutorCaptureMixin, OptionExecutorCombatMixin, Opti
         planner_commit_age = int(getattr(planner_context, "commitment_age", 0) or 0)
         planner_focus_switched = bool(getattr(planner_context, "focus_switched", False))
         planner_side = str(getattr(planner_context, "side", "") or "")
+        planner_stuck_steps = int(getattr(planner_context, "stuck_steps", 0) or 0)
+        planner_last_progress = int(getattr(planner_context, "last_progress", 0) or 0)
+        planner_planned_target = getattr(planner_context, "planned_target", None)
+        planner_last_failure_reason = str(getattr(planner_context, "last_failure_reason", "") or "")
+        planner_team_focus_vp_id = getattr(planner_context, "team_focus_vp_id", None)
+        planner_team_turn_plan_progress = int(getattr(planner_context, "team_turn_plan_progress", 0) or 0)
+        planner_team_units_committed = int(getattr(planner_context, "team_units_committed", 0) or 0)
+        planner_advanced_enabled = bool(getattr(planner_context, "advanced_planner_enabled", False))
+        planner_advanced_horizon = int(getattr(planner_context, "advanced_planner_horizon", 0) or 0)
         action.rl_plan_intent = planner_intent or self._plan_intent_name(strategy)
         resolved_role, role_resolve_reason = resolve_role_with_reason(
             state,
@@ -220,6 +229,15 @@ class OptionExecutor(OptionExecutorCaptureMixin, OptionExecutorCombatMixin, Opti
         action.rl_plan_replan_reason = planner_replan_reason
         action.rl_plan_commitment_age = planner_commit_age
         action.rl_plan_focus_switched = planner_focus_switched
+        action.rl_plan_stuck_steps = planner_stuck_steps
+        action.rl_plan_last_progress = planner_last_progress
+        action.rl_plan_planned_target = planner_planned_target
+        action.rl_plan_last_failure_reason = planner_last_failure_reason
+        action.rl_plan_team_focus_vp_id = planner_team_focus_vp_id
+        action.rl_plan_team_turn_plan_progress = planner_team_turn_plan_progress
+        action.rl_plan_team_units_committed = planner_team_units_committed
+        action.rl_plan_advanced_enabled = planner_advanced_enabled
+        action.rl_plan_advanced_horizon = planner_advanced_horizon
         action.rl_plan_budget_state = str(budget_state or "UNBOUNDED")
         action.rl_plan_budget_remaining_by_role = dict(budget_remaining_by_role or {})
         action.rl_plan_budget_violation_count = int(max(0, budget_violation_count))
@@ -271,6 +289,7 @@ class OptionExecutor(OptionExecutorCaptureMixin, OptionExecutorCombatMixin, Opti
         planner_managed = planner_context is not None
         planner_stage = str(getattr(planner_context, "stage", "") or "").upper()
         planner_intent = str(getattr(planner_context, "intent", "") or "").upper()
+        planner_stuck_steps = int(getattr(planner_context, "stuck_steps", 0) or 0)
         if planner_stage == "STEP_IN" and strategy != StrategicIntent.CAPTURE:
             strategy = StrategicIntent.CAPTURE
             if option in (TacticalOption.HOLD, TacticalOption.RETREAT):
@@ -285,7 +304,7 @@ class OptionExecutor(OptionExecutorCaptureMixin, OptionExecutorCombatMixin, Opti
                 strategy = StrategicIntent.CAPTURE
             # v24-a: keep HOLD available in setup contexts to avoid over-forcing
             # movement and regressing tactical loss rate.
-            if option == TacticalOption.RETREAT:
+            if option == TacticalOption.RETREAT and planner_stuck_steps < 2:
                 option = TacticalOption.ADVANCE
         elif planner_managed and planner_intent == "ATTRIT":
             if strategy is None:
@@ -302,6 +321,12 @@ class OptionExecutor(OptionExecutorCaptureMixin, OptionExecutorCombatMixin, Opti
         near_objective_force_ctx = (
             nearest_vp_d_for_force is not None
             and float(nearest_vp_d_for_force) <= 2.0
+        )
+        relax_capture_forcing = bool(
+            planner_managed
+            and planner_intent in {"CAPTURE", "SETUP_CAPTURE"}
+            and near_objective_force_ctx
+            and planner_stuck_steps >= 2
         )
         aggressive_l3_forced = False
         l3_capture_forced_reason = ""
@@ -335,7 +360,7 @@ class OptionExecutor(OptionExecutorCaptureMixin, OptionExecutorCombatMixin, Opti
             quota = self._l3_capture_quota_slot(unit.side, turn_now)
             quota["decision_count"] = int(quota.get("decision_count", 0)) + 1
             need_capture = int(quota.get("capture_count", 0)) < int(quota.get("required_capture", 0))
-            if need_capture and strategy in (StrategicIntent.PRESERVE, StrategicIntent.CAPTURE):
+            if need_capture and strategy in (StrategicIntent.PRESERVE, StrategicIntent.CAPTURE) and not relax_capture_forcing:
                 strategy = StrategicIntent.CAPTURE
                 aggressive_l3_forced = True
                 l3_capture_forced_reason = "minimum_capture_intent_quota"
@@ -670,6 +695,7 @@ class OptionExecutor(OptionExecutorCaptureMixin, OptionExecutorCombatMixin, Opti
             and not capture_emergency
             and turn_now <= 8
             and not self._has_vp_attack_opportunity(state, unit)
+            and not relax_capture_forcing
         ):
             if option != TacticalOption.ADVANCE:
                 legal_override_applied = True
@@ -685,6 +711,7 @@ class OptionExecutor(OptionExecutorCaptureMixin, OptionExecutorCombatMixin, Opti
             and nearest_vp_d <= 3
             and option in (TacticalOption.ATTACK, TacticalOption.HOLD)
             and not self._has_vp_attack_opportunity(state, unit)
+            and not relax_capture_forcing
         ):
             legal_override_applied = True
             override_reason = "soft_budget_entry_first"
@@ -692,7 +719,7 @@ class OptionExecutor(OptionExecutorCaptureMixin, OptionExecutorCombatMixin, Opti
         # P4.3c hard budget (light):
         # near VP, demand a minimum number of ADVANCE decisions per side/turn
         # unless there is an emergency or a VP-relevant attack.
-        if budgeted_context:
+        if budgeted_context and not relax_capture_forcing:
             slot = self._capture_budget_slot(unit.side, turn_now)
             need_advances = int(slot.get("advance_count", 0)) < int(slot.get("required_advances", 0))
             if (

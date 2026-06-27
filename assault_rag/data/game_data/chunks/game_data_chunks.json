@@ -1,0 +1,204 @@
+[
+  {
+    "chunk_id": "unit::GE_FJ_RIFLES_43",
+    "source": "unit_catalog",
+    "source_id": "GE_FJ_RIFLES_43",
+    "text": "Unit: GE_FJ_RIFLES_43\nSide: GE\nCategory: INFANTRY\nSubtype: FALLSCHIRMJAGER\nClassification: SPECIALIZED_INFANTRY\nMovement: 2\nMax strength: 4\nTraits: PARATROOPS, ELITE, TOUGH, RIFLE_GRENADES, INDIRECT_FIRE, ATTACK_DIE_REROLL, IGNORE_FIRST_CC_DAMAGE, REMOVE_WEAKEST_TERRAIN_DEFENSE\nAttack profile:\n- DIRECT_FIRE vs VEHICLE @ 0: none\n- DIRECT_FIRE vs VEHICLE @ 1: GREEN, GREEN\n- DIRECT_FIRE vs VEHICLE @ 2: GREEN\n- DIRECT_FIRE vs INFANTRY @ 0: RED, YELLOW, YELLOW, BLUE\n- DIRECT_FIRE vs INFANTRY @ 1-3: RED, YELLOW, YELLOW, GREEN\n- DIRECT_FIRE vs INFANTRY @ 4-7: RED, YELLOW, YELLOW, BLUE\n- DIRECT_FIRE vs INFANTRY @ 8-10: YELLOW, YELLOW, BLUE",
+    "metadata": {
+      "side": "GE",
+      "category": "INFANTRY",
+      "classification": "SPECIALIZED_INFANTRY"
+    }
+  },
+  {
+    "chunk_id": "unit::GE_RIFLES_43",
+    "source": "unit_catalog",
+    "source_id": "GE_RIFLES_43",
+    "text": "Unit: GE_RIFLES_43\nSide: GE\nCategory: INFANTRY\nSubtype: STANDARD_INFANTRY\nClassification: STANDARD_INFANTRY\nMovement: 2\nMax strength: 3\nTraits: RIFLE_GRENADES, INDIRECT_FIRE, ATTACK_DIE_REROLL, REMOVE_WEAKEST_TERRAIN_DEFENSE\nAttack profile:\n- DIRECT_FIRE vs VEHICLE @ 0: none\n- DIRECT_FIRE vs VEHICLE @ 1: YELLOW, BLUE\n- DIRECT_FIRE vs VEHICLE @ 2: GREEN, BLUE\n- DIRECT_FIRE vs INFANTRY @ 0: RED, YELLOW, GREEN\n- DIRECT_FIRE vs INFANTRY @ 1-3: RED, YELLOW, BLUE\n- DIRECT_FIRE vs INFANTRY @ 4-6: GREEN, GREEN, YELLOW\n- DIRECT_FIRE vs INFANTRY @ 7-10: YELLOW, YELLOW, BLUE, BLUE\n- INDIRECT_FIRE vs INFANTRY @ 1-3: GREEN, GREEN",
+    "metadata": {
+      "side": "GE",
+      "category": "INFANTRY",
+      "classification": "STANDARD_INFANTRY"
+    }
+  },
+  {
+    "chunk_id": "unit::GE_50MM_MORTAR",
+    "source": "unit_catalog",
+    "source_id": "GE_50MM_MORTAR",
+    "text": "Unit: GE_50MM_MORTAR\nSide: GE\nCategory: INFANTRY\nSubtype: SUPPORT_MORTAR\nClassification: INDIRECT_FIRE_UNIT\nMovement: 1\nMax strength: 2\nTraits: INDIRECT_FIRE, NO_LINE_OF_SIGHT, CAMOUFLAGED, SMOKE, MIN_RANGE_3, MAX_RANGE_8\nAttack profile:\n- DIRECT_FIRE vs VEHICLE @ 0-10: none\n- DIRECT_FIRE vs INFANTRY @ 0: YELLOW, GREEN\n- DIRECT_FIRE vs INFANTRY @ 1: YELLOW, BLUE, BLUE\n- DIRECT_FIRE vs INFANTRY @ 2-4: GREEN, BLUE\n- DIRECT_FIRE vs INFANTRY @ 5-8: GREEN\n- INDIRECT_FIRE vs INFANTRY @ 3-8: GREEN, GREEN, BLUE",
+    "metadata": {
+      "side": "GE",
+      "category": "INFANTRY",
+      "classification": "INDIRECT_FIRE_UNIT"
+    }
+  },
+  {
+    "chunk_id": "unit::GE_HEAVY_MG_42",
+    "source": "unit_catalog",
+    "source_id": "GE_HEAVY_MG_42",
+    "text": "Unit: GE_HEAVY_MG_42\nSide: GE\nCategory: INFANTRY\nSubtype: SUPPORT_MG\nClassification: SUPPORT_INFANTRY\nMovement: 2\nMax strength: 3\nTraits: SUPPORT_FIRE, ATTACK_DIE_REROLL, SLOW_UNIT\nAttack profile:\n- DIRECT_FIRE vs VEHICLE @ 0-10: none\n- DIRECT_FIRE vs INFANTRY @ 0: YELLOW, YELLOW, GREEN\n- DIRECT_FIRE vs INFANTRY @ 1-5: RED, RED, YELLOW, BLUE\n- DIRECT_FIRE vs INFANTRY @ 6-7: RED, YELLOW, GREEN, BLUE\n- DIRECT_FIRE vs INFANTRY @ 8-11: YELLOW, BLUE, BLUE",
+    "metadata": {
+      "side": "GE",
+      "category": "INFANTRY",
+      "classification": "SUPPORT_INFANTRY"
+    }
+  },
+  {
+    "chunk_id": "unit::IT_RIFLES_43",
+    "source": "unit_catalog",
+    "source_id": "IT_RIFLES_43",
+    "text": "Unit: IT_RIFLES_43\nSide: IT\nCategory: INFANTRY\nSubtype: STANDARD_INFANTRY\nClassification: STANDARD_INFANTRY\nMovement: 2\nMax strength: 4\nTraits: none\nAttack profile:\n- DIRECT_FIRE vs VEHICLE @ 0-10: none\n- DIRECT_FIRE vs INFANTRY @ 0: RED, GREEN, BLUE\n- DIRECT_FIRE vs INFANTRY @ 1-3: RED, YELLOW\n- DIRECT_FIRE vs INFANTRY @ 4-5: YELLOW, GREEN\n- DIRECT_FIRE vs INFANTRY @ 6-9: GREEN, BLUE",
+    "metadata": {
+      "side": "IT",
+      "category": "INFANTRY",
+      "classification": "STANDARD_INFANTRY"
+    }
+  },
+  {
+    "chunk_id": "unit::IT_LMG_SQUAD_43",
+    "source": "unit_catalog",
+    "source_id": "IT_LMG_SQUAD_43",
+    "text": "Unit: IT_LMG_SQUAD_43\nSide: IT\nCategory: INFANTRY\nSubtype: SUPPORT_MG\nClassification: SUPPORT_INFANTRY\nMovement: 2\nMax strength: 4\nTraits: SUPPORT_FIRE, SLOW_UNIT\nAttack profile:\n- DIRECT_FIRE vs VEHICLE @ 0-10: none\n- DIRECT_FIRE vs INFANTRY @ 0: RED, GREEN, GREEN\n- DIRECT_FIRE vs INFANTRY @ 1-3: RED, YELLOW, BLUE\n- DIRECT_FIRE vs INFANTRY @ 4-6: RED, GREEN, BLUE\n- DIRECT_FIRE vs INFANTRY @ 7-10: YELLOW, GREEN",
+    "metadata": {
+      "side": "IT",
+      "category": "INFANTRY",
+      "classification": "SUPPORT_INFANTRY"
+    }
+  },
+  {
+    "chunk_id": "unit::IT_SOLOTHURN_ATR_43",
+    "source": "unit_catalog",
+    "source_id": "IT_SOLOTHURN_ATR_43",
+    "text": "Unit: IT_SOLOTHURN_ATR_43\nSide: IT\nCategory: INFANTRY\nSubtype: AT_SUPPORT\nClassification: SPECIALIZED_INFANTRY\nMovement: 2\nMax strength: 2\nTraits: ANTI_TANK, SLOW_UNIT, CAMOUFLAGED\nAttack profile:\n- DIRECT_FIRE vs VEHICLE @ 1-3: YELLOW, GREEN, BLUE\n- DIRECT_FIRE vs VEHICLE @ 4-6: GREEN, GREEN, BLUE\n- DIRECT_FIRE vs VEHICLE @ 7-9: GREEN, BLUE, BLUE\n- DIRECT_FIRE vs INFANTRY @ 1-3: YELLOW, YELLOW, BLUE\n- DIRECT_FIRE vs INFANTRY @ 4-6: GREEN, GREEN, BLUE\n- DIRECT_FIRE vs INFANTRY @ 7-9: BLUE, BLUE",
+    "metadata": {
+      "side": "IT",
+      "category": "INFANTRY",
+      "classification": "SPECIALIZED_INFANTRY"
+    }
+  },
+  {
+    "chunk_id": "unit::IT_20MM_BREDA_AA_43",
+    "source": "unit_catalog",
+    "source_id": "IT_20MM_BREDA_AA_43",
+    "text": "Unit: IT_20MM_BREDA_AA_43\nSide: IT\nCategory: INFANTRY\nSubtype: SUPPORT_GUN\nClassification: SUPPORT_INFANTRY\nMovement: 1\nMax strength: 4\nTraits: SLOW_UNIT, PIVOT, RAPID_FIRE\nAttack profile:\n- DIRECT_FIRE vs VEHICLE @ 1-3: YELLOW, GREEN\n- DIRECT_FIRE vs VEHICLE @ 4-6: YELLOW, BLUE\n- DIRECT_FIRE vs VEHICLE @ 7-10: GREEN, BLUE\n- DIRECT_FIRE vs INFANTRY @ 1-2: RED, YELLOW, BLUE\n- DIRECT_FIRE vs INFANTRY @ 3-6: RED, GREEN, BLUE\n- DIRECT_FIRE vs INFANTRY @ 7-10: YELLOW, GREEN, BLUE",
+    "metadata": {
+      "side": "IT",
+      "category": "INFANTRY",
+      "classification": "SUPPORT_INFANTRY"
+    }
+  },
+  {
+    "chunk_id": "unit::IT_BREDA_MMG",
+    "source": "unit_catalog",
+    "source_id": "IT_BREDA_MMG",
+    "text": "Unit: IT_BREDA_MMG\nSide: IT\nCategory: INFANTRY\nSubtype: SUPPORT_MG\nClassification: SUPPORT_INFANTRY\nMovement: 2\nMax strength: 2\nTraits: SLOW_UNIT\nAttack profile:\n- DIRECT_FIRE vs VEHICLE @ 0-10: none\n- DIRECT_FIRE vs INFANTRY @ 1-3: RED, RED, YELLOW\n- DIRECT_FIRE vs INFANTRY @ 4-6: RED, YELLOW, GREEN\n- DIRECT_FIRE vs INFANTRY @ 7-10: YELLOW, GREEN, BLUE",
+    "metadata": {
+      "side": "IT",
+      "category": "INFANTRY",
+      "classification": "SUPPORT_INFANTRY"
+    }
+  },
+  {
+    "chunk_id": "unit::IT_SNIPER_43",
+    "source": "unit_catalog",
+    "source_id": "IT_SNIPER_43",
+    "text": "Unit: IT_SNIPER_43\nSide: IT\nCategory: INFANTRY\nSubtype: SNIPER\nClassification: SUPPORT_INFANTRY\nMovement: 2\nMax strength: 2\nTraits: SNIPER, HIDDEN\nAttack profile:\n- DIRECT_FIRE vs VEHICLE @ 0-10: none\n- DIRECT_FIRE vs INFANTRY @ 0: YELLOW, GREEN\n- DIRECT_FIRE vs INFANTRY @ 1-4: YELLOW, YELLOW\n- DIRECT_FIRE vs INFANTRY @ 5-7: YELLOW, BLUE\n- DIRECT_FIRE vs INFANTRY @ 8-10: GREEN, BLUE",
+    "metadata": {
+      "side": "IT",
+      "category": "INFANTRY",
+      "classification": "SUPPORT_INFANTRY"
+    }
+  },
+  {
+    "chunk_id": "unit::IT_45MM_BRIXIA",
+    "source": "unit_catalog",
+    "source_id": "IT_45MM_BRIXIA",
+    "text": "Unit: IT_45MM_BRIXIA\nSide: IT\nCategory: INFANTRY\nSubtype: SUPPORT_MORTAR\nClassification: INDIRECT_FIRE_UNIT\nMovement: 2\nMax strength: 2\nTraits: INDIRECT_FIRE, NO_LINE_OF_SIGHT, CAMOUFLAGED, IGNORE_WEAK_TERRAIN_DEFENSE, MIN_RANGE_2, MAX_RANGE_7\nAttack profile:\n- DIRECT_FIRE vs VEHICLE @ 0-10: none\n- DIRECT_FIRE vs INFANTRY @ 0: YELLOW, GREEN\n- DIRECT_FIRE vs INFANTRY @ 1-3: YELLOW, GREEN\n- DIRECT_FIRE vs INFANTRY @ 4-6: GREEN, BLUE\n- DIRECT_FIRE vs INFANTRY @ 7-9: BLUE, BLUE\n- INDIRECT_FIRE vs INFANTRY @ 2-7: GREEN, GREEN, BLUE",
+    "metadata": {
+      "side": "IT",
+      "category": "INFANTRY",
+      "classification": "INDIRECT_FIRE_UNIT"
+    }
+  },
+  {
+    "chunk_id": "unit::US_RANGERS_43",
+    "source": "unit_catalog",
+    "source_id": "US_RANGERS_43",
+    "text": "Unit: US_RANGERS_43\nSide: US\nCategory: INFANTRY\nSubtype: RANGERS\nClassification: SPECIALIZED_INFANTRY\nMovement: 2\nMax strength: 4\nTraits: ELITE, SCOUT, RECON_PATROL\nAttack profile:\n- DIRECT_FIRE vs VEHICLE @ 0-10: none\n- DIRECT_FIRE vs INFANTRY @ 0: RED, RED\n- DIRECT_FIRE vs INFANTRY @ 1-3: RED, YELLOW\n- DIRECT_FIRE vs INFANTRY @ 4-6: RED, BLUE\n- DIRECT_FIRE vs INFANTRY @ 7-9: GREEN, GREEN",
+    "metadata": {
+      "side": "US",
+      "category": "INFANTRY",
+      "classification": "SPECIALIZED_INFANTRY"
+    }
+  },
+  {
+    "chunk_id": "unit::US_81MM_MORTAR",
+    "source": "unit_catalog",
+    "source_id": "US_81MM_MORTAR",
+    "text": "Unit: US_81MM_MORTAR\nSide: US\nCategory: INFANTRY\nSubtype: SUPPORT_MORTAR\nClassification: INDIRECT_FIRE_UNIT\nMovement: 1\nMax strength: 2\nTraits: INDIRECT_FIRE, NO_LINE_OF_SIGHT, SMOKE, SLOW_UNIT, MIN_RANGE_3, MAX_RANGE_11, IGNORE_WEAK_TERRAIN_DEFENSE\nAttack profile:\n- DIRECT_FIRE vs INFANTRY @ 0: YELLOW, GREEN\n- DIRECT_FIRE vs INFANTRY @ 1-3: RED, BLUE\n- DIRECT_FIRE vs INFANTRY @ 4-5: YELLOW, BLUE\n- DIRECT_FIRE vs INFANTRY @ 6-9: GREEN, BLUE\n- INDIRECT_FIRE vs INFANTRY @ 3-11: GREEN, GREEN, GREEN",
+    "metadata": {
+      "side": "US",
+      "category": "INFANTRY",
+      "classification": "INDIRECT_FIRE_UNIT"
+    }
+  },
+  {
+    "chunk_id": "unit::US_BAZOOKA_TEAM",
+    "source": "unit_catalog",
+    "source_id": "US_BAZOOKA_TEAM",
+    "text": "Unit: US_BAZOOKA_TEAM\nSide: US\nCategory: INFANTRY\nSubtype: AT_SUPPORT\nClassification: SPECIALIZED_INFANTRY\nMovement: 2\nMax strength: 2\nTraits: ANTI_TANK, FRAGILE_UNIT\nAttack profile:\n- DIRECT_FIRE vs VEHICLE @ 1: YELLOW\n- DIRECT_FIRE vs VEHICLE @ 2: RED, YELLOW\n- DIRECT_FIRE vs VEHICLE @ 3-5: RED\n- DIRECT_FIRE vs INFANTRY @ 0: GREEN, BLUE\n- DIRECT_FIRE vs INFANTRY @ 1-2: YELLOW, YELLOW\n- DIRECT_FIRE vs INFANTRY @ 3-6: BLUE, BLUE\n- DIRECT_FIRE vs INFANTRY @ 7-9: BLUE",
+    "metadata": {
+      "side": "US",
+      "category": "INFANTRY",
+      "classification": "SPECIALIZED_INFANTRY"
+    }
+  },
+  {
+    "chunk_id": "unit::US_SNIPER_43",
+    "source": "unit_catalog",
+    "source_id": "US_SNIPER_43",
+    "text": "Unit: US_SNIPER_43\nSide: US\nCategory: INFANTRY\nSubtype: SNIPER\nClassification: SUPPORT_INFANTRY\nMovement: 2\nMax strength: 2\nTraits: SNIPER, HIDDEN, REMOVE_STRONGEST_TERRAIN_DEFENSE\nAttack profile:\n- DIRECT_FIRE vs VEHICLE @ 0-10: none\n- DIRECT_FIRE vs INFANTRY @ 0: YELLOW, GREEN\n- DIRECT_FIRE vs INFANTRY @ 1-4: YELLOW, YELLOW\n- DIRECT_FIRE vs INFANTRY @ 5-7: YELLOW, BLUE\n- DIRECT_FIRE vs INFANTRY @ 8-10: GREEN, BLUE",
+    "metadata": {
+      "side": "US",
+      "category": "INFANTRY",
+      "classification": "SUPPORT_INFANTRY"
+    }
+  },
+  {
+    "chunk_id": "unit::US_RIFLES_43",
+    "source": "unit_catalog",
+    "source_id": "US_RIFLES_43",
+    "text": "Unit: US_RIFLES_43\nSide: US\nCategory: INFANTRY\nSubtype: STANDARD_INFANTRY\nClassification: STANDARD_INFANTRY\nMovement: 2\nMax strength: 4\nTraits: RIFLE_GRENADES, INDIRECT_FIRE, ATTACK_DIE_REROLL, REMOVE_WEAKEST_TERRAIN_DEFENSE\nAttack profile:\n- DIRECT_FIRE vs VEHICLE @ 0-10: none\n- DIRECT_FIRE vs INFANTRY @ 0: RED, RED, GREEN\n- DIRECT_FIRE vs INFANTRY @ 1-3: RED, RED, YELLOW\n- DIRECT_FIRE vs INFANTRY @ 4-6: RED, RED\n- DIRECT_FIRE vs INFANTRY @ 7-10: YELLOW, GREEN\n- INDIRECT_FIRE vs INFANTRY @ 1-3: GREEN, GREEN",
+    "metadata": {
+      "side": "US",
+      "category": "INFANTRY",
+      "classification": "STANDARD_INFANTRY"
+    }
+  },
+  {
+    "chunk_id": "scenario::battaglia_cittadina",
+    "source": "scenario",
+    "source_id": "battaglia_cittadina",
+    "text": "Scenario: battaglia_cittadina\nFile: battaglia_cittadina_2_1.json\nMax turns: 8\nUnit count: 14\nVP hex count: 5\nTracked side: US\nSides: IT=7, US=7",
+    "metadata": {
+      "file_name": "battaglia_cittadina_2_1.json",
+      "max_turns": 8,
+      "unit_count": 14,
+      "vp_hex_count": 5,
+      "tracked_side": "US"
+    }
+  },
+  {
+    "chunk_id": "scenario::mettete_i_piedi_terra_1_min",
+    "source": "scenario",
+    "source_id": "mettete_i_piedi_terra_1_min",
+    "text": "Scenario: mettete_i_piedi_terra_1_min\nFile: mettete_i_piedi_terra_1.json\nMax turns: 12\nUnit count: 12\nVP hex count: 3\nTracked side: US\nSides: GE=5, US=7",
+    "metadata": {
+      "file_name": "mettete_i_piedi_terra_1.json",
+      "max_turns": 12,
+      "unit_count": 12,
+      "vp_hex_count": 3,
+      "tracked_side": "US"
+    }
+  }
+]

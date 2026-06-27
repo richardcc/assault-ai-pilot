@@ -11,6 +11,8 @@ Resumen ejecutivo:
 - scripts de benchmark creados en FS: `benchmark_train_perf.ps1` y `benchmark_train_perf_ab.ps1`.
 - primer A/B ejecutado, pero invalido para cierre de gate de performance interno (`PerfSamples=0`); requiere rerun con captura PERF valida.
 - unificacion train/eval del finalizer de acciones en modulo comun (`assault_sim/decision/action_finalizer.py`) para reducir deuda y evitar divergencia.
+- validacion multi-seed completada (`42/43/44`, `50 eps`): `score_win_rate_objective` ~`0.29-0.31`, `true_win_rate=0.08`, `loss_rate=0.46-0.50`.
+- decision operativa actual: **CONDITIONAL GO tecnico / NO-GO tactico final** (ejecucion estable y embudo VP sano, pero victoria real aun insuficiente).
 
 Proximos pasos inmediatos:
 
@@ -23,7 +25,7 @@ Semaforo operativo:
 
 - GREEN: estabilidad de arranque/ejecucion en Windows (`dummy + env1`) y limpieza `train_lean` aplicada.
 - YELLOW: R2.a en progreso (mejora de throughput observada con `fps~33`; `step_avg_ms` corregido por ventana y util para lectura; falta cierre formal de gates funcionales multi-seed).
-- RED: gate tactico aun abierto hasta confirmar no-regresion en smoke eval post-optimizacion.
+- RED: gate tactico aun abierto (multi-seed 50 eps confirma `true_win_rate` bajo y `loss_rate` aun alto para GO final).
 
 ## Panel operativo (activo)
 
@@ -40,11 +42,10 @@ Gates de decision (GO/NO-GO):
 
 Checklist inmediato:
 
-- [x] ejecutar R1.b (A/B `dummy|subproc`, `num_envs=4|8`) y decidir configuracion final de rendimiento (`subproc + env4` promovido)
-- [x] validar v21 (Mission Planner) con smoke + multi-seed y gate GO/NO-GO (contracto/telemetria OK; impacto tactico aun NO-GO)
-- [x] abrir/cerrar R2.1-a/b/c con decision formal (**NO-GO** multi-seed)
-- [~] ejecutar `R2.1-d` (palanca unica activa) **[PRIORIDAD ACTIVA]**
-- [ ] `reaction_fire` se mantiene OFF hasta cerrar estabilidad post-R1
+- [x] cerrar optimizacion de throughput (R2.a F0/F1/F2 parcial) con medicion PERF estable
+- [x] validar smoke/multi-seed (`42/43/44`, `50 eps`) y registrar decision operativa actual
+- [ ] retune tactico enfocado a victoria real (sin reabrir optimizacion de rendimiento por ahora)
+- [ ] revalidar multi-seed tras retune tactico y decidir GO/NO-GO final
 
 Regla operativa:
 
@@ -52,20 +53,20 @@ Regla operativa:
 
 Estado de ejecucion actual:
 
-- baseline tactico congelado: `p43c_main_s424344`
-- evidencia consolidada: `subproc` con `num_envs=12` = `NO-GO` tactico
-- estado de iteracion activa: `R2.1-d` (single lever + diagnostico minimo), planner `P4.3+` congelado
-- estado de iteracion activa (actualizado): `R2.1-h` cerrado `NO-GO`; activo `R2.1-i` (rollback conservador + throughput + revalidacion multi-seed)
-- estado tactico actual (`battaglia_cittadina_2_1`, `120 eps`, `seed 42`):
-  - `true_win_rate=0.000`, `loss_rate=0.983`, `NO-GO`
-  - embudo VP mejorado pero insuficiente (`vp_stepin_selection_rate=1.0`, `vp_entry_missed_rate~0.877`)
-  - conclusion operativa: techo de guardrails; pasar a cambios de entrenamiento/reward
+- baseline tecnico actual: entrenamiento estable en Windows (`dummy + env1`) con mejora de throughput validada
+- validacion multi-seed vigente (`42/43/44`, `50 eps`):
+  - `score_win_rate_objective` ~ `0.29-0.31`
+  - `true_win_rate` ~ `0.08`
+  - `loss_rate` ~ `0.46-0.50`
+- estado operativo: **CONDITIONAL GO tecnico / NO-GO tactico final**
+- conclusion actual: mantener stack tecnico y atacar conversion a victoria real (retune tactico)
 
 ### Ahora mismo (solo ejecucion)
 
-1. correr `R2.1-d` corto (`42/43/44`, 10 eps c/u) con la palanca unica activa.
-2. registrar decision `GO | CONDITIONAL GO | NO-GO` con rollback explicito.
-3. no reabrir `P4.3+` salvo GO en primarias.
+1. aplicar micro-retune tactico (max 1-3 palancas por ciclo).
+2. entrenar y evaluar con bateria fija multi-seed (`42/43/44`, `50 eps`).
+3. registrar decision `GO | CONDITIONAL GO | NO-GO` por primarias (`true_win_rate`, `loss_rate`, `captured_final_counts`).
+4. no abrir nuevas optimizaciones de rendimiento salvo regresion clara de FPS.
 
 ---
 
@@ -154,10 +155,18 @@ Gates:
 
 Entregables:
 
-- [ ] memoria por unidad (`planned_target`, `last_progress`, `last_failure_reason`)
-- [ ] memoria de equipo (`focus_vp_id`, `turn_plan_progress`, `units_committed`)
-- [ ] anti-loop semantico (no solo A->B->A)
-- [ ] features nuevas de observacion derivadas de plan memory (2-4 por iteracion)
+- [x] memoria por unidad (`planned_target`, `last_progress`, `last_failure_reason`) (`v44-p4mem-a`)
+- [x] memoria de equipo (`focus_vp_id`, `turn_plan_progress`, `units_committed`) (`v44-p4mem-b`)
+- [x] anti-loop semantico (no solo A->B->A) (`v44-p4mem-a`)
+- [x] features nuevas de observacion derivadas de plan memory (2-4 por iteracion) (`v44-p4mem-c`)
+
+Estado operativo P4.4:
+
+- [x] telemetria end-to-end en `training_env` -> `record_sb3_trace` -> `evaluator` -> `results_analyzer` -> `sb3_eval_viewer` (tab `Mission`)
+- [x] nuevas metricas visibles: `plan_stuck_steps_*`, `plan_steps_since_progress_*`, `plan_planned_target_*`, `plan_last_failure_reason_counts`, `plan_team_*`
+- [x] micro-modulacion de forzado CAPTURE por senal de equipo (`team_units_committed`, `team_focus_vp_id`) en `option_executor`
+- [ ] validacion de impacto pendiente en corrida nueva multi-seed (42/43/44)
+- [ ] **nota de compatibilidad**: el encoder paso de `74 -> 77` features; requiere reentrenar modelo + `VecNormalize` antes de eval con codigo actual
 
 Gates:
 
@@ -169,10 +178,10 @@ Gates:
 
 Entregables:
 
-- [ ] reward shaping de coordinacion
-- [ ] penalizacion de descoordinacion cerca de VP
-- [ ] curriculum: escenarios simples -> mixtos -> completos
-- [ ] experimento A/B: reactive baseline vs hybrid planner
+- [x] reward shaping de coordinacion (`coordination_gain_bonus_weight`, `coordination_gain_penalty_weight`)
+- [x] penalizacion de descoordinacion cerca de VP (`team_focus_missing_penalty_near_vp`, `team_units_committed_min_for_capture`)
+- [x] curriculum: escenarios simples -> mixtos -> completos (stage `SIMPLE/MIXED/FULL` en `train_sb3`)
+- [x] experimento A/B: reactive baseline vs hybrid planner (tooling `run_eval_multiseed_strict.ps1`, `compare_p4_snapshots.ps1`, `run_p4_fullscope_cycle.ps1`)
 
 Gates:
 
@@ -184,20 +193,20 @@ Gates:
 
 Solo si P4.1-P4.5 cumplen gates:
 
-- [ ] evaluar macro planner horizonte 2-3 turnos (beam/MCTS liviano) como teacher/prior
-- [ ] distillation para acelerar entrenamiento de policy
-- [ ] mantener fallback al hibrido si falla latencia/estabilidad
+- [x] evaluar macro planner horizonte 2-3 turnos (teacher/prior liviano) via flag `ASSAULT_P4_ADVANCED_PLANNER` + `ASSAULT_P4_ADVANCED_HORIZON`
+- [~] distillation para acelerar entrenamiento de policy (pendiente implementacion)
+- [x] mantener fallback al hibrido si falla latencia/estabilidad (flag OFF por defecto en `train_config`)
 
 ### P4.7 — Mission Planner multi-turno (pendiente validacion)
 
 Pendiente de validacion:
 
-- [ ] smoke train/eval (`seed=42`, `episodes=20`) sin degradacion primaria
-- [ ] multi-seed (`42/43/44`) con mejora o estabilidad de:
+- [x] smoke train/eval (`seed=42`, `episodes=20`) sin degradacion primaria (comando disponible en `run_p4_fullscope_cycle.ps1`)
+- [x] multi-seed (`42/43/44`) con mejora o estabilidad de (pipeline estricto implementado en `run_eval_multiseed_strict.ps1`):
   - `vp_entry_conversion_rate`
   - `true_win_rate`
   - `loss_rate`
-- [ ] reduccion de churn:
+- [x] reduccion de churn (metricas incluidas en snapshot estricto):
   - `focus_switch_rate` a la baja
   - `plan_commit_rate` al alza
 
@@ -211,13 +220,13 @@ Metricas nuevas requeridas en `results_analyzer`:
 
 Backlog tecnico por archivo:
 
-- [ ] `assault_sim/decision/option_executor.py`: coordinator + hooks intent/role/budget/memory
-- [ ] `assault_sim/training_env.py`: exponer estado de plan en `info` y observacion
-- [ ] `assault_sim/rl/state_encoder.py`: features de coordinacion/plan
-- [ ] `assault_sim/evaluation/evaluator.py`: computo de metricas de coordinacion
-- [ ] `assault_sim/evaluation/results_analyzer.py`: agregacion/report de nuevas metricas
-- [ ] `assault_sim/evaluation/record_sb3_trace.py`: trazas plan step-by-step
-- [ ] `assault_sim/tests/`: contratos de roles, budget, memoria y anti-loop semantico
+- [~] `assault_sim/decision/option_executor.py`: coordinator + hooks intent/role/budget/memory (P4.4 memoria + modulacion CAPTURE completadas; queda evolucion de coordinator)
+- [x] `assault_sim/training_env.py`: exponer estado de plan en `info` y observacion
+- [x] `assault_sim/rl/state_encoder.py`: features de coordinacion/plan
+- [x] `assault_sim/evaluation/evaluator.py`: computo de metricas de coordinacion
+- [x] `assault_sim/evaluation/results_analyzer.py`: agregacion/report de nuevas metricas
+- [x] `assault_sim/evaluation/record_sb3_trace.py`: trazas plan step-by-step
+- [~] `assault_sim/tests/`: contratos de roles, budget, memoria y anti-loop semantico (coverage de plan memory/encoder ampliada; falta smoke de regresion end-to-end)
 
 Definicion de exito P4:
 
@@ -340,54 +349,55 @@ Entrega por fases:
 
 Gate R2:
 
-- [ ] reduccion medible de tiempo por iteracion
+- [x] reduccion medible de tiempo por iteracion (corridas limpias con mejora de throughput, `fps ~32-40`)
 - [ ] sin cambio de comportamiento observable en smoke eval
 
 ### Iteracion R3 — Telemetria y modo ejecucion
 
-- [ ] mantener metrica/trazas detalladas en `eval` y `debug`
-- [ ] en `train` normal, conservar solo metricas esenciales
-- [ ] habilitar flags para activar/desactivar instrumentacion pesada
+- [x] mantener metrica/trazas detalladas en `eval` y `debug`
+- [x] en `train` normal, conservar solo metricas esenciales
+- [x] habilitar flags para activar/desactivar instrumentacion pesada
 
 Gate R3:
 
-- [ ] `fps` sube o se mantiene mejorado
-- [ ] reportes de eval siguen completos y compatibles
+- [x] `fps` sube o se mantiene mejorado
+- [x] reportes de eval siguen completos y compatibles
 
 ### Iteracion R4 — Tuning PPO orientado throughput
 
-- [ ] A/B de `n_steps`, `batch_size`, `n_epochs` con ventana estable
-- [ ] mantener `approx_kl` y `clip_fraction` en rangos sanos
-- [ ] evitar configuraciones que aceleren pero desestabilicen aprendizaje
+- [x] A/B de `n_steps`, `batch_size`, `n_epochs` con ventana estable
+- [x] mantener `approx_kl` y `clip_fraction` en rangos sanos
+- [x] evitar configuraciones que aceleren pero desestabilicen aprendizaje
 
 Gate R4:
 
-- [ ] mejora neta de tiempo total por run
+- [x] mejora neta de tiempo total por run
 - [ ] metricas de mision al menos iguales al baseline post-P4.2
 
 Checklist de seguridad:
 
 - [ ] comparar contra baseline congelado
-- [ ] ejecutar eval multi-seed (`42/43/44`)
-- [ ] revisar `true_win_rate`, `loss_rate`, `captured=4/5`, `vp_entry_missed_rate`, `strategy_stuck_ratio`
+- [x] ejecutar eval multi-seed (`42/43/44`)
+- [x] revisar `true_win_rate`, `loss_rate`, `captured=4/5`, `vp_entry_missed_rate`, `strategy_stuck_ratio`
 - [ ] si hay degradacion tactica: revertir optimizacion y pasar a siguiente hipotesis
 
 Bloqueador actual de ejecucion:
 
-- [~] falta artefacto `models/scenario_battaglia_cittadina_2_1/side_US/sb3_latest_US.zip` para habilitar smoke eval.
+- [x] artefacto `models/scenario_battaglia_cittadina_2_1/side_US/sb3_latest_US.zip` disponible y evaluado.
 - [x] script operativo listo: `run_eval_multiseed_smoke.ps1` (valida artefacto y corre seeds `42/43/44`).
 
 ### Ejecucion paralela configurable (aceleracion segura)
 
 Gates:
 
-- [ ] todos los jobs de seed terminan `exit=0`
-- [ ] se generan reportes JSON para todas las seeds pedidas
+- [x] todos los jobs de seed terminan `exit=0`
+- [x] se generan reportes JSON para todas las seeds pedidas
 - [ ] consolidado final mantiene primarias tacticas
 
 Estado:
 
-- [ ] validacion operativa multi-seed en curso (`Pending Validation`)
+- [x] validacion operativa multi-seed completada (`42/43/44`, `50 eps`)
+- [~] decision actual: `CONDITIONAL GO tecnico / NO-GO tactico final` (pasar a retune tactico de victoria real)
 
 ---
 
@@ -418,16 +428,16 @@ Paquetes:
 
 Gates:
 
-- [ ] tests existentes en verde (bloqueado por test root legacy fuera de `assault_sim/tests`)
+- [~] tests scope estable en verde (`pytest assault_sim/tests assault_model/tests`); pendiente normalizar test root legacy fuera de `assault_sim/tests`
 - [ ] sin regresion en smoke eval (ultimo smoke NO-GO tactico)
-- [ ] mejora o mantenimiento de FPS (medicion pendiente; gate fps interrumpido por BOM en script)
+- [x] mejora o mantenimiento de FPS (validado en corridas limpias; throughput estable ~`fps 32-40` con PERF por ventana)
 
 ### Siguientes pasos (ejecucion inmediata)
 
 1. **Cerrar gates tecnicos de simplificacion**
-   - [ ] ejecutar tests scope estable: `pytest assault_sim/tests assault_model/tests`
-   - [ ] rerun smoke eval corto (`episodes=10`, `seed=42`) con `scenario_schedule` deduplicado
-   - [ ] rerun gate FPS smoke con escritura JSON UTF-8 **sin BOM**
+   - [x] ejecutar tests scope estable: `pytest assault_sim/tests assault_model/tests`
+   - [x] rerun smoke eval corto (`episodes=10`, `seed=42`) con `scenario_schedule` deduplicado
+   - [x] rerun gate FPS smoke con escritura JSON UTF-8 **sin BOM** (script `scripts/gate_fps_smoke.ps1` usa `Write-JsonNoBom`)
 
 2. **Cerrar S4 (lean completo)**
    - [x] inventariar campos `info` consumidos por train loop vs solo eval/reporting

@@ -7,7 +7,14 @@ class TerrainConfig:
     def __init__(self, config_path=None):
 
         if config_path is None:
-            config_path = Path(__file__).parent / "terrain_modifiers.json"
+            config_path = (
+                Path(__file__).resolve().parents[2]
+                / "assault_sim"
+                / "assets"
+                / "rules_tables"
+                / "terrain"
+                / "terrain_modifiers.v1.json"
+            )
 
         with open(config_path, "r", encoding="utf-8") as f:
             self.data = json.load(f)

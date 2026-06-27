@@ -53,9 +53,9 @@ def test_lote_c_features_present_and_expected(monkeypatch):
         focus_vp_id="2,0",
         role_quota_remaining_norm=0.6,
     )
-    # Tail layout: [..., lote_a(4), lote_c(4), lote_b(4), lote_d(7), lote_e(4)]
-    assert float(obs[-19]) == pytest.approx(1.0, rel=1e-6, abs=1e-6)
-    assert float(obs[-18]) == pytest.approx(0.6, rel=1e-6, abs=1e-6)
-    assert float(obs[-17]) == pytest.approx(0.75, rel=1e-6, abs=1e-6)
-    assert float(obs[-16]) == pytest.approx(0.25, rel=1e-6, abs=1e-6)
+    # Tail layout: [..., lote_a(4), lote_c(4), lote_b(4), lote_d(10), lote_e(4)]
+    assert float(obs[-22]) == pytest.approx(1.0, rel=1e-6, abs=1e-6)
+    assert float(obs[-21]) == pytest.approx(0.6, rel=1e-6, abs=1e-6)
+    assert float(obs[-20]) == pytest.approx(0.75, rel=1e-6, abs=1e-6)
+    assert float(obs[-19]) == pytest.approx(0.25, rel=1e-6, abs=1e-6)
 

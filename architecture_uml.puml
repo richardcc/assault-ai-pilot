@@ -27,7 +27,7 @@ package assault_model {
   component "/assault_model/combat/combat_resolution.py"
   component "/assault_model/combat/critical_effect.py"
   component "/assault_model/combat/critical_resolution.py"
-  component "/assault_model/combat/critical_table.py.py"
+  component "/assault_model/combat/critical_table.py"
   component "/assault_model/combat/defense_dice_pool.py"
   component "/assault_model/combat/defense_die.py"
   component "/assault_model/combat/defense_profile.py"

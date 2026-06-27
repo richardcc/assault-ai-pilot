@@ -86,6 +86,9 @@ def test_option_executor_setup_capture_intent_aligns_with_capture_l3(monkeypatch
         commitment_age=1,
         focus_switched=False,
         side="US",
+        planned_target=(1, 1),
+        last_progress=7,
+        stuck_steps=2,
     )
 
     action = ex.execute(
@@ -99,3 +102,6 @@ def test_option_executor_setup_capture_intent_aligns_with_capture_l3(monkeypatch
 
     assert getattr(action, "rl_plan_intent", "") == "SETUP_CAPTURE"
     assert float(getattr(action, "rl_plan_intent_alignment_stub", 0.0)) == 1.0
+    assert int(getattr(action, "rl_plan_stuck_steps", 0)) == 2
+    assert int(getattr(action, "rl_plan_last_progress", 0)) == 7
+    assert tuple(getattr(action, "rl_plan_planned_target", ())) == (1, 1)

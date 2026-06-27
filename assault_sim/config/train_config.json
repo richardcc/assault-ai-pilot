@@ -36,7 +36,7 @@
     "sb3_models_subdir_template":  "scenario_{scenario}/side_{side}",
     "sb3_clean_models_before_train":  false,
     "sb3_train_lean":  true,
-    "sb3_eval_freq":  120000,
+    "sb3_eval_freq":  20000,
     "sb3_eval_episodes":  1,
     "sb3_net_arch":  [
                          256,
@@ -50,5 +50,8 @@
     "finalizer_override_profile":  "soft",
     "sb3_profile_train":  false,
     "sb3_profile_sort":  "cumulative",
-    "sb3_profile_top_n":  60
+    "sb3_profile_top_n":  60,
+    "sb3_enable_curriculum":  true,
+    "p4_advanced_planner_enabled":  false,
+    "p4_advanced_planner_horizon":  2
 }

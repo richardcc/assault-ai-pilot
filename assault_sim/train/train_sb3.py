@@ -158,6 +158,8 @@ def main():
         else (repo_root / "assault_sim" / "config" / "train_config.json")
     )
     cfg = load_train_config(train_config_path)
+    os.environ["ASSAULT_P4_ADVANCED_PLANNER"] = "1" if bool(getattr(cfg, "p4_advanced_planner_enabled", False)) else "0"
+    os.environ["ASSAULT_P4_ADVANCED_HORIZON"] = str(int(getattr(cfg, "p4_advanced_planner_horizon", 2) or 2))
     models_root = repo_root / "models"
     requested_device = cfg.sb3_device.strip().lower()
     if requested_device == "cuda" and not torch.cuda.is_available():
@@ -231,16 +233,24 @@ def main():
             phase_timesteps = int(phase.episodes * cfg.sb3_max_decisions)
             if phase_timesteps <= 0:
                 continue
-            warmup_capture_phase = len(cfg.scenario_schedule) > 1 and phase_idx == 1
-            phase_force_capture = (
-                True if warmup_capture_phase else bool(getattr(cfg, "diagnostic_force_capture_only", False))
-            )
+            curriculum_enabled = bool(getattr(cfg, "sb3_enable_curriculum", True))
+            total_phases = len(cfg.scenario_schedule)
+            warmup_capture_phase = curriculum_enabled and total_phases > 1 and phase_idx == 1
+            mixed_capture_phase = curriculum_enabled and total_phases > 2 and phase_idx < total_phases and phase_idx > 1
+            if warmup_capture_phase:
+                curriculum_stage = "SIMPLE"
+            elif mixed_capture_phase:
+                curriculum_stage = "MIXED"
+            else:
+                curriculum_stage = "FULL"
+            phase_force_capture = True if warmup_capture_phase else bool(getattr(cfg, "diagnostic_force_capture_only", False))
             os.environ["ASSAULT_CAPTURE_GUARDRAILS_ENABLED"] = (
                 "1" if bool(getattr(cfg, "capture_guardrails_enabled", True)) else "0"
             )
             os.environ["ASSAULT_DIAGNOSTIC_FORCE_CAPTURE_ONLY"] = (
                 "1" if phase_force_capture else "0"
             )
+            os.environ["ASSAULT_CURRICULUM_STAGE"] = str(curriculum_stage)
             os.environ["ASSAULT_FINALIZER_OVERRIDE_PROFILE"] = str(
                 getattr(cfg, "finalizer_override_profile", "strict") or "strict"
             ).strip().lower()
@@ -255,7 +265,7 @@ def main():
             print(
                 f"=== TRAIN PHASE {phase_idx}/{len(cfg.scenario_schedule)} "
                 f"side={rl_side} scenario={scenario_id} episodes={phase.episodes} "
-                f"timesteps={phase_timesteps} ==="
+                f"timesteps={phase_timesteps} curriculum_stage={curriculum_stage} ==="
             )
             if warmup_capture_phase:
                 print("Curriculum warmup: forcing CAPTURE intent for phase 1.")

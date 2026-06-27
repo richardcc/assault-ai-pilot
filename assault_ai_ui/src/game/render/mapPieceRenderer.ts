@@ -1,6 +1,6 @@
 import * as PIXI from "pixi.js";
 import { axialToPixel, HEX_SIZE } from "./hexGridRenderer";
-import { getMapPieceImage } from "./mapPieceMapping";
+import { getMapPieceImageCandidates } from "./mapPieceMapping";
 
 // ---------------------------------------------
 const HEX_WIDTH = HEX_SIZE * Math.sqrt(3);
@@ -21,12 +21,29 @@ export async function drawMapPieces(
   pieces: any[]
 ) {
   for (const piece of pieces) {
-    const texturePath = getMapPieceImage(piece.id);
+    const textureCandidates = getMapPieceImageCandidates(piece.id);
     let texture: PIXI.Texture;
+    let loadedPath: string | null = null;
     try {
-      texture = await PIXI.Assets.load(texturePath);
+      let loaded: PIXI.Texture | null = null;
+      for (const path of textureCandidates) {
+        try {
+          loaded = await PIXI.Assets.load(path);
+          loadedPath = path;
+          break;
+        } catch {
+          // Try next candidate.
+        }
+      }
+      if (!loaded) {
+        throw new Error(`No texture candidate resolved for piece ${piece.id}`);
+      }
+      texture = loaded;
     } catch (err) {
-      console.warn(`Map piece texture not found for ${piece.id}: ${texturePath}`, err);
+      console.warn(
+        `Map piece texture not found for ${piece.id}. Tried: ${textureCandidates.join(", ")}`,
+        err
+      );
       continue;
     }
     const sprite = new PIXI.Sprite(texture);
@@ -38,7 +55,7 @@ export async function drawMapPieces(
     const quarterTurns = normalizeQuarterTurns(Number(piece.rotation ?? 0));
 
     console.log("PIECE:", piece);
-    console.log("IMAGE:", piece.id, texturePath);
+    console.log("IMAGE:", piece.id, loadedPath);
 
     // Base size for an unrotated piece image.
     const baseWidth = (hexW + 0.5) * HEX_WIDTH;

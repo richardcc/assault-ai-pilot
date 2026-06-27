@@ -1,0 +1,23 @@
+param(
+  [string]$Repo = "C:\repos\python\assault"
+)
+
+$ErrorActionPreference = "Stop"
+
+Push-Location $Repo
+try {
+  if (Test-Path ".\.venv\Scripts\Activate.ps1") {
+    . .\.venv\Scripts\Activate.ps1
+  }
+
+  Write-Host "== ptest quick (P4/rules focused) =="
+  python -m pytest -q `
+    assault_sim/tests/test_plan_state_contracts.py `
+    assault_sim/tests/test_option_executor_plan_tags.py `
+    assault_sim/tests/test_trace_plan_fields.py `
+    assault_sim/tests/test_state_encoder_lote_d_features.py `
+    assault_sim/tests/test_evaluator_mission_action_consistency.py
+}
+finally {
+  Pop-Location
+}

@@ -1,57 +1,35 @@
 import random
+import json
+from pathlib import Path
 from typing import Tuple
 
 from assault_model.combat.dice_color import DiceColor
 from assault_model.combat.dice_face import DiceFace
 
-# -------------------------------------------------
-# Battle die face tables
-# -------------------------------------------------
-# Each entry represents one physical face of the die.
-# An empty tuple () represents a blank face (no symbols).
-# Tuples with two symbols represent a double success.
-#
-# These tables are derived from the official Assault
-# dice reference and MUST NOT be generated procedurally.
-# -------------------------------------------------
+def _load_dice_face_table():
+    table_path = (
+        Path(__file__).resolve().parents[2]
+        / "assault_sim"
+        / "assets"
+        / "rules_tables"
+        / "combat"
+        / "dice_face_table.v1.json"
+    )
+    payload = json.loads(table_path.read_text(encoding="utf-8"))
+    raw = payload.get("dice_faces", {})
+    parsed = {}
+    for color_name, faces in raw.items():
+        if color_name not in DiceColor.__members__:
+            continue
+        color = DiceColor[color_name]
+        parsed_faces = []
+        for symbols in faces:
+            parsed_faces.append(tuple(DiceFace[s] for s in symbols))
+        parsed[color] = parsed_faces
+    return parsed
 
-DICE_FACE_TABLE = {
-    DiceColor.RED: [
-        (),  # Miss
-        (DiceFace.DAMAGE,),  # Damage
-        (DiceFace.DAMAGE, DiceFace.SUPPRESS),  # Damage + Suppression
-        (DiceFace.DAMAGE, DiceFace.DAMAGE),  # Double Damage
-        (DiceFace.DAMAGE, DiceFace.DAMAGE),  # Double Damage
-        (DiceFace.CRITICAL, DiceFace.DAMAGE),  # Critical + Damage
-    ],
 
-    DiceColor.YELLOW: [
-        (),  # Miss
-        (DiceFace.DAMAGE,),  # Damage
-        (DiceFace.DAMAGE,),  # Damage
-        (DiceFace.DAMAGE, DiceFace.DAMAGE),  # Double Damage
-        (DiceFace.CRITICAL, DiceFace.DAMAGE),  # Critical + Damage
-        (DiceFace.CRITICAL, DiceFace.DAMAGE),  # Critical + Damage
-    ],
-
-    DiceColor.GREEN: [
-        (),  # Miss
-        (DiceFace.DAMAGE,),  # Damage
-        (DiceFace.DAMAGE,),  # Damage
-        (DiceFace.DAMAGE,),  # Damage
-        (DiceFace.CRITICAL, DiceFace.DAMAGE),  # Critical + Damage
-        (),  # Miss
-    ],
-
-    DiceColor.BLUE: [
-        (),  # Miss
-        (),  # Miss
-        (DiceFace.DAMAGE,),  # Damage
-        (DiceFace.DAMAGE,),  # Damage
-        (),  # Miss
-        (),  # Miss
-    ],
-}
+DICE_FACE_TABLE = _load_dice_face_table()
 
 
 class DiceResult:

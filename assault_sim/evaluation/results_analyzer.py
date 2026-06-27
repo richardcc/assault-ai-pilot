@@ -280,8 +280,10 @@ class ResultsAnalyzer:
         plan_focus_switch_total = 0
         plan_stage_counts_totals = defaultdict(int)
         plan_replan_reason_totals = defaultdict(int)
+        plan_last_failure_reason_totals = defaultdict(int)
         plan_fallback_reason_totals = defaultdict(int)
         plan_role_unknown_reason_totals = defaultdict(int)
+        plan_planned_target_switch_total = 0
         capture_branch_totals = defaultdict(int)
         near_vp_l2_transition_totals = defaultdict(int)
         near_vp_l2_transition_by_l3_totals = defaultdict(int)
@@ -338,6 +340,16 @@ class ResultsAnalyzer:
         source_mix_counts_totals = defaultdict(int)
         source_mix_capture_event_totals = defaultdict(int)
         plan_progress_rates = []
+        plan_stuck_steps_mean_vals = []
+        plan_stuck_steps_p90_vals = []
+        plan_steps_since_progress_mean_vals = []
+        plan_steps_since_progress_p90_vals = []
+        plan_planned_target_set_rate_vals = []
+        plan_team_turn_progress_mean_vals = []
+        plan_team_units_committed_mean_vals = []
+        plan_team_focus_vp_set_rate_vals = []
+        plan_advanced_enabled_rate_vals = []
+        plan_advanced_horizon_mean_vals = []
         coordination_gain_vals = []
         avg_legal_actions_vals = []
         action_catalog_gen_ms_vals = []
@@ -459,6 +471,60 @@ class ResultsAnalyzer:
                 plan_focus_switch_total += int(mission.get("plan_focus_switch_count", 0))
             except Exception:
                 pass
+            try:
+                plan_planned_target_switch_total += int(mission.get("plan_planned_target_switch_count", 0))
+            except Exception:
+                pass
+            if "plan_stuck_steps_mean" in mission:
+                try:
+                    plan_stuck_steps_mean_vals.append(float(mission.get("plan_stuck_steps_mean", 0.0)))
+                except Exception:
+                    pass
+            if "plan_stuck_steps_p90" in mission:
+                try:
+                    plan_stuck_steps_p90_vals.append(float(mission.get("plan_stuck_steps_p90", 0.0)))
+                except Exception:
+                    pass
+            if "plan_steps_since_progress_mean" in mission:
+                try:
+                    plan_steps_since_progress_mean_vals.append(float(mission.get("plan_steps_since_progress_mean", 0.0)))
+                except Exception:
+                    pass
+            if "plan_steps_since_progress_p90" in mission:
+                try:
+                    plan_steps_since_progress_p90_vals.append(float(mission.get("plan_steps_since_progress_p90", 0.0)))
+                except Exception:
+                    pass
+            if "plan_planned_target_set_rate" in mission:
+                try:
+                    plan_planned_target_set_rate_vals.append(float(mission.get("plan_planned_target_set_rate", 0.0)))
+                except Exception:
+                    pass
+            if "plan_team_turn_progress_mean" in mission:
+                try:
+                    plan_team_turn_progress_mean_vals.append(float(mission.get("plan_team_turn_progress_mean", 0.0)))
+                except Exception:
+                    pass
+            if "plan_team_units_committed_mean" in mission:
+                try:
+                    plan_team_units_committed_mean_vals.append(float(mission.get("plan_team_units_committed_mean", 0.0)))
+                except Exception:
+                    pass
+            if "plan_team_focus_vp_set_rate" in mission:
+                try:
+                    plan_team_focus_vp_set_rate_vals.append(float(mission.get("plan_team_focus_vp_set_rate", 0.0)))
+                except Exception:
+                    pass
+            if "plan_advanced_enabled_rate" in mission:
+                try:
+                    plan_advanced_enabled_rate_vals.append(float(mission.get("plan_advanced_enabled_rate", 0.0)))
+                except Exception:
+                    pass
+            if "plan_advanced_horizon_mean" in mission:
+                try:
+                    plan_advanced_horizon_mean_vals.append(float(mission.get("plan_advanced_horizon_mean", 0.0)))
+                except Exception:
+                    pass
             for stage, count in (mission.get("plan_stage_counts", {}) or {}).items():
                 try:
                     plan_stage_counts_totals[str(stage)] += int(count)
@@ -467,6 +533,11 @@ class ResultsAnalyzer:
             for reason, count in (mission.get("plan_replan_reason_counts", {}) or {}).items():
                 try:
                     plan_replan_reason_totals[str(reason)] += int(count)
+                except Exception:
+                    pass
+            for reason, count in (mission.get("plan_last_failure_reason_counts", {}) or {}).items():
+                try:
+                    plan_last_failure_reason_totals[str(reason)] += int(count)
                 except Exception:
                     pass
             for reason, count in (mission.get("plan_fallback_reason_counts", {}) or {}).items():
@@ -861,6 +932,37 @@ class ResultsAnalyzer:
             ),
             "plan_role_counts_stub": dict(plan_role_counts_totals),
             "plan_focus_switch_count": int(plan_focus_switch_total),
+            "plan_stuck_steps_mean": (
+                statistics.mean(plan_stuck_steps_mean_vals) if plan_stuck_steps_mean_vals else 0.0
+            ),
+            "plan_stuck_steps_p90": (
+                statistics.mean(plan_stuck_steps_p90_vals) if plan_stuck_steps_p90_vals else 0.0
+            ),
+            "plan_steps_since_progress_mean": (
+                statistics.mean(plan_steps_since_progress_mean_vals) if plan_steps_since_progress_mean_vals else 0.0
+            ),
+            "plan_steps_since_progress_p90": (
+                statistics.mean(plan_steps_since_progress_p90_vals) if plan_steps_since_progress_p90_vals else 0.0
+            ),
+            "plan_planned_target_set_rate": (
+                statistics.mean(plan_planned_target_set_rate_vals) if plan_planned_target_set_rate_vals else 0.0
+            ),
+            "plan_planned_target_switch_count": int(plan_planned_target_switch_total),
+            "plan_team_turn_progress_mean": (
+                statistics.mean(plan_team_turn_progress_mean_vals) if plan_team_turn_progress_mean_vals else 0.0
+            ),
+            "plan_team_units_committed_mean": (
+                statistics.mean(plan_team_units_committed_mean_vals) if plan_team_units_committed_mean_vals else 0.0
+            ),
+            "plan_team_focus_vp_set_rate": (
+                statistics.mean(plan_team_focus_vp_set_rate_vals) if plan_team_focus_vp_set_rate_vals else 0.0
+            ),
+            "plan_advanced_enabled_rate": (
+                statistics.mean(plan_advanced_enabled_rate_vals) if plan_advanced_enabled_rate_vals else 0.0
+            ),
+            "plan_advanced_horizon_mean": (
+                statistics.mean(plan_advanced_horizon_mean_vals) if plan_advanced_horizon_mean_vals else 0.0
+            ),
             "plan_commit_rate": (
                 1.0 - (float(plan_focus_switch_total) / max(1.0, float(total_decisions)))
             ),
@@ -869,6 +971,7 @@ class ResultsAnalyzer:
             ),
             "plan_stage_counts": dict(plan_stage_counts_totals),
             "plan_replan_reason_counts": dict(plan_replan_reason_totals),
+            "plan_last_failure_reason_counts": dict(plan_last_failure_reason_totals),
             "plan_fallback_reason_counts": dict(plan_fallback_reason_totals),
             "plan_role_unknown_reason_counts": dict(plan_role_unknown_reason_totals),
             "capture_branch_counts": dict(capture_branch_totals),

@@ -59,6 +59,9 @@ class TrainConfig:
     sb3_profile_train: bool
     sb3_profile_sort: str
     sb3_profile_top_n: int
+    sb3_enable_curriculum: bool
+    p4_advanced_planner_enabled: bool
+    p4_advanced_planner_horizon: int
 
     @property
     def scenario(self) -> str:
@@ -139,6 +142,9 @@ class TrainConfig:
             sb3_profile_train=False,
             sb3_profile_sort="cumulative",
             sb3_profile_top_n=40,
+            sb3_enable_curriculum=True,
+            p4_advanced_planner_enabled=False,
+            p4_advanced_planner_horizon=2,
         )
 
     @staticmethod
@@ -218,6 +224,9 @@ class TrainConfig:
             sb3_profile_train=bool(merged.get("sb3_profile_train", False)),
             sb3_profile_sort=str(merged.get("sb3_profile_sort", "cumulative") or "cumulative"),
             sb3_profile_top_n=int(merged.get("sb3_profile_top_n", 40)),
+            sb3_enable_curriculum=bool(merged.get("sb3_enable_curriculum", True)),
+            p4_advanced_planner_enabled=bool(merged.get("p4_advanced_planner_enabled", False)),
+            p4_advanced_planner_horizon=int(merged.get("p4_advanced_planner_horizon", 2)),
         )
 
     def to_dict(self) -> dict[str, Any]:

@@ -52,12 +52,18 @@ def test_lote_d_features_tail_present(monkeypatch):
         plan_commitment_age_norm=0.6,
         intent_alignment_last_k=0.75,
         last_failure_reason_onehot=[1.0, 0.0, 1.0, 0.0],
+        team_turn_plan_progress_norm=0.5,
+        team_units_committed_norm=0.33,
+        team_focus_vp_set=1.0,
     )
-    # Tail layout: [..., lote_d(7), lote_e(4)]
-    assert float(obs[-11]) == pytest.approx(0.4, rel=1e-6, abs=1e-6)
-    assert float(obs[-10]) == pytest.approx(0.6, rel=1e-6, abs=1e-6)
-    assert float(obs[-9]) == pytest.approx(0.75, rel=1e-6, abs=1e-6)
-    assert float(obs[-8]) == pytest.approx(1.0, rel=1e-6, abs=1e-6)
-    assert float(obs[-7]) == pytest.approx(0.0, rel=1e-6, abs=1e-6)
-    assert float(obs[-6]) == pytest.approx(1.0, rel=1e-6, abs=1e-6)
-    assert float(obs[-5]) == pytest.approx(0.0, rel=1e-6, abs=1e-6)
+    # Tail layout: [..., lote_d(10), lote_e(4)]
+    assert float(obs[-14]) == pytest.approx(0.4, rel=1e-6, abs=1e-6)
+    assert float(obs[-13]) == pytest.approx(0.6, rel=1e-6, abs=1e-6)
+    assert float(obs[-12]) == pytest.approx(0.75, rel=1e-6, abs=1e-6)
+    assert float(obs[-11]) == pytest.approx(1.0, rel=1e-6, abs=1e-6)
+    assert float(obs[-10]) == pytest.approx(0.0, rel=1e-6, abs=1e-6)
+    assert float(obs[-9]) == pytest.approx(1.0, rel=1e-6, abs=1e-6)
+    assert float(obs[-8]) == pytest.approx(0.0, rel=1e-6, abs=1e-6)
+    assert float(obs[-7]) == pytest.approx(0.5, rel=1e-6, abs=1e-6)
+    assert float(obs[-6]) == pytest.approx(0.33, rel=1e-6, abs=1e-6)
+    assert float(obs[-5]) == pytest.approx(1.0, rel=1e-6, abs=1e-6)

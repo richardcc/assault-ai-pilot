@@ -18,6 +18,7 @@ from assault_model.map.hex_coord import HexCoord
 from assault_model.actions.combat_mode import CombatMode
 from assault_model.combat.close_combat_context import CombatResolutionContext
 from assault_model.map.combat_geometry import determine_attack_sector
+from assault_model.map.hex_edge_feature import HexEdgeFeature
 
 # --- TYPING-ONLY ---
 if TYPE_CHECKING:
@@ -223,12 +224,21 @@ class GameState:
             defender_facing=getattr(defender, "facing", "N"),
         )
 
-        return CombatResolutionContext(
+        ctx = CombatResolutionContext(
             attacker=attacker,
             defender=defender,
             combat_mode=action.combat_mode,
             attack_sector=attack_sector,
         )
+        # CC-001 obstacle crossing hook:
+        # if attacker->defender edge has an obstacle feature, mark context.
+        if attacker.position is not None and defender.position is not None:
+            edge_feature = self.game_map.get_hex_edge_feature(
+                (attacker.position.q, attacker.position.r),
+                (defender.position.q, defender.position.r),
+            )
+            ctx.crossed_obstacle = edge_feature in {HexEdgeFeature.WALL}
+        return ctx
 
     # =================================================
     # REACTION STATE

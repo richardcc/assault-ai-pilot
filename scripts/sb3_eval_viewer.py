@@ -226,6 +226,7 @@ def _page_html() -> str:
 
   <div class="tabs">
     <button class="tab-btn active" data-tab="overview">Overview</button>
+    <button class="tab-btn" data-tab="howto">How-To</button>
     <button class="tab-btn" data-tab="training">Training</button>
     <button class="tab-btn" data-tab="mission">Mission</button>
     <button class="tab-btn" data-tab="vps">VPs</button>
@@ -250,6 +251,12 @@ def _page_html() -> str:
       </thead>
       <tbody></tbody>
     </table>
+  </div>
+
+  <div id="tab-howto" class="tab-content panel">
+    <h3 style="margin-top:0">How To Interpret This Run</h3>
+    <div id="howtoSummary" class="panel" style="margin-bottom:10px"></div>
+    <div id="howtoChecks"></div>
   </div>
 
   <div id="tab-training" class="tab-content panel">
@@ -354,6 +361,7 @@ function capturedFinalAvgFromSummary(summary){
 async function getJson(url){ const r=await fetch(url); if(!r.ok) throw new Error(await r.text()); return r.json(); }
 let currentDetails = [];
 let historyPoints = [];
+let currentRows = [];
 
 function firstDetail(){
   return (currentDetails && currentDetails.length) ? currentDetails[0] : null;
@@ -467,6 +475,10 @@ function renderMission(){
   const d = firstDetail();
   if (!d){ renderKV('missionDetail', [['No data','-']]); return; }
   const m = d.mission || {};
+  const lastFailureCounts = m.plan_last_failure_reason_counts || {};
+  const topLastFailure = Object.entries(lastFailureCounts)
+    .sort((a,b)=>Number(b[1]||0)-Number(a[1]||0))[0];
+  const topLastFailureLabel = topLastFailure ? `${topLastFailure[0]} (${Number(topLastFailure[1]||0)})` : '-';
   renderKV('missionDetail', [
     ['VP Entry Conversion', pct(Number(m.vp_entry_conversion_rate||0))],
     ['VP Captured (run)', asVpCount(Number(m.vp_entries_taken||0))],
@@ -475,6 +487,18 @@ function renderMission(){
     ['VP Contact Rate', pct(Number(m.vp_contact_rate||0))],
     ['VP Missed Rate', pct(Number(m.vp_entry_missed_rate||0))],
     ['Plan Progress Rate', pct(Number(m.plan_progress_rate||0))],
+    ['Plan Stuck Steps (mean)', Number(m.plan_stuck_steps_mean||0).toFixed(2)],
+    ['Plan Stuck Steps (p90)', Number(m.plan_stuck_steps_p90||0).toFixed(2)],
+    ['Plan Steps Since Progress (mean)', Number(m.plan_steps_since_progress_mean||0).toFixed(2)],
+    ['Plan Steps Since Progress (p90)', Number(m.plan_steps_since_progress_p90||0).toFixed(2)],
+    ['Planned Target Set Rate', pct(Number(m.plan_planned_target_set_rate||0))],
+    ['Planned Target Switch Count', String(m.plan_planned_target_switch_count ?? '-')],
+    ['Team Turn Plan Progress (mean)', Number(m.plan_team_turn_progress_mean||0).toFixed(2)],
+    ['Team Units Committed (mean)', Number(m.plan_team_units_committed_mean||0).toFixed(2)],
+    ['Team Focus VP Set Rate', pct(Number(m.plan_team_focus_vp_set_rate||0))],
+    ['Advanced Planner Enabled Rate', pct(Number(m.plan_advanced_enabled_rate||0))],
+    ['Advanced Planner Horizon (mean)', Number(m.plan_advanced_horizon_mean||0).toFixed(2)],
+    ['Top Plan Last Failure Reason', topLastFailureLabel],
     ['Capture Attempted', String(m.capture_attempted ?? '-')],
     ['Capture Committed', String(m.capture_committed ?? '-')],
     ['Capture Cancelled by Finalizer', String(m.capture_cancelled_by_finalizer ?? '-')],
@@ -775,7 +799,99 @@ function renderStrategies(){
   root.appendChild(panelMap);
 }
 
+function renderHowTo(){
+  const rootSummary = document.getElementById('howtoSummary');
+  const rootChecks = document.getElementById('howtoChecks');
+  rootSummary.innerHTML = '';
+  rootChecks.innerHTML = '';
+
+  if (!currentRows.length || !currentDetails.length){
+    rootSummary.innerHTML = '<div class="sub">No data loaded.</div>';
+    return;
+  }
+
+  const d = firstDetail() || {};
+  const m = d.mission || {};
+  const s = d.summary || {};
+  const n = Math.max(1, currentRows.length);
+  const agg = currentRows.reduce((a,r)=>({
+    true_win_rate: a.true_win_rate + Number(r.true_win_rate||0),
+    loss_rate: a.loss_rate + Number(r.loss_rate||0),
+    vp_entry_conversion_rate: a.vp_entry_conversion_rate + Number(r.vp_entry_conversion_rate||0),
+    capture_conversion_after_contact: a.capture_conversion_after_contact + Number(r.capture_conversion_after_contact||0),
+    finalizer_override: a.finalizer_override + Number(r.finalizer_override||0),
+    sb3_kept: a.sb3_kept + Number(r.sb3_kept||0),
+    captured_final_avg: a.captured_final_avg + Number(r.captured_final_avg||0)
+  }), {true_win_rate:0, loss_rate:0, vp_entry_conversion_rate:0, capture_conversion_after_contact:0, finalizer_override:0, sb3_kept:0, captured_final_avg:0});
+  for (const k of Object.keys(agg)) agg[k] /= n;
+
+  const checks = [
+    {
+      title: '1) Outcome Health',
+      value: `true_win=${pct(agg.true_win_rate)} | loss=${pct(agg.loss_rate)}`,
+      ok: agg.loss_rate <= 0.60,
+      warn: agg.loss_rate <= 0.75,
+      rule: 'Target: lower loss_rate and stable/improving true_win_rate'
+    },
+    {
+      title: '2) VP Funnel',
+      value: `entry_conv=${pct(agg.vp_entry_conversion_rate)} | after_contact=${pct(agg.capture_conversion_after_contact)} | final_vp=${asVpCount(agg.captured_final_avg)}`,
+      ok: agg.vp_entry_conversion_rate >= 0.30 && agg.capture_conversion_after_contact >= 0.10,
+      warn: agg.vp_entry_conversion_rate >= 0.20 && agg.capture_conversion_after_contact >= 0.05,
+      rule: 'Target: VP entry and conversion both move up'
+    },
+    {
+      title: '3) Override Pressure',
+      value: `sb3_kept=${pct(agg.sb3_kept)} | finalizer_override=${pct(agg.finalizer_override)}`,
+      ok: agg.finalizer_override <= 0.20,
+      warn: agg.finalizer_override <= 0.35,
+      rule: 'Target: low override pressure while keeping tactical quality'
+    },
+    {
+      title: '4) Planning Alignment',
+      value: `plan_progress_rate=${pct(Number(m.plan_progress_rate||0))} | capture_readiness=${String(m.capture_readiness ?? '-')}`,
+      ok: Number(m.plan_progress_rate||0) >= 0.20,
+      warn: Number(m.plan_progress_rate||0) >= 0.10,
+      rule: 'Target: planning signals support VP progress'
+    }
+  ];
+
+  let score = 0;
+  for (const c of checks){
+    if (c.ok) score += 2;
+    else if (c.warn) score += 1;
+  }
+  let status = 'NO-GO';
+  let statusCls = 'bad';
+  if (score >= 7){ status = 'GO'; statusCls = 'ok'; }
+  else if (score >= 4){ status = 'CONDITIONAL GO'; statusCls = 'warn'; }
+
+  rootSummary.innerHTML = `
+    <div class="k">Decision for this loaded report</div>
+    <div class="v ${statusCls}" style="font-size:26px">${status}</div>
+    <div class="sub">Use this as operational guidance, then confirm with multi-seed eval and tactical gates.</div>
+  `;
+
+  for (const c of checks){
+    let rowCls = 'bad';
+    let rowStatus = 'RED';
+    if (c.ok){ rowCls = 'ok'; rowStatus = 'GREEN'; }
+    else if (c.warn){ rowCls = 'warn'; rowStatus = 'YELLOW'; }
+    const panel = document.createElement('div');
+    panel.className = 'panel';
+    panel.style.marginBottom = '8px';
+    panel.innerHTML = `
+      <div class="k">${c.title}</div>
+      <div class="v ${rowCls}" style="font-size:18px">${rowStatus}</div>
+      <div>${c.value}</div>
+      <div class="sub">${c.rule}</div>
+    `;
+    rootChecks.appendChild(panel);
+  }
+}
+
 function renderDetailTabs(){
+  renderHowTo();
   renderTraining();
   renderMission();
   renderVPs();
@@ -917,6 +1033,7 @@ async function loadSelected() {
   const data = await getJson('/api/report?name='+encodeURIComponent(name));
   document.getElementById('meta').textContent = `timestamp=${data.meta?.timestamp||'-'} seed=${data.meta?.seed??'-'} episodes=${data.meta?.episodes??'-'}`;
   const rows = data.rows || [];
+  currentRows = rows;
   currentDetails = data.details || [];
   renderCards(rows);
   renderRows(rows);

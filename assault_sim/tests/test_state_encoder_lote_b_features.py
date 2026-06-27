@@ -64,7 +64,7 @@ def test_lote_b_features_present_and_bounded(monkeypatch):
         scenario=SimpleNamespace(max_turns=20, victory_outcomes={}),
         focus_vp_id="2,0",
     )
-    # Tail layout: [..., lote_a(4), lote_c(4), lote_b(4), lote_d(7), lote_e(4)]
-    for idx in (-15, -14, -13, -12):
+    # Tail layout: [..., lote_a(4), lote_c(4), lote_b(4), lote_d(10), lote_e(4)]
+    for idx in (-18, -17, -16, -15):
         assert 0.0 <= float(obs[idx]) <= 1.0
-    assert float(obs[-12]) == pytest.approx(1.0, rel=1e-6, abs=1e-6)
+    assert float(obs[-15]) == pytest.approx(1.0, rel=1e-6, abs=1e-6)

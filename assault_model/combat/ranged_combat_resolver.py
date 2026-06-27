@@ -2,6 +2,8 @@ from assault_model.combat.modifiers.terrain_modifier import TerrainModifier
 from assault_model.combat.attack_dice_pool import AttackDicePool
 from assault_model.combat.defense_dice_pool import DefenseDicePool
 from assault_model.combat.unit_class import UnitClass
+from assault_model.combat.critical_table import CRITICAL_TABLE
+from assault_model.combat.critical_effect import CriticalEffect
 from assault_model.combat.dice_color import DiceColor
 from assault_model.combat.dice_face import DiceFace
 from assault_model.map.combat_geometry import determine_attack_sector
@@ -17,6 +19,7 @@ from assault_model.combat.line_of_sight import (
     check_line_of_sight,
     LineOfSight,
 )
+from assault_model.combat.spotting import can_spot
 
 from assault_model.combat.morale import (
     apply_suppression_hits,
@@ -64,9 +67,11 @@ class CombatResolutionResult:
 
 
 def resolve_critical(face: DiceFace, target_class: UnitClass):
+    effect = CRITICAL_TABLE.get(target_class, CriticalEffect.NO_EFFECT)
     return {
         "face": face.name,
         "target_class": target_class.name,
+        "effect": effect.value,
     }
 
 
@@ -117,6 +122,19 @@ def resolve_ranged_combat(
             defender=target.unit_id,
         )
         return CombatResolutionResult([], [], [])
+
+    # =================================================
+    # SPOTTING GATE (RF-005)
+    # =================================================
+    if not is_indirect and game_map:
+        if not can_spot(attacker, target, los, game_map, terrain_cfg):
+            _trace(
+                "RANGED_BLOCKED_SPOTTING",
+                attacker=attacker.unit_id,
+                defender=target.unit_id,
+                los=los.name,
+            )
+            return CombatResolutionResult([], [], [])
 
     # =================================================
     # INDIRECT RESTRICTIONS

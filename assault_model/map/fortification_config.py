@@ -8,7 +8,14 @@ from assault_model.combat.dice_color import DiceColor
 class FortificationConfig:
     def __init__(self, config_path=None):
         if config_path is None:
-            config_path = Path(__file__).parent / "fortification_modifiers.json"
+            config_path = (
+                Path(__file__).resolve().parents[2]
+                / "assault_sim"
+                / "assets"
+                / "rules_tables"
+                / "fortification"
+                / "fortification_modifiers.v1.json"
+            )
         with open(config_path, "r", encoding="utf-8") as f:
             self.data = json.load(f)
 

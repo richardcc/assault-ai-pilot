@@ -11,6 +11,7 @@ This is the central index for the documentation set.
 - [Class Contracts (Hierarchical Overview)](class_contracts/index.md)
 - [Class Contracts (Flat Full View)](CLASS_CONTRACTS.md)
 - [Build HTML Docs](BUILD_HTML.md)
+- [Backend Architecture State](backend/BACKEND_ARCHITECTURE_STATE.md)
 
 ## Rules Documentation
 
@@ -23,6 +24,19 @@ This is the central index for the documentation set.
 - [TAS, OAS, and Terrain Damage](game_rules/06_TAS_OAS_AND_TERRAIN_DAMAGE.md)
 - [Gela Campaign](game_rules/07_GELA_CAMPAIGN.md)
 - [Optional FoW Rules](game_rules/08_OPTIONAL_FOW_RULES.md)
+- [Rules Coverage Roadmap](game_rules/ROADMAP_RULES_COVERAGE.md)
+- [RAG KB Rulebook Explicativo](game_rules/RAG_KB_RULEBOOK_EXPLICATIVO.md)
+- [RAG KB Ingestion Workflow](game_rules/RAG_KB_INGESTION_WORKFLOW.md)
+- [RAG Assets Tables Migration Plan](game_rules/RAG_ASSETS_TABLES_MIGRATION_PLAN.md)
+
+## RAG Copilot Documentation
+
+- [RAG Copilot Vision](rag/00_RAG_COPILOT_VISION.md)
+- [RAG Copilot Architecture](rag/01_RAG_COPILOT_ARCHITECTURE.md)
+- [RAG Copilot API](rag/02_RAG_COPILOT_API.md)
+- [RAG Operations and Evaluation](rag/03_RAG_OPERATIONS_AND_EVAL.md)
+- [RAG Copilot Roadmap](rag/04_RAG_ROADMAP.md)
+- [RAG MVP Acceptance Checklist](rag/05_RAG_ACCEPTANCE_CHECKLIST.md)
 
 ## Annexes
 

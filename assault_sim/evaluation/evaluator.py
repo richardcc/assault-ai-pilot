@@ -183,6 +183,7 @@ class Evaluator:
         near_vp_l2_transition_by_l3_counts = defaultdict(int)
         plan_focus_switch_count = 0
         plan_replan_reason_counts = defaultdict(int)
+        plan_last_failure_reason_counts = defaultdict(int)
         plan_fallback_reason_counts = defaultdict(int)
         budget_remaining_by_role_last = {}
         budget_violation_count_last = 0
@@ -200,6 +201,16 @@ class Evaluator:
         wait_recovery_sb3_backstep_count = 0
         reward_component_sums = defaultdict(float)
         reward_component_counts = defaultdict(int)
+        plan_stuck_steps_vals = []
+        plan_steps_since_progress_vals = []
+        plan_planned_target_set_count = 0
+        plan_planned_target_switch_count = 0
+        _plan_prev_target_by_unit = {}
+        plan_team_turn_progress_vals = []
+        plan_team_units_committed_vals = []
+        plan_team_focus_vp_set_count = 0
+        plan_advanced_enabled_count = 0
+        plan_advanced_horizon_vals = []
         source_mix_counts = defaultdict(int)
         source_mix_capture_events = defaultdict(int)
         legal_actions_total_by_side = defaultdict(int)
@@ -474,11 +485,63 @@ class Evaluator:
                     capture_branch_counts[capture_branch] += 1
                 if bool(info.get("plan_focus_switched", False)):
                     plan_focus_switch_count += 1
+                try:
+                    stuck_steps_now = int(info.get("plan_stuck_steps", 0) or 0)
+                    plan_stuck_steps_vals.append(float(max(0, stuck_steps_now)))
+                except Exception:
+                    pass
+                try:
+                    step_id_now = int(info.get("plan_step_id", 0) or 0)
+                    last_progress_now = int(info.get("plan_last_progress", 0) or 0)
+                    if step_id_now > 0 and last_progress_now > 0:
+                        plan_steps_since_progress_vals.append(float(max(0, step_id_now - last_progress_now)))
+                except Exception:
+                    pass
+                planned_target_raw = info.get("plan_planned_target", None)
+                planned_target = None
+                if isinstance(planned_target_raw, (list, tuple)) and len(planned_target_raw) >= 2:
+                    try:
+                        planned_target = (int(planned_target_raw[0]), int(planned_target_raw[1]))
+                    except Exception:
+                        planned_target = None
+                if planned_target is not None:
+                    plan_planned_target_set_count += 1
+                uid_plan = str(info.get("unit_id", "") or "")
+                if uid_plan:
+                    prev_target = _plan_prev_target_by_unit.get(uid_plan)
+                    if planned_target is not None and prev_target is not None and planned_target != prev_target:
+                        plan_planned_target_switch_count += 1
+                    _plan_prev_target_by_unit[uid_plan] = planned_target
+                try:
+                    plan_team_turn_progress_vals.append(
+                        float(max(0, int(info.get("plan_team_turn_plan_progress", 0) or 0)))
+                    )
+                except Exception:
+                    pass
+                try:
+                    plan_team_units_committed_vals.append(
+                        float(max(0, int(info.get("plan_team_units_committed", 0) or 0)))
+                    )
+                except Exception:
+                    pass
+                if str(info.get("plan_team_focus_vp_id", "") or "").strip():
+                    plan_team_focus_vp_set_count += 1
+                if bool(info.get("plan_advanced_enabled", False)):
+                    plan_advanced_enabled_count += 1
+                try:
+                    plan_advanced_horizon_vals.append(
+                        float(max(0, int(info.get("plan_advanced_horizon", 0) or 0)))
+                    )
+                except Exception:
+                    pass
                 stage = str(info.get("plan_stage", "") or "UNKNOWN").upper()
                 plan_stage_counts[stage] += 1
                 replan_reason = str(info.get("plan_replan_reason", "") or "")
                 if replan_reason:
                     plan_replan_reason_counts[replan_reason] += 1
+                last_failure_reason = str(info.get("plan_last_failure_reason", "") or "")
+                if last_failure_reason:
+                    plan_last_failure_reason_counts[last_failure_reason] += 1
                 fallback_reason = str(info.get("plan_fallback_reason", "") or "")
                 if fallback_reason:
                     plan_fallback_reason_counts[fallback_reason] += 1
@@ -907,8 +970,40 @@ class Evaluator:
                 float(plan_focus_switch_count) / max(1, float(plan_stub_decisions))
             ),
             "plan_focus_switch_count": int(plan_focus_switch_count),
+            "plan_stuck_steps_mean": (
+                float(np.mean(plan_stuck_steps_vals)) if plan_stuck_steps_vals else 0.0
+            ),
+            "plan_stuck_steps_p90": (
+                float(np.percentile(plan_stuck_steps_vals, 90)) if plan_stuck_steps_vals else 0.0
+            ),
+            "plan_steps_since_progress_mean": (
+                float(np.mean(plan_steps_since_progress_vals)) if plan_steps_since_progress_vals else 0.0
+            ),
+            "plan_steps_since_progress_p90": (
+                float(np.percentile(plan_steps_since_progress_vals, 90)) if plan_steps_since_progress_vals else 0.0
+            ),
+            "plan_planned_target_set_rate": (
+                float(plan_planned_target_set_count) / max(1.0, float(plan_stub_decisions))
+            ),
+            "plan_planned_target_switch_count": int(plan_planned_target_switch_count),
+            "plan_team_turn_progress_mean": (
+                float(np.mean(plan_team_turn_progress_vals)) if plan_team_turn_progress_vals else 0.0
+            ),
+            "plan_team_units_committed_mean": (
+                float(np.mean(plan_team_units_committed_vals)) if plan_team_units_committed_vals else 0.0
+            ),
+            "plan_team_focus_vp_set_rate": (
+                float(plan_team_focus_vp_set_count) / max(1.0, float(plan_stub_decisions))
+            ),
+            "plan_advanced_enabled_rate": (
+                float(plan_advanced_enabled_count) / max(1.0, float(plan_stub_decisions))
+            ),
+            "plan_advanced_horizon_mean": (
+                float(np.mean(plan_advanced_horizon_vals)) if plan_advanced_horizon_vals else 0.0
+            ),
             "plan_stage_counts": dict(plan_stage_counts),
             "plan_replan_reason_counts": dict(plan_replan_reason_counts),
+            "plan_last_failure_reason_counts": dict(plan_last_failure_reason_counts),
             "plan_fallback_reason_counts": dict(plan_fallback_reason_counts),
             "plan_role_unknown_reason_counts": dict(plan_role_unknown_reason_counts),
             "capture_branch_counts": dict(capture_branch_counts),

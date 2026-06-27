@@ -9,7 +9,7 @@ Implementation references:
 
 - `assault_model/combat/close_combat_resolver.py`
 - `assault_model/combat/close_combat_context.py`
-- `assault_model/combat/critical_table.py.py`
+- `assault_model/combat/critical_table.py`
 - `assault_model/combat/critical_effect.py`
 - `assault_model/combat/morale.py`
 

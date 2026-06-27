@@ -440,6 +440,20 @@ class ProgressiveReward(BaseReward):
                         and post_contact
                     ):
                         reward += self.cfg.capture_support_fire_window_bonus
+                    # P4.5: coordination-aware shaping around team commitment to focus VP.
+                    team_units_committed = int(info.get("plan_team_units_committed", 0) or 0)
+                    team_focus_set = bool(str(info.get("plan_team_focus_vp_id", "") or "").strip())
+                    near_vp = (
+                        objective_dist_before is not None
+                        and float(objective_dist_before) <= 2.0
+                    )
+                    if l3 == "CAPTURE":
+                        if team_units_committed >= int(self.cfg.team_units_committed_min_for_capture):
+                            reward += self.cfg.coordination_gain_bonus_weight
+                        else:
+                            reward -= self.cfg.coordination_gain_penalty_weight * 0.5
+                        if near_vp and not team_focus_set:
+                            reward -= self.cfg.team_focus_missing_penalty_near_vp
                 except Exception:
                     pass
             else:

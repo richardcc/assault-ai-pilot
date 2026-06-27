@@ -8,6 +8,9 @@ import { unitImages } from "./game/config/unitImages";
 import { sides } from "./game/config/sides";
 import { formatCoords } from "./game/render/hexGridRenderer";
 import { DispatchedOrdersPanel } from "./game/ui/DispatchedOrdersPanel";
+import { RagSituationPanel } from "./game/ui/RagSituationPanel";
+import { RagRulesPanel } from "./game/ui/RagRulesPanel";
+import { DraggableWindow } from "./game/ui/DraggableWindow";
 import { logCombatEvents } from "./game/systems/combatLog";
 import { getUnitActionMarker } from "./game/state/actionMarkers";
 import { apiUrl } from "./config/backend";
@@ -714,6 +717,12 @@ function App() {
           </div>
         </div>
       </div>
+      <DraggableWindow windowId="tactical-situation" title="Asistente Tactico: Situacion" initialX={1080} initialY={95} width={390}>
+        <RagSituationPanel gameData={gameData} />
+      </DraggableWindow>
+      <DraggableWindow windowId="tactical-rules" title="Asistente Tactico: Reglas" initialX={1080} initialY={420} width={390}>
+        <RagRulesPanel />
+      </DraggableWindow>
 
       {/* =========================
           TACTICAL ROSTER FOOTER

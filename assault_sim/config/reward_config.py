@@ -56,6 +56,10 @@ class RewardConfig:
     capture_near_vp_advance_no_conversion_penalty: float = 0.14
     capture_post_contact_progress_move_bonus: float = 1.00
     capture_support_fire_window_bonus: float = 0.16
+    coordination_gain_bonus_weight: float = 0.25
+    coordination_gain_penalty_weight: float = 0.35
+    team_units_committed_min_for_capture: int = 2
+    team_focus_missing_penalty_near_vp: float = 0.15
     non_capture_near_vp_penalty: float = 0.14
     vp_control_after_entry_bonus: float = 0.32
     early_vp_entry_turn_bonus_cutoff: int = 15
@@ -93,7 +97,9 @@ class RewardConfig:
     @staticmethod
     def from_dict(payload: dict[str, Any]) -> "RewardConfig":
         base = RewardConfig()
-        merged = {**asdict(base), **payload}
+        allowed = set(asdict(base).keys())
+        filtered_payload = {k: v for k, v in (payload or {}).items() if k in allowed}
+        merged = {**asdict(base), **filtered_payload}
         return RewardConfig(**merged)
 
 
