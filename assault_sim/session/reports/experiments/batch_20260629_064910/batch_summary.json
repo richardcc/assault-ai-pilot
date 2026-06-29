@@ -1,0 +1,58 @@
+﻿[
+    {
+        "manifest":  "C:\\repos\\python\\assault\\scripts\\experiments\\architecture_single_lever_mission_critic_telemetry_v1.json",
+        "manifest_name":  "architecture_single_lever_mission_critic_telemetry_v1.json",
+        "status":  "failed",
+        "exit_code":  1,
+        "log":  "C:\\repos\\python\\assault\\assault_sim\\session\\reports\\experiments\\batch_20260629_064910\\architecture_single_lever_mission_critic_telemetry_v1.json.log"
+    },
+    {
+        "manifest":  "C:\\repos\\python\\assault\\scripts\\experiments\\architecture_telemetry_policy_vs_finalizer_v1.json",
+        "manifest_name":  "architecture_telemetry_policy_vs_finalizer_v1.json",
+        "status":  "failed",
+        "exit_code":  1,
+        "log":  "C:\\repos\\python\\assault\\assault_sim\\session\\reports\\experiments\\batch_20260629_064910\\architecture_telemetry_policy_vs_finalizer_v1.json.log"
+    },
+    {
+        "manifest":  "C:\\repos\\python\\assault\\scripts\\experiments\\heuristic_single_lever_capture_priority.json",
+        "manifest_name":  "heuristic_single_lever_capture_priority.json",
+        "status":  "failed",
+        "exit_code":  1,
+        "log":  "C:\\repos\\python\\assault\\assault_sim\\session\\reports\\experiments\\batch_20260629_064910\\heuristic_single_lever_capture_priority.json.log"
+    },
+    {
+        "manifest":  "C:\\repos\\python\\assault\\scripts\\experiments\\heuristic_single_lever_vp_ally_congestion_penalty_v1.json",
+        "manifest_name":  "heuristic_single_lever_vp_ally_congestion_penalty_v1.json",
+        "status":  "failed",
+        "exit_code":  1,
+        "log":  "C:\\repos\\python\\assault\\assault_sim\\session\\reports\\experiments\\batch_20260629_064910\\heuristic_single_lever_vp_ally_congestion_penalty_v1.json.log"
+    },
+    {
+        "manifest":  "C:\\repos\\python\\assault\\scripts\\experiments\\reward_single_lever_capture_post_contact_bonus_v1.json",
+        "manifest_name":  "reward_single_lever_capture_post_contact_bonus_v1.json",
+        "status":  "failed",
+        "exit_code":  1,
+        "log":  "C:\\repos\\python\\assault\\assault_sim\\session\\reports\\experiments\\batch_20260629_064910\\reward_single_lever_capture_post_contact_bonus_v1.json.log"
+    },
+    {
+        "manifest":  "C:\\repos\\python\\assault\\scripts\\experiments\\reward_single_lever_non_capture_near_vp_penalty_v1.json",
+        "manifest_name":  "reward_single_lever_non_capture_near_vp_penalty_v1.json",
+        "status":  "failed",
+        "exit_code":  1,
+        "log":  "C:\\repos\\python\\assault\\assault_sim\\session\\reports\\experiments\\batch_20260629_064910\\reward_single_lever_non_capture_near_vp_penalty_v1.json.log"
+    },
+    {
+        "manifest":  "C:\\repos\\python\\assault\\scripts\\experiments\\reward_single_lever_vp_stepin_bonus.json",
+        "manifest_name":  "reward_single_lever_vp_stepin_bonus.json",
+        "status":  "failed",
+        "exit_code":  1,
+        "log":  "C:\\repos\\python\\assault\\assault_sim\\session\\reports\\experiments\\batch_20260629_064910\\reward_single_lever_vp_stepin_bonus.json.log"
+    },
+    {
+        "manifest":  "C:\\repos\\python\\assault\\scripts\\experiments\\reward_single_lever_vp_stepin_missed_penalty_v1.json",
+        "manifest_name":  "reward_single_lever_vp_stepin_missed_penalty_v1.json",
+        "status":  "failed",
+        "exit_code":  1,
+        "log":  "C:\\repos\\python\\assault\\assault_sim\\session\\reports\\experiments\\batch_20260629_064910\\reward_single_lever_vp_stepin_missed_penalty_v1.json.log"
+    }
+]

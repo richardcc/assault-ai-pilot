@@ -1,0 +1,234 @@
+[CmdletBinding()]
+param(
+  [string]$RepoPath = "C:\repos\python\assault",
+  [string]$ManifestsDir = ".\scripts\experiments",
+  [string[]]$ManifestPaths = @(),
+  [switch]$SkipTrain,
+  [switch]$SkipGate,
+  [switch]$ApplyChanges,
+  [switch]$ContinueOnError,
+  [switch]$SkipCompleted,
+  [switch]$UpdateManifestStatus
+)
+
+Set-StrictMode -Version Latest
+$ErrorActionPreference = "Stop"
+if (Get-Variable -Name PSNativeCommandUseErrorActionPreference -ErrorAction SilentlyContinue) {
+  $PSNativeCommandUseErrorActionPreference = $false
+}
+
+if (-not (Test-Path -Path $RepoPath -PathType Container)) {
+  throw "RepoPath does not exist: $RepoPath"
+}
+
+$runner = Join-Path $RepoPath "scripts\run_experiment_from_manifest.ps1"
+if (-not (Test-Path -Path $runner -PathType Leaf)) {
+  throw "Runner script not found: $runner"
+}
+
+function Resolve-ManifestList {
+  param(
+    [string]$RepoRoot,
+    [string]$DirPath,
+    [string[]]$ExplicitPaths
+  )
+
+  $resolved = New-Object System.Collections.Generic.List[string]
+
+  if ($ExplicitPaths -and $ExplicitPaths.Count -gt 0) {
+    foreach ($p in $ExplicitPaths) {
+      $full = $p
+      if (-not [System.IO.Path]::IsPathRooted($full)) {
+        $full = Join-Path $RepoRoot $p
+      }
+      if (-not (Test-Path -Path $full -PathType Leaf)) {
+        throw "Manifest path does not exist: $full"
+      }
+      $resolved.Add((Resolve-Path -Path $full).Path) | Out-Null
+    }
+    return $resolved
+  }
+
+  $fullDir = $DirPath
+  if (-not [System.IO.Path]::IsPathRooted($fullDir)) {
+    $fullDir = Join-Path $RepoRoot $DirPath
+  }
+  if (-not (Test-Path -Path $fullDir -PathType Container)) {
+    throw "Manifests directory does not exist: $fullDir"
+  }
+
+  $files = @(
+    Get-ChildItem -Path $fullDir -Filter "*.json" -File -ErrorAction SilentlyContinue |
+      Sort-Object Name
+  )
+  foreach ($f in $files) {
+    $resolved.Add($f.FullName) | Out-Null
+  }
+  return $resolved
+}
+
+function Read-ManifestObject {
+  param([string]$ManifestPath)
+  return (Get-Content -Path $ManifestPath -Raw | ConvertFrom-Json)
+}
+
+function Write-ManifestObject {
+  param(
+    [string]$ManifestPath,
+    [object]$ManifestObject
+  )
+  ($ManifestObject | ConvertTo-Json -Depth 12) | Out-File -FilePath $ManifestPath -Encoding UTF8
+}
+
+function Find-CompletedExperiment {
+  param(
+    [string]$RepoRoot,
+    [string]$ExperimentId
+  )
+  if ([string]::IsNullOrWhiteSpace($ExperimentId)) {
+    return $null
+  }
+  $root = Join-Path $RepoRoot "assault_sim\session\reports\experiments"
+  if (-not (Test-Path -Path $root -PathType Container)) {
+    return $null
+  }
+  $resultFiles = @(
+    Get-ChildItem -Path $root -Recurse -File -Filter "result.json" -ErrorAction SilentlyContinue |
+      Where-Object { $_.FullName -notmatch "\\batch_" } |
+      Sort-Object LastWriteTime -Descending
+  )
+  foreach ($f in $resultFiles) {
+    try {
+      $obj = Get-Content -Path $f.FullName -Raw | ConvertFrom-Json
+      if ([string]$obj.experiment_id -eq $ExperimentId -and [string]$obj.status -eq "success") {
+        return $f.FullName
+      }
+    }
+    catch {
+      continue
+    }
+  }
+  return $null
+}
+
+$manifestList = Resolve-ManifestList -RepoRoot $RepoPath -DirPath $ManifestsDir -ExplicitPaths $ManifestPaths
+if ($manifestList.Count -lt 1) {
+  throw "No manifest files found."
+}
+
+$batchTimestamp = Get-Date -Format "yyyyMMdd_HHmmss"
+$batchDir = Join-Path $RepoPath ("assault_sim\session\reports\experiments\batch_{0}" -f $batchTimestamp)
+New-Item -ItemType Directory -Path $batchDir -Force | Out-Null
+
+Write-Host ("Batch run dir: {0}" -f $batchDir)
+Write-Host ("Experiments to run: {0}" -f $manifestList.Count)
+
+$rows = New-Object System.Collections.Generic.List[object]
+$hasFailure = $false
+
+foreach ($manifest in $manifestList) {
+  $manifestObj = Read-ManifestObject -ManifestPath $manifest
+  $experimentId = [string]$manifestObj.experiment_id
+  $manifestStatus = [string]$manifestObj.status
+
+  if ($SkipCompleted) {
+    $doneByStatus = $manifestStatus -in @("done_keep", "done_revert", "cancelled")
+    $doneByHistory = Find-CompletedExperiment -RepoRoot $RepoPath -ExperimentId $experimentId
+    if ($doneByStatus -or $doneByHistory) {
+      $reason = if ($doneByStatus) {
+        ("manifest_status={0}" -f $manifestStatus)
+      } else {
+        ("completed_result={0}" -f $doneByHistory)
+      }
+      Write-Host ""
+      Write-Host ("=== Skipping completed manifest: {0} ({1}) ===" -f $manifest, $reason)
+      $rows.Add([pscustomobject]@{
+        manifest = $manifest
+        manifest_name = [System.IO.Path]::GetFileName($manifest)
+        status = "skipped_completed"
+        exit_code = 0
+        log = ""
+      }) | Out-Null
+      continue
+    }
+  }
+
+  Write-Host ""
+  Write-Host ("=== Experiment from manifest: {0} ===" -f $manifest)
+
+  if ($UpdateManifestStatus) {
+    $manifestObj.status = "running"
+    Write-ManifestObject -ManifestPath $manifest -ManifestObject $manifestObj
+  }
+
+  $args = @(
+    "-NoProfile",
+    "-ExecutionPolicy", "Bypass",
+    "-File", $runner,
+    "-ManifestPath", $manifest,
+    "-RepoPath", $RepoPath
+  )
+  if ($SkipTrain) { $args += "-SkipTrain" }
+  if ($SkipGate) { $args += "-SkipGate" }
+  if ($ApplyChanges) { $args += "-ApplyChanges" }
+
+  $output = @()
+  $exitCode = 0
+  try {
+    $output = & powershell @args 2>&1
+    $exitCode = $LASTEXITCODE
+  }
+  catch {
+    $output = @($_ | Out-String)
+    $exitCode = 1
+  }
+
+  $status = if ($exitCode -eq 0) { "success" } else { "failed" }
+  if ($exitCode -ne 0) { $hasFailure = $true }
+
+  $manifestName = [System.IO.Path]::GetFileName($manifest)
+  $logPath = Join-Path $batchDir ($manifestName + ".log")
+  $output | Out-File -FilePath $logPath -Encoding UTF8
+
+  $rows.Add([pscustomobject]@{
+    manifest = $manifest
+    manifest_name = $manifestName
+    status = $status
+    exit_code = $exitCode
+    log = $logPath
+  }) | Out-Null
+
+  Write-Host ("Result: {0} (exit={1})" -f $status, $exitCode)
+  Write-Host ("Log: {0}" -f $logPath)
+
+  if ($UpdateManifestStatus) {
+    $manifestObj = Read-ManifestObject -ManifestPath $manifest
+    if ($exitCode -eq 0) {
+      $manifestObj.status = "done_keep"
+    } else {
+      $manifestObj.status = "done_revert"
+    }
+    Write-ManifestObject -ManifestPath $manifest -ManifestObject $manifestObj
+  }
+
+  if ($exitCode -ne 0 -and -not $ContinueOnError) {
+    break
+  }
+}
+
+$summaryPath = Join-Path $batchDir "batch_summary.json"
+($rows | ConvertTo-Json -Depth 6) | Out-File -FilePath $summaryPath -Encoding UTF8
+
+$csvPath = Join-Path $batchDir "batch_summary.csv"
+$rows | Export-Csv -Path $csvPath -NoTypeInformation -Encoding UTF8
+
+Write-Host ""
+Write-Host "=== Batch summary ==="
+$rows | Format-Table manifest_name, status, exit_code -AutoSize
+Write-Host ("Summary JSON: {0}" -f $summaryPath)
+Write-Host ("Summary CSV: {0}" -f $csvPath)
+
+if ($hasFailure) {
+  throw "One or more experiments failed."
+}
+

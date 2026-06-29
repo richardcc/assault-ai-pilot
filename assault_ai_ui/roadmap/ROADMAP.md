@@ -1,283 +1,84 @@
-🚀 ASSAULT AI UI — ROADMAP COMPLETO
-
-==================================================
-🧭 VISIÓN
-==================================================
-
-Construir un sistema completo:
-
-- 🎮 Jugar vs AI (IA vs jugador humano)
-- 🔁 Visualizar replays
-- 🧠 Explainability (HRL + decisiones)
-- 🤖 RAG Assistant flotante
-
-IMPORTANTE:
-El sistema es por BANDOS, no por número de unidades.
-Alternancia: GE → US → GE → US…
-Si un bando se queda sin unidades activables, el otro sigue.
-
-==================================================
-🧱 ARQUITECTURA FINAL
-==================================================
-
-BACKEND:
-- SimEnv (motor del juego)
-- ActivationManager (controla turnos)
-- HRLController (IA entrenada)
-- OptionExecutor (convierte decisiones en acciones)
-- FastAPI
-
-Endpoints:
-
-- POST /api/game/start
-- GET  /api/game/next
-- POST /api/game/step
-- GET  /api/game/state
-- POST /api/explain
-- POST /api/rag/query
-
-FRONTEND:
-- React + TypeScript + Vite
-- PixiJS (mapa)
-- UI React (paneles, botones)
-
-==================================================
-📌 MODELO DE TURNO (CRÍTICO)
-==================================================
+# ASSAULT AI UI — ROADMAP OPERATIVO (LIMPIO)
 
-NO es por unidad emparejada.
+## Ultima actualizacion (2026-06-27)
 
-ES así:
+## Objetivo
 
-Turno:
-  GE → activa 1 unidad
-  US → activa 1 unidad
-  GE → siguiente unidad disponible
-  US → siguiente unidad disponible
+Entregar una experiencia estable de juego humano vs IA con:
 
-Si un bando no tiene unidades activables:
-  → se salta
-  → el otro bando continúa
+- loop de partida robusto
+- UX clara para decisiones humanas
+- explainability integrada
+- base lista para replay
 
-La UI NO decide el orden.
-El orden SIEMPRE lo decide el backend (ActivationManager).
+## Alineacion de arquitectura
 
-==================================================
-📅 FASE 0 — ENTORNO ✅
-==================================================
+Backend de juego vigente:
 
-- Vite funcionando
-- React + TypeScript
-- npm run dev
+- `POST /api/game/start`
+- `GET /api/game/state`
+- `POST /api/game/step`
+- `POST /api/game/actions`
+- `POST /api/game/ai-turn`
+- `POST /api/explain/activation`
+- `GET /api/game/trace`
 
-==================================================
-📅 FASE 1 — RENDER DEL MAPA ✅
-==================================================
+## Componentes funcionales (separados)
 
-- Grid hexagonal
-- Hover
-- Selección de hex
-- Colores por terreno (modo debug)
-- Texto legible (shadow + resolution fix)
-- Render estable Pixi v8
+1. **Reglas de juego (core tactico)**
+   - fuente de verdad del estado, legalidad de acciones y resolucion de combate
+   - vive en el motor/simulador y sus endpoints de juego
 
-==================================================
-📅 FASE 2 — ESCENARIO BACKEND → UI ✅
-==================================================
+2. **RAG (copiloto del sistema)**
+   - componente oficial para consulta, explicaciones ampliadas y soporte de decision
+   - se mantiene desacoplado del loop tactico critico de turno
 
-Endpoint:
-GET /api/ui/scenarios/{id}
+Nota:
 
-Devuelve:
-- shape del mapa
-- hexes (q, r, terrain)
-- units (q, r, side)
+- no usar `/api/game/next` (obsoleto)
+- no mezclar llamadas de RAG dentro del loop critico de `step/ai-turn`
 
-UI ya renderiza:
-- grid
-- terreno
-- unidades (posición base)
+## Estado actual
 
-==================================================
-📅 FASE 3 — LOOP DE JUEGO (CRÍTICO 🔥)
-==================================================
+Hecho:
 
-OBJETIVO:
-Conectar UI ↔ SimEnv
+- [x] render hex + unidades + escenarios desde backend
+- [x] base de control por bandos (backend decide turno)
+- [x] endpoint de explainability de activacion
 
-Flujo:
+En curso:
 
-1. UI → /game/start
-2. backend crea:
-   - SimEnv
-   - ActivationManager
-   - HRLController
+- [~] endurecer flujo UI de turno humano vs turno IA (evitar overrides manuales)
+- [~] pulir feedback de acciones invalidas y estados de espera
 
-3. UI pide:
-   GET /game/next
+Pendiente:
 
-4. backend responde:
-{
-  unit_id,
-  side,
-  position
-}
+- [ ] replay viewer de producto (timeline + play/pause)
+- [ ] polish visual (animaciones, overlays, calidad de interaccion)
 
-5. UI:
+## Prioridades inmediatas (ordenadas)
 
-   if side == IA:
-       autoplay (backend decide)
-   else:
-       esperar input usuario
+1. **Integridad del loop de partida UI-backend**
+   - bloquear acciones manuales fuera de turno humano
+   - sincronizar siempre con `state` post-step y post-ai-turn
+   - garantizar que UI no intente decidir el orden de activacion
 
-6. Usuario hace acción:
-   → click / botón
+2. **Explainability usable en UI**
+   - mostrar `strategic_intent` y `tactical_execution` por activacion
+   - fallback visual cuando no haya eventos tacticos
 
-7. UI → POST /game/step
+3. **Integracion RAG sin acoplar turnos**
+   - habilitar panel de copiloto RAG separado de la logica de turno
+   - usar RAG como apoyo de interpretacion, no como autoridad de reglas
 
-8. backend:
-   → SimEnv.step(action)
-   → actualiza GameState
+4. **Observabilidad de partida**
+   - integrar consumo de `GET /api/game/trace`
+   - panel de depuracion minimo para soporte de QA
 
-9. UI renderiza nuevo estado
+## Criterio de cierre de sprint UI
 
-Loop se repite
-
-==================================================
-📅 FASE 4 — CONTROL HUMANO
-==================================================
-
-Para unidades del jugador:
-
-- Selección de unidad
-- Click en hex destino
-- Acciones disponibles:
-  - MOVE
-  - ATTACK
-  - WAIT
-
-UI debe preguntar:
-
-GET /game/actions?unit_id=XXX
-
-backend responde:
-- lista de acciones válidas
-
-==================================================
-📅 FASE 5 — AUTOPLAY IA
-==================================================
-
-Para IA:
-
-- backend usa HRLController
-- decide:
-  - option (ATTACK / ADVANCE / etc)
-- OptionExecutor convierte → acción real
-- backend ejecuta step automáticamente
-
-UI solo renderiza
-
-==================================================
-📅 FASE 6 — EXPLAINABILITY 🧠
-==================================================
-
-Endpoint:
-POST /api/explain/activation
-
-Devuelve:
-- strategic_intent (HRL)
-- tactical_execution (rules + dice)
-
-UI:
-- panel lateral
-- tooltip en hover
-- explicación por acción
-
-==================================================
-📅 FASE 7 — REPLAYS
-==================================================
-
-Backend:
-- guarda eventos (event_bus)
-
-Formato:
-- lista de eventos:
-  - MOVE
-  - ATTACK
-  - DAMAGE
-  - HRL_DECISION
-
-UI:
-- play / pause
-- timeline
-- scrubbing turno a turno
-
-==================================================
-📅 FASE 8 — RAG ASSISTANT 🤖
-==================================================
-
-Endpoint:
-POST /api/rag/query
-
-UI:
-- chat flotante
-
-Ejemplos:
-- "¿Por qué atacó aquí?"
-- "¿Qué opción era mejor?"
-
-Backend responde usando:
-- HRL + reglas
-
-==================================================
-📅 FASE 9 — UI PRO
-==================================================
-
-- ocultar coords en modo normal
-- iconos terreno
-- animaciones:
-  - movimiento
-  - disparo
-  - impacto
-- selección visual de unidades
-- overlay de rangos
-
-==================================================
-📅 FASE 10 — GAME READY 🚀
-==================================================
-
-- IA vs humano
-- múltiples escenarios
-- guardado de partida
-- replay viewer
-- explicación integrada
-
-==================================================
-✅ ESTADO ACTUAL
-==================================================
-
-Ya tienes:
-
-✔ motor de juego completo
-✔ IA entrenada (PPO + HRL)
-✔ render hex grid
-✔ backend con escenarios
-✔ explainable engine
-
-FALTA SOLO:
-
-🔥 conectar loop de juego en tiempo real
-
-==================================================
-🎯 SIGUIENTE PASO
-==================================================
-
-Implementar:
-
-👉 /api/game/start
-👉 /api/game/next
-👉 /api/game/step
-
-Y conectar con UI
+- partida completa humano vs IA sin bloqueos de turno
+- cero llamadas a endpoints obsoletos (`/api/game/next`)
+- explainability visible y consistente en activaciones clave
 
 ==================================================

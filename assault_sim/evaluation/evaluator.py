@@ -7,6 +7,7 @@ from assault_model.actions.action_category import ActionCategory
 from assault_model.actions.composite_fire import MoveThenFireAction, FireThenMoveAction
 from assault_model.map.terrain_config import terrain_config
 from assault_sim.contracts.training_contracts import EvalResult
+from assault_sim.debug.event_bus import EventBus
 from assault_sim.evaluation.metrics_tracker import MetricsTracker
 from assault_sim.engine.match_runner import MatchRunner
 from assault_sim.evaluation.advanced_metrics import AdvancedMetrics
@@ -85,6 +86,38 @@ class Evaluator:
             if hs is not None and hs.ownership == own_ownership:
                 captured += 1
         return captured
+
+    def _per_unit_final_vp_contribution(self, state, side) -> dict[str, int]:
+        """
+        Per-unit final VP control contribution:
+        unit contributes in an episode if it ends on a VP owned by its side.
+        """
+        if state is None or not side:
+            return {}
+        points = getattr(getattr(state, "victory", None), "points", []) or []
+        if not points:
+            return {}
+        vp_coords = {tuple(getattr(vp, "hex_coords", (None, None))) for vp in points}
+        side_to_ownership = getattr(state, "side_to_ownership", {}) or {}
+        own_ownership = side_to_ownership.get(str(side).upper())
+        if own_ownership is None:
+            return {}
+        out: dict[str, int] = {}
+        for u in getattr(state, "units", []) or []:
+            if not getattr(u, "alive", False):
+                continue
+            if str(getattr(u, "side", "")).upper() != str(side).upper():
+                continue
+            pos = getattr(u, "position", None)
+            if pos is None:
+                continue
+            coords = (getattr(pos, "q", None), getattr(pos, "r", None))
+            if coords not in vp_coords:
+                continue
+            hs = getattr(state, "hex_states", {}).get(coords)
+            if hs is not None and getattr(hs, "ownership", None) == own_ownership:
+                out[str(getattr(u, "unit_id", ""))] = 1
+        return out
 
     def run_episode(self):
         advanced_metrics = AdvancedMetrics()
@@ -216,16 +249,74 @@ class Evaluator:
         legal_actions_total_by_side = defaultdict(int)
         legal_actions_decisions_by_side = defaultdict(int)
         legal_actions_gen_time_ms_total_by_side = defaultdict(float)
+        reaction_fire_count = 0
+        reaction_fire_by_side = defaultdict(int)
+        reaction_window_count = 0
+        reaction_fire_skipped_count = 0
+        reaction_seen_keys = set()
+        reaction_window_seen_keys = set()
+        reaction_skipped_seen_keys = set()
 
         # ✅ CRÍTICO → LOG REAL DE EVENTOS
         events_log = []
 
         obs = self.env.reset()
         sim = getattr(self.env, "sim", None) or getattr(self.env, "sim_env", None)
+        # Eval diagnostics depend on runtime events (REACTION_FIRE/WINDOW/SKIPPED).
+        # Some env constructors disable debug bus by default; enable a local bus
+        # here so reaction metrics are observable in evaluation reports.
+        if sim is not None and getattr(sim, "event_bus", None) is None:
+            sim.event_bus = EventBus()
         scenario = getattr(sim, "scenario", None) if sim is not None else None
         tracker = MetricsTracker(self.rl_side, scenario=scenario)
         if sim is not None and getattr(sim, "event_bus", None) is not None:
-            sim.event_bus.subscribe(tracker)
+            def _on_eval_event(event):
+                nonlocal reaction_fire_count
+                nonlocal reaction_window_count
+                nonlocal reaction_fire_skipped_count
+                if not isinstance(event, dict):
+                    return
+                event_type = str(event.get("type", "")).upper()
+                if event_type not in {"REACTION_FIRE", "REACTION_WINDOW", "REACTION_FIRE_SKIPPED"}:
+                    return
+                payload = event.get("payload", {}) or {}
+                reactor_id = str(payload.get("reactor_id", "") or "")
+                target_id = str(payload.get("target_id", "") or "")
+                event_key = (reactor_id, target_id, str(payload.get("trigger", "") or ""))
+                if event_type == "REACTION_FIRE":
+                    if event_key in reaction_seen_keys:
+                        return
+                    reaction_seen_keys.add(event_key)
+                elif event_type == "REACTION_WINDOW":
+                    if event_key in reaction_window_seen_keys:
+                        return
+                    reaction_window_seen_keys.add(event_key)
+                else:
+                    if event_key in reaction_skipped_seen_keys:
+                        return
+                    reaction_skipped_seen_keys.add(event_key)
+                reactor_side = "UNKNOWN"
+                try:
+                    state_now = getattr(sim, "game_state", None)
+                    reactor_obj = next(
+                        (u for u in getattr(state_now, "units", []) if str(getattr(u, "unit_id", "")) == reactor_id),
+                        None,
+                    )
+                    if reactor_obj is not None:
+                        s = str(
+                            getattr(getattr(reactor_obj, "side", None), "value", getattr(reactor_obj, "side", "")) or ""
+                        ).upper()
+                        reactor_side = "RL" if s == str(self.rl_side).upper() else "ENEMY"
+                except Exception:
+                    reactor_side = "UNKNOWN"
+                if event_type == "REACTION_FIRE":
+                    reaction_fire_count += 1
+                    reaction_fire_by_side[reactor_side] += 1
+                elif event_type == "REACTION_WINDOW":
+                    reaction_window_count += 1
+                else:
+                    reaction_fire_skipped_count += 1
+            sim.event_bus.subscribe(_on_eval_event)
 
         if hasattr(self.controller, "reset"):
             self.controller.reset()
@@ -313,6 +404,74 @@ class Evaluator:
                     if not isinstance(e, dict):
                         continue
 
+                    event_type = str(e.get("type", "") or "").upper()
+                    if event_type == "REACTION_FIRE":
+                        reactor_id = str(
+                            e.get("reactor_id")
+                            or (e.get("payload", {}) or {}).get("reactor_id")
+                            or ""
+                        )
+                        target_id = str(
+                            e.get("target_id")
+                            or (e.get("payload", {}) or {}).get("target_id")
+                            or ""
+                        )
+                        reactor_side = "UNKNOWN"
+                        try:
+                            reactor_obj = next(
+                                (u for u in getattr(state, "units", []) if str(getattr(u, "unit_id", "")) == reactor_id),
+                                None,
+                            )
+                            if reactor_obj is not None:
+                                s = str(getattr(getattr(reactor_obj, "side", None), "value", getattr(reactor_obj, "side", "")) or "").upper()
+                                reactor_side = "RL" if s == str(self.rl_side).upper() else "ENEMY"
+                        except Exception:
+                            reactor_side = "UNKNOWN"
+                        reaction_fire_count += 1
+                        reaction_fire_by_side[reactor_side] += 1
+                        events_log.append(
+                            {
+                                "type": "reaction_fire",
+                                "attack_type": "REACTION_FIRE",
+                                "reactor": reactor_id,
+                                "target": target_id,
+                                "reactor_side": reactor_side,
+                            }
+                        )
+                        continue
+                    if event_type == "REACTION_WINDOW":
+                        reactor_id = str(
+                            e.get("reactor_id")
+                            or (e.get("payload", {}) or {}).get("reactor_id")
+                            or ""
+                        )
+                        target_id = str(
+                            e.get("target_id")
+                            or (e.get("payload", {}) or {}).get("target_id")
+                            or ""
+                        )
+                        event_key = (reactor_id, target_id, str(e.get("trigger") or (e.get("payload", {}) or {}).get("trigger") or ""))
+                        if event_key not in reaction_window_seen_keys:
+                            reaction_window_seen_keys.add(event_key)
+                            reaction_window_count += 1
+                        continue
+                    if event_type == "REACTION_FIRE_SKIPPED":
+                        reactor_id = str(
+                            e.get("reactor_id")
+                            or (e.get("payload", {}) or {}).get("reactor_id")
+                            or ""
+                        )
+                        target_id = str(
+                            e.get("target_id")
+                            or (e.get("payload", {}) or {}).get("target_id")
+                            or ""
+                        )
+                        event_key = (reactor_id, target_id, str(e.get("trigger") or (e.get("payload", {}) or {}).get("trigger") or ""))
+                        if event_key not in reaction_skipped_seen_keys:
+                            reaction_skipped_seen_keys.add(event_key)
+                            reaction_fire_skipped_count += 1
+                        continue
+
                     attack_type = (
                         e.get("attack_type")
                         or e.get("type")
@@ -396,8 +555,10 @@ class Evaluator:
                     vp_entry_opportunities += 1
                     if unit_id:
                         per_unit_vp_entry_attempts[str(unit_id)] += 1
-                # Count taken entries from real objective-control delta first.
-                if (
+                # Keep VP-entry funnel coherent:
+                # - attempts: actor had immediate legal VP entry opportunity
+                # - success: that same opportunity was converted in this decision
+                vp_entry_succeeded_now = (
                     objective_delta_real > 0
                     or int(info.get("objective_captured_delta", 0)) > 0
                     or bool(info.get("actor_captured_vp_now", False))
@@ -405,7 +566,11 @@ class Evaluator:
                         bool(info.get("actor_on_vp_after", False))
                         and not bool(info.get("actor_vp_owned_by_rl_before", False))
                     )
-                ):
+                )
+                # Keep global and per-unit VP entry KPIs coherent:
+                # both track strict funnel conversion from immediate opportunity.
+                vp_entry_converted_now = can_enter_vp_now and vp_entry_succeeded_now
+                if vp_entry_converted_now:
                     vp_entries_taken += 1
                     if unit_id:
                         per_unit_vp_entry_success[str(unit_id)] += 1
@@ -826,6 +991,7 @@ class Evaluator:
         # BUILD RESULT
         # -------------------------------------------------
         result = tracker.build_result(final_state)
+        per_unit_vp_final_contribution = self._per_unit_final_vp_contribution(final_state, self.rl_side)
 
         result["steps"] = steps
         result["episode_length"] = steps
@@ -1077,6 +1243,7 @@ class Evaluator:
             "vp_control_after_entry_turns": list(vp_control_after_entry_turns),
             "per_unit_vp_entry_attempts": dict(per_unit_vp_entry_attempts),
             "per_unit_vp_entry_success": dict(per_unit_vp_entry_success),
+            "per_unit_vp_final_contribution": dict(per_unit_vp_final_contribution),
             "first_vp_entry_turn": first_vp_entry_step,
             "contact_events": contact_events,
             "contact_to_capture_success": contact_to_capture_success,
@@ -1118,6 +1285,13 @@ class Evaluator:
                 float(sum(legal_actions_gen_time_ms_total_by_side.values()))
                 / max(1.0, float(sum(legal_actions_decisions_by_side.values())))
             ),
+            "reaction_fire_count": int(reaction_fire_count),
+            "reaction_fire_rate": (
+                float(reaction_fire_count) / max(1.0, float(rl_decisions))
+            ),
+            "reaction_fire_by_side": dict(reaction_fire_by_side),
+            "reaction_window_count": int(reaction_window_count),
+            "reaction_fire_skipped_count": int(reaction_fire_skipped_count),
             "intent_commitment_rate_stub": (
                 plan_stub_intent_aligned / max(1, plan_stub_decisions)
             ),

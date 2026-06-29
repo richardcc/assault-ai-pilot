@@ -10,17 +10,26 @@ from assault_model.actions.action import Action
 from assault_model.actions.movement import MoveAction
 from assault_model.actions.status import WaitAction
 from assault_model.actions.composite_fire import MoveThenFireAction, FireThenMoveAction
+from assault_model.actions.ranged_direct import RangedDirectAttack
 from assault_model.actions.resolution import resolve_action
 
 from assault_model.combat.combat_resolution import CombatResolutionResult
 
 from assault_model.runtime.execution_context import ExecutionContext
 from assault_model.map.hex_coord import HexCoord
+from assault_model.map.hex_utils import safe_hex_distance
 from assault_model.combat.spotting_runtime import update_spotting
+from assault_model.combat.line_of_sight import has_line_of_sight
 
 import os
 
 DEBUG_TRACE = os.getenv("ASSAULT_DEBUG_TRACE", "0") == "1"
+REACTION_FIRE_ENABLED = os.getenv("ASSAULT_ENABLE_REACTION_FIRE", "1") == "1"
+AI_REACTION_POLICY = str(os.getenv("ASSAULT_AI_REACTION_POLICY", "balanced") or "balanced").strip().lower()
+try:
+    AI_REACTION_ADV_THRESHOLD = float(os.getenv("ASSAULT_AI_REACTION_ADV_THRESHOLD", "0.0"))
+except Exception:
+    AI_REACTION_ADV_THRESHOLD = 0.0
 
 
 def _trace(tag: str, **data):
@@ -57,6 +66,12 @@ class RuntimeGameState:
         self.active_side = self.sides[0] if self.sides else None
         # Keep a stable "first player" anchor across turns.
         self.first_player_side = self.active_side
+        # Runtime-local reaction usage tracker: one reaction per reactor per turn.
+        self.reaction_used_this_turn: set[str] = set()
+        # Pending human reaction decision window (if any).
+        self.pending_reaction: dict | None = None
+        # Side controller mapping can be injected by orchestrator (human/ai).
+        self.side_controller_map: dict[str, str] = {}
 
     # =================================================
     # SIDES (NEW)
@@ -110,6 +125,8 @@ class RuntimeGameState:
 
         # --- new turn ---
         self.activated_units.clear()
+        self.reaction_used_this_turn.clear()
+        self.pending_reaction = None
         self._sync_eliminated_activation()
         self.base_state.turn += 1
 
@@ -160,6 +177,8 @@ class RuntimeGameState:
     def start_turn(self) -> None:
 
         self.activated_units.clear()
+        self.reaction_used_this_turn.clear()
+        self.pending_reaction = None
         self._sync_eliminated_activation()
 
         # --- NEW: reset sides each turn ---
@@ -466,6 +485,12 @@ class RuntimeGameState:
                     },
                 })
         self._sync_eliminated_activation()
+        self._try_reaction_fire_on_move(
+            action=action,
+            attacker=attacker,
+            prev_position=prev_position,
+            context=context,
+        )
 
         # --- NEW: activation step ---
         if attacker:
@@ -498,3 +523,214 @@ class RuntimeGameState:
 
         update_spotting(self.base_state, self.scenario.terrain_config)
         return result
+
+    def _can_reactor_react(self, reactor, mover) -> bool:
+        if reactor is None or mover is None:
+            return False
+        if str(getattr(reactor, "side", "")) == str(getattr(mover, "side", "")):
+            return False
+        if not getattr(reactor, "alive", False):
+            return False
+        # Reaction fire is limited to units that have not activated yet this turn.
+        if getattr(reactor, "unit_id", None) in self.activated_units:
+            return False
+        if getattr(reactor, "unit_id", None) in self.reaction_used_this_turn:
+            return False
+        if not self._can_unit_act(reactor):
+            return False
+        if not getattr(reactor, "can_fire", True):
+            return False
+        if getattr(reactor, "position", None) is None or getattr(mover, "position", None) is None:
+            return False
+        try:
+            distance = safe_hex_distance(reactor.position, mover.position)
+            mode = reactor.unit_type._resolve_attack_mode(distance)
+        except Exception:
+            return False
+        if str(mode) != "DIRECT_FIRE":
+            return False
+        try:
+            return bool(
+                has_line_of_sight(
+                    attacker=reactor,
+                    target=mover,
+                    game_map=self.base_state.game_map,
+                    terrain_config=self.scenario.terrain_config,
+                )
+            )
+        except Exception:
+            return False
+
+    def _side_controller(self, side: str | None) -> str:
+        if side is None:
+            return ""
+        raw = getattr(side, "value", side)
+        side_norm = str(raw).strip().upper()
+        # Be defensive with enum-like string representations such as "Side.IT".
+        if "." in side_norm:
+            side_norm = side_norm.split(".")[-1]
+        side_map = getattr(self, "side_controller_map", {}) or {}
+        mode = side_map.get(side_norm)
+        if mode is None:
+            # Lenient fallback for keys that may include enum prefixes.
+            for k, v in side_map.items():
+                key_norm = str(getattr(k, "value", k)).strip().upper()
+                if "." in key_norm:
+                    key_norm = key_norm.split(".")[-1]
+                if key_norm == side_norm:
+                    mode = v
+                    break
+        return str(mode or "").lower()
+
+    def _interactive_match(self) -> bool:
+        side_map = getattr(self, "side_controller_map", {}) or {}
+        return any(str(v).lower() == "human" for v in side_map.values())
+
+    def _should_ai_use_reaction(self, reactor, target) -> bool:
+        """
+        Decide whether an AI-controlled reactor should fire reaction.
+        Policies:
+        - always: always use if legal
+        - never: always skip
+        - balanced (default): use if combat advantage >= threshold
+        """
+        if reactor is None or target is None:
+            return False
+        policy = str(AI_REACTION_POLICY or "balanced").lower()
+        if policy == "always":
+            return True
+        if policy == "never":
+            return False
+        try:
+            advantage = float(reactor.get_combat_advantage(target))
+        except Exception:
+            # Conservative fallback: if we cannot estimate advantage, keep pressure.
+            return True
+        return advantage >= float(AI_REACTION_ADV_THRESHOLD)
+
+    def resolve_pending_reaction(
+        self,
+        *,
+        use_reaction: bool,
+        context: ExecutionContext | None = None,
+    ) -> dict:
+        pending = dict(self.pending_reaction or {})
+        if not pending:
+            return {"resolved": False, "reason": "no_pending_reaction"}
+
+        self.pending_reaction = None
+        if not use_reaction:
+            if context and context.event_bus:
+                context.event_bus.emit(
+                    {
+                        "type": "REACTION_FIRE_SKIPPED",
+                        "payload": pending,
+                    }
+                )
+            return {"resolved": True, "used": False, "payload": pending}
+
+        reactor_id = str(pending.get("reactor_id", ""))
+        target_id = str(pending.get("target_id", ""))
+        reactor = next((u for u in (self.base_state.units or []) if str(getattr(u, "unit_id", "")) == reactor_id), None)
+        target = next((u for u in (self.base_state.units or []) if str(getattr(u, "unit_id", "")) == target_id), None)
+        if reactor is None or target is None or not self._can_reactor_react(reactor, target):
+            return {"resolved": False, "reason": "reaction_no_longer_legal", "payload": pending}
+
+        reaction_action = RangedDirectAttack(reactor_id, target_id)
+        reaction_result = resolve_action(
+            state=self.base_state,
+            action=reaction_action,
+            combat_result=None,
+            context=context,
+        )
+        prev_cache_version = int(getattr(self.base_state, "_cache_version", 0))
+        self.base_state = reaction_result.new_state
+        self.base_state._cache_version = prev_cache_version + 1
+        self.activated_units.add(reactor_id)
+        self.reaction_used_this_turn.add(reactor_id)
+        self._sync_eliminated_activation()
+        if context and context.event_bus:
+            context.event_bus.emit(
+                {
+                    "type": "REACTION_FIRE",
+                    "payload": pending,
+                }
+            )
+        return {"resolved": True, "used": True, "payload": pending}
+
+    def _try_reaction_fire_on_move(
+        self,
+        action: Action,
+        attacker,
+        prev_position: HexCoord | None,
+        context: ExecutionContext | None = None,
+    ) -> None:
+        # Safe MVP: reaction windows are enabled only behind a feature flag.
+        if not REACTION_FIRE_ENABLED:
+            return
+        if attacker is None or prev_position is None:
+            return
+        if not isinstance(action, (MoveAction, MoveThenFireAction, FireThenMoveAction)):
+            return
+        new_pos = getattr(attacker, "position", None)
+        if new_pos is None:
+            return
+        if (
+            getattr(prev_position, "q", None) == getattr(new_pos, "q", None)
+            and getattr(prev_position, "r", None) == getattr(new_pos, "r", None)
+        ):
+            return
+        # Deterministic choice: first eligible reactor by unit_id.
+        enemy_units = sorted(
+            [u for u in (getattr(self.base_state, "units", []) or []) if str(getattr(u, "side", "")) != str(getattr(attacker, "side", ""))],
+            key=lambda u: str(getattr(u, "unit_id", "")),
+        )
+        reactor = next((u for u in enemy_units if self._can_reactor_react(u, attacker)), None)
+        if reactor is None:
+            return
+        payload = {
+            "reactor_id": str(reactor.unit_id),
+            "target_id": str(attacker.unit_id),
+            "trigger": "ENEMY_MOVES_IN_LOS",
+        }
+        # Ask confirmation only when the reactor side is human-controlled.
+        # AI-controlled reactors must resolve reaction automatically.
+        if self._side_controller(getattr(reactor, "side", None)) == "human":
+            self.pending_reaction = payload
+            if context and context.event_bus:
+                context.event_bus.emit({"type": "REACTION_WINDOW", "payload": payload})
+            return
+        use_reaction = self._should_ai_use_reaction(reactor, attacker)
+        if not use_reaction:
+            if context and context.event_bus:
+                context.event_bus.emit(
+                    {
+                        "type": "REACTION_FIRE_SKIPPED",
+                        "payload": {**payload, "decider": "ai"},
+                    }
+                )
+            return
+        try:
+            reaction_action = RangedDirectAttack(str(reactor.unit_id), str(attacker.unit_id))
+            reaction_result = resolve_action(
+                state=self.base_state,
+                action=reaction_action,
+                combat_result=None,
+                context=context,
+            )
+            prev_cache_version = int(getattr(self.base_state, "_cache_version", 0))
+            self.base_state = reaction_result.new_state
+            self.base_state._cache_version = prev_cache_version + 1
+            # Reaction fire consumes activation of the reactor.
+            self.activated_units.add(str(reactor.unit_id))
+            self.reaction_used_this_turn.add(str(reactor.unit_id))
+            self._sync_eliminated_activation()
+            if context and context.event_bus:
+                context.event_bus.emit(
+                    {
+                        "type": "REACTION_FIRE",
+                        "payload": payload,
+                    }
+                )
+        except Exception as e:
+            _trace("REACTION_FIRE_FAILED", error=type(e).__name__)

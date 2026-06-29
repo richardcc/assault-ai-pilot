@@ -1,0 +1,68 @@
+﻿[2026-06-29 06:48:08] Queue worker started. manifests_dir=C:\repos\python\assault\.\scripts\experiments
+[2026-06-29 06:48:08] Pending manifests detected: 8. Running batch...
+[2026-06-29 06:48:08] Queue worker stopped.
+[2026-06-29 06:49:10] Queue worker started. manifests_dir=C:\repos\python\assault\.\scripts\experiments
+[2026-06-29 06:49:10] Pending manifests detected: 7. Running batch...
+powershell.exe : One or more experiments failed.
+En C:\repos\python\assault\scripts\experiment_queue_worker.ps1: 129 Carácter: 19
++         $output = & powershell @args 2>&1
++                   ~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (One or more experiments failed.:String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+
+[2026-06-29 06:49:13] Batch execution finished with errors (exit=1).
+[2026-06-29 06:49:23] No pending manifests.
+[2026-06-29 06:49:33] No pending manifests.
+[2026-06-29 06:49:43] No pending manifests.
+[2026-06-29 06:49:53] No pending manifests.
+[2026-06-29 06:50:00] Queue worker stopped.
+[2026-06-29 06:50:11] Queue worker started. manifests_dir=C:\repos\python\assault\.\scripts\experiments
+[2026-06-29 06:50:11] No pending manifests.
+[2026-06-29 06:50:21] No pending manifests.
+[2026-06-29 06:50:31] No pending manifests.
+[2026-06-29 06:50:41] No pending manifests.
+[2026-06-29 06:50:51] No pending manifests.
+[2026-06-29 06:51:01] No pending manifests.
+[2026-06-29 06:51:11] No pending manifests.
+[2026-06-29 06:51:21] No pending manifests.
+[2026-06-29 06:51:31] Pending manifests detected: 8. Running batch...
+powershell.exe : One or more experiments failed.
+En C:\repos\python\assault\scripts\experiment_queue_worker.ps1: 129 Carácter: 19
++         $output = & powershell @args 2>&1
++                   ~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (One or more experiments failed.:String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+
+[2026-06-29 06:51:34] Batch execution finished with errors (exit=1).
+[2026-06-29 06:51:44] No pending manifests.
+[2026-06-29 06:51:54] No pending manifests.
+[2026-06-29 06:52:00] Queue worker stopped.
+[2026-06-29 06:52:25] Queue worker started. manifests_dir=C:\repos\python\assault\.\scripts\experiments
+[2026-06-29 06:52:25] No pending manifests.
+[2026-06-29 06:52:25] Queue worker stopped.
+[2026-06-29 06:52:32] Queue worker started. manifests_dir=C:\repos\python\assault\.\scripts\experiments
+[2026-06-29 06:52:32] Pending manifests detected: 8. Running batch...
+[2026-06-29 07:40:42] Queue worker stopped.
+[2026-06-29 07:41:08] Queue worker started. manifests_dir=C:\repos\python\assault\.\scripts\experiments
+[2026-06-29 07:41:08] Pending manifests detected: 10. Running batch...
+[2026-06-29 07:41:44] Queue worker stopped.
+[2026-06-29 07:43:56] Queue worker started. manifests_dir=C:\repos\python\assault\.\scripts\experiments
+[2026-06-29 07:43:56] Pending manifests detected: 3. Sample: reward_single_lever_non_capture_near_vp_penalty_v1.json, reward_single_lever_vp_stepin_bonus.json, reward_single_lever_vp_stepin_missed_penalty_v1.json
+[2026-06-29 07:46:52] Queue worker stopped.
+[2026-06-29 07:49:17] Queue worker started. manifests_dir=C:\repos\python\assault\.\scripts\experiments
+[2026-06-29 07:49:17] Running experiment(s) detected (3). Waiting before launching new batch. Sample: reward_single_lever_non_capture_near_vp_penalty_v1, reward_single_lever_capture_post_contact_bonus_v1, architecture_single_lever_mission_critic_telemetry_v1
+[2026-06-29 07:49:27] Running experiment(s) detected (3). Waiting before launching new batch. Sample: reward_single_lever_non_capture_near_vp_penalty_v1, reward_single_lever_capture_post_contact_bonus_v1, architecture_single_lever_mission_critic_telemetry_v1
+[2026-06-29 07:49:37] Running experiment(s) detected (3). Waiting before launching new batch. Sample: reward_single_lever_non_capture_near_vp_penalty_v1, reward_single_lever_capture_post_contact_bonus_v1, architecture_single_lever_mission_critic_telemetry_v1
+[2026-06-29 07:49:47] Running experiment(s) detected (3). Waiting before launching new batch. Sample: reward_single_lever_non_capture_near_vp_penalty_v1, reward_single_lever_capture_post_contact_bonus_v1, architecture_single_lever_mission_critic_telemetry_v1
+[2026-06-29 07:49:57] Running experiment(s) detected (3). Waiting before launching new batch. Sample: reward_single_lever_non_capture_near_vp_penalty_v1, reward_single_lever_capture_post_contact_bonus_v1, architecture_single_lever_mission_critic_telemetry_v1
+[2026-06-29 07:50:05] Queue worker stopped.
+[2026-06-29 07:50:29] Queue worker started. manifests_dir=C:\repos\python\assault\.\scripts\experiments
+[2026-06-29 07:50:29] Running experiment(s) detected (3). Waiting before launching new batch. Sample: reward_single_lever_non_capture_near_vp_penalty_v1, reward_single_lever_capture_post_contact_bonus_v1, architecture_single_lever_mission_critic_telemetry_v1
+[2026-06-29 07:50:33] Queue worker stopped.
+[2026-06-29 07:52:12] Queue worker started. manifests_dir=C:\repos\python\assault\.\scripts\experiments
+[2026-06-29 07:52:12] Queue worker stopped.
+[2026-06-29 07:52:41] Queue worker started. manifests_dir=C:\repos\python\assault\.\scripts\experiments
+[2026-06-29 07:52:41] Pending manifests detected: 11. Sample: architecture_single_lever_mission_critic_telemetry_v1.json, automation_single_lever_postmortem_generator_v1.json, heuristic_single_lever_capture_priority.json, heuristic_single_lever_vp_ally_congestion_penalty_v1.json, planner_single_lever_intent_budget_caps_v1.json
+[2026-06-29 07:54:07] Queue worker stopped.

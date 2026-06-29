@@ -8,6 +8,94 @@ type GameMode = "human" | "ai" | "ai_vs_ai" | "replay";
 type Listener = (state: any) => void;
 
 export class GameController {
+  private normalizeSideId(side: any): string {
+    const raw = String(side ?? "").trim();
+    if (!raw) return "";
+    const upper = raw.toUpperCase();
+    return upper.includes(".") ? upper.split(".").pop() || upper : upper;
+  }
+
+  private getControllerForSide(state: any, side: any): string {
+    const sides = (state && typeof state === "object" ? state.sides : null) || {};
+    const wanted = this.normalizeSideId(side);
+    if (!wanted) return "";
+    for (const [k, v] of Object.entries(sides)) {
+      if (this.normalizeSideId(k) === wanted) {
+        return String(v ?? "").toLowerCase();
+      }
+    }
+    return "";
+  }
+
+  private describeCombatOrder(step: any): { label: string; target: string } {
+    const actionName = String(step?.action || "").toUpperCase();
+    const actionId = String(step?.action_id || "").toUpperCase();
+    const typeName = String(step?.type || step?.kind || "").toUpperCase();
+
+    let label = "Combat";
+    if (
+      actionName.includes("INDIRECT") ||
+      actionId.startsWith("RANGED_INDIRECT:")
+    ) {
+      label = "Indirect Fire";
+    } else if (
+      actionName.includes("ASSAULT") ||
+      typeName.includes("ASSAULT") ||
+      actionId.startsWith("ASSAULT:")
+    ) {
+      label = "Assault Melee";
+    } else if (
+      actionName.includes("RANGED") ||
+      actionName.includes("FIRE") ||
+      actionId.startsWith("RANGED_DIRECT:")
+    ) {
+      label = "Direct Fire";
+    }
+
+    const targetId = String(step?.target_id || "").trim();
+    if (targetId) {
+      return { label, target: targetId };
+    }
+
+    const q = step?.target_q ?? step?.q;
+    const r = step?.target_r ?? step?.r;
+    if (q != null && r != null) {
+      return { label, target: formatCoords(Number(q), Number(r)) };
+    }
+
+    return { label, target: "?" };
+  }
+
+  private mergeIncrementalState(patch: any) {
+    const prevState =
+      this.state && typeof this.state === "object" ? this.state : {};
+    const incoming = patch && typeof patch === "object" ? patch : {};
+
+    const prevUnits = Array.isArray((prevState as any).units)
+      ? (prevState as any).units
+      : [];
+    const incomingUnits = Array.isArray((incoming as any).units)
+      ? (incoming as any).units
+      : [];
+
+    const prevById = new Map<string, any>();
+    for (const u of prevUnits) {
+      const id = String((u as any)?.id || "");
+      if (id) prevById.set(id, u);
+    }
+    const mergedUnits = incomingUnits.map((u: any) => {
+      const id = String(u?.id || "");
+      const base = id ? prevById.get(id) : null;
+      return base ? { ...base, ...u } : u;
+    });
+
+    this.state = {
+      ...prevState,
+      ...incoming,
+      units: mergedUnits,
+    };
+  }
+
   private actionIdToAx(actionId: string | null | undefined): string {
     const raw = String(actionId || "");
     const parts = raw.split(":");
@@ -141,7 +229,29 @@ export class GameController {
           this.pendingWsState = msg.payload;
           return;
         }
-        this.state = msg.payload;
+        // MAP_STATE websocket payload is incremental/partial.
+        // Merge carefully so we don't lose unit metadata (unit_key, etc.)
+        // needed by roster/status panels and action selection.
+        this.mergeIncrementalState(msg.payload);
+        this.emit();
+        return;
+      }
+      if (
+        (msg.type === "REACTION_WINDOW" || msg.type === "REACTION_FIRE" || msg.type === "REACTION_FIRE_SKIPPED")
+        && msg.payload
+      ) {
+        // Never replace core map/status with reaction-only payloads.
+        // Only patch pending_reaction when we already have a hydrated game state.
+        const hasHydratedState =
+          this.state &&
+          typeof this.state === "object" &&
+          Array.isArray((this.state as any).units) &&
+          Array.isArray((this.state as any).hexes);
+        if (!hasHydratedState) return;
+        this.state = {
+          ...this.state,
+          pending_reaction: msg.type === "REACTION_WINDOW" ? msg.payload : null,
+        };
         this.emit();
       }
     };
@@ -269,7 +379,7 @@ export class GameController {
       }
 
       // ✅ solo ejecuta si el lado es IA
-      if (data?.sides?.[activeSide] !== "ai") {
+      if (this.getControllerForSide(data, activeSide) !== "ai") {
         this.scheduleLoop(loop, 1200);
         return;
       }
@@ -290,6 +400,15 @@ export class GameController {
 
         const result = await res.json();
         console.log("🤖 /api/game/ai-turn response:", result);
+        if (result?.blocked === "pending_reaction") {
+          if (result?.state) {
+            this.updateState(result.state);
+          }
+          this.aiTurnInFlight = false;
+          this.pendingWsState = null;
+          this.scheduleLoop(loop, 1200);
+          return;
+        }
 
         const steps = Array.isArray(result?.steps) ? result.steps : [];
         if (steps.length > 0) {
@@ -333,7 +452,25 @@ export class GameController {
             const coordStr = moveQ != null && moveR != null ? formatCoords(moveQ, moveR) : "?";
             (window as any).logSystemEvent?.("move", `🤖 AI Order: Move ${unitId || "?"} to hex ${coordStr}`);
           } else {
-            (window as any).logSystemEvent?.("combat", `⚔️ AI Order: Combat attack by ${unitId || "?"} on target ${step0?.target_id || "?"}`);
+            const combat = this.describeCombatOrder(step0);
+            (window as any).logSystemEvent?.(
+              "combat",
+              `⚔️ AI Order: ${combat.label} attack by ${unitId || "?"} on target ${combat.target}`
+            );
+            // If backend executed a combat order but produced no ACTION_EFFECT,
+            // clarify that no dice were rolled (e.g. invalid/no target at resolution).
+            const events = Array.isArray(result?.state?.last_events) ? result.state.last_events : [];
+            const hasCombatEffect = events.some((ev: any) => {
+              if (ev?.type !== "ACTION_EFFECT") return false;
+              const p = ev?.payload || {};
+              return String(p?.attacker || "") === String(unitId || "");
+            });
+            if (!hasCombatEffect) {
+              (window as any).logSystemEvent?.(
+                "system",
+                `ℹ️ No dice roll for ${unitId || "?"}: combat did not resolve to ACTION_EFFECT.`
+              );
+            }
           }
         }
         (window as any).onAIOrders?.(steps);
@@ -377,7 +514,8 @@ export class GameController {
           // Never let deferred websocket state overwrite a terminal backend state.
           // This prevents losing done/winner/end_reason flags at match end.
           if (!aiTurnState || !aiTurnState.done) {
-            this.updateState(this.pendingWsState);
+            this.mergeIncrementalState(this.pendingWsState);
+            this.emit();
           }
           this.pendingWsState = null;
         }
@@ -392,7 +530,11 @@ export class GameController {
         console.error("❌ AI turn error", e);
         this.aiTurnInFlight = false;
         if (this.pendingWsState) {
-          this.updateState(this.pendingWsState);
+          // pendingWsState comes from websocket MAP_STATE payloads, which are
+          // incremental snapshots. Merge instead of replacing full state, or we
+          // can lose `sides`/`active_side` and stall the AI scheduler.
+          this.mergeIncrementalState(this.pendingWsState);
+          this.emit();
           this.pendingWsState = null;
         }
         this.scheduleLoop(loop, 1800);

@@ -1,0 +1,22 @@
+﻿{
+    "experiment_id":  "reward_single_lever_capture_post_contact_bonus_v1",
+    "status":  "cancelled",
+    "run_dir":  "C:\\repos\\python\\assault\\assault_sim\\session\\reports\\experiments\\reward_single_lever_capture_post_contact_bonus_v1_20260629_074112",
+    "manifest":  "C:\\repos\\python\\assault\\assault_sim\\session\\reports\\experiments\\reward_single_lever_capture_post_contact_bonus_v1_20260629_074112\\manifest.json",
+    "skip_train":  false,
+    "skip_gate":  false,
+    "train":  {
+                  "exit_code":  null,
+                  "command":  "python -m assault_sim.train.train_sb3",
+                  "log":  "C:\\repos\\python\\assault\\assault_sim\\session\\reports\\experiments\\reward_single_lever_capture_post_contact_bonus_v1_20260629_074112\\train.log",
+                  "executed":  false
+              },
+    "gate":  {
+                 "exit_code":  null,
+                 "command":  "powershell -ExecutionPolicy Bypass -File .\\scripts\\gate_r2a_no_regression_vs_r21i.ps1 -RunEval",
+                 "log":  "C:\\repos\\python\\assault\\assault_sim\\session\\reports\\experiments\\reward_single_lever_capture_post_contact_bonus_v1_20260629_074112\\gate.log",
+                 "executed":  false
+             },
+    "started_at_utc":  "2026-06-29T05:41:12.4525445Z",
+    "finished_at_utc":  "2026-06-29T05:51:59Z"
+}

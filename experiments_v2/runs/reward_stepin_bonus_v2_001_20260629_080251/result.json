@@ -1,0 +1,11 @@
+{
+  "id": "reward_stepin_bonus_v2_001",
+  "status": "running",
+  "manifest_source": "C:\\repos\\python\\assault\\experiments_v2\\queue\\example_reward_stepin.yaml",
+  "run_dir": "C:\\repos\\python\\assault\\experiments_v2\\runs\\reward_stepin_bonus_v2_001_20260629_080251",
+  "started_at_utc": "2026-06-29T06:02:51.817393+00:00",
+  "finished_at_utc": null,
+  "apply_ok": true,
+  "train_exit_code": null,
+  "gate_exit_code": null
+}

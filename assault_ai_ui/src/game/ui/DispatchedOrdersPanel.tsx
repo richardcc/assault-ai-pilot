@@ -1,7 +1,5 @@
 import { useEffect, useState } from "react";
 import { formatCoords } from "../render/hexGridRenderer";
-import { gameController } from "../gameControllerInstance";
-import { apiUrl } from "../../config/backend";
 
 type Order = {
   type?: string;
@@ -111,16 +109,9 @@ export function DispatchedOrdersPanel({
       if (executed) {
         return;
       }
-      const res = await fetch(apiUrl("/api/game/step"), {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action_id: actionId }),
-      });
-      const data = await res.json();
-      if (data?.state && typeof (window as any).__setGameState === "function") {
-        (window as any).__setGameState(data.state);
-        gameController.updateState(data.state);
-      }
+      // Keep a single action execution path through onExecuteOrder.
+      // Fallback direct POSTs can race and submit stale action_ids.
+      console.warn("⛔ executeActionById rejected: onExecuteOrder did not execute", actionId);
     } catch (err) {
       console.error("❌ Action by id failed", err);
     }

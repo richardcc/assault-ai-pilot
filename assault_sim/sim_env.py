@@ -237,10 +237,11 @@ class SimEnv:
             if getattr(a, "action_id", None) is None and isinstance(a, WaitAction):
                 a.action_id = f"WAIT:{getattr(a, 'unit_id', unit_id)}"
             if getattr(a, "action_id", None) == action_id:
-                print("[DEBUG] MATCH FOUND ✅")
+                # Keep stdout ASCII-safe on Windows cp1252 consoles.
+                print("[DEBUG] MATCH FOUND")
                 return a
 
-        print("[DEBUG] NO MATCH ❌")
+        print("[DEBUG] NO MATCH")
         return None
 
 

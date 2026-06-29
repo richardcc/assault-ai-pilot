@@ -303,6 +303,7 @@ class MetricsTracker:
             ):
                 tracked_side = str(outcomes.get("tracked_side", "")).strip().upper()
                 captured = 0
+                initial_captured = 0
                 total_obj = 0
                 if tracked_side and game_state is not None:
                     points = getattr(getattr(game_state, "victory", None), "points", []) or []
@@ -310,6 +311,8 @@ class MetricsTracker:
                     side_to_ownership = getattr(game_state, "side_to_ownership", {}) or {}
                     tracked_owner = side_to_ownership.get(tracked_side)
                     for vp in points:
+                        if str(getattr(vp, "initial_owner", "") or "").strip().upper() == tracked_side:
+                            initial_captured += 1
                         hs = game_state.hex_states.get(vp.hex_coords)
                         if hs is not None and hs.ownership == tracked_owner:
                             captured += 1
@@ -326,7 +329,9 @@ class MetricsTracker:
                         break
                 victory_level = {
                     "tracked_side": tracked_side,
+                    "initial_captured": initial_captured,
                     "captured": captured,
+                    "captured_delta": (captured - initial_captured),
                     "objectives_total": total_obj,
                     "result": (matched or {}).get("result"),
                 }

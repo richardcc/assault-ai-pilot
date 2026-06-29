@@ -5,6 +5,8 @@ from pathlib import Path
 from typing import Dict
 
 from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
+from fastapi.encoders import jsonable_encoder
+from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
@@ -36,6 +38,7 @@ from assault_model.actions.action_catalog import ActionCatalog
 from assault_model.map.hex_utils import safe_hex_distance
 from assault_model.map.terrain_config import terrain_config
 from assault_model.actions.status import WaitAction
+from assault_model.runtime.execution_context import ExecutionContext
 
 
 game_session = GameSession()
@@ -129,6 +132,11 @@ engine = ExplainableEngine(
 app.include_router(rag_router)
 
 
+@app.get("/health")
+def health():
+    return {"status": "ok", "service": "assault-backend"}
+
+
 @app.get("/api/engine/status")
 def engine_status():
     return {
@@ -154,7 +162,16 @@ async def get_scenario(scenario_id: str):
     try:
         return load_ui_scenario(scenario_id)
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        safe_state = jsonable_encoder(game_session.get_state())
+        return JSONResponse(
+            status_code=500,
+            content={
+                "ok": False,
+                "code": "STEP_RUNTIME_ERROR",
+                "message": str(e),
+                "state": safe_state,
+            },
+        )
 
 
 @app.get("/api/ui/scenarios")
@@ -213,6 +230,10 @@ class GameStartRequest(BaseModel):
 
 class UnitActionsRequest(BaseModel):
     unit_id: str
+
+
+class ResolveReactionRequest(BaseModel):
+    use_reaction: bool
 
 
 def _is_human_turn_for_side(side: str | None) -> bool:
@@ -322,6 +343,12 @@ async def game_step(payload: Dict):
             status_code=403,
             detail=f"manual step denied: side={unit_side} is not active human side",
         )
+    runtime = getattr(game_session.env, "runtime", None)
+    if getattr(runtime, "pending_reaction", None):
+        raise HTTPException(
+            status_code=409,
+            detail="pending reaction decision must be resolved first",
+        )
     try:
         _, reward, done, info = game_session.env.step(action_id)
         runtime = getattr(game_session.env, "runtime", None)
@@ -339,8 +366,43 @@ async def game_step(payload: Dict):
             if isinstance(info, dict) and isinstance(info2, dict):
                 info = {**info, **info2}
         return {"state": game_session.get_state(), "reward": reward, "done": done, "info": info}
+    except ValueError as e:
+        # Invalid/stale action_id should not surface as 500.
+        # Return current state so frontend can resync and continue loop.
+        safe_state = jsonable_encoder(game_session.get_state())
+        return JSONResponse(
+            status_code=409,
+            content={
+                "ok": False,
+                "code": "INVALID_OR_STALE_ACTION",
+                "message": str(e),
+                "state": safe_state,
+            },
+        )
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/game/reaction/resolve")
+def game_resolve_reaction(req: ResolveReactionRequest):
+    if game_session.env is None:
+        raise HTTPException(status_code=400, detail="no game")
+    runtime = getattr(game_session.env, "runtime", None)
+    if runtime is None:
+        raise HTTPException(status_code=500, detail="runtime missing")
+    pending = getattr(runtime, "pending_reaction", None)
+    if not pending:
+        raise HTTPException(status_code=409, detail="no pending reaction")
+    context = ExecutionContext(
+        event_bus=getattr(game_session.env, "event_bus", None),
+        game_map=getattr(game_session.env, "game_state", None).game_map if getattr(game_session.env, "game_state", None) is not None else None,
+    )
+    result = runtime.resolve_pending_reaction(use_reaction=bool(req.use_reaction), context=context)
+    if not bool(result.get("resolved", False)):
+        raise HTTPException(status_code=409, detail=str(result.get("reason", "reaction_unresolved")))
+    game_session.env.game_state = runtime.base_state
+    game_session.env._emit_map_state()
+    return {"state": game_session.get_state(), "reaction": result}
 
 
 @app.websocket("/ws/game")
@@ -350,17 +412,19 @@ async def websocket_game(ws: WebSocket):
         while game_session.env is None:
             await asyncio.sleep(0.1)
         env = game_session.env
+        loop = asyncio.get_running_loop()
 
         def handler(event):
-            if event["type"] == "MAP_STATE":
-                # Kept for parity with existing event-bus hook behavior.
+            if event["type"] in {"MAP_STATE", "REACTION_WINDOW", "REACTION_FIRE", "REACTION_FIRE_SKIPPED"}:
                 async def safe_send():
                     try:
-                        await ws.send_json({"type": "MAP_STATE", "payload": event["payload"]})
+                        await ws.send_json({"type": event["type"], "payload": event.get("payload", {})})
                     except Exception:
                         pass
-
-                _ = safe_send
+                try:
+                    loop.call_soon_threadsafe(asyncio.create_task, safe_send())
+                except Exception:
+                    pass
 
         if env.event_bus:
             env.event_bus.subscribe(handler)
@@ -402,6 +466,8 @@ def game_ai_turn():
         return {"error": "no game"}
 
     env = game_session.env
+    if getattr(getattr(env, "runtime", None), "pending_reaction", None):
+        return {"state": game_session.get_state(), "steps": [], "blocked": "pending_reaction"}
     if bool(getattr(getattr(env, "game_state", None), "done", False)):
         # Match already ended; do not execute extra AI steps.
         return {"state": game_session.get_state(), "steps": []}
@@ -442,8 +508,11 @@ def game_ai_turn():
             planner_context = None
     sb3_status = "not_attempted"
     sb3_reason = "default_heuristic"
-    runtime_scenario_id = getattr(getattr(env, "scenario", None), "id", None) or getattr(
-        getattr(env, "scenario", None), "name", None
+    runtime_scenario_id = (
+        getattr(game_session, "scenario_id", None)
+        or getattr(getattr(env, "scenario", None), "scenario_id", None)
+        or getattr(getattr(env, "scenario", None), "id", None)
+        or getattr(getattr(env, "scenario", None), "name", None)
     )
     if sb3_ai is not None and sb3_ai.can_control_side(active_side, scenario_id=runtime_scenario_id):
         sb3_status = "attempted"
@@ -452,6 +521,7 @@ def game_ai_turn():
                 env,
                 active_side,
                 planner_context=planner_context,
+                scenario_id=runtime_scenario_id,
             )
             if sb3_action is not None:
                 unit = sb3_unit or unit
@@ -479,6 +549,19 @@ def game_ai_turn():
     else:
         sb3_status = "skipped"
         sb3_reason = f"side_not_controlled:{active_side}"
+        try:
+            resolved_model = sb3_ai._resolve_model_path_for_side(  # type: ignore[attr-defined]
+                active_side,
+                scenario_id=runtime_scenario_id,
+            )
+            print(
+                "[AI TURN] SB3 skipped:"
+                f" side={active_side}"
+                f" scenario={runtime_scenario_id}"
+                f" resolved_model={resolved_model}"
+            )
+        except Exception:
+            pass
 
     proposed_action_id = getattr(action, "action_id", None)
     proposed_source = source

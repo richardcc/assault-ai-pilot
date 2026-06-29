@@ -1,0 +1,50 @@
+﻿{
+    "experiment_id":  "rag_single_lever_failure_pattern_detector_v1",
+    "description":  "RAG-diagnostics single lever: add mission-failure pattern detector over eval reports and traces.",
+    "owner":  "local_user",
+    "created_at_utc":  "2026-06-29T04:58:00Z",
+    "baseline":  {
+                     "report_paths":  [
+                                          "assault_sim/session/reports/sb3_eval/metrics_sb3_report_20260627T103651Z.json",
+                                          "assault_sim/session/reports/sb3_eval/metrics_sb3_report_20260627T103727Z.json",
+                                          "assault_sim/session/reports/sb3_eval/metrics_sb3_report_20260627T103759Z.json"
+                                      ]
+                 },
+    "scope":  {
+                  "side":  "US",
+                  "scenario":  "battaglia_cittadina_2_1",
+                  "seeds":  [
+                                42
+                            ],
+                  "episodes":  20
+              },
+    "policy":  {
+                   "single_lever_only":  true,
+                   "forbidden_mixed_surfaces":  [
+                                                    "planner",
+                                                    "reward",
+                                                    "guardrail"
+                                                ]
+               },
+    "changes":  [
+                    {
+                        "surface":  "rag",
+                        "file":  "assault_rag/copilot/services.py",
+                        "key":  "training_failure_pattern_detector",
+                        "old":  "heuristic_summary_only",
+                        "new":  "explicit_pattern_detector"
+                    }
+                ],
+    "execution":  {
+                      "train_command":  "python -m assault_sim.train.train_sb3",
+                      "gate_command":  "powershell -ExecutionPolicy Bypass -File .\\scripts\\gate_smoke_eval.ps1"
+                  },
+    "acceptance":  {
+                       "required":  [
+                                        "no_runtime_regression",
+                                        "pattern_detector_outputs_non_empty = true",
+                                        "gate_output_generated = true"
+                                    ]
+                   },
+    "status":  "cancelled"
+}

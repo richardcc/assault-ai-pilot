@@ -98,7 +98,7 @@ class GameSession:
 
         # ✅ guardar escenario (CLAVE)
         self.scenario_id = scenario_id
-        self.sides_config = sides  
+        self.sides_config = {str(k).upper(): str(v).lower() for k, v in (sides or {}).items()}
         self.env = SimEnv(
             config,
             debug_config=DebugConfig(enabled=True)
@@ -122,8 +122,8 @@ class GameSession:
                 # ✅ Collect only serializable events consumed by the UI.
                 # UNIT_MOVED / MAP_STATE contain HexCoord objects that break JSON serialization.
                 event_type = event.get("type")
-                should_emit_ui = event_type in {"ACTION_EFFECT", "VP_CAPTURED"}
-                should_trace = event_type in {"ACTION", "ACTION_EFFECT", "VP_CAPTURED", "TURN_END", "MATCH_END"}
+                should_emit_ui = event_type in {"ACTION_EFFECT", "VP_CAPTURED", "REACTION_FIRE", "REACTION_WINDOW"}
+                should_trace = event_type in {"ACTION", "ACTION_EFFECT", "VP_CAPTURED", "TURN_END", "MATCH_END", "REACTION_FIRE", "REACTION_WINDOW"}
                 if not (should_emit_ui or should_trace):
                     return
                 self._event_seq += 1
@@ -143,8 +143,9 @@ class GameSession:
                             f" terrain={breakdown.get('terrain_bonus_dice')}"
                             f" fort_split={breakdown.get('fortification_bonus_dice')}"
                         )
-                    # Stable id lets the frontend dedupe combat log entries
-                    # regardless of which endpoint (step / ai-turn / state) delivers them.
+                if should_emit_ui:
+                    # Stable id lets the frontend dedupe log entries regardless
+                    # of which endpoint (step / ai-turn / state) delivers them.
                     event["id"] = self._event_seq
                     self.last_events.append(event)
                 if should_trace:
@@ -152,6 +153,10 @@ class GameSession:
             self.env.event_bus.subscribe(on_event)
 
         self.env.reset()
+        if getattr(self.env, "runtime", None) is not None:
+            # Runtime is instantiated inside SimEnv.reset(); wire controller roles
+            # after reset so interactive matches always trigger REACTION_WINDOW.
+            self.env.runtime.side_controller_map = dict(self.sides_config)
 
         # ✅ Discard startup events (contain non-JSON-serializable objects like HexCoord)
         self.last_events.clear()
@@ -326,6 +331,7 @@ class GameSession:
             "vp_score_live": vp_score_live,
             "victory_outcome": victory_outcome_state,
             "activated_units": activated_units,
+            "pending_reaction": getattr(runtime, "pending_reaction", None) if runtime is not None else None,
             "last_events": copied_events,
             "trace_path": str(self.trace_path) if self.trace_path is not None else None,
         }

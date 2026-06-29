@@ -1,0 +1,10 @@
+﻿{
+    "pid":  23496,
+    "state":  "stopped",
+    "detail":  "worker exiting",
+    "pending":  0,
+    "pending_samples":  [
+
+                        ],
+    "timestamp_utc":  "2026-06-29T05:54:07.0732973Z"
+}

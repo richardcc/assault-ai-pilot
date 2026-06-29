@@ -1,15 +1,177 @@
 import re
+from functools import lru_cache
 from typing import Dict, List, Set, Tuple
 
 from assault_rag.copilot.index_builder import ensure_game_data_chunks, load_rule_chunks
 
 
+STOPWORDS = {
+    "the",
+    "and",
+    "for",
+    "with",
+    "that",
+    "this",
+    "what",
+    "que",
+    "con",
+    "por",
+    "para",
+    "del",
+    "las",
+    "los",
+    "una",
+    "uno",
+    "sobre",
+    "actual",
+    "juego",
+}
+
+TYPO_NORMALIZATION = {
+    "riffles": "rifles",
+    "riflees": "rifles",
+    "rifels": "rifles",
+    "uniddaes": "unidades",
+    "unidadeses": "unidades",
+    "catalogo": "catalogo",
+}
+
+QUERY_EXPANSIONS = {
+    "bunker": {"fortification", "fortifications", "casemate", "pillbox", "gun", "position", "crossing", "movement", "occupancy"},
+    "pillbox": {"bunker", "casemate", "fortification", "crossing", "movement", "occupancy"},
+    "fortification": {"bunker", "pillbox", "trench", "sandbag", "gun", "position", "crossing", "movement", "occupancy"},
+    "fortifications": {"fortification", "bunker", "pillbox", "trench", "sandbag", "crossing", "movement", "occupancy"},
+    "unidad": {"unit", "units", "category", "classification", "subtype", "catalog", "side"},
+    "unidades": {"unit", "units", "category", "classification", "subtype", "catalog", "side"},
+    "tipo": {"category", "classification", "subtype", "unit", "units"},
+    "tipos": {"category", "classification", "subtype", "unit", "units"},
+    "catalogo": {"catalog", "unit", "units", "stats", "classification"},
+    "catálogo": {"catalog", "unit", "units", "stats", "classification"},
+    "disponibles": {"unit", "units", "catalog", "side", "classification"},
+    "rifles": {"rifle", "unit", "units", "infantry", "standard_infantry"},
+    "rifle": {"rifles", "unit", "units", "infantry", "standard_infantry"},
+}
+
+FUZZY_CANONICAL_TERMS = {
+    "rifles",
+    "rifle",
+    "sniper",
+    "mortar",
+    "bazooka",
+    "infantry",
+    "artillery",
+    "vehicle",
+    "unit",
+    "units",
+    "catalog",
+    "classification",
+    "subtype",
+    "fortification",
+    "fortifications",
+    "bunker",
+    "pillbox",
+    "trench",
+    "sandbag",
+    "movement",
+    "crossing",
+    "occupancy",
+}
+
+
+def _levenshtein_distance_limited(a: str, b: str, limit: int = 2) -> int:
+    """
+    Levenshtein with early exit for small limits (query typo tolerance).
+    """
+    if a == b:
+        return 0
+    if abs(len(a) - len(b)) > limit:
+        return limit + 1
+    prev = list(range(len(b) + 1))
+    for i, ca in enumerate(a, start=1):
+        cur = [i]
+        row_min = cur[0]
+        for j, cb in enumerate(b, start=1):
+            ins = cur[j - 1] + 1
+            dele = prev[j] + 1
+            sub = prev[j - 1] + (0 if ca == cb else 1)
+            val = min(ins, dele, sub)
+            cur.append(val)
+            if val < row_min:
+                row_min = val
+        if row_min > limit:
+            return limit + 1
+        prev = cur
+    return prev[-1]
+
+
+def _fuzzy_expand_query_tokens(query_tokens: Set[str]) -> Set[str]:
+    expanded = set(query_tokens)
+    for token in list(query_tokens):
+        if len(token) < 4:
+            continue
+        # Small typo tolerance: distance <=2 for medium/long tokens.
+        for canon in FUZZY_CANONICAL_TERMS:
+            if canon in expanded:
+                continue
+            dist = _levenshtein_distance_limited(token, canon, limit=2)
+            if dist <= 2:
+                expanded.add(canon)
+    return expanded
+
+
 def _tokenize(text: str) -> Set[str]:
-    return {t for t in re.findall(r"[a-zA-Z0-9_]+", (text or "").lower()) if len(t) > 1}
+    tokens: Set[str] = set()
+    for raw in re.findall(r"[a-zA-Z0-9_]+", (text or "").lower()):
+        if len(raw) <= 1:
+            continue
+        normalized = TYPO_NORMALIZATION.get(raw, raw)
+        if normalized in STOPWORDS:
+            continue
+        # Numeric-only tokens are too noisy for hybrid retrieval ("43", "1", etc.).
+        # Keep alphanumeric unit ids (e.g. "us_43") via regex tokenization above.
+        if normalized.isdigit():
+            continue
+        tokens.add(normalized)
+    return tokens
 
 
-def _score(text: str, query_tokens: Set[str]) -> int:
-    return len(_tokenize(text) & query_tokens)
+@lru_cache(maxsize=8192)
+def _tokenize_cached(text: str) -> frozenset[str]:
+    return frozenset(_tokenize(text))
+
+
+def _expand_query_tokens(query_tokens: Set[str]) -> Set[str]:
+    expanded = set(query_tokens)
+    for token in list(query_tokens):
+        expanded.update(QUERY_EXPANSIONS.get(token, set()))
+    return _fuzzy_expand_query_tokens(expanded)
+
+
+@lru_cache(maxsize=4096)
+def _expanded_query_tokens_for_query(query: str) -> frozenset[str]:
+    return frozenset(_expand_query_tokens(_tokenize(query)))
+
+
+@lru_cache(maxsize=1)
+def _rule_index() -> tuple[tuple[Dict, frozenset[str]], ...]:
+    chunks = load_rule_chunks()
+    return tuple((chunk, _tokenize_cached(str(chunk.get("text", "") or ""))) for chunk in chunks)
+
+
+@lru_cache(maxsize=1)
+def _data_index() -> tuple[tuple[Dict, frozenset[str]], ...]:
+    # ensure_game_data_chunks already backfills fortification chunks when needed.
+    all_data_chunks = ensure_game_data_chunks()
+    seen_chunk_ids: Set[str] = set()
+    indexed: List[tuple[Dict, frozenset[str]]] = []
+    for chunk in all_data_chunks:
+        chunk_id = str(chunk.get("chunk_id", ""))
+        if chunk_id and chunk_id in seen_chunk_ids:
+            continue
+        if chunk_id:
+            seen_chunk_ids.add(chunk_id)
+        indexed.append((chunk, _tokenize_cached(str(chunk.get("text", "") or ""))))
+    return tuple(indexed)
 
 
 def classify_query_mode(query: str, requested_mode: str | None = None) -> str:
@@ -52,21 +214,21 @@ def retrieve_evidence(
     max_rules: int = 5,
     max_data: int = 5,
 ) -> Dict[str, List[Dict]]:
-    query_tokens = _tokenize(query)
+    query_tokens = set(_expanded_query_tokens_for_query(str(query or "")))
 
     rules_ranked: List[Tuple[int, Dict]] = []
     data_ranked: List[Tuple[int, Dict]] = []
 
     if mode in {"rules", "hybrid"}:
-        for chunk in load_rule_chunks():
-            score = _score(chunk.get("text", ""), query_tokens)
+        for chunk, chunk_tokens in _rule_index():
+            score = len(chunk_tokens & query_tokens)
             if score > 0:
                 rules_ranked.append((score, chunk))
         rules_ranked.sort(key=lambda x: x[0], reverse=True)
 
     if mode in {"data", "hybrid"}:
-        for chunk in ensure_game_data_chunks():
-            score = _score(chunk.get("text", ""), query_tokens)
+        for chunk, chunk_tokens in _data_index():
+            score = len(chunk_tokens & query_tokens)
             if score > 0:
                 data_ranked.append((score, chunk))
         data_ranked.sort(key=lambda x: x[0], reverse=True)

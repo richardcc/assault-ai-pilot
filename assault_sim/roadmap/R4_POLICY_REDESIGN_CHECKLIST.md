@@ -8,3 +8,16 @@
 - [ ] Criterio kill inmediato:
       - selection_rate < 0.35 en 20 eps, o
       - vp_entry_missed_rate >= 0.92
+
+Script operativo:
+- `powershell -ExecutionPolicy Bypass -File .\scripts\run_r4_policy_redesign_gate.ps1`
+- Genera closeout: `assault_sim/session/reports/sb3_eval/r4_closeout_<timestamp>.json/.md`
+
+Resultado ultimo run:
+- closeout: `assault_sim/session/reports/sb3_eval/r4_closeout_20260627T104148Z.json`
+- decision: **KILL**
+- micro-benchmark (20 eps, seed 42):
+  - `vp_stepin_selection_rate = 0.000` (**FAIL** vs target `>= 0.50`)
+  - `vp_entry_missed_rate = 0.359` (no dispara kill por missed rate)
+- razon de kill: `selection_rate < 0.35`
+- accion operativa: no escalar a 120 episodios en este ciclo.

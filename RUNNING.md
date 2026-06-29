@@ -143,24 +143,7 @@ Notes:
 - Original engine replay remains unchanged
 
 ------------------------------------------------------------
-8. Open the Web Replay Viewer
-------------------------------------------------------------
-
-Open:
-
-assault-web/index.html
-
-Use a local static HTTP server if required by the browser.
-
-Web viewer capabilities:
-
-- Forward / backward playback
-- Unit movement history
-- Active unit highlighting
-- Basis for tactical explanations
-
-------------------------------------------------------------
-9. Offline Batch Evaluation and Engine Diagnostics
+8. Offline Batch Evaluation and Engine Diagnostics
 ------------------------------------------------------------
 
 This is the canonical offline evaluation system.
@@ -177,7 +160,7 @@ Capabilities:
 - Detect tactical bottlenecks and engine regressions
 
 ------------------------------------------------------------
-9.1 Analysis Modes: Benchmark vs Evaluation
+8.1 Analysis Modes: Benchmark vs Evaluation
 ------------------------------------------------------------
 
 Offline analysis supports two distinct analysis modes.
@@ -216,7 +199,7 @@ Interpretation:
   “With what probability does the RL agent win against the heuristic?”
 
 ------------------------------------------------------------
-9.2 Offline Analysis Command (Canonical)
+8.2 Offline Analysis Command (Canonical)
 ------------------------------------------------------------
 
 Benchmark mode (deterministic):
@@ -237,7 +220,7 @@ Optional debug output:
 --debug
 
 ------------------------------------------------------------
-10. Typical Workflow Summary
+9. Typical Workflow Summary
 ------------------------------------------------------------
 
 1. Train the RL agent continuously
@@ -250,7 +233,7 @@ Optional debug output:
 8. Repeat
 
 ------------------------------------------------------------
-11. Source of Truth
+10. Source of Truth
 ------------------------------------------------------------
 
 This file is the authoritative reference for:

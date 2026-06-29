@@ -1,0 +1,20 @@
+{
+    "cycle":  "R2.1-i",
+    "timestamp_utc":  "20260627T103609Z",
+    "decision":  "GO",
+    "pass_policy":  "majority",
+    "seeds":  [
+                  42,
+                  43,
+                  44
+              ],
+    "episodes":  10,
+    "side":  "US",
+    "scenario":  "battaglia_cittadina_2_1",
+    "capture_metric":  "capture_conversion_after_contact",
+    "thresholds":  {
+                       "min_capture_attempt_success_rate":  1E-07,
+                       "max_loss_rate":  0.8,
+                       "min_vp_entry_conversion_rate":  0.3
+                   }
+}

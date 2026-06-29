@@ -203,3 +203,48 @@ python -m assault_sim.train.train_sb3
 $env:ASSAULT_PERF_PROFILE="1"
 $env:ASSAULT_PERF_EVERY="200"
 python -m assault_sim.train.train_sb3
+
+
+---
+.\scripts\run_experiment_from_manifest.ps1 -ManifestPath .\scripts\experiment_manifest.template.json
+.\scripts\run_experiment_batch.ps1 -ManifestsDir .\scripts\experiments -ContinueOnError
+
+.\scripts\run_experiment_batch.ps1 -ManifestsDir .\scripts\experiments -SkipCompleted -UpdateManifestStatus -ContinueOnError
+
+----
+powershell -ExecutionPolicy Bypass -File .\scripts\experiment_queue_worker.ps1 -ManifestsDir .\scripts\experiments
+
+.\scripts\watch_experiments.ps1
+
+
+***********
+Experimeitneos:
+cd C:\repos\python\assault-experiments-orchestrator
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+pip install -r requirements.txt
+
+
+cd C:\repos\python\assault-experiments-orchestrator
+.\.venv\Scripts\Activate.ps1
+python .\scripts\status.py
+
+cd C:\repos\python\assault-experiments-orchestrator
+.\.venv\Scripts\Activate.ps1
+mlflow ui --backend-store-uri "file:.\mlruns" --port 5001
+http://127.0.0.1:5000
+cd C:\repos\python\assault-experiments-orchestrator
+.\.venv\Scripts\Activate.ps1
+prefect server start
+http://127.0.0.1:4200
+
+cd C:\repos\python\assault-experiments-orchestrator
+powershell -ExecutionPolicy Bypass -File .\scripts\start_dashboards.ps1
+
+python .\scripts\prefect_flow.py --target-repo "C:\repos\python\assault" --loop --interval-seconds 30
+
+cd C:\repos\python\assault-experiments-orchestrator
+powershell -ExecutionPolicy Bypass -File .\scripts\start_parallel_workers.ps1
+
+cd C:\repos\python\assault
+pm2 start .\ecosystem.config.cjs

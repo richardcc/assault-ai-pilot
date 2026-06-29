@@ -23,4 +23,3 @@ class ReactionState:
 
     def reset_turn(self):
         self.reactions_used = 0
-``

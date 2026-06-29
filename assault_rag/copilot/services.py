@@ -8,6 +8,54 @@ from typing import Dict, List
 from assault_rag.copilot.retriever import classify_query_mode, retrieve_evidence
 
 
+UNIT_QUERY_HINTS = {
+    "unit",
+    "units",
+    "unidad",
+    "unidades",
+    "rifle",
+    "rifles",
+    "sniper",
+    "mortar",
+    "bazooka",
+    "catalog",
+    "catalogo",
+    "catálogo",
+    "disponibles",
+}
+
+
+def _to_int(value):
+    try:
+        return int(value)
+    except Exception:
+        return None
+
+
+def _hex_distance(aq: int, ar: int, bq: int, br: int) -> int:
+    # Axial distance for hex grids.
+    return (abs(aq - bq) + abs((aq + ar) - (bq + br)) + abs(ar - br)) // 2
+
+
+def _unit_coords(unit: Dict) -> tuple[int, int] | None:
+    q = _to_int(unit.get("q"))
+    r = _to_int(unit.get("r"))
+    if q is not None and r is not None:
+        return q, r
+    pos = unit.get("position")
+    if isinstance(pos, dict):
+        q = _to_int(pos.get("q"))
+        r = _to_int(pos.get("r"))
+        if q is not None and r is not None:
+            return q, r
+    if isinstance(pos, (list, tuple)) and len(pos) >= 2:
+        q = _to_int(pos[0])
+        r = _to_int(pos[1])
+        if q is not None and r is not None:
+            return q, r
+    return None
+
+
 def _query_terms(query: str) -> List[str]:
     terms = [t.lower() for t in re.findall(r"[a-zA-Z0-9_]+", query or "") if len(t) > 2]
     # Keep order, remove duplicates.
@@ -18,6 +66,11 @@ def _query_terms(query: str) -> List[str]:
             seen.add(t)
             uniq.append(t)
     return uniq
+
+
+def _looks_like_unit_catalog_query(query: str) -> bool:
+    terms = set(_query_terms(query))
+    return bool(terms & UNIT_QUERY_HINTS)
 
 
 def _clean_text(text: str) -> str:
@@ -85,6 +138,22 @@ def _build_query_answer(query: str, evidence: Dict[str, List[Dict]]) -> str:
     return " | ".join(parts)
 
 
+def _prefer_data_for_unit_queries(query: str, evidence: Dict[str, List[Dict]]) -> Dict[str, List[Dict]]:
+    """
+    Unit catalog queries should be grounded on canonical game_data first.
+    In hybrid mode, noisy rule chunks can dominate citations and confuse answers.
+    """
+    rules = list(evidence.get("rules", []) or [])
+    data = list(evidence.get("game_data", []) or [])
+    if not _looks_like_unit_catalog_query(query):
+        return {"rules": rules, "game_data": data}
+    if not data:
+        return {"rules": rules, "game_data": data}
+    # Keep responses focused: when we already have data evidence for unit stats,
+    # avoid mixing in unrelated roadmap/rulebook chunks.
+    return {"rules": [], "game_data": data}
+
+
 def _llm_enabled() -> bool:
     return str(os.getenv("ASSAULT_RAG_LLM_ENABLED", "1")).strip().lower() in {"1", "true", "yes", "on"}
 
@@ -148,15 +217,103 @@ def _answer_with_llm(query: str, evidence: Dict[str, List[Dict]], context: Dict 
     return _ollama_chat(model=model, prompt=prompt)
 
 
+def _extract_json_object(raw_text: str) -> Dict | None:
+    text = str(raw_text or "").strip()
+    if not text:
+        return None
+    try:
+        parsed = json.loads(text)
+        return parsed if isinstance(parsed, dict) else None
+    except Exception:
+        pass
+    start = text.find("{")
+    end = text.rfind("}")
+    if start < 0 or end <= start:
+        return None
+    try:
+        parsed = json.loads(text[start : end + 1])
+        return parsed if isinstance(parsed, dict) else None
+    except Exception:
+        return None
+
+
+def _llm_refine_situation(
+    *,
+    state_snapshot: Dict,
+    evidence: Dict,
+    priorities: List[str],
+    risks: List[str],
+    opportunities: List[str],
+    key_unit_alerts: List[str],
+) -> Dict | None:
+    if not _llm_enabled():
+        return None
+    model = _resolve_model({})
+    turn = state_snapshot.get("turn", "N/A")
+    active_side = str(state_snapshot.get("active_side", "UNKNOWN")).upper()
+    vp_live = state_snapshot.get("vp_score_live", {}) or {}
+    own_vp = float(vp_live.get(active_side, 0) or 0)
+    enemy_best = max(
+        (float(v or 0) for s, v in vp_live.items() if str(s).upper() != active_side),
+        default=0.0,
+    )
+    vp_gap = enemy_best - own_vp
+    evidence_lines = []
+    for c in (evidence.get("citations", []) or [])[:6]:
+        source_id = str(c.get("source_id", "") or "unknown")
+        snippet = str(c.get("snippet", "") or "").strip().replace("\n", " ")
+        evidence_lines.append(f"- [{source_id}] {snippet[:220]}")
+    prompt = (
+        "Eres analista táctico. Devuelve SOLO JSON válido.\n"
+        "No inventes datos fuera del contexto.\n"
+        "Si hay desventaja fuerte de VP, NO uses tono optimista genérico.\n\n"
+        "Schema exacto:\n"
+        '{"situation_summary":"...",'
+        '"priorities":["..."],'
+        '"risks":["..."],'
+        '"opportunities":["..."],'
+        '"key_unit_alerts":["..."]}\n\n'
+        f"Contexto:\nturn={turn}\nactive_side={active_side}\n"
+        f"vp_live={vp_live}\nown_vp={own_vp}\nenemy_best_vp={enemy_best}\nvp_gap={vp_gap}\n"
+        f"heuristic_priorities={priorities[:3]}\n"
+        f"heuristic_risks={risks[:3]}\n"
+        f"heuristic_opportunities={opportunities[:3]}\n"
+        f"heuristic_key_unit_alerts={key_unit_alerts[:3]}\n\n"
+        "Evidencia:\n"
+        + ("\n".join(evidence_lines) if evidence_lines else "- (sin evidencia)")
+    )
+    try:
+        raw = _ollama_chat(model=model, prompt=prompt, timeout_s=12.0)
+    except Exception:
+        return None
+    payload = _extract_json_object(raw)
+    if not payload:
+        return None
+    out: Dict[str, List[str] | str] = {}
+    out["situation_summary"] = str(payload.get("situation_summary", "") or "").strip()
+    for k in ("priorities", "risks", "opportunities", "key_unit_alerts"):
+        val = payload.get(k, [])
+        if isinstance(val, list):
+            out[k] = [str(x).strip() for x in val if str(x).strip()][:3]
+        else:
+            out[k] = []
+    return out
+
+
 def rag_query(query: str, requested_mode: str | None = None, context: Dict | None = None) -> Dict:
     mode = classify_query_mode(query, requested_mode)
-    evidence = retrieve_evidence(query, mode=mode)
+    evidence = _prefer_data_for_unit_queries(
+        query=query,
+        evidence=retrieve_evidence(query, mode=mode),
+    )
     citations: List[Dict] = []
     citations.extend(_build_citation(r, "rule", query=query) for r in evidence.get("rules", []))
     citations.extend(_build_citation(d, "data", query=query) for d in evidence.get("game_data", []))
     limitations: List[str] = []
     if not citations:
         limitations.append("NO_EVIDENCE")
+    if _looks_like_unit_catalog_query(query) and len(evidence.get("game_data", [])) == 0:
+        limitations.append("NO_GAME_DATA_EVIDENCE_FOR_UNIT_QUERY")
     answer = _build_query_answer(query, evidence)
     if _llm_enabled():
         try:
@@ -330,6 +487,25 @@ def explain_game_situation(state_snapshot: Dict) -> Dict:
     active_side_norm = str(active_side).upper()
     own_units = [u for u in units if str(u.get("side", "")).upper() == active_side_norm]
     enemy_units = [u for u in units if str(u.get("side", "")).upper() != active_side_norm]
+    vp_hexes_raw = list(state_snapshot.get("vps", []) or [])
+
+    vp_hexes: List[tuple[int, int]] = []
+    for vp in vp_hexes_raw:
+        if isinstance(vp, dict):
+            q = _to_int(vp.get("q"))
+            r = _to_int(vp.get("r"))
+            if q is not None and r is not None:
+                vp_hexes.append((q, r))
+        elif isinstance(vp, (list, tuple)) and len(vp) >= 2:
+            q = _to_int(vp[0])
+            r = _to_int(vp[1])
+            if q is not None and r is not None:
+                vp_hexes.append((q, r))
+
+    own_with_coords = [(u, _unit_coords(u)) for u in own_units]
+    enemy_with_coords = [(u, _unit_coords(u)) for u in enemy_units]
+    own_with_coords = [(u, c) for (u, c) in own_with_coords if c is not None]
+    enemy_with_coords = [(u, c) for (u, c) in enemy_with_coords if c is not None]
 
     # Overextension / critical HP heuristic.
     low_hp_own = []
@@ -349,16 +525,85 @@ def explain_game_situation(state_snapshot: Dict) -> Dict:
                 f"Unidad clave en riesgo: {unit.get('id', unit.get('unit_id', 'UNKNOWN'))} (HP={unit.get('hp')})."
             )
 
+    # Map-driven tactical geometry (frontline pressure + VP races).
+    if own_with_coords and enemy_with_coords:
+        close_contacts = 0
+        isolated_own = 0
+        own_units_near_vp = 0
+        enemy_units_near_vp = 0
+
+        for own_u, (oq, or_) in own_with_coords:
+            nearest_enemy = min(
+                _hex_distance(oq, or_, eq, er)
+                for _, (eq, er) in enemy_with_coords
+            )
+            if nearest_enemy <= 2:
+                close_contacts += 1
+            if nearest_enemy >= 5:
+                isolated_own += 1
+
+            if vp_hexes:
+                nearest_vp = min(_hex_distance(oq, or_, vq, vr) for (vq, vr) in vp_hexes)
+                if nearest_vp <= 2:
+                    own_units_near_vp += 1
+
+        for _, (eq, er) in enemy_with_coords:
+            if vp_hexes:
+                nearest_vp = min(_hex_distance(eq, er, vq, vr) for (vq, vr) in vp_hexes)
+                if nearest_vp <= 2:
+                    enemy_units_near_vp += 1
+
+        if close_contacts >= max(1, len(own_with_coords) // 2):
+            priorities.append("Línea de contacto corta: priorizar foco de fuego sobre el mismo eje de choque.")
+        if isolated_own > 0:
+            risks.append("Hay unidades propias aisladas por geometría del mapa (enemigo lejano/apoyo débil).")
+        if own_units_near_vp > enemy_units_near_vp:
+            opportunities.append("Ventaja posicional cerca de VP: ventana para consolidar control en objetivos.")
+        elif enemy_units_near_vp > own_units_near_vp:
+            risks.append("El enemigo tiene mejor despliegue alrededor de VP; riesgo de pérdida por posición.")
+
+        for own_u, (oq, or_) in own_with_coords[:6]:
+            nearest_enemy = min(
+                _hex_distance(oq, or_, eq, er)
+                for _, (eq, er) in enemy_with_coords
+            )
+            if nearest_enemy <= 1:
+                key_unit_alerts.append(
+                    f"{own_u.get('id', own_u.get('unit_id', 'UNKNOWN'))} en contacto inmediato (dist={nearest_enemy})."
+                )
+
+    elif units:
+        # Map snapshot without usable coordinates.
+        if "MAP_COORDS_MISSING" not in key_unit_alerts:
+            key_unit_alerts.append("Faltan coordenadas q/r en snapshot; análisis geométrico parcial.")
+
     # VP pressure / capture-window heuristic.
+    vp_gap_value = 0.0
+    side_behind_on_vp = False
     if vp_live and active_side_norm in vp_live:
         own_vp = float(vp_live.get(active_side_norm, 0) or 0)
         enemy_best = max(
             (float(v or 0) for s, v in vp_live.items() if str(s).upper() != active_side_norm),
             default=0.0,
         )
-        if own_vp <= enemy_best:
-            opportunities.append("Ventana de captura activa: conviene priorizar entrada/retención de VP este turno.")
-            priorities.append("Forzar progresión a objetivo antes de intercambios de bajo impacto.")
+        vp_gap_value = enemy_best - own_vp
+        side_behind_on_vp = own_vp <= enemy_best
+        if side_behind_on_vp:
+            if vp_gap_value >= 3.0:
+                risks.append(
+                    "Desventaja crítica de VP: el rival controla claramente los objetivos; riesgo alto de derrota por puntos."
+                )
+                priorities.append(
+                    "Recuperar al menos un VP de inmediato y evitar intercambios de bajo impacto."
+                )
+                opportunities.append(
+                    "Única ventana útil: recapturar VP este turno para frenar la bola de nieve de puntos."
+                )
+            else:
+                opportunities.append(
+                    "Ventana de captura activa: conviene priorizar entrada/retención de VP este turno."
+                )
+                priorities.append("Forzar progresión a objetivo antes de intercambios de bajo impacto.")
         else:
             priorities.append("Conservar ventaja de VP evitando pérdidas de control en hexes expuestos.")
 
@@ -399,6 +644,38 @@ def explain_game_situation(state_snapshot: Dict) -> Dict:
         f"Unidades vivas por bando: {units_txt}. "
         f"Marcador VP: {vp_txt}."
     )
+
+    # LLM structured refinement: smarter wording with tactical consistency.
+    llm_refined = _llm_refine_situation(
+        state_snapshot=state_snapshot,
+        evidence=ev,
+        priorities=priorities,
+        risks=risks,
+        opportunities=opportunities,
+        key_unit_alerts=key_unit_alerts,
+    )
+    if llm_refined:
+        situation_summary = str(llm_refined.get("situation_summary") or situation_summary)
+        priorities = list(llm_refined.get("priorities") or priorities)
+        risks = list(llm_refined.get("risks") or risks)
+        opportunities = list(llm_refined.get("opportunities") or opportunities)
+        key_unit_alerts = list(llm_refined.get("key_unit_alerts") or key_unit_alerts)
+
+    # Guardrail: avoid optimistic output under strong VP deficit.
+    if side_behind_on_vp and vp_gap_value >= 3.0:
+        if not any("desventaja" in r.lower() or "riesgo alto" in r.lower() for r in risks):
+            risks.insert(
+                0,
+                "Desventaja crítica de VP: riesgo alto de derrota por puntos si no se recaptura un objetivo ya.",
+            )
+        if not any("recuperar" in p.lower() or "recaptur" in p.lower() for p in priorities):
+            priorities.insert(0, "Recuperar al menos un VP este turno es prioridad absoluta.")
+        opportunities = [
+            o
+            for o in opportunities
+            if "ventana de captura activa" not in o.lower()
+        ]
+        opportunities.insert(0, "Única oportunidad realista: recapturar VP inmediato para cortar la ventaja rival.")
 
     return {
         "situation_summary": situation_summary,

@@ -6,6 +6,13 @@ rule domain to code, tests, and validation gates.
 
 Validation state: **Active**.
 
+Operational alignment snapshot (2026-06-27):
+
+- Training baseline `R2.1-i` is **GO** and frozen for comparisons (`42/43/44`).
+- `R4` / `R4.1` step-in policy redesign line is **KILL** (micro gate failed; no 120-episode escalation).
+- Anti-regression gate against frozen baseline is available at `scripts/gate_r2a_no_regression_vs_r21i.ps1`.
+- Win-rate-focused train retune (PPO+reward) applied in `assault_sim/config/train_config.json` and `assault_sim/config/reward_config.json`; validation state: **Pending Validation** (requires multi-seed A/B vs frozen baseline).
+
 ## Scope Clarification
 
 This file started as a high-level roadmap and was **not yet a full per-subrule audit**
@@ -60,7 +67,7 @@ Validation state for rules tables data-source unification: **Completed (clean-cu
 | `R-ATTACK-MELEE-RESOLUTION` | Close combat rounds and outcomes | implemented | `assault_model/combat/close_combat_resolver.py` | close-combat tests |
 | `R-STATUS-MORALE` | Suppression/fallback/recovery | implemented-partial | `assault_model/combat/morale.py`, `assault_model/units/unit_instance.py` | suppression tests; fallback pathing to enrich |
 | `R-SUPPORT-INDIRECT-FIRE` | Support phase indirect fires/smoke | implemented-partial | `assault_model/actions/*`, support/combat flow | add scenario-level assertions |
-| `R-ACTION-REACTION-FIRE` | Reaction fire framework | implemented-partial | `assault_model/combat/reaction_*`, runtime integration points | needs full E2E reaction tests |
+| `R-ACTION-REACTION-FIRE` | Reaction fire framework | implemented-partial | `assault_model/combat/reaction_*`, runtime integration points | runtime now supports human decision window (`pending_reaction`); full E2E reaction tests still pending |
 | `R-OPTIONAL-TAOAS-INTEGRATION` | Tactical air / off-board artillery | documented-only | docs + scenario model | implementation pending |
 | `R-VICTORY-CONDITIONS` | VP ownership and objective outcomes | implemented | `assault_model/core/vp_tracker.py` | objective-outcome eval tests |
 
@@ -82,7 +89,7 @@ Validation state for rules tables data-source unification: **Completed (clean-cu
 | Capability ID | Action family from PDF | Status | Code anchor | Validation status |
 |---|---|---|---|---|
 | `R-ACTION-PASS` | Pass action | implemented | runtime/action status flow | regression pending |
-| `R-ACTION-REACTION-FIRE` | Reaction fire + interruption order | implemented-partial | `assault_model/combat/reaction_*` | E2E runtime integration pending |
+| `R-ACTION-REACTION-FIRE` | Reaction fire + interruption order | implemented-partial | `assault_model/combat/reaction_*`, `assault_model/runtime/game_state_runtime.py` (flag `ASSAULT_ENABLE_REACTION_FIRE`, default ON) | Unit coverage in `assault_model/tests/test_runtime_reaction_fire_flag.py` (event order + pending human window); full E2E runtime+UI integration pending |
 | `R-ACTION-COMMAND-CARD` | Play command card | documented-only | docs/optional rules | engine implementation pending |
 | `R-ACTION-MOVE-NORMAL` | Normal movement | implemented | movement rules + catalog | stable |
 | `R-ACTION-MOVE-FAST` | Fast movement | implemented-partial | movement/action catalog | full constraints audit pending |
@@ -144,7 +151,7 @@ Format: one row per explicit PDF subsection to avoid ambiguity in coverage.
 | `6.6` | Victory check phase | implemented | `assault_model/core/vp_tracker.py` + runtime | eval reports | scenario edge-case tests |
 | `6.7` | Placing reinforcements | implemented-partial | scenario/runtime placement paths | partial | reinforcement timing tests |
 | `8.1` | Passing | implemented | `WaitAction` + activation advance | covered in runtime behavior | isolated pass-contract test |
-| `8.2` | Reaction fire | implemented-partial | `assault_model/combat/reaction_*` | limited | full E2E trigger/interrupt tests |
+| `8.2` | Reaction fire | implemented-partial | `assault_model/combat/reaction_*`, `assault_model/runtime/game_state_runtime.py` | limited | runtime pending-window contract active; full E2E trigger/interrupt/UI tests pending |
 | `8.3` | Play command card | documented-only | docs only | none | engine implementation |
 | `9.1` | Normal movement | implemented | movement rules + action catalog | movement tests | regression expansion |
 | `9.2` | Fast movement | implemented-partial | movement/action generation | partial | penalties/limits parity audit |
@@ -216,10 +223,33 @@ Exit gate:
 - Align legacy reaction modules with current action/runtime APIs.
 - Add end-to-end tests for trigger, resolution, and interruption ordering.
 
+Current checkpoint (2026-06-27):
+
+- Runtime contract is validated (`pending_reaction` + resolve use/skip) via `assault_model/tests/test_runtime_reaction_fire_flag.py`.
+- Technical E2E validation script is available at `scripts/test_reaction_fire_e2e.ps1`.
+- Deterministic fallback smoke for guaranteed trigger is available at `scripts/force_reaction_fire_smoke.py`.
+- Evaluation/report/viewer now expose reaction metrics (`reaction_fire_count`, `reaction_fire_rate`, `reaction_fire_by_side`).
+- Operational note: natural eval occurrence can remain `0` in short runs; this is treated separately from technical integration.
+
 Exit gate:
 
 - Reaction fire triggers and resolves deterministically in smoke scenarios.
 - No increase in invalid-action finalization rates during eval.
+
+R2 split gates (recommended):
+
+- Technical gate (must pass): `scripts/test_reaction_fire_e2e.ps1 -MinReactionFireCount 1 -ForceDeterministicFallback`.
+- Natural-occurrence gate (behavioral KPI): same script without fallback over multi-seed runs, target `reaction_fire_count > 0`.
+- Operational wrapper for natural gate: `scripts/gate_reaction_fire_natural.ps1` (default `Seeds=42,43,44`, `Episodes=30`, `MinReactionFireCount=1`).
+- Operational wrapper for technical gate: `scripts/gate_reaction_fire_technical.ps1` (default `Seeds=42,43,44`, `Episodes=30`).
+
+Latest gate result snapshot (2026-06-27):
+
+- Queue runner: `scripts/run_gap_active_queue.ps1`
+- `r2a_gate`: PASS
+- `reaction_fire_technical`: PASS
+- `reaction_fire_natural`: FAIL_EXPECTED_OR_PENDING (latest multi-seed run still reports `reaction_fire_count=0`)
+- Governance status unchanged: `P4.3+` paused, `R4.x` reopen blocked without new single-lever hypothesis.
 
 ## Phase R3 - Support systems (TA/OAS)
 
@@ -239,6 +269,7 @@ Exit gate:
   - at least one automated test,
   - one validation note in rule docs.
 - Sync status with `docs/GAP_ANALYSIS.md` and `docs/game_rules/annexes/B_PDF_TRACEABILITY.md`.
+- Keep training-operation status synchronized with `assault_sim/roadmap/ROADMAP_TRAINING_GYM_SB3_RLLIB.md` for GO/KILL decisions that affect rule-validation sequencing.
 
 Exit gate:
 
@@ -250,3 +281,4 @@ Exit gate:
 - One gameplay rules palanca per cycle where possible.
 - Any new rule must include traceability update (this file + tests reference).
 - If a change regresses tactical gates in 2/3 seeds, rollback only the last palanca.
+- Before promoting rule-sensitive tactical changes, run no-regression check vs frozen baseline (`gate_r2a_no_regression_vs_r21i.ps1`).

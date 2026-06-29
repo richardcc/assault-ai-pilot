@@ -86,6 +86,7 @@ export default function GameCanvas({
   const selectedUnitRef = useRef<string | null>(null);
   const availableMovesRef = useRef<any[]>([]);
   const fxLayerRef = useRef<PIXI.Container | null>(null);
+  const reactionFxSeenRef = useRef<Set<string>>(new Set());
 
   useEffect(() => {
     selectedUnitRef.current = selectedUnitId;
@@ -123,6 +124,63 @@ export default function GameCanvas({
       setTimeout(() => {
         unitLayerRef.current?.sync(state);
       }, 0);
+
+      // Reaction-fire visual: draw immediate attack indicator from reactor to target.
+      // This runs from state updates so it covers both human/manual and AI-driven flows.
+      const events = Array.isArray(state?.last_events) ? state.last_events : [];
+      for (const ev of events) {
+        if (ev?.type !== "REACTION_FIRE") continue;
+        const eventKey =
+          ev?.id != null ? `id:${ev.id}` : `sig:${JSON.stringify(ev?.payload || {})}`;
+        if (reactionFxSeenRef.current.has(eventKey)) continue;
+        reactionFxSeenRef.current.add(eventKey);
+
+        const p = ev?.payload || {};
+        const reactorId = String(p?.reactor_id || "");
+        const targetId = String(p?.target_id || "");
+        if (reactorId) {
+          // Reaction fire also consumes activation; reflect it with a firing marker
+          // even when it was not issued from the standard order panels.
+          setUnitActionMarker(reactorId, "firing");
+        }
+        const units = Array.isArray(state?.units) ? state.units : [];
+        const reactor = units.find((u: any) => String(u?.id || u?.unit_id || "") === reactorId);
+        const target = units.find((u: any) => String(u?.id || u?.unit_id || "") === targetId);
+        const fxLayer =
+          fxLayerRef.current ||
+          unitLayerRef.current?.container?.parent?.children?.find((c: any) => c.label === "fxLayer") ||
+          unitLayerRef.current?.container?.parent;
+        if (!reactor || !target || !fxLayer) continue;
+
+        void (async () => {
+          try {
+            const { playCombatFX } = await import("./animation/combatFx");
+            await playCombatFX(
+              fxLayer,
+              { q: Number(reactor.q), r: Number(reactor.r) },
+              { q: Number(target.q), r: Number(target.r) },
+              ["DAMAGE"],
+              []
+            );
+          } catch {
+            // Fallback to a simple indicator if full FX loading fails.
+            const from = axialToPixel(Number(reactor.q), Number(reactor.r));
+            const to = axialToPixel(Number(target.q), Number(target.r));
+            soundService.playAttack();
+            drawAttackIndicatorPixels(
+              from.x,
+              from.y + HEX_SIZE,
+              to.x,
+              to.y + HEX_SIZE,
+              fxLayer
+            );
+          }
+        })();
+      }
+
+      if (reactionFxSeenRef.current.size > 1000) {
+        reactionFxSeenRef.current.clear();
+      }
     };
 
   }, []);
@@ -454,6 +512,22 @@ export default function GameCanvas({
           body: JSON.stringify({ action_id: actionId }),
         });
         const stepData = await stepRes.json();
+        if (!stepRes.ok) {
+          const maybeState = stepData?.detail?.state || stepData?.state;
+          if (maybeState && typeof maybeState === "object") {
+            (window as any).__setGameState?.(maybeState);
+            try {
+              gameController.updateState(maybeState);
+            } catch {
+              // Ignore bridge failures; state is already synced above.
+            }
+          }
+          (window as any).logSystemEvent?.(
+            "system",
+            `⚠️ Action rejected by backend (${stepRes.status}). State resynced.`
+          );
+          return false;
+        }
         const stateAfter = stepData?.state;
         if (!stateAfter || typeof stateAfter !== "object") {
           console.error("❌ Invalid step response: missing state", stepData);
@@ -550,7 +624,8 @@ export default function GameCanvas({
       selectedUnitId,
       availableMoves,
       hoverHex,
-      orderHoverTarget
+      orderHoverTarget,
+      lastStateRef.current?.pending_reaction ?? null
     );
 
   }, [availableMoves, selectedUnitId, hoverHex, orderHoverTarget]);

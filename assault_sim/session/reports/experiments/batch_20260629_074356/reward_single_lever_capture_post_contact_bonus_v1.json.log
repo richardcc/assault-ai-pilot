@@ -1,0 +1,8 @@
+﻿powershell.exe : Apply changes failed with exit code 1
+En C:\repos\python\assault\scripts\run_experiment_batch.ps1: 225 Carácter: 15
++     $output = & powershell @args 2>&1
++               ~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (Apply changes failed with exit code 1:String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+

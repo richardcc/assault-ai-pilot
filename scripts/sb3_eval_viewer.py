@@ -2,9 +2,217 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
+import re
+import subprocess
+import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
+from urllib.request import Request, urlopen
+
+
+class ServiceController:
+    def __init__(self, repo_root: Path):
+        self.repo_root = repo_root
+        self._ecosystem_path = self.repo_root / "ecosystem.config.cjs"
+        self._specs: dict[str, dict] = {
+            "backend_api": {
+                "name": "Backend API",
+                "description": "FastAPI game backend",
+                "pm2_name": "assault-backend",
+                "health_url": "http://127.0.0.1:8001/health",
+            },
+            "frontend_ui": {
+                "name": "Frontend UI",
+                "description": "React tactical UI (dev server)",
+                "pm2_name": "assault-frontend",
+                "health_url": "http://127.0.0.1:5173/",
+            },
+            "sb3_eval_viewer": {
+                "name": "SB3 Eval Viewer",
+                "description": "Report viewer and control panel",
+                "pm2_name": "assault-sb3-viewer",
+                "health_url": "http://127.0.0.1:8765/",
+            },
+            "orchestrator_loop": {
+                "name": "Orchestrator Loop",
+                "description": "Prefect-based queue loop",
+                "pm2_name": "assault-orchestrator-loop",
+                "health_url": "http://127.0.0.1:4200/",
+            },
+            "orchestrator_prefect_server": {
+                "name": "Orchestrator Prefect Server",
+                "description": "Prefect API/UI server",
+                "pm2_name": "assault-orchestrator-prefect-server",
+                "health_url": "http://127.0.0.1:4200/",
+            },
+            "orchestrator_mlflow": {
+                "name": "Orchestrator MLflow",
+                "description": "MLflow tracking UI",
+                "pm2_name": "assault-orchestrator-mlflow",
+                "health_url": "http://127.0.0.1:5001/",
+            },
+        }
+
+    def _pm2_cmd(self) -> str:
+        return "pm2.cmd" if os.name == "nt" else "pm2"
+
+    def _run_pm2(self, *args: str) -> tuple[bool, str]:
+        try:
+            result = subprocess.run(
+                [self._pm2_cmd(), *args],
+                cwd=str(self.repo_root),
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            ok = result.returncode == 0
+            out = (result.stdout or "") + (result.stderr or "")
+            out = re.sub(r"\x1b\[[0-9;]*m", "", out)
+            return ok, out.strip()
+        except FileNotFoundError:
+            return False, "pm2 not found in PATH"
+        except Exception as e:
+            return False, str(e)
+
+    def _start_from_ecosystem(self, pm2_name: str) -> tuple[bool, str]:
+        if not self._ecosystem_path.exists():
+            return False, f"ecosystem file not found: {self._ecosystem_path}"
+        return self._run_pm2("start", str(self._ecosystem_path), "--only", pm2_name)
+
+    def _pm2_jlist(self) -> tuple[bool, list[dict], str]:
+        ok, out = self._run_pm2("jlist")
+        if not ok:
+            return False, [], out
+        try:
+            payload = json.loads(out or "[]")
+            if isinstance(payload, list):
+                return True, payload, ""
+            return False, [], "invalid pm2 jlist payload"
+        except Exception as e:
+            return False, [], f"failed to parse pm2 jlist: {e}"
+
+    def _health_ok(self, url: str) -> bool:
+        try:
+            req = Request(url, method="GET")
+            with urlopen(req, timeout=1.5) as resp:
+                return 200 <= int(resp.status) < 500
+        except Exception:
+            return False
+
+    def _tail_file(self, path: str, max_lines: int = 300) -> str:
+        file_path = Path(str(path or "").strip())
+        if not file_path.exists():
+            return "(log file not found)"
+        if not file_path.is_file():
+            return "(log path is not a file)"
+        try:
+            with file_path.open("r", encoding="utf-8", errors="replace") as f:
+                lines = f.readlines()
+            clipped = lines[-max(1, int(max_lines)) :]
+            return "".join(clipped).strip() or "(log file is empty)"
+        except Exception as e:
+            return f"(failed reading log: {e})"
+
+    def list_status(self) -> list[dict]:
+        out: list[dict] = []
+        now = time.time()
+        ok_pm2, jlist, pm2_error = self._pm2_jlist()
+        pm2_by_name: dict[str, dict] = {}
+        if ok_pm2:
+            for app in jlist:
+                name = str(app.get("name", "")).strip()
+                if name:
+                    pm2_by_name[name] = app
+        for key, spec in self._specs.items():
+            pm2_name = str(spec.get("pm2_name", "")).strip()
+            app = pm2_by_name.get(pm2_name, {})
+            pm2_env = app.get("pm2_env", {}) if isinstance(app, dict) else {}
+            pm2_status = str(pm2_env.get("status", "")).strip().lower()
+            alive = pm2_status == "online"
+            health = self._health_ok(spec.get("health_url", ""))
+            pm_uptime_ms = int(pm2_env.get("pm_uptime", 0) or 0) if isinstance(pm2_env, dict) else 0
+            uptime_s = int(max(0.0, (now * 1000 - pm_uptime_ms) / 1000.0)) if pm_uptime_ms > 0 else 0
+            pid = app.get("pid") if isinstance(app, dict) else None
+            out.append(
+                {
+                    "id": key,
+                    "name": spec.get("name"),
+                    "description": spec.get("description"),
+                    "pm2_name": pm2_name,
+                    "health_url": spec.get("health_url"),
+                    "managed_running": alive,
+                    "reachable": health,
+                    "pid": int(pid) if isinstance(pid, int) and pid > 0 else None,
+                    "uptime_s": uptime_s,
+                    "last_exit_code": pm2_env.get("exit_code"),
+                    "status": ("running" if alive else ("reachable" if health else "stopped")),
+                    "pm2_available": ok_pm2,
+                    "pm2_error": (pm2_error if not ok_pm2 else ""),
+                }
+            )
+        return out
+
+    def read_service_logs(self, key: str, max_lines: int = 300) -> dict:
+        if key not in self._specs:
+            return {"ok": False, "error": f"unknown service: {key}"}
+        pm2_name = str(self._specs[key].get("pm2_name", "")).strip()
+        ok_pm2, jlist, pm2_error = self._pm2_jlist()
+        if not ok_pm2:
+            return {"ok": False, "error": pm2_error or "pm2 unavailable"}
+        app = next((a for a in jlist if str(a.get("name", "")).strip() == pm2_name), None)
+        if not isinstance(app, dict):
+            return {"ok": False, "error": f"pm2 app not found: {pm2_name}"}
+        pm2_env = app.get("pm2_env", {}) if isinstance(app.get("pm2_env", {}), dict) else {}
+        out_path = str(pm2_env.get("pm_out_log_path", "") or "").strip()
+        err_path = str(pm2_env.get("pm_err_log_path", "") or "").strip()
+        return {
+            "ok": True,
+            "service_id": key,
+            "service_name": self._specs[key].get("name"),
+            "pm2_name": pm2_name,
+            "out_path": out_path,
+            "err_path": err_path,
+            "out_tail": self._tail_file(out_path, max_lines=max_lines) if out_path else "(stdout log path unavailable)",
+            "err_tail": self._tail_file(err_path, max_lines=max_lines) if err_path else "(stderr log path unavailable)",
+        }
+
+    def start(self, key: str) -> dict:
+        if key not in self._specs:
+            return {"ok": False, "error": f"unknown service: {key}"}
+        spec = self._specs[key]
+        pm2_name = str(spec.get("pm2_name", "")).strip()
+        if not pm2_name:
+            return {"ok": False, "error": f"service {key} has no pm2_name"}
+        ok, out = self._start_from_ecosystem(pm2_name)
+        if ok:
+            return {"ok": True, "message": f"started {pm2_name}"}
+        return {"ok": False, "error": out}
+
+    def stop(self, key: str) -> dict:
+        if key not in self._specs:
+            return {"ok": False, "error": f"unknown service: {key}"}
+        pm2_name = str(self._specs[key].get("pm2_name", "")).strip()
+        if not pm2_name:
+            return {"ok": False, "error": f"service {key} has no pm2_name"}
+        ok, out = self._run_pm2("stop", pm2_name)
+        if ok:
+            return {"ok": True, "message": f"stopped {pm2_name}"}
+        return {"ok": False, "error": out}
+
+    def restart(self, key: str) -> dict:
+        if key not in self._specs:
+            return {"ok": False, "error": f"unknown service: {key}"}
+        pm2_name = str(self._specs[key].get("pm2_name", "")).strip()
+        if not pm2_name:
+            return {"ok": False, "error": f"service {key} has no pm2_name"}
+        # Robust restart on Windows: remove stale entry then start from ecosystem.
+        self._run_pm2("delete", pm2_name)
+        ok2, out2 = self._start_from_ecosystem(pm2_name)
+        if ok2:
+            return {"ok": True, "message": f"restarted {pm2_name}"}
+        return {"ok": False, "error": out2}
 
 
 def _safe_float(value, default: float = 0.0) -> float:
@@ -57,6 +265,9 @@ def _build_rows(report: dict) -> list[dict]:
                     ),
                     "capture_attempt_success_rate": _safe_float(
                         mission.get("capture_attempt_success_rate", 0.0)
+                    ),
+                    "reaction_fire_count": _safe_float(
+                        mission.get("reaction_fire_count", 0.0)
                     ),
                     "vp_entries_taken": _safe_float(
                         mission.get("vp_entries_taken", 0.0)
@@ -115,7 +326,7 @@ def _build_history_points(
     scenario_filter: str = "",
 ) -> list[dict]:
     files = sorted(
-        reports_dir.glob("metrics_sb3_report_*.json"),
+        reports_dir.rglob("metrics_sb3_report_*.json"),
         key=lambda p: p.stat().st_mtime,
     )[-max(1, int(limit)) :]
     points: list[dict] = []
@@ -142,8 +353,16 @@ def _build_history_points(
                     _safe_float(r.get("capture_conversion_after_contact", 0.0)) for r in rows
                 )
                 / n,
+                "reaction_fire_count": sum(
+                    _safe_float(r.get("reaction_fire_count", 0.0)) for r in rows
+                )
+                / n,
                 "vp_entries_taken": sum(
                     _safe_float(r.get("vp_entries_taken", 0.0)) for r in rows
+                )
+                / n,
+                "reaction_fire_count": sum(
+                    _safe_float(r.get("reaction_fire_count", 0.0)) for r in rows
                 )
                 / n,
                 "captured_final_avg": sum(
@@ -170,7 +389,7 @@ def _build_history_points(
 
 
 def _latest_report_path(reports_dir: Path) -> Path | None:
-    files = sorted(reports_dir.glob("metrics_sb3_report_*.json"), key=lambda p: p.stat().st_mtime)
+    files = sorted(reports_dir.rglob("metrics_sb3_report_*.json"), key=lambda p: p.stat().st_mtime)
     return files[-1] if files else None
 
 
@@ -197,8 +416,14 @@ def _page_html() -> str:
     .bar { height:8px; background:#242a38; border-radius:999px; overflow:hidden; margin-top:4px; }
     .bar > span { display:block; height:100%; background:var(--accent); }
     .sub { color:var(--muted); font-size:12px; }
+    a { color:#8ec5ff; text-decoration:none; }
+    a:hover { text-decoration:underline; color:#b7dbff; }
     .reason { font-family:Consolas, monospace; font-size:12px; display:block; margin:2px 0; }
-    button, select { background:#1f2532; color:var(--txt); border:1px solid var(--border); border-radius:8px; padding:8px 10px; }
+    button, select { background:#1f2532; color:var(--txt); border:1px solid var(--border); border-radius:8px; padding:8px 10px; transition: background-color .16s ease, border-color .16s ease, transform .08s ease, box-shadow .16s ease, opacity .16s ease; }
+    button:hover { background:#273146; border-color:#4aa3ff; box-shadow:0 0 0 1px rgba(74,163,255,.45) inset; transform:translateY(-1px); cursor:pointer; }
+    button:active { transform:translateY(0px) scale(.98); background:#1d2536; }
+    button:focus-visible { outline:none; box-shadow:0 0 0 2px rgba(74,163,255,.55); border-color:#4aa3ff; }
+    button:disabled { opacity:.55; cursor:not-allowed; transform:none; box-shadow:none; }
     .tabs { display:flex; gap:8px; margin:12px 0; flex-wrap:wrap; }
     .tab-btn { cursor:pointer; }
     .tab-btn.active { border-color:var(--accent); box-shadow:0 0 0 1px var(--accent) inset; }
@@ -222,6 +447,17 @@ def _page_html() -> str:
     <span id="meta" class="sub"></span>
   </div>
 
+  <div class="panel" style="margin-bottom:12px">
+    <h3 style="margin:0 0 8px">Service URLs</h3>
+    <div class="sub" style="display:flex;gap:12px;flex-wrap:wrap">
+      <a href="http://127.0.0.1:8765" target="_blank" rel="noopener">SB3 Viewer (8765)</a>
+      <a href="http://127.0.0.1:5173" target="_blank" rel="noopener">Frontend UI (5173)</a>
+      <a href="http://127.0.0.1:8001/docs" target="_blank" rel="noopener">Backend API Docs (8001)</a>
+      <a href="http://127.0.0.1:4200" target="_blank" rel="noopener">Prefect UI (4200)</a>
+      <a href="http://127.0.0.1:5001" target="_blank" rel="noopener">MLflow UI (5001)</a>
+    </div>
+  </div>
+
   <div class="cards" id="cards"></div>
 
   <div class="tabs">
@@ -235,7 +471,9 @@ def _page_html() -> str:
     <button class="tab-btn" data-tab="actions">Actions</button>
     <button class="tab-btn" data-tab="units">Units/Side</button>
     <button class="tab-btn" data-tab="strategy">Strategies</button>
+    <button class="tab-btn" data-tab="rag">RAG Copilot</button>
     <button class="tab-btn" data-tab="history">History</button>
+    <button class="tab-btn" data-tab="control">Control</button>
   </div>
 
   <div id="tab-overview" class="tab-content active panel">
@@ -245,7 +483,7 @@ def _page_html() -> str:
         <tr>
           <th>Side</th><th>Scenario</th><th>Score Win</th><th>Loss</th>
           <th>VP Entry Conv</th><th>Capture Conv After Contact</th>
-          <th>VP Captured (run)</th><th>VP Captured Final</th>
+          <th>Reaction Fire</th><th>VP Captured (run)</th><th>VP Captured Final</th>
           <th>SB3 Kept</th><th>Finalizer Override</th><th>Top Finalizer Reasons</th>
         </tr>
       </thead>
@@ -304,6 +542,11 @@ def _page_html() -> str:
     <div id="strategyDetail"></div>
   </div>
 
+  <div id="tab-rag" class="tab-content panel">
+    <h3 style="margin-top:0">RAG Copilot (Eval)</h3>
+    <div id="ragDetail"></div>
+  </div>
+
   <div id="tab-history" class="tab-content panel">
     <h3 style="margin-top:0">History (latest reports)</h3>
     <div class="top" style="margin-bottom:8px">
@@ -330,12 +573,45 @@ def _page_html() -> str:
       <thead>
         <tr>
           <th>Report</th><th>Timestamp</th><th>Loss</th><th>VP Entry Conv</th>
-          <th>Capture Conv</th><th>VP Captured (run)</th><th>VP Captured Final</th>
+          <th>Capture Conv</th><th>Reaction Fire</th><th>VP Captured (run)</th><th>VP Captured Final</th>
           <th>SB3 Kept</th><th>Finalizer Override</th>
         </tr>
       </thead>
       <tbody></tbody>
     </table>
+  </div>
+
+  <div id="tab-control" class="tab-content panel">
+    <h3 style="margin-top:0">Service Control</h3>
+    <div class="top" style="margin-bottom:8px">
+      <button id="controlRefreshBtn">Refresh Status</button>
+      <span class="sub">Start/stop/restart local services from this viewer.</span>
+    </div>
+    <table id="controlTable">
+      <thead>
+        <tr>
+          <th>Service</th><th>Status</th><th>PID</th><th>Uptime</th><th>Reachable</th><th>URL</th><th>Actions</th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+    <div id="controlLogPanel" class="panel" style="margin-top:10px; display:none;">
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;">
+        <strong id="controlLogTitle">Service Logs</strong>
+        <button id="controlLogCloseBtn">Close</button>
+      </div>
+      <div class="sub" id="controlLogMeta" style="margin:6px 0 10px;"></div>
+      <div style="display:grid;grid-template-columns:1fr;gap:10px;">
+        <div>
+          <div class="sub" style="margin-bottom:4px;">STDOUT</div>
+          <pre id="controlLogStdout" style="margin:0;max-height:280px;overflow:auto;background:#10141d;border:1px solid var(--border);border-radius:8px;padding:8px;white-space:pre-wrap;"></pre>
+        </div>
+        <div>
+          <div class="sub" style="margin-bottom:4px;">STDERR</div>
+          <pre id="controlLogStderr" style="margin:0;max-height:280px;overflow:auto;background:#10141d;border:1px solid var(--border);border-radius:8px;padding:8px;white-space:pre-wrap;"></pre>
+        </div>
+      </div>
+    </div>
   </div>
 
 <script>
@@ -362,6 +638,7 @@ async function getJson(url){ const r=await fetch(url); if(!r.ok) throw new Error
 let currentDetails = [];
 let historyPoints = [];
 let currentRows = [];
+let controlRenderInFlight = false;
 
 function firstDetail(){
   return (currentDetails && currentDetails.length) ? currentDetails[0] : null;
@@ -386,17 +663,19 @@ function renderCards(rows){
     loss_rate:a.loss_rate+r.loss_rate,
     vp_entry_conversion_rate:a.vp_entry_conversion_rate+r.vp_entry_conversion_rate,
     capture_conversion_after_contact:a.capture_conversion_after_contact+r.capture_conversion_after_contact,
+    reaction_fire_count:a.reaction_fire_count+r.reaction_fire_count,
     vp_entries_taken:a.vp_entries_taken+r.vp_entries_taken,
     captured_final_avg:a.captured_final_avg+r.captured_final_avg,
     sb3_kept:a.sb3_kept+r.sb3_kept,
     finalizer_override:a.finalizer_override+r.finalizer_override
-  }), {score_win_rate:0,loss_rate:0,vp_entry_conversion_rate:0,capture_conversion_after_contact:0,vp_entries_taken:0,captured_final_avg:0,sb3_kept:0,finalizer_override:0});
+  }), {score_win_rate:0,loss_rate:0,vp_entry_conversion_rate:0,capture_conversion_after_contact:0,reaction_fire_count:0,vp_entries_taken:0,captured_final_avg:0,sb3_kept:0,finalizer_override:0});
   for (const k in agg) agg[k]/=n;
   const cards = [
     ['Score Win Rate', agg.score_win_rate, true],
     ['Loss Rate', agg.loss_rate, false],
     ['VP Entry Conversion', agg.vp_entry_conversion_rate, true],
     ['Capture Conversion', agg.capture_conversion_after_contact, true],
+    ['Reaction Fire (run)', agg.reaction_fire_count/3.0, true],
     ['VP Captured (run)', agg.vp_entries_taken/3.0, true],
     ['VP Captured Final', agg.captured_final_avg/3.0, true],
     ['SB3 Kept', agg.sb3_kept, true],
@@ -407,7 +686,7 @@ function renderCards(rows){
   for (const [name,val,goodHigh] of cards){
     const c = document.createElement('div');
     c.className='panel card';
-    const isCountCard = name.startsWith('VP Captured');
+    const isCountCard = name.startsWith('VP Captured') || name.startsWith('Reaction Fire');
     const display = isCountCard ? asVpCount(val*3.0) : pct(val);
     c.innerHTML = `<h3>${name}</h3><div class="v ${clsByRate(val,goodHigh)}">${display}</div><div class="bar"><span style="width:${Math.max(0,Math.min(100,val*100))}%"></span></div>`;
     root.appendChild(c);
@@ -429,6 +708,7 @@ function renderRows(rows){
       <td class="${clsByRate(r.loss_rate,false)}">${pct(r.loss_rate)}</td>
       <td class="${clsByRate(r.vp_entry_conversion_rate,true)}">${pct(r.vp_entry_conversion_rate)}</td>
       <td class="${clsByRate(r.capture_conversion_after_contact,true)}">${pct(r.capture_conversion_after_contact)}</td>
+      <td>${asVpCount(r.reaction_fire_count)}</td>
       <td>${asVpCount(r.vp_entries_taken)}</td>
       <td>${asVpCount(r.captured_final_avg)}</td>
       <td>${pct(r.sb3_kept)}</td>
@@ -519,6 +799,10 @@ function renderVPs(){
   const m = d.mission || {};
   const s = d.summary || {};
   const capturedFinalAvg = capturedFinalAvgFromSummary(s);
+  const capturedDeltaAvg = Number(s.captured_delta_avg || 0);
+  const capturedDeltaGainRate = Number(s.captured_delta_gain_rate || 0);
+  const capturedDeltaFlatRate = Number(s.captured_delta_flat_rate || 0);
+  const capturedDeltaLossRate = Number(s.captured_delta_loss_rate || 0);
 
   renderKV('vpDetail', [
     ['VP Entry Opportunities', String(m.vp_entry_opportunities ?? '-')],
@@ -529,41 +813,54 @@ function renderVPs(){
     ['VP Control AUC', Number(m.vp_control_auc||0).toFixed(3)],
     ['VP Net Progress', Number(m.vp_net_progress||0).toFixed(3)],
     ['VP Captured Final Avg', asVpCount(capturedFinalAvg)],
+    ['Captured Delta Avg', capturedDeltaAvg.toFixed(3)],
+    ['Captured Delta Gain Rate', pct(capturedDeltaGainRate)],
+    ['Captured Delta Flat Rate', pct(capturedDeltaFlatRate)],
+    ['Captured Delta Loss Rate', pct(capturedDeltaLossRate)],
     ['First VP Entry Turn p50', String(m.first_vp_entry_turn_p50 ?? '-')],
     ['First VP Entry Turn p90', String(m.first_vp_entry_turn_p90 ?? '-')],
     ['VP Control After Entry p50', String(m.vp_control_after_entry_turns_p50 ?? '-')],
     ['VP Control After Entry p90', String(m.vp_control_after_entry_turns_p90 ?? '-')],
+    ['Reaction Fire Count', String(m.reaction_fire_count ?? 0)],
+    ['Reaction Fire Rate', pct(Number(m.reaction_fire_rate||0))],
+    ['Reaction Window Count', String(m.reaction_window_count ?? 0)],
+    ['Reaction Fire Skipped Count', String(m.reaction_fire_skipped_count ?? 0)],
   ]);
 
   const finalCounts = s.captured_final_counts || {};
-  const finalRows = Object.entries(finalCounts)
-    .sort((a,b)=>Number(a[0])-Number(b[0]))
-    .map(([k,v])=>`<tr><td>${k}</td><td>${Number(v||0)}</td></tr>`)
+  const deltaCounts = s.captured_delta_counts || {};
+  const finalKeys = Object.keys(finalCounts || {});
+  const deltaKeys = Object.keys(deltaCounts || {});
+  const buckets = Array.from(new Set([...finalKeys, ...deltaKeys])).sort((a,b)=>Number(a)-Number(b));
+  const epsTotal = Number(s.episodes || 0);
+  const compareRows = buckets
+    .map((k) => {
+      const f = Number(finalCounts[k] || 0);
+      const d = Number(deltaCounts[k] || 0);
+      const fp = epsTotal > 0 ? pct(f / epsTotal) : "0.0%";
+      const dp = epsTotal > 0 ? pct(d / epsTotal) : "0.0%";
+      return `<tr><td>${k}</td><td>${f}</td><td>${fp}</td><td>${d}</td><td>${dp}</td></tr>`;
+    })
     .join('');
-  const panelFinal = document.createElement('div');
-  panelFinal.className = 'panel';
-  panelFinal.innerHTML = `<h4 style="margin-top:0">Captured Objectives (Final)</h4>
-    <table><thead><tr><th>Captured VP Bucket</th><th>Episodes</th></tr></thead>
-    <tbody>${finalRows || '<tr><td colspan="2" class="sub">No data</td></tr>'}</tbody></table>`;
-  tablesRoot.appendChild(panelFinal);
+  const panelCompare = document.createElement('div');
+  panelCompare.className = 'panel';
+  panelCompare.innerHTML = `<h4 style="margin-top:0">Captured Objectives (Final vs Delta)</h4>
+    <table><thead><tr><th>Bucket</th><th>Final Episodes</th><th>Final %</th><th>Delta Episodes</th><th>Delta %</th></tr></thead>
+    <tbody>${compareRows || '<tr><td colspan="5" class="sub">No data</td></tr>'}</tbody></table>`;
+  tablesRoot.appendChild(panelCompare);
 
-  const attempts = m.per_unit_vp_entry_attempts || {};
-  const success = m.per_unit_vp_entry_success || {};
-  const unitRows = Object.keys(attempts)
-    .map((uid)=>({
-      uid,
-      att: Number(attempts[uid]||0),
-      ok: Number(success[uid]||0)
-    }))
-    .sort((a,b)=>b.att-a.att)
-    .map((u)=>`<tr><td>${u.uid}</td><td>${u.ok}</td><td>${u.att}</td><td>${u.att>0 ? pct(u.ok/u.att) : '0.0%'}</td></tr>`)
+  const finalContribution = m.per_unit_vp_final_contribution || {};
+  const unitRows = Object.entries(finalContribution)
+    .map(([uid, val]) => ({ uid, eps: Number(val || 0) }))
+    .sort((a,b)=>b.eps-a.eps)
+    .map((u)=>`<tr><td>${u.uid}</td><td>${u.eps}</td><td>${Number(s.episodes||0)>0 ? pct(u.eps/Number(s.episodes||1)) : '0.0%'}</td></tr>`)
     .join('');
   const panelUnits = document.createElement('div');
   panelUnits.className = 'panel';
   panelUnits.style.marginTop = '10px';
-  panelUnits.innerHTML = `<h4 style="margin-top:0">Per-Unit VP Entry Success</h4>
-    <table><thead><tr><th>Unit</th><th>Success</th><th>Attempts</th><th>Rate</th></tr></thead>
-    <tbody>${unitRows || '<tr><td colspan="4" class="sub">No unit VP data</td></tr>'}</tbody></table>`;
+  panelUnits.innerHTML = `<h4 style="margin-top:0">Per-Unit Final VP Ownership Contribution</h4>
+    <table><thead><tr><th>Unit</th><th>Episodes Contributing</th><th>Rate</th></tr></thead>
+    <tbody>${unitRows || '<tr><td colspan="3" class="sub">No unit final VP contribution data</td></tr>'}</tbody></table>`;
   tablesRoot.appendChild(panelUnits);
 }
 
@@ -578,6 +875,7 @@ function renderCombats(){
     return;
   }
   const ae = d.action_execution || {};
+  const m = d.mission || {};
   const us = ae.RL || {};
   const other = ae.ENEMY || {};
 
@@ -605,6 +903,9 @@ function renderCombats(){
     ['Combat actions OTHER', String(otherCount)],
     ['Estimated combat damage US', Number(usDamage||0).toFixed(2)],
     ['Estimated combat damage OTHER', Number(otherDamage||0).toFixed(2)],
+    ['Reaction Fire Count', String(m.reaction_fire_count ?? 0)],
+    ['Reaction Fire Rate', pct(Number(m.reaction_fire_rate||0))],
+    ['Reaction Fire by Side', Object.entries(m.reaction_fire_by_side || {}).map(([k,v])=>`${k}:${v}`).join(' | ') || '-'],
     ['Melee assaults US', String(meleeUS)],
     ['Melee assaults OTHER', String(meleeOther)],
     ['Melee share US', usCount>0 ? pct(meleeUS/usCount) : '0.0%'],
@@ -666,7 +967,26 @@ function renderActions(){
   root.innerHTML = '';
   if (!d){ root.textContent='No data'; return; }
   const ae = d.action_execution || {};
+  const m = d.mission || {};
   const sections = [['US', ae.RL||{}], ['OTHER', ae.ENEMY||{}]];
+
+  const reactionPanel = document.createElement('div');
+  reactionPanel.className = 'panel';
+  reactionPanel.style.marginBottom = '10px';
+  reactionPanel.innerHTML = `
+    <h4 style="margin-top:0">Reaction Fire</h4>
+    <table>
+      <thead><tr><th>Metric</th><th>Value</th></tr></thead>
+      <tbody>
+        <tr><td>Count</td><td>${Number(m.reaction_fire_count||0)}</td></tr>
+        <tr><td>Rate</td><td>${pct(Number(m.reaction_fire_rate||0))}</td></tr>
+        <tr><td>Window Count</td><td>${Number(m.reaction_window_count||0)}</td></tr>
+        <tr><td>Skipped Count</td><td>${Number(m.reaction_fire_skipped_count||0)}</td></tr>
+        <tr><td>By Side</td><td>${Object.entries(m.reaction_fire_by_side || {}).map(([k,v])=>`${k}:${v}`).join(' | ') || '-'}</td></tr>
+      </tbody>
+    </table>`;
+  root.appendChild(reactionPanel);
+
   for (const [label,data] of sections){
     const panel = document.createElement('div');
     panel.className='panel';
@@ -799,6 +1119,82 @@ function renderStrategies(){
   root.appendChild(panelMap);
 }
 
+function renderRag(){
+  const d = firstDetail();
+  const root = document.getElementById('ragDetail');
+  root.innerHTML = '';
+  if (!d || !currentRows.length){
+    root.innerHTML = '<div class="sub">No data</div>';
+    return;
+  }
+  const n = Math.max(1, currentRows.length);
+  const agg = currentRows.reduce((a,r)=>({
+    loss_rate: a.loss_rate + Number(r.loss_rate||0),
+    vp_entry_conversion_rate: a.vp_entry_conversion_rate + Number(r.vp_entry_conversion_rate||0),
+    capture_conversion_after_contact: a.capture_conversion_after_contact + Number(r.capture_conversion_after_contact||0),
+    finalizer_override: a.finalizer_override + Number(r.finalizer_override||0)
+  }), {loss_rate:0, vp_entry_conversion_rate:0, capture_conversion_after_contact:0, finalizer_override:0});
+  for (const k of Object.keys(agg)) agg[k] /= n;
+
+  const m = d.mission || {};
+  const topReasons = Object.entries(m.finalizer_override_reason_counts || {})
+    .sort((a,b)=>Number(b[1]||0)-Number(a[1]||0))
+    .slice(0,3);
+  const topReasonsText = topReasons.length
+    ? topReasons.map(([k,v])=>`${k}:${v}`).join(', ')
+    : 'none';
+
+  const signals = [
+    ['loss_rate', pct(agg.loss_rate), agg.loss_rate <= 0.60 ? 'OK' : 'WATCH'],
+    ['vp_entry_conversion_rate', pct(agg.vp_entry_conversion_rate), agg.vp_entry_conversion_rate >= 0.30 ? 'OK' : 'WATCH'],
+    ['capture_conversion_after_contact', pct(agg.capture_conversion_after_contact), agg.capture_conversion_after_contact >= 0.10 ? 'OK' : 'WATCH'],
+    ['finalizer_override', pct(agg.finalizer_override), agg.finalizer_override <= 0.35 ? 'OK' : 'WATCH'],
+  ];
+
+  const signalRows = signals.map(([k,v,s])=>`<tr><td>${k}</td><td>${v}</td><td class="${s==='OK'?'ok':'warn'}">${s}</td></tr>`).join('');
+  const prompt = [
+    'Analiza este run de SB3 y sugiere una sola palanca para el siguiente ciclo.',
+    `loss_rate=${agg.loss_rate.toFixed(4)}`,
+    `vp_entry_conversion_rate=${agg.vp_entry_conversion_rate.toFixed(4)}`,
+    `capture_conversion_after_contact=${agg.capture_conversion_after_contact.toFixed(4)}`,
+    `finalizer_override=${agg.finalizer_override.toFixed(4)}`,
+    `top_finalizer_override_reasons=${topReasonsText}`,
+    'Responde con: hipotesis, cambio propuesto, riesgo principal, criterio de gate.'
+  ].join('\\n');
+
+  const panel = document.createElement('div');
+  panel.className = 'panel';
+  panel.innerHTML = `
+    <div class="sub" style="margin-bottom:8px">
+      RAG en eval es copiloto de analisis. No sustituye reglas de juego ni gates tacticos.
+    </div>
+    <table>
+      <thead><tr><th>Signal</th><th>Value</th><th>Status</th></tr></thead>
+      <tbody>${signalRows}</tbody>
+    </table>
+    <h4 style="margin:10px 0 6px">Prompt sugerido para RAG</h4>
+    <textarea id="ragPromptBox" style="width:100%;min-height:140px;background:#10141d;color:var(--txt);border:1px solid var(--border);border-radius:8px;padding:8px">${prompt}</textarea>
+    <div style="margin-top:8px;display:flex;justify-content:flex-end">
+      <button id="ragCopyBtn">Copiar prompt</button>
+    </div>
+  `;
+  root.appendChild(panel);
+
+  const copyBtn = document.getElementById('ragCopyBtn');
+  if (copyBtn){
+    copyBtn.onclick = async () => {
+      const box = document.getElementById('ragPromptBox');
+      const txt = box ? box.value : '';
+      try {
+        await navigator.clipboard.writeText(txt);
+        copyBtn.textContent = 'Copiado';
+      } catch {
+        copyBtn.textContent = 'No se pudo copiar';
+      }
+    };
+  }
+}
+
 function renderHowTo(){
   const rootSummary = document.getElementById('howtoSummary');
   const rootChecks = document.getElementById('howtoChecks');
@@ -900,6 +1296,7 @@ function renderDetailTabs(){
   renderActions();
   renderUnits();
   renderStrategies();
+  renderRag();
 }
 
 function polylinePoints(values, w, h, pad){
@@ -929,6 +1326,7 @@ function renderHistoryCharts(points){
     ['Loss Rate', 'loss_rate', false, 0.80, 'max'],
     ['VP Entry Conversion', 'vp_entry_conversion_rate', true, 0.30, 'min'],
     ['Capture Conversion', 'capture_conversion_after_contact', true, 0.0000001, 'min'],
+    ['Reaction Fire', 'reaction_fire_count', true, 0.10, 'min'],
     ['VP Captured (run)', 'vp_entries_taken', true, 2.0, 'min'],
     ['VP Captured Final', 'captured_final_avg', true, 2.0, 'min'],
     ['SB3 Kept', 'sb3_kept', true, 0.45, 'min'],
@@ -945,7 +1343,7 @@ function renderHistoryCharts(points){
     const thrLabel = rule === 'min' ? `>= ${thr}` : `<= ${thr}`;
     const panel = document.createElement('div');
     panel.className='panel';
-    const isCountMetric = key === 'vp_entries_taken' || key === 'captured_final_avg';
+    const isCountMetric = key === 'reaction_fire_count' || key === 'vp_entries_taken' || key === 'captured_final_avg';
     panel.innerHTML = `<div class="k">${title}</div>
       <div class="v ${pass ? 'ok' : 'bad'}">${isCountMetric ? asVpCount(last) : pct(last)}</div>
       <div class="sub">threshold ${thrLabel}</div>
@@ -969,6 +1367,7 @@ function renderHistoryTable(points){
       <td>${pct(Number(p.loss_rate||0))}</td>
       <td>${pct(Number(p.vp_entry_conversion_rate||0))}</td>
       <td>${pct(Number(p.capture_conversion_after_contact||0))}</td>
+      <td>${asVpCount(Number(p.reaction_fire_count||0))}</td>
       <td>${asVpCount(Number(p.vp_entries_taken||0))}</td>
       <td>${asVpCount(Number(p.captured_final_avg||0))}</td>
       <td>${pct(Number(p.sb3_kept||0))}</td>
@@ -993,7 +1392,7 @@ function exportHistoryCsv(){
   const headers = [
     'report','timestamp','seed','score_win_rate','loss_rate',
     'vp_entry_conversion_rate','capture_conversion_after_contact',
-    'vp_entries_taken','captured_final_avg','sb3_kept','finalizer_override'
+    'reaction_fire_count','vp_entries_taken','captured_final_avg','sb3_kept','finalizer_override'
   ];
   const lines = [headers.join(',')];
   for (const p of historyPoints){
@@ -1012,6 +1411,125 @@ function exportHistoryCsv(){
   document.body.appendChild(a);
   a.click();
   a.remove();
+}
+
+async function postJson(url, payload){
+  const r = await fetch(url, {
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body: JSON.stringify(payload || {})
+  });
+  const data = await r.json().catch(()=>({ok:false,error:'invalid json response'}));
+  if (!r.ok || data.ok === false){
+    throw new Error(data.error || `HTTP ${r.status}`);
+  }
+  return data;
+}
+
+function fmtDuration(seconds){
+  const s = Number(seconds||0);
+  const h = Math.floor(s/3600);
+  const m = Math.floor((s%3600)/60);
+  const ss = Math.floor(s%60);
+  if (h > 0) return `${h}h ${m}m`;
+  if (m > 0) return `${m}m ${ss}s`;
+  return `${ss}s`;
+}
+
+function escHtml(v){
+  return String(v ?? '')
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;');
+}
+
+function showControlLogs(data){
+  const panel = document.getElementById('controlLogPanel');
+  const title = document.getElementById('controlLogTitle');
+  const meta = document.getElementById('controlLogMeta');
+  const out = document.getElementById('controlLogStdout');
+  const err = document.getElementById('controlLogStderr');
+  if (!panel || !title || !meta || !out || !err) return;
+  title.textContent = `${data.service_name || data.service_id || 'Service'} (${data.pm2_name || '-'})`;
+  meta.textContent = `Últimas ${Number(data.lines || 300)} líneas por stream`;
+  out.textContent = String(data.out_tail || '(empty)');
+  err.textContent = String(data.err_tail || '(empty)');
+  panel.style.display = 'block';
+  panel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
+async function renderControl(){
+  if (controlRenderInFlight) return;
+  controlRenderInFlight = true;
+  const tb = document.querySelector('#controlTable tbody');
+  try {
+    const data = await getJson('/api/control/services');
+    const rows = data.services || [];
+    const prevHtml = tb.innerHTML;
+    const newRows = [];
+    for (const s of rows){
+      const statusCls = s.status === 'running' ? 'ok' : (s.status === 'reachable' ? 'warn' : 'bad');
+      newRows.push(`
+        <td>
+          <div><strong>${s.name||s.id}</strong></div>
+          <div class="sub">${s.description||''}</div>
+        </td>
+        <td class="${statusCls}">${String(s.status||'unknown').toUpperCase()}</td>
+        <td>${s.pid ?? '-'}</td>
+        <td>${fmtDuration(s.uptime_s||0)}</td>
+        <td>${s.reachable ? 'yes' : 'no'}</td>
+        <td>${s.health_url ? `<a href="${s.health_url}" target="_blank" rel="noopener">${s.health_url}</a>` : '-'}</td>
+        <td>
+          <button data-act="start" data-id="${s.id}">Start</button>
+          <button data-act="stop" data-id="${s.id}">Stop</button>
+          <button data-act="restart" data-id="${s.id}">Restart</button>
+          <button data-act="logs" data-id="${s.id}">Logs</button>
+        </td>
+      `);
+    }
+    const newHtml = newRows.length
+      ? newRows.map(r => `<tr>${r}</tr>`).join('')
+      : '<tr><td colspan="7" class="sub">No services configured</td></tr>';
+    if (newHtml !== prevHtml){
+      tb.innerHTML = newHtml;
+    }
+    for (const b of tb.querySelectorAll('button[data-act]')){
+      b.disabled = false;
+      b.addEventListener('click', async ()=>{
+        const id = b.getAttribute('data-id');
+        const act = b.getAttribute('data-act');
+        if (act === 'logs'){
+          try{
+            const data = await getJson(`/api/control/log?service_id=${encodeURIComponent(id)}&lines=300`);
+            showControlLogs(data);
+          }catch(e){
+            alert(`No se pudo abrir logs: ${e.message||e}`);
+          }
+          return;
+        }
+        const prevText = b.textContent || '';
+        b.textContent = '...';
+        try{
+          await postJson(`/api/control/${act}`, {service_id:id});
+          await renderControl();
+        }catch(e){
+          alert(`Control action failed: ${e.message||e}`);
+        }finally{
+          b.disabled = false;
+          b.textContent = prevText;
+          for (const x of tb.querySelectorAll('button[data-act]')){
+            x.disabled = false;
+          }
+        }
+      });
+    }
+  } catch (e){
+    if (!tb.innerHTML.trim()){
+      tb.innerHTML = `<tr><td colspan="7" class="bad">Failed to load services: ${e.message||e}</td></tr>`;
+    }
+  } finally {
+    controlRenderInFlight = false;
+  }
 }
 
 function setupTabs(){
@@ -1044,16 +1562,22 @@ document.getElementById('reloadBtn').addEventListener('click', async ()=>{ await
 document.getElementById('reportSelect').addEventListener('change', loadSelected);
 document.getElementById('historyReloadBtn').addEventListener('click', loadHistory);
 document.getElementById('historyExportBtn').addEventListener('click', exportHistoryCsv);
+document.getElementById('controlRefreshBtn').addEventListener('click', renderControl);
+document.getElementById('controlLogCloseBtn').addEventListener('click', ()=>{
+  const panel = document.getElementById('controlLogPanel');
+  if (panel) panel.style.display = 'none';
+});
 setupTabs();
 
-(async ()=>{ await loadReports(); await loadSelected(); await loadHistory(); })();
+setInterval(renderControl, 10000);
+(async ()=>{ await loadReports(); await loadSelected(); await loadHistory(); await renderControl(); })();
 </script>
 </body>
 </html>
 """
 
 
-def build_handler(reports_dir: Path):
+def build_handler(reports_dir: Path, controller: ServiceController):
     class Handler(BaseHTTPRequestHandler):
         def _json(self, payload: dict, status: int = 200):
             body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
@@ -1071,20 +1595,45 @@ def build_handler(reports_dir: Path):
             self.end_headers()
             self.wfile.write(data)
 
+        def _text(self, body: str, status: int = 200):
+            data = body.encode("utf-8", errors="replace")
+            self.send_response(status)
+            self.send_header("Content-Type", "text/plain; charset=utf-8")
+            self.send_header("Content-Length", str(len(data)))
+            self.end_headers()
+            self.wfile.write(data)
+
         def do_GET(self):
             parsed = urlparse(self.path)
             if parsed.path == "/":
                 return self._html(_page_html())
+            if parsed.path == "/api/control/services":
+                return self._json({"services": controller.list_status()})
+            if parsed.path == "/api/control/log":
+                qs = parse_qs(parsed.query)
+                service_id = str((qs.get("service_id") or [""])[0]).strip()
+                lines_raw = str((qs.get("lines") or ["300"])[0]).strip()
+                if not service_id:
+                    return self._json({"ok": False, "error": "missing service_id"}, status=400)
+                try:
+                    max_lines = max(50, min(3000, int(lines_raw)))
+                except Exception:
+                    max_lines = 300
+                res = controller.read_service_logs(service_id, max_lines=max_lines)
+                if not bool(res.get("ok")):
+                    return self._json(res, status=400)
+                res["lines"] = max_lines
+                return self._json(res, status=200)
             if parsed.path == "/api/reports":
                 files = sorted(
-                    reports_dir.glob("metrics_sb3_report_*.json"),
+                    reports_dir.rglob("metrics_sb3_report_*.json"),
                     key=lambda p: p.stat().st_mtime,
                     reverse=True,
                 )
                 return self._json(
                     {
-                        "reports": [p.name for p in files],
-                        "latest": files[0].name if files else None,
+                        "reports": [str(p.relative_to(reports_dir)).replace("\\", "/") for p in files],
+                        "latest": (str(files[0].relative_to(reports_dir)).replace("\\", "/") if files else None),
                     }
                 )
             if parsed.path == "/api/report":
@@ -1092,7 +1641,12 @@ def build_handler(reports_dir: Path):
                 name = (qs.get("name") or [""])[0]
                 if not name:
                     return self._json({"error": "missing 'name'"}, status=400)
-                path = reports_dir / name
+                rel = Path(name)
+                path = (reports_dir / rel).resolve()
+                try:
+                    path.relative_to(reports_dir.resolve())
+                except Exception:
+                    return self._json({"error": "invalid report path"}, status=400)
                 if not path.exists() or path.suffix.lower() != ".json":
                     return self._json({"error": "report not found"}, status=404)
                 data = _read_json(path)
@@ -1125,6 +1679,29 @@ def build_handler(reports_dir: Path):
             self.send_response(404)
             self.end_headers()
 
+        def do_POST(self):
+            parsed = urlparse(self.path)
+            if parsed.path not in {"/api/control/start", "/api/control/stop", "/api/control/restart"}:
+                self.send_response(404)
+                self.end_headers()
+                return
+            content_len = int(self.headers.get("Content-Length", "0") or 0)
+            raw = self.rfile.read(content_len) if content_len > 0 else b"{}"
+            try:
+                payload = json.loads(raw.decode("utf-8"))
+            except Exception:
+                return self._json({"ok": False, "error": "invalid json payload"}, status=400)
+            service_id = str(payload.get("service_id", "")).strip()
+            if not service_id:
+                return self._json({"ok": False, "error": "missing service_id"}, status=400)
+            if parsed.path.endswith("/start"):
+                res = controller.start(service_id)
+            elif parsed.path.endswith("/stop"):
+                res = controller.stop(service_id)
+            else:
+                res = controller.restart(service_id)
+            return self._json(res, status=(200 if bool(res.get("ok")) else 400))
+
         def log_message(self, format: str, *args):
             # Keep server quiet in terminal.
             return
@@ -1144,7 +1721,8 @@ def main():
     reports_dir = Path(args.reports_dir).resolve()
     reports_dir.mkdir(parents=True, exist_ok=True)
     latest = _latest_report_path(reports_dir)
-    server = ThreadingHTTPServer((args.host, args.port), build_handler(reports_dir))
+    controller = ServiceController(repo_root=repo_root)
+    server = ThreadingHTTPServer((args.host, args.port), build_handler(reports_dir, controller))
     print(f"SB3 Eval Viewer: http://{args.host}:{args.port}")
     print(f"Reports dir: {reports_dir}")
     print(f"Latest report: {latest.name if latest else '(none yet)'}")

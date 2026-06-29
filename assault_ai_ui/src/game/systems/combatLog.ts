@@ -48,10 +48,12 @@ function diceStr(dice: any[] = []): string {
 
 function labelFor(id: string | null | undefined, units: any[]): string {
   if (!id) return "Unknown";
-  const u = units?.find((x: any) => x.id === id);
-  return u
-    ? unitImages[u.unit_key as keyof typeof unitImages]?.label || u.unit_key
-    : id;
+  const unitId = String(id);
+  const u = units?.find((x: any) => String(x.id) === unitId);
+  if (!u) return unitId;
+  const name =
+    unitImages[u.unit_key as keyof typeof unitImages]?.label || u.unit_key;
+  return name ? `${unitId} (${name})` : unitId;
 }
 
 export function formatCombatEvent(
@@ -59,6 +61,14 @@ export function formatCombatEvent(
   units: any[] = []
 ): { type: string; text: string } | null {
   const p = ev?.payload || {};
+  if (ev?.type === "REACTION_FIRE") {
+    const reactor = labelFor(p.reactor_id, units);
+    const target = labelFor(p.target_id, units);
+    return {
+      type: "combat",
+      text: `⚡ Reaction Fire: ${reactor} -> ${target}`,
+    };
+  }
   const atk = labelFor(p.attacker, units);
   const def = labelFor(p.defender, units);
 
@@ -111,7 +121,7 @@ export function logCombatEvents(
   if (!events?.length) return;
 
   for (const ev of events) {
-    if (ev?.type !== "ACTION_EFFECT") continue;
+    if (ev?.type !== "ACTION_EFFECT" && ev?.type !== "REACTION_FIRE") continue;
 
     const id =
       ev.id != null ? `id:${ev.id}` : `sig:${JSON.stringify(ev.payload || {})}`;

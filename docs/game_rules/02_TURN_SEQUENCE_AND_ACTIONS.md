@@ -79,6 +79,15 @@ The engine must process phases in this exact order:
 - pass,
 - reaction fire,
 
+Reaction fire runtime status (current):
+
+- integrated behind feature flag `ASSAULT_ENABLE_REACTION_FIRE` (default ON),
+- runtime hook is in `assault_model/runtime/game_state_runtime.py`,
+- deterministic reactor selection: first eligible enemy reactor by `unit_id`, max one reaction per reactor per turn, and reaction consumes reactor activation,
+- human-controlled reaction windows are now supported: when reactor side is human, runtime opens a pending decision (`pending_reaction`) instead of auto-firing,
+- unit validation: `assault_model/tests/test_runtime_reaction_fire_flag.py`,
+- full interrupt-order/UI-flow E2E parity remains pending for production hardening.
+
 ## 4. RL Guardrail Traceability (P4.3c)
 
 Validation state: **Pending Validation**.

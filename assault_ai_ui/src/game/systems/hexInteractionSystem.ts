@@ -77,6 +77,22 @@ export async function handleHexClick(
     body: JSON.stringify({ action_id: actionId }),
   });
   const stepData = await stepRes.json();
+  if (!stepRes.ok) {
+    const maybeState = stepData?.detail?.state || stepData?.state;
+    if (maybeState && typeof maybeState === "object") {
+      (window as any).__setGameState?.(maybeState);
+      try {
+        gameController.updateState(maybeState);
+      } catch {
+        // ignore bridge failures
+      }
+    }
+    (window as any).logSystemEvent?.(
+      "system",
+      `⚠️ Action rejected by backend (${stepRes.status}). State resynced.`
+    );
+    return;
+  }
   const stateAfterHuman = stepData.state;
   if (!stateAfterHuman || typeof stateAfterHuman !== "object") {
     console.error("❌ Invalid step response: missing state", stepData);

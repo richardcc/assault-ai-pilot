@@ -1,0 +1,68 @@
+module.exports = {
+  apps: [
+    {
+      name: "assault-backend",
+      cwd: "C:/repos/python/assault",
+      script: "C:/repos/python/assault/.venv/Scripts/python.exe",
+      args: "-m uvicorn assault_backend.main:app --host 127.0.0.1 --port 8001",
+      autorestart: true,
+      max_restarts: 10,
+      restart_delay: 2000,
+      env: {
+        PYTHONUNBUFFERED: "1",
+      },
+    },
+    {
+      name: "assault-frontend",
+      cwd: "C:/repos/python/assault/assault_ai_ui",
+      script: "cmd.exe",
+      args: "/c npm run dev -- --host",
+      interpreter: "none",
+      autorestart: true,
+      max_restarts: 10,
+      restart_delay: 2000,
+      env: {
+        VITE_API_PORT: "8001",
+      },
+    },
+    {
+      name: "assault-sb3-viewer",
+      cwd: "C:/repos/python/assault",
+      script: "C:/repos/python/assault/.venv/Scripts/python.exe",
+      args: "scripts/sb3_eval_viewer.py --host 127.0.0.1 --port 8765",
+      autorestart: true,
+      max_restarts: 10,
+      restart_delay: 2000,
+      env: {
+        PYTHONUNBUFFERED: "1",
+      },
+    },
+    {
+      name: "assault-orchestrator-prefect-server",
+      cwd: "C:/repos/python/assault-experiments-orchestrator",
+      script: "powershell.exe",
+      args: "-ExecutionPolicy Bypass -Command . ./.venv/Scripts/Activate.ps1; prefect server start --host 127.0.0.1 --port 4200",
+      autorestart: true,
+      max_restarts: 10,
+      restart_delay: 3000,
+    },
+    {
+      name: "assault-orchestrator-loop",
+      cwd: "C:/repos/python/assault-experiments-orchestrator",
+      script: "powershell.exe",
+      args: "-ExecutionPolicy Bypass -File ./scripts/start_prefect_loop.ps1 -StartServerIfDown:$true",
+      autorestart: true,
+      max_restarts: 10,
+      restart_delay: 3000,
+    },
+    {
+      name: "assault-orchestrator-mlflow",
+      cwd: "C:/repos/python/assault-experiments-orchestrator",
+      script: "C:/repos/python/assault-experiments-orchestrator/.venv/Scripts/mlflow.exe",
+      args: 'ui --backend-store-uri "file:./mlruns" --host 127.0.0.1 --port 5001',
+      autorestart: true,
+      max_restarts: 10,
+      restart_delay: 3000,
+    },
+  ],
+};

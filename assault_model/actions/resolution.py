@@ -39,6 +39,7 @@ from assault_model.combat.ranged_combat_resolver import resolve_ranged_combat
 
 
 from assault_model.map.hex_utils import safe_hex_distance
+from assault_model.map.hex_coord import HexCoord
 
 # -------------------------------------------------
 # DEVELOPMENT TRACE (INTERNAL ONLY)
@@ -190,19 +191,32 @@ def resolve_action(
         if action.combat_mode == CombatMode.ASSAULT:
             ctx = new_state.create_combat_context(action)
 
-            # Hex objetivo del asalto (hex del defensor). Reglamento 11.1:
-            # el atacante entra en el hex enemigo para iniciar el close
-            # combat y lo OCUPA si elimina al defensor.
-            target_hex = ctx.defender.position
+            def _clone_hex(pos):
+                if pos is None:
+                    return None
+                return HexCoord(pos.q, pos.r)
+
+            # Freeze initial positions to enforce deterministic post-combat placement.
+            attacker_start_hex = _clone_hex(ctx.attacker.position)
+            defender_start_hex = _clone_hex(ctx.defender.position)
 
             result_combat = resolve_close_combat(ctx, context)
 
-            if (
-                target_hex is not None
-                and ctx.attacker.alive
-                and not ctx.defender.alive
-            ):
-                ctx.attacker.position = target_hex
+            # Post-close-combat position contract:
+            # - attacker wins (defender eliminated): attacker occupies defender start hex.
+            # - attacker loses (attacker eliminated): defender remains in its own start hex.
+            # - no decision / both alive: both remain in their own start hexes.
+            if ctx.attacker.alive and not ctx.defender.alive:
+                if defender_start_hex is not None:
+                    ctx.attacker.position = _clone_hex(defender_start_hex)
+            elif not ctx.attacker.alive and ctx.defender.alive:
+                if defender_start_hex is not None:
+                    ctx.defender.position = _clone_hex(defender_start_hex)
+            elif ctx.attacker.alive and ctx.defender.alive:
+                if attacker_start_hex is not None:
+                    ctx.attacker.position = _clone_hex(attacker_start_hex)
+                if defender_start_hex is not None:
+                    ctx.defender.position = _clone_hex(defender_start_hex)
 
         # ------------------------------
         # RANGED DIRECT + INDIRECT FIRE

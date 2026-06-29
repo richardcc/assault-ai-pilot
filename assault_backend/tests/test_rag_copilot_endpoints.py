@@ -135,3 +135,85 @@ def test_rag_explain_situation_golden_response_shape():
     assert "limitations" in body
     if body["citations"]:
         _assert_citation_shape(body["citations"][0])
+
+
+def test_rag_query_bunker_has_specific_evidence(monkeypatch):
+    monkeypatch.setenv("ASSAULT_RAG_LLM_ENABLED", "0")
+    payload = {
+        "query": "Que reglas aplican para cruzar y ocupar bunker o pillbox?",
+        "mode": "hybrid",
+    }
+    res = client.post("/api/rag/query", json=payload)
+    assert res.status_code == 200, res.text
+    body = res.json()
+    assert isinstance(body.get("answer"), str)
+    assert body.get("citations"), "Expected citations for bunker/pillbox query."
+    has_fortification_source = any(
+        "fortification::" in str(c.get("source_id", "")).lower()
+        or "bunker" in str(c.get("snippet", "")).lower()
+        or "pillbox" in str(c.get("snippet", "")).lower()
+        for c in body["citations"]
+    )
+    assert has_fortification_source, body["citations"]
+
+
+def test_rag_query_unit_types_prefers_game_data(monkeypatch):
+    monkeypatch.setenv("ASSAULT_RAG_LLM_ENABLED", "0")
+    payload = {
+        "query": "Que tipos de unidades hay disponibles en el juego actual?",
+        "mode": "hybrid",
+    }
+    res = client.post("/api/rag/query", json=payload)
+    assert res.status_code == 200, res.text
+    body = res.json()
+    assert body.get("citations"), "Expected citations for unit-types query."
+    has_data_citation = any(c.get("source_type") == "data" for c in body["citations"])
+    assert has_data_citation, body["citations"]
+
+
+def test_rag_query_riffles_typo_maps_to_rifles_data(monkeypatch):
+    monkeypatch.setenv("ASSAULT_RAG_LLM_ENABLED", "0")
+    payload = {
+        "query": "Que sabes de riffles 43?",
+        "mode": "hybrid",
+    }
+    res = client.post("/api/rag/query", json=payload)
+    assert res.status_code == 200, res.text
+    body = res.json()
+    assert body.get("citations"), body
+    has_rifles_data = any(
+        c.get("source_type") == "data" and "rifles" in str(c.get("snippet", "")).lower()
+        for c in body["citations"]
+    )
+    assert has_rifles_data, body["citations"]
+
+
+def test_rag_query_bazoka_typo_maps_to_bazooka_data(monkeypatch):
+    monkeypatch.setenv("ASSAULT_RAG_LLM_ENABLED", "0")
+    payload = {
+        "query": "que hace el bazoka team?",
+        "mode": "hybrid",
+    }
+    res = client.post("/api/rag/query", json=payload)
+    assert res.status_code == 200, res.text
+    body = res.json()
+    assert body.get("citations"), body
+    has_bazooka_data = any(
+        c.get("source_type") == "data" and "bazooka" in str(c.get("snippet", "")).lower()
+        for c in body["citations"]
+    )
+    assert has_bazooka_data, body["citations"]
+
+
+def test_rag_query_unit_stats_avoids_rule_noise_when_data_exists(monkeypatch):
+    monkeypatch.setenv("ASSAULT_RAG_LLM_ENABLED", "0")
+    payload = {
+        "query": "Que dados tira GE_RIFLES_43 contra infanteria?",
+        "mode": "hybrid",
+    }
+    res = client.post("/api/rag/query", json=payload)
+    assert res.status_code == 200, res.text
+    body = res.json()
+    assert body.get("citations"), body
+    source_types = {c.get("source_type") for c in body["citations"]}
+    assert source_types == {"data"}, body["citations"]

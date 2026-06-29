@@ -1,0 +1,350 @@
+{
+  "meta": {
+    "episodes": 50,
+    "timestamp": "2026-06-28T15:00:19.368267Z",
+    "seed": 42,
+    "output_dir": "C:\\repos\\python\\assault\\assault_sim\\session\\reports\\sb3_eval",
+    "scenario_schedule": [
+      {
+        "id": "battaglia_cittadina_2_1",
+        "episodes": 300
+      }
+    ],
+    "rl_sides": [
+      "US"
+    ],
+    "models": {
+      "US": {
+        "battaglia_cittadina_2_1": "C:\\repos\\python\\assault\\models\\scenario_battaglia_cittadina_2_1\\side_US\\sb3_latest_US.zip"
+      }
+    },
+    "train_config_path": "C:\\repos\\python\\assault\\assault_sim\\config\\train_config.json",
+    "diagnostic_min_overrides": false,
+    "finalizer_override_profile": "soft",
+    "models_subdir": "",
+    "models_subdir_template": "scenario_{scenario}/side_{side}",
+    "rag_posthoc_enabled": true
+  },
+  "by_side_and_scenario": {
+    "US": {
+      "battaglia_cittadina_2_1": {
+        "meta": {
+          "episodes": 50,
+          "timestamp": "2026-06-28T14:59:54.334496Z",
+          "model": "C:\\repos\\python\\assault\\models\\scenario_battaglia_cittadina_2_1\\side_US\\sb3_latest_US.zip",
+          "scenario": "battaglia_cittadina_2_1",
+          "rl_side": "US",
+          "vecnormalize_path": "C:\\repos\\python\\assault\\models\\scenario_battaglia_cittadina_2_1\\side_US\\sb3_vecnormalize_US.pkl",
+          "obs_normalized": true,
+          "diagnostic_min_overrides": false,
+          "finalizer_override_profile": "soft",
+          "models_subdir": "scenario_battaglia_cittadina_2_1/side_US",
+          "csv": "C:\\repos\\python\\assault\\assault_sim\\session\\reports\\sb3_eval\\metrics_sb3_US_battaglia_cittadina_2_1.csv",
+          "rag_posthoc_enabled": true
+        },
+        "summary": {
+          "episodes": 0,
+          "win_rate": 0,
+          "win_score_rate": 0,
+          "true_win_rate": 0,
+          "draw_rate": 0,
+          "loss_rate": 0,
+          "draws": 0,
+          "losses": 0,
+          "avg_vp": 0,
+          "avg_steps": 0,
+          "end_reason_counts": {},
+          "win_rate_by_end_reason": {},
+          "victory_level_counts": {},
+          "rl_result_counts": {},
+          "tracked_result_counts": {},
+          "captured_final_counts": {},
+          "captured_delta_counts": {},
+          "captured_delta_avg": 0.0,
+          "captured_delta_gain_rate": 0.0,
+          "captured_delta_flat_rate": 0.0,
+          "captured_delta_loss_rate": 0.0
+        },
+        "combat": {
+          "trade_mean": 0.0,
+          "damage_ratio": 0.0,
+          "total_damage_rl": 0,
+          "total_damage_enemy": 0,
+          "trade_samples": 0
+        },
+        "advanced": {
+          "good_trade_rate": 0.0,
+          "bad_trade_rate": 0.0,
+          "selectivity": 0.0,
+          "zero_dmg_rate": 0.0
+        },
+        "policy_alignment": {
+          "forced_steps": 0,
+          "decisions": 0,
+          "forced_ratio": 0.0,
+          "top_sampled_to_executed": {},
+          "composite_available_count": 0,
+          "composite_selected_count": 0,
+          "composite_available_decisions": 0,
+          "composite_selection_rate_when_available": 0.0
+        },
+        "mission": {
+          "vp_contact_rate": 0.0,
+          "capture_pressure_turn": null,
+          "strategy_stuck_ratio": 0.0,
+          "unit_concentration_index": 0.0,
+          "objective_transition_matrix": {},
+          "vp_entry_opportunities": 0,
+          "vp_entries_taken": 0,
+          "vp_entry_conversion_rate": null,
+          "vp_entry_missed_rate": null,
+          "vp_net_progress": 0.0,
+          "position_reversal_rate": 0.0,
+          "attack_near_vp_instead_of_capture_rate": 0.0,
+          "vp_control_turns_share": 0.0,
+          "capture_attempt_success_rate": 0.0,
+          "capture_attempted": 0,
+          "capture_committed": 0,
+          "capture_cancelled_by_finalizer": 0,
+          "capture_cancelled_by_finalizer_rate": 0.0,
+          "capture_cancelled_by_finalizer_reason_counts": {},
+          "first_vp_entry_turn_p50": null,
+          "first_vp_entry_turn_p90": null,
+          "turn_first_contact": null,
+          "turn_first_progress": null,
+          "turn_first_capture": null,
+          "contact_to_progress_delay": null,
+          "progress_to_capture_delay": null,
+          "latency_invalid_order_count": 0,
+          "latency_missing_progress_count": 0,
+          "latency_missing_capture_count": 0,
+          "capture_conversion_after_contact": 0.0,
+          "capture_intent_persistence": 0.0,
+          "attack_opportunity_cost_near_vp": 0.0,
+          "vp_control_auc": 0.0,
+          "intent_commitment_rate_stub": 0.0,
+          "role_diversity_index_stub": 0.0,
+          "intent_commitment_rate": 0.0,
+          "role_diversity_index": 0.0,
+          "plan_role_counts_stub": {},
+          "plan_focus_switch_count": 0,
+          "plan_stuck_steps_mean": 0.0,
+          "plan_stuck_steps_p90": 0.0,
+          "plan_steps_since_progress_mean": 0.0,
+          "plan_steps_since_progress_p90": 0.0,
+          "plan_planned_target_set_rate": 0.0,
+          "plan_planned_target_switch_count": 0,
+          "plan_team_turn_progress_mean": 0.0,
+          "plan_team_units_committed_mean": 0.0,
+          "plan_team_focus_vp_set_rate": 0.0,
+          "plan_advanced_enabled_rate": 0.0,
+          "plan_advanced_horizon_mean": 0.0,
+          "plan_commit_rate": 1.0,
+          "focus_switch_rate": 0.0,
+          "plan_stage_counts": {},
+          "plan_replan_reason_counts": {},
+          "plan_last_failure_reason_counts": {},
+          "plan_fallback_reason_counts": {},
+          "plan_role_unknown_reason_counts": {},
+          "capture_branch_counts": {},
+          "near_vp_l2_transition_counts": {},
+          "near_vp_l2_transition_by_l3_counts": {},
+          "budget_remaining_by_role": {},
+          "budget_violation_count": 0,
+          "budget_violation_rate": 0.0,
+          "budget_compliance_rate": 1.0,
+          "action_finalize_reason_counts": {},
+          "invalid_action_count": 0,
+          "fallback_action_count": 0,
+          "wait_recovery_sb3_backstep_count": 0,
+          "invalid_action_rate": 0.0,
+          "fallback_rate": 0.0,
+          "wait_recovery_sb3_backstep_rate": 0.0,
+          "reward_component_means": {},
+          "source_mix_counts": {},
+          "source_mix_rates": {},
+          "source_mix_capture_event_counts": {},
+          "source_mix_capture_event_rates": {},
+          "finalizer_override_reason_counts": {},
+          "finalizer_override_reason_rates": {},
+          "plan_progress_rate": 0.0,
+          "coordination_gain": 0.0,
+          "avg_legal_actions_per_decision": 0.0,
+          "mean_action_catalog_gen_ms": 0.0,
+          "avg_legal_actions_per_decision_by_side": {},
+          "mean_action_catalog_gen_ms_by_side": {},
+          "reaction_fire_count": 0,
+          "reaction_fire_rate": 0.0,
+          "reaction_window_count": 0,
+          "reaction_fire_skipped_count": 0,
+          "reaction_fire_by_side": {},
+          "plan_success_k": 0.0,
+          "plan_latency_to_progress": null,
+          "lote_e_attack_opportunity_cost_near_vp_norm": 0.0,
+          "lote_e_capture_window_open_rate": 0.0,
+          "lote_e_expected_vp_swing_if_advance": 0.0,
+          "lote_e_expected_trade_if_attack": 0.0,
+          "fallback_to_attack_rate_in_capture": 0.0,
+          "capture_fallback_reason_counts": {},
+          "capture_move_block_profile": {},
+          "capture_override_reason_counts": {},
+          "l3_capture_forced_count": 0,
+          "l3_capture_forced_rate": 0.0,
+          "l3_capture_force_reason_counts": {},
+          "post_open_window_followup_advance_count": 0,
+          "post_open_window_followup_success_count": 0,
+          "post_open_window_followup_success_rate": 0.0,
+          "capture_emergency_override_count": 0,
+          "capture_legal_override_count": 0,
+          "capture_progress_available_count": 0,
+          "capture_suspected_progress_miss_count": 0,
+          "capture_progress_candidate_total": 0,
+          "capture_equal_candidate_total": 0,
+          "capture_increase_candidate_total": 0,
+          "capture_move_candidates_total": 0,
+          "capture_reversal_filtered_total": 0,
+          "capture_selected_move_reason_counts": {},
+          "attack_fallback_to_move_count": 0,
+          "attack_fallback_reason_counts": {},
+          "vp_stepin_legal_count": 0,
+          "vp_stepin_selected_count": 0,
+          "vp_stepin_selection_rate": 0.0,
+          "vp_stepin_block_reason_counts": {},
+          "vp_no_legal_stepin_near_count": 0,
+          "vp_opening_attack_candidates_total": 0,
+          "stepin_legal_mask_count": 0,
+          "stepin_forced_option_count": 0,
+          "vp_control_after_entry_turns_p50": null,
+          "vp_control_after_entry_turns_p90": null,
+          "per_unit_vp_entry_attempts": {},
+          "per_unit_vp_entry_success": {},
+          "per_unit_vp_final_contribution": {},
+          "capture_emergency_override_rate": 0.0,
+          "capture_legal_override_rate": 0.0,
+          "capture_progress_available_rate": 0.0,
+          "capture_suspected_progress_miss_rate": 0.0,
+          "multi_unit_contribution": {
+            "attack_units_mean": 0.0,
+            "damage_units_mean": 0.0
+          },
+          "stability_checks": {
+            "strategy_stuck_ok": true,
+            "unit_concentration_ok": true,
+            "vp_contact_ok": false
+          },
+          "stability_status": "yellow",
+          "capture_checks": {
+            "vp_contact_min": false,
+            "pressure_turn_set": false,
+            "concentration_ok": true,
+            "vp_entry_missed_ok": false,
+            "capture_success_ok": false,
+            "capture_fallback_ok": true
+          },
+          "capture_readiness": false
+        },
+        "action_execution": {
+          "RL": {},
+          "ENEMY": {}
+        },
+        "units": {
+          "by_side": {
+            "RL": {
+              "unit_count": 0,
+              "total_attacks": 0,
+              "total_damage": 0,
+              "total_kills": 0,
+              "damage_per_attack": 0.0
+            },
+            "ENEMY": {
+              "unit_count": 0,
+              "total_attacks": 0,
+              "total_damage": 0,
+              "total_kills": 0,
+              "damage_per_attack": 0.0
+            }
+          },
+          "by_unit": {
+            "RL": [],
+            "ENEMY": []
+          }
+        },
+        "strategy": {
+          "l2_policy_performance": {},
+          "l3_policy_performance": {},
+          "strategy_to_option_map": {},
+          "objective_transition_matrix": {}
+        },
+        "rag_posthoc": {
+          "patterns": [
+            "low_capture_pressure",
+            "low_damage_output"
+          ],
+          "metrics": {
+            "total_steps": 0,
+            "wait_ratio": 0.0,
+            "capture_ratio": 0.0,
+            "damage_ratio": 0.0
+          },
+          "examples": [],
+          "recommendations": [
+            "Aumentar shaping de progreso/entrada en VP en ventanas CAPTURE.",
+            "Incrementar preferencia por l\u00edneas de fuego con follow-up legal."
+          ],
+          "citations": [
+            {
+              "source_type": "rule",
+              "source_id": "02_TURN_SEQUENCE_AND_ACTIONS::8",
+              "snippet": "...e: teach policy that delaying/avoiding VP capture directly increases loss risk, not only at end-of-episode. - Training/eval action finalizer parity (v20): Gym and SB3 eval controllers now finalize RL-selected actions aga..."
+            },
+            {
+              "source_type": "rule",
+              "source_id": "02_TURN_SEQUENCE_AND_ACTIONS::17",
+              "snippet": "...py` (`_best_capture_staging_move`, `_capture_priority_action`, `_tag_action`). - Telemetry path: `assault_sim/training_env.py` -> `assault_sim/evaluation/evaluator.py` -> `assault_sim/evaluation/results_analyzer.py` and..."
+            },
+            {
+              "source_type": "rule",
+              "source_id": "02_TURN_SEQUENCE_AND_ACTIONS::7",
+              "snippet": "...falls forward deterministically to the next side with available units. - PPO/reward anti-plateau retune (v4): training config increases exploration (`ENTROPY_COEF` raised to `0.07` in `assault_sim/config/ppo_config.py`)..."
+            },
+            {
+              "source_type": "rule",
+              "source_id": "02_TURN_SEQUENCE_AND_ACTIONS::11",
+              "snippet": "_to_progress_delay`, `progress_to_capture_delay`) to reduce blind tuning before reward retraining. - R2.1-a kickoff (v28): reward now penalizes near-VP CAPTURE `ADVANCE` moves that fail to produce conversion/progress, an..."
+            },
+            {
+              "source_type": "rule",
+              "source_id": "02_TURN_SEQUENCE_AND_ACTIONS::12",
+              "snippet": "valid temporal orderings (`contact <= progress <= capture`); invalid sequences now surface via counters (`latency_invalid_order_count`, `latency_missing_progress_count`, `latency_missing_capture_count`) instead of mislea..."
+            }
+          ],
+          "limitations": [
+            "LLM_UNAVAILABLE_FALLBACK"
+          ]
+        }
+      }
+    }
+  },
+  "comparison": [
+    {
+      "rl_side": "US",
+      "scenario": "battaglia_cittadina_2_1",
+      "episodes": 0,
+      "win_rate": 0,
+      "win_score_rate": 0,
+      "true_win_rate": 0,
+      "draw_rate": 0,
+      "loss_rate": 0,
+      "draws": 0,
+      "losses": 0,
+      "avg_vp": 0,
+      "avg_steps": 0,
+      "end_reason_counts": {},
+      "win_rate_by_end_reason": {},
+      "rl_result_counts": {},
+      "tracked_result_counts": {},
+      "trade_mean": 0.0,
+      "damage_ratio": 0.0
+    }
+  ]
+}

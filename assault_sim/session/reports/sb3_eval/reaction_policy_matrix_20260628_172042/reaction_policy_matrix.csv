@@ -1,0 +1,4 @@
+﻿"policy","side","scenario","episodes","reaction_window_count","reaction_fire_skipped_count","reaction_fire_count","reaction_fire_rate","win_score_rate","true_win_rate","avg_vp","report"
+"always","US","battaglia_cittadina_2_1","50","0","0","464","0,261851015801354","0,18","0,08","4,76","C:\repos\python\assault\assault_sim\session\reports\sb3_eval\reaction_policy_matrix_20260628_172042\always\metrics_sb3_report_20260628T152242Z.json"
+"balanced","US","battaglia_cittadina_2_1","50","0","44","403","0,219260065288357","0,18","0,1","4,76","C:\repos\python\assault\assault_sim\session\reports\sb3_eval\reaction_policy_matrix_20260628_172042\balanced\metrics_sb3_report_20260628T152500Z.json"
+"never","US","battaglia_cittadina_2_1","50","0","536","0","0","0,18","0,1","4,64","C:\repos\python\assault\assault_sim\session\reports\sb3_eval\reaction_policy_matrix_20260628_172042\never\metrics_sb3_report_20260628T152632Z.json"

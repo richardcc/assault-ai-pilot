@@ -1,0 +1,51 @@
+﻿{
+    "experiment_id":  "planner_single_lever_temporal_objective_windows_v1",
+    "description":  "Planner-only single lever: enable temporal objective windows (contact -\u003e entry -\u003e hold) to improve VP conversion timing.",
+    "owner":  "local_user",
+    "created_at_utc":  "2026-06-29T04:58:00Z",
+    "baseline":  {
+                     "report_paths":  [
+                                          "assault_sim/session/reports/sb3_eval/metrics_sb3_report_20260627T103651Z.json",
+                                          "assault_sim/session/reports/sb3_eval/metrics_sb3_report_20260627T103727Z.json",
+                                          "assault_sim/session/reports/sb3_eval/metrics_sb3_report_20260627T103759Z.json"
+                                      ]
+                 },
+    "scope":  {
+                  "side":  "US",
+                  "scenario":  "battaglia_cittadina_2_1",
+                  "seeds":  [
+                                42
+                            ],
+                  "episodes":  20
+              },
+    "policy":  {
+                   "single_lever_only":  true,
+                   "forbidden_mixed_surfaces":  [
+                                                    "planner",
+                                                    "reward",
+                                                    "guardrail"
+                                                ]
+               },
+    "changes":  [
+                    {
+                        "surface":  "planner",
+                        "file":  "assault_sim/decision/mission_planner.py",
+                        "key":  "temporal_objective_windows",
+                        "old":  "disabled_or_flat",
+                        "new":  "enabled_phase_windows"
+                    }
+                ],
+    "execution":  {
+                      "train_command":  "python -m assault_sim.train.train_sb3",
+                      "gate_command":  "powershell -ExecutionPolicy Bypass -File .\\scripts\\gate_r2a_no_regression_vs_r21i.ps1 -RunEval"
+                  },
+    "acceptance":  {
+                       "required":  [
+                                        "true_win_rate \u003e= baseline - 0.05",
+                                        "loss_rate \u003c= baseline + 0.05",
+                                        "vp_entry_conversion_rate \u003e= baseline - 0.10",
+                                        "capture_conversion_after_contact \u003e= baseline - 0.10"
+                                    ]
+                   },
+    "status":  "cancelled"
+}

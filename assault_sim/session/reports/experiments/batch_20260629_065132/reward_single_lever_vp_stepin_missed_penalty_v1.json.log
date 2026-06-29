@@ -1,0 +1,8 @@
+﻿powershell.exe : Manifest validation failed with exit code 2
+En C:\repos\python\assault\scripts\run_experiment_batch.ps1: 176 Carácter: 15
++     $output = & powershell @args 2>&1
++               ~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (Manifest valida...ith exit code 2:String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+

@@ -43,10 +43,12 @@ function App() {
   const [selectedScenario, setSelectedScenario] = useState<string>("");
   const [scenarioSides, setScenarioSides] = useState<string[]>([]);
   const [humanSide, setHumanSide] = useState<string>("");
+  const [reactionDecisionBusy, setReactionDecisionBusy] = useState(false);
 
   const lastTurnRef = useRef<number>(-1);
   const lastActiveSideRef = useRef<string>("");
   const lastDoneRef = useRef<boolean>(false);
+  const lastReactionWindowRef = useRef<string>("");
   const prevUnitsRef = useRef<Unit[] | null>(null);
 
   // Helper to add structured log events
@@ -226,6 +228,19 @@ function App() {
         "turn",
         `🏁 VP ${coords} ${prevOwner} -> ${newOwner} (+${value})`
       );
+    }
+  }, [gameData?.last_events]);
+
+  // Log reaction decision windows and outcomes explicitly.
+  useEffect(() => {
+    const events = gameData?.last_events || [];
+    for (const event of events) {
+      const p = event?.payload || {};
+      if (event?.type === "REACTION_WINDOW") {
+        addLog("combat", `⏸️ Reaction window: ${String(p.reactor_id || "?")} can react to ${String(p.target_id || "?")}`);
+      } else if (event?.type === "REACTION_FIRE_SKIPPED") {
+        addLog("combat", `⏭️ Reaction skipped: ${String(p.reactor_id || "?")}`);
+      }
     }
   }, [gameData?.last_events]);
 
@@ -411,22 +426,9 @@ function App() {
     try {
       const executed = await (window as any).onExecuteOrder?.(order || { action_id: actionId });
       if (executed) return;
-      // Safety: never POST manual step outside human turn.
-      const activeSideAfterCb = gameData?.active_side;
-      const isHumanTurnAfterCb = gameData?.sides?.[activeSideAfterCb] === "human";
-      if (!isHumanTurnAfterCb) {
-        return;
-      }
-      const res = await fetch(apiUrl("/api/game/step"), {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action_id: actionId }),
-      });
-      const data = await res.json();
-      if (data?.state && typeof (window as any).__setGameState === "function") {
-        (window as any).__setGameState(data.state);
-        gameController.updateState(data.state);
-      }
+      // Avoid direct fallback POST here. onExecuteOrder is the single
+      // execution path to prevent stale/double-dispatched action_ids.
+      console.warn("⛔ executeActionById rejected: onExecuteOrder did not execute");
     } catch (err) {
       console.error("❌ Action by id failed", err);
     }
@@ -446,6 +448,64 @@ function App() {
   }, [gameData?.units, deadUnits]);
 
   const latestCombatEvent = gameData?.last_events?.slice().reverse().find((event: any) => event.type === "ACTION_EFFECT");
+  const pendingReaction = gameData?.pending_reaction || null;
+  const pendingReactionReactor =
+    pendingReaction?.reactor_id
+      ? (gameData?.units || []).find((u: any) => String(u.id) === String(pendingReaction.reactor_id))
+      : null;
+  const pendingReactionTarget =
+    pendingReaction?.target_id
+      ? (gameData?.units || []).find((u: any) => String(u.id) === String(pendingReaction.target_id))
+      : null;
+  const pendingReactionReactorLabel = pendingReactionReactor
+    ? (unitImages[pendingReactionReactor.unit_key as keyof typeof unitImages]?.label || pendingReactionReactor.unit_key || pendingReaction.reactor_id)
+    : String(pendingReaction?.reactor_id || "Unknown");
+  const pendingReactionTargetLabel = pendingReactionTarget
+    ? (unitImages[pendingReactionTarget.unit_key as keyof typeof unitImages]?.label || pendingReactionTarget.unit_key || pendingReaction.target_id)
+    : String(pendingReaction?.target_id || "Unknown");
+
+  useEffect(() => {
+    if (!pendingReaction) {
+      lastReactionWindowRef.current = "";
+      return;
+    }
+    const key = `${pendingReaction?.reactor_id || ""}->${pendingReaction?.target_id || ""}`;
+    if (key && key !== lastReactionWindowRef.current) {
+      addLog("combat", `⚡ Reacción disponible: ${pendingReactionReactorLabel} -> ${pendingReactionTargetLabel}`);
+      lastReactionWindowRef.current = key;
+    }
+  }, [pendingReaction, pendingReactionReactorLabel, pendingReactionTargetLabel]);
+
+  const handleResolveReaction = async (useReaction: boolean) => {
+    if (!pendingReaction || reactionDecisionBusy) return;
+    setReactionDecisionBusy(true);
+    try {
+      const res = await fetch(apiUrl("/api/game/reaction/resolve"), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ use_reaction: useReaction }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(String(data?.detail || `HTTP ${res.status}`));
+      }
+      if (data?.state && typeof (window as any).__setGameState === "function") {
+        (window as any).__setGameState(data.state);
+        gameController.updateState(data.state);
+      }
+      addLog(
+        "combat",
+        useReaction
+          ? `⚡ Reaction Fire accepted: ${pendingReactionReactorLabel} -> ${pendingReactionTargetLabel}`
+          : `⏭️ Reaction Fire skipped: ${pendingReactionReactorLabel}`
+      );
+    } catch (err) {
+      console.error("❌ Reaction resolve failed", err);
+      addLog("system", `❌ Reaction decision failed: ${String(err)}`);
+    } finally {
+      setReactionDecisionBusy(false);
+    }
+  };
 
   return (
     <div className="app">
@@ -747,6 +807,56 @@ function App() {
           <CombatPanel event={latestCombatEvent} units={gameData?.units || []} />
         )}
       </div>
+      {pendingReaction && (
+        <div
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(0,0,0,0.45)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            zIndex: 40,
+          }}
+        >
+          <div
+            style={{
+              width: 460,
+              maxWidth: "92vw",
+              background: "rgba(8, 10, 18, 0.95)",
+              border: "1px solid rgba(0, 240, 255, 0.35)",
+              boxShadow: "0 0 28px rgba(0, 240, 255, 0.25)",
+              borderRadius: 8,
+              padding: 16,
+            }}
+          >
+            <div style={{ fontFamily: "var(--font-tech)", fontSize: 15, letterSpacing: 1, marginBottom: 10, color: "var(--neon-cyan)" }}>
+              REACTION FIRE WINDOW
+            </div>
+            <div style={{ fontSize: 13, lineHeight: 1.5, color: "var(--text-primary)", marginBottom: 14 }}>
+              Enemy movement triggered a reaction opportunity.<br />
+              Reactor: <b>{pendingReactionReactorLabel}</b><br />
+              Target: <b>{pendingReactionTargetLabel}</b>
+            </div>
+            <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
+              <button
+                className="btn-tactical"
+                onClick={() => void handleResolveReaction(false)}
+                disabled={reactionDecisionBusy}
+              >
+                ⏭ Skip
+              </button>
+              <button
+                className="btn-tactical btn-tactical-start"
+                onClick={() => void handleResolveReaction(true)}
+                disabled={reactionDecisionBusy}
+              >
+                ⚡ Use Reaction Fire
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

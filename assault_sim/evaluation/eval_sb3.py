@@ -458,12 +458,67 @@ def _dedupe_schedule_by_scenario_id(schedule):
     return deduped
 
 
+def _build_rag_training_runs(eval_results: list[dict]) -> list[dict]:
+    runs: list[dict] = []
+    for result in (eval_results or []):
+        events: list[dict] = []
+        for ev in (result.get("events", []) or []):
+            if not isinstance(ev, dict):
+                continue
+            action_name = str(
+                ev.get("action")
+                or ev.get("attack_type")
+                or ev.get("type")
+                or "unknown"
+            )
+            try:
+                damage = float(ev.get("damage", 0) or 0)
+            except Exception:
+                damage = 0.0
+            events.append(
+                {
+                    "action": action_name,
+                    "capture_event": False,
+                    "damage": damage,
+                }
+            )
+
+        # Keep capture-pressure signal in post-hoc RAG analysis.
+        mission = result.get("mission", {}) or {}
+        capture_committed = int(mission.get("capture_committed", 0) or 0)
+        for _ in range(max(0, capture_committed)):
+            events.append(
+                {
+                    "action": "capture",
+                    "capture_event": True,
+                    "damage": 0.0,
+                }
+            )
+        runs.append({"events": events})
+    return runs
+
+
+def _maybe_build_rag_posthoc(eval_results: list[dict], enabled: bool) -> dict | None:
+    if not enabled:
+        return None
+    try:
+        from assault_rag.copilot.services import analyze_training_level1
+
+        runs = _build_rag_training_runs(eval_results)
+        return analyze_training_level1(runs)
+    except Exception as exc:
+        return {
+            "error": f"RAG_POSTHOC_FAILED: {exc}",
+        }
+
+
 def evaluate_sb3(
     episodes: int = 100,
     seed: int | None = None,
     out_dir: str | None = None,
     diagnostic_min_overrides: bool = False,
     config: str | None = None,
+    rag_posthoc: bool = True,
 ):
     try:
         from stable_baselines3 import PPO
@@ -624,6 +679,7 @@ def evaluate_sb3(
                     "finalizer_override_profile": str(getattr(cfg, "finalizer_override_profile", "strict") or "strict"),
                     "models_subdir": models_subdir,
                     "csv": str(csv_path),
+                    "rag_posthoc_enabled": bool(rag_posthoc),
                 },
                 "summary": analyzer.summary(),
                 "combat": analyzer.combat_metrics(),
@@ -634,6 +690,9 @@ def evaluate_sb3(
                 "units": analyzer.unit_analysis(),
                 "strategy": analyzer.strategy_analysis(),
             }
+            rag_posthoc_report = _maybe_build_rag_posthoc(results, enabled=bool(rag_posthoc))
+            if rag_posthoc_report is not None:
+                side_report["rag_posthoc"] = rag_posthoc_report
             all_reports[rl_side][scenario] = side_report
             comparison_rows.append({
                 "rl_side": rl_side,
@@ -705,6 +764,7 @@ def evaluate_sb3(
             "finalizer_override_profile": str(getattr(cfg, "finalizer_override_profile", "strict") or "strict"),
             "models_subdir": str(getattr(cfg, "sb3_models_subdir", "") or "").strip(),
             "models_subdir_template": str(getattr(cfg, "sb3_models_subdir_template", "") or "").strip(),
+            "rag_posthoc_enabled": bool(rag_posthoc),
         },
         "by_side_and_scenario": all_reports,
         "comparison": comparison_rows,
@@ -732,6 +792,11 @@ if __name__ == "__main__":
         action="store_true",
         help="Disable planner-like eval coercions (step-in/mission-priority overrides) while keeping legality finalization",
     )
+    parser.add_argument(
+        "--no-rag-posthoc",
+        action="store_true",
+        help="Disable post-hoc RAG analysis in eval report generation.",
+    )
     args = parser.parse_args()
     evaluate_sb3(
         episodes=args.episodes,
@@ -739,5 +804,6 @@ if __name__ == "__main__":
         out_dir=args.out_dir,
         diagnostic_min_overrides=bool(args.diagnostic_min_overrides),
         config=args.config,
+        rag_posthoc=not bool(args.no_rag_posthoc),
     )
 

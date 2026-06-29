@@ -6,7 +6,8 @@ export function updateHighlights(
   selectedUnitId: string | null,
   availableMoves: any[],
   hoverHex: { q: number; r: number } | null,
-  orderHoverTarget: any | null
+  orderHoverTarget: any | null,
+  pendingReaction: any | null = null
 ) {
   if (!layer || !data) return;
 
@@ -130,6 +131,31 @@ export function updateHighlights(
             false
           );
         }
+    }
+  }
+
+  // 5. Highlight pending reaction participants while the popup is open.
+  if (pendingReaction) {
+    const reactorId = String(pendingReaction?.reactor_id || "");
+    const targetId = String(pendingReaction?.target_id || "");
+    const units = Array.isArray(data?.units) ? data.units : [];
+    const reactor = units.find(
+      (u: any) => String(u?.id || u?.unit_id || "") === reactorId
+    );
+    const target = units.find(
+      (u: any) => String(u?.id || u?.unit_id || "") === targetId
+    );
+
+    if (reactor) {
+      layer.drawUnitHighlight(reactor, 0xffcc44);
+      layer.drawHexHighlight(reactor.q, reactor.r, 0xffcc44);
+    }
+    if (target) {
+      layer.drawUnitHighlight(target, 0xff4444);
+      layer.drawHexHighlight(target.q, target.r, 0xff4444);
+    }
+    if (reactor && target) {
+      layer.drawArrow(reactor.q, reactor.r, target.q, target.r, true);
     }
   }
 }

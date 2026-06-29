@@ -98,13 +98,10 @@ class SB3AIService:
             else:
                 _push(self._models_subdir_template)
 
+        # Strict runtime model selection: avoid generic fallbacks that can
+        # silently pick stale/incompatible checkpoints from other folders.
         if normalized_scenario and normalized_side:
             _push(f"scenario_{normalized_scenario}/side_{normalized_side}")
-        if normalized_scenario:
-            _push(f"scenario_{normalized_scenario}")
-        if normalized_side:
-            _push(f"side_{normalized_side}")
-        _push("")
         return result
 
     def _resolve_model_path_for_side(self, side: str | None, scenario_id: str | None = None) -> Path | None:
@@ -126,13 +123,6 @@ class SB3AIService:
         if cache_key in self._models_by_key:
             return self._models_by_key[cache_key]
         chosen = self._resolve_model_path_for_side(normalized_side, scenario_id=scenario_id)
-        if chosen is None and scenario_id:
-            # Runtime can expose scenario ids/names with minor variations.
-            # Fallback to default scenario workspace before giving up.
-            chosen = self._resolve_model_path_for_side(
-                normalized_side,
-                scenario_id=self._default_scenario,
-            )
         if chosen is None:
             return None
         try:
@@ -299,10 +289,10 @@ class SB3AIService:
 
         return max(legal_actions, key=_score)
 
-    def choose_unit_and_action(self, env, side: str | None, planner_context=None):
+    def choose_unit_and_action(self, env, side: str | None, planner_context=None, scenario_id: str | None = None):
         rl_side = (side or "").upper()
         state = env.game_state
-        scenario_id = self._scenario_id_from_env(env)
+        scenario_id = self._safe_token(scenario_id) if scenario_id else self._scenario_id_from_env(env)
         model = self._get_model_for_side(rl_side, scenario_id=scenario_id)
         if model is None:
             return None, None, "WAIT_NO_MODEL"

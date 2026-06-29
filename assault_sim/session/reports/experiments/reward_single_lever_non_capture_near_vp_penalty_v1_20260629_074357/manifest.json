@@ -1,0 +1,51 @@
+﻿{
+    "experiment_id":  "reward_single_lever_non_capture_near_vp_penalty_v1",
+    "description":  "Reward-only single lever: increase penalty for non-CAPTURE intent near VP.",
+    "owner":  "local_user",
+    "created_at_utc":  "2026-06-28T18:50:00Z",
+    "baseline":  {
+                     "report_paths":  [
+                                          "assault_sim/session/reports/sb3_eval/metrics_sb3_report_20260627T103651Z.json",
+                                          "assault_sim/session/reports/sb3_eval/metrics_sb3_report_20260627T103727Z.json",
+                                          "assault_sim/session/reports/sb3_eval/metrics_sb3_report_20260627T103759Z.json"
+                                      ]
+                 },
+    "scope":  {
+                  "side":  "US",
+                  "scenario":  "battaglia_cittadina_2_1",
+                  "seeds":  [
+                                42
+                            ],
+                  "episodes":  20
+              },
+    "policy":  {
+                   "single_lever_only":  true,
+                   "forbidden_mixed_surfaces":  [
+                                                    "planner",
+                                                    "reward",
+                                                    "guardrail"
+                                                ]
+               },
+    "changes":  [
+                    {
+                        "surface":  "reward",
+                        "file":  "assault_sim/config/reward_config.json",
+                        "key":  "non_capture_near_vp_penalty",
+                        "old":  0.1,
+                        "new":  0.2
+                    }
+                ],
+    "execution":  {
+                      "train_command":  "python -m assault_sim.train.train_sb3",
+                      "gate_command":  "powershell -ExecutionPolicy Bypass -File .\\scripts\\gate_r2a_no_regression_vs_r21i.ps1 -RunEval"
+                  },
+    "acceptance":  {
+                       "required":  [
+                                        "true_win_rate \u003e= baseline - 0.05",
+                                        "loss_rate \u003c= baseline + 0.05",
+                                        "vp_entry_conversion_rate \u003e= baseline - 0.10",
+                                        "capture_conversion_after_contact \u003e= baseline - 0.10"
+                                    ]
+                   },
+    "status":  "running"
+}

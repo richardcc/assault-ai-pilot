@@ -1,0 +1,15 @@
+artifact_uri: file:C:\repos\python\assault\experiments_v2\mlruns/243004198643098400/ae8c33581b2a42e681549c092f61b51b/artifacts
+end_time: 1782713144625
+entry_point_name: ''
+experiment_id: '243004198643098400'
+lifecycle_stage: active
+run_id: ae8c33581b2a42e681549c092f61b51b
+run_name: reward_stepin_bonus_v2_001
+run_uuid: ae8c33581b2a42e681549c092f61b51b
+source_name: ''
+source_type: 4
+source_version: ''
+start_time: 1782712972055
+status: 4
+tags: []
+user_id: Richard
