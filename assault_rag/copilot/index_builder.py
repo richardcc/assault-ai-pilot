@@ -198,11 +198,20 @@ def load_rule_chunks() -> List[Dict]:
     return []
 
 
-def ensure_rule_chunks() -> List[Dict]:
-    existing = load_rule_chunks()
-    if existing:
-        return existing
+def _latest_docs_mtime() -> float:
+    if not RULEBOOK_DOCS_DIR.exists():
+        return 0.0
+    mtimes = [p.stat().st_mtime for p in RULEBOOK_DOCS_DIR.glob("*.md") if p.is_file()]
+    return max(mtimes) if mtimes else 0.0
 
+
+def _chunks_mtime() -> float:
+    if not RULE_CHUNKS_PATH.exists():
+        return 0.0
+    return RULE_CHUNKS_PATH.stat().st_mtime
+
+
+def _build_rule_chunks_from_docs() -> List[Dict]:
     if not RULEBOOK_DOCS_DIR.exists():
         raise FileNotFoundError(f"Missing rulebook docs dir: {RULEBOOK_DOCS_DIR}")
 
@@ -238,6 +247,16 @@ def ensure_rule_chunks() -> List[Dict]:
     return chunks
 
 
+def ensure_rule_chunks(*, force_rebuild: bool = False) -> List[Dict]:
+    existing = load_rule_chunks()
+    docs_mtime = _latest_docs_mtime()
+    chunks_mtime = _chunks_mtime()
+    needs_rebuild = force_rebuild or (docs_mtime > 0 and docs_mtime > chunks_mtime)
+    if existing and not needs_rebuild:
+        return existing
+    return _build_rule_chunks_from_docs()
+
+
 def get_rule_index_status() -> Dict:
     chunks_exists = RULE_CHUNKS_PATH.exists()
     typed_exists = RULE_TYPED_PATH.exists()
@@ -246,8 +265,13 @@ def get_rule_index_status() -> Dict:
         active_path = str(RULE_CHUNKS_PATH)
     elif typed_exists:
         active_path = str(RULE_TYPED_PATH)
+    docs_latest_mtime = _latest_docs_mtime()
+    chunks_mtime = _chunks_mtime()
     return {
         "chunks_exists": chunks_exists,
         "typed_exists": typed_exists,
         "active_path": active_path,
+        "docs_latest_mtime": docs_latest_mtime,
+        "chunks_mtime": chunks_mtime,
+        "chunks_outdated_vs_docs": bool(chunks_exists and docs_latest_mtime > chunks_mtime),
     }

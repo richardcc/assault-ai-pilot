@@ -81,6 +81,47 @@ export function RagSituationPanel({ gameData }: { gameData: any }) {
           </div>
         </div>
       )}
+      <div style={{ marginTop: 10, paddingTop: 8, borderTop: "1px solid rgba(120,120,120,0.25)", fontSize: 11 }}>
+        <strong>Observabilidad IA</strong>
+        {gameData?.ai_observability ? (
+          <div style={{ marginTop: 6, display: "grid", gap: 4 }}>
+            <div>
+              <strong>Decisiones:</strong> {Number(gameData.ai_observability.total_decisions || 0)}
+            </div>
+            <div>
+              <strong>Fuentes:</strong>{" "}
+              {Object.entries(gameData.ai_observability.by_source || {})
+                .map(([k, v]) => `${k}:${v}`)
+                .join(" | ") || "n/a"}
+            </div>
+            <div>
+              <strong>SB3 status:</strong>{" "}
+              {Object.entries(gameData.ai_observability.sb3_status_counts || {})
+                .map(([k, v]) => `${k}:${v}`)
+                .join(" | ") || "n/a"}
+            </div>
+            <div>
+              <strong>Corregidas:</strong> {Number(gameData.ai_observability.corrected_count || 0)}
+            </div>
+            {Array.isArray(gameData.ai_observability.recent_decisions) &&
+              gameData.ai_observability.recent_decisions.length > 0 && (
+                <div>
+                  <strong>Última:</strong>{" "}
+                  {(() => {
+                    const d = gameData.ai_observability.recent_decisions[
+                      gameData.ai_observability.recent_decisions.length - 1
+                    ];
+                    return `${d?.side || "?"} T${d?.turn ?? "?"} ${d?.unit_id || "?"} -> ${
+                      d?.action_id || d?.action || "?"
+                    } [${d?.source || "?"}${d?.sb3_status ? `, ${d.sb3_status}` : ""}]`;
+                  })()}
+                </div>
+              )}
+          </div>
+        ) : (
+          <div style={{ marginTop: 6, color: "var(--text-secondary)" }}>n/a</div>
+        )}
+      </div>
     </div>
   );
 }

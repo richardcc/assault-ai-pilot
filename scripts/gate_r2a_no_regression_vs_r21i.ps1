@@ -66,22 +66,12 @@ try {
     throw "No existe carpeta de reportes: $reportsDir"
   }
 
-  $baselinePaths = @(
-    (Join-Path $reportsDir "metrics_sb3_report_20260627T103651Z.json"),
-    (Join-Path $reportsDir "metrics_sb3_report_20260627T103727Z.json"),
-    (Join-Path $reportsDir "metrics_sb3_report_20260627T103759Z.json")
-  ) | ForEach-Object { Resolve-PathStrict $_ }
-
-  $baselineRows = @()
-  foreach ($bp in $baselinePaths) {
-    $baselineRows += Get-ScenarioMetricsFromReport -ReportPath $bp -Side $Side -Scenario $Scenario
+  $baselinePath = Get-LatestReportPath -ReportsDir $reportsDir
+  if ([string]::IsNullOrWhiteSpace($baselinePath)) {
+    throw "No se encontro baseline en $reportsDir"
   }
-  $baseline = [pscustomobject]@{
-    true_win_rate = ($baselineRows | Measure-Object -Property true_win_rate -Average).Average
-    loss_rate = ($baselineRows | Measure-Object -Property loss_rate -Average).Average
-    vp_entry_conversion_rate = ($baselineRows | Measure-Object -Property vp_entry_conversion_rate -Average).Average
-    capture_conversion_after_contact = ($baselineRows | Measure-Object -Property capture_conversion_after_contact -Average).Average
-  }
+  $baselinePaths = @($baselinePath)
+  $baseline = Get-ScenarioMetricsFromReport -ReportPath $baselinePath -Side $Side -Scenario $Scenario
 
   $before = Get-LatestReportPath -ReportsDir $reportsDir
   if ($RunEval) {
@@ -112,7 +102,7 @@ try {
   $gateAll = $gateTrueWin -and $gateLoss -and $gateVpConv -and $gateCaptureConv
 
   Write-Host ""
-  Write-Host "=== R2.a no-regression gate vs R2.1-i baseline ===" -ForegroundColor Cyan
+  Write-Host "=== R2.a no-regression gate vs latest baseline ===" -ForegroundColor Cyan
   Write-Host ("Baseline reports: {0}" -f ($baselinePaths -join " | "))
   Write-Host ("Current report:   {0}" -f $current.report_path)
   Write-Host ("Filters: side={0}; scenario={1}" -f $Side, $Scenario)

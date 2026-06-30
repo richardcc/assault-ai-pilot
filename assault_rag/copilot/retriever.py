@@ -34,6 +34,9 @@ TYPO_NORMALIZATION = {
     "uniddaes": "unidades",
     "unidadeses": "unidades",
     "catalogo": "catalogo",
+    "puedaes": "puedes",
+    "grafico": "gráfico",
+    "graficos": "gráficos",
 }
 
 QUERY_EXPANSIONS = {
@@ -50,6 +53,21 @@ QUERY_EXPANSIONS = {
     "disponibles": {"unit", "units", "catalog", "side", "classification"},
     "rifles": {"rifle", "unit", "units", "infantry", "standard_infantry"},
     "rifle": {"rifles", "unit", "units", "infantry", "standard_infantry"},
+    "infanteria": {"infantry", "unidad", "unidades", "attack", "defense", "dados"},
+    "infantry": {"infanteria", "unit", "units", "attack", "defense", "dice"},
+    "dado": {"dados", "die", "dice", "ataque", "defensa"},
+    "dados": {"dado", "die", "dice", "ataque", "defensa"},
+    "distancia": {"alcance", "range", "hex", "hexes"},
+    "alcance": {"distancia", "range", "hex", "hexes"},
+    "range": {"distancia", "alcance", "hex", "hexes"},
+    "counter": {"counters", "ficha", "fichas", "icono", "símbolo", "unidad", "unit"},
+    "counters": {"counter", "ficha", "fichas", "icono", "símbolo", "unidad", "unit"},
+    "ficha": {"fichas", "counter", "icono", "símbolo", "unidad", "unit"},
+    "fichas": {"ficha", "counter", "icono", "símbolo", "unidad", "unit"},
+    "icono": {"iconos", "símbolo", "counter", "ficha", "unidad", "unit"},
+    "iconos": {"icono", "símbolo", "counter", "ficha", "unidad", "unit"},
+    "grafico": {"gráfico", "icono", "símbolo", "counter", "ficha"},
+    "gráfico": {"grafico", "icono", "símbolo", "counter", "ficha"},
 }
 
 FUZZY_CANONICAL_TERMS = {
@@ -75,6 +93,23 @@ FUZZY_CANONICAL_TERMS = {
     "movement",
     "crossing",
     "occupancy",
+    "dado",
+    "dados",
+    "dice",
+    "die",
+    "distancia",
+    "alcance",
+    "range",
+    "infanteria",
+    "infantry",
+    "counter",
+    "counters",
+    "ficha",
+    "fichas",
+    "icono",
+    "iconos",
+    "grafico",
+    "gráfico",
 }
 
 
@@ -124,14 +159,20 @@ def _tokenize(text: str) -> Set[str]:
     for raw in re.findall(r"[a-zA-Z0-9_]+", (text or "").lower()):
         if len(raw) <= 1:
             continue
-        normalized = TYPO_NORMALIZATION.get(raw, raw)
-        if normalized in STOPWORDS:
-            continue
-        # Numeric-only tokens are too noisy for hybrid retrieval ("43", "1", etc.).
-        # Keep alphanumeric unit ids (e.g. "us_43") via regex tokenization above.
-        if normalized.isdigit():
-            continue
-        tokens.add(normalized)
+        raw_parts = [raw]
+        if "_" in raw:
+            raw_parts.extend(p for p in raw.split("_") if p)
+        for part in raw_parts:
+            if len(part) <= 1:
+                continue
+            normalized = TYPO_NORMALIZATION.get(part, part)
+            if normalized in STOPWORDS:
+                continue
+            # Numeric-only tokens are too noisy for hybrid retrieval ("43", "1", etc.).
+            # Keep alphanumeric unit ids (e.g. "us_43") via regex tokenization above.
+            if normalized.isdigit():
+                continue
+            tokens.add(normalized)
     return tokens
 
 
@@ -172,6 +213,13 @@ def _data_index() -> tuple[tuple[Dict, frozenset[str]], ...]:
             seen_chunk_ids.add(chunk_id)
         indexed.append((chunk, _tokenize_cached(str(chunk.get("text", "") or ""))))
     return tuple(indexed)
+
+
+def invalidate_retriever_caches() -> None:
+    _tokenize_cached.cache_clear()
+    _expanded_query_tokens_for_query.cache_clear()
+    _rule_index.cache_clear()
+    _data_index.cache_clear()
 
 
 def classify_query_mode(query: str, requested_mode: str | None = None) -> str:

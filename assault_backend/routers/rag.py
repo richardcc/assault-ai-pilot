@@ -12,6 +12,8 @@ from assault_backend.schemas.rag_copilot import (
     RagRecommendActionsRequest,
     RagTrainingAnalysisRequest,
 )
+from assault_rag.copilot.index_builder import ensure_game_data_chunks, ensure_rule_chunks, get_rule_index_status, load_rule_chunks
+from assault_rag.copilot.retriever import invalidate_retriever_caches
 from assault_rag.copilot.services import (
     analyze_training_level1,
     explain_action_short,
@@ -69,6 +71,40 @@ def rag_query_endpoint(payload: RagQueryRequest):
         return rag_query(query=query, requested_mode=payload.mode, context=payload.context)
     except HTTPException:
         raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/reindex")
+def rag_reindex_endpoint(payload: dict | None = None):
+    body = payload or {}
+    force = bool(body.get("force", False))
+    try:
+        rules = ensure_rule_chunks(force_rebuild=force)
+        data = ensure_game_data_chunks()
+        invalidate_retriever_caches()
+        return {
+            "ok": True,
+            "force": force,
+            "rule_chunks": len(rules),
+            "data_chunks": len(data),
+            "rule_index_status": get_rule_index_status(),
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/index/status")
+def rag_index_status_endpoint():
+    try:
+        rule_chunks = load_rule_chunks()
+        data_chunks = ensure_game_data_chunks()
+        return {
+            "ok": True,
+            "rule_chunks": len(rule_chunks),
+            "data_chunks": len(data_chunks),
+            "rule_index_status": get_rule_index_status(),
+        }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 

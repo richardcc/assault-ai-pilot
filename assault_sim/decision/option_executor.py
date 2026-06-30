@@ -469,9 +469,27 @@ class OptionExecutor(OptionExecutorCaptureMixin, OptionExecutorCombatMixin, Opti
         ):
             step_into_vp = self._best_step_into_uncaptured_vp(state, unit)
             if step_into_vp is not None:
+                step_path = getattr(step_into_vp, "path", None) or []
+                step_end = step_path[-1] if step_path else getattr(unit, "position", None)
                 d_before = self._nearest_uncaptured_vp_dist(state, unit)
-                step_into_vp.rl_capture_fallback_reason = "hard_gate_step_into_uncaptured_vp"
-                step_into_vp.rl_capture_move_block_profile = "hard_gate_step_into_uncaptured_vp"
+                pressure = float(self._enemy_pressure_at_pos(state, unit.side, step_end, radius=3))
+                if pressure >= 2.0:
+                    pressure_band = "high"
+                elif pressure >= 1.0:
+                    pressure_band = "medium"
+                else:
+                    pressure_band = "low"
+                d_bucket = "na" if d_before is None else str(int(max(0, min(6, int(d_before)))))
+                # Explicit reason string for telemetry/debug:
+                # CAPTURE hard gate forces immediate legal step-in to uncaptured VP.
+                hard_gate_reason = (
+                    "hard_gate_step_into_uncaptured_vp"
+                    "|rule=capture_intent_and_objectives_pending_force_immediate_stepin"
+                    "|conditions=strategy:CAPTURE,objectives_pending:1,capture_emergency:0,legal_stepin:1"
+                    f"|dist_before={d_bucket}|enemy_pressure={pressure_band}"
+                )
+                step_into_vp.rl_capture_fallback_reason = hard_gate_reason
+                step_into_vp.rl_capture_move_block_profile = hard_gate_reason
                 step_into_vp.rl_capture_target_dist_before = d_before
                 step_into_vp.rl_capture_target_dist_after = 0
                 self._attach_vp_entry_debug(step_into_vp, True, True, "")
@@ -483,7 +501,7 @@ class OptionExecutor(OptionExecutorCaptureMixin, OptionExecutorCombatMixin, Opti
                     state=state,
                     unit=unit,
                     legal_override=True,
-                    override_reason="hard_gate_step_into_uncaptured_vp",
+                    override_reason=hard_gate_reason,
                     l3_capture_forced=bool(aggressive_l3_forced),
                     l3_capture_force_reason=(l3_capture_forced_reason if aggressive_l3_forced else ""),
                     plan_fallback_reason="",

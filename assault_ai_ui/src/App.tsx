@@ -31,6 +31,15 @@ type Unit = {
 };
 
 function App() {
+  const floatWindowIds = [
+    "tactical-intel",
+    "tactical-log",
+    "tactical-situation",
+    "tactical-rules",
+    "tactical-status",
+    "tactical-units",
+    "tactical-dice",
+  ] as const;
   const [gameData, setGameData] = useState<any>(null);
   const [deadUnits, setDeadUnits] = useState<Unit[]>([]);
   const [selectedUnitId, setSelectedUnitId] = useState<string | null>(null);
@@ -44,6 +53,9 @@ function App() {
   const [scenarioSides, setScenarioSides] = useState<string[]>([]);
   const [humanSide, setHumanSide] = useState<string>("");
   const [reactionDecisionBusy, setReactionDecisionBusy] = useState(false);
+  const [stickyCombatEvent, setStickyCombatEvent] = useState<any>(null);
+  const [autoAdvanceAfterHuman, setAutoAdvanceAfterHuman] = useState(true);
+  const [waitingForManualAdvance, setWaitingForManualAdvance] = useState(false);
 
   const lastTurnRef = useRef<number>(-1);
   const lastActiveSideRef = useRef<string>("");
@@ -84,8 +96,12 @@ function App() {
   // Subscribe to the game controller events
   useEffect(() => {
     (window as any).gameController = gameController;
-    gameController.subscribe((state: any) => {
+    const unsubscribeState = gameController.subscribe((state: any) => {
       setGameData(state);
+    });
+    const unsubscribeTurnFlow = gameController.subscribeTurnFlow((flow) => {
+      setAutoAdvanceAfterHuman(Boolean(flow?.autoAdvanceAfterHuman));
+      setWaitingForManualAdvance(Boolean(flow?.waitingForManualAdvance));
     });
 
     (window as any).logSystemEvent = (type: string, text: string) => {
@@ -95,6 +111,8 @@ function App() {
     addLog("system", "🖥️ Tactical Control System initialized. Ready to launch.");
 
     return () => {
+      unsubscribeState?.();
+      unsubscribeTurnFlow?.();
       (window as any).logSystemEvent = undefined;
       (window as any).gameController = undefined;
     };
@@ -210,6 +228,15 @@ function App() {
   useEffect(() => {
     logCombatEvents(gameData?.last_events, gameData?.units || []);
   }, [gameData]);
+
+  // Keep last combat dice/result visible until a new combat action arrives.
+  useEffect(() => {
+    const events = gameData?.last_events || [];
+    const latest = events.slice().reverse().find((event: any) => event?.type === "ACTION_EFFECT");
+    if (latest) {
+      setStickyCombatEvent(latest);
+    }
+  }, [gameData?.last_events]);
 
   // Log VP ownership changes.
   useEffect(() => {
@@ -341,6 +368,8 @@ function App() {
       "system",
       `🚀 Launching match mode: [${mode.toUpperCase()}] // Scenario: ${selectedScenario} // Human: ${humanSide || "-"}`
     );
+    // Force an initial camera fit for the next valid map state.
+    (window as any).__forceInitialCameraFit = true;
     resetMatchUiState();
     gameController.start(
       mode as any,
@@ -405,6 +434,64 @@ function App() {
     }
   };
 
+  const handleSaveLayout = () => {
+    try {
+      window.dispatchEvent(new Event("assault:save-layout"));
+      localStorage.setItem("assault.layout.savedAt", new Date().toISOString());
+      addLog("system", "💾 Layout guardado (ventanas + panel de unidades).");
+    } catch (err) {
+      addLog("system", `❌ No se pudo guardar layout: ${String(err)}`);
+    }
+  };
+
+  const handleResetLayout = () => {
+    try {
+      const keysToRemove: string[] = [];
+      for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        if (!key) continue;
+        if (key.startsWith("assault.window.") || key === "assault.units.layoutMode" || key === "assault.layout.savedAt") {
+          keysToRemove.push(key);
+        }
+      }
+      for (const key of keysToRemove) {
+        localStorage.removeItem(key);
+      }
+      addLog("system", "♻️ Layout reseteado. Recargando interfaz...");
+      setTimeout(() => window.location.reload(), 250);
+    } catch (err) {
+      addLog("system", `❌ No se pudo resetear layout: ${String(err)}`);
+    }
+  };
+
+  const handleMapMode = () => {
+    try {
+      window.dispatchEvent(
+        new CustomEvent("assault:set-window-state", {
+          detail: { windowId: "*", minimized: true, visible: true },
+        })
+      );
+      addLog("system", "🗺️ Modo Mapa: ventanas minimizadas.");
+    } catch (err) {
+      addLog("system", `❌ No se pudo activar Modo Mapa: ${String(err)}`);
+    }
+  };
+
+  const handleToggleAutoAdvance = (enabled: boolean) => {
+    gameController.setAutoAdvanceAfterHuman(enabled);
+    addLog(
+      "system",
+      enabled
+        ? "▶ Autoavance activado: la IA continua automaticamente tras tu accion."
+        : "⏸ Autoavance desactivado: pulsa Avanzar para continuar tras tu accion."
+    );
+  };
+
+  const handleManualAdvance = () => {
+    gameController.continueAfterHumanAction();
+    addLog("system", "▶ Avance manual solicitado: continuando turno de IA.");
+  };
+
   // Find active specifications of the selected troop
   const selectedUnit = gameData?.units?.find((u: Unit) => u.id === selectedUnitId);
   const selectedUnitSpec = selectedUnit 
@@ -447,7 +534,6 @@ function App() {
     return Array.from(byId.values());
   }, [gameData?.units, deadUnits]);
 
-  const latestCombatEvent = gameData?.last_events?.slice().reverse().find((event: any) => event.type === "ACTION_EFFECT");
   const pendingReaction = gameData?.pending_reaction || null;
   const pendingReactionReactor =
     pendingReaction?.reactor_id
@@ -517,53 +603,6 @@ function App() {
           ⚡ ASSAULT AI <span>// COMMAND INTERFACE v1.2</span>
         </div>
 
-        {/* Real-time turn indicator readout */}
-        {gameData && (
-          <div style={{ display: "flex", gap: "20px", fontFamily: "var(--font-tech)", fontSize: "14px", letterSpacing: "1px" }}>
-            <div>SCENARIO: <span style={{ color: "var(--neon-cyan)" }}>{(gameData.scenario_name || "Initial Contact").toUpperCase()}</span></div>
-            <div>TURN: <span style={{ color: "var(--neon-cyan)" }}>{gameData.turn}</span></div>
-            <div>
-              VICTORY:
-              <span style={{ color: "var(--neon-cyan)", marginLeft: 6 }}>
-                Elimination / MaxTurns by VP
-              </span>
-            </div>
-            <div>
-              VPs:
-              <span style={{ color: "var(--neon-cyan)", marginLeft: 6 }}>
-                {Object.entries(gameData?.vp_score_live || {})
-                  .map(([sideId, score]) => `${sideId} ${score}`)
-                  .join(" | ") || "-"}
-              </span>
-            </div>
-            {gameData?.victory_outcome && (
-              <div>
-                OBJECTIVES:
-                <span style={{ color: "var(--neon-cyan)", marginLeft: 6 }}>
-                  {gameData.victory_outcome.tracked_side} {gameData.victory_outcome.captured}/
-                  {gameData.victory_outcome.objectives_total}
-                  {gameData.victory_outcome?.outcome?.result
-                    ? ` (${gameData.victory_outcome.outcome.result})`
-                    : ""}
-                </span>
-              </div>
-            )}
-            {gameData?.done && (
-              <div>
-                RESULT:
-                <span style={{ color: "var(--neon-green)", marginLeft: 6 }}>
-                  {gameData?.winner ? `${gameData.winner} wins` : "Draw"} ({gameData?.end_reason || "completed"})
-                </span>
-              </div>
-            )}
-            <div style={{
-              color: gameData.sides?.[gameData.active_side] === "human" ? "var(--neon-green)" : "var(--neon-orange)"
-            }}>
-              ACTIVE: {gameData.active_side} ({gameData.sides?.[gameData.active_side]?.toUpperCase() || "-"})
-            </div>
-          </div>
-        )}
-
         <div className="header-controls">
           <select
             className="btn-tactical"
@@ -627,6 +666,30 @@ function App() {
           </button>
 
           <button
+            className="btn-tactical"
+            onClick={handleSaveLayout}
+            title="Guardar layout de ventanas y paneles"
+          >
+            🧩 Guardar Layout
+          </button>
+
+          <button
+            className="btn-tactical"
+            onClick={handleResetLayout}
+            title="Resetear layout guardado"
+          >
+            ♻ Reset Layout
+          </button>
+
+          <button
+            className="btn-tactical"
+            onClick={handleMapMode}
+            title="Minimizar todas las ventanas para vista limpia de mapa"
+          >
+            🗺 Modo Mapa
+          </button>
+
+          <button
             className="btn-tactical btn-tactical-start"
             onClick={handleStartSelectedMode}
             title="Start selected mode"
@@ -648,104 +711,6 @@ function App() {
           MAIN GAME SCREEN GRID
       ========================= */}
       <div className="main">
-        {/* LEFT PANEL - TARGET INTEL & ACTIONS */}
-        <div className="panel-side">
-          <div className="panel-title">Target Intel</div>
-          
-          {selectedUnit ? (
-            <div>
-              {/* Unit Specifications Card */}
-              <div className="spec-box">
-                <div className="spec-header">
-                  {selectedUnitSpec?.full && (
-                    <img 
-                      src={encodeURI(selectedUnitSpec.full)} 
-                      className="spec-avatar" 
-                      alt="Avatar"
-                    />
-                  )}
-                  <div>
-                    <div className="spec-title">{selectedUnitSpec?.label || selectedUnit.unit_key}</div>
-                    <div className="spec-subtitle">ID: {selectedUnit.id}</div>
-                    <div className="spec-inline-health-row">
-                      <span className="spec-inline-health-hearts">
-                        {selectedUnit.hp != null
-                          ? Array.from({ length: selectedUnit.hp }).map((_, i) => (
-                              <span key={i} style={{ color: "#ff3838" }}>❤️</span>
-                            ))
-                          : "-"}
-                      </span>
-                      {(selectedUnitActionMarker == null || selectedUnitActionMarker === "normal") && selectedWaitOrder && (
-                        <button
-                          className="spec-wait-btn"
-                          onClick={() => void executeActionById(selectedWaitOrder.action_id, selectedWaitOrder)}
-                          title="Wait / End activation"
-                        >
-                          WAIT
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                </div>
-                
-                <div className="spec-stats">
-                  <div className={`spec-stat-item side-${selectedUnit.side}`}>
-                    <div className="spec-stat-label">Side</div>
-                    <div className="spec-stat-val" style={{ color: selectedUnit.side === "GE" ? "var(--neon-red)" : "var(--neon-cyan)" }}>
-                      {sides[selectedUnit.side]?.label || selectedUnit.side}
-                    </div>
-                  </div>
-
-                  <div className="spec-stat-item">
-                    <div className="spec-stat-label">Coords</div>
-                    <div className="spec-stat-val" style={{ fontFamily: "var(--font-mono)", fontSize: "11px" }}>
-                      Q:{selectedUnit.q} R:{selectedUnit.r}
-                    </div>
-                  </div>
-
-                </div>
-              </div>
-
-              {/* Dynamic Actions readout list */}
-              <DispatchedOrdersPanel
-                availableMoves={availableMoves}
-                selectedUnitId={selectedUnitId}
-                isHumanTurn={gameData?.sides?.[gameData?.active_side] === "human"}
-                onHoverOrder={(order) => setHoveredTargetId(resolveOrderTargetId(order))}
-                onLeaveOrder={() => setHoveredTargetId(null)}
-              />
-              {attackHint && (
-                <div
-                  style={{
-                    marginTop: 8,
-                    padding: "8px 10px",
-                    fontSize: 11,
-                    border: "1px solid rgba(255, 80, 80, 0.35)",
-                    background: "rgba(255, 60, 60, 0.12)",
-                    color: "#ffd6d6",
-                    borderRadius: 6,
-                    fontFamily: "var(--font-mono)",
-                  }}
-                >
-                  {attackHint}
-                </div>
-              )}
-            </div>
-          ) : (
-            /* Radar scanning placeholder when no target is locked */
-            <div className="awaiting-selection">
-              <div className="radar-circle"></div>
-              <div>
-                <h4 style={{ margin: "0 0 4px 0", color: "var(--text-secondary)", fontSize: "13px" }}>Awaiting Target Lock</h4>
-                <p style={{ fontSize: "11px", color: "var(--text-muted)", lineHeight: "1.4" }}>
-                  Select a tactical unit on the grid or troop roster to deploy commands.
-                </p>
-              </div>
-            </div>
-          )}
-        </div>
-
-        {/* CENTER PANEL - THE HEX GRID CANVAS */}
         <div className="center">
           <GameCanvas
             gameData={gameData}
@@ -757,37 +722,202 @@ function App() {
             setAttackHint={setAttackHint}
           />
         </div>
-
-        {/* RIGHT PANEL - REALTIME TELEMETRY TERMINAL */}
-        <div className="panel-side right-log">
-          <div className="panel-title">System Log</div>
-          <div className="log-container">
-            {logEvents.length > 0 ? (
-              logEvents.map((log, index) => (
-                <div key={index} className={`log-entry log-${log.type}`}>
-                  <span className="log-time">[{log.time}]</span>
-                  <span className="log-text">{log.text}</span>
+      </div>
+      <DraggableWindow windowId="tactical-intel" title="Target Intel" initialX={16} initialY={92} width={360} bodyMaxHeight={640}>
+        {selectedUnit ? (
+          <div>
+            <div className="spec-box">
+              <div className="spec-header">
+                {selectedUnitSpec?.full && (
+                  <img
+                    src={encodeURI(selectedUnitSpec.full)}
+                    className="spec-avatar"
+                    alt="Avatar"
+                  />
+                )}
+                <div>
+                  <div className="spec-title">{selectedUnitSpec?.label || selectedUnit.unit_key}</div>
+                  <div className="spec-subtitle">ID: {selectedUnit.id}</div>
+                  <div className="spec-inline-health-row">
+                    <span className="spec-inline-health-hearts">
+                      {selectedUnit.hp != null
+                        ? Array.from({ length: selectedUnit.hp }).map((_, i) => (
+                            <span key={i} style={{ color: "#ff3838" }}>❤️</span>
+                          ))
+                        : "-"}
+                    </span>
+                    {(selectedUnitActionMarker == null || selectedUnitActionMarker === "normal") && selectedWaitOrder && (
+                      <button
+                        className="spec-wait-btn"
+                        onClick={() => void executeActionById(selectedWaitOrder.action_id, selectedWaitOrder)}
+                        title="Wait / End activation"
+                      >
+                        WAIT
+                      </button>
+                    )}
+                  </div>
                 </div>
-              ))
-            ) : (
-              <div style={{ fontSize: "12px", color: "var(--text-muted)", fontStyle: "italic", textAlign: "center", padding: "10px" }}>
-                Awaiting telemetry transmissions...
+              </div>
+              <div className="spec-stats">
+                <div className={`spec-stat-item side-${selectedUnit.side}`}>
+                  <div className="spec-stat-label">Side</div>
+                  <div className="spec-stat-val" style={{ color: selectedUnit.side === "GE" ? "var(--neon-red)" : "var(--neon-cyan)" }}>
+                    {sides[selectedUnit.side]?.label || selectedUnit.side}
+                  </div>
+                </div>
+                <div className="spec-stat-item">
+                  <div className="spec-stat-label">Coords</div>
+                  <div className="spec-stat-val" style={{ fontFamily: "var(--font-mono)", fontSize: "11px" }}>
+                    Q:{selectedUnit.q} R:{selectedUnit.r}
+                  </div>
+                </div>
+              </div>
+            </div>
+            <DispatchedOrdersPanel
+              availableMoves={availableMoves}
+              selectedUnitId={selectedUnitId}
+              isHumanTurn={gameData?.sides?.[gameData?.active_side] === "human"}
+              onHoverOrder={(order) => setHoveredTargetId(resolveOrderTargetId(order))}
+              onLeaveOrder={() => setHoveredTargetId(null)}
+            />
+            {attackHint && (
+              <div
+                style={{
+                  marginTop: 8,
+                  padding: "8px 10px",
+                  fontSize: 11,
+                  border: "1px solid rgba(255, 80, 80, 0.35)",
+                  background: "rgba(255, 60, 60, 0.12)",
+                  color: "#ffd6d6",
+                  borderRadius: 6,
+                  fontFamily: "var(--font-mono)",
+                }}
+              >
+                {attackHint}
               </div>
             )}
           </div>
+        ) : (
+          <div className="awaiting-selection">
+            <div className="radar-circle"></div>
+            <div>
+              <h4 style={{ margin: "0 0 4px 0", color: "var(--text-secondary)", fontSize: "13px" }}>Awaiting Target Lock</h4>
+              <p style={{ fontSize: "11px", color: "var(--text-muted)", lineHeight: "1.4" }}>
+                Select a tactical unit on the grid or troop roster to deploy commands.
+              </p>
+            </div>
+          </div>
+        )}
+      </DraggableWindow>
+      <DraggableWindow windowId="tactical-log" title="System Log" initialX={1540} initialY={92} width={360} bodyMaxHeight={640}>
+        <div className="log-container">
+          {logEvents.length > 0 ? (
+            logEvents.map((log, index) => (
+              <div key={index} className={`log-entry log-${log.type}`}>
+                <span className="log-time">[{log.time}]</span>
+                <span className="log-text">{log.text}</span>
+              </div>
+            ))
+          ) : (
+            <div style={{ fontSize: "12px", color: "var(--text-muted)", fontStyle: "italic", textAlign: "center", padding: "10px" }}>
+              Awaiting telemetry transmissions...
+            </div>
+          )}
         </div>
-      </div>
+      </DraggableWindow>
       <DraggableWindow windowId="tactical-situation" title="Asistente Tactico: Situacion" initialX={1080} initialY={95} width={390}>
         <RagSituationPanel gameData={gameData} />
       </DraggableWindow>
       <DraggableWindow windowId="tactical-rules" title="Asistente Tactico: Reglas" initialX={1080} initialY={420} width={390}>
-        <RagRulesPanel />
+        <RagRulesPanel gameData={gameData} />
+      </DraggableWindow>
+      <DraggableWindow windowId="tactical-status" title="Estado de Partida" initialX={360} initialY={82} width={700}>
+        <div style={{ display: "grid", gap: 8, fontSize: 12 }}>
+          <div>
+            <strong>SCENARIO:</strong>{" "}
+            <span style={{ color: "var(--neon-cyan)" }}>
+              {(gameData?.scenario_name || "Initial Contact").toUpperCase()}
+            </span>
+          </div>
+          <div>
+            <strong>TURN:</strong>{" "}
+            <span style={{ color: "var(--neon-cyan)" }}>{gameData?.turn ?? "-"}</span>
+          </div>
+          <div>
+            <strong>VPs:</strong>{" "}
+            <span style={{ color: "var(--neon-cyan)" }}>
+              {Object.entries(gameData?.vp_score_live || {})
+                .map(([sideId, score]) => `${sideId} ${score}`)
+                .join(" | ") || "-"}
+            </span>
+          </div>
+          <div>
+            <strong>ACTIVE:</strong>{" "}
+            <span
+              style={{
+                color:
+                  gameData?.sides?.[gameData?.active_side] === "human"
+                    ? "var(--neon-green)"
+                    : "var(--neon-orange)",
+              }}
+            >
+              {gameData?.active_side || "-"} ({gameData?.sides?.[gameData?.active_side]?.toUpperCase() || "-"})
+            </span>
+          </div>
+          <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+            <label style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+              <input
+                type="checkbox"
+                checked={autoAdvanceAfterHuman}
+                onChange={(e) => handleToggleAutoAdvance(e.target.checked)}
+              />
+              <strong>Autoavance</strong>
+            </label>
+            <button
+              className="btn-tactical"
+              onClick={handleManualAdvance}
+              disabled={autoAdvanceAfterHuman || !waitingForManualAdvance}
+              title="Continuar resolucion IA tras accion humana"
+            >
+              ▶ Avanzar
+            </button>
+            <span style={{ color: "var(--text-muted)", fontSize: 11 }}>
+              {waitingForManualAdvance && !autoAdvanceAfterHuman
+                ? "Esperando avance manual..."
+                : "Flujo normal"}
+            </span>
+          </div>
+          {gameData?.victory_outcome && (
+            <div>
+              <strong>OBJECTIVES:</strong>{" "}
+              <span style={{ color: "var(--neon-cyan)" }}>
+                {gameData.victory_outcome.tracked_side} {gameData.victory_outcome.captured}/
+                {gameData.victory_outcome.objectives_total}
+                {gameData.victory_outcome?.outcome?.result
+                  ? ` (${gameData.victory_outcome.outcome.result})`
+                  : ""}
+              </span>
+            </div>
+          )}
+          {gameData?.done && (
+            <div>
+              <strong>RESULT:</strong>{" "}
+              <span style={{ color: "var(--neon-green)" }}>
+                {gameData?.winner ? `${gameData.winner} wins` : "Draw"} ({gameData?.end_reason || "completed"})
+              </span>
+            </div>
+          )}
+        </div>
       </DraggableWindow>
 
-      {/* =========================
-          TACTICAL ROSTER FOOTER
-      ========================= */}
-      <div className="footer">
+      <DraggableWindow
+        windowId="tactical-units"
+        title="Unidades"
+        initialX={80}
+        initialY={520}
+        width={1450}
+        bodyMaxHeight={300}
+      >
         <UnitStatePanel
           units={panelUnits}
           activeSide={gameData?.active_side}
@@ -802,11 +932,18 @@ function App() {
             }
           }}
         />
+      </DraggableWindow>
 
-        {latestCombatEvent && (
-          <CombatPanel event={latestCombatEvent} units={gameData?.units || []} />
+      <DraggableWindow windowId="tactical-dice" title="Combate / Tirada de Dados" initialX={1220} initialY={610} width={320}>
+        {stickyCombatEvent && (
+          <CombatPanel event={stickyCombatEvent} units={gameData?.units || []} />
         )}
-      </div>
+        {!stickyCombatEvent && (
+          <div style={{ fontSize: 12, color: "var(--text-muted)" }}>
+            Sin evento de combate reciente.
+          </div>
+        )}
+      </DraggableWindow>
       {pendingReaction && (
         <div
           style={{

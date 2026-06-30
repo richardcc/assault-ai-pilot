@@ -1,5 +1,6 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { apiUrl } from "../../config/backend";
+import { unitImages } from "../config/unitImages";
 
 type Citation = {
   source_type: string;
@@ -15,15 +16,77 @@ type QueryResult = {
   llm_model?: string;
 };
 
-export function RagRulesPanel() {
+type CounterPreview = {
+  unitKey: string;
+  label: string;
+  imagePath: string;
+};
+
+function normalizeToken(value: string): string {
+  return String(value || "")
+    .trim()
+    .toUpperCase()
+    .replace(/[^A-Z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "");
+}
+
+function findCounterPreview(result: QueryResult | null, query: string): CounterPreview | null {
+  if (!result) return null;
+  const catalog = unitImages as Record<string, { label?: string; full?: string }>;
+  const byKey = new Map<string, string>(Object.keys(catalog).map((k) => [normalizeToken(k), k]));
+
+  const candidateTokens = new Set<string>();
+  for (const c of result.citations || []) {
+    candidateTokens.add(normalizeToken(c.source_id));
+    const snippetTokens = String(c.snippet || "").match(/[A-Za-z0-9_]+/g) || [];
+    for (const t of snippetTokens) {
+      candidateTokens.add(normalizeToken(t));
+    }
+  }
+  const queryTokens = String(query || "").match(/[A-Za-z0-9_]+/g) || [];
+  for (const t of queryTokens) {
+    candidateTokens.add(normalizeToken(t));
+  }
+
+  for (const token of candidateTokens) {
+    const direct = byKey.get(token);
+    if (direct && catalog[direct]?.full) {
+      return {
+        unitKey: direct,
+        label: catalog[direct]?.label || direct,
+        imagePath: catalog[direct].full!,
+      };
+    }
+  }
+
+  const loweredSearch = `${query} ${result.answer} ${(result.citations || []).map((c) => c.snippet).join(" ")}`.toLowerCase();
+  for (const [unitKey, def] of Object.entries(catalog)) {
+    if (!def?.full) continue;
+    const label = String(def.label || "").toLowerCase();
+    const key = unitKey.toLowerCase().replace(/_/g, " ");
+    if (label && loweredSearch.includes(label)) {
+      return { unitKey, label: def.label || unitKey, imagePath: def.full };
+    }
+    if (key && loweredSearch.includes(key)) {
+      return { unitKey, label: def.label || unitKey, imagePath: def.full };
+    }
+  }
+
+  return null;
+}
+
+export function RagRulesPanel({ gameData }: { gameData?: any }) {
   const [query, setQuery] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<QueryResult | null>(null);
   const [model, setModel] = useState("qwen2.5:14b");
-  const [retrievalMode, setRetrievalMode] = useState<"auto" | "rules" | "data" | "hybrid">("auto");
+  const [retrievalMode, setRetrievalMode] = useState<"auto" | "rules" | "data" | "hybrid">("rules");
   const [liveModels, setLiveModels] = useState<string[]>([]);
   const [ollamaReachable, setOllamaReachable] = useState<boolean | null>(null);
+  const conversationIdRef = useRef<string>(
+    `rag-rules-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`
+  );
 
   const fallbackModels = [
     "qwen2.5:7b",
@@ -66,6 +129,7 @@ export function RagRulesPanel() {
     ollamaReachable == null ? "#f6c945" : ollamaReachable ? "#21d07a" : "#ff5b5b";
   const statusText =
     ollamaReachable == null ? "Comprobando Ollama..." : ollamaReachable ? "Ollama activo" : "Ollama no disponible";
+  const counterPreview = useMemo(() => findCounterPreview(result, query), [result, query]);
 
   async function runQuery() {
     const q = query.trim();
@@ -80,7 +144,13 @@ export function RagRulesPanel() {
         body: JSON.stringify({
           query: q,
           mode: retrievalMode === "auto" ? null : retrievalMode,
-          context: { llm_model: model },
+          context: {
+            llm_model: model,
+            conversation_id: conversationIdRef.current,
+            assistant_scope: "manual",
+            state_snapshot: gameData || null,
+            ai_observability: gameData?.ai_observability || null,
+          },
         }),
       });
       if (!res.ok) {
@@ -99,7 +169,7 @@ export function RagRulesPanel() {
   return (
     <div style={{ marginTop: 10, borderTop: "1px solid rgba(255,255,255,0.12)", paddingTop: 10 }}>
       <div style={{ fontSize: 12, color: "var(--text-secondary)", marginBottom: 6 }}>
-        Asistente de Reglas
+        Asistente de Manual
       </div>
       <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 6, fontSize: 11 }}>
         <span
@@ -117,7 +187,7 @@ export function RagRulesPanel() {
       <textarea
         value={query}
         onChange={(e) => setQuery(e.target.value)}
-        placeholder="Pregunta por reglas (LOS, modificadores, close combat, etc.)"
+        placeholder="Pregunta por el manual (regla, excepciones, aplicacion)"
         rows={3}
         style={{
           width: "100%",
@@ -196,6 +266,28 @@ export function RagRulesPanel() {
               ))}
             </ul>
           </div>
+          {counterPreview && (
+            <div>
+              <strong>Counter grafico:</strong>
+              <div style={{ marginTop: 6, display: "flex", flexDirection: "column", gap: 6 }}>
+                <div style={{ color: "var(--text-secondary)" }}>
+                  {counterPreview.label} ({counterPreview.unitKey})
+                </div>
+                <img
+                  src={counterPreview.imagePath}
+                  alt={`Counter ${counterPreview.label}`}
+                  style={{
+                    width: 120,
+                    height: "auto",
+                    border: "1px solid rgba(255,255,255,0.14)",
+                    borderRadius: 6,
+                    background: "rgba(0,0,0,0.3)",
+                    padding: 4,
+                  }}
+                />
+              </div>
+            </div>
+          )}
         </div>
       )}
     </div>

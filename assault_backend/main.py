@@ -33,6 +33,7 @@ from assault_rag.copilot.index_builder import (
     get_rule_index_status,
     load_rule_chunks,
 )
+from assault_rag.copilot.retriever import invalidate_retriever_caches
 from assault_sim.decision.decision_engine import DecisionEngine
 from assault_model.actions.action_catalog import ActionCatalog
 from assault_model.map.hex_utils import safe_hex_distance
@@ -58,9 +59,10 @@ async def app_lifespan(_app: FastAPI):
     """
     try:
         # Auto-build canonical rulebook chunks from docs when missing.
-        ensure_rule_chunks()
+        ensure_rule_chunks(force_rebuild=False)
         rule_index_status = get_rule_index_status()
         data_chunks = ensure_game_data_chunks()
+        invalidate_retriever_caches()
         rule_chunks = load_rule_chunks()
         if not rule_chunks:
             raise RuntimeError("Rulebook index file exists but loaded zero chunks.")
@@ -1038,6 +1040,27 @@ def game_ai_turn():
         "side": active_side,
         "turn": int(getattr(getattr(env, "game_state", None), "turn", 0) or 0),
     }
+    try:
+        first_step = steps[0] if steps else {}
+        game_session.record_ai_decision(
+            {
+                "timestamp": time.time(),
+                "side": active_side,
+                "turn": int(getattr(getattr(env, "game_state", None), "turn", 0) or 0),
+                "unit_id": first_step.get("unit_id"),
+                "action_id": first_step.get("action_id"),
+                "action": first_step.get("action"),
+                "source": first_step.get("source"),
+                "sb3_status": first_step.get("sb3_status"),
+                "sb3_reason": first_step.get("sb3_reason"),
+                "corrected": bool(first_step.get("corrected", False)),
+                "corrected_reason": first_step.get("corrected_reason"),
+                "planner_stage": first_step.get("planner_stage"),
+                "planner_focus_vp_id": first_step.get("planner_focus_vp_id"),
+            }
+        )
+    except Exception:
+        pass
     return {"state": game_session.get_state(), "steps": steps}
 
 

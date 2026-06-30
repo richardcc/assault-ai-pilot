@@ -35,7 +35,7 @@
   "capture_staging_bonus": 0.12,
   "capture_idle_no_progress_penalty": 0.18,
   "capture_staging_repeat_penalty": 0.5,
-  "vp_stepin_selected_bonus": 1.4,
+  "vp_stepin_selected_bonus": 1.8,
   "vp_stepin_missed_near_penalty": 0.45,
   "capture_near_vp_advance_no_conversion_penalty": 0.24,
   "capture_post_contact_progress_move_bonus": 1.25,

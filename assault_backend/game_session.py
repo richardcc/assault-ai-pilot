@@ -36,6 +36,13 @@ class GameSession:
         self.trace_path: Optional[Path] = None
         self.last_backend_ai_decision: Optional[dict] = None
         self.mission_planner: Optional[MissionPlanner] = None
+        self.ai_observability: dict = {
+            "total_decisions": 0,
+            "by_source": {},
+            "sb3_status_counts": {},
+            "corrected_count": 0,
+            "recent_decisions": [],
+        }
 
     def _trace_file_path(self, scenario_id: str) -> Path:
         base_path = Path(__file__).resolve().parents[1]
@@ -109,6 +116,13 @@ class GameSession:
         self.trace_path = self._trace_file_path(scenario_id)
         self.last_backend_ai_decision = None
         self.mission_planner = MissionPlanner()
+        self.ai_observability = {
+            "total_decisions": 0,
+            "by_source": {},
+            "sb3_status_counts": {},
+            "corrected_count": 0,
+            "recent_decisions": [],
+        }
         with open(self.trace_path, "w", encoding="utf-8") as f:
             header = {
                 "type": "MATCH_START",
@@ -160,6 +174,27 @@ class GameSession:
 
         # ✅ Discard startup events (contain non-JSON-serializable objects like HexCoord)
         self.last_events.clear()
+
+    # ---------------------------------------------
+    def record_ai_decision(self, payload: dict) -> None:
+        if not isinstance(payload, dict):
+            return
+        obs = self.ai_observability
+        obs["total_decisions"] = int(obs.get("total_decisions", 0) or 0) + 1
+        src = str(payload.get("source", "unknown") or "unknown")
+        sb3_status = str(payload.get("sb3_status", "unknown") or "unknown")
+        by_source = dict(obs.get("by_source", {}) or {})
+        by_source[src] = int(by_source.get(src, 0) or 0) + 1
+        obs["by_source"] = by_source
+        sb3_counts = dict(obs.get("sb3_status_counts", {}) or {})
+        sb3_counts[sb3_status] = int(sb3_counts.get(sb3_status, 0) or 0) + 1
+        obs["sb3_status_counts"] = sb3_counts
+        if bool(payload.get("corrected", False)):
+            obs["corrected_count"] = int(obs.get("corrected_count", 0) or 0) + 1
+        recent = list(obs.get("recent_decisions", []) or [])
+        recent.append(self._to_jsonable(payload))
+        obs["recent_decisions"] = recent[-30:]
+        self.ai_observability = obs
 
     # ---------------------------------------------
     def get_state(self) -> Dict[str, Any]:
@@ -334,5 +369,6 @@ class GameSession:
             "pending_reaction": getattr(runtime, "pending_reaction", None) if runtime is not None else None,
             "last_events": copied_events,
             "trace_path": str(self.trace_path) if self.trace_path is not None else None,
+            "ai_observability": self._to_jsonable(self.ai_observability),
         }
         return payload

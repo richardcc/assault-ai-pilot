@@ -13,6 +13,7 @@ export function subscribeToGameState({
   showMapRef,
   showGridRef,
   showCoordsRef,
+  onStateRendered,
 }: any) {
 
   gameController.subscribe((state) => {
@@ -67,6 +68,10 @@ export function subscribeToGameState({
     // ✅ UNITS
     if (unitLayerRef.current) {
       unitLayerRef.current.sync(data);
+    }
+
+    if (typeof onStateRendered === "function") {
+      onStateRendered(data);
     }
 
   });

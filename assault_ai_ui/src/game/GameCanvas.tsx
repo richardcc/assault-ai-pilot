@@ -87,6 +87,71 @@ export default function GameCanvas({
   const availableMovesRef = useRef<any[]>([]);
   const fxLayerRef = useRef<PIXI.Container | null>(null);
   const reactionFxSeenRef = useRef<Set<string>>(new Set());
+  const lastAutoFitScenarioRef = useRef<string>("");
+  const hasInitialAutoFitRef = useRef(false);
+
+  const autoFitCameraToMap = (state: any) => {
+    const world = worldRef.current;
+    const app = appRef.current;
+    const hexes = Array.isArray(state?.hexes) ? state.hexes : [];
+    if (!world || !app || hexes.length === 0) return;
+
+    let minX = Number.POSITIVE_INFINITY;
+    let maxX = Number.NEGATIVE_INFINITY;
+    let minY = Number.POSITIVE_INFINITY;
+    let maxY = Number.NEGATIVE_INFINITY;
+    for (const hex of hexes) {
+      const p = axialToPixel(Number(hex.q), Number(hex.r));
+      const hx = p.x;
+      const hy = p.y + HEX_SIZE;
+      if (hx < minX) minX = hx;
+      if (hx > maxX) maxX = hx;
+      if (hy < minY) minY = hy;
+      if (hy > maxY) maxY = hy;
+    }
+    if (!Number.isFinite(minX) || !Number.isFinite(minY)) return;
+
+    const padding = HEX_SIZE * 2.6;
+    const mapW = Math.max(1, (maxX - minX) + padding * 2);
+    const mapH = Math.max(1, (maxY - minY) + padding * 2);
+    const viewportW = app.renderer.width;
+    const viewportH = app.renderer.height;
+    if (viewportW <= 0 || viewportH <= 0) return;
+
+    const fitScale = Math.min((viewportW * 0.985) / mapW, (viewportH * 0.965) / mapH);
+    const defaultScale = Math.max(0.7, Math.min(3, fitScale * 1.12));
+    const centerX = (minX + maxX) / 2;
+    const centerY = (minY + maxY) / 2;
+
+    // Keep camera math consistent with the existing pan/zoom controller:
+    // it assumes pivot=(0,0) and translates with world.x/world.y.
+    world.rotation = 0;
+    world.pivot.set(0, 0);
+    world.scale.set(defaultScale);
+    world.position.set(
+      (viewportW / 2) - centerX * defaultScale,
+      (viewportH / 2) - centerY * defaultScale
+    );
+  };
+
+  const maybeAutoFitCamera = (state: any) => {
+    const nextTurn = Number.isFinite(state?.turn) ? Number(state.turn) : null;
+    const scenarioKey = String(state?.scenario_name || "default");
+    const hasHexes = Array.isArray(state?.hexes) && state.hexes.length > 0;
+    const forceInitialFit = Boolean((window as any).__forceInitialCameraFit);
+    const shouldAutoFit =
+      hasHexes &&
+      (
+        forceInitialFit ||
+        !hasInitialAutoFitRef.current ||
+        (scenarioKey !== lastAutoFitScenarioRef.current && (nextTurn == null || nextTurn <= 1))
+      );
+    if (!shouldAutoFit) return;
+    autoFitCameraToMap(state);
+    lastAutoFitScenarioRef.current = scenarioKey;
+    hasInitialAutoFitRef.current = true;
+    (window as any).__forceInitialCameraFit = false;
+  };
 
   useEffect(() => {
     selectedUnitRef.current = selectedUnitId;
@@ -111,6 +176,8 @@ export default function GameCanvas({
       if (nextTurn != null) {
         lastTurnRef.current = nextTurn;
       }
+
+      maybeAutoFitCamera(state);
 
       setGameData(state);
       lastStateRef.current = state;
@@ -503,9 +570,6 @@ export default function GameCanvas({
           }
         }
 
-        setSelectedUnitId(null);
-        setAvailableMoves([]);
-
         const stepRes = await fetch(apiUrl("/api/game/step"), {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -534,6 +598,11 @@ export default function GameCanvas({
           (window as any).logSystemEvent?.("system", "❌ Invalid backend step response (no state).");
           return false;
         }
+
+        // Clear local human selection only after backend confirmed a valid step.
+        // This avoids "UI gets confused" cases with stale/rejected WAIT action_ids.
+        setSelectedUnitId(null);
+        setAvailableMoves([]);
 
         // Combat FX for attack orders.
         if (isAttack && stateAfter?.last_events && unitLayerRef?.current) {
@@ -594,6 +663,7 @@ export default function GameCanvas({
           showMapRef,
           showGridRef,
           showCoordsRef,
+          onStateRendered: maybeAutoFitCamera,
         });
       }
 

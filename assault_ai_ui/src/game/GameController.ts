@@ -6,6 +6,10 @@ import { apiUrl, wsUrl } from "../config/backend";
 type ControllerType = "human" | "ai";
 type GameMode = "human" | "ai" | "ai_vs_ai" | "replay";
 type Listener = (state: any) => void;
+type TurnFlowListener = (flow: {
+  autoAdvanceAfterHuman: boolean;
+  waitingForManualAdvance: boolean;
+}) => void;
 
 export class GameController {
   private normalizeSideId(side: any): string {
@@ -112,6 +116,7 @@ export class GameController {
   private sidesConfig: Record<string, string> = { GE: "human", US: "ai" };
 
   private listeners: Listener[] = [];
+  private turnFlowListeners: TurnFlowListener[] = [];
   private lastState: any = null;
 
   private socket: WebSocket | null = null;
@@ -121,6 +126,9 @@ export class GameController {
   private startRequestToken = 0;
   private aiTurnInFlight = false;
   private pendingWsState: any = null;
+  private loopFn: (() => void) | null = null;
+  private autoAdvanceAfterHuman = true;
+  private waitingForManualAdvance = false;
 
   // ✅ NUEVO: referencia al highlight layer
   private highlightLayer: any = null;
@@ -133,6 +141,8 @@ export class GameController {
   ) {
     const requestToken = ++this.startRequestToken;
     this.stopLoop();
+    this.waitingForManualAdvance = false;
+    this.emitTurnFlow();
 
     // If a session is already running, treat start() as a full restart
     // (needed when user switches scenario from the dropdown).
@@ -281,6 +291,76 @@ export class GameController {
     if (this.lastState) {
       cb(this.lastState);
     }
+
+    return () => {
+      this.listeners = this.listeners.filter((l) => l !== cb);
+    };
+  }
+
+  subscribeTurnFlow(cb: TurnFlowListener) {
+    this.turnFlowListeners.push(cb);
+    cb({
+      autoAdvanceAfterHuman: this.autoAdvanceAfterHuman,
+      waitingForManualAdvance: this.waitingForManualAdvance,
+    });
+    return () => {
+      this.turnFlowListeners = this.turnFlowListeners.filter((l) => l !== cb);
+    };
+  }
+
+  private emitTurnFlow() {
+    const payload = {
+      autoAdvanceAfterHuman: this.autoAdvanceAfterHuman,
+      waitingForManualAdvance: this.waitingForManualAdvance,
+    };
+    for (const cb of this.turnFlowListeners) {
+      cb(payload);
+    }
+  }
+
+  private maybePauseForManualAdvance(prevState: any, nextState: any) {
+    if (this.mode !== "human") return;
+    if (!nextState || nextState.done) return;
+    const prevSide = prevState?.active_side;
+    const nextSide = nextState?.active_side;
+    if (!prevSide || !nextSide || prevSide === nextSide) return;
+    const prevController = this.getControllerForSide(prevState, prevSide);
+    const nextController = this.getControllerForSide(nextState, nextSide);
+    if (prevController === "human" && nextController === "ai") {
+      const shouldWait = !this.autoAdvanceAfterHuman;
+      if (this.waitingForManualAdvance !== shouldWait) {
+        this.waitingForManualAdvance = shouldWait;
+        this.emitTurnFlow();
+      }
+    }
+  }
+
+  setAutoAdvanceAfterHuman(enabled: boolean) {
+    this.autoAdvanceAfterHuman = Boolean(enabled);
+    if (this.autoAdvanceAfterHuman && this.waitingForManualAdvance) {
+      this.waitingForManualAdvance = false;
+      if (this.loopFn) {
+        this.scheduleLoop(this.loopFn, 20);
+      }
+    }
+    this.emitTurnFlow();
+  }
+
+  getAutoAdvanceAfterHuman(): boolean {
+    return this.autoAdvanceAfterHuman;
+  }
+
+  isWaitingForManualAdvance(): boolean {
+    return this.waitingForManualAdvance;
+  }
+
+  continueAfterHumanAction() {
+    if (!this.waitingForManualAdvance) return;
+    this.waitingForManualAdvance = false;
+    this.emitTurnFlow();
+    if (this.loopFn) {
+      this.scheduleLoop(this.loopFn, 20);
+    }
   }
 
   private emit() {
@@ -298,7 +378,9 @@ export class GameController {
     if (!newState || typeof newState !== "object") {
       return;
     }
+    const prevState = this.state;
     this.state = newState;
+    this.maybePauseForManualAdvance(prevState, newState);
     this.emit();
     // Keep GameCanvas turn-transition hooks in sync (marker reset, unit sync).
     // Some flows (backend ai-turn loop) update controller state directly and
@@ -339,6 +421,7 @@ export class GameController {
     this.aiLoopToken += 1;
     this.aiTurnInFlight = false;
     this.pendingWsState = null;
+    this.loopFn = null;
     if (this.aiLoopTimer) {
       clearTimeout(this.aiLoopTimer);
       this.aiLoopTimer = null;
@@ -381,6 +464,11 @@ export class GameController {
       // ✅ solo ejecuta si el lado es IA
       if (this.getControllerForSide(data, activeSide) !== "ai") {
         this.scheduleLoop(loop, 1200);
+        return;
+      }
+
+      if (this.waitingForManualAdvance) {
+        this.scheduleLoop(loop, 400);
         return;
       }
 
@@ -542,6 +630,7 @@ export class GameController {
       }
     };
 
+    this.loopFn = loop;
     loop();
   }
 

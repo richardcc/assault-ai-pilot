@@ -185,6 +185,8 @@ class ServiceController:
         pm2_name = str(spec.get("pm2_name", "")).strip()
         if not pm2_name:
             return {"ok": False, "error": f"service {key} has no pm2_name"}
+        # Use delete+start to ensure the process definition is refreshed.
+        self._run_pm2("delete", pm2_name)
         ok, out = self._start_from_ecosystem(pm2_name)
         if ok:
             return {"ok": True, "message": f"started {pm2_name}"}
@@ -521,8 +523,30 @@ def _page_html() -> str:
 
   <div id="tab-overrides" class="tab-content panel">
     <h3 style="margin-top:0">Override Breakdown</h3>
+    <div id="overrideSummary" class="sub" style="margin-bottom:8px"></div>
+    <h4 style="margin:8px 0 6px 0">Override Source Mix</h4>
+    <table id="overrideSourceTable">
+      <thead><tr><th>Source</th><th>Count</th><th>Rate</th></tr></thead>
+      <tbody></tbody>
+    </table>
+    <h4 style="margin:8px 0 6px 0">Finalizer Overrides</h4>
     <table id="overrideTable">
       <thead><tr><th>Reason</th><th>Count</th><th>Rate</th></tr></thead>
+      <tbody></tbody>
+    </table>
+    <h4 style="margin:12px 0 6px 0">Capture Override Reasons</h4>
+    <table id="captureOverrideTable">
+      <thead><tr><th>Reason</th><th>Count</th><th>Rate vs Capture Attempts</th></tr></thead>
+      <tbody></tbody>
+    </table>
+    <h4 style="margin:12px 0 6px 0">Capture Move Block Profile</h4>
+    <table id="captureBlockTable">
+      <thead><tr><th>Profile</th><th>Count</th><th>Rate vs Capture Attempts</th></tr></thead>
+      <tbody></tbody>
+    </table>
+    <h4 style="margin:12px 0 6px 0">Hard Gate Step-in Breakdown</h4>
+    <table id="hardGateTable">
+      <thead><tr><th>Hard Gate Detail</th><th>Count</th><th>Rate vs Hard Gate</th></tr></thead>
       <tbody></tbody>
     </table>
   </div>
@@ -831,23 +855,96 @@ function renderVPs(){
   const deltaCounts = s.captured_delta_counts || {};
   const finalKeys = Object.keys(finalCounts || {});
   const deltaKeys = Object.keys(deltaCounts || {});
-  const buckets = Array.from(new Set([...finalKeys, ...deltaKeys])).sort((a,b)=>Number(a)-Number(b));
+  const finalBuckets = finalKeys.sort((a,b)=>Number(a)-Number(b));
+  const deltaBuckets = deltaKeys.sort((a,b)=>Number(a)-Number(b));
   const epsTotal = Number(s.episodes || 0);
-  const compareRows = buckets
+  const finalRows = finalBuckets
     .map((k) => {
       const f = Number(finalCounts[k] || 0);
-      const d = Number(deltaCounts[k] || 0);
       const fp = epsTotal > 0 ? pct(f / epsTotal) : "0.0%";
-      const dp = epsTotal > 0 ? pct(d / epsTotal) : "0.0%";
-      return `<tr><td>${k}</td><td>${f}</td><td>${fp}</td><td>${d}</td><td>${dp}</td></tr>`;
+      return `<tr><td>${k}</td><td>${f}</td><td>${fp}</td></tr>`;
     })
     .join('');
-  const panelCompare = document.createElement('div');
-  panelCompare.className = 'panel';
-  panelCompare.innerHTML = `<h4 style="margin-top:0">Captured Objectives (Final vs Delta)</h4>
-    <table><thead><tr><th>Bucket</th><th>Final Episodes</th><th>Final %</th><th>Delta Episodes</th><th>Delta %</th></tr></thead>
-    <tbody>${compareRows || '<tr><td colspan="5" class="sub">No data</td></tr>'}</tbody></table>`;
-  tablesRoot.appendChild(panelCompare);
+  const deltaRows = deltaBuckets
+    .map((k) => {
+      const d = Number(deltaCounts[k] || 0);
+      const dp = epsTotal > 0 ? pct(d / epsTotal) : "0.0%";
+      return `<tr><td>${k}</td><td>${d}</td><td>${dp}</td></tr>`;
+    })
+    .join('');
+
+  const compareWrap = document.createElement('div');
+  compareWrap.style.display = 'flex';
+  compareWrap.style.gap = '10px';
+  compareWrap.style.flexWrap = 'wrap';
+  compareWrap.style.alignItems = 'flex-start';
+
+  const panelFinal = document.createElement('div');
+  panelFinal.className = 'panel';
+  panelFinal.style.flex = '1 1 440px';
+  panelFinal.innerHTML = `<h4 style="margin-top:0">Captured Objectives (Final)</h4>
+    <table><thead><tr><th>Final Bucket</th><th>Episodes</th><th>Rate</th></tr></thead>
+    <tbody>${finalRows || '<tr><td colspan="3" class="sub">No data</td></tr>'}</tbody></table>`;
+
+  const panelDelta = document.createElement('div');
+  panelDelta.className = 'panel';
+  panelDelta.style.flex = '1 1 440px';
+  panelDelta.innerHTML = `<h4 style="margin-top:0">Captured Objectives (Delta)</h4>
+    <table><thead><tr><th>Delta Bucket</th><th>Episodes</th><th>Rate</th></tr></thead>
+    <tbody>${deltaRows || '<tr><td colspan="3" class="sub">No data</td></tr>'}</tbody></table>`;
+
+  compareWrap.appendChild(panelFinal);
+  compareWrap.appendChild(panelDelta);
+  tablesRoot.appendChild(compareWrap);
+
+  const vpOpp = Number(m.vp_entry_opportunities || 0);
+  const vpTaken = Number(m.vp_entries_taken || 0);
+  const vpNotTaken = Math.max(0, vpOpp - vpTaken);
+  const vpContact = Number(m.vp_contact_steps || 0);
+  const captureAfterContact = Number(m.contact_to_capture_success || 0);
+  const stage1 = vpOpp;
+  const stage2 = vpTaken;
+  const stage3 = captureAfterContact;
+  const funnelMax = Math.max(1, stage1, stage2, stage3);
+  const funnelWidthPct = (v) => Math.max(20, (Number(v || 0) / funnelMax) * 100);
+  const blockReasons = m.vp_stepin_block_reason_counts || {};
+  const overrideReasons = m.capture_override_reason_counts || {};
+  const reasonRows = Object.entries(blockReasons)
+    .sort((a,b)=>Number(b[1]||0)-Number(a[1]||0))
+    .map(([k,v]) => {
+      const n = Number(v || 0);
+      const rate = vpOpp > 0 ? pct(n / vpOpp) : '0.0%';
+      return `<tr><td>${k}</td><td>${n}</td><td>${rate}</td></tr>`;
+    })
+    .join('');
+  const overrideRows = Object.entries(overrideReasons)
+    .sort((a,b)=>Number(b[1]||0)-Number(a[1]||0))
+    .map(([k,v]) => `<tr><td>${k}</td><td>${Number(v||0)}</td></tr>`)
+    .join('');
+
+  const panelReasons = document.createElement('div');
+  panelReasons.className = 'panel';
+  panelReasons.style.marginTop = '10px';
+  panelReasons.innerHTML = `<h4 style="margin-top:0">VP Entry Breakdown (why not taken)</h4>
+    <div class="sub" style="margin-bottom:8px">Funnel VP (opportunity -> taken -> captured after contact)</div>
+    <div style="display:flex;flex-direction:column;align-items:center;gap:6px;margin-bottom:10px;">
+      <div style="width:${funnelWidthPct(stage1).toFixed(1)}%;max-width:760px;min-width:240px;padding:8px 12px;background:rgba(122,197,255,0.22);border:1px solid rgba(122,197,255,0.55);clip-path:polygon(4% 0,96% 0,100% 100%,0 100%);text-align:center;">
+        <b>Opportunities</b> - ${stage1}
+      </div>
+      <div style="width:${funnelWidthPct(stage2).toFixed(1)}%;max-width:700px;min-width:210px;padding:8px 12px;background:rgba(255,179,92,0.22);border:1px solid rgba(255,179,92,0.55);clip-path:polygon(6% 0,94% 0,98% 100%,2% 100%);text-align:center;">
+        <b>Entries Taken</b> - ${stage2}
+      </div>
+      <div style="width:${funnelWidthPct(stage3).toFixed(1)}%;max-width:640px;min-width:190px;padding:8px 12px;background:rgba(123,240,168,0.20);border:1px solid rgba(123,240,168,0.50);clip-path:polygon(8% 0,92% 0,96% 100%,4% 100%);text-align:center;">
+        <b>Captured After Contact</b> - ${stage3}
+      </div>
+    </div>
+    <div class="sub" style="margin-bottom:8px">opportunities=${vpOpp} | taken=${vpTaken} | not_taken=${vpNotTaken}</div>
+    <table><thead><tr><th>Block Reason</th><th>Count</th><th>Rate vs Opportunities</th></tr></thead>
+    <tbody>${reasonRows || '<tr><td colspan="3" class="sub">No VP block reasons reported</td></tr>'}</tbody></table>
+    <div class="sub" style="margin:10px 0 6px 0">Capture override reasons</div>
+    <table><thead><tr><th>Override Reason</th><th>Count</th></tr></thead>
+    <tbody>${overrideRows || '<tr><td colspan="2" class="sub">No capture override reasons reported</td></tr>'}</tbody></table>`;
+  tablesRoot.appendChild(panelReasons);
 
   const finalContribution = m.per_unit_vp_final_contribution || {};
   const unitRows = Object.entries(finalContribution)
@@ -944,20 +1041,125 @@ function renderCombats(){
 function renderOverrides(){
   const d = firstDetail();
   const tb = document.querySelector('#overrideTable tbody');
+  const captureTb = document.querySelector('#captureOverrideTable tbody');
+  const blockTb = document.querySelector('#captureBlockTable tbody');
+  const hardGateTb = document.querySelector('#hardGateTable tbody');
+  const sourceTb = document.querySelector('#overrideSourceTable tbody');
+  const summary = document.getElementById('overrideSummary');
   tb.innerHTML = '';
+  if (captureTb) captureTb.innerHTML = '';
+  if (blockTb) blockTb.innerHTML = '';
+  if (hardGateTb) hardGateTb.innerHTML = '';
+  if (sourceTb) sourceTb.innerHTML = '';
+  if (summary) summary.textContent = '';
   if (!d){ return; }
   const m = d.mission || {};
-  const counts = m.finalizer_override_reason_counts || {};
-  const rates = m.finalizer_override_reason_rates || {};
-  const entries = Object.entries(counts).sort((a,b)=>Number(b[1])-Number(a[1]));
-  if (!entries.length){
-    tb.innerHTML = '<tr><td colspan="3" class="sub">No override reasons found</td></tr>';
-    return;
+  const sourceCounts = m.source_mix_counts || {};
+  const sourceRates = m.source_mix_rates || {};
+  const sourceEntries = Object.entries(sourceCounts).sort((a,b)=>Number(b[1])-Number(a[1]));
+  if (sourceTb){
+    if (!sourceEntries.length){
+      sourceTb.innerHTML = '<tr><td colspan="3" class="sub">No source mix data</td></tr>';
+    } else {
+      for (const [k,v] of sourceEntries){
+        const tr = document.createElement('tr');
+        tr.innerHTML = `<td>${k}</td><td>${Number(v||0)}</td><td>${pct(Number(sourceRates[k]||0))}</td>`;
+        sourceTb.appendChild(tr);
+      }
+    }
   }
-  for (const [k,v] of entries){
+  const finalizerCounts = m.finalizer_override_reason_counts || {};
+  const finalizerRates = m.finalizer_override_reason_rates || {};
+  const finalizerEntries = Object.entries(finalizerCounts).sort((a,b)=>Number(b[1])-Number(a[1]));
+  if (!finalizerEntries.length){
+    tb.innerHTML = '<tr><td colspan="3" class="sub">No finalizer override reasons found</td></tr>';
+  } else for (const [k,v] of finalizerEntries){
     const tr = document.createElement('tr');
-    tr.innerHTML = `<td>${k}</td><td>${v}</td><td>${pct(Number(rates[k]||0))}</td>`;
+    tr.innerHTML = `<td>${k}</td><td>${v}</td><td>${pct(Number(finalizerRates[k]||0))}</td>`;
     tb.appendChild(tr);
+  }
+
+  const captureAttempts = Number(m.capture_attempted || 0);
+  const captureOverrideCounts = m.capture_override_reason_counts || {};
+  const captureOverrideEntries = Object.entries(captureOverrideCounts).sort((a,b)=>Number(b[1])-Number(a[1]));
+  if (captureTb){
+    if (!captureOverrideEntries.length){
+      captureTb.innerHTML = '<tr><td colspan="3" class="sub">No capture override reasons found</td></tr>';
+    } else {
+      for (const [k,v] of captureOverrideEntries){
+        const n = Number(v || 0);
+        const tr = document.createElement('tr');
+        tr.innerHTML = `<td>${k}</td><td>${n}</td><td>${captureAttempts>0 ? pct(n/captureAttempts) : '0.0%'}</td>`;
+        captureTb.appendChild(tr);
+      }
+    }
+  }
+
+  const captureMoveBlockProfile = m.capture_move_block_profile || {};
+  const blockEntries = Object.entries(captureMoveBlockProfile).sort((a,b)=>Number(b[1])-Number(a[1]));
+  if (blockTb){
+    if (!blockEntries.length){
+      blockTb.innerHTML = '<tr><td colspan="3" class="sub">No capture move block profile data</td></tr>';
+    } else {
+      for (const [k,v] of blockEntries){
+        const n = Number(v || 0);
+        const tr = document.createElement('tr');
+        tr.innerHTML = `<td>${k}</td><td>${n}</td><td>${captureAttempts>0 ? pct(n/captureAttempts) : '0.0%'}</td>`;
+        blockTb.appendChild(tr);
+      }
+    }
+  }
+
+  // Explicit hard-gate breakdown from detailed reason keys.
+  // Supports both old flat key and new key with "|dist_before=..|enemy_pressure=..".
+  if (hardGateTb){
+    const hardGatePrefix = "hard_gate_step_into_uncaptured_vp";
+    const hardGateRows = [];
+    let hardGateTotal = 0;
+    for (const [reason, rawCount] of captureOverrideEntries) {
+      const reasonKey = String(reason || "");
+      const n = Number(rawCount || 0);
+      if (!reasonKey.startsWith(hardGatePrefix)) continue;
+      hardGateTotal += n;
+      let detail = "";
+      if (reasonKey.includes("|")) {
+        const parts = reasonKey.split("|").slice(1);
+        const tags = [];
+        for (const p of parts) {
+          if (p.startsWith("dist_before=") || p.startsWith("enemy_pressure=")) {
+            tags.push(p);
+          }
+        }
+        detail = tags.length ? tags.join(" | ") : "";
+      }
+      // Skip legacy/non-detailed rows: user asked to hide them from report.
+      if (detail) {
+        hardGateRows.push({ detail, count: n });
+      }
+    }
+    const agg = {};
+    for (const r of hardGateRows) {
+      agg[r.detail] = (agg[r.detail] || 0) + r.count;
+    }
+    const sortedHard = Object.entries(agg).sort((a,b)=>Number(b[1])-Number(a[1]));
+    if (!sortedHard.length){
+      hardGateTb.innerHTML = '<tr><td colspan="3" class="sub">No hard gate overrides found in this report</td></tr>';
+    } else {
+      for (const [detail, c] of sortedHard){
+        const tr = document.createElement('tr');
+        tr.innerHTML = `<td>${detail}</td><td>${Number(c||0)}</td><td>${hardGateTotal>0 ? pct(Number(c||0)/hardGateTotal) : '0.0%'}</td>`;
+        hardGateTb.appendChild(tr);
+      }
+    }
+  }
+
+  if (summary){
+    const legalOverrides = Number(m.capture_legal_override_count || 0);
+    const emergencyOverrides = Number(m.capture_emergency_override_count || 0);
+    const plannerOverride = Number(sourceCounts.planner_override || 0);
+    const finalizerOverride = Number(sourceCounts.finalizer_override || 0);
+    const sb3Kept = Number(sourceCounts.sb3_kept || 0);
+    summary.textContent = `sb3_kept=${sb3Kept} | planner_override=${plannerOverride} | finalizer_override=${finalizerOverride} | capture_attempted=${captureAttempts} | capture_legal_override=${legalOverrides} | capture_emergency_override=${emergencyOverrides}`;
   }
 }
 
@@ -970,23 +1172,6 @@ function renderActions(){
   const m = d.mission || {};
   const sections = [['US', ae.RL||{}], ['OTHER', ae.ENEMY||{}]];
 
-  const reactionPanel = document.createElement('div');
-  reactionPanel.className = 'panel';
-  reactionPanel.style.marginBottom = '10px';
-  reactionPanel.innerHTML = `
-    <h4 style="margin-top:0">Reaction Fire</h4>
-    <table>
-      <thead><tr><th>Metric</th><th>Value</th></tr></thead>
-      <tbody>
-        <tr><td>Count</td><td>${Number(m.reaction_fire_count||0)}</td></tr>
-        <tr><td>Rate</td><td>${pct(Number(m.reaction_fire_rate||0))}</td></tr>
-        <tr><td>Window Count</td><td>${Number(m.reaction_window_count||0)}</td></tr>
-        <tr><td>Skipped Count</td><td>${Number(m.reaction_fire_skipped_count||0)}</td></tr>
-        <tr><td>By Side</td><td>${Object.entries(m.reaction_fire_by_side || {}).map(([k,v])=>`${k}:${v}`).join(' | ') || '-'}</td></tr>
-      </tbody>
-    </table>`;
-  root.appendChild(reactionPanel);
-
   for (const [label,data] of sections){
     const panel = document.createElement('div');
     panel.className='panel';
@@ -994,6 +1179,21 @@ function renderActions(){
     panel.innerHTML = `<h4 style="margin-top:0">${label}</h4><table><thead><tr><th>Type</th><th>Count</th><th>Damage/Action</th></tr></thead><tbody>${rows||'<tr><td colspan="3" class="sub">No data</td></tr>'}</tbody></table>`;
     root.appendChild(panel);
   }
+
+  // Keep reaction metrics in the same visual format as other action panels.
+  const reactionPanel = document.createElement('div');
+  reactionPanel.className = 'panel';
+  reactionPanel.innerHTML = `<h4 style="margin-top:0">REACTION</h4>
+    <table>
+      <thead><tr><th>Type</th><th>Count</th><th>Value</th></tr></thead>
+      <tbody>
+        <tr><td>REACTION_FIRE</td><td>${Number(m.reaction_fire_count||0)}</td><td>${pct(Number(m.reaction_fire_rate||0))}</td></tr>
+        <tr><td>REACTION_WINDOW</td><td>${Number(m.reaction_window_count||0)}</td><td>-</td></tr>
+        <tr><td>REACTION_FIRE_SKIPPED</td><td>${Number(m.reaction_fire_skipped_count||0)}</td><td>-</td></tr>
+        <tr><td>REACTION_BY_SIDE</td><td>-</td><td>${Object.entries(m.reaction_fire_by_side || {}).map(([k,v])=>`${k}:${v}`).join(' | ') || '-'}</td></tr>
+      </tbody>
+    </table>`;
+  root.appendChild(reactionPanel);
 }
 
 function renderUnits(){
@@ -1053,6 +1253,14 @@ function renderStrategies(){
   const l2 = s.l2_policy_performance || {};
   const l3 = s.l3_policy_performance || {};
   const map = s.strategy_to_option_map || {};
+  const optionColor = (opt) => {
+    const k = String(opt || '').toUpperCase();
+    if (k === 'ADVANCE') return '#4aa3ff';
+    if (k === 'ATTACK') return '#ff9f43';
+    if (k === 'RETREAT') return '#a66cff';
+    if (k === 'HOLD') return '#22c55e';
+    return '#6b7280';
+  };
   const vpConv = Number(m.vp_entry_conversion_rate || 0);
   const capConv = Number(m.capture_conversion_after_contact || 0);
 
@@ -1101,20 +1309,193 @@ function renderStrategies(){
         return `<tr><td>${k}</td><td>${Number(v.usage||0)}</td><td>${dpa.toFixed(3)}</td><td>${kpa.toFixed(3)}</td><td class="${rowStatus}">${rowStatus.toUpperCase()}</td></tr>`;
       }).join('') || '<tr><td colspan="5" class="sub">No data</td></tr>'
     }</tbody></table>`;
-  root.appendChild(panelL3);
+
+  const perfGrid = document.createElement('div');
+  perfGrid.style.display = 'grid';
+  perfGrid.style.gridTemplateColumns = 'repeat(2, minmax(360px, 1fr))';
+  perfGrid.style.gap = '10px';
+  perfGrid.style.alignItems = 'start';
+  panelL2.style.marginTop = '0';
+  panelL3.style.marginTop = '0';
+  perfGrid.appendChild(panelL2);
+  perfGrid.appendChild(panelL3);
+  root.appendChild(perfGrid);
 
   const panelMap = document.createElement('div');
   panelMap.className = 'panel';
   panelMap.style.marginTop = '10px';
+  const transitions = Object.entries(map).flatMap(([strat, opts]) =>
+    Object.entries(opts || {}).map(([opt, tuple]) => {
+      const count = Array.isArray(tuple) ? Number(tuple[0]||0) : Number((tuple||{}).count||0);
+      const ratio = Array.isArray(tuple) ? Number(tuple[1]||0) : Number((tuple||{}).ratio||0);
+      return { strat, opt, count, ratio };
+    })
+  ).sort((a,b)=>b.count-a.count);
+  const funnelData = transitions.map((t) => ({
+    l3: t.strat,
+    l2: t.opt,
+    finalAction: "ALL_ACTIONS",
+    count: t.count,
+    key: `${t.strat}:${t.opt}`,
+  }));
+  const byL3 = funnelData.reduce((acc, row) => {
+    const k = String(row.l3 || "UNKNOWN");
+    if (!acc[k]) acc[k] = [];
+    acc[k].push(row);
+    return acc;
+  }, {});
+  const l3Funnels = Object.entries(byL3)
+    .map(([l3Name, rows]) => ({ l3Name, rows }))
+    .sort((a, b) => {
+      const ta = a.rows.reduce((s, x) => s + Number(x.count || 0), 0);
+      const tb = b.rows.reduce((s, x) => s + Number(x.count || 0), 0);
+      return tb - ta;
+    })
+    ;
+  const commonMaxRows = Math.max(
+    1,
+    ...l3Funnels.map(({ rows }) => {
+      const l2Keys = new Set(rows.map((r) => String(r.l2 || "UNKNOWN")));
+      return Math.max(rows.length, l2Keys.size);
+    })
+  );
+  const commonRowGap = 68;
+  const commonTopPad = 56;
+  const commonBottomPad = 24;
+  const commonSvgHeight = Math.max(220, commonTopPad + commonMaxRows * commonRowGap + commonBottomPad);
+
+  const l3FunnelsHtml = l3Funnels.map(({ l3Name, rows }) => {
+      const l3Total = rows.reduce((s, x) => s + Number(x.count || 0), 0);
+      const maxCount = Math.max(1, ...rows.map((x) => Number(x.count || 0)));
+      const sortedRows = rows.sort((a,b)=>Number(b.count||0)-Number(a.count||0));
+      const l2Agg = sortedRows.reduce((acc, r) => {
+        const k = String(r.l2 || "UNKNOWN");
+        acc[k] = (acc[k] || 0) + Number(r.count || 0);
+        return acc;
+      }, {});
+      const l2Nodes = Object.entries(l2Agg)
+        .map(([name, count]) => ({ name, count: Number(count || 0) }))
+        .sort((a,b)=>b.count-a.count);
+      const finalNodes = sortedRows.map((r) => ({
+        l2: String(r.l2 || "UNKNOWN"),
+        finalAction: String(r.finalAction || "UNKNOWN"),
+        count: Number(r.count || 0),
+      }));
+
+      const rowGap = commonRowGap;
+      const svgHeight = commonSvgHeight;
+      const xL3 = 90;
+      const xL2 = 360;
+      const xFinal = 690;
+      const yForIndex = (i) => commonTopPad + i * rowGap;
+      const linkPath = (x1, y1, x2, y2) => {
+        const c1 = x1 + Math.max(40, (x2 - x1) * 0.35);
+        const c2 = x2 - Math.max(40, (x2 - x1) * 0.35);
+        return `M ${x1} ${y1} C ${c1} ${y1}, ${c2} ${y2}, ${x2} ${y2}`;
+      };
+      const l2Y = {};
+      l2Nodes.forEach((n, idx) => { l2Y[n.name] = yForIndex(idx); });
+      const finalY = {};
+      finalNodes.forEach((n, idx) => { finalY[`${n.l2}__${n.finalAction}__${idx}`] = yForIndex(idx); });
+      const l3Y = commonTopPad + ((commonMaxRows - 1) * rowGap) / 2;
+      const l3R = Math.max(16, 16 + (l3Total / maxCount) * 4);
+
+      const linksL3toL2 = l2Nodes.map((n) => {
+        const y2 = l2Y[n.name];
+        const scale = n.count / Math.max(1, l3Total);
+        const strokeW = Math.max(2, 2 + scale * 14);
+        const c = optionColor(n.name);
+        return `<path d="${linkPath(xL3 + l3R, l3Y, xL2 - 12, y2)}" fill="none" stroke="${c}" stroke-opacity="0.6" stroke-width="${strokeW.toFixed(2)}"></path>`;
+      }).join('');
+
+      const linksL2toFinal = finalNodes.map((n, idx) => {
+        const y1 = l2Y[n.l2];
+        const y2 = finalY[`${n.l2}__${n.finalAction}__${idx}`];
+        const scale = n.count / Math.max(1, l2Agg[n.l2] || 1);
+        const strokeW = Math.max(1.5, 1.5 + scale * 10);
+        const c = optionColor(n.l2);
+        return `<path d="${linkPath(xL2 + 12, y1, xFinal - 12, y2)}" fill="none" stroke="${c}" stroke-opacity="0.62" stroke-width="${strokeW.toFixed(2)}"></path>`;
+      }).join('');
+
+      const nodeL3 = `
+        <circle cx="${xL3}" cy="${l3Y}" r="${l3R.toFixed(1)}" fill="rgba(74,163,255,0.22)" stroke="rgba(74,163,255,0.75)"></circle>
+        <text x="${xL3}" y="${l3Y+4}" text-anchor="middle" fill="#dbeafe" font-size="${Math.max(10, Math.round(l3R*0.62))}" font-weight="700">${l3Total}</text>
+          <text x="${xL3}" y="${Math.max(14, l3Y-l3R-8).toFixed(1)}" text-anchor="middle" fill="#9fb3d1" font-size="10">${l3Name}</text>
+      `;
+
+      const nodesL2 = l2Nodes.map((n) => {
+        const y = l2Y[n.name];
+        const scale = n.count / Math.max(1, l3Total);
+        const r = Math.max(12, 12 + scale * 18);
+        const c = optionColor(n.name);
+        return `
+          <circle cx="${xL2}" cy="${y}" r="${r.toFixed(1)}" fill="${c}" fill-opacity="0.92" stroke="rgba(255,255,255,0.16)"></circle>
+          <text x="${xL2}" y="${y+4}" text-anchor="middle" fill="#0b1020" font-size="${Math.max(9, Math.round(r*0.56))}" font-weight="700">${n.count}</text>
+          <text x="${xL2}" y="${Math.max(14, y-r-8).toFixed(1)}" text-anchor="middle" fill="#9fb3d1" font-size="10">${n.name}</text>
+        `;
+      }).join('');
+
+      const nodesFinal = finalNodes.map((n, idx) => {
+        const y = finalY[`${n.l2}__${n.finalAction}__${idx}`];
+        const scale = n.count / Math.max(1, l2Agg[n.l2] || 1);
+        const r = Math.max(10, 10 + scale * 16);
+        return `
+          <circle cx="${xFinal}" cy="${y}" r="${r.toFixed(1)}" fill="rgba(122,197,255,0.18)" stroke="rgba(122,197,255,0.55)"></circle>
+          <text x="${xFinal}" y="${y+4}" text-anchor="middle" fill="#dbeafe" font-size="${Math.max(8, Math.round(r*0.55))}" font-weight="700">${n.count}</text>
+          <text x="${xFinal}" y="${Math.max(14, y-r-8).toFixed(1)}" text-anchor="middle" fill="#9fb3d1" font-size="10">${n.finalAction}</text>
+        `;
+      }).join('');
+
+      const nodesAndLinks = `${linksL3toL2}${linksL2toFinal}${nodeL3}${nodesL2}${nodesFinal}`;
+      return `<div class="panel" style="margin-bottom:0;min-width:420px;">
+        <h5 style="margin:0 0 6px 0">${l3Name} Funnel</h5>
+        <div class="sub" style="margin-bottom:6px">total transitions: ${l3Total}</div>
+        <svg viewBox="0 0 760 ${svgHeight}" width="100%" height="${svgHeight}" style="background:rgba(15,18,27,0.45);border:1px solid var(--border);border-radius:10px;">
+          ${nodesAndLinks}
+        </svg>
+      </div>`;
+    }).join('');
+  const tableRowsGrouped = (() => {
+    const deepForTable = transitions.map((t) => ({
+      c1: String(t.strat || "UNKNOWN"),
+      c2: String(t.opt || "UNKNOWN"),
+      c3: "ALL_ACTIONS",
+      count: Number(t.count || 0),
+    }));
+    const grouped = deepForTable.reduce((acc, row) => {
+      if (!acc[row.c1]) acc[row.c1] = {};
+      if (!acc[row.c1][row.c2]) acc[row.c1][row.c2] = [];
+      acc[row.c1][row.c2].push(row);
+      return acc;
+    }, {});
+    return Object.keys(grouped)
+      .sort((a, b) => a.localeCompare(b))
+      .map((c1) => {
+        const c2Groups = grouped[c1];
+        const c2Html = Object.keys(c2Groups)
+          .sort((a, b) => a.localeCompare(b))
+          .map((c2) => {
+            const c3Rows = c2Groups[c2]
+              .sort((a, b) => {
+                const c3cmp = a.c3.localeCompare(b.c3);
+                if (c3cmp !== 0) return c3cmp;
+                return b.count - a.count;
+              })
+              .map((r) => `<tr><td></td><td></td><td>${r.c3}</td><td>${r.count}</td></tr>`)
+              .join('');
+            return `<tr><td></td><td class="sub" style="font-weight:700;color:#8ec5ff;">${c2}</td><td></td><td></td></tr>${c3Rows}`;
+          })
+          .join('');
+        return `<tr><td class="sub" style="font-weight:700;color:var(--accent);">${c1}</td><td></td><td></td><td></td></tr>${c2Html}`;
+      })
+      .join('');
+  })();
+
   panelMap.innerHTML = `<h4 style="margin-top:0">Strategy → Option Map</h4>
-    <table><thead><tr><th>Strategy</th><th>Option</th><th>Count</th><th>Ratio</th></tr></thead><tbody>${
-      Object.entries(map).flatMap(([strat, opts]) =>
-        Object.entries(opts || {}).map(([opt, tuple]) => {
-          const count = Array.isArray(tuple) ? Number(tuple[0]||0) : Number((tuple||{}).count||0);
-          const ratio = Array.isArray(tuple) ? Number(tuple[1]||0) : Number((tuple||{}).ratio||0);
-          return `<tr><td>${strat}</td><td>${opt}</td><td>${count}</td><td>${pct(ratio)}</td></tr>`;
-        })
-      ).join('') || '<tr><td colspan="4" class="sub">No data</td></tr>'
+    <div class="sub" style="margin-bottom:8px">Global funnel by L3 (L3 → L2, no near-VP filter)</div>
+    <div style="margin-bottom:10px;display:grid;grid-template-columns:repeat(3,minmax(420px,1fr));gap:10px;align-items:start;overflow-x:auto;padding-bottom:4px;">${l3FunnelsHtml || '<div class="sub">No transition data</div>'}</div>
+    <table><thead><tr><th>Strategy</th><th>Option</th><th>Final Action</th><th>Count</th></tr></thead><tbody>${
+      tableRowsGrouped || '<tr><td colspan="4" class="sub">No data</td></tr>'
     }</tbody></table>`;
   root.appendChild(panelMap);
 }

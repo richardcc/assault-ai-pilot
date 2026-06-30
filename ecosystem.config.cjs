@@ -16,7 +16,7 @@ module.exports = {
       name: "assault-frontend",
       cwd: "C:/repos/python/assault/assault_ai_ui",
       script: "cmd.exe",
-      args: "/c npm run dev -- --host",
+      args: '/d /s /c "npm run dev -- --host"',
       interpreter: "none",
       autorestart: true,
       max_restarts: 10,

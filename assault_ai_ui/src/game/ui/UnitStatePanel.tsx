@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { unitImages } from "../config/unitImages";
 import { UnitCardTooltip } from "./UnitCardTooltip";
 import { sides } from "../config/sides";
@@ -32,12 +32,37 @@ export function UnitStatePanel({
   targetUnitId,
   onSelectUnit
 }: Props) {
+  const [layoutMode, setLayoutMode] = useState<"row1" | "row2" | "v1" | "v2">(() => {
+    try {
+      const raw = localStorage.getItem("assault.units.layoutMode");
+      if (raw === "row1" || raw === "row2" || raw === "v1" || raw === "v2") {
+        return raw;
+      }
+    } catch {
+      // ignore storage read errors
+    }
+    return "row1";
+  });
 
   const [cardPreview, setCardPreview] = useState<{
     unit: Unit;
     x: number;
     y: number;
   } | null>(null);
+
+  useEffect(() => {
+    const onSave = () => {
+      try {
+        localStorage.setItem("assault.units.layoutMode", layoutMode);
+      } catch {
+        // ignore storage write errors
+      }
+    };
+    window.addEventListener("assault:save-layout", onSave as EventListener);
+    return () => {
+      window.removeEventListener("assault:save-layout", onSave as EventListener);
+    };
+  }, [layoutMode]);
 
   const unitsBySide: Record<string, Unit[]> = {};
 
@@ -47,6 +72,7 @@ export function UnitStatePanel({
     }
     unitsBySide[u.side].push(u);
   }
+  const sideEntries = Object.entries(unitsBySide).sort(([a], [b]) => a.localeCompare(b));
 
   // Handle clicking a trooper card
   const handleCardClick = (u: Unit) => {
@@ -79,8 +105,38 @@ export function UnitStatePanel({
       />
     )}
 
-    <div className="roster-container">
-      {Object.entries(unitsBySide).map(([side, list]) => (
+    <div className="roster-layout-toolbar">
+      <button
+        className={`btn-tactical roster-layout-btn ${layoutMode === "row1" ? "active" : ""}`}
+        onClick={() => setLayoutMode("row1")}
+        title="Una fila horizontal"
+      >
+        1 fila
+      </button>
+      <button
+        className={`btn-tactical roster-layout-btn ${layoutMode === "row2" ? "active" : ""}`}
+        onClick={() => setLayoutMode("row2")}
+        title="Dos filas horizontales"
+      >
+        2 filas
+      </button>
+      <button
+        className={`btn-tactical roster-layout-btn ${layoutMode === "v1" ? "active" : ""}`}
+        onClick={() => setLayoutMode("v1")}
+        title="Vertical una columna"
+      >
+        Vertical 1 col
+      </button>
+      <button
+        className={`btn-tactical roster-layout-btn ${layoutMode === "v2" ? "active" : ""}`}
+        onClick={() => setLayoutMode("v2")}
+        title="Vertical dos columnas"
+      >
+        Vertical 2 col
+      </button>
+    </div>
+    <div className={`roster-container roster-layout-${layoutMode}`}>
+      {sideEntries.map(([side, list]) => (
         <div key={side} className="roster-side-group">
           {/* FLAG + UNITS IN SAME ROW */}
           <div className="roster-list">

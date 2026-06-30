@@ -1,0 +1,802 @@
+{
+  "meta": {
+    "episodes": 8,
+    "timestamp": "2026-06-29T18:32:11.034970Z",
+    "seed": 42,
+    "output_dir": "C:\\repos\\python\\assault\\assault_sim\\session\\reports\\sb3_eval",
+    "scenario_schedule": [
+      {
+        "id": "battaglia_cittadina_2_1",
+        "episodes": 300
+      }
+    ],
+    "rl_sides": [
+      "US"
+    ],
+    "models": {
+      "US": {
+        "battaglia_cittadina_2_1": "C:\\repos\\python\\assault\\models\\scenario_battaglia_cittadina_2_1\\side_US\\sb3_latest_US.zip"
+      }
+    },
+    "train_config_path": "C:\\repos\\python\\assault\\assault_sim\\config\\train_config.json",
+    "diagnostic_min_overrides": false,
+    "finalizer_override_profile": "soft",
+    "models_subdir": "",
+    "models_subdir_template": "scenario_{scenario}/side_{side}",
+    "rag_posthoc_enabled": true
+  },
+  "by_side_and_scenario": {
+    "US": {
+      "battaglia_cittadina_2_1": {
+        "meta": {
+          "episodes": 8,
+          "timestamp": "2026-06-29T18:31:58.094913Z",
+          "model": "C:\\repos\\python\\assault\\models\\scenario_battaglia_cittadina_2_1\\side_US\\sb3_latest_US.zip",
+          "scenario": "battaglia_cittadina_2_1",
+          "rl_side": "US",
+          "vecnormalize_path": "C:\\repos\\python\\assault\\models\\scenario_battaglia_cittadina_2_1\\side_US\\sb3_vecnormalize_US.pkl",
+          "obs_normalized": true,
+          "diagnostic_min_overrides": false,
+          "finalizer_override_profile": "soft",
+          "models_subdir": "scenario_battaglia_cittadina_2_1/side_US",
+          "csv": "C:\\repos\\python\\assault\\assault_sim\\session\\reports\\sb3_eval\\metrics_sb3_US_battaglia_cittadina_2_1.csv",
+          "rag_posthoc_enabled": true
+        },
+        "summary": {
+          "episodes": 8,
+          "win_rate": 0.25,
+          "win_score_rate": 0.25,
+          "true_win_rate": 0.125,
+          "draw_rate": 0.25,
+          "loss_rate": 0.625,
+          "draws": 2,
+          "losses": 5,
+          "avg_vp": 6,
+          "avg_steps": 84,
+          "end_reason_counts": {
+            "objective_outcome_resolved": 8
+          },
+          "win_rate_by_end_reason": {
+            "objective_outcome_resolved": 0.25
+          },
+          "victory_level_counts": {
+            "Pareggio": 2,
+            "Sconfitta": 4,
+            "Vittoria": 1,
+            "Sconfitta totale": 1
+          },
+          "rl_result_counts": {
+            "draw": 2,
+            "loss": 5,
+            "win": 1
+          },
+          "tracked_result_counts": {
+            "Pareggio": 2,
+            "Sconfitta": 4,
+            "Vittoria": 1,
+            "Sconfitta totale": 1
+          },
+          "captured_final_counts": {
+            "3": 2,
+            "2": 4,
+            "4": 1,
+            "1": 1
+          },
+          "captured_delta_counts": {
+            "1": 2,
+            "0": 4,
+            "2": 1,
+            "-1": 1
+          },
+          "captured_delta_avg": 0.375,
+          "captured_delta_gain_rate": 0.375,
+          "captured_delta_flat_rate": 0.5,
+          "captured_delta_loss_rate": 0.125
+        },
+        "combat": {
+          "trade_mean": 0.5,
+          "damage_ratio": 0.07462686567164178,
+          "total_damage_rl": 5,
+          "total_damage_enemy": 67,
+          "trade_samples": 10
+        },
+        "advanced": {
+          "good_trade_rate": 0.02040816326530612,
+          "bad_trade_rate": 0.9795918367346939,
+          "selectivity": 0.24713584288052373,
+          "zero_dmg_rate": 0.9795918367346939
+        },
+        "policy_alignment": {
+          "forced_steps": 304,
+          "decisions": 330,
+          "forced_ratio": 0.9212121212121213,
+          "top_sampled_to_executed": {
+            "RETREAT->ADVANCE": 157,
+            "HOLD->ADVANCE": 131,
+            "RETREAT->RETREAT": 15,
+            "HOLD->RETREAT": 9,
+            "RETREAT->ATTACK": 7,
+            "ATTACK->HOLD": 5,
+            "ATTACK->ADVANCE": 3,
+            "ATTACK->ATTACK": 2,
+            "HOLD->ATTACK": 1
+          },
+          "composite_available_count": 2903,
+          "composite_selected_count": 2,
+          "composite_available_decisions": 134,
+          "composite_selection_rate_when_available": 0.014925373134328358
+        },
+        "mission": {
+          "vp_contact_rate": 0.17575757575757575,
+          "capture_pressure_turn": 17.5,
+          "strategy_stuck_ratio": 0.7429974521579538,
+          "unit_concentration_index": 1.0,
+          "objective_transition_matrix": {
+            "DENY": {
+              "ADVANCE": 208,
+              "RETREAT": 21,
+              "ATTACK": 10,
+              "HOLD": 5
+            },
+            "CAPTURE": {
+              "ADVANCE": 31
+            },
+            "PRESERVE": {
+              "ADVANCE": 52,
+              "RETREAT": 3
+            }
+          },
+          "vp_entry_opportunities": 37,
+          "vp_entries_taken": 0,
+          "vp_entry_conversion_rate": 0.0,
+          "vp_entry_missed_rate": 1.0,
+          "vp_net_progress": 0.0,
+          "position_reversal_rate": 0.006801470588235294,
+          "attack_near_vp_instead_of_capture_rate": 0.0,
+          "vp_control_turns_share": 0.6997118696339055,
+          "capture_attempt_success_rate": 0.08783409808876497,
+          "capture_attempted": 312,
+          "capture_committed": 312,
+          "capture_cancelled_by_finalizer": 0,
+          "capture_cancelled_by_finalizer_rate": 0.0,
+          "capture_cancelled_by_finalizer_reason_counts": {},
+          "first_vp_entry_turn_p50": 18.0,
+          "first_vp_entry_turn_p90": 18.0,
+          "turn_first_contact": 18.0,
+          "turn_first_progress": 20.0,
+          "turn_first_capture": 18.0,
+          "contact_to_progress_delay": 2.0,
+          "progress_to_capture_delay": null,
+          "latency_invalid_order_count": 8,
+          "latency_missing_progress_count": 0,
+          "latency_missing_capture_count": 0,
+          "capture_conversion_after_contact": 0.6,
+          "capture_intent_persistence": 0.9467635483300445,
+          "attack_opportunity_cost_near_vp": 0.125,
+          "vp_control_auc": 2.919134030005491,
+          "intent_commitment_rate_stub": 0.27661818105983216,
+          "role_diversity_index_stub": 0.6555005100478987,
+          "intent_commitment_rate": 0.27661818105983216,
+          "role_diversity_index": 0.6555005100478987,
+          "plan_role_counts_stub": {
+            "SUPPORT_FIRE": 103,
+            "SCREEN": 141,
+            "ASSAULT": 80,
+            "HOLD_VP": 6
+          },
+          "plan_focus_switch_count": 120,
+          "plan_stuck_steps_mean": 0.278673551491084,
+          "plan_stuck_steps_p90": 1.0,
+          "plan_steps_since_progress_mean": 156.4879640653078,
+          "plan_steps_since_progress_p90": 162.125,
+          "plan_planned_target_set_rate": 1.0,
+          "plan_planned_target_switch_count": 34,
+          "plan_team_turn_progress_mean": 0.7595458838668188,
+          "plan_team_units_committed_mean": 3.0838170718511284,
+          "plan_team_focus_vp_set_rate": 0.9744245524296675,
+          "plan_advanced_enabled_rate": 0.0,
+          "plan_advanced_horizon_mean": 2.0,
+          "plan_commit_rate": 0.6363636363636364,
+          "focus_switch_rate": 0.36363636363636365,
+          "plan_stage_counts": {
+            "SETUP": 276,
+            "STEP_IN": 38,
+            "HOLD": 16
+          },
+          "plan_replan_reason_counts": {
+            "init": 56,
+            "no_progress": 89,
+            "progress": 71,
+            "blocked_or_expired": 64,
+            "objective_captured": 50
+          },
+          "plan_last_failure_reason_counts": {
+            "no_progress": 86,
+            "semantic_loop_reset": 3
+          },
+          "plan_fallback_reason_counts": {
+            "intent_blocked": 4,
+            "emergency_override": 5
+          },
+          "plan_role_unknown_reason_counts": {},
+          "capture_branch_counts": {
+            "capture_priority_action": 284,
+            "stepin_hard_gate": 27,
+            "capture_default": 1
+          },
+          "near_vp_l2_transition_counts": {
+            "HOLD->ADVANCE->MoveAction": 19,
+            "RETREAT->ADVANCE->MoveAction": 25,
+            "HOLD->HOLD->MoveAction": 1,
+            "RETREAT->ATTACK->MoveThenFireAction": 1
+          },
+          "near_vp_l2_transition_by_l3_counts": {
+            "CAPTURE:HOLD->ADVANCE->MoveAction": 19,
+            "CAPTURE:RETREAT->ADVANCE->MoveAction": 25,
+            "DENY:HOLD->HOLD->MoveAction": 1,
+            "CAPTURE:RETREAT->ATTACK->MoveThenFireAction": 1
+          },
+          "budget_remaining_by_role": {},
+          "budget_violation_count": 0,
+          "budget_violation_rate": 0.0,
+          "budget_compliance_rate": 1.0,
+          "action_finalize_reason_counts": {
+            "ok": 330
+          },
+          "invalid_action_count": 0,
+          "fallback_action_count": 0,
+          "wait_recovery_sb3_backstep_count": 0,
+          "invalid_action_rate": 0.0,
+          "fallback_rate": 0.0,
+          "wait_recovery_sb3_backstep_rate": 0.0,
+          "reward_component_means": {
+            "raw_total": -0.30653923012684897,
+            "clipped_total": -0.30653923012684897,
+            "clipping_delta": 0.0,
+            "time_penalty": -0.02000000000000001,
+            "trade_term": 0.01849133922343641,
+            "objective_delta_term": 0.0,
+            "capture_near_vp_advance_no_conversion_penalty": 0.0,
+            "capture_post_contact_progress_move_bonus": 0.0,
+            "unattributed": -0.30503056935028544
+          },
+          "source_mix_counts": {
+            "sb3_kept": 324,
+            "planner_override": 6
+          },
+          "source_mix_rates": {
+            "sb3_kept": 0.9818181818181818,
+            "planner_override": 0.01818181818181818
+          },
+          "source_mix_capture_event_counts": {},
+          "source_mix_capture_event_rates": {
+            "sb3_kept": 0.0,
+            "planner_override": 0.0
+          },
+          "finalizer_override_reason_counts": {},
+          "finalizer_override_reason_rates": {},
+          "plan_progress_rate": 0.785527690903052,
+          "coordination_gain": 0.490625,
+          "avg_legal_actions_per_decision": 24.55509840159777,
+          "mean_action_catalog_gen_ms": 0.7088582016116408,
+          "avg_legal_actions_per_decision_by_side": {
+            "IT": 24.723846779109937,
+            "US": 24.36887934127643
+          },
+          "mean_action_catalog_gen_ms_by_side": {
+            "IT": 0.9794414705152632,
+            "US": 0.47154822469554913
+          },
+          "reaction_fire_count": 81,
+          "reaction_fire_rate": 0.24545454545454545,
+          "reaction_window_count": 0,
+          "reaction_fire_skipped_count": 19,
+          "reaction_fire_by_side": {
+            "RL": 19,
+            "ENEMY": 62
+          },
+          "plan_success_k": 0.0,
+          "plan_latency_to_progress": 17.5,
+          "lote_e_attack_opportunity_cost_near_vp_norm": 0.06979014706233126,
+          "lote_e_capture_window_open_rate": 0.08230729902904485,
+          "lote_e_expected_vp_swing_if_advance": 0.0,
+          "lote_e_expected_trade_if_attack": 0.002958614275749826,
+          "fallback_to_attack_rate_in_capture": 0.005922519509476031,
+          "capture_fallback_reason_counts": {
+            "attack_gate_high_adv": 1,
+            "forced_attack_open_vp_window": 1
+          },
+          "capture_move_block_profile": {
+            "objective_progress_move": 244,
+            "hard_gate_step_into_uncaptured_vp": 27,
+            "objective_staging_move": 13,
+            "emergency_blocked": 24,
+            "all_moves_increase_distance": 3,
+            "unknown": 1
+          },
+          "capture_override_reason_counts": {
+            "hard_gate_step_into_uncaptured_vp": 27
+          },
+          "l3_capture_forced_count": 6,
+          "l3_capture_forced_rate": 0.016950015270284027,
+          "l3_capture_force_reason_counts": {
+            "minimum_capture_intent_quota": 6
+          },
+          "post_open_window_followup_advance_count": 1,
+          "post_open_window_followup_success_count": 1,
+          "post_open_window_followup_success_rate": 1.0,
+          "capture_emergency_override_count": 0,
+          "capture_legal_override_count": 27,
+          "capture_progress_available_count": 244,
+          "capture_suspected_progress_miss_count": 0,
+          "capture_progress_candidate_total": 1563,
+          "capture_equal_candidate_total": 555,
+          "capture_increase_candidate_total": 1174,
+          "capture_move_candidates_total": 3292,
+          "capture_reversal_filtered_total": 199,
+          "capture_selected_move_reason_counts": {
+            "objective_progress_move": 244,
+            "objective_staging_move": 13,
+            "all_moves_increase_distance": 3
+          },
+          "attack_fallback_to_move_count": 3,
+          "attack_fallback_reason_counts": {
+            "no_legal_attack_reposition": 2,
+            "no_legal_attack_objective_push": 1,
+            "no_legal_attack_hold_no_progress": 5
+          },
+          "vp_stepin_legal_count": 0,
+          "vp_stepin_selected_count": 0,
+          "vp_stepin_selection_rate": 0.0,
+          "vp_stepin_block_reason_counts": {},
+          "vp_no_legal_stepin_near_count": 0,
+          "vp_opening_attack_candidates_total": 0,
+          "stepin_legal_mask_count": 0,
+          "stepin_forced_option_count": 0,
+          "vp_control_after_entry_turns_p50": null,
+          "vp_control_after_entry_turns_p90": null,
+          "per_unit_vp_entry_attempts": {
+            "US_2": 8,
+            "US_4": 12,
+            "US_3": 10,
+            "US_6": 5,
+            "US_1": 1,
+            "US_7": 1
+          },
+          "per_unit_vp_entry_success": {},
+          "per_unit_vp_final_contribution": {},
+          "capture_emergency_override_rate": 0.0,
+          "capture_legal_override_rate": 0.08783409808876497,
+          "capture_progress_available_rate": 0.785527690903052,
+          "capture_suspected_progress_miss_rate": 0.0,
+          "multi_unit_contribution": {
+            "attack_units_mean": 0.875,
+            "damage_units_mean": 0.375
+          },
+          "stability_checks": {
+            "strategy_stuck_ok": true,
+            "unit_concentration_ok": false,
+            "vp_contact_ok": true
+          },
+          "stability_status": "yellow",
+          "capture_checks": {
+            "vp_contact_min": false,
+            "pressure_turn_set": true,
+            "concentration_ok": false,
+            "vp_entry_missed_ok": false,
+            "capture_success_ok": true,
+            "capture_fallback_ok": true
+          },
+          "capture_readiness": false
+        },
+        "action_execution": {
+          "RL": {
+            "MOVE": {
+              "count": 313,
+              "damage_per_action": 0.0
+            },
+            "INDIRECT": {
+              "count": 5,
+              "damage_per_action": 0.0
+            },
+            "ASSAULT_MELEE": {
+              "count": 2,
+              "damage_per_action": 2.0
+            },
+            "FIRE_THEN_MOVE": {
+              "count": 1,
+              "damage_per_action": 0.0
+            },
+            "WAIT": {
+              "count": 5,
+              "damage_per_action": 0.0
+            },
+            "MOVE_THEN_FIRE": {
+              "count": 1,
+              "damage_per_action": 0.0
+            },
+            "DIRECT_RANGED": {
+              "count": 3,
+              "damage_per_action": 0.3333333333333333
+            }
+          },
+          "ENEMY": {
+            "MOVE": {
+              "count": 188,
+              "damage_per_action": 0.0
+            },
+            "DIRECT_RANGED": {
+              "count": 143,
+              "damage_per_action": 0.4405594405594406
+            },
+            "INDIRECT": {
+              "count": 11,
+              "damage_per_action": 0.36363636363636365
+            }
+          }
+        },
+        "units": {
+          "by_side": {
+            "RL": {
+              "unit_count": 7,
+              "total_attacks": 10,
+              "total_damage": 5.0,
+              "total_kills": 2,
+              "damage_per_attack": 0.5
+            },
+            "ENEMY": {
+              "unit_count": 7,
+              "total_attacks": 154,
+              "total_damage": 67.0,
+              "total_kills": 19,
+              "damage_per_attack": 0.43506493506493504
+            }
+          },
+          "by_unit": {
+            "RL": [
+              {
+                "unit_id": "US_5",
+                "category": "INFANTRY",
+                "classification": "SPECIALIZED_INFANTRY",
+                "attacks": 2,
+                "damage": 4.0,
+                "kills": 2,
+                "damage_per_attack": 2.0,
+                "kills_per_attack": 1.0
+              },
+              {
+                "unit_id": "US_7",
+                "category": "INFANTRY",
+                "classification": "INDIRECT_FIRE_UNIT",
+                "attacks": 4,
+                "damage": 1.0,
+                "kills": 0,
+                "damage_per_attack": 0.25,
+                "kills_per_attack": 0.0
+              },
+              {
+                "unit_id": "US_1",
+                "category": "INFANTRY",
+                "classification": "STANDARD_INFANTRY",
+                "attacks": 2,
+                "damage": 0.0,
+                "kills": 0,
+                "damage_per_attack": 0.0,
+                "kills_per_attack": 0.0
+              },
+              {
+                "unit_id": "US_2",
+                "category": "INFANTRY",
+                "classification": "STANDARD_INFANTRY",
+                "attacks": 0,
+                "damage": 0.0,
+                "kills": 0,
+                "damage_per_attack": 0.0,
+                "kills_per_attack": 0.0
+              },
+              {
+                "unit_id": "US_3",
+                "category": "INFANTRY",
+                "classification": "STANDARD_INFANTRY",
+                "attacks": 0,
+                "damage": 0.0,
+                "kills": 0,
+                "damage_per_attack": 0.0,
+                "kills_per_attack": 0.0
+              },
+              {
+                "unit_id": "US_4",
+                "category": "INFANTRY",
+                "classification": "STANDARD_INFANTRY",
+                "attacks": 2,
+                "damage": 0.0,
+                "kills": 0,
+                "damage_per_attack": 0.0,
+                "kills_per_attack": 0.0
+              },
+              {
+                "unit_id": "US_6",
+                "category": "INFANTRY",
+                "classification": "SUPPORT_INFANTRY",
+                "attacks": 0,
+                "damage": 0.0,
+                "kills": 0,
+                "damage_per_attack": 0.0,
+                "kills_per_attack": 0.0
+              }
+            ],
+            "ENEMY": [
+              {
+                "unit_id": "IT_3",
+                "category": "INFANTRY",
+                "classification": "SUPPORT_INFANTRY",
+                "attacks": 31,
+                "damage": 17.0,
+                "kills": 3,
+                "damage_per_attack": 0.5483870967741935,
+                "kills_per_attack": 0.0967741935483871
+              },
+              {
+                "unit_id": "IT_1",
+                "category": "INFANTRY",
+                "classification": "STANDARD_INFANTRY",
+                "attacks": 40,
+                "damage": 13.0,
+                "kills": 4,
+                "damage_per_attack": 0.325,
+                "kills_per_attack": 0.1
+              },
+              {
+                "unit_id": "IT_6",
+                "category": "INFANTRY",
+                "classification": "SUPPORT_INFANTRY",
+                "attacks": 19,
+                "damage": 12.0,
+                "kills": 5,
+                "damage_per_attack": 0.631578947368421,
+                "kills_per_attack": 0.2631578947368421
+              },
+              {
+                "unit_id": "IT_2",
+                "category": "INFANTRY",
+                "classification": "STANDARD_INFANTRY",
+                "attacks": 26,
+                "damage": 12.0,
+                "kills": 3,
+                "damage_per_attack": 0.46153846153846156,
+                "kills_per_attack": 0.11538461538461539
+              },
+              {
+                "unit_id": "IT_5",
+                "category": "INFANTRY",
+                "classification": "INDIRECT_FIRE_UNIT",
+                "attacks": 17,
+                "damage": 6.0,
+                "kills": 3,
+                "damage_per_attack": 0.35294117647058826,
+                "kills_per_attack": 0.17647058823529413
+              },
+              {
+                "unit_id": "IT_4",
+                "category": "INFANTRY",
+                "classification": "SUPPORT_INFANTRY",
+                "attacks": 12,
+                "damage": 5.0,
+                "kills": 0,
+                "damage_per_attack": 0.4166666666666667,
+                "kills_per_attack": 0.0
+              },
+              {
+                "unit_id": "IT_7",
+                "category": "INFANTRY",
+                "classification": "SUPPORT_INFANTRY",
+                "attacks": 9,
+                "damage": 2.0,
+                "kills": 1,
+                "damage_per_attack": 0.2222222222222222,
+                "kills_per_attack": 0.1111111111111111
+              }
+            ]
+          }
+        },
+        "strategy": {
+          "l2_policy_performance": {
+            "ADVANCE": {
+              "usage": 291,
+              "damage_per_attack": 0.49582673114081804,
+              "kills_per_attack": 0.19985704372882257
+            },
+            "RETREAT": {
+              "usage": 24,
+              "damage_per_attack": 0.6882539695894175,
+              "kills_per_attack": 0.3101838553003379
+            },
+            "ATTACK": {
+              "usage": 10,
+              "damage_per_attack": 0.35378318795756947,
+              "kills_per_attack": 0.09366784079118354
+            },
+            "HOLD": {
+              "usage": 5,
+              "damage_per_attack": 0.6973684210526315,
+              "kills_per_attack": 0.2982456140350877
+            }
+          },
+          "l3_policy_performance": {
+            "DENY": {
+              "usage": 244,
+              "damage_per_attack": 0.4622456557980204,
+              "kills_per_attack": 0.17782590523832448
+            },
+            "CAPTURE": {
+              "usage": 31,
+              "damage_per_attack": 0.5349760479352929,
+              "kills_per_attack": 0.2192639360361871
+            },
+            "PRESERVE": {
+              "usage": 55,
+              "damage_per_attack": 0.7493194675567758,
+              "kills_per_attack": 0.3475112552889329
+            }
+          },
+          "strategy_to_option_map": {
+            "DENY": {
+              "ADVANCE": [
+                208,
+                0.8524590163934426
+              ],
+              "RETREAT": [
+                21,
+                0.0860655737704918
+              ],
+              "ATTACK": [
+                10,
+                0.040983606557377046
+              ],
+              "HOLD": [
+                5,
+                0.020491803278688523
+              ]
+            },
+            "CAPTURE": {
+              "ADVANCE": [
+                31,
+                1.0
+              ]
+            },
+            "PRESERVE": {
+              "ADVANCE": [
+                52,
+                0.9454545454545454
+              ],
+              "RETREAT": [
+                3,
+                0.05454545454545454
+              ]
+            }
+          },
+          "objective_transition_matrix": {
+            "DENY": {
+              "ADVANCE": 208,
+              "RETREAT": 21,
+              "ATTACK": 10,
+              "HOLD": 5
+            },
+            "CAPTURE": {
+              "ADVANCE": 31
+            },
+            "PRESERVE": {
+              "ADVANCE": 52,
+              "RETREAT": 3
+            }
+          }
+        },
+        "rag_posthoc": {
+          "patterns": [],
+          "metrics": {
+            "total_steps": 476,
+            "wait_ratio": 0.0,
+            "capture_ratio": 0.6554621848739496,
+            "damage_ratio": 0.10714285714285714
+          },
+          "examples": [
+            {
+              "action": "INDIRECT",
+              "capture_event": false,
+              "damage": 0.0
+            },
+            {
+              "action": "INDIRECT",
+              "capture_event": false,
+              "damage": 0.0
+            },
+            {
+              "action": "INDIRECT",
+              "capture_event": false,
+              "damage": 0.0
+            },
+            {
+              "action": "INDIRECT",
+              "capture_event": false,
+              "damage": 0.0
+            },
+            {
+              "action": "INDIRECT",
+              "capture_event": false,
+              "damage": 0.0
+            }
+          ],
+          "recommendations": [],
+          "citations": [
+            {
+              "source_type": "rule",
+              "source_id": "02_TURN_SEQUENCE_AND_ACTIONS::18",
+              "snippet": "...coherence shaping). - Test: Pending validation in SB3 smoke eval (`strategy -> option`, attack share, damage ratio). - Rule: with objective-rule scenarios, policy should feel continuous pressure to satisfy campaign VP c..."
+            },
+            {
+              "source_type": "rule",
+              "source_id": "02_TURN_SEQUENCE_AND_ACTIONS::8",
+              "snippet": "...falls forward deterministically to the next side with available units. - PPO/reward anti-plateau retune (v4): training config increases exploration (`ENTROPY_COEF` raised to `0.07` in `assault_sim/config/ppo_config.py`)..."
+            },
+            {
+              "source_type": "rule",
+              "source_id": "02_TURN_SEQUENCE_AND_ACTIONS::12",
+              "snippet": "...also suppressed in progress-available states except VP-critical cases. - SB3 curriculum/eval contract (v30): training schedule supports a two-phase same-scenario curriculum (capture warmup then full phase), with phase-1..."
+            },
+            {
+              "source_type": "rule",
+              "source_id": "02_TURN_SEQUENCE_AND_ACTIONS::17",
+              "snippet": "...py` (`_best_capture_staging_move`, `_capture_priority_action`, `_tag_action`). - Telemetry path: `assault_sim/training_env.py`"
+            },
+            {
+              "source_type": "rule",
+              "source_id": "02_TURN_SEQUENCE_AND_ACTIONS::21",
+              "snippet": "...assign_role`), `assault_sim/decision/option_executor.py` (`_plan_unit_role`, `_tag_action`), and `assault_sim/training_env.py` (role inf"
+            },
+            {
+              "source_type": "data",
+              "source_id": "GE_FJ_RIFLES_43",
+              "snippet": "...rength: 4 Traits: PARATROOPS, ELITE, TOUGH, RIFLE_GRENADES, INDIRECT_FIRE, ATTACK_DIE_REROLL, IGNORE_FIRST_CC_DAMAGE, REMOVE_WEAKEST_TERRAIN_DEFENSE Attack profile: - DIRECT_FIRE vs VEHICLE @ 0: none - DIRECT_FIRE vs VEH..."
+            }
+          ],
+          "limitations": []
+        }
+      }
+    }
+  },
+  "comparison": [
+    {
+      "rl_side": "US",
+      "scenario": "battaglia_cittadina_2_1",
+      "episodes": 8,
+      "win_rate": 0.25,
+      "win_score_rate": 0.25,
+      "true_win_rate": 0.125,
+      "draw_rate": 0.25,
+      "loss_rate": 0.625,
+      "draws": 2,
+      "losses": 5,
+      "avg_vp": 6,
+      "avg_steps": 84,
+      "end_reason_counts": {
+        "objective_outcome_resolved": 8
+      },
+      "win_rate_by_end_reason": {
+        "objective_outcome_resolved": 0.25
+      },
+      "rl_result_counts": {
+        "draw": 2,
+        "loss": 5,
+        "win": 1
+      },
+      "tracked_result_counts": {
+        "Pareggio": 2,
+        "Sconfitta": 4,
+        "Vittoria": 1,
+        "Sconfitta totale": 1
+      },
+      "trade_mean": 0.5,
+      "damage_ratio": 0.07462686567164178
+    }
+  ]
+}

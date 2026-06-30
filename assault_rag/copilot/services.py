@@ -3,6 +3,8 @@ import os
 import re
 import urllib.error
 import urllib.request
+from collections import defaultdict, deque
+from threading import Lock
 from typing import Dict, List
 
 from assault_rag.copilot.retriever import classify_query_mode, retrieve_evidence
@@ -23,6 +25,10 @@ UNIT_QUERY_HINTS = {
     "catálogo",
     "disponibles",
 }
+
+_RAG_MEMORY_MAX_TURNS = max(1, int(os.getenv("ASSAULT_RAG_MEMORY_TURNS", "6")))
+_RAG_MEMORY: dict[str, deque[dict]] = defaultdict(lambda: deque(maxlen=_RAG_MEMORY_MAX_TURNS))
+_RAG_MEMORY_LOCK = Lock()
 
 
 def _to_int(value):
@@ -71,6 +77,377 @@ def _query_terms(query: str) -> List[str]:
 def _looks_like_unit_catalog_query(query: str) -> bool:
     terms = set(_query_terms(query))
     return bool(terms & UNIT_QUERY_HINTS)
+
+
+def _looks_like_counter_query(query: str) -> bool:
+    terms = set(_query_terms(query))
+    counter_hints = {
+        "counter",
+        "counters",
+        "ficha",
+        "fichas",
+        "icono",
+        "iconos",
+        "grafico",
+        "gráfico",
+        "simbolo",
+        "símbolo",
+    }
+    return bool(terms & counter_hints)
+
+
+def _looks_like_combat_resolution_query(query: str) -> bool:
+    terms = set(_query_terms(query))
+    combat_hints = {
+        "dado",
+        "dados",
+        "die",
+        "dice",
+        "distancia",
+        "alcance",
+        "range",
+        "contra",
+        "vs",
+        "ataque",
+        "attack",
+        "defensa",
+        "defense",
+        "infanteria",
+        "infantry",
+        "vehiculo",
+        "vehicle",
+    }
+    return bool(terms & combat_hints)
+
+
+def _conversation_id_from_context(context: Dict | None) -> str | None:
+    ctx = context or {}
+    cid = str(ctx.get("conversation_id", "") or "").strip()
+    if not cid:
+        return None
+    return cid[:128]
+
+
+def _looks_followup_ambiguous(query: str) -> bool:
+    q = str(query or "").strip().lower()
+    if not q:
+        return False
+    terms = _query_terms(q)
+    if len(terms) <= 3:
+        return True
+    followup_tokens = {
+        "eso",
+        "esa",
+        "ese",
+        "sus",
+        "stats",
+        "detalles",
+        "mas",
+        "más",
+        "tambien",
+        "también",
+    }
+    return bool(set(terms) & followup_tokens)
+
+
+def _memory_rewrite_query(query: str, context: Dict | None) -> str:
+    cid = _conversation_id_from_context(context)
+    if not cid:
+        return query
+    if not _looks_followup_ambiguous(query):
+        return query
+    with _RAG_MEMORY_LOCK:
+        turns = list(_RAG_MEMORY.get(cid, []))
+    if not turns:
+        return query
+    last_user_query = str(turns[-1].get("query", "") or "").strip()
+    if not last_user_query:
+        return query
+    # Keep retrieval deterministic while injecting immediate intent carry-over.
+    return f"{last_user_query} | seguimiento: {query.strip()}"
+
+
+def _memory_store_turn(*, context: Dict | None, query: str, mode: str, answer: str, citations: List[Dict]) -> None:
+    cid = _conversation_id_from_context(context)
+    if not cid:
+        return
+    turn = {
+        "query": str(query or "")[:800],
+        "mode": str(mode or ""),
+        "answer": str(answer or "")[:1200],
+        "citation_ids": [str(c.get("source_id", "") or "")[:120] for c in (citations or [])[:6]],
+    }
+    with _RAG_MEMORY_LOCK:
+        _RAG_MEMORY[cid].append(turn)
+
+
+def _compact_state_snapshot(context: Dict | None) -> Dict:
+    ctx = context or {}
+    snap = ctx.get("state_snapshot", {}) if isinstance(ctx.get("state_snapshot", {}), dict) else {}
+    units = list(snap.get("units", []) or [])
+    vp_live = snap.get("vp_score_live", {}) or {}
+    active_side = str(snap.get("active_side", "UNKNOWN")).upper()
+    side_counts: Dict[str, int] = {}
+    for u in units:
+        side = str((u or {}).get("side", "UNKNOWN")).upper()
+        hp = (u or {}).get("hp", None)
+        alive = hp is None or float(hp) > 0
+        if alive:
+            side_counts[side] = side_counts.get(side, 0) + 1
+    return {
+        "turn": snap.get("turn"),
+        "active_side": active_side,
+        "vp_score_live": vp_live,
+        "alive_units_by_side": side_counts,
+        "done": bool(snap.get("done", False)),
+    }
+
+
+def _augment_query_with_state_context(query: str, context: Dict | None) -> str:
+    compact = _compact_state_snapshot(context)
+    if compact.get("turn") is None and not compact.get("vp_score_live"):
+        return query
+    return (
+        f"{query.strip()} | "
+        f"turn={compact.get('turn')} "
+        f"active_side={compact.get('active_side')} "
+        f"vp={compact.get('vp_score_live')} "
+        f"alive_units={compact.get('alive_units_by_side')}"
+    )
+
+
+def _fallback_answer_from_state(query: str, context: Dict | None) -> str | None:
+    compact = _compact_state_snapshot(context)
+    ctx = context or {}
+    snap = ctx.get("state_snapshot", {}) if isinstance(ctx.get("state_snapshot", {}), dict) else {}
+    ai_obs = ctx.get("ai_observability", {}) if isinstance(ctx.get("ai_observability", {}), dict) else {}
+    recent_ai = list(ai_obs.get("recent_decisions", []) or [])
+    q_lower = str(query or "").lower()
+    asks_unmoved_units = any(
+        k in q_lower
+        for k in (
+            "no he movido",
+            "no movi",
+            "no moví",
+            "unidades sin mover",
+            "pendientes de mover",
+            "sin activar",
+            "no activadas",
+        )
+    )
+    asks_moved_units = any(
+        k in q_lower
+        for k in (
+            "han sido movidas",
+            "han sido movidos",
+            "que unidades movi",
+            "qué unidades moví",
+            "que unidades he movido",
+            "qué unidades he movido",
+            "unidades movidas",
+            "ya movi",
+            "ya moví",
+            "ya se movieron",
+            "se movieron",
+            "activadas",
+        )
+    )
+    if asks_moved_units and isinstance(snap, dict) and snap:
+        active_side = str(snap.get("active_side", "") or "").upper()
+        units = list(snap.get("units", []) or [])
+        activated = {
+            str(u)
+            for u in (snap.get("activated_units", []) or [])
+            if str(u).strip()
+        }
+        moved = []
+        for u in units:
+            side = str((u or {}).get("side", "") or "").upper()
+            unit_id = str((u or {}).get("id", "") or "")
+            unit_key = str((u or {}).get("unit_key", "") or "")
+            alive = bool((u or {}).get("alive", True))
+            if not unit_id or side != active_side:
+                continue
+            if not alive:
+                continue
+            if unit_id in activated:
+                moved.append((unit_id, unit_key))
+        if not moved:
+            return (
+                f"No veo unidades ya activadas/movidas para el lado activo {active_side} en este turno."
+            )
+        short = ", ".join(
+            f"{uid}{f' ({uk})' if uk else ''}" for uid, uk in moved[:8]
+        )
+        more = f" (+{len(moved) - 8} más)" if len(moved) > 8 else ""
+        return (
+            f"Unidades del lado activo {active_side} ya activadas/movidas en este turno: {short}{more}."
+        )
+    if asks_unmoved_units and isinstance(snap, dict) and snap:
+        active_side = str(snap.get("active_side", "") or "").upper()
+        units = list(snap.get("units", []) or [])
+        activated = {
+            str(u)
+            for u in (snap.get("activated_units", []) or [])
+            if str(u).strip()
+        }
+        pending = []
+        for u in units:
+            side = str((u or {}).get("side", "") or "").upper()
+            unit_id = str((u or {}).get("id", "") or "")
+            unit_key = str((u or {}).get("unit_key", "") or "")
+            alive = bool((u or {}).get("alive", True))
+            hp = (u or {}).get("hp", None)
+            if not unit_id or side != active_side:
+                continue
+            if not alive or (hp is not None and float(hp) <= 0):
+                continue
+            if unit_id in activated:
+                continue
+            pending.append((unit_id, unit_key))
+        if not pending:
+            return (
+                f"No veo unidades pendientes por mover para el lado activo {active_side} en este turno."
+            )
+        short = ", ".join(
+            f"{uid}{f' ({uk})' if uk else ''}" for uid, uk in pending[:8]
+        )
+        more = f" (+{len(pending) - 8} más)" if len(pending) > 8 else ""
+        return (
+            f"Unidades del lado activo {active_side} aún no activadas en este turno: {short}{more}."
+        )
+    asks_last_ai_move = any(
+        k in q_lower
+        for k in (
+            "que unidad",
+            "qué unidad",
+            "movio la ia",
+            "movió la ia",
+            "ultimo movimiento",
+            "último movimiento",
+            "que hizo la ia",
+            "qué hizo la ia",
+        )
+    )
+    asks_recent_ai_history = any(
+        k in q_lower
+        for k in (
+            "ultimas decisiones",
+            "últimas decisiones",
+            "ultimos turnos",
+            "últimos turnos",
+            "ultimas acciones",
+            "últimas acciones",
+            "que hizo la ia en los ultimos",
+            "qué hizo la ia en los últimos",
+        )
+    )
+    if asks_recent_ai_history and recent_ai:
+        tail = recent_ai[-3:]
+        items = []
+        for d in tail:
+            turn = int(d.get("turn", compact.get("turn", 0)) or 0)
+            side = str(d.get("side", compact.get("active_side", "UNKNOWN")) or "UNKNOWN")
+            unit_id = str(d.get("unit_id", "?") or "?")
+            action_desc = str(d.get("action_id", "") or d.get("action", "") or "acción desconocida")
+            src = str(d.get("source", "") or "unknown")
+            items.append(f"T{turn} {side} {unit_id} -> {action_desc} [{src}]")
+        return "Últimas decisiones IA: " + " | ".join(items)
+    if asks_last_ai_move and recent_ai:
+        last = recent_ai[-1]
+        unit_id = str(last.get("unit_id", "?") or "?")
+        action_id = str(last.get("action_id", "") or "")
+        action_name = str(last.get("action", "") or "")
+        side = str(last.get("side", compact.get("active_side", "UNKNOWN")) or "UNKNOWN")
+        turn = int(last.get("turn", compact.get("turn", 0)) or 0)
+        source = str(last.get("source", "") or "")
+        sb3_status = str(last.get("sb3_status", "") or "")
+        corrected = bool(last.get("corrected", False))
+        correction_note = " (acción corregida por backend)" if corrected else ""
+        action_desc = action_id or action_name or "acción desconocida"
+        return (
+            f"Última decisión IA registrada: turno {turn}, lado {side}, unidad {unit_id}, "
+            f"acción {action_desc}, fuente={source or 'unknown'}"
+            f"{f', sb3_status={sb3_status}' if sb3_status else ''}{correction_note}."
+        )
+    if compact.get("turn") is None and not compact.get("vp_score_live"):
+        return None
+    active = str(compact.get("active_side", "UNKNOWN"))
+    vp_live = compact.get("vp_score_live", {}) or {}
+    own_vp = float(vp_live.get(active, 0) or 0)
+    enemy_best = max(
+        (float(v or 0) for s, v in vp_live.items() if str(s).upper() != active),
+        default=0.0,
+    )
+    gap = enemy_best - own_vp
+    if gap >= 3:
+        tactical = (
+            "La IA parece priorizar recaptura/negación de VP bajo desventaja de puntos; "
+            "debería buscar tomar al menos 1 objetivo este turno y evitar intercambios de bajo impacto."
+        )
+    elif gap > 0:
+        tactical = (
+            "La IA debería mejorar presión sobre objetivos (VP) y reducir movimientos sin impacto en control."
+        )
+    else:
+        tactical = (
+            "Con ventaja de VP, la IA debería consolidar control, proteger unidades expuestas y evitar riesgos innecesarios."
+        )
+    return (
+        f"Contexto de partida detectado (turno {compact.get('turn')}, lado activo {active}, VP {vp_live}). "
+        f"{tactical}"
+    )
+
+
+def _query_targets_ai_decision(query: str) -> bool:
+    q_lower = str(query or "").lower()
+    return any(
+        k in q_lower
+        for k in (
+            "movio la ia",
+            "movió la ia",
+            "que hizo la ia",
+            "qué hizo la ia",
+            "decision ia",
+            "decisión ia",
+            "ultimo movimiento",
+            "último movimiento",
+            "ultimas decisiones",
+            "últimas decisiones",
+            "ultimos turnos",
+            "últimos turnos",
+        )
+    )
+
+
+def _query_targets_live_state_ops(query: str) -> bool:
+    q_lower = str(query or "").lower()
+    return any(
+        k in q_lower
+        for k in (
+            "no he movido",
+            "no movi",
+            "no moví",
+            "unidades sin mover",
+            "pendientes de mover",
+            "sin activar",
+            "no activadas",
+            "que hice este turno",
+            "qué hice este turno",
+            "que movi",
+            "qué moví",
+            "han sido movidas",
+            "han sido movidos",
+            "unidades movidas",
+            "se movieron",
+            "activadas",
+        )
+    ) or _query_targets_ai_decision(query)
+
+
+def _is_manual_scope(context: Dict | None) -> bool:
+    ctx = context or {}
+    return str(ctx.get("assistant_scope", "") or "").strip().lower() == "manual"
 
 
 def _clean_text(text: str) -> str:
@@ -156,6 +533,11 @@ def _prefer_data_for_unit_queries(query: str, evidence: Dict[str, List[Dict]]) -
 
 def _llm_enabled() -> bool:
     return str(os.getenv("ASSAULT_RAG_LLM_ENABLED", "1")).strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _situation_llm_enabled() -> bool:
+    # Keep LLM enabled by default for richer tactical narration.
+    return str(os.getenv("ASSAULT_RAG_SITUATION_LLM_ENABLED", "1")).strip().lower() in {"1", "true", "yes", "on"}
 
 
 def _ollama_chat(model: str, prompt: str, timeout_s: float = 25.0) -> str:
@@ -301,23 +683,57 @@ def _llm_refine_situation(
 
 
 def rag_query(query: str, requested_mode: str | None = None, context: Dict | None = None) -> Dict:
-    mode = classify_query_mode(query, requested_mode)
+    manual_scope = _is_manual_scope(context)
+    effective_query = _memory_rewrite_query(query, context)
+    if not manual_scope:
+        effective_query = _augment_query_with_state_context(effective_query, context)
+    mode = classify_query_mode(effective_query, requested_mode)
+    if mode == "rules" and _looks_like_counter_query(effective_query):
+        # Counter/icon questions usually need both manual semantics and
+        # unit/catalog anchors (labels, categories, symbols).
+        mode = "hybrid"
+    # UX guardrail: unit-definition questions in "rules" mode are often backed
+    # by game-data catalog, but combat-resolution questions need rules + data.
+    if (
+        mode == "rules"
+        and _looks_like_unit_catalog_query(effective_query)
+        and not _looks_like_combat_resolution_query(effective_query)
+    ):
+        mode = "data"
+    elif mode == "rules" and _looks_like_combat_resolution_query(effective_query):
+        mode = "hybrid"
     evidence = _prefer_data_for_unit_queries(
-        query=query,
-        evidence=retrieve_evidence(query, mode=mode),
+        query=effective_query,
+        evidence=retrieve_evidence(effective_query, mode=mode),
     )
+    # UX fallback: users can leave "Datos" selected while asking rule/combat questions.
+    # If data retrieval is empty, retry with hybrid before declaring NO_EVIDENCE.
+    if (
+        mode == "data"
+        and len(evidence.get("game_data", [])) == 0
+        and len(evidence.get("rules", [])) == 0
+    ):
+        fallback_evidence = _prefer_data_for_unit_queries(
+            query=effective_query,
+            evidence=retrieve_evidence(effective_query, mode="hybrid"),
+        )
+        if len(fallback_evidence.get("game_data", [])) > 0 or len(fallback_evidence.get("rules", [])) > 0:
+            evidence = fallback_evidence
+            mode = "hybrid"
     citations: List[Dict] = []
-    citations.extend(_build_citation(r, "rule", query=query) for r in evidence.get("rules", []))
-    citations.extend(_build_citation(d, "data", query=query) for d in evidence.get("game_data", []))
+    citations.extend(_build_citation(r, "rule", query=effective_query) for r in evidence.get("rules", []))
+    citations.extend(_build_citation(d, "data", query=effective_query) for d in evidence.get("game_data", []))
     limitations: List[str] = []
     if not citations:
         limitations.append("NO_EVIDENCE")
-    if _looks_like_unit_catalog_query(query) and len(evidence.get("game_data", [])) == 0:
+    if _looks_like_unit_catalog_query(effective_query) and len(evidence.get("game_data", [])) == 0:
         limitations.append("NO_GAME_DATA_EVIDENCE_FOR_UNIT_QUERY")
-    answer = _build_query_answer(query, evidence)
+    if requested_mode == "data" and mode == "hybrid":
+        limitations.append("AUTO_FALLBACK_DATA_TO_HYBRID")
+    answer = _build_query_answer(effective_query, evidence)
     if _llm_enabled():
         try:
-            llm_answer = _answer_with_llm(query, evidence, context=context)
+            llm_answer = _answer_with_llm(effective_query, evidence, context=context)
             if llm_answer:
                 answer = llm_answer
             else:
@@ -326,6 +742,26 @@ def rag_query(query: str, requested_mode: str | None = None, context: Dict | Non
             limitations.append("LLM_UNAVAILABLE_FALLBACK")
         except Exception:
             limitations.append("LLM_ERROR_FALLBACK")
+    # For operational match questions, prefer live state/observability over
+    # generic catalog/scenario citations that can mislead the answer.
+    if (not manual_scope) and _query_targets_live_state_ops(query):
+        obs_answer = _fallback_answer_from_state(query, context)
+        if obs_answer:
+            answer = obs_answer
+            if "STATE_CONTEXT_FALLBACK" not in limitations:
+                limitations.append("STATE_CONTEXT_FALLBACK")
+    if (not manual_scope) and not citations:
+        fallback = _fallback_answer_from_state(query, context)
+        if fallback:
+            answer = fallback
+            limitations.append("STATE_CONTEXT_FALLBACK")
+    _memory_store_turn(
+        context=context,
+        query=query,
+        mode=mode,
+        answer=answer,
+        citations=citations,
+    )
     return {
         "mode": mode,
         "answer": answer,
@@ -646,14 +1082,16 @@ def explain_game_situation(state_snapshot: Dict) -> Dict:
     )
 
     # LLM structured refinement: smarter wording with tactical consistency.
-    llm_refined = _llm_refine_situation(
-        state_snapshot=state_snapshot,
-        evidence=ev,
-        priorities=priorities,
-        risks=risks,
-        opportunities=opportunities,
-        key_unit_alerts=key_unit_alerts,
-    )
+    llm_refined = None
+    if _situation_llm_enabled():
+        llm_refined = _llm_refine_situation(
+            state_snapshot=state_snapshot,
+            evidence=ev,
+            priorities=priorities,
+            risks=risks,
+            opportunities=opportunities,
+            key_unit_alerts=key_unit_alerts,
+        )
     if llm_refined:
         situation_summary = str(llm_refined.get("situation_summary") or situation_summary)
         priorities = list(llm_refined.get("priorities") or priorities)

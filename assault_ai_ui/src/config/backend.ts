@@ -1,5 +1,5 @@
 const ENV_API_BASE = String(import.meta.env.VITE_API_BASE_URL || "").trim();
-const ENV_API_PORT = String(import.meta.env.VITE_API_PORT || "8000").trim();
+const ENV_API_PORT = String(import.meta.env.VITE_API_PORT || "8001").trim();
 
 function normalizePath(path: string): string {
   return path.startsWith("/") ? path : `/${path}`;

@@ -248,3 +248,16 @@ powershell -ExecutionPolicy Bypass -File .\scripts\start_parallel_workers.ps1
 
 cd C:\repos\python\assault
 pm2 start .\ecosystem.config.cjs
+
+pm2 ls
+pm2 logs
+pm2 restart all
+pm2 stop all
+pm2 delete all
+pm2 monit
+pm2 save
+
+
+“qué unidades no he movido”
+“pendientes de mover”
+“sin activar / no activadas”

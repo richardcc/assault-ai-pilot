@@ -56,7 +56,10 @@ class Evaluator:
 
     def _normalize_side_key(self, value) -> str:
         raw = getattr(value, "value", value)
-        return str(raw or "").strip().upper()
+        key = str(raw or "").strip().upper()
+        if "." in key:
+            key = key.split(".")[-1]
+        return key
 
     def _ownership_for_side(self, state, side):
         side_to_ownership = getattr(state, "side_to_ownership", {}) or {}
@@ -118,6 +121,38 @@ class Evaluator:
             if hs is not None and getattr(hs, "ownership", None) == own_ownership:
                 out[str(getattr(u, "unit_id", ""))] = 1
         return out
+
+    def _compute_vp_entry_rates(
+        self,
+        vp_entry_opportunities: int,
+        vp_entries_taken: int,
+    ):
+        """Compute VP-entry funnel rates with explicit zero-opportunity handling."""
+        if int(vp_entry_opportunities) <= 0:
+            return None, None
+        conversion = float(vp_entries_taken) / float(vp_entry_opportunities)
+        return conversion, 1.0 - conversion
+
+    def _did_vp_entry_succeed_now(self, objective_delta_real: int, info: dict) -> bool:
+        return bool(
+            objective_delta_real > 0
+            or int(info.get("objective_captured_delta", 0)) > 0
+            or bool(info.get("actor_captured_vp_now", False))
+            or (
+                bool(info.get("actor_on_vp_after", False))
+                and not bool(info.get("actor_vp_owned_by_rl_before", False))
+            )
+        )
+
+    def _is_vp_entry_converted_now(
+        self,
+        can_enter_vp_now: bool,
+        objective_delta_real: int,
+        info: dict,
+    ) -> bool:
+        if not can_enter_vp_now:
+            return False
+        return self._did_vp_entry_succeed_now(objective_delta_real, info)
 
     def run_episode(self):
         advanced_metrics = AdvancedMetrics()
@@ -558,18 +593,17 @@ class Evaluator:
                 # Keep VP-entry funnel coherent:
                 # - attempts: actor had immediate legal VP entry opportunity
                 # - success: that same opportunity was converted in this decision
-                vp_entry_succeeded_now = (
-                    objective_delta_real > 0
-                    or int(info.get("objective_captured_delta", 0)) > 0
-                    or bool(info.get("actor_captured_vp_now", False))
-                    or (
-                        bool(info.get("actor_on_vp_after", False))
-                        and not bool(info.get("actor_vp_owned_by_rl_before", False))
-                    )
+                vp_entry_succeeded_now = self._did_vp_entry_succeed_now(
+                    objective_delta_real=objective_delta_real,
+                    info=info,
                 )
                 # Keep global and per-unit VP entry KPIs coherent:
                 # both track strict funnel conversion from immediate opportunity.
-                vp_entry_converted_now = can_enter_vp_now and vp_entry_succeeded_now
+                vp_entry_converted_now = self._is_vp_entry_converted_now(
+                    can_enter_vp_now=can_enter_vp_now,
+                    objective_delta_real=objective_delta_real,
+                    info=info,
+                )
                 if vp_entry_converted_now:
                     vp_entries_taken += 1
                     if unit_id:
@@ -577,16 +611,7 @@ class Evaluator:
                     if _vp_control_streak_after_entry is not None:
                         vp_control_after_entry_turns.append(int(_vp_control_streak_after_entry))
                     _vp_control_streak_after_entry = 0
-                if (
-                    first_vp_entry_step is None
-                    and (
-                        objective_delta_real > 0
-                        or (
-                            bool(info.get("actor_on_vp_after", False))
-                            and not bool(info.get("actor_vp_owned_by_rl_before", False))
-                        )
-                    )
-                ):
+                if first_vp_entry_step is None and vp_entry_converted_now:
                     first_vp_entry_step = steps + 1
 
                 option = getattr(self.controller, "current_option", None)
@@ -1041,13 +1066,9 @@ class Evaluator:
                 hhi += p * p
             role_diversity_index_stub = max(0.0, 1.0 - hhi)
         total_contacts = vp_contact_steps + vp_hold_steps
-        vp_entry_conversion_rate = (
-            (vp_entries_taken / vp_entry_opportunities)
-            if vp_entry_opportunities > 0 else None
-        )
-        vp_entry_missed_rate = (
-            1.0 - vp_entry_conversion_rate
-            if vp_entry_conversion_rate is not None else None
+        vp_entry_conversion_rate, vp_entry_missed_rate = self._compute_vp_entry_rates(
+            vp_entry_opportunities=vp_entry_opportunities,
+            vp_entries_taken=vp_entries_taken,
         )
         contact_to_progress_delay = None
         progress_to_capture_delay = None

@@ -161,7 +161,7 @@ Format: one row per explicit PDF subsection to avoid ambiguity in coverage.
 | `9.6.2` | Buildings | implemented-partial | terrain/defense/LOS handling | partial | special-case audit |
 | `9.6.3` | Roads and trails | implemented-partial | terrain movement paths | limited | exact cost-rule parity |
 | `9.6.4` | Fortifications | implemented-partial | `assault_model/rules/fortification_rules.py` | partial | exhaustive rule cases |
-| `9.6.5` | Obstacles | implemented-partial | terrain/marker interactions | limited | blocking/interaction tests |
+| `9.6.5` | Obstacles | implemented-partial | terrain/marker interactions | `assault_model/tests/test_pdf_subsection_trace_strict_pass.py::test_9_6_5_obstacle_crossing_flagged_for_combat_context` + `assault_model/tests/test_modifier_parity_ranged_close.py::test_cc001_crossed_obstacle_flag_is_set_in_context` | expand blocking/interaction matrix beyond close-combat entry |
 | `9.6.6` | Minefields | implemented-partial | movement/terrain marker flow | limited | trigger/damage parity tests |
 | `9.7` | Capturing objective hexes | implemented | game state ownership + VP tracker | eval metrics | corner-case ownership tests |
 | `9.8` | Infantry specific movement | implemented-partial | infantry movement + unit traits | partial | all subclauses (`9.8.1`,`9.8.2`) |
@@ -175,8 +175,8 @@ Format: one row per explicit PDF subsection to avoid ambiguity in coverage.
 | `10.5` | Direct fire spotting | implemented-partial | spotting hooks in ranged flow | partial | full spotting rule matrix |
 | `10.6` | Arc of fire | implemented-partial | attack legality/action generation | partial | strict arc constraints tests |
 | `10.7` | Resolving combat + criticals | implemented | ranged resolver critical paths | combat tests | buildings/vehicle edge suite |
-| `10.8` | Attack dice modifiers | implemented-partial | unit attributes/status/experience in resolver | partial | modifier table parity |
-| `10.9` | Defense dice modifiers | implemented-partial | terrain/LOS/status modifiers | partial | modifier table parity |
+| `10.8` | Attack dice modifiers | implemented-partial | unit attributes/status/experience in resolver | `assault_model/tests/test_pdf_subsection_trace_strict_pass.py::test_10_8_attack_modifier_suppressed_attacker_drops_weakest_die` + `assault_model/tests/test_modifier_parity_ranged_close.py::test_rf002_suppressed_attacker_loses_weakest_die` | extend matrix for experience-level branches |
+| `10.9` | Defense dice modifiers | implemented-partial | terrain/LOS/status modifiers | `assault_model/tests/test_pdf_subsection_trace_strict_pass.py::test_10_9_defense_modifier_hindered_los_adds_green_die` + `assault_model/tests/test_modifier_parity_ranged_close.py::test_rf001_los_hindered_adds_green_defense_die` | expand terrain/fortification cross-product |
 | `10.10` | Ranged fire vs transporting vehicles | implemented-partial | combat + transport interactions | limited | emergency disembark parity |
 | `11.1` | Resolving close combat | implemented | close combat resolver | close-combat tests | round-by-round matrix |
 | `11.2` | Dug-in defender | implemented-partial | defense modifiers | limited | dedicated dug-in tests |
@@ -199,9 +199,12 @@ Format: one row per explicit PDF subsection to avoid ambiguity in coverage.
   - `6.4` / `8.1` (WAIT/pass activation progression)
   - `9.4` (terrain movement cost baseline)
   - `9.6.4` (fortification defense bonus presence)
+  - `9.6.5` (obstacle crossing flag in combat context)
   - `9.7` (objective hex control switch)
   - `10.2-10.4` (LOS blocked/hindered)
   - `10.5` (spotting fail path)
+  - `10.8` (suppressed attacker drops weakest attack die)
+  - `10.9` (hindered LOS adds defense die modifier)
   - `13.3` (suppression -> fallback transition)
 
 ## Gap-Closing Roadmap

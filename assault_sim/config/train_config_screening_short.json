@@ -5,25 +5,25 @@
   "scenario_schedule": [
     {
       "id": "battaglia_cittadina_2_1",
-      "episodes": 300
+      "episodes": 120
     },
     {
       "id": "battaglia_cittadina_2_1",
-      "episodes": 700
+      "episodes": 180
     }
   ],
   "seed": 42,
-  "total_updates": 4000,
+  "total_updates": 1200,
   "rollout_steps": 160,
-  "num_envs": 22,
+  "num_envs": 12,
   "batch_rollouts": 4,
   "lr": 8e-05,
   "eval_interval": 200,
   "eval_min_improvement": 0.01,
-  "sb3_total_timesteps": 320000,
+  "sb3_total_timesteps": 60000,
   "sb3_num_envs": 1,
-  "sb3_n_steps": 1024,
-  "sb3_batch_size": 256,
+  "sb3_n_steps": 512,
+  "sb3_batch_size": 128,
   "sb3_n_epochs": 6,
   "sb3_gamma": 0.995,
   "sb3_gae_lambda": 0.97,
@@ -36,8 +36,8 @@
   "sb3_models_subdir_template": "scenario_{scenario}/side_{side}",
   "sb3_clean_models_before_train": false,
   "sb3_train_lean": true,
-  "sb3_eval_freq": 20000,
-  "sb3_eval_episodes": 5,
+  "sb3_eval_freq": 10000,
+  "sb3_eval_episodes": 3,
   "sb3_net_arch": [
     256,
     256
