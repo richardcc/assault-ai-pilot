@@ -85,6 +85,49 @@ GE_50MM_MORTAR → 0.26 dmg/atk
 
 ---
 
+# PHASE 2.9 — REACTION FIRE + ASSAULT EXECUTION 🎯
+
+## Objective
+- Move from "combat contact exists" to "combat conversion exists":
+  - Reaction Fire used with intent (not random spam).
+  - Assault/melee used when tactical advantage is favorable.
+
+## Reaction Fire workstream
+- [ ] Keep strict policy matrix gate as hard contract (`always/balanced/never`).
+- [ ] Add MuZero-specific telemetry for reaction windows:
+  - `reaction_window_count`, `reaction_fire_count`, `reaction_fire_skipped_count`.
+- [ ] Add side-by-side KPI between train/eval:
+  - reaction fire activation rate
+  - kill conversion after reaction fire
+  - damage prevented/induced proxy.
+- [ ] Define fail-fast rule:
+  - if reaction fire rate rises while win/mission KPIs drop, rollback last lever.
+
+## Assault (melee) workstream
+- [ ] Add explicit action-family tracking for `ASSAULT_MELEE` in MuZero outputs.
+- [ ] Add "assault quality" KPIs:
+  - melee attempts
+  - melee success rate
+  - melee kills per attempt
+  - melee damage per attempt
+- [ ] Add engagement context tags:
+  - favorable vs unfavorable assault (based on local advantage proxy).
+- [ ] Gate misuse:
+  - high assault volume with low conversion blocks promotion.
+
+## Joint acceptance gates
+- [ ] Reaction Fire contract remains PASS under strict matrix.
+- [ ] Assault usage is non-zero in combat-heavy episodes.
+- [ ] `capture_conversion_after_contact` does not regress.
+- [ ] `loss_rate` does not regress while combat metrics improve.
+
+## Exit criteria
+- Reaction Fire remains controlled (not disabled, not spam-only).
+- Assault contributes positive net value in eval traces.
+- Improvement visible in both combat KPIs and mission KPIs.
+
+---
+
 # PHASE 3 — REWARD QUALITY ⛔ BLOCKED
 - [ ] Complete reward-quality audit and deploy final reward function
 

@@ -246,6 +246,38 @@ python .\scripts\prefect_flow.py --target-repo "C:\repos\python\assault" --loop 
 cd C:\repos\python\assault-experiments-orchestrator
 powershell -ExecutionPolicy Bypass -File .\scripts\start_parallel_workers.ps1
 
+
+
+“qué unidades no he movido”
+“pendientes de mover”
+“sin activar / no activadas”
+
+
+***************************
+redblobgames 
+CNN
+MCTS like
+Hexagdly
+
+-----------
+cd C:\repos\python\assault
+python -m alphazero_project.main
+
+
+
+powershell -ExecutionPolicy Bypass -File .\scripts\run_muzero_train_and_bench.ps1
+
+
+
+.\scripts\run_muzero_train_and_bench.ps1 -Profile fast -OpenViewer
+.\scripts\run_muzero_train_and_bench.ps1 -Profile test -OpenViewer
+.\scripts\run_muzero_train_and_bench.ps1 -Profile quality -OpenViewer
+
+
+.\scripts\run_muzero_reaction_fire_ab.ps1 -Profile fast 
+
+
+
 cd C:\repos\python\assault
 pm2 start .\ecosystem.config.cjs
 
@@ -257,7 +289,3 @@ pm2 delete all
 pm2 monit
 pm2 save
 
-
-“qué unidades no he movido”
-“pendientes de mover”
-“sin activar / no activadas”

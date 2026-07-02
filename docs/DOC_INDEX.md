@@ -11,7 +11,11 @@ This is the central index for the documentation set.
 - [Class Contracts (Hierarchical Overview)](class_contracts/index.md)
 - [Class Contracts (Flat Full View)](CLASS_CONTRACTS.md)
 - [Build HTML Docs](BUILD_HTML.md)
+- [Scripts Index](SCRIPTS_INDEX.md)
 - [Backend Architecture State](backend/BACKEND_ARCHITECTURE_STATE.md)
+- [Benchmark Protocol](BENCHMARK_PROTOCOL.md)
+- [Observability Spec](OBSERVABILITY_SPEC.md)
+- [XAI Report Spec](XAI_REPORT_SPEC.md)
 
 ## Rules Documentation
 

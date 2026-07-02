@@ -5,6 +5,7 @@ import json
 import os
 import re
 import subprocess
+import sys
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -395,6 +396,334 @@ def _latest_report_path(reports_dir: Path) -> Path | None:
     return files[-1] if files else None
 
 
+def _runs_root(repo_root: Path) -> Path:
+    return (repo_root / "runs").resolve()
+
+
+def _list_muzero_runs(repo_root: Path, limit: int = 50) -> list[dict]:
+    root = _runs_root(repo_root)
+    if not root.exists():
+        return []
+    run_dirs = [p for p in root.glob("muzero_*") if p.is_dir()]
+    run_dirs = sorted(run_dirs, key=lambda p: p.stat().st_mtime, reverse=True)[: max(1, int(limit))]
+    out: list[dict] = []
+    for rd in run_dirs:
+        run_manifest = rd / "run_manifest.json"
+        metrics = rd / "metrics" / "summary.json"
+        integrity = rd / "events" / "integrity.json"
+        unitsides = rd / "metrics" / "units_sides.json"
+        channels = rd / "metrics" / "observation_channels.json"
+        out.append(
+            {
+                "run_id": rd.name,
+                "run_dir": str(rd),
+                "has_manifest": run_manifest.exists(),
+                "has_metrics": metrics.exists(),
+                "has_integrity": integrity.exists(),
+                "has_unitsides": unitsides.exists(),
+                "has_channels": channels.exists(),
+            }
+        )
+    return out
+
+
+def _read_muzero_run(repo_root: Path, run_id: str) -> dict:
+    root = _runs_root(repo_root)
+    rd = (root / run_id).resolve()
+    try:
+        rd.relative_to(root)
+    except Exception:
+        raise ValueError("invalid run_id")
+    if not rd.exists() or not rd.is_dir():
+        raise FileNotFoundError("run not found")
+    manifest_path = rd / "run_manifest.json"
+    metrics_path = rd / "metrics" / "summary.json"
+    integrity_path = rd / "events" / "integrity.json"
+    manifest = _read_json(manifest_path) if manifest_path.exists() else {}
+    return {
+        "run_id": run_id,
+        "scenario_id": manifest.get("scenario_id"),
+        "seed": manifest.get("seed"),
+        "manifest_config": manifest.get("config", {}) or {},
+        "metrics": (_read_json(metrics_path) if metrics_path.exists() else {}),
+        "integrity": (_read_json(integrity_path) if integrity_path.exists() else {}),
+    }
+
+
+def _read_bench_latest(repo_root: Path) -> dict:
+    path = (repo_root / "runs" / "bench_latest.json").resolve()
+    if not path.exists():
+        return {"scenario_id": "", "results": []}
+    return _read_json(path)
+
+
+def _read_muzero_channels(repo_root: Path, run_id: str) -> dict:
+    root = _runs_root(repo_root)
+    rd = (root / run_id).resolve()
+    try:
+        rd.relative_to(root)
+    except Exception:
+        raise ValueError("invalid run_id")
+    path = rd / "metrics" / "observation_channels.json"
+    if not path.exists():
+        raise FileNotFoundError(
+            f"channel preview not found for run '{run_id}'. "
+            "Re-run training with CNN encoder to generate metrics/observation_channels.json."
+        )
+    return _read_json(path)
+
+
+def _read_muzero_scenario_hexes(repo_root: Path, run_id: str) -> dict:
+    run_payload = _read_muzero_run(repo_root, run_id)
+    scenario_id = str(run_payload.get("scenario_id") or "").strip()
+    seed = int(run_payload.get("seed") or 0)
+    if not scenario_id:
+        raise ValueError("run missing scenario_id")
+    from assault_model.map.terrain_config import terrain_config
+    from voec_sim.configs.config_loader import load_voec_config
+
+    voec_cfg = load_voec_config((repo_root / "voec_sim" / "configs" / "voec_config.yaml").resolve())
+    scenario_path = (voec_cfg.assets.scenarios_path / f"{scenario_id}.json").resolve()
+    map_catalog_path = voec_cfg.assets.map_piece_catalog_path.resolve()
+    if not scenario_path.exists():
+        raise FileNotFoundError(f"scenario file not found: {scenario_path}")
+    if not map_catalog_path.exists():
+        raise FileNotFoundError(f"map piece catalog not found: {map_catalog_path}")
+
+    raw_scenario = _read_json(scenario_path)
+    raw_catalog = _read_json(map_catalog_path)
+    catalog_pieces = (raw_catalog.get("pieces", {}) or {}) if isinstance(raw_catalog, dict) else {}
+    hexes_by_key: dict[str, dict] = {}
+    for piece in list((raw_scenario.get("map", {}) or {}).get("pieces", []) or []):
+        piece_id = str(piece.get("id", "")).strip()
+        origin = piece.get("origin", [0, 0]) if isinstance(piece, dict) else [0, 0]
+        origin_q = int(origin[0]) if isinstance(origin, list) and len(origin) >= 2 else 0
+        origin_r = int(origin[1]) if isinstance(origin, list) and len(origin) >= 2 else 0
+        piece_def = catalog_pieces.get(piece_id, {}) if isinstance(catalog_pieces, dict) else {}
+        for h in list((piece_def.get("hexes", []) if isinstance(piece_def, dict) else []) or []):
+            q = origin_q + int(h.get("q", 0))
+            r = origin_r + int(h.get("r", 0))
+            terrain = str(h.get("terrain", "clear"))
+            key = f"{q},{r}"
+            hexes_by_key[key] = {"q": q, "r": r, "terrain": terrain}
+
+    playable_hexes = sorted(
+        [{"q": int(v["q"]), "r": int(v["r"])} for v in hexes_by_key.values()],
+        key=lambda x: (int(x["r"]), int(x["q"])),
+    )
+    vp_hexes = [
+        {"q": int(h.get("q")), "r": int(h.get("r"))}
+        for h in list(((raw_scenario.get("vp", {}) or {}).get("hexes", []) or []))
+        if isinstance(h.get("q"), int) and isinstance(h.get("r"), int)
+    ]
+    terrain_move_cost_by_hex: dict[str, float] = {}
+    terrain_cover_by_hex: dict[str, float] = {}
+    terrain_los_block_by_hex: dict[str, int] = {}
+    for key, payload in hexes_by_key.items():
+        terrain = str(payload.get("terrain", "clear"))
+        move_cost = terrain_config.get_move_cost(terrain, "foot", default=1)
+        if move_cost is None:
+            terrain_move_cost_by_hex[key] = 0.0
+        else:
+            terrain_move_cost_by_hex[key] = float(max(0, int(move_cost))) / 4.0
+        cover_dice = terrain_config.get_defense_dice(terrain, "INFANTRY")
+        terrain_cover_by_hex[key] = float(len(cover_dice)) / 3.0
+        los_type = str(terrain_config.get_los(terrain)).upper()
+        terrain_los_block_by_hex[key] = 1 if los_type == "BLOCKED" else 0
+    return {
+        "run_id": run_id,
+        "scenario_id": scenario_id,
+        "seed": seed,
+        "hexes": playable_hexes,
+        "vp_hexes": vp_hexes,
+        "terrain_move_cost_by_hex": terrain_move_cost_by_hex,
+        "terrain_cover_by_hex": terrain_cover_by_hex,
+        "terrain_los_block_by_hex": terrain_los_block_by_hex,
+    }
+
+
+def _read_muzero_scenario_roles(repo_root: Path, run_id: str) -> dict:
+    run_payload = _read_muzero_run(repo_root, run_id)
+    scenario_id = str(run_payload.get("scenario_id") or "").strip()
+    if not scenario_id:
+        raise ValueError("run missing scenario_id")
+    from voec_sim.configs.config_loader import load_voec_config
+
+    voec_cfg = load_voec_config((repo_root / "voec_sim" / "configs" / "voec_config.yaml").resolve())
+    scenario_path = (voec_cfg.assets.scenarios_path / f"{scenario_id}.json").resolve()
+    if not scenario_path.exists():
+        raise FileNotFoundError(f"scenario file not found: {scenario_path}")
+    raw = _read_json(scenario_path)
+    units = list(raw.get("units", []) or [])
+    sides = sorted({str(u.get("side", "")).strip() for u in units if str(u.get("side", "")).strip()})
+    victory_outcomes = raw.get("victory_outcomes", {}) or {}
+    tracked_side = str(victory_outcomes.get("tracked_side", "")).strip()
+    tracked_metric = str(victory_outcomes.get("metric", "")).strip()
+    attacker_side = tracked_side if tracked_side in sides else ""
+    if not attacker_side and len(sides) == 1:
+        attacker_side = sides[0]
+    defender_sides = [s for s in sides if s != attacker_side]
+    vp_hexes = list((raw.get("vp", {}) or {}).get("hexes", []) or [])
+    objective_total = len(vp_hexes)
+    table = list(victory_outcomes.get("table", []) or [])
+    for row in table:
+        captured = row.get("captured", {}) if isinstance(row, dict) else {}
+        if isinstance(captured, dict):
+            objective_total = max(objective_total, int(captured.get("max", 0) or 0))
+    return {
+        "run_id": run_id,
+        "scenario_id": scenario_id,
+        "scenario_path": str(scenario_path),
+        "tracked_side": tracked_side,
+        "tracked_metric": tracked_metric,
+        "attacker_side": attacker_side,
+        "defender_sides": defender_sides,
+        "sides": sides,
+        "objective_total": int(objective_total),
+        "inference_source": "scenario_json",
+    }
+
+
+def _read_muzero_xai_decisions(repo_root: Path, run_id: str, limit: int = 2000) -> dict:
+    root = _runs_root(repo_root)
+    rd = (root / run_id).resolve()
+    try:
+        rd.relative_to(root)
+    except Exception:
+        raise ValueError("invalid run_id")
+    path = rd / "xai" / "xai_decisions.jsonl"
+    if not path.exists():
+        raise FileNotFoundError(
+            f"xai decisions not found for run '{run_id}'. "
+            "Re-run training with XAI decision logging enabled to generate xai/xai_decisions.jsonl."
+        )
+    rows: list[dict] = []
+    with path.open("r", encoding="utf-8", errors="replace") as fh:
+        for line in fh:
+            s = line.strip()
+            if not s:
+                continue
+            try:
+                rows.append(json.loads(s))
+            except Exception:
+                continue
+    lim = max(1, min(20000, int(limit)))
+    if len(rows) > lim:
+        rows = rows[-lim:]
+    return {"run_id": run_id, "count": len(rows), "rows": rows}
+
+
+def _read_muzero_timeline(
+    repo_root: Path,
+    run_id: str,
+    iteration: int | None = None,
+    episode: int | None = None,
+) -> dict:
+    try:
+        from agents.muzero.xai.timeline_exporter import export_muzero_episode_timeline
+    except ModuleNotFoundError:
+        repo_root_str = str(repo_root.resolve())
+        if repo_root_str not in sys.path:
+            sys.path.insert(0, repo_root_str)
+        from agents.muzero.xai.timeline_exporter import export_muzero_episode_timeline
+
+    return export_muzero_episode_timeline(
+        repo_root=repo_root,
+        run_id=run_id,
+        iteration=iteration,
+        episode=episode,
+    )
+
+
+def _read_muzero_timeline_file(repo_root: Path, rel_path: str) -> dict:
+    raw = str(rel_path or "").strip()
+    if not raw:
+        raise ValueError("missing path")
+    path = (repo_root / raw).resolve()
+    try:
+        path.relative_to(repo_root.resolve())
+    except Exception:
+        raise ValueError("invalid path")
+    if not path.exists() or not path.is_file():
+        raise FileNotFoundError(f"timeline file not found: {raw}")
+    payload = _read_json(path)
+    transitions = payload.get("transitions", []) if isinstance(payload, dict) else []
+    if not isinstance(transitions, list):
+        transitions = []
+    return {
+        "path": str(path),
+        "schema_version": payload.get("schema_version", ""),
+        "scenario_id": payload.get("scenario_id", ""),
+        "seed": payload.get("seed", 0),
+        "meta": payload.get("meta", {}) if isinstance(payload, dict) else {},
+        "count": len(transitions),
+        "transitions": transitions,
+    }
+
+
+def _export_muzero_timeline_file(
+    repo_root: Path,
+    run_id: str,
+    iteration: int | None = None,
+    episode: int | None = None,
+    out_rel: str = "",
+) -> dict:
+    payload = _read_muzero_timeline(
+        repo_root=repo_root,
+        run_id=run_id,
+        iteration=iteration,
+        episode=episode,
+    )
+    out_path = (repo_root / str(out_rel).strip()).resolve() if str(out_rel).strip() else (
+        repo_root / "runs" / run_id / "xai" / "muzero_timeline_latest.json"
+    ).resolve()
+    try:
+        out_path.relative_to(repo_root.resolve())
+    except Exception:
+        raise ValueError("invalid out path")
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    out_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+    rel = out_path.relative_to(repo_root.resolve()).as_posix()
+    return {
+        "ok": True,
+        "run_id": run_id,
+        "path": str(out_path),
+        "path_rel": rel,
+        "count": len(payload.get("transitions", []) or []),
+        "timeline": payload,
+    }
+
+
+def _summarize_muzero_unitsides(repo_root: Path, run_id: str) -> dict:
+    root = _runs_root(repo_root)
+    rd = (root / run_id).resolve()
+    try:
+        rd.relative_to(root)
+    except Exception:
+        raise ValueError("invalid run_id")
+    metrics_path = rd / "metrics" / "units_sides.json"
+    if not metrics_path.exists():
+        raise FileNotFoundError(
+            f"units/sides metrics not found for run '{run_id}'. "
+            "Re-run training with updated MuZero runner to generate metrics/units_sides.json."
+        )
+    payload = _read_json(metrics_path)
+    required = {
+        "transition_events",
+        "side_turn_counts",
+        "side_turn_rates",
+        "top_action_units",
+        "units_by_side",
+        "global_actions",
+        "vp_summary",
+        "strategy_summary",
+    }
+    missing = [k for k in required if k not in payload]
+    if missing:
+        raise ValueError(f"units/sides metrics contract violation: missing fields {missing}")
+    return payload
+
+
 def _page_html() -> str:
     return """<!doctype html>
 <html>
@@ -434,6 +763,72 @@ def _page_html() -> str:
     .kv { display:grid; grid-template-columns:repeat(auto-fit,minmax(210px,1fr)); gap:8px; }
     .kv .k { color:var(--muted); font-size:12px; }
     .kv .v { font-weight:600; font-size:16px; margin-top:2px; }
+    #muzeroGlobalActionsSummary > .panel { margin-bottom:10px; }
+    #muzeroGlobalActionsSummary .kv span {
+      display:inline-block;
+      margin-right:10px;
+      margin-bottom:2px;
+      white-space:nowrap;
+    }
+    #muzeroGlobalActionsSummary td,
+    #muzeroGlobalActionsSummary th {
+      white-space:nowrap;
+      font-size:12px;
+    }
+    @media (max-width: 1400px) {
+      #muzeroGlobalActionsSummary .kv {
+        grid-template-columns: 1fr !important;
+      }
+      #muzeroGlobalActionsSummary .kv span {
+        white-space:normal;
+        word-break:break-word;
+      }
+      #muzeroGlobalActionsSummary td,
+      #muzeroGlobalActionsSummary th {
+        white-space:normal;
+      }
+    }
+    @media (max-width: 1200px) {
+      #muzeroXaiReplayLayout {
+        grid-template-columns: 1fr !important;
+      }
+    }
+    #muzeroXaiSummaryGrid {
+      display:grid;
+      grid-template-columns:repeat(4,minmax(180px,1fr));
+      gap:8px 10px;
+    }
+    #muzeroXaiSummaryGrid .xai-card {
+      background:#10141d;
+      border:1px solid var(--border);
+      border-radius:8px;
+      padding:8px;
+    }
+    #muzeroXaiSummaryGrid .xai-card .k {
+      color:var(--muted);
+      font-size:12px;
+      margin-bottom:4px;
+    }
+    #muzeroXaiSummaryGrid .xai-card .v {
+      font-weight:700;
+      font-size:16px;
+    }
+    #muzeroXaiSummaryGrid .xai-wide {
+      grid-column:1 / -1;
+    }
+    #muzeroXaiSummaryGrid .xai-wide .v {
+      font-size:13px;
+      font-weight:600;
+      line-height:1.35;
+      white-space:normal;
+      word-break:break-word;
+    }
+    @media (max-width: 1400px){
+      #muzeroXaiSummaryGrid { grid-template-columns:repeat(2,minmax(180px,1fr)); }
+    }
+    @media (max-width: 900px){
+      #muzeroXaiSummaryGrid { grid-template-columns:1fr; }
+    }
     .hist-grid { display:grid; grid-template-columns:1fr; gap:10px; }
     .sparkline { width:100%; height:72px; background:#10141d; border:1px solid var(--border); border-radius:8px; padding:8px; box-sizing:border-box; }
     .units-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(340px,1fr)); gap:10px; }
@@ -442,14 +837,24 @@ def _page_html() -> str:
 <body>
   <h1>SB3 Eval Viewer</h1>
   <div class="top panel">
-    <label>Report:
+    <label>Mode:
+      <select id="dashboardMode">
+        <option value="sb3" selected>SB3</option>
+        <option value="muzero">MuZero</option>
+      </select>
+    </label>
+    <label id="muzeroRunLabel">Run:
+      <select id="muzeroRunSelectTop"></select>
+    </label>
+    <button id="muzeroReloadBtnTop">Reload Runs</button>
+    <label id="sb3ReportLabel">Report:
       <select id="reportSelect"></select>
     </label>
     <button id="reloadBtn">Reload</button>
     <span id="meta" class="sub"></span>
   </div>
 
-  <div class="panel" style="margin-bottom:12px">
+  <div class="panel" id="sb3ServiceUrlsPanel" style="margin-bottom:12px">
     <h3 style="margin:0 0 8px">Service URLs</h3>
     <div class="sub" style="display:flex;gap:12px;flex-wrap:wrap">
       <a href="http://127.0.0.1:8765" target="_blank" rel="noopener">SB3 Viewer (8765)</a>
@@ -463,19 +868,29 @@ def _page_html() -> str:
   <div class="cards" id="cards"></div>
 
   <div class="tabs">
-    <button class="tab-btn active" data-tab="overview">Overview</button>
-    <button class="tab-btn" data-tab="howto">How-To</button>
-    <button class="tab-btn" data-tab="training">Training</button>
-    <button class="tab-btn" data-tab="mission">Mission</button>
-    <button class="tab-btn" data-tab="vps">VPs</button>
-    <button class="tab-btn" data-tab="combats">Combats</button>
-    <button class="tab-btn" data-tab="overrides">Overrides</button>
-    <button class="tab-btn" data-tab="actions">Actions</button>
-    <button class="tab-btn" data-tab="units">Units/Side</button>
-    <button class="tab-btn" data-tab="strategy">Strategies</button>
-    <button class="tab-btn" data-tab="rag">RAG Copilot</button>
-    <button class="tab-btn" data-tab="history">History</button>
-    <button class="tab-btn" data-tab="control">Control</button>
+    <button class="tab-btn active" data-tab="overview" data-domain="sb3">Overview</button>
+    <button class="tab-btn" data-tab="howto" data-domain="sb3">How-To</button>
+    <button class="tab-btn" data-tab="training" data-domain="sb3">Training</button>
+    <button class="tab-btn" data-tab="mission" data-domain="sb3">Mission</button>
+    <button class="tab-btn" data-tab="vps" data-domain="sb3">VPs</button>
+    <button class="tab-btn" data-tab="combats" data-domain="sb3">Combats</button>
+    <button class="tab-btn" data-tab="overrides" data-domain="sb3">Overrides</button>
+    <button class="tab-btn" data-tab="actions" data-domain="sb3">Actions</button>
+    <button class="tab-btn" data-tab="units" data-domain="sb3">Units/Side</button>
+    <button class="tab-btn" data-tab="strategy" data-domain="sb3">Strategies</button>
+    <button class="tab-btn" data-tab="rag" data-domain="sb3">RAG Copilot</button>
+    <button class="tab-btn" data-tab="history" data-domain="sb3">History</button>
+    <button class="tab-btn" data-tab="control" data-domain="both">Control</button>
+    <button class="tab-btn" data-tab="muzero" data-domain="muzero">MuZero Ops</button>
+    <button class="tab-btn" data-tab="muzero-runs" data-domain="muzero">MuZero Recent Runs</button>
+    <button class="tab-btn" data-tab="muzero-units" data-domain="muzero">MuZero Units/Side</button>
+    <button class="tab-btn" data-tab="muzero-actions" data-domain="muzero">MuZero Global Actions</button>
+    <button class="tab-btn" data-tab="muzero-vps" data-domain="muzero">MuZero VPs</button>
+    <button class="tab-btn" data-tab="muzero-strategies" data-domain="muzero">MuZero Strategies</button>
+    <button class="tab-btn" data-tab="muzero-channels" data-domain="muzero">MuZero Channels</button>
+    <button class="tab-btn" data-tab="muzero-xai" data-domain="muzero">MuZero XAI Decisions</button>
+    <button class="tab-btn" data-tab="muzero-xai-map" data-domain="muzero">MuZero XAI Map Replay</button>
+    <button class="tab-btn" data-tab="muzero-replay" data-domain="muzero">MuZero Match Replay</button>
   </div>
 
   <div id="tab-overview" class="tab-content active panel">
@@ -638,6 +1053,315 @@ def _page_html() -> str:
     </div>
   </div>
 
+  <div id="tab-muzero" class="tab-content panel">
+    <h3 style="margin-top:0">MuZero Ops</h3>
+    <div class="top" id="muzeroRunBar" style="margin-bottom:8px; display:none">
+      <label>Run:
+        <select id="muzeroRunSelect"></select>
+      </label>
+      <button id="muzeroReloadBtn">Reload Runs</button>
+    </div>
+    <div id="muzeroCards" class="cards"></div>
+    <div class="panel" style="margin-top:8px">
+      <h4 style="margin:0 0 8px 0">Run Detail</h4>
+      <div id="muzeroRunDetail" class="kv"></div>
+    </div>
+    <div class="panel" style="margin-top:8px">
+      <h4 style="margin:0 0 8px 0">Latest Benchmark</h4>
+      <div id="muzeroBenchDetail" class="kv"></div>
+    </div>
+    <div class="panel" style="margin-top:8px">
+      <h4 style="margin:0 0 8px 0">Benchmark Matrix</h4>
+      <table id="muzeroBenchTable">
+        <thead>
+          <tr>
+            <th>Agent</th><th>Episodes</th><th>Avg Return</th><th>Avg Steps</th><th>Finished Matches</th><th>Turn-Limit Finish</th><th>Win</th><th>Winner Sides</th><th>Tracked Capt Avg</th><th>Outcome Mix (Tracked)</th><th>VP Final Avg by Side</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+      <div class="sub" id="muzeroBenchReasons" style="margin-top:8px"></div>
+    </div>
+  </div>
+
+  <div id="tab-muzero-units" class="tab-content panel">
+    <h3 style="margin-top:0">MuZero Units / Sides</h3>
+    <div id="muzeroUnitsSidesDetail" class="kv"></div>
+    <table id="muzeroUnitsTable" style="margin-top:8px">
+      <thead>
+        <tr><th>Side</th><th>Unit</th><th>Name</th><th>Category</th><th>Class</th><th>Dmg</th><th>Actions</th><th>BlockedTurns</th><th>Exp/Unit</th><th>Delta</th><th>Load</th><th>Atk</th><th>Kills</th><th>Dmg/Atk</th><th>Share Global</th><th>Share in Side</th></tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+  </div>
+
+  <div id="tab-muzero-runs" class="tab-content panel">
+    <h3 style="margin-top:0">MuZero Recent Runs</h3>
+    <table id="muzeroRunsTable">
+      <thead>
+        <tr>
+          <th>Run ID</th><th>Manifest</th><th>Metrics</th><th>Integrity</th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+  </div>
+
+  <div id="tab-muzero-actions" class="tab-content panel">
+    <h3 style="margin-top:0">MuZero Global Actions</h3>
+    <div id="muzeroGlobalActionsSummary"></div>
+    <div class="top" style="margin-top:8px">
+      <label>Sort unified table:
+        <select id="muzeroGlobalActionsSort">
+          <option value="count" selected>Total Count</option>
+          <option value="global_succ">Global Success</option>
+          <option value="global_exp_dmg">Global Exp Dmg</option>
+          <option value="global_exp_kills">Global Exp Kills</option>
+          <option value="it_succ">IT Success</option>
+          <option value="us_succ">US Success</option>
+        </select>
+      </label>
+    </div>
+    <div class="panel" style="margin-top:8px">
+      <h4 style="margin:0 0 8px 0">Unified Actions + Attack Effectiveness</h4>
+      <table id="muzeroGlobalActionsBySideTable">
+        <thead><tr><th>Action Kind</th><th>Total Count</th><th>Total Rate</th><th>IT Count</th><th>IT Rate</th><th>US Count</th><th>US Rate</th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </div>
+
+  <div id="tab-muzero-vps" class="tab-content panel">
+    <h3 style="margin-top:0">MuZero VPs</h3>
+    <div id="muzeroVpsSummary" class="kv"></div>
+    <div class="panel" style="margin-top:8px">
+      <h4 style="margin:0 0 8px 0">Objective Decision Flow (Explainability Graph)</h4>
+      <div id="muzeroVpsExplainGraph"></div>
+    </div>
+    <div class="panel" style="margin-top:8px">
+      <h4 style="margin:0 0 8px 0">Objective Breakdown Graph (By Side)</h4>
+      <div id="muzeroVpsHierBySideGraph"></div>
+    </div>
+    <div class="panel" style="margin-top:8px">
+      <h4 style="margin:0 0 8px 0">Path Transition Matrix (Top)</h4>
+      <table id="muzeroVpsPathTransitionsTable">
+        <thead><tr><th>Scope</th><th>From Path</th><th>To Path</th><th>Count</th><th>Rate from From-Path</th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+    <div class="panel" style="margin-top:8px">
+      <h4 style="margin:0 0 8px 0">Time-To-Convert by Reason (Top)</h4>
+      <table id="muzeroVpsTimeToConvertReasonTable">
+        <thead><tr><th>Scope</th><th>Reason</th><th>Count</th><th>Observed Conversion</th><th>TTC p50</th><th>TTC p90</th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+    <div class="panel" style="margin-top:8px">
+      <h4 style="margin:0 0 8px 0">Top Harmful Paths</h4>
+      <table id="muzeroVpsHarmfulPathsTable">
+        <thead><tr><th>Path</th><th>Count</th><th>No-Conversion Rate</th><th>TTC p50</th><th>TTC p90</th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+    <div class="panel" style="margin-top:8px">
+      <h4 style="margin:0 0 8px 0">VP Actions by Side</h4>
+      <table id="muzeroVpsBySideTable">
+        <thead>
+          <tr><th>Side</th><th>VP Init Avg</th><th>VP Final Avg</th><th>VP Gained Sum</th><th>VP Lost Sum</th><th>VP Net Sum</th><th>VP-related Actions</th><th>Capture Actions</th><th>VP Captures (state)</th><th>VP Capture Rate in Side</th><th>Capture Rate in Side</th><th>Units with VP Captures</th></tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </div>
+
+  <div id="tab-muzero-strategies" class="tab-content panel">
+    <h3 style="margin-top:0">MuZero Strategies</h3>
+    <div id="muzeroStrategiesSummary" class="kv"></div>
+    <div class="panel" style="margin-top:8px">
+      <h4 style="margin:0 0 8px 0">Strategy Mix by Side</h4>
+      <table id="muzeroStrategiesBySideTable">
+        <thead><tr><th>Strategy</th><th>Total Count</th><th>Total Rate</th><th>IT Count</th><th>IT Rate</th><th>US Count</th><th>US Rate</th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </div>
+
+  <div id="tab-muzero-channels" class="tab-content panel">
+    <h3 style="margin-top:0">MuZero Channels</h3>
+    <div id="muzeroChannelsSummary" class="kv"></div>
+    <div class="top" style="margin-top:8px">
+      <label>Snapshot:
+        <select id="muzeroChannelSnapshotSelect"></select>
+      </label>
+      <label>Channel:
+        <select id="muzeroChannelSelect"></select>
+      </label>
+      <label>
+        <input type="checkbox" id="muzeroShowConstantChannels" />
+        Show constant channels
+      </label>
+      <button id="muzeroChannelRefreshBtn">Refresh</button>
+    </div>
+    <table id="muzeroChannelsTable" style="margin-top:8px">
+      <thead>
+        <tr><th>Idx</th><th>Name</th><th>Nonzero Cells</th><th>Nonzero Ratio</th><th>Mean</th><th>Max</th></tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+    <div class="panel" style="margin-top:8px">
+      <h4 style="margin:0 0 8px 0">Channel Heatmap</h4>
+      <div id="muzeroChannelHeatmap" class="sub">No heatmap data.</div>
+    </div>
+  </div>
+
+  <div id="tab-muzero-xai" class="tab-content panel">
+    <h3 style="margin-top:0">MuZero XAI Decisions</h3>
+    <div id="muzeroXaiSummary" class="kv"></div>
+    <div class="top" style="margin-top:8px">
+      <label>Side:
+        <select id="muzeroXaiSideSelect">
+          <option value="">(all)</option>
+          <option value="IT">IT</option>
+          <option value="US">US</option>
+        </select>
+      </label>
+      <label>Action contains:
+        <input id="muzeroXaiActionFilter" placeholder="FIRE_MOVE / CAPTURE / unit id"
+          style="min-width:260px;background:#1f2532;color:var(--txt);border:1px solid var(--border);border-radius:8px;padding:8px 10px;" />
+      </label>
+      <button id="muzeroXaiApplyBtn">Apply</button>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px;">
+      <div class="panel" style="margin-top:0">
+        <h4 style="margin:0 0 8px 0">Table A: Latent Correlations (Top Dims)</h4>
+        <table id="muzeroXaiDimTable">
+          <thead>
+            <tr><th>Dim</th><th>Support</th><th>Attack Rate</th><th>VP Capture Rate</th><th>Top Policy Prob Avg</th><th>Count</th></tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+      <div class="panel" style="margin-top:0">
+        <h4 style="margin:0 0 8px 0">Table B: Decision Ownership by Side</h4>
+        <table id="muzeroXaiOwnershipTable">
+          <thead>
+            <tr><th>Side</th><th>Rows</th><th>Policy Kept</th><th>Overwritten</th></tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
+    <div class="panel" style="margin-top:8px">
+      <h4 style="margin:0 0 8px 0">Table C: Step-Level Decisions (compact)</h4>
+      <table id="muzeroXaiTable">
+        <thead>
+          <tr><th>It/Ep/Step</th><th>Turn</th><th>Side</th><th>Action</th><th>Top Policy</th><th>Top Prob</th><th>Value(root)</th><th>Latent Top Dims</th><th>Dyn Reward</th><th>MCTS (p/H/m)</th></tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </div>
+
+  <div id="tab-muzero-xai-map" class="tab-content panel">
+    <h3 style="margin-top:0">MuZero XAI Map Replay</h3>
+    <div id="muzeroXaiMapSummary" class="kv"></div>
+    <div class="top" style="margin-top:8px">
+      <label>Step:
+        <input id="muzeroXaiMapStep" type="range" min="0" max="0" value="0" style="width:320px" />
+      </label>
+      <span id="muzeroXaiMapStepLabel" class="sub">step 0/0</span>
+      <button id="muzeroXaiMapPlayBtn">Play</button>
+      <button id="muzeroXaiMapPauseBtn">Pause</button>
+      <label>Speed(ms):
+        <input id="muzeroXaiMapSpeed" type="number" value="180" min="40" max="2000"
+          style="width:88px;background:#1f2532;color:var(--txt);border:1px solid var(--border);border-radius:8px;padding:6px 8px;" />
+      </label>
+      <label>Palette:
+        <select id="muzeroXaiMapPalette">
+          <option value="neon" selected>Neon</option>
+          <option value="heat">Heat</option>
+          <option value="mono">Mono</option>
+        </select>
+      </label>
+      <label>Side colors:
+        <select id="muzeroXaiMapSideMode">
+          <option value="blend" selected>Blend</option>
+          <option value="single">Single</option>
+        </select>
+      </label>
+      <label>
+        <input type="checkbox" id="muzeroXaiMapAccumulate" checked />
+        Accumulate intensity
+      </label>
+    </div>
+    <div style="display:grid;grid-template-columns:1.2fr 1fr;gap:10px;margin-top:8px;" id="muzeroXaiReplayLayout">
+      <div class="panel" style="margin-top:0">
+        <h4 style="margin:0 0 8px 0">Spatial Intensity (acting unit + target)</h4>
+        <canvas id="muzeroXaiMapCanvas" width="720" height="560" style="width:100%;max-width:100%;height:560px;background:#0b0f18;border:1px solid var(--border);border-radius:8px;"></canvas>
+      </div>
+      <div style="display:grid;grid-template-rows:1fr 1fr;gap:10px;">
+        <div class="panel" style="margin-top:0">
+          <h4 style="margin:0 0 8px 0">Latent Activations Replay (dXX x step)</h4>
+          <canvas id="muzeroXaiDimsCanvas" width="560" height="270" style="width:100%;max-width:100%;height:270px;background:#0b0f18;border:1px solid var(--border);border-radius:8px;"></canvas>
+        </div>
+        <div class="panel" style="margin-top:0">
+          <h4 style="margin:0 0 8px 0">Latent Resonance Map (synthetic MRI style)</h4>
+          <canvas id="muzeroXaiResCanvas" width="560" height="270" style="width:100%;max-width:100%;height:270px;background:#0b0f18;border:1px solid var(--border);border-radius:8px;"></canvas>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="tab-muzero-replay" class="tab-content panel">
+    <h3 style="margin-top:0">MuZero Match Replay (Timeline)</h3>
+    <div id="muzeroReplaySummary" class="kv"></div>
+    <div class="top" style="margin-top:8px">
+      <button id="muzeroReplayLoadRunBtn">Load from selected run</button>
+      <label>Iter:
+        <input id="muzeroReplayIteration" type="number" value="-1" min="-1" max="9999"
+          style="width:80px;background:#1f2532;color:var(--txt);border:1px solid var(--border);border-radius:8px;padding:6px 8px;" />
+      </label>
+      <label>Ep:
+        <input id="muzeroReplayEpisode" type="number" value="-1" min="-1" max="9999"
+          style="width:80px;background:#1f2532;color:var(--txt);border:1px solid var(--border);border-radius:8px;padding:6px 8px;" />
+      </label>
+      <label>Path:
+        <input id="muzeroReplayPathInput" value="runs/ui_timeline_latest.json"
+          style="min-width:300px;background:#1f2532;color:var(--txt);border:1px solid var(--border);border-radius:8px;padding:8px 10px;" />
+      </label>
+      <button id="muzeroReplayExportBtn">Export now</button>
+      <button id="muzeroReplayLoadPathBtn">Load JSON path</button>
+      <label>Step:
+        <input id="muzeroReplayStep" type="range" min="0" max="0" value="0" style="width:320px" />
+      </label>
+      <span id="muzeroReplayStepLabel" class="sub">step 0/0</span>
+      <button id="muzeroReplayPlayBtn">Play</button>
+      <button id="muzeroReplayPauseBtn">Pause</button>
+      <label>Speed(ms):
+        <input id="muzeroReplaySpeed" type="number" value="220" min="40" max="2000"
+          style="width:88px;background:#1f2532;color:var(--txt);border:1px solid var(--border);border-radius:8px;padding:6px 8px;" />
+      </label>
+    </div>
+    <div class="panel" style="margin-top:8px">
+      <h4 style="margin:0 0 8px 0">Step Details</h4>
+      <div id="muzeroReplayStepDetail" class="kv"></div>
+    </div>
+    <div class="panel" style="margin-top:8px">
+      <h4 style="margin:0 0 8px 0">Map Snapshot</h4>
+      <canvas id="muzeroReplayMapCanvas" width="820" height="520"
+        style="width:100%;max-width:100%;height:520px;background:#0b0f18;border:1px solid var(--border);border-radius:8px;"></canvas>
+    </div>
+    <div class="panel" style="margin-top:8px">
+      <h4 style="margin:0 0 8px 0">Units Snapshot</h4>
+      <table id="muzeroReplayUnitsTable">
+        <thead>
+          <tr><th>Side</th><th>Unit ID</th><th>Unit</th><th>Hex</th><th>HP</th><th>Alive</th></tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </div>
+
 <script>
 function clsByRate(v, goodHigh=true){
   if (goodHigh) return v>=0.30?'ok':(v>=0.20?'warn':'bad');
@@ -662,22 +1386,45 @@ async function getJson(url){ const r=await fetch(url); if(!r.ok) throw new Error
 let currentDetails = [];
 let historyPoints = [];
 let currentRows = [];
+let muzeroRuns = [];
+let latestMuzeroRun = null;
+let latestMuzeroBench = null;
+let latestMuzeroUnitsSides = null;
+let latestMuzeroChannels = null;
+let latestMuzeroXai = null;
+let latestMuzeroScenarioHexes = null;
+let latestMuzeroScenarioRoles = null;
+let muzeroXaiMapTimer = null;
+let latestMuzeroReplay = null;
+let muzeroReplayTimer = null;
+let muzeroReplayHexOverlay = [];
+let muzeroReplayHoverHex = null;
 let controlRenderInFlight = false;
+let dashboardMode = 'sb3';
 
 function firstDetail(){
   return (currentDetails && currentDetails.length) ? currentDetails[0] : null;
 }
 
-async function loadReports() {
-  const data = await getJson('/api/reports');
+async function loadReports(forceRefresh=false) {
   const sel = document.getElementById('reportSelect');
-  const prev = sel.value;
-  sel.innerHTML = '';
-  for (const name of data.reports){
-    const o=document.createElement('option'); o.value=name; o.textContent=name; sel.appendChild(o);
+  const meta = document.getElementById('meta');
+  try {
+    const suffix = forceRefresh ? `?_ts=${Date.now()}` : '';
+    const data = await getJson('/api/reports' + suffix);
+    const prev = sel.value;
+    sel.innerHTML = '';
+    for (const name of data.reports){
+      const o=document.createElement('option'); o.value=name; o.textContent=name; sel.appendChild(o);
+    }
+    if (prev && data.reports.includes(prev)) sel.value=prev;
+    else if (data.latest) sel.value=data.latest;
+    if (!data.reports || !data.reports.length){
+      if (meta) meta.textContent = 'No SB3 reports found in reports dir.';
+    }
+  } catch (e) {
+    if (meta) meta.textContent = `Error loading reports: ${e.message||e}`;
   }
-  if (prev && data.reports.includes(prev)) sel.value=prev;
-  else if (data.latest) sel.value=data.latest;
 }
 
 function renderCards(rows){
@@ -1665,6 +2412,66 @@ function renderHowTo(){
     `;
     rootChecks.appendChild(panel);
   }
+
+  const criticalGuide = document.createElement('div');
+  criticalGuide.className = 'panel';
+  criticalGuide.style.marginBottom = '8px';
+  criticalGuide.innerHTML = `
+    <h4 style="margin:0 0 8px 0">Guia de metricas criticas (SB3)</h4>
+    <table>
+      <thead>
+        <tr><th>Metrica</th><th>Senal critica</th><th>Interpretacion</th><th>Que ajustar</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>true_win_rate / loss_rate</td>
+          <td>win bajo o loss alto sostenido</td>
+          <td>la politica no convierte ventaja tactica en victoria</td>
+          <td>subir presupuesto de entrenamiento, revisar reward de objetivo y mcts</td>
+        </tr>
+        <tr>
+          <td>vp_entry_conversion_rate</td>
+          <td>&lt; 20%</td>
+          <td>el agente llega mal a zonas VP o no las prioriza</td>
+          <td>reforzar reward de entrada VP, revisar canales de VP/distancia</td>
+        </tr>
+        <tr>
+          <td>capture_conversion_after_contact</td>
+          <td>&lt; 5-10%</td>
+          <td>hay contacto pero no se cierra captura</td>
+          <td>subir bonus de captura, penalizar espera con opcion de captura</td>
+        </tr>
+        <tr>
+          <td>captured_final_avg</td>
+          <td>plano o decreciente entre runs</td>
+          <td>estancamiento en control de objetivos</td>
+          <td>incrementar episodios por iteracion y/o mcts_simulations</td>
+        </tr>
+        <tr>
+          <td>finalizer_override</td>
+          <td>&gt; 35%</td>
+          <td>la policy propuesta no pasa filtros tacticos</td>
+          <td>mejorar calidad de acciones base (reward/policy), no solo reglas finales</td>
+        </tr>
+        <tr>
+          <td>sb3_kept</td>
+          <td>muy bajo junto a override alto</td>
+          <td>desalineacion entre politica y criterio tactico</td>
+          <td>ajustar exploracion y calibracion para reducir decisiones inviables</td>
+        </tr>
+        <tr>
+          <td>plan_progress_rate</td>
+          <td>&lt; 10-20%</td>
+          <td>la secuencia de juego no progresa hacia objetivo</td>
+          <td>subir peso de progreso/objetivo en shaping y extender horizonte util</td>
+        </tr>
+      </tbody>
+    </table>
+    <div class="sub" style="margin-top:8px">
+      Regla rapida: primero estabilidad (win/loss), luego embudo VP (entry/capture), y al final eficiencia tactica (override/sb3_kept).
+    </div>
+  `;
+  rootChecks.appendChild(criticalGuide);
 }
 
 function renderDetailTabs(){
@@ -1926,32 +2733,2419 @@ function setupTabs(){
   }
 }
 
-async function loadSelected() {
-  const name = document.getElementById('reportSelect').value;
-  if (!name) return;
-  const data = await getJson('/api/report?name='+encodeURIComponent(name));
-  document.getElementById('meta').textContent = `timestamp=${data.meta?.timestamp||'-'} seed=${data.meta?.seed??'-'} episodes=${data.meta?.episodes??'-'}`;
-  const rows = data.rows || [];
-  currentRows = rows;
-  currentDetails = data.details || [];
-  renderCards(rows);
-  renderRows(rows);
-  renderDetailTabs();
+function activateTab(tabName){
+  const buttons = [...document.querySelectorAll('.tab-btn')];
+  for (const x of buttons) x.classList.remove('active');
+  const btn = buttons.find((b)=>b.dataset.tab === tabName);
+  if (btn) btn.classList.add('active');
+  for (const c of document.querySelectorAll('.tab-content')) c.classList.remove('active');
+  const target = document.getElementById(`tab-${tabName}`);
+  if (target) target.classList.add('active');
 }
 
-document.getElementById('reloadBtn').addEventListener('click', async ()=>{ await loadReports(); await loadSelected(); });
+function applyDashboardMode(mode){
+  dashboardMode = mode === 'muzero' ? 'muzero' : 'sb3';
+  const tabButtons = [...document.querySelectorAll('.tab-btn')];
+  for (const b of tabButtons){
+    const domain = String(b.dataset.domain || 'sb3');
+    const visible = domain === 'both' || domain === dashboardMode;
+    b.style.display = visible ? '' : 'none';
+  }
+  // Keep SB3 header/cards always visible to avoid breaking report UX.
+  const reportSelect = document.getElementById('reportSelect');
+  const reportLabel = document.getElementById('sb3ReportLabel');
+  const reloadBtn = document.getElementById('reloadBtn');
+  const muzeroRunLabel = document.getElementById('muzeroRunLabel');
+  const muzeroReloadBtnTop = document.getElementById('muzeroReloadBtnTop');
+  const muzeroRunBar = document.getElementById('muzeroRunBar');
+  const meta = document.getElementById('meta');
+  const cards = document.getElementById('cards');
+  const serviceUrlsPanel = document.getElementById('sb3ServiceUrlsPanel');
+  const sb3Visible = dashboardMode === 'sb3';
+  if (reportLabel) reportLabel.style.display = sb3Visible ? '' : 'none';
+  if (reportSelect) reportSelect.style.display = sb3Visible ? '' : 'none';
+  if (reloadBtn) reloadBtn.style.display = sb3Visible ? '' : 'none';
+  if (meta) meta.style.display = sb3Visible ? '' : 'none';
+  if (muzeroRunLabel) muzeroRunLabel.style.display = sb3Visible ? 'none' : '';
+  if (muzeroReloadBtnTop) muzeroReloadBtnTop.style.display = sb3Visible ? 'none' : '';
+  if (muzeroRunBar) muzeroRunBar.style.display = 'none';
+  if (cards) cards.style.display = '';
+  if (serviceUrlsPanel) serviceUrlsPanel.style.display = sb3Visible ? '' : 'none';
+  if (dashboardMode === 'muzero'){
+    const runMetrics = latestMuzeroRun ? (latestMuzeroRun.metrics || {}) : {};
+    const runIntegrity = latestMuzeroRun ? (latestMuzeroRun.integrity || {}) : {};
+    renderMuzeroTopCards(runMetrics, runIntegrity, latestMuzeroBench || {});
+    activateTab('muzero');
+  } else {
+    loadSelected().catch(()=>{});
+    activateTab('overview');
+  }
+}
+
+async function loadSelected() {
+  if (dashboardMode !== 'sb3') return;
+  const name = document.getElementById('reportSelect').value;
+  if (!name) return;
+  const meta = document.getElementById('meta');
+  try {
+    const data = await getJson('/api/report?name='+encodeURIComponent(name));
+    if (meta) meta.textContent = `timestamp=${data.meta?.timestamp||'-'} seed=${data.meta?.seed??'-'} episodes=${data.meta?.episodes??'-'}`;
+    const rows = data.rows || [];
+    currentRows = rows;
+    currentDetails = data.details || [];
+    renderCards(rows);
+    renderRows(rows);
+    renderDetailTabs();
+  } catch (e) {
+    if (meta) meta.textContent = `Error loading selected report: ${e.message||e}`;
+  }
+}
+
+function renderMuzeroCards(metrics, integrity){
+  const root = document.getElementById('muzeroCards');
+  if (!root) return;
+  const loss = Number((metrics || {}).loss || 0);
+  const pl = Number((metrics || {}).policy_loss || 0);
+  const vl = Number((metrics || {}).value_loss || 0);
+  const rl = Number((metrics || {}).reward_loss || 0);
+  const ol = Number((metrics || {}).objective_loss || 0);
+  const transitionEvents = Number((integrity || {}).transition_events || 0);
+  const trainEvents = Number((integrity || {}).train_step_events || 0);
+  const valid = Boolean((integrity || {}).valid);
+  const cards = [
+    ["Loss", loss.toFixed(4), loss <= 0.20],
+    ["Policy Loss", pl.toFixed(4), pl <= 0.10],
+    ["Value Loss", vl.toFixed(4), vl <= 0.10],
+    ["Reward Loss", rl.toFixed(4), rl <= 0.10],
+    ["Objective Loss", ol.toFixed(4), ol <= 0.20],
+    ["Transition Events", String(transitionEvents), transitionEvents > 0],
+    ["TrainStep Events", String(trainEvents), trainEvents > 0],
+    ["Integrity", valid ? "VALID" : "INVALID", valid],
+  ];
+  root.innerHTML = "";
+  for (const [name, value, ok] of cards){
+    const c = document.createElement('div');
+    c.className = 'panel card';
+    c.innerHTML = `<h3>${name}</h3><div class="v ${ok ? 'ok' : 'warn'}">${value}</div>`;
+    root.appendChild(c);
+  }
+}
+
+function renderMuzeroTopCards(metrics, integrity, bench){
+  const root = document.getElementById('cards');
+  if (!root) return;
+  const loss = Number((metrics || {}).loss || 0);
+  const pl = Number((metrics || {}).policy_loss || 0);
+  const vl = Number((metrics || {}).value_loss || 0);
+  const rl = Number((metrics || {}).reward_loss || 0);
+  const ol = Number((metrics || {}).objective_loss || 0);
+  const transitionEvents = Number((integrity || {}).transition_events || 0);
+  const trainEvents = Number((integrity || {}).train_step_events || 0);
+  const valid = Boolean((integrity || {}).valid);
+  let winRate = 0;
+  let timeoutRate = 0;
+  if (bench && Array.isArray(bench.results)){
+    const mz = bench.results.find((r)=>r.agent_name === 'muzero_stub') || bench.results[0];
+    if (mz){
+      winRate = Number(mz.win_rate || 0);
+      timeoutRate = Number(mz.timeout_rate || 0);
+    }
+  }
+  const cards = [
+    ['Loss', loss.toFixed(4), loss <= 0.20],
+    ['Policy Loss', pl.toFixed(4), pl <= 0.10],
+    ['Value Loss', vl.toFixed(4), vl <= 0.10],
+    ['Reward Loss', rl.toFixed(4), rl <= 0.10],
+    ['Objective Loss', ol.toFixed(4), ol <= 0.20],
+    ['Transition Events', String(transitionEvents), transitionEvents > 0],
+    ['TrainStep Events', String(trainEvents), trainEvents > 0],
+    ['Benchmark Win Rate', pct(winRate), winRate >= 0.50],
+    ['Benchmark Turn-Limit Finish Rate', pct(timeoutRate), timeoutRate <= 0.50],
+    ['Integrity', valid ? 'VALID' : 'INVALID', valid],
+  ];
+  root.innerHTML = '';
+  for (const [name, display, good] of cards){
+    const c = document.createElement('div');
+    c.className = 'panel card';
+    c.innerHTML = `<h3>${name}</h3><div class="v ${good ? 'ok' : 'warn'}">${display}</div>`;
+    root.appendChild(c);
+  }
+}
+
+function renderMuzeroRunDetail(run){
+  const root = document.getElementById('muzeroRunDetail');
+  if (!root) return;
+  if (!run){
+    root.innerHTML = '<div class="sub">No run selected.</div>';
+    return;
+  }
+  const cfg = run.manifest_config || {};
+  const rfRaw = String(cfg.reaction_fire_enabled || '').trim();
+  const rfText = (rfRaw === '' || rfRaw === '1') ? 'ON' : (rfRaw === '0' ? 'OFF' : rfRaw);
+  const model = cfg.model || {};
+  const inputChannels = Number(model.observation_channels || model.input_channels || 0);
+  const boardH = Number(model.observation_height || model.board_h || 0);
+  const boardW = Number(model.observation_width || model.board_w || 0);
+  const hiddenDim = Number(model.hidden_dim || 0);
+  const actionDim = Number(model.action_dim || 0);
+  const dynamicsBlocks = Number(model.dynamics_blocks || 0);
+  const predictionBlocks = Number(model.prediction_blocks || 0);
+  const repText = (inputChannels > 0 && boardH > 0 && boardW > 0 && hiddenDim > 0)
+    ? `${inputChannels}x${boardH}x${boardW} -> hidden(${hiddenDim})`
+    : '-';
+  const dynInputText = (hiddenDim > 0 && actionDim > 0)
+    ? `Linear(${hiddenDim}+${actionDim} -> ${hiddenDim}) + ReLU`
+    : '-';
+  const dynStateText = dynamicsBlocks > 0 ? `${dynamicsBlocks} residual MLP blocks` : '-';
+  const predTrunkText = predictionBlocks > 0 ? `${predictionBlocks} residual MLP blocks` : '-';
+  const policyHeadText = (hiddenDim > 0 && actionDim > 0) ? `Linear(${hiddenDim} -> ${actionDim})` : '-';
+  const valueHeadText = hiddenDim > 0 ? `Linear(${hiddenDim} -> 1)` : '-';
+  const rewardHeadText = hiddenDim > 0 ? `Linear(${hiddenDim} -> 1)` : '-';
+  const objectiveHeadText = hiddenDim > 0 ? `Linear(${hiddenDim} -> 1)` : '-';
+  const items = [
+    ['Run ID', run.run_id || '-'],
+    ['Scenario', run.scenario_id || '-'],
+    ['Seed', String(run.seed ?? '-')],
+    ['Reaction Fire', rfText],
+    ['Iterations', String(cfg.iterations ?? '-')],
+    ['Episodes / Iter', String(cfg.episodes_per_iter ?? '-')],
+    ['Batch Size', String(cfg.batch_size ?? '-')],
+    ['Resume CKPT', String(cfg.resume_checkpoint || '(none)')],
+    ['Model - Representation (CNN)', repText],
+    ['Model - Dynamics Input', dynInputText],
+    ['Model - Dynamics State', dynStateText],
+    ['Model - Prediction Trunk', predTrunkText],
+    ['Model - Policy Head', policyHeadText],
+    ['Model - Value Head', valueHeadText],
+    ['Model - Reward Head', rewardHeadText],
+    ['Model - Objective Head', objectiveHeadText],
+    ['Train - Objective Loss Weight', String(cfg.objective_loss_weight ?? '-')],
+    ['Train - Objective Target Mode', String(cfg.objective_target_mode ?? 'progress')],
+    ['Train - Objective Pos Weight', String(cfg.objective_pos_weight ?? '-')],
+    ['Metrics - Objective Loss', Number((run.metrics || {}).objective_loss ?? 0).toFixed(4)],
+  ];
+  renderKV('muzeroRunDetail', items);
+}
+
+function renderMuzeroRunsTable(runs){
+  const tb = document.querySelector('#muzeroRunsTable tbody');
+  if (!tb) return;
+  tb.innerHTML = '';
+  if (!runs || !runs.length){
+    tb.innerHTML = '<tr><td colspan="4" class="sub">No MuZero runs found.</td></tr>';
+    return;
+  }
+  for (const r of runs){
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td>${r.run_id || '-'}</td>
+      <td>${r.has_manifest ? '<span class="ok">yes</span>' : '<span class="bad">no</span>'}</td>
+      <td>${r.has_metrics ? '<span class="ok">yes</span>' : '<span class="bad">no</span>'}</td>
+      <td>${r.has_integrity ? '<span class="ok">yes</span>' : '<span class="bad">no</span>'}</td>
+    `;
+    tb.appendChild(tr);
+  }
+}
+
+function renderMuzeroBenchDetail(bench){
+  const root = document.getElementById('muzeroBenchDetail');
+  if (!root) return;
+  if (!bench || !Array.isArray(bench.results) || !bench.results.length){
+    root.innerHTML = '<div class="sub">No benchmark data.</div>';
+    return;
+  }
+  const mz = bench.results.find(r => r.agent_name === 'muzero_stub') || bench.results[0];
+  const rnd = bench.results.find(r => r.agent_name === 'baseline_random');
+  const reasons = mz.terminal_reasons || {};
+  const reasonText = Object.entries(reasons).map(([k,v])=>`${k}: ${pct(Number(v||0))}`).join(' | ') || '-';
+  const turnLimitFinishRate = Number(reasons.turn_unit_budget || reasons.max_steps || 0);
+  const objectiveResolvedFinishRate = Number(reasons.objective_outcome_resolved || 0);
+  const mzWinnerSides = Object.entries(mz.winner_side_counts || {})
+    .map(([k,v])=>`${k}:${Number(v||0)} (${pct(Number((mz.winner_side_rates || {})[k] || 0))})`)
+    .join(' | ') || '-';
+  const rndWinnerSides = rnd ? (Object.entries(rnd.winner_side_counts || {})
+    .map(([k,v])=>`${k}:${Number(v||0)} (${pct(Number((rnd.winner_side_rates || {})[k] || 0))})`)
+    .join(' | ') || '-') : '-';
+  const mzVpAvg = Object.entries(mz.vp_final_avg_by_side || {})
+    .map(([k,v])=>`${k}:${Number(v||0).toFixed(2)}`)
+    .join(' | ') || '-';
+  const mzOutcomeMix = Object.entries(mz.scenario_outcome_rates || {})
+    .map(([k,v])=>`${k}:${pct(Number(v||0))}`)
+    .join(' | ') || '-';
+  const rndOutcomeMix = rnd ? (Object.entries(rnd.scenario_outcome_rates || {})
+    .map(([k,v])=>`${k}:${pct(Number(v||0))}`)
+    .join(' | ') || '-') : '-';
+  const mzVpDist = Object.entries(mz.vp_final_distribution_by_side || {})
+    .map(([side, dist])=>{
+      const txt = Object.entries(dist || {}).map(([k,v])=>`${k}:${pct(Number(v||0))}`).join(', ');
+      return `${side}=>${txt || '-'}`;
+    })
+    .join(' | ') || '-';
+  const roles = latestMuzeroScenarioRoles || {};
+  const attackerSide = String(roles.attacker_side || mz.tracked_side || '').trim();
+  const defenderSides = Array.isArray(roles.defender_sides) ? roles.defender_sides : [];
+  const objectiveTotalRaw = Number(roles.objective_total || 0);
+  const objectiveTotal = Number.isFinite(objectiveTotalRaw) && objectiveTotalRaw > 0 ? objectiveTotalRaw : null;
+  const attackerWinRate = attackerSide ? Number((mz.winner_side_rates || {})[attackerSide] || 0) : null;
+  const attackerCapturedAvg = Number(mz.tracked_captured_avg || 0);
+  const defenderDeniedAvg = objectiveTotal !== null
+    ? Math.max(0, objectiveTotal - attackerCapturedAvg)
+    : null;
+  const roleLine = attackerSide
+    ? `Attacker=${attackerSide} | Defender=${defenderSides.length ? defenderSides.join(',') : '-'}`
+    : '-';
+  const roleMetric = String(roles.tracked_metric || mz.tracked_metric || '-');
+  const items = [
+    ['Scenario', String(bench.scenario_id || '-')],
+    ['MuZero Avg Return', Number(mz.avg_return || 0).toFixed(3)],
+    ['MuZero Win Rate', pct(Number(mz.win_rate || 0))],
+    ['MuZero Turn-Limit Finish Rate', pct(Number(mz.timeout_rate || 0))],
+    ['MuZero Finished Match Rate', pct(Number(mz.terminal_rate || 0))],
+    ['Objective-Resolved Finish %', pct(objectiveResolvedFinishRate)],
+    ['Turn-Limit Finish %', pct(turnLimitFinishRate)],
+    ['Tracked Side / Metric', `${String(mz.tracked_side || '-')} / ${String(mz.tracked_metric || '-')}`],
+    ['MuZero Tracked Capt Avg', Number(mz.tracked_captured_avg || 0).toFixed(2)],
+    ['MuZero Tracked Outcome Mix', mzOutcomeMix],
+    ['MuZero Winner Sides', mzWinnerSides],
+    ['MuZero VP Final Avg by Side', mzVpAvg],
+    ['MuZero VP Final Dist by Side', mzVpDist],
+    ['Roles (from scenario.json)', roleLine],
+    ['Role KPI Metric', roleMetric],
+    ['Attacker Win Rate', attackerWinRate === null ? '-' : pct(attackerWinRate)],
+    ['Attacker Objective Capt Avg', Number(attackerCapturedAvg || 0).toFixed(2)],
+    ['Defender Objective Denied Avg', defenderDeniedAvg === null ? '-' : defenderDeniedAvg.toFixed(2)],
+    ['Random Avg Return', rnd ? Number(rnd.avg_return || 0).toFixed(3) : '-'],
+    ['Random Tracked Capt Avg', rnd ? Number(rnd.tracked_captured_avg || 0).toFixed(2) : '-'],
+    ['Random Tracked Outcome Mix', rndOutcomeMix],
+    ['Random Winner Sides', rndWinnerSides],
+    ['Terminal Reasons (MuZero)', reasonText],
+  ];
+  renderKV('muzeroBenchDetail', items);
+
+  const bt = document.querySelector('#muzeroBenchTable tbody');
+  const reasonsEl = document.getElementById('muzeroBenchReasons');
+  if (bt){
+    bt.innerHTML = '';
+    for (const r of (bench.results || [])){
+      const winnerSidesText = Object.entries(r.winner_side_counts || {})
+        .map(([k,v])=>`${k}:${Number(v||0)} (${pct(Number((r.winner_side_rates || {})[k] || 0))})`)
+        .join(' | ') || '-';
+      const outcomeMix = Object.entries(r.scenario_outcome_rates || {})
+        .map(([k,v])=>`${k}:${pct(Number(v||0))}`)
+        .join(' | ') || '-';
+      const vpAvgText = Object.entries(r.vp_final_avg_by_side || {})
+        .map(([k,v])=>`${k}:${Number(v||0).toFixed(2)}`)
+        .join(' | ') || '-';
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td>${r.agent_name || '-'}</td>
+        <td>${Number(r.episodes || 0)}</td>
+        <td>${Number(r.avg_return || 0).toFixed(3)}</td>
+        <td>${Number(r.avg_steps || 0).toFixed(2)}</td>
+        <td>${pct(Number(r.terminal_rate || 0))}</td>
+        <td>${pct(Number(r.timeout_rate || 0))}</td>
+        <td>${pct(Number(r.win_rate || 0))}</td>
+        <td>${winnerSidesText}</td>
+        <td>${Number(r.tracked_captured_avg || 0).toFixed(2)}</td>
+        <td>${outcomeMix}</td>
+        <td>${vpAvgText}</td>
+      `;
+      bt.appendChild(tr);
+    }
+    if (!bench.results || !bench.results.length){
+      bt.innerHTML = '<tr><td colspan="11" class="sub">No benchmark rows.</td></tr>';
+    }
+  }
+  if (reasonsEl){
+    const parts = [];
+    for (const r of (bench.results || [])){
+      const rs = r.terminal_reasons || {};
+      const txt = Object.entries(rs).map(([k,v])=>`${k}:${pct(Number(v||0))}`).join(' | ') || '-';
+      parts.push(`${r.agent_name || 'agent'} => ${txt}`);
+    }
+    reasonsEl.textContent = parts.length ? parts.join('   ||   ') : 'No terminal reasons available.';
+  }
+}
+
+function renderMuzeroUnitsSides(data, errorMsg=''){
+  const detail = document.getElementById('muzeroUnitsSidesDetail');
+  const tb = document.querySelector('#muzeroUnitsTable tbody');
+  if (!detail || !tb) return;
+  if (!data || errorMsg){
+    const msg = errorMsg ? `Error: ${errorMsg}` : 'No units/sides data.';
+    renderKV('muzeroUnitsSidesDetail', [
+      ['Status', msg],
+      ['Hint', 'Select a MuZero run with TransitionEvent logs'],
+    ]);
+    tb.innerHTML = '<tr><td colspan="16" class="sub">No data.</td></tr>';
+    return;
+  }
+  const sideCounts = data.side_turn_counts || {};
+  const sideRates = data.side_turn_rates || {};
+  const sidesText = Object.entries(sideCounts)
+    .sort((a,b)=>Number(b[1]||0)-Number(a[1]||0))
+    .map(([k,v]) => `${k}: ${v} (${pct(Number(sideRates[k] || 0))})`)
+    .join(' | ') || '-';
+  const sideUnitTotalText = Object.entries(data.units_by_side || {})
+    .map(([k,v]) => {
+      const p = v || {};
+      const total = Number(p.total_actions || 0);
+      const active = Number(p.active_units || 0);
+      const expected = Number(p.expected_actions_per_active_unit || 0);
+      return `${k}: ${total} (active=${active}, exp=${expected.toFixed(2)})`;
+    })
+    .join(' | ') || '-';
+  const blockedTurnsText = Object.entries(data.units_by_side || {})
+    .map(([k,v]) => {
+      const units = ((v || {}).units || []);
+      const blocked = units.reduce((acc, u)=>acc + Number(u.blocked_before_activation_turns || 0), 0);
+      return `${k}: ${blocked}`;
+    })
+    .join(' | ') || '-';
+  renderKV('muzeroUnitsSidesDetail', [
+    ['Transition Events', String(Number(data.transition_events || 0))],
+    ['Turn Share by Side', sidesText],
+    ['Unit Action Volume by Side', sideUnitTotalText],
+    ['Blocked Before Activation (turns)', blockedTurnsText],
+  ]);
+  tb.innerHTML = '';
+  const unitsBySide = data.units_by_side || {};
+  const rows = [];
+  for (const [side, sidePayload] of Object.entries(unitsBySide)){
+    for (const row of ((sidePayload || {}).units || [])){
+      rows.push({
+        side: String(side),
+        unit_id: String(row.unit_id || '-'),
+        unit_label: String(row.unit_label || '-'),
+        category: String(row.category || '-'),
+        class_name: String(row.class_name || row.unit_key || '-'),
+        damage: Number(row.damage || 0),
+        count: Number(row.count || 0),
+        actions: Number(row.actions || row.count || 0),
+        expected_actions_in_side: Number(
+          row.expected_actions_in_side || (sidePayload || {}).expected_actions_per_active_unit || 0
+        ),
+        delta_vs_expected_in_side: Number(row.delta_vs_expected_in_side || 0),
+        load_ratio_in_side: Number(row.load_ratio_in_side || 0),
+        turns_eligible: Number(row.turns_eligible || 0),
+        turns_activated: Number(row.turns_activated || row.actions || row.count || 0),
+        activation_coverage: Number(row.activation_coverage || 0),
+        blocked_before_activation_turns: Number(row.blocked_before_activation_turns || 0),
+        attacks: Number(row.attacks || 0),
+        kills: Number(row.kills || 0),
+        damage_per_attack: Number(row.damage_per_attack || 0),
+        rate_global: Number(row.rate_global || 0),
+        rate_in_side: Number(row.rate_in_side || 0),
+      });
+    }
+  }
+  rows.sort((a,b)=>b.count-a.count);
+  if (!rows.length){
+    tb.innerHTML = '<tr><td colspan="16" class="sub">No unit action ids found in TransitionEvent logs for this run.</td></tr>';
+    return;
+  }
+  for (const u of rows){
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td>${u.side || '-'}</td>
+      <td>${u.unit_id || '-'}</td>
+      <td>${u.unit_label || '-'}</td>
+      <td>${u.category || '-'}</td>
+      <td>${u.class_name || '-'}</td>
+      <td>${Number(u.damage || 0).toFixed(1)}</td>
+      <td>${Number(u.actions || 0)}</td>
+      <td>${Number(u.blocked_before_activation_turns || 0)}</td>
+      <td>${Number(u.expected_actions_in_side || 0).toFixed(2)}</td>
+      <td>${Number(u.delta_vs_expected_in_side || 0).toFixed(2)}</td>
+      <td>${Number(u.load_ratio_in_side || 0).toFixed(2)}x</td>
+      <td>${Number(u.attacks || 0)}</td>
+      <td>${Number(u.kills || 0)}</td>
+      <td>${Number(u.damage_per_attack || 0).toFixed(3)}</td>
+      <td>${pct(Number(u.rate_global || 0))}</td>
+      <td>${pct(Number(u.rate_in_side || 0))}</td>
+    `;
+    tb.appendChild(tr);
+  }
+}
+
+function renderMuzeroGlobalActions(data, runMetrics){
+  const summary = document.getElementById('muzeroGlobalActionsSummary');
+  const bySideTable = document.getElementById('muzeroGlobalActionsBySideTable');
+  const bySideTb = document.querySelector('#muzeroGlobalActionsBySideTable tbody');
+  const sortSel = document.getElementById('muzeroGlobalActionsSort');
+  if (!summary || !bySideTb || !bySideTable || !sortSel) return;
+  const ga = (data || {}).global_actions || {};
+  const rs = (data || {}).reward_summary || {};
+  const os = (data || {}).option_space_summary || {};
+  const ds = (data || {}).diagnostics_summary || {};
+  const ae = ds.attack_effectiveness || {};
+  const se = ds.search_efficiency_avg || {};
+  const vc = ds.value_calibration || {};
+  const vcp = ds.value_calibration_by_phase || {};
+  const me = Array.isArray(ds.matchup_effectiveness) ? ds.matchup_effectiveness : [];
+  const ce = Array.isArray(ds.context_effectiveness) ? ds.context_effectiveness : [];
+  const dfr = ds.decision_flip_rate || {};
+  const ooc = ds.objective_opportunity_conversion || {};
+  const opf = ds.objective_progress_funnel || {};
+  const tst = ds.tactical_survival_tradeoff || {};
+  const xai = ds.xai_decision_signals || {};
+  const dfrGlobal = pct(Number((((dfr || {}).global || {}).rate) || 0));
+  const dfrIT = pct(Number((((((dfr || {}).by_side || {}).IT) || {}).rate) || 0));
+  const dfrUS = pct(Number((((((dfr || {}).by_side || {}).US) || {}).rate) || 0));
+  const oocGlobal = pct(Number((((ooc || {}).global || {}).rate) || 0));
+  const oocIT = pct(Number((((((ooc || {}).by_side || {}).IT) || {}).rate) || 0));
+  const oocUS = pct(Number((((((ooc || {}).by_side || {}).US) || {}).rate) || 0));
+  const opfGlobal = (opf || {}).global || {};
+  const opfBySide = (opf || {}).by_side || {};
+  const opfConvGlobal = pct(Number(opfGlobal.conversion_rate || 0));
+  const opfProgGlobal = pct(Number(opfGlobal.progress_rate || 0));
+  const opfDeltaGlobal = Number(opfGlobal.avg_progress_delta || 0).toFixed(3);
+  const opfOppGlobal = Number(opfGlobal.opportunities || 0);
+  const opfStallsGlobal = Number(opfGlobal.stalls || 0);
+  const ts = ds.train_stability || {};
+  const objectiveLoss = Number((runMetrics || {}).objective_loss ?? 0);
+  const xaiRep = xai.representation || {};
+  const xaiPred = xai.prediction || {};
+  const xaiDyn = xai.dynamics || {};
+  const xaiTopPolicy = Array.isArray(xai.top_policy_actions) ? xai.top_policy_actions : [];
+  const xaiTopDims = Array.isArray(xai.top_latent_dims) ? xai.top_latent_dims : [];
+  const xaiTopPolicyPred = Array.isArray(xaiPred.top_policy_actions) ? xaiPred.top_policy_actions : xaiTopPolicy;
+  const xaiTopDimsRep = Array.isArray(xaiRep.top_latent_dims) ? xaiRep.top_latent_dims : xaiTopDims;
+  const compTotal = rs.components_total || {};
+  const compAvg = rs.components_avg_per_transition || {};
+  const osAvg = os.avg_per_transition || {};
+  const aeByKind = Array.isArray(ae.by_action_kind) ? ae.by_action_kind : [];
+  const aeBySideKind = ae.by_side_action_kind || {};
+  const total = Number(ga.total_actions || 0);
+  const kinds = ga.kinds || [];
+  const kindsBySide = ga.kinds_by_side || {};
+  const attackKinds = kinds
+    .filter((x)=>!['MOVE','WAIT','TIMEOUT','UNKNOWN'].includes(String(x.action_kind || '').toUpperCase()))
+    .reduce((acc, x)=>acc + Number(x.count || 0), 0);
+  const fmtPair = (obj, digits) => Object.entries(obj || {})
+    .map(([k,v])=>`<span><b>${k}</b>: ${Number(v || 0).toFixed(digits)}</span>`)
+    .join('');
+  const binsHtml = Array.isArray(vc.bins) && vc.bins.length
+    ? vc.bins.map((b)=>`<span><b>${b.bin}</b>: ${Number(b.mae || 0).toFixed(3)}</span>`).join('')
+    : '<span>-</span>';
+  const phaseOrder = ['early', 'mid', 'late'];
+  const phaseHtml = phaseOrder
+    .map((p)=>{
+      const row = vcp[p] || {};
+      return `<span><b>${p}</b>: mae=${Number(row.mae || 0).toFixed(3)}, pred=${Number(row.avg_predicted || 0).toFixed(3)}, real=${Number(row.avg_realized_return || 0).toFixed(3)}, n=${Number(row.count || 0)}</span>`;
+    })
+    .join('');
+  const aeGlobalRows = aeByKind.length
+    ? aeByKind.slice(0, 6).map((r)=>`
+        <tr>
+          <td>${r.action_kind || '-'}</td>
+          <td>${Number(r.count || 0)}</td>
+          <td>${pct(Number(r.attack_success_estimate || 0))}</td>
+          <td>${Number(r.expected_damage_estimate || 0).toFixed(3)}</td>
+          <td>${Number(r.expected_kills_estimate || 0).toFixed(3)}</td>
+        </tr>
+      `).join('')
+    : '<tr><td colspan="5" class="sub">No attack-effectiveness data.</td></tr>';
+  const aeSideRows = Object.entries(aeBySideKind).length
+    ? Object.entries(aeBySideKind).map(([side, rows])=>{
+      const list = Array.isArray(rows) ? rows.slice(0, 3) : [];
+      const text = list.map((r)=>`${r.action_kind}: succ ${pct(Number(r.attack_success_estimate || 0))}, dmg ${Number(r.expected_damage_estimate || 0).toFixed(2)}`).join(' | ');
+      return `<tr><td>${side}</td><td>${text || '-'}</td></tr>`;
+    }).join('')
+    : '<tr><td colspan="2" class="sub">No side attack-effectiveness data.</td></tr>';
+  const matchupRows = me.length
+    ? me.slice(0, 8).map((r)=>`
+        <tr>
+          <td>${r.matchup || '-'}</td>
+          <td>${Number(r.count || 0)}</td>
+          <td>${pct(Number(r.attack_success_estimate || 0))}</td>
+          <td>${Number(r.expected_damage_estimate || 0).toFixed(3)}</td>
+          <td>${Number(r.expected_kills_estimate || 0).toFixed(3)}</td>
+        </tr>
+      `).join('')
+    : '<tr><td colspan="5" class="sub">No matchup effectiveness data.</td></tr>';
+  const parseContext = (ctxRaw) => {
+    const raw = String(ctxRaw || '');
+    const [distRaw, coverRaw, losRaw] = raw.split('|');
+    const dist = String(distRaw || '').replace('dist_', '').replace('_', ' ').trim() || '-';
+    const cover = String(coverRaw || '').replace('cover_', '').replace('_', ' ').trim() || '-';
+    const los = String(losRaw || '').replace('los_', '').replace('_', ' ').trim() || '-';
+    return { dist, cover, los };
+  };
+  const contextRows = ce.length
+    ? ce
+      .slice()
+      .sort((a,b)=>Number(b.count || 0) - Number(a.count || 0))
+      .slice(0, 10)
+      .map((r)=>{
+        const c = parseContext(r.context);
+        return `
+          <tr>
+            <td>${c.dist}</td>
+            <td>${c.cover}</td>
+            <td>${c.los}</td>
+            <td>${Number(r.count || 0)}</td>
+            <td>${pct(Number(r.attack_success_estimate || 0))}</td>
+            <td>${Number(r.expected_damage_estimate || 0).toFixed(3)}</td>
+            <td>${Number(r.expected_kills_estimate || 0).toFixed(3)}</td>
+          </tr>
+        `;
+      }).join('')
+    : '<tr><td colspan="7" class="sub">No context effectiveness data.</td></tr>';
+  const xaiPolicyText = xaiTopPolicyPred.length
+    ? xaiTopPolicyPred.slice(0, 5).map((r)=>`${r.action_id}: ${Number(r.count || 0)} (${pct(Number(r.rate || 0))})`).join(' | ')
+    : '-';
+  const xaiDimsText = xaiTopDimsRep.length
+    ? xaiTopDimsRep.slice(0, 5).map((r)=>`d${Number(r.dim || 0)}: ${Number(r.count || 0)} (${pct(Number(r.rate || 0))})`).join(' | ')
+    : '-';
+  const opfSideRows = Object.entries(opfBySide).length
+    ? Object.entries(opfBySide).map(([side, row])=>`
+      <tr>
+        <td>${side}</td>
+        <td>${Number((row || {}).opportunities || 0)}</td>
+        <td>${pct(Number((row || {}).progress_rate || 0))}</td>
+        <td>${pct(Number((row || {}).conversion_rate || 0))}</td>
+        <td>${Number((row || {}).stalls || 0)}</td>
+        <td>${Number((row || {}).avg_progress_delta || 0).toFixed(3)}</td>
+      </tr>
+    `).join('')
+    : '<tr><td colspan="6" class="sub">No objective progress funnel data.</td></tr>';
+  summary.innerHTML = `
+    <div class="panel" style="margin-bottom:8px">
+      <h4 style="margin:0 0 8px 0">Action Mix</h4>
+      <div class="kv" style="grid-template-columns:repeat(3,minmax(160px,1fr));gap:6px 12px">
+        <div><b>Total Actions</b><span>${total}</span></div>
+        <div><b>Attack-like Actions</b><span>${attackKinds}</span></div>
+        <div><b>Attack Share</b><span>${total > 0 ? pct(attackKinds / total) : '0.0%'}</span></div>
+      </div>
+    </div>
+    <div class="panel" style="margin-bottom:8px">
+      <h4 style="margin:0 0 8px 0">Search & Train Diagnostics</h4>
+      <div class="kv" style="grid-template-columns:repeat(2,minmax(260px,1fr));gap:6px 12px">
+        <div><b>Possible Actions Avg</b><span>legal=${Number(osAvg.legal_action_count || 0).toFixed(2)} | atk=${Number(osAvg.legal_attack_options || 0).toFixed(2)} | cap=${Number(osAvg.legal_capture_options || 0).toFixed(2)}</span></div>
+        <div><b>MCTS Confidence Avg</b><span>p=${Number(osAvg.chosen_action_prob || 0).toFixed(3)} | margin=${Number(osAvg.mcts_margin || 0).toFixed(3)} | H=${Number(osAvg.mcts_entropy || 0).toFixed(3)}</span></div>
+        <div><b>Search Efficiency Avg</b><span>visits=${Number(se.mcts_total_visits || 0).toFixed(2)} | active=${Number(se.mcts_active_actions || 0).toFixed(2)} | ratio=${Number(se.mcts_active_ratio || 0).toFixed(3)}</span></div>
+        <div><b>Train Stability</b><span>grad_norm=${Number(ts.final_grad_norm || 0).toFixed(4)} | replay_age_mean=${Number(ts.replay_age_mean || 0).toFixed(1)} | replay_age_max=${Number(ts.replay_age_max || 0).toFixed(0)}</span></div>
+        <div><b>Objective Head Loss</b><span>${objectiveLoss.toFixed(4)}</span></div>
+        <div><b>Value Calibration MAE</b><span>${Number(vc.mae || 0).toFixed(4)}</span></div>
+        <div><b>Value Calibration Bins</b><span>${binsHtml}</span></div>
+        <div><b>Decision Flip Rate</b><span>global=${dfrGlobal} | IT=${dfrIT} | US=${dfrUS}</span></div>
+        <div><b>Objective Opportunity Conv.</b><span>global=${oocGlobal} | IT=${oocIT} | US=${oocUS}</span></div>
+        <div><b>Objective Progress Funnel (Global)</b><span>opp=${opfOppGlobal} | prog=${opfProgGlobal} | conv=${opfConvGlobal} | stalls=${opfStallsGlobal} | avgDelta=${opfDeltaGlobal}</span></div>
+        <div><b>Tactical Survival Tradeoff</b><span>net_avg=${Number((((tst||{}).global||{}).net_tradeoff_avg || 0)).toFixed(3)} | out=${Number((((tst||{}).global||{}).damage_out_avg || 0)).toFixed(3)} | in+2=${Number((((tst||{}).global||{}).damage_in_next2_avg || 0)).toFixed(3)}</span></div>
+        <div style="grid-column:1 / -1;"><b>Value Calibration by Phase</b><span>${phaseHtml || '-'}</span></div>
+      </div>
+    </div>
+    <div class="panel" style="margin-bottom:8px">
+      <h4 style="margin:0 0 8px 0">Objective Progress Funnel (By Side)</h4>
+      <table>
+        <thead><tr><th>Side</th><th>Opportunities</th><th>Progress Rate</th><th>Conversion Rate</th><th>Stalls</th><th>Avg Progress Delta</th></tr></thead>
+        <tbody>${opfSideRows}</tbody>
+      </table>
+    </div>
+    <div class="panel" style="margin-bottom:8px">
+      <h4 style="margin:0 0 8px 0">Reward Components</h4>
+      <div class="kv" style="grid-template-columns:1fr;gap:6px">
+        <div><b>Total</b><span>${fmtPair(compTotal, 3) || '-'}</span></div>
+        <div><b>Avg / Transition</b><span>${fmtPair(compAvg, 4) || '-'}</span></div>
+      </div>
+    </div>
+    <div class="panel" style="margin-bottom:8px">
+      <h4 style="margin:0 0 8px 0">XAI Decision Signals (Root)</h4>
+      <div class="kv" style="grid-template-columns:repeat(2,minmax(260px,1fr));gap:6px 12px">
+        <div><b>Representation L2 Avg</b><span>${Number((xaiRep.latent_l2_norm_avg ?? xai.latent_l2_norm_avg ?? 0)).toFixed(3)}</span></div>
+        <div><b>Prediction Top-1 Avg</b><span>${pct(Number((xaiPred.policy_top1_confidence_avg ?? xai.policy_top1_confidence_avg ?? 0)))}</span></div>
+        <div><b>Prediction Value(root) Avg</b><span>${Number((xaiPred.predicted_value_root_avg ?? xai.predicted_value_root_avg ?? 0)).toFixed(4)}</span></div>
+        <div><b>Dynamics Pred Reward Avg</b><span>${Number((xaiDyn.pred_reward_avg ?? xai.dynamics_pred_reward_avg ?? 0)).toFixed(4)}</span></div>
+        <div><b>Dynamics Next L2 Avg</b><span>${Number((xaiDyn.next_latent_l2_avg ?? xai.dynamics_next_latent_l2_avg ?? 0)).toFixed(3)}</span></div>
+        <div><b>Dynamics Delta L2 Avg</b><span>${Number((xaiDyn.delta_l2_avg ?? xai.dynamics_delta_l2_avg ?? 0)).toFixed(3)}</span></div>
+        <div style="grid-column:1 / -1;"><b>Top Policy Actions</b><span>${xaiPolicyText}</span></div>
+        <div style="grid-column:1 / -1;"><b>Top Latent Dimensions</b><span>${xaiDimsText}</span></div>
+      </div>
+    </div>
+    <div class="panel" style="margin-bottom:8px">
+      <h4 style="margin:0 0 8px 0">Attack Effectiveness</h4>
+      <div class="sub">Merged into unified action table below (global + by side).</div>
+    </div>
+    <div class="panel" style="margin-top:8px">
+      <h4 style="margin:0 0 8px 0">Matchup Effectiveness (Attacker → Target)</h4>
+      <table>
+        <thead><tr><th>Matchup</th><th>Count</th><th>Success</th><th>Exp Dmg</th><th>Exp Kills</th></tr></thead>
+        <tbody>${matchupRows}</tbody>
+      </table>
+    </div>
+    <div class="panel" style="margin-top:8px">
+      <h4 style="margin:0 0 8px 0">Attack Context Effectiveness (Dist/Cover/LOS)</h4>
+      <table>
+        <thead><tr><th>Dist</th><th>Cover</th><th>LOS</th><th>Count</th><th>Success</th><th>Exp Dmg</th><th>Exp Kills</th></tr></thead>
+        <tbody>${contextRows}</tbody>
+      </table>
+    </div>
+  `;
+
+  bySideTb.innerHTML = '';
+  const sideNames = Object.keys(kindsBySide).sort();
+  const byKind = {};
+  for (const side of sideNames){
+    for (const row of (kindsBySide[side] || [])){
+      const kind = String(row.action_kind || 'UNKNOWN');
+      if (!byKind[kind]) byKind[kind] = {};
+      byKind[kind][side] = {
+        count: Number(row.count || 0),
+        rate: Number(row.rate_in_side || 0),
+      };
+    }
+  }
+  if (!sideNames.length || !Object.keys(byKind).length){
+    bySideTable.querySelector('thead').innerHTML = '<tr><th>Action Kind</th><th>Total Count</th><th>Total Rate</th><th>Global Succ</th><th>Global Exp Dmg</th><th>Global Exp Kills</th><th>Count</th><th>Rate</th><th>Succ</th><th>Exp Dmg</th></tr>';
+    bySideTb.innerHTML = '<tr><td colspan="10" class="sub">No side action breakdown.</td></tr>';
+    return;
+  }
+  const aeGlobalMap = {};
+  for (const row of aeByKind){
+    const k = String(row.action_kind || 'UNKNOWN');
+    aeGlobalMap[k] = {
+      success: Number(row.attack_success_estimate || 0),
+      expDmg: Number(row.expected_damage_estimate || 0),
+      expKills: Number(row.expected_kills_estimate || 0),
+    };
+  }
+  const aeSideMap = {};
+  for (const [side, rows] of Object.entries(aeBySideKind || {})){
+    aeSideMap[String(side)] = {};
+    for (const row of (Array.isArray(rows) ? rows : [])){
+      const k = String(row.action_kind || 'UNKNOWN');
+      aeSideMap[String(side)][k] = {
+        success: Number(row.attack_success_estimate || 0),
+        expDmg: Number(row.expected_damage_estimate || 0),
+      };
+    }
+  }
+  const headerCells = [
+    '<th>Action Kind</th>',
+    '<th>Total Count</th>',
+    '<th>Total Rate</th>',
+    '<th>Global Succ</th>',
+    '<th>Global Exp Dmg</th>',
+    '<th>Global Exp Kills</th>',
+  ];
+  for (const side of sideNames){
+    headerCells.push(`<th>${side} Count</th>`);
+    headerCells.push(`<th>${side} Rate</th>`);
+    headerCells.push(`<th>${side} Succ</th>`);
+    headerCells.push(`<th>${side} Exp Dmg</th>`);
+  }
+  bySideTable.querySelector('thead').innerHTML = `<tr>${headerCells.join('')}</tr>`;
+  const sortMode = String(sortSel.value || 'count');
+  const kindsSorted = Object.keys(byKind).sort((a,b)=>{
+    const sumCount = (kind) => {
+      let v = 0;
+      for (const side of sideNames){
+        v += Number((byKind[kind][side] || {}).count || 0);
+      }
+      return v;
+    };
+    const globalSucc = (kind) => Number((aeGlobalMap[kind] || {}).success || 0);
+    const globalDmg = (kind) => Number((aeGlobalMap[kind] || {}).expDmg || 0);
+    const globalKills = (kind) => Number((aeGlobalMap[kind] || {}).expKills || 0);
+    const sideSucc = (kind, side) => Number((((aeSideMap[side] || {})[kind] || {}).success) || 0);
+    let va = 0;
+    let vb = 0;
+    if (sortMode === 'global_succ'){
+      va = globalSucc(a); vb = globalSucc(b);
+    } else if (sortMode === 'global_exp_dmg'){
+      va = globalDmg(a); vb = globalDmg(b);
+    } else if (sortMode === 'global_exp_kills'){
+      va = globalKills(a); vb = globalKills(b);
+    } else if (sortMode === 'it_succ'){
+      va = sideSucc(a, 'IT'); vb = sideSucc(b, 'IT');
+    } else if (sortMode === 'us_succ'){
+      va = sideSucc(a, 'US'); vb = sideSucc(b, 'US');
+    } else {
+      va = sumCount(a); vb = sumCount(b);
+    }
+    if (vb !== va) return vb - va;
+    return sumCount(b) - sumCount(a);
+  });
+  for (const kind of kindsSorted){
+    const tr = document.createElement('tr');
+    let totalCountForKind = 0;
+    for (const side of sideNames){
+      totalCountForKind += Number((byKind[kind][side] || {}).count || 0);
+    }
+    const cells = [
+      `<td>${kind}</td>`,
+      `<td>${totalCountForKind}</td>`,
+      `<td>${total > 0 ? pct(totalCountForKind / total) : '0.0%'}</td>`,
+      `<td>${pct(Number((aeGlobalMap[kind] || {}).success || 0))}</td>`,
+      `<td>${Number((aeGlobalMap[kind] || {}).expDmg || 0).toFixed(3)}</td>`,
+      `<td>${Number((aeGlobalMap[kind] || {}).expKills || 0).toFixed(3)}</td>`,
+    ];
+    for (const side of sideNames){
+      const payload = byKind[kind][side] || { count: 0, rate: 0 };
+      const eff = ((aeSideMap[side] || {})[kind] || {});
+      cells.push(`<td>${Number(payload.count || 0)}</td>`);
+      cells.push(`<td>${pct(Number(payload.rate || 0))}</td>`);
+      cells.push(`<td>${pct(Number(eff.success || 0))}</td>`);
+      cells.push(`<td>${Number(eff.expDmg || 0).toFixed(3)}</td>`);
+    }
+    tr.innerHTML = cells.join('');
+    bySideTb.appendChild(tr);
+  }
+}
+
+function renderMuzeroVps(data){
+  const summary = document.getElementById('muzeroVpsSummary');
+  const bySideTb = document.querySelector('#muzeroVpsBySideTable tbody');
+  const hierGraph = document.getElementById('muzeroVpsHierBySideGraph');
+  const pathTransTb = document.querySelector('#muzeroVpsPathTransitionsTable tbody');
+  const ttcReasonTb = document.querySelector('#muzeroVpsTimeToConvertReasonTable tbody');
+  const harmfulTb = document.querySelector('#muzeroVpsHarmfulPathsTable tbody');
+  const explainGraph = document.getElementById('muzeroVpsExplainGraph');
+  if (!summary || !bySideTb || !hierGraph || !explainGraph || !pathTransTb || !ttcReasonTb || !harmfulTb) return;
+  const vp = (data || {}).vp_summary || {};
+  const ds = (data || {}).diagnostics_summary || {};
+  const ooc = ds.objective_opportunity_conversion || {};
+  const opf = ds.objective_progress_funnel || {};
+  const opx = ds.objective_progress_explain || {};
+  const opa = ds.objective_path_analysis || {};
+  const opfGlobal = (opf || {}).global || {};
+  const opfBySide = (opf || {}).by_side || {};
+  const opxBySide = (opx || {}).by_side || {};
+  const pathMatrix = (opa.path_transition_matrix || {});
+  const pathMatrixGlobal = Array.isArray(pathMatrix.global) ? pathMatrix.global : [];
+  const pathMatrixBySide = (pathMatrix.by_side || {});
+  const ttcByReason = (((opa.time_to_convert || {}).by_reason) || {});
+  const ttcByReasonGlobal = Array.isArray(ttcByReason.global) ? ttcByReason.global : [];
+  const ttcByReasonSide = (ttcByReason.by_side || {});
+  const ttcByPath = (((opa.time_to_convert || {}).by_path) || {});
+  const ttcByPathGlobal = Array.isArray(ttcByPath.global) ? ttcByPath.global : [];
+  const ttcByPathSide = (ttcByPath.by_side || {});
+  const harmfulPaths = Array.isArray(opa.harmful_paths_top) ? opa.harmful_paths_top : [];
+  renderKV('muzeroVpsSummary', [
+    ['VP-related Actions (total)', String(Number(vp.vp_related_actions_total || 0))],
+    ['Capture Actions (total)', String(Number(vp.capture_actions_total || 0))],
+    ['VP Captures (state total)', String(Number(vp.vp_captures_total || 0))],
+    ['VP Captures / 1000 transitions', Number(vp.vp_captures_per_1000_transitions || 0).toFixed(2)],
+    ['VP Capture Rate (global)', pct(Number(vp.vp_capture_rate_global || 0))],
+    ['Units with VP Captures (total)', String(Number(vp.unique_units_with_vp_captures_total || 0))],
+    ['VP Initial Avg by Side', Object.entries(vp.vp_initial_avg_by_side || {}).map(([k,v])=>`${k}:${Number(v||0).toFixed(2)}`).join(' | ') || '-'],
+    ['VP Final Avg by Side', Object.entries(vp.vp_final_avg_by_side || {}).map(([k,v])=>`${k}:${Number(v||0).toFixed(2)}`).join(' | ') || '-'],
+    ['VP Gained Sum by Side', Object.entries(vp.vp_gain_sum_by_side || {}).map(([k,v])=>`${k}:${Number(v||0)}`).join(' | ') || '-'],
+    ['VP Lost Sum by Side', Object.entries(vp.vp_loss_sum_by_side || {}).map(([k,v])=>`${k}:${Number(v||0)}`).join(' | ') || '-'],
+    ['VP Net Sum by Side', Object.entries(vp.vp_net_sum_by_side || {}).map(([k,v])=>`${k}:${Number(v||0)}`).join(' | ') || '-'],
+    ['VP Net Avg / Episode by Side', Object.entries(vp.vp_net_avg_per_episode_by_side || {}).map(([k,v])=>`${k}:${Number(v||0).toFixed(3)}`).join(' | ') || '-'],
+    ['Objective Opp. Conv. (global/by-side)', `global=${pct(Number((((ooc || {}).global || {}).rate) || 0))} | IT=${pct(Number((((((ooc || {}).by_side || {}).IT) || {}).rate) || 0))} | US=${pct(Number((((((ooc || {}).by_side || {}).US) || {}).rate) || 0))}`],
+    ['Objective Progress Funnel (global)', `opp=${Number(opfGlobal.opportunities || 0)} | progress=${Number(opfGlobal.progress_actions || 0)} | conv=${Number(opfGlobal.conversions || 0)} | stalls=${Number(opfGlobal.stalls || 0)} | progRate=${pct(Number(opfGlobal.progress_rate || 0))} | convRate=${pct(Number(opfGlobal.conversion_rate || 0))} | avgDelta=${Number(opfGlobal.avg_progress_delta || 0).toFixed(3)}`],
+    ['Note', 'Gain/Loss are gross flow sums across all transitions; Net is gain-loss.'],
+    ['VP-related Rate (global)', pct(Number(vp.vp_related_action_rate_global || 0))],
+    ['Capture Rate (global)', pct(Number(vp.capture_action_rate_global || 0))],
+  ]);
+  const flowRows = Object.entries(opfBySide || {});
+  const flowPayloads = [{ side: 'GLOBAL', row: opfGlobal }];
+  for (const [side, row] of flowRows){
+    flowPayloads.push({ side: String(side), row: row || {} });
+  }
+  const mkFlowSvg = (title, row, explain) => {
+    const opp = Math.max(0, Number((row || {}).opportunities || 0));
+    const progress = Math.max(0, Number((row || {}).progress_actions || 0));
+    const conversions = Math.max(0, Number((row || {}).conversions || 0));
+    const stalls = Math.max(0, Number((row || {}).stalls || (opp - progress)));
+    const noProgress = Math.max(0, opp - progress);
+    const progressedNotConverted = Math.max(0, progress - conversions);
+    const stalledNotConverted = Math.max(0, noProgress - Math.max(0, Math.min(conversions, noProgress)));
+    const convFromProgress = Math.max(0, Math.min(conversions, progress));
+    const convFromNoProgress = Math.max(0, conversions - convFromProgress);
+    const explainRow = explain || {};
+    const noProgCounts = explainRow.no_progress_reason_counts || {};
+    const convPathCounts = explainRow.conversion_path_counts || {};
+    const topNoProg = Object.entries(noProgCounts)
+      .sort((a,b)=>Number(b[1] || 0) - Number(a[1] || 0))
+      .slice(0, 2);
+    const topConvPath = Object.entries(convPathCounts)
+      .sort((a,b)=>Number(b[1] || 0) - Number(a[1] || 0))
+      .slice(0, 2);
+    const W = 430;
+    const H = 290;
+    const nodeW = 140;
+    const nodeH = 36;
+    const x0 = 10;
+    const x1 = 150;
+    const x2 = 280;
+    const yCenter = 110;
+    const yTop = 55;
+    const yBot = 155;
+    const rScale = opp > 0 ? Math.max(4.0, Math.min(22.0, 90.0 / Math.sqrt(opp))) : 5.0;
+    const bubbleR = (v) => Math.max(10, Math.min(48, Math.sqrt(Math.max(0, v)) * rScale));
+    const linkScale = opp > 0 ? Math.max(1.0, Math.min(4.0, 32.0 / opp)) : 1.0;
+    const stroke = (v) => Math.max(1.0, Math.min(14.0, v * linkScale));
+    const reasonR = (v) => Math.max(8, Math.min(18, Math.sqrt(Math.max(0, Number(v || 0))) * 3.2));
+    const shortLabel = (txt) => {
+      const s = String(txt || '').replaceAll('_', ' ');
+      return s.length > 16 ? (s.slice(0, 15) + '…') : s;
+    };
+    const reasonBubble = (x, y, key, val, fill, strokeColor) => `
+      <g>
+        <title>${String(key)}: ${Number(val || 0)}</title>
+        <circle cx="${x}" cy="${y}" r="${reasonR(val)}" fill="${fill}" stroke="${strokeColor}" opacity="0.95"></circle>
+        <text x="${x}" y="${y + 3}" text-anchor="middle" fill="#eaf2f8" font-size="10">${Number(val || 0)}</text>
+        <text x="${x}" y="${y + 20}" text-anchor="middle" fill="#9fb1c9" font-size="10">${shortLabel(key)}</text>
+      </g>
+    `;
+    const reasonLink = (xA, yA, xB, yB, val, color) => `
+      <path d="M ${xA} ${yA} C ${xA + 24} ${yA - 16}, ${xB - 18} ${yB + 10}, ${xB} ${yB}"
+            fill="none" stroke="${color}" stroke-width="${Math.max(1.0, Math.min(6.0, Number(val || 0) * 0.35)).toFixed(2)}"
+            stroke-linecap="round" opacity="0.75"></path>
+    `;
+    const isNotConvertedPath = (k) => String(k || '').toLowerCase().includes('not_converted') || String(k || '').toLowerCase().includes('stalled');
+    const noProg1 = topNoProg[0] || null;
+    const noProg2 = topNoProg[1] || null;
+    const conv1 = topConvPath[0] || null;
+    const conv2 = topConvPath[1] || null;
+    const link = (xA, yA, xB, yB, val, color) => `
+      <path d="M ${xA} ${yA} C ${xA + 80} ${yA}, ${xB - 80} ${yB}, ${xB} ${yB}"
+            fill="none" stroke="${color}" stroke-width="${stroke(val).toFixed(2)}" stroke-linecap="round" opacity="0.65"></path>
+    `;
+    return `
+      <div style="background:rgba(15,18,27,0.45);border:1px solid var(--border);border-radius:10px;padding:8px;">
+      <div class="sub" style="margin:0 0 6px 0;"><b>${title}</b> · opp=${opp} · prog=${progress} · conv=${conversions} · stalls=${stalls}</div>
+      <svg viewBox="0 0 ${W} ${H}" width="100%" height="${H}" style="display:block;">
+        <circle cx="${x0 + 58}" cy="${yCenter}" r="${bubbleR(opp)}" fill="rgba(93,173,226,0.24)" stroke="#5dade2"></circle>
+        <circle cx="${x1 + 58}" cy="${yTop + nodeH / 2}" r="${bubbleR(progress)}" fill="rgba(46,204,113,0.20)" stroke="#2ecc71"></circle>
+        <circle cx="${x1 + 58}" cy="${yBot + nodeH / 2}" r="${bubbleR(noProgress)}" fill="rgba(93,173,226,0.16)" stroke="#5dade2"></circle>
+        <circle cx="${x2 + 58}" cy="${yTop + nodeH / 2}" r="${bubbleR(conversions)}" fill="rgba(245,176,65,0.20)" stroke="#f5b041"></circle>
+        <circle cx="${x2 + 58}" cy="${yBot + nodeH / 2}" r="${bubbleR(Math.max(0, opp - conversions))}" fill="rgba(149,165,166,0.16)" stroke="#95a5a6"></circle>
+        ${link(x0 + nodeW, yCenter, x1, yTop + nodeH / 2, progress, '#2ecc71')}
+        ${link(x0 + nodeW, yCenter, x1, yBot + nodeH / 2, noProgress, '#5dade2')}
+        ${link(x1 + nodeW, yTop + nodeH / 2, x2, yTop + nodeH / 2, convFromProgress, '#f5b041')}
+        ${link(x1 + nodeW, yTop + nodeH / 2, x2, yBot + nodeH / 2, progressedNotConverted, '#58d68d')}
+        ${link(x1 + nodeW, yBot + nodeH / 2, x2, yTop + nodeH / 2, convFromNoProgress, '#af7ac5')}
+        ${link(x1 + nodeW, yBot + nodeH / 2, x2, yBot + nodeH / 2, stalledNotConverted, '#7f8c8d')}
+        <rect x="${x0}" y="${yCenter - nodeH / 2}" width="${nodeW}" height="${nodeH}" rx="8" ry="8" fill="#1b2538" stroke="#4aa3ff"></rect>
+        <text x="${x0 + 10}" y="${yCenter - 4}" fill="#d8e2f1" font-size="12">OPPORTUNITY</text>
+        <text x="${x0 + 10}" y="${yCenter + 14}" fill="#9fb1c9" font-size="12">${opp}</text>
+        <rect x="${x1}" y="${yTop}" width="${nodeW}" height="${nodeH}" rx="8" ry="8" fill="#1f3a2b" stroke="#2ecc71"></rect>
+        <text x="${x1 + 10}" y="${yTop + 14}" fill="#dff6e9" font-size="12">PROGRESS</text>
+        <text x="${x1 + 10}" y="${yTop + 30}" fill="#9de3be" font-size="12">${progress}</text>
+        <rect x="${x1}" y="${yBot}" width="${nodeW}" height="${nodeH}" rx="8" ry="8" fill="#1b2e47" stroke="#5dade2"></rect>
+        <text x="${x1 + 10}" y="${yBot + 14}" fill="#dcecff" font-size="12">NO PROGRESS</text>
+        <text x="${x1 + 10}" y="${yBot + 30}" fill="#9cc6f4" font-size="12">${noProgress}</text>
+        <rect x="${x2}" y="${yTop}" width="${nodeW}" height="${nodeH}" rx="8" ry="8" fill="#4a3118" stroke="#f5b041"></rect>
+        <text x="${x2 + 10}" y="${yTop + 14}" fill="#fff1db" font-size="12">CONVERTED</text>
+        <text x="${x2 + 10}" y="${yTop + 30}" fill="#f8cb8c" font-size="12">${conversions}</text>
+        <rect x="${x2}" y="${yBot}" width="${nodeW}" height="${nodeH}" rx="8" ry="8" fill="#313b47" stroke="#95a5a6"></rect>
+        <text x="${x2 + 10}" y="${yBot + 14}" fill="#e5eaef" font-size="12">NOT CONVERTED</text>
+        <text x="${x2 + 10}" y="${yBot + 30}" fill="#bcc7d1" font-size="12">${Math.max(0, opp - conversions)}</text>
+        <text x="${x1 + 58}" y="246" text-anchor="middle" fill="#7fb3d5" font-size="11">No-progress reasons</text>
+        ${(topNoProg[0] ? reasonBubble(x1 + 22, 262, topNoProg[0][0], topNoProg[0][1], 'rgba(93,173,226,0.28)', '#5dade2') : '')}
+        ${(topNoProg[1] ? reasonBubble(x1 + 94, 262, topNoProg[1][0], topNoProg[1][1], 'rgba(93,173,226,0.20)', '#5dade2') : '')}
+        <text x="${x2 + 58}" y="246" text-anchor="middle" fill="#f5b041" font-size="11">Conversion paths</text>
+        ${(noProg1 ? reasonLink(x1 + 22, 248, x1 + 58, yBot + nodeH / 2 + 4, noProg1[1], '#5dade2') : '')}
+        ${(noProg2 ? reasonLink(x1 + 94, 248, x1 + 58, yBot + nodeH / 2 + 4, noProg2[1], '#5dade2') : '')}
+        ${(conv1 ? reasonLink(x2 + 22, 248, x2 + 58, (isNotConvertedPath(conv1[0]) ? (yBot + nodeH / 2 + 4) : (yTop + nodeH / 2 + 4)), conv1[1], (isNotConvertedPath(conv1[0]) ? '#95a5a6' : '#f5b041')) : '')}
+        ${(conv2 ? reasonLink(x2 + 94, 248, x2 + 58, (isNotConvertedPath(conv2[0]) ? (yBot + nodeH / 2 + 4) : (yTop + nodeH / 2 + 4)), conv2[1], (isNotConvertedPath(conv2[0]) ? '#95a5a6' : '#af7ac5')) : '')}
+        ${(topConvPath[0] ? reasonBubble(x2 + 22, 262, topConvPath[0][0], topConvPath[0][1], 'rgba(245,176,65,0.28)', '#f5b041') : '')}
+        ${(topConvPath[1] ? reasonBubble(x2 + 94, 262, topConvPath[1][0], topConvPath[1][1], 'rgba(175,122,197,0.24)', '#af7ac5') : '')}
+      </svg>
+      </div>
+    `;
+  };
+  if (!flowPayloads.length){
+    explainGraph.innerHTML = '<div class="sub">No objective funnel data to build explainability graph.</div>';
+  } else {
+    const cardsHtml = flowPayloads
+      .filter((p)=>Number((p.row || {}).opportunities || 0) > 0)
+      .map((p)=>mkFlowSvg(p.side, p.row || {}, ((opxBySide || {})[String(p.side)] || ((p.side === 'GLOBAL') ? ((opx || {}).global || {}) : {}))))
+      .join('');
+    explainGraph.innerHTML = cardsHtml
+      ? `<div style="display:grid;grid-template-columns:repeat(3,minmax(280px,1fr));gap:10px;align-items:start;">${cardsHtml}</div>`
+      : '<div class="sub">No opportunities in this run (graph not informative).</div>';
+  }
+  hierGraph.innerHTML = '';
+  pathTransTb.innerHTML = '';
+  ttcReasonTb.innerHTML = '';
+  harmfulTb.innerHTML = '';
+  const sideRowsForExplain = Object.entries(opfBySide || {}).sort((a,b)=>String(a[0]).localeCompare(String(b[0])));
+  if (!sideRowsForExplain.length){
+    hierGraph.innerHTML = '<div class="sub">No side opportunities to explain.</div>';
+  } else {
+    const mkBreakdownSvg = (side, funnelRow, convEntries, reasonEntries, ttcReasonMap, ttcPathMap) => {
+      const opp = Math.max(0, Number((funnelRow || {}).opportunities || 0));
+      const progress = Math.max(0, Number((funnelRow || {}).progress_actions || 0));
+      const conversions = Math.max(0, Number((funnelRow || {}).conversions || 0));
+      const stalls = Math.max(0, Number((funnelRow || {}).stalls || 0));
+      const noProgress = Math.max(0, opp - progress);
+      const W = 450;
+      const H = 320;
+      const baseX = 45;
+      const lane1X = 170;
+      const lane2X = 300;
+      const lane3X = 400;
+      const yMid = 130;
+      const rr = (v) => Math.max(9, Math.min(28, Math.sqrt(Math.max(0, Number(v || 0))) * 2.5));
+      const fmtTtc = (v) => (Number(v) >= 0 ? Number(v).toFixed(1) : '-');
+      const urgencyColor = (meta, baseGood, baseWarn) => {
+        const rate = Number((meta || {}).conversion_observed_rate ?? -1);
+        const p90 = Number((meta || {}).ttc_p90_turns ?? -1);
+        // High urgency: low conversion + long p90.
+        if (rate >= 0 && p90 >= 0 && (rate < 0.25 || p90 >= 8.0)) return '#e74c3c';
+        if (rate >= 0 && p90 >= 0 && (rate < 0.45 || p90 >= 5.0)) return '#f1c40f';
+        return baseGood || baseWarn;
+      };
+      const path = (x1, y1, x2, y2, w, color) => `
+        <path d="M ${x1} ${y1} C ${x1 + 42} ${y1}, ${x2 - 42} ${y2}, ${x2} ${y2}"
+              fill="none" stroke="${color}" stroke-width="${Math.max(1.0, Math.min(5.0, Number(w || 1))).toFixed(2)}" opacity="0.7" />`;
+      const bubble = (x, y, label, v, fill, stroke, metaText='') => `
+        <g>
+          <title>${label}: ${Number(v || 0)}</title>
+          <circle cx="${x}" cy="${y}" r="${rr(v)}" fill="${fill}" stroke="${stroke}" />
+          <text x="${x}" y="${y + 3}" text-anchor="middle" fill="#dfe8f4" font-size="10">${Number(v || 0)}</text>
+          <text x="${x}" y="${y + 18}" text-anchor="middle" fill="#97aac1" font-size="10">${label}</text>
+          ${metaText ? `<text x="${x}" y="${y + 32}" text-anchor="middle" fill="#8aa0b8" font-size="9">${metaText}</text>` : ''}
+        </g>`;
+      const convTop = (Array.isArray(convEntries) ? convEntries : []).slice(0, 3);
+      const reasonTop = (Array.isArray(reasonEntries) ? reasonEntries : []).slice(0, 3);
+      const convY = [80, 150, 220];
+      const reasonY = [70, 150, 230];
+      const convNodes = convTop.map((e, i)=>{
+        const key = String(e[0]);
+        return { key, count: Number(e[1] || 0), y: convY[i] || 190, meta: (ttcPathMap || {})[key] || null };
+      });
+      const reasonNodes = reasonTop.map((e, i)=>{
+        const key = String(e[0]);
+        return { key, count: Number(e[1] || 0), y: reasonY[i] || 230, meta: (ttcReasonMap || {})[key] || null };
+      });
+      const short = (s)=> {
+        const t = String(s || '').replaceAll('_', ' ');
+        return t.length > 16 ? (t.slice(0, 15) + '…') : t;
+      };
+      return `
+        <div style="background:rgba(15,18,27,0.45);border:1px solid var(--border);border-radius:10px;padding:8px;">
+          <div class="sub" style="margin:0 0 6px 0;"><b>${side}</b> · opp=${opp} · progress=${progress} · conv=${conversions} · stalls=${stalls}</div>
+          <svg viewBox="0 0 ${W} ${H}" width="100%" height="${H}" style="display:block;">
+            <text x="${lane1X}" y="20" text-anchor="middle" fill="#7fb3d5" font-size="11">Funnel</text>
+            <text x="${lane2X}" y="20" text-anchor="middle" fill="#f5b041" font-size="11">Conversion Paths (r/p50/p90)</text>
+            <text x="${lane3X}" y="20" text-anchor="middle" fill="#af7ac5" font-size="11">No-Progress Reasons (r/p50/p90)</text>
+            ${path(baseX, yMid, lane1X, 70, progress, '#2ecc71')}
+            ${path(baseX, yMid, lane1X, 130, conversions, '#f5b041')}
+            ${path(baseX, yMid, lane1X, 190, stalls, '#5dade2')}
+            ${bubble(baseX, yMid, 'opp', opp, 'rgba(93,173,226,0.25)', '#5dade2')}
+            ${bubble(lane1X, 70, 'progress', progress, 'rgba(46,204,113,0.22)', '#2ecc71')}
+            ${bubble(lane1X, 130, 'converted', conversions, 'rgba(245,176,65,0.22)', '#f5b041')}
+            ${bubble(lane1X, 190, 'stalls', stalls, 'rgba(93,173,226,0.18)', '#5dade2')}
+            ${convNodes.map((n)=>{
+              const meta = n.meta || {};
+              const hasMeta = meta && Number(meta.count || 0) > 0;
+              const metaTxt = hasMeta
+                ? `r=${pct(Number(meta.conversion_observed_rate || 0))} TTC p50=${fmtTtc(meta.ttc_p50_turns)} p90=${fmtTtc(meta.ttc_p90_turns)}`
+                : 'TTC: N/A';
+              const c = urgencyColor(meta, '#f5b041', '#af7ac5');
+              return (
+                `${path(lane1X, 130, lane2X, n.y, n.count, '#f5b041')}
+                 ${bubble(lane2X, n.y, short(n.key), n.count, 'rgba(245,176,65,0.18)', c, metaTxt)}`
+              );
+            }).join('')}
+            ${reasonNodes.map((n)=>{
+              const meta = n.meta || {};
+              const hasMeta = meta && Number(meta.count || 0) > 0;
+              const metaTxt = hasMeta
+                ? `r=${pct(Number(meta.conversion_observed_rate || 0))} TTC p50=${fmtTtc(meta.ttc_p50_turns)} p90=${fmtTtc(meta.ttc_p90_turns)}`
+                : 'TTC: N/A';
+              const c = urgencyColor(meta, '#af7ac5', '#5dade2');
+              return (
+                `${path(lane1X, 190, lane3X, n.y, n.count, '#af7ac5')}
+                 ${bubble(lane3X, n.y, short(n.key), n.count, 'rgba(175,122,197,0.18)', c, metaTxt)}`
+              );
+            }).join('')}
+            <text x="${lane2X}" y="302" text-anchor="middle" fill="#7f8c8d" font-size="10">${convNodes.length ? '' : 'no conversion path rows'}</text>
+            <text x="${lane3X}" y="302" text-anchor="middle" fill="#7f8c8d" font-size="10">${reasonNodes.length ? '' : 'no reason rows'}</text>
+          </svg>
+        </div>
+      `;
+    };
+    const graphCards = [];
+    for (const [side, funnelRow] of sideRowsForExplain){
+      const opp = Math.max(1, Number((funnelRow || {}).opportunities || 0));
+      const explainSide = (opxBySide || {})[side] || {};
+      const noProgCounts = explainSide.no_progress_reason_counts || {};
+      const convPathCounts = explainSide.conversion_path_counts || {};
+      const noProgEntries = Object.entries(noProgCounts).sort((a,b)=>Number(b[1] || 0) - Number(a[1] || 0));
+      const convEntries = Object.entries(convPathCounts).sort((a,b)=>Number(b[1] || 0) - Number(a[1] || 0));
+      const reasonRows = Array.isArray((ttcByReasonSide || {})[side]) ? (ttcByReasonSide || {})[side] : [];
+      const pathRows = Array.isArray((ttcByPathSide || {})[side]) ? (ttcByPathSide || {})[side] : [];
+      const reasonMap = {};
+      const pathMap = {};
+      for (const r of reasonRows) {
+        const k = String((r || {}).key || '');
+        if (k) reasonMap[k] = r;
+      }
+      for (const r of pathRows) {
+        const k = String((r || {}).key || '');
+        if (k) pathMap[k] = r;
+      }
+      graphCards.push(mkBreakdownSvg(side, funnelRow, convEntries, noProgEntries, reasonMap, pathMap));
+    }
+    hierGraph.innerHTML = graphCards.length
+      ? `<div style="display:grid;grid-template-columns:repeat(3,minmax(300px,1fr));gap:10px;align-items:start;">${graphCards.join('')}</div>`
+      : '<div class="sub">No side opportunities to explain.</div>';
+  }
+  const transitionRows = [];
+  for (const r of pathMatrixGlobal.slice(0, 12)){
+    transitionRows.push({ scope: 'GLOBAL', row: r });
+  }
+  for (const [side, rows] of Object.entries(pathMatrixBySide || {})){
+    for (const r of (Array.isArray(rows) ? rows.slice(0, 6) : [])){
+      transitionRows.push({ scope: String(side), row: r });
+    }
+  }
+  if (!transitionRows.length){
+    pathTransTb.innerHTML = '<tr><td colspan="5" class="sub">No path transition matrix data.</td></tr>';
+  } else {
+    for (const item of transitionRows){
+      const r = item.row || {};
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td>${item.scope}</td>
+        <td>${String(r.from_path || '-')}</td>
+        <td>${String(r.to_path || '-')}</td>
+        <td>${Number(r.count || 0)}</td>
+        <td>${pct(Number(r.rate_from || 0))}</td>
+      `;
+      pathTransTb.appendChild(tr);
+    }
+  }
+  const ttcRows = [];
+  for (const r of ttcByReasonGlobal.slice(0, 8)){
+    ttcRows.push({ scope: 'GLOBAL', row: r });
+  }
+  for (const [side, rows] of Object.entries(ttcByReasonSide || {})){
+    for (const r of (Array.isArray(rows) ? rows.slice(0, 4) : [])){
+      ttcRows.push({ scope: String(side), row: r });
+    }
+  }
+  if (!ttcRows.length){
+    ttcReasonTb.innerHTML = '<tr><td colspan="6" class="sub">No time-to-convert reason data.</td></tr>';
+  } else {
+    for (const item of ttcRows){
+      const r = item.row || {};
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td>${item.scope}</td>
+        <td>${String(r.key || '-')}</td>
+        <td>${Number(r.count || 0)}</td>
+        <td>${pct(Number(r.conversion_observed_rate || 0))}</td>
+        <td>${Number(r.ttc_p50_turns || -1).toFixed(2)}</td>
+        <td>${Number(r.ttc_p90_turns || -1).toFixed(2)}</td>
+      `;
+      ttcReasonTb.appendChild(tr);
+    }
+  }
+  if (!harmfulPaths.length){
+    harmfulTb.innerHTML = '<tr><td colspan="5" class="sub">No harmful path ranking data.</td></tr>';
+  } else {
+    for (const r of harmfulPaths){
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td>${String(r.path || '-')}</td>
+        <td>${Number(r.count || 0)}</td>
+        <td>${pct(Number(r.no_conversion_rate || 0))}</td>
+        <td>${Number(r.ttc_p50_turns || -1).toFixed(2)}</td>
+        <td>${Number(r.ttc_p90_turns || -1).toFixed(2)}</td>
+      `;
+      harmfulTb.appendChild(tr);
+    }
+  }
+  bySideTb.innerHTML = '';
+  const rows = Object.entries(vp.by_side || {});
+  if (!rows.length){
+    bySideTb.innerHTML = '<tr><td colspan="12" class="sub">No VP-by-side data.</td></tr>';
+    return;
+  }
+  for (const [side, payload] of rows){
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td>${side}</td>
+      <td>${Number(payload.vp_initial || 0).toFixed(2)}</td>
+      <td>${Number(payload.vp_final || 0).toFixed(2)}</td>
+      <td>${Number(payload.vp_gained_sum || 0)}</td>
+      <td>${Number(payload.vp_lost_sum || 0)}</td>
+      <td>${Number(payload.vp_net_sum || 0)}</td>
+      <td>${Number(payload.vp_related_actions || 0)}</td>
+      <td>${Number(payload.capture_actions || 0)}</td>
+      <td>${Number(payload.vp_captures || 0)}</td>
+      <td>${pct(Number(payload.vp_capture_rate_in_side || 0))}</td>
+      <td>${pct(Number(payload.capture_rate_in_side || 0))}</td>
+      <td>${Number(payload.unique_units_with_vp_captures || payload.unique_units_with_vp_actions || 0)}</td>
+    `;
+    bySideTb.appendChild(tr);
+  }
+}
+
+function renderMuzeroStrategies(data){
+  const summary = document.getElementById('muzeroStrategiesSummary');
+  const sideTable = document.getElementById('muzeroStrategiesBySideTable');
+  const sideTb = document.querySelector('#muzeroStrategiesBySideTable tbody');
+  if (!summary || !sideTb || !sideTable) return;
+  const ss = (data || {}).strategy_summary || {};
+  const rows = ss.strategies || [];
+  const bySide = ss.strategies_by_side || {};
+
+  const getRate = (name) =>
+    Number((rows.find((r) => String(r.strategy) === name) || {}).rate_global || 0);
+  renderKV('muzeroStrategiesSummary', [
+    ['Total Actions', String(Number(ss.total_actions || 0))],
+    ['Advance Share', pct(getRate('ADVANCE'))],
+    ['Attack Share', pct(getRate('ATTACK'))],
+    ['Capture Share', pct(getRate('CAPTURE'))],
+    ['Assault Share', pct(getRate('ASSAULT'))],
+    ['Hold Share', pct(getRate('HOLD'))],
+  ]);
+
+  sideTb.innerHTML = '';
+  const sideNames = Object.keys(bySide).sort();
+  const byStrategy = {};
+  for (const side of sideNames){
+    for (const r of (bySide[side] || [])){
+      const strategy = String(r.strategy || 'OTHER');
+      if (!byStrategy[strategy]) byStrategy[strategy] = {};
+      byStrategy[strategy][side] = {
+        count: Number(r.count || 0),
+        rate: Number(r.rate_in_side || 0),
+      };
+    }
+  }
+  if (!sideNames.length || !Object.keys(byStrategy).length){
+    sideTable.querySelector('thead').innerHTML = '<tr><th>Strategy</th><th>Total Count</th><th>Total Rate</th><th>Count</th><th>Rate</th></tr>';
+    sideTb.innerHTML = '<tr><td colspan="5" class="sub">No side strategy breakdown.</td></tr>';
+    return;
+  }
+  const headerCells = ['<th>Strategy</th>', '<th>Total Count</th>', '<th>Total Rate</th>'];
+  for (const side of sideNames){
+    headerCells.push(`<th>${side} Count</th>`);
+    headerCells.push(`<th>${side} Rate</th>`);
+  }
+  sideTable.querySelector('thead').innerHTML = `<tr>${headerCells.join('')}</tr>`;
+  const strategyRows = rows.length ? rows : Object.keys(byStrategy).map((s)=>({strategy:s,count:0,rate_global:0}));
+  const sortedStrategies = strategyRows
+    .slice()
+    .sort((a,b)=>Number(b.count||0)-Number(a.count||0))
+    .map((r)=>String(r.strategy || 'OTHER'));
+  for (const strategy of sortedStrategies){
+    let totalCount = 0;
+    for (const side of sideNames){
+      totalCount += Number((byStrategy[strategy] && byStrategy[strategy][side] ? byStrategy[strategy][side].count : 0) || 0);
+    }
+    const globalRow = rows.find((r)=>String(r.strategy||'OTHER')===strategy) || {};
+    const totalRate = Number(globalRow.rate_global || 0);
+    const cells = [
+      `<td>${strategy}</td>`,
+      `<td>${totalCount}</td>`,
+      `<td>${pct(totalRate)}</td>`,
+    ];
+    for (const side of sideNames){
+      const payload = (byStrategy[strategy] || {})[side] || { count: 0, rate: 0 };
+      cells.push(`<td>${Number(payload.count || 0)}</td>`);
+      cells.push(`<td>${pct(Number(payload.rate || 0))}</td>`);
+    }
+    const tr = document.createElement('tr');
+    tr.innerHTML = cells.join('');
+    sideTb.appendChild(tr);
+  }
+}
+
+function _updateMuzeroChannelHeatmap(){
+  const data = latestMuzeroChannels;
+  const heatRoot = document.getElementById('muzeroChannelHeatmap');
+  const snapshotSel = document.getElementById('muzeroChannelSnapshotSelect');
+  const channelSel = document.getElementById('muzeroChannelSelect');
+  if (!heatRoot || !snapshotSel || !channelSel || !data) return;
+  const snapshots = data.snapshots || [];
+  if (!snapshots.length){
+    heatRoot.innerHTML = '<div class="sub">No snapshot planes available.</div>';
+    return;
+  }
+  const snap = snapshots.find((s)=>String(s.label) === String(snapshotSel.value)) || snapshots[0];
+  const channel = (snap.channels || []).find((c)=>String(c.index) === String(channelSel.value)) || (snap.channels || [])[0];
+  if (!channel || !Array.isArray(channel.values)){
+    heatRoot.innerHTML = '<div class="sub">No channel values available.</div>';
+    return;
+  }
+  const values = channel.values;
+  let minV = Infinity;
+  let maxV = -Infinity;
+  for (const row of values){
+    for (const v of row){
+      const fv = Number(v || 0);
+      if (fv < minV) minV = fv;
+      if (fv > maxV) maxV = fv;
+    }
+  }
+  const den = (maxV - minV) || 1e-9;
+  const isUniform = Math.abs(maxV - minV) < 1e-12;
+  const rowsHtml = values.map((row)=>`<tr>${
+    row.map((v)=>{
+      const fv = Number(v || 0);
+      let color = 'rgba(40,52,80,0.25)';
+      if (isUniform){
+        if (Math.abs(fv) < 1e-12){
+          color = 'rgba(90,100,120,0.35)';
+        } else if (fv > 0){
+          // Strong visible fill for uniform nonzero channels.
+          color = 'rgba(0,220,140,0.90)';
+        } else {
+          color = 'rgba(255,80,80,0.90)';
+        }
+      } else {
+        const t = (fv - minV) / den;
+        const alpha = Math.max(0.15, Math.min(1.0, t));
+        color = fv >= 0
+          ? `rgba(70,170,255,${alpha.toFixed(3)})`
+          : `rgba(255,100,100,${alpha.toFixed(3)})`;
+      }
+      return `<td title="${fv.toFixed(4)}" style="width:16px;height:16px;background:${color};border:1px solid #1e2534;"></td>`;
+    }).join('')
+  }</tr>`).join('');
+  const uniformTag = isUniform ? ' [uniform channel]' : '';
+  const uniformHint = isUniform
+    ? `<div class="sub" style="margin:0 0 6px 0;">uniform value = ${minV.toFixed(4)} (rendered with high-contrast fill)</div>`
+    : '';
+  heatRoot.innerHTML = `
+    <div class="sub" style="margin-bottom:6px;">snapshot=${snap.label} channel=${channel.name} min=${minV.toFixed(4)} max=${maxV.toFixed(4)}${uniformTag}</div>
+    ${uniformHint}
+    <table style="border-collapse:collapse;"><tbody>${rowsHtml}</tbody></table>
+  `;
+}
+
+function renderMuzeroChannels(data, errorMsg=''){
+  const summary = document.getElementById('muzeroChannelsSummary');
+  const tb = document.querySelector('#muzeroChannelsTable tbody');
+  const snapshotSel = document.getElementById('muzeroChannelSnapshotSelect');
+  const channelSel = document.getElementById('muzeroChannelSelect');
+  const showConst = document.getElementById('muzeroShowConstantChannels');
+  if (!summary || !tb || !snapshotSel || !channelSel || !showConst) return;
+  if (!data || errorMsg){
+    latestMuzeroChannels = null;
+    renderKV('muzeroChannelsSummary', [
+      ['Status', errorMsg ? `Error: ${errorMsg}` : 'No channel data'],
+      ['Hint', 'Run training with CNN encoder and reload run'],
+    ]);
+    snapshotSel.innerHTML = '';
+    channelSel.innerHTML = '';
+    tb.innerHTML = '<tr><td colspan="6" class="sub">No channel data.</td></tr>';
+    const heatRoot = document.getElementById('muzeroChannelHeatmap');
+    if (heatRoot) heatRoot.innerHTML = '<div class="sub">No heatmap data.</div>';
+    return;
+  }
+  latestMuzeroChannels = data;
+  const shape = data.shape || {};
+  renderKV('muzeroChannelsSummary', [
+    ['Encoder', String(data.encoder_type || '-')],
+    ['Channels', String(Number(shape.channels || 0))],
+    ['Height', String(Number(shape.height || 0))],
+    ['Width', String(Number(shape.width || 0))],
+  ]);
+  const snapshots = data.snapshots || [];
+  const firstSnapshot = snapshots[0] || {};
+  const allRows = firstSnapshot.channels || data.channels || [];
+  const rows = showConst.checked
+    ? allRows
+    : allRows.filter((r)=>!['turn_norm','done_flag'].includes(String(r.name || '')));
+  snapshotSel.innerHTML = '';
+  for (const s of snapshots){
+    const o = document.createElement('option');
+    o.value = String(s.label || '');
+    o.textContent = String(s.label || '');
+    snapshotSel.appendChild(o);
+  }
+  channelSel.innerHTML = '';
+  for (const row of rows){
+    const o = document.createElement('option');
+    o.value = String(row.index);
+    o.textContent = `${row.index} - ${row.name || '-'}`;
+    channelSel.appendChild(o);
+  }
+  tb.innerHTML = '';
+  if (!rows.length){
+    tb.innerHTML = '<tr><td colspan="6" class="sub">No channels listed.</td></tr>';
+    const heatRoot = document.getElementById('muzeroChannelHeatmap');
+    if (heatRoot) heatRoot.innerHTML = '<div class="sub">No heatmap data.</div>';
+    return;
+  }
+  for (const row of rows){
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td>${Number(row.index || 0)}</td>
+      <td>${row.name || '-'}</td>
+      <td>${Number(row.nonzero_cells || 0)}</td>
+      <td>${pct(Number(row.nonzero_ratio || 0))}</td>
+      <td>${Number(row.mean_value || 0).toFixed(4)}</td>
+      <td>${Number(row.max_value || 0).toFixed(4)}</td>
+    `;
+    tb.appendChild(tr);
+  }
+  _updateMuzeroChannelHeatmap();
+}
+
+function renderMuzeroXaiDecisions(data, errorMsg=''){
+  const summary = document.getElementById('muzeroXaiSummary');
+  const tb = document.querySelector('#muzeroXaiTable tbody');
+  const dimTb = document.querySelector('#muzeroXaiDimTable tbody');
+  const ownTb = document.querySelector('#muzeroXaiOwnershipTable tbody');
+  const sideSel = document.getElementById('muzeroXaiSideSelect');
+  const actionFilter = document.getElementById('muzeroXaiActionFilter');
+  if (!summary || !tb || !dimTb || !ownTb || !sideSel || !actionFilter) return;
+  if (!data || errorMsg){
+    latestMuzeroXai = null;
+    renderKV('muzeroXaiSummary', [['Status', errorMsg ? `Error: ${errorMsg}` : 'No XAI decision data']]);
+    dimTb.innerHTML = '<tr><td colspan="6" class="sub">No latent correlation rows.</td></tr>';
+    ownTb.innerHTML = '<tr><td colspan="4" class="sub">No ownership rows.</td></tr>';
+    tb.innerHTML = '<tr><td colspan="10" class="sub">No XAI decision rows.</td></tr>';
+    return;
+  }
+  latestMuzeroXai = data;
+  const rows = Array.isArray(data.rows) ? data.rows : [];
+  const side = String(sideSel.value || '').trim().toUpperCase();
+  const term = String(actionFilter.value || '').trim().toUpperCase();
+  const filtered = rows.filter((r)=>{
+    if (side && String(r.to_play || '').toUpperCase() !== side) return false;
+    if (term){
+      const hay = `${r.action_id || ''} ${r.action_kind || ''}`.toUpperCase();
+      if (!hay.includes(term)) return false;
+    }
+    return true;
+  });
+  const topProbAvg = filtered.length
+    ? (filtered.reduce((acc, r)=>acc + Number(((r.policy_top_probs || [])[0] || 0)), 0) / filtered.length)
+    : 0;
+  const l2Avg = filtered.length
+    ? (filtered.reduce((acc, r)=>acc + Number(r.latent_l2_norm || 0), 0) / filtered.length)
+    : 0;
+  const valueRootAvg = filtered.length
+    ? (filtered.reduce((acc, r)=>acc + Number(r.predicted_value_root || 0), 0) / filtered.length)
+    : 0;
+  const dynRewardAvg = filtered.length
+    ? (filtered.reduce((acc, r)=>acc + Number(r.dynamics_pred_reward || 0), 0) / filtered.length)
+    : 0;
+  const dynNextL2Avg = filtered.length
+    ? (filtered.reduce((acc, r)=>acc + Number(r.dynamics_next_latent_l2 || 0), 0) / filtered.length)
+    : 0;
+  const dynDeltaL2Avg = filtered.length
+    ? (filtered.reduce((acc, r)=>acc + Number(r.dynamics_delta_l2 || 0), 0) / filtered.length)
+    : 0;
+  const dimStats = new Map();
+  for (const r of filtered){
+    const dims = Array.isArray(r.latent_top_indices) ? r.latent_top_indices : [];
+    const isAttack = !['', 'MOVE', 'WAIT', 'TIMEOUT'].includes(String(r.action_kind || '').toUpperCase());
+    const vpCapture = Number(r.vp_captures || 0) > 0 ? 1 : 0;
+    const topProb = Number(((r.policy_top_probs || [])[0] || 0));
+    for (const dRaw of dims){
+      const d = Number(dRaw);
+      if (!Number.isFinite(d)) continue;
+      if (!dimStats.has(d)){
+        dimStats.set(d, {count: 0, attackCount: 0, vpCount: 0, topProbSum: 0});
+      }
+      const s = dimStats.get(d);
+      s.count += 1;
+      if (isAttack) s.attackCount += 1;
+      if (vpCapture) s.vpCount += 1;
+      s.topProbSum += topProb;
+    }
+  }
+  const dimRows = Array.from(dimStats.entries()).map(([dim, s])=>({
+    dim: Number(dim),
+    count: Number(s.count || 0),
+    support: filtered.length > 0 ? Number(s.count || 0) / filtered.length : 0,
+    attackRate: Number(s.count || 0) > 0 ? Number(s.attackCount || 0) / Number(s.count || 1) : 0,
+    vpCaptureRate: Number(s.count || 0) > 0 ? Number(s.vpCount || 0) / Number(s.count || 1) : 0,
+    topProbAvg: Number(s.count || 0) > 0 ? Number(s.topProbSum || 0) / Number(s.count || 1) : 0,
+  }));
+  dimRows.sort((a,b)=>b.count-a.count);
+  const dimExplainText = dimRows.length
+    ? dimRows.slice(0, 5).map((r)=>`d${r.dim}: supp ${pct(r.support)}, atk ${pct(r.attackRate)}, vpCap ${pct(r.vpCaptureRate)}, pTop ${pct(r.topProbAvg)}`).join(' | ')
+    : '-';
+  const ownership = {
+    total: 0,
+    aligned: 0,
+    overwritten: 0,
+    bySide: {},
+  };
+  for (const r of filtered){
+    const side = String(r.to_play || 'unknown').toUpperCase();
+    const action = String(r.action_id || '');
+    const topPolicy = String(((r.policy_top_actions || [])[0]) || '');
+    const aligned = action && topPolicy && action === topPolicy;
+    ownership.total += 1;
+    if (aligned) ownership.aligned += 1;
+    else ownership.overwritten += 1;
+    if (!ownership.bySide[side]){
+      ownership.bySide[side] = { total: 0, aligned: 0, overwritten: 0 };
+    }
+    ownership.bySide[side].total += 1;
+    if (aligned) ownership.bySide[side].aligned += 1;
+    else ownership.bySide[side].overwritten += 1;
+  }
+  summary.innerHTML = `
+    <div id="muzeroXaiSummaryGrid">
+      <div class="xai-card"><div class="k">Rows (loaded)</div><div class="v">${String(Number(data.count || rows.length || 0))}</div></div>
+      <div class="xai-card"><div class="k">Rows (filtered)</div><div class="v">${String(filtered.length)}</div></div>
+      <div class="xai-card"><div class="k">Representation L2 avg</div><div class="v">${Number(l2Avg || 0).toFixed(3)}</div></div>
+      <div class="xai-card"><div class="k">Prediction Top-1 prob avg</div><div class="v">${pct(Number(topProbAvg || 0))}</div></div>
+      <div class="xai-card"><div class="k">Prediction Value(root) avg</div><div class="v">${Number(valueRootAvg || 0).toFixed(4)}</div></div>
+      <div class="xai-card"><div class="k">Dynamics Reward avg</div><div class="v">${Number(dynRewardAvg || 0).toFixed(4)}</div></div>
+      <div class="xai-card"><div class="k">Dynamics Next L2 avg</div><div class="v">${Number(dynNextL2Avg || 0).toFixed(3)}</div></div>
+      <div class="xai-card"><div class="k">Dynamics Delta L2 avg</div><div class="v">${Number(dynDeltaL2Avg || 0).toFixed(3)}</div></div>
+    </div>
+  `;
+  dimTb.innerHTML = '';
+  ownTb.innerHTML = '';
+  tb.innerHTML = '';
+  if (!filtered.length){
+    dimTb.innerHTML = '<tr><td colspan="6" class="sub">No rows after filter.</td></tr>';
+    ownTb.innerHTML = '<tr><td colspan="4" class="sub">No rows after filter.</td></tr>';
+    tb.innerHTML = '<tr><td colspan="10" class="sub">No rows after filter.</td></tr>';
+    return;
+  }
+  for (const r of dimRows.slice(0, 12)){
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td>d${Number(r.dim || 0)}</td>
+      <td>${pct(Number(r.support || 0))}</td>
+      <td>${pct(Number(r.attackRate || 0))}</td>
+      <td>${pct(Number(r.vpCaptureRate || 0))}</td>
+      <td>${pct(Number(r.topProbAvg || 0))}</td>
+      <td>${Number(r.count || 0)}</td>
+    `;
+    dimTb.appendChild(tr);
+  }
+  if (!dimTb.children.length){
+    dimTb.innerHTML = '<tr><td colspan="6" class="sub">No latent dimension rows.</td></tr>';
+  }
+  const bySideRows = Object.entries(ownership.bySide).sort((a,b)=>String(a[0]).localeCompare(String(b[0])));
+  for (const [sideName, s] of bySideRows){
+    const t = Math.max(1, Number(s.total || 0));
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td>${sideName || '-'}</td>
+      <td>${Number(s.total || 0)}</td>
+      <td>${Number(s.aligned || 0)} (${pct(Number(s.aligned || 0) / t)})</td>
+      <td>${Number(s.overwritten || 0)} (${pct(Number(s.overwritten || 0) / t)})</td>
+    `;
+    ownTb.appendChild(tr);
+  }
+  if (bySideRows.length){
+    const totalAll = Number(ownership.total || 0);
+    const alignedAll = Number(ownership.aligned || 0);
+    const overwrittenAll = Number(ownership.overwritten || 0);
+    const denomAll = Math.max(1, totalAll);
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td><b>TOTAL</b></td>
+      <td><b>${totalAll}</b></td>
+      <td><b>${alignedAll} (${pct(alignedAll / denomAll)})</b></td>
+      <td><b>${overwrittenAll} (${pct(overwrittenAll / denomAll)})</b></td>
+    `;
+    ownTb.appendChild(tr);
+  }
+  if (!ownTb.children.length){
+    ownTb.innerHTML = '<tr><td colspan="4" class="sub">No ownership rows.</td></tr>';
+  }
+  const maxRows = 300;
+  for (const r of filtered.slice(-maxRows).reverse()){
+    const tr = document.createElement('tr');
+    const topA = String(((r.policy_top_actions || [])[0]) || '-');
+    const topP = Number(((r.policy_top_probs || [])[0]) || 0);
+    const dims = (Array.isArray(r.latent_top_indices) ? r.latent_top_indices : [])
+      .slice(0, 5)
+      .map((d)=>`d${Number(d)}`)
+      .join(', ');
+    tr.innerHTML = `
+      <td>${Number(r.iteration || 0)}/${Number(r.episode || 0)}/${Number(r.step || 0)}</td>
+      <td>${Number(r.game_turn || 0)}</td>
+      <td>${r.to_play || '-'}</td>
+      <td>${r.action_id || '-'}</td>
+      <td>${topA}</td>
+      <td>${pct(topP)}</td>
+      <td>${Number(r.predicted_value_root || 0).toFixed(4)}</td>
+      <td>${dims || '-'}</td>
+      <td>${Number(r.dynamics_pred_reward || 0).toFixed(4)}</td>
+      <td>p=${Number(r.chosen_action_prob || 0).toFixed(3)} | H=${Number(r.mcts_entropy || 0).toFixed(3)} | m=${Number(r.mcts_margin || 0).toFixed(3)}</td>
+    `;
+    tb.appendChild(tr);
+  }
+}
+
+function _renderMuzeroXaiMapFrame(){
+  const canvas = document.getElementById('muzeroXaiMapCanvas');
+  const dimsCanvas = document.getElementById('muzeroXaiDimsCanvas');
+  const resCanvas = document.getElementById('muzeroXaiResCanvas');
+  const slider = document.getElementById('muzeroXaiMapStep');
+  const label = document.getElementById('muzeroXaiMapStepLabel');
+  const accum = document.getElementById('muzeroXaiMapAccumulate');
+  const paletteSel = document.getElementById('muzeroXaiMapPalette');
+  const sideModeSel = document.getElementById('muzeroXaiMapSideMode');
+  if (!canvas || !slider || !label || !accum) return;
+  const rows = Array.isArray((latestMuzeroXai || {}).rows) ? latestMuzeroXai.rows : [];
+  const ctx = canvas.getContext('2d');
+  if (!ctx){
+    return;
+  }
+  const total = rows.length;
+  const idx = Math.max(0, Math.min(total - 1, Number(slider.value || 0)));
+  const palette = String((paletteSel && paletteSel.value) || 'neon');
+  const sideMode = String((sideModeSel && sideModeSel.value) || 'blend');
+  label.textContent = total ? `step ${idx + 1}/${total}` : 'step 0/0';
+  ctx.fillStyle = '#0b0f18';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  if (!total){
+    return;
+  }
+  const runCfg = ((latestMuzeroRun || {}).manifest_config || {}).model || {};
+  const w = Number(runCfg.observation_width || 32);
+  const h = Number(runCfg.observation_height || 32);
+  const start = accum.checked ? 0 : idx;
+  const end = idx;
+  const counts = new Map();
+  const scenarioHexes = Array.isArray((latestMuzeroScenarioHexes || {}).hexes)
+    ? latestMuzeroScenarioHexes.hexes
+    : [];
+  const getPlayableCellsFromChannels = ()=>{
+    const snaps = Array.isArray((latestMuzeroChannels || {}).snapshots) ? latestMuzeroChannels.snapshots : [];
+    const snap = snaps[0] || {};
+    const channels = Array.isArray(snap.channels) ? snap.channels : [];
+    const playable = channels.find((c)=>String(c.name || '') === 'map_playable' || Number(c.index) === 12);
+    const vals = (playable && Array.isArray(playable.values)) ? playable.values : null;
+    if (!vals || !vals.length) return [];
+    const halfW = Math.floor(w / 2);
+    const halfH = Math.floor(h / 2);
+    const out = [];
+    for (let y = 0; y < vals.length; y += 1){
+      const row = Array.isArray(vals[y]) ? vals[y] : [];
+      for (let x = 0; x < row.length; x += 1){
+        if (Number(row[x] || 0) <= 0) continue;
+        out.push({ q: x - halfW, r: y - halfH });
+      }
+    }
+    return out;
+  };
+  const playableCellsFromChannels = getPlayableCellsFromChannels();
+  const geometryCells = scenarioHexes.length
+    ? scenarioHexes.map((h)=>({ q: Number(h.q), r: Number(h.r) }))
+    : playableCellsFromChannels;
+  const hexSet = new Set(geometryCells.map((h)=>`${Number(h.q)},${Number(h.r)}`));
+  const addCell = (q, r, weight, sideTag)=>{
+    const qn = Number(q);
+    const rn = Number(r);
+    if (!Number.isFinite(qn) || !Number.isFinite(rn)) return;
+    if (hexSet.size > 0 && !hexSet.has(`${qn},${rn}`)) return;
+    if (hexSet.size === 0 && (qn < 0 || rn < 0 || qn >= w || rn >= h)) return;
+    const key = `${qn},${rn}`;
+    const prev = counts.get(key) || { total: 0, it: 0, us: 0 };
+    const next = {
+      total: Number(prev.total || 0) + Number(weight || 0),
+      it: Number(prev.it || 0),
+      us: Number(prev.us || 0),
+    };
+    const s = String(sideTag || '').toUpperCase();
+    if (s === 'IT') next.it += Number(weight || 0);
+    if (s === 'US') next.us += Number(weight || 0);
+    counts.set(key, next);
+  };
+  for (let i = start; i <= end; i += 1){
+    const row = rows[i] || {};
+    const sideTag = String(row.unit_side || row.to_play || '').toUpperCase();
+    const aq = Number(row.acting_q || 0);
+    const ar = Number(row.acting_r || 0);
+    if ((aq !== 0 || ar !== 0)) addCell(aq, ar, 1.0, sideTag);
+    const actionKind = String(row.action_kind || '').toUpperCase();
+    const isAttack = !['', 'MOVE', 'WAIT', 'TIMEOUT'].includes(actionKind);
+    if (isAttack){
+      const hasTargetUnit = String(row.attack_target_unit_id || '').trim().length > 0;
+      const tq = Number(row.target_q);
+      const tr = Number(row.target_r);
+      if (hasTargetUnit && Number.isFinite(tq) && Number.isFinite(tr)){
+        addCell(tq, tr, 0.6, sideTag);
+      }
+    }
+  }
+  let maxV = 0;
+  for (const v of counts.values()) maxV = Math.max(maxV, Number((v || {}).total || 0));
+  const safeMax = Math.max(1e-9, maxV);
+  const baseCells = geometryCells.length
+    ? geometryCells
+    : Array.from({ length: h }, (_, rr)=>
+      Array.from({ length: w }, (_, qq)=>({ q: qq, r: rr }))
+    ).flat();
+  // Match assault_ai_ui projection: odd-r offset hex layout.
+  const axialRaw = (q, r)=>({
+    x: Math.sqrt(3) * (q + 0.5 * (r % 2)),
+    y: 1.5 * r,
+  });
+  const raws = baseCells.map((c)=>axialRaw(Number(c.q), Number(c.r)));
+  let minX = Number.POSITIVE_INFINITY;
+  let maxX = Number.NEGATIVE_INFINITY;
+  let minY = Number.POSITIVE_INFINITY;
+  let maxY = Number.NEGATIVE_INFINITY;
+  for (const p of raws){
+    minX = Math.min(minX, p.x);
+    maxX = Math.max(maxX, p.x);
+    minY = Math.min(minY, p.y);
+    maxY = Math.max(maxY, p.y);
+  }
+  const pad = 14;
+  const spanX = Math.max(1e-9, maxX - minX);
+  const spanY = Math.max(1e-9, maxY - minY);
+  const scale = Math.min((canvas.width - 2 * pad) / spanX, (canvas.height - 2 * pad) / spanY);
+  const offsetX = (canvas.width - spanX * scale) / 2;
+  const offsetY = (canvas.height - spanY * scale) / 2;
+  // Match assault_ai_ui geometry: center spacing uses HEX_SIZE as circumradius.
+  // With odd-r offset projection, touching neighbors require radius ~= scale.
+  const hexRadius = Math.max(2.5, scale);
+  const hexPath = (cx, cy, rad) => {
+    ctx.beginPath();
+    for (let k = 0; k < 6; k += 1){
+      const ang = (Math.PI / 180) * (60 * k - 30);
+      const px = cx + rad * Math.cos(ang);
+      const py = cy + rad * Math.sin(ang);
+      if (k === 0) ctx.moveTo(px, py);
+      else ctx.lineTo(px, py);
+    }
+    ctx.closePath();
+  };
+  const axialToPixel = (q, r) => {
+    const raw = axialRaw(q, r);
+    const px = offsetX + (raw.x - minX) * scale;
+    const py = offsetY + (raw.y - minY) * scale;
+    return { px, py };
+  };
+  for (const [key, payload] of counts.entries()){
+    const [q, r] = key.split(',').map((n)=>Number(n));
+    const totalVal = Number((payload || {}).total || 0);
+    const itVal = Number((payload || {}).it || 0);
+    const usVal = Number((payload || {}).us || 0);
+    const t = totalVal / safeMax;
+    const a = Math.max(0.12, Math.min(1.0, t));
+    const { px, py } = axialToPixel(q, r);
+    if (sideMode === 'single'){
+      if (palette === 'heat') ctx.fillStyle = `rgba(255,${Math.round(120 + 80 * (1 - t))},40,${a.toFixed(3)})`;
+      else if (palette === 'mono') ctx.fillStyle = `rgba(210,225,255,${a.toFixed(3)})`;
+      else ctx.fillStyle = `rgba(255,80,80,${a.toFixed(3)})`;
+    } else {
+      const itFrac = totalVal > 0 ? itVal / totalVal : 0;
+      const usFrac = totalVal > 0 ? usVal / totalVal : 0;
+      const rCol = Math.round(235 * itFrac + 40 * usFrac);
+      const gCol = Math.round(85 * itFrac + 180 * usFrac);
+      const bCol = Math.round(70 * itFrac + 255 * usFrac);
+      ctx.fillStyle = `rgba(${rCol},${gCol},${bCol},${a.toFixed(3)})`;
+    }
+    hexPath(px, py, hexRadius);
+    ctx.fill();
+  }
+  ctx.strokeStyle = 'rgba(90,110,150,0.35)';
+  ctx.lineWidth = 1;
+  for (const c of baseCells){
+    const { px, py } = axialToPixel(Number(c.q), Number(c.r));
+    hexPath(px, py, hexRadius);
+    ctx.stroke();
+  }
+  // Side legend
+  ctx.fillStyle = 'rgba(220,230,255,0.92)';
+  ctx.font = '12px Segoe UI, sans-serif';
+  ctx.fillText('IT', 10, 18);
+  ctx.fillStyle = 'rgba(235,85,70,0.95)';
+  ctx.fillRect(30, 8, 16, 10);
+  ctx.fillStyle = 'rgba(220,230,255,0.92)';
+  ctx.fillText('US', 58, 18);
+  ctx.fillStyle = 'rgba(40,180,255,0.95)';
+  ctx.fillRect(82, 8, 16, 10);
+
+  if (!dimsCanvas) return;
+  const dctx = dimsCanvas.getContext('2d');
+  if (!dctx) return;
+  const dims = 96;
+  const cols = Math.min(240, rows.length);
+  const colStart = Math.max(0, idx - cols + 1);
+  dctx.fillStyle = '#0b0f18';
+  dctx.fillRect(0, 0, dimsCanvas.width, dimsCanvas.height);
+  const cellW = dimsCanvas.width / Math.max(1, cols);
+  const cellH = dimsCanvas.height / Math.max(1, dims);
+  const heat = Array.from({ length: dims }, () => Array(cols).fill(0));
+  let maxHeat = 0;
+  for (let c = 0; c < cols; c += 1){
+    const row = rows[colStart + c] || {};
+    const idxs = Array.isArray(row.latent_top_indices) ? row.latent_top_indices : [];
+    const vals = Array.isArray(row.latent_top_values) ? row.latent_top_values : [];
+    for (let k = 0; k < idxs.length; k += 1){
+      const d = Number(idxs[k]);
+      const v = Math.abs(Number(vals[k] || 0));
+      if (!Number.isFinite(d) || d < 0 || d >= dims) continue;
+      heat[d][c] = v;
+      if (v > maxHeat) maxHeat = v;
+    }
+  }
+  const safeHeat = Math.max(1e-9, maxHeat);
+  for (let d = 0; d < dims; d += 1){
+    for (let c = 0; c < cols; c += 1){
+      const t = heat[d][c] / safeHeat;
+      if (t <= 0) continue;
+      const a = Math.max(0.08, Math.min(0.95, t));
+      if (palette === 'heat') dctx.fillStyle = `rgba(255,${Math.round(160 + 80 * (1 - t))},60,${a.toFixed(3)})`;
+      else if (palette === 'mono') dctx.fillStyle = `rgba(210,225,255,${a.toFixed(3)})`;
+      else dctx.fillStyle = `rgba(80,220,255,${a.toFixed(3)})`;
+      dctx.fillRect(c * cellW, (dims - 1 - d) * cellH, cellW, cellH);
+    }
+  }
+  const cursorCol = cols - 1;
+  dctx.strokeStyle = 'rgba(255,200,80,0.9)';
+  dctx.lineWidth = 2;
+  dctx.beginPath();
+  dctx.moveTo((cursorCol + 0.5) * cellW, 0);
+  dctx.lineTo((cursorCol + 0.5) * cellW, dimsCanvas.height);
+  dctx.stroke();
+
+  if (!resCanvas) return;
+  const rctx = resCanvas.getContext('2d');
+  if (!rctx) return;
+  rctx.fillStyle = '#0b0f18';
+  rctx.fillRect(0, 0, resCanvas.width, resCanvas.height);
+  if (!total) return;
+  const rowNow = rows[idx] || {};
+  const idxs = Array.isArray(rowNow.latent_top_indices) ? rowNow.latent_top_indices : [];
+  const vals = Array.isArray(rowNow.latent_top_values) ? rowNow.latent_top_values : [];
+  const cx = resCanvas.width / 2;
+  const cy = resCanvas.height / 2;
+  const maxR = Math.min(resCanvas.width, resCanvas.height) * 0.36;
+  for (let k = 0; k < idxs.length; k += 1){
+    const d = Number(idxs[k]);
+    const v = Math.abs(Number(vals[k] || 0));
+    if (!Number.isFinite(d) || !Number.isFinite(v)) continue;
+    const ang = ((d % 96) / 96) * Math.PI * 2;
+    const rad = maxR * (0.35 + (k / Math.max(1, idxs.length)) * 0.6);
+    const x = cx + Math.cos(ang) * rad;
+    const y = cy + Math.sin(ang) * rad;
+    const rr = 16 + v * 240;
+    const g = rctx.createRadialGradient(x, y, 0, x, y, rr);
+    const alpha = Math.max(0.06, Math.min(0.65, 0.1 + v * 5.0));
+    if (palette === 'heat'){
+      g.addColorStop(0, `rgba(255,160,60,${alpha.toFixed(3)})`);
+      g.addColorStop(1, 'rgba(255,160,60,0)');
+    } else if (palette === 'mono'){
+      g.addColorStop(0, `rgba(210,225,255,${alpha.toFixed(3)})`);
+      g.addColorStop(1, 'rgba(210,225,255,0)');
+    } else {
+      g.addColorStop(0, `rgba(90,220,255,${alpha.toFixed(3)})`);
+      g.addColorStop(1, 'rgba(90,220,255,0)');
+    }
+    rctx.fillStyle = g;
+    rctx.beginPath();
+    rctx.arc(x, y, rr, 0, Math.PI * 2);
+    rctx.fill();
+  }
+  rctx.strokeStyle = 'rgba(120,150,220,0.22)';
+  rctx.lineWidth = 1;
+  rctx.beginPath();
+  rctx.arc(cx, cy, maxR * 0.45, 0, Math.PI * 2);
+  rctx.stroke();
+  rctx.beginPath();
+  rctx.arc(cx, cy, maxR * 0.75, 0, Math.PI * 2);
+  rctx.stroke();
+  rctx.fillStyle = 'rgba(190,210,255,0.9)';
+  rctx.font = '12px Segoe UI, sans-serif';
+  rctx.fillText(`step ${idx + 1}/${total}`, 12, 18);
+}
+
+function renderMuzeroXaiMap(data, errorMsg=''){
+  const summary = document.getElementById('muzeroXaiMapSummary');
+  const slider = document.getElementById('muzeroXaiMapStep');
+  if (!summary || !slider) return;
+  if (!data || errorMsg){
+    renderKV('muzeroXaiMapSummary', [['Status', errorMsg ? `Error: ${errorMsg}` : 'No XAI map data']]);
+    slider.min = '0';
+    slider.max = '0';
+    slider.value = '0';
+    _renderMuzeroXaiMapFrame();
+    return;
+  }
+  const rows = Array.isArray(data.rows) ? data.rows : [];
+  const runCfg = ((latestMuzeroRun || {}).manifest_config || {}).model || {};
+  const snaps = Array.isArray((latestMuzeroChannels || {}).snapshots) ? latestMuzeroChannels.snapshots : [];
+  const snap = snaps[0] || {};
+  const channels = Array.isArray(snap.channels) ? snap.channels : [];
+  const playable = channels.find((c)=>String(c.name || '') === 'map_playable' || Number(c.index) === 12);
+  const vals = (playable && Array.isArray(playable.values)) ? playable.values : null;
+  let playableCount = 0;
+  if (vals && vals.length){
+    for (const row of vals){
+      if (!Array.isArray(row)) continue;
+      for (const v of row){
+        if (Number(v || 0) > 0) playableCount += 1;
+      }
+    }
+  }
+  renderKV('muzeroXaiMapSummary', [
+    ['Rows', String(rows.length)],
+    ['Board tensor', `${Number(runCfg.observation_width || 32)}x${Number(runCfg.observation_height || 32)}`],
+    ['Playable hexes', String(playableCount || Number(((latestMuzeroScenarioHexes || {}).hexes || []).length || 0))],
+    ['Signal', 'acting unit = full weight, target = 0.6 weight'],
+  ]);
+  slider.min = '0';
+  slider.max = String(Math.max(0, rows.length - 1));
+  slider.value = String(Math.max(0, rows.length - 1));
+  _renderMuzeroXaiMapFrame();
+}
+
+function _renderMuzeroReplayFrame(){
+  const slider = document.getElementById('muzeroReplayStep');
+  const label = document.getElementById('muzeroReplayStepLabel');
+  const detailRoot = document.getElementById('muzeroReplayStepDetail');
+  const tbody = document.querySelector('#muzeroReplayUnitsTable tbody');
+  if (!slider || !label || !detailRoot || !tbody) return;
+  const rows = Array.isArray((latestMuzeroReplay || {}).transitions) ? latestMuzeroReplay.transitions : [];
+  const total = rows.length;
+  const idx = Math.max(0, Math.min(Math.max(0, total - 1), Number(slider.value || 0)));
+  label.textContent = `step ${total ? idx + 1 : 0}/${total}`;
+  tbody.innerHTML = '';
+  if (!total){
+    renderKV('muzeroReplayStepDetail', [['Status', 'No replay loaded']]);
+    return;
+  }
+  const row = rows[idx] || {};
+  renderKV('muzeroReplayStepDetail', [
+    ['Turn', String(row.turn || 0)],
+    ['Side', String(row.to_play || '-')],
+    ['Action', String(row.action_id || '-')],
+    ['Reward', Number(row.reward || 0).toFixed(3)],
+    ['Done', (row.done ? 'Yes' : 'No')],
+  ]);
+  const units = Array.isArray(row.units) ? row.units.slice() : [];
+  units.sort((a,b)=>{
+    const sa = String((a || {}).side || '');
+    const sb = String((b || {}).side || '');
+    if (sa !== sb) return sa.localeCompare(sb);
+    return String((a || {}).unit_id || '').localeCompare(String((b || {}).unit_id || ''));
+  });
+  for (const u of units){
+    const tr = document.createElement('tr');
+    const side = String((u || {}).side || '');
+    const unitId = String((u || {}).unit_id || '-');
+    const unitLabel = String((u || {}).unit_label || (u || {}).unit_id || '');
+    const hex = `${Number((u || {}).q || 0)},${Number((u || {}).r || 0)}`;
+    const hp = Number((u || {}).hp || 0);
+    const alive = Boolean((u || {}).alive);
+    tr.innerHTML = `<td>${side}</td><td>${unitId}</td><td>${unitLabel}</td><td>${hex}</td><td>${hp}</td><td>${alive ? 'yes' : 'no'}</td>`;
+    tbody.appendChild(tr);
+  }
+  _renderMuzeroReplayMap(row, units);
+}
+
+function _renderMuzeroReplayMap(stepRow, units){
+  const canvas = document.getElementById('muzeroReplayMapCanvas');
+  if (!canvas) return;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return;
+  const w = canvas.width;
+  const h = canvas.height;
+  ctx.fillStyle = '#0b0f18';
+  ctx.fillRect(0, 0, w, h);
+  const hexes = Array.isArray((latestMuzeroScenarioHexes || {}).hexes) ? latestMuzeroScenarioHexes.hexes : [];
+  const points = [];
+  muzeroReplayHexOverlay = [];
+  for (const h0 of hexes){
+    const q = Number((h0 || {}).q);
+    const r = Number((h0 || {}).r);
+    if (!Number.isFinite(q) || !Number.isFinite(r)) continue;
+    points.push({ q, r });
+  }
+  for (const u of units){
+    const q = Number((u || {}).q);
+    const r = Number((u || {}).r);
+    if (!Number.isFinite(q) || !Number.isFinite(r)) continue;
+    points.push({ q, r });
+  }
+  if (!points.length){
+    ctx.fillStyle = 'rgba(190,210,255,0.85)';
+    ctx.font = '14px Segoe UI, sans-serif';
+    ctx.fillText('No map coordinates available', 14, 22);
+    return;
+  }
+  let minQ = 0, maxQ = 0, minR = 0, maxR = 0;
+  for (const p of points){
+    minQ = Math.min(minQ, p.q);
+    maxQ = Math.max(maxQ, p.q);
+    minR = Math.min(minR, p.r);
+    maxR = Math.max(maxR, p.r);
+  }
+  const spanQ = Math.max(1, maxQ - minQ + 1);
+  const spanR = Math.max(1, maxR - minR + 1);
+  const margin = 30;
+  const sizeByW = (w - margin * 2) / (Math.sqrt(3) * (spanQ + spanR * 0.5) + 2);
+  const sizeByH = (h - margin * 2) / (1.5 * spanR + 2);
+  const size = Math.max(8, Math.min(28, sizeByW, sizeByH));
+  const ox = margin + size * 1.8;
+  const oy = margin + size * 1.8;
+  const toXY = (q, r) => {
+    const qq = q - minQ;
+    const rr = r - minR;
+    const x = ox + size * Math.sqrt(3) * (qq + rr / 2);
+    const y = oy + size * 1.5 * rr;
+    return [x, y];
+  };
+    const moveByHex = (latestMuzeroScenarioHexes || {}).terrain_move_cost_by_hex || {};
+    const coverByHex = (latestMuzeroScenarioHexes || {}).terrain_cover_by_hex || {};
+    const losByHex = (latestMuzeroScenarioHexes || {}).terrain_los_block_by_hex || {};
+    const vpSet = new Set(
+      Array.isArray((latestMuzeroScenarioHexes || {}).vp_hexes)
+        ? latestMuzeroScenarioHexes.vp_hexes.map((v)=>`${Number(v.q)},${Number(v.r)}`)
+        : []
+    );
+    const drawHex = (x, y, radius, stroke, fill) => {
+    ctx.beginPath();
+    for (let i = 0; i < 6; i += 1){
+      const a = (Math.PI / 180) * (60 * i - 30);
+      const px = x + radius * Math.cos(a);
+      const py = y + radius * Math.sin(a);
+      if (i === 0) ctx.moveTo(px, py);
+      else ctx.lineTo(px, py);
+    }
+    ctx.closePath();
+    ctx.fillStyle = fill;
+    ctx.fill();
+    ctx.strokeStyle = stroke;
+    ctx.lineWidth = 1;
+    ctx.stroke();
+  };
+  if (hexes.length){
+    for (const hx of hexes){
+      const q = Number((hx || {}).q);
+      const r = Number((hx || {}).r);
+      if (!Number.isFinite(q) || !Number.isFinite(r)) continue;
+      const [x, y] = toXY(q, r);
+        const key = `${q},${r}`;
+        const move = Number(moveByHex[key] || 1.0);
+        const cover = Number(coverByHex[key] || 0.0);
+        const los = Number(losByHex[key] || 0);
+        const vp = vpSet.has(key);
+        const moveTint = Math.max(0, Math.min(1, (move - 1.0) / 2.0));
+        const baseR = Math.round(45 + 95 * moveTint);
+        const baseG = Math.round(64 + 70 * (1 - moveTint));
+        const baseB = Math.round(88 + 45 * (1 - moveTint));
+        const coverAlpha = Math.max(0.08, Math.min(0.55, cover * 0.9));
+        const fill = `rgba(${baseR},${baseG},${baseB},${Math.max(0.25, 0.25 + coverAlpha).toFixed(3)})`;
+        const stroke = los > 0 ? 'rgba(255,180,90,0.95)' : (vp ? 'rgba(220,240,120,0.95)' : 'rgba(110,130,170,0.65)');
+        drawHex(x, y, size * 0.92, stroke, fill);
+        muzeroReplayHexOverlay.push({
+          q, r, x, y, radius: size * 0.92, move, cover, los, vp,
+        });
+        if (vp){
+          ctx.fillStyle = 'rgba(220,240,120,0.9)';
+          ctx.beginPath();
+          ctx.arc(x, y, Math.max(2, size * 0.14), 0, Math.PI * 2);
+          ctx.fill();
+          ctx.strokeStyle = 'rgba(240,250,150,0.98)';
+          ctx.lineWidth = 2;
+          ctx.beginPath();
+          ctx.arc(x, y, Math.max(5, size * 0.42), 0, Math.PI * 2);
+          ctx.stroke();
+          ctx.fillStyle = 'rgba(245,250,170,0.96)';
+          ctx.font = `${Math.max(8, Math.round(size * 0.32))}px Segoe UI, sans-serif`;
+          ctx.fillText('VP', x - size * 0.22, y - size * 0.52);
+        }
+        if (los > 0){
+          ctx.fillStyle = 'rgba(255,195,120,0.92)';
+          ctx.font = `${Math.max(8, Math.round(size * 0.38))}px Segoe UI, sans-serif`;
+          ctx.fillText('L', x - size * 0.16, y + size * 0.12);
+        }
+    }
+  }
+  for (const u of units){
+    const q = Number((u || {}).q);
+    const r = Number((u || {}).r);
+    if (!Number.isFinite(q) || !Number.isFinite(r)) continue;
+    const side = String((u || {}).side || '').toUpperCase();
+    const alive = Boolean((u || {}).alive);
+    const [x, y] = toXY(q, r);
+    const base = side === 'US' ? '80,180,255' : '255,120,120';
+    const alpha = alive ? 0.95 : 0.35;
+    drawHex(x, y, size * 0.78, `rgba(${base},1.0)`, `rgba(${base},${alpha})`);
+    ctx.fillStyle = 'rgba(8,12,20,0.95)';
+    ctx.beginPath();
+    ctx.arc(x, y, Math.max(3, size * 0.22), 0, Math.PI * 2);
+    ctx.fill();
+  }
+  const action = String((stepRow || {}).action_id || '');
+  ctx.fillStyle = 'rgba(190,210,255,0.9)';
+  ctx.font = '13px Segoe UI, sans-serif';
+  ctx.fillText(`Action: ${action || '-'}`, 12, h - 16);
+  ctx.fillStyle = 'rgba(180,200,240,0.82)';
+  ctx.font = '12px Segoe UI, sans-serif';
+  ctx.fillText('Terrain: brighter=harder move | stronger fill=more cover | L=LOS block | dot=VP', 12, h - 34);
+  ctx.fillStyle = 'rgba(170,190,230,0.78)';
+  ctx.fillText('Grid origin: q=0,r=0 at top-left', 12, h - 50);
+  if (muzeroReplayHoverHex){
+    const hh = muzeroReplayHoverHex;
+    const lines = [
+      `hex ${hh.q},${hh.r}`,
+      `move ${Number(hh.move || 0).toFixed(2)} | cover ${Number(hh.cover || 0).toFixed(2)} | los ${Number(hh.los || 0)}`,
+      hh.vp ? 'VP hex' : 'non-VP',
+    ];
+    const bx = Math.max(8, Math.min(w - 260, Number(hh.x || 10) + 14));
+    const by = Math.max(8, Math.min(h - 72, Number(hh.y || 10) - 14));
+    ctx.fillStyle = 'rgba(12,18,30,0.92)';
+    ctx.fillRect(bx, by, 252, 56);
+    ctx.strokeStyle = 'rgba(120,150,220,0.75)';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(bx, by, 252, 56);
+    ctx.fillStyle = 'rgba(215,228,255,0.95)';
+    ctx.font = '12px Segoe UI, sans-serif';
+    ctx.fillText(lines[0], bx + 8, by + 16);
+    ctx.fillText(lines[1], bx + 8, by + 32);
+    ctx.fillText(lines[2], bx + 8, by + 48);
+  }
+}
+
+function renderMuzeroReplay(data, errorMsg=''){
+  const slider = document.getElementById('muzeroReplayStep');
+  if (!slider) return;
+  if (!data || errorMsg){
+    latestMuzeroReplay = null;
+    renderKV('muzeroReplaySummary', [['Status', errorMsg ? `Error: ${errorMsg}` : 'No replay data']]);
+    slider.min = '0';
+    slider.max = '0';
+    slider.value = '0';
+    _renderMuzeroReplayFrame();
+    return;
+  }
+  latestMuzeroReplay = data;
+  const rows = Array.isArray(data.transitions) ? data.transitions : [];
+  const meta = (data.meta && typeof data.meta === 'object') ? data.meta : {};
+  renderKV('muzeroReplaySummary', [
+    ['Scenario', String(data.scenario_id || '-')],
+    ['Seed', String(data.seed || 0)],
+    ['Transitions', String(rows.length)],
+    ['Run', String(meta.run_id || '-')],
+    ['Iteration/Episode', `${String(meta.iteration ?? '-')}/${String(meta.episode ?? '-')}`],
+    ['Action mismatches', String(meta.action_mismatch_count ?? 0)],
+  ]);
+  slider.min = '0';
+  slider.max = String(Math.max(0, rows.length - 1));
+  slider.value = String(Math.max(0, rows.length - 1));
+  _renderMuzeroReplayFrame();
+}
+
+async function loadMuzeroReplayFromSelectedRun(){
+  const sel = document.getElementById('muzeroRunSelect');
+  const iterInput = document.getElementById('muzeroReplayIteration');
+  const epInput = document.getElementById('muzeroReplayEpisode');
+  if (!sel || !sel.value){
+    renderMuzeroReplay(null, 'No run selected');
+    return;
+  }
+  try {
+    const iter = Number((iterInput && iterInput.value) || -1);
+    const ep = Number((epInput && epInput.value) || -1);
+    const qs = new URLSearchParams();
+    qs.set('run_id', String(sel.value));
+    if (Number.isFinite(iter) && iter >= 0) qs.set('iteration', String(Math.floor(iter)));
+    if (Number.isFinite(ep) && ep >= 0) qs.set('episode', String(Math.floor(ep)));
+    const data = await getJson('/api/muzero/timeline?' + qs.toString());
+    renderMuzeroReplay(data);
+  } catch (e) {
+    renderMuzeroReplay(null, e.message || String(e));
+  }
+}
+
+async function exportMuzeroReplayFromSelectedRun(){
+  const sel = document.getElementById('muzeroRunSelect');
+  const iterInput = document.getElementById('muzeroReplayIteration');
+  const epInput = document.getElementById('muzeroReplayEpisode');
+  const pathInput = document.getElementById('muzeroReplayPathInput');
+  if (!sel || !sel.value){
+    renderMuzeroReplay(null, 'No run selected');
+    return;
+  }
+  try {
+    const iter = Number((iterInput && iterInput.value) || -1);
+    const ep = Number((epInput && epInput.value) || -1);
+    const outPath = String((pathInput && pathInput.value) || '').trim();
+    const payload = { run_id: String(sel.value) };
+    if (Number.isFinite(iter) && iter >= 0) payload.iteration = Math.floor(iter);
+    if (Number.isFinite(ep) && ep >= 0) payload.episode = Math.floor(ep);
+    if (outPath) payload.out_path = outPath;
+    const data = await postJson('/api/muzero/timeline_export', payload);
+    if (pathInput && data.path_rel) pathInput.value = String(data.path_rel);
+    renderMuzeroReplay(data.timeline || null, '');
+  } catch (e) {
+    renderMuzeroReplay(null, e.message || String(e));
+  }
+}
+
+async function loadMuzeroReplayFromPath(){
+  const input = document.getElementById('muzeroReplayPathInput');
+  const path = String((input && input.value) || '').trim();
+  if (!path){
+    renderMuzeroReplay(null, 'Path is empty');
+    return;
+  }
+  try {
+    const data = await getJson('/api/muzero/timeline_file?path=' + encodeURIComponent(path));
+    renderMuzeroReplay(data);
+  } catch (e) {
+    renderMuzeroReplay(null, e.message || String(e));
+  }
+}
+
+async function loadMuzeroRuns(){
+  const data = await getJson('/api/muzero/runs');
+  muzeroRuns = data.runs || [];
+  renderMuzeroRunsTable(muzeroRuns);
+  const sel = document.getElementById('muzeroRunSelect');
+  const topSel = document.getElementById('muzeroRunSelectTop');
+  const prev = sel ? sel.value : '';
+  const buildOptions = (target)=>{
+    if (!target) return;
+    target.innerHTML = '';
+    for (const r of muzeroRuns){
+      const o = document.createElement('option');
+      o.value = r.run_id;
+      o.textContent = r.run_id;
+      target.appendChild(o);
+    }
+  };
+  buildOptions(sel);
+  buildOptions(topSel);
+  const nextValue = (prev && muzeroRuns.some(r => r.run_id === prev))
+    ? prev
+    : String(data.latest_run_id || '');
+  if (sel && nextValue) sel.value = nextValue;
+  if (topSel && nextValue) topSel.value = nextValue;
+}
+
+async function loadMuzeroSelected(){
+  const sel = document.getElementById('muzeroRunSelect');
+  const topSel = document.getElementById('muzeroRunSelectTop');
+  if (sel && topSel && topSel.value !== sel.value){
+    topSel.value = sel.value;
+  }
+  if (!sel || !sel.value){
+    renderMuzeroCards({}, {});
+    renderMuzeroRunDetail(null);
+    renderMuzeroUnitsSides(null, 'No run selected');
+    renderMuzeroXaiDecisions(null, 'No run selected');
+    renderMuzeroXaiMap(null, 'No run selected');
+    renderMuzeroReplay(null, 'No run selected');
+    latestMuzeroScenarioHexes = null;
+    latestMuzeroScenarioRoles = null;
+    return;
+  }
+  const run = await getJson('/api/muzero/run?run_id=' + encodeURIComponent(sel.value));
+  latestMuzeroRun = run;
+  renderMuzeroCards(run.metrics || {}, run.integrity || {});
+  renderMuzeroRunDetail(run);
+  try {
+    const unitsides = await getJson('/api/muzero/unitsides?run_id=' + encodeURIComponent(sel.value));
+    latestMuzeroUnitsSides = unitsides;
+    renderMuzeroUnitsSides(unitsides);
+    renderMuzeroGlobalActions(unitsides, run.metrics || {});
+    renderMuzeroVps(unitsides);
+    renderMuzeroStrategies(unitsides);
+  } catch (e) {
+    latestMuzeroUnitsSides = null;
+    renderMuzeroUnitsSides(null, e.message || String(e));
+    renderMuzeroGlobalActions(null, run.metrics || {});
+    renderMuzeroVps(null);
+    renderMuzeroStrategies(null);
+  }
+  try {
+    const channels = await getJson('/api/muzero/channels?run_id=' + encodeURIComponent(sel.value));
+    renderMuzeroChannels(channels);
+  } catch (e) {
+    renderMuzeroChannels(null, e.message || String(e));
+  }
+  try {
+    const xai = await getJson('/api/muzero/xai_decisions?run_id=' + encodeURIComponent(sel.value) + '&limit=4000');
+    renderMuzeroXaiDecisions(xai);
+    renderMuzeroXaiMap(xai);
+  } catch (e) {
+    renderMuzeroXaiDecisions(null, e.message || String(e));
+    renderMuzeroXaiMap(null, e.message || String(e));
+  }
+  try {
+    latestMuzeroScenarioHexes = await getJson('/api/muzero/scenario_hexes?run_id=' + encodeURIComponent(sel.value));
+    _renderMuzeroXaiMapFrame();
+  } catch (e) {
+    latestMuzeroScenarioHexes = null;
+  }
+  try {
+    latestMuzeroScenarioRoles = await getJson('/api/muzero/scenario_roles?run_id=' + encodeURIComponent(sel.value));
+  } catch (e) {
+    latestMuzeroScenarioRoles = null;
+  }
+  await loadMuzeroReplayFromSelectedRun();
+  if (latestMuzeroBench){
+    renderMuzeroBenchDetail(latestMuzeroBench);
+  }
+  if (dashboardMode === 'muzero'){
+    renderMuzeroTopCards(run.metrics || {}, run.integrity || {}, latestMuzeroBench || {});
+  }
+}
+
+async function loadMuzeroBench(){
+  const bench = await getJson('/api/muzero/bench_latest');
+  latestMuzeroBench = bench;
+  renderMuzeroBenchDetail(bench);
+  if (dashboardMode === 'muzero'){
+    const runMetrics = latestMuzeroRun ? (latestMuzeroRun.metrics || {}) : {};
+    const runIntegrity = latestMuzeroRun ? (latestMuzeroRun.integrity || {}) : {};
+    renderMuzeroTopCards(runMetrics, runIntegrity, bench || {});
+  }
+}
+
+document.getElementById('reloadBtn').addEventListener('click', async ()=>{ await loadReports(true); await loadSelected(); });
 document.getElementById('reportSelect').addEventListener('change', loadSelected);
 document.getElementById('historyReloadBtn').addEventListener('click', loadHistory);
 document.getElementById('historyExportBtn').addEventListener('click', exportHistoryCsv);
 document.getElementById('controlRefreshBtn').addEventListener('click', renderControl);
+document.getElementById('muzeroReloadBtn').addEventListener('click', async ()=>{ await loadMuzeroRuns(); await loadMuzeroSelected(); await loadMuzeroBench(); });
+document.getElementById('muzeroRunSelect').addEventListener('change', loadMuzeroSelected);
+document.getElementById('muzeroReloadBtnTop').addEventListener('click', async ()=>{
+  await loadMuzeroRuns();
+  await loadMuzeroSelected();
+  await loadMuzeroBench();
+});
+document.getElementById('muzeroRunSelectTop').addEventListener('change', async (e)=>{
+  const runId = String((e && e.target && e.target.value) || '');
+  const sel = document.getElementById('muzeroRunSelect');
+  if (sel && runId) sel.value = runId;
+  await loadMuzeroSelected();
+});
+document.getElementById('muzeroChannelSnapshotSelect').addEventListener('change', _updateMuzeroChannelHeatmap);
+document.getElementById('muzeroChannelSelect').addEventListener('change', _updateMuzeroChannelHeatmap);
+document.getElementById('muzeroChannelRefreshBtn').addEventListener('click', _updateMuzeroChannelHeatmap);
+document.getElementById('muzeroShowConstantChannels').addEventListener('change', ()=>{
+  renderMuzeroChannels(latestMuzeroChannels);
+});
+document.getElementById('muzeroXaiApplyBtn').addEventListener('click', ()=>{
+  renderMuzeroXaiDecisions(latestMuzeroXai);
+});
+document.getElementById('muzeroXaiSideSelect').addEventListener('change', ()=>{
+  renderMuzeroXaiDecisions(latestMuzeroXai);
+});
+document.getElementById('muzeroXaiActionFilter').addEventListener('input', ()=>{
+  renderMuzeroXaiDecisions(latestMuzeroXai);
+});
+document.getElementById('muzeroXaiMapStep').addEventListener('input', _renderMuzeroXaiMapFrame);
+document.getElementById('muzeroXaiMapAccumulate').addEventListener('change', _renderMuzeroXaiMapFrame);
+document.getElementById('muzeroXaiMapPalette').addEventListener('change', _renderMuzeroXaiMapFrame);
+document.getElementById('muzeroXaiMapSideMode').addEventListener('change', _renderMuzeroXaiMapFrame);
+document.getElementById('muzeroXaiMapSpeed').addEventListener('change', ()=>{
+  const v = Number(document.getElementById('muzeroXaiMapSpeed').value || 180);
+  if (!Number.isFinite(v)) document.getElementById('muzeroXaiMapSpeed').value = '180';
+});
+document.getElementById('muzeroXaiMapPlayBtn').addEventListener('click', ()=>{
+  const slider = document.getElementById('muzeroXaiMapStep');
+  const speedInput = document.getElementById('muzeroXaiMapSpeed');
+  if (!slider) return;
+  const intervalMs = Math.max(40, Math.min(2000, Number((speedInput && speedInput.value) || 180)));
+  if (muzeroXaiMapTimer) clearInterval(muzeroXaiMapTimer);
+  muzeroXaiMapTimer = setInterval(()=>{
+    const maxV = Number(slider.max || 0);
+    const curr = Number(slider.value || 0);
+    slider.value = String(curr >= maxV ? 0 : curr + 1);
+    _renderMuzeroXaiMapFrame();
+  }, intervalMs);
+});
+document.getElementById('muzeroXaiMapPauseBtn').addEventListener('click', ()=>{
+  if (muzeroXaiMapTimer){
+    clearInterval(muzeroXaiMapTimer);
+    muzeroXaiMapTimer = null;
+  }
+});
+document.getElementById('muzeroReplayLoadRunBtn').addEventListener('click', loadMuzeroReplayFromSelectedRun);
+document.getElementById('muzeroReplayExportBtn').addEventListener('click', exportMuzeroReplayFromSelectedRun);
+document.getElementById('muzeroReplayLoadPathBtn').addEventListener('click', loadMuzeroReplayFromPath);
+document.getElementById('muzeroReplayStep').addEventListener('input', _renderMuzeroReplayFrame);
+document.getElementById('muzeroReplaySpeed').addEventListener('change', ()=>{
+  const v = Number(document.getElementById('muzeroReplaySpeed').value || 220);
+  if (!Number.isFinite(v)) document.getElementById('muzeroReplaySpeed').value = '220';
+});
+document.getElementById('muzeroReplayPlayBtn').addEventListener('click', ()=>{
+  const slider = document.getElementById('muzeroReplayStep');
+  const speedInput = document.getElementById('muzeroReplaySpeed');
+  if (!slider) return;
+  const intervalMs = Math.max(40, Math.min(2000, Number((speedInput && speedInput.value) || 220)));
+  if (muzeroReplayTimer) clearInterval(muzeroReplayTimer);
+  muzeroReplayTimer = setInterval(()=>{
+    const maxV = Number(slider.max || 0);
+    const curr = Number(slider.value || 0);
+    slider.value = String(curr >= maxV ? 0 : curr + 1);
+    _renderMuzeroReplayFrame();
+  }, intervalMs);
+});
+document.getElementById('muzeroReplayPauseBtn').addEventListener('click', ()=>{
+  if (muzeroReplayTimer){
+    clearInterval(muzeroReplayTimer);
+    muzeroReplayTimer = null;
+  }
+});
+document.getElementById('muzeroReplayMapCanvas').addEventListener('mousemove', (e)=>{
+  const canvas = document.getElementById('muzeroReplayMapCanvas');
+  if (!canvas) return;
+  const rect = canvas.getBoundingClientRect();
+  const sx = canvas.width / Math.max(1, rect.width);
+  const sy = canvas.height / Math.max(1, rect.height);
+  const mx = (e.clientX - rect.left) * sx;
+  const my = (e.clientY - rect.top) * sy;
+  let best = null;
+  let bestD = Number.POSITIVE_INFINITY;
+  for (const h of muzeroReplayHexOverlay){
+    const dx = mx - Number(h.x || 0);
+    const dy = my - Number(h.y || 0);
+    const d = Math.sqrt(dx * dx + dy * dy);
+    if (d <= Number(h.radius || 0) && d < bestD){
+      best = h;
+      bestD = d;
+    }
+  }
+  muzeroReplayHoverHex = best;
+  _renderMuzeroReplayFrame();
+});
+document.getElementById('muzeroReplayMapCanvas').addEventListener('mouseleave', ()=>{
+  muzeroReplayHoverHex = null;
+  _renderMuzeroReplayFrame();
+});
+document.getElementById('muzeroGlobalActionsSort').addEventListener('change', ()=>{
+  renderMuzeroGlobalActions(latestMuzeroUnitsSides, (latestMuzeroRun || {}).metrics || {});
+});
+document.getElementById('dashboardMode').addEventListener('change', async (e)=>{
+  const mode = (e && e.target && e.target.value) || 'sb3';
+  applyDashboardMode(mode);
+  if (mode === 'sb3'){
+    const sel = document.getElementById('reportSelect');
+    if (sel) sel.innerHTML = '';
+    await loadReports(true);
+    await loadSelected();
+  } else {
+    await loadMuzeroRuns();
+    await loadMuzeroSelected();
+    await loadMuzeroBench();
+  }
+});
 document.getElementById('controlLogCloseBtn').addEventListener('click', ()=>{
   const panel = document.getElementById('controlLogPanel');
   if (panel) panel.style.display = 'none';
 });
 setupTabs();
+applyDashboardMode('sb3');
 
 setInterval(renderControl, 10000);
-(async ()=>{ await loadReports(); await loadSelected(); await loadHistory(); await renderControl(); })();
+(async ()=>{
+  try { await loadReports(); } catch {}
+  try { await loadSelected(); } catch {}
+  try { await loadHistory(); } catch {}
+  try { await renderControl(); } catch {}
+  try { await loadMuzeroRuns(); } catch {}
+  try { await loadMuzeroSelected(); } catch {}
+  try { await loadMuzeroBench(); } catch {}
+})();
 </script>
 </body>
 </html>
@@ -2057,12 +5251,151 @@ def build_handler(reports_dir: Path, controller: ServiceController):
                     scenario_filter=scenario,
                 )
                 return self._json({"points": points})
+            if parsed.path == "/api/muzero/runs":
+                qs = parse_qs(parsed.query)
+                limit_raw = (qs.get("limit") or ["50"])[0]
+                try:
+                    limit = max(1, min(200, int(limit_raw)))
+                except Exception:
+                    limit = 50
+                runs = _list_muzero_runs(controller.repo_root, limit=limit)
+                latest = ""
+                for r in runs:
+                    if bool(r.get("has_manifest")) and bool(r.get("has_metrics")) and bool(r.get("has_integrity")):
+                        latest = str(r.get("run_id", ""))
+                        break
+                if not latest:
+                    latest = runs[0]["run_id"] if runs else ""
+                return self._json({"runs": runs, "latest_run_id": latest})
+            if parsed.path == "/api/muzero/run":
+                qs = parse_qs(parsed.query)
+                run_id = str((qs.get("run_id") or [""])[0]).strip()
+                if not run_id:
+                    return self._json({"error": "missing run_id"}, status=400)
+                try:
+                    payload = _read_muzero_run(controller.repo_root, run_id)
+                except ValueError:
+                    return self._json({"error": "invalid run_id"}, status=400)
+                except FileNotFoundError:
+                    return self._json({"error": "run not found"}, status=404)
+                return self._json(payload)
+            if parsed.path == "/api/muzero/bench_latest":
+                return self._json(_read_bench_latest(controller.repo_root))
+            if parsed.path == "/api/muzero/unitsides":
+                qs = parse_qs(parsed.query)
+                run_id = str((qs.get("run_id") or [""])[0]).strip()
+                if not run_id:
+                    return self._json({"error": "missing run_id"}, status=400)
+                try:
+                    payload = _summarize_muzero_unitsides(controller.repo_root, run_id)
+                except ValueError:
+                    return self._json({"error": "invalid run_id"}, status=400)
+                return self._json(payload)
+            if parsed.path == "/api/muzero/channels":
+                qs = parse_qs(parsed.query)
+                run_id = str((qs.get("run_id") or [""])[0]).strip()
+                if not run_id:
+                    return self._json({"error": "missing run_id"}, status=400)
+                try:
+                    payload = _read_muzero_channels(controller.repo_root, run_id)
+                except ValueError:
+                    return self._json({"error": "invalid run_id"}, status=400)
+                except FileNotFoundError as e:
+                    return self._json({"error": str(e)}, status=404)
+                return self._json(payload)
+            if parsed.path == "/api/muzero/xai_decisions":
+                qs = parse_qs(parsed.query)
+                run_id = str((qs.get("run_id") or [""])[0]).strip()
+                limit_raw = str((qs.get("limit") or ["2000"])[0]).strip()
+                if not run_id:
+                    return self._json({"error": "missing run_id"}, status=400)
+                try:
+                    limit = max(1, min(20000, int(limit_raw)))
+                except Exception:
+                    limit = 2000
+                try:
+                    payload = _read_muzero_xai_decisions(controller.repo_root, run_id, limit=limit)
+                except ValueError:
+                    return self._json({"error": "invalid run_id"}, status=400)
+                except FileNotFoundError as e:
+                    return self._json({"error": str(e)}, status=404)
+                return self._json(payload)
+            if parsed.path == "/api/muzero/scenario_hexes":
+                qs = parse_qs(parsed.query)
+                run_id = str((qs.get("run_id") or [""])[0]).strip()
+                if not run_id:
+                    return self._json({"error": "missing run_id"}, status=400)
+                try:
+                    payload = _read_muzero_scenario_hexes(controller.repo_root, run_id)
+                except ValueError:
+                    return self._json({"error": "invalid run_id"}, status=400)
+                except FileNotFoundError as e:
+                    return self._json({"error": str(e)}, status=404)
+                except Exception as e:
+                    return self._json({"error": f"failed loading scenario hexes: {e}"}, status=500)
+                return self._json(payload)
+            if parsed.path == "/api/muzero/scenario_roles":
+                qs = parse_qs(parsed.query)
+                run_id = str((qs.get("run_id") or [""])[0]).strip()
+                if not run_id:
+                    return self._json({"error": "missing run_id"}, status=400)
+                try:
+                    payload = _read_muzero_scenario_roles(controller.repo_root, run_id)
+                except ValueError:
+                    return self._json({"error": "invalid run_id"}, status=400)
+                except FileNotFoundError as e:
+                    return self._json({"error": str(e)}, status=404)
+                except Exception as e:
+                    return self._json({"error": f"failed loading scenario roles: {e}"}, status=500)
+                return self._json(payload)
+            if parsed.path == "/api/muzero/timeline":
+                qs = parse_qs(parsed.query)
+                run_id = str((qs.get("run_id") or [""])[0]).strip()
+                iteration_raw = str((qs.get("iteration") or [""])[0]).strip()
+                episode_raw = str((qs.get("episode") or [""])[0]).strip()
+                if not run_id:
+                    return self._json({"error": "missing run_id"}, status=400)
+                try:
+                    iteration = int(iteration_raw) if iteration_raw else None
+                    episode = int(episode_raw) if episode_raw else None
+                    payload = _read_muzero_timeline(
+                        controller.repo_root,
+                        run_id,
+                        iteration=iteration,
+                        episode=episode,
+                    )
+                except ValueError as e:
+                    return self._json({"error": str(e)}, status=400)
+                except FileNotFoundError as e:
+                    return self._json({"error": str(e)}, status=404)
+                except Exception as e:
+                    return self._json({"error": f"failed loading timeline: {e}"}, status=500)
+                return self._json(payload)
+            if parsed.path == "/api/muzero/timeline_file":
+                qs = parse_qs(parsed.query)
+                rel_path = str((qs.get("path") or [""])[0]).strip()
+                if not rel_path:
+                    return self._json({"error": "missing path"}, status=400)
+                try:
+                    payload = _read_muzero_timeline_file(controller.repo_root, rel_path)
+                except ValueError as e:
+                    return self._json({"error": str(e)}, status=400)
+                except FileNotFoundError as e:
+                    return self._json({"error": str(e)}, status=404)
+                except Exception as e:
+                    return self._json({"error": f"failed loading timeline file: {e}"}, status=500)
+                return self._json(payload)
             self.send_response(404)
             self.end_headers()
 
         def do_POST(self):
             parsed = urlparse(self.path)
-            if parsed.path not in {"/api/control/start", "/api/control/stop", "/api/control/restart"}:
+            if parsed.path not in {
+                "/api/control/start",
+                "/api/control/stop",
+                "/api/control/restart",
+                "/api/muzero/timeline_export",
+            }:
                 self.send_response(404)
                 self.end_headers()
                 return
@@ -2072,6 +5405,30 @@ def build_handler(reports_dir: Path, controller: ServiceController):
                 payload = json.loads(raw.decode("utf-8"))
             except Exception:
                 return self._json({"ok": False, "error": "invalid json payload"}, status=400)
+            if parsed.path == "/api/muzero/timeline_export":
+                run_id = str(payload.get("run_id", "")).strip()
+                if not run_id:
+                    return self._json({"ok": False, "error": "missing run_id"}, status=400)
+                iteration_raw = payload.get("iteration", None)
+                episode_raw = payload.get("episode", None)
+                out_path = str(payload.get("out_path", "")).strip()
+                try:
+                    iteration = int(iteration_raw) if iteration_raw is not None else None
+                    episode = int(episode_raw) if episode_raw is not None else None
+                    res = _export_muzero_timeline_file(
+                        repo_root=controller.repo_root,
+                        run_id=run_id,
+                        iteration=iteration,
+                        episode=episode,
+                        out_rel=out_path,
+                    )
+                except ValueError as e:
+                    return self._json({"ok": False, "error": str(e)}, status=400)
+                except FileNotFoundError as e:
+                    return self._json({"ok": False, "error": str(e)}, status=404)
+                except Exception as e:
+                    return self._json({"ok": False, "error": f"timeline export failed: {e}"}, status=500)
+                return self._json(res, status=200)
             service_id = str(payload.get("service_id", "")).strip()
             if not service_id:
                 return self._json({"ok": False, "error": "missing service_id"}, status=400)

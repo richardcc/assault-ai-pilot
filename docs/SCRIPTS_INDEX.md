@@ -20,6 +20,31 @@ Quick start:
 
 ## Most Used Commands
 
+- VOEC/MuZero train runner (default config):
+  - `python -m agents.muzero.train.train_muzero`
+- VOEC/MuZero train runner (custom config):
+  - `python -m agents.muzero.train.train_muzero --config agents/muzero/configs/muzero_config.test.yaml`
+- VOEC/MuZero train runner (dev config):
+  - `python -m agents.muzero.train.train_muzero --config agents/muzero/configs/muzero_config.dev.yaml`
+- VOEC/MuZero train runner (dev-plus config):
+  - `python -m agents.muzero.train.train_muzero --config agents/muzero/configs/muzero_config.dev_plus.yaml`
+- VOEC/MuZero train runner (dev-plus 8 workers):
+  - `python -m agents.muzero.train.train_muzero --config agents/muzero/configs/muzero_config.dev_plus_8w.yaml`
+- VOEC/MuZero train runner (resume from checkpoint):
+  - `python -m agents.muzero.train.train_muzero --config agents/muzero/configs/muzero_config.yaml` (set `train.resume_checkpoint` in YAML)
+- VOEC benchmark runner (default config):
+  - `python -m assault_bench.runner`
+- VOEC benchmark runner (custom config):
+  - `python -m assault_bench.runner --config assault_bench/configs/benchmark_config.test.yaml`
+- VOEC benchmark runner (dev config):
+  - `python -m assault_bench.runner --config assault_bench/configs/benchmark_config.dev.yaml`
+- VOEC benchmark runner (dev-plus config):
+  - `python -m assault_bench.runner --config assault_bench/configs/benchmark_config.dev_plus.yaml`
+- VOEC benchmark with trained checkpoint:
+  - `python -m assault_bench.runner --config assault_bench/configs/benchmark_config.dev_plus.yaml --checkpoint runs/<run_id>/checkpoints/iter_11.pt`
+- VOEC UI timeline export (CLI):
+  - `python -m voec_sim.ui_contract.export_timeline --voec-config voec_sim/configs/voec_config.yaml --scenario battaglia_cittadina_2_1 --seed 42 --policy first --max-steps 200 --out runs/ui_timeline_latest.json`
+
 - Reaction Fire strict matrix gate:
   - `powershell -ExecutionPolicy Bypass -File .\scripts\run_reaction_policy_matrix.ps1 -Episodes 50 -Seed 42 -EnforceGate`
 - R2.a no-regression gate (with eval):
@@ -65,12 +90,49 @@ Quick start:
 
 ## Training / Eval Utilities
 
-- `scripts/sb3_eval_viewer.py` - Viewer for SB3 evaluation reports.
+- `scripts/sb3_eval_viewer.py` - Viewer for SB3 reports + MuZero Ops tab (runs, integrity, benchmark latest).
+- `docs/MUZERO_STRATEGY_TAXONOMY.md` - Canonical mapping from MuZero `action_kind` to strategy labels used by reports.
+- `scripts/run_muzero_train_and_bench.ps1` - Runs MuZero train + benchmark in sequence, auto-picking latest `run_id` checkpoint.
+- `scripts/run_muzero_train_and_bench.ps1 -Profile smoke` - Very short smoke profile for rapid channel/projection/reward sanity checks.
+- `scripts/run_muzero_reaction_fire_ab.ps1` - MuZero-only A/B runner for Reaction Fire (`ASSAULT_ENABLE_REACTION_FIRE=1/0`) with comparative summary.
+- `scripts/run_muzero_smoke_ab3.ps1` - Runs 3 smoke repetitions (seed sweep) and writes per-run + aggregate KPI summaries for quick low-noise comparisons.
+- `scripts/run_muzero_objective_head_ab.ps1` - MuZero A/B runner for objective auxiliary head (`train.objective_loss_weight` OFF/ON), with objective funnel + benchmark comparative summary.
+- `scripts/run_muzero_objective_head_ab3.ps1` - MuZero A/B x3 seeds for objective auxiliary head, with short-budget train overrides and explicit `on-off` delta summary.
+- `scripts/run_muzero_objective_head_ab3_medium.ps1` - Medium-budget AB3 preset for objective head (`iterations=10`, `episodes_per_iter=8`) to reduce variance before deciding ON/OFF.
+- `scripts/run_muzero_vp_progress_ab3.ps1` - MuZero AB3 runner for VP-progress tuning (`baseline` vs `progress`) with objective funnel/reason deltas and turn-limit finish impact.
+- `scripts/run_muzero_vp_progress_ab3_long.ps1` - Long-budget AB3 preset for VP-progress tuning (`iterations=24`, `episodes_per_iter=16`).
+- `scripts/run_muzero_timeline_export.ps1` - Exports a replay-ready timeline JSON from a MuZero run (`train_events`) for the viewer replay tab.
 - `scripts/run_eval_parallel_configs.ps1` - Runs eval across multiple config files in parallel.
 - `scripts/run_trainer_sweep_it_battaglia.ps1` - Trainer sweep for IT battaglia scenario.
 - `scripts/build_trainer_sweep_summary.ps1` - Builds summary artifacts for trainer sweeps.
 - `scripts/analyze_us_vp_losses.py` - VP loss analysis helper for US-side runs.
 - `scripts/debug_vp_owners_once.py` - One-shot debug script for VP ownership state.
+
+## VOEC / MuZero Runners
+
+- `agents/muzero/train/train_muzero.py` - MuZero training runner with `--config` YAML support.
+- `assault_bench/runner.py` - Benchmark runner with `--config` YAML support.
+- `agents/muzero/configs/muzero_config.yaml` - Default MuZero config.
+- `agents/muzero/configs/muzero_config.test.yaml` - Fast smoke config for CI/tests.
+- `agents/muzero/configs/muzero_config.smoke.yaml` - Short local smoke config (slightly extended episodes) for fast-but-more-stable diagnostics.
+- `agents/muzero/configs/muzero_config.dev.yaml` - Development training config (aligned to benchmark dev).
+- `agents/muzero/configs/muzero_config.dev_plus.yaml` - Extended training config (higher budget for measurable separation).
+- `agents/muzero/configs/muzero_config.dev_plus_8w.yaml` - Extended training config with `selfplay.num_workers=8`.
+- `agents/muzero/configs/muzero_config.yaml::train.resume_checkpoint` - Optional checkpoint path for resume runs.
+- `agents/muzero/configs/muzero_config.yaml::selfplay.mcts_unroll_steps` - Latent unroll depth for model-value planning.
+- `agents/muzero/configs/muzero_config.yaml::selfplay.mcts_discount` - Discount used during latent multi-step value estimation.
+- `agents/muzero/configs/muzero_config.yaml::model.device` - Device selector (`auto|cpu|cuda`) for training.
+- `agents/muzero/configs/muzero_config.yaml::model.device_benchmark_steps` - Steps for auto device micro-benchmark when `device=auto`.
+- `agents/muzero/configs/muzero_config.yaml::selfplay.num_workers` - Parallel self-play workers (CPU mode).
+- `assault_bench/configs/benchmark_config.yaml` - Default benchmark config.
+- `assault_bench/configs/benchmark_config.test.yaml` - Fast benchmark smoke config.
+- `assault_bench/configs/benchmark_config.smoke.yaml` - Short benchmark config paired with MuZero smoke profile (extended seed count for better signal).
+- `assault_bench/configs/benchmark_config.dev.yaml` - Development benchmark config (more seeds/steps).
+- `assault_bench/configs/benchmark_config.dev_plus.yaml` - Extended benchmark config (higher horizon + more seeds).
+- `assault_bench/configs/benchmark_config.yaml::benchmark.num_workers` - Parallel benchmark workers by seed.
+- `voec_sim/configs/voec_config.yaml` - Shared VOEC asset-path and default scenario config.
+- `voec_sim/ui_contract/export_timeline.py` - CLI to export replay-ready `EpisodeTimeline` JSON.
+- `agents/muzero/xai/timeline_exporter.py` - Converts MuZero run events into VOEC-compatible timeline JSON (`EpisodeTimeline` shape).
 
 ## Reaction Fire / Tactical Debug
 
