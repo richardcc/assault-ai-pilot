@@ -36,6 +36,7 @@ results/
 debug_out/
 replays/
 models/
+runs/
 
 # ===============================
 # Data / temporary work folders
