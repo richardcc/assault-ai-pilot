@@ -1,0 +1,8 @@
+assets:
+  root: assault_sim/assets
+  unit_catalog: catalogs/unit_catalog.json
+  map_piece_catalog: catalogs/map_piece_catalog.json
+  scenarios_dir: scenarios
+
+defaults:
+  scenario_id: battaglia_cittadina_2_1

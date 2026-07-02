@@ -1,0 +1,48 @@
+paths:
+  run_root: runs
+  voec_config: voec_sim/configs/voec_config.yaml
+
+scenario:
+  id: battaglia_cittadina_2_1
+  seed: 42
+
+model:
+  device: auto
+  device_benchmark_steps: 40
+  observation_dim: 4
+  encoder_type: cnn
+  observation_channels: 32
+  observation_height: 32
+  observation_width: 32
+  hidden_dim: 96
+  dynamics_blocks: 3
+  prediction_blocks: 2
+  action_dim: 32
+  learning_rate: 0.0005
+
+selfplay:
+  num_workers: 8
+  max_steps: 100
+  max_steps_override: 0
+  mcts_simulations: 48
+  mcts_c_puct: 1.5
+  mcts_unroll_steps: 4
+  mcts_discount: 0.997
+  mcts_temperature: 0.6
+  mcts_dirichlet_alpha: 0.3
+  mcts_dirichlet_epsilon: 0.2
+  timeout_penalty: -0.1
+  reward_shaping:
+    terminal_scale: 1.0
+    damage_weight: 0.02
+    kill_weight: 0.25
+    vp_action_bonus: 0.02
+    capture_bonus: 0.05
+    idle_penalty: -0.002
+
+train:
+  iterations: 12
+  episodes_per_iter: 10
+  batch_size: 32
+  replay_capacity: 80000
+  resume_checkpoint: ""

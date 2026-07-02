@@ -1,0 +1,61 @@
+paths:
+  run_root: runs
+  voec_config: voec_sim/configs/voec_config.yaml
+
+scenario:
+  id: battaglia_cittadina_2_1
+  seed: 7
+
+model:
+  device: cpu
+  device_benchmark_steps: 40
+  observation_dim: 4
+  encoder_type: cnn
+  observation_channels: 32
+  observation_height: 32
+  observation_width: 32
+  hidden_dim: 96
+  dynamics_blocks: 4
+  prediction_blocks: 3
+  action_dim: 32
+  learning_rate: 0.0005
+
+selfplay:
+  num_workers: 10
+  max_steps: 80
+  max_steps_override: 0
+  mcts_simulations: 48
+  mcts_c_puct: 1.5
+  mcts_unroll_steps: 3
+  mcts_discount: 0.997
+  mcts_temperature: 0.7
+  mcts_dirichlet_alpha: 0.3
+  mcts_dirichlet_epsilon: 0.15
+  timeout_penalty: -0.35
+  reward_shaping:
+    terminal_scale: 1.0
+    damage_weight: 0.04
+    kill_weight: 0.35
+    vp_action_bonus: 0.12
+    capture_bonus: 0.35
+    vp_capture_bonus_per_hex: 0.65
+    vp_net_gain_bonus: 0.15
+    vp_net_loss_penalty: 0.06
+    objective_progress_bonus_per_hex: 0.18
+    objective_no_progress_penalty: 0.08
+    objective_no_progress_attack_penalty: 0.12
+    reaction_fire_miss_penalty: 0.08
+    idle_penalty: -0.05
+    idle_with_options_multiplier: 2.5
+
+train:
+  iterations: 40
+  episodes_per_iter: 16
+  batch_size: 32
+  objective_loss_weight: 0.0
+  objective_target_mode: progress
+  objective_pos_weight: 4.0
+  replay_capacity: 100000
+  replay_recent_fraction: 0.7
+  replay_recent_window_ratio: 0.3
+  resume_checkpoint: ""

@@ -1,0 +1,14 @@
+paths:
+  run_root: runs
+  voec_config: voec_sim/configs/voec_config.yaml
+  muzero_config: agents/muzero/configs/muzero_config.yaml
+
+benchmark:
+  num_workers: 1
+  scenario_id: battaglia_cittadina_2_1
+  seeds: [42, 43, 44]
+  max_steps: 80
+  max_steps_override: 0
+  mcts_simulations: 32
+  mcts_c_puct: 1.5
+  mcts_temperature: 1.0
