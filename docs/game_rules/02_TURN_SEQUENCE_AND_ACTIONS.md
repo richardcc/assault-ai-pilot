@@ -169,6 +169,14 @@ Validation state: **Pending Validation**.
 - R2.1-d single-lever kickoff (v35, Pending Validation): reward tuning changes only `vp_delta_weight` (`10.0 -> 12.0`) to isolate objective-pressure effect; no additional reward/planner changes are allowed in this cycle until short multi-seed results are reviewed.
 - R2.1-g single-lever CAPTURE priority (v45, Pending Validation): reward tuning changes only `capture_strategy_bonus` (`0.60 -> 0.90`) to increase CAPTURE strategic mass before conversion, with planner/guardrails/finalizer levers frozen for attribution cleanliness.
 - R2.1-h single-lever post-contact conversion (v46, Pending Validation): reward tuning changes only `capture_post_contact_progress_move_bonus` (`0.70 -> 1.00`) to reinforce objective-progress moves after first contact, keeping planner/guardrails/finalizer and other reward levers unchanged.
+- MuZero VP event shaping alignment (v47, Pending Validation): MuZero self-play reward now credits objective progress from observed state transitions (`vp_captures` and side VP net delta) instead of relying only on action-id CAPTURE string patterns, via `agents/muzero/core/selfplay.py::shaped_training_reward`; new reward components are `vp_capture_event`, `vp_net_gain`, and `vp_net_loss`.
+- MuZero unit-capability observation channels (v48, Pending Validation): CNN observation encoding now includes per-unit normalized mobility, direct-range, indirect-range, attack-power, and defense-power planes by side (ally/enemy pairs), derived from `assault_sim/assets/catalogs/unit_catalog.json` and projected in `agents/muzero/core/selfplay.py::observation_to_tensor`.
+- MuZero VP opportunity instrumentation alignment (v49, Pending Validation): self-play now infers `legal_capture_options` from legal action destinations on enemy/neutral VP hexes (not only CAPTURE/VP string markers), and training aggregates treat VP gain/capture events as objective-action evidence so `capture_actions_total` and objective-opportunity conversion reflect real VP transitions.
+- MuZero reaction fire as explicit decision option (v50, Pending Validation): VOEC simulator exposes reaction-window choices as legal actions (`OPPORTUNITY_FIRE:<reactor>:<target>` and `OPPORTUNITY_SKIP:<reactor>:<target>`) instead of auto-resolving AI reactions, so the learning policy can decide whether to consume reactor activation.
+- MuZero reaction-fire efficiency shaping (v51, Pending Validation): reward shaping adds `reaction_fire_miss_penalty` applied when `OPPORTUNITY_FIRE` deals no damage and causes no kill, to reduce low-value reaction shots that consume activation without objective progress.
+- MuZero objective progress funnel instrumentation (v52, Pending Validation): transition telemetry now records objective-distance delta to nearest uncaptured VP (`objective_distance_before/after`, `objective_progress_delta`) and conversion flags (`objective_had_opportunity`, `objective_converted`); run diagnostics add `objective_progress_funnel` (opportunity/progress/conversion/stall rates) to support capability-driven tuning.
+- MuZero objective auxiliary head (v54, Pending Validation): model prediction trunk includes a dedicated objective logit head (`prediction_objective`) trained with masked class-balanced BCE over objective-opportunity samples (`objective_had_opportunity`) against progress labels (`objective_progress_delta > 0`), with knobs `train.objective_loss_weight`, `train.objective_target_mode`, and `train.objective_pos_weight`; `objective_loss` tracks whether latent state is learning progress-relevant structure instead of sparse end conversion only.
+- MuZero phase-2.9 reaction/assault benchmark gate (v55, Pending Validation): benchmark now computes reaction-window and assault/melee KPIs in eval (`phase_2_9_eval_kpis`) and compares them against train metrics (`phase_2_9_train_eval`), then emits promotion gate status (`phase_2_9_promotion_gate`) with explicit checks and fail-fast misuse blocks.
 - Eval source-mix diagnostics (v36, Pending Validation): mission report now separates decisions into `sb3_kept`, `planner_override`, and `finalizer_override`, and prints per-bucket capture-event rates so we can distinguish policy weakness from override-driven behavior during eval.
 - Eval minimal-overrides diagnostic mode (v37, Pending Validation): `eval_sb3 --diagnostic-min-overrides` disables planner-like eval coercions (step-in option forcing and mission-priority CAPTURE forcing) while preserving legality finalization, to compare hybrid control against a more SB3-kept behavior baseline.
 - SB3 artifact workspace partitioning (v38, Pending Validation): training/eval can target a scoped model directory via `sb3_models_subdir`; cleanup now removes only artifacts for configured `rl_sides` within that workspace, enabling safe parallel side training without cross-run deletion.
@@ -247,3 +255,15 @@ A unit may be ineligible if:
 - [ ] State updates are committed immediately after action resolution.
 - [ ] Victory check timing matches rule semantics.
 - [ ] Reinforcements are handled only in reinforcement timing.
+
+## 6. VOEC Simulator Contract (Architecture-Neutral)
+
+Validation state: **Pending Validation**.
+
+- Rule: external AI architectures must consume the same episode API without using legacy training controllers.
+- Code: `voec_sim/core/simulator.py` (`VOECSimulator.new_episode`, `legal_actions`, `step`, `is_terminal`).
+- Test: `voec_sim/tests/test_sim_determinism.py`, `voec_sim/tests/test_legal_actions_contract.py`, `voec_sim/tests/test_terminal_conditions_v1.py`.
+
+- Rule: VOEC v1 must reuse existing scenario/unit assets rather than synthetic redefinition.
+- Code: `voec_sim/assets_bridge/importers.py`.
+- Test: `voec_sim/tests/test_asset_parity_units.py`, `voec_sim/tests/test_asset_parity_scenarios.py`.
