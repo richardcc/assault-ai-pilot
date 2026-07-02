@@ -1,0 +1,23 @@
+{
+  "rl_sides": [
+    "US"
+  ],
+  "scenario_schedule": [
+    {
+      "id": "battaglia_cittadina_2_1",
+      "episodes": 1
+    }
+  ],
+  "seed": 42,
+
+  "sb3_max_decisions": 300,
+  "sb3_zero_damage_penalty": 0.8,
+  "sb3_extra_good_trade_bonus": 0.3,
+  "sb3_train_lean": true,
+
+  "model": {
+    "max_board_size": 20,
+    "in_channels": 6,
+    "policy_size": 64
+  }
+}

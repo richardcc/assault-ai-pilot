@@ -1,0 +1,878 @@
+
+================================================================================
+FILE: C:\repos\python\assault\alphazero_project\main.py
+================================================================================
+
+from pathlib import Path
+import yaml
+
+from alphazero_project.env.training_env import TrainingEnv
+from alphazero_project.integration.assault_model_adapter import AssaultModelAdapter
+from alphazero_project.integration.assault_simulation import AssaultSimulation
+
+
+BASE_DIR = Path(__file__).resolve().parent
+CONFIG_PATH = BASE_DIR / "config" / "alphazero_config.yaml"
+
+if not CONFIG_PATH.exists():
+    raise FileNotFoundError(f"Config file not found: {CONFIG_PATH}")
+
+# ✅ cargar UNA sola vez
+with open(CONFIG_PATH, "r", encoding="utf-8") as f:
+    config = yaml.safe_load(f)
+
+# ✅ pasar config hacia abajo
+sim = AssaultSimulation(config)
+game = AssaultModelAdapter(sim)
+env = TrainingEnv(game, config)
+
+state = game.get_initial_state()
+env.reset(state)
+
+for step in range(3):
+    state = env.step()
+    print(f"[MAIN] Step {step} executed")
+
+
+================================================================================
+FILE: C:\repos\python\assault\alphazero_project\config\alphazero_config.yaml
+================================================================================
+
+{
+  "rl_sides": [
+    "US"
+  ],
+  "scenario_schedule": [
+    {
+      "id": "battaglia_cittadina_2_1",
+      "episodes": 1
+    }
+  ],
+  "seed": 42,
+
+  "sb3_max_decisions": 300,
+  "sb3_zero_damage_penalty": 0.8,
+  "sb3_extra_good_trade_bonus": 0.3,
+  "sb3_train_lean": true,
+
+  "model": {
+    "max_board_size": 20,
+    "in_channels": 6,
+    "policy_size": 64
+  }
+}
+
+
+================================================================================
+FILE: C:\repos\python\assault\alphazero_project\core\interfaces.py
+================================================================================
+
+class GameInterface:
+    def get_legal_actions(self, state):
+        raise NotImplementedError
+
+    def step(self, state, action):
+        raise NotImplementedError
+
+    def is_terminal(self, state):
+        raise NotImplementedError
+
+
+
+================================================================================
+FILE: C:\repos\python\assault\alphazero_project\core\decision\decision.py
+================================================================================
+
+import numpy as np
+
+from alphazero_project.core.encoder.encoder import encode_state
+from alphazero_project.core.model.model import forward
+
+
+def decide(state, plan, game, config):
+    # -------------------------
+    # 1. encode
+    # -------------------------
+    x = encode_state(state, config)
+
+    # -------------------------
+    # 2. modelo
+    # -------------------------
+    out = forward(x)
+
+    policy = np.array(out["policy"], dtype=np.float32)
+
+    # -------------------------
+    # 3. acciones legales
+    # -------------------------
+    legal_actions = game.get_legal_actions(state)
+
+    if not legal_actions:
+        raise RuntimeError("No legal actions available")
+
+    # -------------------------
+    # 4. recortar policy
+    # -------------------------
+    policy = policy[:len(legal_actions)]
+
+    # -------------------------
+    # 5. normalizar
+    # -------------------------
+    if policy.sum() > 0:
+        policy = policy / policy.sum()
+    else:
+        policy = np.ones(len(legal_actions)) / len(legal_actions)
+
+    # -------------------------
+    # 6. elegir acción
+    # -------------------------
+    action_idx = int(np.argmax(policy))
+
+    return action_idx, {
+        "policy": policy.tolist(),
+        "value": out["value"]
+    }
+
+
+
+================================================================================
+FILE: C:\repos\python\assault\alphazero_project\core\encoder\encoder.py
+================================================================================
+
+import numpy as np
+
+
+# ✅ encoding determinista de terreno
+TERRAIN_MAP = {
+    "plain": 0.1,
+    "forest": 0.2,
+    "city": 0.3,
+    "water": 0.4,
+    "road": 0.5
+}
+
+
+def encode_state(state, config):
+    """
+    Convierte GameState → tensor [C, max_board_size, max_board_size]
+
+    Canales:
+    0: unidades propias
+    1: unidades enemigas
+    2: hp propias
+    3: hp enemigas
+    4: terreno
+    5: objetivos
+    """
+
+    game_map = state.game_map
+    hexes = getattr(game_map, "hexes", [])
+
+    if not hexes:
+        raise ValueError("Map has no hexes")
+
+    # -------------------------
+    # MAP SIZE REAL
+    # -------------------------
+    max_q = max(h.q for h in hexes)
+    max_r = max(h.r for h in hexes)
+
+    H_real = max_q + 1
+    W_real = max_r + 1
+
+    # -------------------------
+    # CONFIG (modelo)
+    # -------------------------
+    model_cfg = config["model"]
+
+    C = model_cfg["in_channels"]
+    MAX_SIZE = model_cfg["max_board_size"]
+
+    # -------------------------
+    # VALIDACIÓN (muy importante)
+    # -------------------------
+    if H_real > MAX_SIZE or W_real > MAX_SIZE:
+        raise ValueError(
+            f"Map too large: ({H_real}, {W_real}) exceeds max_board_size ({MAX_SIZE})"
+        )
+
+    # -------------------------
+    # TENSOR BASE (tamaño real)
+    # -------------------------
+    tensor = np.zeros((C, H_real, W_real), dtype=np.float32)
+
+    # -------------------------
+    # TERRAIN
+    # -------------------------
+    for h in hexes:
+        q, r = h.q, h.r
+        terrain = h.get_terrain()
+
+        # ✅ determinista
+        terrain_id = TERRAIN_MAP.get(str(terrain), 0.0)
+        tensor[4, q, r] = terrain_id
+
+    # -------------------------
+    # UNITS
+    # -------------------------
+    for u in state.units:
+        if not getattr(u, "alive", True):
+            continue
+
+        if u.position is None:
+            continue
+
+        q = u.position.q
+        r = u.position.r
+
+        is_friendly = (u.side == state.active_side)
+
+        hp = getattr(u, "hp", 0.0)
+        max_hp = getattr(u, "max_hp", hp if hp > 0 else 1.0)
+        hp_norm = hp / max_hp if max_hp > 0 else 0.0
+
+        if is_friendly:
+            tensor[0, q, r] = 1.0
+            tensor[2, q, r] = hp_norm
+        else:
+            tensor[1, q, r] = 1.0
+            tensor[3, q, r] = hp_norm
+
+    # -------------------------
+    # OBJECTIVES
+    # -------------------------
+    vp_tracker = getattr(state, "vp_tracker", None)
+
+    if vp_tracker and getattr(vp_tracker, "conditions", None):
+        for vp in getattr(vp_tracker.conditions, "points", []):
+            q, r = vp.hex_coords
+            if 0 <= q < H_real and 0 <= r < W_real:
+                tensor[5, q, r] = 1.0
+
+    # -------------------------
+    # ✅ PADDING FINAL
+    # -------------------------
+    padded = np.zeros((C, MAX_SIZE, MAX_SIZE), dtype=np.float32)
+
+    padded[:, :H_real, :W_real] = tensor
+
+    return padded
+
+
+================================================================================
+FILE: C:\repos\python\assault\alphazero_project\core\model\model.py
+================================================================================
+
+from alphazero_project.core.planner.plan_context import PlanContext
+from alphazero_project.core.telemetry.logger import log
+
+
+class TrainingEnv:
+
+    def __init__(self, game, config):
+        self.game = game
+        self.config = config
+        self.state = None
+
+    # -------------------------
+    def reset(self, state):
+        self.state = state
+
+    # -------------------------
+    def step(self):
+        plan = PlanContext()
+
+        # ✅ PASAR game + config (CLAVE)
+        action_idx, out = decide(self.state, plan, self.game, self.config)
+
+        # ✅ SIEMPRE pasar por adapter
+        legal_actions = self.game.get_legal_actions(self.state)
+
+        if not legal_actions:
+            raise RuntimeError("No legal actions available")
+
+        # ✅ proteger índice
+        action_idx = min(action_idx, len(legal_actions) - 1)
+
+        # ✅ índice → acción real
+        action = legal_actions[action_idx]
+
+        # ✅ ejecutar
+        self.state = self.game.step(self.state, action)
+
+        # ✅ log limpio
+        log({
+            "policy": out["policy"],
+            "value": out["value"],
+            "action": action
+        })
+
+        return self.state
+
+
+
+================================================================================
+FILE: C:\repos\python\assault\alphazero_project\core\planner\plan_context.py
+================================================================================
+
+class PlanContext:
+    def __init__(self):
+        self.strategy = None
+        self.targets = []
+        self.pressure = 0.0
+
+
+
+================================================================================
+FILE: C:\repos\python\assault\alphazero_project\core\telemetry\logger.py
+================================================================================
+
+def log(data):
+    print(data)
+
+
+
+================================================================================
+FILE: C:\repos\python\assault\alphazero_project\env\state_encoder.py
+================================================================================
+
+import numpy as np
+
+
+def encode_state(state, config):
+    """
+    Convierte GameState → tensor [C, H, W] con padding fijo
+
+    Canales:
+    0: unidades propias
+    1: unidades enemigas
+    2: hp propias
+    3: hp enemigas
+    4: terreno
+    5: objetivos
+    """
+
+    game_map = state.game_map
+    hexes = getattr(game_map, "hexes", [])
+
+    if not hexes:
+        raise ValueError("Map has no hexes")
+
+    # -------------------------
+    # MAP SIZE REAL
+    # -------------------------
+    max_q = max(h.q for h in hexes)
+    max_r = max(h.r for h in hexes)
+
+    H_real = max_q + 1
+    W_real = max_r + 1
+
+    # -------------------------
+    # CONFIG (TAMAÑO MODELO)
+    # -------------------------
+    model_cfg = config["model"]
+    C = model_cfg["in_channels"]
+    MAX_SIZE = model_cfg["max_board_size"]
+
+    # -------------------------
+    # TENSOR BASE
+    # -------------------------
+    tensor = np.zeros((C, H_real, W_real), dtype=np.float32)
+
+    # -------------------------
+    # TERRAIN
+    # -------------------------
+    for h in hexes:
+        q, r = h.q, h.r
+        terrain = h.get_terrain()
+
+        terrain_id = hash(terrain) % 10 / 10.0
+        tensor[4, q, r] = terrain_id
+
+    # -------------------------
+    # UNITS
+    # -------------------------
+    for u in state.units:
+        if not getattr(u, "alive", True):
+            continue
+
+        if u.position is None:
+            continue
+
+        q = u.position.q
+        r = u.position.r
+
+        is_friendly = (u.side == state.active_side)
+
+        hp = getattr(u, "hp", 0.0)
+        max_hp = getattr(u, "max_hp", hp if hp > 0 else 1.0)
+        hp_norm = hp / max_hp if max_hp > 0 else 0.0
+
+        if is_friendly:
+            tensor[0, q, r] = 1.0
+            tensor[2, q, r] = hp_norm
+        else:
+            tensor[1, q, r] = 1.0
+            tensor[3, q, r] = hp_norm
+
+    # -------------------------
+    # OBJECTIVES
+    # -------------------------
+    vp_tracker = getattr(state, "vp_tracker", None)
+
+    if vp_tracker and getattr(vp_tracker, "conditions", None):
+        for vp in getattr(vp_tracker.conditions, "points", []):
+            q, r = vp.hex_coords
+            if 0 <= q < H_real and 0 <= r < W_real:
+                tensor[5, q, r] = 1.0
+
+    # -------------------------
+    # ✅ PADDING A TAMAÑO FIJO
+    # -------------------------
+    padded = np.zeros((C, MAX_SIZE, MAX_SIZE), dtype=np.float32)
+
+    h = min(H_real, MAX_SIZE)
+    w = min(W_real, MAX_SIZE)
+
+    padded[:, :h, :w] = tensor[:, :h, :w]
+
+    return padded
+``
+
+
+================================================================================
+FILE: C:\repos\python\assault\alphazero_project\env\training_env.py
+================================================================================
+
+from alphazero_project.core.planner.plan_context import PlanContext
+from alphazero_project.core.decision.decision import decide
+from alphazero_project.core.telemetry.logger import log
+
+
+class TrainingEnv:
+
+    def __init__(self, game):
+        self.game = game
+        self.state = None
+
+    # -------------------------
+    def reset(self, state):
+        self.state = state
+
+    # -------------------------
+    def step(self):
+        plan = PlanContext()
+
+        # ✅ PASAR game (CLAVE)
+        action_idx, out = decide(self.state, plan, self.game)
+
+        # ✅ SIEMPRE pasar por adapter
+        legal_actions = self.game.get_legal_actions(self.state)
+
+        if not legal_actions:
+            raise RuntimeError("No legal actions available")
+
+        # ✅ proteger índice
+        action_idx = min(action_idx, len(legal_actions) - 1)
+
+        # ✅ índice → acción real
+        action = legal_actions[action_idx]
+
+        # ✅ ejecutar
+        self.state = self.game.step(self.state, action)
+
+        # ✅ log limpio
+        log({
+            "policy": out["policy"],
+            "value": out["value"],
+            "action": action
+        })
+
+        return self.state
+
+
+
+================================================================================
+FILE: C:\repos\python\assault\alphazero_project\integration\assault_model_adapter.py
+================================================================================
+
+from alphazero_project.core.interfaces import GameInterface
+
+
+class AssaultModelAdapter(GameInterface):
+
+    def __init__(self, sim):
+        self.sim = sim
+
+    # ✅ estado inicial (muy importante)
+    def get_initial_state(self):
+        return self.sim.get_initial_state()
+
+    # ✅ acciones legales
+    def get_legal_actions(self, state):
+        return self.sim.get_legal_actions(state)
+
+    # ✅ transición
+    def step(self, state, action):
+        return self.sim.step(state, action)
+
+    # ✅ terminal (interfaz estándar)
+    def is_terminal(self, state):
+        return self.sim.is_done(state)
+
+
+
+================================================================================
+FILE: C:\repos\python\assault\alphazero_project\integration\assault_simulation.py
+================================================================================
+
+from pathlib import Path
+
+from assault_model.core.scenario_loader import load_scenario
+from assault_model.units.catalog_loader import load_unit_catalog
+from assault_model.map.map_piece_loader import load_map_piece_catalog
+
+from assault_model.state.game_state import GameState
+from assault_model.runtime.game_state_runtime import RuntimeGameState
+from assault_model.runtime.execution_context import ExecutionContext
+
+from assault_model.map.terrain_config import terrain_config
+from assault_model.actions.action_catalog import ActionCatalog
+
+
+class AssaultSimulation:
+
+    def __init__(self, config):
+        # -------------------------
+        # CONFIG (inyectada desde main)
+        # -------------------------
+        cfg = config
+
+        # ✅ escenario
+        self.scenario_name = cfg["scenario_schedule"][0]["id"]
+
+        # ✅ rutas robustas
+        repo_root = Path(__file__).resolve().parents[2]
+        self.assets_root = repo_root / "assault_sim" / "assets"
+
+        # -------------------------
+        # CARGA DE DATOS
+        # -------------------------
+        self.unit_catalog = load_unit_catalog(
+            self.assets_root / "catalogs" / "unit_catalog.json"
+        )
+
+        self.map_catalog = load_map_piece_catalog(
+            self.assets_root / "catalogs" / "map_piece_catalog.json"
+        )
+
+        scenario_path = self.assets_root / "scenarios" / f"{self.scenario_name}.json"
+
+        self.scenario = load_scenario(
+            scenario_path,
+            self.unit_catalog,
+            self.map_catalog
+        )
+
+        # -------------------------
+        # ESTADO
+        # -------------------------
+        self.game_state = None
+        self.runtime = None
+        self.done = False
+
+    # -------------------------
+    # INITIAL STATE
+    # -------------------------
+    def get_initial_state(self):
+        self.game_state = GameState.from_scenario(self.scenario)
+
+        self.game_state.game_map.terrain_config = terrain_config
+
+        self.runtime = RuntimeGameState(self.game_state, self.scenario)
+        self.runtime.start_turn()
+
+        self.game_state = self.runtime.base_state
+        self.done = False
+
+        return self.game_state
+
+    # -------------------------
+    # LEGAL ACTIONS
+    # -------------------------
+    def get_legal_actions(self, state):
+        actions = []
+
+        terrain_cfg = state.game_map.terrain_config
+
+        for unit in state.units:
+            if not getattr(unit, "alive", True):
+                continue
+
+            catalog = ActionCatalog(
+                state,
+                unit,
+                terrain_config=terrain_cfg
+            )
+
+            actions.extend(catalog.actions())
+
+        return actions
+
+    # -------------------------
+    # STEP
+    # -------------------------
+    def step(self, state, action):
+        if self.runtime is None:
+            raise RuntimeError("Simulation not initialized. Call get_initial_state() first.")
+
+        context = ExecutionContext(
+            game_map=self.game_state.game_map
+        )
+
+        prev_turn = self.game_state.turn
+
+        # ✅ aplicar acción
+        self.runtime.apply_action(action, context=context)
+        self.game_state = self.runtime.base_state
+
+        # ✅ fin partida
+        if self.game_state.done:
+            self.done = True
+            return self.game_state
+
+        # ✅ cambio de turno
+        if self.game_state.turn != prev_turn:
+            self.runtime.start_turn()
+            self.game_state = self.runtime.base_state
+
+        return self.game_state
+
+    # -------------------------
+    # TERMINAL
+    # -------------------------
+    def is_done(self, state):
+        return self.done
+
+
+================================================================================
+FILE: C:\repos\python\assault\alphazero_project\roadmap\alphazero_roadmap_v3.md
+================================================================================
+
+# 🚀 ROADMAP ENRIQUECIDO V3: ALPHAZERO++ (NEURO-SYMBOLIC TACTICAL SYSTEM)
+
+## 🧠 OBJETIVO REAL
+Construir un sistema que:
+- aprende (CNN + MCTS)
+- razona (planificador aprendido + explícito)
+- usa conocimiento sin bloquear aprendizaje (overrides → bias)
+- explica decisiones (telemetría profunda)
+- mantiene compatibilidad con TODO tu sistema actual
+
+---
+
+# 🏗️ ARQUITECTURA GLOBAL FINAL
+
+Game Logic
+→ Planificador (explícito + aprendido)
+→ Encoder (state + plan)
+→ CNN multi-head
+→ MCTS híbrido
+→ Decision layer
+→ Telemetry interna
+→ Metrics engine existente
+→ Dashboard existente
+
+---
+
+# 📦 STACK TECNOLÓGICO
+
+## Core ML
+- torch
+- numpy
+
+## Backend / Orquestación
+- Prefect
+- MLflow
+
+## Datos
+- JSON logs
+- datasets (numpy / torch)
+
+---
+
+# 🔥 PRINCIPIOS DE DISEÑO (AMPLIADOS)
+
+- nunca bloquear acciones válidas
+- sustituir reglas por bias
+- separación estricta de módulos
+- observabilidad > modelo
+- aprendizaje progresivo
+
+## ⚠️ CORE INMUTABLE
+
+- ❗ EL CORE NUNCA SE TOCA
+- ❗ TODA LA LÓGICA ESPECÍFICA VA EN LA CAPA DE INTEGRACIÓN
+- ✅ el core depende SOLO de interfaces mínimas
+- ✅ el objetivo es poder optimizar/reemplazar el core sin romper nada
+
+Ejemplo:
+
+core → usa GameInterface
+integration → implementa assault_model_adapter
+
+---
+
+## 🌍 ESTÁNDAR DE CÓDIGO
+
+- TODO el código debe estar en inglés
+- TODOS los comentarios deben estar en inglés
+- arquitectura y nombres consistentes
+- esta conversación y explicaciones → en español ✅
+
+---
+
+# 🟢 FASE 0 — BASELINE
+
+- congelar sistema actual
+- métricas clave (VP entry, capture funnel, alignment)
+- guardar episodios
+
+---
+
+# 🟢 FASE 1 — DESACOPLAR PLANIFICADOR
+
+- crear PlanContext
+- eliminar control directo sobre acciones
+- mantener métricas y explicación
+
+---
+
+# 🟢 FASE 2 — REFACTOR OVERRIDES
+
+ANTES:
+if X → bloquear
+
+DESPUÉS:
+value -= penalty
+policy *= weight
+
+Tipos:
+- hard: legalidad
+- soft: policy bias
+- shaping: value
+
+---
+
+# 🟢 FASE 3 — ENCODER
+
+Input:
+(C_state + C_plan, H, W)
+
+Incluye:
+- unidades
+- objetivos
+- presión
+- planificación
+
+---
+
+# 🟢 FASE 4 — RED BASE
+
+CNN → policy + value
+
+Entrenamiento:
+imitation learning
+
+---
+
+# 🟢 FASE 5 — STRATEGY HEAD
+
+Añadir:
+strategy_head (CAPTURE, DENY, ...)
+
+Entrenamiento supervisado
+
+---
+
+# 🟢 FASE 6 — MCTS
+
+Implementación básica
+
+---
+
+# 🟢 FASE 7 — MCTS HÍBRIDO
+
+UCB = Q + cP√N/(1+n) + bias − risk
+
+---
+
+# 🟢 FASE 8 — VALUE MULTI-HEAD
+
+Outputs:
+- win_prob
+- vp_progress
+- combat_adv
+
+---
+
+# 🟢 FASE 9 — SELF PLAY
+
+(state, policy, outcome)
+
+---
+
+# 🟢 FASE 10 — PLANIFICADOR APRENDIDO
+
+comparar planner vs modelo
+
+---
+
+# 🟢 FASE 11 — TELEMETRÍA TOTAL
+
+Log:
+- policy
+- value
+- MCTS
+- plan
+- override
+
+---
+
+# 🟢 FASE 12 — OPTIMIZACIÓN
+
+- paralelización
+- GPU
+- tuning MCTS
+
+---
+
+# ✅ RESULTADO FINAL
+
+Sistema capaz de:
+- aprender ✅
+- razonar ✅
+- explicar ✅
+- escalar ✅
+
+---
+
+# 🚀 PROMPT DE ARRANQUE
+
+You are building a clean AlphaZero++ system from scratch.
+
+Rules:
+- DO NOT modify core logic once defined
+- ALL integration must happen outside core
+- CODE and COMMENTS in English
+- architecture must be modular and testable
+- NO hard-coded overrides
+- ALL knowledge must be expressed as bias or features
+
+Your first goal:
+Implement a minimal working pipeline:
+Game → PlanContext → Encoder → Model (stub) → Decision → Telemetry
+
+Keep everything simple, observable and extensible.
+
+
