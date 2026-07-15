@@ -289,3 +289,86 @@ pm2 delete all
 pm2 monit
 pm2 save
 
+
+
+python -m agents.muzero.train.train_muzero --config agents/muzero/configs/muzero_config.test.yaml --mlflow-experiment assault_muzero --mlflow-run-name muzero_vpfirst
+python -m assault_bench.runner --config assault_bench/configs/benchmark_config.test.yaml --checkpoint latest --mlflow-experiment assault_bench --mlflow-run-name bench_vpfirst
+
+
+# ya estás en C:\repos\python\assault-experiments-orchestrator
+Copy-Item .\templates\reward_grid_v1\reward_vp_stepin_selected_bonus_1p7.yaml .\queue_reward\
+Get-ChildItem .\queue_reward\
+
+
+python .\scripts\sb3_eval_viewer.py
+
+.\scripts\run_curriculum_reporting_viewer.ps1 -Dev
+
+
+*************************
+wsl -l -v
+wsl -d Ubuntu
+
+
+# --- sims=3, episodes_per_iter=3 ---
+cp /tmp/muzero_wsl_nano.yaml /tmp/muzero_wsl_s3_e3.yaml
+sed -i 's/mcts_simulations: .*/mcts_simulations: 3/' /tmp/muzero_wsl_s3_e3.yaml
+sed -i 's/episodes_per_iter: .*/episodes_per_iter: 3/' /tmp/muzero_wsl_s3_e3.yaml
+OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 NUMEXPR_NUM_THREADS=1 \
+python -m agents.muzero.train.train_muzero \
+  --config /tmp/muzero_wsl_s3_e3.yaml \
+  --mlflow-experiment assault_muzero \
+  --mlflow-run-name wsl_cuda_curve_s3_e3
+  
+  
+  
+  python -m mlops.reporting.build_catalog \
+  --repo-root /mnt/c/repos/python/assault \
+  --out runs/experiments/reporting/model_catalog_latest.json \
+  --runs-root runs
+  
+  python -m mlops.reporting.build_catalog --repo-root . --out runs/experiments/reporting/model_catalog_latest.json --runs-root runs
+  
+  powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\run_efficientzero_v2_train_bench_quick.ps1 `
+  -Device cpu `
+  -SelfplayWorkers 1 `
+  -EpisodesPerIter 6 `
+  -TrainUpdatesPerIter 6 `
+  -MctsSimulations 4 `
+  -SelfplayMaxSteps 112 `
+  -BenchWorkers 1 `
+  -BenchMaxSteps 112 `
+  -BenchSeeds 41,42,43,44,45 `
+  -RunsRoot runs
+  
+  
+  CKPT="$(ls -t runs/efficientzero_v2_*/checkpoints/final.pt 2>/dev/null | head -n 1)"
+python -m assault_bench.runner \
+  --config runs/experiments/reporting/tmp_configs/efficientzero_v2.bench.wsl.yaml \
+  --checkpoint "$CKPT" \
+  --muzero-config runs/experiments/reporting/tmp_configs/efficientzero_v2.wsl_2workers.yaml \
+  --mlflow-experiment assault_bench \
+  --mlflow-run-name efficientzero_v2_bench_full_$(date +%Y%m%d_%H%M%S)
+  
+  
+  python -m mlops.reporting.build_catalog \
+  --repo-root . \
+  --out runs/experiments/reporting/model_catalog_latest.json \
+  --runs-root runs
+  
+
+wsl -l -v
+wsl -d Ubuntu
+cd /mnt/c/repos/python/assault
+source .venv-wsl/bin/activate
+cd C:\repos\python\assault
+
+
+# 1) Train EfficientZero v2
+python -m agents.efficientzero_v2.train.train_efficientzero_v2 `
+  --config agents/efficientzero_v2/configs/efficientzero_v2_config.yaml `
+  --mlflow-experiment assault_efficientzero_v2 `
+  --mlflow-run-name "ezv2_new_train"
+
+python -m assault_bench.runner --config assault_bench/configs/benchmark_config.yaml --checkpoint latest
+.\scripts\build_curriculum_reporting_catalog.ps1

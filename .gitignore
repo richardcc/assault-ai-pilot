@@ -90,3 +90,11 @@ Thumbs.db
 # Packaging artifacts
 # ===============================
 *.egg-info/
+.venv-wsl/
+mlruns/
+runs_curriculum/
+.assault_experiment_orchestrator.queue_*.lock
+.venv-wsl/
+mlruns/
+runs_curriculum/
+.assault_experiment_orchestrator.queue_*.lock

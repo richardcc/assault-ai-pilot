@@ -75,6 +75,8 @@ class VOECSimulator:
     def legal_actions(self) -> List[str]:
         state = self._require_state()
         runtime = self._require_runtime()
+        if bool(getattr(state, "done", False)):
+            return []
         active_side = getattr(runtime, "active_side", None)
         cache_key = (
             int(getattr(state, "_cache_version", 0)),
@@ -92,8 +94,15 @@ class VOECSimulator:
             return reaction_actions
         all_action_ids: List[str] = []
         if active_side is None:
-            return []
+            # Explicit pass to let runtime recover activation order deterministically.
+            self._legal_actions_cache_key = cache_key
+            self._legal_actions_cache_value = ["WAIT:SYSTEM"]
+            return ["WAIT:SYSTEM"]
         candidate_units = runtime.get_available_units(active_side)
+        if not candidate_units:
+            self._legal_actions_cache_key = cache_key
+            self._legal_actions_cache_value = ["WAIT:SYSTEM"]
+            return ["WAIT:SYSTEM"]
         for unit in candidate_units:
             catalog = ActionCatalog(
                 state,
@@ -113,7 +122,15 @@ class VOECSimulator:
     def step(self, action_id: str) -> TransitionRecord:
         runtime = self._require_runtime()
         state = self._require_state()
-        context = ExecutionContext(event_bus=None, game_map=state.game_map)
+        class _StepEventBus:
+            def __init__(self):
+                self.events = []
+
+            def emit(self, event):
+                self.events.append(dict(event or {}))
+
+        step_bus = _StepEventBus()
+        context = ExecutionContext(event_bus=step_bus, game_map=state.game_map)
         reaction_choice = self._parse_reaction_choice(action_id)
         if reaction_choice is not None:
             out = runtime.resolve_pending_reaction(use_reaction=bool(reaction_choice), context=context)
@@ -132,7 +149,10 @@ class VOECSimulator:
             action_id=action_id,
             reward=reward,
             done=done,
-            info={"scenario_id": self._scenario_id},
+            info={
+                "scenario_id": self._scenario_id,
+                "runtime_events": list(step_bus.events),
+            },
             state=self.snapshot(),
         )
 
@@ -308,6 +328,8 @@ class VOECSimulator:
     def _resolve_action_by_id(self, action_id: str) -> Any:
         state = self._require_state()
         runtime = self._require_runtime()
+        if str(action_id) == "WAIT:SYSTEM":
+            return WaitAction("SYSTEM")
         active_side = getattr(runtime, "active_side", None)
         if active_side is None:
             raise ValueError("No active side available to resolve action.")

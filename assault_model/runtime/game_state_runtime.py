@@ -320,38 +320,47 @@ class RuntimeGameState:
             # Unrecognized labels default to draw to avoid accidental wins.
             return None, "objective_outcome_resolved"
         
-        if not alive_units and not uses_objective_outcomes:
+        if not alive_units:
             _finalize_vp_if_needed()
             self.base_state.done = True
-            self.base_state.winner = None
-            self.base_state.end_reason = "all_units_destroyed"
+            if uses_objective_outcomes:
+                winner, reason = _objective_outcome_winner()
+                self.base_state.winner = winner
+                self.base_state.end_reason = reason
+            else:
+                self.base_state.winner = None
+                self.base_state.end_reason = "all_units_destroyed"
 
             if event_bus:
                 event_bus.emit({
                     "type": "MATCH_END",
                     "payload": {
-                        "result": "draw",
-                        "winner": None,
+                        "result": "draw" if self.base_state.winner is None else "victory",
+                        "winner": self.base_state.winner,
                         "reason": self.base_state.end_reason,
                         "turn": self.base_state.turn,
                     },
                 })
             return
 
-        if len(alive_sides) == 1 and not uses_objective_outcomes:
-            winner = next(iter(alive_sides))
-
+        if len(alive_sides) == 1:
             _finalize_vp_if_needed()
             self.base_state.done = True
-            self.base_state.winner = winner
-            self.base_state.end_reason = "last_side_standing"
+            if uses_objective_outcomes:
+                winner, reason = _objective_outcome_winner()
+                self.base_state.winner = winner
+                self.base_state.end_reason = reason
+            else:
+                winner = next(iter(alive_sides))
+                self.base_state.winner = winner
+                self.base_state.end_reason = "last_side_standing"
 
             if event_bus:
                 event_bus.emit({
                     "type": "MATCH_END",
                     "payload": {
-                        "result": "victory",
-                        "winner": winner,
+                        "result": "draw" if self.base_state.winner is None else "victory",
+                        "winner": self.base_state.winner,
                         "reason": self.base_state.end_reason,
                         "turn": self.base_state.turn,
                     },
