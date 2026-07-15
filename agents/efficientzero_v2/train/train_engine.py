@@ -24,7 +24,10 @@ from agents.efficientzero_v2.core.interop import (
 )
 from agents.efficientzero_v2.train.trainer import EfficientZeroV2Trainer
 from agents.efficientzero_v2.core.replay import ReplayBuffer
-from agents.efficientzero_v2.core.selfplay import play_episode
+from agents.efficientzero_v2.core.selfplay import (
+    play_episode,
+    resolve_effective_step_budget,
+)
 from voec_sim.configs.config_loader import load_voec_config
 from voec_sim.core.simulator import VOECSimulator
 
@@ -673,26 +676,28 @@ def run_training(
         seq_adapter = MuZeroVOECAdapter(seq_sim)
     budget_turn_limit = -1
     budget_unit_count = -1
-    if int(max_turns_override) > 0:
-        budget_turn_limit = int(max_turns_override)
-    elif int(max_steps_override) <= 0:
-        try:
-            probe_obs = (
-                seq_adapter.initial_state(scenario_id=scenario_id, seed=int(seed))
-                if seq_adapter is not None
-                else MuZeroVOECAdapter(VOECSimulator(assets=voec_cfg.assets)).initial_state(
-                    scenario_id=scenario_id, seed=int(seed)
-                )
-            )
-            budget_unit_count = int(len(getattr(probe_obs, "units", []) or []))
-            sim_probe = seq_sim if seq_sim is not None else None
-            if sim_probe is None and seq_adapter is not None:
-                sim_probe = getattr(seq_adapter, "sim", None)
-            if sim_probe is not None and hasattr(sim_probe, "scenario_max_turns"):
-                budget_turn_limit = int(sim_probe.scenario_max_turns() or 0)
-        except Exception:
-            budget_turn_limit = -1
-            budget_unit_count = -1
+    try:
+        probe_adapter = (
+            seq_adapter
+            if seq_adapter is not None
+            else MuZeroVOECAdapter(VOECSimulator(assets=voec_cfg.assets))
+        )
+        probe_obs = probe_adapter.initial_state(scenario_id=scenario_id, seed=int(seed))
+        budget_unit_count = int(len(getattr(probe_obs, "units", []) or []))
+        sim_probe = seq_sim if seq_sim is not None else getattr(probe_adapter, "sim", None)
+        if sim_probe is not None and hasattr(sim_probe, "scenario_max_turns"):
+            budget_turn_limit = int(sim_probe.scenario_max_turns() or 0)
+    except Exception:
+        budget_turn_limit = -1
+        budget_unit_count = -1
+
+    logged_effective_budget, logged_budget_source = resolve_effective_step_budget(
+        max_steps=int(max_steps),
+        max_steps_override=int(max_steps_override),
+        max_turns_override=int(max_turns_override),
+        unit_count=int(budget_unit_count),
+        scenario_turn_limit=int(budget_turn_limit),
+    )
 
     events_writer = None
     if bool(enable_post_train_analytics):
@@ -998,32 +1003,13 @@ def run_training(
                 for ep in range(episodes_per_iter):
                     ep_seed = int(seed + it * episodes_per_iter + ep)
                     episode_plan.append((ep, ep_seed))
-                    if int(max_turns_override) > 0:
-                        units_for_turns = int(budget_unit_count) if int(budget_unit_count) > 0 else -1
-                        if units_for_turns > 0:
-                            est_steps = int(max_turns_override) * units_for_turns
-                            budget_label = (
-                                f"max_turns_override={int(max_turns_override)} "
-                                f"units={units_for_turns} effective_max_steps={est_steps}"
-                            )
-                        else:
-                            budget_label = f"max_turns_override={int(max_turns_override)} (units pending)"
-                    elif int(max_steps_override) > 0:
-                        budget_label = (
-                            f"max_steps_override={int(max_steps_override)} "
-                            f"effective_max_steps={int(max_steps_override)}"
-                        )
-                    else:
-                        if int(budget_turn_limit) > 0 and int(budget_unit_count) > 0:
-                            budget_label = (
-                                f"scenario_turn_limit={int(budget_turn_limit)} "
-                                f"units={int(budget_unit_count)} "
-                                f"effective_max_steps={int(budget_turn_limit) * int(budget_unit_count)}"
-                            )
-                        else:
-                            budget_label = (
-                                f"scenario_turns*x_units (unknown now, fallback max_steps={int(max_steps)})"
-                            )
+                    budget_label = (
+                        f"source={logged_budget_source} effective_max_steps={int(logged_effective_budget)} "
+                        f"(max_turns_override={int(max_turns_override)} "
+                        f"max_steps_override={int(max_steps_override)} "
+                        f"scenario_turn_limit={int(budget_turn_limit)} units={int(budget_unit_count)} "
+                        f"max_steps={int(max_steps)})"
+                    )
                     print(
                         f"[EfficientZeroV2]   episode {ep+1}/{episodes_per_iter} "
                         f"starting (seed={ep_seed}, sims={mcts_simulations}, budget={budget_label})"

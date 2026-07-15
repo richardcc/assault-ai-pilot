@@ -15,6 +15,43 @@ DEFAULT_OBS_HEIGHT = 16
 DEFAULT_OBS_WIDTH = 16
 
 
+def _scenario_turn_limit_from_adapter(adapter) -> int:
+    try:
+        if hasattr(adapter, "scenario_max_turns"):
+            return int(adapter.scenario_max_turns() or 0)
+    except Exception:
+        return 0
+    try:
+        sim = getattr(adapter, "sim", None)
+        if sim is not None and hasattr(sim, "scenario_max_turns"):
+            return int(sim.scenario_max_turns() or 0)
+    except Exception:
+        return 0
+    return 0
+
+
+def resolve_effective_step_budget(
+    *,
+    max_steps: int,
+    max_steps_override: int = 0,
+    max_turns_override: int = 0,
+    unit_count: int = 0,
+    scenario_turn_limit: int = 0,
+) -> tuple[int, str]:
+    units = int(unit_count)
+    turns_override = int(max_turns_override)
+    steps_override = int(max_steps_override)
+    scenario_turns = int(scenario_turn_limit)
+    fallback_steps = int(max_steps)
+    if turns_override > 0 and units > 0:
+        return int(turns_override * units), "max_turns_override*unit_count"
+    if steps_override > 0:
+        return steps_override, "max_steps_override"
+    if scenario_turns > 0 and units > 0:
+        return int(scenario_turns * units), "scenario_turn_limit*unit_count"
+    return fallback_steps, "max_steps_fallback"
+
+
 def _observation_to_vector(obs) -> list[float]:
     alive = sum(1 for u in obs.units if u.get("alive", True))
     mean_hp = 0.0
@@ -126,11 +163,14 @@ class _NativeEZV2SelfplayBackend:
         samples = []
         obs = adapter.initial_state(scenario_id=str(scenario_id), seed=int(seed))
         unit_count = len(getattr(obs, "units", []) or [])
-        effective_max_steps = int(max_steps)
-        if int(max_turns_override) > 0 and unit_count > 0:
-            effective_max_steps = int(max_turns_override) * int(unit_count)
-        elif int(max_steps_override) > 0:
-            effective_max_steps = int(max_steps_override)
+        scenario_turn_limit = _scenario_turn_limit_from_adapter(adapter)
+        effective_max_steps, budget_source = resolve_effective_step_budget(
+            max_steps=int(max_steps),
+            max_steps_override=int(max_steps_override),
+            max_turns_override=int(max_turns_override),
+            unit_count=int(unit_count),
+            scenario_turn_limit=int(scenario_turn_limit),
+        )
 
         for step_idx in range(max(1, effective_max_steps)):
             legal = list(adapter.legal_actions() or [])
@@ -229,6 +269,8 @@ class _NativeEZV2SelfplayBackend:
                         "latent_top_indices": list(xai.get("latent_top_indices", []) or []),
                         "latent_top_values": list(xai.get("latent_top_values", []) or []),
                         "predicted_value_root": float(xai.get("predicted_value_root", 0.0)),
+                        "effective_max_steps": int(effective_max_steps),
+                        "step_budget_source": str(budget_source),
                         "timeout": False,
                         "terminal_reason": str(terminal_reason),
                     },
