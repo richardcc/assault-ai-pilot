@@ -4,6 +4,7 @@ paths:
   muzero_config: agents/muzero/configs/muzero_config.smoke.yaml
 
 benchmark:
+  device: cuda
   num_workers: 10
   scenario_id: battaglia_cittadina_2_1
   seeds: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]

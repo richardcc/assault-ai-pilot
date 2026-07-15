@@ -44,5 +44,6 @@ train:
   iterations: 12
   episodes_per_iter: 10
   batch_size: 32
+  enable_post_train_analytics: false
   replay_capacity: 80000
   resume_checkpoint: ""

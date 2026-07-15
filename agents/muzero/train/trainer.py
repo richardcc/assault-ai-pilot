@@ -39,6 +39,8 @@ class MuZeroTrainer:
         objective_loss_weight: float = 0.0,
         objective_target_mode: str = "progress",
         objective_pos_weight: float = 1.0,
+        objective_opportunity_max_dist: float = 2.0,
+        objective_progress_positive_threshold: float = 0.0,
     ):
         self.device = device
         self.model = model.to(self.device)
@@ -48,6 +50,33 @@ class MuZeroTrainer:
         if self.objective_target_mode not in {"progress", "conversion"}:
             self.objective_target_mode = "progress"
         self.objective_pos_weight = float(max(1.0, objective_pos_weight))
+        self.objective_opportunity_max_dist = float(max(0.0, objective_opportunity_max_dist))
+        self.objective_progress_positive_threshold = float(objective_progress_positive_threshold)
+
+    def _objective_had_opportunity(self, info: dict) -> bool:
+        payload = dict(info or {})
+        if "objective_had_opportunity" in payload:
+            return int(payload.get("objective_had_opportunity", 0)) > 0
+        if int(payload.get("legal_capture_options", 0)) > 0:
+            return True
+        if int(payload.get("objective_converted", 0)) > 0:
+            return True
+        if float(payload.get("objective_progress_delta", 0.0)) > 0.0:
+            return True
+        before = float(
+            payload.get(
+                "objective_min_dist_before",
+                payload.get("objective_distance_before", -1.0),
+            )
+        )
+        after = float(
+            payload.get(
+                "objective_min_dist_after",
+                payload.get("objective_distance_after", -1.0),
+            )
+        )
+        dist_cap = float(self.objective_opportunity_max_dist)
+        return bool((before >= 0.0 and before <= dist_cap) or (after >= 0.0 and after <= dist_cap))
 
     def train_batch(self, batch: List[ReplaySample]) -> TrainMetrics:
         if not batch:
@@ -99,12 +128,14 @@ class MuZeroTrainer:
                     if "objective_progress_delta" not in info:
                         target_rows.append([float(int(info.get("objective_converted", 0)) > 0)])
                     else:
-                        target_rows.append([1.0 if delta > 0.0 else 0.0])
+                        target_rows.append(
+                            [1.0 if delta > float(self.objective_progress_positive_threshold) else 0.0]
+                        )
                 else:
                     target_rows.append([float(int(info.get("objective_converted", 0)) > 0)])
             objective_target = torch.tensor(target_rows, dtype=torch.float32, device=self.device)
             objective_mask = torch.tensor(
-                [[1.0 if int((s.info or {}).get("objective_had_opportunity", 0)) > 0 else 0.0] for s in batch],
+                [[1.0 if self._objective_had_opportunity(s.info or {}) else 0.0] for s in batch],
                 dtype=torch.float32,
                 device=self.device,
             )

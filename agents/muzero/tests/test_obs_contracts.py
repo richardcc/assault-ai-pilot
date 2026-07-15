@@ -39,11 +39,14 @@ def test_transition_event_payload_shape():
         iteration=1,
         episode=2,
         step=3,
+        game_turn=1,
         action_id="move:u1:0,0",
         to_play="A",
         reward_target=1.0,
         done=True,
         terminal_reason="max_steps",
         timeout=True,
+        units_snapshot=[{"unit_id": "U1", "q": 0, "r": 0, "alive": True}],
     ).to_payload()
     assert payload["action_id"] == "move:u1:0,0"
+    assert payload["units_snapshot"][0]["unit_id"] == "U1"

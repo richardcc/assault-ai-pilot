@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 from concurrent.futures import ProcessPoolExecutor, as_completed
+from contextlib import nullcontext
 import json
 import os
 import time
@@ -30,6 +31,49 @@ from agents.muzero.xai.episode_narrative import build_episode_narrative
 from agents.muzero.xai.search_tree_snapshot import build_search_snapshot
 from voec_sim.configs.config_loader import load_voec_config
 from voec_sim.core.simulator import VOECSimulator
+
+
+def _start_mlflow_run(experiment_name: str, run_name: str):
+    try:
+        import mlflow  # type: ignore
+    except Exception:
+        return None, nullcontext()
+    mlflow.set_experiment(str(experiment_name))
+    ctx = mlflow.start_run(run_name=str(run_name) if str(run_name).strip() else None)
+    return mlflow, ctx
+
+
+def _mlflow_log_params(mlflow_mod, params: dict) -> None:
+    if mlflow_mod is None:
+        return
+    for k, v in (params or {}).items():
+        try:
+            mlflow_mod.log_param(str(k), str(v))
+        except Exception:
+            continue
+
+
+def _mlflow_log_metrics(mlflow_mod, metrics: dict, step: int = 0) -> None:
+    if mlflow_mod is None:
+        return
+    for k, v in (metrics or {}).items():
+        if isinstance(v, (int, float)):
+            try:
+                mlflow_mod.log_metric(str(k), float(v), step=step)
+            except Exception:
+                continue
+
+
+def _tracked_side_from_scenario(scenarios_dir: Path, scenario_id: str) -> str:
+    scenario_path = (Path(scenarios_dir) / f"{str(scenario_id).strip()}.json").resolve()
+    if not scenario_path.exists():
+        return ""
+    try:
+        payload = json.loads(scenario_path.read_text(encoding="utf-8"))
+    except Exception:
+        return ""
+    victory = dict(payload.get("victory_outcomes", {}) or {})
+    return str(victory.get("tracked_side", "")).strip().upper()
 
 
 def _channel_name(index: int) -> str:
@@ -76,18 +120,22 @@ def _assault_advantage_bucket(
     mcts_margin: float,
     legal_attack_options: int,
     attack_target_cover_mean: float,
+    prob_threshold: float = 0.55,
+    margin_threshold: float = 0.20,
+    cover_max: float = 0.35,
+    min_score: int = 3,
 ) -> str:
     score = 0
-    if float(chosen_action_prob) >= 0.55:
+    if float(chosen_action_prob) >= float(prob_threshold):
         score += 1
-    if float(mcts_margin) >= 0.20:
+    if float(mcts_margin) >= float(margin_threshold):
         score += 1
     if int(legal_attack_options) >= 1:
         score += 1
     cover = float(attack_target_cover_mean)
-    if cover >= 0.0 and cover <= 0.35:
+    if cover >= 0.0 and cover <= float(cover_max):
         score += 1
-    return "favorable" if score >= 3 else "unfavorable"
+    return "favorable" if score >= int(min_score) else "unfavorable"
 
 
 def _selfplay_worker_task(payload: dict):
@@ -131,9 +179,16 @@ def _selfplay_worker_task(payload: dict):
         mcts_temperature=payload["selfplay"]["mcts_temperature"],
         mcts_dirichlet_alpha=payload["selfplay"]["mcts_dirichlet_alpha"],
         mcts_dirichlet_epsilon=payload["selfplay"]["mcts_dirichlet_epsilon"],
-        progress_log_every=0,
+        inference_cache_limit=int(payload["selfplay"].get("inference_cache_limit", 2048)),
+        progress_log_every=int(payload["selfplay"].get("progress_log_every", 0)),
+        log_episode_end=bool(payload["selfplay"].get("log_episode_end", False)),
         timeout_penalty=payload["selfplay"]["timeout_penalty"],
+        log_units_snapshot=bool(payload["selfplay"].get("log_units_snapshot", False)),
         reward_shaping=payload["selfplay"]["reward_shaping"],
+        objective_opportunity_near_vp_max_dist=float(
+            payload["selfplay"].get("objective_opportunity_near_vp_max_dist", 2.0)
+        ),
+        collect_xai=bool(payload["selfplay"].get("collect_xai", True)),
     )
     return payload["ep_index"], samples
 
@@ -217,6 +272,8 @@ def _benchmark_model_device(
 
 def run_training(
     config_path: str = "agents/muzero/configs/muzero_config.yaml",
+    mlflow_experiment: str = "assault_muzero",
+    mlflow_run_name: str = "",
 ) -> dict:
     cfg = load_muzero_config(Path(config_path))
     voec_cfg_path = Path(cfg.paths["voec_config"])
@@ -224,6 +281,9 @@ def run_training(
 
     scenario_id = str(cfg.scenario["id"])
     seed = int(cfg.scenario["seed"])
+    objective_tracked_side = _tracked_side_from_scenario(
+        Path(voec_cfg.assets.scenarios_dir), scenario_id
+    )
     iterations = int(cfg.train["iterations"])
     episodes_per_iter = int(cfg.train["episodes_per_iter"])
     batch_size = int(cfg.train["batch_size"])
@@ -263,11 +323,55 @@ def run_training(
     mcts_temperature = float(cfg.selfplay.get("mcts_temperature", 1.0))
     mcts_dirichlet_alpha = float(cfg.selfplay.get("mcts_dirichlet_alpha", 0.3))
     mcts_dirichlet_epsilon = float(cfg.selfplay.get("mcts_dirichlet_epsilon", 0.0))
+    inference_cache_limit = int(cfg.selfplay.get("inference_cache_limit", 2048))
+    progress_log_every = int(cfg.selfplay.get("progress_log_every", 0))
+    log_episode_end = bool(cfg.selfplay.get("log_episode_end", False))
     timeout_penalty = float(cfg.selfplay.get("timeout_penalty", -0.1))
+    log_units_snapshot = bool(cfg.selfplay.get("log_units_snapshot", False))
     reward_shaping = dict(cfg.selfplay.get("reward_shaping", {}) or {})
-    objective_loss_weight = float(cfg.train.get("objective_loss_weight", 0.25))
+    enable_post_train_analytics = bool(cfg.train.get("enable_post_train_analytics", False))
+    checkpoint_every = int(cfg.train.get("checkpoint_every", 1))
+    checkpoint_every = max(1, checkpoint_every)
+    objective_loss_weight = float(cfg.train.get("objective_loss_weight", 0.30))
     objective_target_mode = str(cfg.train.get("objective_target_mode", "progress")).strip().lower()
-    objective_pos_weight = float(cfg.train.get("objective_pos_weight", 4.0))
+    objective_pos_weight = float(cfg.train.get("objective_pos_weight", 5.0))
+    objective_opportunity_max_dist = float(cfg.train.get("objective_opportunity_max_dist", 2.0))
+    objective_signal_cfg = dict(cfg.train.get("objective_signal", {}) or {})
+    objective_head_cfg = dict(cfg.train.get("objective_head", {}) or {})
+    objective_reporting_cfg = dict(cfg.train.get("objective_reporting", {}) or {})
+    objective_opportunity_near_vp_max_dist = float(
+        objective_signal_cfg.get("opportunity_near_vp_max_dist", objective_opportunity_max_dist)
+    )
+    objective_progress_positive_threshold = float(
+        objective_head_cfg.get("progress_positive_threshold", 0.0)
+    )
+    objective_near_vp_max_dist = float(
+        objective_reporting_cfg.get("near_vp_max_dist", objective_opportunity_near_vp_max_dist)
+    )
+    objective_strong_progress_delta_threshold = float(
+        objective_reporting_cfg.get("strong_progress_delta_threshold", 2.0)
+    )
+    objective_high_confidence_prob_threshold = float(
+        objective_reporting_cfg.get("high_confidence_prob_threshold", 0.60)
+    )
+    objective_high_confidence_margin_threshold = float(
+        objective_reporting_cfg.get("high_confidence_margin_threshold", 0.25)
+    )
+    assault_advantage_prob_threshold = float(
+        objective_reporting_cfg.get("assault_advantage_prob_threshold", 0.55)
+    )
+    assault_advantage_margin_threshold = float(
+        objective_reporting_cfg.get("assault_advantage_margin_threshold", 0.20)
+    )
+    assault_advantage_cover_max = float(
+        objective_reporting_cfg.get("assault_advantage_cover_max", 0.35)
+    )
+    assault_advantage_min_score = int(
+        objective_reporting_cfg.get("assault_advantage_min_score", 3)
+    )
+    decision_flip_legal_count_tolerance = int(
+        objective_reporting_cfg.get("decision_flip_legal_count_tolerance", 2)
+    )
 
     run_root = Path(str(cfg.paths["run_root"]))
     run_id = f"muzero_{uuid.uuid4().hex[:8]}"
@@ -277,8 +381,11 @@ def run_training(
     print(f"[MuZero] scenario={scenario_id} seed={seed}")
     print(f"[MuZero] device={device}")
     print(f"[MuZero] selfplay_workers={num_workers}")
-    events_writer = JsonlWriter(run_dir / "events" / "train_events.jsonl")
-    event_bus = EventBus()
+    events_writer = None
+    if bool(enable_post_train_analytics):
+        (run_dir / "events").mkdir(parents=True, exist_ok=True)
+        events_writer = JsonlWriter(run_dir / "events" / "train_events.jsonl")
+    event_bus = EventBus(enabled=enable_post_train_analytics)
 
     sim = VOECSimulator(assets=voec_cfg.assets)
     adapter = MuZeroVOECAdapter(sim)
@@ -300,6 +407,8 @@ def run_training(
         objective_loss_weight=objective_loss_weight,
         objective_target_mode=objective_target_mode,
         objective_pos_weight=objective_pos_weight,
+        objective_opportunity_max_dist=objective_opportunity_max_dist,
+        objective_progress_positive_threshold=objective_progress_positive_threshold,
     )
     model = trainer.model
     replay = ReplayBuffer(
@@ -326,10 +435,29 @@ def run_training(
             "iterations": iterations,
             "episodes_per_iter": episodes_per_iter,
             "batch_size": batch_size,
+            "checkpoint_every": checkpoint_every,
             "resume_checkpoint": resume_checkpoint,
             "objective_loss_weight": float(objective_loss_weight),
             "objective_target_mode": str(objective_target_mode),
             "objective_pos_weight": float(objective_pos_weight),
+            "objective_opportunity_max_dist": float(objective_opportunity_max_dist),
+            "objective_signal": {
+                "opportunity_near_vp_max_dist": float(objective_opportunity_near_vp_max_dist),
+            },
+            "objective_head": {
+                "progress_positive_threshold": float(objective_progress_positive_threshold),
+            },
+            "objective_reporting": {
+                "near_vp_max_dist": float(objective_near_vp_max_dist),
+                "strong_progress_delta_threshold": float(objective_strong_progress_delta_threshold),
+                "high_confidence_prob_threshold": float(objective_high_confidence_prob_threshold),
+                "high_confidence_margin_threshold": float(objective_high_confidence_margin_threshold),
+                "assault_advantage_prob_threshold": float(assault_advantage_prob_threshold),
+                "assault_advantage_margin_threshold": float(assault_advantage_margin_threshold),
+                "assault_advantage_cover_max": float(assault_advantage_cover_max),
+                "assault_advantage_min_score": int(assault_advantage_min_score),
+                "decision_flip_legal_count_tolerance": int(decision_flip_legal_count_tolerance),
+            },
             "model": {
                 "encoder_type": encoder_type,
                 "observation_channels": observation_channels,
@@ -350,14 +478,61 @@ def run_training(
             "reaction_fire_enabled": str(
                 os.getenv("ASSAULT_ENABLE_REACTION_FIRE", "1")
             ).strip(),
+            "objective_tracked_side": str(objective_tracked_side),
         },
     )
     manifest.write(run_dir / "run_manifest.json")
+    mlflow_mod, mlflow_ctx = _start_mlflow_run(
+        experiment_name=str(mlflow_experiment),
+        run_name=(str(mlflow_run_name).strip() or run_id),
+    )
+    _mlflow_log_params(
+        mlflow_mod,
+        {
+            "run_id": run_id,
+            "scenario_id": scenario_id,
+            "seed": seed,
+            "config_path": config_path,
+            "device": device,
+            "iterations": iterations,
+            "episodes_per_iter": episodes_per_iter,
+            "batch_size": batch_size,
+            "checkpoint_every": checkpoint_every,
+            "mcts_simulations": mcts_simulations,
+            "mcts_c_puct": mcts_c_puct,
+            "encoder_type": encoder_type,
+            "objective_loss_weight": objective_loss_weight,
+            "objective_pos_weight": objective_pos_weight,
+            "objective_opportunity_max_dist": objective_opportunity_max_dist,
+        "objective_signal": {
+            "opportunity_near_vp_max_dist": objective_opportunity_near_vp_max_dist,
+        },
+        "objective_head": {
+            "progress_positive_threshold": objective_progress_positive_threshold,
+        },
+        "objective_reporting": {
+            "near_vp_max_dist": objective_near_vp_max_dist,
+            "strong_progress_delta_threshold": objective_strong_progress_delta_threshold,
+            "high_confidence_prob_threshold": objective_high_confidence_prob_threshold,
+            "high_confidence_margin_threshold": objective_high_confidence_margin_threshold,
+            "assault_advantage_prob_threshold": assault_advantage_prob_threshold,
+            "assault_advantage_margin_threshold": assault_advantage_margin_threshold,
+            "assault_advantage_cover_max": assault_advantage_cover_max,
+            "assault_advantage_min_score": assault_advantage_min_score,
+            "decision_flip_legal_count_tolerance": decision_flip_legal_count_tolerance,
+        },
+            "objective_tracked_side": str(objective_tracked_side),
+        },
+    )
 
     latest_metrics = {}
     episode_rewards = []
     episode_actions = []
+    run_t0 = time.perf_counter()
+    iter_timing_rows: list[dict] = []
     for it in range(iterations):
+        iter_t0 = time.perf_counter()
+        selfplay_t0 = time.perf_counter()
         print(f"[MuZero] iteration {it + 1}/{iterations} - selfplay")
         if num_workers > 1 and device == "cpu":
             model_state = {k: v.detach().cpu() for k, v in model.state_dict().items()}
@@ -396,8 +571,14 @@ def run_training(
                             "mcts_temperature": mcts_temperature,
                             "mcts_dirichlet_alpha": mcts_dirichlet_alpha,
                             "mcts_dirichlet_epsilon": mcts_dirichlet_epsilon,
+                            "inference_cache_limit": inference_cache_limit,
+                            "progress_log_every": progress_log_every,
+                            "log_episode_end": bool(log_episode_end),
                             "timeout_penalty": timeout_penalty,
+                            "log_units_snapshot": bool(log_units_snapshot),
                             "reward_shaping": reward_shaping,
+                            "objective_opportunity_near_vp_max_dist": objective_opportunity_near_vp_max_dist,
+                            "collect_xai": bool(enable_post_train_analytics),
                         },
                     }
                 )
@@ -473,8 +654,14 @@ def run_training(
                             objective_had_opportunity=int(sample.info.get("objective_had_opportunity", 0)),
                             objective_distance_before=float(sample.info.get("objective_distance_before", -1.0)),
                             objective_distance_after=float(sample.info.get("objective_distance_after", -1.0)),
+                            objective_min_dist_before=float(sample.info.get("objective_min_dist_before", -1.0)),
+                            objective_min_dist_after=float(sample.info.get("objective_min_dist_after", -1.0)),
                             objective_progress_delta=float(sample.info.get("objective_progress_delta", 0.0)),
                             objective_converted=int(sample.info.get("objective_converted", 0)),
+                            objective_best_vp_id=str(sample.info.get("objective_best_vp_id", "")),
+                            vp_distance_vector=dict(sample.info.get("vp_distance_vector", {}) or {}),
+                            vp_distance_vector_size=int(sample.info.get("vp_distance_vector_size", 0)),
+                            objective_signal_definition_version=str(sample.info.get("objective_signal_definition_version", "")),
                             objective_vp_hexes_count=int(sample.info.get("objective_vp_hexes_count", 0)),
                             objective_vp_owner_count=int(sample.info.get("objective_vp_owner_count", 0)),
                             objective_side_norm=str(sample.info.get("objective_side_norm", "")),
@@ -504,12 +691,17 @@ def run_training(
                             acting_r=int(sample.info.get("acting_r", 0)),
                             target_q=int(sample.info.get("target_q", 0)),
                             target_r=int(sample.info.get("target_r", 0)),
+                            units_snapshot=list(sample.info.get("units_snapshot", []) or []),
                         ).to_payload(),
                     )
         else:
             if num_workers > 1 and device != "cpu":
                 print("[MuZero] parallel selfplay disabled for non-cpu device")
             for ep in range(episodes_per_iter):
+                print(
+                    f"[MuZero]   episode {ep + 1}/{episodes_per_iter} starting "
+                    f"(seed={seed + it + ep}, sims={mcts_simulations}, max_steps={max_steps})"
+                )
                 samples = play_episode(
                     adapter=adapter,
                     scenario_id=scenario_id,
@@ -525,9 +717,14 @@ def run_training(
                     mcts_temperature=mcts_temperature,
                     mcts_dirichlet_alpha=mcts_dirichlet_alpha,
                     mcts_dirichlet_epsilon=mcts_dirichlet_epsilon,
-                    progress_log_every=10,
+                    inference_cache_limit=inference_cache_limit,
+                    progress_log_every=progress_log_every,
+                    log_episode_end=bool(log_episode_end),
                     timeout_penalty=timeout_penalty,
+                    log_units_snapshot=bool(log_units_snapshot),
                     reward_shaping=reward_shaping,
+                    objective_opportunity_near_vp_max_dist=objective_opportunity_near_vp_max_dist,
+                    collect_xai=bool(enable_post_train_analytics),
                 )
                 replay.extend(samples)
                 episode_rewards.append(sum(s.reward_target for s in samples))
@@ -593,8 +790,14 @@ def run_training(
                             objective_had_opportunity=int(sample.info.get("objective_had_opportunity", 0)),
                             objective_distance_before=float(sample.info.get("objective_distance_before", -1.0)),
                             objective_distance_after=float(sample.info.get("objective_distance_after", -1.0)),
+                            objective_min_dist_before=float(sample.info.get("objective_min_dist_before", -1.0)),
+                            objective_min_dist_after=float(sample.info.get("objective_min_dist_after", -1.0)),
                             objective_progress_delta=float(sample.info.get("objective_progress_delta", 0.0)),
                             objective_converted=int(sample.info.get("objective_converted", 0)),
+                            objective_best_vp_id=str(sample.info.get("objective_best_vp_id", "")),
+                            vp_distance_vector=dict(sample.info.get("vp_distance_vector", {}) or {}),
+                            vp_distance_vector_size=int(sample.info.get("vp_distance_vector_size", 0)),
+                            objective_signal_definition_version=str(sample.info.get("objective_signal_definition_version", "")),
                             objective_vp_hexes_count=int(sample.info.get("objective_vp_hexes_count", 0)),
                             objective_vp_owner_count=int(sample.info.get("objective_vp_owner_count", 0)),
                             objective_side_norm=str(sample.info.get("objective_side_norm", "")),
@@ -624,9 +827,12 @@ def run_training(
                             acting_r=int(sample.info.get("acting_r", 0)),
                             target_q=int(sample.info.get("target_q", 0)),
                             target_r=int(sample.info.get("target_r", 0)),
+                            units_snapshot=list(sample.info.get("units_snapshot", []) or []),
                         ).to_payload(),
                     )
+        selfplay_elapsed_s = float(time.perf_counter() - selfplay_t0)
 
+        train_t0 = time.perf_counter()
         batch = replay.sample(batch_size=batch_size)
         replay_age_values = []
         current_add_idx = int(replay.add_index)
@@ -651,6 +857,7 @@ def run_training(
             f"reward={latest_metrics['reward_loss']:.4f} "
             f"objective={latest_metrics.get('objective_loss', 0.0):.4f}"
         )
+        _mlflow_log_metrics(mlflow_mod, latest_metrics, step=int(it))
         event_bus.emit(
             "TrainStepEvent",
             TrainStepEvent(iteration=it, **latest_metrics).to_payload(),
@@ -658,12 +865,45 @@ def run_training(
 
         ckpt_dir = run_dir / "checkpoints"
         ckpt_dir.mkdir(parents=True, exist_ok=True)
-        ckpt_path = ckpt_dir / f"iter_{it}.pt"
-        torch.save(model.state_dict(), ckpt_path)
-        print(f"[MuZero]   checkpoint={ckpt_path}")
+        ckpt_path = None
+        should_save_iter = ((it + 1) % checkpoint_every == 0) or (it == iterations - 1)
+        if should_save_iter:
+            ckpt_path = ckpt_dir / f"iter_{it}.pt"
+            torch.save(model.state_dict(), ckpt_path)
+        train_elapsed_s = float(time.perf_counter() - train_t0)
+        iter_elapsed_s = float(time.perf_counter() - iter_t0)
+        latest_metrics["timing_selfplay_s"] = float(selfplay_elapsed_s)
+        latest_metrics["timing_train_s"] = float(train_elapsed_s)
+        latest_metrics["timing_iter_s"] = float(iter_elapsed_s)
+        iter_timing_rows.append(
+            {
+                "iteration": int(it),
+                "selfplay_s": float(selfplay_elapsed_s),
+                "train_s": float(train_elapsed_s),
+                "iter_s": float(iter_elapsed_s),
+            }
+        )
+        _mlflow_log_metrics(
+            mlflow_mod,
+            {
+                "timing_selfplay_s": float(selfplay_elapsed_s),
+                "timing_train_s": float(train_elapsed_s),
+                "timing_iter_s": float(iter_elapsed_s),
+            },
+            step=int(it),
+        )
+        print(
+            "[MuZero]   timing "
+            f"selfplay_s={selfplay_elapsed_s:.2f} "
+            f"train_s={train_elapsed_s:.2f} "
+            f"iter_s={iter_elapsed_s:.2f}"
+        )
+        if ckpt_path is not None:
+            print(f"[MuZero]   checkpoint={ckpt_path}")
 
-    for event in event_bus.events:
-        events_writer.append(event)
+    if events_writer is not None:
+        for event in event_bus.events:
+            events_writer.append(event)
 
     transition_count = sum(1 for e in event_bus.events if e.get("type") == "TransitionEvent")
     train_step_count = sum(1 for e in event_bus.events if e.get("type") == "TrainStepEvent")
@@ -679,6 +919,40 @@ def run_training(
         json.dumps(integrity, indent=2),
         encoding="utf-8",
     )
+    total_elapsed_s = float(time.perf_counter() - run_t0)
+    selfplay_total_s = float(sum(float(x.get("selfplay_s", 0.0)) for x in iter_timing_rows))
+    train_total_s = float(sum(float(x.get("train_s", 0.0)) for x in iter_timing_rows))
+    iter_total_s = float(sum(float(x.get("iter_s", 0.0)) for x in iter_timing_rows))
+    latest_metrics["timing_summary"] = {
+        "total_elapsed_s": float(total_elapsed_s),
+        "selfplay_total_s": float(selfplay_total_s),
+        "train_total_s": float(train_total_s),
+        "iter_total_s": float(iter_total_s),
+        "iter_avg_s": (float(iter_total_s) / float(max(1, len(iter_timing_rows)))),
+        "selfplay_avg_s": (float(selfplay_total_s) / float(max(1, len(iter_timing_rows)))),
+        "train_avg_s": (float(train_total_s) / float(max(1, len(iter_timing_rows)))),
+        "iterations": int(len(iter_timing_rows)),
+    }
+    latest_metrics["timing_by_iteration"] = iter_timing_rows
+
+    if not enable_post_train_analytics:
+        latest_metrics["train_runtime_profile"] = {
+            "post_train_analytics_enabled": False,
+            "mode": "lean",
+        }
+        metrics_path = run_dir / "metrics" / "summary.json"
+        metrics_path.parent.mkdir(parents=True, exist_ok=True)
+        metrics_path.write_text(json.dumps(latest_metrics, indent=2), encoding="utf-8")
+        if mlflow_mod is not None:
+            try:
+                mlflow_mod.log_artifact(str(metrics_path))
+                mlflow_mod.log_artifact(str(run_dir / "run_manifest.json"))
+                mlflow_mod.end_run()
+            except Exception:
+                pass
+        print("[MuZero] post-train analytics disabled (lean mode)")
+        print(f"[MuZero] completed run_dir={run_dir}")
+        return {"run_id": run_id, "metrics": latest_metrics}
 
     # Aggregated units/sides metrics are first-class runner outputs
     # consumed by dashboard tabs (no UI-side guesswork).
@@ -752,6 +1026,7 @@ def run_training(
     objective_opportunity_by_side: dict[str, dict[str, float]] = {}
     objective_funnel_by_side: dict[str, dict[str, float]] = {}
     objective_explain_by_side: dict[str, dict[str, dict[str, float]]] = {}
+    objective_near_vp_by_side: dict[str, dict[str, float]] = {}
     vp_units_by_side: dict[str, set[str]] = {}
     turn_side_snapshots: dict[tuple[int, int, int, str], list[set[str]]] = {}
     unit_turn_activated: set[tuple[int, int, int, str]] = set()
@@ -857,6 +1132,10 @@ def run_training(
                 mcts_margin=float(payload.get("mcts_margin", 0.0)),
                 legal_attack_options=int(payload.get("legal_attack_options", 0)),
                 attack_target_cover_mean=float(payload.get("attack_target_cover_mean", -1.0)),
+                prob_threshold=assault_advantage_prob_threshold,
+                margin_threshold=assault_advantage_margin_threshold,
+                cover_max=assault_advantage_cover_max,
+                min_score=assault_advantage_min_score,
             )
             assault_context_counts[assault_bucket] = (
                 int(assault_context_counts.get(assault_bucket, 0)) + 1
@@ -877,7 +1156,7 @@ def run_training(
             curr_legal = int(curr_signature["legal_action_count"])
             state_similar = (
                 prev_eligible == curr_eligible
-                and abs(prev_legal - curr_legal) <= 2
+                and abs(prev_legal - curr_legal) <= int(decision_flip_legal_count_tolerance)
             )
             if state_similar:
                 decision_flip_by_side[side_ep_key]["opportunities"] += 1.0
@@ -897,13 +1176,24 @@ def run_training(
         if unit_side not in objective_explain_by_side:
             objective_explain_by_side[unit_side] = {
                 "no_progress_reason_counts": {},
+                "no_progress_reason_l2_counts": {},
                 "progress_path_counts": {},
                 "conversion_path_counts": {},
                 "non_progress_confidence_counts": {},
             }
+        if unit_side not in objective_near_vp_by_side:
+            objective_near_vp_by_side[unit_side] = {
+                "near_vp_opportunities": 0.0,
+                "near_vp_progress_actions": 0.0,
+                "near_vp_conversions": 0.0,
+                "far_vp_opportunities": 0.0,
+                "far_vp_progress_actions": 0.0,
+                "far_vp_conversions": 0.0,
+            }
         has_vp_opportunity = int(payload.get("objective_had_opportunity", 0)) > 0
         objective_progress_delta = float(payload.get("objective_progress_delta", 0.0))
         objective_converted = int(payload.get("objective_converted", 0)) > 0
+        objective_distance_before = float(payload.get("objective_distance_before", -1.0))
         if has_vp_opportunity:
             objective_funnel_by_side[unit_side]["opportunities"] += 1.0
             if objective_progress_delta > 0.0:
@@ -913,15 +1203,29 @@ def run_training(
             objective_funnel_by_side[unit_side]["progress_delta_sum"] += float(objective_progress_delta)
             if objective_converted:
                 objective_funnel_by_side[unit_side]["conversions"] += 1.0
+            near_key_prefix = (
+                "near_vp"
+                if (
+                    objective_distance_before >= 0.0
+                    and objective_distance_before <= float(objective_near_vp_max_dist)
+                )
+                else "far_vp"
+            )
+            objective_near_vp_by_side[unit_side][f"{near_key_prefix}_opportunities"] += 1.0
+            if objective_progress_delta > 0.0:
+                objective_near_vp_by_side[unit_side][f"{near_key_prefix}_progress_actions"] += 1.0
+            if objective_converted:
+                objective_near_vp_by_side[unit_side][f"{near_key_prefix}_conversions"] += 1.0
             action_kind_raw = str(payload.get("action_kind", "")).strip().upper()
             chosen_prob = float(payload.get("chosen_action_prob", 0.0))
             mcts_margin = float(payload.get("mcts_margin", 0.0))
             no_prog_counts = objective_explain_by_side[unit_side]["no_progress_reason_counts"]
+            no_prog_l2_counts = objective_explain_by_side[unit_side]["no_progress_reason_l2_counts"]
             prog_counts = objective_explain_by_side[unit_side]["progress_path_counts"]
             conv_counts = objective_explain_by_side[unit_side]["conversion_path_counts"]
             conf_counts = objective_explain_by_side[unit_side]["non_progress_confidence_counts"]
             if objective_progress_delta > 0.0:
-                if objective_progress_delta >= 2.0:
+                if objective_progress_delta >= float(objective_strong_progress_delta_threshold):
                     pr_key = "strong_progress_delta_ge_2"
                 else:
                     pr_key = "marginal_progress_delta_0_1"
@@ -936,7 +1240,50 @@ def run_training(
                 else:
                     np_key = "other_non_progress_action"
                 no_prog_counts[np_key] = float(no_prog_counts.get(np_key, 0.0)) + 1.0
-                conf_key = "high_confidence_non_progress" if (chosen_prob >= 0.60 or mcts_margin >= 0.25) else "low_confidence_non_progress"
+                dist_before = float(payload.get("objective_distance_before", -1.0))
+                dist_after = float(payload.get("objective_distance_after", -1.0))
+                legal_capture_options = int(payload.get("legal_capture_options", 0))
+                legal_attack_options = int(payload.get("legal_attack_options", 0))
+                legal_action_count = int(payload.get("legal_action_count", 0))
+                distance_bucket = (
+                    "near_vp"
+                    if (dist_before >= 0.0 and dist_before <= float(objective_near_vp_max_dist))
+                    else "far_vp"
+                )
+                if legal_action_count <= 1:
+                    np_l2_key = f"forced_action_{distance_bucket}"
+                elif action_kind_raw in {"WAIT", "TIMEOUT"}:
+                    np_l2_key = f"passive_wait_{distance_bucket}"
+                elif action_kind_raw == "MOVE":
+                    if legal_capture_options > 0:
+                        np_l2_key = f"move_skipped_capture_window_{distance_bucket}"
+                    elif dist_before >= 0.0 and dist_after >= 0.0 and dist_after >= dist_before:
+                        np_l2_key = f"move_no_closer_path_{distance_bucket}"
+                    elif legal_attack_options <= 0:
+                        np_l2_key = f"move_no_attack_options_{distance_bucket}"
+                    else:
+                        np_l2_key = f"move_unclear_non_progress_{distance_bucket}"
+                elif action_kind_raw in {"FIRE_MOVE", "RANGED_DIRECT", "RANGED_INDIRECT", "OPPORTUNITY_FIRE", "MELEE", "ASSAULT_MELEE", "CAPTURE", "FIRE_CAPTURE"}:
+                    if legal_capture_options > 0 and not objective_converted:
+                        np_l2_key = f"capture_window_not_converted_{distance_bucket}"
+                    elif (
+                        chosen_prob >= float(objective_high_confidence_prob_threshold)
+                        or mcts_margin >= float(objective_high_confidence_margin_threshold)
+                    ):
+                        np_l2_key = f"high_confidence_non_progress_attack_{distance_bucket}"
+                    else:
+                        np_l2_key = f"low_confidence_non_progress_attack_{distance_bucket}"
+                else:
+                    np_l2_key = f"other_non_progress_action_{distance_bucket}"
+                no_prog_l2_counts[np_l2_key] = float(no_prog_l2_counts.get(np_l2_key, 0.0)) + 1.0
+                conf_key = (
+                    "high_confidence_non_progress"
+                    if (
+                        chosen_prob >= float(objective_high_confidence_prob_threshold)
+                        or mcts_margin >= float(objective_high_confidence_margin_threshold)
+                    )
+                    else "low_confidence_non_progress"
+                )
                 conf_counts[conf_key] = float(conf_counts.get(conf_key, 0.0)) + 1.0
             if objective_converted and objective_progress_delta > 0.0:
                 cp_key = "converted_after_progress"
@@ -1103,6 +1450,13 @@ def run_training(
         xai_policy_top_probs = [float(x) for x in (payload.get("policy_top_probs", []) or [])]
         xai_latent_top_indices = [int(x) for x in (payload.get("latent_top_indices", []) or [])]
         xai_latent_top_values = [float(x) for x in (payload.get("latent_top_values", []) or [])]
+        opp_fire_no_progress = float(comp.get("opportunity_fire_no_progress", 0.0))
+        opp_skip_capture_preserve = float(comp.get("opportunity_skip_capture_preserve", 0.0))
+        opp_weighting_label = "neutral"
+        if opp_fire_no_progress < 0.0:
+            opp_weighting_label = "fire_penalized_for_vp_progress_risk"
+        elif opp_skip_capture_preserve > 0.0:
+            opp_weighting_label = "skip_bonus_for_capture_preservation"
         xai_decision_rows.append(
             {
                 "iteration": int(iteration_idx),
@@ -1133,6 +1487,9 @@ def run_training(
                 "objective_distance_after": float(payload.get("objective_distance_after", -1.0)),
                 "objective_progress_delta": float(payload.get("objective_progress_delta", 0.0)),
                 "objective_converted": int(payload.get("objective_converted", 0)),
+                "opportunity_fire_no_progress": float(opp_fire_no_progress),
+                "opportunity_skip_capture_preserve": float(opp_skip_capture_preserve),
+                "opportunity_vp_weighting_label": str(opp_weighting_label),
                 "mcts_entropy": float(payload.get("mcts_entropy", 0.0)),
                 "mcts_margin": float(payload.get("mcts_margin", 0.0)),
                 "chosen_action_prob": float(payload.get("chosen_action_prob", 0.0)),
@@ -1376,6 +1733,7 @@ def run_training(
     reason_ttc_by_side: dict[str, dict[str, dict[str, float | list[float]]]] = {}
     path_ttc_global: dict[str, dict[str, float | list[float]]] = {}
     path_ttc_by_side: dict[str, dict[str, dict[str, float | list[float]]]] = {}
+    progress_to_conversion_by_side: dict[str, dict[str, float]] = {}
     for (iter_idx, ep_idx), plist in episode_transitions_by_key.items():
         by_side: dict[str, list[dict]] = {}
         for p in plist:
@@ -1405,6 +1763,18 @@ def run_training(
                 next_conv = next((ct for ct in conversion_turns if ct >= turn), None)
                 reason = _objective_reason_for_payload(p)
                 path = _objective_path_for_payload(p)
+                if side not in progress_to_conversion_by_side:
+                    progress_to_conversion_by_side[side] = {
+                        "progress_events": 0.0,
+                        "converted_any": 0.0,
+                        "converted_within_2_turns": 0.0,
+                    }
+                if float(p.get("objective_progress_delta", 0.0)) > 0.0:
+                    progress_to_conversion_by_side[side]["progress_events"] += 1.0
+                    if next_conv is not None:
+                        progress_to_conversion_by_side[side]["converted_any"] += 1.0
+                        if int(next_conv - turn) <= 2:
+                            progress_to_conversion_by_side[side]["converted_within_2_turns"] += 1.0
                 if reason not in reason_ttc_global:
                     reason_ttc_global[reason] = {"with_conversion": 0.0, "no_conversion": 0.0, "delays": []}
                 if path not in path_ttc_global:
@@ -1492,6 +1862,59 @@ def run_training(
             }
             for (f, t), c in sorted(cmap.items(), key=lambda kv: kv[1], reverse=True)
         ]
+    conversion_path_global_counts = {
+        key: int(
+            sum(
+                vals.get("conversion_path_counts", {}).get(key, 0.0)
+                for vals in objective_explain_by_side.values()
+            )
+        )
+        for key in sorted(
+            {
+                k
+                for vals in objective_explain_by_side.values()
+                for k in vals.get("conversion_path_counts", {}).keys()
+            }
+        )
+    }
+    no_progress_l2_global_counts = {
+        key: int(
+            sum(
+                vals.get("no_progress_reason_l2_counts", {}).get(key, 0.0)
+                for vals in objective_explain_by_side.values()
+            )
+        )
+        for key in sorted(
+            {
+                k
+                for vals in objective_explain_by_side.values()
+                for k in vals.get("no_progress_reason_l2_counts", {}).keys()
+            }
+        )
+    }
+    converted_after_progress_global = float(conversion_path_global_counts.get("converted_after_progress", 0))
+    progress_actions_global = float(
+        sum(float(v.get("progress_actions", 0.0)) for v in objective_funnel_by_side.values())
+    )
+    near_vp_global = {
+        "opportunities": float(sum(float(v.get("near_vp_opportunities", 0.0)) for v in objective_near_vp_by_side.values())),
+        "progress_actions": float(sum(float(v.get("near_vp_progress_actions", 0.0)) for v in objective_near_vp_by_side.values())),
+        "conversions": float(sum(float(v.get("near_vp_conversions", 0.0)) for v in objective_near_vp_by_side.values())),
+    }
+    far_vp_global = {
+        "opportunities": float(sum(float(v.get("far_vp_opportunities", 0.0)) for v in objective_near_vp_by_side.values())),
+        "progress_actions": float(sum(float(v.get("far_vp_progress_actions", 0.0)) for v in objective_near_vp_by_side.values())),
+        "conversions": float(sum(float(v.get("far_vp_conversions", 0.0)) for v in objective_near_vp_by_side.values())),
+    }
+    progress_events_global = float(
+        sum(float(v.get("progress_events", 0.0)) for v in progress_to_conversion_by_side.values())
+    )
+    converted_any_global = float(
+        sum(float(v.get("converted_any", 0.0)) for v in progress_to_conversion_by_side.values())
+    )
+    converted_within2_global = float(
+        sum(float(v.get("converted_within_2_turns", 0.0)) for v in progress_to_conversion_by_side.values())
+    )
     harmful_paths_top = []
     for row in _ttc_rows(path_ttc_global):
         if int(row.get("count", 0)) <= 0:
@@ -1989,6 +2412,21 @@ def run_training(
                             }
                         )
                     },
+                    "no_progress_reason_l2_counts": {
+                        key: int(
+                            sum(
+                                vals.get("no_progress_reason_l2_counts", {}).get(key, 0.0)
+                                for vals in objective_explain_by_side.values()
+                            )
+                        )
+                        for key in sorted(
+                            {
+                                k
+                                for vals in objective_explain_by_side.values()
+                                for k in vals.get("no_progress_reason_l2_counts", {}).keys()
+                            }
+                        )
+                    },
                     "progress_path_counts": {
                         key: int(
                             sum(
@@ -2041,6 +2479,10 @@ def run_training(
                             key: int(val)
                             for key, val in sorted((vals.get("no_progress_reason_counts", {}) or {}).items(), key=lambda kv: kv[0])
                         },
+                        "no_progress_reason_l2_counts": {
+                            key: int(val)
+                            for key, val in sorted((vals.get("no_progress_reason_l2_counts", {}) or {}).items(), key=lambda kv: kv[0])
+                        },
                         "progress_path_counts": {
                             key: int(val)
                             for key, val in sorted((vals.get("progress_path_counts", {}) or {}).items(), key=lambda kv: kv[0])
@@ -2058,6 +2500,132 @@ def run_training(
                 },
             },
             "objective_path_analysis": {
+                "conversion_quality_metrics": {
+                    "global": {
+                        "converted_from_progress_rate": (
+                            float(converted_after_progress_global)
+                            / float(max(1.0, progress_actions_global))
+                        ),
+                        "converted_rate_near_vp": (
+                            float(near_vp_global["conversions"])
+                            / float(max(1.0, near_vp_global["opportunities"]))
+                        ),
+                        "converted_rate_far_vp": (
+                            float(far_vp_global["conversions"])
+                            / float(max(1.0, far_vp_global["opportunities"]))
+                        ),
+                        "conversion_within_2_turns_after_progress": (
+                            float(converted_within2_global) / float(max(1.0, progress_events_global))
+                        ),
+                        "conversion_within_2_turns_given_eventual_conversion": (
+                            float(converted_within2_global) / float(max(1.0, converted_any_global))
+                        ),
+                        "support_counts": {
+                            "progress_actions": int(progress_actions_global),
+                            "converted_after_progress": int(converted_after_progress_global),
+                            "near_vp_opportunities": int(near_vp_global["opportunities"]),
+                            "near_vp_conversions": int(near_vp_global["conversions"]),
+                            "far_vp_opportunities": int(far_vp_global["opportunities"]),
+                            "far_vp_conversions": int(far_vp_global["conversions"]),
+                            "progress_events": int(progress_events_global),
+                            "progress_events_eventually_converted": int(converted_any_global),
+                            "progress_events_converted_within_2_turns": int(converted_within2_global),
+                        },
+                        "no_progress_causes_l2_top": [
+                            {
+                                "cause": str(k),
+                                "count": int(v),
+                                "rate_over_no_progress": (
+                                    float(v)
+                                    / float(
+                                        max(
+                                            1.0,
+                                            sum(float(x) for x in no_progress_l2_global_counts.values()),
+                                        )
+                                    )
+                                ),
+                            }
+                            for k, v in sorted(
+                                no_progress_l2_global_counts.items(),
+                                key=lambda kv: kv[1],
+                                reverse=True,
+                            )[:8]
+                        ],
+                    },
+                    "by_side": {
+                        side: {
+                            "converted_from_progress_rate": (
+                                float((objective_explain_by_side.get(side, {}).get("conversion_path_counts", {}) or {}).get("converted_after_progress", 0.0))
+                                / float(max(1.0, float((objective_funnel_by_side.get(side, {}) or {}).get("progress_actions", 0.0))))
+                            ),
+                            "converted_rate_near_vp": (
+                                float((objective_near_vp_by_side.get(side, {}) or {}).get("near_vp_conversions", 0.0))
+                                / float(max(1.0, float((objective_near_vp_by_side.get(side, {}) or {}).get("near_vp_opportunities", 0.0))))
+                            ),
+                            "converted_rate_far_vp": (
+                                float((objective_near_vp_by_side.get(side, {}) or {}).get("far_vp_conversions", 0.0))
+                                / float(max(1.0, float((objective_near_vp_by_side.get(side, {}) or {}).get("far_vp_opportunities", 0.0))))
+                            ),
+                            "conversion_within_2_turns_after_progress": (
+                                float((progress_to_conversion_by_side.get(side, {}) or {}).get("converted_within_2_turns", 0.0))
+                                / float(max(1.0, float((progress_to_conversion_by_side.get(side, {}) or {}).get("progress_events", 0.0))))
+                            ),
+                            "conversion_within_2_turns_given_eventual_conversion": (
+                                float((progress_to_conversion_by_side.get(side, {}) or {}).get("converted_within_2_turns", 0.0))
+                                / float(max(1.0, float((progress_to_conversion_by_side.get(side, {}) or {}).get("converted_any", 0.0))))
+                            ),
+                            "support_counts": {
+                                "progress_actions": int((objective_funnel_by_side.get(side, {}) or {}).get("progress_actions", 0.0)),
+                                "converted_after_progress": int((objective_explain_by_side.get(side, {}).get("conversion_path_counts", {}) or {}).get("converted_after_progress", 0.0)),
+                                "near_vp_opportunities": int((objective_near_vp_by_side.get(side, {}) or {}).get("near_vp_opportunities", 0.0)),
+                                "near_vp_conversions": int((objective_near_vp_by_side.get(side, {}) or {}).get("near_vp_conversions", 0.0)),
+                                "far_vp_opportunities": int((objective_near_vp_by_side.get(side, {}) or {}).get("far_vp_opportunities", 0.0)),
+                                "far_vp_conversions": int((objective_near_vp_by_side.get(side, {}) or {}).get("far_vp_conversions", 0.0)),
+                                "progress_events": int((progress_to_conversion_by_side.get(side, {}) or {}).get("progress_events", 0.0)),
+                                "progress_events_eventually_converted": int((progress_to_conversion_by_side.get(side, {}) or {}).get("converted_any", 0.0)),
+                                "progress_events_converted_within_2_turns": int((progress_to_conversion_by_side.get(side, {}) or {}).get("converted_within_2_turns", 0.0)),
+                            },
+                            "no_progress_causes_l2_top": [
+                                {
+                                    "cause": str(k),
+                                    "count": int(v),
+                                    "rate_over_no_progress": (
+                                        float(v)
+                                        / float(
+                                            max(
+                                                1.0,
+                                                sum(
+                                                    float(x)
+                                                    for x in (
+                                                        (objective_explain_by_side.get(side, {}) or {}).get(
+                                                            "no_progress_reason_l2_counts", {}
+                                                        )
+                                                        or {}
+                                                    ).values()
+                                                ),
+                                            )
+                                        )
+                                    ),
+                                }
+                                for k, v in sorted(
+                                    (
+                                        (objective_explain_by_side.get(side, {}) or {}).get(
+                                            "no_progress_reason_l2_counts", {}
+                                        )
+                                        or {}
+                                    ).items(),
+                                    key=lambda kv: kv[1],
+                                    reverse=True,
+                                )[:8]
+                            ],
+                        }
+                        for side in sorted(
+                            set(objective_funnel_by_side.keys())
+                            | set(objective_near_vp_by_side.keys())
+                            | set(progress_to_conversion_by_side.keys())
+                        )
+                    },
+                },
                 "path_transition_matrix": {
                     "global": transition_rows_global,
                     "by_side": transition_rows_by_side,
@@ -2237,6 +2805,16 @@ def run_training(
         "reaction_fire_damage_prevented_proxy": (
             float(reaction_fire_kill_conversions) / float(max(1, reaction_fire_count))
         ),
+        "converted_from_progress_rate": (
+            float(converted_after_progress_global) / float(max(1.0, progress_actions_global))
+        ),
+        "converted_rate_near_vp": (
+            float(near_vp_global["conversions"])
+            / float(max(1.0, near_vp_global["opportunities"]))
+        ),
+        "conversion_within_2_turns_after_progress": (
+            float(converted_within2_global) / float(max(1.0, progress_events_global))
+        ),
         "assault_melee_action_family_count": int(melee_attempts),
         "assault_quality": {
             "melee_attempts": int(melee_attempts),
@@ -2258,6 +2836,11 @@ def run_training(
                 / float(melee_den)
             ),
         },
+    }
+    latest_metrics["objective_contract"] = {
+        "tracked_side": str(objective_tracked_side),
+        "metric": "objectives_captured",
+        "source": "scenario_json.victory_outcomes.tracked_side",
     }
 
     xai_decisions_path = run_dir / "xai" / "xai_decisions.jsonl"
@@ -2343,6 +2926,42 @@ def run_training(
         json.dumps(build_episode_narrative(episode_rewards, episode_actions), indent=2),
         encoding="utf-8",
     )
+    if mlflow_mod is not None:
+        try:
+            _mlflow_log_metrics(
+                mlflow_mod,
+                {
+                    "phase29_reaction_activation_rate": float(
+                        latest_metrics.get("phase_2_9_train_kpis", {})
+                        .get("reaction_fire_activation_rate", 0.0)
+                    ),
+                    "phase29_melee_attempts": float(
+                        latest_metrics.get("phase_2_9_train_kpis", {})
+                        .get("assault_quality", {})
+                        .get("melee_attempts", 0.0)
+                    ),
+                    "phase29_converted_from_progress_rate": float(
+                        latest_metrics.get("phase_2_9_train_kpis", {})
+                        .get("converted_from_progress_rate", 0.0)
+                    ),
+                    "phase29_converted_rate_near_vp": float(
+                        latest_metrics.get("phase_2_9_train_kpis", {})
+                        .get("converted_rate_near_vp", 0.0)
+                    ),
+                    "phase29_conversion_within_2_turns_after_progress": float(
+                        latest_metrics.get("phase_2_9_train_kpis", {})
+                        .get("conversion_within_2_turns_after_progress", 0.0)
+                    ),
+                },
+                step=int(iterations),
+            )
+            mlflow_mod.log_artifact(str(metrics_path))
+            mlflow_mod.log_artifact(str(run_dir / "run_manifest.json"))
+            mlflow_mod.log_artifact(str(run_dir / "metrics" / "units_sides.json"))
+            mlflow_mod.log_artifact(str(run_dir / "xai" / "decision_report.json"))
+            mlflow_mod.end_run()
+        except Exception:
+            pass
     print(f"[MuZero] completed run_dir={run_dir}")
     return {"run_id": run_id, "metrics": latest_metrics}
 
@@ -2354,9 +2973,25 @@ def _build_arg_parser() -> argparse.ArgumentParser:
         default="agents/muzero/configs/muzero_config.yaml",
         help="Path to MuZero YAML config file.",
     )
+    parser.add_argument(
+        "--mlflow-experiment",
+        default="assault_muzero",
+        help="MLflow experiment name.",
+    )
+    parser.add_argument(
+        "--mlflow-run-name",
+        default="",
+        help="Optional MLflow run name. Defaults to MuZero run_id.",
+    )
     return parser
 
 
 if __name__ == "__main__":
     args = _build_arg_parser().parse_args()
-    print(run_training(config_path=args.config))
+    print(
+        run_training(
+            config_path=args.config,
+            mlflow_experiment=args.mlflow_experiment,
+            mlflow_run_name=args.mlflow_run_name,
+        )
+    )

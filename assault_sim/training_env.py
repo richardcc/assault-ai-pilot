@@ -622,7 +622,7 @@ class TrainingEnv:
                 continue
 
             if is_attack:
-                if actor_side == self.rl_side:
+                if actor_side_norm == rl_side_norm:
                     self.rl_damage += damage
                     info["rl_damage"] += damage
                 else:
@@ -631,7 +631,7 @@ class TrainingEnv:
 
             if alive_before[uid] and not alive_after.get(uid, True):
                 if is_attack:
-                    if actor_side == self.rl_side:
+                    if actor_side_norm == rl_side_norm:
                         self.rl_kills += 1
                         info["rl_kills"] += 1
                     else:

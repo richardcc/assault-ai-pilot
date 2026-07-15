@@ -1,0 +1,93 @@
+paths:
+  run_root: runs
+  voec_config: voec_sim/configs/voec_config.yaml
+
+scenario:
+  id: battaglia_cittadina_2_1
+  seed: 42
+
+model:
+  device: auto
+  device_benchmark_steps: 40
+  observation_dim: 4
+  encoder_type: cnn
+  observation_channels: 32
+  observation_height: 16
+  observation_width: 16
+  hidden_dim: 48
+  dynamics_blocks: 3
+  prediction_blocks: 2
+  action_dim: 32
+  learning_rate: 0.0005
+
+selfplay:
+  device: cpu
+  num_workers: 1
+  max_steps: 100
+  max_steps_override: 0
+  max_turns_override: 0
+  mcts_simulations: 64
+  mcts_c_puct: 1.5
+  mcts_unroll_steps: 4
+  mcts_discount: 0.997
+  mcts_temperature: 0.70
+  mcts_dirichlet_alpha: 0.3
+  mcts_dirichlet_epsilon: 0.20
+  timeout_penalty: -0.35
+  reward_shaping:
+    terminal_scale: 1.0
+    damage_weight: 0.05
+    kill_weight: 0.40
+    vp_action_bonus: 0.14
+    capture_bonus: 0.62
+    vp_capture_bonus_per_hex: 1.12
+    vp_net_gain_bonus: 0.30
+    vp_net_loss_penalty: 0.20
+    objective_progress_bonus_per_hex: 0.72
+    objective_no_progress_penalty: 0.40
+    objective_no_progress_attack_penalty: 0.44
+    reaction_fire_miss_penalty: 0.08
+    idle_penalty: -0.08
+    idle_with_options_multiplier: 3.0
+    terminal_win_bonus: 0.20
+    terminal_draw_bonus: 0.02
+    terminal_loss_penalty: 0.20
+
+train:
+  iterations: 24
+  episodes_per_iter: 12
+  train_updates_per_iter: 9
+  checkpoint_every: 5
+  batch_size: 24
+  objective_loss_weight: 0.12
+  consistency_loss_weight: 0.05
+  consistency_unroll_steps: 3
+  reanalysis_ratio: 0.35
+  reanalysis_value_mix: 0.50
+  reanalysis_policy_mix: 0.25
+  value_bootstrap_steps: 5
+  value_bootstrap_discount: 0.997
+  amp_enabled: true
+  amp_dtype: auto
+  compile_model: false
+  compile_mode: reduce-overhead
+  matmul_precision: high
+  objective_target_mode: progress
+  objective_pos_weight: 5.6
+  objective_opportunity_max_dist: 2.5
+  objective_signal:
+    opportunity_near_vp_max_dist: 2.5
+  objective_head:
+    progress_positive_threshold: 0.0
+  objective_reporting:
+    conversion_window_steps_after_progress: 2
+    assault_advantage_prob_threshold: 0.55
+    assault_advantage_margin_threshold: 0.20
+    assault_advantage_legal_count_threshold: 6
+    assault_advantage_min_score: 2
+  replay_capacity: 30000
+  replay_recent_fraction: 0.7
+  replay_recent_window_ratio: 0.3
+  enable_post_train_analytics: false
+  resume_checkpoint: "C:\\repos\\python\\assault\\runs\\efficientzero_v2_9e9391c7\\checkpoints\\final.pt"
+

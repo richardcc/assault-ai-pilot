@@ -28,32 +28,51 @@ selfplay:
   mcts_c_puct: 1.5
   mcts_unroll_steps: 3
   mcts_discount: 0.997
-  mcts_temperature: 1.0
+  mcts_temperature: 0.9
   mcts_dirichlet_alpha: 0.3
-  mcts_dirichlet_epsilon: 0.0
+  mcts_dirichlet_epsilon: 0.15
   timeout_penalty: -0.35
   reward_shaping:
     terminal_scale: 1.0
     damage_weight: 0.02
     kill_weight: 0.25
-    vp_action_bonus: 0.02
-    capture_bonus: 0.05
-    vp_capture_bonus_per_hex: 0.65
-    vp_net_gain_bonus: 0.15
+    vp_action_bonus: 0.08
+    capture_bonus: 0.12
+    vp_capture_bonus_per_hex: 1.15
+    vp_net_gain_bonus: 0.3
     vp_net_loss_penalty: 0.01
-    objective_progress_bonus_per_hex: 0.18
-    objective_no_progress_penalty: 0.08
-    objective_no_progress_attack_penalty: 0.12
+    objective_progress_bonus_per_hex: 0.44
+    objective_no_progress_penalty: 0.17
+    objective_no_progress_attack_penalty: 0.24
     reaction_fire_miss_penalty: 0.02
+    opportunity_fire_no_progress_penalty: 0.10
+    opportunity_skip_capture_preserve_bonus: 0.06
+    opportunity_vp_distance_threshold: 2.0
     idle_penalty: -0.05
     idle_with_options_multiplier: 2.5
 
 train:
   iterations: 2
   episodes_per_iter: 2
+  checkpoint_every: 5
   batch_size: 8
-  objective_loss_weight: 0.0
+  objective_loss_weight: 0.30
   objective_target_mode: progress
-  objective_pos_weight: 4.0
+  objective_pos_weight: 5.0
+  objective_opportunity_max_dist: 2.0
+  objective_signal:
+    opportunity_near_vp_max_dist: 2.0
+  objective_head:
+    progress_positive_threshold: 0.0
+  objective_reporting:
+    near_vp_max_dist: 2.0
+    strong_progress_delta_threshold: 2.0
+    high_confidence_prob_threshold: 0.60
+    high_confidence_margin_threshold: 0.25
+    assault_advantage_prob_threshold: 0.55
+    assault_advantage_margin_threshold: 0.20
+    assault_advantage_cover_max: 0.35
+    assault_advantage_min_score: 3
+    decision_flip_legal_count_tolerance: 2
   replay_capacity: 20000
   resume_checkpoint: ""

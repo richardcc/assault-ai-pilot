@@ -8,6 +8,7 @@ Validation state: **Pending Validation**.
 - `SearchEvent`: search envelope metadata (node count and depth proxy).
 - `TrainStepEvent`: optimization metrics per iteration.
 - `TransitionEvent`: environment step-level transitions for replay.
+- `InferenceServiceKPIs` (EfficientZero v2): latency/queue/staleness snapshot embedded in `metrics/summary.json`.
 
 ## Storage
 
@@ -16,6 +17,7 @@ Validation state: **Pending Validation**.
 - Integrity checks under `runs/<run_id>/events/integrity.json`.
 - Units/sides aggregate under `runs/<run_id>/metrics/units_sides.json`.
 - Resume source checkpoint (when used) is captured in run manifest `config.resume_checkpoint`.
+- MLflow (when installed): MuZero train and benchmark log key params/metrics/artifacts to configured experiment (`assault_muzero` / `assault_bench` by default).
 
 ## Minimum fields
 
@@ -36,6 +38,10 @@ Validation state: **Pending Validation**.
   - `side_turn_counts`
   - `side_turn_rates`
   - `top_action_units` (`unit_id`, `count`, `rate`)
+- EfficientZero v2 additions in `metrics/summary.json`:
+  - `short_episode_diagnostics` (distribution + short-rate + reason/outcome buckets),
+  - `iter_short_episode_diagnostics`,
+  - `inference_service_kpis` (`inference_latency_p50_ms`, `inference_latency_p95_ms`, `inference_queue_depth[_max]`, `inference_staleness_proxy_steps`).
 
 ## MCTS planning parameters (current runner)
 

@@ -36,3 +36,48 @@ def test_trainer_objective_loss_zero_when_disabled():
     batch = [_make_sample(1.0, 1), _make_sample(0.0, 1)]
     metrics = trainer.train_batch(batch).to_dict()
     assert metrics["objective_loss"] == 0.0
+
+
+def test_trainer_uses_distance_fallback_for_opportunity_mask():
+    model = MuZeroNetwork(observation_dim=4, hidden_dim=16, action_dim=4)
+    trainer = MuZeroTrainer(model=model, lr=1e-3, objective_loss_weight=1.0)
+    batch = [
+        ReplaySample(
+            observation=torch.randn(4),
+            policy_target=[1.0, 0.0, 0.0, 0.0],
+            value_target=0.0,
+            reward_target=0.0,
+            info={
+                "objective_progress_delta": 0.0,
+                "objective_min_dist_before": 1.0,
+            },
+        ),
+        ReplaySample(
+            observation=torch.randn(4),
+            policy_target=[1.0, 0.0, 0.0, 0.0],
+            value_target=0.0,
+            reward_target=0.0,
+            info={
+                "objective_progress_delta": 0.0,
+                "objective_min_dist_before": 5.0,
+            },
+        ),
+    ]
+    metrics = trainer.train_batch(batch).to_dict()
+    assert metrics["objective_loss"] > 0.0
+
+
+def test_trainer_respects_objective_progress_positive_threshold():
+    model = MuZeroNetwork(observation_dim=4, hidden_dim=16, action_dim=4)
+    trainer = MuZeroTrainer(
+        model=model,
+        lr=1e-3,
+        objective_loss_weight=1.0,
+        objective_progress_positive_threshold=0.5,
+    )
+    batch = [
+        _make_sample(0.4, 1, converted=0),
+        _make_sample(0.8, 1, converted=0),
+    ]
+    metrics = trainer.train_batch(batch).to_dict()
+    assert metrics["objective_loss"] > 0.0

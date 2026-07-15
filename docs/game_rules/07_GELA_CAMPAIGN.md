@@ -67,3 +67,20 @@ Implementation should keep this table-driven (not hardcoded by assumption).
 - [ ] Branching decisions are table-driven and traceable.
 - [ ] Campaign precedence over base rules is explicit.
 - [ ] Final campaign result matches campaign-book mapping.
+
+## 9. Match-End Precedence (Runtime Contract)
+
+Validation state: **Pending Validation**.
+
+For scenarios using objective outcome tables (`victory_outcomes.metric=objectives_captured`,
+`timing=end_of_last_turn`), runtime termination precedence is:
+
+1. Determine that the match is over only by:
+   - side annihilation (`alive_sides` <= 1), or
+   - max-turn consumption.
+2. Once match-end is confirmed, evaluate VP/objective outcome table to derive
+   final winner/result (`objective_outcome_resolved` family).
+
+Implication:
+- Objective table evaluation does **not** short-circuit active matches before
+  a valid terminal condition (annihilation or turn limit) is reached.

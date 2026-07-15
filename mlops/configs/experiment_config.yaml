@@ -1,0 +1,13 @@
+experiment_name: curriculum_eval_multi_agent_v1
+agents: [muzero, baseline_random]
+
+paths:
+  run_root: runs
+  curriculum_config: mlops/configs/curriculum.multi_agent.yaml
+  benchmark_config: assault_bench/configs/benchmark_config.dev_plus.yaml
+  muzero_config: agents/muzero/configs/muzero_config.dev_plus.yaml
+
+execution:
+  mlflow_experiment: assault_mlop
+  orchestration_backend: local
+  prefect_flow_name: assault-curriculum-eval

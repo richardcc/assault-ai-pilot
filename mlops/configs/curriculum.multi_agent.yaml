@@ -1,0 +1,11 @@
+stages:
+  - name: stage_dev_plus
+    scenario_id: battaglia_cittadina_2_1
+    seeds: [42, 43, 44, 45, 46, 47, 48, 49]
+    train_iterations: 40
+    eval_episodes: 8
+    train_agents: [muzero, baseline_random]
+    muzero_config: agents/muzero/configs/muzero_config.dev_plus.yaml
+    benchmark_config: assault_bench/configs/benchmark_config.dev_plus.yaml
+    promotion_criteria:
+      gate: phase_2_9_promotion_gate

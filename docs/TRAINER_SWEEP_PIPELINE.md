@@ -82,3 +82,30 @@ Apply archive move:
 ```powershell
 .\scripts\archive_cleanup_batch1.ps1 -Apply
 ```
+
+## Curriculum + Evaluation Orchestrator (V1)
+
+Validation state: **Pending Validation**.
+
+The new `mlops` orchestrator complements the trainer sweep with a unified curriculum pipeline:
+
+- entrypoint: `python -m mlops.orchestrator.run --config mlops/configs/experiment_config.yaml`
+- Prefect entrypoint (if installed): `python -m mlops.orchestrator.run --config mlops/configs/experiment_config.yaml --prefect`
+- curriculum spec: `mlops/configs/curriculum.multi_agent.yaml`
+- experiment config: `mlops/configs/experiment_config.yaml`
+- generated artifacts:
+  - `runs/experiments/<experiment_id>/experiment_manifest.json`
+  - `runs/experiments/<experiment_id>/<stage_name>/stage_manifest.json`
+  - `runs/experiments/<experiment_id>/comparison_summary.json`
+  - `runs/experiments/<experiment_id>/decision_report.json`
+- MLflow integration:
+  - orchestrator-level run is logged to experiment from `execution.mlflow_experiment`
+  - per-stage metrics logged: `promotion_gate_pass`, `muzero_win_rate`, `baseline_win_rate`, `win_rate_delta_vs_baseline`
+
+Internal canonical docs for this orchestrator now live in:
+
+- `mlops/internal_docs/README.md`
+- `mlops/internal_docs/01_architecture/README.md`
+- `mlops/internal_docs/02_operations/README.md`
+- `mlops/internal_docs/03_roadmap/README.md`
+- `mlops/internal_docs/CHANGELOG.md`

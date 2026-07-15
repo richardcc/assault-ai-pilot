@@ -79,8 +79,14 @@ class TransitionEvent:
     objective_had_opportunity: int = 0
     objective_distance_before: float = -1.0
     objective_distance_after: float = -1.0
+    objective_min_dist_before: float = -1.0
+    objective_min_dist_after: float = -1.0
     objective_progress_delta: float = 0.0
     objective_converted: int = 0
+    objective_best_vp_id: str = ""
+    vp_distance_vector: Dict[str, float] = field(default_factory=dict)
+    vp_distance_vector_size: int = 0
+    objective_signal_definition_version: str = ""
     objective_vp_hexes_count: int = 0
     objective_vp_owner_count: int = 0
     objective_side_norm: str = ""
@@ -110,6 +116,7 @@ class TransitionEvent:
     acting_r: int = 0
     target_q: int = 0
     target_r: int = 0
+    units_snapshot: List[Dict] = field(default_factory=list)
 
     def to_payload(self) -> Dict:
         return asdict(self)

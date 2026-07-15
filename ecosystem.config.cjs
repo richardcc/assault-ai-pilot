@@ -54,6 +54,9 @@ module.exports = {
       autorestart: true,
       max_restarts: 10,
       restart_delay: 3000,
+      env: {
+        MLFLOW_TRACKING_URI: "http://127.0.0.1:5001",
+      },
     },
     {
       name: "assault-orchestrator-mlflow",

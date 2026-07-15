@@ -4,15 +4,21 @@ import json
 import math
 import re
 import time
+from collections import OrderedDict
 from functools import lru_cache
 from pathlib import Path
 from typing import Dict, List
 
 import torch
+import torch.nn.functional as F
 
 from agents.muzero.adapter_voec import MuZeroVOECAdapter
 from agents.muzero.core.mcts import run_mcts_puct
 from agents.muzero.core.replay import ReplaySample
+from agents.muzero.objective_signals import (
+    objective_min_distance_snapshot,
+    objective_step_signal,
+)
 from agents.muzero.core.targets import build_sample
 
 DEFAULT_ACTION_DIM = 32
@@ -242,6 +248,8 @@ def observation_to_tensor(
         grid[6, :, :] = float(obs.turn) / 50.0  # turn_norm
     if channels > 7:
         grid[7, :, :] = 1.0 if bool(obs.done) else 0.0  # done_flag
+    vp_owner_by_hex = dict(getattr(obs, "vp_owner_by_hex", {}) or {})
+    vp_list = list(getattr(obs, "vp_hexes", []) or [])
     for hx in getattr(obs, "playable_hexes", []) or []:
         q = hx.get("q")
         r = hx.get("r")
@@ -274,14 +282,15 @@ def observation_to_tensor(
         put(15, y, x, float((getattr(obs, "terrain_move_cost_by_hex", {}) or {}).get(key, 0.0)))
         put(16, y, x, float((getattr(obs, "terrain_cover_by_hex", {}) or {}).get(key, 0.0)))
         put(17, y, x, float((getattr(obs, "terrain_los_block_by_hex", {}) or {}).get(key, 0.0)))
-        vp_list = list(getattr(obs, "vp_hexes", []) or [])
         if vp_list:
-            dmin = min(
-                _hex_distance(q, r, int(vp.get("q")), int(vp.get("r")))
-                for vp in vp_list
-                if isinstance(vp.get("q"), int) and isinstance(vp.get("r"), int)
+            dmin, _, _ = objective_min_distance_snapshot(
+                units=[{"side": str(to_play), "alive": True, "q": int(q), "r": int(r)}],
+                side=str(to_play),
+                vp_hexes=vp_list,
+                vp_owner_by_hex=vp_owner_by_hex,
             )
-            put(18, y, x, 1.0 / float(1 + max(0, int(dmin))))  # vp_distance_inv
+            if float(dmin) >= 0.0:
+                put(18, y, x, 1.0 / float(1 + max(0.0, float(dmin))))  # vp_distance_inv
         put(19, y, x, float(q) / max_q_norm)  # q_coord_norm
         put(20, y, x, float(r) / max_r_norm)  # r_coord_norm
         put(21, y, x, 1.0 if (getattr(obs, "vp_owner_by_hex", {}) or {}).get(key, "") else 0.0)  # has_vp_owner
@@ -291,6 +300,22 @@ def observation_to_tensor(
 def action_id_to_index(action_id: str, action_dim: int) -> int:
     # Stable hash-like mapping across runs/processes (no Python hash randomization).
     return sum(action_id.encode("utf-8")) % action_dim
+
+
+def _action_id_to_index_cached(
+    action_id: str,
+    action_dim: int,
+    index_cache: dict[str, int] | None = None,
+) -> int:
+    if index_cache is None:
+        return action_id_to_index(action_id, action_dim)
+    k = str(action_id)
+    v = index_cache.get(k)
+    if v is not None:
+        return int(v)
+    idx = int(action_id_to_index(k, action_dim))
+    index_cache[k] = idx
+    return idx
 
 
 def parse_action_id(action_id: str) -> tuple[str, str]:
@@ -442,6 +467,106 @@ def _canonical_vp_hexes_from_sim(sim) -> list[dict]:
     return out
 
 
+@lru_cache(maxsize=128)
+def _tracked_side_from_scenario_file(scenario_path_str: str) -> str:
+    p = Path(str(scenario_path_str)).resolve()
+    if not p.exists():
+        return ""
+    try:
+        payload = json.loads(p.read_text(encoding="utf-8"))
+    except Exception:
+        return ""
+    victory = dict(payload.get("victory_outcomes", {}) or {})
+    return _normalize_side_label(str(victory.get("tracked_side", "")).strip())
+
+
+@lru_cache(maxsize=128)
+def _victory_outcomes_from_scenario_file(scenario_path_str: str) -> dict:
+    p = Path(str(scenario_path_str)).resolve()
+    if not p.exists():
+        return {}
+    try:
+        payload = json.loads(p.read_text(encoding="utf-8"))
+    except Exception:
+        return {}
+    victory = dict(payload.get("victory_outcomes", {}) or {})
+    table = []
+    for row in list(victory.get("table", []) or []):
+        rr = dict(row or {})
+        captured = dict(rr.get("captured", {}) or {})
+        table.append(
+            {
+                "captured_min": int(captured.get("min", -10**9)),
+                "captured_max": int(captured.get("max", 10**9)),
+                "result": str(rr.get("result", "")).strip(),
+                "outcome_class": str(rr.get("outcome_class", "")).strip().lower(),
+            }
+        )
+    return {
+        "tracked_side": _normalize_side_label(str(victory.get("tracked_side", "")).strip()),
+        "metric": str(victory.get("metric", "")).strip(),
+        "table": table,
+    }
+
+
+def _resolve_tracked_side(sim, scenario_id: str) -> str:
+    try:
+        assets = getattr(sim, "_assets", None) or getattr(sim, "assets", None)
+        scenarios_path = getattr(assets, "scenarios_path", None)
+        if scenarios_path is None:
+            return ""
+        scenario_path = (Path(scenarios_path) / f"{scenario_id}.json").resolve()
+        return _tracked_side_from_scenario_file(str(scenario_path))
+    except Exception:
+        return ""
+
+
+def _resolve_victory_outcomes(sim, scenario_id: str) -> dict:
+    try:
+        assets = getattr(sim, "_assets", None) or getattr(sim, "assets", None)
+        scenarios_path = getattr(assets, "scenarios_path", None)
+        if scenarios_path is None:
+            return {}
+        scenario_path = (Path(scenarios_path) / f"{scenario_id}.json").resolve()
+        return dict(_victory_outcomes_from_scenario_file(str(scenario_path)) or {})
+    except Exception:
+        return {}
+
+
+def _invert_outcome_bucket(bucket: str) -> str:
+    b = str(bucket or "").strip().lower()
+    if b == "win":
+        return "loss"
+    if b == "loss":
+        return "win"
+    return b if b else "unknown"
+
+
+def _outcome_bucket_from_class(outcome_class: str) -> str:
+    cls = str(outcome_class or "").strip().lower()
+    if cls in {"total_victory", "victory"}:
+        return "win"
+    if cls == "draw":
+        return "draw"
+    if cls in {"defeat", "total_defeat"}:
+        return "loss"
+    return "unknown"
+
+
+def _tracked_outcome_class_from_vp_counts(victory_outcomes: dict, vp_counts: dict[str, int]) -> str:
+    tracked_side = _normalize_side_label(str((victory_outcomes or {}).get("tracked_side", "")).strip())
+    if not tracked_side:
+        return ""
+    captured = int((dict(vp_counts or {})).get(tracked_side, 0) or 0)
+    for row in list((victory_outcomes or {}).get("table", []) or []):
+        rr = dict(row or {})
+        lo = int(rr.get("captured_min", -10**9))
+        hi = int(rr.get("captured_max", 10**9))
+        if lo <= captured <= hi:
+            return str(rr.get("outcome_class", "")).strip().lower()
+    return ""
+
+
 def _count_vp_capture_options(
     legal_actions: list[str],
     to_play_side: str,
@@ -546,6 +671,25 @@ def _unit_side_by_id(obs) -> dict:
     return {u["unit_id"]: str(u.get("side")) for u in obs.units if u.get("unit_id")}
 
 
+def _json_ready(value):
+    if value is None or isinstance(value, (str, int, float, bool)):
+        return value
+    if isinstance(value, dict):
+        return {str(k): _json_ready(v) for k, v in value.items()}
+    if isinstance(value, (list, tuple, set)):
+        return [_json_ready(v) for v in value]
+    return str(value)
+
+
+def _units_snapshot_json_ready(units: list[dict]) -> list[dict]:
+    out: list[dict] = []
+    for u in list(units or []):
+        if not isinstance(u, dict):
+            continue
+        out.append(dict(_json_ready(u) or {}))
+    return out
+
+
 def value_signs_from_to_play(obs, legal_actions: List[str]) -> dict:
     """
     Sign convention for backup from root player perspective:
@@ -563,19 +707,18 @@ def value_signs_from_to_play(obs, legal_actions: List[str]) -> dict:
 
 
 def _inference_cache_key(obs, legal_actions: List[str], encoder_type: str) -> tuple:
+    # Keep key construction lightweight; unit order in observations is stable for this simulator.
     units_sig = tuple(
-        sorted(
-            (
-                str(u.get("unit_id", "")),
-                str(u.get("side", "")),
-                int(u.get("q")) if isinstance(u.get("q"), int) else None,
-                int(u.get("r")) if isinstance(u.get("r"), int) else None,
-                float(u.get("hp")) if isinstance(u.get("hp"), (int, float)) else None,
-                bool(u.get("alive", True)),
-            )
-            for u in (getattr(obs, "units", []) or [])
-            if str(u.get("unit_id", ""))
+        (
+            str(u.get("unit_id", "")),
+            str(u.get("side", "")),
+            int(u.get("q")) if isinstance(u.get("q"), int) else None,
+            int(u.get("r")) if isinstance(u.get("r"), int) else None,
+            float(u.get("hp")) if isinstance(u.get("hp"), (int, float)) else None,
+            bool(u.get("alive", True)),
         )
+        for u in (getattr(obs, "units", []) or [])
+        if str(u.get("unit_id", ""))
     )
     return (
         str(encoder_type),
@@ -603,12 +746,17 @@ def shaped_training_reward(
     action_kind: str,
     damage_dealt: float,
     kills_dealt: int,
+    acting_side: str = "",
+    tracked_side: str = "",
     vp_captures: int = 0,
     vp_net_delta: int = 0,
     objective_had_opportunity: bool = False,
     objective_progress_delta: float = 0.0,
+    objective_distance_before: float = -1.0,
+    legal_capture_options: int = 0,
     has_attack_option: bool = False,
     has_capture_option: bool = False,
+    terminal_outcome_bucket_for_actor: str = "",
     reward_shaping: dict | None = None,
 ) -> tuple[float, dict[str, float]]:
     cfg = reward_shaping or {}
@@ -624,8 +772,59 @@ def shaped_training_reward(
     objective_no_progress_penalty = float(cfg.get("objective_no_progress_penalty", 0.0))
     objective_no_progress_attack_penalty = float(cfg.get("objective_no_progress_attack_penalty", 0.0))
     reaction_fire_miss_penalty = float(cfg.get("reaction_fire_miss_penalty", 0.0))
+    opportunity_fire_no_progress_penalty = float(
+        cfg.get("opportunity_fire_no_progress_penalty", 0.0)
+    )
+    opportunity_skip_capture_preserve_bonus = float(
+        cfg.get("opportunity_skip_capture_preserve_bonus", 0.0)
+    )
+    opportunity_vp_distance_threshold = float(
+        cfg.get("opportunity_vp_distance_threshold", 2.0)
+    )
     idle_penalty = float(cfg.get("idle_penalty", 0.0))
     idle_with_options_multiplier = float(cfg.get("idle_with_options_multiplier", 1.0))
+    attacker_vp_action_multiplier = float(cfg.get("attacker_vp_action_multiplier", 1.0))
+    attacker_capture_multiplier = float(cfg.get("attacker_capture_multiplier", 1.0))
+    attacker_objective_progress_multiplier = float(cfg.get("attacker_objective_progress_multiplier", 1.0))
+    defender_vp_action_multiplier = float(cfg.get("defender_vp_action_multiplier", 0.35))
+    defender_capture_multiplier = float(cfg.get("defender_capture_multiplier", 0.35))
+    defender_objective_progress_multiplier = float(cfg.get("defender_objective_progress_multiplier", 0.25))
+    defender_no_progress_penalty_multiplier = float(cfg.get("defender_no_progress_penalty_multiplier", 0.30))
+    defender_no_progress_attack_penalty_multiplier = float(
+        cfg.get("defender_no_progress_attack_penalty_multiplier", 0.50)
+    )
+    defender_idle_penalty_multiplier = float(cfg.get("defender_idle_penalty_multiplier", 0.70))
+    # Outcome-class terminal shaping from scenario victory table.
+    terminal_win_bonus = float(cfg.get("terminal_win_bonus", 0.15))
+    terminal_draw_bonus = float(cfg.get("terminal_draw_bonus", 0.02))
+    terminal_loss_penalty = float(cfg.get("terminal_loss_penalty", 0.15))
+
+    acting_norm = _normalize_side_label(acting_side)
+    tracked_norm = _normalize_side_label(tracked_side)
+    role = "neutral"
+    if tracked_norm:
+        role = "attacker" if acting_norm == tracked_norm else "defender"
+    if role == "attacker":
+        vp_action_scale = attacker_vp_action_multiplier
+        capture_scale = attacker_capture_multiplier
+        obj_progress_scale = attacker_objective_progress_multiplier
+        obj_no_progress_scale = 1.0
+        obj_no_progress_attack_scale = 1.0
+        idle_scale = 1.0
+    elif role == "defender":
+        vp_action_scale = defender_vp_action_multiplier
+        capture_scale = defender_capture_multiplier
+        obj_progress_scale = defender_objective_progress_multiplier
+        obj_no_progress_scale = defender_no_progress_penalty_multiplier
+        obj_no_progress_attack_scale = defender_no_progress_attack_penalty_multiplier
+        idle_scale = defender_idle_penalty_multiplier
+    else:
+        vp_action_scale = 1.0
+        capture_scale = 1.0
+        obj_progress_scale = 1.0
+        obj_no_progress_scale = 1.0
+        obj_no_progress_attack_scale = 1.0
+        idle_scale = 1.0
 
     base_terminal = training_reward_from_transition(root_to_play, transition) * terminal_scale
     kind_upper = str(action_kind or "").upper()
@@ -633,8 +832,8 @@ def shaped_training_reward(
     kill_component = kill_weight * float(kills_dealt)
     vp_action_component = 0.0
     if "VP" in str(getattr(transition, "action_id", "")).upper() or "CAPTURE" in kind_upper:
-        vp_action_component = float(vp_action_bonus)
-    capture_component = float(capture_bonus) if "CAPTURE" in kind_upper else 0.0
+        vp_action_component = float(vp_action_bonus) * float(vp_action_scale)
+    capture_component = (float(capture_bonus) * float(capture_scale)) if "CAPTURE" in kind_upper else 0.0
     vp_capture_event_component = float(max(0, int(vp_captures))) * float(vp_capture_bonus_per_hex)
     vp_net_gain_component = float(max(0, int(vp_net_delta))) * float(vp_net_gain_bonus)
     vp_net_loss_component = float(max(0, -int(vp_net_delta))) * float(vp_net_loss_penalty)
@@ -643,11 +842,14 @@ def shaped_training_reward(
     objective_no_progress_attack_component = 0.0
     if bool(objective_had_opportunity):
         prog_delta = float(max(0.0, float(objective_progress_delta)))
-        objective_progress_component = prog_delta * float(objective_progress_bonus_per_hex)
+        objective_progress_component = prog_delta * float(objective_progress_bonus_per_hex) * float(obj_progress_scale)
         if prog_delta <= 0.0:
-            objective_no_progress_component = -float(max(0.0, objective_no_progress_penalty))
-            if kind_upper not in {"", "MOVE", "WAIT", "TIMEOUT"}:
-                objective_no_progress_attack_component = -float(max(0.0, objective_no_progress_attack_penalty))
+            objective_no_progress_component = -float(max(0.0, objective_no_progress_penalty)) * float(obj_no_progress_scale)
+            if kind_upper not in {"", "MOVE", "WAIT", "TIMEOUT", "OPPORTUNITY_SKIP"}:
+                objective_no_progress_attack_component = (
+                    -float(max(0.0, objective_no_progress_attack_penalty))
+                    * float(obj_no_progress_attack_scale)
+                )
     reaction_fire_miss_component = 0.0
     if (
         kind_upper == "OPPORTUNITY_FIRE"
@@ -655,6 +857,29 @@ def shaped_training_reward(
         and int(kills_dealt) <= 0
     ):
         reaction_fire_miss_component = -float(max(0.0, reaction_fire_miss_penalty))
+    opportunity_fire_no_progress_component = 0.0
+    opportunity_skip_capture_preserve_component = 0.0
+    is_near_vp_opportunity = bool(
+        bool(objective_had_opportunity)
+        and float(objective_distance_before) >= 0.0
+        and float(objective_distance_before) <= float(max(0.0, opportunity_vp_distance_threshold))
+    )
+    if (
+        kind_upper == "OPPORTUNITY_FIRE"
+        and is_near_vp_opportunity
+        and float(objective_progress_delta) <= 0.0
+    ):
+        opportunity_fire_no_progress_component = -float(
+            max(0.0, opportunity_fire_no_progress_penalty)
+        )
+    if (
+        kind_upper == "OPPORTUNITY_SKIP"
+        and is_near_vp_opportunity
+        and int(legal_capture_options) <= 0
+    ):
+        opportunity_skip_capture_preserve_component = float(
+            max(0.0, opportunity_skip_capture_preserve_bonus)
+        )
     dense = (
         damage_component
         + kill_component
@@ -667,15 +892,27 @@ def shaped_training_reward(
         + objective_no_progress_component
         + objective_no_progress_attack_component
         + reaction_fire_miss_component
+        + opportunity_fire_no_progress_component
+        + opportunity_skip_capture_preserve_component
     )
     idle_component = 0.0
     if not transition.done and kind_upper in {"MOVE", "WAIT"} and dense <= 0.0:
-        idle_component = float(idle_penalty)
+        idle_component = float(idle_penalty) * float(idle_scale)
         if has_attack_option or has_capture_option:
             idle_component *= float(max(1.0, idle_with_options_multiplier))
-    total = float(base_terminal + dense + idle_component)
+    terminal_outcome_component = 0.0
+    if transition.done:
+        bucket = str(terminal_outcome_bucket_for_actor or "").strip().lower()
+        if bucket == "win":
+            terminal_outcome_component = float(terminal_win_bonus)
+        elif bucket == "draw":
+            terminal_outcome_component = float(terminal_draw_bonus)
+        elif bucket == "loss":
+            terminal_outcome_component = -float(abs(terminal_loss_penalty))
+    total = float(base_terminal + dense + idle_component + terminal_outcome_component)
     return total, {
         "terminal": float(base_terminal),
+        "terminal_outcome": float(terminal_outcome_component),
         "damage": float(damage_component),
         "kill": float(kill_component),
         "vp_action": float(vp_action_component),
@@ -687,7 +924,10 @@ def shaped_training_reward(
         "objective_no_progress": float(objective_no_progress_component),
         "objective_no_progress_attack": float(objective_no_progress_attack_component),
         "reaction_fire_miss": float(reaction_fire_miss_component),
+        "opportunity_fire_no_progress": float(opportunity_fire_no_progress_component),
+        "opportunity_skip_capture_preserve": float(opportunity_skip_capture_preserve_component),
         "idle": float(idle_component),
+        "role": float(1.0 if role == "attacker" else (-1.0 if role == "defender" else 0.0)),
         "timeout": 0.0,
         "total": float(total),
     }
@@ -700,22 +940,9 @@ def priors_and_values_from_model(
     action_dim: int,
     unroll_steps: int = 1,
     discount: float = 0.997,
+    index_cache: dict[str, int] | None = None,
 ):
     model_device = next(model.parameters()).device
-
-    def rollout_value_from_action(hidden_state, action_idx: int, depth: int) -> float:
-        action_onehot = torch.zeros(1, action_dim, dtype=torch.float32, device=model_device)
-        action_onehot[0, action_idx] = 1.0
-        next_hidden, next_policy_logits, next_value, next_reward = model.recurrent_inference(
-            hidden_state, action_onehot
-        )
-        reward_scalar = float(next_reward[0, 0].item())
-        value_scalar = float(next_value[0, 0].item())
-        if depth <= 1:
-            return reward_scalar + (discount * value_scalar)
-        next_idx = int(torch.argmax(next_policy_logits[0]).item())
-        # Alternate perspective by ply in latent rollout.
-        return reward_scalar - (discount * rollout_value_from_action(next_hidden, next_idx, depth - 1))
 
     with torch.inference_mode():
         if str(getattr(model, "encoder_type", "mlp")) == "cnn":
@@ -725,22 +952,53 @@ def priors_and_values_from_model(
         hidden, policy_logits, _, _ = model.initial_inference(obs_tensor)
         logits = policy_logits[0]
 
-        legal_indices = [action_id_to_index(a, action_dim) for a in legal_actions]
-        legal_logits = torch.tensor(
-            [float(logits[i].item()) for i in legal_indices],
-            dtype=torch.float32,
-            device=model_device,
-        )
-        legal_probs = torch.softmax(legal_logits, dim=0).tolist()
+        legal_indices = [
+            _action_id_to_index_cached(a, action_dim, index_cache=index_cache)
+            for a in legal_actions
+        ]
+        legal_idx_t = torch.tensor(legal_indices, dtype=torch.long, device=model_device)
+        legal_logits = torch.index_select(logits, dim=0, index=legal_idx_t).to(torch.float32)
+        legal_probs = torch.softmax(legal_logits, dim=0).detach().cpu().tolist()
         priors = {a: p for a, p in zip(legal_actions, legal_probs)}
 
         values = {}
-        for action_id, action_idx in zip(legal_actions, legal_indices):
-            values[action_id] = rollout_value_from_action(
-                hidden_state=hidden,
-                action_idx=action_idx,
-                depth=max(1, int(unroll_steps)),
+        depth = max(1, int(unroll_steps))
+        if legal_indices:
+            # Batch first recurrent step for all legal actions (dominant hotspot in selfplay).
+            bsz = len(legal_indices)
+            action_onehot = F.one_hot(legal_idx_t, num_classes=int(action_dim)).to(torch.float32)
+            if hidden.ndim == 4:
+                hidden_batch = hidden.expand(bsz, -1, -1, -1).contiguous()
+            else:
+                hidden_batch = hidden.expand(bsz, -1).contiguous()
+            next_hidden, next_policy_logits, next_value, next_reward = model.recurrent_inference(
+                hidden_batch, action_onehot
             )
+            if depth <= 1:
+                acc = next_reward[:, 0] + (float(discount) * next_value[:, 0])
+            else:
+                # Vectorized greedy latent rollout for all legal actions.
+                acc = next_reward[:, 0].clone()
+                cur_hidden = next_hidden
+                cur_policy = next_policy_logits
+                sign = -1.0
+                gamma = float(discount)
+                rem = depth - 1
+                while rem > 0:
+                    next_idx = torch.argmax(cur_policy, dim=1)
+                    onehot = F.one_hot(next_idx, num_classes=int(action_dim)).to(torch.float32)
+                    cur_hidden, cur_policy, cur_value, cur_reward = model.recurrent_inference(cur_hidden, onehot)
+                    r = cur_reward[:, 0]
+                    v = cur_value[:, 0]
+                    if rem == 1:
+                        acc = acc + (sign * gamma) * (r + float(discount) * v)
+                    else:
+                        acc = acc + (sign * gamma) * r
+                        gamma *= float(discount)
+                        sign *= -1.0
+                    rem -= 1
+            for bi, action_id in enumerate(legal_actions):
+                values[action_id] = float(acc[bi].item())
     return priors, values
 
 
@@ -750,6 +1008,7 @@ def xai_root_signals_from_model(
     legal_actions: List[str],
     action_dim: int,
     topk: int = 5,
+    index_cache: dict[str, int] | None = None,
 ):
     model_device = next(model.parameters()).device
     with torch.inference_mode():
@@ -759,33 +1018,34 @@ def xai_root_signals_from_model(
             obs_tensor = torch.tensor([observation], dtype=torch.float32, device=model_device)
         hidden, policy_logits, value_root, _ = model.initial_inference(obs_tensor)
         hidden_vec = hidden[0].detach()
+        hidden_flat = torch.flatten(hidden_vec)
         logits = policy_logits[0].detach()
 
-        legal_pairs = []
-        for action_id in legal_actions:
-            idx = action_id_to_index(action_id, action_dim)
-            legal_pairs.append((action_id, float(logits[idx].item())))
-        if legal_pairs:
-            legal_logits = torch.tensor(
-                [p[1] for p in legal_pairs], dtype=torch.float32, device=model_device
-            )
-            legal_probs = torch.softmax(legal_logits, dim=0).detach().cpu().tolist()
-            ranked = sorted(
-                zip([p[0] for p in legal_pairs], legal_probs),
-                key=lambda kv: float(kv[1]),
-                reverse=True,
-            )[: max(1, int(topk))]
+        legal_indices = [
+            _action_id_to_index_cached(a, action_dim, index_cache=index_cache)
+            for a in legal_actions
+        ]
+        if legal_indices:
+            legal_idx_t = torch.tensor(legal_indices, dtype=torch.long, device=model_device)
+            legal_logits = torch.index_select(logits, dim=0, index=legal_idx_t).to(torch.float32)
+            legal_probs_t = torch.softmax(legal_logits, dim=0)
+            kk = min(max(1, int(topk)), int(legal_probs_t.numel()))
+            top_p, top_i = torch.topk(legal_probs_t, k=kk)
+            ranked = [
+                (str(legal_actions[int(i)]), float(p))
+                for i, p in zip(top_i.detach().cpu().tolist(), top_p.detach().cpu().tolist())
+            ]
             policy_top_actions = [str(a) for a, _ in ranked]
             policy_top_probs = [float(p) for _, p in ranked]
         else:
             policy_top_actions = []
             policy_top_probs = []
 
-        k = min(max(1, int(topk)), int(hidden_vec.numel()))
-        top_vals, top_idx = torch.topk(hidden_vec.abs(), k=k)
+        k = min(max(1, int(topk)), int(hidden_flat.numel()))
+        top_vals, top_idx = torch.topk(hidden_flat.abs(), k=k)
         latent_top_indices = [int(i) for i in top_idx.detach().cpu().tolist()]
         latent_top_values = [float(v) for v in top_vals.detach().cpu().tolist()]
-        latent_l2_norm = float(torch.linalg.vector_norm(hidden_vec, ord=2).item())
+        latent_l2_norm = float(torch.linalg.vector_norm(hidden_flat, ord=2).item())
         predicted_value_root = float(value_root[0, 0].item())
     return {
         "policy_top_actions": policy_top_actions,
@@ -802,6 +1062,7 @@ def xai_dynamics_signals_for_action(
     observation,
     chosen_action_id: str,
     action_dim: int,
+    index_cache: dict[str, int] | None = None,
 ):
     model_device = next(model.parameters()).device
     with torch.inference_mode():
@@ -811,9 +1072,13 @@ def xai_dynamics_signals_for_action(
             obs_tensor = torch.tensor([observation], dtype=torch.float32, device=model_device)
         hidden, _, _, _ = model.initial_inference(obs_tensor)
         hidden_vec = hidden[0].detach()
-        action_idx = int(action_id_to_index(chosen_action_id, action_dim))
-        action_onehot = torch.zeros(1, action_dim, dtype=torch.float32, device=model_device)
-        action_onehot[0, action_idx] = 1.0
+        action_idx = int(
+            _action_id_to_index_cached(chosen_action_id, action_dim, index_cache=index_cache)
+        )
+        action_onehot = F.one_hot(
+            torch.tensor([action_idx], dtype=torch.long, device=model_device),
+            num_classes=int(action_dim),
+        ).to(torch.float32)
         next_hidden, _, _, pred_reward = model.recurrent_inference(hidden, action_onehot)
         next_hidden_vec = next_hidden[0].detach()
         dynamics_pred_reward = float(pred_reward[0, 0].item())
@@ -832,6 +1097,7 @@ def play_episode(
     seed: int,
     max_steps: int = 100,
     max_steps_override: int = 0,
+    max_turns_override: int = 0,
     action_dim: int = DEFAULT_ACTION_DIM,
     model=None,
     mcts_simulations: int = 32,
@@ -841,9 +1107,14 @@ def play_episode(
     mcts_temperature: float = 1.0,
     mcts_dirichlet_alpha: float = 0.3,
     mcts_dirichlet_epsilon: float = 0.0,
+    inference_cache_limit: int = 2048,
     progress_log_every: int = 0,
+    log_episode_end: bool = False,
     timeout_penalty: float = -0.1,
     reward_shaping: dict | None = None,
+    objective_opportunity_near_vp_max_dist: float = 2.0,
+    log_units_snapshot: bool = False,
+    collect_xai: bool = True,
 ) -> List[ReplaySample]:
     def _vp_control_counts(observation) -> dict[str, int]:
         sides = sorted(
@@ -867,6 +1138,8 @@ def play_episode(
     samples: List[ReplaySample] = []
     obs = adapter.initial_state(scenario_id=scenario_id, seed=seed)
     sim = getattr(adapter, "sim", None)
+    tracked_side = _resolve_tracked_side(sim, scenario_id=scenario_id) if sim is not None else ""
+    victory_outcomes = _resolve_victory_outcomes(sim, scenario_id=scenario_id) if sim is not None else {}
     scenario_turn_limit = None
     if sim is not None and hasattr(sim, "scenario_max_turns"):
         try:
@@ -875,17 +1148,44 @@ def play_episode(
             scenario_turn_limit = None
     unit_count = len(getattr(obs, "units", []) or [])
     effective_max_steps = int(max_steps)
-    if int(max_steps_override) > 0:
+    if int(max_turns_override) > 0 and unit_count > 0:
+        effective_max_steps = int(max_turns_override) * int(unit_count)
+    elif int(max_steps_override) > 0:
         effective_max_steps = int(max_steps_override)
     elif scenario_turn_limit is not None and int(scenario_turn_limit) > 0 and unit_count > 0:
         effective_max_steps = int(scenario_turn_limit) * int(unit_count)
     t0 = time.perf_counter()
     # Episode-local cache: repeated states can reuse model priors/values.
-    inference_cache: dict[tuple, tuple[dict, dict, dict]] = {}
-    inference_cache_limit = 2048
+    inference_cache: "OrderedDict[tuple, tuple[dict, dict, dict]]" = OrderedDict()
+    action_index_cache: dict[str, int] = {}
+    cache_limit = max(0, int(inference_cache_limit))
+    episode_end_cause = "unknown"
+    episode_end_step = 0
+    episode_end_turn = int(getattr(obs, "turn", 0) or 0)
+    episode_end_to_play = str(getattr(obs, "to_play", "") or "")
+    episode_end_reason = ""
+    episode_end_winner = ""
     for step_idx in range(effective_max_steps):
         legal = adapter.legal_actions()
         if not legal:
+            episode_end_cause = "no_legal_actions"
+            episode_end_step = int(step_idx)
+            episode_end_turn = int(getattr(obs, "turn", 0) or 0)
+            episode_end_to_play = str(getattr(obs, "to_play", "") or "")
+            # Count alive units by side to diagnose if legal-set collapse is expected.
+            alive_by_side: dict[str, int] = {}
+            for u in list(getattr(obs, "units", []) or []):
+                side = str((u or {}).get("side", "")).strip()
+                if not side:
+                    continue
+                if bool((u or {}).get("alive", True)):
+                    alive_by_side[side] = int(alive_by_side.get(side, 0)) + 1
+            if bool(log_episode_end):
+                print(
+                    f"[MuZero]     episode stop at step={step_idx} "
+                    f"cause=no_legal_actions turn={episode_end_turn} "
+                    f"to_play={episode_end_to_play or 'none'} alive_by_side={alive_by_side}"
+                )
             break
         legal_kinds = [parse_action_id(a)[0] for a in legal]
         legal_attack_options = sum(1 for k in legal_kinds if _is_attack_like_action_kind(k))
@@ -939,13 +1239,18 @@ def play_episode(
             "dynamics_delta_l2": 0.0,
         }
         if model is not None:
-            cache_key = _inference_cache_key(
-                obs=obs,
-                legal_actions=legal,
-                encoder_type=str(getattr(model, "encoder_type", "mlp")),
-            )
-            cached = inference_cache.get(cache_key)
+            cache_key = None
+            cached = None
+            if cache_limit > 0:
+                cache_key = _inference_cache_key(
+                    obs=obs,
+                    legal_actions=legal,
+                    encoder_type=str(getattr(model, "encoder_type", "mlp")),
+                )
+                cached = inference_cache.get(cache_key)
             if cached is not None:
+                if cache_key is not None:
+                    inference_cache.move_to_end(cache_key)
                 priors, values, xai_signals = cached
             else:
                 priors, values = priors_and_values_from_model(
@@ -955,17 +1260,21 @@ def play_episode(
                     action_dim=action_dim,
                     unroll_steps=mcts_unroll_steps,
                     discount=mcts_discount,
+                    index_cache=action_index_cache,
                 )
-                xai_signals = xai_root_signals_from_model(
-                    model=model,
-                    observation=obs_encoded,
-                    legal_actions=legal,
-                    action_dim=action_dim,
-                    topk=5,
-                )
-                if len(inference_cache) >= inference_cache_limit:
-                    inference_cache.clear()
-                inference_cache[cache_key] = (priors, values, xai_signals)
+                if bool(collect_xai):
+                    xai_signals = xai_root_signals_from_model(
+                        model=model,
+                        observation=obs_encoded,
+                        legal_actions=legal,
+                        action_dim=action_dim,
+                        topk=5,
+                        index_cache=action_index_cache,
+                    )
+                if cache_limit > 0 and cache_key is not None:
+                    if len(inference_cache) >= cache_limit:
+                        inference_cache.popitem(last=False)
+                    inference_cache[cache_key] = (priors, values, xai_signals)
         value_signs = value_signs_from_to_play(obs, legal)
         phase_ratio = float(step_idx) / float(max(1, effective_max_steps - 1))
         effective_temperature = float(mcts_temperature)
@@ -1006,13 +1315,23 @@ def play_episode(
         predicted_value = 0.0
         if values is not None:
             predicted_value = float(values.get(mcts.chosen_action, 0.0))
+        policy_top_actions_raw = list(xai_signals.get("policy_top_actions", []) or [])
+        policy_top_action = str(policy_top_actions_raw[0]) if policy_top_actions_raw else ""
+        policy_overridden_by_mcts = (
+            int(policy_top_action != str(mcts.chosen_action))
+            if policy_top_action
+            else None
+        )
         transition = adapter.apply(mcts.chosen_action)
-        if model is not None:
+        transition_info = dict(getattr(transition, "info", {}) or {})
+        runtime_events = list(transition_info.get("runtime_events", []) or [])
+        if model is not None and bool(collect_xai):
             xai_dyn = xai_dynamics_signals_for_action(
                 model=model,
                 observation=obs_encoded,
                 chosen_action_id=mcts.chosen_action,
                 action_dim=action_dim,
+                index_cache=action_index_cache,
             )
             xai_signals.update(xai_dyn)
         action_kind, acting_unit_id = parse_action_id(mcts.chosen_action)
@@ -1101,23 +1420,6 @@ def play_episode(
             (u for u in (getattr(post_obs, "units", []) or []) if str(u.get("unit_id", "")) == str(acting_unit_id)),
             None,
         )
-        # Progress is mission-level: compare the side's closest alive unit to
-        # an uncaptured VP before/after action, not only the acting unit.
-        obj_dist_before = _side_min_uncaptured_vp_distance(
-            units=list(getattr(obs, "units", []) or []),
-            side=acting_side,
-            vp_hexes=canonical_vp_hexes,
-            vp_owner_by_hex=before_vp_owner,
-        )
-        obj_dist_after = _side_min_uncaptured_vp_distance(
-            units=list(getattr(post_obs, "units", []) or []),
-            side=acting_side,
-            vp_hexes=canonical_vp_hexes,
-            vp_owner_by_hex=dict(getattr(post_obs, "vp_owner_by_hex", {}) or {}),
-        )
-        objective_progress_delta = 0.0
-        if obj_dist_before >= 0.0 and obj_dist_after >= 0.0:
-            objective_progress_delta = float(obj_dist_before - obj_dist_after)
         after_vp_owner = dict(getattr(post_obs, "vp_owner_by_hex", {}) or {})
         after_vp_counts = _vp_control_counts(post_obs)
         vp_captures = 0
@@ -1135,29 +1437,66 @@ def play_episode(
             delta = a - b
             vp_gain_by_side[side] = int(max(0, delta))
             vp_loss_by_side[side] = int(max(0, -delta))
-        # Strict opportunity signal: side has a valid distance to at least one
-        # uncaptured VP (single source of truth, no fallback masking).
-        objective_had_opportunity = int(float(obj_dist_before) >= 0.0)
-        objective_converted = int(
-            int(vp_captures) > 0
-            or int(vp_gain_by_side.get(str(acting_side), 0)) > 0
+        objective_signal = objective_step_signal(
+            side=str(acting_side),
+            vp_hexes=list(canonical_vp_hexes or []),
+            legal_actions=list(legal or []),
+            before_units=list(getattr(obs, "units", []) or []),
+            before_vp_owner_by_hex=dict(before_vp_owner),
+            after_units=list(getattr(post_obs, "units", []) or []),
+            after_vp_owner_by_hex=dict(after_vp_owner),
+            legal_capture_options=int(legal_capture_options),
+            capture_taken=("CAPTURE" in str(action_kind or "").upper()),
+            vp_captures=int(vp_captures),
+            vp_gain_for_side=int(vp_gain_by_side.get(str(acting_side), 0)),
+            opportunity_near_vp_max_dist=float(objective_opportunity_near_vp_max_dist),
         )
+        obj_dist_before = float(objective_signal.objective_min_dist_before)
+        obj_dist_after = float(objective_signal.objective_min_dist_after)
+        objective_progress_delta = float(objective_signal.objective_progress_delta)
+        objective_had_opportunity = int(objective_signal.objective_had_opportunity)
+        objective_converted = int(objective_signal.objective_converted)
+        tracked_terminal_outcome_class = (
+            _tracked_outcome_class_from_vp_counts(victory_outcomes, after_vp_counts)
+            if bool(getattr(transition, "done", False))
+            else ""
+        )
+        tracked_terminal_outcome_bucket = (
+            _outcome_bucket_from_class(tracked_terminal_outcome_class)
+            if tracked_terminal_outcome_class
+            else ""
+        )
+        actor_terminal_outcome_bucket = ""
+        if tracked_terminal_outcome_bucket:
+            if _normalize_side_label(str(acting_side)) == _normalize_side_label(str(tracked_side)):
+                actor_terminal_outcome_bucket = tracked_terminal_outcome_bucket
+            else:
+                actor_terminal_outcome_bucket = _invert_outcome_bucket(tracked_terminal_outcome_bucket)
         reward_target, reward_components = shaped_training_reward(
             root_to_play=obs.to_play,
             transition=transition,
             action_kind=action_kind,
             damage_dealt=damage_dealt,
             kills_dealt=kills_dealt,
+            acting_side=str(acting_side),
+            tracked_side=str(tracked_side),
             vp_captures=int(vp_captures),
             vp_net_delta=int(vp_gain_by_side.get(str(acting_side), 0))
             - int(vp_loss_by_side.get(str(acting_side), 0)),
             objective_had_opportunity=(int(objective_had_opportunity) > 0),
             objective_progress_delta=float(objective_progress_delta),
+            objective_distance_before=float(obj_dist_before),
+            legal_capture_options=int(legal_capture_options),
             has_attack_option=(int(legal_attack_options) > 0),
             has_capture_option=(int(legal_capture_options) > 0),
+            terminal_outcome_bucket_for_actor=str(actor_terminal_outcome_bucket),
             reward_shaping=reward_shaping,
         )
-        action_idx = action_id_to_index(mcts.chosen_action, action_dim)
+        action_idx = _action_id_to_index_cached(
+            mcts.chosen_action,
+            action_dim,
+            index_cache=action_index_cache,
+        )
         attack_distance_mean = (
             float(sum(attack_target_distances) / float(max(1, len(attack_target_distances))))
             if attack_target_distances
@@ -1173,6 +1512,34 @@ def play_episode(
             if attack_target_los_blocks
             else -1.0
         )
+        dice_rolls: list[dict] = []
+        for evt in runtime_events:
+            if str((dict(evt or {})).get("type", "")) != "ACTION_EFFECT":
+                continue
+            payload_evt = dict((dict(evt or {})).get("payload", {}) or {})
+            attacker_evt = str(payload_evt.get("attacker", "")).strip()
+            if attacker_evt and attacker_evt != str(acting_unit_id):
+                continue
+            attack_dice = list(payload_evt.get("attacker_attack_dice", []) or [])
+            defense_dice = list(payload_evt.get("defender_defense_dice", []) or [])
+            for d in attack_dice:
+                dd = dict(d or {})
+                dice_rolls.append(
+                    {
+                        "side": "attack",
+                        "color": str(dd.get("color", "")),
+                        "faces": [str(x) for x in (list(dd.get("faces", []) or []))],
+                    }
+                )
+            for d in defense_dice:
+                dd = dict(d or {})
+                dice_rolls.append(
+                    {
+                        "side": "defense",
+                        "color": str(dd.get("color", "")),
+                        "faces": [str(x) for x in (list(dd.get("faces", []) or []))],
+                    }
+                )
         samples.append(
             build_sample(
                 observation=obs_encoded,
@@ -1207,11 +1574,26 @@ def play_episode(
                     "objective_had_opportunity": int(objective_had_opportunity),
                     "objective_distance_before": float(obj_dist_before),
                     "objective_distance_after": float(obj_dist_after),
+                    "objective_min_dist_before": float(objective_signal.objective_min_dist_before),
+                    "objective_min_dist_after": float(objective_signal.objective_min_dist_after),
                     "objective_progress_delta": float(objective_progress_delta),
                     "objective_converted": int(objective_converted),
+                    "objective_best_vp_id": str(objective_signal.objective_best_vp_id),
+                    "vp_distance_vector": dict(objective_signal.vp_distance_vector),
+                    "vp_distance_vector_size": int(len(objective_signal.vp_distance_vector)),
+                    "objective_signal_definition_version": "vp_objective_v2",
                     "objective_vp_hexes_count": int(len(canonical_vp_hexes)),
                     "objective_vp_owner_count": int(len(before_vp_owner)),
                     "objective_side_norm": str(_normalize_side_label(acting_side)),
+                    "objective_tracked_side": str(_normalize_side_label(tracked_side)),
+                    "objective_outcome_class_tracked": str(tracked_terminal_outcome_class),
+                    "objective_outcome_bucket_tracked": str(tracked_terminal_outcome_bucket),
+                    "objective_outcome_bucket_actor": str(actor_terminal_outcome_bucket),
+                    "units_snapshot": (
+                        _units_snapshot_json_ready(list(getattr(post_obs, "units", []) or []))
+                        if bool(log_units_snapshot)
+                        else []
+                    ),
                     "mcts_entropy": float(mcts_entropy),
                     "mcts_margin": float(mcts_margin),
                     "chosen_action_prob": float(chosen_prob),
@@ -1225,10 +1607,22 @@ def play_episode(
                     "attack_distance_mean": float(attack_distance_mean),
                     "attack_target_cover_mean": float(attack_target_cover_mean),
                     "attack_target_los_block_mean": float(attack_target_los_block_mean),
-                    "policy_top_actions": list(xai_signals.get("policy_top_actions", []) or []),
+                    "dice_rolls": list(dice_rolls),
+                    "policy_top_actions": list(policy_top_actions_raw),
                     "policy_top_probs": [
                         float(v) for v in (xai_signals.get("policy_top_probs", []) or [])
                     ],
+                    "policy_top_action": str(policy_top_action),
+                    "mcts_chosen_action": str(mcts.chosen_action),
+                    "policy_overridden_by_mcts": policy_overridden_by_mcts,
+                    "override_sanity_consistent": (
+                        None
+                        if policy_overridden_by_mcts is None
+                        else int(
+                            int(policy_overridden_by_mcts)
+                            == int(str(policy_top_action) != str(mcts.chosen_action))
+                        )
+                    ),
                     "latent_top_indices": [
                         int(v) for v in (xai_signals.get("latent_top_indices", []) or [])
                     ],
@@ -1240,10 +1634,10 @@ def play_episode(
                     "dynamics_pred_reward": float(xai_signals.get("dynamics_pred_reward", 0.0)),
                     "dynamics_next_latent_l2": float(xai_signals.get("dynamics_next_latent_l2", 0.0)),
                     "dynamics_delta_l2": float(xai_signals.get("dynamics_delta_l2", 0.0)),
-                    "acting_q": int(acting_q),
-                    "acting_r": int(acting_r),
-                    "target_q": int(target_q),
-                    "target_r": int(target_r),
+                    "acting_q": int(acting_q) if isinstance(acting_q, int) else -1,
+                    "acting_r": int(acting_r) if isinstance(acting_r, int) else -1,
+                    "target_q": int(target_q) if isinstance(target_q, int) else -1,
+                    "target_r": int(target_r) if isinstance(target_r, int) else -1,
                     "terminal_reason": str(transition.state.end_reason)
                     if transition.state.end_reason is not None
                     else "",
@@ -1259,26 +1653,82 @@ def play_episode(
                 f"elapsed_s={elapsed:.1f}"
             )
         if transition.done:
+            episode_end_cause = "transition_done"
+            episode_end_step = int(step_idx + 1)
+            episode_end_turn = int(getattr(transition.state, "turn", 0) or 0)
+            episode_end_to_play = str(getattr(transition.state, "to_play", "") or "")
+            end_reason = str(getattr(transition.state, "end_reason", "") or "")
+            winner = str(getattr(transition.state, "winner", "") or "")
+            episode_end_reason = end_reason
+            episode_end_winner = winner
+            if bool(log_episode_end):
+                turn_now = int(getattr(transition.state, "turn", 0) or 0)
+                print(
+                    f"[MuZero]     episode terminal at step={step_idx + 1} "
+                    f"turn={turn_now} reason={end_reason or 'unknown'} "
+                    f"winner={winner or 'none'}"
+                )
             break
     if not adapter.terminal() and samples:
-        # Timeout penalty to discourage endless neutral rollouts.
-        prev_total = float(samples[-1].reward_target)
-        samples[-1].reward_target = float(timeout_penalty)
-        samples[-1].value_target = float(timeout_penalty)
-        samples[-1].info["timeout"] = True
-        comp = dict(samples[-1].info.get("reward_components", {}) or {})
-        timeout_delta = float(timeout_penalty) - prev_total
-        comp["timeout"] = float(comp.get("timeout", 0.0)) + float(timeout_delta)
-        comp["total"] = float(timeout_penalty)
-        samples[-1].info["reward_components"] = comp
-        sim = getattr(adapter, "sim", None)
-        reached_turn_limit = False
-        if sim is not None and hasattr(sim, "reached_turn_limit"):
-            try:
-                reached_turn_limit = bool(sim.reached_turn_limit())
-            except Exception:
-                reached_turn_limit = False
-        samples[-1].info["terminal_reason"] = (
-            "scenario_turn_limit" if reached_turn_limit else "turn_unit_budget"
+        # Distinguish "no legal actions" from real selfplay budget timeout.
+        if episode_end_cause == "no_legal_actions":
+            samples[-1].info["timeout"] = False
+            samples[-1].info["terminal_reason"] = "no_legal_actions"
+            episode_end_step = int(len(samples))
+            episode_end_turn = int(getattr(obs, "turn", 0) or 0)
+            episode_end_to_play = str(getattr(obs, "to_play", "") or "")
+            episode_end_reason = "no_legal_actions"
+            episode_end_winner = ""
+        else:
+            # Timeout penalty to discourage endless neutral rollouts.
+            prev_total = float(samples[-1].reward_target)
+            samples[-1].reward_target = float(timeout_penalty)
+            samples[-1].value_target = float(timeout_penalty)
+            samples[-1].info["timeout"] = True
+            comp = dict(samples[-1].info.get("reward_components", {}) or {})
+            timeout_delta = float(timeout_penalty) - prev_total
+            comp["timeout"] = float(comp.get("timeout", 0.0)) + float(timeout_delta)
+            comp["total"] = float(timeout_penalty)
+            samples[-1].info["reward_components"] = comp
+            sim = getattr(adapter, "sim", None)
+            reached_turn_limit = False
+            if sim is not None and hasattr(sim, "reached_turn_limit"):
+                try:
+                    reached_turn_limit = bool(sim.reached_turn_limit())
+                except Exception:
+                    reached_turn_limit = False
+            samples[-1].info["terminal_reason"] = (
+                "scenario_turn_limit" if reached_turn_limit else "turn_unit_budget"
+            )
+            episode_end_cause = "timeout_budget"
+            episode_end_step = int(len(samples))
+            episode_end_turn = int(getattr(obs, "turn", 0) or 0)
+            episode_end_to_play = str(getattr(obs, "to_play", "") or "")
+            episode_end_reason = str(samples[-1].info.get("terminal_reason", "") or "")
+            episode_end_winner = ""
+    if episode_end_cause == "unknown":
+        # Defensive fallback: should not happen, but keeps diagnostics explicit.
+        episode_end_cause = "loop_exhausted_or_external"
+        episode_end_step = int(len(samples))
+        episode_end_turn = int(getattr(obs, "turn", 0) or 0)
+        episode_end_to_play = str(getattr(obs, "to_play", "") or "")
+    if bool(log_episode_end):
+        alive_final_by_side: dict[str, int] = {}
+        for u in list(getattr(obs, "units", []) or []):
+            side = str((u or {}).get("side", "")).strip()
+            if not side:
+                continue
+            if bool((u or {}).get("alive", True)):
+                alive_final_by_side[side] = int(alive_final_by_side.get(side, 0)) + 1
+        print(
+            f"[MuZero]     episode end summary cause={episode_end_cause} "
+            f"step={episode_end_step} turn={episode_end_turn} "
+            f"to_play={episode_end_to_play or 'none'} "
+            f"reason={episode_end_reason or 'n/a'} winner={episode_end_winner or 'none'} "
+            f"samples={len(samples)}"
+        )
+        print(
+            f"[MuZero]     episode end sides_alive turn={episode_end_turn} "
+            f"to_play={episode_end_to_play or 'none'} alive_by_side={alive_final_by_side}"
         )
     return samples

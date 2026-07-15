@@ -63,6 +63,7 @@ Compare agents on the same VOEC scenario, seeds, and action budget.
   - if `tracked_side == dominant_winner_side`, higher `tracked_captured_avg` is better;
   - otherwise lower `tracked_captured_avg` is better (opponent-side tracked metric).
 - Assault/melee checks are kept as diagnostics in `phase_2_9_promotion_gate.advisory` and do not block promotion by themselves.
+- Advisory assault signal is computed from aggregated MuZero eval contexts (`muzero_stub` + side-asymmetric matchups), to avoid false negatives from a single matchup slice.
 
 ## Runner CLI
 
@@ -75,3 +76,23 @@ Compare agents on the same VOEC scenario, seeds, and action budget.
 - Auto-pick latest MuZero checkpoint:
   - `python -m assault_bench.runner --config assault_bench/configs/benchmark_config.test.yaml`
   - `python -m assault_bench.runner --config assault_bench/configs/benchmark_config.test.yaml --checkpoint latest`
+- Log benchmark runs to MLflow:
+  - `python -m assault_bench.runner --config assault_bench/configs/benchmark_config.test.yaml --mlflow-experiment assault_bench --mlflow-run-name bench_vp_first`
+
+## Curriculum Orchestrator Integration (V1)
+
+Validation state: **Pending Validation**.
+
+- New orchestration entrypoint: `python -m mlops.orchestrator.run --config mlops/configs/experiment_config.yaml`
+- Prefect wrapper entrypoint: `python -m mlops.orchestrator.run --config mlops/configs/experiment_config.yaml --prefect`
+- The orchestrator delegates evaluation to `assault_bench/runner.py` and persists stage-level benchmark payloads under:
+  - `runs/experiments/<experiment_id>/<stage_name>/stage_manifest.json`
+- Experiment-level benchmark summaries are materialized as:
+  - `runs/experiments/<experiment_id>/comparison_summary.json`
+  - `runs/experiments/<experiment_id>/decision_report.json`
+- Orchestrator-level MLflow run logs consolidated artifacts and stage metrics while benchmark keeps its own optional MLflow logging path.
+- Current V1 agent coverage in orchestrated benchmark flow:
+  - `muzero_stub`
+  - `baseline_random`
+
+Internal canonical documentation for curriculum/evaluation orchestration is maintained in `mlops/internal_docs/`.

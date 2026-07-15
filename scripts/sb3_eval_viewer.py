@@ -720,7 +720,23 @@ def _summarize_muzero_unitsides(repo_root: Path, run_id: str) -> dict:
     }
     missing = [k for k in required if k not in payload]
     if missing:
-        raise ValueError(f"units/sides metrics contract violation: missing fields {missing}")
+        # Backward compatibility: old runs (including early EfficientZero)
+        # can miss the full units/sides contract.
+        payload = {
+            **dict(payload or {}),
+            "transition_events": int(payload.get("transition_events", 0) or 0),
+            "side_turn_counts": dict(payload.get("side_turn_counts", {}) or {}),
+            "side_turn_rates": dict(payload.get("side_turn_rates", {}) or {}),
+            "top_action_units": list(payload.get("top_action_units", []) or []),
+            "units_by_side": dict(payload.get("units_by_side", {}) or {}),
+            "global_actions": dict(payload.get("global_actions", {}) or {}),
+            "vp_summary": dict(payload.get("vp_summary", {}) or {}),
+            "strategy_summary": {
+                "contract_status": "partial_legacy",
+                "missing_fields": list(missing),
+                **dict(payload.get("strategy_summary", {}) or {}),
+            },
+        }
     return payload
 
 
@@ -4609,10 +4625,29 @@ function _renderMuzeroReplayFrame(){
     return;
   }
   const row = rows[idx] || {};
+  const intent = String(row.plan_intent || '-');
+  const focus = String(row.plan_focus_vp_id || '-');
+  const teamFocus = String(row.plan_team_focus_vp_id || '-');
+  const captureOpp = Number(row.legal_capture_options || 0);
+  const hadOpp = Number(row.objective_had_opportunity || 0) > 0 ? 'yes' : 'no';
+  const converted = Number(row.objective_converted || 0) > 0 ? 'yes' : 'no';
+  const distBefore = Number(row.objective_distance_before);
+  const distAfter = Number(row.objective_distance_after);
+  const progressDelta = Number(row.objective_progress_delta || 0);
+  const intentAlign = Number(row.intent_alignment_stub || 0);
   renderKV('muzeroReplayStepDetail', [
     ['Turn', String(row.turn || 0)],
     ['Side', String(row.to_play || '-')],
     ['Action', String(row.action_id || '-')],
+    ['Plan intent', intent],
+    ['Focus VP', focus],
+    ['Team focus VP', teamFocus],
+    ['Capture options', String(captureOpp)],
+    ['Objective opportunity', hadOpp],
+    ['Objective converted', converted],
+    ['Objective distance (before -> after)', `${Number.isFinite(distBefore) ? distBefore.toFixed(2) : '-'} -> ${Number.isFinite(distAfter) ? distAfter.toFixed(2) : '-'}`],
+    ['Objective progress Δ', progressDelta.toFixed(2)],
+    ['Intent alignment', intentAlign.toFixed(2)],
     ['Reward', Number(row.reward || 0).toFixed(3)],
     ['Done', (row.done ? 'Yes' : 'No')],
   ]);

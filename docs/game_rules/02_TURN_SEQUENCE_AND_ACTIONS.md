@@ -105,6 +105,10 @@ Validation state: **Pending Validation**.
   - info propagation: `assault_sim/training_env.py`
   - trace persistence: `assault_sim/evaluation/record_sb3_trace.py`
   - aggregation/reporting: `assault_sim/evaluation/evaluator.py`, `assault_sim/evaluation/results_analyzer.py`
+- Side attribution contract (training/eval telemetry): combat `damage/kills` must be
+  attributed by normalized side key (`actor_side_norm` vs `rl_side_norm`) because
+  runtime side values may be enum-like objects (`side.value`) while `rl_side` is a
+  plain string. Validation state: **Pending Validation**.
 - CAPTURE distance-progress diagnostics (observability-only, no rules change):
   - `capture_progress_available`: at least one legal move reduced distance to an uncaptured VP.
   - `capture_suspected_progress_miss`: progress existed but selected move reason was not `objective_progress_move`.
@@ -114,6 +118,20 @@ Validation state: **Pending Validation**.
   - when at least one legal CAPTURE move reduces distance to an uncaptured VP, selector must choose a `objective_progress_move`.
   - lateral `objective_staging_move` is allowed only when no progress move exists.
   - for CAPTURE-forced `ADVANCE`, movement selection uses strict objective distance priority and prefers non-worsening moves when available.
+
+## 5. Objective/Reward Runtime Parameterization (MuZero + EfficientZero v2)
+
+Validation state: **Pending Validation**.
+
+- Objective and reward-shaping runtime behavior is now configured from YAML, with legacy-compatible defaults injected by `agents/muzero/configs/config_loader.py`.
+- Objective signal opportunity window is configurable (`train.objective_signal.opportunity_near_vp_max_dist`) and consumed by `agents/muzero/core/selfplay.py` -> `objective_step_signal(...)`.
+- Objective head label behavior is configurable (`train.objective_head.progress_positive_threshold`) and consumed by:
+  - `agents/muzero/train/trainer.py`,
+  - `agents/efficientzero_v2/train/trainer.py`.
+- Objective diagnostics/objective-path thresholds are configurable (`train.objective_reporting.*`) and consumed by:
+  - `agents/muzero/train/train_muzero.py` (near-vp, confidence and assault context thresholds),
+  - `agents/efficientzero_v2/train/train_engine.py` (conversion window and assault context thresholds).
+- Run-level reporting now surfaces active objective/reward parameters in a dedicated tab (`Objective/Reward Config`) in `mlops/reporting/viewer.py`, including source precedence (`run_config` vs `fallback_default` vs `legacy_missing`).
   - when CAPTURE remains in `objective_staging_move` while near VP (`<=2`), fallback forces an attack (`forced_attack_near_vp_staging`) to break local loops.
   - relaxed CAPTURE attack fallback is constrained to VP-relevant targets (enemy/neutral VP holders or threats on owned VP).
   - VP-window opening guardrail: when near VP (`<=3`) without legal step-in and movement is blocked/staging (or any near-VP no-step-in streak), force VP-lane-opening attack (`forced_attack_open_vp_window`) including threats adjacent to uncaptured VP, with anti-spam per-unit throttle (max once every 2 CAPTURE decisions).
@@ -174,8 +192,16 @@ Validation state: **Pending Validation**.
 - MuZero VP opportunity instrumentation alignment (v49, Pending Validation): self-play now infers `legal_capture_options` from legal action destinations on enemy/neutral VP hexes (not only CAPTURE/VP string markers), and training aggregates treat VP gain/capture events as objective-action evidence so `capture_actions_total` and objective-opportunity conversion reflect real VP transitions.
 - MuZero reaction fire as explicit decision option (v50, Pending Validation): VOEC simulator exposes reaction-window choices as legal actions (`OPPORTUNITY_FIRE:<reactor>:<target>` and `OPPORTUNITY_SKIP:<reactor>:<target>`) instead of auto-resolving AI reactions, so the learning policy can decide whether to consume reactor activation.
 - MuZero reaction-fire efficiency shaping (v51, Pending Validation): reward shaping adds `reaction_fire_miss_penalty` applied when `OPPORTUNITY_FIRE` deals no damage and causes no kill, to reduce low-value reaction shots that consume activation without objective progress.
+- MuZero opportunity-phase VP tradeoff shaping (v59, Pending Validation): in reaction windows, objective-aware weighting now distinguishes `OPPORTUNITY_FIRE` vs `OPPORTUNITY_SKIP` under near-VP opportunity context using YAML knobs in `selfplay.reward_shaping`:
+  - `opportunity_fire_no_progress_penalty`: extra penalty for `OPPORTUNITY_FIRE` when near VP and the action does not preserve objective progress.
+  - `opportunity_skip_capture_preserve_bonus`: positive shaping for `OPPORTUNITY_SKIP` when it preserves imminent VP-capture potential (no immediate capture available yet).
+  - `opportunity_vp_distance_threshold`: activation window for the two rules above.
+  - Rule-to-code-to-test mapping: `agents/muzero/core/selfplay.py::shaped_training_reward` -> `agents/muzero/tests/test_reward_targets.py` (`test_shaped_reward_prefers_opportunity_skip_to_preserve_near_vp_capture`, `test_shaped_reward_keeps_opportunity_fire_when_tactically_strong`).
 - MuZero objective progress funnel instrumentation (v52, Pending Validation): transition telemetry now records objective-distance delta to nearest uncaptured VP (`objective_distance_before/after`, `objective_progress_delta`) and conversion flags (`objective_had_opportunity`, `objective_converted`); run diagnostics add `objective_progress_funnel` (opportunity/progress/conversion/stall rates) to support capability-driven tuning.
+- MuZero/EfficientZero objective conversion retune (v57, Pending Validation): conservative objective-path reward tuning raises `objective_progress_bonus_per_hex` (~+15%), strengthens no-progress penalties in opportunity states (`objective_no_progress_penalty`, `objective_no_progress_attack_penalty`), and increases VP conversion event bonus (`vp_capture_bonus_per_hex`) to improve `objective conversion on opportunities` without touching damage/kill shaping or MCTS core.
+- MuZero eval objective-distance parity (v56, Pending Validation): benchmark/eval trace now computes and serializes VP-distance objective signals per step using the same base logic as self-play (`objective_min_dist_before/after`, `objective_progress_delta`, `objective_best_vp_id`, `vp_distance_vector`), and `objective_had_opportunity` is derived from legal capture windows plus distance-reduction opportunities. Eval head telemetry marks `objective` as `complete` when these distances are present, removing legacy `objective_distance_not_in_eval_pipeline` partials on new runs.
 - MuZero objective auxiliary head (v54, Pending Validation): model prediction trunk includes a dedicated objective logit head (`prediction_objective`) trained with masked class-balanced BCE over objective-opportunity samples (`objective_had_opportunity`) against progress labels (`objective_progress_delta > 0`), with knobs `train.objective_loss_weight`, `train.objective_target_mode`, and `train.objective_pos_weight`; `objective_loss` tracks whether latent state is learning progress-relevant structure instead of sparse end conversion only.
+- Eval VP opportunity metric unification (v58, Pending Validation): benchmark/eval aggregate objective metrics now use one primary opportunity definition aligned with per-step telemetry (`objective_had_opportunity`). `eval_vp_capture_opportunity_steps` is the sum of per-step opportunities, while strict immediate-window opportunities are tracked separately as `eval_vp_immediate_capture_opportunity_steps`. Conversion/take rates expose explicit denominator counters (`eval_vp_capture_take_rate_denominator_steps`, `eval_vp_conversion_efficiency_denominator_steps`) and viewer labels clarify both semantics.
 - MuZero phase-2.9 reaction/assault benchmark gate (v55, Pending Validation): benchmark now computes reaction-window and assault/melee KPIs in eval (`phase_2_9_eval_kpis`) and compares them against train metrics (`phase_2_9_train_eval`), then emits promotion gate status (`phase_2_9_promotion_gate`) with explicit checks and fail-fast misuse blocks.
 - Eval source-mix diagnostics (v36, Pending Validation): mission report now separates decisions into `sb3_kept`, `planner_override`, and `finalizer_override`, and prints per-bucket capture-event rates so we can distinguish policy weakness from override-driven behavior during eval.
 - Eval minimal-overrides diagnostic mode (v37, Pending Validation): `eval_sb3 --diagnostic-min-overrides` disables planner-like eval coercions (step-in option forcing and mission-priority CAPTURE forcing) while preserving legality finalization, to compare hybrid control against a more SB3-kept behavior baseline.
@@ -222,6 +248,9 @@ Validation state: **Pending Validation**.
 - Rule: side-level runtime cost asymmetry must be observable before comparing model quality/performance between sides.
 - Code: `assault_sim/evaluation/evaluator.py` (catalog count/timing capture), `assault_sim/evaluation/results_analyzer.py` (aggregation/printing), `scripts/run_eval_parallel_configs.ps1` (comparative table).
 - Test: Pending validation by multi-side eval run with non-empty per-side metrics.
+- Rule: when objective opportunity exists, no-progress actions should be penalized more strongly than progress/conversion actions.
+- Code: `agents/muzero/core/selfplay.py` (`shaped_training_reward` objective components) and active knobs in `agents/muzero/configs/muzero_config.yaml` + `agents/efficientzero_v2/configs/efficientzero_v2_config*.yaml`.
+- Test: `agents/muzero/tests/test_reward_targets.py` (`test_shaped_reward_opportunity_no_progress_penalty_is_effective`, `test_shaped_reward_progress_and_conversion_outweigh_no_progress_path`).
 - Rule: policy must learn to reduce invalid/fallback action-finalization events without adding new backend hard-force behavior.
 - Code: `assault_sim/rewards/progressive_reward.py` (`action_finalized_reason` shaping + `SETUP` backstep wait penalty), `assault_sim/config/reward_config.py/json` (new v22 reward knobs), `assault_sim/evaluation/evaluator.py` and `assault_sim/evaluation/results_analyzer.py` (R2.1 KPI counters/rates).
 - Test: Pending validation in train+eval (`invalid_action_rate`, `fallback_rate`, `wait_recovery_sb3_backstep_rate` down vs baseline; no material `loss_rate` regression).

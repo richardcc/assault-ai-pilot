@@ -18,22 +18,33 @@ Quick start:
 - Check status:
   - `python .\scripts\exp_v2_status.py`
 
-## Most Used Commands
+## Most Used Commands (EfficientZero v2)
 
-- VOEC/MuZero train runner (default config):
-  - `python -m agents.muzero.train.train_muzero`
-- VOEC/MuZero train runner (custom config):
-  - `python -m agents.muzero.train.train_muzero --config agents/muzero/configs/muzero_config.test.yaml`
-- VOEC/MuZero train runner (dev config):
-  - `python -m agents.muzero.train.train_muzero --config agents/muzero/configs/muzero_config.dev.yaml`
-- VOEC/MuZero train runner (dev-plus config):
-  - `python -m agents.muzero.train.train_muzero --config agents/muzero/configs/muzero_config.dev_plus.yaml`
-- VOEC/MuZero train runner (dev-plus 8 workers):
-  - `python -m agents.muzero.train.train_muzero --config agents/muzero/configs/muzero_config.dev_plus_8w.yaml`
-- VOEC/MuZero train runner (resume from checkpoint):
-  - `python -m agents.muzero.train.train_muzero --config agents/muzero/configs/muzero_config.yaml` (set `train.resume_checkpoint` in YAML)
+- EfficientZero v2 quick train:
+  - `powershell -ExecutionPolicy Bypass -File .\scripts\run_efficientzero_v2_quick.ps1`
+- EfficientZero v2 quick train + bench (single command):
+  - `powershell -ExecutionPolicy Bypass -File .\scripts\run_efficientzero_v2_train_bench_quick.ps1`
+- Curriculum reporting viewer:
+  - `powershell -ExecutionPolicy Bypass -File .\scripts\run_curriculum_reporting_viewer.ps1 -OpenWindow`
+- EfficientZero v2 train runner (module):
+  - `python -m agents.efficientzero_v2.train.train_efficientzero_v2 --config agents/efficientzero_v2/configs/efficientzero_v2_config.min_valid.yaml`
+- EfficientZero v2 legacy selfplay compatibility override (optional, non-default):
+  - `$env:ASSAULT_EZV2_SELFPLAY_BACKEND="legacy_muzero"`
+
+Standard operational flow (train + bench + viewer, EZv2):
+
+1. `powershell -ExecutionPolicy Bypass -File .\scripts\run_efficientzero_v2_train_bench_quick.ps1`
+2. `powershell -ExecutionPolicy Bypass -File .\scripts\build_curriculum_reporting_catalog.ps1`
+3. `powershell -ExecutionPolicy Bypass -File .\scripts\run_curriculum_reporting_viewer.ps1 -OpenWindow`
+
 - VOEC benchmark runner (default config):
   - `python -m assault_bench.runner`
+- VOEC benchmark runner (recommended standard quality profile):
+  - `python -m assault_bench.runner --config assault_bench/configs/benchmark_config.yaml`
+- VOEC benchmark device note:
+  - Default benchmark YAMLs use `benchmark.device: cuda`; for CPU runs, pass a config with `benchmark.device: cpu` via `--config`.
+- VOEC benchmark runner (quick smoke profile):
+  - `python -m assault_bench.runner --config assault_bench/configs/benchmark_config.smoke.yaml`
 - VOEC benchmark runner (custom config):
   - `python -m assault_bench.runner --config assault_bench/configs/benchmark_config.test.yaml`
 - VOEC benchmark runner (dev config):
@@ -88,9 +99,9 @@ Quick start:
 - `scripts/check_latest_eval_gates.ps1` - Quick check of latest eval gate results.
 - `scripts/check_trainer_sweep_gate.ps1` - Validates trainer sweep outputs against gate criteria.
 
-## Training / Eval Utilities
+## Training / Eval Utilities (EZv2-first)
 
-- `scripts/sb3_eval_viewer.py` - Viewer for SB3 reports + MuZero Ops tab (runs, integrity, benchmark latest).
+- `scripts/sb3_eval_viewer.py` - Viewer for SB3 reports + legacy MuZero Ops tab (historical only).
 - `docs/MUZERO_STRATEGY_TAXONOMY.md` - Canonical mapping from MuZero `action_kind` to strategy labels used by reports.
 - `scripts/run_muzero_train_and_bench.ps1` - Runs MuZero train + benchmark in sequence, auto-picking latest `run_id` checkpoint.
 - `scripts/run_muzero_train_and_bench.ps1 -Profile smoke` - Very short smoke profile for rapid channel/projection/reward sanity checks.
@@ -102,13 +113,21 @@ Quick start:
 - `scripts/run_muzero_vp_progress_ab3.ps1` - MuZero AB3 runner for VP-progress tuning (`baseline` vs `progress`) with objective funnel/reason deltas and turn-limit finish impact.
 - `scripts/run_muzero_vp_progress_ab3_long.ps1` - Long-budget AB3 preset for VP-progress tuning (`iterations=24`, `episodes_per_iter=16`).
 - `scripts/run_muzero_timeline_export.ps1` - Exports a replay-ready timeline JSON from a MuZero run (`train_events`) for the viewer replay tab.
+- `scripts/run_efficientzero_v2_promotion_gate.ps1` - Runs candidate-vs-baseline benchmark (>=5 seeds recommended) and emits a promotion gate report JSON.
 - `scripts/run_eval_parallel_configs.ps1` - Runs eval across multiple config files in parallel.
 - `scripts/run_trainer_sweep_it_battaglia.ps1` - Trainer sweep for IT battaglia scenario.
 - `scripts/build_trainer_sweep_summary.ps1` - Builds summary artifacts for trainer sweeps.
 - `scripts/analyze_us_vp_losses.py` - VP loss analysis helper for US-side runs.
 - `scripts/debug_vp_owners_once.py` - One-shot debug script for VP ownership state.
 
-## VOEC / MuZero Runners
+## VOEC / EfficientZero v2 Runners (Primary)
+
+- `agents/efficientzero_v2/train/train_efficientzero_v2.py` - EfficientZero v2 training runner with `--config` YAML support.
+- `agents/efficientzero_v2/configs/efficientzero_v2_config.min_valid.yaml` - Default EfficientZero v2 local config.
+- `agents/efficientzero_v2/configs/efficientzero_v2_config.min_valid.yaml::train.resume_checkpoint` - Optional checkpoint path for resume runs.
+- `agents/efficientzero_v2/configs/efficientzero_v2_config.min_valid.yaml::selfplay.num_workers` - Parallel self-play workers.
+
+## VOEC / MuZero Runners (Legacy Compatibility)
 
 - `agents/muzero/train/train_muzero.py` - MuZero training runner with `--config` YAML support.
 - `assault_bench/runner.py` - Benchmark runner with `--config` YAML support.

@@ -4,11 +4,18 @@ paths:
   muzero_config: agents/muzero/configs/muzero_config.yaml
 
 benchmark:
-  num_workers: 1
+  device: cuda
+  num_workers: 4
   scenario_id: battaglia_cittadina_2_1
-  seeds: [42, 43, 44]
+  matchup_profiles:
+    - muzero_selfplay
+    - random_selfplay
+    - muzero_vs_random_side_a
+    - muzero_vs_random_side_b
+  # Default "standard quality" matrix: 25 seeds x 4 matchups = 100 episodes.
+  seeds: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25]
   max_steps: 80
   max_steps_override: 0
-  mcts_simulations: 32
+  mcts_simulations: 24
   mcts_c_puct: 1.5
-  mcts_temperature: 1.0
+  mcts_temperature: 0.7
