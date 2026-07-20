@@ -41,7 +41,7 @@ selfplay:
     vp_capture_bonus_per_hex: 1.12
     vp_net_gain_bonus: 0.30
     vp_net_loss_penalty: 0.20
-    objective_progress_bonus_per_hex: 0.56
+    objective_progress_bonus_per_hex: 0.68
     objective_no_progress_penalty: 0.30
     objective_no_progress_attack_penalty: 0.35
     reaction_fire_miss_penalty: 0.08
@@ -52,8 +52,8 @@ selfplay:
     terminal_loss_penalty: 0.20
 
 train:
-  iterations: 24
-  episodes_per_iter: 12
+  iterations: 30
+  episodes_per_iter: 20
   checkpoint_every: 5
   batch_size: 32
   objective_loss_weight: 0.24
@@ -62,8 +62,14 @@ train:
   reanalysis_ratio: 0.35
   reanalysis_value_mix: 0.50
   objective_target_mode: progress
-  objective_pos_weight: 5.6
-  objective_opportunity_max_dist: 2.5
+  objective_pos_weight: 6.4
+  aux_objective_enabled: false
+  aux_objective_loss_weight: 0.0
+  aux_intent_loss_weight: 0.5
+  aux_multi_vp_loss_weight: 0.5
+  aux_multi_vp_feature_dim: 4
+  aux_intent_classes: 8
+  objective_opportunity_max_dist: 3
   replay_capacity: 100000
   replay_recent_fraction: 0.7
   replay_recent_window_ratio: 0.3

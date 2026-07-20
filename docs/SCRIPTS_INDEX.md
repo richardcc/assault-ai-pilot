@@ -28,8 +28,6 @@ Quick start:
   - `powershell -ExecutionPolicy Bypass -File .\scripts\run_curriculum_reporting_viewer.ps1 -OpenWindow`
 - EfficientZero v2 train runner (module):
   - `python -m agents.efficientzero_v2.train.train_efficientzero_v2 --config agents/efficientzero_v2/configs/efficientzero_v2_config.min_valid.yaml`
-- EfficientZero v2 legacy selfplay compatibility override (optional, non-default):
-  - `$env:ASSAULT_EZV2_SELFPLAY_BACKEND="legacy_muzero"`
 
 Standard operational flow (train + bench + viewer, EZv2):
 
@@ -124,8 +122,113 @@ Standard operational flow (train + bench + viewer, EZv2):
 
 - `agents/efficientzero_v2/train/train_efficientzero_v2.py` - EfficientZero v2 training runner with `--config` YAML support.
 - `agents/efficientzero_v2/configs/efficientzero_v2_config.min_valid.yaml` - Default EfficientZero v2 local config.
+- `agents/efficientzero_v2/configs/efficientzero_v2_config.vp_strict.yaml` - Strict VP-objective reward profile (strong VP/progress rewards + explicit no-progress penalties when objective opportunity exists).
+- `agents/efficientzero_v2/configs/efficientzero_v2_config.q_calib_a.yaml` - Q-calibration A profile (VP strict baseline, `mcts_q_clip_abs=20`, normalization strength `0.35`).
+- `agents/efficientzero_v2/configs/efficientzero_v2_config.q_calib_b.yaml` - Q-calibration B profile (VP strict baseline, `mcts_q_clip_abs=20`, normalization strength `0.50`).
+- `agents/efficientzero_v2/configs/efficientzero_v2_config.q_calib_a_vp_push.yaml` - A-derived moderate VP-push profile (higher VP take incentives with conservative timeout guard).
+- `agents/efficientzero_v2/configs/efficientzero_v2_config.q_calib_c.yaml` - Round-1 Q-calib C (lower clip `16.0`, normalization strength `0.35`) to reduce Q clipping/saturation pressure.
+- `agents/efficientzero_v2/configs/efficientzero_v2_config.q_calib_d.yaml` - Round-1 Q-calib D (moderate clip `18.0`, stronger normalization `0.45`) to increase root-Q separation under flat bands.
+- `agents/efficientzero_v2/configs/efficientzero_v2_config.q_calib_e.yaml` - Round-1 Q-calib E (clip `18.0`, norm `0.40`, tie-break `0.05`, slightly wider flat-Q eps) to test VP safeguard sensitivity.
+- `agents/efficientzero_v2/configs/efficientzero_v2_config.q_calib_d_vp_conv.yaml` - Conservative D-derived VP-conversion profile (moderate VP/capture shaping lift plus timeout safety reinforcement).
+- `agents/efficientzero_v2/configs/efficientzero_v2_config.q_calib_d_vp_conv_v2.yaml` - Q-desaturation v2 over active D VP-conv profile (clip ceiling raised to `24.0`, norm strength tuned to `0.42`) to reduce positive-Q ceiling saturation without changing strategy shaping.
+- `agents/efficientzero_v2/configs/efficientzero_v2_config.q_desat_quick.yaml` - Quick desaturation profile from current main config (lower Q clip, stronger root normalization, wider flat-Q safeguards) for immediate validation loops.
+- `agents/efficientzero_v2/configs/efficientzero_v2_config.q_calib_d_timeout_recover_v1.yaml` - Conservative timeout-recovery profile from stable `q_calib_d_vp_conv_v2` baseline (`reaction_fire_soft_signal_weight=0.04`, slightly stronger timeout penalty) intended to recover timeout failures before further VP-pressure tuning.
+- `agents/efficientzero_v2/configs/efficientzero_v2_config.vp_progress_recover_v1.yaml` - Focused VP-progression recovery profile (stronger opportunity-gated no-progress penalties + team VP-distance reduction shaping; bounded soft caps, no hard overrides).
+- `agents/efficientzero_v2/configs/efficientzero_v2_config.vp_push_aggressive.yaml` - Aggressive VP-conversion profile over `q_desat_quick` (strong VP/capture incentives, stronger no-progress penalties, stronger VP tie-break/flat-Q nudges, and tighter anti-drift pressure).
+- `agents/efficientzero_v2/configs/efficientzero_v2_config*.yaml::selfplay.reward_shaping.reaction_fire_soft_signal_*` - Learned soft signal for reaction fire quality from dice/defense context (`enabled`, `weight`, `expected_damage_scale`); this adds a small reward-shaping bias only and does not hard-override action selection or MCTS.
+- `agents/efficientzero_v2/configs/efficientzero_v2_config*.yaml::selfplay.reward_shaping.global_strategy_*` - Conservative global strategy soft-guidance terms (team VP-control net gain, units in VP ring, enemy VP-threat reduction, sustained VP advantage, role-consistency prior, setup->convert delayed credit); bounded shaping only, with per-term toggles/weights and no hard action forcing.
 - `agents/efficientzero_v2/configs/efficientzero_v2_config.min_valid.yaml::train.resume_checkpoint` - Optional checkpoint path for resume runs.
 - `agents/efficientzero_v2/configs/efficientzero_v2_config.min_valid.yaml::selfplay.num_workers` - Parallel self-play workers.
+- `scripts/run_efficientzero_v2_q_calib_a_vp_push_train_bench.ps1` - Trains EZv2 with `q_calib_a_vp_push` then benches latest `final.pt`.
+- `scripts/run_efficientzero_v2_q_calib_d_vp_conv_train_bench.ps1` - Trains EZv2 with `q_calib_d_vp_conv` then benches latest `final.pt`.
+- `scripts/run_efficientzero_v2_q_calib_d_vp_conv_v2_train_bench.ps1` - Trains EZv2 with Q-desaturation v2 (`q_calib_d_vp_conv_v2`) then benches latest `final.pt`.
+- `scripts/run_efficientzero_v2_q_desat_quick_train_bench.ps1` - Runs a short EZv2 train+bench cycle with `q_desat_quick` (temporary reduced train budget + smoke bench overrides).
+- `scripts/run_efficientzero_v2_vp_push_aggressive_train_bench.ps1` - Runs the default EZv2 train+bench+catalog cycle with `vp_push_aggressive` for stronger VP-conversion pressure (train defaults: `iterations=50`, `episodes_per_iter=20`, `train_updates_per_iter=3`); benchmark now defaults to `assault_bench/configs/benchmark_config.yaml` and preserves that config's standard matrix (`seeds`/`num_workers`/`max_steps`) unless optional overrides are explicitly passed (`-BenchSeeds`, `-BenchWorkers`, `-BenchMaxSteps`).
+- `scripts/run_efficientzero_v2_q_calib_d_timeout_recover_v1_train_bench.ps1` - Trains EZv2 with timeout-recovery v1 profile and benches latest `final.pt`.
+- `scripts/run_efficientzero_v2_vp_progress_recover_v1_train_bench.ps1` - Trains EZv2 with focused VP-progression recovery profile and benches latest `final.pt`.
+- `scripts/run_efficientzero_v2_q_calib_round1_train_bench.ps1` - Runs train+bench consistently for Q-calib C/D/E and writes per-profile bench JSON + round summary.
+- `scripts/compare_efficientzero_v2_a_vs_vp_push.ps1` - Runs baseline-vs-candidate bench and emits promotion decision JSON.
+
+Q-calibration round-1 (focused C/D/E):
+
+1. One-command train+bench package:
+   - `powershell -ExecutionPolicy Bypass -File .\scripts\run_efficientzero_v2_q_calib_round1_train_bench.ps1`
+2. Optional bench-only proxy before training (same checkpoint, all three profiles):
+   - `python -m assault_bench.runner --config assault_bench/configs/benchmark_config.smoke.yaml --checkpoint runs/efficientzero_v2_9e9391c7/checkpoints/final.pt --muzero-config agents/efficientzero_v2/configs/efficientzero_v2_config.q_calib_c.yaml`
+   - `python -m assault_bench.runner --config assault_bench/configs/benchmark_config.smoke.yaml --checkpoint runs/efficientzero_v2_9e9391c7/checkpoints/final.pt --muzero-config agents/efficientzero_v2/configs/efficientzero_v2_config.q_calib_d.yaml`
+   - `python -m assault_bench.runner --config assault_bench/configs/benchmark_config.smoke.yaml --checkpoint runs/efficientzero_v2_9e9391c7/checkpoints/final.pt --muzero-config agents/efficientzero_v2/configs/efficientzero_v2_config.q_calib_e.yaml`
+3. Decision rule for this round (winner selection):
+   - Primary: lower Q saturation indicators from training telemetry (`mcts_q_guardrail_clipped_count` down, `mcts_q_root_score_spread` up vs baseline).
+   - Secondary: improve or maintain `xai_vp_capture_take_rate` (no regression below baseline by more than `0.01`).
+   - Safety: `timeout_rate <= 0.20` and timeout delta vs baseline `<= +0.03`.
+   - Tie-break: highest `tracked_captured_avg` among profiles that satisfy the three conditions above.
+
+Single-profile VP-conversion run (`q_calib_d_vp_conv`):
+
+1. Train + bench in one command:
+   - `powershell -ExecutionPolicy Bypass -File .\scripts\run_efficientzero_v2_q_calib_d_vp_conv_train_bench.ps1`
+2. Acceptance gate:
+   - `xai_vp_capture_take_rate > 0`
+   - `timeout_rate <= 0.20`
+
+Single-profile Q-desaturation tuning run (`q_calib_d_vp_conv_v2`):
+
+1. Train + bench in one command:
+   - `powershell -ExecutionPolicy Bypass -File .\scripts\run_efficientzero_v2_q_calib_d_vp_conv_v2_train_bench.ps1`
+   - Micro-tuning (opportunity fire soft-signal pressure): set `agents/efficientzero_v2/configs/efficientzero_v2_config.q_calib_d_vp_conv_v2.yaml::selfplay.reward_shaping.reaction_fire_soft_signal_weight=0.06`; launch with `powershell -ExecutionPolicy Bypass -File .\scripts\run_efficientzero_v2_q_calib_d_vp_conv_v2_train_bench.ps1`.
+2. Validation targets (vs `q_calib_d_vp_conv` baseline):
+   - Reduced ceiling saturation signs in train telemetry (`mcts_q_guardrail_clipped_count` lower or reduced clip-at-ceiling concentration near `+20`).
+   - Higher root-Q discrimination (`mcts_q_root_score_spread` increases).
+   - No timeout explosion (`timeout_rate <= 0.20` and timeout delta within `+0.03`).
+
+Single-profile timeout-recovery run (`q_calib_d_timeout_recover_v1`):
+
+1. Train + bench in one command:
+   - `powershell -ExecutionPolicy Bypass -File .\scripts\run_efficientzero_v2_q_calib_d_timeout_recover_v1_train_bench.ps1`
+2. Primary gate for this recovery run:
+   - `timeout_rate <= 0.20`
+3. Note:
+   - Evaluate VP capture/take KPIs after timeout recovery is validated.
+
+Single-profile VP-progression recovery run (`vp_progress_recover_v1`):
+
+1. Train + bench in one command:
+   - `powershell -ExecutionPolicy Bypass -File .\scripts\run_efficientzero_v2_vp_progress_recover_v1_train_bench.ps1`
+2. Acceptance gate:
+   - `vp_capture_take_rate > 0`
+   - `timeout_rate <= 0.20`
+
+Single-profile aggressive VP-push run (`vp_push_aggressive`):
+
+1. Train + bench in one command:
+   - `powershell -ExecutionPolicy Bypass -File .\scripts\run_efficientzero_v2_vp_push_aggressive_train_bench.ps1`
+   - Default profile for this command is now `iterations=50` and `episodes_per_iter=20`, and includes catalog build after benchmark.
+2. Acceptance gate:
+   - `vp_capture_take_rate >= q_desat_quick baseline + 0.03`
+   - `timeout_rate <= 0.20`
+
+Quick A/B run (Q calibration, EZv2):
+
+1. Run A:
+   - `python -m agents.efficientzero_v2.train.train_efficientzero_v2 --config agents/efficientzero_v2/configs/efficientzero_v2_config.q_calib_a.yaml`
+2. Run B:
+   - `python -m agents.efficientzero_v2.train.train_efficientzero_v2 --config agents/efficientzero_v2/configs/efficientzero_v2_config.q_calib_b.yaml`
+3. Optional resume checkpoint:
+   - Set `train.resume_checkpoint` in each profile to `runs/<run_id>/checkpoints/final.pt`.
+4. Compare these KPIs first:
+   - Q clip incidence telemetry
+   - Conversion on opportunities
+   - `win_rate` / timeout
+
+VP-push package (A baseline vs candidate):
+
+1. Train + bench candidate (`q_calib_a_vp_push`):
+   - `powershell -ExecutionPolicy Bypass -File .\scripts\run_efficientzero_v2_q_calib_a_vp_push_train_bench.ps1`
+2. Compare baseline A checkpoint vs VP-push checkpoint (set your checkpoint paths):
+   - `powershell -ExecutionPolicy Bypass -File .\scripts\compare_efficientzero_v2_a_vs_vp_push.ps1 -BaselineCheckpoint "runs\<baseline_run_id>\checkpoints\final.pt" -CandidateCheckpoint "runs\<candidate_run_id>\checkpoints\final.pt"`
+3. Decision rule (default thresholds in compare script):
+   - Promote if `xai_vp_capture_take_rate` improves by at least `+0.05`, while timeout does not explode (`candidate timeout_rate <= 0.20` and `timeout_rate delta <= +0.03`).
+   - Otherwise hold and iterate on reward/selection pressure.
 
 ## VOEC / MuZero Runners (Legacy Compatibility)
 
@@ -176,6 +279,15 @@ Standard operational flow (train + bench + viewer, EZv2):
 - `scripts/ptest_rules_tables.ps1` - Rules tables parity checks.
 - `scripts/ptest_modifier_parity.ps1` - Modifier parity validation.
 - `scripts/archive_cleanup_batch1.ps1` - Cleanup helper for archived run batches.
+
+## Pytest Discovery Note (Temporary)
+
+- Default `pytest` behavior now excludes MuZero tests under `agents/muzero/tests` via marker filtering.
+- Run MuZero tests explicitly when needed:
+  - `pytest -m muzero agents/muzero/tests`
+- Revert the temporary exclusion:
+  - Remove `addopts = -m "not muzero"` from `pytest.ini`.
+  - Remove the `pytest_collection_modifyitems(...)` marker hook in `agents/muzero/tests/conftest.py` (or delete that file).
 
 ## Experiment Orchestration
 

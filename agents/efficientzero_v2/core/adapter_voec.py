@@ -18,6 +18,9 @@ class EZV2Observation:
     terrain_move_cost_by_hex: Dict[str, float]
     terrain_cover_by_hex: Dict[str, float]
     terrain_los_block_by_hex: Dict[str, int]
+    terrain_type_by_hex: Dict[str, str]
+    fortification_type_by_hex: Dict[str, str]
+    fortification_edge_by_hex: Dict[str, Dict[str, int]]
 
 
 class EZV2VOECAdapter:
@@ -66,5 +69,8 @@ class EZV2VOECAdapter:
             terrain_move_cost_by_hex=dict(spatial.get("terrain_move_cost_by_hex", {})),
             terrain_cover_by_hex=dict(spatial.get("terrain_cover_by_hex", {})),
             terrain_los_block_by_hex=dict(spatial.get("terrain_los_block_by_hex", {})),
+            terrain_type_by_hex=dict(spatial.get("terrain_type_by_hex", {})),
+            fortification_type_by_hex=dict(spatial.get("fortification_type_by_hex", {})),
+            fortification_edge_by_hex=dict(spatial.get("fortification_edge_by_hex", {})),
         )
 

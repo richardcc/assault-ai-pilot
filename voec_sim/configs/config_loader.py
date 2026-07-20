@@ -14,8 +14,9 @@ class VOECConfig:
     default_scenario_id: str
 
 
-def load_voec_config(path: Path) -> VOECConfig:
-    raw = yaml.safe_load(path.read_text(encoding="utf-8"))
+def load_voec_config(path: Path | str) -> VOECConfig:
+    config_path = Path(path)
+    raw = yaml.safe_load(config_path.read_text(encoding="utf-8"))
     assets_raw = raw.get("assets", {})
     defaults = raw.get("defaults", {})
     assets = AssetPaths(

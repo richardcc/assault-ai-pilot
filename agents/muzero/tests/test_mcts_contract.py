@@ -58,3 +58,31 @@ def test_mcts_temperature_sharpens_choice():
         temperature=1e-6,
     )
     assert output.chosen_action == "A"
+
+
+def test_mcts_q_guardrail_clips_extreme_values_and_tracks_counter():
+    output = run_mcts_puct(
+        ["A", "B"],
+        num_simulations=20,
+        c_puct=1.5,
+        priors_by_action={"A": 0.01, "B": 0.99},
+        values_by_action={"A": 1e9, "B": 0.0},
+        q_clip_abs=0.0,
+    )
+    assert output.chosen_action == "B"
+    assert int(output.q_guardrail_clipped_count) > 0
+    assert float(output.q_guardrail_clip_limit) == 0.0
+
+
+def test_mcts_sampled_expectation_chance_mode_tracks_k() -> None:
+    output = run_mcts_puct(
+        ["A", "B"],
+        num_simulations=24,
+        c_puct=1.5,
+        priors_by_action={"A": 0.5, "B": 0.5},
+        values_by_action={"A": 0.7, "B": 0.3},
+        chance_mode="sampled_expectation",
+        chance_samples_per_expansion=3,
+        chance_value_noise_std=0.0,
+    )
+    assert int(output.chance_samples_per_expansion) == 3

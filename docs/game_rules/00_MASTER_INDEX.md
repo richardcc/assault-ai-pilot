@@ -34,3 +34,11 @@ Validation state: **Pending Validation**.
 - `assault_sim/train/train_sb3.py` now cleans transient artifacts under `models/` at run start to avoid cross-run contamination (`sb3_latest_*`, `sb3_vecnormalize_*`, `sb3_best_*`, `sb3_eval_*`, `models/runs/`).
 - This does not define game rules; it is a reproducibility guardrail for RL train/eval workflow.
 - `run_train_eval.ps1` supports configurable parallel eval by seed (`-ParallelEvalSeeds`, `-EvalParallelJobs`) with isolated output folders per seed.
+
+## Decision Telemetry Operational Note
+
+Validation state: **Pending Validation**.
+
+- `assault_bench/runner.py` now keeps producer-missing decision channels as `None` (rendered as `N/A`) instead of coercing to `0` for `vp_horizon_*` and `vp_progress` fields.
+- Benchmark MCTS dispatch now follows model family parity: EfficientZero v2 checkpoints use `agents/efficientzero_v2/core/mcts.py`, MuZero checkpoints use `agents/muzero/core/mcts.py`.
+- Candidate telemetry now includes channel provenance/availability flags (`*_source`, `*_available`) and preserves Q diagnostics (`mcts_q_unclipped`, `mcts_q_clipped`, `mcts_q_norm_applied`) when producer data is present.

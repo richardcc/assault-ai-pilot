@@ -1107,6 +1107,10 @@ def play_episode(
     mcts_temperature: float = 1.0,
     mcts_dirichlet_alpha: float = 0.3,
     mcts_dirichlet_epsilon: float = 0.0,
+    mcts_q_clip_abs: float = 10.0,
+    mcts_chance_mode: str = "off",
+    mcts_chance_samples_per_expansion: int = 1,
+    mcts_chance_value_noise_std: float = 0.0,
     inference_cache_limit: int = 2048,
     progress_log_every: int = 0,
     log_episode_end: bool = False,
@@ -1295,6 +1299,10 @@ def play_episode(
             temperature=effective_temperature,
             dirichlet_alpha=mcts_dirichlet_alpha,
             dirichlet_epsilon=effective_dirichlet_epsilon,
+            q_clip_abs=float(mcts_q_clip_abs),
+            chance_mode=str(mcts_chance_mode),
+            chance_samples_per_expansion=int(mcts_chance_samples_per_expansion),
+            chance_value_noise_std=float(mcts_chance_value_noise_std),
         )
         mcts_total_visits = int(sum(mcts.visits or []))
         mcts_active_actions = int(sum(1 for v in (mcts.visits or []) if int(v) > 0))
@@ -1600,6 +1608,19 @@ def play_episode(
                     "predicted_value": float(predicted_value),
                     "mcts_total_visits": int(mcts_total_visits),
                     "mcts_active_actions": int(mcts_active_actions),
+                    "mcts_q_guardrail_clipped_count": int(
+                        getattr(mcts, "q_guardrail_clipped_count", 0)
+                    ),
+                    "mcts_q_guardrail_clip_limit": (
+                        float(getattr(mcts, "q_guardrail_clip_limit", 0.0))
+                        if getattr(mcts, "q_guardrail_clip_limit", None) is not None
+                        else None
+                    ),
+                    "mcts_chance_mode": str(mcts_chance_mode),
+                    "mcts_chance_samples_per_expansion": int(
+                        getattr(mcts, "chance_samples_per_expansion", 1)
+                    ),
+                    "mcts_chance_value_noise_std": float(mcts_chance_value_noise_std),
                     "attack_target_unit_id": str(attack_target_unit_id),
                     "attack_target_class_attempt": str(attack_target_class_attempt),
                     "attack_target_class_damage": dict(attack_target_class_damage),

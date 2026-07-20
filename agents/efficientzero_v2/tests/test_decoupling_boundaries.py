@@ -31,9 +31,58 @@ def test_train_engine_module_no_direct_muzero_import() -> None:
     assert "agents.muzero" not in text
 
 
+def test_interop_module_no_legacy_alias_export() -> None:
+    text = (_repo_root() / "agents" / "efficientzero_v2" / "core" / "interop.py").read_text(
+        encoding="utf-8"
+    )
+    assert "MuZeroVOECAdapter" not in text
+
+
+def test_core_interop_symbol_table_has_no_legacy_alias() -> None:
+    from agents.efficientzero_v2.core import interop as interop_module
+
+    assert not hasattr(interop_module, "MuZeroVOECAdapter")
+    assert "MuZeroVOECAdapter" not in getattr(interop_module, "__all__", [])
+
+
+def test_package_root_has_no_legacy_alias() -> None:
+    import agents.efficientzero_v2 as package_root
+
+    assert not hasattr(package_root, "MuZeroVOECAdapter")
+
+
+def test_legacy_compat_module_removed() -> None:
+    import importlib
+
+    try:
+        importlib.import_module("agents.efficientzero_v2.legacy_compat")
+    except ModuleNotFoundError:
+        return
+    assert False, "legacy_compat module should not exist"
+
+
+def test_selfplay_module_no_legacy_backend_toggle() -> None:
+    text = (_repo_root() / "agents" / "efficientzero_v2" / "core" / "selfplay.py").read_text(
+        encoding="utf-8"
+    )
+    assert "ASSAULT_EZV2_SELFPLAY_BACKEND" not in text
+    assert "legacy_muzero" not in text
+    assert "agents.muzero" not in text
+
+
 def test_load_efficientzero_config_returns_local_contract() -> None:
     cfg = load_efficientzero_config(
         _repo_root() / "agents" / "efficientzero_v2" / "configs" / "efficientzero_v2_config.min_valid.yaml"
+    )
+    assert isinstance(cfg.paths, dict)
+    assert isinstance(cfg.model, dict)
+    assert isinstance(cfg.selfplay, dict)
+    assert isinstance(cfg.train, dict)
+
+
+def test_load_efficientzero_vp_strict_config_returns_local_contract() -> None:
+    cfg = load_efficientzero_config(
+        _repo_root() / "agents" / "efficientzero_v2" / "configs" / "efficientzero_v2_config.vp_strict.yaml"
     )
     assert isinstance(cfg.paths, dict)
     assert isinstance(cfg.model, dict)

@@ -27,6 +27,12 @@ _DEFAULT_OBJECTIVE_REPORTING_CFG: dict[str, Any] = {
 }
 
 _DEFAULT_CONFIG: dict[str, Any] = {
+    "selfplay": {
+        "mcts_q_clip_abs": 10.0,
+        "mcts_chance_mode": "off",
+        "mcts_chance_samples_per_expansion": 1,
+        "mcts_chance_value_noise_std": 0.0,
+    },
     "train": {
         "objective_signal": _DEFAULT_OBJECTIVE_SIGNAL_CFG,
         "objective_head": _DEFAULT_OBJECTIVE_HEAD_CFG,

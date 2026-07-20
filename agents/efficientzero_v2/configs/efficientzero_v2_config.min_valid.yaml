@@ -34,6 +34,7 @@ selfplay:
   mcts_temperature: 0.40
   mcts_dirichlet_alpha: 0.3
   mcts_dirichlet_epsilon: 0.08
+  unit_prefilter_enabled: false
   timeout_penalty: -0.35
   reward_shaping:
     terminal_scale: 1.0
@@ -44,10 +45,32 @@ selfplay:
     vp_capture_bonus_per_hex: 1.12
     vp_net_gain_bonus: 0.30
     vp_net_loss_penalty: 0.20
-    objective_progress_bonus_per_hex: 0.56
+    objective_progress_bonus_per_hex: 0.68
     objective_no_progress_penalty: 0.30
     objective_no_progress_attack_penalty: 0.35
     reaction_fire_miss_penalty: 0.08
+    reaction_fire_soft_signal_enabled: true
+    reaction_fire_soft_signal_weight: 0.04
+    reaction_fire_soft_signal_expected_damage_scale: 4.0
+    global_strategy_soft_enabled: true
+    global_strategy_vp_control_net_gain_weight: 0.08
+    global_strategy_units_in_vp_ring_weight: 0.04
+    global_strategy_enemy_vp_threat_reduced_weight: 0.05
+    global_strategy_sustained_vp_advantage_weight: 0.02
+    global_strategy_role_consistency_weight: 0.03
+    global_strategy_setup_convert_weight: 0.03
+    global_strategy_vp_ring_radius: 2
+    global_strategy_enemy_threat_radius: 3
+    global_strategy_sustained_advantage_min_turns: 2
+    global_strategy_total_cap_abs: 0.15
+    vp_horizon_soft_enabled: true
+    vp_horizon_soft_weight: 0.02
+    vp_horizon_soft_cap_steps: 8.0
+    enemy_threat_component_enabled: false
+    enemy_threat_component_weight: 0.01
+    enemy_threat_component_horizon_steps: 6.0
+    enemy_threat_component_cap_abs: 0.03
+    enemy_threat_component_immediate_capture_bonus: 0.40
     idle_penalty: -0.08
     idle_with_options_multiplier: 3.0
     terminal_win_bonus: 0.20
@@ -75,8 +98,14 @@ train:
   compile_mode: reduce-overhead
   matmul_precision: high
   objective_target_mode: progress
-  objective_pos_weight: 5.6
-  objective_opportunity_max_dist: 2.5
+  objective_pos_weight: 6.4
+  aux_objective_enabled: false
+  aux_objective_loss_weight: 0.0
+  aux_intent_loss_weight: 0.5
+  aux_multi_vp_loss_weight: 0.5
+  aux_multi_vp_feature_dim: 4
+  aux_intent_classes: 8
+  objective_opportunity_max_dist: 3
   replay_capacity: 20000
   replay_recent_fraction: 0.7
   replay_recent_window_ratio: 0.3

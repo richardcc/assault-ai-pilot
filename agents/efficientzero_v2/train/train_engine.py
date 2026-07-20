@@ -16,9 +16,9 @@ import torch
 from agents.efficientzero_v2.core.network import EfficientZeroV2Network
 from agents.efficientzero_v2.core.inference_service import InferenceService
 from agents.efficientzero_v2.core.interop import (
+    EZV2VOECAdapter,
     EventBus,
     JsonlWriter,
-    MuZeroVOECAdapter,
     RunManifest,
     load_efficientzero_config,
 )
@@ -42,7 +42,7 @@ def _process_actor_init(
     scenario_id: str,
 ) -> None:
     sim = VOECSimulator(assets=voec_assets)
-    adapter = MuZeroVOECAdapter(sim)
+    adapter = EZV2VOECAdapter(sim)
     model = EfficientZeroV2Network(
         observation_dim=int(model_spec["observation_dim"]),
         hidden_dim=int(model_spec["hidden_dim"]),
@@ -88,12 +88,37 @@ def _process_actor_run_episode(ep_seed: int) -> list:
             mcts_temperature=float(cfg["mcts_temperature"]),
             mcts_dirichlet_alpha=float(cfg["mcts_dirichlet_alpha"]),
             mcts_dirichlet_epsilon=float(cfg["mcts_dirichlet_epsilon"]),
+            mcts_q_clip_abs=float(cfg.get("mcts_q_clip_abs", 10.0)),
+            mcts_q_root_normalization_mode=str(
+                cfg.get("mcts_q_root_normalization_mode", "adaptive_minmax")
+            ),
+            mcts_q_root_normalization_strength=float(
+                cfg.get("mcts_q_root_normalization_strength", 0.35)
+            ),
+            mcts_chance_mode=str(cfg.get("mcts_chance_mode", "off")),
+            mcts_chance_samples_per_expansion=int(cfg.get("mcts_chance_samples_per_expansion", 1)),
+            mcts_chance_value_noise_std=float(cfg.get("mcts_chance_value_noise_std", 0.0)),
+            mcts_success_prob_enabled=bool(cfg.get("mcts_success_prob_enabled", False)),
+            mcts_success_prob_alpha=float(cfg.get("mcts_success_prob_alpha", 0.0)),
+            mcts_success_prob_center=float(cfg.get("mcts_success_prob_center", 0.5)),
+            mcts_success_prob_scale=float(cfg.get("mcts_success_prob_scale", 0.5)),
+            mcts_success_prob_centered_clip_abs=float(
+                cfg.get("mcts_success_prob_centered_clip_abs", 1.0)
+            ),
+            mcts_success_prob_expected_damage_scale=float(
+                cfg.get("mcts_success_prob_expected_damage_scale", 4.0)
+            ),
+            mcts_vp_tiebreak_epsilon=float(cfg.get("mcts_vp_tiebreak_epsilon", 0.01)),
+            mcts_q_flat_spread_epsilon=float(cfg.get("mcts_q_flat_spread_epsilon", 1e-6)),
+            mcts_vp_flat_q_score_epsilon=float(cfg.get("mcts_vp_flat_q_score_epsilon", 0.02)),
+            mcts_vp_flat_q_min_progress=float(cfg.get("mcts_vp_flat_q_min_progress", 0.0)),
             inference_cache_limit=int(cfg["inference_cache_limit"]),
             timeout_penalty=float(cfg["timeout_penalty"]),
             reward_shaping=dict(cfg["reward_shaping"]),
             objective_opportunity_near_vp_max_dist=float(
                 cfg.get("objective_opportunity_near_vp_max_dist", 2.0)
             ),
+            unit_prefilter_enabled=bool(cfg.get("unit_prefilter_enabled", False)),
             collect_xai=bool(cfg.get("collect_xai", False)),
         )
 
@@ -546,6 +571,33 @@ def run_training(
     mcts_temperature = float(cfg.selfplay.get("mcts_temperature", 1.0))
     mcts_dirichlet_alpha = float(cfg.selfplay.get("mcts_dirichlet_alpha", 0.3))
     mcts_dirichlet_epsilon = float(cfg.selfplay.get("mcts_dirichlet_epsilon", 0.0))
+    mcts_q_clip_abs = float(cfg.selfplay.get("mcts_q_clip_abs", 10.0))
+    mcts_q_root_normalization_mode = str(
+        cfg.selfplay.get("mcts_q_root_normalization_mode", "adaptive_minmax")
+    )
+    mcts_q_root_normalization_strength = float(
+        cfg.selfplay.get("mcts_q_root_normalization_strength", 0.35)
+    )
+    mcts_chance_mode = str(cfg.selfplay.get("mcts_chance_mode", "off"))
+    mcts_chance_samples_per_expansion = int(
+        cfg.selfplay.get("mcts_chance_samples_per_expansion", 1)
+    )
+    mcts_chance_value_noise_std = float(cfg.selfplay.get("mcts_chance_value_noise_std", 0.0))
+    mcts_success_prob_enabled = bool(cfg.selfplay.get("mcts_success_prob_enabled", False))
+    mcts_success_prob_alpha = float(cfg.selfplay.get("mcts_success_prob_alpha", 0.0))
+    mcts_success_prob_center = float(cfg.selfplay.get("mcts_success_prob_center", 0.5))
+    mcts_success_prob_scale = float(cfg.selfplay.get("mcts_success_prob_scale", 0.5))
+    mcts_success_prob_centered_clip_abs = float(
+        cfg.selfplay.get("mcts_success_prob_centered_clip_abs", 1.0)
+    )
+    mcts_success_prob_expected_damage_scale = float(
+        cfg.selfplay.get("mcts_success_prob_expected_damage_scale", 4.0)
+    )
+    mcts_vp_tiebreak_epsilon = float(cfg.selfplay.get("mcts_vp_tiebreak_epsilon", 0.01))
+    mcts_q_flat_spread_epsilon = float(cfg.selfplay.get("mcts_q_flat_spread_epsilon", 1e-6))
+    mcts_vp_flat_q_score_epsilon = float(cfg.selfplay.get("mcts_vp_flat_q_score_epsilon", 0.02))
+    mcts_vp_flat_q_min_progress = float(cfg.selfplay.get("mcts_vp_flat_q_min_progress", 0.0))
+    unit_prefilter_enabled = bool(cfg.selfplay.get("unit_prefilter_enabled", False))
     inference_cache_limit = int(cfg.selfplay.get("inference_cache_limit", 2048))
     timeout_penalty = float(cfg.selfplay.get("timeout_penalty", -0.1))
     reward_shaping = dict(cfg.selfplay.get("reward_shaping", {}) or {})
@@ -572,6 +624,12 @@ def run_training(
     objective_target_mode = str(cfg.train.get("objective_target_mode", "progress")).strip().lower()
     objective_pos_weight = float(cfg.train.get("objective_pos_weight", 5.0))
     objective_opportunity_max_dist = float(cfg.train.get("objective_opportunity_max_dist", 2.0))
+    aux_objective_enabled = bool(cfg.train.get("aux_objective_enabled", False))
+    aux_objective_loss_weight = float(cfg.train.get("aux_objective_loss_weight", 0.0))
+    aux_intent_loss_weight = float(cfg.train.get("aux_intent_loss_weight", 0.5))
+    aux_multi_vp_loss_weight = float(cfg.train.get("aux_multi_vp_loss_weight", 0.5))
+    aux_multi_vp_feature_dim = int(cfg.train.get("aux_multi_vp_feature_dim", 4))
+    aux_intent_classes = int(cfg.train.get("aux_intent_classes", 8))
     objective_signal_cfg = dict(cfg.train.get("objective_signal", {}) or {})
     objective_head_cfg = dict(cfg.train.get("objective_head", {}) or {})
     objective_reporting_cfg = dict(cfg.train.get("objective_reporting", {}) or {})
@@ -627,6 +685,8 @@ def run_training(
         observation_width=observation_width,
         dynamics_blocks=dynamics_blocks,
         prediction_blocks=prediction_blocks,
+        objective_intent_classes=aux_intent_classes if aux_objective_enabled else 0,
+        multi_vp_feature_dim=aux_multi_vp_feature_dim if aux_objective_enabled else 0,
     )
     if str(device) == "cuda":
         try:
@@ -661,6 +721,11 @@ def run_training(
         value_bootstrap_discount=value_bootstrap_discount,
         amp_enabled=amp_enabled,
         amp_dtype=amp_dtype,
+        aux_objective_enabled=aux_objective_enabled,
+        aux_objective_loss_weight=aux_objective_loss_weight,
+        aux_intent_loss_weight=aux_intent_loss_weight,
+        aux_multi_vp_loss_weight=aux_multi_vp_loss_weight,
+        aux_multi_vp_feature_dim=aux_multi_vp_feature_dim,
     )
     model = trainer.model
     replay = ReplayBuffer(
@@ -673,14 +738,14 @@ def run_training(
     if int(num_workers) <= 1:
         # Stable sequential path: reuse a single simulator/adapter across episodes.
         seq_sim = VOECSimulator(assets=voec_cfg.assets)
-        seq_adapter = MuZeroVOECAdapter(seq_sim)
+        seq_adapter = EZV2VOECAdapter(seq_sim)
     budget_turn_limit = -1
     budget_unit_count = -1
     try:
         probe_adapter = (
             seq_adapter
             if seq_adapter is not None
-            else MuZeroVOECAdapter(VOECSimulator(assets=voec_cfg.assets))
+            else EZV2VOECAdapter(VOECSimulator(assets=voec_cfg.assets))
         )
         probe_obs = probe_adapter.initial_state(scenario_id=scenario_id, seed=int(seed))
         budget_unit_count = int(len(getattr(probe_obs, "units", []) or []))
@@ -742,6 +807,12 @@ def run_training(
             "objective_loss_weight": objective_loss_weight,
             "objective_pos_weight": objective_pos_weight,
             "objective_opportunity_max_dist": objective_opportunity_max_dist,
+            "aux_objective_enabled": aux_objective_enabled,
+            "aux_objective_loss_weight": aux_objective_loss_weight,
+            "aux_intent_loss_weight": aux_intent_loss_weight,
+            "aux_multi_vp_loss_weight": aux_multi_vp_loss_weight,
+            "aux_multi_vp_feature_dim": aux_multi_vp_feature_dim,
+            "aux_intent_classes": aux_intent_classes,
             "objective_signal": {
                 "opportunity_near_vp_max_dist": objective_opportunity_near_vp_max_dist,
             },
@@ -814,6 +885,23 @@ def run_training(
             "mcts_temperature": mcts_temperature,
             "mcts_dirichlet_alpha": mcts_dirichlet_alpha,
             "mcts_dirichlet_epsilon": mcts_dirichlet_epsilon,
+            "mcts_q_clip_abs": mcts_q_clip_abs,
+            "mcts_q_root_normalization_mode": mcts_q_root_normalization_mode,
+            "mcts_q_root_normalization_strength": mcts_q_root_normalization_strength,
+            "mcts_chance_mode": mcts_chance_mode,
+            "mcts_chance_samples_per_expansion": mcts_chance_samples_per_expansion,
+            "mcts_chance_value_noise_std": mcts_chance_value_noise_std,
+            "mcts_success_prob_enabled": mcts_success_prob_enabled,
+            "mcts_success_prob_alpha": mcts_success_prob_alpha,
+            "mcts_success_prob_center": mcts_success_prob_center,
+            "mcts_success_prob_scale": mcts_success_prob_scale,
+            "mcts_success_prob_centered_clip_abs": mcts_success_prob_centered_clip_abs,
+            "mcts_success_prob_expected_damage_scale": mcts_success_prob_expected_damage_scale,
+            "mcts_vp_tiebreak_epsilon": mcts_vp_tiebreak_epsilon,
+            "mcts_q_flat_spread_epsilon": mcts_q_flat_spread_epsilon,
+            "mcts_vp_flat_q_score_epsilon": mcts_vp_flat_q_score_epsilon,
+            "mcts_vp_flat_q_min_progress": mcts_vp_flat_q_min_progress,
+            "unit_prefilter_enabled": unit_prefilter_enabled,
             "inference_cache_limit": inference_cache_limit,
             "timeout_penalty": timeout_penalty,
             "reward_shaping": reward_shaping,
@@ -878,7 +966,7 @@ def run_training(
                     if local_adapter is None:
                         # Parallel path keeps per-task adapter isolation.
                         local_sim = VOECSimulator(assets=voec_cfg.assets)
-                        local_adapter = MuZeroVOECAdapter(local_sim)
+                        local_adapter = EZV2VOECAdapter(local_sim)
                     model_for_episode = (
                         inference_service.create_proxy()
                         if inference_service is not None
@@ -901,6 +989,23 @@ def run_training(
                             mcts_temperature=mcts_temperature,
                             mcts_dirichlet_alpha=mcts_dirichlet_alpha,
                             mcts_dirichlet_epsilon=mcts_dirichlet_epsilon,
+                            mcts_q_clip_abs=mcts_q_clip_abs,
+                            mcts_q_root_normalization_mode=mcts_q_root_normalization_mode,
+                            mcts_q_root_normalization_strength=mcts_q_root_normalization_strength,
+                            mcts_chance_mode=mcts_chance_mode,
+                            mcts_chance_samples_per_expansion=mcts_chance_samples_per_expansion,
+                            mcts_chance_value_noise_std=mcts_chance_value_noise_std,
+                            mcts_success_prob_enabled=mcts_success_prob_enabled,
+                            mcts_success_prob_alpha=mcts_success_prob_alpha,
+                            mcts_success_prob_center=mcts_success_prob_center,
+                            mcts_success_prob_scale=mcts_success_prob_scale,
+                            mcts_success_prob_centered_clip_abs=mcts_success_prob_centered_clip_abs,
+                            mcts_success_prob_expected_damage_scale=mcts_success_prob_expected_damage_scale,
+                            mcts_vp_tiebreak_epsilon=mcts_vp_tiebreak_epsilon,
+                            mcts_q_flat_spread_epsilon=mcts_q_flat_spread_epsilon,
+                            mcts_vp_flat_q_score_epsilon=mcts_vp_flat_q_score_epsilon,
+                            mcts_vp_flat_q_min_progress=mcts_vp_flat_q_min_progress,
+                            unit_prefilter_enabled=unit_prefilter_enabled,
                             inference_cache_limit=inference_cache_limit,
                             timeout_penalty=timeout_penalty,
                             reward_shaping=reward_shaping,
@@ -1003,12 +1108,14 @@ def run_training(
                 for ep in range(episodes_per_iter):
                     ep_seed = int(seed + it * episodes_per_iter + ep)
                     episode_plan.append((ep, ep_seed))
+                    budget_source_detail = ""
+                    if str(logged_budget_source) == "scenario_turn_limit*unit_count":
+                        budget_source_detail = (
+                            f" ({int(budget_turn_limit)}*{int(budget_unit_count)})"
+                        )
                     budget_label = (
-                        f"source={logged_budget_source} effective_max_steps={int(logged_effective_budget)} "
-                        f"(max_turns_override={int(max_turns_override)} "
-                        f"max_steps_override={int(max_steps_override)} "
-                        f"scenario_turn_limit={int(budget_turn_limit)} units={int(budget_unit_count)} "
-                        f"max_steps={int(max_steps)})"
+                        f"source={logged_budget_source}{budget_source_detail} "
+                        f"effective_max_steps={int(logged_effective_budget)}"
                     )
                     print(
                         f"[EfficientZeroV2]   episode {ep+1}/{episodes_per_iter} "
@@ -1090,6 +1197,9 @@ def run_training(
                         "reanalysis_target_drift",
                         "reanalysis_policy_drift",
                         "consistency_pairs",
+                        "aux_objective_loss",
+                        "aux_intent_loss",
+                        "aux_multi_vp_loss",
                         "grad_norm",
                     ]
                     for k in metric_keys:
@@ -1317,6 +1427,12 @@ def run_training(
                 "objective_target_mode": objective_target_mode,
                 "objective_pos_weight": objective_pos_weight,
                 "objective_opportunity_max_dist": objective_opportunity_max_dist,
+                "aux_objective_enabled": aux_objective_enabled,
+                "aux_objective_loss_weight": aux_objective_loss_weight,
+                "aux_intent_loss_weight": aux_intent_loss_weight,
+                "aux_multi_vp_loss_weight": aux_multi_vp_loss_weight,
+                "aux_multi_vp_feature_dim": aux_multi_vp_feature_dim,
+                "aux_intent_classes": aux_intent_classes,
                 "objective_signal": {
                     **dict(objective_signal_cfg),
                     "opportunity_near_vp_max_dist": objective_opportunity_near_vp_max_dist,
@@ -1375,6 +1491,23 @@ def run_training(
                     "mcts_temperature": mcts_temperature,
                     "mcts_dirichlet_alpha": mcts_dirichlet_alpha,
                     "mcts_dirichlet_epsilon": mcts_dirichlet_epsilon,
+                    "mcts_q_clip_abs": mcts_q_clip_abs,
+                    "mcts_q_root_normalization_mode": mcts_q_root_normalization_mode,
+                    "mcts_q_root_normalization_strength": mcts_q_root_normalization_strength,
+                    "mcts_chance_mode": mcts_chance_mode,
+                    "mcts_chance_samples_per_expansion": mcts_chance_samples_per_expansion,
+                    "mcts_chance_value_noise_std": mcts_chance_value_noise_std,
+                    "mcts_success_prob_enabled": mcts_success_prob_enabled,
+                    "mcts_success_prob_alpha": mcts_success_prob_alpha,
+                    "mcts_success_prob_center": mcts_success_prob_center,
+                    "mcts_success_prob_scale": mcts_success_prob_scale,
+                    "mcts_success_prob_centered_clip_abs": mcts_success_prob_centered_clip_abs,
+                    "mcts_success_prob_expected_damage_scale": mcts_success_prob_expected_damage_scale,
+                    "mcts_vp_tiebreak_epsilon": mcts_vp_tiebreak_epsilon,
+                    "mcts_q_flat_spread_epsilon": mcts_q_flat_spread_epsilon,
+                    "mcts_vp_flat_q_score_epsilon": mcts_vp_flat_q_score_epsilon,
+                    "mcts_vp_flat_q_min_progress": mcts_vp_flat_q_min_progress,
+                    "unit_prefilter_enabled": unit_prefilter_enabled,
                     "inference_cache_limit": inference_cache_limit,
                     "timeout_penalty": timeout_penalty,
                     "reward_shaping": dict(reward_shaping),

@@ -92,6 +92,12 @@ def _normalize_result_controllers(result_row: dict[str, Any]) -> dict[str, Any]:
     return out
 
 
+def _filter_default_matchups(results: list[dict[str, Any]], *, include_random_selfplay: bool) -> list[dict[str, Any]]:
+    if include_random_selfplay:
+        return list(results or [])
+    return [r for r in (results or []) if str((r or {}).get("matchup_profile", "")).strip() != "random_selfplay"]
+
+
 def _mlflow_commit_by_train_run(repo_root: Path) -> dict[str, str]:
     out: dict[str, str] = {}
     mlruns = repo_root / "mlruns"
@@ -174,7 +180,13 @@ def _collect_agent_train_runs(
     return out
 
 
-def _collect_eval_history(repo_root: Path, runs_root_rel: str, train_run_id: str) -> list[dict[str, Any]]:
+def _collect_eval_history(
+    repo_root: Path,
+    runs_root_rel: str,
+    train_run_id: str,
+    *,
+    include_random_selfplay: bool = False,
+) -> list[dict[str, Any]]:
     xai_dir = (repo_root / str(runs_root_rel) / train_run_id / "xai").resolve()
     if not xai_dir.exists():
         return []
@@ -188,6 +200,10 @@ def _collect_eval_history(repo_root: Path, runs_root_rel: str, train_run_id: str
             for r in raw_results
             if isinstance(r, dict)
         ]
+        filtered_results = _filter_default_matchups(
+            normalized_results,
+            include_random_selfplay=include_random_selfplay,
+        )
         rows.append(
             {
                 "eval_id": p.stem.replace("bench_eval_", ""),
@@ -203,9 +219,9 @@ def _collect_eval_history(repo_root: Path, runs_root_rel: str, train_run_id: str
                     "flow_fields": sorted(list(diagnostics_eval.keys())),
                 },
                 "diagnostics_summary_eval": diagnostics_eval,
-                "results": normalized_results,
+                "results": filtered_results,
                 "controller_legacy_unlabeled_rows": sum(
-                    1 for r in normalized_results if int(r.get("controller_legacy_unlabeled_count", 0) or 0) > 0
+                    1 for r in filtered_results if int(r.get("controller_legacy_unlabeled_count", 0) or 0) > 0
                 ),
             }
         )
@@ -229,6 +245,8 @@ def _iter_runs_roots(runs_roots_rel: str | Iterable[str]) -> list[str]:
 def build_reporting_catalog(
     repo_root: Path,
     runs_roots_rel: str | Iterable[str] = ("runs_curriculum", "runs"),
+    *,
+    include_random_selfplay: bool = False,
 ) -> dict[str, Any]:
     commit_by_train_run = _mlflow_commit_by_train_run(repo_root)
     run_roots = _iter_runs_roots(runs_roots_rel)
@@ -285,7 +303,12 @@ def build_reporting_catalog(
                     "git_commit": commit_by_train_run.get(run_id, ""),
                 }
                 for root_rel in run_roots
-                for ev in _collect_eval_history(repo_root, runs_root_rel=root_rel, train_run_id=run_id)
+                for ev in _collect_eval_history(
+                    repo_root,
+                    runs_root_rel=root_rel,
+                    train_run_id=run_id,
+                    include_random_selfplay=include_random_selfplay,
+                )
             ]
         )
 
@@ -352,13 +375,22 @@ def _build_arg_parser() -> argparse.ArgumentParser:
         default="runs_curriculum,runs",
         help="Runs roots relative to repo root (comma-separated).",
     )
+    parser.add_argument(
+        "--include-random-selfplay",
+        action="store_true",
+        help="Include random_selfplay rows in report catalog (opt-in).",
+    )
     return parser
 
 
 if __name__ == "__main__":
     args = _build_arg_parser().parse_args()
     repo_root = Path(args.repo_root).resolve()
-    payload = build_reporting_catalog(repo_root=repo_root, runs_roots_rel=str(args.runs_root))
+    payload = build_reporting_catalog(
+        repo_root=repo_root,
+        runs_roots_rel=str(args.runs_root),
+        include_random_selfplay=bool(args.include_random_selfplay),
+    )
     out_path = (repo_root / args.out).resolve() if not Path(args.out).is_absolute() else Path(args.out)
     out_path.parent.mkdir(parents=True, exist_ok=True)
     out_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")

@@ -368,7 +368,7 @@ cd C:\repos\python\assault
 python -m agents.efficientzero_v2.train.train_efficientzero_v2 `
   --config agents/efficientzero_v2/configs/efficientzero_v2_config.yaml `
   --mlflow-experiment assault_efficientzero_v2 `
-  --mlflow-run-name "ezv2_new_train"
-
+  --mlflow-run-name "ezv2_train_$(Get-Date -Format yyyyMMdd_HHmmss)"
+  
 python -m assault_bench.runner --config assault_bench/configs/benchmark_config.yaml --checkpoint latest
-.\scripts\build_curriculum_reporting_catalog.ps1
+powershell -ExecutionPolicy Bypass -File .\scripts\build_curriculum_reporting_catalog.ps1

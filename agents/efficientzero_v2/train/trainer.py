@@ -19,6 +19,9 @@ class EfficientTrainMetrics(TrainMetrics):
     reanalysis_target_drift: float = 0.0
     reanalysis_policy_drift: float = 0.0
     consistency_pairs: float = 0.0
+    aux_objective_loss: float = 0.0
+    aux_intent_loss: float = 0.0
+    aux_multi_vp_loss: float = 0.0
 
     def to_dict(self) -> Dict[str, float]:
         d = super().to_dict()
@@ -27,6 +30,9 @@ class EfficientTrainMetrics(TrainMetrics):
         d["reanalysis_target_drift"] = float(self.reanalysis_target_drift)
         d["reanalysis_policy_drift"] = float(self.reanalysis_policy_drift)
         d["consistency_pairs"] = float(self.consistency_pairs)
+        d["aux_objective_loss"] = float(self.aux_objective_loss)
+        d["aux_intent_loss"] = float(self.aux_intent_loss)
+        d["aux_multi_vp_loss"] = float(self.aux_multi_vp_loss)
         return d
 
 
@@ -52,6 +58,11 @@ class EfficientZeroV2Trainer(EfficientZeroV2BaseTrainer):
         value_bootstrap_discount: float = 0.997,
         amp_enabled: bool = True,
         amp_dtype: str = "auto",
+        aux_objective_enabled: bool = False,
+        aux_objective_loss_weight: float = 0.0,
+        aux_intent_loss_weight: float = 0.5,
+        aux_multi_vp_loss_weight: float = 0.5,
+        aux_multi_vp_feature_dim: int = 0,
     ):
         super().__init__(
             model=model,
@@ -85,6 +96,11 @@ class EfficientZeroV2Trainer(EfficientZeroV2BaseTrainer):
             "cuda",
             enabled=self.amp_enabled and self._amp_dtype == torch.float16,
         )
+        self.aux_objective_enabled = bool(aux_objective_enabled)
+        self.aux_objective_loss_weight = float(max(0.0, aux_objective_loss_weight))
+        self.aux_intent_loss_weight = float(max(0.0, aux_intent_loss_weight))
+        self.aux_multi_vp_loss_weight = float(max(0.0, aux_multi_vp_loss_weight))
+        self.aux_multi_vp_feature_dim = int(max(0, aux_multi_vp_feature_dim))
 
     def _autocast_ctx(self):
         if not self.amp_enabled:
@@ -115,6 +131,9 @@ class EfficientZeroV2Trainer(EfficientZeroV2BaseTrainer):
                 reanalysis_target_drift=0.0,
                 reanalysis_policy_drift=0.0,
                 consistency_pairs=0.0,
+                aux_objective_loss=0.0,
+                aux_intent_loss=0.0,
+                aux_multi_vp_loss=0.0,
             )
 
         obs = torch.stack(
@@ -228,6 +247,50 @@ class EfficientZeroV2Trainer(EfficientZeroV2BaseTrainer):
                         objective_pred, objective_target, pos_weight=pos_weight, reduction="none"
                     )
                     objective_loss = (bce * objective_mask).sum() / objective_mask.sum().clamp(min=1.0)
+            aux_intent_loss = torch.tensor(0.0, dtype=torch.float32, device=self.device)
+            if (
+                self.aux_objective_enabled
+                and self.aux_objective_loss_weight > 0.0
+                and isinstance(aux, dict)
+                and "objective_intent_logits" in aux
+            ):
+                intent_logits = aux["objective_intent_logits"]
+                target_idx = []
+                for s in batch:
+                    vec = dict((s.info or {}).get("vp_distance_vector", {}) or {})
+                    if vec:
+                        best_id = min(vec.keys(), key=lambda k: float(vec.get(k, 1e9)))
+                        ordered = sorted(vec.keys())
+                        target_idx.append(max(0, ordered.index(best_id)))
+                    else:
+                        target_idx.append(0)
+                target_t = torch.tensor(target_idx, dtype=torch.long, device=self.device)
+                classes = int(intent_logits.shape[-1]) if intent_logits.ndim == 2 else 0
+                if classes > 1:
+                    target_t = torch.clamp(target_t, min=0, max=classes - 1)
+                    aux_intent_loss = F.cross_entropy(intent_logits, target_t)
+            aux_multi_vp_loss = torch.tensor(0.0, dtype=torch.float32, device=self.device)
+            if (
+                self.aux_objective_enabled
+                and self.aux_objective_loss_weight > 0.0
+                and self.aux_multi_vp_feature_dim > 0
+                and isinstance(aux, dict)
+                and "multi_vp_pred" in aux
+            ):
+                target_rows = []
+                for s in batch:
+                    vec = dict((s.info or {}).get("vp_distance_vector", {}) or {})
+                    vals = sorted(float(v) for v in list(vec.values()))
+                    vals = vals[: self.aux_multi_vp_feature_dim]
+                    if len(vals) < self.aux_multi_vp_feature_dim:
+                        vals += [0.0] * (self.aux_multi_vp_feature_dim - len(vals))
+                    target_rows.append(vals)
+                multi_vp_target = torch.tensor(target_rows, dtype=torch.float32, device=self.device)
+                aux_multi_vp_loss = F.smooth_l1_loss(aux["multi_vp_pred"], multi_vp_target)
+            aux_objective_loss = (
+                (self.aux_intent_loss_weight * aux_intent_loss)
+                + (self.aux_multi_vp_loss_weight * aux_multi_vp_loss)
+            )
 
             consistency_loss = torch.tensor(0.0, dtype=torch.float32, device=self.device)
             consistency_pairs = 0
@@ -270,6 +333,7 @@ class EfficientZeroV2Trainer(EfficientZeroV2BaseTrainer):
                 + reward_loss
                 + (self.objective_loss_weight * objective_loss)
                 + (self.consistency_loss_weight * consistency_loss)
+                + (self.aux_objective_loss_weight * aux_objective_loss)
             )
         self.optimizer.zero_grad()
         if self._scaler.is_enabled():
@@ -303,5 +367,8 @@ class EfficientZeroV2Trainer(EfficientZeroV2BaseTrainer):
             reanalysis_target_drift=float(reanalysis_target_drift),
             reanalysis_policy_drift=float(reanalysis_policy_drift),
             consistency_pairs=float(consistency_pairs),
+            aux_objective_loss=float(aux_objective_loss.detach().cpu().item()),
+            aux_intent_loss=float(aux_intent_loss.detach().cpu().item()),
+            aux_multi_vp_loss=float(aux_multi_vp_loss.detach().cpu().item()),
         )
 

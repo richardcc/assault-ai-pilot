@@ -12,50 +12,20 @@ Success target ("100% done"):
 
 ---
 
-## Current State (Today)
+## Current State (Pending Only)
 
-Implemented:
-- Separate agent package: `agents/efficientzero_v2`.
-- Independent train entry + local train engine:
-  - `agents/efficientzero_v2/train/train_efficientzero_v2.py`
-  - `agents/efficientzero_v2/train/train_engine.py`
-- EfficientZero-specific network/trainer scaffolding:
-  - `agents/efficientzero_v2/core/network.py`
-  - `agents/efficientzero_v2/train/trainer.py`
-- Consistency signal wired with temporal `next_observation`.
-- Benchmark can load EfficientZero checkpoints.
-- Reporting catalog supports `engine=efficientzero_v2`.
-- Checkpoint I/O reduced (`checkpoint_every`, keep `final.pt`, remove `iter_*.pt` at end).
-
-Still partial:
+Open items:
 - EfficientZero target/reanalysis pipeline is not fully implemented.
-- Promotion gating automation still requires robust candidate-vs-baseline runbook adoption in regular ops.
-
-Recent implementation delta (2026-07-15, this iteration):
-- `collect_xai` is now configurable in EfficientZero selfplay (`selfplay.collect_xai` / `train.collect_xai` fallback) and no longer hardcoded off.
-- EfficientZero now emits a full `metrics/units_sides.json` contract (`units_sides_v1`) plus backward-compatible fallback handling in viewers.
-- Short-episode diagnostics added to train summary/artifacts (`short_episode_diagnostics`, per-iteration distribution, thresholded short rate).
-- Inference service now exports KPIs (`inference_latency_p50_ms`, `inference_latency_p95_ms`, queue depth, staleness proxy) into training metrics.
-- Promotion gate operational pipeline added (`scripts/run_efficientzero_v2_promotion_gate.ps1` + `mlops.efficientzero_promotion_gate`).
-- EZv2 network base is now local (`agents/efficientzero_v2/core/network_base.py`), removing direct inheritance from `agents.muzero.core.network` in the core path.
-- EZv2 trainer base is now local (`agents/efficientzero_v2/train/trainer_base.py`), removing direct inheritance from `agents.muzero.train.trainer` while preserving objective-mask behavior.
-- EZv2 config loading is now local (`agents/efficientzero_v2/core/interop.py::load_efficientzero_config`) and no longer routes through MuZero config loader.
-- Selfplay path now uses an explicit EZv2 backend boundary (`agents/efficientzero_v2/core/selfplay.py`) with compatibility backend + swappable interface for full native migration.
-- P0 independence closeout: selfplay default backend is now native EZv2 (`_NativeEZV2SelfplayBackend`), runtime interop/observability is local (`adapter_voec.py`, `observability.py`), and MuZero selfplay remains optional only via `ASSAULT_EZV2_SELFPLAY_BACKEND=legacy_muzero`.
-
-Validation state for this delta: **Pending Validation** (requires EZv2 quick train+bench smoke and medium profile candidate-vs-baseline benchmark/gate review).
+- Promotion gating automation needs robust candidate-vs-baseline runbook adoption in regular ops.
+- P0 implementation is complete, but runtime smoke + bench/report validation is still pending.
+- Unit-first iterative replanning is implemented as experimental and pending A/B validation.
 
 ## P0 Independence Status
 
 Status: **Done (implementation)** / **Pending Validation (runtime smoke + bench/report)**.
-
-Closed scope:
-- Default selfplay/MCTS runtime path is EZv2-native (no MuZero imports in normal train path).
-- EZv2 train engine interop/observability uses local modules and no longer depends on MuZero obs/adapter modules.
-- Daily train -> bench -> report route remains EZv2-first, with legacy artifact reading preserved at reporting layer.
-
-Compatibility scope kept intentionally:
-- Legacy MuZero selfplay fallback remains available through env flag only (`ASSAULT_EZV2_SELFPLAY_BACKEND=legacy_muzero`), not default.
+Validation focus:
+- Contract/boundary tests pass in CI/local.
+- Downstream import migration confirmed after `legacy_compat` removal.
 
 ---
 
@@ -121,6 +91,37 @@ Exit criteria:
 - >=20% reduction in `selfplay_s` at same `mcts_simulations` and `max_steps`.
 - No KPI regression on fixed benchmark seeds.
 
+### Unit-First Iterative Replanning (Experimental)
+
+Status: **Implemented (experimental)** / **Pending A/B Validation**.
+
+Concept:
+- At each turn, rank the best-positioned unit first.
+- Run MCTS constrained to that unit's legal actions.
+- Apply the chosen action, then re-run planning for the next unit.
+- Repeat until the turn's actionable units are exhausted.
+
+Rationale:
+- Current single-pass turn-level planning may dilute tactical focus when many units compete for search budget.
+- Sequential unit-scoped planning can improve local tactical quality while still adapting after each applied action.
+
+Expected benefits:
+- Better action quality for high-leverage units (capture windows, VP contests, threat response).
+- More interpretable decision traces (per-unit ranking plus per-unit MCTS choice).
+- Potentially improved search efficiency by reducing per-decision branching complexity.
+
+Risks and trade-offs:
+- Greedy ordering bias: early unit choices may over-constrain later unit opportunities.
+- Extra planning overhead from repeated MCTS invocations per turn.
+- Sensitivity to unit-ranking heuristic; weak ranking can hurt global turn outcomes.
+- Integration complexity with existing objective shaping and root-level tie-break logic.
+
+Minimal validation plan:
+- A/B compare against current planner on fixed seeds and equal simulation budget envelopes.
+- Track turn-level KPIs (`tracked_captured_avg`, `vp_net_avg_by_side`, outcome rates) plus runtime (`selfplay_s`).
+- Add telemetry for unit order, per-unit legal-action count, and per-unit selected-action quality deltas.
+- Keep as experimental until two independent benchmark blocks show non-regression with measurable tactical gain.
+
 ### Target Scalable Architecture (Widely Used Pattern)
 
 Idea:
@@ -161,7 +162,6 @@ Objective:
 - Make Efficient engine first-class in all reporting contracts.
 
 Tasks:
-- Produce full `metrics/units_sides.json` contract in Efficient engine (not minimal).
 - Ensure parity of artifacts expected by reporting and benchmark docs.
 - Add clear viewer labels for Efficient-specific metrics.
 
@@ -202,7 +202,7 @@ Exit criteria:
 
 1. Add `train_updates_per_iter` to Efficient engine (start at 3).
 2. Implement robust checkpoint atomic save with retries.
-3. Implement full `units_sides.json` emission in Efficient engine.
+3. Run A/B validation for unit-first iterative replanning (fixed seeds, equal budget).
 
 ---
 
@@ -237,4 +237,15 @@ Investigation tasks:
 - Full distributed cluster training.
 - Multi-node actor/learner deployment.
 - Cross-platform orchestration beyond local/WSL.
+
+---
+
+## Closed Worklog (Condensed)
+
+- EZv2 runtime decoupled from MuZero in core training/selfplay path.
+- Local config loader, local network/trainer bases, local observability/adapter path.
+- Legacy alias export removed from interop; `legacy_compat` module removed.
+- VP-progress and decision telemetry expanded in benchmark/viewer contracts.
+- Optional aux objectives, success-probability term, global strategy soft signals wired.
+- Unit-first iterative replanning implemented behind config (experimental).
 

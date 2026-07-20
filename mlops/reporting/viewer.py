@@ -191,6 +191,52 @@ def _index_html() -> str:
     .item { background: #1e293b; border: 1px solid #334155; border-radius: 6px; padding: 8px; cursor: pointer; }
     .item.active { border-color: #22d3ee; }
     .muted { color: #94a3b8; font-size: 12px; }
+    .ok-chip {
+      display:inline-block;
+      padding:1px 6px;
+      border:1px solid #14532d;
+      border-radius:999px;
+      color:#86efac;
+      background:#052e16;
+      font-size:11px;
+      font-weight:600;
+    }
+    .degraded-chip {
+      display:inline-block;
+      padding:1px 6px;
+      border:1px solid #7c2d12;
+      border-radius:999px;
+      color:#fdba74;
+      background:#431407;
+      font-size:11px;
+      font-weight:600;
+    }
+    .ok-text { color:#86efac; font-weight:600; }
+    .degraded-text { color:#fdba74; font-weight:600; }
+    .na-text { color:#94a3b8; font-style:italic; }
+    .ok-chip {
+      display:inline-block;
+      padding:1px 6px;
+      border:1px solid #14532d;
+      border-radius:999px;
+      color:#86efac;
+      background:#052e16;
+      font-size:11px;
+      font-weight:600;
+    }
+    .degraded-chip {
+      display:inline-block;
+      padding:1px 6px;
+      border:1px solid #7c2d12;
+      border-radius:999px;
+      color:#fdba74;
+      background:#431407;
+      font-size:11px;
+      font-weight:600;
+    }
+    .ok-text { color:#86efac; font-weight:600; }
+    .degraded-text { color:#fdba74; font-weight:600; }
+    .na-text { color:#94a3b8; font-style:italic; }
     .tabs { display: flex; gap: 6px; margin: 8px; }
     .tab { padding: 6px 10px; border: 1px solid #334155; border-radius: 6px; cursor: pointer; }
     .tab.active { background: #0ea5e9; color: #0f172a; border-color: #0ea5e9; font-weight: 700; }
@@ -203,6 +249,7 @@ def _index_html() -> str:
 <body>
   <div class="wrap">
     <h1>Curriculum Reporting Viewer (Base UI)</h1>
+    <div id="catalogBuildMarker" class="muted" style="font-size:11px;margin-top:-6px;margin-bottom:6px;">build: pending</div>
     <div class="bar">
       <button id="reloadBtn">Reload</button>
       <label class="muted" style="display:flex;align-items:center;gap:6px;">
@@ -237,6 +284,7 @@ def _index_html() -> str:
     </div>
   </div>
   <script>
+    window.__CATALOG_BUILD__ = "catalog-2026-07-20-replay-candidate-fix";
     let catalog = null;
     let selectedEngine = "";
     let selectedModel = "";
@@ -249,6 +297,9 @@ def _index_html() -> str:
     const escapeHtml = (v) => String((v === undefined || v === null) ? "" : v).replace(/[&<>"']/g, c => ({
       "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"
     }[c]));
+
+    const catalogBuildEl = el("catalogBuildMarker");
+    if (catalogBuildEl) catalogBuildEl.textContent = "build: " + String(window.__CATALOG_BUILD__ || "unknown");
 
     async function loadCatalog() {
       const r = await fetch("/api/catalog");
@@ -487,6 +538,11 @@ def _index_html() -> str:
 """
 
 
+def _catalog_html() -> str:
+    """Backward-compatible alias for tests/importers expecting _catalog_html."""
+    return _index_html()
+
+
 def _model_html() -> str:
     return """<!doctype html>
 <html lang="en">
@@ -502,6 +558,29 @@ def _model_html() -> str:
     .grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
     .kpi { background: #1e293b; border: 1px solid #334155; border-radius: 6px; padding: 8px; }
     .muted { color: #94a3b8; font-size: 12px; }
+    .ok-chip {
+      display:inline-block;
+      padding:1px 6px;
+      border:1px solid #14532d;
+      border-radius:999px;
+      color:#86efac;
+      background:#052e16;
+      font-size:11px;
+      font-weight:600;
+    }
+    .degraded-chip {
+      display:inline-block;
+      padding:1px 6px;
+      border:1px solid #7c2d12;
+      border-radius:999px;
+      color:#fdba74;
+      background:#431407;
+      font-size:11px;
+      font-weight:600;
+    }
+    .ok-text { color:#86efac; font-weight:600; }
+    .degraded-text { color:#fdba74; font-weight:600; }
+    .na-text { color:#94a3b8; font-style:italic; }
     .main { flex: 1; min-height: 0; display: grid; grid-template-columns: 320px minmax(0,1fr); gap: 10px; }
     .main.train-collapsed { grid-template-columns: 44px minmax(0,1fr); }
     .collapsed-body { display: none; }
@@ -536,8 +615,24 @@ def _model_html() -> str:
     .replay-kv { display:grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap:8px; }
     .replay-kv .kpi { background:#111827; }
     .replay-canvas { width:100%; max-width:100%; height:auto; max-height:560px; aspect-ratio:16/9; background:#0b0f18; border:1px solid #334155; border-radius:8px; display:block; }
+    .replay-hover-legend { display:flex; gap:12px; align-items:center; margin-top:8px; font-size:12px; color:#cbd5e1; }
+    .replay-hover-legend-chip { display:inline-block; width:10px; height:10px; border-radius:999px; margin-right:6px; border:1px solid #334155; vertical-align:middle; }
+    .replay-hover-legend-move { background:rgba(34,197,94,0.34); border-color:#22c55e; }
+    .replay-hover-legend-attack { background:rgba(239,68,68,0.34); border-color:#ef4444; }
     .replay-grid { display:grid; grid-template-columns: minmax(0, 1.05fr) minmax(320px, 0.8fr) minmax(280px, 0.75fr); gap:10px; }
+    .replay-side-col {
+      display:grid;
+      gap:10px;
+      min-height:0;
+      max-height:760px;
+      overflow:auto;
+      overscroll-behavior: contain;
+      padding-right:2px;
+    }
+    .replay-details-grid { display:grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap:10px; }
+    .replay-details-grid .replay-panel { margin-top:0; }
     @media (max-width: 1400px) { .replay-grid { grid-template-columns: minmax(0, 1fr); } }
+    @media (max-width: 900px) { .replay-details-grid { grid-template-columns: minmax(0, 1fr); } }
     .replay-log {
       white-space: pre-wrap;
       word-break: break-word;
@@ -550,6 +645,30 @@ def _model_html() -> str:
       overflow:auto;
       max-height:520px;
       min-height:280px;
+    }
+    .replay-candidate-table-wrap {
+      max-height: 320px;
+      overflow-y: auto;
+      border: 1px solid #334155;
+      border-radius: 6px;
+    }
+    .replay-candidate-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 12px;
+    }
+    .replay-candidate-sort-btn {
+      background: transparent;
+      border: 0;
+      color: #cbd5e1;
+      cursor: pointer;
+      font-size: 12px;
+      font-weight: 600;
+      padding: 0;
+      text-align: left;
+    }
+    .replay-candidate-sort-btn:hover {
+      color: #7dd3fc;
     }
     .dash-wrap { margin-top:10px; display:grid; grid-template-columns: 1fr; gap:10px; }
     .dash-section { border:1px solid #334155; border-radius:8px; background:#0b1220; padding:10px; }
@@ -641,6 +760,7 @@ def _model_html() -> str:
               <button id="tabObjectiveRewardConfigBtn" class="tab-btn" data-section="train">Objective/Reward Config</button>
               <button id="tabMuzeroVpsBtn" class="tab-btn active" data-section="eval">VP Summary</button>
               <button id="tabHeadDiagnosticsBtn" class="tab-btn" data-section="eval">Eval Head Diagnostics</button>
+              <button id="tabEvalMetricsBtn" class="tab-btn" data-section="eval">Eval Metrics</button>
               <button id="tabUnifiedBtn" class="tab-btn" data-section="eval">Unified Actions + Attack Effectiveness</button>
               <button id="tabEvalDecisionsBtn" class="tab-btn" data-section="eval">Eval KBI Decisions</button>
               <button id="tabReplayBtn" class="tab-btn" data-section="eval">Match Replay</button>
@@ -648,7 +768,8 @@ def _model_html() -> str:
             </div>
           </div>
           <div class="toolbar-sep"></div>
-          <div id="analysisFiltersHost" class="toolbar-filters"></div>
+        <div id="analysisFiltersHost" class="toolbar-filters"></div>
+        <span id="viewerBuildMarker" class="muted" style="margin-left:auto;font-size:11px;"></span>
         </div>
         <div id="tabTrainDetail" class="tab-pane">
           <h2 style="margin-top:8px;">Selected Train Metrics</h2>
@@ -676,6 +797,10 @@ def _model_html() -> str:
           <h2 style="margin-top:8px;">Eval Head Diagnostics</h2>
           <div id="headDiagnosticsRoot" class="list"></div>
         </div>
+        <div id="tabEvalMetrics" class="tab-pane">
+          <h2 style="margin-top:8px;">Eval Metrics</h2>
+          <div id="evalMetricsRoot" class="list"></div>
+        </div>
         <div id="tabUnified" class="tab-pane">
           <h2 style="margin-top:8px;">Unified Actions + Attack Effectiveness</h2>
           <div id="unifiedRoot" class="list"></div>
@@ -692,13 +817,15 @@ def _model_html() -> str:
     </div>
   </div>
   <script>
-    window.__VIEWER_BUILD__ = "viewer-fix-2026-07-06-turn-closed-label";
+    window.__VIEWER_BUILD__ = "viewer-2026-07-20-replay-candidate-fix";
     function el(id) { return document.getElementById(id); }
     function esc(v) {
       return String((v === undefined || v === null) ? "" : v).replace(/[&<>"']/g, function (c) {
         return ({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;" })[c];
       });
     }
+    const viewerBuildMarker = el("viewerBuildMarker");
+    if (viewerBuildMarker) viewerBuildMarker.textContent = "build: " + String(window.__VIEWER_BUILD__ || "unknown");
     const q = new URLSearchParams(window.location.search);
     const engine = q.get("engine") || "";
     const modelId = q.get("model") || "";
@@ -713,10 +840,22 @@ def _model_html() -> str:
     const objectiveRewardDefaults = {
       objective_loss_weight: 0.12,
       objective_target_mode: "progress",
-      objective_pos_weight: 5.0,
-      objective_opportunity_max_dist: 2.0,
+      objective_pos_weight: 6.8,
+      objective_opportunity_max_dist: 3.0,
+      mcts_q_clip_abs: 20.0,
+      mcts_q_root_normalization_mode: "adaptive_minmax",
+      mcts_q_root_normalization_strength: 0.40,
+      mcts_q_flat_spread_epsilon: 1.0e-6,
+      mcts_vp_flat_q_score_epsilon: 0.02,
+      mcts_vp_flat_q_min_progress: 0.0,
+      aux_objective_enabled: false,
+      aux_objective_loss_weight: 0.0,
+      aux_intent_loss_weight: 0.5,
+      aux_multi_vp_loss_weight: 0.5,
+      aux_multi_vp_feature_dim: 4,
+      aux_intent_classes: 8,
       objective_progress_positive_threshold: 0.0,
-      objective_opportunity_near_vp_max_dist: 2.0,
+      objective_opportunity_near_vp_max_dist: 3.0,
       assault_advantage_prob_threshold: 0.55,
       assault_advantage_margin_threshold: 0.20,
       assault_advantage_legal_count_threshold: 6,
@@ -728,6 +867,29 @@ def _model_html() -> str:
       strong_progress_delta_threshold: 2.0,
       conversion_window_steps_after_progress: 2,
       decision_flip_legal_count_tolerance: 2,
+      mcts_vp_tiebreak_epsilon: 0.015,
+      capture_bonus: 0.70,
+      vp_capture_bonus_per_hex: 1.20,
+      objective_progress_bonus_per_hex: 0.95,
+      objective_no_progress_penalty: 0.46,
+      objective_no_progress_attack_penalty: 0.40,
+      reaction_fire_soft_signal_enabled: true,
+      reaction_fire_soft_signal_weight: 0.04,
+      reaction_fire_soft_signal_expected_damage_scale: 4.0,
+      global_strategy_soft_enabled: true,
+      global_strategy_vp_control_net_gain_weight: 0.08,
+      global_strategy_units_in_vp_ring_weight: 0.04,
+      global_strategy_enemy_vp_threat_reduced_weight: 0.05,
+      global_strategy_sustained_vp_advantage_weight: 0.02,
+      global_strategy_role_consistency_weight: 0.03,
+      global_strategy_setup_convert_weight: 0.03,
+      global_strategy_vp_ring_radius: 2,
+      global_strategy_enemy_threat_radius: 3,
+      global_strategy_sustained_advantage_min_turns: 2,
+      global_strategy_total_cap_abs: 0.15,
+      vp_horizon_soft_enabled: true,
+      vp_horizon_soft_weight: 0.02,
+      vp_horizon_soft_cap_steps: 8.0,
     };
 
     async function loadModel() {
@@ -887,7 +1049,10 @@ def _model_html() -> str:
         ["Episodes/Iter", trainCfg.episodes_per_iter || "-"],
         ["Temperature", fmtDashNum(trainSelf.mcts_temperature, 3)],
         ["Dirichlet Epsilon", fmtDashNum(trainSelf.mcts_dirichlet_epsilon, 3)],
+        ["VP Tiebreak Epsilon", fmtDashNum(trainSelf.mcts_vp_tiebreak_epsilon, 3)],
         ["Progress Bonus/Hex", fmtDashNum(((trainSelf.reward_shaping || {}).objective_progress_bonus_per_hex), 3)],
+        ["No-Progress Penalty", fmtDashNum(((trainSelf.reward_shaping || {}).objective_no_progress_penalty), 3)],
+        ["No-Progress Attack Penalty", fmtDashNum(((trainSelf.reward_shaping || {}).objective_no_progress_attack_penalty), 3)],
         ["Capture Bonus", fmtDashNum(((trainSelf.reward_shaping || {}).capture_bonus), 3)],
         ["VP Capture Bonus/Hex", fmtDashNum(((trainSelf.reward_shaping || {}).vp_capture_bonus_per_hex), 3)],
       ];
@@ -1001,24 +1166,38 @@ def _model_html() -> str:
       const preflightWarnings = Array.isArray(trainBlocks.preflight_warnings) ? trainBlocks.preflight_warnings : [];
       function pull(label, explicitValue, fallbackKey) {
         if (explicitValue !== undefined && explicitValue !== null && explicitValue !== "") {
-          return { label: label, value: explicitValue, source: "run_config" };
+          return { label: label, value: explicitValue, source: "run_config", status: "ok" };
         }
         if (Object.prototype.hasOwnProperty.call(objectiveRewardDefaults, fallbackKey || label)) {
           return {
             label: label,
             value: objectiveRewardDefaults[fallbackKey || label],
             source: "fallback_default",
+            status: "degraded",
           };
         }
-        return { label: label, value: "N/A", source: "legacy_missing" };
+        return { label: label, value: "N/A", source: "missing", status: "degraded" };
       }
       const rows = [
         { section: "Objective Head Runtime", row: pull("objective_loss_weight", trainCfg.objective_loss_weight) },
         { section: "Objective Head Runtime", row: pull("objective_target_mode", trainCfg.objective_target_mode) },
         { section: "Objective Head Runtime", row: pull("objective_pos_weight", trainCfg.objective_pos_weight) },
+        { section: "Objective Head Runtime", row: pull("mcts_vp_tiebreak_epsilon", selfCfg.mcts_vp_tiebreak_epsilon) },
         { section: "Objective Head Runtime", row: pull("objective_opportunity_max_dist", trainCfg.objective_opportunity_max_dist) },
+        { section: "Objective Head Runtime", row: pull("aux_objective_enabled", trainCfg.aux_objective_enabled) },
+        { section: "Objective Head Runtime", row: pull("aux_objective_loss_weight", trainCfg.aux_objective_loss_weight) },
+        { section: "Objective Head Runtime", row: pull("aux_intent_loss_weight", trainCfg.aux_intent_loss_weight) },
+        { section: "Objective Head Runtime", row: pull("aux_multi_vp_loss_weight", trainCfg.aux_multi_vp_loss_weight) },
+        { section: "Objective Head Runtime", row: pull("aux_multi_vp_feature_dim", trainCfg.aux_multi_vp_feature_dim) },
+        { section: "Objective Head Runtime", row: pull("aux_intent_classes", trainCfg.aux_intent_classes) },
         { section: "Objective Head Runtime", row: pull("objective_progress_positive_threshold", headCfg.progress_positive_threshold) },
         { section: "Objective Head Runtime", row: pull("objective_opportunity_near_vp_max_dist", signalCfg.opportunity_near_vp_max_dist) },
+        { section: "Q Calibration / MCTS", row: pull("mcts_q_clip_abs", selfCfg.mcts_q_clip_abs) },
+        { section: "Q Calibration / MCTS", row: pull("mcts_q_root_normalization_mode", selfCfg.mcts_q_root_normalization_mode) },
+        { section: "Q Calibration / MCTS", row: pull("mcts_q_root_normalization_strength", selfCfg.mcts_q_root_normalization_strength) },
+        { section: "Q Calibration / MCTS", row: pull("mcts_q_flat_spread_epsilon", selfCfg.mcts_q_flat_spread_epsilon) },
+        { section: "Q Calibration / MCTS", row: pull("mcts_vp_flat_q_score_epsilon", selfCfg.mcts_vp_flat_q_score_epsilon) },
+        { section: "Q Calibration / MCTS", row: pull("mcts_vp_flat_q_min_progress", selfCfg.mcts_vp_flat_q_min_progress) },
         { section: "Reward Shaping", row: pull("terminal_scale", rewardCfg.terminal_scale) },
         { section: "Reward Shaping", row: pull("damage_weight", rewardCfg.damage_weight) },
         { section: "Reward Shaping", row: pull("kill_weight", rewardCfg.kill_weight) },
@@ -1031,6 +1210,23 @@ def _model_html() -> str:
         { section: "Reward Shaping", row: pull("objective_no_progress_penalty", rewardCfg.objective_no_progress_penalty) },
         { section: "Reward Shaping", row: pull("objective_no_progress_attack_penalty", rewardCfg.objective_no_progress_attack_penalty) },
         { section: "Reward Shaping", row: pull("reaction_fire_miss_penalty", rewardCfg.reaction_fire_miss_penalty) },
+        { section: "Combat Soft Signals", row: pull("reaction_fire_soft_signal_enabled", rewardCfg.reaction_fire_soft_signal_enabled) },
+        { section: "Combat Soft Signals", row: pull("reaction_fire_soft_signal_weight", rewardCfg.reaction_fire_soft_signal_weight) },
+        { section: "Combat Soft Signals", row: pull("reaction_fire_soft_signal_expected_damage_scale", rewardCfg.reaction_fire_soft_signal_expected_damage_scale) },
+        { section: "Global Strategy Soft Signals", row: pull("global_strategy_soft_enabled", rewardCfg.global_strategy_soft_enabled) },
+        { section: "Global Strategy Soft Signals", row: pull("global_strategy_vp_control_net_gain_weight", rewardCfg.global_strategy_vp_control_net_gain_weight) },
+        { section: "Global Strategy Soft Signals", row: pull("global_strategy_units_in_vp_ring_weight", rewardCfg.global_strategy_units_in_vp_ring_weight) },
+        { section: "Global Strategy Soft Signals", row: pull("global_strategy_enemy_vp_threat_reduced_weight", rewardCfg.global_strategy_enemy_vp_threat_reduced_weight) },
+        { section: "Global Strategy Soft Signals", row: pull("global_strategy_sustained_vp_advantage_weight", rewardCfg.global_strategy_sustained_vp_advantage_weight) },
+        { section: "Global Strategy Soft Signals", row: pull("global_strategy_role_consistency_weight", rewardCfg.global_strategy_role_consistency_weight) },
+        { section: "Global Strategy Soft Signals", row: pull("global_strategy_setup_convert_weight", rewardCfg.global_strategy_setup_convert_weight) },
+        { section: "Global Strategy Soft Signals", row: pull("global_strategy_vp_ring_radius", rewardCfg.global_strategy_vp_ring_radius) },
+        { section: "Global Strategy Soft Signals", row: pull("global_strategy_enemy_threat_radius", rewardCfg.global_strategy_enemy_threat_radius) },
+        { section: "Global Strategy Soft Signals", row: pull("global_strategy_sustained_advantage_min_turns", rewardCfg.global_strategy_sustained_advantage_min_turns) },
+        { section: "Global Strategy Soft Signals", row: pull("global_strategy_total_cap_abs", rewardCfg.global_strategy_total_cap_abs) },
+        { section: "Global Strategy Soft Signals", row: pull("vp_horizon_soft_enabled", rewardCfg.vp_horizon_soft_enabled) },
+        { section: "Global Strategy Soft Signals", row: pull("vp_horizon_soft_weight", rewardCfg.vp_horizon_soft_weight) },
+        { section: "Global Strategy Soft Signals", row: pull("vp_horizon_soft_cap_steps", rewardCfg.vp_horizon_soft_cap_steps) },
         { section: "Reward Shaping", row: pull("idle_penalty", rewardCfg.idle_penalty) },
         { section: "Reward Shaping", row: pull("idle_with_options_multiplier", rewardCfg.idle_with_options_multiplier) },
         { section: "Reward Shaping", row: pull("terminal_win_bonus", rewardCfg.terminal_win_bonus) },
@@ -1050,6 +1246,9 @@ def _model_html() -> str:
       ];
       const sectionLayout = [
         { name: "Reward Shaping", wide: true },
+        { name: "Q Calibration / MCTS", wide: false },
+        { name: "Combat Soft Signals", wide: false },
+        { name: "Global Strategy Soft Signals", wide: true },
         { name: "Objective Head Runtime", wide: false },
         { name: "Objective Opportunity & Thresholds", wide: false },
       ];
@@ -1062,10 +1261,14 @@ def _model_html() -> str:
           .filter(function (entry) { return entry.section === sectionName; })
           .map(function (entry) { return entry.row; });
         const body = sectionRows.map(function (r) {
+          const statusChip = (r.status === "ok")
+            ? "<span class='ok-chip'>OK</span>"
+            : "<span class='degraded-chip'>degraded</span>";
+          const valueClass = (r.status === "ok") ? "ok-text" : ((String(r.value) === "N/A") ? "na-text" : "degraded-text");
           return "<tr>" +
             "<td style='border:1px solid #334155;padding:6px;'>" + esc(r.label) + "</td>" +
-            "<td style='border:1px solid #334155;padding:6px;'>" + esc(r.value) + "</td>" +
-            "<td style='border:1px solid #334155;padding:6px;'>" + esc(r.source) + "</td>" +
+            "<td style='border:1px solid #334155;padding:6px;'><span class='" + valueClass + "'>" + esc(r.value) + "</span></td>" +
+            "<td style='border:1px solid #334155;padding:6px;'>" + statusChip + " <span class='muted'>(" + esc(r.source) + ")</span></td>" +
             "</tr>";
         }).join("");
         return "<div class='" + sectionClass + "'>" +
@@ -1075,7 +1278,7 @@ def _model_html() -> str:
               "<thead><tr>" +
                 "<th style='text-align:left;border:1px solid #334155;padding:6px;'>parameter</th>" +
                 "<th style='text-align:left;border:1px solid #334155;padding:6px;'>active_value</th>" +
-                "<th style='text-align:left;border:1px solid #334155;padding:6px;'>source</th>" +
+                "<th style='text-align:left;border:1px solid #334155;padding:6px;'>status/source</th>" +
               "</tr></thead>" +
               "<tbody>" + body + "</tbody>" +
             "</table>" +
@@ -1088,9 +1291,9 @@ def _model_html() -> str:
         (preflightWarnings.length
           ? ('<div class="muted" style="margin-bottom:8px;color:#fbbf24;">Config preflight warnings: ' + esc(preflightWarnings.join(", ")) + '</div>')
           : "") +
-        '<div class="muted" style="margin-bottom:8px;">Source precedence: <b>run_config</b> -> <b>fallback_default</b> -> <b>legacy_missing (N/A)</b>.</div>' +
+        '<div class="muted" style="margin-bottom:8px;">OK criteria: <b>run_config</b> values are green; <b>fallback_default</b> and <b>missing (N/A)</b> are degraded.</div>' +
         "<div class='objective-reward-grid'>" + sectionTables + "</div>" +
-        "<div class='muted' style='margin-top:8px;'>Legacy runs without objective/reward blocks show N/A where no default/fallback is declared.</div>";
+        "<div class='muted' style='margin-top:8px;'>Rows marked degraded indicate fallback/defaulted or missing config coverage.</div>";
     }
 
     function renderTrainHeadDiagnostics() {
@@ -1250,21 +1453,121 @@ def _model_html() -> str:
 
     function normalizeControllerLabel(raw) {
       const p = String(raw || "").trim().toLowerCase();
-      if (p === "mcts") return "MuZero";
+      if (p === "mcts" || p === "muzero" || p === "muzero_controller") return "MuZero";
       if (p === "random") return "Random";
       if (p === "legacy/unlabeled") return "Legacy/Unlabeled";
       return "Unknown";
     }
 
+    function sideValueFromMap(src, side) {
+      if (!src || typeof src !== "object") return "";
+      const sideRaw = String(side || "");
+      const sideUp = sideRaw.toUpperCase();
+      const v = src[sideUp] || src[sideRaw] || src[String(sideRaw || "").toLowerCase()];
+      return String(v || "").trim();
+    }
+
+    function readResultMetadata(resultRow) {
+      if (!resultRow || typeof resultRow !== "object") return {};
+      const direct = resultRow.metadata;
+      if (direct && typeof direct === "object") return direct;
+      const fallback = resultRow.meta;
+      if (fallback && typeof fallback === "object") return fallback;
+      const raw = resultRow.metadata_json || resultRow.meta_json;
+      if (!raw) return {};
+      try {
+        const parsed = JSON.parse(String(raw));
+        return (parsed && typeof parsed === "object") ? parsed : {};
+      } catch (_e) {
+        return {};
+      }
+    }
+
     function controllerFor(resultRow, side) {
       const s = String(side || "").trim().toUpperCase();
       const cb = (resultRow && resultRow.controller_by_side) || {};
-      const explicit = String(cb[s] || cb[side] || "").trim();
-      if (explicit) return explicit;
+      const explicit = sideValueFromMap(cb, s);
+      if (explicit) {
+        const normalizedExplicit = normalizeControllerLabel(explicit);
+        return normalizedExplicit !== "Unknown" ? normalizedExplicit : explicit;
+      }
       const pb = (resultRow && resultRow.policy_by_side) || {};
-      const p = String(pb[s] || pb[side] || "").toLowerCase();
-      if (!p) return "Legacy/Unlabeled";
-      return normalizeControllerLabel(p);
+      const p = String(sideValueFromMap(pb, s) || "").toLowerCase();
+      if (p) return normalizeControllerLabel(p);
+      const meta = readResultMetadata(resultRow);
+      const metaCb = (meta && meta.controller_by_side) || {};
+      const metaExplicit = sideValueFromMap(metaCb, s);
+      if (metaExplicit) {
+        const normalizedMetaExplicit = normalizeControllerLabel(metaExplicit);
+        return normalizedMetaExplicit !== "Unknown" ? normalizedMetaExplicit : metaExplicit;
+      }
+      const metaPb = (meta && (meta.policy_by_side || meta.side_policy_by_side)) || {};
+      const metaPolicy = String(sideValueFromMap(metaPb, s) || "").toLowerCase();
+      if (metaPolicy) return normalizeControllerLabel(metaPolicy);
+      return "Legacy/Unlabeled";
+    }
+
+    function controllerBySideFromResult(resultRow) {
+      const row = (resultRow && typeof resultRow === "object") ? resultRow : {};
+      const meta = readResultMetadata(row);
+      const summary = (row.eval_decision_summary && typeof row.eval_decision_summary === "object") ? row.eval_decision_summary : {};
+      const byActionSide = (summary.by_action_kind_and_side && typeof summary.by_action_kind_and_side === "object")
+        ? summary.by_action_kind_and_side
+        : {};
+      const sideSet = {};
+      function registerFromMap(src) {
+        if (!src || typeof src !== "object") return;
+        for (const key of Object.keys(src)) {
+          const side = String(key || "").trim().toUpperCase();
+          if (side) sideSet[side] = true;
+        }
+      }
+      registerFromMap(row.controller_by_side);
+      registerFromMap(row.policy_by_side);
+      registerFromMap(meta.controller_by_side);
+      registerFromMap(meta.policy_by_side);
+      registerFromMap(meta.side_policy_by_side);
+      for (const key of Object.keys(byActionSide)) {
+        const side = String(((byActionSide[key] || {}).unit_side) || "").trim().toUpperCase();
+        if (side) sideSet[side] = true;
+      }
+      const sides = Object.keys(sideSet).sort((a, b) => String(a || "").localeCompare(String(b || "")));
+      if (!sides.length) {
+        return [{ side: "Unlabeled side", controller: "Unknown/Unlabeled", source: "fallback" }];
+      }
+      return sides.map(function (side) {
+        const explicit = sideValueFromMap(row.controller_by_side, side);
+        if (explicit) {
+          const normalizedExplicit = normalizeControllerLabel(explicit);
+          return { side: side, controller: normalizedExplicit !== "Unknown" ? normalizedExplicit : explicit, source: "controller_by_side" };
+        }
+        const policy = sideValueFromMap(row.policy_by_side, side);
+        if (policy) {
+          return { side: side, controller: normalizeControllerLabel(policy), source: "policy_by_side" };
+        }
+        const metaExplicit = sideValueFromMap(meta.controller_by_side, side);
+        if (metaExplicit) {
+          const normalizedMetaExplicit = normalizeControllerLabel(metaExplicit);
+          return { side: side, controller: normalizedMetaExplicit !== "Unknown" ? normalizedMetaExplicit : metaExplicit, source: "metadata" };
+        }
+        const metaPolicy = sideValueFromMap((meta && (meta.policy_by_side || meta.side_policy_by_side)) || {}, side);
+        if (metaPolicy) {
+          return { side: side, controller: normalizeControllerLabel(metaPolicy), source: "metadata" };
+        }
+        return { side: side, controller: "Unknown/Unlabeled", source: "fallback" };
+      });
+    }
+
+    function collectSidesFromResult(resultRow) {
+      const out = [];
+      const summary = (resultRow && resultRow.eval_decision_summary) || {};
+      const by = summary.by_action_kind_and_side || {};
+      for (const k of Object.keys(by || {})) {
+        const row = by[k] || {};
+        const s = String(row.unit_side || "").toUpperCase();
+        if (s) out.push(s);
+      }
+      return out;
     }
 
     function aggregateHeadDiagnostics(evalRows) {
@@ -1331,8 +1634,11 @@ def _model_html() -> str:
       function sideAllowed(resultRow, side, selectedSide, selectedController) {
         const s = String(side || "").toUpperCase();
         if (selectedSide !== "__all__" && s !== selectedSide) return false;
-        const c = controllerFor(resultRow, s);
-        if (selectedController !== "__all__" && c !== selectedController) return false;
+        const c = normalizeControllerLabel(controllerFor(resultRow, s));
+        const selectedCtrlNorm = selectedController === "__all__"
+          ? "__all__"
+          : normalizeControllerLabel(selectedController);
+        if (selectedCtrlNorm !== "__all__" && c !== selectedCtrlNorm) return false;
         return true;
       }
       const muzeroRows = rows.flatMap(function (r) {
@@ -1437,6 +1743,8 @@ def _model_html() -> str:
       }
       function fmtNum(v) { return (v === null || v === undefined) ? "-" : Number(v).toFixed(3); }
       function fmtPct(v) { return (v === null || v === undefined) ? "-" : (Number(v) * 100).toFixed(1) + "%"; }
+      function fmtNumNa(v) { return (v === null || v === undefined) ? "N/A" : Number(v).toFixed(3); }
+      function fmtPctNa(v) { return (v === null || v === undefined) ? "N/A" : (Number(v) * 100).toFixed(1) + "%"; }
       function aggregateXaiVpKpis(resultRows, selectedSide, selectedController) {
         const totals = {
           episodes: 0,
@@ -1456,6 +1764,26 @@ def _model_html() -> str:
           terminal_rate: 0,
           reaction_fire_activation_rate: 0,
           melee_success_rate: 0,
+          vp_approach_rate_eligible_steps: 0,
+          vp_approach_rate_positive_steps: 0,
+          vp_regret_delta_count: 0,
+          vp_regret_delta_mean_weighted_sum: 0,
+          vp_regret_delta_p95_weighted_sum: 0,
+          q_saturation_candidate_rows: 0,
+          q_saturation_hits: 0,
+          decision_spread_step_count: 0,
+          decision_spread_mean_weighted_sum: 0,
+          decision_spread_p50_weighted_sum: 0,
+          decision_spread_p95_weighted_sum: 0,
+          path_to_capture_length_count: 0,
+          path_to_capture_length_weighted_sum: 0,
+          path_to_capture_length_p95_weighted_sum: 0,
+          opportunity_conversion_early_opportunity_steps: 0,
+          opportunity_conversion_early_converted_steps: 0,
+          opportunity_conversion_mid_opportunity_steps: 0,
+          opportunity_conversion_mid_converted_steps: 0,
+          opportunity_conversion_late_opportunity_steps: 0,
+          opportunity_conversion_late_converted_steps: 0,
           weight_n: 0,
         };
         for (const row of (resultRows || [])) {
@@ -1481,6 +1809,26 @@ def _model_html() -> str:
               xai_latent_signal_coverage: 0,
               xai_vp_capture_take_rate: 0,
               xai_vp_immediate_capture_take_rate: 0,
+              vp_approach_rate_eligible_steps: 0,
+              vp_approach_rate_positive_steps: 0,
+              vp_regret_delta_count: 0,
+              vp_regret_delta_mean: 0,
+              vp_regret_delta_p95: 0,
+              q_saturation_candidate_rows: 0,
+              q_saturation_hits: 0,
+              decision_spread_step_count: 0,
+              decision_spread_mean: 0,
+              decision_spread_p50: 0,
+              decision_spread_p95: 0,
+              path_to_capture_length_count: 0,
+              path_to_capture_length_mean: 0,
+              path_to_capture_length_p95: 0,
+              opportunity_conversion_early_opportunity_steps: 0,
+              opportunity_conversion_early_converted_steps: 0,
+              opportunity_conversion_mid_opportunity_steps: 0,
+              opportunity_conversion_mid_converted_steps: 0,
+              opportunity_conversion_late_opportunity_steps: 0,
+              opportunity_conversion_late_converted_steps: 0,
             };
             for (const side of sides) {
               const ks = bySide[side] || {};
@@ -1494,6 +1842,26 @@ def _model_html() -> str:
               merged.xai_latent_signal_coverage += Number(ks.xai_latent_signal_coverage || 0);
               merged.xai_vp_capture_take_rate += Number(ks.xai_vp_capture_take_rate || 0);
               merged.xai_vp_immediate_capture_take_rate += Number(ks.xai_vp_immediate_capture_take_rate || 0);
+              merged.vp_approach_rate_eligible_steps += Number(ks.vp_approach_rate_eligible_steps || 0);
+              merged.vp_approach_rate_positive_steps += Number(ks.vp_approach_rate_positive_steps || 0);
+              merged.vp_regret_delta_count += Number(ks.vp_regret_delta_count || 0);
+              merged.vp_regret_delta_mean += Number(ks.vp_regret_delta_mean || 0);
+              merged.vp_regret_delta_p95 += Number(ks.vp_regret_delta_p95 || 0);
+              merged.q_saturation_candidate_rows += Number(ks.q_saturation_candidate_rows || 0);
+              merged.q_saturation_hits += Number(ks.q_saturation_hits || 0);
+              merged.decision_spread_step_count += Number(ks.decision_spread_step_count || 0);
+              merged.decision_spread_mean += Number(ks.decision_spread_mean || 0);
+              merged.decision_spread_p50 += Number(ks.decision_spread_p50 || 0);
+              merged.decision_spread_p95 += Number(ks.decision_spread_p95 || 0);
+              merged.path_to_capture_length_count += Number(ks.path_to_capture_length_count || 0);
+              merged.path_to_capture_length_mean += Number(ks.path_to_capture_length_mean || 0);
+              merged.path_to_capture_length_p95 += Number(ks.path_to_capture_length_p95 || 0);
+              merged.opportunity_conversion_early_opportunity_steps += Number(ks.opportunity_conversion_early_opportunity_steps || 0);
+              merged.opportunity_conversion_early_converted_steps += Number(ks.opportunity_conversion_early_converted_steps || 0);
+              merged.opportunity_conversion_mid_opportunity_steps += Number(ks.opportunity_conversion_mid_opportunity_steps || 0);
+              merged.opportunity_conversion_mid_converted_steps += Number(ks.opportunity_conversion_mid_converted_steps || 0);
+              merged.opportunity_conversion_late_opportunity_steps += Number(ks.opportunity_conversion_late_opportunity_steps || 0);
+              merged.opportunity_conversion_late_converted_steps += Number(ks.opportunity_conversion_late_converted_steps || 0);
             }
             const nSides = Math.max(1, sides.length);
             merged.xai_policy_confidence_mean /= nSides;
@@ -1520,10 +1888,38 @@ def _model_html() -> str:
           totals.terminal_rate += Number(row.terminal_rate || 0) * eps;
           totals.reaction_fire_activation_rate += Number(k.reaction_fire_activation_rate || 0) * eps;
           totals.melee_success_rate += Number(k.melee_success_rate || 0) * eps;
+          totals.vp_approach_rate_eligible_steps += Number(k.vp_approach_rate_eligible_steps || 0);
+          totals.vp_approach_rate_positive_steps += Number(k.vp_approach_rate_positive_steps || 0);
+          totals.vp_regret_delta_count += Number(k.vp_regret_delta_count || 0);
+          totals.vp_regret_delta_mean_weighted_sum += Number(k.vp_regret_delta_mean || 0) * Number(k.vp_regret_delta_count || 0);
+          totals.vp_regret_delta_p95_weighted_sum += Number(k.vp_regret_delta_p95 || 0) * eps;
+          totals.q_saturation_candidate_rows += Number(k.q_saturation_candidate_rows || 0);
+          totals.q_saturation_hits += Number(k.q_saturation_hits || 0);
+          totals.decision_spread_step_count += Number(k.decision_spread_step_count || 0);
+          totals.decision_spread_mean_weighted_sum += Number(k.decision_spread_mean || 0) * Number(k.decision_spread_step_count || 0);
+          totals.decision_spread_p50_weighted_sum += Number(k.decision_spread_p50 || 0) * eps;
+          totals.decision_spread_p95_weighted_sum += Number(k.decision_spread_p95 || 0) * eps;
+          totals.path_to_capture_length_count += Number(k.path_to_capture_length_count || 0);
+          totals.path_to_capture_length_weighted_sum += Number(k.path_to_capture_length_mean || 0) * Number(k.path_to_capture_length_count || 0);
+          totals.path_to_capture_length_p95_weighted_sum += Number(k.path_to_capture_length_p95 || 0) * Number(k.path_to_capture_length_count || 0);
+          totals.opportunity_conversion_early_opportunity_steps += Number(k.opportunity_conversion_early_opportunity_steps || 0);
+          totals.opportunity_conversion_early_converted_steps += Number(k.opportunity_conversion_early_converted_steps || 0);
+          totals.opportunity_conversion_mid_opportunity_steps += Number(k.opportunity_conversion_mid_opportunity_steps || 0);
+          totals.opportunity_conversion_mid_converted_steps += Number(k.opportunity_conversion_mid_converted_steps || 0);
+          totals.opportunity_conversion_late_opportunity_steps += Number(k.opportunity_conversion_late_opportunity_steps || 0);
+          totals.opportunity_conversion_late_converted_steps += Number(k.opportunity_conversion_late_converted_steps || 0);
           totals.weight_n += eps;
         }
         const den = Math.max(1, Number(totals.weight_n || 0));
         const decisions = Math.max(1, Number(totals.xai_decision_steps || 0));
+        const regretCount = Number(totals.vp_regret_delta_count || 0);
+        const spreadCount = Number(totals.decision_spread_step_count || 0);
+        const pathCount = Number(totals.path_to_capture_length_count || 0);
+        const approachEligible = Number(totals.vp_approach_rate_eligible_steps || 0);
+        const qSatCandidates = Number(totals.q_saturation_candidate_rows || 0);
+        const oppEarly = Number(totals.opportunity_conversion_early_opportunity_steps || 0);
+        const oppMid = Number(totals.opportunity_conversion_mid_opportunity_steps || 0);
+        const oppLate = Number(totals.opportunity_conversion_late_opportunity_steps || 0);
         return {
           episodes: totals.episodes,
           xai_decision_steps: totals.xai_decision_steps,
@@ -1544,6 +1940,32 @@ def _model_html() -> str:
           terminal_rate: totals.terminal_rate / den,
           reaction_fire_activation_rate: totals.reaction_fire_activation_rate / den,
           melee_success_rate: totals.melee_success_rate / den,
+          vp_approach_rate_eligible_steps: approachEligible,
+          vp_approach_rate_positive_steps: Number(totals.vp_approach_rate_positive_steps || 0),
+          vp_approach_rate: approachEligible > 0 ? (Number(totals.vp_approach_rate_positive_steps || 0) / approachEligible) : null,
+          vp_regret_delta_count: regretCount,
+          vp_regret_delta_mean: regretCount > 0 ? (totals.vp_regret_delta_mean_weighted_sum / regretCount) : null,
+          vp_regret_delta_p95: den > 0 ? (totals.vp_regret_delta_p95_weighted_sum / den) : null,
+          q_saturation_candidate_rows: qSatCandidates,
+          q_saturation_hits: Number(totals.q_saturation_hits || 0),
+          q_saturation_rate: qSatCandidates > 0 ? (Number(totals.q_saturation_hits || 0) / qSatCandidates) : null,
+          decision_spread_step_count: spreadCount,
+          decision_spread_mean: spreadCount > 0 ? (totals.decision_spread_mean_weighted_sum / spreadCount) : null,
+          decision_spread_p50: den > 0 ? (totals.decision_spread_p50_weighted_sum / den) : null,
+          decision_spread_p95: den > 0 ? (totals.decision_spread_p95_weighted_sum / den) : null,
+          path_to_capture_length_count: pathCount,
+          path_to_capture_length_mean: pathCount > 0 ? (totals.path_to_capture_length_weighted_sum / pathCount) : null,
+          path_to_capture_length_p95: pathCount > 0 ? (totals.path_to_capture_length_p95_weighted_sum / pathCount) : null,
+          opportunity_conversion_early_opportunity_steps: oppEarly,
+          opportunity_conversion_early_converted_steps: Number(totals.opportunity_conversion_early_converted_steps || 0),
+          opportunity_conversion_early_rate: oppEarly > 0 ? (Number(totals.opportunity_conversion_early_converted_steps || 0) / oppEarly) : null,
+          opportunity_conversion_mid_opportunity_steps: oppMid,
+          opportunity_conversion_mid_converted_steps: Number(totals.opportunity_conversion_mid_converted_steps || 0),
+          opportunity_conversion_mid_rate: oppMid > 0 ? (Number(totals.opportunity_conversion_mid_converted_steps || 0) / oppMid) : null,
+          opportunity_conversion_late_opportunity_steps: oppLate,
+          opportunity_conversion_late_converted_steps: Number(totals.opportunity_conversion_late_converted_steps || 0),
+          opportunity_conversion_late_rate: oppLate > 0 ? (Number(totals.opportunity_conversion_late_converted_steps || 0) / oppLate) : null,
+          opportunity_conversion_turn_buckets_definition: "early: turn<=3, mid: turn 4-7, late: turn>=8",
         };
       }
       function aggregateHeadDiagnostics(evalRows) {
@@ -1608,17 +2030,6 @@ def _model_html() -> str:
       function resultController(resultRow, side) {
         return controllerFor(resultRow, side);
       }
-      function collectSidesFromResult(resultRow) {
-        const out = [];
-        const summary = (resultRow && resultRow.eval_decision_summary) || {};
-        const by = summary.by_action_kind_and_side || {};
-        for (const k of Object.keys(by || {})) {
-          const row = by[k] || {};
-          const s = String(row.unit_side || "").toUpperCase();
-          if (s) out.push(s);
-        }
-        return out;
-      }
       const sides = Array.from(new Set(rows.flatMap(r => (Array.isArray(r.results) ? r.results : []).flatMap(x => collectSidesFromResult(x))))).sort();
       const controllers = ["MuZero", "Random", "Legacy/Unlabeled", "Unknown"];
       if (filtersHost) {
@@ -1645,12 +2056,33 @@ def _model_html() -> str:
         const p = (((document.getElementById("vpFilterProfile") || {}).value)) || "__all__";
         const s = (((document.getElementById("vpFilterSide") || {}).value)) || "__all__";
         const c = (((document.getElementById("vpFilterController") || {}).value)) || "__all__";
+        function resultMatchesUnifiedFilters(resultRow) {
+          if (!resultRow || typeof resultRow !== "object") return false;
+          if (p !== "__all__" && String(resultRow.matchup_profile || "") !== String(p)) return false;
+          if (s === "__all__" && c === "__all__") return true;
+          const sidesLocal = collectSidesFromResult(resultRow);
+          if (!Array.isArray(sidesLocal) || !sidesLocal.length) return false;
+          return sidesLocal.some(function (side) {
+            return sideAllowed(resultRow, side, s, c);
+          });
+        }
         const evalRowsForTabs = rows.filter(r =>
           (e === "__all__" || String(r.eval_id || "") === String(e)) &&
           (p === "__all__" || (Array.isArray(r.results) && r.results.some(x => String(x.matchup_profile || "") === String(p)))) &&
           (s === "__all__" || (Array.isArray(r.results) && r.results.some(x => collectSidesFromResult(x).includes(s)))) &&
           (c === "__all__" || (Array.isArray(r.results) && r.results.some(x => collectSidesFromResult(x).some(side => resultController(x, side) === c))))
         );
+        const evalRowsForUnified = evalRowsForTabs
+          .map(function (er) {
+            const results = Array.isArray(er.results)
+              ? er.results.filter(resultMatchesUnifiedFilters)
+              : [];
+            if (!results.length) return null;
+            const out = Object.assign({}, er);
+            out.results = results;
+            return out;
+          })
+          .filter(Boolean);
         const countEl = document.getElementById("vpFilterCount");
         if (countEl) countEl.textContent = String(evalRowsForTabs.length) + "/" + String(rows.length) + " eval rows";
         const warningEl = document.getElementById("vpFilterControllerWarning");
@@ -1663,10 +2095,7 @@ def _model_html() -> str:
           }, 0);
           warningEl.textContent = legacyRows > 0 ? ("legacy unlabeled rows: " + String(legacyRows)) : "";
         }
-        // Replay should stay available even if profile/side/controller narrow data too much.
-        const replayRows = rows.filter(r =>
-          (e === "__all__" || String(r.eval_id || "") === String(e))
-        );
+        const replayRows = evalRowsForUnified;
         const filteredMuzeroRows = muzeroRows.filter(r =>
           (e === "__all__" || String(r.eval_id || "") === String(e)) &&
           (p === "__all__" || String(r.matchup_profile || "") === String(p))
@@ -1767,6 +2196,42 @@ def _model_html() -> str:
           '<td style="border:1px solid #334155;padding:6px;">' + esc(fmtNum(xai.xai_policy_margin_mean)) + '</td>' +
           '<td style="border:1px solid #334155;padding:6px;">' + esc(fmtPct(xai.xai_latent_signal_coverage)) + '</td>' +
           '</tr></tbody></table></div>';
+        htmlVps += '<div style="margin-top:12px;"><h3 style="margin:0 0 6px 0;">Decision-making KPIs</h3>' +
+          '<table style="width:100%;border-collapse:collapse;font-size:12px;"><thead><tr>' +
+          '<th style="border:1px solid #334155;padding:6px;">vp_approach_rate</th>' +
+          '<th style="border:1px solid #334155;padding:6px;">vp_regret_delta_mean</th>' +
+          '<th style="border:1px solid #334155;padding:6px;">vp_regret_delta_p95</th>' +
+          '<th style="border:1px solid #334155;padding:6px;">q_saturation_rate</th>' +
+          '<th style="border:1px solid #334155;padding:6px;">decision_spread_mean</th>' +
+          '<th style="border:1px solid #334155;padding:6px;">decision_spread_p50</th>' +
+          '<th style="border:1px solid #334155;padding:6px;">decision_spread_p95</th>' +
+          '<th style="border:1px solid #334155;padding:6px;">path_to_capture_length_mean</th>' +
+          '<th style="border:1px solid #334155;padding:6px;">path_to_capture_length_p95</th>' +
+          '</tr></thead><tbody><tr>' +
+          '<td style="border:1px solid #334155;padding:6px;">' + esc(fmtPctNa(xai.vp_approach_rate)) + '</td>' +
+          '<td style="border:1px solid #334155;padding:6px;">' + esc(fmtNumNa(xai.vp_regret_delta_mean)) + '</td>' +
+          '<td style="border:1px solid #334155;padding:6px;">' + esc(fmtNumNa(xai.vp_regret_delta_p95)) + '</td>' +
+          '<td style="border:1px solid #334155;padding:6px;">' + esc(fmtPctNa(xai.q_saturation_rate)) + '</td>' +
+          '<td style="border:1px solid #334155;padding:6px;">' + esc(fmtNumNa(xai.decision_spread_mean)) + '</td>' +
+          '<td style="border:1px solid #334155;padding:6px;">' + esc(fmtNumNa(xai.decision_spread_p50)) + '</td>' +
+          '<td style="border:1px solid #334155;padding:6px;">' + esc(fmtNumNa(xai.decision_spread_p95)) + '</td>' +
+          '<td style="border:1px solid #334155;padding:6px;">' + esc(fmtNumNa(xai.path_to_capture_length_mean)) + '</td>' +
+          '<td style="border:1px solid #334155;padding:6px;">' + esc(fmtNumNa(xai.path_to_capture_length_p95)) + '</td>' +
+          '</tr></tbody></table>' +
+          '<div class="muted" style="margin-top:4px;">N/A means producer telemetry for that KPI is unavailable after current filters.</div>' +
+          '</div>';
+        htmlVps += '<div style="margin-top:12px;"><h3 style="margin:0 0 6px 0;">Opportunity conversion by turn</h3>' +
+          '<div class="muted" style="margin-bottom:6px;">Buckets: ' + esc(String(xai.opportunity_conversion_turn_buckets_definition || "early: turn<=3, mid: turn 4-7, late: turn>=8")) + '</div>' +
+          '<table style="width:100%;border-collapse:collapse;font-size:12px;"><thead><tr>' +
+          '<th style="border:1px solid #334155;padding:6px;">bucket</th>' +
+          '<th style="border:1px solid #334155;padding:6px;">opportunity_steps</th>' +
+          '<th style="border:1px solid #334155;padding:6px;">converted_steps</th>' +
+          '<th style="border:1px solid #334155;padding:6px;">conversion_rate</th>' +
+          '</tr></thead><tbody>' +
+          '<tr><td style="border:1px solid #334155;padding:6px;">early</td><td style="border:1px solid #334155;padding:6px;">' + esc(String(Math.round(Number(xai.opportunity_conversion_early_opportunity_steps || 0)))) + '</td><td style="border:1px solid #334155;padding:6px;">' + esc(String(Math.round(Number(xai.opportunity_conversion_early_converted_steps || 0)))) + '</td><td style="border:1px solid #334155;padding:6px;">' + esc(fmtPctNa(xai.opportunity_conversion_early_rate)) + '</td></tr>' +
+          '<tr><td style="border:1px solid #334155;padding:6px;">mid</td><td style="border:1px solid #334155;padding:6px;">' + esc(String(Math.round(Number(xai.opportunity_conversion_mid_opportunity_steps || 0)))) + '</td><td style="border:1px solid #334155;padding:6px;">' + esc(String(Math.round(Number(xai.opportunity_conversion_mid_converted_steps || 0)))) + '</td><td style="border:1px solid #334155;padding:6px;">' + esc(fmtPctNa(xai.opportunity_conversion_mid_rate)) + '</td></tr>' +
+          '<tr><td style="border:1px solid #334155;padding:6px;">late</td><td style="border:1px solid #334155;padding:6px;">' + esc(String(Math.round(Number(xai.opportunity_conversion_late_opportunity_steps || 0)))) + '</td><td style="border:1px solid #334155;padding:6px;">' + esc(String(Math.round(Number(xai.opportunity_conversion_late_converted_steps || 0)))) + '</td><td style="border:1px solid #334155;padding:6px;">' + esc(fmtPctNa(xai.opportunity_conversion_late_rate)) + '</td></tr>' +
+          '</tbody></table></div>';
         htmlVps += '<div style="margin-top:12px;"><h3 style="margin:0 0 6px 0;">Additional diagnostics</h3>' +
           '<table style="width:100%;border-collapse:collapse;font-size:12px;"><thead><tr>' +
           '<th style="border:1px solid #334155;padding:6px;">vp_conversion_efficiency</th>' +
@@ -1787,8 +2252,9 @@ def _model_html() -> str:
           '</tr></tbody></table></div>';
         root.innerHTML = htmlVps;
         renderHeadDiagnostics(evalRowsForTabs);
-        renderUnifiedActions(evalRowsForTabs, { side: s, controller: c, sideAllowed: sideAllowed });
-        renderEvalDecisions(evalRowsForTabs, { side: s, controller: c, sideAllowed: sideAllowed });
+        renderEvalMetrics(evalRowsForUnified, { side: s, controller: c, sideAllowed: sideAllowed });
+        renderUnifiedActions(evalRowsForUnified, { side: s, controller: c, sideAllowed: sideAllowed });
+        renderEvalDecisions(evalRowsForUnified, { side: s, controller: c, sideAllowed: sideAllowed });
         renderMatchReplay(replayRows);
         // Flow graph: keep it alive and filtered by current selectors.
         if (typeof _buildFlowDataset === "function" && typeof _renderFlowGraph === "function") {
@@ -1827,9 +2293,776 @@ def _model_html() -> str:
       if (fc) fc.onchange = applySimpleFilters;
       applySimpleFilters();
     }
+      function renderEvalMetrics(filteredResultRows, filterCtx) {
+        const host = document.getElementById("evalMetricsRoot");
+        if (!host) return;
+        const sourceRows = Array.isArray(filteredResultRows) ? filteredResultRows : [];
+        const sideAllowedFn = (filterCtx && typeof filterCtx.sideAllowed === "function")
+          ? filterCtx.sideAllowed
+          : function () { return true; };
+        const selectedSide = (filterCtx && filterCtx.side) || "__all__";
+        const selectedController = (filterCtx && filterCtx.controller) || "__all__";
+        const channels = [
+          { key: "obs_unit_position", label: "obs_unit_position", layer: "input", source: "observation_stack:unit_positions", nonNumeric: true, getter: function (step) { return containerFieldPresent(step, ["unit_positions", "units"]); } },
+          { key: "obs_unit_hp_map", label: "obs_unit_hp_map", layer: "input", source: "observation_stack:unit_hp_map", nonNumeric: true, getter: function (step) { return containerFieldPresent(step, ["unit_hp_map"]); } },
+          { key: "obs_unit_alive_map", label: "obs_unit_alive_map", layer: "input", source: "observation_stack:unit_alive_map", nonNumeric: true, getter: function (step) { return containerFieldPresent(step, ["unit_alive_map"]); } },
+          { key: "obs_vp_map", label: "obs_vp_map", layer: "input", source: "observation_stack:vp_map", nonNumeric: true, getter: function (step) { return containerFieldPresent(step, ["vp_map", "objective_map"]); } },
+          { key: "obs_enemy_vp_threat_map", label: "obs_enemy_vp_threat_map", layer: "input", source: "observation_stack:obs_enemy_vp_threat_map", nonNumeric: true, getter: function (step) { return containerFieldPresent(step, ["obs_enemy_vp_threat_map"]); } },
+          { key: "obs_terrain_type_map", label: "obs_terrain_type_map", layer: "input", source: "observation_stack:terrain_type_by_hex", nonNumeric: true, getter: function (step) { return containerFieldPresent(step, ["obs_terrain_type_map"]); } },
+          { key: "obs_terrain_cover_map", label: "obs_terrain_cover_map", layer: "input", source: "observation_stack:terrain_cover_by_hex", nonNumeric: true, getter: function (step) { return containerFieldPresent(step, ["obs_terrain_cover_map", "terrain_cover_by_hex"]); } },
+          { key: "obs_terrain_los_block_map", label: "obs_terrain_los_block_map", layer: "input", source: "observation_stack:terrain_los_block_by_hex", nonNumeric: true, getter: function (step) { return containerFieldPresent(step, ["obs_terrain_los_block_map", "terrain_los_block_by_hex"]); } },
+          { key: "obs_terrain_move_cost_map", label: "obs_terrain_move_cost_map", layer: "input", source: "observation_stack:terrain_move_cost_by_hex", nonNumeric: true, getter: function (step) { return containerFieldPresent(step, ["obs_terrain_move_cost_map", "terrain_move_cost_by_hex"]); } },
+          { key: "obs_fortification_type_map", label: "obs_fortification_type_map", layer: "input", source: "observation_stack:fortification_type_by_hex", nonNumeric: true, getter: function (step) { return containerFieldPresent(step, ["obs_fortification_type_map"]); } },
+          { key: "obs_fortification_edge_map", label: "obs_fortification_edge_map", layer: "input", source: "observation_stack:fortification_edge_by_hex", nonNumeric: true, getter: function (step) { return containerFieldPresent(step, ["obs_fortification_edge_map"]); } },
+          { key: "obs_reachable_hex_mask_by_unit", label: "obs_reachable_hex_mask_by_unit", layer: "input", source: "observation_stack:obs_reachable_hex_mask_by_unit", nonNumeric: true, getter: function (step) { return containerFieldPresent(step, ["obs_reachable_hex_mask_by_unit"]); } },
+          { key: "obs_attackable_hex_mask_by_unit", label: "obs_attackable_hex_mask_by_unit", layer: "input", source: "observation_stack:obs_attackable_hex_mask_by_unit", nonNumeric: true, getter: function (step) { return containerFieldPresent(step, ["obs_attackable_hex_mask_by_unit"]); } },
+          { key: "obs_vp_ownership_ttl", label: "obs_vp_ownership_ttl", layer: "input", source: "observation_stack:obs_vp_ownership_ttl", nonNumeric: true, getter: function (step) { return containerFieldPresent(step, ["obs_vp_ownership_ttl"]); } },
+          { key: "obs_enemy_reaction_fire_risk", label: "obs_enemy_reaction_fire_risk", layer: "input", source: "observation_stack:obs_enemy_reaction_fire_risk", getter: function (step) { return numberField(step, "obs_enemy_reaction_fire_risk"); } },
+          { key: "obs_unit_side", label: "obs_unit_side", layer: "input", source: "observation_stack:unit_side", nonNumeric: true, getter: function (step) { return scalarFieldPresent(step, ["unit_side", "to_play"]); } },
+          { key: "mcts_prior", label: "mcts_prior", layer: "decision", source: "producer field:mcts_prior | mcts_action_candidates[].policy_prior", getter: function (step) { return numberFieldProducerAware(step, { topLevelKeys: ["mcts_prior"], decisionComponentKeys: ["policy_prior"], availabilityKeys: ["mcts_prior_available"], sourceKeys: ["mcts_prior_source"] }); } },
+          { key: "mcts_q_value", label: "mcts_q_value", layer: "decision", source: "producer field:mcts_q_value | mcts_action_candidates[].mcts_q_value", getter: function (step) { return numberFieldProducerAware(step, { topLevelKeys: ["mcts_q_value"], decisionComponentKeys: ["mcts_q_value", "q_value"], availabilityKeys: ["mcts_q_value_available"], sourceKeys: ["mcts_q_value_source"] }); } },
+          { key: "mcts_u_value", label: "mcts_u_value", layer: "decision", source: "producer field:mcts_u_value | mcts_action_candidates[].mcts_u_value", getter: function (step) { return numberFieldProducerAware(step, { topLevelKeys: ["mcts_u_value"], decisionComponentKeys: ["mcts_u_value", "u_value"], availabilityKeys: ["mcts_u_value_available"], sourceKeys: ["mcts_u_value_source"] }); } },
+          { key: "vp_progress", label: "vp_progress", layer: "decision", source: "producer field:vp_progress", getter: function (step) { return numberField(step, "vp_progress"); } },
+          { key: "mcts_success_prob_proxy", label: "mcts_success_prob_proxy", layer: "decision", source: "producer field:mcts_success_prob_proxy | selected_action.decision_components.success_prob_proxy", getter: function (step) { return numberFieldProducerAware(step, { topLevelKeys: ["mcts_success_prob_proxy"], decisionComponentKeys: ["mcts_success_prob_proxy", "success_prob_proxy"], availabilityKeys: ["mcts_success_prob_proxy_available"], sourceKeys: ["mcts_success_prob_proxy_source"] }); } },
+          { key: "mcts_success_component", label: "mcts_success_component", layer: "decision", source: "producer field:mcts_success_component | selected_action.decision_components.success_component", getter: function (step) { return numberFieldProducerAware(step, { topLevelKeys: ["mcts_success_component"], decisionComponentKeys: ["mcts_success_component", "success_component"], availabilityKeys: ["mcts_success_component_available"], sourceKeys: ["mcts_success_component_source"] }); } },
+          { key: "vp_horizon_steps", label: "vp_horizon_steps", layer: "decision", source: "producer field:vp_horizon_steps | selected_action.decision_components.vp_horizon_steps", getter: function (step) { return numberFieldProducerAware(step, { topLevelKeys: ["vp_horizon_steps"], decisionComponentKeys: ["vp_horizon_steps"], availabilityKeys: ["vp_horizon_available"], sourceKeys: ["vp_horizon_source"] }); } },
+          { key: "vp_horizon_signal", label: "vp_horizon_signal", layer: "decision", source: "producer field:vp_horizon_signal | selected_action.decision_components.vp_horizon_signal", getter: function (step) { return numberFieldMulti(step, ["vp_horizon_signal"], ["vp_horizon_signal"]); } },
+          { key: "vp_horizon_component", label: "vp_horizon_component", layer: "decision", source: "producer field:vp_horizon_component | selected_action.decision_components.vp_horizon_component", getter: function (step) { return numberFieldMulti(step, ["vp_horizon_component"], ["vp_horizon_component"]); } },
+          { key: "vp_horizon_decision_component", label: "vp_horizon_decision_component", layer: "decision", source: "producer field:vp_horizon_decision_component | selected_action.decision_components.vp_horizon_decision_component", getter: function (step) { return numberFieldMulti(step, ["vp_horizon_decision_component"], ["vp_horizon_component", "vp_horizon_decision_component"]); } },
+          { key: "objective_soft_reward_component", label: "objective_soft_reward_component", layer: "decision", source: "producer field:objective_soft_reward_component", getter: function (step) { return numberFieldMulti(step, ["objective_soft_reward_component"], ["objective_soft_reward_component"]); } },
+          { key: "global_strategy_soft_reward_component", label: "global_strategy_soft_reward_component", layer: "decision", source: "producer field:global_strategy_soft_reward_component", getter: function (step) { return numberFieldMulti(step, ["global_strategy_soft_reward_component"], ["global_strategy_soft_reward_component"]); } },
+          { key: "reaction_fire_soft_reward_component", label: "reaction_fire_soft_reward_component", layer: "decision", source: "producer field:reaction_fire_soft_reward_component", getter: function (step) { return numberFieldProducerAware(step, { topLevelKeys: ["reaction_fire_soft_reward_component"], decisionComponentKeys: ["reaction_fire_soft_reward_component"], availabilityKeys: ["reaction_fire_soft_reward_component_available"], sourceKeys: ["reaction_fire_soft_reward_component_source"] }); } },
+          { key: "reaction_exposure_component", label: "reaction_exposure_component", layer: "decision", source: "producer field:reaction_exposure_component", getter: function (step) { return numberFieldProducerAware(step, { topLevelKeys: ["reaction_exposure_component"], decisionComponentKeys: ["reaction_exposure_component"], availabilityKeys: ["reaction_exposure_component_available"], sourceKeys: ["reaction_exposure_component_source"] }); } },
+          { key: "strategy_label", label: "strategy_label", layer: "telemetry", source: "producer field:strategy_label", nonNumeric: true, getter: function (step) { return scalarFieldPresent(step, ["strategy_label"]); } },
+          { key: "tie_break_term", label: "tie_break_term", layer: "telemetry", source: "producer field:selected_action.decision_components.tie_break_term", getter: function (step) { return selectedDecisionComponent(step, "tie_break_term"); } },
+          { key: "decision_score_selected", label: "decision_score_selected", layer: "telemetry", source: "producer field:real_decision_score | selected_action.real_decision_score", getter: function (step) { return numberFieldProducerAware(step, { topLevelKeys: ["decision_score_selected", "real_decision_score"], decisionComponentKeys: ["real_decision_score", "final_score", "mcts_puct_score"], availabilityKeys: ["decision_score_selected_available"], sourceKeys: ["decision_score_selected_source"] }); } },
+          { key: "unit_prefilter_enabled", label: "unit_prefilter_enabled", layer: "telemetry", source: "producer field:unit_prefilter_enabled", getter: function (step) { return numberField(step, "unit_prefilter_enabled"); } },
+          { key: "unit_prefilter_constrained_count", label: "unit_prefilter_constrained_count", layer: "telemetry", source: "producer field:unit_prefilter_constrained_count", getter: function (step) { return numberField(step, "unit_prefilter_constrained_count"); } },
+          { key: "unit_prefilter_global_count", label: "unit_prefilter_global_count", layer: "telemetry", source: "producer field:unit_prefilter_global_count", getter: function (step) { return numberField(step, "unit_prefilter_global_count"); } },
+          { key: "unit_prefilter_selected_unit_id", label: "unit_prefilter_selected_unit_id", layer: "telemetry", source: "producer field:unit_prefilter_selected_unit_id", nonNumeric: true, getter: function (step) { return scalarFieldPresent(step, ["unit_prefilter_selected_unit_id"]); } },
+        ];
+        const expectedStructuralChannelKeys = new Set([
+          "obs_unit_position",
+          "obs_unit_hp_map",
+          "obs_unit_alive_map",
+          "obs_vp_map",
+          "obs_enemy_vp_threat_map",
+          "obs_terrain_type_map",
+          "obs_terrain_cover_map",
+          "obs_terrain_los_block_map",
+          "obs_terrain_move_cost_map",
+          "obs_fortification_type_map",
+          "obs_fortification_edge_map",
+          "obs_reachable_hex_mask_by_unit",
+          "obs_attackable_hex_mask_by_unit",
+          "obs_vp_ownership_ttl",
+          "obs_unit_side",
+          "strategy_label",
+          "unit_prefilter_selected_unit_id",
+        ]);
+        const expectedChannelOrder = [
+          "obs_unit_position",
+          "obs_unit_hp_map",
+          "obs_unit_alive_map",
+          "obs_vp_map",
+          "obs_enemy_vp_threat_map",
+          "obs_terrain_type_map",
+          "obs_terrain_cover_map",
+          "obs_terrain_los_block_map",
+          "obs_terrain_move_cost_map",
+          "obs_fortification_type_map",
+          "obs_fortification_edge_map",
+          "obs_reachable_hex_mask_by_unit",
+          "obs_attackable_hex_mask_by_unit",
+          "obs_vp_ownership_ttl",
+          "obs_enemy_reaction_fire_risk",
+          "obs_unit_side",
+          "mcts_prior",
+          "mcts_q_value",
+          "mcts_u_value",
+          "vp_progress",
+          "mcts_success_prob_proxy",
+          "mcts_success_component",
+          "vp_horizon_steps",
+          "vp_horizon_signal",
+          "vp_horizon_component",
+          "vp_horizon_decision_component",
+          "objective_soft_reward_component",
+          "global_strategy_soft_reward_component",
+          "reaction_fire_soft_reward_component",
+          "reaction_exposure_component",
+          "strategy_label",
+          "tie_break_term",
+          "decision_score_selected",
+          "unit_prefilter_enabled",
+          "unit_prefilter_constrained_count",
+          "unit_prefilter_global_count",
+          "unit_prefilter_selected_unit_id",
+        ];
+        const decisionChannelDependencyMap = [
+          {
+            channel: "decision_score_selected",
+            compute_path: "agents/efficientzero_v2/core/mcts.py::final_score (producer field:real_decision_score | selected_action.real_decision_score)",
+            injection_point: "score",
+            effect_type: "direct MCTS",
+            train_eval_scope: "eval telemetry only",
+            notes: "Expected finite scalar; valid 0 when terms offset to neutral score.",
+          },
+          {
+            channel: "mcts_prior",
+            compute_path: "agents/efficientzero_v2/core/mcts.py::_puct_score (producer field:mcts_prior | mcts_action_candidates[].policy_prior)",
+            injection_point: "score",
+            effect_type: "direct MCTS",
+            train_eval_scope: "train+eval",
+            notes: "Policy prior in [0,1]; valid 0 for pruned/very low-prior actions.",
+          },
+          {
+            channel: "mcts_q_value (mcts_q)",
+            compute_path: "agents/efficientzero_v2/core/mcts.py::_puct_score (producer field:mcts_q_value | mcts_action_candidates[].mcts_q_value)",
+            injection_point: "score",
+            effect_type: "direct MCTS",
+            train_eval_scope: "train+eval",
+            notes: "Q term can be negative/positive; valid 0 for neutral expectation.",
+          },
+          {
+            channel: "mcts_u_value (mcts_u)",
+            compute_path: "agents/efficientzero_v2/core/mcts.py::_puct_score (producer field:mcts_u_value | mcts_action_candidates[].mcts_u_value)",
+            injection_point: "score",
+            effect_type: "direct MCTS",
+            train_eval_scope: "train+eval",
+            notes: "Exploration bonus usually >=0; valid 0 when fully exploited/low prior.",
+          },
+          {
+            channel: "mcts_success_component",
+            compute_path: "agents/efficientzero_v2/core/objective_signals.py::compute_success_component (producer field:mcts_success_component)",
+            injection_point: "score",
+            effect_type: "direct MCTS",
+            train_eval_scope: "train+eval",
+            notes: "Auxiliary decision term; valid 0 when no success signal applies.",
+          },
+          {
+            channel: "mcts_success_prob_proxy",
+            compute_path: "agents/efficientzero_v2/core/objective_signals.py::compute_success_prob_proxy (producer field:mcts_success_prob_proxy)",
+            injection_point: "score",
+            effect_type: "direct MCTS",
+            train_eval_scope: "train+eval",
+            notes: "Proxy probability in [0,1] nominally; valid 0 indicates no immediate success path.",
+          },
+          {
+            channel: "reaction_fire_soft_reward_component",
+            compute_path: "agents/efficientzero_v2/core/objective_signals.py::compute_reaction_fire_soft_reward_component (producer field:reaction_fire_soft_reward_component)",
+            injection_point: "reward",
+            effect_type: "indirect via reward",
+            train_eval_scope: "train+eval",
+            notes: "Shaping reward component; valid 0 when risk is absent/disabled.",
+          },
+          {
+            channel: "reaction_exposure_component",
+            compute_path: "agents/efficientzero_v2/core/objective_signals.py::compute_reaction_exposure_component (producer field:reaction_exposure_component)",
+            injection_point: "reward",
+            effect_type: "indirect via reward",
+            train_eval_scope: "train+eval",
+            notes: "Exposure/risk shaping term; valid 0 in safe or non-applicable states.",
+          },
+          {
+            channel: "vp_horizon_steps",
+            compute_path: "agents/efficientzero_v2/core/objective_signals.py::compute_vp_horizon_component (producer field:vp_horizon_steps)",
+            injection_point: "score",
+            effect_type: "direct MCTS",
+            train_eval_scope: "train+eval",
+            notes: "Step horizon >=0 expected; valid 0 means immediate horizon/no lookahead.",
+          },
+          {
+            channel: "vp_horizon_signal",
+            compute_path: "agents/efficientzero_v2/core/objective_signals.py::compute_vp_horizon_component (producer field:vp_horizon_signal)",
+            injection_point: "score",
+            effect_type: "direct MCTS",
+            train_eval_scope: "train+eval",
+            notes: "Normalized horizon signal; valid 0 means no VP-progress evidence.",
+          },
+          {
+            channel: "vp_horizon_component",
+            compute_path: "agents/efficientzero_v2/core/objective_signals.py::compute_vp_horizon_component (producer field:vp_horizon_component)",
+            injection_point: "score",
+            effect_type: "direct MCTS",
+            train_eval_scope: "train+eval",
+            notes: "Decision component added to score; valid 0 when disabled or neutral.",
+          },
+          {
+            channel: "vp_horizon_decision_component",
+            compute_path: "agents/efficientzero_v2/core/mcts.py::decision_components.vp_horizon_decision_component (producer field:vp_horizon_decision_component)",
+            injection_point: "telemetry",
+            effect_type: "telemetry only",
+            train_eval_scope: "eval telemetry only",
+            notes: "Diagnostic mirror of vp_horizon term; valid 0 when no horizon bonus applied.",
+          },
+          {
+            channel: "tie_break_term",
+            compute_path: "agents/efficientzero_v2/core/mcts.py::_break_score_tie (producer field:selected_action.decision_components.tie_break_term)",
+            injection_point: "score",
+            effect_type: "direct MCTS",
+            train_eval_scope: "eval telemetry only",
+            notes: "Small epsilon tie-breaker around 0; valid 0 when no tie-break needed.",
+          },
+          {
+            channel: "vp_progress",
+            compute_path: "agents/efficientzero_v2/core/objective_signals.py::compute_vp_progress (producer field:vp_progress)",
+            injection_point: "score",
+            effect_type: "direct MCTS",
+            train_eval_scope: "train+eval",
+            notes: "Progress delta signal; valid 0 for flat VP state transitions.",
+          },
+        ];
+        const channelByKey = {};
+        for (const ch of channels) {
+          if (!ch || !ch.key) continue;
+          channelByKey[String(ch.key)] = ch;
+        }
+        const stableChannels = [];
+        for (const key of expectedChannelOrder) {
+          const existing = channelByKey[key];
+          if (existing) {
+            stableChannels.push({
+              ...existing,
+              nonNumeric: expectedStructuralChannelKeys.has(key) || !!existing.nonNumeric,
+              label: String(existing.label || existing.key || key),
+              key: String(existing.key || key),
+            });
+            continue;
+          }
+          stableChannels.push({
+            key: key,
+            label: key,
+            layer: "telemetry",
+            source: "producer field:" + key,
+            nonNumeric: expectedStructuralChannelKeys.has(key),
+            getter: function () { return null; },
+          });
+        }
+        for (const ch of channels) {
+          if (!ch || !ch.key) continue;
+          const key = String(ch.key);
+          if (expectedChannelOrder.indexOf(key) >= 0) continue;
+          stableChannels.push({
+            ...ch,
+            nonNumeric: expectedStructuralChannelKeys.has(key) || !!ch.nonNumeric,
+            label: String(ch.label || key),
+            key: key,
+          });
+        }
+        const channelsStable = stableChannels;
+        function hasOwn(src, key) {
+          return !!src && typeof src === "object" && Object.prototype.hasOwnProperty.call(src, key);
+        }
+        function numberField(src, key) {
+          if (!hasOwn(src, key)) return null;
+          const n = Number(src[key]);
+          return Number.isFinite(n) ? n : null;
+        }
+        function scalarFieldPresent(src, keys) {
+          const keyList = Array.isArray(keys) ? keys : [];
+          for (const key of keyList) {
+            if (!hasOwn(src, key)) continue;
+            const raw = src[key];
+            if (raw === null || raw === undefined) continue;
+            if (typeof raw === "string" && raw.trim() === "") continue;
+            return true;
+          }
+          return false;
+        }
+        function containerFieldPresent(src, keys) {
+          const keyList = Array.isArray(keys) ? keys : [];
+          for (const key of keyList) {
+            if (!hasOwn(src, key)) continue;
+            const raw = src[key];
+            if (Array.isArray(raw)) return true;
+            if (raw && typeof raw === "object") return true;
+          }
+          return false;
+        }
+        function selectedCandidate(step) {
+          const candidates = Array.isArray(step && step.mcts_action_candidates)
+            ? step.mcts_action_candidates
+            : [];
+          const src = candidates;
+          if (!src.length) return null;
+          const chosenActionId = String(
+            (step && step.why_action_vs_vp && step.why_action_vs_vp.chosen_action_id)
+            || (step && step.chosen_action_id)
+            || (step && step.selected_action_id)
+            || (step && step.action_id)
+            || ""
+          );
+          const selected = src.find(function (c) {
+            return c && (c.selected_action === true || String(c.action_id || "") === chosenActionId);
+          });
+          if (selected) return selected;
+          return src[0] || null;
+        }
+        function selectedCandidateField(step, key) {
+          const selected = selectedCandidate(step);
+          if (!selected) return null;
+          let raw = null;
+          if (hasOwn(selected, key)) raw = selected[key];
+          if (raw === null || raw === undefined) return null;
+          const n = Number(raw);
+          return Number.isFinite(n) ? n : null;
+        }
+        function selectedDecisionComponent(step, key) {
+          const topLevelBlock = (step && step.decision_components && typeof step.decision_components === "object")
+            ? step.decision_components
+            : null;
+          const selected = selectedCandidate(step);
+          const selectedBlock = (selected && selected.decision_components && typeof selected.decision_components === "object")
+            ? selected.decision_components
+            : null;
+          const block = (topLevelBlock && hasOwn(topLevelBlock, key))
+            ? topLevelBlock
+            : selectedBlock;
+          if (!block || !hasOwn(block, key)) return null;
+          const n = Number(block[key]);
+          return Number.isFinite(n) ? n : null;
+        }
+        function numberFieldMulti(step, topLevelKeys, decisionComponentKeys) {
+          const topKeys = Array.isArray(topLevelKeys) ? topLevelKeys : [];
+          for (const key of topKeys) {
+            const n = numberField(step, key);
+            if (n !== null) return n;
+          }
+          const dcKeys = Array.isArray(decisionComponentKeys) ? decisionComponentKeys : [];
+          for (const key of dcKeys) {
+            const n = selectedDecisionComponent(step, key);
+            if (n !== null) return n;
+          }
+          return null;
+        }
+        function isMissingSourceTag(sourceText) {
+          const s = String(sourceText || "").trim().toLowerCase();
+          return !!s && (s.indexOf("missing") >= 0 || s.indexOf("fallback") >= 0 || s.indexOf("default") >= 0);
+        }
+        function numberFieldProducerAware(step, cfg) {
+          const c = cfg || {};
+          const availKeys = Array.isArray(c.availabilityKeys) ? c.availabilityKeys : [];
+          for (const key of availKeys) {
+            if (Object.prototype.hasOwnProperty.call(step || {}, key) && !step[key]) return null;
+          }
+          const sourceKeys = Array.isArray(c.sourceKeys) ? c.sourceKeys : [];
+          for (const key of sourceKeys) {
+            if (Object.prototype.hasOwnProperty.call(step || {}, key) && isMissingSourceTag(step[key])) return null;
+          }
+          return numberFieldMulti(
+            step,
+            Array.isArray(c.topLevelKeys) ? c.topLevelKeys : [],
+            Array.isArray(c.decisionComponentKeys) ? c.decisionComponentKeys : [],
+          );
+        }
+        function telemetryStepsFromResult(resultRow) {
+          const games = Array.isArray(resultRow && resultRow.match_games) ? resultRow.match_games : [];
+          const fromMatchGames = [];
+          for (let gi = 0; gi < games.length; gi += 1) {
+            const transitions = Array.isArray((games[gi] && games[gi].transitions)) ? games[gi].transitions : [];
+            for (let si = 0; si < transitions.length; si += 1) {
+              const step = transitions[si];
+              if (step && typeof step === "object") fromMatchGames.push(step);
+            }
+          }
+          if (fromMatchGames.length > 0) {
+            return { source: "match_games.transitions", steps: fromMatchGames };
+          }
+          const fallback = Array.isArray(resultRow && resultRow.eval_decision_steps_top)
+            ? resultRow.eval_decision_steps_top
+            : [];
+          const fromFallback = fallback.filter(function (step) { return step && typeof step === "object"; });
+          if (fromFallback.length > 0) {
+            return { source: "eval_decision_steps_top", steps: fromFallback };
+          }
+          return { source: "none", steps: [] };
+        }
+        const channelBuckets = {};
+        for (const ch of channelsStable) {
+          channelBuckets[ch.label] = {
+            seen: 0,
+            nonzero: 0,
+            abs: [],
+            pos: 0,
+            neg: 0,
+            zero: 0,
+            totalRows: 0,
+            nonNumeric: !!ch.nonNumeric,
+          };
+        }
+        const perStepRows = [];
+        const debug = {
+          artifactPaths: {},
+          evalIds: {},
+          evalRows: 0,
+          matchedResults: 0,
+          stepRows: 0,
+          candidateRows: 0,
+          rowsWithDecisionComponents: 0,
+          sourceStepCounts: {
+            "match_games.transitions": 0,
+            "eval_decision_steps_top": 0,
+            "none": 0,
+          },
+        };
+        const qualityStats = {
+          rows: 0,
+          q_clip_hits: 0,
+          entropy_collapse_hits: 0,
+          low_active_actions_hits: 0,
+        };
+        function p95(values) {
+          const arr = (Array.isArray(values) ? values : []).filter(function (x) { return Number.isFinite(Number(x)); }).map(Number).sort((a, b) => a - b);
+          if (!arr.length) return null;
+          const idx = Math.max(0, Math.min(arr.length - 1, Math.floor(0.95 * (arr.length - 1))));
+          return arr[idx];
+        }
+        function fmtPctOrNa(v) {
+          const n = Number(v);
+          return Number.isFinite(n) ? ((n * 100).toFixed(1) + "%") : "N/A";
+        }
+        function fmtNum(v, digits) {
+          const n = Number(v);
+          const d = Number.isFinite(Number(digits)) ? Math.max(0, Math.min(6, Number(digits))) : 3;
+          return Number.isFinite(n) ? n.toFixed(d) : "N/A";
+        }
+        debug.evalRows = sourceRows.length;
+        for (const er of sourceRows) {
+          const evalId = String((er && er.eval_id) || "");
+          if (evalId) debug.evalIds[evalId] = true;
+          const sourcePath = String((er && er.source_path) || "");
+          if (sourcePath) debug.artifactPaths[sourcePath] = true;
+          const results = Array.isArray(er && er.results) ? er.results : [];
+          for (const r of results) {
+            if (!r || typeof r !== "object") continue;
+            const sidesLocal = collectSidesFromResult(r);
+            const sidePass = (selectedSide === "__all__" && selectedController === "__all__")
+              || (Array.isArray(sidesLocal) && sidesLocal.some(function (s) { return sideAllowedFn(r, s, selectedSide, selectedController); }));
+            if (!sidePass) continue;
+            debug.matchedResults += 1;
+            const sourceBundle = telemetryStepsFromResult(r);
+            const sourceKey = String(sourceBundle.source || "none");
+            if (!Object.prototype.hasOwnProperty.call(debug.sourceStepCounts, sourceKey)) {
+              debug.sourceStepCounts[sourceKey] = 0;
+            }
+            const steps = Array.isArray(sourceBundle.steps) ? sourceBundle.steps : [];
+            debug.sourceStepCounts[sourceKey] += steps.length;
+            for (let si = 0; si < steps.length; si += 1) {
+              const step = steps[si];
+              const stepSide = String(step.unit_side || step.to_play || "");
+              if (!sideAllowedFn(r, stepSide, selectedSide, selectedController)) continue;
+              debug.stepRows += 1;
+              qualityStats.rows += 1;
+              if (Number(step.mcts_q_guardrail_clipped_count || 0) > 0) qualityStats.q_clip_hits += 1;
+              if (step.mcts_entropy_collapse === true) qualityStats.entropy_collapse_hits += 1;
+              if (Number.isFinite(Number(step.mcts_active_actions)) && Number(step.mcts_active_actions) <= 1) {
+                qualityStats.low_active_actions_hits += 1;
+              }
+              const candidates = Array.isArray(step.mcts_action_candidates) ? step.mcts_action_candidates : [];
+              debug.candidateRows += candidates.length;
+              const selected = selectedCandidate(step);
+              if (selected && selected.decision_components && typeof selected.decision_components === "object") {
+                debug.rowsWithDecisionComponents += 1;
+              }
+              for (const ch of channelsStable) {
+                const bucket = channelBuckets[ch.label];
+                bucket.totalRows += 1;
+                const raw = ch.getter(step);
+                if (raw === null || raw === false || raw === undefined) continue;
+                bucket.seen += 1;
+                if (bucket.nonNumeric) continue;
+                const absVal = Math.abs(Number(raw));
+                bucket.abs.push(absVal);
+                if (absVal > 1e-12) bucket.nonzero += 1;
+                if (Number(raw) > 1e-12) bucket.pos += 1;
+                else if (Number(raw) < -1e-12) bucket.neg += 1;
+                else bucket.zero += 1;
+              }
+              if (perStepRows.length < 20) {
+                const rowPreview = {
+                  eval_id: String(er.eval_id || ""),
+                  step: Number(step.step || si),
+                  action_id: String(step.action_id || ""),
+                  unit_side: String(step.unit_side || step.to_play || ""),
+                };
+                for (const ch of channelsStable) {
+                  rowPreview[ch.label] = ch.getter(step);
+                }
+                perStepRows.push(rowPreview);
+              }
+            }
+          }
+        }
+        const sourcePathKeys = Object.keys(debug.artifactPaths);
+        const evalIdCount = Object.keys(debug.evalIds).length;
+        const sourcePreview = sourcePathKeys.length
+          ? (sourcePathKeys.slice(0, 2).join(" ; ") + (sourcePathKeys.length > 2 ? (" ; +" + String(sourcePathKeys.length - 2) + " more") : ""))
+          : "none";
+        const sourceCountsText = Object.keys(debug.sourceStepCounts)
+          .map(function (k) { return String(k) + ":" + String(Number(debug.sourceStepCounts[k] || 0)); })
+          .join(", ");
+        const qsDen = Math.max(1, Number(qualityStats.rows || 0));
+        const qualityRows = [
+          ["q_clip_rows_rate", fmtPctOrNa(Number(qualityStats.q_clip_hits || 0) / qsDen), "High values indicate Q clipping/saturation pressure."],
+          ["entropy_collapse_rows_rate", fmtPctOrNa(Number(qualityStats.entropy_collapse_hits || 0) / qsDen), "High values indicate root visit distribution collapse."],
+          ["active_actions_le_1_rate", fmtPctOrNa(Number(qualityStats.low_active_actions_hits || 0) / qsDen), "High values indicate weak exploration breadth."],
+        ];
+        const qualityBody = qualityRows.map(function (row) {
+          return "<tr>" +
+            "<td style='border:1px solid #334155;padding:6px;'>" + esc(row[0]) + "</td>" +
+            "<td style='border:1px solid #334155;padding:6px;'>" + esc(row[1]) + "</td>" +
+            "<td style='border:1px solid #334155;padding:6px;'>" + esc(row[2]) + "</td>" +
+            "</tr>";
+        }).join("");
+        const channelMapRows = channelsStable.map(function (ch) {
+          const b = channelBuckets[ch.label] || {};
+          const seen = Number(b.seen || 0);
+          const total = Number(b.totalRows || 0);
+          const coverage = total > 0 ? (seen / total) : null;
+          const absMean = seen > 0 && !b.nonNumeric ? (b.abs.reduce((acc, x) => acc + Number(x || 0), 0) / seen) : null;
+          const absP95 = seen > 0 && !b.nonNumeric ? p95(b.abs) : null;
+          let status = "missing";
+          if (coverage !== null && coverage >= 0.999) status = "ok";
+          else if (coverage !== null && coverage > 0) status = "partial";
+          return {
+            channel_name: ch.label,
+            layer: ch.layer,
+            source: ch.source,
+            availability: fmtPctOrNa(coverage),
+            mean_abs: b.nonNumeric ? "N/A (non-numeric)" : (seen > 0 ? fmtNum(absMean) : "N/A"),
+            p95_abs: b.nonNumeric ? "N/A (non-numeric)" : (seen > 0 ? fmtNum(absP95) : "N/A"),
+            status: status,
+          };
+        });
+        const channelMetaByLabel = {};
+        for (const ch of channelsStable) {
+          channelMetaByLabel[String(ch.label || "")] = ch || {};
+        }
+        function buildNumericRowsByLayer(layerName) {
+          return Object.keys(channelBuckets).sort().map(function (label) {
+            const b = channelBuckets[label] || {};
+            if (b.nonNumeric) return null;
+            const meta = channelMetaByLabel[String(label)] || {};
+            if (String(meta.layer || "") !== String(layerName || "")) return null;
+            const seen = Number(b.seen || 0);
+            const total = Number(b.totalRows || 0);
+            const missingRows = Math.max(0, total - seen);
+            const absMean = seen > 0 ? (b.abs.reduce((acc, x) => acc + Number(x || 0), 0) / seen) : null;
+            const absP95 = p95(b.abs);
+            const nonzeroRate = seen > 0 ? (Number(b.nonzero || 0) / seen) : null;
+            const signKnown = seen > 0
+              ? ("+ " + fmtPctOrNa(Number(b.pos || 0) / seen) + " / - " + fmtPctOrNa(Number(b.neg || 0) / seen) + " / 0 " + fmtPctOrNa(Number(b.zero || 0) / seen))
+              : "N/A (missing producer fields)";
+            const producerNote = total > 0 && seen <= 0
+              ? "missing producer fields"
+              : (missingRows > 0 ? ("partial coverage: missing " + String(missingRows) + " rows") : "ok");
+            return [label, seen > 0 ? fmtPctOrNa(nonzeroRate) : "N/A", seen > 0 ? fmtNum(absMean) : "N/A", seen > 0 ? fmtNum(absP95) : "N/A", signKnown, producerNote];
+          }).filter(Boolean);
+        }
+        const summaryRowsNumericDecision = buildNumericRowsByLayer("decision");
+        const summaryRowsNumericTelemetry = buildNumericRowsByLayer("telemetry");
+        const summaryRowsNumericInput = buildNumericRowsByLayer("input");
+        const summaryRowsStructural = Object.keys(channelBuckets).sort().map(function (label) {
+          const b = channelBuckets[label] || {};
+          if (!b.nonNumeric) return null;
+          const seen = Number(b.seen || 0);
+          const total = Number(b.totalRows || 0);
+          const coverage = total > 0 ? (seen / total) : null;
+          const missingRows = Math.max(0, total - seen);
+          const producerNote = total > 0 && seen <= 0
+            ? "missing producer fields"
+            : (missingRows > 0 ? ("partial coverage: missing " + String(missingRows) + " rows") : "ok");
+          return [label, fmtPctOrNa(coverage), String(seen), String(total), producerNote];
+        }).filter(Boolean);
+        const channelMapBody = channelMapRows.length
+          ? channelMapRows.map(function (row) {
+            const statusTxt = String(row.status || "missing");
+            const statusClass = statusTxt === "ok" ? "ok-text" : (statusTxt === "partial" ? "degraded-text" : "na-text");
+            return "<tr class='channel-map-row status-" + esc(String(row.status || "missing")) + "'>" +
+              "<td style='border:1px solid #334155;padding:6px;'><code>" + esc(row.channel_name) + "</code></td>" +
+              "<td style='border:1px solid #334155;padding:6px;'>" + esc(row.layer) + "</td>" +
+              "<td style='border:1px solid #334155;padding:6px;'>" + esc(row.source) + "</td>" +
+              "<td style='border:1px solid #334155;padding:6px;'><span class='" + esc(statusClass) + "'>" + esc(row.availability) + "</span></td>" +
+              "<td style='border:1px solid #334155;padding:6px;'>" + esc(row.mean_abs) + "</td>" +
+              "<td style='border:1px solid #334155;padding:6px;'>" + esc(row.p95_abs) + "</td>" +
+              "<td style='border:1px solid #334155;padding:6px;'><span class='" + esc(statusClass) + "'>" + esc(row.status) + "</span></td>" +
+            "</tr>";
+          }).join("")
+          : "<tr><td colspan='7' style='border:1px solid #334155;padding:6px;' class='muted'>No eval channel rows for current filters.</td></tr>";
+        function renderNumericSummaryBody(summaryRowsNumeric) {
+          return summaryRowsNumeric.length
+            ? summaryRowsNumeric.map(function (row) {
+              const coverageNote = String(row[5] || "");
+              const rowClass = coverageNote === "ok" ? "ok-text" : (coverageNote.indexOf("partial coverage") >= 0 ? "degraded-text" : "na-text");
+              return "<tr>" +
+                "<td style='border:1px solid #334155;padding:6px;'>" + esc(row[0]) + "</td>" +
+                "<td style='border:1px solid #334155;padding:6px;'><span class='" + esc(rowClass) + "'>" + esc(row[1]) + "</span></td>" +
+                "<td style='border:1px solid #334155;padding:6px;'>" + esc(row[2]) + "</td>" +
+                "<td style='border:1px solid #334155;padding:6px;'>" + esc(row[3]) + "</td>" +
+                "<td style='border:1px solid #334155;padding:6px;'>" + esc(row[4]) + "</td>" +
+                "<td style='border:1px solid #334155;padding:6px;'><span class='" + esc(rowClass) + "'>" + esc(row[5]) + "</span></td>" +
+              "</tr>";
+            }).join("")
+            : "<tr><td colspan='6' style='border:1px solid #334155;padding:6px;' class='muted'>No numeric channels for current filters.</td></tr>";
+        }
+        const summaryBodyNumericDecision = renderNumericSummaryBody(summaryRowsNumericDecision);
+        const summaryBodyNumericTelemetry = renderNumericSummaryBody(summaryRowsNumericTelemetry);
+        const summaryBodyNumericInput = renderNumericSummaryBody(summaryRowsNumericInput);
+        const summaryBodyStructural = summaryRowsStructural.length
+          ? summaryRowsStructural.map(function (row) {
+            const coverageNote = String(row[4] || "");
+            const rowClass = coverageNote === "ok" ? "ok-text" : (coverageNote.indexOf("partial coverage") >= 0 ? "degraded-text" : "na-text");
+            return "<tr>" +
+              "<td style='border:1px solid #334155;padding:6px;'>" + esc(row[0]) + "</td>" +
+              "<td style='border:1px solid #334155;padding:6px;'><span class='" + esc(rowClass) + "'>" + esc(row[1]) + "</span></td>" +
+              "<td style='border:1px solid #334155;padding:6px;'>" + esc(row[2]) + "</td>" +
+              "<td style='border:1px solid #334155;padding:6px;'>" + esc(row[3]) + "</td>" +
+              "<td style='border:1px solid #334155;padding:6px;'><span class='" + esc(rowClass) + "'>" + esc(row[4]) + "</span></td>" +
+            "</tr>";
+          }).join("")
+          : "<tr><td colspan='5' style='border:1px solid #334155;padding:6px;' class='muted'>No structural/non-numeric channels for current filters.</td></tr>";
+        const channelByLabel = {};
+        for (const ch of channelsStable) channelByLabel[ch.label] = ch;
+        const stepColumns = ["eval_id", "step", "unit_side", "action_id"].concat(channelsStable.map(function (ch) { return ch.label; }));
+        function formatPerStepCell(rowObj, colKey) {
+          if (colKey === "eval_id" || colKey === "action_id" || colKey === "unit_side") return String(rowObj[colKey] || "");
+          if (colKey === "step") return String(Number(rowObj.step || 0));
+          const ch = channelByLabel[colKey] || null;
+          const raw = rowObj[colKey];
+          if (!ch) return (raw === null || raw === undefined || raw === "") ? "N/A" : String(raw);
+          if (ch.nonNumeric) {
+            if (raw === null || raw === undefined || raw === false) return "N/A";
+            return "present";
+          }
+          const n = Number(raw);
+          return Number.isFinite(n) ? fmtNum(n, 3) : "N/A";
+        }
+        const stepBody = perStepRows.length
+          ? perStepRows.map(function (r) {
+            return "<tr>" + stepColumns.map(function (colKey) {
+              return "<td style='border:1px solid #334155;padding:6px;'>" + esc(formatPerStepCell(r, colKey)) + "</td>";
+            }).join("") + "</tr>";
+          }).join("")
+          : "<tr><td colspan='" + String(stepColumns.length) + "' style='border:1px solid #334155;padding:6px;' class='muted'>No per-step telemetry rows for current filters.</td></tr>";
+        const dependencyMapBody = decisionChannelDependencyMap.map(function (row) {
+          return "<tr>" +
+            "<td style='border:1px solid #334155;padding:6px;'><code>" + esc(row.channel) + "</code></td>" +
+            "<td style='border:1px solid #334155;padding:6px;'>" + esc(row.compute_path) + "</td>" +
+            "<td style='border:1px solid #334155;padding:6px;'>" + esc(row.injection_point) + "</td>" +
+            "<td style='border:1px solid #334155;padding:6px;'>" + esc(row.effect_type) + "</td>" +
+            "<td style='border:1px solid #334155;padding:6px;'>" + esc(row.train_eval_scope) + "</td>" +
+            "<td style='border:1px solid #334155;padding:6px;'>" + esc(row.notes) + "</td>" +
+          "</tr>";
+        }).join("");
+        host.innerHTML =
+          "<div class='muted' style='margin-bottom:6px;'><b>Debug:</b> source_artifacts=" + esc(sourcePreview) +
+          " | eval_rows=" + esc(String(debug.evalRows)) +
+          " | eval_ids=" + esc(String(evalIdCount)) +
+          " | matched_results=" + esc(String(debug.matchedResults)) +
+          " | step_rows=" + esc(String(debug.stepRows)) +
+          " | candidate_rows=" + esc(String(debug.candidateRows)) +
+          " | rows_with_decision_components=" + esc(String(debug.rowsWithDecisionComponents)) +
+          " | step_source_counts=" + esc(sourceCountsText) + "</div>" +
+          "<div class='muted' style='margin-bottom:6px;'>Producer-first contract: missing channels are shown as N/A with explicit missing producer notes.</div>" +
+          "<h3 style='margin:8px 0;'>Signal Quality Alarms</h3>" +
+          "<table style='width:100%;border-collapse:collapse;font-size:12px;'><thead><tr>" +
+          "<th style='border:1px solid #334155;padding:6px;'>alarm</th>" +
+          "<th style='border:1px solid #334155;padding:6px;'>rate</th>" +
+          "<th style='border:1px solid #334155;padding:6px;'>interpretation</th>" +
+          "</tr></thead><tbody>" + qualityBody + "</tbody></table>" +
+          "<h3 style='margin:8px 0;'>Channel Map</h3>" +
+          "<div class='muted' style='margin-bottom:6px;'>Filter-aware map across input, decision, and telemetry channels. Missing producer fields stay explicit as <b>missing</b>.</div>" +
+          "<table id='evalChannelMapTable' class='eval-channel-map' style='width:100%;border-collapse:collapse;font-size:12px;'><thead><tr>" +
+          "<th style='border:1px solid #334155;padding:6px;'>channel_name</th>" +
+          "<th style='border:1px solid #334155;padding:6px;'>layer/type</th>" +
+          "<th style='border:1px solid #334155;padding:6px;'>source</th>" +
+          "<th style='border:1px solid #334155;padding:6px;'>availability coverage</th>" +
+          "<th style='border:1px solid #334155;padding:6px;'>mean abs</th>" +
+          "<th style='border:1px solid #334155;padding:6px;'>p95 abs</th>" +
+          "<th style='border:1px solid #334155;padding:6px;'>status</th>" +
+          "</tr></thead><tbody>" + channelMapBody + "</tbody></table>" +
+          "<h3 style='margin:8px 0;'>Channel usage diagnostics - Decision channels</h3>" +
+          "<table style='width:100%;border-collapse:collapse;font-size:12px;'><thead><tr>" +
+          "<th style='border:1px solid #334155;padding:6px;'>channel</th>" +
+          "<th style='border:1px solid #334155;padding:6px;'>nonzero usage rate</th>" +
+          "<th style='border:1px solid #334155;padding:6px;'>mean |term|</th>" +
+          "<th style='border:1px solid #334155;padding:6px;'>p95 |term|</th>" +
+          "<th style='border:1px solid #334155;padding:6px;'>sign distribution</th>" +
+          "<th style='border:1px solid #334155;padding:6px;'>producer coverage</th>" +
+          "</tr></thead><tbody>" + summaryBodyNumericDecision + "</tbody></table>" +
+          "<h3 style='margin:8px 0;'>Channel usage diagnostics - Telemetry channels</h3>" +
+          "<table style='width:100%;border-collapse:collapse;font-size:12px;'><thead><tr>" +
+          "<th style='border:1px solid #334155;padding:6px;'>channel</th>" +
+          "<th style='border:1px solid #334155;padding:6px;'>nonzero usage rate</th>" +
+          "<th style='border:1px solid #334155;padding:6px;'>mean |term|</th>" +
+          "<th style='border:1px solid #334155;padding:6px;'>p95 |term|</th>" +
+          "<th style='border:1px solid #334155;padding:6px;'>sign distribution</th>" +
+          "<th style='border:1px solid #334155;padding:6px;'>producer coverage</th>" +
+          "</tr></thead><tbody>" + summaryBodyNumericTelemetry + "</tbody></table>" +
+          "<h3 style='margin:8px 0;'>Channel usage diagnostics - Input numeric channels</h3>" +
+          "<table style='width:100%;border-collapse:collapse;font-size:12px;'><thead><tr>" +
+          "<th style='border:1px solid #334155;padding:6px;'>channel</th>" +
+          "<th style='border:1px solid #334155;padding:6px;'>nonzero usage rate</th>" +
+          "<th style='border:1px solid #334155;padding:6px;'>mean |term|</th>" +
+          "<th style='border:1px solid #334155;padding:6px;'>p95 |term|</th>" +
+          "<th style='border:1px solid #334155;padding:6px;'>sign distribution</th>" +
+          "<th style='border:1px solid #334155;padding:6px;'>producer coverage</th>" +
+          "</tr></thead><tbody>" + summaryBodyNumericInput + "</tbody></table>" +
+          "<h3 style='margin:8px 0;'>Channel usage diagnostics - Structural channels</h3>" +
+          "<div class='muted' style='margin-bottom:6px;'>Structural/input channels are analyzed by presence/coverage, not numeric magnitude.</div>" +
+          "<table style='width:100%;border-collapse:collapse;font-size:12px;'><thead><tr>" +
+          "<th style='border:1px solid #334155;padding:6px;'>channel</th>" +
+          "<th style='border:1px solid #334155;padding:6px;'>availability coverage</th>" +
+          "<th style='border:1px solid #334155;padding:6px;'>rows present</th>" +
+          "<th style='border:1px solid #334155;padding:6px;'>rows total</th>" +
+          "<th style='border:1px solid #334155;padding:6px;'>producer coverage</th>" +
+          "</tr></thead><tbody>" + summaryBodyStructural + "</tbody></table>" +
+          "<h3 style='margin:12px 0 8px 0;'>Decision Channel Dependency Map</h3>" +
+          "<div class='muted' style='margin-bottom:6px;'>Deterministic architecture map for decision channels: channel -> compute path -> injection point -> effect.</div>" +
+          "<table id='decisionDependencyMapTable' style='width:100%;border-collapse:collapse;font-size:12px;'><thead><tr>" +
+          "<th style='border:1px solid #334155;padding:6px;'>channel</th>" +
+          "<th style='border:1px solid #334155;padding:6px;'>compute function/path</th>" +
+          "<th style='border:1px solid #334155;padding:6px;'>injection point</th>" +
+          "<th style='border:1px solid #334155;padding:6px;'>effect type</th>" +
+          "<th style='border:1px solid #334155;padding:6px;'>train vs eval</th>" +
+          "<th style='border:1px solid #334155;padding:6px;'>notes</th>" +
+          "</tr></thead><tbody>" + dependencyMapBody + "</tbody></table>" +
+          "<h3 style='margin:12px 0 8px 0;'>Latest per-step channel rows</h3>" +
+          "<table style='width:100%;border-collapse:collapse;font-size:12px;'><thead><tr>" +
+          stepColumns.map(function (key) {
+            const label = key === "unit_side" ? "side" : key;
+            return "<th style='border:1px solid #334155;padding:6px;'>" + esc(label) + "</th>";
+          }).join("") +
+          "</tr></thead><tbody>" + stepBody + "</tbody></table>";
+      }
       function renderHeadDiagnostics(evalRowsForTabs) {
         const root = document.getElementById("headDiagnosticsRoot");
         if (!root) return;
+        function isMetricOkValue(v) {
+          if (v === null || v === undefined) return false;
+          if (typeof v === "string") {
+            const t = v.trim();
+            if (!t) return false;
+            if (t.toUpperCase() === "N/A") return false;
+            return true;
+          }
+          if (typeof v === "number") return Number.isFinite(v);
+          return true;
+        }
+        function metricStatus(v, opts) {
+          const o = opts || {};
+          if (!isMetricOkValue(v)) return "na";
+          if (Array.isArray(o.degradedSources) && o.degradedSources.includes(String(v))) return "degraded";
+          return "ok";
+        }
+        function metricValueHtml(v, opts) {
+          const st = metricStatus(v, opts);
+          const txt = (v === null || v === undefined || v === "") ? "N/A" : String(v);
+          if (st === "ok") return '<span class="ok-text">' + esc(txt) + "</span>";
+          if (st === "degraded") return '<span class="degraded-text">' + esc(txt) + "</span>";
+          return '<span class="na-text">' + esc(txt) + "</span>";
+        }
         const rowsTotal = Array.isArray(evalRowsForTabs) ? evalRowsForTabs.length : 0;
         const headDiag = aggregateHeadDiagnostics(evalRowsForTabs);
         let status = "ok";
@@ -1890,9 +3123,8 @@ def _model_html() -> str:
           const rows = Array.isArray(evalRowsForTabs) ? evalRowsForTabs : [];
           const actionMap = {};
           const ownershipBySide = {};
-          const mismatchBySide = {};
           let overrideSignalRows = 0;
-          let legacyFallbackRows = 0;
+          let unknownOverrideRows = 0;
           let totalTopActionCount = 0;
           for (const evalRow of rows) {
             const results = Array.isArray(evalRow.results) ? evalRow.results : [];
@@ -1914,25 +3146,17 @@ def _model_html() -> str:
               }
               const own = ((r || {}).eval_decision_summary || {}).decision_ownership_by_side || {};
               for (const side of Object.keys(own || {})) {
-                if (!ownershipBySide[side]) ownershipBySide[side] = { side: side, rows: 0, policy_kept: 0, overwritten: 0, override_signal_rows: 0, legacy_fallback_rows: 0 };
+                if (!ownershipBySide[side]) ownershipBySide[side] = { side: side, rows: 0, policy_kept: 0, overwritten: 0, override_signal_rows: 0, unknown_override_rows: 0 };
                 const src = own[side] || {};
                 ownershipBySide[side].rows += Number(src.rows || 0);
                 ownershipBySide[side].policy_kept += Number(src.policy_kept || 0);
                 ownershipBySide[side].overwritten += Number(src.overwritten || 0);
                 ownershipBySide[side].override_signal_rows += Number(src.override_signal_rows || 0);
-                ownershipBySide[side].legacy_fallback_rows += Number(src.legacy_fallback_rows || 0);
+                ownershipBySide[side].unknown_override_rows += Number(src.unknown_override_rows || 0);
               }
               const ownSource = ((r || {}).eval_decision_summary || {}).decision_ownership_source || {};
               overrideSignalRows += Number(ownSource.override_signal_rows || 0);
-              legacyFallbackRows += Number(ownSource.legacy_fallback_rows || 0);
-              const mm = ((r || {}).eval_decision_summary || {}).execution_mismatch_by_side || {};
-              for (const side of Object.keys(mm || {})) {
-                if (!mismatchBySide[side]) mismatchBySide[side] = { side: side, rows: 0, execution_match: 0, execution_mismatch: 0 };
-                const src = mm[side] || {};
-                mismatchBySide[side].rows += Number(src.rows || 0);
-                mismatchBySide[side].execution_match += Number(src.execution_match || 0);
-                mismatchBySide[side].execution_mismatch += Number(src.execution_mismatch || 0);
-              }
+              unknownOverrideRows += Number(ownSource.unknown_override_rows || 0);
             }
           }
           const topPolicyActions = Object.values(actionMap)
@@ -1956,26 +3180,15 @@ def _model_html() -> str:
                 String(Math.round(Number(x.policy_kept || 0))),
                 String(Math.round(Number(x.overwritten || 0))),
                 String(Math.round(Number(x.override_signal_rows || 0))),
-                String(Math.round(Number(x.legacy_fallback_rows || 0))),
-              ];
-            });
-          const executionMismatchRows = Object.values(mismatchBySide)
-            .sort(function (a, b) { return String(a.side || "").localeCompare(String(b.side || "")); })
-            .map(function (x) {
-              return [
-                String(x.side || "N/A"),
-                String(Math.round(Number(x.rows || 0))),
-                String(Math.round(Number(x.execution_match || 0))),
-                String(Math.round(Number(x.execution_mismatch || 0))),
+                String(Math.round(Number(x.unknown_override_rows || 0))),
               ];
             });
           return {
             topPolicyActions: topPolicyActions,
             mctsOwnershipRows: mctsOwnershipRows,
-            executionMismatchRows: executionMismatchRows,
             ownershipSourceSummary: {
               override_signal_rows: Math.round(overrideSignalRows),
-              legacy_fallback_rows: Math.round(legacyFallbackRows),
+              unknown_override_rows: Math.round(unknownOverrideRows),
             },
           };
         }
@@ -2001,6 +3214,9 @@ def _model_html() -> str:
           return rows.map(function (r) {
             const cells = Array.isArray(r) ? r : [];
             return '<tr>' + cells.map(function (c) {
+              if (c && typeof c === "object" && c.__html) {
+                return '<td style="border:1px solid #334155;padding:6px;">' + String(c.__html) + "</td>";
+              }
               return '<td style="border:1px solid #334155;padding:6px;">' + esc(String(c)) + '</td>';
             }).join("") + '</tr>';
           }).join("");
@@ -2124,9 +3340,9 @@ def _model_html() -> str:
           if (cov.status !== "complete") overallReasons.push(String(cov.reason || "unspecified reason"));
           overallBreakdownRows.push([
             spec.label,
-            String(cov.status || "none"),
+            { __html: metricValueHtml(String(cov.status || "none"), { degradedSources: ["partial", "none", "unknown"] }) },
             String(Number(cov.available || 0)) + "/" + String(Number(cov.total || 0)),
-            String(cov.reason || ""),
+            { __html: metricValueHtml(String(cov.reason || ""), { degradedSources: ["no eval telemetry for this head"] }) },
           ]);
         }
         html += '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:10px;align-items:start;margin-bottom:10px;">';
@@ -2143,20 +3359,14 @@ def _model_html() -> str:
         html += topReasonsList(overallReasons, "Frequent partial/none reasons");
         html += '<div style="background:#0f172a;border:1px solid #334155;border-radius:8px;padding:8px;">' +
           '<div style="font-weight:700;margin-bottom:6px;">Decision Influence quick access</div>' +
-          '<div class="muted" style="margin-bottom:6px;">Use replay for step-level influence; ownership uses policy_overridden_by_mcts (fallback: execution_mismatch on legacy runs).</div>' +
-          '<div class="muted" style="margin-bottom:6px;">Ownership source coverage: override_signal_rows=' + esc(String(intents.ownershipSourceSummary.override_signal_rows || 0)) + ', legacy_fallback_rows=' + esc(String(intents.ownershipSourceSummary.legacy_fallback_rows || 0)) + '</div>' +
+          '<div class="muted" style="margin-bottom:6px;">Use replay for step-level influence; ownership uses policy_overridden_by_mcts from current telemetry.</div>' +
+          '<div class="muted" style="margin-bottom:6px;">Ownership source coverage: override_signal_rows=' + esc(String(intents.ownershipSourceSummary.override_signal_rows || 0)) + ', unknown_override_rows=' + esc(String(intents.ownershipSourceSummary.unknown_override_rows || 0)) + '</div>' +
           '<button id="headDiagOpenReplayBtn" style="padding:4px 8px;font-size:12px;">Open Match Replay (Decision Influence)</button>' +
           intentTable(
             "MCTS decision ownership by side",
-            ["side", "rows", "policy_kept", "overwritten", "override_signal_rows", "legacy_fallback_rows"],
+            ["side", "rows", "policy_kept", "overwritten", "override_signal_rows", "unknown_override_rows"],
             intents.mctsOwnershipRows,
             "No MCTS ownership signals in eval diagnostics."
-          ) +
-          intentTable(
-            "Execution mismatch by side (legacy compatibility metric)",
-            ["side", "rows", "execution_match", "execution_mismatch"],
-            intents.executionMismatchRows,
-            "No execution mismatch metrics in eval diagnostics."
           ) +
           '</div>';
         html += '</div>';
@@ -2215,7 +3425,7 @@ def _model_html() -> str:
         const objectiveMetrics = [
           ["train_objective_loss", fmtEvalNum(getHeadMetric("objective", "train_objective_loss"), 4)],
           ["eval_vp_capture_opportunity_steps (sum objective_had_opportunity)", fmtEvalNum(getHeadMetric("objective", "eval_vp_capture_opportunity_steps"), 1)],
-          ["eval_vp_immediate_capture_opportunity_steps (capture legal now)", fmtEvalNum(objectiveHeadMetric("eval_vp_immediate_capture_opportunity_steps"), 1)],
+          ["eval_vp_immediate_capture_opportunity_steps (MOVE into capturable VP legal now)", fmtEvalNum(objectiveHeadMetric("eval_vp_immediate_capture_opportunity_steps"), 1)],
           ["eval_vp_capture_taken_steps", fmtEvalNum(getHeadMetric("objective", "eval_vp_capture_taken_steps"), 1)],
           ["eval_vp_immediate_capture_taken_steps", fmtEvalNum(objectiveHeadMetric("eval_vp_immediate_capture_taken_steps"), 1)],
           ["eval_vp_capture_take_rate", fmtEvalPct(getHeadMetric("objective", "eval_vp_capture_take_rate"))],
@@ -2235,7 +3445,7 @@ def _model_html() -> str:
           ["signal", "value"],
           [
             ["vp_capture_opportunities (objective_had_opportunity)", fmtEvalNum(objOpp, 1)],
-            ["vp_immediate_capture_opportunities (legal capture window)", fmtEvalNum(objImmediateOpp, 1)],
+            ["vp_immediate_capture_opportunities (legal MOVE-into-VP window)", fmtEvalNum(objImmediateOpp, 1)],
             ["vp_capture_taken", fmtEvalNum(objTaken, 1)],
             ["vp_immediate_capture_taken", fmtEvalNum(objImmediateTaken, 1)],
             ["vp_take_rate", fmtEvalPct(getHeadMetric("objective", "eval_vp_capture_take_rate"))],
@@ -2272,14 +3482,9 @@ def _model_html() -> str:
         const mctsCoverage = coverageForHead("mcts", headSpecRows[5].metrics);
         const mctsIntentHtml = intentTable(
           "MCTS decision ownership by side",
-          ["side", "rows", "policy_kept", "overwritten", "override_signal_rows", "legacy_fallback_rows"],
+          ["side", "rows", "policy_kept", "overwritten", "override_signal_rows", "unknown_override_rows"],
           intents.mctsOwnershipRows,
           "No MCTS ownership signals in eval diagnostics."
-        ) + intentTable(
-          "Execution mismatch by side (legacy compatibility metric)",
-          ["side", "rows", "execution_match", "execution_mismatch"],
-          intents.executionMismatchRows,
-          "No execution mismatch metrics in eval diagnostics."
         );
         const mctsMargin = getHeadMetric("mcts", "eval_policy_margin_mean");
         const mctsSummary = (mctsMargin === null)
@@ -2338,22 +3543,36 @@ def _model_html() -> str:
       function renderUnifiedActions(filteredResultRows, filterCtx) {
         const host = document.getElementById("unifiedRoot");
         if (!host) return;
-        if (!Array.isArray(filteredResultRows) || !filteredResultRows.length) {
-          host.innerHTML = '<h3 style="margin:8px 0;">By Action Kind</h3><div class="muted">No rows for current filters.</div>';
-          return;
+        const sourceRows = Array.isArray(filteredResultRows) ? filteredResultRows : [];
+        const sideAllowedFn = (filterCtx && typeof filterCtx.sideAllowed === "function")
+          ? filterCtx.sideAllowed
+          : function () { return true; };
+        const selectedSide = (filterCtx && filterCtx.side) || "__all__";
+        const selectedController = (filterCtx && filterCtx.controller) || "__all__";
+        function resultMatchesSideControllerFilters(resultRow) {
+          if (selectedSide === "__all__" && selectedController === "__all__") return true;
+          const sidesLocal = collectSidesFromResult(resultRow);
+          if (!Array.isArray(sidesLocal) || !sidesLocal.length) return false;
+          return sidesLocal.some(function (s) {
+            return sideAllowedFn(resultRow, s, selectedSide, selectedController);
+          });
         }
         const rowMap = {};
         const rowBySideMap = {};
-        for (const er of filteredResultRows) {
+        const colKeyMap = {};
+        for (const er of sourceRows) {
           const results = Array.isArray(er.results) ? er.results : [];
           for (const r of results) {
+            if (!r || typeof r !== "object") continue;
             const summary = (r && r.eval_decision_summary) || {};
             const by = summary.by_action_kind_and_side || {};
             for (const key of Object.keys(by || {})) {
+              if (!Object.prototype.hasOwnProperty.call(by || {}, key)) continue;
               const src = by[key] || {};
+              if (!src || typeof src !== "object") continue;
               const action = String(src.action_kind || "UNKNOWN");
               const side = String(src.unit_side || "UNK");
-              if (filterCtx && typeof filterCtx.sideAllowed === "function" && !filterCtx.sideAllowed(r, side, filterCtx.side || "__all__", filterCtx.controller || "__all__")) continue;
+              if (!sideAllowedFn(r, side, selectedSide, selectedController)) continue;
               const ctrl = String(controllerFor(r, side));
               if (!rowMap[action]) rowMap[action] = { action: action, count: 0, damage: 0, kills: 0 };
               rowMap[action].count += Number(src.count || 0);
@@ -2364,11 +3583,28 @@ def _model_html() -> str:
               rowBySideMap[k2].count += Number(src.count || 0);
               rowBySideMap[k2].damage += Number(src.damage_sum || 0);
               rowBySideMap[k2].kills += Number(src.kills_sum || 0);
+              const colKey = side + "|" + ctrl;
+              if (!colKeyMap[colKey]) colKeyMap[colKey] = { side: side, controller: ctrl };
             }
           }
         }
         const rows = Object.values(rowMap).sort((a, b) => Number(b.count || 0) - Number(a.count || 0));
         const rowsBySide = Object.values(rowBySideMap).sort((a, b) => Number(b.count || 0) - Number(a.count || 0));
+        const colKeys = Object.keys(colKeyMap).sort((a, b) => {
+          const aa = colKeyMap[a] || {};
+          const bb = colKeyMap[b] || {};
+          const sa = String(aa.side || "");
+          const sb = String(bb.side || "");
+          if (sa !== sb) return sa.localeCompare(sb);
+          return String(aa.controller || "").localeCompare(String(bb.controller || ""));
+        });
+        const pivotMap = {};
+        for (const row of rowsBySide) {
+          const action = String(row.action || "UNKNOWN");
+          const colKey = String(row.side || "UNK") + "|" + String(row.controller || "UNKNOWN");
+          if (!pivotMap[action]) pivotMap[action] = {};
+          pivotMap[action][colKey] = row;
+        }
         let html = '<h3 style="margin:8px 0;">By Action Kind</h3><table style="width:100%;border-collapse:collapse;font-size:12px;"><thead><tr>' +
           '<th style="border:1px solid #334155;padding:6px;">action_kind</th>' +
           '<th style="border:1px solid #334155;padding:6px;">count</th>' +
@@ -2388,26 +3624,338 @@ def _model_html() -> str:
           }
         }
         html += '</tbody></table>';
-        html += '<h3 style="margin:12px 0 8px 0;">By Action x Side x Controller</h3><table style="width:100%;border-collapse:collapse;font-size:12px;"><thead><tr>' +
-          '<th style="border:1px solid #334155;padding:6px;">action_kind</th>' +
-          '<th style="border:1px solid #334155;padding:6px;">side</th>' +
-          '<th style="border:1px solid #334155;padding:6px;">controller</th>' +
-          '<th style="border:1px solid #334155;padding:6px;">count</th>' +
-          '<th style="border:1px solid #334155;padding:6px;">damage</th>' +
-          '<th style="border:1px solid #334155;padding:6px;">kills</th>' +
-          '</tr></thead><tbody>';
-        if (!rowsBySide.length) {
-          html += '<tr><td colspan="6" style="border:1px solid #334155;padding:6px;" class="muted">No side/controller rows available.</td></tr>';
+        html += '<h3 style="margin:12px 0 8px 0;">By Action x Side x Controller (Pivot)</h3>';
+        html += '<div style="overflow-x:auto;"><table style="min-width:720px;width:100%;border-collapse:collapse;font-size:12px;"><thead><tr>' +
+          '<th style="border:1px solid #334155;padding:6px;position:sticky;left:0;background:#0b1220;z-index:1;">action_kind</th>';
+        for (const colKey of colKeys) {
+          const colMeta = colKeyMap[colKey] || {};
+          const label = String(colMeta.side || "UNK") + " x " + String(colMeta.controller || "UNKNOWN");
+          html += '<th style="border:1px solid #334155;padding:6px;white-space:nowrap;">' + esc(label) + '</th>';
+        }
+        html += '</tr></thead><tbody>';
+        if (!rows.length || !colKeys.length) {
+          html += '<tr><td colspan="' + String(1 + colKeys.length) + '" style="border:1px solid #334155;padding:6px;" class="muted">No side/controller rows available.</td></tr>';
         } else {
-          for (const r of rowsBySide) {
+          for (const actionRow of rows) {
+            const action = String(actionRow.action || "UNKNOWN");
             html += '<tr>' +
-              '<td style="border:1px solid #334155;padding:6px;">' + esc(String(r.action || "")) + '</td>' +
-              '<td style="border:1px solid #334155;padding:6px;">' + esc(String(r.side || "")) + '</td>' +
-              '<td style="border:1px solid #334155;padding:6px;">' + esc(String(r.controller || "")) + '</td>' +
-              '<td style="border:1px solid #334155;padding:6px;">' + esc(String(r.count || 0)) + '</td>' +
-              '<td style="border:1px solid #334155;padding:6px;">' + esc(Number(r.damage || 0).toFixed(3)) + '</td>' +
-              '<td style="border:1px solid #334155;padding:6px;">' + esc(Number(r.kills || 0).toFixed(3)) + '</td>' +
-              '</tr>';
+              '<td style="border:1px solid #334155;padding:6px;position:sticky;left:0;background:#0b1220;z-index:1;">' + esc(action) + '</td>';
+            for (const colKey of colKeys) {
+              const cell = ((pivotMap[action] || {})[colKey]) || null;
+              if (!cell) {
+                html += '<td style="border:1px solid #334155;padding:6px;" class="muted">-</td>';
+              } else {
+                html += '<td style="border:1px solid #334155;padding:6px;">' +
+                  esc(String(cell.count || 0)) +
+                  '<span class="muted"> | d:' + esc(Number(cell.damage || 0).toFixed(3)) + ' k:' + esc(Number(cell.kills || 0).toFixed(3)) + '</span>' +
+                  '</td>';
+              }
+            }
+            html += '</tr>';
+          }
+        }
+        html += '</tbody></table></div>';
+        const attackEff = {
+          global: {},
+          by_action_kind: {},
+          by_unit: {},
+          by_distance_bucket: {},
+          by_cover_bucket: {},
+          calibration_bins: {},
+        };
+        function metricFromStep(stepRow, keys, defaultValue) {
+          const names = Array.isArray(keys) ? keys : [];
+          for (const key of names) {
+            if (!Object.prototype.hasOwnProperty.call(stepRow || {}, key)) continue;
+            const raw = stepRow[key];
+            if (raw === null || raw === undefined) continue;
+            const n = Number(raw);
+            if (Number.isFinite(n)) return n;
+          }
+          return Number(defaultValue || 0);
+        }
+        function distanceBucket(raw) {
+          const v = Number(raw);
+          if (!Number.isFinite(v) || v < 0) return "unknown";
+          if (v < 1.5) return "0-1";
+          if (v < 3.5) return "2-3";
+          if (v < 6.5) return "4-6";
+          return "7+";
+        }
+        function coverBucket(raw) {
+          const v = Number(raw);
+          if (!Number.isFinite(v) || v < 0) return "unknown";
+          if (v < 0.25) return "low";
+          if (v < 0.60) return "medium";
+          return "high";
+        }
+        function probBucket(raw) {
+          let p = Number(raw);
+          if (!Number.isFinite(p)) p = 0;
+          p = Math.max(0, Math.min(1, p));
+          const lo = Math.floor(p * 5) / 5;
+          const hi = Math.min(1, lo + 0.2);
+          return "[" + lo.toFixed(1) + "," + hi.toFixed(1) + ")";
+        }
+        function isAttackLike(kindRaw) {
+          const kind = String(kindRaw || "").trim().toUpperCase();
+          return kind !== "" && kind !== "MOVE" && kind !== "WAIT" && kind !== "TIMEOUT" && kind !== "OPPORTUNITY_SKIP";
+        }
+        function mergeBucket(dst, src) {
+          const out = Object.assign({}, dst || {});
+          const keys = Object.keys(src || {});
+          for (const k of keys) {
+            const row = src[k] || {};
+            const prev = out[k] || { count: 0 };
+            const c0 = Number(prev.count || 0);
+            const c1 = Number(row.count || 0);
+            const den = c0 + c1;
+            function mv(name) {
+              const a = Number(prev[name] || 0);
+              const b = Number(row[name] || 0);
+              return den > 0 ? (((a * c0) + (b * c1)) / den) : 0;
+            }
+            out[k] = {
+              count: den,
+              empirical_expected_damage: mv("empirical_expected_damage"),
+              damage_variance: mv("damage_variance"),
+              exchange_win_rate: mv("exchange_win_rate"),
+              attack_good_rate: mv("attack_good_rate"),
+              attack_good_prob_mean: mv("attack_good_prob_mean"),
+              attack_good_brier: mv("attack_good_brier"),
+            };
+          }
+          return out;
+        }
+        function mergeAttackEffSummary(summaryEff) {
+          const eff = summaryEff || {};
+          const g = (eff && eff.global) || {};
+          const gx = Number(g.count || 0);
+          if (gx > 0) {
+            const prevCount = Number(attackEff.global.count || 0);
+            const nextCount = prevCount + gx;
+            function wavg(prevVal, curVal) {
+              const a = Number(prevVal || 0);
+              const b = Number(curVal || 0);
+              if (nextCount <= 0) return 0;
+              return ((a * prevCount) + (b * gx)) / nextCount;
+            }
+            attackEff.global = {
+              count: nextCount,
+              empirical_expected_damage: wavg(attackEff.global.empirical_expected_damage, g.empirical_expected_damage),
+              damage_variance: wavg(attackEff.global.damage_variance, g.damage_variance),
+              exchange_win_rate: wavg(attackEff.global.exchange_win_rate, g.exchange_win_rate),
+              attack_good_rate: wavg(attackEff.global.attack_good_rate, g.attack_good_rate),
+              attack_good_prob_mean: wavg(attackEff.global.attack_good_prob_mean, g.attack_good_prob_mean),
+              attack_good_brier: wavg(attackEff.global.attack_good_brier, g.attack_good_brier),
+            };
+          }
+          attackEff.by_action_kind = mergeBucket(attackEff.by_action_kind, (eff && eff.by_action_kind) || {});
+          attackEff.by_unit = mergeBucket(attackEff.by_unit, (eff && eff.by_unit) || {});
+          attackEff.by_distance_bucket = mergeBucket(attackEff.by_distance_bucket, (eff && eff.by_distance_bucket) || {});
+          attackEff.by_cover_bucket = mergeBucket(attackEff.by_cover_bucket, (eff && eff.by_cover_bucket) || {});
+          const bins = (eff && eff.calibration_bins) || {};
+          for (const k of Object.keys(bins)) {
+            const row = bins[k] || {};
+            const prev = attackEff.calibration_bins[k] || { count: 0, predicted_prob_mean: 0, empirical_attack_good_rate: 0, brier: 0 };
+            const c0 = Number(prev.count || 0);
+            const c1 = Number(row.count || 0);
+            const den = c0 + c1;
+            function bmv(name) {
+              const a = Number(prev[name] || 0);
+              const b = Number(row[name] || 0);
+              return den > 0 ? (((a * c0) + (b * c1)) / den) : 0;
+            }
+            attackEff.calibration_bins[k] = {
+              count: den,
+              predicted_prob_mean: bmv("predicted_prob_mean"),
+              empirical_attack_good_rate: bmv("empirical_attack_good_rate"),
+              brier: bmv("brier"),
+            };
+          }
+        }
+        const attackAgg = {};
+        const attackBins = {};
+        function accAttackGroup(groupKey, dmg, kills, pGood, yGood) {
+          if (!attackAgg[groupKey]) {
+            attackAgg[groupKey] = {
+              count: 0,
+              damage_sum: 0,
+              damage_sq_sum: 0,
+              exchange_win_sum: 0,
+              attack_good_label_sum: 0,
+              attack_good_prob_sum: 0,
+              brier_sum: 0,
+            };
+          }
+          const g = attackAgg[groupKey];
+          g.count += 1;
+          g.damage_sum += Number(dmg || 0);
+          g.damage_sq_sum += Number(dmg || 0) * Number(dmg || 0);
+          g.exchange_win_sum += (Number(dmg || 0) > 0 || Number(kills || 0) > 0) ? 1 : 0;
+          g.attack_good_label_sum += Number(yGood || 0);
+          g.attack_good_prob_sum += Number(pGood || 0);
+          g.brier_sum += (Number(pGood || 0) - Number(yGood || 0)) ** 2;
+        }
+        function accAttackBin(binKey, pGood, yGood) {
+          if (!attackBins[binKey]) {
+            attackBins[binKey] = { count: 0, prob_sum: 0, label_sum: 0, brier_sum: 0 };
+          }
+          const b = attackBins[binKey];
+          b.count += 1;
+          b.prob_sum += Number(pGood || 0);
+          b.label_sum += Number(yGood || 0);
+          b.brier_sum += (Number(pGood || 0) - Number(yGood || 0)) ** 2;
+        }
+        function finalizeAttackGroup(src) {
+          const n = Number((src || {}).count || 0);
+          if (n <= 0) {
+            return {
+              count: 0,
+              empirical_expected_damage: 0,
+              damage_variance: 0,
+              exchange_win_rate: 0,
+              attack_good_rate: 0,
+              attack_good_prob_mean: 0,
+              attack_good_brier: 0,
+            };
+          }
+          const meanD = Number(src.damage_sum || 0) / n;
+          const ex2 = Number(src.damage_sq_sum || 0) / n;
+          return {
+            count: n,
+            empirical_expected_damage: meanD,
+            damage_variance: Math.max(0, ex2 - (meanD * meanD)),
+            exchange_win_rate: Number(src.exchange_win_sum || 0) / n,
+            attack_good_rate: Number(src.attack_good_label_sum || 0) / n,
+            attack_good_prob_mean: Number(src.attack_good_prob_sum || 0) / n,
+            attack_good_brier: Number(src.brier_sum || 0) / n,
+          };
+        }
+        let builtFromTransitions = false;
+        for (const er of sourceRows) {
+          const results = Array.isArray(er.results) ? er.results : [];
+          for (const r of results) {
+            if (!resultMatchesSideControllerFilters(r)) continue;
+            const games = Array.isArray(r.match_games) ? r.match_games : [];
+            let rowHasTransitions = false;
+            for (const game of games) {
+              const transitions = Array.isArray((game && game.transitions)) ? game.transitions : [];
+              if (!transitions.length) continue;
+              rowHasTransitions = true;
+              for (const step of transitions) {
+                const stepKind = String((step && step.action_kind) || "").trim().toUpperCase();
+                if (!isAttackLike(stepKind)) continue;
+                const stepSide = String((step && step.unit_side) || "").trim().toUpperCase() || "UNKNOWN";
+                if (!sideAllowedFn(r, stepSide, selectedSide, selectedController)) continue;
+                const dmg = metricFromStep(step, ["damage_dealt", "enemy_damage", "damage", "damage_sum"], 0);
+                const kills = metricFromStep(step, ["kills_dealt", "enemy_kills", "kills", "kills_sum"], 0);
+                let pGood = metricFromStep(step, ["chosen_action_prob", "policy_prior"], 0);
+                pGood = Math.max(0, Math.min(1, pGood));
+                const yGood = (dmg > 0 || kills > 0) ? 1 : 0;
+                accAttackGroup("global", dmg, kills, pGood, yGood);
+                accAttackGroup("kind::" + stepKind, dmg, kills, pGood, yGood);
+                const unitKey = String((step && step.unit_label) || (step && step.unit_id) || "UNKNOWN");
+                accAttackGroup("unit::" + unitKey, dmg, kills, pGood, yGood);
+                accAttackGroup("distance::" + distanceBucket(step && step.attack_distance_mean), dmg, kills, pGood, yGood);
+                accAttackGroup("cover::" + coverBucket(step && step.attack_target_cover_mean), dmg, kills, pGood, yGood);
+                accAttackBin(probBucket(pGood), pGood, yGood);
+                builtFromTransitions = true;
+              }
+            }
+            if (!rowHasTransitions) {
+              const summary = (r && r.eval_decision_summary) || {};
+              mergeAttackEffSummary((summary && summary.attack_effectiveness) || {});
+            }
+          }
+        }
+        if (builtFromTransitions) {
+          attackEff.global = finalizeAttackGroup(attackAgg.global || {});
+          for (const key of Object.keys(attackAgg)) {
+            const group = attackAgg[key] || {};
+            if (String(key).indexOf("kind::") === 0) attackEff.by_action_kind[String(key).slice("kind::".length)] = finalizeAttackGroup(group);
+            else if (String(key).indexOf("unit::") === 0) attackEff.by_unit[String(key).slice("unit::".length)] = finalizeAttackGroup(group);
+            else if (String(key).indexOf("distance::") === 0) attackEff.by_distance_bucket[String(key).slice("distance::".length)] = finalizeAttackGroup(group);
+            else if (String(key).indexOf("cover::") === 0) attackEff.by_cover_bucket[String(key).slice("cover::".length)] = finalizeAttackGroup(group);
+          }
+          for (const binKey of Object.keys(attackBins).sort()) {
+            const src = attackBins[binKey] || {};
+            const n = Number(src.count || 0);
+            attackEff.calibration_bins[binKey] = {
+              count: n,
+              predicted_prob_mean: n > 0 ? (Number(src.prob_sum || 0) / n) : 0,
+              empirical_attack_good_rate: n > 0 ? (Number(src.label_sum || 0) / n) : 0,
+              brier: n > 0 ? (Number(src.brier_sum || 0) / n) : 0,
+            };
+          }
+        }
+        const g = attackEff.global || {};
+        const hasAttackData = Number(g.count || 0) > 0;
+        if (!hasAttackData) {
+          html += '<div class="muted" style="margin:8px 0 6px 0;">No attack effectiveness rows for current filters.</div>';
+        }
+        html += '<h3 style="margin:12px 0 8px 0;">Attack Effectiveness (calibration)</h3>' +
+          '<table style="width:100%;border-collapse:collapse;font-size:12px;"><thead><tr>' +
+          '<th style="border:1px solid #334155;padding:6px;">count</th>' +
+          '<th style="border:1px solid #334155;padding:6px;">E[dmg]</th>' +
+          '<th style="border:1px solid #334155;padding:6px;">Var[dmg]</th>' +
+          '<th style="border:1px solid #334155;padding:6px;">exchange_win_rate</th>' +
+          '<th style="border:1px solid #334155;padding:6px;">attack_good_rate</th>' +
+          '<th style="border:1px solid #334155;padding:6px;">pred_attack_good_mean</th>' +
+          '<th style="border:1px solid #334155;padding:6px;">Brier</th>' +
+          '</tr></thead><tbody>';
+        if (!hasAttackData) {
+          html += '<tr><td colspan="7" style="border:1px solid #334155;padding:6px;" class="muted">No attack effectiveness rows for current filters.</td></tr>';
+        } else {
+          html += '<tr>' +
+            '<td style="border:1px solid #334155;padding:6px;">' + esc(String(Number(g.count || 0))) + '</td>' +
+            '<td style="border:1px solid #334155;padding:6px;">' + esc(Number(g.empirical_expected_damage || 0).toFixed(3)) + '</td>' +
+            '<td style="border:1px solid #334155;padding:6px;">' + esc(Number(g.damage_variance || 0).toFixed(3)) + '</td>' +
+            '<td style="border:1px solid #334155;padding:6px;">' + esc(Number(g.exchange_win_rate || 0).toFixed(3)) + '</td>' +
+            '<td style="border:1px solid #334155;padding:6px;">' + esc(Number(g.attack_good_rate || 0).toFixed(3)) + '</td>' +
+            '<td style="border:1px solid #334155;padding:6px;">' + esc(Number(g.attack_good_prob_mean || 0).toFixed(3)) + '</td>' +
+            '<td style="border:1px solid #334155;padding:6px;">' + esc(Number(g.attack_good_brier || 0).toFixed(4)) + '</td>' +
+            '</tr>';
+        }
+        html += '</tbody></table>';
+        function bucketTable(title, bucket) {
+          const rowsB = Object.keys(bucket || {}).map(function (k) {
+            return { key: k, row: bucket[k] || {} };
+          }).sort(function (a, b) { return Number((b.row || {}).count || 0) - Number((a.row || {}).count || 0); });
+          let out = '<h4 style="margin:10px 0 6px 0;">' + esc(title) + '</h4><table style="width:100%;border-collapse:collapse;font-size:12px;"><thead><tr>' +
+            '<th style="border:1px solid #334155;padding:6px;">bucket</th><th style="border:1px solid #334155;padding:6px;">count</th><th style="border:1px solid #334155;padding:6px;">E[dmg]</th><th style="border:1px solid #334155;padding:6px;">Var[dmg]</th><th style="border:1px solid #334155;padding:6px;">exchange_win_rate</th><th style="border:1px solid #334155;padding:6px;">Brier</th></tr></thead><tbody>';
+          if (!rowsB.length) {
+            out += '<tr><td colspan="6" style="border:1px solid #334155;padding:6px;" class="muted">No rows.</td></tr>';
+          } else {
+            for (const rb of rowsB.slice(0, 30)) {
+              const rr = rb.row || {};
+              out += '<tr><td style="border:1px solid #334155;padding:6px;">' + esc(String(rb.key || "")) + '</td>' +
+                '<td style="border:1px solid #334155;padding:6px;">' + esc(String(Number(rr.count || 0))) + '</td>' +
+                '<td style="border:1px solid #334155;padding:6px;">' + esc(Number(rr.empirical_expected_damage || 0).toFixed(3)) + '</td>' +
+                '<td style="border:1px solid #334155;padding:6px;">' + esc(Number(rr.damage_variance || 0).toFixed(3)) + '</td>' +
+                '<td style="border:1px solid #334155;padding:6px;">' + esc(Number(rr.exchange_win_rate || 0).toFixed(3)) + '</td>' +
+                '<td style="border:1px solid #334155;padding:6px;">' + esc(Number(rr.attack_good_brier || 0).toFixed(4)) + '</td></tr>';
+            }
+          }
+          out += '</tbody></table>';
+          return out;
+        }
+        html += bucketTable("By attack kind", attackEff.by_action_kind || {});
+        html += bucketTable("By distance bucket", attackEff.by_distance_bucket || {});
+        html += bucketTable("By cover bucket", attackEff.by_cover_bucket || {});
+        const calRows = Object.keys(attackEff.calibration_bins || {}).sort();
+        html += '<h4 style="margin:10px 0 6px 0;">Calibration bins</h4><table style="width:100%;border-collapse:collapse;font-size:12px;"><thead><tr>' +
+          '<th style="border:1px solid #334155;padding:6px;">bin</th><th style="border:1px solid #334155;padding:6px;">count</th><th style="border:1px solid #334155;padding:6px;">pred_mean</th><th style="border:1px solid #334155;padding:6px;">empirical_rate</th><th style="border:1px solid #334155;padding:6px;">Brier</th></tr></thead><tbody>';
+        if (!calRows.length) {
+          html += '<tr><td colspan="5" style="border:1px solid #334155;padding:6px;" class="muted">No calibration bins.</td></tr>';
+        } else {
+          for (const k of calRows) {
+            const rr = attackEff.calibration_bins[k] || {};
+            html += '<tr><td style="border:1px solid #334155;padding:6px;">' + esc(String(k || "")) + '</td>' +
+              '<td style="border:1px solid #334155;padding:6px;">' + esc(String(Number(rr.count || 0))) + '</td>' +
+              '<td style="border:1px solid #334155;padding:6px;">' + esc(Number(rr.predicted_prob_mean || 0).toFixed(3)) + '</td>' +
+              '<td style="border:1px solid #334155;padding:6px;">' + esc(Number(rr.empirical_attack_good_rate || 0).toFixed(3)) + '</td>' +
+              '<td style="border:1px solid #334155;padding:6px;">' + esc(Number(rr.brier || 0).toFixed(4)) + '</td></tr>';
           }
         }
         html += '</tbody></table>';
@@ -2421,6 +3969,7 @@ def _model_html() -> str:
           return;
         }
         const rowMap = {};
+        const sideKeyMap = {};
         const topActions = {};
         const ownership = {};
         for (const er of filteredResultRows) {
@@ -2437,6 +3986,7 @@ def _model_html() -> str:
               rowMap[k].count += Number(src.count || 0);
               rowMap[k].damage += Number(src.damage_sum || 0);
               rowMap[k].kills += Number(src.kills_sum || 0);
+              sideKeyMap[String(src.unit_side || "UNK")] = true;
             }
             const tops = Array.isArray(r.eval_decisions_top) ? r.eval_decisions_top : [];
             for (const t of tops) {
@@ -2452,48 +4002,78 @@ def _model_html() -> str:
             for (const s of Object.keys(own || {})) {
               if (filterCtx && typeof filterCtx.sideAllowed === "function" && !filterCtx.sideAllowed(r, s, filterCtx.side || "__all__", filterCtx.controller || "__all__")) continue;
               const o = own[s] || {};
-              if (!ownership[s]) ownership[s] = { side: s, rows: 0, policy_kept: 0, overwritten: 0, override_signal_rows: 0, legacy_fallback_rows: 0 };
+              if (!ownership[s]) ownership[s] = { side: s, rows: 0, policy_kept: 0, overwritten: 0, override_signal_rows: 0, unknown_override_rows: 0 };
               ownership[s].rows += Number(o.rows || 0);
               ownership[s].policy_kept += Number(o.policy_kept || 0);
               ownership[s].overwritten += Number(o.overwritten || 0);
               ownership[s].override_signal_rows += Number(o.override_signal_rows || 0);
-              ownership[s].legacy_fallback_rows += Number(o.legacy_fallback_rows || 0);
+              ownership[s].unknown_override_rows += Number(o.unknown_override_rows || 0);
             }
           }
         }
         const rows = Object.values(rowMap).sort((a, b) => Number(b.count || 0) - Number(a.count || 0));
+        const sideKeys = Object.keys(sideKeyMap).sort((a, b) => String(a || "").localeCompare(String(b || "")));
+        const pivotRows = {};
+        for (const row of rows) {
+          const action = String(row.action_kind || "UNKNOWN");
+          const side = String(row.side || "UNK");
+          if (!pivotRows[action]) pivotRows[action] = {};
+          pivotRows[action][side] = row;
+        }
+        const actionKeys = Object.keys(pivotRows).sort((a, b) => {
+          let sumA = 0;
+          const aRow = pivotRows[a] || {};
+          for (const s of sideKeys) sumA += Number(((aRow[s] || {}).count) || 0);
+          let sumB = 0;
+          const bRow = pivotRows[b] || {};
+          for (const s of sideKeys) sumB += Number(((bRow[s] || {}).count) || 0);
+          return sumB - sumA;
+        });
         const topRows = Object.values(topActions).sort((a, b) => Number(b.count || 0) - Number(a.count || 0)).slice(0, 20);
         const ownRows = Object.values(ownership).sort((a, b) => String(a.side).localeCompare(String(b.side)));
-        let html = '<h3 style="margin:8px 0;">Table A: Action Kind x Side</h3><table style="width:100%;border-collapse:collapse;font-size:12px;"><thead><tr>' +
-          '<th style="border:1px solid #334155;padding:6px;">action_kind</th>' +
-          '<th style="border:1px solid #334155;padding:6px;">side</th>' +
-          '<th style="border:1px solid #334155;padding:6px;">count</th>' +
-          '<th style="border:1px solid #334155;padding:6px;">damage</th>' +
-          '<th style="border:1px solid #334155;padding:6px;">kills</th>' +
-          '</tr></thead><tbody>';
-        if (!rows.length) {
-          html += '<tr><td colspan="5" style="border:1px solid #334155;padding:6px;" class="muted">No decision rows available.</td></tr>';
+        let html = '<h3 style="margin:8px 0;">Table A: Action Kind x Side (Pivot)</h3><table style="width:100%;border-collapse:collapse;font-size:12px;"><thead><tr>' +
+          '<th rowspan="2" style="border:1px solid #334155;padding:6px;">action_kind</th>';
+        for (const side of sideKeys) {
+          html += '<th colspan="3" style="border:1px solid #334155;padding:6px;white-space:nowrap;">' + esc(String(side || "UNK")) + '</th>';
+        }
+        html += '</tr><tr>';
+        for (const _side of sideKeys) {
+          html += '<th style="border:1px solid #334155;padding:6px;white-space:nowrap;">count</th>' +
+            '<th style="border:1px solid #334155;padding:6px;white-space:nowrap;">damage</th>' +
+            '<th style="border:1px solid #334155;padding:6px;white-space:nowrap;">kills</th>';
+        }
+        html += '</tr></thead><tbody>';
+        if (!actionKeys.length || !sideKeys.length) {
+          html += '<tr><td colspan="' + String(1 + sideKeys.length * 3) + '" style="border:1px solid #334155;padding:6px;" class="muted">No decision rows available.</td></tr>';
         } else {
-          for (const r of rows) {
+          for (const action of actionKeys) {
             html += '<tr>' +
-              '<td style="border:1px solid #334155;padding:6px;">' + esc(String(r.action_kind || "")) + '</td>' +
-              '<td style="border:1px solid #334155;padding:6px;">' + esc(String(r.side || "")) + '</td>' +
-              '<td style="border:1px solid #334155;padding:6px;">' + esc(String(r.count || 0)) + '</td>' +
-              '<td style="border:1px solid #334155;padding:6px;">' + esc(Number(r.damage || 0).toFixed(3)) + '</td>' +
-              '<td style="border:1px solid #334155;padding:6px;">' + esc(Number(r.kills || 0).toFixed(3)) + '</td>' +
-              '</tr>';
+              '<td style="border:1px solid #334155;padding:6px;">' + esc(action) + '</td>';
+            for (const side of sideKeys) {
+              const cell = ((pivotRows[action] || {})[side]) || null;
+              if (!cell) {
+                html += '<td style="border:1px solid #334155;padding:6px;" class="muted">-</td>' +
+                  '<td style="border:1px solid #334155;padding:6px;" class="muted">-</td>' +
+                  '<td style="border:1px solid #334155;padding:6px;" class="muted">-</td>';
+              } else {
+                html += '<td style="border:1px solid #334155;padding:6px;">' + esc(String(cell.count || 0)) + '</td>' +
+                  '<td style="border:1px solid #334155;padding:6px;">' + esc(Number(cell.damage || 0).toFixed(3)) + '</td>' +
+                  '<td style="border:1px solid #334155;padding:6px;">' + esc(Number(cell.kills || 0).toFixed(3)) + '</td>';
+              }
+            }
+            html += '</tr>';
           }
         }
         html += '</tbody></table>';
         html += '<h3 style="margin:12px 0 8px 0;">Table B: Decision Ownership by Side</h3>' +
-          '<div class="muted" style="margin:0 0 6px 0;">Source: policy_overridden_by_mcts (fallback: execution_mismatch for legacy runs without override telemetry).</div>' +
+          '<div class="muted" style="margin:0 0 6px 0;">Source: policy_overridden_by_mcts (canonical ownership telemetry).</div>' +
           '<table style="width:100%;border-collapse:collapse;font-size:12px;"><thead><tr>' +
           '<th style="border:1px solid #334155;padding:6px;">side</th>' +
           '<th style="border:1px solid #334155;padding:6px;">rows</th>' +
           '<th style="border:1px solid #334155;padding:6px;">policy_kept</th>' +
           '<th style="border:1px solid #334155;padding:6px;">overwritten</th>' +
           '<th style="border:1px solid #334155;padding:6px;">override_signal_rows</th>' +
-          '<th style="border:1px solid #334155;padding:6px;">legacy_fallback_rows</th>' +
+          '<th style="border:1px solid #334155;padding:6px;">unknown_override_rows</th>' +
           '</tr></thead><tbody>';
         if (!ownRows.length) {
           html += '<tr><td colspan="6" style="border:1px solid #334155;padding:6px;" class="muted">No ownership rows available.</td></tr>';
@@ -2505,7 +4085,7 @@ def _model_html() -> str:
               '<td style="border:1px solid #334155;padding:6px;">' + esc(String(r.policy_kept || 0)) + '</td>' +
               '<td style="border:1px solid #334155;padding:6px;">' + esc(String(r.overwritten || 0)) + '</td>' +
               '<td style="border:1px solid #334155;padding:6px;">' + esc(String(r.override_signal_rows || 0)) + '</td>' +
-              '<td style="border:1px solid #334155;padding:6px;">' + esc(String(r.legacy_fallback_rows || 0)) + '</td>' +
+              '<td style="border:1px solid #334155;padding:6px;">' + esc(String(r.unknown_override_rows || 0)) + '</td>' +
               '</tr>';
           }
         }
@@ -2547,7 +4127,43 @@ def _model_html() -> str:
         unitFilter: "__all__",
         knownUnits: [],
         headTopK: 5,
+        hoveredUnitId: "",
+        hoverHitPoints: [],
+        hoverHitRadius: 6,
+        hoverCanvasBound: false,
+        hoverCanvasEl: null,
+        decisionCandidateSortKey: "decision_score",
+        decisionCandidateSortDir: "desc",
+        payloadCache: {},
+        logCache: {},
+        logDebounceTimer: null,
+        resizeRafToken: null,
+        sliderDebounceTimer: null,
+        hoverDebounceTimer: null,
+        drawRafToken: null,
+        drawPending: false,
+        drawForcePending: false,
+        lastDrawStateKey: "",
+        lastCanvasDrawKey: "",
+        panelMemo: {},
+        loadReplayLogFn: null,
+        chunkSize: 80,
+        transitionsTotal: 0,
+        transitionsHasMore: false,
+        episodesMetaRenderKey: "",
       };
+      function setReplayLoadStatus(message, tone) {
+        const host = document.getElementById("replayLoadStatus");
+        if (!host) return;
+        const msg = String(message || "").trim();
+        const t = String(tone || "info");
+        const color = t === "error" ? "#fca5a5" : (t === "ok" ? "#86efac" : "#93c5fd");
+        host.style.color = color;
+        host.textContent = msg || "";
+      }
+      function clearReplayLoadStatus() {
+        setReplayLoadStatus("", "info");
+      }
       function stopReplayTimer() {
         if (replayState.timer) {
           clearInterval(replayState.timer);
@@ -2555,16 +4171,51 @@ def _model_html() -> str:
         }
         replayState.playing = false;
       }
+      function replayPayloadCacheKey(evalSourcePath, episodeIdx) {
+        return String(evalSourcePath || "") + "::" + String(Math.max(0, Number(episodeIdx || 0)));
+      }
+      function replayLogCacheKey(evalSourcePath, episodeIdx, uptoStep, unitId) {
+        return [
+          String(evalSourcePath || ""),
+          String(Math.max(0, Number(episodeIdx || 0))),
+          String(Math.max(0, Number(uptoStep || 0))),
+          String(unitId || "__all__"),
+        ].join("::");
+      }
+      function scheduleReplayLogLoad(delayMs) {
+        const delay = Math.max(0, Number(delayMs || 0));
+        if (replayState.logDebounceTimer) clearTimeout(replayState.logDebounceTimer);
+        replayState.logDebounceTimer = setTimeout(function () {
+          replayState.logDebounceTimer = null;
+          if (typeof replayState.loadReplayLogFn === "function") {
+            replayState.loadReplayLogFn();
+          }
+        }, delay);
+      }
       function renderMatchReplay(filteredResultRows) {
         try {
         const host = document.getElementById("replayRoot");
         if (!host) return;
         host.innerHTML = '<div class="muted">Loading replay...</div>';
+        const sourceRows = Array.isArray(filteredResultRows)
+          ? filteredResultRows.filter(function (r) { return r && typeof r === "object"; })
+          : [];
+        if (!sourceRows.length) {
+          stopReplayTimer();
+          replayState.evalId = "__all__";
+          replayState.payload = null;
+          replayState.step = 0;
+          replayState.episodeIndex = 0;
+          host.innerHTML = '<div class="muted">No match games for current filters. Adjust filters to load replay.</div>';
+          return;
+        }
         let rows = [];
         try {
-          rows = Array.isArray(filteredResultRows)
-            ? filteredResultRows
-                .map(r => Object.assign({}, r, { eval_source_path: String(r.eval_source_path || r.source_path || "") }))
+          rows = Array.isArray(sourceRows)
+            ? sourceRows
+                .map(function (r) {
+                  return Object.assign({}, r, { eval_source_path: String((r && (r.eval_source_path || r.source_path)) || "") });
+                })
                 .filter(r => String(r.eval_source_path || "").trim())
             : [];
         } catch (e) {
@@ -2573,6 +4224,9 @@ def _model_html() -> str:
         }
         if (!rows.length) {
           stopReplayTimer();
+          replayState.payload = null;
+          replayState.step = 0;
+          replayState.episodeIndex = 0;
           host.innerHTML = '<div class="muted">No replay source for current filters (eval_source_path/source_path missing).</div>';
           return;
         }
@@ -2593,6 +4247,8 @@ def _model_html() -> str:
         }
         const activeRow = evalRows.find(r => String(r.eval_id || "") === String(replayState.evalId || "")) || evalRows[0];
         const speedMs = 220;
+        replayState.hoverCanvasBound = false;
+        replayState.hoverCanvasEl = null;
         host.innerHTML = `
           <div class="replay-top">
             <button id="replayLoadBtn">Load from selected eval</button>
@@ -2623,65 +4279,165 @@ def _model_html() -> str:
             <label class="muted">Head top-k:
               <input id="replayHeadTopKInput" class="replay-input" type="number" min="1" max="10" value="${Math.max(1, Number(replayState.headTopK || 5))}" style="width:72px;margin-left:6px;" />
             </label>
+            <span id="replayLoadStatus" class="muted" style="min-width:220px;"></span>
           </div>
           <div id="replaySummary" class="replay-kv"></div>
           <div class="replay-grid">
             <div class="replay-panel">
               <h3>Map Snapshot</h3>
               <canvas id="replayCanvas" width="980" height="540" class="replay-canvas"></canvas>
-            </div>
-            <div style="display:grid;grid-template-rows:auto auto minmax(0,1fr);gap:10px;min-height:0;">
-              <div class="replay-panel">
-                <h3>Step Details</h3>
-                <div id="replayStepDetail" class="list"></div>
+              <div id="replayHoverLegend" class="replay-hover-legend">
+                <span><span class="replay-hover-legend-chip replay-hover-legend-move"></span>reachable move hexes</span>
+                <span><span class="replay-hover-legend-chip replay-hover-legend-attack"></span>attackable hexes</span>
               </div>
+            </div>
+            <div class="replay-side-col" style="grid-template-rows:auto auto minmax(0,1fr);">
               <div class="replay-panel">
-                <h3>Head Diagnostics (per step)</h3>
-                <div id="replayHeadDiagnosticsHost" class="list"></div>
+                <h3>Hovered Unit Actions</h3>
+                <div id="replayHoverActionsHost" class="list"></div>
+              </div>
+              <div class="replay-details-grid">
+                <div class="replay-panel">
+                  <h3>Step Details</h3>
+                  <div id="replayStepDetail" class="list"></div>
+                </div>
+                <div class="replay-panel">
+                  <h3 style="margin-bottom:6px;">Controller by side</h3>
+                  <div id="replayControllerBySide" class="list" style="margin-bottom:10px;"></div>
+                  <h3>Units Snapshot</h3>
+                  <div id="replayUnitsHost" class="list"></div>
+                </div>
               </div>
               <div class="replay-panel">
                 <h3>Decision Influence</h3>
                 <div id="replayDecisionInfluenceHost" class="list"></div>
               </div>
-              <div class="replay-panel">
-                <h3>Units Snapshot</h3>
-                <div id="replayUnitsHost" class="list"></div>
-              </div>
             </div>
-            <div class="replay-panel" style="min-height:0;display:flex;flex-direction:column;">
-              <h3>Execution Log</h3>
-              <pre id="replayLogHost" style="white-space:pre-wrap;word-break:break-word;background:#0b1220;border:1px solid #334155;border-radius:6px;padding:8px;font-size:12px;line-height:1.35;overflow:auto;max-height:520px;min-height:280px;">Loading...</pre>
+            <div class="replay-side-col" style="grid-template-rows:auto minmax(0,1fr);">
+              <div class="replay-panel">
+                <h3>Head Diagnostics (per step)</h3>
+                <div id="replayHeadDiagnosticsHost" class="list"></div>
+              </div>
+              <div class="replay-panel" style="min-height:0;display:flex;flex-direction:column;">
+                <h3>Execution Log</h3>
+                <pre id="replayLogHost" style="white-space:pre-wrap;word-break:break-word;background:#0b1220;border:1px solid #334155;border-radius:6px;padding:8px;font-size:12px;line-height:1.35;overflow:auto;max-height:520px;min-height:280px;">Loading...</pre>
+              </div>
             </div>
           </div>
         `;
         async function loadReplay() {
+          const t0 = (typeof performance !== "undefined" && performance.now) ? performance.now() : Date.now();
+          setReplayLoadStatus("Loading replay: preparing request...", "info");
           stopReplayTimer();
+          replayState.hoveredUnitId = "";
+          replayState.hoverHitPoints = [];
+          replayState.hoverHitRadius = 6;
+          replayState.hoverCanvasBound = false;
+          replayState.hoverCanvasEl = null;
           const details = document.getElementById("replayStepDetail");
           if (details) details.innerHTML = '<div class="muted">Loading replay payload...</div>';
           const evalSel = document.getElementById("replayEvalSelect");
           const epSel = document.getElementById("replayEpisodeSelect");
           replayState.evalId = String((((evalSel || {}).value) || replayState.evalId || ""));
           const row = evalRows.find(r => String(r.eval_id || "") === String(replayState.evalId || "")) || activeRow;
-          const episodeIdx = Math.max(0, Number((((epSel || {}).value) || replayState.episodeIndex || 0)));
+          const episodeIdx = Math.max(0, Number(
+            (epSel && Number.isFinite(Number(epSel.selectedIndex)) && Number(epSel.selectedIndex) >= 0)
+              ? epSel.selectedIndex
+              : ((((epSel || {}).value) || replayState.episodeIndex || 0))
+          ));
           replayState.episodeIndex = episodeIdx;
           if (!row || !String(row.eval_source_path || "").trim()) {
             replayState.payload = null;
             drawReplay();
+            setReplayLoadStatus("Replay load failed: missing eval source path.", "error");
             return;
           }
+          async function fetchReplayPayload(evalSourcePath, epIndex, chunkOffset, chunkLimit) {
+            const cacheKey = replayPayloadCacheKey(evalSourcePath, epIndex) + "::" + String(Math.max(0, Number(chunkOffset || 0))) + "::" + String(Math.max(1, Number(chunkLimit || 80)));
+            if (Object.prototype.hasOwnProperty.call(replayState.payloadCache, cacheKey)) {
+              setReplayLoadStatus("Loading replay: cache hit...", "info");
+              return replayState.payloadCache[cacheKey];
+            }
+            setReplayLoadStatus("Loading replay: fetching chunk...", "info");
+            const url = `/api/muzero-replay?eval_source_path=${encodeURIComponent(String(evalSourcePath || ""))}&episode_index=${encodeURIComponent(String(epIndex || 0))}&chunk_offset=${encodeURIComponent(String(Math.max(0, Number(chunkOffset || 0))))}&chunk_limit=${encodeURIComponent(String(Math.max(1, Number(chunkLimit || 80))))}`;
+            const resp = await fetch(url);
+            setReplayLoadStatus("Loading replay: parsing payload...", "info");
+            const payload = await resp.json();
+            replayState.payloadCache[cacheKey] = payload;
+            return payload;
+          }
           try {
-            const resp = await fetch(`/api/muzero-replay?eval_source_path=${encodeURIComponent(String(row.eval_source_path || ""))}&episode_index=${encodeURIComponent(String(episodeIdx))}`);
-            replayState.payload = await resp.json();
+            setReplayLoadStatus("Loading replay: first chunk...", "info");
+            replayState.payload = await fetchReplayPayload(String(row.eval_source_path || ""), episodeIdx, 0, replayState.chunkSize);
+            const firstTransitions = Array.isArray(replayState.payload && replayState.payload.transitions)
+              ? replayState.payload.transitions
+              : [];
+            // Some eval artifacts expose sparse/invalid episode indexes in UI state.
+            // If selected episode is empty, retry episode 0 automatically.
+            if (!firstTransitions.length && Number(episodeIdx) > 0) {
+              setReplayLoadStatus("Loading replay: retrying episode 0...", "info");
+              const fallbackPayload = await fetchReplayPayload(String(row.eval_source_path || ""), 0, 0, replayState.chunkSize);
+              const fallbackTransitions = Array.isArray(fallbackPayload && fallbackPayload.transitions)
+                ? fallbackPayload.transitions
+                : [];
+              if (fallbackTransitions.length) {
+                replayState.payload = fallbackPayload;
+                replayState.episodeIndex = 0;
+                const epSelect = document.getElementById("replayEpisodeSelect");
+                if (epSelect) epSelect.value = "0";
+              }
+            }
             if (replayState.payload && replayState.payload.error) {
               if (details) details.innerHTML = '<div class="muted">Replay payload error: ' + esc(String(replayState.payload.error)) + '</div>';
+            }
+            replayState.transitionsTotal = Math.max(0, Number((replayState.payload && replayState.payload.transitions_total) || 0));
+            replayState.transitionsHasMore = Boolean(replayState.payload && replayState.payload.transitions_has_more);
+            // Auto-load all chunks for the selected episode so replay navigation
+            // does not depend on manual "Load More" interactions.
+            let chunkGuard = 0;
+            while (replayState.transitionsHasMore && chunkGuard < 1000) {
+              chunkGuard += 1;
+              const existing = Array.isArray(replayState.payload && replayState.payload.transitions)
+                ? replayState.payload.transitions
+                : [];
+              const chunkOffset = existing.length;
+              setReplayLoadStatus(
+                "Loading replay: transitions " + String(chunkOffset) + "/" + String(Math.max(chunkOffset, Number(replayState.transitionsTotal || 0))) + "...",
+                "info"
+              );
+              const extra = await fetchReplayPayload(
+                String(row.eval_source_path || ""),
+                Math.max(0, Number(replayState.episodeIndex || episodeIdx || 0)),
+                chunkOffset,
+                replayState.chunkSize
+              );
+              const extraTransitions = Array.isArray(extra && extra.transitions) ? extra.transitions : [];
+              if (!extraTransitions.length) {
+                replayState.transitionsHasMore = false;
+                break;
+              }
+              replayState.payload.transitions = existing.concat(extraTransitions);
+              replayState.transitionsTotal = Math.max(
+                replayState.payload.transitions.length,
+                Number((extra && extra.transitions_total) || replayState.transitionsTotal || 0)
+              );
+              replayState.transitionsHasMore = Boolean(extra && extra.transitions_has_more);
             }
             replayState.step = 0;
           } catch (_e) {
             replayState.payload = null;
             if (details) details.innerHTML = '<div class="muted">Replay fetch failed.</div>';
+            setReplayLoadStatus("Replay load failed.", "error");
           }
-          drawReplay();
-          loadReplayLog();
+          drawReplay(true);
+          scheduleReplayLogLoad(0);
+          const t1 = (typeof performance !== "undefined" && performance.now) ? performance.now() : Date.now();
+          const ms = Math.max(0, Math.round(Number(t1) - Number(t0)));
+          const loaded = Array.isArray(replayState.payload && replayState.payload.transitions)
+            ? replayState.payload.transitions.length
+            : 0;
+          const total = Math.max(loaded, Number(replayState.transitionsTotal || 0));
+          setReplayLoadStatus("Replay loaded: " + String(loaded) + "/" + String(total) + " transitions (" + String(ms) + " ms)", "ok");
         }
         async function loadReplayLog() {
           const logHost = document.getElementById("replayLogHost");
@@ -2690,7 +4446,11 @@ def _model_html() -> str:
             const evalSel = document.getElementById("replayEvalSelect");
             const epSel = document.getElementById("replayEpisodeSelect");
             const evalId = String((((evalSel || {}).value) || replayState.evalId || ""));
-            const epIdx = Math.max(0, Number((((epSel || {}).value) || replayState.episodeIndex || 0)));
+            const epIdx = Math.max(0, Number(
+              (epSel && Number.isFinite(Number(epSel.selectedIndex)) && Number(epSel.selectedIndex) >= 0)
+                ? epSel.selectedIndex
+                : ((((epSel || {}).value) || replayState.episodeIndex || 0))
+            ));
             const row = evalRows.find(r => String(r.eval_id || "") === String(evalId)) || activeRow;
             const src = String((row && row.eval_source_path) || "");
             if (!src) {
@@ -2698,6 +4458,13 @@ def _model_html() -> str:
               return;
             }
             const upto = Math.max(0, Number(replayState.step || 0));
+            const selectedUnitId = String(replayState.unitFilter || "__all__");
+            const cacheKey = replayLogCacheKey(src, epIdx, upto, selectedUnitId);
+            if (Object.prototype.hasOwnProperty.call(replayState.logCache, cacheKey)) {
+              logHost.textContent = String(replayState.logCache[cacheKey] || "");
+              logHost.scrollTop = logHost.scrollHeight;
+              return;
+            }
             const url = "/api/replay-log?eval_source_path=" + encodeURIComponent(src)
               + "&episode_index=" + encodeURIComponent(String(epIdx))
               + "&upto_step=" + encodeURIComponent(String(upto));
@@ -2713,7 +4480,7 @@ def _model_html() -> str:
                 if (!unitMatch || !unitMatch[1]) return txt;
                 return txt.replace(/(to_play=[^\\s]+)/, "$1 unit_id=" + unitMatch[1]);
               });
-              const unitId = String(replayState.unitFilter || "__all__");
+              const unitId = selectedUnitId;
               const filteredLines = unitId === "__all__"
                 ? withUnitAfterToPlay
                 : withUnitAfterToPlay.filter(function (line) { return replayLogLineMatchesUnit(line, unitId); });
@@ -2727,11 +4494,13 @@ def _model_html() -> str:
             } else {
               logHost.textContent = "Execution log has no lines for current episode/step.";
             }
+            replayState.logCache[cacheKey] = String(logHost.textContent || "");
             logHost.scrollTop = logHost.scrollHeight;
           } catch (e) {
             logHost.textContent = "Execution log unavailable: " + String((e && e.message) || e || "unknown error");
           }
         }
+        replayState.loadReplayLogFn = loadReplayLog;
         function oddRRaw(q, r) {
           const qn = Number(q || 0);
           const rn = Number(r || 0);
@@ -2744,8 +4513,9 @@ def _model_html() -> str:
         function makeProjection(baseCells, w, h, pad) {
           const cells = Array.isArray(baseCells) && baseCells.length
             ? baseCells
-            : Array.from({ length: h }, (_, rr) =>
-                Array.from({ length: w }, (_, qq) => ({ q: qq, r: rr }))
+            // Defensive fallback: never use pixel width/height as cell counts.
+            : Array.from({ length: 12 }, (_, rr) =>
+                Array.from({ length: 18 }, (_, qq) => ({ q: qq, r: rr }))
               ).flat();
           const raws = cells.map((c) => oddRRaw(Number(c.q || 0), Number(c.r || 0)));
           let minX = Number.POSITIVE_INFINITY;
@@ -2792,6 +4562,17 @@ def _model_html() -> str:
           ctx.lineWidth = 1;
           ctx.stroke();
         }
+        function drawHexCoordLabel(ctx, cx, cy, size, q, r) {
+          const qn = Math.round(Number(q || 0));
+          const rn = Math.round(Number(r || 0));
+          ctx.fillStyle = "rgba(148,163,184,0.82)";
+          ctx.font = String(Math.max(8, Math.floor(size * 0.28))) + "px sans-serif";
+          ctx.textAlign = "left";
+          ctx.textBaseline = "top";
+          const labelX = cx - size * 0.62;
+          const labelY = cy - size * 0.52;
+          ctx.fillText("(" + String(qn) + "," + String(rn) + ")", labelX, labelY);
+        }
         function buildReplayUnitCatalog(transitions) {
           const byId = {};
           for (const row of (Array.isArray(transitions) ? transitions : [])) {
@@ -2811,6 +4592,390 @@ def _model_html() -> str:
           const wanted = String(unitId || "").trim();
           if (!wanted) return true;
           return txt.indexOf("unit_id=" + wanted) >= 0 || txt.indexOf(":" + wanted + ":") >= 0;
+        }
+        function setReplayHoveredUnit(unitId) {
+          const selectedUnitId = String(replayState.unitFilter || "__all__").trim();
+          let nextId = String(unitId || "");
+          if (selectedUnitId !== "__all__" && nextId && nextId !== selectedUnitId) nextId = "";
+          const curr = String(replayState.hoveredUnitId || "");
+          if (nextId === curr) return;
+          replayState.hoveredUnitId = nextId;
+          if (replayState.hoverDebounceTimer) clearTimeout(replayState.hoverDebounceTimer);
+          replayState.hoverDebounceTimer = setTimeout(function () {
+            replayState.hoverDebounceTimer = null;
+            requestReplayDraw("hover", false);
+          }, 24);
+        }
+        function replayActionKindFromId(actionId) {
+          return String(actionId || "").split(":")[0].trim().toUpperCase();
+        }
+        function replayActionUnitFromId(actionId) {
+          const parts = String(actionId || "").split(":");
+          return String(parts.length > 1 ? parts[1] : "").trim();
+        }
+        function replayActionHexFromRaw(raw) {
+          if (!raw || typeof raw !== "object") return null;
+          const qKeys = ["target_q", "to_q", "action_target_q", "hex_q"];
+          const rKeys = ["target_r", "to_r", "action_target_r", "hex_r"];
+          for (let i = 0; i < Math.min(qKeys.length, rKeys.length); i += 1) {
+            const q = Number(raw[qKeys[i]]);
+            const r = Number(raw[rKeys[i]]);
+            if (Number.isFinite(q) && Number.isFinite(r)) return { q, r };
+          }
+          const actionId = String(raw.action_id || raw.id || "");
+          const parts = actionId.split(":");
+          if (parts.length >= 4) {
+            const q = Number(parts[2]);
+            const r = Number(parts[3]);
+            if (Number.isFinite(q) && Number.isFinite(r)) return { q, r };
+          }
+          return null;
+        }
+        function replayCollectCanonicalActionCandidates(stepRow) {
+          const out = [];
+          const pushActionLike = function (raw) {
+            if (raw === null || raw === undefined) return;
+            if (typeof raw === "string") {
+              out.push({ action_id: raw });
+              return;
+            }
+            if (raw && typeof raw === "object") out.push(raw);
+          };
+          const directLists = [
+            stepRow && stepRow.legal_actions,
+            stepRow && stepRow.legal_action_ids,
+            stepRow && stepRow.mcts_action_candidates,
+            stepRow && stepRow.why_action_vs_vp && stepRow.why_action_vs_vp.candidate_actions,
+          ];
+          for (const src of directLists) {
+            if (!Array.isArray(src)) continue;
+            for (const item of src) pushActionLike(item);
+          }
+          return out;
+        }
+        function replayCandidateActorUnit(cand) {
+          if (!cand || typeof cand !== "object") return "";
+          const actionId = String((cand && cand.action_id) || cand.id || "");
+          const explicitActorUnits = [
+            String((cand && cand.unit_id) || "").trim(),
+            String((cand && cand.actor_unit_id) || "").trim(),
+            String((cand && cand.source_unit_id) || "").trim(),
+          ].filter(Boolean);
+          const uniqueExplicit = Array.from(new Set(explicitActorUnits));
+          if (uniqueExplicit.length > 1) return "";
+          const explicitActor = uniqueExplicit.length ? uniqueExplicit[0] : "";
+          const derivedActor = String(replayActionUnitFromId(actionId) || "").trim();
+          if (derivedActor && explicitActor && derivedActor !== explicitActor) return "";
+          return explicitActor || derivedActor;
+        }
+        function replayCollectUnitHexCandidates(stepRow, hoveredUnitId) {
+          const wanted = String(hoveredUnitId || "").trim();
+          const empty = { moveHexes: [], attackHexes: [] };
+          if (!wanted || !stepRow || typeof stepRow !== "object") return empty;
+          const moveMap = {};
+          const attackMap = {};
+          const addHex = function (bucket, q, r) {
+            if (!Number.isFinite(Number(q)) || !Number.isFinite(Number(r))) return;
+            const qn = Number(q);
+            const rn = Number(r);
+            bucket[String(qn) + "," + String(rn)] = { q: qn, r: rn };
+          };
+          const moveKind = function (kind) {
+            const k = String(kind || "").toUpperCase();
+            return k === "MOVE" || k === "ADVANCE" || k === "REDEPLOY";
+          };
+          const attackKind = function (kind) {
+            const k = String(kind || "").toUpperCase();
+            return k.indexOf("FIRE") >= 0 || k.indexOf("ATTACK") >= 0 || k.indexOf("MELEE") >= 0;
+          };
+          const actionCandidates = replayCollectCanonicalActionCandidates(stepRow);
+          for (const cand of actionCandidates) {
+            const actionId = String((cand && cand.action_id) || cand.id || "");
+            const kind = String((cand && (cand.action_kind || cand.kind)) || replayActionKindFromId(actionId));
+            const actionUnit = replayCandidateActorUnit(cand);
+            if (!actionUnit || actionUnit !== wanted) continue;
+            const hex = replayActionHexFromRaw(cand);
+            if (!hex) continue;
+            if (moveKind(kind)) addHex(moveMap, hex.q, hex.r);
+            else if (attackKind(kind)) addHex(attackMap, hex.q, hex.r);
+          }
+          return {
+            moveHexes: Object.values(moveMap),
+            attackHexes: Object.values(attackMap),
+          };
+        }
+        function replayBindCanvasHoverHandlers(canvas) {
+          if (!canvas) return;
+          if (replayState.hoverCanvasBound && replayState.hoverCanvasEl === canvas) return;
+          canvas.onmousemove = function (ev) {
+            const rectLocal = canvas.getBoundingClientRect();
+            const mx = Number(ev.clientX || 0) - Number(rectLocal.left || 0);
+            const my = Number(ev.clientY || 0) - Number(rectLocal.top || 0);
+            const points = Array.isArray(replayState.hoverHitPoints) ? replayState.hoverHitPoints : [];
+            const hitRadius = Math.max(6, Number(replayState.hoverHitRadius || 6));
+            let hitUnit = "";
+            for (const u of points) {
+              const dx = Number(u.x || 0) - mx;
+              const dy = Number(u.y || 0) - my;
+              if ((dx * dx + dy * dy) <= (hitRadius * hitRadius)) {
+                hitUnit = String(u.unit_id || "");
+                break;
+              }
+            }
+            setReplayHoveredUnit(hitUnit);
+          };
+          canvas.onmouseleave = function () {
+            setReplayHoveredUnit("");
+          };
+          replayState.hoverCanvasEl = canvas;
+          replayState.hoverCanvasBound = true;
+        }
+        function renderReplayHoveredActions(stepRow) {
+          const host = document.getElementById("replayHoverActionsHost");
+          if (!host) return;
+          const fmtNum = function (v, digits) {
+            if (v === null || v === undefined) return "N/A";
+            const n = Number(v);
+            if (!Number.isFinite(n)) return "N/A";
+            const d = Number.isFinite(Number(digits)) ? Number(digits) : 3;
+            return n.toFixed(d);
+          };
+          const hoveredUnitId = String(replayState.hoveredUnitId || "").trim();
+          const selectedUnitId = String(replayState.unitFilter || "__all__").trim();
+          const effectiveUnitId = hoveredUnitId || (selectedUnitId !== "__all__" ? selectedUnitId : "");
+          if (!stepRow || typeof stepRow !== "object") {
+            host.innerHTML = '<div class="muted">Hover a unit to inspect candidate actions.</div>';
+            return;
+          }
+          if (!effectiveUnitId) {
+            host.innerHTML = '<div class="muted">Hover a unit to inspect candidate actions.</div>';
+            return;
+          }
+          const candidateRows = replayCollectCanonicalActionCandidates(stepRow);
+          const why = (stepRow.why_action_vs_vp && typeof stepRow.why_action_vs_vp === "object") ? stepRow.why_action_vs_vp : {};
+          const chosenActionId = String((why && why.chosen_action_id) || stepRow.action_id || "").trim();
+          const vpBestActionId = String((why && why.vp_best_action_id) || "").trim();
+          const filtered = [];
+          for (const cand of candidateRows) {
+            const actorUnitId = replayCandidateActorUnit(cand);
+            if (!actorUnitId || actorUnitId !== effectiveUnitId) continue;
+            const actionId = String((cand && cand.action_id) || cand.id || "").trim();
+            const actionKind = String((cand && (cand.action_kind || cand.kind)) || replayActionKindFromId(actionId)).toUpperCase();
+            const target = replayActionHexFromRaw(cand);
+            const markers = [];
+            if (actionId && chosenActionId && actionId === chosenActionId) markers.push("chosen");
+            if (actionId && vpBestActionId && actionId === vpBestActionId) markers.push("vp-best");
+            if (cand && cand.selected_action === true) markers.push("selected");
+            filtered.push({
+              actionId: actionId || "N/A",
+              actionKind: actionKind || "N/A",
+              unitId: actorUnitId,
+              targetQr: target ? (String(Number(target.q)) + "," + String(Number(target.r))) : "-",
+              vpDelta: (cand && cand.vp_progress_delta !== undefined && cand.vp_progress_delta !== null && Number.isFinite(Number(cand.vp_progress_delta)))
+                ? Number(cand.vp_progress_delta)
+                : null,
+              vpDistanceAfter: (cand && cand.vp_distance_after !== undefined && cand.vp_distance_after !== null && Number.isFinite(Number(cand.vp_distance_after)))
+                ? Number(cand.vp_distance_after)
+                : null,
+              markers: markers.length ? markers.join(", ") : "-",
+              raw: cand,
+            });
+          }
+          // Merge telemetry across duplicated action_id entries coming from
+          // legal list + mcts candidates + why_action_vs_vp candidates.
+          const mergedByAction = {};
+          for (const row of filtered) {
+            const key = String(row.actionId || "").trim();
+            if (!key || key === "N/A") continue;
+            if (!mergedByAction[key]) {
+              mergedByAction[key] = {
+                vpDelta: row.vpDelta,
+                vpDistanceAfter: row.vpDistanceAfter,
+              };
+              continue;
+            }
+            if (mergedByAction[key].vpDelta === null && row.vpDelta !== null) {
+              mergedByAction[key].vpDelta = row.vpDelta;
+            }
+            if (mergedByAction[key].vpDistanceAfter === null && row.vpDistanceAfter !== null) {
+              mergedByAction[key].vpDistanceAfter = row.vpDistanceAfter;
+            }
+          }
+          for (const row of filtered) {
+            const key = String(row.actionId || "").trim();
+            const merged = mergedByAction[key];
+            if (!merged) continue;
+            if (row.vpDelta === null && merged.vpDelta !== null) row.vpDelta = merged.vpDelta;
+            if (row.vpDistanceAfter === null && merged.vpDistanceAfter !== null) row.vpDistanceAfter = merged.vpDistanceAfter;
+          }
+          const hasOwn = function (obj, key) {
+            return !!obj && typeof obj === "object" && Object.prototype.hasOwnProperty.call(obj, key);
+          };
+          const hasMctsTelemetry = function (cand) {
+            if (!cand || typeof cand !== "object") return false;
+            return (
+              hasOwn(cand, "real_decision_score") ||
+              hasOwn(cand, "visit_count") ||
+              hasOwn(cand, "decision_rank") ||
+              hasOwn(cand, "mcts_q_value") ||
+              hasOwn(cand, "mcts_u_value") ||
+              hasOwn(cand, "policy_prior")
+            );
+          };
+          const valueOrNA = function (value) {
+            if (value === null || value === undefined) return "N/A";
+            const txt = String(value).trim();
+            return txt ? txt : "N/A";
+          };
+          const fmtTinyProb = function (value) {
+            if (value === null || value === undefined) return "N/A";
+            const n = Number(value);
+            if (!Number.isFinite(n)) return "N/A";
+            if (n === 0) return "0";
+            if (Math.abs(n) < 1e-6) return "<1e-6 (" + n.toExponential(2) + ")";
+            return fmtNum(n, 6);
+          };
+          const mctsRowsRaw = [];
+          for (const row of filtered) {
+            if (!hasMctsTelemetry(row.raw)) continue;
+            const raw = row.raw || {};
+            const scoreRaw = hasOwn(raw, "real_decision_score") ? raw.real_decision_score : null;
+            const scoreNum = (scoreRaw === null || scoreRaw === undefined) ? null : Number(scoreRaw);
+            const visitsRaw = hasOwn(raw, "visit_count") ? raw.visit_count : null;
+            const visitsNum = (visitsRaw === null || visitsRaw === undefined) ? null : Number(visitsRaw);
+            const rankRaw = hasOwn(raw, "decision_rank") ? raw.decision_rank : null;
+            const qRaw = hasOwn(raw, "mcts_q_value") ? raw.mcts_q_value : null;
+            const uRaw = hasOwn(raw, "mcts_u_value") ? raw.mcts_u_value : null;
+            const priorRaw = hasOwn(raw, "policy_prior") ? raw.policy_prior : null;
+            const selectionSourceRaw = hasOwn(raw, "selection_source") ? raw.selection_source : null;
+            mctsRowsRaw.push({
+              actionId: row.actionId,
+              unitId: row.unitId,
+              scoreNum: Number.isFinite(scoreNum) ? Number(scoreNum) : null,
+              visitsNum: Number.isFinite(visitsNum) ? Number(visitsNum) : null,
+              vpDelta: valueOrNA((row.vpDelta === null || row.vpDelta === undefined) ? null : fmtNum(row.vpDelta, 3)),
+              vpDist: valueOrNA((row.vpDistanceAfter === null || row.vpDistanceAfter === undefined) ? null : fmtNum(row.vpDistanceAfter, 3)),
+              score: valueOrNA(scoreNum === null || !Number.isFinite(scoreNum) ? null : fmtNum(scoreNum, 3)),
+              visits: valueOrNA(visitsRaw),
+              rank: valueOrNA(rankRaw),
+              qValue: valueOrNA((qRaw === null || qRaw === undefined || !Number.isFinite(Number(qRaw))) ? null : fmtNum(Number(qRaw), 3)),
+              uValue: valueOrNA((uRaw === null || uRaw === undefined || !Number.isFinite(Number(uRaw))) ? null : fmtNum(Number(uRaw), 3)),
+              prior: valueOrNA((priorRaw === null || priorRaw === undefined || !Number.isFinite(Number(priorRaw))) ? null : fmtNum(Number(priorRaw), 3)),
+              visitShare: valueOrNA(hasOwn(raw, "visit_share") ? fmtTinyProb(raw.visit_share) : null),
+              chosenActionProb: valueOrNA(hasOwn(raw, "chosen_action_prob") ? fmtTinyProb(raw.chosen_action_prob) : null),
+              selectionSource: valueOrNA(selectionSourceRaw),
+            });
+          }
+          const byScoreOrder = mctsRowsRaw.slice().sort(function (a, b) {
+            const as = Number.isFinite(Number(a.scoreNum)) ? Number(a.scoreNum) : -Infinity;
+            const bs = Number.isFinite(Number(b.scoreNum)) ? Number(b.scoreNum) : -Infinity;
+            if (bs !== as) return bs - as;
+            return String(a.actionId || "").localeCompare(String(b.actionId || ""));
+          });
+          const byVisitsOrder = mctsRowsRaw.slice().sort(function (a, b) {
+            const av = Number.isFinite(Number(a.visitsNum)) ? Number(a.visitsNum) : -1;
+            const bv = Number.isFinite(Number(b.visitsNum)) ? Number(b.visitsNum) : -1;
+            if (bv !== av) return bv - av;
+            const as = Number.isFinite(Number(a.scoreNum)) ? Number(a.scoreNum) : -Infinity;
+            const bs = Number.isFinite(Number(b.scoreNum)) ? Number(b.scoreNum) : -Infinity;
+            if (bs !== as) return bs - as;
+            return String(a.actionId || "").localeCompare(String(b.actionId || ""));
+          });
+          const rankByScore = {};
+          const rankByVisits = {};
+          byScoreOrder.forEach(function (r, idx) { rankByScore[String(r.actionId || "")] = idx + 1; });
+          byVisitsOrder.forEach(function (r, idx) { rankByVisits[String(r.actionId || "")] = idx + 1; });
+          const mctsRows = mctsRowsRaw.map(function (r) {
+            return Object.assign({}, r, {
+              rankByScore: valueOrNA(rankByScore[String(r.actionId || "")]),
+              rankByVisits: valueOrNA(rankByVisits[String(r.actionId || "")]),
+            });
+          });
+          const sourceLabel = hoveredUnitId ? "hover" : "selected";
+          let html = '<div class="muted" style="margin-bottom:4px;">Hovered unit action candidates (producer-only strict) | unit=' + esc(effectiveUnitId) + ' | source=' + esc(sourceLabel) + '</div>';
+          html += '<div style="margin:4px 0 6px 0;font-weight:600;">Legal actions (unit-scoped)</div>';
+          html += '<div class="muted" style="margin-bottom:4px;">Producer legal list for hovered unit; no MCTS fields required.</div>';
+          html += '<div id="replayHoverLegalTableWrap" class="replay-candidate-table-wrap"><table class="replay-candidate-table" style="width:100%;border-collapse:collapse;font-size:12px;">' +
+            '<thead><tr>' +
+            '<th style="border:1px solid #334155;padding:6px;">action_id</th>' +
+            '<th style="border:1px solid #334155;padding:6px;">action_kind</th>' +
+            '<th style="border:1px solid #334155;padding:6px;">unit_id</th>' +
+            '<th style="border:1px solid #334155;padding:6px;">target_qr</th>' +
+            '<th style="border:1px solid #334155;padding:6px;">vp_delta</th>' +
+            '<th style="border:1px solid #334155;padding:6px;">vp_dist</th>' +
+            '<th style="border:1px solid #334155;padding:6px;">markers</th>' +
+            '</tr></thead><tbody>';
+          if (!filtered.length) {
+            html += '<tr><td colspan="7" style="border:1px solid #334155;padding:6px;" class="muted">No candidate actions for hovered unit in this step.</td></tr>';
+          } else {
+            for (const row of filtered) {
+              const isChosen = String(row.markers || "").indexOf("chosen") >= 0;
+              const isVpBest = String(row.markers || "").indexOf("vp-best") >= 0;
+              const rowStyle = isChosen
+                ? 'background:rgba(16,185,129,0.18);'
+                : (isVpBest ? 'background:rgba(250,204,21,0.12);' : '');
+              html += '<tr>' +
+                '<td style="border:1px solid #334155;padding:6px;' + rowStyle + '">' + esc(row.actionId) + '</td>' +
+                '<td style="border:1px solid #334155;padding:6px;' + rowStyle + '">' + esc(row.actionKind) + '</td>' +
+                '<td style="border:1px solid #334155;padding:6px;' + rowStyle + '">' + esc(row.unitId) + '</td>' +
+                '<td style="border:1px solid #334155;padding:6px;' + rowStyle + '">' + esc(row.targetQr) + '</td>' +
+                '<td style="border:1px solid #334155;padding:6px;' + rowStyle + '">' + esc(row.vpDelta === null ? "N/A" : fmtNum(row.vpDelta, 3)) + '</td>' +
+                '<td style="border:1px solid #334155;padding:6px;' + rowStyle + '">' + esc(row.vpDistanceAfter === null ? "N/A" : fmtNum(row.vpDistanceAfter, 3)) + '</td>' +
+                '<td style="border:1px solid #334155;padding:6px;' + rowStyle + '">' + esc(row.markers) + '</td>' +
+                '</tr>';
+            }
+          }
+          html += '</tbody></table></div>';
+          html += '<div style="margin:8px 0 6px 0;font-weight:600;">MCTS-evaluated actions</div>';
+          html += '<div class="muted" style="margin-bottom:4px;">Rows below are producer-only strict; missing producer keys show as N/A. Tiny probs are shown as &lt;1e-6 (scientific).</div>';
+          html += '<div id="replayHoverMctsTableWrap" class="replay-candidate-table-wrap"><table class="replay-candidate-table" style="width:100%;border-collapse:collapse;font-size:12px;">' +
+            '<thead><tr>' +
+            '<th style="border:1px solid #334155;padding:6px;">action_id</th>' +
+            '<th style="border:1px solid #334155;padding:6px;">unit_id</th>' +
+            '<th style="border:1px solid #334155;padding:6px;">vp_delta</th>' +
+            '<th style="border:1px solid #334155;padding:6px;">vp_dist</th>' +
+            '<th style="border:1px solid #334155;padding:6px;">score</th>' +
+            '<th style="border:1px solid #334155;padding:6px;">visits</th>' +
+            '<th style="border:1px solid #334155;padding:6px;">rank</th>' +
+            '<th style="border:1px solid #334155;padding:6px;">rank_by_score</th>' +
+            '<th style="border:1px solid #334155;padding:6px;">rank_by_visits</th>' +
+            '<th style="border:1px solid #334155;padding:6px;">mcts_q</th>' +
+            '<th style="border:1px solid #334155;padding:6px;">mcts_u</th>' +
+            '<th style="border:1px solid #334155;padding:6px;">prior</th>' +
+            '<th style="border:1px solid #334155;padding:6px;">visit_share</th>' +
+            '<th style="border:1px solid #334155;padding:6px;">chosen_action_prob</th>' +
+            '<th style="border:1px solid #334155;padding:6px;">selection_source</th>' +
+            '</tr></thead><tbody>';
+          if (!mctsRows.length) {
+            html += '<tr><td colspan="15" style="border:1px solid #334155;padding:6px;" class="muted">No MCTS-evaluated actions for hovered unit in this step.</td></tr>';
+          } else {
+            for (const row of mctsRows) {
+              const isChosen = String(row.actionId || "") === String(chosenActionId || "");
+              const isVpBest = String(row.actionId || "") === String(vpBestActionId || "");
+              const rowStyle = isChosen
+                ? 'background:rgba(16,185,129,0.18);'
+                : (isVpBest ? 'background:rgba(250,204,21,0.12);' : '');
+              html += '<tr>' +
+                '<td style="border:1px solid #334155;padding:6px;' + rowStyle + '">' + esc(row.actionId) + '</td>' +
+                '<td style="border:1px solid #334155;padding:6px;' + rowStyle + '">' + esc(row.unitId) + '</td>' +
+                '<td style="border:1px solid #334155;padding:6px;' + rowStyle + '">' + esc(row.vpDelta) + '</td>' +
+                '<td style="border:1px solid #334155;padding:6px;' + rowStyle + '">' + esc(row.vpDist) + '</td>' +
+                '<td style="border:1px solid #334155;padding:6px;' + rowStyle + '">' + esc(row.score) + '</td>' +
+                '<td style="border:1px solid #334155;padding:6px;' + rowStyle + '">' + esc(row.visits) + '</td>' +
+                '<td style="border:1px solid #334155;padding:6px;' + rowStyle + '">' + esc(row.rank) + '</td>' +
+                '<td style="border:1px solid #334155;padding:6px;' + rowStyle + '">' + esc(row.rankByScore) + '</td>' +
+                '<td style="border:1px solid #334155;padding:6px;' + rowStyle + '">' + esc(row.rankByVisits) + '</td>' +
+                '<td style="border:1px solid #334155;padding:6px;' + rowStyle + '">' + esc(row.qValue) + '</td>' +
+                '<td style="border:1px solid #334155;padding:6px;' + rowStyle + '">' + esc(row.uValue) + '</td>' +
+                '<td style="border:1px solid #334155;padding:6px;' + rowStyle + '">' + esc(row.prior) + '</td>' +
+                '<td style="border:1px solid #334155;padding:6px;' + rowStyle + '">' + esc(row.visitShare) + '</td>' +
+                '<td style="border:1px solid #334155;padding:6px;' + rowStyle + '">' + esc(row.chosenActionProb) + '</td>' +
+                '<td style="border:1px solid #334155;padding:6px;' + rowStyle + '">' + esc(row.selectionSource) + '</td>' +
+                '</tr>';
+            }
+          }
+          html += '</tbody></table></div>';
+          host.innerHTML = html;
         }
         function replayStepHasRelevantUnitActivity(stepRow, unitId) {
           const wanted = String(unitId || "").trim();
@@ -2903,13 +5068,14 @@ def _model_html() -> str:
           const nav = resolveReplayStepDelta(delta);
           replayState.step = nav.targetStep;
           drawReplay();
-          loadReplayLog();
+          scheduleReplayLogLoad(90);
           if (!nav.moved) {
-            const direction = Number(delta || 0) >= 0 ? "next" : "previous";
             if (String(replayState.unitFilter || "__all__") === "__all__") {
+              const direction = Number(delta || 0) >= 0 ? "next" : "previous";
               setReplayStepNavFeedback("No " + direction + " step.");
             } else {
-              setReplayStepNavFeedback("No " + direction + " step for selected unit.");
+              if (Number(delta || 0) >= 0) setReplayStepNavFeedback("No next step for selected unit.");
+              else setReplayStepNavFeedback("No previous step for selected unit.");
             }
           } else {
             setReplayStepNavFeedback("");
@@ -2957,19 +5123,21 @@ def _model_html() -> str:
           if (select) {
             select.onchange = function () {
               replayState.unitFilter = String(select.value || "__all__");
+              replayState.hoveredUnitId = "";
               snapReplayStepToRelevantUnitActivity();
               setReplayStepNavFeedback("");
               drawReplay();
-              loadReplayLog();
+              scheduleReplayLogLoad(60);
             };
           }
           const clearBtn = document.getElementById("replayUnitFilterClearBtn");
           if (clearBtn) {
             clearBtn.onclick = function () {
               replayState.unitFilter = "__all__";
+              replayState.hoveredUnitId = "";
               setReplayStepNavFeedback("");
               drawReplay();
-              loadReplayLog();
+              scheduleReplayLogLoad(60);
             };
           }
         }
@@ -3083,8 +5251,13 @@ def _model_html() -> str:
             if (!rows.length) {
               return '<tr><td colspan="2" style="border:1px solid #334155;padding:6px;" class="muted">' + esc(emptyMsg) + '</td></tr>';
             }
+            function valueClass(v) {
+              const s = String(v || "");
+              if (s === "N/A" || s.indexOf("N/A") >= 0 || s === "unknown") return "na-text";
+              return "ok-text";
+            }
             return rows.map(function (r) {
-              return '<tr><td style="border:1px solid #334155;padding:6px;">' + esc(String(r[0])) + '</td><td style="border:1px solid #334155;padding:6px;">' + esc(String(r[1])) + '</td></tr>';
+              return '<tr><td style="border:1px solid #334155;padding:6px;">' + esc(String(r[0])) + '</td><td style="border:1px solid #334155;padding:6px;"><span class="' + valueClass(r[1]) + '">' + esc(String(r[1])) + "</span></td></tr>";
             }).join("");
           }
           function headCard(title, summary, tableTitleA, tableTitleB, rows, emptyMsg, headName) {
@@ -3146,7 +5319,10 @@ def _model_html() -> str:
               ["chosen_action_prob", fmtPercent(stepRow.chosen_action_prob, 1)],
               ["mcts_margin", fmtNumber(stepRow.mcts_margin, 4)],
               ["mcts_entropy", fmtNumber(stepRow.mcts_entropy, 4)],
-              ["mcts_total_visits", fmtNumber(stepRow.mcts_total_visits, 0)]
+              ["mcts_total_visits", fmtNumber(stepRow.mcts_total_visits, 0)],
+              ["active_actions_with_visits", fmtNumber(stepRow.mcts_active_actions, 0)],
+              ["mcts_entropy_source", String(stepRow.mcts_entropy_source || "unknown")],
+              ["mcts_entropy_collapse", String(stepRow.mcts_entropy_collapse_label || "unknown")]
             ],
             "No MCTS diagnostics.",
             "mcts"
@@ -3207,6 +5383,10 @@ def _model_html() -> str:
           const objectiveOpp = safeNum(stepRow.objective_had_opportunity);
           const objectiveConverted = safeNum(stepRow.objective_converted);
           const objectiveProgress = safeNum(stepRow.objective_progress_delta);
+          const unitPrefilterEnabled = safeNum(stepRow.unit_prefilter_enabled);
+          const unitPrefilterSelectedUnitId = String(stepRow.unit_prefilter_selected_unit_id || "");
+          const unitPrefilterConstrainedCount = safeNum(stepRow.unit_prefilter_constrained_count);
+          const unitPrefilterGlobalCount = safeNum(stepRow.unit_prefilter_global_count);
           const mctsDominanceScore = Math.max(safeNum(stepRow.chosen_action_prob) || 0, safeNum(stepRow.mcts_margin) || 0);
           const policyDominanceScore = safeNum((Array.isArray(stepRow.policy_top_probs) ? stepRow.policy_top_probs[0] : null)) || 0;
           const objectiveDominanceScore = Math.max((objectiveOpp || 0) * 0.35, Math.max(0, objectiveProgress || 0) * 0.6, (objectiveConverted || 0) * 1.0);
@@ -3227,7 +5407,6 @@ def _model_html() -> str:
             safeNum(stepRow.reward) !== null || objectiveProgress !== null || safeNum(stepRow.damage_dealt) !== null || safeNum(stepRow.kills_dealt) !== null,
           ];
           const stepCoverage = coverageState(partsPresent);
-          const coverageColor = stepCoverage === "complete" ? "#22c55e" : (stepCoverage === "partial" ? "#f59e0b" : "#ef4444");
           let opportunities = 0;
           let converted = 0;
           let overrides = 0;
@@ -3269,7 +5448,8 @@ def _model_html() -> str:
             ["policy top-k", policyTopAction ? (policyTopAction + " | top1=" + fmtPct((Array.isArray(stepRow.policy_top_probs) ? stepRow.policy_top_probs[0] : null), 1)) : "N/A"],
             ["value/reward/objective/consistency", "value=" + fmtNum(stepRow.predicted_value_root, 3) + " | reward=" + fmtNum(stepRow.dynamics_pred_reward, 3) + " | obj_dist=" + fmtNum(stepRow.objective_min_dist_before, 3) + "->" + fmtNum(stepRow.objective_min_dist_after, 3) + " | obj_prog=" + fmtNum(objectiveProgress, 3) + " | cons_l2=" + fmtNum(stepRow.dynamics_delta_l2, 3)],
             ["opportunity vp weighting", "fire_no_prog=" + fmtNum(stepRow.opportunity_fire_no_progress, 3) + " | skip_preserve=" + fmtNum(stepRow.opportunity_skip_capture_preserve, 3) + " | label=" + String(stepRow.opportunity_vp_weighting_label || "N/A")],
-            ["mcts metrics", "visits=" + fmtNum(stepRow.mcts_total_visits, 0) + " | margin=" + fmtNum(stepRow.mcts_margin, 3) + " | entropy=" + fmtNum(stepRow.mcts_entropy, 3) + " | chosen_prob=" + fmtPct(stepRow.chosen_action_prob, 1)],
+            ["mcts metrics", "visits=" + fmtNum(stepRow.mcts_total_visits, 0) + " | active_actions_with_visits=" + fmtNum(stepRow.mcts_active_actions, 0) + " | margin=" + fmtNum(stepRow.mcts_margin, 3) + " | entropy=" + fmtNum(stepRow.mcts_entropy, 3) + " | chosen_prob=" + fmtPct(stepRow.chosen_action_prob, 1) + " | collapse=" + String(stepRow.mcts_entropy_collapse_label || "unknown")],
+            ["unit prefilter", "enabled=" + (unitPrefilterEnabled === null ? "N/A" : String(Math.round(unitPrefilterEnabled))) + " | selected_unit_id=" + (unitPrefilterSelectedUnitId || "N/A") + " | constrained=" + fmtNum(unitPrefilterConstrainedCount, 0) + " | global=" + fmtNum(unitPrefilterGlobalCount, 0)],
             ["final action", finalAction || "N/A"],
             ["step outcome", "reward=" + fmtNum(stepRow.reward, 3) + " | obj_prog=" + fmtNum(objectiveProgress, 3) + " | dmg=" + fmtNum(stepRow.damage_dealt, 3) + " | kills=" + fmtNum(stepRow.kills_dealt, 0)],
           ];
@@ -3288,50 +5468,185 @@ def _model_html() -> str:
             ["dominance distribution", rows.length ? ("policy=" + ((100.0 * dominance.policy / rows.length).toFixed(1)) + "% | objective=" + ((100.0 * dominance.objective / rows.length).toFixed(1)) + "% | mcts=" + ((100.0 * dominance.mcts / rows.length).toFixed(1)) + "%") : "N/A"],
           ];
           const whyBlock = (stepRow.why_action_vs_vp && typeof stepRow.why_action_vs_vp === "object") ? stepRow.why_action_vs_vp : {};
-          const whyTopK = Math.max(1, Math.min(10, Number(whyBlock.top_k || replayState.headTopK || 5)));
-          const candidateRowsRaw = Array.isArray(whyBlock.candidate_actions) ? whyBlock.candidate_actions : (Array.isArray(stepRow.mcts_action_candidates) ? stepRow.mcts_action_candidates : []);
-          const candidateRows = candidateRowsRaw.slice(0, whyTopK);
+          const candidateSourceLists = [
+            Array.isArray(whyBlock.candidate_actions) ? whyBlock.candidate_actions : [],
+            Array.isArray(stepRow.mcts_action_candidates) ? stepRow.mcts_action_candidates : [],
+            Array.isArray(stepRow.legal_actions) ? stepRow.legal_actions : [],
+            Array.isArray(stepRow.legal_action_ids) ? stepRow.legal_action_ids : [],
+          ];
+          const candidateRowsRawMap = {};
+          const candidateRowsRaw = [];
+          const pushCandidateRaw = function (raw) {
+            if (raw === null || raw === undefined) return;
+            const obj = (typeof raw === "string") ? { action_id: String(raw) } : ((raw && typeof raw === "object") ? Object.assign({}, raw) : null);
+            if (!obj) return;
+            const actionId = String(obj.action_id || obj.id || "").trim();
+            if (!actionId) return;
+            if (!candidateRowsRawMap[actionId]) {
+              candidateRowsRawMap[actionId] = obj;
+              candidateRowsRaw.push(obj);
+              return;
+            }
+            const prev = candidateRowsRawMap[actionId];
+            candidateRowsRawMap[actionId] = Object.assign({}, prev, obj);
+            const idx = candidateRowsRaw.findIndex(function (c) { return String((c && c.action_id) || "") === actionId; });
+            if (idx >= 0) candidateRowsRaw[idx] = candidateRowsRawMap[actionId];
+          };
+          for (const srcList of candidateSourceLists) {
+            for (const item of srcList) pushCandidateRaw(item);
+          }
+          const normalizeDecisionCandidate = function (raw, chosenActionId) {
+            const hasOwn = function (obj, key) {
+              return !!obj && typeof obj === "object" && Object.prototype.hasOwnProperty.call(obj, key);
+            };
+            const c = (raw && typeof raw === "object") ? Object.assign({}, raw) : {};
+            const actionId = String(c.action_id || "");
+            const actionParts = actionId.split(":");
+            if (!c.unit_id && actionParts.length > 1) c.unit_id = String(actionParts[1] || "").trim();
+            c.real_decision_score = hasOwn(c, "real_decision_score") ? safeNum(c.real_decision_score) : null;
+            c.visit_count = hasOwn(c, "visit_count") ? safeNum(c.visit_count) : null;
+            c.decision_rank = hasOwn(c, "decision_rank") ? safeNum(c.decision_rank) : null;
+            c.mcts_q_value = hasOwn(c, "mcts_q_value") ? safeNum(c.mcts_q_value) : null;
+            c.mcts_u_value = hasOwn(c, "mcts_u_value") ? safeNum(c.mcts_u_value) : null;
+            c.policy_prior = hasOwn(c, "policy_prior") ? safeNum(c.policy_prior) : null;
+            c.selection_source = hasOwn(c, "selection_source") ? String(c.selection_source || "") : null;
+            c.selected_action = c.selected_action === true || (actionId && actionId === String(chosenActionId || ""));
+            c.missing_producer_fields = [];
+            if (c.real_decision_score === null) c.missing_producer_fields.push("real_decision_score");
+            if (c.visit_count === null) c.missing_producer_fields.push("visit_count");
+            if (c.decision_rank === null) c.missing_producer_fields.push("decision_rank");
+            if (c.mcts_q_value === null) c.missing_producer_fields.push("mcts_q_value");
+            if (c.mcts_u_value === null) c.missing_producer_fields.push("mcts_u_value");
+            if (c.policy_prior === null) c.missing_producer_fields.push("policy_prior");
+            if (!c.decision_components || typeof c.decision_components !== "object") {
+              c.missing_producer_fields.push("decision_components");
+            }
+            return c;
+          };
+          const candidateRows = candidateRowsRaw
+            .map(function (c) { return normalizeDecisionCandidate(c, whyBlock.chosen_action_id || finalAction); });
+          const decisionCandidateSortKey = String(replayState.decisionCandidateSortKey || "decision_score");
+          const decisionCandidateSortDir = String(replayState.decisionCandidateSortDir || "desc");
+          const candidateSortMultiplier = decisionCandidateSortDir === "asc" ? 1 : -1;
+          const candidateSortValue = function (c, key) {
+            if (!c || typeof c !== "object") return null;
+            if (key === "action_id") return String(c.action_id || "");
+            if (key === "unit_id") return String(c.unit_id || c.actor_unit_id || "");
+            if (key === "decision_rank") return safeNum(c.decision_rank);
+            if (key === "decision_score") return safeNum(c.real_decision_score);
+            return null;
+          };
+          const sortedCandidateRows = candidateRows.slice().sort(function (a, b) {
+            const av = candidateSortValue(a, decisionCandidateSortKey);
+            const bv = candidateSortValue(b, decisionCandidateSortKey);
+            const aNum = typeof av === "number" && Number.isFinite(av);
+            const bNum = typeof bv === "number" && Number.isFinite(bv);
+            if (aNum && bNum) return candidateSortMultiplier * (av - bv);
+            if (aNum && !bNum) return -1;
+            if (!aNum && bNum) return 1;
+            return candidateSortMultiplier * String(av || "").localeCompare(String(bv || ""));
+          });
           const chosenActionWhy = String(whyBlock.chosen_action_id || finalAction || "");
           const vpBestActionWhy = String(whyBlock.vp_best_action_id || "");
           const deltaScoreWhy = safeNum(whyBlock.delta_score);
           const whyShortText = String(stepRow.why_action_vs_vp_text || whyBlock.explanation || "N/A");
           const whyComponents = Array.isArray(whyBlock.score_components_priority) ? whyBlock.score_components_priority : [];
-          const whyRows = candidateRows.map(function (c) {
+          const hasMctsTelemetry = function (c) {
+            if (!c || typeof c !== "object") return false;
+            const hasScore = Number.isFinite(Number(c.real_decision_score));
+            const hasVisit = Number.isFinite(Number(c.visit_count));
+            const hasRank = Number.isFinite(Number(c.decision_rank));
+            const hasQ = Number.isFinite(Number(c.mcts_q_value));
+            const hasU = Number.isFinite(Number(c.mcts_u_value));
+            const hasPrior = Number.isFinite(Number(c.policy_prior));
+            return hasScore || hasVisit || hasRank || hasQ || hasU || hasPrior;
+          };
+          const candidateRowsMcts = sortedCandidateRows.filter(hasMctsTelemetry);
+          const candidateRowsLegalOnly = sortedCandidateRows.filter(function (c) { return !hasMctsTelemetry(c); });
+          const whyRowsFromCandidates = function (rowsIn) {
+            return rowsIn.map(function (c) {
             const actionId = String((c && c.action_id) || "");
+            const unitId = String((c && (c.unit_id || c.actor_unit_id)) || "");
             const badges = [];
             if (actionId && actionId === chosenActionWhy) badges.push("chosen");
             if (actionId && actionId === vpBestActionWhy) badges.push("vp-best");
+            const vpProgSrc = String((c && c.vp_progress_source) || "unknown");
+            const vpProgKnown = vpProgSrc !== "unknown" && !vpProgSrc.startsWith("unavailable_");
+            const vpProgDisplay = vpProgKnown ? fmtNum(c ? c.vp_progress_delta : null, 3) : "N/A";
+            const realDecisionScore = (c && c.real_decision_score !== undefined && c.real_decision_score !== null)
+              ? fmtNum(c.real_decision_score, 3)
+              : "N/A";
+            const decisionRank = (c && c.decision_rank !== undefined && c.decision_rank !== null)
+              ? String(Math.max(1, Number(c.decision_rank || 0)))
+              : "N/A";
+            const visitCount = (c && c.visit_count !== undefined && c.visit_count !== null)
+              ? String(Math.max(0, Number(c.visit_count || 0)))
+              : "N/A";
+            const selectionSource = String((c && c.selection_source) || "N/A");
+            const dc = (c && c.decision_components && typeof c.decision_components === "object") ? c.decision_components : {};
+            const dcEntries = Object.keys(dc).length
+              ? Object.keys(dc).map(function (k) { return k + "=" + fmtNum(dc[k], 3); }).join(", ")
+              : "N/A";
+            const missingProducer = (c && Array.isArray(c.missing_producer_fields) && c.missing_producer_fields.length)
+              ? (" | missing_producer_fields=" + c.missing_producer_fields.join(","))
+              : "";
             return [
               (actionId || "N/A") + (badges.length ? (" [" + badges.join(", ") + "]") : ""),
-              "prior=" + fmtNum(c ? c.policy_prior : null, 3) +
-              " | Q=" + fmtNum(c ? c.q_estimate : null, 3) +
-              " | reward=" + fmtNum(c ? c.reward_estimate : null, 3) +
-              " | U=" + fmtNum(c ? c.exploration_bonus_u : null, 3) +
-              " | score=" + fmtNum(c ? c.final_score : null, 3) +
-              " | vp_prog=" + fmtNum(c ? c.vp_progress_delta : null, 3)
+              unitId || "N/A",
+              "real_decision_score=" + realDecisionScore +
+              " | decision_rank=" + decisionRank +
+              " | visits=" + visitCount +
+              " | selection_source=" + selectionSource +
+              " | prior=" + fmtNum(c ? c.policy_prior : null, 3) +
+              " | Q=" + fmtNum(c ? c.mcts_q_value : null, 3) +
+              " | U=" + fmtNum(c ? c.mcts_u_value : null, 3) +
+              " | decision_components=" + dcEntries +
+              " | vp_prog=" + vpProgDisplay +
+              " | vp_prog_src=" + vpProgSrc +
+              missingProducer
             ];
-          });
+            });
+          };
+          const whyRowsMcts = whyRowsFromCandidates(candidateRowsMcts);
+          const whyRowsLegal = whyRowsFromCandidates(candidateRowsLegalOnly);
           const whySummaryRows = [
             ["chosen_action", chosenActionWhy || "N/A"],
             ["vp_best_action", vpBestActionWhy || "N/A"],
             ["delta_score (chosen - vp_best)", deltaScoreWhy === null ? "N/A" : deltaScoreWhy.toFixed(4)],
+            ["decision_win_basis", String(stepRow.decision_win_basis || "N/A")],
+            ["real_decision_score (selected)", fmtNum(stepRow.real_decision_score, 3)],
+            ["selection_source (selected)", String(stepRow.selection_source || "N/A")],
             ["dominant components", whyComponents.length ? whyComponents.join(", ") : "N/A"],
             ["opportunity_vp_weighting_label", String(stepRow.opportunity_vp_weighting_label || "N/A")],
             ["opportunity_fire_no_progress", fmtNum(stepRow.opportunity_fire_no_progress, 3)],
             ["opportunity_skip_capture_preserve", fmtNum(stepRow.opportunity_skip_capture_preserve, 3)],
+            ["unit_prefilter_enabled", unitPrefilterEnabled === null ? "N/A" : String(Math.round(unitPrefilterEnabled))],
+            ["unit_prefilter_selected_unit_id", unitPrefilterSelectedUnitId || "N/A"],
+            ["unit_prefilter_constrained_count", fmtNum(unitPrefilterConstrainedCount, 0)],
+            ["unit_prefilter_global_count", fmtNum(unitPrefilterGlobalCount, 0)],
             ["step explanation", whyShortText || "N/A"],
           ];
           const tableHtml = function (rowsIn, emptyMsg) {
             if (!rowsIn.length) return '<tr><td colspan="2" style="border:1px solid #334155;padding:6px;" class="muted">' + esc(emptyMsg) + '</td></tr>';
+            const classifyCell = function (txt) {
+              const s = String(txt || "");
+              if (s === "N/A" || s.indexOf("N/A") >= 0 || s.indexOf("unknown") >= 0 || s.indexOf("WARN") >= 0) return "degraded-text";
+              return "ok-text";
+            };
             return rowsIn.map(function (r) {
-              return '<tr><td style="border:1px solid #334155;padding:6px;width:38%;">' + esc(String(r[0])) + '</td><td style="border:1px solid #334155;padding:6px;">' + esc(String(r[1])) + '</td></tr>';
+              const value = String(r[1]);
+              return '<tr><td style="border:1px solid #334155;padding:6px;width:38%;">' + esc(String(r[0])) + '</td><td style="border:1px solid #334155;padding:6px;"><span class="' + classifyCell(value) + '">' + esc(value) + "</span></td></tr>";
             }).join("");
+          };
+          const decisionSortArrow = function (key) {
+            if (String(replayState.decisionCandidateSortKey || "") !== String(key || "")) return "";
+            return String(replayState.decisionCandidateSortDir || "desc") === "asc" ? " ▲" : " ▼";
           };
           host.innerHTML =
             '<div class="muted" style="margin-bottom:6px;">' +
-            'step_coverage=<span style="color:' + coverageColor + ';">' + esc(stepCoverage) + '</span>' +
-            ' | episode_coverage=' + esc(episodeCoverage) +
-            ' | step_dominance=' + esc(dominantLabel) +
+            'step_coverage=<span class="' + (stepCoverage === "complete" ? "ok-text" : "degraded-text") + '">' + esc(stepCoverage) + '</span>' +
+            ' | episode_coverage=<span class="' + (episodeCoverage === "complete" ? "ok-text" : "degraded-text") + '">' + esc(episodeCoverage) + "</span>" +
+            ' | step_dominance=<span class="ok-text">' + esc(dominantLabel) + "</span>" +
             '</div>' +
             '<div class="muted" style="margin-bottom:4px;">Pipeline by step</div>' +
             '<table style="width:100%;border-collapse:collapse;font-size:12px;margin-bottom:8px;"><thead><tr>' +
@@ -3343,21 +5658,152 @@ def _model_html() -> str:
               '<th style="border:1px solid #334155;padding:6px;">focus</th>' +
               '<th style="border:1px solid #334155;padding:6px;">detail</th>' +
             '</tr></thead><tbody>' + tableHtml(whySummaryRows, "No chosen vs VP summary.") + '</tbody></table>' +
-            '<table style="width:100%;border-collapse:collapse;font-size:12px;margin-bottom:8px;"><thead><tr>' +
+            '<div class="muted" style="margin-bottom:4px;">MCTS-evaluated actions (producer-only strict)</div>' +
+            '<div id="replayDecisionMctsTableWrap" class="replay-candidate-table-wrap"><table class="replay-candidate-table" style="margin-bottom:8px;"><thead><tr>' +
+              '<th style="border:1px solid #334155;padding:6px;"><button class="replay-candidate-sort-btn" data-candidate-sort-key="action_id">candidate action' + esc(decisionSortArrow("action_id")) + '</button></th>' +
+              '<th style="border:1px solid #334155;padding:6px;"><button class="replay-candidate-sort-btn" data-candidate-sort-key="unit_id">unit_id' + esc(decisionSortArrow("unit_id")) + '</button></th>' +
+              '<th style="border:1px solid #334155;padding:6px;"><button class="replay-candidate-sort-btn" data-candidate-sort-key="decision_score">score breakdown' + esc(decisionSortArrow("decision_score")) + '</button></th>' +
+              '<th style="border:1px solid #334155;padding:6px;"><button class="replay-candidate-sort-btn" data-candidate-sort-key="decision_rank">decision rank' + esc(decisionSortArrow("decision_rank")) + '</button></th>' +
+            '</tr></thead><tbody>' + (whyRowsMcts.length
+              ? whyRowsMcts.map(function (r) {
+                const detailVal = String(r[2]);
+                const classifyCell = function (txt) {
+                  const s = String(txt || "");
+                  if (s === "N/A" || s.indexOf("N/A") >= 0 || s.indexOf("unknown") >= 0 || s.indexOf("WARN") >= 0) return "degraded-text";
+                  return "ok-text";
+                };
+                const rankMatch = detailVal.match(/decision_rank=([^|]+)/);
+                const rankText = rankMatch ? String(rankMatch[1] || "").trim() : "N/A";
+                return '<tr>' +
+                  '<td style="border:1px solid #334155;padding:6px;">' + esc(String(r[0])) + '</td>' +
+                  '<td style="border:1px solid #334155;padding:6px;">' + esc(String(r[1])) + '</td>' +
+                  '<td style="border:1px solid #334155;padding:6px;"><span class="' + classifyCell(detailVal) + '">' + esc(detailVal) + '</span></td>' +
+                  '<td style="border:1px solid #334155;padding:6px;">' + esc(rankText) + '</td>' +
+                '</tr>';
+              }).join("")
+              : '<tr><td colspan="4" style="border:1px solid #334155;padding:6px;" class="muted">No MCTS-evaluated actions available.</td></tr>') + '</tbody></table></div>' +
+            '<div class="muted" style="margin:8px 0 4px 0;">Legal/non-evaluated actions (no MCTS telemetry)</div>' +
+            '<div id="replayDecisionLegalTableWrap" class="replay-candidate-table-wrap"><table class="replay-candidate-table" style="margin-bottom:8px;"><thead><tr>' +
               '<th style="border:1px solid #334155;padding:6px;">candidate action</th>' +
-              '<th style="border:1px solid #334155;padding:6px;">score breakdown (top-k=' + esc(String(whyTopK)) + ')</th>' +
-            '</tr></thead><tbody>' + tableHtml(whyRows, "No candidate breakdown available (legacy run or missing telemetry).") + '</tbody></table>' +
+              '<th style="border:1px solid #334155;padding:6px;">unit_id</th>' +
+              '<th style="border:1px solid #334155;padding:6px;">score breakdown</th>' +
+              '<th style="border:1px solid #334155;padding:6px;">decision rank</th>' +
+            '</tr></thead><tbody>' + (whyRowsLegal.length
+              ? whyRowsLegal.map(function (r) {
+                const detailVal = String(r[2]);
+                const classifyCell = function (txt) {
+                  const s = String(txt || "");
+                  if (s === "N/A" || s.indexOf("N/A") >= 0 || s.indexOf("unknown") >= 0 || s.indexOf("WARN") >= 0) return "degraded-text";
+                  return "ok-text";
+                };
+                const rankMatch = detailVal.match(/decision_rank=([^|]+)/);
+                const rankText = rankMatch ? String(rankMatch[1] || "").trim() : "N/A";
+                return '<tr>' +
+                  '<td style="border:1px solid #334155;padding:6px;">' + esc(String(r[0])) + '</td>' +
+                  '<td style="border:1px solid #334155;padding:6px;">' + esc(String(r[1])) + '</td>' +
+                  '<td style="border:1px solid #334155;padding:6px;"><span class="' + classifyCell(detailVal) + '">' + esc(detailVal) + '</span></td>' +
+                  '<td style="border:1px solid #334155;padding:6px;">' + esc(rankText) + '</td>' +
+                '</tr>';
+              }).join("")
+              : '<tr><td colspan="4" style="border:1px solid #334155;padding:6px;" class="muted">No legal/non-evaluated actions in this step.</td></tr>') + '</tbody></table></div>' +
             '<div class="muted" style="margin-bottom:4px;">Episode aggregation</div>' +
             '<table style="width:100%;border-collapse:collapse;font-size:12px;"><thead><tr>' +
               '<th style="border:1px solid #334155;padding:6px;">metric</th>' +
               '<th style="border:1px solid #334155;padding:6px;">value</th>' +
             '</tr></thead><tbody>' + tableHtml(episodeRows, "No episode aggregation available.") + '</tbody></table>';
+          const sortButtons = host.querySelectorAll("[data-candidate-sort-key]");
+          sortButtons.forEach(function (btn) {
+            btn.onclick = function () {
+              const key = String((btn && btn.getAttribute("data-candidate-sort-key")) || "");
+              if (!key) return;
+              if (String(replayState.decisionCandidateSortKey || "") === key) {
+                replayState.decisionCandidateSortDir = String(replayState.decisionCandidateSortDir || "desc") === "asc" ? "desc" : "asc";
+              } else {
+                replayState.decisionCandidateSortKey = key;
+                replayState.decisionCandidateSortDir = (key === "action_id" || key === "unit_id") ? "asc" : "desc";
+              }
+              renderDecisionInfluence(stepRow, transitions);
+            };
+          });
         }
-        function drawReplay() {
-          const epMeta = Array.isArray(replayState.payload && replayState.payload.episodes_meta) ? replayState.payload.episodes_meta : [];
+        function replayStateKey() {
+          const payload = (replayState && replayState.payload && typeof replayState.payload === "object") ? replayState.payload : {};
+          const transitions = Array.isArray(payload.transitions) ? payload.transitions : [];
+          return [
+            String(replayState.evalId || ""),
+            String(Math.max(0, Number(replayState.episodeIndex || 0))),
+            String(Math.max(0, Number(replayState.step || 0))),
+            String(replayState.unitFilter || "__all__"),
+            String(replayState.hoveredUnitId || ""),
+            String(replayState.decisionCandidateSortKey || "decision_score"),
+            String(replayState.decisionCandidateSortDir || "desc"),
+            String(Math.max(1, Math.min(10, Number(replayState.headTopK || 5)))),
+            String(transitions.length || 0),
+            String(payload.run_id || ""),
+          ].join("::");
+        }
+        function replayMemoRender(hostId, key, renderFn) {
+          const host = document.getElementById(hostId);
+          if (!host) return;
+          const memo = replayState.panelMemo[hostId] || { key: "", html: "" };
+          if (memo.key === key) {
+            if (memo.html && host.innerHTML !== memo.html) host.innerHTML = memo.html;
+            return;
+          }
+          renderFn();
+          memo.key = key;
+          memo.html = String(host.innerHTML || "");
+          replayState.panelMemo[hostId] = memo;
+        }
+        function requestReplayDraw(_reason, force) {
+          if (force) replayState.drawForcePending = true;
+          if (replayState.drawPending) return;
+          replayState.drawPending = true;
+          replayState.drawRafToken = requestAnimationFrame(function () {
+            replayState.drawPending = false;
+            replayState.drawRafToken = null;
+            const forceDraw = !!replayState.drawForcePending;
+            replayState.drawForcePending = false;
+            drawReplay(forceDraw);
+          });
+        }
+        function drawReplay(forceDraw) {
+          const payloadObj = (replayState.payload && typeof replayState.payload === "object") ? replayState.payload : {};
+          const rawEpMeta = Array.isArray(payloadObj.episodes_meta) ? payloadObj.episodes_meta : [];
+          const epMeta = rawEpMeta.length
+            ? rawEpMeta
+            : [{
+              episode_index: Math.max(0, Number(payloadObj.selected_episode_index || replayState.episodeIndex || 0)),
+              seed: Number(payloadObj.selected_seed || 0),
+            }];
           const epSel = document.getElementById("replayEpisodeSelect");
           if (epSel) {
-            epSel.innerHTML = epMeta.map(e => `<option value="${esc(String(e.episode_index || 0))}" ${Number(e.episode_index||0)===Number(replayState.episodeIndex||0)?"selected":""}>ep ${esc(String(e.episode_index||0))} seed ${esc(String(e.seed||""))}</option>`).join("");
+            const epMetaKey = JSON.stringify(epMeta.map(function (e) {
+              return [Number(e.episode_index || 0), Number(e.seed || 0)];
+            }));
+            if (epMetaKey !== replayState.episodesMetaRenderKey) {
+              epSel.innerHTML = epMeta.map(function (e, idx) {
+                const ordinal = Math.max(0, Number(idx || 0));
+                const isSelected = ordinal === Math.max(0, Number(replayState.episodeIndex || 0));
+                return `<option value="${esc(String(ordinal))}" ${isSelected ? "selected" : ""}>ep ${esc(String(e.episode_index || ordinal))} seed ${esc(String(e.seed || ""))}</option>`;
+              }).join("");
+              replayState.episodesMetaRenderKey = epMetaKey;
+            }
+            if (!epSel.options.length) {
+              const fallbackEpisode = Math.max(0, Number(replayState.episodeIndex || 0));
+              epSel.innerHTML = `<option value="${esc(String(fallbackEpisode))}">ep ${esc(String(fallbackEpisode))}</option>`;
+              replayState.episodesMetaRenderKey = "__fallback__::" + String(fallbackEpisode);
+            }
+            const desiredEpisodeValue = String(Math.max(0, Number(replayState.episodeIndex || 0)));
+            const hasDesiredEpisode = Array.from(epSel.options || []).some(function (opt) {
+              return String((opt && opt.value) || "") === desiredEpisodeValue;
+            });
+            if (hasDesiredEpisode) {
+              epSel.value = desiredEpisodeValue;
+            } else if (epSel.options.length) {
+              epSel.value = String((epSel.options[0] && epSel.options[0].value) || "0");
+              replayState.episodeIndex = Math.max(0, Number(epSel.value || 0));
+            }
           }
           const transitions = Array.isArray(replayState.payload && replayState.payload.transitions) ? replayState.payload.transitions : [];
           const unitOptions = buildReplayUnitCatalog(transitions);
@@ -3368,10 +5814,23 @@ def _model_html() -> str:
           ) {
             replayState.unitFilter = "__all__";
           }
+          if (
+            replayState.hoveredUnitId &&
+            !unitOptions.some(function (u) { return String((u && u.unit_id) || "") === String(replayState.hoveredUnitId || ""); })
+          ) {
+            replayState.hoveredUnitId = "";
+          }
           renderReplayUnitFilter(unitOptions);
           const maxStep = Math.max(0, transitions.length - 1);
           replayState.step = Math.max(0, Math.min(maxStep, Number(replayState.step || 0)));
-          const stepRow = transitions[replayState.step] || null;
+          const stepRowRaw = transitions[replayState.step];
+          const stepRow = (stepRowRaw && typeof stepRowRaw === "object") ? stepRowRaw : null;
+          const stepRowSafe = stepRow || {};
+          const stateKey = replayStateKey();
+          if (!forceDraw && stateKey === replayState.lastDrawStateKey) {
+            return;
+          }
+          replayState.lastDrawStateKey = stateKey;
           const range = document.getElementById("replayStepRange");
           if (range) {
             range.max = String(maxStep);
@@ -3388,20 +5847,121 @@ def _model_html() -> str:
           const summary = document.getElementById("replaySummary");
           if (summary) {
             const src = replayState.payload || {};
+            const loadedTransitions = Array.isArray(src.transitions) ? src.transitions.length : 0;
+            const totalTransitions = Math.max(loadedTransitions, Number(replayState.transitionsTotal || 0));
+            const chunkLabel = totalTransitions > loadedTransitions
+              ? (String(loadedTransitions) + "/" + String(totalTransitions))
+              : String(loadedTransitions);
             summary.innerHTML =
               "<div><span>Run:</span> <b>" + esc(String(src.run_id || "")) + "</b></div>" +
               "<div><span>Eval:</span> <b>" + esc(String(replayState.evalId || "")) + "</b></div>" +
               "<div><span>Scenario:</span> <b>" + esc(String(src.scenario_id || "")) + "</b></div>" +
-              "<div><span>Transitions:</span> <b>" + esc(String(transitions.length || 0)) + "</b></div>";
+              "<div><span>Transitions:</span> <b>" + esc(chunkLabel) + "</b></div>";
+          }
+          const replayControllerBySide = document.getElementById("replayControllerBySide");
+          if (replayControllerBySide) {
+            const resolveReplayResultRow = function (evalRow) {
+              const rowObj = (evalRow && typeof evalRow === "object") ? evalRow : {};
+              const results = Array.isArray(rowObj.results) ? rowObj.results : [];
+              if (results.length > 0) {
+                // Prefer first concrete result row; eval wrapper rows often
+                // do not carry side/controller metadata directly.
+                return results[0];
+              }
+              return rowObj;
+            };
+            const evalSel = document.getElementById("replayEvalSelect");
+            const evalId = String((((evalSel || {}).value) || replayState.evalId || ""));
+            const replayEvalRow = evalRows.find(r => String(r.eval_id || "") === String(evalId)) || activeRow || {};
+            const replayResultRow = resolveReplayResultRow(replayEvalRow);
+            const matchLabel = String(replayResultRow.matchup_profile || replayResultRow.agent_name || "Unknown match");
+            const controllerRows = controllerBySideFromResult(replayResultRow);
+            const episodeLabel = "ep " + String(Number(replayState.episodeIndex || 0));
+            let bySideHtml = '<div class="muted" style="margin-bottom:4px;">match=' + esc(matchLabel) + ' | ' + esc(episodeLabel) + '</div>' +
+              '<table style="width:100%;border-collapse:collapse;font-size:12px;"><thead><tr>' +
+              '<th style="border:1px solid #334155;padding:6px;">side</th>' +
+              '<th style="border:1px solid #334155;padding:6px;">controller</th>' +
+              '<th style="border:1px solid #334155;padding:6px;">source</th>' +
+              '</tr></thead><tbody>';
+            for (const item of controllerRows) {
+              bySideHtml += '<tr>' +
+                '<td style="border:1px solid #334155;padding:6px;">' + esc(String(item.side || "Unlabeled side")) + '</td>' +
+                '<td style="border:1px solid #334155;padding:6px;">' + esc(String(item.controller || "Unknown/Unlabeled")) + '</td>' +
+                '<td style="border:1px solid #334155;padding:6px;">' + esc(String(item.source || "fallback")) + '</td>' +
+                '</tr>';
+            }
+            bySideHtml += '</tbody></table>';
+            replayControllerBySide.innerHTML = bySideHtml;
           }
           const details = document.getElementById("replayStepDetail");
           if (details) {
             if (!stepRow) {
               details.innerHTML = '<div class="muted">No replay loaded.</div>';
             } else {
+              function fmtQrPair(q, r) {
+                if (!Number.isFinite(Number(q)) || !Number.isFinite(Number(r))) return "-";
+                return String(Number(q)) + "," + String(Number(r));
+              }
+              function readQrFromObject(obj, keysQ, keysR) {
+                if (!obj || typeof obj !== "object") return null;
+                const qKeys = Array.isArray(keysQ) ? keysQ : [];
+                const rKeys = Array.isArray(keysR) ? keysR : [];
+                for (let i = 0; i < Math.min(qKeys.length, rKeys.length); i += 1) {
+                  const q = obj[qKeys[i]];
+                  const r = obj[rKeys[i]];
+                  if (Number.isFinite(Number(q)) && Number.isFinite(Number(r))) {
+                    return { q: Number(q), r: Number(r) };
+                  }
+                }
+                return null;
+              }
+              function readUnitQrFromCollection(collection, unitId) {
+                if (!Array.isArray(collection) || !unitId) return null;
+                const wanted = String(unitId || "");
+                const unit = collection.find(function (u) { return String((u && u.unit_id) || "") === wanted; });
+                if (!unit || typeof unit !== "object") return null;
+                return readQrFromObject(unit, ["q", "hex_q", "target_q", "to_q", "current_q"], ["r", "hex_r", "target_r", "to_r", "current_r"]);
+              }
+              function readActionDestination(step) {
+                if (!step || typeof step !== "object") return null;
+                const direct = readQrFromObject(step, ["target_q", "to_q", "action_target_q"], ["target_r", "to_r", "action_target_r"]);
+                if (direct) return direct;
+                const parts = String(step.action_id || "").split(":");
+                if (parts.length < 4) return null;
+                const q = Number(parts[2]);
+                const r = Number(parts[3]);
+                if (!Number.isFinite(q) || !Number.isFinite(r)) return null;
+                return { q, r };
+              }
+              function deriveStepPositions(step, transitions, stepIdx) {
+                const unitId = String((step && step.unit_id) || "");
+                const currentCandidates = [
+                  readActionDestination(step),
+                  readQrFromObject(step, ["current_q", "to_q", "q"], ["current_r", "to_r", "r"]),
+                  readUnitQrFromCollection(step && step.units, unitId),
+                ];
+                const current = currentCandidates.find(Boolean) || null;
+                const previousCandidates = [
+                  readQrFromObject(step, ["previous_q", "from_q", "pre_q"], ["previous_r", "from_r", "pre_r"]),
+                  readQrFromObject(step && step.unit_before, ["q", "hex_q", "current_q"], ["r", "hex_r", "current_r"]),
+                  readQrFromObject(step && step.pre_step_unit, ["q", "hex_q", "current_q"], ["r", "hex_r", "current_r"]),
+                  readQrFromObject(step && step.unit_snapshot_before, ["q", "hex_q", "current_q"], ["r", "hex_r", "current_r"]),
+                ];
+                const prevRow = (Array.isArray(transitions) && Number.isFinite(Number(stepIdx)) && Number(stepIdx) > 0)
+                  ? transitions[Number(stepIdx) - 1]
+                  : null;
+                previousCandidates.push(readUnitQrFromCollection(prevRow && prevRow.units, unitId));
+                previousCandidates.push(readQrFromObject(prevRow, ["target_q", "current_q", "to_q"], ["target_r", "current_r", "to_r"]));
+                const previous = previousCandidates.find(Boolean) || null;
+                return {
+                  previousPosition: fmtQrPair(previous && previous.q, previous && previous.r),
+                  currentPosition: fmtQrPair(current && current.q, current && current.r),
+                };
+              }
               const tq = (stepRow.target_q === undefined || stepRow.target_q === null) ? "-" : String(stepRow.target_q);
               const tr = (stepRow.target_r === undefined || stepRow.target_r === null) ? "-" : String(stepRow.target_r);
               const targetQr = tq + "," + tr;
+              const positions = deriveStepPositions(stepRow, transitions, replayState.step);
               const dmgKills = Number(stepRow.damage_dealt || 0).toFixed(3) + " / " + Number(stepRow.kills_dealt || 0).toFixed(0);
               const coverageTxt = String(stepRow.telemetry_coverage_status || "unknown")
                 + (String(stepRow.telemetry_coverage_reason || "").trim() ? (" (" + String(stepRow.telemetry_coverage_reason || "").trim() + ")") : "");
@@ -3412,6 +5972,8 @@ def _model_html() -> str:
                     '<tr><td style="border:1px solid #334155;padding:6px;">action_id</td><td style="border:1px solid #334155;padding:6px;">' + esc(stepRow.action_id) + '</td></tr>' +
                     '<tr><td style="border:1px solid #334155;padding:6px;">unit_id</td><td style="border:1px solid #334155;padding:6px;">' + esc(stepRow.unit_id) + '</td></tr>' +
                     '<tr><td style="border:1px solid #334155;padding:6px;">target_qr</td><td style="border:1px solid #334155;padding:6px;">' + esc(targetQr) + '</td></tr>' +
+                    '<tr><td style="border:1px solid #334155;padding:6px;">previous_position</td><td style="border:1px solid #334155;padding:6px;">' + esc(positions.previousPosition) + '</td></tr>' +
+                    '<tr><td style="border:1px solid #334155;padding:6px;">current_position</td><td style="border:1px solid #334155;padding:6px;">' + esc(positions.currentPosition) + '</td></tr>' +
                     '<tr><td style="border:1px solid #334155;padding:6px;">reward</td><td style="border:1px solid #334155;padding:6px;">' + esc(Number(stepRow.reward || 0).toFixed(4)) + '</td></tr>' +
                     '<tr><td style="border:1px solid #334155;padding:6px;">damage / kills</td><td style="border:1px solid #334155;padding:6px;">' + esc(dmgKills) + '</td></tr>' +
                     '<tr><td style="border:1px solid #334155;padding:6px;">telemetry_coverage</td><td style="border:1px solid #334155;padding:6px;">' + esc(coverageTxt) + '</td></tr>' +
@@ -3419,10 +5981,25 @@ def _model_html() -> str:
                 '</table>';
             }
           }
-          renderReplayHeadDiagnostics(stepRow);
-          renderDecisionInfluence(stepRow, transitions);
+          try {
+            replayMemoRender("replayHeadDiagnosticsHost", "head::" + stateKey, function () {
+              renderReplayHeadDiagnostics(stepRowSafe);
+            });
+          } catch (_e) {
+            const hostHead = document.getElementById("replayHeadDiagnosticsHost");
+            if (hostHead) hostHead.innerHTML = '<div class="muted">Head Diagnostics render error.</div>';
+          }
+          try {
+            replayMemoRender("replayDecisionInfluenceHost", "decision::" + stateKey, function () {
+              renderDecisionInfluence(stepRowSafe, transitions);
+            });
+          } catch (_e) {
+            const hostDecision = document.getElementById("replayDecisionInfluenceHost");
+            if (hostDecision) hostDecision.innerHTML = '<div class="muted">Decision Influence render error.</div>';
+          }
           const canvas = document.getElementById("replayCanvas");
           if (canvas && canvas.getContext) {
+            replayBindCanvasHoverHandlers(canvas);
             const ctx = canvas.getContext("2d");
             if (ctx) {
               const dpr = Math.max(1, window.devicePixelRatio || 1);
@@ -3434,7 +6011,7 @@ def _model_html() -> str:
               if ((rect.width || 0) < 40 || (rect.height || 0) < 40) {
                 if (replayState.pendingLayoutRetries < 12) {
                   replayState.pendingLayoutRetries += 1;
-                  requestAnimationFrame(() => drawReplay());
+                  requestReplayDraw("layout-retry", true);
                 } else {
                   replayState.pendingLayoutRetries = 0;
                 }
@@ -3445,10 +6022,20 @@ def _model_html() -> str:
                 canvas.width = Math.floor(cssW * dpr);
                 canvas.height = Math.floor(cssH * dpr);
               }
-              ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-              ctx.clearRect(0, 0, cssW, cssH);
-              ctx.fillStyle = "#0b0f18";
-              ctx.fillRect(0, 0, cssW, cssH);
+              const canvasKey = [
+                stateKey,
+                String(cssW),
+                String(cssH),
+                String(dpr),
+              ].join("::");
+              if (!forceDraw && replayState.lastCanvasDrawKey === canvasKey) {
+                // Skip redundant canvas redraw when both state and size are unchanged.
+              } else {
+                replayState.lastCanvasDrawKey = canvasKey;
+                ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+                ctx.clearRect(0, 0, cssW, cssH);
+                ctx.fillStyle = "#0b0f18";
+                ctx.fillRect(0, 0, cssW, cssH);
               const allStepUnits = Array.isArray(stepRow && stepRow.units) ? stepRow.units : [];
               const selectedUnitId = String(replayState.unitFilter || "__all__");
               const units = selectedUnitId === "__all__"
@@ -3466,8 +6053,11 @@ def _model_html() -> str:
                 qs.push(Number(uc.q || 0));
                 rs.push(Number(uc.r || 0));
               }
-              const tQ = Number.isFinite(Number(stepRow && stepRow.target_q)) ? Number(stepRow.target_q) : null;
-              const tR = Number.isFinite(Number(stepRow && stepRow.target_r)) ? Number(stepRow.target_r) : null;
+              const hasStepObj = !!stepRow && typeof stepRow === "object";
+              const rawTargetQ = hasStepObj ? stepRow.target_q : null;
+              const rawTargetR = hasStepObj ? stepRow.target_r : null;
+              const tQ = Number.isFinite(Number(rawTargetQ)) ? Number(rawTargetQ) : null;
+              const tR = Number.isFinite(Number(rawTargetR)) ? Number(rawTargetR) : null;
               if (tQ !== null && tR !== null) { qs.push(tQ); rs.push(tR); }
               const overlay = (replayState.payload && replayState.payload.scenario_overlay) || {};
               const shape = Array.isArray(overlay.shape) ? overlay.shape : [];
@@ -3484,7 +6074,8 @@ def _model_html() -> str:
                   const r = Number(c && c.r);
                   if (Number.isFinite(q) && Number.isFinite(r)) baseCells.push({ q, r });
                 }
-              } else if (shape.length >= 2 && Number(shape[0]) > 0 && Number(shape[1]) > 0) {
+              }
+              if (!baseCells.length && shape.length >= 2 && Number(shape[0]) > 0 && Number(shape[1]) > 0) {
                 const wCells = Math.max(1, Number(shape[0]));
                 const hCells = Math.max(1, Number(shape[1]));
                 for (let r = 0; r < hCells; r += 1) {
@@ -3492,7 +6083,8 @@ def _model_html() -> str:
                     baseCells.push({ q, r });
                   }
                 }
-              } else {
+              }
+              if (!baseCells.length) {
                 for (let q = minQ; q <= maxQ; q += 1) {
                   for (let r = minR; r <= maxR; r += 1) {
                     baseCells.push({ q, r });
@@ -3504,12 +6096,33 @@ def _model_html() -> str:
               for (const c of baseCells) {
                 const p = proj.toPixel(c.q, c.r);
                 drawHex(ctx, p.x, p.y, size, "#263244", "rgba(15,23,42,0.35)");
+                drawHexCoordLabel(ctx, p.x, p.y, size, c.q, c.r);
+              }
+              const hoverUnitId = String(replayState.hoveredUnitId || "").trim();
+              const overlayHexes = replayCollectUnitHexCandidates(stepRow, hoverUnitId);
+              const moveHexes = Array.isArray(overlayHexes.moveHexes) ? overlayHexes.moveHexes : [];
+              const attackHexes = Array.isArray(overlayHexes.attackHexes) ? overlayHexes.attackHexes : [];
+              for (const hx of moveHexes) {
+                const q = Number(hx && hx.q);
+                const r = Number(hx && hx.r);
+                if (!Number.isFinite(q) || !Number.isFinite(r)) continue;
+                const p = proj.toPixel(q, r);
+                drawHex(ctx, p.x, p.y, size * 1.03, "#22c55e", "rgba(34,197,94,0.24)");
+              }
+              for (const hx of attackHexes) {
+                const q = Number(hx && hx.q);
+                const r = Number(hx && hx.r);
+                if (!Number.isFinite(q) || !Number.isFinite(r)) continue;
+                const p = proj.toPixel(q, r);
+                drawHex(ctx, p.x, p.y, size * 1.03, "#ef4444", "rgba(239,68,68,0.20)");
               }
               const points = [];
               for (const u of unitCoords) {
                 const px = proj.toPixel(u.q, u.r);
                 points.push(Object.assign({}, u, px));
               }
+              replayState.hoverHitPoints = points;
+              replayState.hoverHitRadius = Math.max(6, size * 0.58);
               for (const p of points) {
                 drawHex(ctx, p.x, p.y, size, "#334155", "rgba(15,23,42,0.45)");
               }
@@ -3528,11 +6141,12 @@ def _model_html() -> str:
                 ctx.fillText(String(u.unit_id || ""), u.x + size * 0.65, u.y + 3);
               }
               if (
-                Number.isFinite(Number(stepRow && stepRow.target_q)) &&
-                Number.isFinite(Number(stepRow && stepRow.target_r)) &&
-                Number(((stepRow && stepRow.attack_distance_mean) === undefined || (stepRow && stepRow.attack_distance_mean) === null) ? -1 : (stepRow && stepRow.attack_distance_mean)) >= 0
+                hasStepObj &&
+                Number.isFinite(Number(rawTargetQ)) &&
+                Number.isFinite(Number(rawTargetR)) &&
+                Number((stepRow.attack_distance_mean === undefined || stepRow.attack_distance_mean === null) ? -1 : stepRow.attack_distance_mean) >= 0
               ) {
-                const t = proj.toPixel(Number(stepRow.target_q), Number(stepRow.target_r));
+                const t = proj.toPixel(Number(rawTargetQ), Number(rawTargetR));
                 drawHex(ctx, t.x, t.y, size * 1.08, "#facc15", "rgba(250,204,21,0.10)");
               }
               for (const vp of vpHexes) {
@@ -3551,10 +6165,53 @@ def _model_html() -> str:
                 ctx.lineWidth = 1;
                 ctx.stroke();
               }
+              const legend = document.getElementById("replayHoverLegend");
+              if (legend) {
+                if (hoverUnitId) {
+                  legend.title = "hover unit=" + hoverUnitId + " | move=" + String(moveHexes.length) + " | attack=" + String(attackHexes.length);
+                } else {
+                  legend.title = "Hover a unit to preview move/attack hexes";
+                }
+              }
+              }
             }
           }
+          replayMemoRender("replayHoverActionsHost", "hover::" + stateKey, function () {
+            renderReplayHoveredActions(stepRowSafe);
+          });
           const unitsHost = document.getElementById("replayUnitsHost");
           if (unitsHost) {
+            const parseSuppressedValue = function (raw) {
+              if (raw === null || raw === undefined || raw === "") return null;
+              if (typeof raw === "boolean") return raw;
+              if (typeof raw === "number") return Number.isFinite(raw) ? (raw !== 0) : null;
+              const txt = String(raw).trim().toLowerCase();
+              if (!txt) return null;
+              if (txt === "1" || txt === "true" || txt === "yes" || txt === "y" || txt === "on") return true;
+              if (txt === "0" || txt === "false" || txt === "no" || txt === "n" || txt === "off") return false;
+              return null;
+            };
+            const formatSuppressedLabel = function (value) {
+              return value === null ? "N/A" : (value ? "yes" : "no");
+            };
+            const suppressedValueForUnit = function (stepRowObj, unitObj) {
+              const unitId = String((unitObj && unitObj.unit_id) || "").trim();
+              const mapRaw = (stepRowObj && typeof stepRowObj === "object")
+                ? stepRowObj.unit_suppressed_map
+                : null;
+              if (mapRaw && typeof mapRaw === "object" && unitId && Object.prototype.hasOwnProperty.call(mapRaw, unitId)) {
+                const mapped = parseSuppressedValue(mapRaw[unitId]);
+                if (mapped !== null) return mapped;
+              }
+              if (!unitObj || typeof unitObj !== "object") return null;
+              const producerKeys = ["suppressed", "is_suppressed", "pinned", "is_pinned"];
+              for (const key of producerKeys) {
+                if (!Object.prototype.hasOwnProperty.call(unitObj, key)) continue;
+                const parsed = parseSuppressedValue(unitObj[key]);
+                if (parsed !== null) return parsed;
+              }
+              return null;
+            };
             const allStepUnits = Array.isArray(stepRow && stepRow.units) ? stepRow.units : [];
             const selectedUnitId = String(replayState.unitFilter || "__all__");
             const units = selectedUnitId === "__all__"
@@ -3568,13 +6225,15 @@ def _model_html() -> str:
               '<th style="border:1px solid #334155;padding:6px;">hex</th>' +
               '<th style="border:1px solid #334155;padding:6px;">hp</th>' +
               '<th style="border:1px solid #334155;padding:6px;">alive</th>' +
+              '<th style="border:1px solid #334155;padding:6px;">suppressed</th>' +
               '</tr></thead><tbody>';
             if (!units.length) {
-              unitsHtml += '<tr><td colspan="6" style="border:1px solid #334155;padding:6px;" class="muted">No units for selected filter.</td></tr>';
+              unitsHtml += '<tr><td colspan="7" style="border:1px solid #334155;padding:6px;" class="muted">No units for selected filter.</td></tr>';
             } else {
               for (const u of units) {
                 const hex = String(u.q) + "," + String(u.r);
                 const unitWithId = String(u.unit_id || "") + " - " + String(u.unit_label || u.unit_key || "");
+                const suppressedLabel = formatSuppressedLabel(suppressedValueForUnit(stepRow, u));
                 unitsHtml += '<tr>' +
                   '<td style="border:1px solid #334155;padding:6px;">' + esc(u.side) + '</td>' +
                   '<td style="border:1px solid #334155;padding:6px;">' + esc(u.unit_id) + '</td>' +
@@ -3582,6 +6241,7 @@ def _model_html() -> str:
                   '<td style="border:1px solid #334155;padding:6px;">' + esc(hex) + '</td>' +
                   '<td style="border:1px solid #334155;padding:6px;">' + esc(Number(u.hp || 0).toFixed(1)) + '</td>' +
                   '<td style="border:1px solid #334155;padding:6px;">' + esc(Boolean(u.alive) ? "yes" : "no") + '</td>' +
+                  '<td style="border:1px solid #334155;padding:6px;">' + esc(suppressedLabel) + '</td>' +
                   '</tr>';
               }
             }
@@ -3594,25 +6254,26 @@ def _model_html() -> str:
           replayState.evalId = String(evalSelect.value || "");
           replayState.episodeIndex = 0;
           await loadReplay();
-          loadReplayLog();
         };
         const epSelect = document.getElementById("replayEpisodeSelect");
         if (epSelect) epSelect.onchange = async () => {
-          replayState.episodeIndex = Math.max(0, Number(epSelect.value || 0));
+          replayState.episodeIndex = Math.max(0, Number(
+            (Number.isFinite(Number(epSelect.selectedIndex)) && Number(epSelect.selectedIndex) >= 0)
+              ? epSelect.selectedIndex
+              : (epSelect.value || 0)
+          ));
           await loadReplay();
-          loadReplayLog();
         };
         const loadBtn = document.getElementById("replayLoadBtn");
         if (loadBtn) loadBtn.onclick = async () => {
           await loadReplay();
-          loadReplayLog();
         };
         const replayRangeInput = document.getElementById("replayStepRange");
         if (replayRangeInput) replayRangeInput.oninput = () => {
           replayState.step = Math.max(0, Number(replayRangeInput.value || 0));
           setReplayStepNavFeedback("");
           drawReplay();
-          loadReplayLog();
+          scheduleReplayLogLoad(120);
         };
         const prevStepBtn = document.getElementById("replayPrevStepBtn");
         if (prevStepBtn) prevStepBtn.onclick = () => moveReplayStep(-1);
@@ -3655,11 +6316,17 @@ def _model_html() -> str:
             }
           }
         };
-        window.onresize = () => drawReplay();
+        window.onresize = () => {
+          if (replayState.resizeRafToken) cancelAnimationFrame(replayState.resizeRafToken);
+          replayState.resizeRafToken = requestAnimationFrame(() => {
+            replayState.resizeRafToken = null;
+            drawReplay();
+          });
+        };
         drawReplay();
         setTimeout(() => drawReplay(), 0);
         setTimeout(() => drawReplay(), 60);
-        loadReplayLog();
+        scheduleReplayLogLoad(0);
         loadReplay();
         } catch (e) {
           const host = document.getElementById("replayRoot");
@@ -3701,7 +6368,7 @@ def _model_html() -> str:
           return true;
         };
 
-        const resultRows = (rows || [])
+        const resultRows = (flowRows || [])
           .filter(er => selectedEvalId === "__all__" || String(er.eval_id || "") === String(selectedEvalId))
           .flatMap(er => (Array.isArray(er.results) ? er.results : []).map(r => ({ ...r, eval_id: er.eval_id || "" })))
           .filter(r => String(r.agent_name || "").startsWith("muzero"))
@@ -4064,7 +6731,7 @@ def _model_html() -> str:
       if (secTrain) secTrain.classList.toggle("active", section === "train");
       if (secEval) secEval.classList.toggle("active", section === "eval");
       if (secMeta) secMeta.classList.toggle("active", section === "meta");
-      ["tabTrainDetailBtn", "tabTrainHeadDiagnosticsBtn", "tabObjectiveRewardConfigBtn", "tabMuzeroVpsBtn", "tabHeadDiagnosticsBtn", "tabUnifiedBtn", "tabEvalDecisionsBtn", "tabReplayBtn", "tabOverviewBtn"].forEach(id => {
+      ["tabTrainDetailBtn", "tabTrainHeadDiagnosticsBtn", "tabObjectiveRewardConfigBtn", "tabMuzeroVpsBtn", "tabHeadDiagnosticsBtn", "tabEvalMetricsBtn", "tabUnifiedBtn", "tabEvalDecisionsBtn", "tabReplayBtn", "tabOverviewBtn"].forEach(id => {
         const n = el(id);
         if (!n) return;
         const sec = n.getAttribute("data-section");
@@ -4073,7 +6740,7 @@ def _model_html() -> str:
       const filtersHost = el("analysisFiltersHost");
       if (filtersHost) filtersHost.style.display = (section === "eval") ? "block" : "none";
       if (section === "train" && activeTab !== "train-detail" && activeTab !== "train-head-diagnostics" && activeTab !== "objective-reward-config") switchTab("train-detail");
-      if (section === "eval" && activeTab !== "vps" && activeTab !== "head-diagnostics" && activeTab !== "unified" && activeTab !== "eval-decisions" && activeTab !== "replay") switchTab("vps");
+      if (section === "eval" && activeTab !== "vps" && activeTab !== "head-diagnostics" && activeTab !== "eval-metrics" && activeTab !== "unified" && activeTab !== "eval-decisions" && activeTab !== "replay") switchTab("vps");
       if (section === "meta" && activeTab !== "overview") switchTab("overview");
     }
 
@@ -4082,6 +6749,7 @@ def _model_html() -> str:
       const tOverviewBtn = el("tabOverviewBtn");
       const tVpsBtn = el("tabMuzeroVpsBtn");
       const tHeadDiagBtn = el("tabHeadDiagnosticsBtn");
+      const tEvalMetricsBtn = el("tabEvalMetricsBtn");
       const tUnifiedBtn = el("tabUnifiedBtn");
       const tDecisionsBtn = el("tabEvalDecisionsBtn");
       const tReplayBtn = el("tabReplayBtn");
@@ -4091,6 +6759,7 @@ def _model_html() -> str:
       const pOverview = el("tabOverview");
       const pVps = el("tabMuzeroVps");
       const pHeadDiag = el("tabHeadDiagnostics");
+      const pEvalMetrics = el("tabEvalMetrics");
       const pUnified = el("tabUnified");
       const pDecisions = el("tabEvalDecisions");
       const pReplay = el("tabReplay");
@@ -4100,6 +6769,7 @@ def _model_html() -> str:
       if (tOverviewBtn) tOverviewBtn.classList.toggle("active", tab === "overview");
       if (tVpsBtn) tVpsBtn.classList.toggle("active", tab === "vps");
       if (tHeadDiagBtn) tHeadDiagBtn.classList.toggle("active", tab === "head-diagnostics");
+      if (tEvalMetricsBtn) tEvalMetricsBtn.classList.toggle("active", tab === "eval-metrics");
       if (tUnifiedBtn) tUnifiedBtn.classList.toggle("active", tab === "unified");
       if (tDecisionsBtn) tDecisionsBtn.classList.toggle("active", tab === "eval-decisions");
       if (tReplayBtn) tReplayBtn.classList.toggle("active", tab === "replay");
@@ -4109,6 +6779,7 @@ def _model_html() -> str:
       if (pOverview) pOverview.classList.toggle("active", tab === "overview");
       if (pVps) pVps.classList.toggle("active", tab === "vps");
       if (pHeadDiag) pHeadDiag.classList.toggle("active", tab === "head-diagnostics");
+      if (pEvalMetrics) pEvalMetrics.classList.toggle("active", tab === "eval-metrics");
       if (pUnified) pUnified.classList.toggle("active", tab === "unified");
       if (pDecisions) pDecisions.classList.toggle("active", tab === "eval-decisions");
       if (pReplay) pReplay.classList.toggle("active", tab === "replay");
@@ -4142,6 +6813,7 @@ def _model_html() -> str:
     const nTabOverview = el("tabOverviewBtn");
     const nTabVps = el("tabMuzeroVpsBtn");
     const nTabHeadDiag = el("tabHeadDiagnosticsBtn");
+    const nTabEvalMetrics = el("tabEvalMetricsBtn");
     const nTabUnified = el("tabUnifiedBtn");
     const nTabDecisions = el("tabEvalDecisionsBtn");
     const nTabReplay = el("tabReplayBtn");
@@ -4154,6 +6826,7 @@ def _model_html() -> str:
     if (nTabOverview) nTabOverview.onclick = () => switchTab("overview");
     if (nTabVps) nTabVps.onclick = () => switchTab("vps");
     if (nTabHeadDiag) nTabHeadDiag.onclick = () => switchTab("head-diagnostics");
+    if (nTabEvalMetrics) nTabEvalMetrics.onclick = () => switchTab("eval-metrics");
     if (nTabUnified) nTabUnified.onclick = () => switchTab("unified");
     if (nTabDecisions) nTabDecisions.onclick = () => switchTab("eval-decisions");
     if (nTabReplay) nTabReplay.onclick = () => switchTab("replay");
@@ -4280,11 +6953,17 @@ def serve(
                 eval_source_path = str(qs.get("eval_source_path", [""])[0] or "")
                 replay_path = str(qs.get("replay_path", [""])[0] or "")
                 episode_index = int(qs.get("episode_index", ["0"])[0] or 0)
+                chunk_offset = max(0, int(qs.get("chunk_offset", ["0"])[0] or 0))
+                chunk_limit = max(1, int(qs.get("chunk_limit", ["80"])[0] or 80))
                 rp = _resolve_replay_path(eval_source_path=eval_source_path, explicit_replay_path=replay_path)
                 payload: dict = {
                     "replay_path": str(rp) if rp is not None else "",
                     "episodes_meta": [],
                     "transitions": [],
+                    "transitions_total": 0,
+                    "transitions_offset": int(chunk_offset),
+                    "transitions_limit": int(chunk_limit),
+                    "transitions_has_more": False,
                 }
                 if rp is not None:
                     try:
@@ -4314,11 +6993,69 @@ def serve(
                             payload["selected_episode_index"] = idx
                             payload["selected_seed"] = int(selected.get("seed", 0) or 0)
                             payload["selected_agent_name"] = str(selected.get("agent_name", "") or "")
-                            payload["transitions"] = list(selected.get("transitions", []) or [])
+                            all_transitions = list(selected.get("transitions", []) or [])
+                            total = int(len(all_transitions))
+                            start = max(0, min(int(chunk_offset), total))
+                            end = max(start, min(total, start + int(chunk_limit)))
+                            payload["transitions_total"] = total
+                            payload["transitions"] = all_transitions[start:end]
+                            payload["transitions_has_more"] = bool(end < total)
                     except Exception as exc:
                         payload["error"] = f"failed to load replay: {exc}"
                 else:
                     payload["error"] = "replay file not found"
+                    src_raw = str(eval_source_path or "").strip()
+                    if src_raw:
+                        src = Path(src_raw).expanduser().resolve()
+                        if src.exists():
+                            try:
+                                raw_eval = json.loads(src.read_text(encoding="utf-8"))
+                                results = list(raw_eval.get("results", []) or [])
+                                selected_row = next(
+                                    (
+                                        r
+                                        for r in results
+                                        if isinstance(r, dict)
+                                        and str(r.get("agent_name", "") or "").strip().lower() == "muzero_stub"
+                                    ),
+                                    None,
+                                )
+                                if selected_row is None:
+                                    selected_row = next((r for r in results if isinstance(r, dict)), None)
+                                step_rows = []
+                                if isinstance(selected_row, dict):
+                                    step_rows = list(selected_row.get("eval_decision_steps_top", []) or [])
+                                if step_rows:
+                                    payload["error"] = ""
+                                    payload["schema_version"] = "bench_eval_fallback_v1"
+                                    payload["run_id"] = str(raw_eval.get("run_id", "") or "")
+                                    payload["scenario_id"] = str(raw_eval.get("scenario_id", "") or "")
+                                    payload["bench_id"] = str(src.stem or "")
+                                    payload["scenario_overlay"] = _load_scenario_overlay(
+                                        repo_root=repo_root,
+                                        scenario_id=str(raw_eval.get("scenario_id", "") or ""),
+                                    )
+                                    payload["episodes_meta"] = [
+                                        {
+                                            "episode_index": 0,
+                                            "seed": 0,
+                                            "agent_name": str((selected_row or {}).get("agent_name", "") or ""),
+                                            "transitions": int(len(step_rows)),
+                                        }
+                                    ]
+                                    payload["selected_episode_index"] = 0
+                                    payload["selected_seed"] = 0
+                                    payload["selected_agent_name"] = str(
+                                        (selected_row or {}).get("agent_name", "") or ""
+                                    )
+                                    total = int(len(step_rows))
+                                    start = max(0, min(int(chunk_offset), total))
+                                    end = max(start, min(total, start + int(chunk_limit)))
+                                    payload["transitions_total"] = total
+                                    payload["transitions"] = step_rows[start:end]
+                                    payload["transitions_has_more"] = bool(end < total)
+                            except Exception as exc:
+                                payload["error"] = f"failed to load eval fallback: {exc}"
                 body = _json_bytes(payload)
                 self._send_bytes(body, "application/json; charset=utf-8")
                 return

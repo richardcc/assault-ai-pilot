@@ -267,6 +267,9 @@ class VOECSimulator:
         terrain_move_cost_by_hex: Dict[str, float] = {}
         terrain_cover_by_hex: Dict[str, float] = {}
         terrain_los_block_by_hex: Dict[str, int] = {}
+        terrain_type_by_hex: Dict[str, str] = {}
+        fortification_type_by_hex: Dict[str, str] = {}
+        fortification_edge_by_hex: Dict[str, Dict[str, int]] = {}
         for coord in list(getattr(state, "hex_states", {}).keys()):
             q, r = _coord_to_qr(coord)
             if q is None or r is None:
@@ -284,6 +287,7 @@ class VOECSimulator:
                     terrain_name = str(hex_obj.get_terrain())
                 except Exception:
                     terrain_name = "clear"
+            terrain_type_by_hex[key] = str(terrain_name or "clear")
             move_cost = terrain_config.get_move_cost(terrain_name, "foot", default=1)
             if move_cost is None:
                 terrain_move_cost_by_hex[key] = 0.0
@@ -293,6 +297,23 @@ class VOECSimulator:
             terrain_cover_by_hex[key] = float(len(cover_dice)) / 3.0
             los_type = str(terrain_config.get_los(terrain_name)).upper()
             terrain_los_block_by_hex[key] = 1 if los_type == "BLOCKED" else 0
+            fort_data = None
+            if hex_obj is not None:
+                try:
+                    fort_data = state.game_map.get_hex_fortification_data(int(q), int(r))
+                except Exception:
+                    fort_data = None
+            if isinstance(fort_data, dict):
+                fort_type = str(fort_data.get("type", "") or "").strip()
+                if fort_type:
+                    fortification_type_by_hex[key] = fort_type
+                    v_start = _as_int(fort_data.get("vertex_start"))
+                    v_end = _as_int(fort_data.get("vertex_end"))
+                    if v_start is not None and v_end is not None:
+                        fortification_edge_by_hex[key] = {
+                            "vertex_start": int(v_start),
+                            "vertex_end": int(v_end),
+                        }
 
         ownership_to_side = {v: str(k) for k, v in getattr(state, "side_to_ownership", {}).items()}
         hex_state_by_key: Dict[str, Any] = {}
@@ -323,6 +344,9 @@ class VOECSimulator:
             "terrain_move_cost_by_hex": terrain_move_cost_by_hex,
             "terrain_cover_by_hex": terrain_cover_by_hex,
             "terrain_los_block_by_hex": terrain_los_block_by_hex,
+            "terrain_type_by_hex": terrain_type_by_hex,
+            "fortification_type_by_hex": fortification_type_by_hex,
+            "fortification_edge_by_hex": fortification_edge_by_hex,
         }
 
     def _resolve_action_by_id(self, action_id: str) -> Any:

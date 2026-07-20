@@ -176,14 +176,6 @@ class InferenceService:
             "inference_staleness_proxy_steps": float(_percentile(waits, 0.95)) if waits else 0.0,
         }
 
-
-def _percentile(values: list[float], q: float) -> float:
-    if not values:
-        return 0.0
-    sorted_values = sorted(float(v) for v in values)
-    pos = max(0, min(len(sorted_values) - 1, int(round((len(sorted_values) - 1) * float(q)))))
-    return float(sorted_values[pos])
-
     def _call_model(self, method: str, args: tuple[Any, ...], kwargs: dict[str, Any]) -> Any:
         fn = getattr(self.model, method)
         moved_args = tuple(self._to_device(x) for x in args)
@@ -233,6 +225,14 @@ def _percentile(values: list[float], q: float) -> float:
             per_key = {k: self._split_output(v, sizes) for k, v in out.items()}
             return [{k: per_key[k][i] for k in per_key} for i in range(len(sizes))]
         return [out for _ in sizes]
+
+
+def _percentile(values: list[float], q: float) -> float:
+    if not values:
+        return 0.0
+    sorted_values = sorted(float(v) for v in values)
+    pos = max(0, min(len(sorted_values) - 1, int(round((len(sorted_values) - 1) * float(q)))))
+    return float(sorted_values[pos])
 
 
 class RemoteInferenceModel:

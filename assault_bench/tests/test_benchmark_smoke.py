@@ -1,8 +1,10 @@
+import math
+import pytest
 import yaml
 
-from assault_bench.runner import _run_episode_with_policy, run_benchmark
+from assault_bench.runner import _resolve_enabled_profiles, _run_episode_with_policy, run_benchmark
 from agents.muzero.adapter_voec import MuZeroVOECAdapter
-from voec_sim.configs.config_loader import load_voec_config
+from agents.muzero.core.mcts import MCTSOutput
 from voec_sim.core.simulator import VOECSimulator
 
 
@@ -16,10 +18,20 @@ def test_benchmark_returns_results():
     muzero_row = next(r for r in payload["results"] if r["agent_name"] == "muzero_stub")
     assert "phase_2_9_eval_kpis" in muzero_row
     assert "reaction_fire_count" in muzero_row["phase_2_9_eval_kpis"]
+    steps_top = list(muzero_row.get("eval_decision_steps_top", []) or [])
+    if steps_top:
+        top = dict(steps_top[0] or {})
+        for key in (
+            "unit_prefilter_enabled",
+            "unit_prefilter_selected_unit_id",
+            "unit_prefilter_constrained_count",
+            "unit_prefilter_global_count",
+        ):
+            assert key in top
 
 
 def test_eval_trace_rows_include_head_telemetry_coverage():
-    adapter = MuZeroVOECAdapter(VOECSimulator(config=load_voec_config("assault_sim/config/train_config.json")))
+    adapter = MuZeroVOECAdapter(VOECSimulator())
     _, _, _, _, _, _, _, _, _, _, _, _, trace_rows = _run_episode_with_policy(
         adapter=adapter,
         scenario_id="battaglia_cittadina_2_1",
@@ -53,10 +65,19 @@ def test_eval_trace_rows_include_head_telemetry_coverage():
     assert "vp_distance_vector" in row
     assert "vp_distance_vector_size" in row
     assert "objective_signal_definition_version" in row
+    assert isinstance(row.get("legal_actions", None), list)
+    assert len(list(row.get("legal_actions", []) or [])) >= 1
+    assert isinstance(row.get("legal_actions_decoded_target_qr", None), list)
+    assert isinstance(row.get("acting_unit_action_catalog", None), list)
+    assert any(
+        str(item.get("action_id", "")) == str(row.get("action_id", ""))
+        for item in list(row.get("legal_actions_decoded_target_qr", []) or [])
+    )
+    assert all("catalog_index" in dict(item or {}) for item in list(row.get("acting_unit_action_catalog", []) or []))
 
 
 def test_eval_objective_head_not_partial_when_distance_present():
-    adapter = MuZeroVOECAdapter(VOECSimulator(config=load_voec_config("assault_sim/config/train_config.json")))
+    adapter = MuZeroVOECAdapter(VOECSimulator())
     _, _, _, _, _, _, _, _, _, _, _, _, trace_rows = _run_episode_with_policy(
         adapter=adapter,
         scenario_id="battaglia_cittadina_2_1",
@@ -83,7 +104,7 @@ def test_eval_objective_head_not_partial_when_distance_present():
 
 
 def test_eval_trace_rows_include_override_sanity_fields():
-    adapter = MuZeroVOECAdapter(VOECSimulator(config=load_voec_config("assault_sim/config/train_config.json")))
+    adapter = MuZeroVOECAdapter(VOECSimulator())
     _, _, _, _, _, _, _, _, _, _, _, _, trace_rows = _run_episode_with_policy(
         adapter=adapter,
         scenario_id="battaglia_cittadina_2_1",
@@ -109,6 +130,49 @@ def test_eval_trace_rows_include_override_sanity_fields():
     assert "override_sanity_consistent" in row
 
 
+def test_eval_trace_rows_entropy_uses_visit_distribution_and_sets_collapse_label(monkeypatch):
+    adapter = MuZeroVOECAdapter(VOECSimulator())
+
+    def _fake_mcts(**kwargs):
+        legal_actions = list(kwargs.get("legal_actions", []) or [])
+        n = len(legal_actions)
+        visits = [3, 2] + ([0] * max(0, n - 2))
+        probs = [1.0] + ([0.0] * max(0, n - 1))
+        return MCTSOutput(
+            actions=list(legal_actions),
+            visits=list(visits[:n]),
+            probs=list(probs[:n]),
+            chosen_action=str(legal_actions[0]) if legal_actions else "",
+        )
+
+    monkeypatch.setattr("assault_bench.runner.run_mcts_puct", _fake_mcts)
+
+    _, _, _, _, _, _, _, _, _, _, _, _, trace_rows = _run_episode_with_policy(
+        adapter=adapter,
+        scenario_id="battaglia_cittadina_2_1",
+        seed=17,
+        policy_name="muzero_stub",
+        policy_by_side={},
+        max_steps=1,
+        max_steps_override=1,
+        mcts_simulations=8,
+        mcts_c_puct=1.5,
+        mcts_temperature=0.1,
+        model=None,
+        action_dim=32,
+        mcts_unroll_steps=1,
+        mcts_discount=0.997,
+        collect_flow_metrics=True,
+    )
+    assert trace_rows
+    row = dict(trace_rows[0] or {})
+    expected_entropy = -((3.0 / 5.0) * math.log(3.0 / 5.0) + (2.0 / 5.0) * math.log(2.0 / 5.0))
+    assert float(row.get("mcts_entropy", 0.0)) == pytest.approx(expected_entropy, rel=1e-6, abs=1e-8)
+    assert row.get("mcts_entropy_source") == "root_visit_distribution"
+    assert bool(row.get("mcts_entropy_collapse", False)) is False
+    assert row.get("mcts_entropy_collapse_label") == "ok"
+
+
 def test_default_benchmark_config_is_not_quick_profile():
     cfg = yaml.safe_load(open("assault_bench/configs/benchmark_config.yaml", "r", encoding="utf-8").read())
     bench = dict(cfg.get("benchmark", {}) or {})
@@ -116,9 +180,21 @@ def test_default_benchmark_config_is_not_quick_profile():
     profiles = list(
         bench.get(
             "matchup_profiles",
-            ["muzero_selfplay", "random_selfplay", "muzero_vs_random_side_a", "muzero_vs_random_side_b"],
+            ["muzero_selfplay", "muzero_vs_random_side_a", "muzero_vs_random_side_b"],
         )
         or []
     )
     assert len(seeds) >= 5
-    assert len(seeds) * max(1, len(profiles)) >= 100
+    assert "random_selfplay" not in profiles
+    assert len(seeds) * max(1, len(profiles)) >= 75
+
+
+def test_matchup_profile_defaults_exclude_random_selfplay():
+    defaults = _resolve_enabled_profiles({})
+    assert "random_selfplay" not in defaults
+    assert defaults == {"muzero_selfplay", "muzero_vs_random_side_a", "muzero_vs_random_side_b"}
+
+
+def test_matchup_profile_allows_explicit_random_selfplay_opt_in():
+    enabled = _resolve_enabled_profiles({"matchup_profiles": ["muzero_selfplay", "random_selfplay"]})
+    assert enabled == {"muzero_selfplay", "random_selfplay"}

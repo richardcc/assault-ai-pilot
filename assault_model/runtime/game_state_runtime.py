@@ -124,14 +124,8 @@ class RuntimeGameState:
             next_side = self._next_side(next_side)
 
         # --- new turn ---
-        self.activated_units.clear()
-        self.reaction_used_this_turn.clear()
-        self.pending_reaction = None
-        self._sync_eliminated_activation()
         self.base_state.turn += 1
-
-        self.sides = self._extract_sides()
-        self.active_side = self._start_side_for_new_turn()
+        self.start_turn()
 
     # =================================================
     # TURN END (UNCHANGED - compatibility)
@@ -179,11 +173,6 @@ class RuntimeGameState:
         self.activated_units.clear()
         self.reaction_used_this_turn.clear()
         self.pending_reaction = None
-        self._sync_eliminated_activation()
-
-        # --- NEW: reset sides each turn ---
-        self.sides = self._extract_sides()
-        self.active_side = self._start_side_for_new_turn()
 
         for unit in self.base_state.units:
 
@@ -194,6 +183,12 @@ class RuntimeGameState:
             if getattr(unit, "fallback", False):
                 unit.clear_fallback()
                 _trace("FALLBACK_RECOVERED", unit=unit.unit_id)
+
+        self._sync_eliminated_activation()
+
+        # --- NEW: reset sides each turn ---
+        self.sides = self._extract_sides()
+        self.active_side = self._start_side_for_new_turn()
 
         _trace(
             "TURN_START_UNITS",

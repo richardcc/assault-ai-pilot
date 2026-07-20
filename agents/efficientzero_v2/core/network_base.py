@@ -46,6 +46,8 @@ class EfficientZeroV2BaseNetwork(nn.Module):
         observation_width: int = 16,
         dynamics_blocks: int = 1,
         prediction_blocks: int = 1,
+        objective_intent_classes: int = 0,
+        multi_vp_feature_dim: int = 0,
     ):
         super().__init__()
         self.encoder_type = str(encoder_type).lower().strip()
@@ -57,6 +59,8 @@ class EfficientZeroV2BaseNetwork(nn.Module):
         self.latent_shape = (self.hidden_dim, self.observation_height, self.observation_width)
         self.dynamics_blocks = max(1, int(dynamics_blocks))
         self.prediction_blocks = max(1, int(prediction_blocks))
+        self.objective_intent_classes = max(0, int(objective_intent_classes))
+        self.multi_vp_feature_dim = max(0, int(multi_vp_feature_dim))
         if self.encoder_type == "cnn":
             self.representation_input = nn.Sequential(
                 nn.Conv2d(self.observation_channels, self.hidden_dim, kernel_size=3, padding=1),
@@ -90,6 +94,16 @@ class EfficientZeroV2BaseNetwork(nn.Module):
             self.prediction_policy = nn.Linear(flat_dim, action_dim)
             self.prediction_value = nn.Linear(flat_dim, 1)
             self.prediction_objective = nn.Linear(flat_dim, 1)
+            self.prediction_intent = (
+                nn.Linear(flat_dim, self.objective_intent_classes)
+                if self.objective_intent_classes > 0
+                else None
+            )
+            self.prediction_multi_vp = (
+                nn.Linear(flat_dim, self.multi_vp_feature_dim)
+                if self.multi_vp_feature_dim > 0
+                else None
+            )
         else:
             self.representation = nn.Sequential(
                 nn.Linear(observation_dim, hidden_dim),
@@ -111,6 +125,16 @@ class EfficientZeroV2BaseNetwork(nn.Module):
             self.prediction_policy = nn.Linear(hidden_dim, action_dim)
             self.prediction_value = nn.Linear(hidden_dim, 1)
             self.prediction_objective = nn.Linear(hidden_dim, 1)
+            self.prediction_intent = (
+                nn.Linear(hidden_dim, self.objective_intent_classes)
+                if self.objective_intent_classes > 0
+                else None
+            )
+            self.prediction_multi_vp = (
+                nn.Linear(hidden_dim, self.multi_vp_feature_dim)
+                if self.multi_vp_feature_dim > 0
+                else None
+            )
 
     def initial_inference(self, observation: torch.Tensor, return_aux: bool = False):
         if self.encoder_type == "cnn":
@@ -121,6 +145,12 @@ class EfficientZeroV2BaseNetwork(nn.Module):
             value = self.prediction_value(pred_flat)
             reward = torch.zeros_like(value)
             objective_logit = self.prediction_objective(pred_flat)
+            objective_intent_logits = (
+                self.prediction_intent(pred_flat) if self.prediction_intent is not None else None
+            )
+            multi_vp_pred = (
+                self.prediction_multi_vp(pred_flat) if self.prediction_multi_vp is not None else None
+            )
         else:
             hidden = self.representation(observation)
             pred_hidden = self.prediction_trunk(hidden)
@@ -128,8 +158,19 @@ class EfficientZeroV2BaseNetwork(nn.Module):
             value = self.prediction_value(pred_hidden)
             reward = torch.zeros_like(value)
             objective_logit = self.prediction_objective(pred_hidden)
+            objective_intent_logits = (
+                self.prediction_intent(pred_hidden) if self.prediction_intent is not None else None
+            )
+            multi_vp_pred = (
+                self.prediction_multi_vp(pred_hidden) if self.prediction_multi_vp is not None else None
+            )
         if return_aux:
-            return hidden, policy_logits, value, reward, {"objective_logit": objective_logit}
+            aux = {"objective_logit": objective_logit}
+            if objective_intent_logits is not None:
+                aux["objective_intent_logits"] = objective_intent_logits
+            if multi_vp_pred is not None:
+                aux["multi_vp_pred"] = multi_vp_pred
+            return hidden, policy_logits, value, reward, aux
         return hidden, policy_logits, value, reward
 
     def recurrent_inference(
@@ -152,6 +193,12 @@ class EfficientZeroV2BaseNetwork(nn.Module):
             policy_logits = self.prediction_policy(pred_flat)
             value = self.prediction_value(pred_flat)
             objective_logit = self.prediction_objective(pred_flat)
+            objective_intent_logits = (
+                self.prediction_intent(pred_flat) if self.prediction_intent is not None else None
+            )
+            multi_vp_pred = (
+                self.prediction_multi_vp(pred_flat) if self.prediction_multi_vp is not None else None
+            )
         else:
             x = torch.cat([hidden, action_onehot], dim=-1)
             next_hidden = self.dynamics_state(self.dynamics_input(x))
@@ -160,6 +207,17 @@ class EfficientZeroV2BaseNetwork(nn.Module):
             policy_logits = self.prediction_policy(pred_hidden)
             value = self.prediction_value(pred_hidden)
             objective_logit = self.prediction_objective(pred_hidden)
+            objective_intent_logits = (
+                self.prediction_intent(pred_hidden) if self.prediction_intent is not None else None
+            )
+            multi_vp_pred = (
+                self.prediction_multi_vp(pred_hidden) if self.prediction_multi_vp is not None else None
+            )
         if return_aux:
-            return next_hidden, policy_logits, value, reward, {"objective_logit": objective_logit}
+            aux = {"objective_logit": objective_logit}
+            if objective_intent_logits is not None:
+                aux["objective_intent_logits"] = objective_intent_logits
+            if multi_vp_pred is not None:
+                aux["multi_vp_pred"] = multi_vp_pred
+            return next_hidden, policy_logits, value, reward, aux
         return next_hidden, policy_logits, value, reward

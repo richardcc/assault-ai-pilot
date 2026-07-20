@@ -13,6 +13,37 @@ def hex_distance_axial(aq: int, ar: int, bq: int, br: int) -> int:
     return int((abs(dq) + abs(dr) + abs(dq + dr)) // 2)
 
 
+def parse_hex_key_to_qr(key: str) -> tuple[int | None, int | None]:
+    try:
+        s = str(key or "").strip()
+        if not s:
+            return None, None
+        if len(s) >= 2 and ((s[0] == "(" and s[-1] == ")") or (s[0] == "[" and s[-1] == "]")):
+            s = s[1:-1].strip()
+        if "," in s:
+            q_s, r_s = s.split(",", 1)
+            return int(q_s), int(r_s)
+        if ":" in s:
+            q_s, r_s = s.split(":", 1)
+            return int(q_s), int(r_s)
+    except Exception:
+        return None, None
+    return None, None
+
+
+def extract_vp_qr(vp: dict) -> tuple[int | None, int | None]:
+    if not isinstance(vp, dict):
+        return None, None
+    q = vp.get("q")
+    r = vp.get("r")
+    if isinstance(q, int) and isinstance(r, int):
+        return int(q), int(r)
+    q2, r2 = parse_hex_key_to_qr(vp.get("hex_key", ""))
+    if q2 is not None and r2 is not None:
+        return q2, r2
+    return None, None
+
+
 @dataclass(frozen=True)
 class ObjectiveSignal:
     vp_distance_vector: dict[str, float]
@@ -25,12 +56,24 @@ class ObjectiveSignal:
     objective_min_dist_after: float
 
 
+def _owner_by_qr(vp_owner_by_hex: dict[str, str]) -> dict[tuple[int, int], str]:
+    out: dict[tuple[int, int], str] = {}
+    for raw_key, owner in dict(vp_owner_by_hex or {}).items():
+        q, r = parse_hex_key_to_qr(str(raw_key))
+        if q is None or r is None:
+            continue
+        out[(int(q), int(r))] = normalize_side_label(owner)
+    return out
+
+
 def objective_min_distance_snapshot(
     *,
     units: list[dict],
     side: str,
     vp_hexes: list[dict],
     vp_owner_by_hex: dict[str, str],
+    include_owned_for_defense: bool = False,
+    defendable_vp_ids: set[str] | None = None,
 ) -> tuple[float, str, dict[str, float]]:
     side_norm = normalize_side_label(side)
     if not side_norm:
@@ -46,20 +89,24 @@ def objective_min_distance_snapshot(
     ]
     if not alive_units:
         return -1.0, "", {}
-    owners = dict(vp_owner_by_hex or {})
+    owners_by_qr = _owner_by_qr(vp_owner_by_hex)
+    allowed_owned_ids = {str(v).strip() for v in (defendable_vp_ids or set()) if str(v).strip()}
     best = -1.0
     best_id = ""
     by_vp: dict[str, float] = {}
     for idx, vp in enumerate(list(vp_hexes or [])):
-        q = vp.get("q")
-        r = vp.get("r")
-        if not isinstance(q, int) or not isinstance(r, int):
+        q, r = extract_vp_qr(vp)
+        if q is None or r is None:
             continue
         key = f"{int(q)},{int(r)}"
-        if normalize_side_label(owners.get(key, "")) == side_norm:
-            continue
         dmin = min(hex_distance_axial(int(u["q"]), int(u["r"]), int(q), int(r)) for u in alive_units)
         vp_id = str(vp.get("vp_id", "")).strip() or f"VP_{idx}_{key}"
+        owner = owners_by_qr.get((int(q), int(r)), "")
+        if owner == side_norm:
+            if not include_owned_for_defense:
+                continue
+            if allowed_owned_ids and vp_id not in allowed_owned_ids:
+                continue
         by_vp[vp_id] = float(dmin)
         if best < 0.0 or dmin < best:
             best = float(dmin)
@@ -81,18 +128,24 @@ def objective_step_signal(
     vp_captures: int,
     vp_gain_for_side: int,
     opportunity_near_vp_max_dist: float = 2.0,
+    include_owned_for_defense: bool = False,
+    defendable_vp_ids: set[str] | None = None,
 ) -> ObjectiveSignal:
     before_min, best_vp_id, before_vec = objective_min_distance_snapshot(
         units=before_units,
         side=side,
         vp_hexes=vp_hexes,
         vp_owner_by_hex=before_vp_owner_by_hex,
+        include_owned_for_defense=bool(include_owned_for_defense),
+        defendable_vp_ids=defendable_vp_ids,
     )
     after_min, _, _ = objective_min_distance_snapshot(
         units=after_units,
         side=side,
         vp_hexes=vp_hexes,
         vp_owner_by_hex=after_vp_owner_by_hex,
+        include_owned_for_defense=bool(include_owned_for_defense),
+        defendable_vp_ids=defendable_vp_ids,
     )
     progress_delta = float(before_min - after_min) if before_min >= 0.0 and after_min >= 0.0 else 0.0
     near = float(max(0.0, opportunity_near_vp_max_dist))

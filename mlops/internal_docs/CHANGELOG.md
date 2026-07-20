@@ -2,6 +2,17 @@
 
 Validation state: **Pending Validation**.
 
+## 2026-07-15
+
+- Bench decision telemetry now backfills `why_action_vs_vp` VP progress from observed transition outcomes when action target hex parsing fails.
+- Stationary/non-move actions now report `vp_progress_delta=0.0` in VP candidate telemetry instead of `N/A` when VP context exists.
+- Added MCTS Q guardrail (`mcts_q_clip_abs`, default `10.0`) for MuZero/EfficientZero selection and backup, plus telemetry counters:
+  - `mcts_q_guardrail_clipped_count`
+  - `mcts_q_guardrail_clip_limit`
+- Added regression tests for VP telemetry fallback/stationary deltas and deterministic Q guardrail clipping behavior.
+- EfficientZero v2 root MCTS now applies configurable root-Q normalization (`mcts_q_root_normalization_mode`, `mcts_q_root_normalization_strength`) before Q+U to avoid clipped-Q saturation ties while keeping guardrail clipping telemetry.
+- EfficientZero v2 chosen-action selection now applies VP-aware tie-break for near-equal candidate scores (`mcts_vp_tiebreak_epsilon`) and emits explicit tie-break telemetry (`mcts_tiebreak_path`, tie-break metadata in `why_action_vs_vp`).
+
 ## 2026-07-03
 
 - Added structured internal docs layout:

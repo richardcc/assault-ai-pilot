@@ -179,6 +179,14 @@ def _selfplay_worker_task(payload: dict):
         mcts_temperature=payload["selfplay"]["mcts_temperature"],
         mcts_dirichlet_alpha=payload["selfplay"]["mcts_dirichlet_alpha"],
         mcts_dirichlet_epsilon=payload["selfplay"]["mcts_dirichlet_epsilon"],
+        mcts_q_clip_abs=float(payload["selfplay"].get("mcts_q_clip_abs", 10.0)),
+        mcts_chance_mode=str(payload["selfplay"].get("mcts_chance_mode", "off")),
+        mcts_chance_samples_per_expansion=int(
+            payload["selfplay"].get("mcts_chance_samples_per_expansion", 1)
+        ),
+        mcts_chance_value_noise_std=float(
+            payload["selfplay"].get("mcts_chance_value_noise_std", 0.0)
+        ),
         inference_cache_limit=int(payload["selfplay"].get("inference_cache_limit", 2048)),
         progress_log_every=int(payload["selfplay"].get("progress_log_every", 0)),
         log_episode_end=bool(payload["selfplay"].get("log_episode_end", False)),
@@ -323,6 +331,12 @@ def run_training(
     mcts_temperature = float(cfg.selfplay.get("mcts_temperature", 1.0))
     mcts_dirichlet_alpha = float(cfg.selfplay.get("mcts_dirichlet_alpha", 0.3))
     mcts_dirichlet_epsilon = float(cfg.selfplay.get("mcts_dirichlet_epsilon", 0.0))
+    mcts_q_clip_abs = float(cfg.selfplay.get("mcts_q_clip_abs", 10.0))
+    mcts_chance_mode = str(cfg.selfplay.get("mcts_chance_mode", "off"))
+    mcts_chance_samples_per_expansion = int(
+        cfg.selfplay.get("mcts_chance_samples_per_expansion", 1)
+    )
+    mcts_chance_value_noise_std = float(cfg.selfplay.get("mcts_chance_value_noise_std", 0.0))
     inference_cache_limit = int(cfg.selfplay.get("inference_cache_limit", 2048))
     progress_log_every = int(cfg.selfplay.get("progress_log_every", 0))
     log_episode_end = bool(cfg.selfplay.get("log_episode_end", False))
@@ -474,6 +488,10 @@ def run_training(
                 "mcts_simulations": mcts_simulations,
                 "mcts_c_puct": mcts_c_puct,
                 "mcts_temperature": mcts_temperature,
+                "mcts_q_clip_abs": mcts_q_clip_abs,
+                "mcts_chance_mode": mcts_chance_mode,
+                "mcts_chance_samples_per_expansion": mcts_chance_samples_per_expansion,
+                "mcts_chance_value_noise_std": mcts_chance_value_noise_std,
             },
             "reaction_fire_enabled": str(
                 os.getenv("ASSAULT_ENABLE_REACTION_FIRE", "1")
@@ -500,6 +518,10 @@ def run_training(
             "checkpoint_every": checkpoint_every,
             "mcts_simulations": mcts_simulations,
             "mcts_c_puct": mcts_c_puct,
+            "mcts_q_clip_abs": mcts_q_clip_abs,
+            "mcts_chance_mode": mcts_chance_mode,
+            "mcts_chance_samples_per_expansion": mcts_chance_samples_per_expansion,
+            "mcts_chance_value_noise_std": mcts_chance_value_noise_std,
             "encoder_type": encoder_type,
             "objective_loss_weight": objective_loss_weight,
             "objective_pos_weight": objective_pos_weight,
@@ -571,6 +593,10 @@ def run_training(
                             "mcts_temperature": mcts_temperature,
                             "mcts_dirichlet_alpha": mcts_dirichlet_alpha,
                             "mcts_dirichlet_epsilon": mcts_dirichlet_epsilon,
+                            "mcts_q_clip_abs": mcts_q_clip_abs,
+                            "mcts_chance_mode": mcts_chance_mode,
+                            "mcts_chance_samples_per_expansion": mcts_chance_samples_per_expansion,
+                            "mcts_chance_value_noise_std": mcts_chance_value_noise_std,
                             "inference_cache_limit": inference_cache_limit,
                             "progress_log_every": progress_log_every,
                             "log_episode_end": bool(log_episode_end),
@@ -717,6 +743,10 @@ def run_training(
                     mcts_temperature=mcts_temperature,
                     mcts_dirichlet_alpha=mcts_dirichlet_alpha,
                     mcts_dirichlet_epsilon=mcts_dirichlet_epsilon,
+                    mcts_q_clip_abs=mcts_q_clip_abs,
+                    mcts_chance_mode=mcts_chance_mode,
+                    mcts_chance_samples_per_expansion=mcts_chance_samples_per_expansion,
+                    mcts_chance_value_noise_std=mcts_chance_value_noise_std,
                     inference_cache_limit=inference_cache_limit,
                     progress_log_every=progress_log_every,
                     log_episode_end=bool(log_episode_end),

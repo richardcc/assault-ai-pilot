@@ -24,6 +24,12 @@ Compare agents on the same VOEC scenario, seeds, and action budget.
 - Agents included:
   - `muzero_stub`
   - `baseline_random`
+- Default matchup profiles:
+  - `muzero_selfplay`
+  - `muzero_vs_random_side_a`
+  - `muzero_vs_random_side_b`
+- Optional opt-in matchup profile:
+  - `random_selfplay` (add it to `benchmark.matchup_profiles` in the selected benchmark YAML)
 
 ## Outputs
 

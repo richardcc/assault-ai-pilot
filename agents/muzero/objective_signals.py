@@ -42,6 +42,16 @@ def extract_vp_qr(vp: dict) -> tuple[int | None, int | None]:
     return None, None
 
 
+def _owner_by_qr(vp_owner_by_hex: dict[str, str]) -> dict[tuple[int, int], str]:
+    out: dict[tuple[int, int], str] = {}
+    for raw_key, owner in dict(vp_owner_by_hex or {}).items():
+        q, r = parse_hex_key_to_qr(str(raw_key))
+        if q is None or r is None:
+            continue
+        out[(int(q), int(r))] = normalize_side_label(owner)
+    return out
+
+
 @dataclass(frozen=True)
 class ObjectiveSignal:
     vp_distance_vector: dict[str, float]
@@ -58,15 +68,15 @@ def _enemy_vp_candidates(
     side_norm: str,
     vp_hexes: list[dict],
     vp_owner_by_hex: dict[str, str],
+    include_owned_for_defense: bool = False,
+    defendable_vp_ids: set[str] | None = None,
 ) -> list[tuple[str, int, int]]:
-    owners = dict(vp_owner_by_hex or {})
+    owners_by_qr = _owner_by_qr(vp_owner_by_hex)
+    allowed_owned_ids = {str(v).strip() for v in (defendable_vp_ids or set()) if str(v).strip()}
     candidates: list[tuple[str, int, int]] = []
     by_owner_map = []
-    for key in owners.keys():
-        q, r = parse_hex_key_to_qr(key)
-        if q is None or r is None:
-            continue
-        by_owner_map.append({"q": int(q), "r": int(r), "hex_key": str(key)})
+    for q, r in owners_by_qr.keys():
+        by_owner_map.append({"q": int(q), "r": int(r), "hex_key": f"{int(q)},{int(r)}"})
     if by_owner_map:
         src = by_owner_map
     else:
@@ -76,10 +86,13 @@ def _enemy_vp_candidates(
         if q is None or r is None:
             continue
         key = f"{int(q)},{int(r)}"
-        owner = normalize_side_label(owners.get(key, ""))
-        if owner == side_norm:
-            continue
         vp_id = str((vp or {}).get("vp_id", "")).strip() or f"VP_{idx}_{key}"
+        owner = owners_by_qr.get((int(q), int(r)), "")
+        if owner == side_norm:
+            if not include_owned_for_defense:
+                continue
+            if allowed_owned_ids and vp_id not in allowed_owned_ids:
+                continue
         candidates.append((vp_id, int(q), int(r)))
     return candidates
 
@@ -107,11 +120,19 @@ def objective_min_distance_snapshot(
     side: str,
     vp_hexes: list[dict],
     vp_owner_by_hex: dict[str, str],
+    include_owned_for_defense: bool = False,
+    defendable_vp_ids: set[str] | None = None,
 ) -> tuple[float, str, dict[str, float]]:
     side_norm = normalize_side_label(side)
     if not side_norm:
         return -1.0, "", {}
-    vp_candidates = _enemy_vp_candidates(side_norm, vp_hexes, vp_owner_by_hex)
+    vp_candidates = _enemy_vp_candidates(
+        side_norm,
+        vp_hexes,
+        vp_owner_by_hex,
+        include_owned_for_defense=bool(include_owned_for_defense),
+        defendable_vp_ids=defendable_vp_ids,
+    )
     if not vp_candidates:
         return -1.0, "", {}
     alive_units = _alive_units_for_side(units, side_norm)
@@ -149,18 +170,24 @@ def objective_step_signal(
     vp_captures: int,
     vp_gain_for_side: int,
     opportunity_near_vp_max_dist: float = 2.0,
+    include_owned_for_defense: bool = False,
+    defendable_vp_ids: set[str] | None = None,
 ) -> ObjectiveSignal:
     before_min, best_vp_id, before_vec = objective_min_distance_snapshot(
         units=before_units,
         side=side,
         vp_hexes=vp_hexes,
         vp_owner_by_hex=before_vp_owner_by_hex,
+        include_owned_for_defense=bool(include_owned_for_defense),
+        defendable_vp_ids=defendable_vp_ids,
     )
     after_min, _, _ = objective_min_distance_snapshot(
         units=after_units,
         side=side,
         vp_hexes=vp_hexes,
         vp_owner_by_hex=after_vp_owner_by_hex,
+        include_owned_for_defense=bool(include_owned_for_defense),
+        defendable_vp_ids=defendable_vp_ids,
     )
     progress_delta = 0.0
     if before_min >= 0.0 and after_min >= 0.0:

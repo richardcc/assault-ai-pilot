@@ -36,6 +36,10 @@ def test_config_loader_injects_objective_defaults_for_legacy_configs(tmp_path: P
     assert cfg.train["objective_signal"]["opportunity_near_vp_max_dist"] == 2.0
     assert cfg.train["objective_head"]["progress_positive_threshold"] == 0.0
     assert cfg.train["objective_reporting"]["high_confidence_prob_threshold"] == 0.60
+    assert cfg.selfplay["mcts_q_clip_abs"] == 10.0
+    assert cfg.selfplay["mcts_chance_mode"] == "off"
+    assert cfg.selfplay["mcts_chance_samples_per_expansion"] == 1
+    assert cfg.selfplay["mcts_chance_value_noise_std"] == 0.0
 
 
 def test_config_loader_preserves_explicit_objective_overrides(tmp_path: Path) -> None:
