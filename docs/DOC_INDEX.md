@@ -14,8 +14,13 @@ This is the central index for the documentation set.
 - [Scripts Index](SCRIPTS_INDEX.md)
 - [Backend Architecture State](backend/BACKEND_ARCHITECTURE_STATE.md)
 - [Benchmark Protocol](BENCHMARK_PROTOCOL.md)
+- [Curriculum Roadmap: Self vs Random](CURRICULUM_SELF_VS_RANDOM_ROADMAP.md)
+- [Curriculum Repeatability Runbook](CURRICULUM_REPEATABILITY_RUNBOOK.md)
+- [Guia del Sistema de Curriculum: Funcionamiento y Ejecucion](CURRICULUM_SYSTEM_GUIDE.md)
 - [Observability Spec](OBSERVABILITY_SPEC.md)
 - [XAI Report Spec](XAI_REPORT_SPEC.md)
+- [Guia de Interfaces, Visores y Simulador](INTERFACES_Y_VISORES.md)
+- [Plan de Accion: Optimizacion de Rendimiento (RL & Curriculum)](PLAN_ACCION_OPTIMIZACION_RENDIMIENTO.md)
 
 ## Rules Documentation
 

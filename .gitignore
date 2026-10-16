@@ -98,3 +98,10 @@ runs_curriculum/
 mlruns/
 runs_curriculum/
 .assault_experiment_orchestrator.queue_*.lock
+
+# Local reporting artifacts
+mlops/reporting/artifacts/
+node_modules/
+_artifacts/
+!mlops/reporting/viewer_frontend/index.html
+
