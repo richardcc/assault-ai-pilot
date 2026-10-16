@@ -470,29 +470,31 @@ export function VpSummaryTab({
 
         // Outcome rates
         let tv = 0, v = 0, d = 0, def = 0, td = 0;
-        if (bySide[s] && Object.keys(bySide[s]).length > 0) {
-          const sr = bySide[s];
-          tv = Number(sr.total_victory || 0);
-          v = Number(sr.victory || 0);
-          d = Number(sr.draw || 0);
-          def = Number(sr.defeat || 0);
-          td = Number(sr.total_defeat || 0);
-        } else if (bySide[sNorm] && Object.keys(bySide[sNorm]).length > 0) {
-          const sr = bySide[sNorm];
-          tv = Number(sr.total_victory || 0);
-          v = Number(sr.victory || 0);
-          d = Number(sr.draw || 0);
-          def = Number(sr.defeat || 0);
-          td = Number(sr.total_defeat || 0);
-        } else if (rates[s] !== undefined || rates[sNorm] !== undefined) {
-          const wr = Number(rates[s] ?? rates[sNorm] ?? 0);
-          v = wr;
-          def = Math.max(0, 1 - wr);
+        if (eps > 0) {
+          if (bySide[s] && Object.keys(bySide[s]).length > 0) {
+            const sr = bySide[s];
+            tv = Number(sr.total_victory || 0);
+            v = Number(sr.victory || 0);
+            d = Number(sr.draw || 0);
+            def = Number(sr.defeat || 0);
+            td = Number(sr.total_defeat || 0);
+          } else if (bySide[sNorm] && Object.keys(bySide[sNorm]).length > 0) {
+            const sr = bySide[sNorm];
+            tv = Number(sr.total_victory || 0);
+            v = Number(sr.victory || 0);
+            d = Number(sr.draw || 0);
+            def = Number(sr.defeat || 0);
+            td = Number(sr.total_defeat || 0);
+          } else if (rates[s] !== undefined || rates[sNorm] !== undefined) {
+            const wr = Number(rates[s] ?? rates[sNorm] ?? 0);
+            v = wr;
+            def = Math.max(0, 1 - wr);
+          }
         }
 
-        const winRate = tv + v > 0 ? (tv + v) : Number(rates[s] ?? rates[sNorm] ?? 0);
-        const lossRate = td + def > 0 ? (td + def) : Math.max(0, 1 - winRate);
-        const score = (tv + v) * 1 + (td + def) * -1;
+        const winRate = eps > 0 ? (tv + v > 0 ? (tv + v) : Number(rates[s] ?? rates[sNorm] ?? 0)) : 0;
+        const lossRate = eps > 0 ? (td + def > 0 ? (td + def) : Math.max(0, 1 - winRate)) : 0;
+        const score = eps > 0 ? ((tv + v) * 1 + (td + def) * -1) : 0;
 
         // Tactical averages
         const tact = rTactical[sNorm];
@@ -947,42 +949,42 @@ export function VpSummaryTab({
                   </td>
                   <td>
                     <span style={{ color: m.total_victory > 0 ? "#34d399" : "#64748b", fontWeight: m.total_victory > 0 ? 700 : 400 }}>
-                      {(m.total_victory * 100).toFixed(1)}%
+                      {m.episodes > 0 ? `${(m.total_victory * 100).toFixed(1)}%` : "-"}
                     </span>
                   </td>
                   <td>
                     <span style={{ color: m.victory > 0 ? "#86efac" : "#64748b", fontWeight: m.victory > 0 ? 600 : 400 }}>
-                      {(m.victory * 100).toFixed(1)}%
+                      {m.episodes > 0 ? `${(m.victory * 100).toFixed(1)}%` : "-"}
                     </span>
                   </td>
                   <td>
                     <span style={{ color: m.draw > 0 ? "#fde047" : "#64748b" }}>
-                      {(m.draw * 100).toFixed(1)}%
+                      {m.episodes > 0 ? `${(m.draw * 100).toFixed(1)}%` : "-"}
                     </span>
                   </td>
                   <td>
                     <span style={{ color: m.defeat > 0 ? "#fdba74" : "#64748b" }}>
-                      {(m.defeat * 100).toFixed(1)}%
+                      {m.episodes > 0 ? `${(m.defeat * 100).toFixed(1)}%` : "-"}
                     </span>
                   </td>
                   <td>
                     <span style={{ color: m.total_defeat > 0 ? "#fca5a5" : "#64748b", fontWeight: m.total_defeat > 0 ? 700 : 400 }}>
-                      {(m.total_defeat * 100).toFixed(1)}%
+                      {m.episodes > 0 ? `${(m.total_defeat * 100).toFixed(1)}%` : "-"}
                     </span>
                   </td>
                   <td>
-                    <b style={{ color: m.win_rate >= 0.5 ? "#22c55e" : "#e2e8f0", fontSize: 13 }}>
-                      {(m.win_rate * 100).toFixed(1)}%
+                    <b style={{ color: m.episodes > 0 && m.win_rate >= 0.5 ? "#22c55e" : "#e2e8f0", fontSize: 13 }}>
+                      {m.episodes > 0 ? `${(m.win_rate * 100).toFixed(1)}%` : "-"}
                     </b>
                   </td>
                   <td>
-                    <span style={{ color: m.loss_rate >= 0.5 ? "#ef4444" : "#94a3b8" }}>
-                      {(m.loss_rate * 100).toFixed(1)}%
+                    <span style={{ color: m.episodes > 0 && m.loss_rate >= 0.5 ? "#ef4444" : "#94a3b8" }}>
+                      {m.episodes > 0 ? `${(m.loss_rate * 100).toFixed(1)}%` : "-"}
                     </span>
                   </td>
                   <td>
-                    <b style={{ color: scoreColor, fontSize: 13 }}>
-                      {m.outcome_score >= 0 ? `+${m.outcome_score.toFixed(2)}` : m.outcome_score.toFixed(2)}
+                    <b style={{ color: m.episodes > 0 ? scoreColor : "#64748b", fontSize: 13 }}>
+                      {m.episodes > 0 ? (m.outcome_score >= 0 ? `+${m.outcome_score.toFixed(2)}` : m.outcome_score.toFixed(2)) : "-"}
                     </b>
                   </td>
                 </tr>
