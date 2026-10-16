@@ -85,7 +85,8 @@ def choose_action_with_mcts(
             priors_u = {str(a): float(priors.get(str(a), 0.0)) for a in unit_actions} if isinstance(priors, dict) else None
             values_u = {str(a): float(values.get(str(a), 0.0)) for a in unit_actions} if isinstance(values, dict) else None
             signs_u = {str(a): int(signs.get(str(a), 1)) for a in unit_actions} if isinstance(signs, dict) else None
-            forced_min_root_visits_per_action = max(5, int(mcts_min_root_visits_per_action))
+            effective_min_root_visits = int(mcts_min_root_visits_per_action)
+            effective_min_root_top_n = int(mcts_min_root_visits_top_n)
             mcts_u = run_policy_mcts_fn(
                 legal_actions=unit_actions,
                 num_simulations=mcts_simulations,
@@ -106,8 +107,8 @@ def choose_action_with_mcts(
                 success_prob_center=float(mcts_success_prob_center),
                 success_prob_scale=float(mcts_success_prob_scale),
                 success_prob_centered_clip_abs=float(mcts_success_prob_centered_clip_abs),
-                min_root_visits_per_action=int(forced_min_root_visits_per_action),
-                min_root_visits_top_n=0,
+                min_root_visits_per_action=int(effective_min_root_visits),
+                min_root_visits_top_n=int(effective_min_root_top_n),
             )
             chosen_u = str(getattr(mcts_u, "chosen_action", "") or "")
             probs_u = [float(x) for x in list(getattr(mcts_u, "probs", []) or [])]
@@ -134,8 +135,8 @@ def choose_action_with_mcts(
                     "chosen_action": str(chosen_u),
                     "chosen_prob": float(chosen_prob_u),
                     "chosen_visits": int(chosen_visits_u),
-                    "forced_min_root_visits_per_action": int(forced_min_root_visits_per_action),
-                    "forced_min_root_visits_top_n": int(0),
+                    "forced_min_root_visits_per_action": int(effective_min_root_visits),
+                    "forced_min_root_visits_top_n": int(effective_min_root_top_n),
                     "actions": list(actions_u),
                     "visits": list(visits_u),
                     "probs": list(probs_u),

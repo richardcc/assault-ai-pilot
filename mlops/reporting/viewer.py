@@ -552,8 +552,9 @@ def serve(
                 return
             if parsed.path == "/api/v2/replay/meta":
                 qs = parse_qs(parsed.query)
+                eval_src = str(qs.get("eval_source_path", [""])[0] or qs.get("source_path", [""])[0] or "")
                 payload = _build_v2_replay_meta_payload(
-                    str(qs.get("eval_source_path", [""])[0] or ""),
+                    eval_src,
                     repo_root=repo_root,
                     load_scenario_overlay=_load_scenario_overlay,
                 )
@@ -561,9 +562,10 @@ def serve(
                 return
             if parsed.path == "/api/v2/replay/steps":
                 qs = parse_qs(parsed.query)
+                eval_src = str(qs.get("eval_source_path", [""])[0] or qs.get("source_path", [""])[0] or "")
                 from_step = max(0, int(qs.get("from_step", ["0"])[0] or 0))
                 payload = _build_v2_replay_steps_payload(
-                    eval_source_path=str(qs.get("eval_source_path", [""])[0] or ""),
+                    eval_source_path=eval_src,
                     episode_id=str(qs.get("episode_id", ["episode_0"])[0] or "episode_0"),
                     from_step=int(from_step),
                     to_step=max(from_step, int(qs.get("to_step", ["79"])[0] or 79)),

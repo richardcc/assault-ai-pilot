@@ -31,16 +31,16 @@ selfplay:
   max_steps: 100
   max_steps_override: 0
   max_turns_override: 0
-  mcts_simulations: 256
+  mcts_simulations: 512
   mcts_c_puct: 2.3
   mcts_unroll_steps: 4
   mcts_discount: 0.997
   mcts_temperature: 1.1
   mcts_dirichlet_alpha: 0.3
-  mcts_dirichlet_epsilon: 0.35
+  mcts_dirichlet_epsilon: 0.25
   mcts_q_clip_abs: 1000000.0
   mcts_min_root_visits_per_action: 5
-  mcts_min_root_visits_top_n: 0
+  mcts_min_root_visits_top_n: 8
   mcts_q_root_normalization_mode: adaptive_minmax
   mcts_q_root_normalization_strength: 0.90
   mcts_value_rescale_mode: tanh

@@ -31,17 +31,18 @@ benchmark:
   mcts_c_puct: 2.3
   mcts_temperature: 1.1
   mcts_dirichlet_alpha: 0.3
-  mcts_dirichlet_epsilon: 0.35
+  mcts_dirichlet_epsilon: 0.25
   mcts_q_clip_abs: 1000000.0
   mcts_q_root_normalization_mode: adaptive_minmax
   mcts_q_root_normalization_strength: 0.40
   mcts_value_rescale_mode: signed_log_tanh
   mcts_value_rescale_temperature: 8.0
   mcts_min_root_visits_per_action: 5
-  mcts_min_root_visits_top_n: 0
+  mcts_min_root_visits_top_n: 8
   unit_prefilter_enabled: true
   unit_prefilter_replan_enabled: true
   unit_prefilter_top_k: 3
   unit_prefilter_vp_progress_weight: 1.0
   unit_prefilter_capture_opportunity_weight: 2.0
   unit_prefilter_threat_weight: 0.25
+

@@ -10,6 +10,8 @@ import torch.nn.functional as F
 from agents.efficientzero_v2.core.network import EfficientZeroV2Network
 from agents.efficientzero_v2.core.replay import ReplaySample
 from agents.efficientzero_v2.train.trainer_base import EfficientZeroV2BaseTrainer, TrainMetrics
+from agents.efficientzero_v2.core.support import cross_entropy_two_hot
+from agents.efficientzero_v2.train.loss_balancer import pcgrad_backward, AdaptiveLossScaler
 
 
 @dataclass
@@ -65,6 +67,7 @@ class EfficientZeroV2Trainer(EfficientZeroV2BaseTrainer):
         aux_multi_vp_feature_dim: int = 0,
         compute_grad_norm: bool = True,
         progress_callback: Callable[[str], None] | None = None,
+        gradient_balance_mode: str = "none",
     ):
         super().__init__(
             model=model,
@@ -105,6 +108,10 @@ class EfficientZeroV2Trainer(EfficientZeroV2BaseTrainer):
         self.aux_multi_vp_feature_dim = int(max(0, aux_multi_vp_feature_dim))
         self.compute_grad_norm = bool(compute_grad_norm)
         self._progress_callback = progress_callback
+        self.gradient_balance_mode = str(gradient_balance_mode or "none").lower().strip()
+        self.adaptive_scaler = (
+            AdaptiveLossScaler() if self.gradient_balance_mode == "adaptive" else None
+        )
 
     def _progress(self, message: str) -> None:
         cb = self._progress_callback
@@ -256,8 +263,19 @@ class EfficientZeroV2Trainer(EfficientZeroV2BaseTrainer):
             # Cross-entropy / KL divergence: avoids gradient saturation of MSE on softmax
             log_policy_probs = F.log_softmax(policy_logits, dim=-1)
             policy_loss = -(policy_target * log_policy_probs).sum(dim=-1).mean()
-            value_loss = F.mse_loss(value_pred, value_target)
-            reward_loss = F.mse_loss(reward_pred, reward_target)
+            if getattr(self.model, "support_size", 0) > 0 and isinstance(aux, dict) and "value_logits" in aux:
+                value_loss = cross_entropy_two_hot(
+                    aux["value_logits"], value_target, support_size=self.model.support_size
+                )
+            else:
+                value_loss = F.mse_loss(value_pred, value_target)
+
+            if getattr(self.model, "support_size", 0) > 0 and isinstance(aux, dict) and "reward_logits" in aux:
+                reward_loss = cross_entropy_two_hot(
+                    aux["reward_logits"], reward_target, support_size=self.model.support_size
+                )
+            else:
+                reward_loss = F.mse_loss(reward_pred, reward_target)
             objective_loss = torch.tensor(0.0, dtype=torch.float32, device=self.device)
             if self.objective_loss_weight > 0.0 and isinstance(aux, dict) and "objective_logit" in aux:
                 objective_pred = aux["objective_logit"]
@@ -409,18 +427,32 @@ class EfficientZeroV2Trainer(EfficientZeroV2BaseTrainer):
                 else:
                     consistency_loss = torch.tensor(0.0, dtype=torch.float32, device=self.device)
 
+            eff_aux_weight = self.aux_objective_loss_weight
+            if self.adaptive_scaler is not None:
+                eff_aux_weight = self.adaptive_scaler.compute_scaled_weight(
+                    policy_loss + value_loss, aux_objective_loss, self.aux_objective_loss_weight
+                )
             loss = (
                 policy_loss
                 + value_loss
                 + reward_loss
                 + (self.objective_loss_weight * objective_loss)
                 + (self.consistency_loss_weight * consistency_loss)
-                + (self.aux_objective_loss_weight * aux_objective_loss)
+                + (eff_aux_weight * aux_objective_loss)
             )
         self._progress("forward_done")
         self.optimizer.zero_grad(set_to_none=True)
         self._progress("backward_start")
-        if self._scaler.is_enabled():
+        if self.gradient_balance_mode == "pcgrad" and not self._scaler.is_enabled():
+            task_losses = [policy_loss, value_loss, reward_loss]
+            if self.objective_loss_weight > 0.0:
+                task_losses.append(self.objective_loss_weight * objective_loss)
+            if self.consistency_loss_weight > 0.0:
+                task_losses.append(self.consistency_loss_weight * consistency_loss)
+            if eff_aux_weight > 0.0:
+                task_losses.append(eff_aux_weight * aux_objective_loss)
+            pcgrad_backward(task_losses, self.optimizer, self.model.parameters())
+        elif self._scaler.is_enabled():
             self._scaler.scale(loss).backward()
         else:
             loss.backward()

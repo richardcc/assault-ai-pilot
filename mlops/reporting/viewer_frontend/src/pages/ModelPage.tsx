@@ -47,6 +47,7 @@ export function ModelPage() {
 
   // Navegación de secciones
   const [section, setSection] = useState<SectionKey>("topology");
+  const [topologyTab, setTopologyTab] = useState<"diagram" | "head-diagnostics" | "channel-attribution">("diagram");
   const [trainTab, setTrainTab] = useState<TrainTabKey>("train-detail");
   const [evalTab, setEvalTab] = useState<EvalTabKey>("vp-summary");
   const [metaTab, setMetaTab] = useState<MetaTabKey>("overview");
@@ -323,6 +324,20 @@ export function ModelPage() {
           {/* Sub-tabs per section */}
           <div className="tabs" style={{ marginBottom: 10 }}>
 
+            {section === "topology" && (
+              <>
+                <button className={`tabBtn ${topologyTab === "diagram" ? "active" : ""}`} onClick={() => setTopologyTab("diagram")}>
+                  📐 Topología & Arquitectura
+                </button>
+                <button className={`tabBtn ${topologyTab === "head-diagnostics" ? "active" : ""}`} onClick={() => setTopologyTab("head-diagnostics")}>
+                  🔬 Análisis de Cabezas (Head Diagnostics)
+                </button>
+                <button className={`tabBtn ${topologyTab === "channel-attribution" ? "active" : ""}`} onClick={() => setTopologyTab("channel-attribution")}>
+                  📊 Atribución de Canales
+                </button>
+              </>
+            )}
+
             {section === "train" && (
               <>
                 <button className={`tabBtn ${trainTab === "train-detail" ? "active" : ""}`} onClick={() => setTrainTab("train-detail")}>
@@ -398,13 +413,25 @@ export function ModelPage() {
           {/* Contenido de la pestaña activa */}
           <div className="content">
             {section === "topology" && (
-              <NetworkTopologyTab trainRow={selectedTrainRow} trainSummary={trainSummary} />
+              <NetworkTopologyTab
+                trainRow={selectedTrainRow}
+                trainSummary={trainSummary}
+                evalRows={evalRows}
+                activeSubTab={topologyTab}
+                onSubTabChange={setTopologyTab}
+              />
             )}
             {section === "train" && trainTab === "train-detail" && (
               <TrainDetailTab trainRow={selectedTrainRow} trainSummary={trainSummary} />
             )}
             {section === "train" && trainTab === "network-topology" && (
-              <NetworkTopologyTab trainRow={selectedTrainRow} trainSummary={trainSummary} />
+              <NetworkTopologyTab
+                trainRow={selectedTrainRow}
+                trainSummary={trainSummary}
+                evalRows={evalRows}
+                activeSubTab={topologyTab}
+                onSubTabChange={setTopologyTab}
+              />
             )}
             {section === "train" && trainTab === "train-head-diagnostics" && (
               <TrainHeadDiagnosticsTab trainRow={selectedTrainRow} trainSummary={trainSummary} />

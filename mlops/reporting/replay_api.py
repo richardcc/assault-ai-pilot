@@ -152,6 +152,14 @@ def build_v2_replay_meta_payload(
     ]
     if repo_root is not None and load_scenario_overlay is not None:
         scenario_id = str((payload.get("manifest", {}) or {}).get("scenario_id", "") or "")
+        if not scenario_id and eval_source_path:
+            try:
+                p = Path(eval_source_path)
+                if p.exists() and p.suffix == ".json":
+                    raw_eval = json.loads(p.read_text(encoding="utf-8"))
+                    scenario_id = str(raw_eval.get("scenario_id", "") or "")
+            except Exception:
+                pass
         payload["scenario_overlay"] = load_scenario_overlay(repo_root, scenario_id)
     return payload
 

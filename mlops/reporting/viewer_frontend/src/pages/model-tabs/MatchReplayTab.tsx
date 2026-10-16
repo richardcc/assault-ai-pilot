@@ -61,8 +61,48 @@ function getFortificationShort(type: string): string {
   }
 }
 
+const MAP_PIECE_OVERRIDES: Record<string, string[]> = {
+  S1: ["/art/maps/Map S1.png", "/art/maps/map_s1.png"],
+  S2: ["/art/maps/Map S2.png", "/art/maps/map_s2.png"],
+  S3: ["/art/maps/Map S3.png", "/art/maps/map_s3.png"],
+  S4: ["/art/maps/Map S4.png", "/art/maps/map_s4.png"],
+  S5: ["/art/maps/Map S5.png", "/art/maps/map_s5.png"],
+  S6: ["/art/maps/Map S6.png", "/art/maps/map_s6.png"],
+  S7: ["/art/maps/Map S7.png", "/art/maps/map_s7.png"],
+  S8: ["/art/maps/Map S8.png", "/art/maps/map_s8.png"],
+  Z1: ["/art/maps/Map Z1.png", "/art/maps/map_z1.png"],
+  Z2: ["/art/maps/Map Z2.png", "/art/maps/map_z2.png"],
+  Z3: ["/art/maps/Map Z3.png", "/art/maps/map_z3.png"],
+  Z4: ["/art/maps/Map Z4.png", "/art/maps/map_z4.png"],
+  P1: ["/art/maps/Map P1.png", "/art/maps/map_p1.png"],
+  P2: ["/art/maps/Map P2.png", "/art/maps/map_p2.png"],
+  P3: ["/art/maps/Map P3.png", "/art/maps/map_p3.png"],
+};
+
+function getMapPieceCandidates(pieceId: string): string[] {
+  const id = String(pieceId || "").toUpperCase();
+  const found = MAP_PIECE_OVERRIDES[id];
+  if (found && found.length) return found;
+  return [`/art/maps/Map ${id}.png`, `/art/maps/map_${id.toLowerCase()}.png`];
+}
+
+const FORTIFICATION_CONFIG: Record<string, { label: string; short: string; art: string }> = {
+  trench: { label: "Trinchera", short: "TR", art: "/art/terrain/Terrain Trenches.png" },
+  bunker: { label: "Búnker Reforzado", short: "BK", art: "/art/terrain/Terrain Bunker.png" },
+  casemate: { label: "Casamata", short: "CS", art: "/art/terrain/Terrain Pillbox.png" },
+  pillbox: { label: "Pillbox Blindado", short: "PB", art: "/art/terrain/Terrain Pillbox.png" },
+  gun_emplacement: { label: "Emplazamiento de Cañón", short: "GN", art: "/art/terrain/Terrain Gun Emplacement.png" },
+  barbed_wire: { label: "Alambradas", short: "WR", art: "/art/terrain/Terrain Barbed Wire.png" },
+  sandbag: { label: "Sacos de Arena", short: "SB", art: "/art/terrain/Terrain Sandbag Position.png" },
+  tank_barricades: { label: "Barricadas Anticarro", short: "TB", art: "/art/terrain/Terrain Tank Barricades.png" },
+  minefield: { label: "Campo de Minas", short: "MN", art: "" },
+};
+
 function getFortificationArt(type: string): string {
-  switch (type.toLowerCase()) {
+  const norm = String(type || "").toLowerCase().replace(/ /g, "_");
+  const def = FORTIFICATION_CONFIG[norm];
+  if (def && def.art) return def.art;
+  switch (norm) {
     case "bunker":
       return "/art/terrain/Terrain Bunker.png";
     case "casemate":
@@ -84,7 +124,8 @@ function getFortificationArt(type: string): string {
 }
 
 function getFortificationIconEmoji(type: string): string {
-  switch (type.toLowerCase()) {
+  const norm = String(type || "").toLowerCase().replace(/ /g, "_");
+  switch (norm) {
     case "bunker":
       return "🛡️";
     case "casemate":
@@ -106,6 +147,148 @@ function getFortificationIconEmoji(type: string): string {
       return "🛡️";
   }
 }
+
+const SIDE_MARKERS: Record<string, string> = {
+  US: "/art/markers/Markers USA.png",
+  IT: "/art/markers/Markers Italy.png",
+  GE: "/art/markers/Markers Germany.png",
+  UK: "/art/markers/Markers UK.png",
+};
+
+const UNIT_IMAGES: Record<string, { label: string; full: string; half?: string }> = {
+  GE_RIFLES_43: {
+    label: "GE Rifles 43",
+    full: "/art/counters/GE Rifles 43.png",
+    half: "/art/counters/GE Rifles 43b.png",
+  },
+  GE_FJ_RIFLES_43: {
+    label: "GE FJ Rifles 43",
+    full: "/art/counters/GE FJ Rifles 43.png",
+    half: "/art/counters/GE FJ Rifles 43b.png",
+  },
+  GE_HEAVY_MG_42: {
+    label: "GE Heavy MG 42",
+    full: "/art/counters/GE HMG 42.png",
+    half: "/art/counters/GE HMG 42b.png",
+  },
+  GE_50MM_MORTAR: {
+    label: "GE 50mm Mortar",
+    full: "/art/counters/GE 50mm Mortar.png",
+    half: "/art/counters/GE 50mm Mortarb.png",
+  },
+  IT_RIFLES_43: {
+    label: "IT Rifles 43",
+    full: "/art/counters/IT Rifles 43.png",
+    half: "/art/counters/IT Rifles 43b.png",
+  },
+  IT_LMG_SQUAD_43: {
+    label: "IT LMG Squad 43",
+    full: "/art/counters/IT LMG Squad 43.png",
+    half: "/art/counters/IT LMG Squad 43b.png",
+  },
+  IT_SOLOTHURN_ATR_43: {
+    label: "IT Solothurn ATR 43",
+    full: "/art/counters/IT Solothurn ATR 43.png",
+    half: "/art/counters/IT Solothurn ATR 43b.png",
+  },
+  IT_20MM_BREDA_AA_43: {
+    label: "IT 20mm Breda AA 43",
+    full: "/art/counters/IT 20mm Breda AA 43.png",
+    half: "/art/counters/IT 20mm Breda AAb.png",
+  },
+  IT_BREDA_MMG: {
+    label: "IT Breda MMG",
+    full: "/art/counters/IT Breda MMG.png",
+    half: "/art/counters/IT Breda MMG.png",
+  },
+  IT_SNIPER_43: {
+    label: "IT Sniper 43",
+    full: "/art/counters/IT Sniper 43.png",
+    half: "/art/counters/IT Sniper 43b.png",
+  },
+  IT_45MM_BRIXIA: {
+    label: "IT 45mm Brixia",
+    full: "/art/counters/IT 45mm Brixia Team.png",
+    half: "/art/counters/IT 45mm Brixia Teamb.png",
+  },
+  US_RIFLES_43: {
+    label: "US Rifles 43",
+    full: "/art/counters/US Rifles 43.png",
+    half: "/art/counters/US Rifles 43b.png",
+  },
+  US_RANGERS_43: {
+    label: "US Rangers 43",
+    full: "/art/counters/US Rangers 43.png",
+    half: "/art/counters/US Rangers 43b.png",
+  },
+  US_SNIPER_43: {
+    label: "US Sniper 43",
+    full: "/art/counters/US Sniper 43.png",
+    half: "/art/counters/US Sniper 43b.png",
+  },
+  US_BAZOOKA_TEAM: {
+    label: "US Bazooka Team 43",
+    full: "/art/counters/US Bazooka Team 43.png",
+    half: "/art/counters/US Bazooka Team 43b.png",
+  },
+  US_81MM_MORTAR: {
+    label: "US 81mm Mortar",
+    full: "/art/counters/US 81mm Mortar.png",
+    half: "/art/counters/US 81mm Mortarb.png",
+  },
+};
+
+const DEFAULT_UNIT_KEYS: Record<string, string> = {
+  IT_1: "IT_RIFLES_43",
+  IT_2: "IT_RIFLES_43",
+  IT_3: "IT_LMG_SQUAD_43",
+  IT_4: "IT_LMG_SQUAD_43",
+  IT_5: "IT_45MM_BRIXIA",
+  IT_6: "IT_BREDA_MMG",
+  IT_7: "IT_SNIPER_43",
+  US_1: "US_RIFLES_43",
+  US_2: "US_RIFLES_43",
+  US_3: "US_RIFLES_43",
+  US_4: "US_RIFLES_43",
+  US_5: "US_BAZOOKA_TEAM",
+  US_6: "US_SNIPER_43",
+  US_7: "US_81MM_MORTAR",
+};
+
+function getUnitCounterArt(unitKey: string, hp?: number): string {
+  const normKey = String(unitKey || "").toUpperCase();
+  const def = UNIT_IMAGES[normKey];
+  if (!def) return "";
+  if (hp !== undefined && hp <= 2 && def.half) {
+    return def.half;
+  }
+  return def.full;
+}
+
+function axialToLabel(q: number, r: number): string {
+  return `${String.fromCharCode(65 + q)}${r + 1}`;
+}
+
+const DEFAULT_MAP_PIECES = [
+  { id: "Z1", origin: [0, 0] as [number, number], rotation: 0, shape: [9, 4] as [number, number] },
+  { id: "Z2", origin: [9, 0] as [number, number], rotation: 0, shape: [9, 4] as [number, number] },
+  { id: "S3", origin: [0, 4] as [number, number], rotation: 0, shape: [9, 8] as [number, number] },
+  { id: "S4", origin: [9, 4] as [number, number], rotation: 0, shape: [9, 8] as [number, number] },
+];
+
+const DEFAULT_FORTIFICATIONS = [
+  { type: "gun_emplacement", q: 6, r: 2, orientation: 4, vertex_start: 1, vertex_end: 2 },
+  { type: "casemate", q: 3, r: 4, orientation: 3, vertex_start: 1, vertex_end: 2 },
+  { type: "casemate", q: 12, r: 3, orientation: 4, vertex_start: 1, vertex_end: 2 },
+];
+
+const DEFAULT_VP_HEXES = [
+  { q: 16, r: 1, owner: "IT", value: 2 },
+  { q: 9, r: 1, owner: "IT", value: 3 },
+  { q: 2, r: 6, owner: "IT", value: 2 },
+  { q: 8, r: 9, owner: "US", value: 2 },
+  { q: 16, r: 8, owner: "US", value: 3 },
+];
 
 function getTerrainColorCss(t: string): string {
   switch (t.toLowerCase()) {
@@ -208,8 +391,17 @@ export function MatchReplayTab({
   const [showForts, setShowForts] = useState(true);
   const [showTerrain, setShowTerrain] = useState(true);
   const [theaterMode, setTheaterMode] = useState(false);
-  const [mapHeight, setMapHeight] = useState(660);
+  const [mapHeight, setMapHeight] = useState(520);
   const [zoomLevel, setZoomLevel] = useState(1.0);
+  const [panOffset, setPanOffset] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
+  const [isDragging, setIsDragging] = useState(false);
+  const dragStartRef = useRef<{ clientX: number; clientY: number; startPanX: number; startPanY: number; hasMoved: boolean }>({
+    clientX: 0,
+    clientY: 0,
+    startPanX: 0,
+    startPanY: 0,
+    hasMoved: false,
+  });
   const [imgLoadVersion, setImgLoadVersion] = useState(0);
 
   // Cache loaded PNG assets for 2D canvas drawing
@@ -225,6 +417,9 @@ export function MatchReplayTab({
     img.onload = () => {
       setImgLoadVersion((v) => v + 1);
     };
+    img.onerror = () => {
+      // avoid infinite reload
+    };
     imageCacheRef.current.set(src, img);
     return null;
   }, []);
@@ -234,6 +429,38 @@ export function MatchReplayTab({
 
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
 
+  // Smooth mouse wheel zoom anchored to cursor
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+
+    const handleWheel = (e: WheelEvent) => {
+      e.preventDefault();
+      const rect = canvas.getBoundingClientRect();
+      const mouseX = e.clientX - rect.left;
+      const mouseY = e.clientY - rect.top;
+
+      const zoomFactor = e.deltaY < 0 ? 1.15 : 0.87;
+      setZoomLevel((prevZoom) => {
+        const nextZoom = Math.max(0.5, Math.min(3.5, Number((prevZoom * zoomFactor).toFixed(2))));
+        if (nextZoom === prevZoom) return prevZoom;
+
+        const factor = nextZoom / prevZoom;
+        setPanOffset((prevPan) => ({
+          x: Math.round(mouseX - (mouseX - prevPan.x) * factor),
+          y: Math.round(mouseY - (mouseY - prevPan.y) * factor),
+        }));
+
+        return nextZoom;
+      });
+    };
+
+    canvas.addEventListener("wheel", handleWheel, { passive: false });
+    return () => {
+      canvas.removeEventListener("wheel", handleWheel);
+    };
+  }, []);
+
   const steps = useMemo(
     () => (Array.isArray(replaySteps?.steps) ? (replaySteps!.steps as ReplayStepRow[]) : []),
     [replaySteps]
@@ -241,10 +468,36 @@ export function MatchReplayTab({
   const clamped = Math.max(0, Math.min(stepIndex, Math.max(0, steps.length - 1)));
   const currentStep = steps[clamped] || {};
 
+  // Scenario Units definitions (unit_id -> unit_key mapping)
+  const scenarioUnitMap = useMemo(() => {
+    const raw = (replayMeta?.scenario_overlay as Dict | undefined)?.scenario_units;
+    const map = new Map<string, { unit_key: string; side: string }>();
+    if (Array.isArray(raw)) {
+      for (const u of raw) {
+        if (u && u.unit_id) {
+          map.set(String(u.unit_id), {
+            unit_key: String(u.unit_key || ""),
+            side: String(u.side || ""),
+          });
+        }
+      }
+    }
+    return map;
+  }, [replayMeta?.scenario_overlay]);
+
   // Units list for current step
   const units = useMemo(() => {
     if (Array.isArray(currentStep.units) && currentStep.units.length > 0) {
-      return currentStep.units as ReplayUnitSnapshot[];
+      return (currentStep.units as Dict[]).map((u) => {
+        const uid = String(u.unit_id || "");
+        const su = scenarioUnitMap.get(uid);
+        return {
+          ...u,
+          unit_id: uid,
+          unit_key: String(u.unit_key || su?.unit_key || DEFAULT_UNIT_KEYS[uid] || ""),
+          side: String(u.side || su?.side || (uid.split("_")[0] || "")),
+        } as ReplayUnitSnapshot;
+      });
     }
     if (Array.isArray(currentStep.unit_positions) && currentStep.unit_positions.length > 0) {
       const hpMap = (currentStep.unit_hp_map || {}) as Record<string, number>;
@@ -252,9 +505,12 @@ export function MatchReplayTab({
       const suppMap = (currentStep.unit_suppressed_map || {}) as Record<string, unknown>;
       return (currentStep.unit_positions as Dict[]).map((p) => {
         const uid = String(p.unit_id || "");
+        const su = scenarioUnitMap.get(uid);
+        const ukey = String(p.unit_key || su?.unit_key || DEFAULT_UNIT_KEYS[uid] || "");
         return {
           unit_id: uid,
-          side: String(p.side || (uid.split("_")[0] || "")),
+          unit_key: ukey,
+          side: String(p.side || su?.side || (uid.split("_")[0] || "")),
           q: Number(p.q),
           r: Number(p.r),
           hp: hpMap[uid] !== undefined ? Number(hpMap[uid]) : 4.0,
@@ -264,7 +520,7 @@ export function MatchReplayTab({
       });
     }
     return [];
-  }, [currentStep]);
+  }, [currentStep, scenarioUnitMap]);
 
   // Controller mapping by side
   const controllerMap = useMemo(() => {
@@ -274,20 +530,39 @@ export function MatchReplayTab({
   // VP Map for current step
   const vpMap = useMemo(() => {
     const raw = (currentStep.vp_map || {}) as Record<string, string>;
-    const list: Array<{ q: number; r: number; owner: string; key: string }> = [];
-    for (const [k, v] of Object.entries(raw)) {
+    const overlayVps = (replayMeta?.scenario_overlay as Dict | undefined)?.vp_hexes as Array<{ q: number; r: number; initial_owner?: string; value?: number }> | undefined;
+    const vpValues = new Map<string, number>();
+    const initialOwners = new Map<string, string>();
+
+    if (Array.isArray(overlayVps) && overlayVps.length > 0) {
+      for (const v of overlayVps) {
+        const k = `${v.q},${v.r}`;
+        vpValues.set(k, Number(v.value || 2));
+        if (v.initial_owner) initialOwners.set(k, String(v.initial_owner).toUpperCase());
+      }
+    } else {
+      for (const d of DEFAULT_VP_HEXES) {
+        const k = `${d.q},${d.r}`;
+        vpValues.set(k, d.value);
+        initialOwners.set(k, d.owner);
+      }
+    }
+
+    const list: Array<{ q: number; r: number; owner: string; key: string; value: number }> = [];
+    const keys = new Set([...Object.keys(raw), ...initialOwners.keys()]);
+    for (const k of keys) {
       const parts = k.split(",");
       if (parts.length === 2) {
-        list.push({
-          q: Number(parts[0]),
-          r: Number(parts[1]),
-          owner: String(v || "NEUTRAL").toUpperCase(),
-          key: k,
-        });
+        const q = Number(parts[0]);
+        const r = Number(parts[1]);
+        const stepOwner = raw[k];
+        const owner = String(stepOwner || initialOwners.get(k) || "NEUTRAL").toUpperCase();
+        const value = vpValues.get(k) || 2;
+        list.push({ q, r, owner, key: k, value });
       }
     }
     return list;
-  }, [currentStep.vp_map]);
+  }, [currentStep.vp_map, replayMeta?.scenario_overlay]);
 
   // VP tally counts
   const vpTally = useMemo(() => {
@@ -307,14 +582,48 @@ export function MatchReplayTab({
     return [18, 12] as [number, number];
   }, [replayMeta?.scenario_overlay]);
 
+  // Scenario Max Turns
+  const maxTurns = useMemo(() => {
+    const raw = (replayMeta?.scenario_overlay as Dict | undefined)?.max_turns;
+    if (raw !== undefined && Number(raw) > 0) return Number(raw);
+    return 8;
+  }, [replayMeta?.scenario_overlay]);
+
+  // Exact optimal pixel width of the map so no horizontal space is wasted
+  const optimalMapWidth = useMemo(() => {
+    const [shapeW, shapeH] = scenarioShape;
+    const sX = Math.sqrt(3) * (shapeW + 0.5);
+    const sY = 1.5 * Math.max(1, shapeH - 1) + 2.0;
+    const pad = 24;
+    return Math.round((mapHeight - pad) * (sX / sY) + pad);
+  }, [scenarioShape, mapHeight]);
+
+  // Scenario Map Pieces (Illustrated boards with buildings, streets, etc.)
+  const mapPieces = useMemo(() => {
+    const raw = (replayMeta?.scenario_overlay as Dict | undefined)?.pieces;
+    if (Array.isArray(raw) && raw.length > 0) {
+      return raw as Array<{ id: string; origin: [number, number]; rotation?: number; shape: [number, number] }>;
+    }
+    return DEFAULT_MAP_PIECES;
+  }, [replayMeta?.scenario_overlay]);
+
   // Scenario Fortifications (Bunkers, Pillboxes, Trenches, Wire, etc.)
   const fortifications = useMemo(() => {
-    const list: Array<{ q: number; r: number; type: string; side?: string; label?: string }> = [];
+    const list: Array<{
+      q: number;
+      r: number;
+      type: string;
+      orientation?: number;
+      vertex_start?: number;
+      vertex_end?: number;
+      side?: string;
+      label?: string;
+    }> = [];
     const seen = new Set<string>();
 
     // 1. From scenario_overlay
     const overlayForts = (replayMeta?.scenario_overlay as Dict | undefined)?.fortifications;
-    if (Array.isArray(overlayForts)) {
+    if (Array.isArray(overlayForts) && overlayForts.length > 0) {
       for (const f of overlayForts) {
         if (f && Number.isFinite(Number(f.q)) && Number.isFinite(Number(f.r))) {
           const q = Number(f.q);
@@ -327,11 +636,18 @@ export function MatchReplayTab({
               q,
               r,
               type: ftype,
+              orientation: f.orientation !== undefined ? Number(f.orientation) : undefined,
+              vertex_start: f.vertex_start !== undefined ? Number(f.vertex_start) : undefined,
+              vertex_end: f.vertex_end !== undefined ? Number(f.vertex_end) : undefined,
               side: f.side ? String(f.side) : undefined,
               label: f.label ? String(f.label) : undefined,
             });
           }
         }
+      }
+    } else {
+      for (const f of DEFAULT_FORTIFICATIONS) {
+        list.push({ ...f });
       }
     }
 
@@ -389,28 +705,52 @@ export function MatchReplayTab({
 
     const actorUnit = units.find((u) => u.unit_id === actorId);
 
-    let fromQ: number | null = actorUnit ? actorUnit.q : null;
-    let fromR: number | null = actorUnit ? actorUnit.r : null;
+    let fromQ: number | null = actorUnit && Number.isFinite(actorUnit.q) ? Number(actorUnit.q) : null;
+    let fromR: number | null = actorUnit && Number.isFinite(actorUnit.r) ? Number(actorUnit.r) : null;
     let toQ: number | null = null;
     let toR: number | null = null;
     let targetUnitId: string | null = null;
-    let isFire = kind.includes("FIRE") || kind.includes("ATTACK");
-    let isMove = kind.includes("MOVE") || kind.includes("ASSAULT");
+    const isFire = kind.includes("FIRE") || kind.includes("ATTACK");
+    const isMove = !isFire && (kind.includes("MOVE") || kind.includes("ASSAULT"));
 
-    if (isMove && parts.length >= 4) {
-      toQ = Number(parts[2]);
-      toR = Number(parts[3]);
-    } else if (Number.isFinite(Number(currentStep.target_q)) && Number.isFinite(Number(currentStep.target_r))) {
-      toQ = Number(currentStep.target_q);
-      toR = Number(currentStep.target_r);
-    } else if (isFire && parts.length >= 3) {
-      targetUnitId = parts[2];
-      const targetUnit = units.find((u) => u.unit_id === targetUnitId);
-      if (targetUnit) {
-        toQ = targetUnit.q;
-        toR = targetUnit.r;
+    if (isFire) {
+      // Find target unit id across tokens (e.g. FIRE_MOVE:US_2:RANGED_DIRECT:US_2:IT_1:0:10)
+      for (let i = 2; i < parts.length; i++) {
+        const pStr = parts[i];
+        if (pStr && pStr !== actorId && units.some((u) => u.unit_id === pStr)) {
+          targetUnitId = pStr;
+          break;
+        }
+      }
+      if (!targetUnitId && parts.length >= 3 && parts[2]) {
+        targetUnitId = parts[2];
+      }
+      if (targetUnitId) {
+        const targetUnit = units.find((u) => u.unit_id === targetUnitId);
+        if (targetUnit && Number.isFinite(targetUnit.q) && Number.isFinite(targetUnit.r)) {
+          toQ = Number(targetUnit.q);
+          toR = Number(targetUnit.r);
+        }
+      }
+    } else if (isMove && parts.length >= 4) {
+      const qNum = Number(parts[2]);
+      const rNum = Number(parts[3]);
+      if (Number.isFinite(qNum) && Number.isFinite(rNum)) {
+        toQ = qNum;
+        toR = rNum;
       }
     }
+
+    if (toQ === null && Number.isFinite(Number(currentStep.target_q)) && Number.isFinite(Number(currentStep.target_r))) {
+      toQ = Number(currentStep.target_q);
+      toR = Number(currentStep.target_r);
+    }
+
+    // Strict numerical sanity check (prevent any NaN from leaking)
+    if (toQ !== null && !Number.isFinite(toQ)) toQ = null;
+    if (toR !== null && !Number.isFinite(toR)) toR = null;
+    if (fromQ !== null && !Number.isFinite(fromQ)) fromQ = null;
+    if (fromR !== null && !Number.isFinite(fromR)) fromR = null;
 
     return {
       actionId,
@@ -519,6 +859,7 @@ export function MatchReplayTab({
           q: Number(u.q),
           r: Number(u.r),
           unit_id: String(u.unit_id || ""),
+          unit_key: String(u.unit_key || DEFAULT_UNIT_KEYS[u.unit_id || ""] || ""),
           side: String(u.side || "").toUpperCase(),
           alive: Boolean(u.alive),
           hp: Number(u.hp || 0),
@@ -561,27 +902,12 @@ export function MatchReplayTab({
     ctx.fillStyle = grad;
     ctx.fillRect(0, 0, cssWidth, cssHeight);
 
-    // Compute coordinate bounding box using scenario shape and entities
+    // Compute coordinate bounding box strictly using scenario shape
     const [shapeW, shapeH] = scenarioShape;
-    const qs = unitPoints.map((p) => p.q);
-    const rs = unitPoints.map((p) => p.r);
-    for (const vp of vpMap) {
-      qs.push(vp.q);
-      rs.push(vp.r);
-    }
-    for (const f of fortifications) {
-      qs.push(f.q);
-      rs.push(f.r);
-    }
-    if (actionVector.toQ !== null && actionVector.toR !== null) {
-      qs.push(actionVector.toQ);
-      rs.push(actionVector.toR);
-    }
-
     const minQ = 0;
-    const maxQ = Math.max(shapeW - 1, ...qs, 15);
+    const maxQ = Math.max(1, (Number.isFinite(shapeW) ? shapeW : 18) - 1);
     const minR = 0;
-    const maxR = Math.max(shapeH - 1, ...rs, 9);
+    const maxR = Math.max(1, (Number.isFinite(shapeH) ? shapeH : 12) - 1);
 
     // Odd-r Pointy-Topped Hexagon Geometry
     const oddRRaw = (q: number, r: number) => ({
@@ -606,12 +932,12 @@ export function MatchReplayTab({
     const pad = 16;
     const baseScaleX = (cssWidth - pad * 2) / spanX;
     const baseScaleY = (cssHeight - pad * 2) / spanY;
-    const scale = Math.max(8, Math.min(baseScaleX, baseScaleY) * zoomLevel);
+    const scale = Math.max(6, Math.min(baseScaleX, baseScaleY) * zoomLevel);
 
     const boardPixelW = spanX * scale;
     const boardPixelH = spanY * scale;
-    const offsetX = (cssWidth - boardPixelW) / 2 + (Math.sqrt(3) / 2) * scale;
-    const offsetY = (cssHeight - boardPixelH) / 2 + 1.0 * scale;
+    const offsetX = (cssWidth - boardPixelW) / 2 + (Math.sqrt(3) / 2) * scale + panOffset.x;
+    const offsetY = (cssHeight - boardPixelH) / 2 + 1.0 * scale + panOffset.y;
 
     const toPixel = (q: number, r: number) => {
       const p = oddRRaw(q, r);
@@ -638,25 +964,99 @@ export function MatchReplayTab({
       ctx.stroke();
     };
 
-    // 1. Draw Board Hex Grid Cells (Terrain + Outline + Coords)
+    // 0. Draw Scenario Illustrated Map Pieces (Buildings, streets, rivers, groves)
+    let hasDrawnAnyMapPiece = false;
+    if (showTerrain && mapPieces.length > 0) {
+      for (const piece of mapPieces) {
+        const candidates = getMapPieceCandidates(piece.id);
+        let img: HTMLImageElement | null = null;
+        for (const c of candidates) {
+          img = getLoadedImage(c);
+          if (img) break;
+        }
+        if (!img) continue;
+
+        const [oq, orr] = piece.origin || [0, 0];
+        const [hexW, hexH] = piece.shape || [9, 4];
+        const quarterTurns = (((Number(piece.rotation ?? 0) / 90) % 4) + 4) % 4;
+
+        const pOrigin = toPixel(oq, orr);
+        const hexW_px = Math.sqrt(3) * scale;
+        const hexH_px = 1.5 * scale;
+
+        // Base size for an unrotated piece image (exact assault_ai_ui formula)
+        const baseWidth = (hexW + 0.5) * hexW_px;
+        const baseHeight = (hexH - 1) * hexH_px + scale * 2.0;
+
+        const topLeftX = pOrigin.x - hexW_px / 2;
+        const topLeftY = pOrigin.y - scale;
+
+        ctx.save();
+        const rotOffsetX =
+          quarterTurns === 1 ? baseHeight :
+          quarterTurns === 2 ? baseWidth :
+          0;
+        const rotOffsetY =
+          quarterTurns === 2 ? baseHeight :
+          quarterTurns === 3 ? baseWidth :
+          0;
+
+        ctx.translate(topLeftX + rotOffsetX, topLeftY + rotOffsetY);
+        ctx.rotate((quarterTurns * Math.PI) / 2);
+        ctx.drawImage(img, 0, 0, baseWidth, baseHeight);
+        ctx.restore();
+        hasDrawnAnyMapPiece = true;
+      }
+    }
+
+    // 1. Draw Board Hex Grid Cells (Tactical Grid + Coordinates)
     for (const cell of raws) {
       const p = toPixel(cell.q, cell.r);
       const isHovered = hoveredHex && hoveredHex.q === cell.q && hoveredHex.r === cell.r;
       const coordKey = `${cell.q},${cell.r}`;
       const terrainType = terrainMap.get(coordKey) || "clear";
-      const terrainColor = showTerrain ? getTerrainColorCss(terrainType) : "rgba(15, 23, 42, 0.70)";
+
+      const terrainColor = showTerrain
+        ? hasDrawnAnyMapPiece
+          ? "transparent"
+          : getTerrainColorCss(terrainType)
+        : "rgba(15, 23, 42, 0.70)";
+
+      const strokeColor = hasDrawnAnyMapPiece
+        ? isHovered
+          ? "#38bdf8"
+          : "rgba(255, 255, 255, 0.35)"
+        : isHovered
+        ? "#38bdf8"
+        : "#243247";
 
       drawHex(
         p.x,
         p.y,
         scale * 0.95,
-        isHovered ? "#38bdf8" : "#243247",
+        strokeColor,
         isHovered ? "rgba(56, 189, 248, 0.28)" : terrainColor,
         isHovered ? 2 : 1
       );
 
-      // Terrain short label
-      if (showTerrain && terrainType !== "clear") {
+      // Alphanumeric Coordinate label (like A1, B2) matching assault_ai_ui
+      if (showCoords) {
+        const coordLabel = axialToLabel(cell.q, cell.r);
+        ctx.save();
+        ctx.shadowColor = "rgba(0, 0, 0, 0.9)";
+        ctx.shadowBlur = 3;
+        ctx.shadowOffsetX = 1;
+        ctx.shadowOffsetY = 1;
+        ctx.fillStyle = isHovered ? "#38bdf8" : hasDrawnAnyMapPiece ? "rgba(245, 245, 245, 0.9)" : "rgba(148, 163, 184, 0.75)";
+        ctx.font = `bold ${Math.max(7, Math.floor(scale * 0.28))}px monospace`;
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.fillText(coordLabel, p.x, p.y - scale * 0.44);
+        ctx.restore();
+      }
+
+      // Terrain short label if illustrated map piece is not present
+      if (showTerrain && !hasDrawnAnyMapPiece && terrainType !== "clear") {
         const shortCode = getTerrainShort(terrainType);
         if (shortCode) {
           ctx.fillStyle = "rgba(255, 255, 255, 0.40)";
@@ -666,35 +1066,65 @@ export function MatchReplayTab({
           ctx.fillText(shortCode, p.x, p.y + scale * 0.38);
         }
       }
-
-      // Coordinates text
-      if (showCoords) {
-        ctx.fillStyle = isHovered ? "#38bdf8" : "rgba(148, 163, 184, 0.70)";
-        ctx.font = `${Math.max(7, Math.floor(scale * 0.28))}px monospace`;
-        ctx.textAlign = "center";
-        ctx.textBaseline = "middle";
-        ctx.fillText(`${cell.q},${cell.r}`, p.x, p.y - scale * 0.42);
-      }
     }
 
     // 2. Draw Scenario Fortifications (Bunkers, Pillboxes, Trenches, Barbed Wire, etc.)
     if (showForts && fortifications.length > 0) {
+      const renderCfg = {
+        scaleX: 1.7,
+        scaleY: 1.5,
+        edgeOffset: 0.0,
+        xNudge: -0.26,
+        yNudge: 0.10,
+      };
+
       for (const fort of fortifications) {
         const p = toPixel(fort.q, fort.r);
         const artSrc = getFortificationArt(fort.type);
         const img = artSrc ? getLoadedImage(artSrc) : null;
 
+        const orientation = fort.orientation;
+        const edgeStart = fort.vertex_start;
+        const edgeEnd = fort.vertex_end;
+        const edgeRotation = (() => {
+          if (orientation != null && orientation >= 1 && orientation <= 6) {
+            return ((orientation - 1) * Math.PI) / 3;
+          }
+          if (edgeStart != null && edgeEnd != null) {
+            const a = Math.min(edgeStart, edgeEnd);
+            return ((a - 1) * Math.PI) / 3;
+          }
+          return 0;
+        })();
+
+        const edgeAnchorAngle = edgeRotation - Math.PI / 6;
+        const nx = Math.cos(edgeAnchorAngle);
+        const ny = Math.sin(edgeAnchorAngle);
+        const tx = -ny;
+        const ty = nx;
+
+        const edgeDx = nx * scale * renderCfg.edgeOffset;
+        const edgeDy = ny * scale * renderCfg.edgeOffset;
+        const nudgeDx = tx * scale * renderCfg.xNudge + nx * scale * renderCfg.yNudge;
+        const nudgeDy = ty * scale * renderCfg.xNudge + ny * scale * renderCfg.yNudge;
+        const drawX = Math.round(p.x + edgeDx + nudgeDx);
+        const drawY = Math.round(p.y + edgeDy + nudgeDy);
+
         if (img) {
-          // Draw authentic art sprite centered on hex
-          const imgSize = scale * 1.35;
-          ctx.drawImage(img, p.x - imgSize / 2, p.y - imgSize / 2, imgSize, imgSize);
+          ctx.save();
+          ctx.translate(drawX, drawY);
+          ctx.rotate(edgeRotation);
+          const fWidth = scale * renderCfg.scaleX;
+          const fHeight = scale * renderCfg.scaleY;
+          ctx.drawImage(img, -fWidth / 2, -fHeight / 2, fWidth, fHeight);
+          ctx.restore();
         } else {
           // Tactical fortification badge fallback
           const emoji = getFortificationIconEmoji(fort.type);
           const shortCode = getFortificationShort(fort.type);
 
           ctx.beginPath();
-          ctx.arc(p.x, p.y, scale * 0.45, 0, Math.PI * 2);
+          ctx.arc(drawX, drawY, scale * 0.45, 0, Math.PI * 2);
           ctx.fillStyle = "rgba(30, 41, 59, 0.85)";
           ctx.fill();
           ctx.strokeStyle = "#eab308";
@@ -704,51 +1134,76 @@ export function MatchReplayTab({
           ctx.font = `${Math.max(10, Math.floor(scale * 0.38))}px sans-serif`;
           ctx.textAlign = "center";
           ctx.textBaseline = "middle";
-          ctx.fillText(emoji, p.x, p.y - scale * 0.08);
+          ctx.fillText(emoji, drawX, drawY - scale * 0.08);
 
           ctx.fillStyle = "#facc15";
           ctx.font = `bold ${Math.max(7, Math.floor(scale * 0.22))}px sans-serif`;
-          ctx.fillText(shortCode, p.x, p.y + scale * 0.28);
+          ctx.fillText(shortCode, drawX, drawY + scale * 0.28);
         }
       }
     }
 
-    // 2. Draw Victory Points (VPs)
+    // 3. Draw Victory Points (VPs)
     if (showVps) {
       for (const vp of vpMap) {
         const p = toPixel(vp.q, vp.r);
+        const owner = String(vp.owner || "").toUpperCase();
         const ownerColor =
-          vp.owner === "US"
+          owner === "US"
             ? "#3b82f6"
-            : vp.owner === "IT"
+            : owner === "IT"
             ? "#10b981"
-            : vp.owner === "GE"
-            ? "#a855f7"
+            : owner === "GE"
+            ? "#ef4444"
             : "#f59e0b";
 
         // VP Hex Outer Glowing Ring
-        drawHex(p.x, p.y, scale * 0.98, ownerColor, "rgba(0, 0, 0, 0.25)", 2.5);
+        drawHex(p.x, p.y, scale * 0.98, ownerColor, "rgba(0, 0, 0, 0.25)", 2.0);
 
-        // VP Star / Diamond marker
-        ctx.beginPath();
-        ctx.arc(p.x, p.y, scale * 0.38, 0, Math.PI * 2);
-        ctx.fillStyle = `${ownerColor}33`;
-        ctx.fill();
-        ctx.strokeStyle = ownerColor;
-        ctx.lineWidth = 1.5;
-        ctx.stroke();
+        // VP Faction Marker badge at top-right of hex (matching assault_ai_ui)
+        const markerSrc = SIDE_MARKERS[owner];
+        const markerImg = markerSrc ? getLoadedImage(markerSrc) : null;
+        const markerX = p.x + scale * 0.58;
+        const markerY = p.y - scale * 0.62;
+        const markerSize = Math.max(14, scale * 0.52);
 
-        // VP Text Label
+        if (markerImg) {
+          ctx.drawImage(markerImg, markerX - markerSize / 2, markerY - markerSize / 2, markerSize, markerSize);
+        } else if (owner) {
+          ctx.beginPath();
+          ctx.arc(markerX, markerY, markerSize / 2, 0, Math.PI * 2);
+          ctx.fillStyle = ownerColor;
+          ctx.fill();
+          ctx.strokeStyle = "#ffffff";
+          ctx.lineWidth = 1;
+          ctx.stroke();
+          ctx.fillStyle = "#ffffff";
+          ctx.font = `bold ${Math.max(6, Math.floor(markerSize * 0.45))}px sans-serif`;
+          ctx.textAlign = "center";
+          ctx.textBaseline = "middle";
+          ctx.fillText(owner, markerX, markerY);
+        }
+
+        // VP Point Value Banner / Star Indicator at center-bottom
+        ctx.save();
+        ctx.shadowColor = "rgba(0,0,0,0.8)";
+        ctx.shadowBlur = 3;
         ctx.fillStyle = "#ffffff";
-        ctx.font = `bold ${Math.max(8, Math.floor(scale * 0.32))}px sans-serif`;
+        ctx.font = `bold ${Math.max(8, Math.floor(scale * 0.30))}px sans-serif`;
         ctx.textAlign = "center";
         ctx.textBaseline = "middle";
-        ctx.fillText(`★ ${vp.owner}`, p.x, p.y + (scale * 0.38));
+        ctx.fillText(`★ ${vp.value || 2}VP`, p.x, p.y + scale * 0.40);
+        ctx.restore();
       }
     }
 
-    // 3. Draw Target Hex Marker
-    if (actionVector.toQ !== null && actionVector.toR !== null) {
+    // 4. Draw Target Hex Marker
+    if (
+      actionVector.toQ !== null &&
+      actionVector.toR !== null &&
+      Number.isFinite(actionVector.toQ) &&
+      Number.isFinite(actionVector.toR)
+    ) {
       const tp = toPixel(actionVector.toQ, actionVector.toR);
       const isFire = actionVector.isFire;
       const targetStroke = isFire ? "#ef4444" : "#facc15";
@@ -767,8 +1222,18 @@ export function MatchReplayTab({
       ctx.stroke();
     }
 
-    // 4. Draw Action Trajectory Vector (Movement Arrow or Fire Line)
-    if (showVectors && actionVector.fromQ !== null && actionVector.fromR !== null && actionVector.toQ !== null && actionVector.toR !== null) {
+    // 5. Draw Action Trajectory Vector (Movement Arrow or Fire Line)
+    if (
+      showVectors &&
+      actionVector.fromQ !== null &&
+      actionVector.fromR !== null &&
+      actionVector.toQ !== null &&
+      actionVector.toR !== null &&
+      Number.isFinite(actionVector.fromQ) &&
+      Number.isFinite(actionVector.fromR) &&
+      Number.isFinite(actionVector.toQ) &&
+      Number.isFinite(actionVector.toR)
+    ) {
       const pFrom = toPixel(actionVector.fromQ, actionVector.fromR);
       const pTo = toPixel(actionVector.toQ, actionVector.toR);
 
@@ -816,7 +1281,7 @@ export function MatchReplayTab({
       ctx.restore();
     }
 
-    // 5. Draw Tactical Unit Counters
+    // 6. Draw Tactical Unit Counters (Authentic WWII Counters)
     for (const u of unitPoints) {
       const p = toPixel(u.q, u.r);
       const isHovered = hoveredUnitId === u.unit_id || (hoveredHex && hoveredHex.q === u.q && hoveredHex.r === u.r);
@@ -824,93 +1289,137 @@ export function MatchReplayTab({
       const isActing = String(currentStep.unit_id || actionVector.actorId) === u.unit_id;
       const isEliminated = !u.alive || u.hp <= 0;
 
-      const unitRadius = Math.max(6, scale * (isActing || isHovered || isSelected ? 0.48 : 0.42));
+      const counterSize = Math.max(18, scale * (isActing || isHovered || isSelected ? 1.15 : 1.05));
+      const counterHalf = counterSize / 2;
 
       // Active Unit Beacon Aura
       if (isActing) {
+        ctx.save();
         ctx.beginPath();
-        ctx.arc(p.x, p.y, unitRadius * 1.5, 0, Math.PI * 2);
-        ctx.fillStyle = "rgba(250, 204, 21, 0.22)";
+        ctx.arc(p.x, p.y, counterSize * 0.75, 0, Math.PI * 2);
+        ctx.fillStyle = "rgba(250, 204, 21, 0.25)";
         ctx.fill();
         ctx.strokeStyle = "#facc15";
-        ctx.lineWidth = 2;
+        ctx.lineWidth = 2.5;
+        ctx.shadowColor = "#facc15";
+        ctx.shadowBlur = 8;
         ctx.stroke();
 
         // Arrow indicator pointing down to active unit
         ctx.fillStyle = "#facc15";
         ctx.beginPath();
-        ctx.moveTo(p.x, p.y - unitRadius * 1.6);
-        ctx.lineTo(p.x - 5, p.y - unitRadius * 1.6 - 7);
-        ctx.lineTo(p.x + 5, p.y - unitRadius * 1.6 - 7);
+        ctx.moveTo(p.x, p.y - counterSize * 0.72);
+        ctx.lineTo(p.x - 5, p.y - counterSize * 0.72 - 8);
+        ctx.lineTo(p.x + 5, p.y - counterSize * 0.72 - 8);
         ctx.closePath();
         ctx.fill();
+        ctx.restore();
       }
 
-      // Unit Body Token
+      // Unit selection / hover ring
+      if (isSelected || isHovered) {
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, counterSize * 0.70, 0, Math.PI * 2);
+        ctx.strokeStyle = isSelected ? "#38bdf8" : "#ffffff";
+        ctx.lineWidth = 2;
+        ctx.stroke();
+      }
+
+      // Unit Counter Image (WWII wargame counter token)
+      const uKey = u.unit_key || DEFAULT_UNIT_KEYS[u.unit_id] || u.unit_id;
+      const counterArt = getUnitCounterArt(uKey, u.hp);
+      const counterImg = counterArt ? getLoadedImage(counterArt) : null;
+
+      if (counterImg) {
+        ctx.save();
+        if (isEliminated) {
+          ctx.globalAlpha = 0.35;
+        }
+        ctx.drawImage(counterImg, p.x - counterHalf, p.y - counterHalf, counterSize, counterSize);
+        ctx.restore();
+
+        if (isEliminated) {
+          ctx.fillStyle = "#ef4444";
+          ctx.font = `bold ${Math.max(12, Math.floor(counterSize * 0.55))}px sans-serif`;
+          ctx.textAlign = "center";
+          ctx.textBaseline = "middle";
+          ctx.fillText("☠️", p.x, p.y);
+        }
+      } else {
+        // Fallback token circle
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, counterHalf * 0.85, 0, Math.PI * 2);
+        const fillColor = isEliminated
+          ? "#334155"
+          : u.side === "IT"
+          ? "#064e3b"
+          : u.side === "GE"
+          ? "#4c1d95"
+          : "#1e3a8a";
+
+        const strokeColor = isEliminated
+          ? "#64748b"
+          : isActing
+          ? "#facc15"
+          : isHovered || isSelected
+          ? "#ffffff"
+          : u.side === "IT"
+          ? "#34d399"
+          : u.side === "GE"
+          ? "#c084fc"
+          : "#60a5fa";
+
+        ctx.fillStyle = fillColor;
+        ctx.fill();
+        ctx.strokeStyle = strokeColor;
+        ctx.lineWidth = isActing ? 2.5 : 1.5;
+        ctx.stroke();
+
+        ctx.fillStyle = isEliminated ? "#94a3b8" : "#ffffff";
+        ctx.font = `bold ${Math.max(7, Math.floor(scale * 0.28))}px sans-serif`;
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.fillText(isEliminated ? "☠️" : "🪖", p.x, p.y - 2);
+      }
+
+      // Unit ID Pill Underneath (matching assault_ai_ui addUnitLabel)
+      const sideBgColor =
+        u.side === "US"
+          ? "rgba(0, 51, 102, 0.90)"
+          : u.side === "IT"
+          ? "rgba(46, 92, 46, 0.90)"
+          : u.side === "GE"
+          ? "rgba(102, 0, 0, 0.90)"
+          : "rgba(15, 23, 42, 0.90)";
+
+      const nameW = Math.max(28, scale * 0.72);
+      const nameH = Math.max(12, scale * 0.26);
+      const pillY = p.y + counterHalf * 0.55;
+
+      ctx.save();
+      ctx.fillStyle = sideBgColor;
       ctx.beginPath();
-      ctx.arc(p.x, p.y, unitRadius, 0, Math.PI * 2);
-
-      const fillColor = isEliminated
-        ? "#334155"
-        : u.side === "IT"
-        ? "#064e3b"
-        : u.side === "GE"
-        ? "#4c1d95"
-        : "#1e3a8a";
-
-      const strokeColor = isEliminated
-        ? "#64748b"
-        : isActing
-        ? "#facc15"
-        : isHovered || isSelected
-        ? "#ffffff"
-        : u.side === "IT"
-        ? "#34d399"
-        : u.side === "GE"
-        ? "#c084fc"
-        : "#60a5fa";
-
-      ctx.fillStyle = fillColor;
+      ctx.roundRect(p.x - nameW / 2, pillY, nameW, nameH, 3);
       ctx.fill();
-      ctx.strokeStyle = strokeColor;
-      ctx.lineWidth = isActing ? 3 : isHovered ? 2.5 : 1.5;
+      ctx.strokeStyle = isActing ? "#facc15" : "rgba(255, 255, 255, 0.6)";
+      ctx.lineWidth = 1;
       ctx.stroke();
 
-      // Unit Role Icon / Text
-      ctx.fillStyle = isEliminated ? "#94a3b8" : "#ffffff";
-      ctx.font = `bold ${Math.max(7, Math.floor(scale * 0.28))}px sans-serif`;
+      ctx.fillStyle = isActing ? "#facc15" : "#ffffff";
+      ctx.font = `bold ${Math.max(7, Math.floor(scale * 0.22))}px sans-serif`;
       ctx.textAlign = "center";
       ctx.textBaseline = "middle";
-
-      const roleIcon = isEliminated
-        ? "☠️"
-        : u.unit_id.includes("MORTAR") || u.unit_id.includes("MG") || u.unit_id.includes("4") || u.unit_id.includes("5")
-        ? "🎯"
-        : "🪖";
-
-      ctx.fillText(roleIcon, p.x, p.y - 2);
-
-      // Unit ID Pill Underneath
-      ctx.fillStyle = "#0f172a";
-      const nameW = Math.max(26, scale * 0.7);
-      const nameH = Math.max(10, scale * 0.26);
-      ctx.fillRect(p.x - nameW / 2, p.y + unitRadius * 0.65, nameW, nameH);
-      ctx.strokeStyle = strokeColor;
-      ctx.lineWidth = 1;
-      ctx.strokeRect(p.x - nameW / 2, p.y + unitRadius * 0.65, nameW, nameH);
-
-      ctx.fillStyle = isActing ? "#facc15" : "#f8fafc";
-      ctx.font = `bold ${Math.max(7, Math.floor(scale * 0.22))}px sans-serif`;
-      ctx.fillText(u.unit_id, p.x, p.y + unitRadius * 0.65 + nameH / 2);
+      ctx.fillText(u.unit_id, p.x, pillY + nameH / 2);
+      ctx.restore();
 
       // HP Gauge Bar
       if (showHpBars && !isEliminated) {
         const maxHp = 4.0;
         const hpFrac = Math.max(0, Math.min(1, u.hp / maxHp));
-        const barW = Math.max(22, scale * 0.6);
+        const barW = Math.max(22, scale * 0.7);
         const barH = 3.5;
         const barX = p.x - barW / 2;
-        const barY = p.y - unitRadius - 5;
+        const barY = p.y - counterHalf - 5;
 
         // Background
         ctx.fillStyle = "rgba(15, 23, 42, 0.85)";
@@ -925,11 +1434,19 @@ export function MatchReplayTab({
         ctx.strokeRect(barX, barY, barW, barH);
       }
 
-      // Suppressed Badge
+      // Suppressed / Pinned Badge
       if (u.suppressed && !isEliminated) {
+        ctx.save();
         ctx.fillStyle = "#ea580c";
-        ctx.font = `bold ${Math.max(7, Math.floor(scale * 0.20))}px sans-serif`;
-        ctx.fillText("PIN", p.x + unitRadius * 0.7, p.y - unitRadius * 0.7);
+        ctx.beginPath();
+        ctx.roundRect(p.x + counterHalf * 0.3, p.y - counterHalf - 4, 22, 11, 2);
+        ctx.fill();
+        ctx.fillStyle = "#ffffff";
+        ctx.font = `bold 7px sans-serif`;
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.fillText("PIN", p.x + counterHalf * 0.3 + 11, p.y - counterHalf + 1.5);
+        ctx.restore();
       }
     }
 
@@ -949,38 +1466,59 @@ export function MatchReplayTab({
     showForts,
     showTerrain,
     zoomLevel,
+    panOffset,
     fortifications,
     terrainMap,
+    mapPieces,
     scenarioShape,
     imgLoadVersion,
     mapHeight,
     getLoadedImage,
   ]);
 
-  // Canvas Mouse Move Event
+  // Canvas Mouse Drag & Picking Handlers
+  const handleCanvasMouseDown = (e: React.MouseEvent<HTMLCanvasElement>) => {
+    if (e.button === 0 || e.button === 1) {
+      dragStartRef.current = {
+        clientX: e.clientX,
+        clientY: e.clientY,
+        startPanX: panOffset.x,
+        startPanY: panOffset.y,
+        hasMoved: false,
+      };
+      setIsDragging(true);
+    }
+  };
+
   const handleCanvasMouseMove = (e: React.MouseEvent<HTMLCanvasElement>) => {
     const c = canvasRef.current;
     if (!c) return;
+
+    // Handle Pan dragging
+    if (isDragging) {
+      const dx = e.clientX - dragStartRef.current.clientX;
+      const dy = e.clientY - dragStartRef.current.clientY;
+      if (!dragStartRef.current.hasMoved && Math.hypot(dx, dy) > 3) {
+        dragStartRef.current.hasMoved = true;
+      }
+      if (dragStartRef.current.hasMoved) {
+        setPanOffset({
+          x: dragStartRef.current.startPanX + dx,
+          y: dragStartRef.current.startPanY + dy,
+        });
+      }
+    }
+
     const rect = c.getBoundingClientRect();
     const x = e.clientX - rect.left;
     const y = e.clientY - rect.top;
 
-    // Inverse odd-r hex picking using scenario bounds
+    // Inverse odd-r hex picking strictly using scenario bounds and panOffset
     const [shapeW, shapeH] = scenarioShape;
-    const qs = unitPoints.map((p) => p.q);
-    const rs = unitPoints.map((p) => p.r);
-    for (const vp of vpMap) {
-      qs.push(vp.q);
-      rs.push(vp.r);
-    }
-    for (const f of fortifications) {
-      qs.push(f.q);
-      rs.push(f.r);
-    }
     const minQ = 0;
-    const maxQ = Math.max(shapeW - 1, ...qs, 15);
+    const maxQ = Math.max(1, (Number.isFinite(shapeW) ? shapeW : 18) - 1);
     const minR = 0;
-    const maxR = Math.max(shapeH - 1, ...rs, 9);
+    const maxR = Math.max(1, (Number.isFinite(shapeH) ? shapeH : 12) - 1);
 
     const oddRRaw = (q: number, r: number) => ({
       x: Math.sqrt(3) * (q + 0.5 * (r % 2)) + Math.sqrt(3) / 2,
@@ -1004,12 +1542,12 @@ export function MatchReplayTab({
     const pad = 16;
     const baseScaleX = (rect.width - pad * 2) / spanX;
     const baseScaleY = (rect.height - pad * 2) / spanY;
-    const scale = Math.max(8, Math.min(baseScaleX, baseScaleY) * zoomLevel);
+    const scale = Math.max(6, Math.min(baseScaleX, baseScaleY) * zoomLevel);
 
     const boardPixelW = spanX * scale;
     const boardPixelH = spanY * scale;
-    const offsetX = (rect.width - boardPixelW) / 2 + (Math.sqrt(3) / 2) * scale;
-    const offsetY = (rect.height - boardPixelH) / 2 + 1.0 * scale;
+    const offsetX = (rect.width - boardPixelW) / 2 + (Math.sqrt(3) / 2) * scale + panOffset.x;
+    const offsetY = (rect.height - boardPixelH) / 2 + 1.0 * scale + panOffset.y;
 
     let closestCell: { q: number; r: number; dist: number } | null = null;
     for (const cell of raws) {
@@ -1028,12 +1566,21 @@ export function MatchReplayTab({
     }
   };
 
+  const handleCanvasMouseUp = () => {
+    setIsDragging(false);
+  };
+
   const handleCanvasMouseLeave = () => {
+    setIsDragging(false);
     setHoveredHex(null);
     setHoveredUnitId("");
   };
 
   const handleCanvasClick = () => {
+    if (dragStartRef.current.hasMoved) {
+      // User was panning, ignore click selection
+      return;
+    }
     if (hoveredHex) {
       const unitOnHex = units.find((u) => u.q === hoveredHex.q && u.r === hoveredHex.r);
       if (unitOnHex) {
@@ -1064,22 +1611,71 @@ export function MatchReplayTab({
           boxShadow: "0 4px 12px rgba(0,0,0,0.3)",
         }}
       >
-        {/* Scrubber Range Slider */}
-        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-          <span style={{ fontSize: 11, fontWeight: 700, color: "#38bdf8", minWidth: 60 }}>
-            Paso {clamped} / {Math.max(0, steps.length - 1)}
-          </span>
+        {/* Scrubber Range Slider with Prominent Turn Indicator */}
+        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+          {/* Step Pill */}
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 4,
+              background: "rgba(14, 165, 233, 0.15)",
+              border: "1px solid #0284c7",
+              padding: "4px 10px",
+              borderRadius: 6,
+              fontSize: 12,
+              fontWeight: 700,
+              color: "#38bdf8",
+              whiteSpace: "nowrap",
+            }}
+          >
+            <span>Paso {clamped}</span>
+            <span style={{ color: "#64748b" }}>/</span>
+            <span style={{ color: "#94a3b8" }}>{Math.max(0, steps.length - 1)}</span>
+          </div>
+
           <input
             type="range"
             min={0}
             max={Math.max(0, steps.length - 1)}
             value={clamped}
             onChange={(e) => onStepIndexChange(Number(e.target.value || 0))}
-            style={{ flex: 1, accentColor: "#38bdf8", cursor: "pointer" }}
+            style={{ flex: 1, accentColor: "#38bdf8", cursor: "pointer", height: 6 }}
           />
-          <span style={{ fontSize: 11, fontWeight: 700, color: "#a855f7", minWidth: 60, textAlign: "right" }}>
-            Turno {currentDetails.gameTurn}
-          </span>
+
+          {/* Prominent High-Contrast Turn Badge */}
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 6,
+              background: "linear-gradient(135deg, rgba(147, 51, 234, 0.35), rgba(99, 102, 241, 0.45))",
+              border: "2px solid #a855f7",
+              boxShadow: "0 0 14px rgba(168, 85, 247, 0.45)",
+              padding: "4px 12px",
+              borderRadius: 6,
+              fontSize: 13,
+              fontWeight: 800,
+              color: "#f3e8ff",
+              whiteSpace: "nowrap",
+            }}
+          >
+            <span>⏱️ TURNO</span>
+            <span
+              style={{
+                color: "#ffffff",
+                fontSize: 16,
+                fontWeight: 900,
+                background: "#7e22ce",
+                padding: "1px 8px",
+                borderRadius: 4,
+                boxShadow: "0 2px 6px rgba(0,0,0,0.5)",
+              }}
+            >
+              {currentDetails.gameTurn}
+            </span>
+            <span style={{ color: "#c084fc", fontSize: 11, fontWeight: 600 }}>/ {maxTurns}</span>
+          </div>
         </div>
 
         {/* Controls Bar */}
@@ -1217,21 +1813,29 @@ export function MatchReplayTab({
         </div>
       </div>
 
-      {/* 2. Main Tactical Arena (Left Map, Right Inspector or Full Width Theater Mode) */}
+      {/* 2. Main Tactical Arena (Left Map snug-fit, Right Inspector expansive or Full Width Theater Mode) */}
       <div
         style={
           theaterMode
             ? { display: "flex", flexDirection: "column", gap: 14 }
             : {
                 display: "grid",
-                gridTemplateColumns: "minmax(640px, 1.8fr) minmax(380px, 1fr)",
-                gap: 14,
+                gridTemplateColumns: `minmax(320px, ${optimalMapWidth}px) minmax(460px, 1fr)`,
+                gap: 16,
                 alignItems: "start",
               }
         }
       >
-        {/* LEFT COLUMN: Tactical Map & Event Feed */}
-        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+        {/* LEFT COLUMN: Tactical Map & Event Feed (snug fit to map width) */}
+        <div
+          style={{
+            display: "flex",
+            flexDirection: "column",
+            gap: 10,
+            maxWidth: theaterMode ? "100%" : `${optimalMapWidth}px`,
+            width: "100%",
+          }}
+        >
           {/* Map Controls Toolbar */}
           <div
             style={{
@@ -1339,7 +1943,7 @@ export function MatchReplayTab({
             <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
               <div style={{ display: "flex", alignItems: "center", gap: 2 }}>
                 <span style={{ fontSize: 10, color: "#94a3b8" }}>Alto:</span>
-                {[520, 660, 840].map((h) => (
+                {[460, 520, 600, 680].map((h) => (
                   <button
                     key={h}
                     onClick={() => setMapHeight(h)}
@@ -1373,47 +1977,178 @@ export function MatchReplayTab({
               >
                 {theaterMode ? "🗗 Dividida" : "🖥️ Maximizar"}
               </button>
-              <button
-                onClick={() => setZoomLevel((z) => Math.max(0.7, z - 0.1))}
-                title="Alejar mapa"
-                style={{ padding: "2px 6px", fontSize: 11, background: "#0f172a", border: "1px solid #334155", color: "#f8fafc", borderRadius: 3, cursor: "pointer" }}
+              {/* Zoom & Pan Toolbar Controls */}
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 3,
+                  background: "#0f172a",
+                  padding: "2px 6px",
+                  borderRadius: 4,
+                  border: "1px solid #334155",
+                }}
               >
-                -
-              </button>
-              <span style={{ fontSize: 10, color: "#94a3b8", minWidth: 32, textAlign: "center" }}>
-                {(zoomLevel * 100).toFixed(0)}%
+                <button
+                  onClick={() => {
+                    setZoomLevel((z) => Math.max(0.5, Number((z / 1.2).toFixed(2))));
+                  }}
+                  title="Alejar mapa (-)"
+                  style={{
+                    padding: "2px 7px",
+                    fontSize: 12,
+                    fontWeight: "bold",
+                    background: "#1e293b",
+                    border: "1px solid #475569",
+                    color: "#f8fafc",
+                    borderRadius: 3,
+                    cursor: "pointer",
+                  }}
+                >
+                  −
+                </button>
+                <span
+                  style={{
+                    fontSize: 10,
+                    fontWeight: 700,
+                    color: zoomLevel !== 1.0 || panOffset.x !== 0 || panOffset.y !== 0 ? "#38bdf8" : "#94a3b8",
+                    minWidth: 38,
+                    textAlign: "center",
+                  }}
+                  title="Nivel de zoom actual"
+                >
+                  {(zoomLevel * 100).toFixed(0)}%
+                </span>
+                <button
+                  onClick={() => {
+                    setZoomLevel((z) => Math.min(3.5, Number((z * 1.2).toFixed(2))));
+                  }}
+                  title="Acercar mapa (+)"
+                  style={{
+                    padding: "2px 7px",
+                    fontSize: 12,
+                    fontWeight: "bold",
+                    background: "#1e293b",
+                    border: "1px solid #475569",
+                    color: "#f8fafc",
+                    borderRadius: 3,
+                    cursor: "pointer",
+                  }}
+                >
+                  +
+                </button>
+                <button
+                  onClick={() => {
+                    setZoomLevel(1.0);
+                    setPanOffset({ x: 0, y: 0 });
+                  }}
+                  title="Restablecer vista a 100% y centrar"
+                  style={{
+                    padding: "2px 6px",
+                    fontSize: 10,
+                    fontWeight: 600,
+                    background: zoomLevel !== 1.0 || panOffset.x !== 0 || panOffset.y !== 0 ? "#0369a1" : "#1e293b",
+                    border: `1px solid ${zoomLevel !== 1.0 || panOffset.x !== 0 || panOffset.y !== 0 ? "#38bdf8" : "#475569"}`,
+                    color: "#ffffff",
+                    borderRadius: 3,
+                    cursor: "pointer",
+                    marginLeft: 2,
+                  }}
+                >
+                  ↺ 100%
+                </button>
+              </div>
+
+              {/* Navigation Hint */}
+              <span
+                style={{
+                  fontSize: 10,
+                  color: "#64748b",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 3,
+                }}
+                title="Rueda del ratón para zoom sobre el cursor, y arrastra con el ratón para moverte por el mapa."
+              >
+                <span>🖱️</span> Rueda: Zoom • Arrastrar: Pan
               </span>
-              <button
-                onClick={() => setZoomLevel((z) => Math.min(1.8, z + 0.1))}
-                title="Acercar mapa"
-                style={{ padding: "2px 6px", fontSize: 11, background: "#0f172a", border: "1px solid #334155", color: "#f8fafc", borderRadius: 3, cursor: "pointer" }}
-              >
-                +
-              </button>
-              <button
-                onClick={() => setZoomLevel(1.0)}
-                title="Restablecer zoom"
-                style={{ padding: "2px 6px", fontSize: 10, background: "#0f172a", border: "1px solid #334155", color: "#94a3b8", borderRadius: 3, cursor: "pointer" }}
-              >
-                100%
-              </button>
             </div>
           </div>
 
-          {/* Tactical Map Canvas with Relative Hover HUD */}
-          <div style={{ position: "relative" }}>
+          {/* Tactical Map Canvas with Relative Hover HUD and Permanent Turn Badge */}
+          <div
+            style={{
+              position: "relative",
+              width: "100%",
+              maxWidth: theaterMode ? "100%" : `${optimalMapWidth}px`,
+            }}
+          >
+            {/* Top-Left Floating Tactical HUD: Turn, Step, and Turn to Play */}
+            <div
+              style={{
+                position: "absolute",
+                top: 10,
+                left: 10,
+                background: "rgba(15, 23, 42, 0.92)",
+                backdropFilter: "blur(6px)",
+                border: "1px solid #7c3aed",
+                boxShadow: "0 4px 14px rgba(0, 0, 0, 0.6), 0 0 10px rgba(124, 58, 237, 0.35)",
+                borderRadius: 6,
+                padding: "5px 12px",
+                display: "flex",
+                alignItems: "center",
+                gap: 10,
+                fontSize: 12,
+                color: "#f8fafc",
+                pointerEvents: "none",
+                zIndex: 10,
+              }}
+            >
+              <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                <span style={{ color: "#e9d5ff", fontSize: 11, fontWeight: 700 }}>TURNO</span>
+                <span
+                  style={{
+                    color: "#ffffff",
+                    fontSize: 14,
+                    fontWeight: 900,
+                    background: "#7e22ce",
+                    padding: "1px 7px",
+                    borderRadius: 3,
+                  }}
+                >
+                  {currentDetails.gameTurn}
+                </span>
+                <span style={{ color: "#94a3b8", fontSize: 10 }}>/ {maxTurns}</span>
+              </div>
+              <div style={{ height: 14, width: 1, background: "#475569" }} />
+              <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                <span style={{ color: "#38bdf8", fontWeight: 700 }}>Paso {clamped}</span>
+              </div>
+              <div style={{ height: 14, width: 1, background: "#475569" }} />
+              <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
+                <span>{currentDetails.flag}</span>
+                <span style={{ fontWeight: 800, color: currentDetails.toPlay === "US" ? "#60a5fa" : "#34d399" }}>
+                  {currentDetails.toPlay}
+                </span>
+                <span style={{ color: "#94a3b8", fontSize: 10 }}>al mando</span>
+              </div>
+            </div>
+
             <canvas
               ref={canvasRef}
+              onMouseDown={handleCanvasMouseDown}
               onMouseMove={handleCanvasMouseMove}
+              onMouseUp={handleCanvasMouseUp}
               onMouseLeave={handleCanvasMouseLeave}
               onClick={handleCanvasClick}
               style={{
                 width: "100%",
+                maxWidth: theaterMode ? "100%" : `${optimalMapWidth}px`,
                 height: mapHeight,
                 border: "1px solid #334155",
                 borderRadius: 8,
                 display: "block",
-                cursor: hoveredHex ? "pointer" : "default",
+                cursor: isDragging ? "grabbing" : zoomLevel > 1.05 || panOffset.x !== 0 || panOffset.y !== 0 ? "grab" : hoveredHex ? "pointer" : "default",
                 boxShadow: "inset 0 0 20px rgba(0,0,0,0.6)",
               }}
             />
@@ -1492,8 +2227,13 @@ export function MatchReplayTab({
                 {actionVector.isFire ? "💥" : actionVector.isMove ? "🏃" : "🛡️"}
               </span>
               <div>
-                <div style={{ fontSize: 10, textTransform: "uppercase", color: "#94a3b8", fontWeight: 700 }}>
-                  Acción Ejecutada en Paso {clamped}
+                <div style={{ fontSize: 11, textTransform: "uppercase", color: "#cbd5e1", fontWeight: 700, display: "flex", alignItems: "center", gap: 6 }}>
+                  <span style={{ background: "#7e22ce", color: "#ffffff", padding: "1px 6px", borderRadius: 3, fontWeight: 900, fontSize: 10 }}>
+                    TURNO {currentDetails.gameTurn}
+                  </span>
+                  <span style={{ color: "#38bdf8" }}>PASO {clamped}</span>
+                  <span style={{ color: "#64748b" }}>•</span>
+                  <span>{actionVector.isFire ? "FUEGO / ATAQUE" : actionVector.isMove ? "MOVIMIENTO" : "ACCIÓN"}</span>
                 </div>
                 <div style={{ fontSize: 13, fontWeight: 700, color: "#f8fafc" }}>
                   <span style={{ color: currentDetails.toPlay === "US" ? "#60a5fa" : "#34d399" }}>
@@ -1608,8 +2348,11 @@ export function MatchReplayTab({
                 }}
               >
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                  <span style={{ fontSize: 10, color: "#60a5fa", fontWeight: 700, textTransform: "uppercase" }}>
-                    Decisión Monte Carlo Tree Search
+                  <span style={{ fontSize: 11, color: "#60a5fa", fontWeight: 800, textTransform: "uppercase", display: "flex", alignItems: "center", gap: 6 }}>
+                    <span>Decisión MCTS</span>
+                    <span style={{ color: "#e9d5ff", background: "rgba(168, 85, 247, 0.25)", border: "1px solid #a855f7", padding: "1px 6px", borderRadius: 3, fontSize: 10, fontWeight: 800 }}>
+                      Turno {currentDetails.gameTurn} | Paso {clamped}
+                    </span>
                   </span>
                   {currentStep.policy_overridden_by_mcts ? (
                     <span style={{ fontSize: 10, background: "rgba(14, 165, 233, 0.2)", color: "#38bdf8", padding: "1px 5px", borderRadius: 3, fontWeight: 700 }}>

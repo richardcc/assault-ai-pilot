@@ -110,8 +110,20 @@ class EfficientZeroV2BaseTrainer:
         # Cross-entropy / KL divergence: avoids gradient saturation of MSE on softmax
         log_policy_probs = F.log_softmax(policy_logits, dim=-1)
         policy_loss = -(policy_target * log_policy_probs).sum(dim=-1).mean()
-        value_loss = F.mse_loss(value_pred, value_target)
-        reward_loss = F.mse_loss(reward_pred, reward_target)
+
+        if getattr(self.model, "support_size", 0) > 0 and isinstance(aux, dict) and "value_logits" in aux:
+            value_loss = cross_entropy_two_hot(
+                aux["value_logits"], value_target, support_size=self.model.support_size
+            )
+        else:
+            value_loss = F.mse_loss(value_pred, value_target)
+
+        if getattr(self.model, "support_size", 0) > 0 and isinstance(aux, dict) and "reward_logits" in aux:
+            reward_loss = cross_entropy_two_hot(
+                aux["reward_logits"], reward_target, support_size=self.model.support_size
+            )
+        else:
+            reward_loss = F.mse_loss(reward_pred, reward_target)
         objective_loss = torch.tensor(0.0, dtype=torch.float32, device=self.device)
         if self.objective_loss_weight > 0.0 and isinstance(aux, dict) and "objective_logit" in aux:
             objective_pred = aux["objective_logit"]
