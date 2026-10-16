@@ -199,6 +199,7 @@ def observation_to_tensor(
     feature_max = dict(unit_features.get("max", {}) or {})
 
     ally_alive_coords: list[tuple[int, int]] = []
+    ally_threat_sources: list[tuple[int, int, float, float]] = []
     enemy_threat_sources: list[tuple[int, int, float, float]] = []
 
     for unit in obs.units:
@@ -216,10 +217,10 @@ def observation_to_tensor(
         raw_attack_power = float(feat.get("attack_power", 0.0))
         movement_norm = float(feat.get("movement", 0.0)) / float(max(1e-9, feature_max.get("movement", 1.0)))
         direct_range_norm = raw_direct_range / float(max(1e-9, feature_max.get("direct_range", 1.0)))
-        indirect_range_norm = float(feat.get("indirect_range", 0.0)) / float(max(1e-9, feature_max.get("indirect_range", 1.0)))
         attack_power_norm = raw_attack_power / float(max(1e-9, feature_max.get("attack_power", 1.0)))
         defense_power_norm = float(feat.get("defense_power", 0.0)) / float(max(1e-9, feature_max.get("defense_power", 1.0)))
         alive = bool(unit.get("alive", True))
+        suppressed = bool(unit.get("suppressed", False) or unit.get("is_suppressed", False))
         hp = unit.get("hp")
         hp_norm = 0.0
         if isinstance(hp, (int, float)):
@@ -227,16 +228,16 @@ def observation_to_tensor(
         if side == to_play:
             if alive:
                 ally_alive_coords.append((int(q), int(r)))
+                ally_threat_sources.append((int(q), int(r), max(1.0, raw_direct_range), max(0.1, attack_power_norm)))
             put(0, y, x, 1.0)  # ally_presence
             put(2, y, x, hp_norm)  # ally_hp_norm
-            put(4, y, x, 1.0 if alive else 0.0)  # ally_alive
+            put(4, y, x, 1.0 if (alive and suppressed) else 0.0)  # ally_suppressed
             if _is_infantry(unit_key):
                 put(8, y, x, 1.0)  # ally_infantry
             if _is_support(unit_key):
                 put(10, y, x, 1.0)  # ally_support
             put(22, y, x, movement_norm)  # ally_mobility_norm
             put(24, y, x, direct_range_norm)  # ally_direct_range_norm
-            put(26, y, x, indirect_range_norm)  # ally_indirect_range_norm
             put(28, y, x, attack_power_norm)  # ally_attack_power_norm
             put(30, y, x, defense_power_norm)  # ally_defense_power_norm
         else:
@@ -244,18 +245,14 @@ def observation_to_tensor(
                 enemy_threat_sources.append((int(q), int(r), max(1.0, raw_direct_range), max(0.1, attack_power_norm)))
             put(1, y, x, 1.0)  # enemy_presence
             put(3, y, x, hp_norm)  # enemy_hp_norm
-            put(5, y, x, 1.0 if alive else 0.0)  # enemy_alive
+            put(5, y, x, 1.0 if (alive and suppressed) else 0.0)  # enemy_suppressed
             if _is_infantry(unit_key):
                 put(9, y, x, 1.0)  # enemy_infantry
-            if _is_support(unit_key):
-                put(11, y, x, 1.0)  # enemy_support
             put(23, y, x, movement_norm)  # enemy_mobility_norm
             put(25, y, x, direct_range_norm)  # enemy_direct_range_norm
-            put(27, y, x, indirect_range_norm)  # enemy_indirect_range_norm
             put(29, y, x, attack_power_norm)  # enemy_attack_power_norm
             put(31, y, x, defense_power_norm)  # enemy_defense_power_norm
-    if channels > 6:
-        grid[6, :, :] = float(obs.turn) / 50.0  # turn_norm
+
     vp_owner_by_hex = dict(getattr(obs, "vp_owner_by_hex", {}) or {})
     vp_list = list(getattr(obs, "vp_hexes", []) or [])
     for hx in getattr(obs, "playable_hexes", []) or []:
@@ -302,10 +299,26 @@ def observation_to_tensor(
         put(19, y, x, float(q) / max_q_norm)  # q_coord_norm
         put(20, y, x, float(r) / max_r_norm)  # r_coord_norm
 
+        # Channel 6: vp_contest_race (Advantage race toward closest VP: >0 ally closer, <0 enemy closer)
+        if channels > 6:
+            if ally_alive_coords and enemy_threat_sources:
+                d_ally_min = min((_hex_distance(aq, ar, int(q), int(r)) for aq, ar in ally_alive_coords), default=99)
+                d_enemy_min = min((_hex_distance(eq, er, int(q), int(r)) for eq, er, _, _ in enemy_threat_sources), default=99)
+                denom = max(1.0, float(d_ally_min + d_enemy_min))
+                race_val = float(d_enemy_min - d_ally_min) / denom
+                put(6, y, x, max(-1.0, min(1.0, race_val)))
+            elif ally_alive_coords:
+                put(6, y, x, 1.0)
+            elif enemy_threat_sources:
+                put(6, y, x, -1.0)
+            else:
+                put(6, y, x, 0.0)
+
+        cov = float((getattr(obs, "terrain_cover_by_hex", {}) or {}).get(key, 0.0))
+        los_blk = float((getattr(obs, "terrain_los_block_by_hex", {}) or {}).get(key, 0.0))
+
         # Channel 7: reaction_fire_threat (Overwatch threat heatmap from alive enemies)
         if channels > 7 and enemy_threat_sources:
-            cov = float((getattr(obs, "terrain_cover_by_hex", {}) or {}).get(key, 0.0))
-            los_blk = float((getattr(obs, "terrain_los_block_by_hex", {}) or {}).get(key, 0.0))
             if los_blk < 1.0:
                 max_threat = 0.0
                 for eq, er, edrange, eatk in enemy_threat_sources:
@@ -315,6 +328,24 @@ def observation_to_tensor(
                         if t_val > max_threat:
                             max_threat = t_val
                 put(7, y, x, min(1.0, max(0.0, max_threat)))
+
+        # Channel 26: ally_fire_coverage (Friendly direct fire coverage heatmap from alive allies)
+        if channels > 26 and ally_threat_sources:
+            if los_blk < 1.0:
+                max_threat_ally = 0.0
+                for aq, ar, adrange, aatk in ally_threat_sources:
+                    dist = _hex_distance(int(q), int(r), aq, ar)
+                    if 1 <= dist <= adrange:
+                        t_val = aatk * (1.0 - 0.4 * cov) * (1.0 - float(dist - 1) / max(1.0, float(adrange)))
+                        if t_val > max_threat_ally:
+                            max_threat_ally = t_val
+                put(26, y, x, min(1.0, max(0.0, max_threat_ally)))
+
+        # Channel 11: local_firepower_balance (Difference between friendly and enemy fire coverage on hex)
+        if channels > 11:
+            ally_cov = grid[26, y, x] if channels > 26 else 0.0
+            enemy_cov = grid[7, y, x] if channels > 7 else 0.0
+            put(11, y, x, max(-1.0, min(1.0, ally_cov - enemy_cov)))
 
         # Channel 21: frontline_control (Territorial control field: +1 ally rear, 0 contested frontline, -1 enemy rear)
         if channels > 21:
@@ -329,6 +360,20 @@ def observation_to_tensor(
             else:
                 ctrl = 0.0
             put(21, y, x, max(-1.0, min(1.0, ctrl)))
+
+        # Channel 27: fortification_defensive_tier (Bunkers=1.0, Trenches=0.6, Mines=-0.6, Wire=-0.3)
+        if channels > 27:
+            fort_type = str((getattr(obs, "fortification_type_by_hex", {}) or {}).get(key, "")).lower()
+            fort_val = 0.0
+            if "bunker" in fort_type or "casemate" in fort_type:
+                fort_val = 1.0
+            elif "gun_emplacement" in fort_type or "trench" in fort_type:
+                fort_val = 0.6
+            elif "mine" in fort_type:
+                fort_val = -0.6
+            elif "wire" in fort_type:
+                fort_val = -0.3
+            put(27, y, x, fort_val)
     return grid
 
 

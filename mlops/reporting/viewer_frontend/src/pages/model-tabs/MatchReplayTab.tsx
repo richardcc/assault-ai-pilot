@@ -325,15 +325,23 @@ export function MatchReplayTab({
     const minY = Math.min(...raws.map((p) => p.y));
     const maxY = Math.max(...raws.map((p) => p.y));
 
-    const baseScaleX = (cssWidth - 48) / Math.max(1e-6, maxX - minX + 2);
-    const baseScaleY = (cssHeight - 48) / Math.max(1e-6, maxY - minY + 2);
+    const spanX = Math.max(1e-6, maxX - minX + Math.sqrt(3));
+    const spanY = Math.max(1e-6, maxY - minY + 2.0);
+    const pad = 16;
+    const baseScaleX = (cssWidth - pad * 2) / spanX;
+    const baseScaleY = (cssHeight - pad * 2) / spanY;
     const scale = Math.max(8, Math.min(baseScaleX, baseScaleY) * zoomLevel);
+
+    const boardPixelW = spanX * scale;
+    const boardPixelH = spanY * scale;
+    const offsetX = (cssWidth - boardPixelW) / 2 + (Math.sqrt(3) / 2) * scale;
+    const offsetY = (cssHeight - boardPixelH) / 2 + 1.0 * scale;
 
     const toPixel = (q: number, r: number) => {
       const p = oddRRaw(q, r);
       return {
-        x: 24 + (p.x - minX + 0.5) * scale,
-        y: 24 + (p.y - minY + 0.5) * scale,
+        x: offsetX + (p.x - minX) * scale,
+        y: offsetY + (p.y - minY) * scale,
       };
     };
 
@@ -363,15 +371,15 @@ export function MatchReplayTab({
         p.x,
         p.y,
         scale * 0.95,
-        isHovered ? "#38bdf8" : "#1e293b",
-        isHovered ? "rgba(56, 189, 248, 0.15)" : "rgba(15, 23, 42, 0.65)",
+        isHovered ? "#38bdf8" : "#243247",
+        isHovered ? "rgba(56, 189, 248, 0.18)" : "rgba(15, 23, 42, 0.70)",
         isHovered ? 2 : 1
       );
 
       // Coordinates text
       if (showCoords) {
-        ctx.fillStyle = isHovered ? "#38bdf8" : "rgba(148, 163, 184, 0.4)";
-        ctx.font = `${Math.max(7, Math.floor(scale * 0.26))}px monospace`;
+        ctx.fillStyle = isHovered ? "#38bdf8" : "#64748b";
+        ctx.font = `${Math.max(8, Math.floor(scale * 0.32))}px monospace`;
         ctx.textAlign = "center";
         ctx.textBaseline = "middle";
         ctx.fillText(`${cell.q},${cell.r}`, p.x, p.y - scale * 0.42);
@@ -651,14 +659,22 @@ export function MatchReplayTab({
     const minY = Math.min(...raws.map((p) => p.y));
     const maxY = Math.max(...raws.map((p) => p.y));
 
-    const baseScaleX = (rect.width - 48) / Math.max(1e-6, maxX - minX + 2);
-    const baseScaleY = (rect.height - 48) / Math.max(1e-6, maxY - minY + 2);
+    const spanX = Math.max(1e-6, maxX - minX + Math.sqrt(3));
+    const spanY = Math.max(1e-6, maxY - minY + 2.0);
+    const pad = 16;
+    const baseScaleX = (rect.width - pad * 2) / spanX;
+    const baseScaleY = (rect.height - pad * 2) / spanY;
     const scale = Math.max(8, Math.min(baseScaleX, baseScaleY) * zoomLevel);
+
+    const boardPixelW = spanX * scale;
+    const boardPixelH = spanY * scale;
+    const offsetX = (rect.width - boardPixelW) / 2 + (Math.sqrt(3) / 2) * scale;
+    const offsetY = (rect.height - boardPixelH) / 2 + 1.0 * scale;
 
     let closestCell: { q: number; r: number; dist: number } | null = null;
     for (const cell of raws) {
-      const px = 24 + (cell.x - minX + 0.5) * scale;
-      const py = 24 + (cell.y - minY + 0.5) * scale;
+      const px = offsetX + (cell.x - minX) * scale;
+      const py = offsetY + (cell.y - minY) * scale;
       const dist = Math.hypot(px - x, py - y);
       if (!closestCell || dist < closestCell.dist) {
         closestCell = { q: cell.q, r: cell.r, dist };
@@ -865,7 +881,7 @@ export function MatchReplayTab({
       <div
         style={{
           display: "grid",
-          gridTemplateColumns: "minmax(540px, 1.4fr) minmax(360px, 1fr)",
+          gridTemplateColumns: "minmax(480px, 680px) minmax(420px, 1fr)",
           gap: 14,
           alignItems: "start",
         }}
@@ -983,7 +999,7 @@ export function MatchReplayTab({
               onClick={handleCanvasClick}
               style={{
                 width: "100%",
-                height: 440,
+                height: 480,
                 border: "1px solid #334155",
                 borderRadius: 8,
                 display: "block",
@@ -997,7 +1013,7 @@ export function MatchReplayTab({
               <div
                 style={{
                   position: "absolute",
-                  left: Math.min(hoveredHex.x + 14, 380),
+                  left: hoveredHex.x > 460 ? hoveredHex.x - 175 : hoveredHex.x + 14,
                   top: Math.max(10, hoveredHex.y - 40),
                   background: "rgba(15, 23, 42, 0.95)",
                   border: "1px solid #38bdf8",

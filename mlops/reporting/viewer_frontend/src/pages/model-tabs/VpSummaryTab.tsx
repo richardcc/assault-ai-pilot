@@ -36,6 +36,32 @@ function OutcomeBadge({ outcomeClass, customLabel }: { outcomeClass?: string; cu
   );
 }
 
+function resolveController(
+  side: string,
+  ctrlsMap: Record<string, string>,
+  policiesMap?: Record<string, string>,
+  defaultFallback: string = ""
+): string {
+  const norm = String(side || "").toUpperCase();
+  if (ctrlsMap[norm]) return ctrlsMap[norm];
+  if (ctrlsMap[side]) return ctrlsMap[side];
+  for (const [k, v] of Object.entries(ctrlsMap)) {
+    if (k.toUpperCase() === norm) return v;
+  }
+  // In 2-scenario curriculum benchmarks, Side A is Italian (IT) in scenario 1 and German (GE) in scenario 2:
+  if (norm === "GE" && (ctrlsMap["IT"] || ctrlsMap["it"])) return ctrlsMap["IT"] || ctrlsMap["it"];
+  if (norm === "IT" && (ctrlsMap["GE"] || ctrlsMap["ge"])) return ctrlsMap["GE"] || ctrlsMap["ge"];
+
+  if (policiesMap) {
+    if (policiesMap[norm]) return policiesMap[norm];
+    if (policiesMap[side]) return policiesMap[side];
+    if (norm === "GE" && (policiesMap["IT"] || policiesMap["it"])) return policiesMap["IT"] || policiesMap["it"];
+    if (norm === "IT" && (policiesMap["GE"] || policiesMap["ge"])) return policiesMap["GE"] || policiesMap["ge"];
+  }
+
+  return defaultFallback;
+}
+
 function getOpponentInfo(side: string, allSides: string[], main: EvalResultRow | null) {
   const normSide = String(side || "").toUpperCase();
   const candidates = allSides.filter((x) => String(x || "").toUpperCase() !== normSide);
@@ -44,8 +70,9 @@ function getOpponentInfo(side: string, allSides: string[], main: EvalResultRow |
   const label = oppNorm === "US" ? "🇺🇸 US" : oppNorm === "IT" ? "🇮🇹 IT" : oppNorm === "GE" ? "🇩🇪 GE" : oppNorm;
   const color = oppNorm === "US" ? "#60a5fa" : oppNorm === "IT" ? "#34d399" : oppNorm === "GE" ? "#f87171" : "#e2e8f0";
 
-  const ctrlMap = (main?.controller_by_side || main?.policy_by_side || {}) as Record<string, string>;
-  const ctrl = ctrlMap[opp] || ctrlMap[oppNorm] || "";
+  const ctrlMap = (main?.controller_by_side || {}) as Record<string, string>;
+  const policyMap = (main?.policy_by_side || {}) as Record<string, string>;
+  const ctrl = resolveController(oppNorm, ctrlMap, policyMap, "");
   return { side: oppNorm, label, color, controller: ctrl };
 }
 
@@ -351,16 +378,44 @@ export function VpSummaryTab({
       const vpGainMap = (r.vp_gained_avg_by_side || {}) as Record<string, number>;
       const vpLostMap = (r.vp_lost_avg_by_side || {}) as Record<string, number>;
 
-      // Determine sides in this specific result
-      const resultSides = Array.from(
+      // Determine the real 2 participating sides in this specific match result
+      let matchSides = Array.from(
         new Set([
           ...Object.keys(rates),
           ...Object.keys(vpNetMap),
           ...Object.keys(bySide),
-          ...Object.keys(ctrls),
         ])
-      ).sort();
-      if (!resultSides.length) resultSides.push("IT", "US");
+      )
+        .map((s) => s.toUpperCase())
+        .filter(Boolean);
+
+      // If missing from rates/vp, check seed_games side_metrics
+      if (!matchSides.length && r.seed_games && Array.isArray(r.seed_games)) {
+        const sgSides = new Set<string>();
+        for (const sg of r.seed_games as Dict[]) {
+          if (sg.side_metrics) {
+            for (const s of Object.keys(sg.side_metrics)) sgSides.add(s.toUpperCase());
+          }
+        }
+        matchSides = Array.from(sgSides);
+      }
+
+      // If still missing, check tracked_side and opponent_side
+      if (!matchSides.length) {
+        if (r.tracked_side) matchSides.push(String(r.tracked_side).toUpperCase());
+        if (r.opponent_side) matchSides.push(String(r.opponent_side).toUpperCase());
+      }
+
+      // Fallback only if completely empty
+      if (!matchSides.length) {
+        matchSides = ["IT", "US"];
+      } else if (matchSides.length === 1) {
+        const s0 = matchSides[0];
+        matchSides.push(s0 === "IT" ? "US" : s0 === "US" ? "IT" : s0 === "GE" ? "US" : "US");
+      }
+
+      // Ensure we only have the distinct participating sides
+      const resultSides = Array.from(new Set(matchSides)).sort();
 
       // Casualties in this specific result
       const seedGames = (r.seed_games || []) as Dict[];
@@ -386,12 +441,25 @@ export function VpSummaryTab({
         const opp = resultSides.find((x) => x.toUpperCase() !== sNorm) || (sNorm === "IT" ? "US" : sNorm === "US" ? "IT" : sNorm === "GE" ? "US" : "-");
         const oppNorm = opp.toUpperCase();
 
-        const ownCtrl = ctrls[s] || ctrls[sNorm] || "";
-        const oppCtrl = ctrls[opp] || ctrls[oppNorm] || "";
+        const policies = (r.policy_by_side || {}) as Record<string, string>;
+        const defaultEng = String(currentEval?.engine || "");
+        const ownCtrl = resolveController(sNorm, ctrls, policies, defaultEng);
+        const oppCtrl = resolveController(oppNorm, ctrls, policies, defaultEng);
 
+        // Filter 1: Engine filter strictly targets the first column (the side being evaluated)
+        if (selectedEngine !== "all") {
+          const selEng = selectedEngine.toLowerCase();
+          const ownMatches = ownCtrl.toLowerCase().includes(selEng);
+          if (!ownMatches) {
+            return;
+          }
+        }
+
+        // Filter 2: Opponent filter strictly targets the second column (the opponent side)
         if (selectedOpponent !== "all") {
           const selOpp = selectedOpponent.toLowerCase();
-          if (!oppCtrl.toLowerCase().includes(selOpp) && !oppNorm.toLowerCase().includes(selOpp)) {
+          const oppMatches = oppCtrl.toLowerCase().includes(selOpp) || oppNorm.toLowerCase().includes(selOpp);
+          if (!oppMatches) {
             return;
           }
         }
@@ -463,7 +531,7 @@ export function VpSummaryTab({
     });
 
     return list;
-  }, [filteredResults, selectedSide, selectedOpponent]);
+  }, [filteredResults, selectedSide, selectedEngine, selectedOpponent, currentEval]);
 
   const hasActiveFilters =
     selectedEngine !== "all" ||
