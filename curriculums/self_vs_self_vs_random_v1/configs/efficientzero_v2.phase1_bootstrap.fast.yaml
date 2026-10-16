@@ -1,0 +1,10 @@
+base_config: curriculums/self_vs_self_vs_random_v1/configs/efficientzero_v2.phase1_bootstrap.yaml
+
+selfplay:
+  mcts_simulations: 96
+
+train:
+  batch_size: 16
+  train_updates_per_iter: 3
+  reanalysis_ratio: 0.05
+  debug_train_batch_progress: true

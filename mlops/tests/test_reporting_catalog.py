@@ -51,11 +51,11 @@ def test_reporting_catalog_groups_train_and_eval(tmp_path: Path) -> None:
     assert model["train_history"][0]["git_commit"] == "deadbeef"
     eval_results = model["eval_history"][0]["results"]
     assert len(eval_results) == 2
-    assert eval_results[0]["controller_by_side"] == {"IT": "Legacy/Unlabeled", "US": "Legacy/Unlabeled"}
-    assert eval_results[0]["controller_legacy_unlabeled_count"] == 2
+    assert eval_results[0]["controller_by_side"] == {"IT": "Unknown", "US": "Unknown"}
+    assert eval_results[0]["controller_unknown_label_count"] == 2
     assert eval_results[1]["policy_by_side"] == {"IT": "mcts", "US": "random"}
     assert eval_results[1]["controller_by_side"] == {"IT": "MuZero", "US": "Random"}
-    assert model["eval_history"][0]["controller_legacy_unlabeled_rows"] == 1
+    assert model["eval_history"][0]["controller_unknown_label_rows"] == 1
     obj_cfg = model["train_history"][0]["objective_reward_config"]
     assert obj_cfg["objective_signal"]["opportunity_near_vp_max_dist"] == 2.0
     assert obj_cfg["objective_head"]["progress_positive_threshold"] == 0.0
@@ -150,3 +150,40 @@ def test_reporting_catalog_preserves_unit_prefilter_fields_in_eval_decision_step
     assert top["unit_prefilter_selected_unit_id"] == "US_3"
     assert top["unit_prefilter_constrained_count"] == 2
     assert top["unit_prefilter_global_count"] == 7
+
+
+def test_reporting_catalog_groups_curriculum_retrains_under_lineage_model(tmp_path: Path) -> None:
+    repo = tmp_path
+    run1 = repo / "runs_curriculum" / "efficientzero_v2_root1111"
+    run2 = repo / "runs_curriculum" / "efficientzero_v2_child2222"
+    (run1 / "checkpoints").mkdir(parents=True, exist_ok=True)
+    (run1 / "metrics").mkdir(parents=True, exist_ok=True)
+    (run1 / "xai").mkdir(parents=True, exist_ok=True)
+    (run2 / "checkpoints").mkdir(parents=True, exist_ok=True)
+    (run2 / "metrics").mkdir(parents=True, exist_ok=True)
+    (run2 / "xai").mkdir(parents=True, exist_ok=True)
+    (run1 / "checkpoints" / "final.pt").write_text("x", encoding="utf-8")
+    (run2 / "checkpoints" / "final.pt").write_text("y", encoding="utf-8")
+
+    (run1 / "run_manifest.json").write_text(
+        '{"scenario_id":"s1","config":{"iterations":2,"matchup_modes":["self_vs_self"]}}',
+        encoding="utf-8",
+    )
+    (run2 / "run_manifest.json").write_text(
+        (
+            '{"scenario_id":"s1","config":{"iterations":2,'
+            '"matchup_modes":["self_vs_self","self_vs_random"],'
+            '"resume_checkpoint":"'
+            + str((run1 / "checkpoints" / "final.pt").as_posix())
+            + '"}}'
+        ),
+        encoding="utf-8",
+    )
+
+    payload = build_reporting_catalog(repo_root=repo, runs_roots_rel=("runs_curriculum",))
+    ez_engine = next(e for e in payload["engines"] if e["engine"] == "efficientzero_v2")
+    assert len(ez_engine["models"]) == 1
+    model = ez_engine["models"][0]
+    assert model["lineage_root_run_id"] == "efficientzero_v2_root1111"
+    run_ids = [str(r.get("run_id", "")) for r in model["train_history"]]
+    assert set(run_ids) == {"efficientzero_v2_root1111", "efficientzero_v2_child2222"}

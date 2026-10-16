@@ -1,0 +1,16 @@
+base_config: agents/efficientzero_v2/configs/efficientzero_v2_config.yaml
+
+paths:
+  run_root: runs_curriculum
+
+selfplay:
+  num_workers: 1
+  matchup_modes: [self_vs_self, self_vs_random]
+  matchup_mode_weights:
+    self_vs_self: 9
+    self_vs_random: 1
+  mcts_simulations: 416
+
+train:
+  iterations: 70
+  episodes_per_iter: 24

@@ -3,6 +3,7 @@ from assault_bench.runner import (
     _build_head_diagnostics_eval,
     _count_immediate_vp_capture_move_options,
     _is_immediate_vp_capture_move_taken,
+    _is_vp_capture_taken_for_metrics,
 )
 
 
@@ -78,6 +79,39 @@ def test_immediate_capture_taken_requires_move_and_owner_conversion():
     assert not_taken_without_conversion is False
 
 
+def test_vp_capture_taken_metrics_prioritize_observed_owner_conversion_signals():
+    assert _is_vp_capture_taken_for_metrics(
+        vp_captures_eval=1,
+        objective_converted=0,
+        immediate_capture_taken=False,
+        capture_like_action_taken=False,
+    )
+    assert _is_vp_capture_taken_for_metrics(
+        vp_captures_eval=0,
+        objective_converted=1,
+        immediate_capture_taken=False,
+        capture_like_action_taken=False,
+    )
+    assert _is_vp_capture_taken_for_metrics(
+        vp_captures_eval=0,
+        objective_converted=0,
+        immediate_capture_taken=True,
+        capture_like_action_taken=False,
+    )
+    assert _is_vp_capture_taken_for_metrics(
+        vp_captures_eval=0,
+        objective_converted=0,
+        immediate_capture_taken=False,
+        capture_like_action_taken=True,
+    )
+    assert not _is_vp_capture_taken_for_metrics(
+        vp_captures_eval=0,
+        objective_converted=0,
+        immediate_capture_taken=False,
+        capture_like_action_taken=False,
+    )
+
+
 def test_decision_diagnostics_kpis_compute_expected_rates_and_spreads():
     trace_rows = [
         {
@@ -120,3 +154,24 @@ def test_decision_diagnostics_kpis_compute_expected_rates_and_spreads():
     assert out["opportunity_conversion_mid_opportunity_steps"] == 1
     assert out["opportunity_conversion_mid_converted_steps"] == 1
     assert out["opportunity_conversion_late_opportunity_steps"] == 0
+
+
+def test_opportunity_conversion_uses_objective_converted_not_only_capture_label() -> None:
+    trace_rows = [
+        {
+            "step": 3,
+            "game_turn": 2,
+            "action_id": "MOVE:US_1:2:2",
+            "legal_capture_options": 1,
+            "capture_like_taken": False,
+            "objective_converted": 1,
+            "mcts_action_candidates": [
+                {"action_id": "MOVE:US_1:2:2", "real_decision_score": 0.4, "mcts_q_value": 0.1, "q_clip_limit": 10.0},
+                {"action_id": "WAIT:US_1", "real_decision_score": 0.3, "mcts_q_value": 0.0, "q_clip_limit": 10.0},
+            ],
+        }
+    ]
+    out = _compute_decision_diagnostics_kpis(trace_rows)
+    assert out["opportunity_conversion_early_opportunity_steps"] == 1
+    assert out["opportunity_conversion_early_converted_steps"] == 1
+    assert out["opportunity_conversion_early_rate"] == 1.0

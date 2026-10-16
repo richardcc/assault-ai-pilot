@@ -1,0 +1,5 @@
+.main { flex: 1; min-height: 0; display: grid; grid-template-columns: 320px minmax(0,1fr); gap: 10px; }
+.kpi-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
+.kpi { background: #1e293b; border: 1px solid #334155; border-radius: 6px; padding: 8px; }
+.kpi .k { color: #94a3b8; font-size: 11px; margin-bottom: 4px; }
+.kpi .v { color: #e2e8f0; font-size: 12px; font-weight: 700; }

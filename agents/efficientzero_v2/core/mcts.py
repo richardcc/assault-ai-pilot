@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from math import sqrt
+from math import copysign, log1p, sqrt, tanh
 import random
 from typing import Dict, List, Optional
 
@@ -93,6 +93,8 @@ def run_mcts_puct(
     success_prob_centered_clip_abs: float = 1.0,
     min_root_visits_per_action: int = 0,
     min_root_visits_top_n: int = 0,
+    value_rescale_mode: str = "tanh",
+    value_rescale_temperature: float = 10.0,
 ) -> MCTSOutput:
     if not legal_actions:
         return MCTSOutput(actions=[], visits=[], probs=[], chosen_action="")
@@ -132,10 +134,26 @@ def run_mcts_puct(
     success_scale = max(1e-6, abs(float(success_prob_scale)))
     success_centered_clip = max(0.0, float(success_prob_centered_clip_abs))
     min_root_k = max(0, int(min_root_visits_per_action))
-    min_root_n = max(0, min(int(min_root_visits_top_n), n))
+    configured_top_n = int(min_root_visits_top_n)
+    # Contract: top_n <= 0 means "apply to all legal root actions".
+    min_root_n = n if configured_top_n <= 0 else max(0, min(configured_top_n, n))
     forced_root_indices: list[int] = []
     if min_root_k > 0 and min_root_n > 0:
         forced_root_indices = sorted(range(n), key=lambda i: float(priors[i]), reverse=True)[:min_root_n]
+
+    def _rescale_value_estimate(value: float) -> float:
+        mode = str(value_rescale_mode or "tanh").strip().lower()
+        if mode in {"", "off", "none"}:
+            return float(value)
+        temp = max(1e-6, float(value_rescale_temperature))
+        if mode == "tanh":
+            return float(tanh(float(value) / temp))
+        if mode in {"signed_log_tanh", "log_tanh"}:
+            v = float(value)
+            signed_log = copysign(log1p(abs(v)), v)
+            return float(tanh(signed_log / temp))
+        # Unknown mode defaults to tanh for safety.
+        return float(tanh(float(value) / temp))
 
     def _success_components(action_id: str) -> tuple[float, float, float]:
         if not success_enabled:
@@ -153,7 +171,9 @@ def run_mcts_puct(
         comp = success_alpha * centered
         return float(raw), float(centered), float(comp)
 
-    for _ in range(max(1, num_simulations)):
+    required_root_visits = int(min_root_k * min_root_n) if (min_root_k > 0 and min_root_n > 0) else 0
+    total_simulations = max(1, int(num_simulations), int(required_root_visits))
+    for _ in range(total_simulations):
         total_visits = sum(visits)
         best_idx = 0
         best_score = float("-inf")
@@ -202,6 +222,7 @@ def run_mcts_puct(
         if value_sign_by_action:
             sign = int(value_sign_by_action.get(legal_actions[best_idx], 1))
             simulated_value *= -1.0 if sign < 0 else 1.0
+        simulated_value = _rescale_value_estimate(simulated_value)
         if chance_enabled:
             sample_sum = 0.0
             for _sample_idx in range(chance_k):

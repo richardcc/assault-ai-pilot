@@ -8,6 +8,7 @@ import torch
 
 from assault_model.actions.status import WaitAction
 from assault_model.map.hex_utils import safe_hex_distance
+from assault_model.core.victory_outcomes import evaluate_scenario_outcome
 
 from assault_sim.rl.state_encoder import encode_state
 from assault_sim.rewards.progressive_reward import ProgressiveReward
@@ -226,26 +227,8 @@ class TrainingEnv:
         return captured
 
     def _objective_outcome_result(self, state):
-        outcomes = getattr(self.sim.scenario, "victory_outcomes", None) or {}
-        metric = str(outcomes.get("metric", "")).strip()
-        timing = str(outcomes.get("timing", "")).strip()
-        tracked_side = str(outcomes.get("tracked_side", "")).strip().upper()
-        table = outcomes.get("table", [])
-        if metric != "objectives_captured" or timing != "end_of_last_turn" or not tracked_side or not table:
-            return None
-        captured = self._objectives_captured_for_side(state, tracked_side)
-        for row in table:
-            if not isinstance(row, dict):
-                continue
-            cap = row.get("captured", {}) or {}
-            try:
-                min_cap = int(cap.get("min", -10**9))
-                max_cap = int(cap.get("max", 10**9))
-            except Exception:
-                continue
-            if min_cap <= captured <= max_cap:
-                return row
-        return None
+        outcome = evaluate_scenario_outcome(state=state, scenario=self.sim.scenario)
+        return outcome.matched_table_row
 
     def _nearest_unsecured_objective_distance(self, state, unit, tracked_side: str):
         if state is None or unit is None or unit.position is None or not tracked_side:
@@ -807,19 +790,9 @@ class TrainingEnv:
                 info["expected_vp_swing_if_advance"] = 0.0
                 info["expected_trade_if_attack"] = 0.0
             if objective_rule_active:
-                row = self._objective_outcome_result(next_state)
-                result_text = str((row or {}).get("result", "")).strip()
-                result_l = result_text.lower()
-                if "vittoria totale" in result_l or result_l == "vittoria":
-                    result_kind = "victory"
-                elif "pareggio" in result_l or "draw" in result_l:
-                    result_kind = "draw"
-                elif "sconfitta" in result_l or "defeat" in result_l or "lose" in result_l:
-                    result_kind = "defeat"
-                else:
-                    result_kind = "unknown"
-                info["objective_result_text"] = result_text
-                info["objective_result_kind"] = result_kind
+                outcome = evaluate_scenario_outcome(state=next_state, scenario=self.sim.scenario)
+                info["objective_result_text"] = outcome.result_text
+                info["objective_result_kind"] = outcome.outcome_class.value
 
         if self.train_lean:
             # Keep only fields required by reward/obs shaping and core training telemetry.

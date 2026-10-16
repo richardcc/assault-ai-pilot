@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import math
+import random
 import re
 import time
 from collections import OrderedDict
@@ -197,6 +198,9 @@ def observation_to_tensor(
     feature_table = dict(unit_features.get("table", {}) or {})
     feature_max = dict(unit_features.get("max", {}) or {})
 
+    ally_alive_coords: list[tuple[int, int]] = []
+    enemy_threat_sources: list[tuple[int, int, float, float]] = []
+
     for unit in obs.units:
         q = unit.get("q")
         r = unit.get("r")
@@ -208,10 +212,12 @@ def observation_to_tensor(
         side = str(unit.get("side", ""))
         unit_key = str(unit.get("unit_key", ""))
         feat = dict(feature_table.get(unit_key, {}) or {})
+        raw_direct_range = float(feat.get("direct_range", 1.0))
+        raw_attack_power = float(feat.get("attack_power", 0.0))
         movement_norm = float(feat.get("movement", 0.0)) / float(max(1e-9, feature_max.get("movement", 1.0)))
-        direct_range_norm = float(feat.get("direct_range", 0.0)) / float(max(1e-9, feature_max.get("direct_range", 1.0)))
+        direct_range_norm = raw_direct_range / float(max(1e-9, feature_max.get("direct_range", 1.0)))
         indirect_range_norm = float(feat.get("indirect_range", 0.0)) / float(max(1e-9, feature_max.get("indirect_range", 1.0)))
-        attack_power_norm = float(feat.get("attack_power", 0.0)) / float(max(1e-9, feature_max.get("attack_power", 1.0)))
+        attack_power_norm = raw_attack_power / float(max(1e-9, feature_max.get("attack_power", 1.0)))
         defense_power_norm = float(feat.get("defense_power", 0.0)) / float(max(1e-9, feature_max.get("defense_power", 1.0)))
         alive = bool(unit.get("alive", True))
         hp = unit.get("hp")
@@ -219,6 +225,8 @@ def observation_to_tensor(
         if isinstance(hp, (int, float)):
             hp_norm = max(0.0, min(1.0, float(hp) / 10.0))
         if side == to_play:
+            if alive:
+                ally_alive_coords.append((int(q), int(r)))
             put(0, y, x, 1.0)  # ally_presence
             put(2, y, x, hp_norm)  # ally_hp_norm
             put(4, y, x, 1.0 if alive else 0.0)  # ally_alive
@@ -232,6 +240,8 @@ def observation_to_tensor(
             put(28, y, x, attack_power_norm)  # ally_attack_power_norm
             put(30, y, x, defense_power_norm)  # ally_defense_power_norm
         else:
+            if alive:
+                enemy_threat_sources.append((int(q), int(r), max(1.0, raw_direct_range), max(0.1, attack_power_norm)))
             put(1, y, x, 1.0)  # enemy_presence
             put(3, y, x, hp_norm)  # enemy_hp_norm
             put(5, y, x, 1.0 if alive else 0.0)  # enemy_alive
@@ -246,8 +256,6 @@ def observation_to_tensor(
             put(31, y, x, defense_power_norm)  # enemy_defense_power_norm
     if channels > 6:
         grid[6, :, :] = float(obs.turn) / 50.0  # turn_norm
-    if channels > 7:
-        grid[7, :, :] = 1.0 if bool(obs.done) else 0.0  # done_flag
     vp_owner_by_hex = dict(getattr(obs, "vp_owner_by_hex", {}) or {})
     vp_list = list(getattr(obs, "vp_hexes", []) or [])
     for hx in getattr(obs, "playable_hexes", []) or []:
@@ -293,7 +301,34 @@ def observation_to_tensor(
                 put(18, y, x, 1.0 / float(1 + max(0.0, float(dmin))))  # vp_distance_inv
         put(19, y, x, float(q) / max_q_norm)  # q_coord_norm
         put(20, y, x, float(r) / max_r_norm)  # r_coord_norm
-        put(21, y, x, 1.0 if (getattr(obs, "vp_owner_by_hex", {}) or {}).get(key, "") else 0.0)  # has_vp_owner
+
+        # Channel 7: reaction_fire_threat (Overwatch threat heatmap from alive enemies)
+        if channels > 7 and enemy_threat_sources:
+            cov = float((getattr(obs, "terrain_cover_by_hex", {}) or {}).get(key, 0.0))
+            los_blk = float((getattr(obs, "terrain_los_block_by_hex", {}) or {}).get(key, 0.0))
+            if los_blk < 1.0:
+                max_threat = 0.0
+                for eq, er, edrange, eatk in enemy_threat_sources:
+                    dist = _hex_distance(int(q), int(r), eq, er)
+                    if 1 <= dist <= edrange:
+                        t_val = eatk * (1.0 - 0.4 * cov) * (1.0 - float(dist - 1) / max(1.0, float(edrange)))
+                        if t_val > max_threat:
+                            max_threat = t_val
+                put(7, y, x, min(1.0, max(0.0, max_threat)))
+
+        # Channel 21: frontline_control (Territorial control field: +1 ally rear, 0 contested frontline, -1 enemy rear)
+        if channels > 21:
+            d_ally = min((_hex_distance(int(q), int(r), aq, ar) for aq, ar in ally_alive_coords), default=99)
+            d_enemy = min((_hex_distance(int(q), int(r), eq, er) for eq, er, _, _ in enemy_threat_sources), default=99)
+            if d_ally < 99 and d_enemy < 99:
+                ctrl = float(d_enemy - d_ally) / float(max(1, d_enemy + d_ally))
+            elif d_ally < 99:
+                ctrl = 1.0
+            elif d_enemy < 99:
+                ctrl = -1.0
+            else:
+                ctrl = 0.0
+            put(21, y, x, max(-1.0, min(1.0, ctrl)))
     return grid
 
 
@@ -500,6 +535,9 @@ def _victory_outcomes_from_scenario_file(scenario_path_str: str) -> dict:
                 "captured_max": int(captured.get("max", 10**9)),
                 "result": str(rr.get("result", "")).strip(),
                 "outcome_class": str(rr.get("outcome_class", "")).strip().lower(),
+                "outcome_score": _normalize_outcome_score(
+                    rr.get("outcome_score", rr.get("result_score", rr.get("score", None)))
+                ),
             }
         )
     return {
@@ -553,6 +591,28 @@ def _outcome_bucket_from_class(outcome_class: str) -> str:
     return "unknown"
 
 
+def _normalize_outcome_score(raw: object) -> int | None:
+    try:
+        score = int(raw)
+    except Exception:
+        return None
+    if score > 0:
+        return 1
+    if score < 0:
+        return -1
+    return 0
+
+
+def _outcome_bucket_from_score(score: int | None) -> str:
+    if score is None:
+        return "unknown"
+    if int(score) > 0:
+        return "win"
+    if int(score) < 0:
+        return "loss"
+    return "draw"
+
+
 def _tracked_outcome_class_from_vp_counts(victory_outcomes: dict, vp_counts: dict[str, int]) -> str:
     tracked_side = _normalize_side_label(str((victory_outcomes or {}).get("tracked_side", "")).strip())
     if not tracked_side:
@@ -565,6 +625,22 @@ def _tracked_outcome_class_from_vp_counts(victory_outcomes: dict, vp_counts: dic
         if lo <= captured <= hi:
             return str(rr.get("outcome_class", "")).strip().lower()
     return ""
+
+
+def _tracked_outcome_score_from_vp_counts(victory_outcomes: dict, vp_counts: dict[str, int]) -> int | None:
+    tracked_side = _normalize_side_label(str((victory_outcomes or {}).get("tracked_side", "")).strip())
+    if not tracked_side:
+        return None
+    captured = int((dict(vp_counts or {})).get(tracked_side, 0) or 0)
+    for row in list((victory_outcomes or {}).get("table", []) or []):
+        rr = dict(row or {})
+        lo = int(rr.get("captured_min", -10**9))
+        hi = int(rr.get("captured_max", 10**9))
+        if lo <= captured <= hi:
+            return _normalize_outcome_score(
+                rr.get("outcome_score", rr.get("result_score", rr.get("score", None)))
+            )
+    return None
 
 
 def _count_vp_capture_options(
@@ -751,6 +827,7 @@ def shaped_training_reward(
     vp_captures: int = 0,
     vp_net_delta: int = 0,
     objective_had_opportunity: bool = False,
+    objective_converted: bool = False,
     objective_progress_delta: float = 0.0,
     objective_distance_before: float = -1.0,
     legal_capture_options: int = 0,
@@ -841,15 +918,20 @@ def shaped_training_reward(
     objective_no_progress_component = 0.0
     objective_no_progress_attack_component = 0.0
     if bool(objective_had_opportunity):
-        prog_delta = float(max(0.0, float(objective_progress_delta)))
-        objective_progress_component = prog_delta * float(objective_progress_bonus_per_hex) * float(obj_progress_scale)
-        if prog_delta <= 0.0:
-            objective_no_progress_component = -float(max(0.0, objective_no_progress_penalty)) * float(obj_no_progress_scale)
-            if kind_upper not in {"", "MOVE", "WAIT", "TIMEOUT", "OPPORTUNITY_SKIP"}:
-                objective_no_progress_attack_component = (
-                    -float(max(0.0, objective_no_progress_attack_penalty))
-                    * float(obj_no_progress_attack_scale)
-                )
+        if bool(objective_converted):
+            objective_progress_component = 0.0
+            objective_no_progress_component = 0.0
+            objective_no_progress_attack_component = 0.0
+        else:
+            prog_delta = float(max(0.0, float(objective_progress_delta)))
+            objective_progress_component = prog_delta * float(objective_progress_bonus_per_hex) * float(obj_progress_scale)
+            if prog_delta <= 0.0:
+                objective_no_progress_component = -float(max(0.0, objective_no_progress_penalty)) * float(obj_no_progress_scale)
+                if kind_upper not in {"", "MOVE", "WAIT", "TIMEOUT", "OPPORTUNITY_SKIP"}:
+                    objective_no_progress_attack_component = (
+                        -float(max(0.0, objective_no_progress_attack_penalty))
+                        * float(obj_no_progress_attack_scale)
+                    )
     reaction_fire_miss_component = 0.0
     if (
         kind_upper == "OPPORTUNITY_FIRE"
@@ -941,6 +1023,7 @@ def priors_and_values_from_model(
     unroll_steps: int = 1,
     discount: float = 0.997,
     index_cache: dict[str, int] | None = None,
+    return_root_cache: bool = False,
 ):
     model_device = next(model.parameters()).device
 
@@ -949,7 +1032,7 @@ def priors_and_values_from_model(
             obs_tensor = observation.unsqueeze(0).to(model_device)
         else:
             obs_tensor = torch.tensor([observation], dtype=torch.float32, device=model_device)
-        hidden, policy_logits, _, _ = model.initial_inference(obs_tensor)
+        hidden, policy_logits, value_root, _ = model.initial_inference(obs_tensor)
         logits = policy_logits[0]
 
         legal_indices = [
@@ -999,7 +1082,71 @@ def priors_and_values_from_model(
                     rem -= 1
             for bi, action_id in enumerate(legal_actions):
                 values[action_id] = float(acc[bi].item())
-    return priors, values
+    if not bool(return_root_cache):
+        return priors, values
+    root_cache = {
+        "hidden": hidden.detach(),
+        "policy_logits": logits.detach(),
+        "value_root": value_root.detach(),
+    }
+    return priors, values, root_cache
+
+
+def xai_root_signals_from_root_cache(
+    *,
+    root_cache: dict,
+    legal_actions: List[str],
+    action_dim: int,
+    topk: int = 5,
+    index_cache: dict[str, int] | None = None,
+):
+    hidden = (dict(root_cache or {})).get("hidden", None)
+    logits = (dict(root_cache or {})).get("policy_logits", None)
+    value_root = (dict(root_cache or {})).get("value_root", None)
+    if hidden is None or logits is None or value_root is None:
+        return {
+            "policy_top_actions": [],
+            "policy_top_probs": [],
+            "latent_top_indices": [],
+            "latent_top_values": [],
+            "latent_l2_norm": None,
+            "predicted_value_root": None,
+        }
+    hidden_vec = hidden[0].detach()
+    hidden_flat = torch.flatten(hidden_vec)
+    legal_indices = [
+        _action_id_to_index_cached(a, action_dim, index_cache=index_cache)
+        for a in legal_actions
+    ]
+    if legal_indices:
+        legal_idx_t = torch.tensor(legal_indices, dtype=torch.long, device=logits.device)
+        legal_logits = torch.index_select(logits, dim=0, index=legal_idx_t).to(torch.float32)
+        legal_probs_t = torch.softmax(legal_logits, dim=0)
+        kk = min(max(1, int(topk)), int(legal_probs_t.numel()))
+        top_p, top_i = torch.topk(legal_probs_t, k=kk)
+        ranked = [
+            (str(legal_actions[int(i)]), float(p))
+            for i, p in zip(top_i.detach().cpu().tolist(), top_p.detach().cpu().tolist())
+        ]
+        policy_top_actions = [str(a) for a, _ in ranked]
+        policy_top_probs = [float(p) for _, p in ranked]
+    else:
+        policy_top_actions = []
+        policy_top_probs = []
+    k = min(max(1, int(topk)), int(hidden_flat.numel()))
+    top_vals, top_idx = torch.topk(hidden_flat.abs(), k=k)
+    latent_top_indices = [int(i) for i in top_idx.detach().cpu().tolist()]
+    latent_top_values = [float(v) for v in top_vals.detach().cpu().tolist()]
+    latent_l2_norm = float(torch.linalg.vector_norm(hidden_flat, ord=2).item())
+    predicted_value_root = float(value_root[0, 0].item())
+    return {
+        "policy_top_actions": policy_top_actions,
+        "policy_top_probs": policy_top_probs,
+        "latent_top_indices": latent_top_indices,
+        "latent_top_values": latent_top_values,
+        "latent_l2_norm": latent_l2_norm,
+        "predicted_value_root": predicted_value_root,
+    }
 
 
 def xai_root_signals_from_model(
@@ -1017,43 +1164,54 @@ def xai_root_signals_from_model(
         else:
             obs_tensor = torch.tensor([observation], dtype=torch.float32, device=model_device)
         hidden, policy_logits, value_root, _ = model.initial_inference(obs_tensor)
-        hidden_vec = hidden[0].detach()
-        hidden_flat = torch.flatten(hidden_vec)
-        logits = policy_logits[0].detach()
+        cache = {
+            "hidden": hidden.detach(),
+            "policy_logits": policy_logits[0].detach(),
+            "value_root": value_root.detach(),
+        }
+    return xai_root_signals_from_root_cache(
+        root_cache=cache,
+        legal_actions=legal_actions,
+        action_dim=action_dim,
+        topk=topk,
+        index_cache=index_cache,
+    )
 
-        legal_indices = [
-            _action_id_to_index_cached(a, action_dim, index_cache=index_cache)
-            for a in legal_actions
-        ]
-        if legal_indices:
-            legal_idx_t = torch.tensor(legal_indices, dtype=torch.long, device=model_device)
-            legal_logits = torch.index_select(logits, dim=0, index=legal_idx_t).to(torch.float32)
-            legal_probs_t = torch.softmax(legal_logits, dim=0)
-            kk = min(max(1, int(topk)), int(legal_probs_t.numel()))
-            top_p, top_i = torch.topk(legal_probs_t, k=kk)
-            ranked = [
-                (str(legal_actions[int(i)]), float(p))
-                for i, p in zip(top_i.detach().cpu().tolist(), top_p.detach().cpu().tolist())
-            ]
-            policy_top_actions = [str(a) for a, _ in ranked]
-            policy_top_probs = [float(p) for _, p in ranked]
-        else:
-            policy_top_actions = []
-            policy_top_probs = []
 
-        k = min(max(1, int(topk)), int(hidden_flat.numel()))
-        top_vals, top_idx = torch.topk(hidden_flat.abs(), k=k)
-        latent_top_indices = [int(i) for i in top_idx.detach().cpu().tolist()]
-        latent_top_values = [float(v) for v in top_vals.detach().cpu().tolist()]
-        latent_l2_norm = float(torch.linalg.vector_norm(hidden_flat, ord=2).item())
-        predicted_value_root = float(value_root[0, 0].item())
+def xai_dynamics_signals_for_action_from_hidden(
+    *,
+    model,
+    hidden,
+    chosen_action_id: str,
+    action_dim: int,
+    index_cache: dict[str, int] | None = None,
+):
+    model_device = next(model.parameters()).device
+    if hidden is None:
+        return {
+            "dynamics_pred_reward": None,
+            "dynamics_next_latent_l2": None,
+            "dynamics_delta_l2": None,
+        }
+    with torch.inference_mode():
+        hidden_t = hidden.to(model_device)
+        hidden_vec = hidden_t[0].detach()
+        action_idx = int(
+            _action_id_to_index_cached(chosen_action_id, action_dim, index_cache=index_cache)
+        )
+        action_onehot = F.one_hot(
+            torch.tensor([action_idx], dtype=torch.long, device=model_device),
+            num_classes=int(action_dim),
+        ).to(torch.float32)
+        next_hidden, _, _, pred_reward = model.recurrent_inference(hidden_t, action_onehot)
+        next_hidden_vec = next_hidden[0].detach()
+        dynamics_pred_reward = float(pred_reward[0, 0].item())
+        dynamics_next_latent_l2 = float(torch.linalg.vector_norm(next_hidden_vec, ord=2).item())
+        dynamics_delta_l2 = float(torch.linalg.vector_norm(next_hidden_vec - hidden_vec, ord=2).item())
     return {
-        "policy_top_actions": policy_top_actions,
-        "policy_top_probs": policy_top_probs,
-        "latent_top_indices": latent_top_indices,
-        "latent_top_values": latent_top_values,
-        "latent_l2_norm": latent_l2_norm,
-        "predicted_value_root": predicted_value_root,
+        "dynamics_pred_reward": dynamics_pred_reward,
+        "dynamics_next_latent_l2": dynamics_next_latent_l2,
+        "dynamics_delta_l2": dynamics_delta_l2,
     }
 
 
@@ -1071,24 +1229,13 @@ def xai_dynamics_signals_for_action(
         else:
             obs_tensor = torch.tensor([observation], dtype=torch.float32, device=model_device)
         hidden, _, _, _ = model.initial_inference(obs_tensor)
-        hidden_vec = hidden[0].detach()
-        action_idx = int(
-            _action_id_to_index_cached(chosen_action_id, action_dim, index_cache=index_cache)
-        )
-        action_onehot = F.one_hot(
-            torch.tensor([action_idx], dtype=torch.long, device=model_device),
-            num_classes=int(action_dim),
-        ).to(torch.float32)
-        next_hidden, _, _, pred_reward = model.recurrent_inference(hidden, action_onehot)
-        next_hidden_vec = next_hidden[0].detach()
-        dynamics_pred_reward = float(pred_reward[0, 0].item())
-        dynamics_next_latent_l2 = float(torch.linalg.vector_norm(next_hidden_vec, ord=2).item())
-        dynamics_delta_l2 = float(torch.linalg.vector_norm(next_hidden_vec - hidden_vec, ord=2).item())
-    return {
-        "dynamics_pred_reward": dynamics_pred_reward,
-        "dynamics_next_latent_l2": dynamics_next_latent_l2,
-        "dynamics_delta_l2": dynamics_delta_l2,
-    }
+    return xai_dynamics_signals_for_action_from_hidden(
+        model=model,
+        hidden=hidden,
+        chosen_action_id=chosen_action_id,
+        action_dim=action_dim,
+        index_cache=index_cache,
+    )
 
 
 def play_episode(
@@ -1119,7 +1266,45 @@ def play_episode(
     objective_opportunity_near_vp_max_dist: float = 2.0,
     log_units_snapshot: bool = False,
     collect_xai: bool = True,
+    matchup_modes: list[str] | None = None,
+    matchup_mode_weights: dict | None = None,
 ) -> List[ReplaySample]:
+    def _normalize_mode(raw: object) -> str:
+        m = str(raw or "").strip().lower()
+        if m in {"self_vs_self", "self_self", "self"}:
+            return "self_vs_self"
+        if m in {"self_vs_random", "self_random", "random"}:
+            return "self_vs_random"
+        return "self_vs_self"
+
+    def _resolve_episode_mode(seed_val: int) -> str:
+        modes_raw = list(matchup_modes or []) or ["self_vs_self"]
+        weights_raw = dict(matchup_mode_weights or {})
+        expanded: list[str] = []
+        for mode_raw in modes_raw:
+            mode = _normalize_mode(mode_raw)
+            w = int(weights_raw.get(mode_raw, weights_raw.get(mode, 1)) or 1)
+            for _ in range(max(1, w)):
+                expanded.append(mode)
+        if not expanded:
+            expanded = ["self_vs_self"]
+        return str(expanded[int(abs(int(seed_val))) % int(len(expanded))])
+
+    def _resolve_policy_by_side(obs_obj, seed_val: int) -> tuple[str, dict[str, str]]:
+        mode = _resolve_episode_mode(seed_val)
+        sides = sorted(
+            {
+                str((u or {}).get("side", "")).strip()
+                for u in list(getattr(obs_obj, "units", []) or [])
+                if str((u or {}).get("side", "")).strip()
+            }
+        )
+        policy_map: dict[str, str] = {str(s): "mcts" for s in sides}
+        if mode == "self_vs_random" and sides:
+            random_side = str(sides[int(abs(int(seed_val))) % int(len(sides))])
+            policy_map[random_side] = "random"
+        return mode, policy_map
+
     def _vp_control_counts(observation) -> dict[str, int]:
         sides = sorted(
             {
@@ -1141,6 +1326,7 @@ def play_episode(
 
     samples: List[ReplaySample] = []
     obs = adapter.initial_state(scenario_id=scenario_id, seed=seed)
+    episode_matchup_mode, episode_policy_by_side = _resolve_policy_by_side(obs, seed)
     sim = getattr(adapter, "sim", None)
     tracked_side = _resolve_tracked_side(sim, scenario_id=scenario_id) if sim is not None else ""
     victory_outcomes = _resolve_victory_outcomes(sim, scenario_id=scenario_id) if sim is not None else {}
@@ -1304,12 +1490,17 @@ def play_episode(
             chance_samples_per_expansion=int(mcts_chance_samples_per_expansion),
             chance_value_noise_std=float(mcts_chance_value_noise_std),
         )
+        step_side = str(getattr(obs, "to_play", "") or "")
+        step_policy = str(episode_policy_by_side.get(step_side, "mcts") or "mcts").strip().lower()
+        chosen_action = str(mcts.chosen_action or "")
+        if step_policy == "random":
+            chosen_action = str(random.choice(list(legal or [])))
         mcts_total_visits = int(sum(mcts.visits or []))
         mcts_active_actions = int(sum(1 for v in (mcts.visits or []) if int(v) > 0))
         chosen_prob = 0.0
         if mcts.actions and mcts.probs:
             for a, p in zip(mcts.actions, mcts.probs):
-                if a == mcts.chosen_action:
+                if str(a) == str(chosen_action):
                     chosen_prob = float(p)
                     break
         probs_sorted = sorted([float(p) for p in (mcts.probs or [])], reverse=True)
@@ -1322,27 +1513,27 @@ def play_episode(
             mcts_entropy += -pp * math.log(pp)
         predicted_value = 0.0
         if values is not None:
-            predicted_value = float(values.get(mcts.chosen_action, 0.0))
+            predicted_value = float(values.get(chosen_action, 0.0))
         policy_top_actions_raw = list(xai_signals.get("policy_top_actions", []) or [])
         policy_top_action = str(policy_top_actions_raw[0]) if policy_top_actions_raw else ""
         policy_overridden_by_mcts = (
-            int(policy_top_action != str(mcts.chosen_action))
+            int(policy_top_action != str(chosen_action))
             if policy_top_action
             else None
         )
-        transition = adapter.apply(mcts.chosen_action)
+        transition = adapter.apply(chosen_action)
         transition_info = dict(getattr(transition, "info", {}) or {})
         runtime_events = list(transition_info.get("runtime_events", []) or [])
         if model is not None and bool(collect_xai):
             xai_dyn = xai_dynamics_signals_for_action(
                 model=model,
                 observation=obs_encoded,
-                chosen_action_id=mcts.chosen_action,
+                chosen_action_id=chosen_action,
                 action_dim=action_dim,
                 index_cache=action_index_cache,
             )
             xai_signals.update(xai_dyn)
-        action_kind, acting_unit_id = parse_action_id(mcts.chosen_action)
+        action_kind, acting_unit_id = parse_action_id(chosen_action)
         acting_unit = next((u for u in obs.units if str(u.get("unit_id")) == acting_unit_id), None)
         acting_q = int(acting_unit.get("q")) if isinstance(acting_unit, dict) and isinstance(acting_unit.get("q"), int) else 0
         acting_r = int(acting_unit.get("r")) if isinstance(acting_unit, dict) and isinstance(acting_unit.get("r"), int) else 0
@@ -1350,7 +1541,7 @@ def play_episode(
             str(obs.to_play) if obs.to_play is not None else ""
         )
         before_by_unit = {str(u.get("unit_id")): u for u in obs.units if u.get("unit_id")}
-        action_parts = str(mcts.chosen_action).split(":")
+        action_parts = str(chosen_action).split(":")
         attack_target_unit_id = ""
         for token in reversed(action_parts):
             tok = str(token).strip()
@@ -1364,7 +1555,7 @@ def play_episode(
                 break
         if not attack_target_unit_id:
             attack_target_unit_id = _infer_indirect_target_unit_id(
-                action_id=mcts.chosen_action,
+                action_id=chosen_action,
                 before_by_unit=before_by_unit,
                 acting_side=acting_side,
             )
@@ -1469,10 +1660,19 @@ def play_episode(
             if bool(getattr(transition, "done", False))
             else ""
         )
+        tracked_terminal_outcome_score = (
+            _tracked_outcome_score_from_vp_counts(victory_outcomes, after_vp_counts)
+            if bool(getattr(transition, "done", False))
+            else None
+        )
         tracked_terminal_outcome_bucket = (
-            _outcome_bucket_from_class(tracked_terminal_outcome_class)
-            if tracked_terminal_outcome_class
-            else ""
+            _outcome_bucket_from_score(tracked_terminal_outcome_score)
+            if tracked_terminal_outcome_score is not None
+            else (
+                _outcome_bucket_from_class(tracked_terminal_outcome_class)
+                if tracked_terminal_outcome_class
+                else ""
+            )
         )
         actor_terminal_outcome_bucket = ""
         if tracked_terminal_outcome_bucket:
@@ -1492,6 +1692,7 @@ def play_episode(
             vp_net_delta=int(vp_gain_by_side.get(str(acting_side), 0))
             - int(vp_loss_by_side.get(str(acting_side), 0)),
             objective_had_opportunity=(int(objective_had_opportunity) > 0),
+            objective_converted=(int(objective_converted) > 0),
             objective_progress_delta=float(objective_progress_delta),
             objective_distance_before=float(obj_dist_before),
             legal_capture_options=int(legal_capture_options),
@@ -1501,7 +1702,7 @@ def play_episode(
             reward_shaping=reward_shaping,
         )
         action_idx = _action_id_to_index_cached(
-            mcts.chosen_action,
+            chosen_action,
             action_dim,
             index_cache=action_index_cache,
         )
@@ -1558,7 +1759,7 @@ def play_episode(
                 info={
                     "step": step_idx,
                     "game_turn": int(getattr(obs, "turn", 0)),
-                    "action_id": mcts.chosen_action,
+                    "action_id": chosen_action,
                     "action_kind": str(action_kind),
                     "unit_id": str(acting_unit_id),
                     "unit_side": str(acting_side),
@@ -1595,6 +1796,11 @@ def play_episode(
                     "objective_side_norm": str(_normalize_side_label(acting_side)),
                     "objective_tracked_side": str(_normalize_side_label(tracked_side)),
                     "objective_outcome_class_tracked": str(tracked_terminal_outcome_class),
+                    "objective_outcome_score_tracked": (
+                        int(tracked_terminal_outcome_score)
+                        if tracked_terminal_outcome_score is not None
+                        else None
+                    ),
                     "objective_outcome_bucket_tracked": str(tracked_terminal_outcome_bucket),
                     "objective_outcome_bucket_actor": str(actor_terminal_outcome_bucket),
                     "units_snapshot": (
@@ -1621,6 +1827,9 @@ def play_episode(
                         getattr(mcts, "chance_samples_per_expansion", 1)
                     ),
                     "mcts_chance_value_noise_std": float(mcts_chance_value_noise_std),
+                    "episode_matchup_mode": str(episode_matchup_mode),
+                    "step_policy_mode": str(step_policy),
+                    "step_policy_random": bool(step_policy == "random"),
                     "attack_target_unit_id": str(attack_target_unit_id),
                     "attack_target_class_attempt": str(attack_target_class_attempt),
                     "attack_target_class_damage": dict(attack_target_class_damage),
@@ -1634,14 +1843,14 @@ def play_episode(
                         float(v) for v in (xai_signals.get("policy_top_probs", []) or [])
                     ],
                     "policy_top_action": str(policy_top_action),
-                    "mcts_chosen_action": str(mcts.chosen_action),
+                    "mcts_chosen_action": str(chosen_action),
                     "policy_overridden_by_mcts": policy_overridden_by_mcts,
                     "override_sanity_consistent": (
                         None
                         if policy_overridden_by_mcts is None
                         else int(
                             int(policy_overridden_by_mcts)
-                            == int(str(policy_top_action) != str(mcts.chosen_action))
+                            == int(str(policy_top_action) != str(chosen_action))
                         )
                     ),
                     "latent_top_indices": [

@@ -1,0 +1,11 @@
+# ASSAULT PROJECT RULES & INVARIANTS
+
+## ZERO HALLUCINATION / DATOS 100% REALES EN REPORTING Y DASHBOARDS
+- El Dashboard, visores de replay, métricas de catálogo, gráficos y tablas NUNCA deben inventar, interpolar ni falsear datos.
+- Todo dato mostrado en la UI debe provenir estrictamente de la ejecución real del backend (DuckDB, JSON replays, logs de entrenamiento y bench).
+- Si un campo no está disponible, se muestra explícitamente como no disponible o vacío. Jamás inventar placeholders sintéticos.
+
+## MCTS CALIBRATION & SIMULATION INTEGRITY
+- NO reducir el número de simulaciones MCTS a ciegas.
+- Las simulaciones se incrementaron porque muchas ramas tácticas quedaban sin explorar (0 visitas).
+- Antes de cualquier ajuste en simulaciones de entrenamiento o evaluación, es OBLIGATORIO inspeccionar la telemetría real del árbol MCTS en los replays (visitas por acción, ramas legales vs exploradas, distribución de visitas en raíz).

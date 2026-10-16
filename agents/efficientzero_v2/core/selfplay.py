@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import random
 from functools import lru_cache
 from pathlib import Path
 from typing import Any, Protocol
@@ -8,6 +9,9 @@ from typing import Any, Protocol
 import torch
 
 from agents.efficientzero_v2.core.mcts import run_mcts_puct
+from agents.muzero.core.selfplay import (
+    observation_to_tensor as _muzero_observation_to_tensor,
+)
 from agents.efficientzero_v2.core.objective_signals import (
     hex_distance_axial,
     objective_min_distance_snapshot,
@@ -156,47 +160,14 @@ def _observation_to_vector(obs) -> list[float]:
 
 
 def _observation_to_tensor(obs, channels: int = DEFAULT_OBS_CHANNELS, height: int = DEFAULT_OBS_HEIGHT, width: int = DEFAULT_OBS_WIDTH):
-    out = torch.zeros(int(channels), int(height), int(width), dtype=torch.float32)
-    units = list(getattr(obs, "units", []) or [])
-    cover_map = dict(getattr(obs, "terrain_cover_by_hex", {}) or {})
-    los_map = dict(getattr(obs, "terrain_los_block_by_hex", {}) or {})
-    for unit in list(getattr(obs, "units", []) or []):
-        q = unit.get("q")
-        r = unit.get("r")
-        if not isinstance(q, int) or not isinstance(r, int):
-            continue
-        x = int(q) % max(1, int(width))
-        y = int(r) % max(1, int(height))
-        ally = str(unit.get("side", "")) == str(getattr(obs, "to_play", ""))
-        hp = float(unit.get("hp", 0.0) or 0.0) / 10.0
-        out[0 if ally else 1, y, x] = 1.0
-        out[2 if ally else 3, y, x] = max(0.0, min(1.0, hp))
-        if int(channels) > 4:
-            best_ev = 0.0
-            uq = int(unit.get("q")) if isinstance(unit.get("q"), int) else None
-            ur = int(unit.get("r")) if isinstance(unit.get("r"), int) else None
-            if uq is not None and ur is not None:
-                for other in units:
-                    if str(other.get("side", "")) == str(unit.get("side", "")):
-                        continue
-                    oq = other.get("q")
-                    or_ = other.get("r")
-                    if not isinstance(oq, int) or not isinstance(or_, int):
-                        continue
-                    dist = float(max(abs(int(uq) - int(oq)), abs(int(ur) - int(or_))))
-                    target_key = f"{int(oq)},{int(or_)}"
-                    best_ev = max(
-                        best_ev,
-                        _expected_damage_proxy(
-                            attacker_key=str(unit.get("unit_key", "") or ""),
-                            defender_key=str(other.get("unit_key", "") or ""),
-                            distance=dist,
-                            cover=float(cover_map.get(target_key, 0.0) or 0.0),
-                            los_block=float(los_map.get(target_key, 0.0) or 0.0),
-                        ),
-                    )
-            out[4 if ally else 5, y, x] = float(best_ev)
-    return out
+    # Keep EfficientZeroV2 channel contract aligned with MuZero: when
+    # observation_channels=32, all declared planes are populated producer-side.
+    return _muzero_observation_to_tensor(
+        obs,
+        channels=int(channels),
+        height=int(height),
+        width=int(width),
+    )
 
 
 def _action_id_to_index(action_id: str, action_dim: int) -> int:
@@ -337,10 +308,22 @@ def _action_target_qr(action_id: str) -> tuple[int | None, int | None]:
     parts = str(action_id).split(":")
     if len(parts) < 2:
         return None, None
+    # Canonical format is "...:<q>:<r>", but some producers emit compact
+    # forms such as "...:<q>,<r>" or "...:(q,r)".
     try:
         return int(parts[-2]), int(parts[-1])
     except Exception:
-        return None, None
+        pass
+    tail = str(parts[-1] if parts else "")
+    q1, r1 = parse_hex_key_to_qr(tail)
+    if isinstance(q1, int) and isinstance(r1, int):
+        return int(q1), int(r1)
+    if len(parts) >= 2:
+        combined = f"{parts[-2]},{parts[-1]}"
+        q2, r2 = parse_hex_key_to_qr(combined)
+        if isinstance(q2, int) and isinstance(r2, int):
+            return int(q2), int(r2)
+    return None, None
 
 
 def _count_capture_options(legal_actions: list[str], vp_owner_by_hex: dict[str, str], to_play: str) -> int:
@@ -399,6 +382,7 @@ def _unit_prefilter_ranking(
         return "", [], []
 
     units_by_id = {str(u.get("unit_id", "")): dict(u or {}) for u in list(units or []) if isinstance(u, dict)}
+    units_idx_by_id, units_idx_by_pos = _build_unit_indexes(list(units or []))
     side_norm = _normalize_side(to_play)
     best_vp_q, best_vp_r = _best_enemy_vp_qr_for_side(
         side=str(side_norm),
@@ -440,6 +424,8 @@ def _unit_prefilter_ranking(
                             units=list(units or []),
                             terrain_cover_by_hex=dict(terrain_cover_by_hex or {}),
                             terrain_los_block_by_hex=dict(terrain_los_block_by_hex or {}),
+                            units_by_id=dict(units_idx_by_id),
+                            units_by_pos=dict(units_idx_by_pos),
                         )
                     ),
                 )
@@ -586,36 +572,101 @@ def _candidate_vp_progress_delta(
     return 0.0, "unknown"
 
 
+def _candidate_vp_target_after(
+    *,
+    action_id: str,
+    side: str,
+    vp_hexes: list[dict],
+    vp_owner_by_hex: dict[str, str],
+    acting_q: int | None = None,
+    acting_r: int | None = None,
+) -> tuple[str, float | None, str]:
+    tq, tr = _action_target_qr(action_id)
+    source = "target_hex_parse"
+    if not isinstance(tq, int) or not isinstance(tr, int):
+        # Position-based fallback for non-targeted actions (WAIT/ATTACK/etc):
+        # use actor current hex as terminal proxy so VP target/distance remain
+        # deterministic and producer-side.
+        if isinstance(acting_q, int) and isinstance(acting_r, int):
+            tq, tr = int(acting_q), int(acting_r)
+            source = "actor_position_fallback"
+        else:
+            return "", None, "unavailable_no_target_hex"
+    side_norm = str(side or "").strip().upper()
+    owners_by_qr: dict[tuple[int, int], str] = {}
+    for raw_key, owner_raw in dict(vp_owner_by_hex or {}).items():
+        qk, rk = parse_hex_key_to_qr(str(raw_key))
+        if qk is None or rk is None:
+            continue
+        owners_by_qr[(int(qk), int(rk))] = str(owner_raw or "").strip().upper()
+    best_vp_id = ""
+    best_distance: float | None = None
+    for idx, vp in enumerate(list(vp_hexes or [])):
+        if not isinstance(vp, dict):
+            continue
+        vq, vr = None, None
+        if isinstance(vp.get("q"), int) and isinstance(vp.get("r"), int):
+            vq, vr = int(vp.get("q")), int(vp.get("r"))
+        else:
+            vq, vr = parse_hex_key_to_qr(vp.get("hex_key", ""))
+        if vq is None or vr is None:
+            continue
+        owner = owners_by_qr.get((int(vq), int(vr)), "")
+        if owner == side_norm:
+            continue
+        vid = str(vp.get("vp_id", "")).strip() or f"VP_{idx}_{int(vq)},{int(vr)}"
+        d = float(hex_distance_axial(int(tq), int(tr), int(vq), int(vr)))
+        if best_distance is None or d < best_distance:
+            best_distance = d
+            best_vp_id = vid
+    if best_distance is None:
+        return "", None, "unavailable_no_enemy_vp"
+    return str(best_vp_id), float(best_distance), str(source)
+
+
 def _candidate_expected_damage(
     *,
     action_id: str,
     units: list[dict],
     terrain_cover_by_hex: dict[str, float],
     terrain_los_block_by_hex: dict[str, float],
+    units_by_id: dict[str, dict] | None = None,
+    units_by_pos: dict[tuple[int, int], list[dict]] | None = None,
 ) -> float:
     parts = str(action_id or "").split(":")
     if len(parts) < 2:
         return 0.0
     actor_id = str(parts[1] or "")
-    actor = next((u for u in list(units or []) if str(u.get("unit_id", "")) == actor_id), None)
+    actor = None
+    if isinstance(units_by_id, dict):
+        actor = units_by_id.get(actor_id, None)
+    if not isinstance(actor, dict):
+        actor = next((u for u in list(units or []) if str(u.get("unit_id", "")) == actor_id), None)
     if not isinstance(actor, dict):
         return 0.0
     target = None
     target_id = str(parts[2] or "") if len(parts) > 2 else ""
     if target_id:
-        target = next((u for u in list(units or []) if str(u.get("unit_id", "")) == target_id), None)
+        if isinstance(units_by_id, dict):
+            target = units_by_id.get(target_id, None)
+        if not isinstance(target, dict):
+            target = next((u for u in list(units or []) if str(u.get("unit_id", "")) == target_id), None)
     if not isinstance(target, dict):
         tq, tr = _action_target_qr(action_id)
         if isinstance(tq, int) and isinstance(tr, int):
-            target = next(
-                (
-                    u for u in list(units or [])
-                    if str(u.get("side", "")) != str(actor.get("side", ""))
-                    and int(u.get("q")) == int(tq)
-                    and int(u.get("r")) == int(tr)
-                ),
-                None,
-            )
+            if isinstance(units_by_pos, dict):
+                same_hex = list(units_by_pos.get((int(tq), int(tr)), []) or [])
+                target = next((u for u in same_hex if str(u.get("side", "")) != str(actor.get("side", ""))), None)
+            if not isinstance(target, dict):
+                target = next(
+                    (
+                        u for u in list(units or [])
+                        if str(u.get("side", "")) != str(actor.get("side", ""))
+                        and int(u.get("q")) == int(tq)
+                        and int(u.get("r")) == int(tr)
+                    ),
+                    None,
+                )
     if not isinstance(target, dict):
         return 0.0
     aq = actor.get("q")
@@ -635,6 +686,21 @@ def _candidate_expected_damage(
             los_block=float((terrain_los_block_by_hex or {}).get(key, 0.0) or 0.0),
         )
     )
+
+
+def _build_unit_indexes(units: list[dict]) -> tuple[dict[str, dict], dict[tuple[int, int], list[dict]]]:
+    by_id: dict[str, dict] = {}
+    by_pos: dict[tuple[int, int], list[dict]] = {}
+    for unit in list(units or []):
+        u = dict(unit or {})
+        uid = str(u.get("unit_id", "")).strip()
+        if uid:
+            by_id[uid] = u
+        uq = u.get("q")
+        ur = u.get("r")
+        if isinstance(uq, int) and isinstance(ur, int):
+            by_pos.setdefault((int(uq), int(ur)), []).append(u)
+    return by_id, by_pos
 
 
 def _clamp01(value: float) -> float:
@@ -1316,6 +1382,7 @@ def _objective_progress_soft_signal(
     *,
     reward_shaping: dict | None,
     objective_had_opportunity: int,
+    objective_converted: int,
     objective_progress_delta: float,
     team_progress_delta: float,
     legal_capture_options: int,
@@ -1327,6 +1394,15 @@ def _objective_progress_soft_signal(
             "objective_soft_enabled": 0,
             "objective_soft_had_opportunity": 0,
             "objective_soft_component": 0.0,
+        }
+    if int(objective_converted) > 0:
+        # If conversion already happened on this step, ignore progress-delta shaping to avoid
+        # mixing "new target" deltas with a successful conversion event.
+        return 0.0, {
+            "objective_soft_enabled": 1,
+            "objective_soft_had_opportunity": 1,
+            "objective_soft_component": 0.0,
+            "objective_soft_progress_masked_on_convert": True,
         }
     progress_bonus = float(cfg.get("objective_progress_bonus_per_hex", 0.0) or 0.0)
     team_progress_bonus = float(
@@ -1751,17 +1827,57 @@ def _decision_ranked_candidates(
         row["decision_criterion"] = str(mode if mode else "none")
         row["decision_components"] = {
             "visit_count": int(row.get("visit_count", 0) or 0),
-            "q_value": float(row.get("mcts_q_value", 0.0) or 0.0),
-            "u_value": float(row.get("mcts_u_value", 0.0) or 0.0),
-            "success_prob_proxy": float(row.get("mcts_success_prob_proxy", 0.5) or 0.5),
-            "success_component": float(row.get("mcts_success_component", 0.0) or 0.0),
-            "puct_score": float(row.get("mcts_puct_score", 0.0) or 0.0),
-            "policy_prior": float(row.get("policy_prior", 0.0) or 0.0),
-            "tie_break_term": float(row.get("vp_progress_delta", 0.0) or 0.0),
+            "q_value": (
+                float(row.get("mcts_q_value"))
+                if row.get("mcts_q_value", None) is not None
+                else None
+            ),
+            "u_value": (
+                float(row.get("mcts_u_value"))
+                if row.get("mcts_u_value", None) is not None
+                else None
+            ),
+            "success_prob_proxy": (
+                float(row.get("mcts_success_prob_proxy"))
+                if row.get("mcts_success_prob_proxy", None) is not None
+                else None
+            ),
+            "success_component": (
+                float(row.get("mcts_success_component"))
+                if row.get("mcts_success_component", None) is not None
+                else None
+            ),
+            "puct_score": (
+                float(row.get("mcts_puct_score"))
+                if row.get("mcts_puct_score", None) is not None
+                else None
+            ),
+            "policy_prior": (
+                float(row.get("policy_prior"))
+                if row.get("policy_prior", None) is not None
+                else None
+            ),
+            "tie_break_term": (
+                float(row.get("vp_progress_delta"))
+                if row.get("vp_progress_delta", None) is not None
+                else None
+            ),
             "tie_break_source": str(row.get("vp_progress_source", "unknown") or "unknown"),
-            "vp_horizon_steps": float(row.get("vp_horizon_steps", -1.0) or -1.0),
-            "vp_horizon_signal": float(row.get("vp_horizon_signal", 0.0) or 0.0),
-            "vp_horizon_component": float(row.get("vp_horizon_component", 0.0) or 0.0),
+            "vp_horizon_steps": (
+                float(row.get("vp_horizon_steps"))
+                if row.get("vp_horizon_steps", None) is not None
+                else None
+            ),
+            "vp_horizon_signal": (
+                float(row.get("vp_horizon_signal"))
+                if row.get("vp_horizon_signal", None) is not None
+                else None
+            ),
+            "vp_horizon_component": (
+                float(row.get("vp_horizon_component"))
+                if row.get("vp_horizon_component", None) is not None
+                else None
+            ),
             "vp_horizon_source": str(row.get("vp_horizon_source", "unknown") or "unknown"),
             "enemy_can_capture_vp_next": row.get("enemy_can_capture_vp_next"),
             "enemy_min_steps_to_vp": row.get("enemy_min_steps_to_vp"),
@@ -1843,6 +1959,8 @@ class _NativeEZV2SelfplayBackend:
         mcts_success_prob_centered_clip_abs: float = 1.0,
         mcts_min_root_visits_per_action: int = 0,
         mcts_min_root_visits_top_n: int = 0,
+        mcts_value_rescale_mode: str = "tanh",
+        mcts_value_rescale_temperature: float = 10.0,
         mcts_success_prob_expected_damage_scale: float = 4.0,
         mcts_vp_tiebreak_epsilon: float = 0.01,
         mcts_q_flat_spread_epsilon: float = 1e-6,
@@ -1862,10 +1980,49 @@ class _NativeEZV2SelfplayBackend:
         unit_prefilter_vp_progress_weight: float = 1.0,
         unit_prefilter_capture_opportunity_weight: float = 2.0,
         unit_prefilter_threat_weight: float = 0.25,
+        matchup_modes: list[str] | None = None,
+        matchup_mode_weights: dict | None = None,
         **_: Any,
     ) -> list:
+        def _normalize_mode(raw: object) -> str:
+            m = str(raw or "").strip().lower()
+            if m in {"self_vs_self", "self_self", "self"}:
+                return "self_vs_self"
+            if m in {"self_vs_random", "self_random", "random"}:
+                return "self_vs_random"
+            return "self_vs_self"
+
+        def _resolve_episode_mode(seed_val: int) -> str:
+            modes_raw = list(matchup_modes or []) or ["self_vs_self"]
+            weights_raw = dict(matchup_mode_weights or {})
+            expanded: list[str] = []
+            for mode_raw in modes_raw:
+                mode = _normalize_mode(mode_raw)
+                w = int(weights_raw.get(mode_raw, weights_raw.get(mode, 1)) or 1)
+                for _i in range(max(1, w)):
+                    expanded.append(mode)
+            if not expanded:
+                expanded = ["self_vs_self"]
+            return str(expanded[int(abs(int(seed_val))) % int(len(expanded))])
+
+        def _resolve_policy_by_side(obs_obj, seed_val: int) -> tuple[str, dict[str, str]]:
+            mode = _resolve_episode_mode(seed_val)
+            sides = sorted(
+                {
+                    str((u or {}).get("side", "")).strip()
+                    for u in list(getattr(obs_obj, "units", []) or [])
+                    if str((u or {}).get("side", "")).strip()
+                }
+            )
+            policy_map: dict[str, str] = {str(s): "mcts" for s in sides}
+            if mode == "self_vs_random" and sides:
+                random_side = str(sides[int(abs(int(seed_val))) % int(len(sides))])
+                policy_map[random_side] = "random"
+            return mode, policy_map
+
         samples = []
         obs = adapter.initial_state(scenario_id=str(scenario_id), seed=int(seed))
+        episode_matchup_mode, episode_policy_by_side = _resolve_policy_by_side(obs, int(seed))
         unit_count = len(getattr(obs, "units", []) or [])
         scenario_turn_limit = _scenario_turn_limit_from_adapter(adapter)
         effective_max_steps, budget_source = resolve_effective_step_budget(
@@ -1901,6 +2058,8 @@ class _NativeEZV2SelfplayBackend:
             unit_prefilter_candidate_ranking: list[dict] = []
             unit_prefilter_global_candidate_count = int(len(global_legal))
             legal = list(global_legal)
+            step_units = [dict(u or {}) for u in list(getattr(obs, "units", []) or []) if isinstance(u, dict)]
+            step_units_by_id, step_units_by_pos = _build_unit_indexes(step_units)
             unit_prefilter_requested = bool(unit_prefilter_enabled) or bool(unit_prefilter_replan_enabled)
             precomputed_plan: dict[str, object] = {}
             if unit_prefilter_requested:
@@ -1969,9 +2128,11 @@ class _NativeEZV2SelfplayBackend:
                             expected_damage_u = float(
                                 _candidate_expected_damage(
                                     action_id=str(aid),
-                                    units=list(getattr(obs, "units", []) or []),
+                                    units=list(step_units),
                                     terrain_cover_by_hex=dict(getattr(obs, "terrain_cover_by_hex", {}) or {}),
                                     terrain_los_block_by_hex=dict(getattr(obs, "terrain_los_block_by_hex", {}) or {}),
+                                    units_by_id=dict(step_units_by_id),
+                                    units_by_pos=dict(step_units_by_pos),
                                 )
                             )
                             expected_damage_by_action_u[str(aid)] = float(expected_damage_u)
@@ -2002,6 +2163,8 @@ class _NativeEZV2SelfplayBackend:
                             success_prob_centered_clip_abs=float(mcts_success_prob_centered_clip_abs),
                             min_root_visits_per_action=int(mcts_min_root_visits_per_action),
                             min_root_visits_top_n=int(mcts_min_root_visits_top_n),
+                            value_rescale_mode=str(mcts_value_rescale_mode),
+                            value_rescale_temperature=float(mcts_value_rescale_temperature),
                         )
                         chosen_u = str(mcts_u.chosen_action or "")
                         breakdown_u = {
@@ -2078,9 +2241,11 @@ class _NativeEZV2SelfplayBackend:
                     expected_damage = float(
                         _candidate_expected_damage(
                             action_id=str(aid),
-                            units=list(getattr(obs, "units", []) or []),
+                            units=list(step_units),
                             terrain_cover_by_hex=dict(getattr(obs, "terrain_cover_by_hex", {}) or {}),
                             terrain_los_block_by_hex=dict(getattr(obs, "terrain_los_block_by_hex", {}) or {}),
+                            units_by_id=dict(step_units_by_id),
+                            units_by_pos=dict(step_units_by_pos),
                         )
                     )
                     expected_damage_by_action[str(aid)] = float(expected_damage)
@@ -2112,6 +2277,8 @@ class _NativeEZV2SelfplayBackend:
                     success_prob_centered_clip_abs=float(mcts_success_prob_centered_clip_abs),
                     min_root_visits_per_action=int(mcts_min_root_visits_per_action),
                     min_root_visits_top_n=int(mcts_min_root_visits_top_n),
+                    value_rescale_mode=str(mcts_value_rescale_mode),
+                    value_rescale_temperature=float(mcts_value_rescale_temperature),
                 )
             sorted_probs = sorted([float(p) for p in list(mcts.probs or [])], reverse=True)
             mcts_margin = float((sorted_probs[0] if sorted_probs else 0.0) - (sorted_probs[1] if len(sorted_probs) > 1 else 0.0))
@@ -2206,6 +2373,14 @@ class _NativeEZV2SelfplayBackend:
                     fallback_progress_delta=None,
                     legal_capture_options=int(legal_capture_options),
                 )
+                vp_target_id, vp_distance_after, vp_distance_source = _candidate_vp_target_after(
+                    action_id=str(aid),
+                    side=str(side),
+                    vp_hexes=list(getattr(obs, "vp_hexes", []) or []),
+                    vp_owner_by_hex=dict(candidate_vp_owner),
+                    acting_q=acting_q,
+                    acting_r=acting_r,
+                )
                 row = {
                     "action_id": str(aid),
                     "policy_prior": float(policy_prior),
@@ -2214,12 +2389,24 @@ class _NativeEZV2SelfplayBackend:
                     "policy_prior_available": True,
                     "final_score": float(prob),
                     "visit_count": int(mcts_visits_by_action.get(str(aid), 0)),
-                    "vp_progress_delta": float(vp_delta) if vp_delta is not None else 0.0,
+                    "vp_progress_delta": float(vp_delta) if vp_delta is not None else None,
                     "vp_progress_source": str(source or "unknown"),
+                    "vp_target_id": str(vp_target_id),
+                    "vp_target_source": str(vp_distance_source or "unknown"),
+                    "vp_distance_after": (
+                        float(vp_distance_after)
+                        if isinstance(vp_distance_after, (int, float))
+                        else None
+                    ),
+                    "vp_distance_source": str(vp_distance_source or "unknown"),
                     "expected_damage_proxy": float(
                         expected_damage_by_action.get(str(aid), 0.0)
                     ),
-                    "mcts_q_value": float(mcts_row.get("q_value", 0.0) or 0.0),
+                    "mcts_q_value": (
+                        float(mcts_row.get("q_value"))
+                        if mcts_row.get("q_value", None) is not None
+                        else None
+                    ),
                     "mcts_q_unclipped": (
                         float(mcts_row.get("q_unclipped"))
                         if mcts_row.get("q_unclipped", None) is not None
@@ -2233,23 +2420,54 @@ class _NativeEZV2SelfplayBackend:
                     "mcts_q_norm_applied": bool(mcts_row.get("q_norm_applied", False)),
                     "mcts_q_value_source": "mcts_root_candidate_breakdown",
                     "mcts_q_value_available": bool(mcts_row.get("q_value", None) is not None),
-                    "mcts_u_value": float(mcts_row.get("u_value", 0.0) or 0.0),
+                    "mcts_u_value": (
+                        float(mcts_row.get("u_value"))
+                        if mcts_row.get("u_value", None) is not None
+                        else None
+                    ),
                     "mcts_u_value_source": "mcts_root_candidate_breakdown",
                     "mcts_u_value_available": bool(mcts_row.get("u_value", None) is not None),
-                    "mcts_success_prob_proxy": float(
-                        mcts_row.get("success_prob_proxy", success_prob_by_action.get(str(aid), 0.5))
+                    "mcts_success_prob_proxy": (
+                        float(mcts_row.get("success_prob_proxy"))
+                        if mcts_row.get("success_prob_proxy", None) is not None
+                        else (
+                            float(success_prob_by_action.get(str(aid)))
+                            if success_prob_by_action.get(str(aid), None) is not None
+                            else None
+                        )
                     ),
-                    "mcts_success_prob_proxy_source": "mcts_root_candidate_breakdown",
+                    "mcts_success_prob_proxy_source": (
+                        "mcts_root_candidate_breakdown"
+                        if mcts_row.get("success_prob_proxy", None) is not None
+                        else (
+                            "success_prob_by_action"
+                            if success_prob_by_action.get(str(aid), None) is not None
+                            else "missing"
+                        )
+                    ),
                     "mcts_success_prob_proxy_available": bool(
                         mcts_row.get("success_prob_proxy", None) is not None
+                        or success_prob_by_action.get(str(aid), None) is not None
                     ),
                     "mcts_success_prob_centered": float(mcts_row.get("success_prob_centered", 0.0) or 0.0),
-                    "mcts_success_component": float(mcts_row.get("success_component", 0.0) or 0.0),
-                    "mcts_success_component_source": "mcts_root_candidate_breakdown",
+                    "mcts_success_component": (
+                        float(mcts_row.get("success_component"))
+                        if mcts_row.get("success_component", None) is not None
+                        else None
+                    ),
+                    "mcts_success_component_source": (
+                        "mcts_root_candidate_breakdown"
+                        if mcts_row.get("success_component", None) is not None
+                        else "missing"
+                    ),
                     "mcts_success_component_available": bool(
                         mcts_row.get("success_component", None) is not None
                     ),
-                    "mcts_puct_score": float(mcts_row.get("puct_score", 0.0) or 0.0),
+                    "mcts_puct_score": (
+                        float(mcts_row.get("puct_score"))
+                        if mcts_row.get("puct_score", None) is not None
+                        else None
+                    ),
                 }
                 enemy_can_capture_vp_next, enemy_min_steps_to_vp = _enemy_threat_signals(
                     actor_side=str(side),
@@ -2284,16 +2502,22 @@ class _NativeEZV2SelfplayBackend:
                 row["obs_attackable_hex_mask_by_unit"] = dict(obs_attackable_hex_mask_by_unit)
                 row["obs_enemy_reaction_fire_risk"] = float(obs_enemy_reaction_fire_risk)
                 row["obs_vp_ownership_ttl"] = dict(obs_vp_ownership_ttl)
-                vp_horizon_component, vp_horizon_steps, vp_horizon_signal, vp_horizon_source = _vp_horizon_soft_components(
-                    reward_shaping=dict(reward_shaping or {}),
-                    objective_had_opportunity=int(objective_baseline_before >= 0.0),
-                    baseline_horizon_steps=float(objective_baseline_before) if float(objective_baseline_before) >= 0.0 else None,
-                    vp_progress_delta=float(vp_delta or 0.0),
-                )
-                row["vp_horizon_steps"] = float(vp_horizon_steps)
-                row["vp_horizon_signal"] = float(vp_horizon_signal)
-                row["vp_horizon_component"] = float(vp_horizon_component)
-                row["vp_horizon_source"] = str(vp_horizon_source)
+                if vp_delta is not None:
+                    vp_horizon_component, vp_horizon_steps, vp_horizon_signal, vp_horizon_source = _vp_horizon_soft_components(
+                        reward_shaping=dict(reward_shaping or {}),
+                        objective_had_opportunity=int(objective_baseline_before >= 0.0),
+                        baseline_horizon_steps=float(objective_baseline_before) if float(objective_baseline_before) >= 0.0 else None,
+                        vp_progress_delta=float(vp_delta),
+                    )
+                    row["vp_horizon_steps"] = float(vp_horizon_steps)
+                    row["vp_horizon_signal"] = float(vp_horizon_signal)
+                    row["vp_horizon_component"] = float(vp_horizon_component)
+                    row["vp_horizon_source"] = str(vp_horizon_source)
+                else:
+                    row["vp_horizon_steps"] = None
+                    row["vp_horizon_signal"] = None
+                    row["vp_horizon_component"] = None
+                    row["vp_horizon_source"] = "missing_vp_progress"
                 unit_for_row = str(_parse_action_id(str(aid))[1] or "")
                 unit_best_vp_progress_by_unit[unit_for_row] = max(
                     float(unit_best_vp_progress_by_unit.get(unit_for_row, 0.0)),
@@ -2348,6 +2572,15 @@ class _NativeEZV2SelfplayBackend:
                 flat_q_score_epsilon=float(mcts_vp_flat_q_score_epsilon),
                 flat_q_vp_min_progress=float(mcts_vp_flat_q_min_progress),
             )
+            step_policy = str(
+                episode_policy_by_side.get(str(getattr(obs, "to_play", "") or ""), "mcts")
+                or "mcts"
+            ).strip().lower()
+            if step_policy == "random" and legal:
+                chosen = str(random.choice(list(legal)))
+                tiebreak_path = "random_policy"
+                tiebreak_meta = dict(tiebreak_meta or {})
+                tiebreak_meta["policy_override"] = "random"
             candidate_actions = _decision_ranked_candidates(
                 candidate_actions=candidate_actions,
                 tiebreak_path=str(tiebreak_path),
@@ -2467,6 +2700,16 @@ class _NativeEZV2SelfplayBackend:
             for row in candidate_actions:
                 if str(row.get("action_id", "")) == str(chosen) and str(row.get("vp_progress_source", "")) == "state_fallback":
                     row["vp_progress_delta"] = float(objective_progress_delta)
+                    if not str(row.get("vp_target_id", "") or "").strip():
+                        row["vp_target_id"] = str(getattr(objective, "objective_best_vp_id", "") or "")
+                        if str(row.get("vp_target_id", "") or "").strip():
+                            row["vp_target_source"] = "post_transition_objective"
+                    if (
+                        row.get("vp_distance_after", None) is None
+                        and isinstance(selected_after, float)
+                    ):
+                        row["vp_distance_after"] = float(selected_after)
+                        row["vp_distance_source"] = "post_transition_objective"
             damage_dealt, kills_dealt = _resolve_actor_damage_kills(
                 info=info,
                 before_units=list(getattr(obs, "units", []) or []),
@@ -2533,6 +2776,7 @@ class _NativeEZV2SelfplayBackend:
             objective_soft_component, objective_soft_meta = _objective_progress_soft_signal(
                 reward_shaping=dict(reward_shaping or {}),
                 objective_had_opportunity=int(objective.objective_had_opportunity),
+                objective_converted=int(objective.objective_converted),
                 objective_progress_delta=float(objective_progress_delta),
                 team_progress_delta=float(team_progress_delta),
                 legal_capture_options=int(legal_capture_options),
@@ -2540,27 +2784,30 @@ class _NativeEZV2SelfplayBackend:
             )
             chosen_vp_horizon_component = next(
                 (
-                    float(c.get("vp_horizon_component", 0.0) or 0.0)
+                    float(c.get("vp_horizon_component"))
                     for c in candidate_actions
                     if str(c.get("action_id", "")) == str(chosen)
+                    and c.get("vp_horizon_component", None) is not None
                 ),
-                0.0,
+                None,
             )
             chosen_vp_horizon_steps = next(
                 (
-                    float(c.get("vp_horizon_steps", -1.0) or -1.0)
+                    float(c.get("vp_horizon_steps"))
                     for c in candidate_actions
                     if str(c.get("action_id", "")) == str(chosen)
+                    and c.get("vp_horizon_steps", None) is not None
                 ),
-                -1.0,
+                None,
             )
             chosen_vp_horizon_signal = next(
                 (
-                    float(c.get("vp_horizon_signal", 0.0) or 0.0)
+                    float(c.get("vp_horizon_signal"))
                     for c in candidate_actions
                     if str(c.get("action_id", "")) == str(chosen)
+                    and c.get("vp_horizon_signal", None) is not None
                 ),
-                0.0,
+                None,
             )
             chosen_vp_horizon_source = next(
                 (
@@ -2659,9 +2906,21 @@ class _NativeEZV2SelfplayBackend:
                         "reaction_exposure_source": str(reaction_exposure_source),
                         "global_strategy_soft_reward_component": float(global_strategy_soft_component),
                         "objective_soft_reward_component": float(objective_soft_component),
-                        "vp_horizon_steps": float(chosen_vp_horizon_steps),
-                        "vp_horizon_signal": float(chosen_vp_horizon_signal),
-                        "vp_horizon_decision_component": float(chosen_vp_horizon_component),
+                        "vp_horizon_steps": (
+                            float(chosen_vp_horizon_steps)
+                            if chosen_vp_horizon_steps is not None
+                            else None
+                        ),
+                        "vp_horizon_signal": (
+                            float(chosen_vp_horizon_signal)
+                            if chosen_vp_horizon_signal is not None
+                            else None
+                        ),
+                        "vp_horizon_decision_component": (
+                            float(chosen_vp_horizon_component)
+                            if chosen_vp_horizon_component is not None
+                            else None
+                        ),
                         "vp_horizon_source": str(chosen_vp_horizon_source),
                         "enemy_can_capture_vp_next": step_enemy_can_capture_vp_next,
                         "enemy_min_steps_to_vp": (
@@ -2769,6 +3028,9 @@ class _NativeEZV2SelfplayBackend:
                         "mcts_vp_flat_q_score_epsilon": float(mcts_vp_flat_q_score_epsilon),
                         "mcts_vp_flat_q_min_progress": float(mcts_vp_flat_q_min_progress),
                         "mcts_original_chosen_action": str(mcts_chosen),
+                        "episode_matchup_mode": str(episode_matchup_mode),
+                        "step_policy_mode": str(step_policy),
+                        "step_policy_random": bool(step_policy == "random"),
                         "mcts_tiebreak_meta": dict(tiebreak_meta),
                         "latent_top_indices": list(xai.get("latent_top_indices", []) or []),
                         "latent_top_values": list(xai.get("latent_top_values", []) or []),

@@ -1,0 +1,45 @@
+paths:
+  run_root: runs_curriculum
+  voec_config: voec_sim/configs/voec_config.yaml
+  muzero_config: agents/muzero/configs/muzero_config.yaml
+
+benchmark:
+  device: cuda
+  num_workers: 1
+  allow_cuda_parallel: false
+  cuda_parallel_workers: 2
+  cuda_parallel_use_threads: false
+  inference_max_batch_size: 16
+  inference_batch_wait_ms: 2.0
+  seed_batch_size: 2
+  persist_replay_episode_files: true
+  mcts_simulations_by_profile:
+    muzero_selfplay: 352
+    muzero_vs_random_side_a: 352
+    muzero_vs_random_side_b: 352
+  scenario_id: battaglia_cittadina_2_1
+  matchup_profiles:
+    - muzero_selfplay
+    - muzero_vs_random_side_a
+    - muzero_vs_random_side_b
+  seeds: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60]
+  max_steps: 60
+  max_steps_override: 0
+  mcts_simulations: 352
+  mcts_c_puct: 2.3
+  mcts_temperature: 1.1
+  mcts_dirichlet_alpha: 0.3
+  mcts_dirichlet_epsilon: 0.35
+  mcts_q_clip_abs: 1000000.0
+  mcts_q_root_normalization_mode: adaptive_minmax
+  mcts_q_root_normalization_strength: 0.40
+  mcts_value_rescale_mode: signed_log_tanh
+  mcts_value_rescale_temperature: 8.0
+  mcts_min_root_visits_per_action: 5
+  mcts_min_root_visits_top_n: 0
+  unit_prefilter_enabled: true
+  unit_prefilter_replan_enabled: true
+  unit_prefilter_top_k: 3
+  unit_prefilter_vp_progress_weight: 1.0
+  unit_prefilter_capture_opportunity_weight: 2.0
+  unit_prefilter_threat_weight: 0.25

@@ -1,0 +1,11 @@
+{
+  "name": "self_vs_self_vs_random_2scenarios_v1_phase1_channel_adapt",
+  "repo": "C:/repos/python/assault",
+  "runs_root": "runs_curriculum",
+  "tracked_files": [
+    "curriculums/self_vs_self_vs_random_2scenarios_v1/configs/efficientzero_v2.phase1_channel_adapt.yaml",
+    "assault_bench/configs/benchmark_config.curriculum_2scenarios_phase1_256_70_30.yaml"
+  ],
+  "train_command": "python -m agents.efficientzero_v2.train.train_efficientzero_v2 --config curriculums/self_vs_self_vs_random_2scenarios_v1/configs/efficientzero_v2.phase1_channel_adapt.yaml --mlflow-experiment assault_efficientzero_v2 --mlflow-run-name curriculum_2scenarios_v1_phase1_channel_adapt",
+  "eval_command": "python -m assault_bench.runner --config assault_bench/configs/benchmark_config.curriculum_2scenarios_phase1_256_70_30.yaml"
+}

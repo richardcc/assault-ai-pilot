@@ -1,0 +1,10 @@
+base_config: curriculums/self_vs_self_vs_random_v1/configs/efficientzero_v2.phase2_mix_70_30.yaml
+
+scenario:
+  id: battaglia_cittadina_2_1
+  ids: [battaglia_cittadina_2_1, mettete_i_piedi_terra_1]
+  weights: [70, 30]
+
+selfplay:
+  num_workers: 6
+  parallel_backend: process

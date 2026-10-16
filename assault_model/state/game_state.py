@@ -93,6 +93,7 @@ class GameState:
         self.done: bool = False
         self.winner: Optional[str] = None
         self.end_reason: Optional[str] = None
+        self.outcome: Optional["ScenarioOutcomeResult"] = None
 
         # init
         self.recalculate_hex_control()
@@ -227,7 +228,7 @@ class GameState:
         ctx = CombatResolutionContext(
             attacker=attacker,
             defender=defender,
-            combat_mode=action.combat_mode,
+            combat_mode=getattr(action, "combat_mode", CombatMode.ASSAULT),
             attack_sector=attack_sector,
         )
         # CC-001 obstacle crossing hook:

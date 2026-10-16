@@ -1,0 +1,30 @@
+base_config: curriculums/self_vs_self_vs_random_v1/configs/efficientzero_v2.phase1_bootstrap.yaml
+
+selfplay:
+  num_workers: 1
+  mcts_simulations: 128
+  mcts_vp_tiebreak_epsilon: 0.06
+  unit_prefilter_enabled: true
+  unit_prefilter_replan_enabled: true
+  unit_prefilter_top_k: 3
+  unit_prefilter_vp_progress_weight: 1.1
+  unit_prefilter_capture_opportunity_weight: 2.4
+  unit_prefilter_threat_weight: 0.25
+  reward_shaping:
+    capture_bonus: 0.78
+    vp_capture_bonus_per_hex: 1.60
+    objective_progress_bonus_per_hex: 1.15
+    objective_no_progress_penalty: 0.30
+    objective_no_progress_attack_penalty: 0.24
+    vp_horizon_soft_weight: 0.035
+
+train:
+  batch_size: 16
+  train_updates_per_iter: 5
+  reanalysis_ratio: 0.18
+  consistency_loss_weight: 0.02
+  objective_loss_weight: 0.13
+  objective_signal:
+    opportunity_near_vp_max_dist: 3
+  objective_reporting:
+    conversion_window_steps_after_progress: 2

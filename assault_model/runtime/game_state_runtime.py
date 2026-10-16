@@ -20,6 +20,7 @@ from assault_model.map.hex_coord import HexCoord
 from assault_model.map.hex_utils import safe_hex_distance
 from assault_model.combat.spotting_runtime import update_spotting
 from assault_model.combat.line_of_sight import has_line_of_sight
+from assault_model.core.victory_outcomes import evaluate_scenario_outcome
 
 import os
 
@@ -216,176 +217,51 @@ class RuntimeGameState:
         return self.base_state.done
 
     def _check_match_end(self, context: ExecutionContext | None = None):
-
         if self.base_state.done:
             return
 
         alive_units = [u for u in self.base_state.units if u.alive]
         alive_sides = {u.side for u in alive_units}
-        outcomes = getattr(self.scenario, "victory_outcomes", None) or {}
-        uses_objective_outcomes = (
-            str(outcomes.get("metric", "")).strip() == "objectives_captured"
-            and str(outcomes.get("timing", "")).strip() == "end_of_last_turn"
-            and bool(outcomes.get("table"))
-        )
-
         event_bus = context.event_bus if context else None
 
-        def _finalize_vp_if_needed():
-            if not self.base_state.vp_tracker:
-                return
+        is_terminal = (
+            not alive_units
+            or len(alive_sides) == 1
+            or (self.scenario.max_turns is not None and self.base_state.turn > self.scenario.max_turns)
+        )
+
+        if not is_terminal:
+            return
+
+        if self.base_state.vp_tracker:
             ownership_map = {
                 coords: hs.ownership
                 for coords, hs in self.base_state.hex_states.items()
             }
             self.base_state.vp_tracker.finalize(ownership_map)
 
-        def _winner_by_vp() -> str | None:
-            tracker = self.base_state.vp_tracker
-            if tracker is None:
-                return None
-            side_to_ownership = getattr(self.base_state, "side_to_ownership", {}) or {}
-            if not side_to_ownership:
-                return None
-            side_scores = {
-                side: tracker.score.get(ownership, 0)
-                for side, ownership in side_to_ownership.items()
-            }
-            if not side_scores:
-                return None
-            best_score = max(side_scores.values())
-            winners = [side for side, score in side_scores.items() if score == best_score]
-            if len(winners) != 1:
-                return None
-            return winners[0]
+        self.base_state.done = True
 
-        def _objective_outcome_winner() -> tuple[str | None, str]:
-            outcomes = getattr(self.scenario, "victory_outcomes", None) or {}
-            tracked_side = str(outcomes.get("tracked_side", "")).strip().upper()
-            if not tracked_side:
-                return None, "objective_outcome_invalid"
+        outcome_res = evaluate_scenario_outcome(
+            state=self.base_state,
+            scenario=self.scenario,
+            alive_sides=alive_sides,
+        )
+        self.base_state.outcome = outcome_res
+        self.base_state.winner = outcome_res.winner
+        self.base_state.end_reason = outcome_res.end_reason
 
-            points = getattr(self.base_state.victory, "points", []) if self.base_state.victory else []
-            captured = 0
-            for vp in points:
-                hs = self.base_state.hex_states.get(vp.hex_coords)
-                if hs is None:
-                    continue
-                owner_side = None
-                for side, ownership in getattr(self.base_state, "side_to_ownership", {}).items():
-                    if ownership == hs.ownership:
-                        owner_side = side
-                        break
-                if owner_side == tracked_side:
-                    captured += 1
-
-            row_match = None
-            for row in outcomes.get("table", []):
-                if not isinstance(row, dict):
-                    continue
-                captured_range = row.get("captured", {}) or {}
-                try:
-                    min_cap = int(captured_range.get("min", -10**9))
-                    max_cap = int(captured_range.get("max", 10**9))
-                except Exception:
-                    continue
-                if min_cap <= captured <= max_cap:
-                    row_match = row
-                    break
-
-            result_text = str((row_match or {}).get("result", "")).strip().lower()
-            # Campaign table semantics:
-            # - Victory only when result is explicitly "Vittoria" or "Vittoria totale".
-            # - Draw on "Pareggio".
-            # - Any "Sconfitta*" means tracked side loses.
-            if "pareggio" in result_text or "draw" in result_text:
-                # Experimental override for curriculum tuning:
-                # treat campaign draw as tracked-side win.
-                if os.getenv("ASSAULT_OBJECTIVE_PAREGGIO_IS_WIN", "0") == "1":
-                    return tracked_side, "objective_outcome_resolved_draw_as_win"
-                return None, "objective_outcome_resolved"
-            if "vittoria totale" in result_text or result_text == "vittoria":
-                return tracked_side, "objective_outcome_resolved"
-            if "sconfitta" in result_text or "defeat" in result_text or "lose" in result_text:
-                alive_sides_now = sorted({u.side for u in self.base_state.units if u.alive})
-                if len(alive_sides_now) == 2 and tracked_side in alive_sides_now:
-                    other = [s for s in alive_sides_now if s != tracked_side]
-                    return (other[0] if other else None), "objective_outcome_resolved"
-                return None, "objective_outcome_resolved"
-            # Unrecognized labels default to draw to avoid accidental wins.
-            return None, "objective_outcome_resolved"
-        
-        if not alive_units:
-            _finalize_vp_if_needed()
-            self.base_state.done = True
-            if uses_objective_outcomes:
-                winner, reason = _objective_outcome_winner()
-                self.base_state.winner = winner
-                self.base_state.end_reason = reason
-            else:
-                self.base_state.winner = None
-                self.base_state.end_reason = "all_units_destroyed"
-
-            if event_bus:
-                event_bus.emit({
-                    "type": "MATCH_END",
-                    "payload": {
-                        "result": "draw" if self.base_state.winner is None else "victory",
-                        "winner": self.base_state.winner,
-                        "reason": self.base_state.end_reason,
-                        "turn": self.base_state.turn,
-                    },
-                })
-            return
-
-        if len(alive_sides) == 1:
-            _finalize_vp_if_needed()
-            self.base_state.done = True
-            if uses_objective_outcomes:
-                winner, reason = _objective_outcome_winner()
-                self.base_state.winner = winner
-                self.base_state.end_reason = reason
-            else:
-                winner = next(iter(alive_sides))
-                self.base_state.winner = winner
-                self.base_state.end_reason = "last_side_standing"
-
-            if event_bus:
-                event_bus.emit({
-                    "type": "MATCH_END",
-                    "payload": {
-                        "result": "draw" if self.base_state.winner is None else "victory",
-                        "winner": self.base_state.winner,
-                        "reason": self.base_state.end_reason,
-                        "turn": self.base_state.turn,
-                    },
-                })
-            return
-
-        if (
-            self.scenario.max_turns is not None
-            and self.base_state.turn > self.scenario.max_turns
-        ):
-            _finalize_vp_if_needed()
-            self.base_state.done = True
-            if uses_objective_outcomes:
-                winner, reason = _objective_outcome_winner()
-                self.base_state.winner = winner
-                self.base_state.end_reason = reason
-            else:
-                self.base_state.winner = _winner_by_vp()
-                self.base_state.end_reason = "max_turns_vp"
-
-            if event_bus:
-                event_bus.emit({
-                    "type": "MATCH_END",
-                    "payload": {
-                        "result": "draw" if self.base_state.winner is None else "victory",
-                        "winner": self.base_state.winner,
-                        "reason": self.base_state.end_reason,
-                        "turn": self.base_state.turn,
-                    },
-                })
+        if event_bus:
+            event_bus.emit({
+                "type": "MATCH_END",
+                "payload": {
+                    "result": "draw" if self.base_state.winner is None else "victory",
+                    "winner": self.base_state.winner,
+                    "reason": self.base_state.end_reason,
+                    "turn": self.base_state.turn,
+                    "outcome": outcome_res.to_dict(),
+                },
+            })
 
     # =================================================
     # MAIN EXECUTION (MINIMAL CHANGE)

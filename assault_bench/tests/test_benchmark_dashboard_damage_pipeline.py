@@ -7,6 +7,8 @@ from assault_bench.runner import (
     _backfill_why_action_vs_vp_from_observed_transition,
     _build_eval_decision_summary,
     _build_eval_decision_steps_top,
+    _resolve_vp_horizon_selected_fields,
+    _select_action_with_probability_tie_break,
     _build_why_action_vs_vp,
     _run_episode_with_policy,
 )
@@ -198,6 +200,30 @@ class _AdapterUnitPrefilterInfoStub(_AdapterDictUnitsStub):
                 "unit_prefilter_constrained_count": 2,
                 "unit_prefilter_global_count": 5,
             },
+        )
+
+
+class _AdapterReactionComponentsInfoStub(_AdapterDictUnitsStub):
+    def __init__(self, *, include_reaction_exposure: bool):
+        super().__init__()
+        self._include_reaction_exposure = bool(include_reaction_exposure)
+
+    def apply(self, action: str):
+        self._obs = self._after
+        info = {
+            "reward_components": {
+                "reaction_fire_miss": -0.05,
+                "opportunity_fire_no_progress": 0.02,
+                "opportunity_skip_capture_preserve": 0.01,
+            }
+        }
+        if self._include_reaction_exposure:
+            info["reaction_exposure_component"] = -0.12
+        return _Transition(
+            state=self._after,
+            reward=0.0,
+            done=True,
+            info=info,
         )
 
 
@@ -530,6 +556,137 @@ def test_run_episode_emits_vp_horizon_fields_for_selected_candidate() -> None:
     assert "vp_horizon_steps" in dc
     assert "vp_horizon_signal" in dc
     assert "vp_horizon_component" in dc
+
+
+def test_run_episode_fills_obs_enemy_reaction_fire_risk_from_proximity_fallback() -> None:
+    adapter = _AdapterDictUnitsStub()
+    (*_, trace_rows) = _run_episode_with_policy(
+        adapter=adapter,
+        scenario_id="stub_scenario",
+        seed=25,
+        policy_name="muzero_stub",
+        policy_by_side={"US": "muzero_stub", "GE": "muzero_stub"},
+        max_steps=2,
+        max_steps_override=2,
+        mcts_simulations=8,
+        mcts_c_puct=1.5,
+        mcts_temperature=1.0,
+        model=None,
+        action_dim=32,
+        mcts_unroll_steps=1,
+        mcts_discount=0.997,
+        collect_flow_metrics=True,
+    )
+    row = dict(trace_rows[0] or {})
+    risk = float(row.get("obs_enemy_reaction_fire_risk", 0.0) or 0.0)
+    assert risk > 0.0
+    assert risk <= 1.0
+
+
+def test_run_episode_computes_vp_horizon_when_producer_fields_missing() -> None:
+    adapter = _AdapterDictUnitsStub()
+    (*_, trace_rows) = _run_episode_with_policy(
+        adapter=adapter,
+        scenario_id="stub_scenario",
+        seed=26,
+        policy_name="muzero_stub",
+        policy_by_side={"US": "muzero_stub", "GE": "muzero_stub"},
+        max_steps=2,
+        max_steps_override=2,
+        mcts_simulations=8,
+        mcts_c_puct=1.5,
+        mcts_temperature=1.0,
+        model=None,
+        action_dim=32,
+        mcts_unroll_steps=1,
+        mcts_discount=0.997,
+        collect_flow_metrics=True,
+    )
+    row = dict(trace_rows[0] or {})
+    assert row.get("vp_horizon_available", None) is True
+    assert str(row.get("vp_horizon_source", "")).startswith("computed_")
+    assert row.get("vp_horizon_steps", None) is not None
+    assert row.get("vp_horizon_signal", None) is not None
+    assert row.get("vp_horizon_component", None) is not None
+
+
+def test_run_episode_computes_reaction_components_when_producer_fields_missing() -> None:
+    adapter = _AdapterDictUnitsStub()
+    (*_, trace_rows) = _run_episode_with_policy(
+        adapter=adapter,
+        scenario_id="stub_scenario",
+        seed=27,
+        policy_name="muzero_stub",
+        policy_by_side={"US": "muzero_stub", "GE": "muzero_stub"},
+        max_steps=2,
+        max_steps_override=2,
+        mcts_simulations=8,
+        mcts_c_puct=1.5,
+        mcts_temperature=1.0,
+        model=None,
+        action_dim=32,
+        mcts_unroll_steps=1,
+        mcts_discount=0.997,
+        collect_flow_metrics=True,
+    )
+    row = dict(trace_rows[0] or {})
+    assert row.get("reaction_fire_soft_reward_component_available", None) is True
+    assert str(row.get("reaction_fire_soft_reward_component_source", "")).startswith("computed_")
+    assert row.get("reaction_exposure_component_available", None) is True
+    assert str(row.get("reaction_exposure_component_source", "")).startswith("computed_")
+
+
+def test_run_episode_computes_reaction_exposure_when_producer_field_missing() -> None:
+    adapter = _AdapterReactionComponentsInfoStub(include_reaction_exposure=False)
+    (*_, trace_rows) = _run_episode_with_policy(
+        adapter=adapter,
+        scenario_id="stub_scenario",
+        seed=23,
+        policy_name="muzero_stub",
+        policy_by_side={"US": "muzero_stub", "GE": "muzero_stub"},
+        max_steps=2,
+        max_steps_override=2,
+        mcts_simulations=8,
+        mcts_c_puct=1.5,
+        mcts_temperature=1.0,
+        model=None,
+        action_dim=32,
+        mcts_unroll_steps=1,
+        mcts_discount=0.997,
+        collect_flow_metrics=True,
+    )
+    row = dict(trace_rows[0] or {})
+    assert row.get("reaction_exposure_component", None) is not None
+    assert row.get("reaction_exposure_component_available", None) is True
+    assert str(row.get("reaction_exposure_component_source", "")).startswith("computed_")
+
+
+def test_run_episode_derives_reaction_fire_soft_component_from_reward_components() -> None:
+    adapter = _AdapterReactionComponentsInfoStub(include_reaction_exposure=True)
+    (*_, trace_rows) = _run_episode_with_policy(
+        adapter=adapter,
+        scenario_id="stub_scenario",
+        seed=24,
+        policy_name="muzero_stub",
+        policy_by_side={"US": "muzero_stub", "GE": "muzero_stub"},
+        max_steps=2,
+        max_steps_override=2,
+        mcts_simulations=8,
+        mcts_c_puct=1.5,
+        mcts_temperature=1.0,
+        model=None,
+        action_dim=32,
+        mcts_unroll_steps=1,
+        mcts_discount=0.997,
+        collect_flow_metrics=True,
+    )
+    row = dict(trace_rows[0] or {})
+    assert row.get("reaction_fire_soft_reward_component_available", None) is True
+    assert str(row.get("reaction_fire_soft_reward_component_source", "")) == (
+        "transition_info.reward_components.reaction_sum"
+    )
+    # -0.05 + 0.02 + 0.01
+    assert abs(float(row.get("reaction_fire_soft_reward_component", 0.0)) - (-0.02)) <= 1e-12
 
 
 def test_decision_ownership_prefers_policy_override_signal_when_present():
@@ -1050,6 +1207,83 @@ def test_build_why_action_vs_vp_deterministic_fallback_uses_chosen_when_move_sco
     assert out["explanation"] == "selected action is also best toward VP"
 
 
+def test_build_why_action_vs_vp_rescales_large_q_values_for_diagnostics():
+    out = _build_why_action_vs_vp(
+        legal_actions=["MOVE:US_1:2:2", "WAIT:US_1"],
+        chosen_action="MOVE:US_1:2:2",
+        priors_by_action={"MOVE:US_1:2:2": 0.6, "WAIT:US_1": 0.4},
+        values_by_action={"MOVE:US_1:2:2": 1_000_000.0, "WAIT:US_1": -1_000_000.0},
+        value_sign_by_action={},
+        visits_by_action={"MOVE:US_1:2:2": 1, "WAIT:US_1": 1},
+        c_puct=1.5,
+        dynamics_pred_reward=None,
+        acting_unit_q=3,
+        acting_unit_r=3,
+        vp_hexes=[{"q": 2, "r": 2, "vp_id": "VP_A"}],
+        top_k=2,
+        q_clip_abs=25.0,
+        value_rescale_mode="tanh",
+        value_rescale_temperature=1.5,
+    )
+    by_action = {str(c.get("action_id", "")): dict(c or {}) for c in list(out.get("candidate_actions", []) or [])}
+    q_move = float(by_action["MOVE:US_1:2:2"]["mcts_q_value"])
+    q_wait = float(by_action["WAIT:US_1"]["mcts_q_value"])
+    assert 0.99 <= q_move <= 1.0
+    assert -1.0 <= q_wait <= -0.99
+
+
+def test_resolve_vp_horizon_marks_available_when_signal_exists_without_steps() -> None:
+    steps, signal, comp, source, available = _resolve_vp_horizon_selected_fields(
+        selected_candidate={
+            "vp_horizon_steps": None,
+            "vp_horizon_signal": 0.25,
+            "vp_horizon_component": 0.10,
+            "vp_horizon_source": "selected_candidate",
+        },
+        transition_info=None,
+    )
+    assert steps is None
+    assert signal == 0.25
+    assert comp == 0.10
+    assert source == "selected_candidate"
+    assert available is True
+
+
+def test_resolve_vp_horizon_uses_transition_info_when_candidate_missing() -> None:
+    steps, signal, comp, source, available = _resolve_vp_horizon_selected_fields(
+        selected_candidate={},
+        transition_info={
+            "vp_horizon_steps": None,
+            "vp_horizon_signal": 0.4,
+            "vp_horizon_component": 0.08,
+        },
+    )
+    assert steps is None
+    assert signal == 0.4
+    assert comp == 0.08
+    assert source == "transition_info"
+    assert available is True
+
+
+def test_probability_tie_break_prefers_capture_then_visits_then_score() -> None:
+    chosen, source = _select_action_with_probability_tie_break(
+        sampled_action="WAIT:US_1",
+        actions=["WAIT:US_1", "MOVE:US_1:2:6", "MOVE:US_1:1:6"],
+        probs=[0.333333, 0.333333, 0.333333],
+        visits=[5, 5, 5],
+        breakdown_by_action={
+            "WAIT:US_1": {"puct_score": 0.9, "q_value": 0.2},
+            "MOVE:US_1:2:6": {"puct_score": 0.2, "q_value": 0.1},
+            "MOVE:US_1:1:6": {"puct_score": 0.8, "q_value": 0.3},
+        },
+        side="US",
+        vp_hexes=[{"q": 2, "r": 6, "vp_id": "VP_A"}],
+        vp_owner_by_hex={"2,6": "GE"},
+    )
+    assert chosen == "MOVE:US_1:2:6"
+    assert source == "mcts_prob_tie_break_capture_visits_score"
+
+
 def test_eval_decision_top_preserves_vp_candidate_fields_when_present():
     trace_rows = [
         {
@@ -1133,3 +1367,93 @@ def test_eval_trace_propagates_unit_prefilter_telemetry_into_decision_steps_top(
     assert str(top.get("unit_prefilter_selected_unit_id", "")) == "US_1"
     assert int(top.get("unit_prefilter_constrained_count", -1)) == 2
     assert int(top.get("unit_prefilter_global_count", -1)) == 5
+
+
+def test_eval_steps_top_uses_selected_tie_break_for_vp_progress_when_observed_missing() -> None:
+    trace_rows = [
+        {
+            "step": 0,
+            "action_id": "MOVE:US_1:2:2",
+            "unit_side": "US",
+            "objective_progress_delta": None,
+            "tie_break_term": 1.5,
+            "vp_progress_estimated_selected": 1.5,
+            "vp_progress_source": "selected_candidate.tie_break_term",
+            "vp_progress_available": True,
+            "mcts_action_candidates": [
+                {
+                    "action_id": "MOVE:US_1:2:2",
+                    "selected_action": True,
+                    "decision_components": {"tie_break_term": 1.5},
+                }
+            ],
+            "why_action_vs_vp": {"chosen_action_id": "MOVE:US_1:2:2"},
+        }
+    ]
+    steps_top = _build_eval_decision_steps_top(trace_rows, limit=10)
+    top = dict(steps_top[0] or {})
+    assert top["vp_progress"] == 1.5
+    assert top["vp_progress_source"] == "selected_candidate.tie_break_term"
+    assert top["vp_progress_available"] is True
+
+
+def test_eval_steps_top_keeps_missing_mcts_success_channels_as_none() -> None:
+    trace_rows = [
+        {
+            "step": 0,
+            "action_id": "MOVE:US_1:2:2",
+            "unit_side": "US",
+            "mcts_success_prob_proxy": None,
+            "mcts_success_component": None,
+            "mcts_success_prob_proxy_source": "missing",
+            "mcts_success_component_source": "missing",
+            "mcts_success_prob_proxy_available": False,
+            "mcts_success_component_available": False,
+            "mcts_action_candidates": [
+                {
+                    "action_id": "MOVE:US_1:2:2",
+                    "selected_action": True,
+                    "decision_components": {
+                        "success_prob_proxy": None,
+                        "success_component": None,
+                    },
+                }
+            ],
+            "why_action_vs_vp": {"chosen_action_id": "MOVE:US_1:2:2"},
+        }
+    ]
+    steps_top = _build_eval_decision_steps_top(trace_rows, limit=10)
+    top = dict(steps_top[0] or {})
+    assert top["mcts_success_prob_proxy"] is None
+    assert top["mcts_success_component"] is None
+
+
+def test_eval_steps_top_preserves_health_diagnostics_denominator_fields() -> None:
+    trace_rows = [
+        {
+            "step": 0,
+            "action_id": "MOVE:US_1:2:2",
+            "unit_side": "US",
+            "mcts_total_visits": 128,
+            "mcts_active_actions": 31,
+            "mcts_q_guardrail_clipped_count": 4,
+            "mcts_q_clipped_count": 4,
+            "mcts_q_clip_denominator_count": 128,
+            "telemetry_coverage_status": "partial",
+            "telemetry_coverage_reason": "some_heads_missing_or_not_applicable",
+            "mcts_action_candidates": [
+                {"action_id": "MOVE:US_1:2:2", "visit_count": 9, "selected_action": True},
+                {"action_id": "WAIT:US_1", "visit_count": 3},
+            ],
+            "why_action_vs_vp": {"chosen_action_id": "MOVE:US_1:2:2"},
+        }
+    ]
+    steps_top = _build_eval_decision_steps_top(trace_rows, limit=10)
+    top = dict(steps_top[0] or {})
+    assert int(top.get("mcts_total_visits", -1)) == 128
+    assert int(top.get("mcts_active_actions", -1)) == 31
+    assert int(top.get("mcts_q_guardrail_clipped_count", -1)) == 4
+    assert int(top.get("mcts_q_clipped_count", -1)) == 4
+    assert int(top.get("mcts_q_clip_denominator_count", -1)) == 128
+    assert str(top.get("telemetry_coverage_status", "")) == "partial"
+    assert str(top.get("telemetry_coverage_reason", "")) == "some_heads_missing_or_not_applicable"

@@ -9,8 +9,8 @@ def _as_qr(pos: CoordLike) -> Tuple[int, int]:
     """
     Normalize coordinate inputs to (q, r).
     """
-    if isinstance(pos, HexCoord):
-        return pos.q, pos.r
+    if hasattr(pos, "q") and hasattr(pos, "r"):
+        return int(pos.q), int(pos.r)
     return pos
 
 

@@ -12,7 +12,7 @@ class _DummyReward:
         return 0.0
 
 
-class _DummyAction:
+class _DummyRangedAction:
     def __init__(self, unit_id: str):
         self.unit_id = unit_id
 
@@ -68,7 +68,7 @@ def test_damage_and_kills_are_attributed_to_rl_side_with_enum_like_side(tmp_path
 
     sim.step = _sim_step
 
-    monkeypatch.setattr("assault_sim.training_env.encode_state", lambda **_kwargs: {"obs": "ok"})
+    monkeypatch.setattr("assault_sim.training_env.encode_state", lambda *args, **_kwargs: {"obs": "ok"})
 
     env = TrainingEnv(
         sim_env=sim,
@@ -76,7 +76,7 @@ def test_damage_and_kills_are_attributed_to_rl_side_with_enum_like_side(tmp_path
         rl_side="US",
         reward_fn=_DummyReward(),
     )
-    action = _DummyAction("US_1")  # class name marks this as a ranged attack
+    action = _DummyRangedAction("US_1")  # class name marks this as a ranged attack
 
     _obs, _reward, _done, info = env.step(action)
 

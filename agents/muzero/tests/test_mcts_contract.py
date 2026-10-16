@@ -86,3 +86,23 @@ def test_mcts_sampled_expectation_chance_mode_tracks_k() -> None:
         chance_value_noise_std=0.0,
     )
     assert int(output.chance_samples_per_expansion) == 3
+
+
+def test_mcts_min_root_visits_top_n_zero_forces_all_actions_and_can_overspend() -> None:
+    output = run_mcts_puct(
+        ["A", "B", "C", "D"],
+        num_simulations=8,
+        c_puct=1.5,
+        priors_by_action={"A": 0.40, "B": 0.30, "C": 0.20, "D": 0.10},
+        values_by_action={"A": 0.1, "B": 0.1, "C": 0.1, "D": 0.1},
+        min_root_visits_per_action=5,
+        min_root_visits_top_n=0,
+    )
+    visits_by_action = {
+        str(a): int(v) for a, v in zip(list(output.actions or []), list(output.visits or []))
+    }
+    assert sum(int(v) for v in visits_by_action.values()) >= 20
+    assert visits_by_action["A"] >= 5
+    assert visits_by_action["B"] >= 5
+    assert visits_by_action["C"] >= 5
+    assert visits_by_action["D"] >= 5

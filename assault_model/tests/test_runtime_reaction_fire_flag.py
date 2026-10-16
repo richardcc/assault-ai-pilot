@@ -75,8 +75,9 @@ def test_reaction_fire_disabled_by_default(monkeypatch):
 def test_reaction_fire_once_per_reactor_per_turn(monkeypatch):
     us1 = _unit("US_1", "US", 0, 0)
     us2 = _unit("US_2", "US", 0, 1)
+    us3 = _unit("US_3", "US", 0, 2)
     it = _unit("IT_1", "IT", 2, 0)
-    rt = _build_runtime([us1, us2, it])
+    rt = _build_runtime([us1, us2, us3, it])
 
     calls = []
 

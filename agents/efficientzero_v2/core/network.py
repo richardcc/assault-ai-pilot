@@ -8,10 +8,7 @@ from agents.efficientzero_v2.core.network_base import EfficientZeroV2BaseNetwork
 
 class EfficientZeroV2Network(EfficientZeroV2BaseNetwork):
     """
-    Migration-safe EfficientZero network scaffold.
-
-    Current behavior is MuZero-compatible with an additional projection head that
-    will be used by upcoming consistency losses.
+    Optimized EfficientZero V2 network with compact consistency projection bottleneck.
     """
 
     def __init__(
@@ -44,18 +41,25 @@ class EfficientZeroV2Network(EfficientZeroV2BaseNetwork):
         )
         self.consistency_proj_dim = int(max(16, consistency_proj_dim))
         if self.encoder_type == "cnn":
-            in_dim = self.hidden_dim * self.observation_height * self.observation_width
+            proj_channels = max(8, self.hidden_dim // 4)
+            self.consistency_projection = nn.Sequential(
+                nn.Conv2d(self.hidden_dim, proj_channels, kernel_size=1, bias=False),
+                nn.SiLU(),
+                nn.AdaptiveAvgPool2d((4, 4)),
+                nn.Flatten(start_dim=1),
+                nn.Linear(proj_channels * 4 * 4, self.consistency_proj_dim),
+                nn.SiLU(),
+                nn.Linear(self.consistency_proj_dim, self.consistency_proj_dim),
+            )
         else:
-            in_dim = self.hidden_dim
-        self.consistency_projection = nn.Sequential(
-            nn.Linear(in_dim, self.consistency_proj_dim),
-            nn.ReLU(),
-            nn.Linear(self.consistency_proj_dim, self.consistency_proj_dim),
-        )
+            self.consistency_projection = nn.Sequential(
+                nn.Linear(self.hidden_dim, self.consistency_proj_dim),
+                nn.SiLU(),
+                nn.Linear(self.consistency_proj_dim, self.consistency_proj_dim),
+            )
 
     def consistency_embedding(self, hidden: torch.Tensor) -> torch.Tensor:
-        if self.encoder_type == "cnn":
+        if self.encoder_type != "cnn" and hidden.dim() > 2:
             hidden = torch.flatten(hidden, start_dim=1)
         z = self.consistency_projection(hidden)
         return torch.nn.functional.normalize(z, dim=-1)
-

@@ -473,6 +473,59 @@ def _read_muzero_channels(repo_root: Path, run_id: str) -> dict:
     return _read_json(path)
 
 
+def _read_muzero_channel_attribution(repo_root: Path, run_id: str) -> dict:
+    root = _runs_root(repo_root)
+    rd = (root / run_id).resolve()
+    try:
+        rd.relative_to(root)
+    except Exception:
+        raise ValueError("invalid run_id")
+    path = rd / "metrics" / "channel_effectiveness_report.json"
+    if not path.exists():
+        return {"exists": False}
+    payload = _read_json(path)
+    if isinstance(payload, dict):
+        payload["exists"] = True
+        return payload
+    return {"exists": False}
+
+
+def _run_channel_attribution(repo_root: Path, run_id: str) -> dict:
+    import sys
+    if str(repo_root) not in sys.path:
+        sys.path.insert(0, str(repo_root))
+    from scripts.analyze_channel_attribution import _load_model, _collect_observations, analyze_channels
+
+    root = _runs_root(repo_root)
+    rd = (root / run_id).resolve()
+    try:
+        rd.relative_to(root)
+    except Exception:
+        raise ValueError("invalid run_id")
+    manifest_path = rd / "run_manifest.json"
+    manifest = _read_json(manifest_path) if manifest_path.exists() else {}
+    scenario_id = str(manifest.get("scenario_id") or "battaglia_cittadina_2_1")
+    voec_cfg_path = (repo_root / "voec_sim" / "configs" / "voec_config.yaml").resolve()
+
+    model = _load_model(rd)
+    observations = _collect_observations(
+        voec_config_path=voec_cfg_path,
+        scenario_id=scenario_id,
+        seeds=[42, 101, 202, 303],
+        steps_per_seed=15,
+        channels=getattr(model, "observation_channels", 32),
+        height=getattr(model, "observation_height", 16),
+        width=getattr(model, "observation_width", 16),
+    )
+    report = analyze_channels(model, observations, device="cpu")
+    report["exists"] = True
+
+    out_path = rd / "metrics" / "channel_effectiveness_report.json"
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    out_path.write_text(json.dumps(report, indent=2), encoding="utf-8")
+    return report
+
+
 def _read_muzero_scenario_hexes(repo_root: Path, run_id: str) -> dict:
     run_payload = _read_muzero_run(repo_root, run_id)
     scenario_id = str(run_payload.get("scenario_id") or "").strip()
@@ -1217,7 +1270,38 @@ def _page_html() -> str:
         Show constant channels
       </label>
       <button id="muzeroChannelRefreshBtn">Refresh</button>
+      <button id="muzeroChannelAnalyzeBtn" style="background:#2563eb;color:#fff;font-weight:600;padding:6px 14px;border-radius:6px;cursor:pointer;border:none;">⚡ Analizar Efectividad (Ablación & Saliency)</button>
+      <span id="muzeroChannelAnalyzeStatus" class="sub" style="font-weight:500;margin-left:8px;"></span>
     </div>
+
+    <!-- Panel de Efectividad y Atribución de Canales -->
+    <div id="muzeroChannelAttributionPanel" style="margin-top:12px; display:none; border:1px solid #334155; background:#182234; border-radius:8px; padding:12px;">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+        <h4 style="margin:0; font-size:1.05em; color:#38bdf8;">📊 Reporte de Efectividad y Atribución de Canales (Ablación & Saliency)</h4>
+        <span id="muzeroChannelAttributionMeta" class="sub" style="color:#94a3b8; font-size:0.85em;"></span>
+      </div>
+      <div id="muzeroChannelCatSummary" style="display:grid; grid-template-columns:repeat(auto-fit, minmax(180px, 1fr)); gap:8px; margin-bottom:12px;"></div>
+      <div style="max-height:420px; overflow-y:auto; border:1px solid #334155; border-radius:6px;">
+        <table id="muzeroChannelAttributionTable" style="margin:0; width:100%; border-collapse:collapse; font-size:0.88em;">
+          <thead>
+            <tr style="position:sticky; top:0; background:#1e293b; z-index:2;">
+              <th style="padding:6px 8px;">Rank</th>
+              <th style="padding:6px 8px;">Idx</th>
+              <th style="padding:6px 8px;">Canal</th>
+              <th style="padding:6px 8px;">Familia</th>
+              <th style="padding:6px 8px;">Status</th>
+              <th style="padding:6px 8px; text-align:center;">Score</th>
+              <th style="padding:6px 8px;">Flip %</th>
+              <th style="padding:6px 8px;">KL Policy</th>
+              <th style="padding:6px 8px;">|Δv| Valor</th>
+              <th style="padding:6px 8px;">Recomendación</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
+
     <table id="muzeroChannelsTable" style="margin-top:8px">
       <thead>
         <tr><th>Idx</th><th>Name</th><th>Nonzero Cells</th><th>Nonzero Ratio</th><th>Mean</th><th>Max</th></tr>
@@ -1384,6 +1468,16 @@ function clsByRate(v, goodHigh=true){
   return v<=0.40?'ok':(v<=0.60?'warn':'bad');
 }
 function pct(v){ return (100*v).toFixed(1)+'%'; }
+function fmtLocal(s){
+  if (!s || s === '-') return '-';
+  const raw = String(s).trim();
+  if (!raw || raw === '-') return '-';
+  const hasTz = raw.endsWith('Z') || raw.includes('+') || /-\d{2}:\d{2}$/.test(raw);
+  const d = new Date(hasTz ? raw : raw + 'Z');
+  if (isNaN(d.getTime())) return raw.slice(0, 19).replace('T', ' ');
+  const pad = n => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+}
 function asVpCount(v){ return Number(v||0).toFixed(2); }
 function capturedFinalAvgFromSummary(summary){
   const counts = (summary && summary.captured_final_counts) ? summary.captured_final_counts : {};
@@ -2567,7 +2661,7 @@ function renderHistoryTable(points){
     const tr = document.createElement('tr');
     tr.innerHTML = `
       <td>${p.report}</td>
-      <td>${p.timestamp||'-'}</td>
+      <td>${fmtLocal(p.timestamp)}</td>
       <td>${pct(Number(p.loss_rate||0))}</td>
       <td>${pct(Number(p.vp_entry_conversion_rate||0))}</td>
       <td>${pct(Number(p.capture_conversion_after_contact||0))}</td>
@@ -2805,7 +2899,7 @@ async function loadSelected() {
   const meta = document.getElementById('meta');
   try {
     const data = await getJson('/api/report?name='+encodeURIComponent(name));
-    if (meta) meta.textContent = `timestamp=${data.meta?.timestamp||'-'} seed=${data.meta?.seed??'-'} episodes=${data.meta?.episodes??'-'}`;
+    if (meta) meta.textContent = `timestamp=${fmtLocal(data.meta?.timestamp)} seed=${data.meta?.seed??'-'} episodes=${data.meta?.episodes??'-'}`;
     const rows = data.rows || [];
     currentRows = rows;
     currentDetails = data.details || [];
@@ -4102,6 +4196,74 @@ function renderMuzeroChannels(data, errorMsg=''){
   _updateMuzeroChannelHeatmap();
 }
 
+function renderMuzeroChannelAttribution(data){
+  const panel = document.getElementById('muzeroChannelAttributionPanel');
+  const meta = document.getElementById('muzeroChannelAttributionMeta');
+  const catRoot = document.getElementById('muzeroChannelCatSummary');
+  const tb = document.querySelector('#muzeroChannelAttributionTable tbody');
+  if (!panel || !meta || !catRoot || !tb) return;
+  if (!data || !data.exists || !Array.isArray(data.ranked_channels) || !data.ranked_channels.length){
+    panel.style.display = 'none';
+    return;
+  }
+  panel.style.display = 'block';
+  meta.textContent = `${data.num_observations_analyzed || 60} estados evaluados | ${data.channels_analyzed || 32} canales`;
+
+  catRoot.innerHTML = '';
+  const cats = data.categories_summary || {};
+  for (const [catName, catData] of Object.entries(cats)){
+    const card = document.createElement('div');
+    card.style = 'background:#1e293b; border:1px solid #334155; border-radius:6px; padding:8px;';
+    card.innerHTML = `
+      <div style="font-size:0.75em; color:#94a3b8; font-weight:600; text-transform:uppercase;">${catName}</div>
+      <div style="font-size:1.1em; font-weight:700; color:#f8fafc; margin-top:2px;">Score: ${(catData.avg_importance || 0).toFixed(3)}</div>
+      <div style="font-size:0.75em; color:#64748b; margin-top:2px;">Activos: ${catData.active_channels || 0}/${catData.total_channels || 0}</div>
+    `;
+    catRoot.appendChild(card);
+  }
+
+  tb.innerHTML = '';
+  data.ranked_channels.forEach((ch, idx) => {
+    const tr = document.createElement('tr');
+    tr.style = 'border-bottom:1px solid #334155;';
+    let badgeBg = '#374151';
+    let badgeColor = '#9ca3af';
+    if (ch.status === 'HIGH_EFFECTIVENESS'){
+      badgeBg = '#065f46';
+      badgeColor = '#34d399';
+    } else if (ch.status === 'MODERATE_EFFECTIVENESS'){
+      badgeBg = '#1e3a8a';
+      badgeColor = '#60a5fa';
+    } else if (ch.status === 'LOW_EFFECTIVENESS'){
+      badgeBg = '#78350f';
+      badgeColor = '#fbbf24';
+    }
+    const scoreVal = Number(ch.importance_score || 0);
+    const scorePct = Math.min(100, Math.round(scoreVal * 100));
+
+    tr.innerHTML = `
+      <td style="padding:6px 8px; font-weight:600; color:#94a3b8;">#${idx + 1}</td>
+      <td style="padding:6px 8px; font-weight:600;">${ch.index}</td>
+      <td style="padding:6px 8px; font-weight:600; color:#f8fafc;">${ch.name || '-'}</td>
+      <td style="padding:6px 8px; color:#cbd5e1;">${ch.category || '-'}</td>
+      <td style="padding:6px 8px;"><span style="background:${badgeBg}; color:${badgeColor}; padding:2px 6px; border-radius:4px; font-size:0.8em; font-weight:600;">${ch.status}</span></td>
+      <td style="padding:6px 8px; min-width:110px;">
+        <div style="display:flex; align-items:center; gap:6px;">
+          <div style="flex:1; background:#334155; height:6px; border-radius:3px; overflow:hidden;">
+            <div style="background:#38bdf8; height:100%; width:${scorePct}%;"></div>
+          </div>
+          <span style="font-weight:700; font-size:0.85em;">${scoreVal.toFixed(3)}</span>
+        </div>
+      </td>
+      <td style="padding:6px 8px;">${Number(ch.decision_flip_rate || 0).toFixed(1)}%</td>
+      <td style="padding:6px 8px; font-family:monospace;">${Number(ch.kl_divergence || 0).toFixed(5)}</td>
+      <td style="padding:6px 8px; font-family:monospace;">${Number(ch.value_shift_mean || 0).toFixed(5)}</td>
+      <td style="padding:6px 8px; font-size:0.82em; color:#94a3b8;">${ch.recommendation || '-'}</td>
+    `;
+    tb.appendChild(tr);
+  });
+}
+
 function renderMuzeroXaiDecisions(data, errorMsg=''){
   const summary = document.getElementById('muzeroXaiSummary');
   const tb = document.querySelector('#muzeroXaiTable tbody');
@@ -4996,6 +5158,12 @@ async function loadMuzeroSelected(){
     renderMuzeroChannels(null, e.message || String(e));
   }
   try {
+    const attr = await getJson('/api/muzero/channel_attribution?run_id=' + encodeURIComponent(sel.value));
+    renderMuzeroChannelAttribution(attr);
+  } catch (e) {
+    renderMuzeroChannelAttribution(null);
+  }
+  try {
     const xai = await getJson('/api/muzero/xai_decisions?run_id=' + encodeURIComponent(sel.value) + '&limit=4000');
     renderMuzeroXaiDecisions(xai);
     renderMuzeroXaiMap(xai);
@@ -5057,6 +5225,32 @@ document.getElementById('muzeroChannelSelect').addEventListener('change', _updat
 document.getElementById('muzeroChannelRefreshBtn').addEventListener('click', _updateMuzeroChannelHeatmap);
 document.getElementById('muzeroShowConstantChannels').addEventListener('change', ()=>{
   renderMuzeroChannels(latestMuzeroChannels);
+});
+document.getElementById('muzeroChannelAnalyzeBtn').addEventListener('click', async ()=>{
+  const sel = document.getElementById('muzeroRunSelect');
+  const statusSpan = document.getElementById('muzeroChannelAnalyzeStatus');
+  const btn = document.getElementById('muzeroChannelAnalyzeBtn');
+  if (!sel || !sel.value) return;
+  btn.disabled = true;
+  statusSpan.style.color = '#38bdf8';
+  statusSpan.textContent = '⏳ Ejecutando análisis de ablación y gradientes (60 estados)...';
+  try {
+    const resp = await postJson('/api/muzero/run_channel_attribution', { run_id: sel.value });
+    if (resp && resp.ok && resp.report){
+      statusSpan.style.color = '#34d399';
+      statusSpan.textContent = '✅ Análisis completado con éxito';
+      renderMuzeroChannelAttribution(resp.report);
+    } else {
+      statusSpan.style.color = '#f87171';
+      statusSpan.textContent = '❌ Error: ' + ((resp && resp.error) || 'Fallo desconocido');
+    }
+  } catch (err){
+    statusSpan.style.color = '#f87171';
+    statusSpan.textContent = '❌ Error: ' + (err.message || String(err));
+  } finally {
+    btn.disabled = false;
+    setTimeout(()=>{ if (statusSpan.textContent.startsWith('✅')) statusSpan.textContent = ''; }, 7000);
+  }
 });
 document.getElementById('muzeroXaiApplyBtn').addEventListener('click', ()=>{
   renderMuzeroXaiDecisions(latestMuzeroXai);
@@ -5338,6 +5532,16 @@ def build_handler(reports_dir: Path, controller: ServiceController):
                 except FileNotFoundError as e:
                     return self._json({"error": str(e)}, status=404)
                 return self._json(payload)
+            if parsed.path == "/api/muzero/channel_attribution":
+                qs = parse_qs(parsed.query)
+                run_id = str((qs.get("run_id") or [""])[0]).strip()
+                if not run_id:
+                    return self._json({"error": "missing run_id"}, status=400)
+                try:
+                    payload = _read_muzero_channel_attribution(controller.repo_root, run_id)
+                except ValueError:
+                    return self._json({"error": "invalid run_id"}, status=400)
+                return self._json(payload)
             if parsed.path == "/api/muzero/xai_decisions":
                 qs = parse_qs(parsed.query)
                 run_id = str((qs.get("run_id") or [""])[0]).strip()
@@ -5430,6 +5634,7 @@ def build_handler(reports_dir: Path, controller: ServiceController):
                 "/api/control/stop",
                 "/api/control/restart",
                 "/api/muzero/timeline_export",
+                "/api/muzero/run_channel_attribution",
             }:
                 self.send_response(404)
                 self.end_headers()
@@ -5440,6 +5645,19 @@ def build_handler(reports_dir: Path, controller: ServiceController):
                 payload = json.loads(raw.decode("utf-8"))
             except Exception:
                 return self._json({"ok": False, "error": "invalid json payload"}, status=400)
+            if parsed.path == "/api/muzero/run_channel_attribution":
+                run_id = str(payload.get("run_id", "")).strip()
+                if not run_id:
+                    return self._json({"ok": False, "error": "missing run_id"}, status=400)
+                try:
+                    report = _run_channel_attribution(controller.repo_root, run_id)
+                    return self._json({"ok": True, "report": report}, status=200)
+                except ValueError as e:
+                    return self._json({"ok": False, "error": str(e)}, status=400)
+                except FileNotFoundError as e:
+                    return self._json({"ok": False, "error": str(e)}, status=404)
+                except Exception as e:
+                    return self._json({"ok": False, "error": f"channel attribution failed: {e}"}, status=500)
             if parsed.path == "/api/muzero/timeline_export":
                 run_id = str(payload.get("run_id", "")).strip()
                 if not run_id:

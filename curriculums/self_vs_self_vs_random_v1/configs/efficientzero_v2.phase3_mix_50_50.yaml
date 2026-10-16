@@ -1,0 +1,24 @@
+base_config: agents/efficientzero_v2/configs/efficientzero_v2_config.yaml
+
+paths:
+  run_root: runs_curriculum
+
+selfplay:
+  num_workers: 1
+  matchup_modes: [self_vs_self, self_vs_random]
+  matchup_mode_weights:
+    self_vs_self: 5
+    self_vs_random: 5
+  mcts_simulations: 352
+  reward_shaping:
+    # Iteration tuning: add controlled pressure to finish vulnerable enemies
+    # while preserving VP-first behavior.
+    kill_weight: 0.62
+    timeout_penalty: -0.45
+    objective_no_progress_penalty: 0.34
+    vp_capture_bonus_per_hex: 1.55
+
+train:
+  iterations: 60
+  episodes_per_iter: 20
+  train_updates_per_iter: 7

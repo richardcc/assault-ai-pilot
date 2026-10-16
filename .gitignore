@@ -103,5 +103,10 @@ runs_curriculum/
 mlops/reporting/artifacts/
 node_modules/
 _artifacts/
+*.duckdb
+*.sqlite
+*.sqlite3
 !mlops/reporting/viewer_frontend/index.html
+!mlops/reporting/viewer_frontend/dist/**
+
 

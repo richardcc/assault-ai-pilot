@@ -1,0 +1,17 @@
+# REGLAS FUNDAMENTALES DEL PROYECTO: TELEMETRÍA REAL Y CALIBRACIÓN MCTS
+
+## 1. PRINCIPIO DE TOLERANCIA CERO A DATOS FICTICIOS (ZERO HALLUCINATION IN DASHBOARDS)
+- El Dashboard, visores de replay, métricas de catálogo, gráficos y tablas NUNCA deben inventar, interpolar ni falsear datos.
+- Todo dato mostrado en la UI debe provenir estrictamente de la ejecución real del backend:
+  - Archivos de replay reales (`.json`, `.parquet`).
+  - Base de datos DuckDB de catálogo (`catalog.duckdb`).
+  - Logs y telemetría de runs reales (`runs_curriculum/`, `assault_bench/`).
+- Si un campo no está presente o una métrica no se calculó, debe reflejarse fielmente como no disponible o cero, jamás rellenarse con placeholders heurísticos o números inventados.
+
+## 2. INVARIANTE DE CALIBRACIÓN MCTS (EXPLORACIÓN VS SIMULACIONES)
+- NO reducir ni modificar a ciegas el número de simulaciones MCTS (`num_simulations`).
+- Histórico crítico: Las simulaciones se aumentaron previamente porque demasiadas ramas legales y tácticas se quedaban sin explorar (visitas = 0).
+- Antes de proponer o aplicar cualquier reducción en simulaciones de entrenamiento o evaluación:
+  1. Se debe inspeccionar la telemetría MCTS REAL de las partidas (visitas por candidato de acción en la raíz, total de ramas legales vs exploradas, porcentaje de ramas en 0 visitas).
+  2. Verificar fehacientemente qué está decidiendo el agente y cómo se distribuye el árbol en cada turno.
+  3. Comprobar que los datos se están generando y guardando correctamente en los replays y telemetría de MCTS.

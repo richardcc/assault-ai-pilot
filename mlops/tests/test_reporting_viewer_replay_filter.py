@@ -98,7 +98,7 @@ def test_model_html_replay_units_snapshot_renders_suppressed_with_na_fallback() 
     assert 'const mapRaw = (stepRowObj && typeof stepRowObj === "object")' in html
     assert "stepRowObj.unit_suppressed_map" in html
     assert 'const producerKeys = ["suppressed", "is_suppressed", "pinned", "is_pinned"];' in html
-    assert 'return value === null ? "N/A" : (value ? "yes" : "no");' in html
+    assert 'return value === null ? "N/A" : (value ? "true" : "false");' in html
     assert '<tr><td colspan="7" style="border:1px solid #334155;padding:6px;" class="muted">No units for selected filter.</td></tr>' in html
 
 
@@ -311,13 +311,13 @@ def test_model_html_restricts_eval_head_diagnostics_to_eval_section() -> None:
     html = _model_html()
     assert '<button id="tabHeadDiagnosticsBtn" class="tab-btn" data-section="eval">Eval Head Diagnostics</button>' in html
     assert '<button id="tabEvalMetricsBtn" class="tab-btn" data-section="eval">Eval Metrics</button>' in html
-    assert '["tabTrainDetailBtn", "tabTrainHeadDiagnosticsBtn", "tabObjectiveRewardConfigBtn", "tabMuzeroVpsBtn", "tabHeadDiagnosticsBtn", "tabEvalMetricsBtn", "tabUnifiedBtn", "tabEvalDecisionsBtn", "tabReplayBtn", "tabOverviewBtn"].forEach(id => {' in html
+    assert '["tabTrainDetailBtn", "tabTrainHeadDiagnosticsBtn", "tabObjectiveRewardConfigBtn", "tabMuzeroVpsBtn", "tabHeadDiagnosticsBtn", "tabEvalMetricsBtn", "tabEvalDecisionsBtn", "tabReplayBtn", "tabOverviewBtn"].forEach(id => {' in html
 
 
 def test_model_html_forces_valid_tab_when_switching_sections() -> None:
     html = _model_html()
     assert 'if (section === "train" && activeTab !== "train-detail" && activeTab !== "train-head-diagnostics" && activeTab !== "objective-reward-config") switchTab("train-detail");' in html
-    assert 'if (section === "eval" && activeTab !== "vps" && activeTab !== "head-diagnostics" && activeTab !== "eval-metrics" && activeTab !== "unified" && activeTab !== "eval-decisions" && activeTab !== "replay") switchTab("vps");' in html
+    assert 'if (section === "eval" && activeTab !== "vps" && activeTab !== "head-diagnostics" && activeTab !== "eval-metrics" && activeTab !== "eval-decisions" && activeTab !== "replay") switchTab("vps");' in html
     assert 'if (section === "meta" && activeTab !== "overview") switchTab("overview");' in html
 
 
@@ -352,7 +352,7 @@ def test_model_html_renders_objective_reward_config_with_source_precedence() -> 
     assert "selfCfg.mcts_vp_tiebreak_epsilon" in objective_fn
     assert "trainSelf.mcts_vp_tiebreak_epsilon" not in objective_fn
     assert "objectiveRewardDefaults" in html
-    assert "OK criteria: <b>run_config</b> values are green; <b>fallback_default</b> and <b>missing (N/A)</b> are degraded." in html
+    assert "OK criteria: <b>run_config</b> values are green; <b>default_config</b> and <b>missing (N/A)</b> are degraded." in html
     assert "Objective Head Runtime" in html
     assert "Q Calibration / MCTS" in html
     assert "Combat Soft Signals" in html
@@ -428,12 +428,14 @@ def test_model_html_uses_responsive_two_column_objective_reward_layout() -> None
     assert "overflow-x:auto;" in html
 
 
-def test_viewer_server_train_summary_reads_runs_roots_with_legacy_fallback() -> None:
+def test_viewer_server_train_summary_requires_strict_runs_roots() -> None:
     from pathlib import Path
 
-    source = Path("mlops/reporting/viewer.py").read_text(encoding="utf-8")
-    assert 'catalog_payload.get("runs_roots", [])' in source
-    assert 'catalog_payload.get("runs_root", "runs_curriculum")' in source
+    viewer_source = Path("mlops/reporting/viewer.py").read_text(encoding="utf-8")
+    model_api_source = Path("mlops/reporting/model_api.py").read_text(encoding="utf-8")
+    assert 'catalog_payload.get("runs_roots", [])' in viewer_source
+    assert 'catalog_payload.get("runs_root", "runs_curriculum")' not in viewer_source
+    assert 'runs_roots missing in strict catalog' in model_api_source
 
 
 def test_model_html_eval_head_diagnostics_shows_interpretable_intentions_and_coverage() -> None:
@@ -493,60 +495,44 @@ def test_model_html_filters_attack_effectiveness_by_side_controller() -> None:
     assert "if (p !== \"__all__\" && String(resultRow.matchup_profile || \"\") !== String(p)) return false;" in html
     assert "const evalRowsForUnified = evalRowsForTabs" in html
     assert "renderEvalMetrics(evalRowsForUnified, { side: s, controller: c, sideAllowed: sideAllowed });" in html
-    assert "renderUnifiedActions(evalRowsForUnified, { side: s, controller: c, sideAllowed: sideAllowed });" in html
+    assert "renderUnifiedActions(evalRowsForUnified, { side: s, controller: c, sideAllowed: sideAllowed });" not in html
     assert "renderEvalDecisions(evalRowsForUnified, { side: s, controller: c, sideAllowed: sideAllowed });" in html
-    assert "function resultMatchesSideControllerFilters(resultRow)" in html
-    assert "if (selectedSide === \"__all__\" && selectedController === \"__all__\") return true;" in html
+    assert "function sideAllowed(resultRow, side, selectedSide, selectedController)" in html
+    assert "if (selectedSide !== \"__all__\" && s !== selectedSide) return false;" in html
     assert "const sidesLocal = collectSidesFromResult(resultRow);" in html
     assert "if (!Array.isArray(sidesLocal) || !sidesLocal.length) return false;" in html
     assert "const sideAllowedFn = (filterCtx && typeof filterCtx.sideAllowed === \"function\")" in html
-    assert "return sideAllowedFn(resultRow, s, selectedSide, selectedController);" in html
+    assert "return sideAllowed(resultRow, side, s, c);" in html
     assert "if (p === \"mcts\" || p === \"muzero\" || p === \"muzero_controller\") return \"MuZero\";" in html
     assert "const selectedCtrlNorm = selectedController === \"__all__\"" in html
     assert "if (selectedCtrlNorm !== \"__all__\" && c !== selectedCtrlNorm) return false;" in html
-    assert "if (!resultMatchesSideControllerFilters(r)) continue;" in html
-    assert "const games = Array.isArray(r.match_games) ? r.match_games : [];" in html
-    assert "const transitions = Array.isArray((game && game.transitions)) ? game.transitions : [];" in html
+    assert "if (!sideAllowed(r, side, selectedSide, selectedController)) continue;" in html
+    assert "const games = Array.isArray(resultRow && resultRow.match_games) ? resultRow.match_games : [];" in html
+    assert "const transitions = Array.isArray((games[gi] && games[gi].transitions)) ? games[gi].transitions : [];" in html
     assert "if (!sideAllowedFn(r, stepSide, selectedSide, selectedController)) continue;" in html
-    assert "if (!rowHasTransitions) {" in html
-    assert "mergeAttackEffSummary((summary && summary.attack_effectiveness) || {});" in html
-    assert "By Action x Side x Controller (Pivot)" in html
-    assert "const colKeys = Object.keys(colKeyMap).sort((a, b) => {" in html
-    assert "const pivotMap = {};" in html
-    assert "const label = String(colMeta.side || \"UNK\") + \" x \" + String(colMeta.controller || \"UNKNOWN\");" in html
-    side_allowed_decl_idx = html.find("const sideAllowedFn = (filterCtx && typeof filterCtx.sideAllowed === \"function\")")
-    side_allowed_use_idx = html.find("return sideAllowedFn(resultRow, s, selectedSide, selectedController);")
-    assert side_allowed_decl_idx >= 0
-    assert side_allowed_use_idx >= 0
-    assert side_allowed_decl_idx < side_allowed_use_idx
+    assert 'return { source: "match_games.transitions", steps: fromMatchGames };' in html
+    assert "Table A: Action Kind x Side (Pivot)" in html
     assert "if (!r || typeof r !== \"object\") continue;" in html
-    assert "if (!src || typeof src !== \"object\") continue;" in html
-    assert "if (!sideAllowedFn(r, side, selectedSide, selectedController)) continue;" in html
-    assert "filterCtx.side || \"__all__\"" not in html.split("function renderUnifiedActions(filteredResultRows, filterCtx)", 1)[1].split("function renderEvalDecisions(filteredResultRows, filterCtx)", 1)[0]
+    assert "if (!sideAllowed(r, side, selectedSide, selectedController)) continue;" in html
 
 
-def test_model_html_unified_keeps_attack_effectiveness_visible_on_filter_change() -> None:
+def test_model_html_unified_removed_from_current_layout() -> None:
     html = _model_html()
-    unified_fn = html.split("function renderUnifiedActions(filteredResultRows, filterCtx) {", 1)[1].split("function renderEvalDecisions(filteredResultRows, filterCtx)", 1)[0]
-    assert "const sourceRows = Array.isArray(filteredResultRows) ? filteredResultRows : [];" in unified_fn
-    assert "for (const er of sourceRows) {" in unified_fn
-    assert "Attack Effectiveness (calibration)" in unified_fn
-    assert "No rows for current filters." not in unified_fn
+    assert "function renderUnifiedActions(filteredResultRows, filterCtx)" not in html
+    assert 'id="tabUnifiedBtn"' not in html
+    assert "Attack Effectiveness (calibration)" not in html
 
 
-def test_model_html_unified_attack_effectiveness_zero_match_shows_explicit_empty_state() -> None:
-    html = _model_html()
-    unified_fn = html.split("function renderUnifiedActions(filteredResultRows, filterCtx) {", 1)[1].split("function renderEvalMetrics(filteredResultRows, filterCtx)", 1)[0]
-    assert "const hasAttackData = Number(g.count || 0) > 0;" in unified_fn
-    assert "No attack effectiveness rows for current filters." in unified_fn
-    assert "colspan=\"7\"" in unified_fn
-    assert "No calibration bins." in unified_fn
-
-
-def test_model_html_uses_unified_filtered_rows_for_replay() -> None:
+def test_model_html_replay_uses_unified_filtered_rows() -> None:
     html = _model_html()
     assert "const replayRows = evalRowsForUnified;" in html
     assert "renderMatchReplay(replayRows);" in html
+
+
+def test_model_html_unified_tab_not_present() -> None:
+    html = _model_html()
+    assert 'id="tabUnifiedBtn"' not in html
+    assert 'id="tabUnified"' not in html
 
 
 def test_model_html_includes_eval_metrics_channel_diagnostics_tab_and_hooks() -> None:
@@ -610,6 +596,22 @@ def test_model_html_includes_eval_metrics_channel_diagnostics_tab_and_hooks() ->
     assert "vp_progress" in html
 
 
+def test_model_html_eval_metrics_tie_break_term_reads_top_level_or_decision_components() -> None:
+    html = _model_html()
+    assert 'key: "tie_break_term"' in html
+    assert 'source: "producer field:tie_break_term | selected_action.decision_components.tie_break_term"' in html
+    assert 'return numberFieldMulti(step, ["tie_break_term"], ["tie_break_term"]);' in html
+
+
+def test_model_html_eval_metrics_vp_horizon_channels_respect_producer_availability() -> None:
+    html = _model_html()
+    assert 'key: "vp_horizon_signal"' in html
+    assert 'key: "vp_horizon_component"' in html
+    assert 'key: "vp_horizon_decision_component"' in html
+    assert 'availabilityKeys: ["vp_horizon_available"]' in html
+    assert 'sourceKeys: ["vp_horizon_source"]' in html
+
+
 def test_model_html_includes_unit_prefilter_channels_with_producer_sources() -> None:
     html = _model_html()
     assert 'key: "unit_prefilter_enabled"' in html
@@ -647,21 +649,16 @@ def test_model_html_eval_metrics_renders_unit_prefilter_step_columns() -> None:
     assert "formatPerStepCell(r, colKey)" in html
 
 
-def test_model_html_unified_controller_filter_keeps_attack_section_structure() -> None:
+def test_model_html_eval_decisions_still_uses_unified_filters() -> None:
     html = _model_html()
-    unified_fn = html.split("function renderUnifiedActions(filteredResultRows, filterCtx) {", 1)[1].split("function renderEvalDecisions(filteredResultRows, filterCtx)", 1)[0]
-    assert "const sourceRows = Array.isArray(filteredResultRows) ? filteredResultRows : [];" in unified_fn
-    assert "for (const er of sourceRows) {" in unified_fn
-    assert "for (const er of filteredResultRows) {" not in unified_fn
-    assert "No attack effectiveness rows for current filters." in unified_fn
+    assert "function renderEvalDecisions(filteredResultRows, filterCtx)" in html
+    assert "const evalRowsForUnified = evalRowsForTabs" in html
+    assert "renderEvalDecisions(evalRowsForUnified, { side: s, controller: c, sideAllowed: sideAllowed });" in html
 
 
-def test_model_html_unified_controller_filter_keeps_attack_effectiveness_with_summary_fallback() -> None:
+def test_model_html_unified_attack_effectiveness_fallback_removed() -> None:
     html = _model_html()
-    unified_fn = html.split("function renderUnifiedActions(filteredResultRows, filterCtx) {", 1)[1].split("function renderEvalMetrics(filteredResultRows, filterCtx)", 1)[0]
-    assert "if (!rowHasTransitions) {" in unified_fn
-    assert "mergeAttackEffSummary((summary && summary.attack_effectiveness) || {});" in unified_fn
-    assert "if (!rowHasTransitions && selectedSide === \"__all__\" && selectedController === \"__all__\") {" not in unified_fn
+    assert "mergeAttackEffSummary((summary && summary.attack_effectiveness) || {});" not in html
 
 
 def test_model_html_includes_new_decision_making_kpis_in_vp_diagnostics() -> None:
@@ -715,7 +712,7 @@ def test_model_html_pivots_eval_decisions_table_a_by_side() -> None:
 def test_model_html_defines_collect_sides_helper_in_shared_scope() -> None:
     html = _model_html()
     helper_idx = html.find("function collectSidesFromResult(resultRow)")
-    unified_idx = html.find("function renderUnifiedActions(filteredResultRows, filterCtx)")
+    unified_idx = html.find("function renderEvalDecisions(filteredResultRows, filterCtx)")
     assert helper_idx >= 0
     assert unified_idx >= 0
     assert helper_idx < unified_idx
@@ -754,8 +751,8 @@ def test_model_html_replay_renders_controller_by_side_block_with_fallback_source
     assert 'source: "controller_by_side"' in html
     assert 'source: "policy_by_side"' in html
     assert 'source: "metadata"' in html
-    assert "Unknown/Unlabeled" in html
-    assert "Unlabeled side" in html
+    assert "Unknown side" in html
+    assert "Unknown side" in html
 
 
 def test_model_html_replay_includes_hover_overlay_legend_and_colors() -> None:
@@ -908,3 +905,46 @@ def test_model_html_replay_episode_select_uses_ordinal_index_for_reload_and_redr
     assert "? epSelect.selectedIndex" in html
     assert "await loadReplay();" in html
     assert "drawReplay(true);" in html
+
+
+def test_model_html_replay_load_uses_nonce_abort_and_stale_guards() -> None:
+    html = _model_html()
+    assert "loadReplayNonce: 0," in html
+    assert "loadReplayActiveNonce: 0," in html
+    assert "loadReplayAbortController: null," in html
+    assert "const loadNonce = Number(replayState.loadReplayNonce || 0) + 1;" in html
+    assert "replayState.loadReplayActiveNonce = loadNonce;" in html
+    assert "replayState.loadReplayAbortController.abort();" in html
+    assert "const replayAbortController = (typeof AbortController !== \"undefined\") ? new AbortController() : null;" in html
+    assert "const replayLoadIsCurrent = function () {" in html
+    assert "if (!replayLoadIsCurrent()) return;" in html
+    assert "const resp = replaySignal ? await fetch(url, { signal: replaySignal }) : await fetch(url);" in html
+    assert "if (replayLoadIsCurrent() && replayState.loadReplayAbortController === replayAbortController) {" in html
+    assert "setReplayLoadStatusIfCurrent(\"Replay loaded:" in html
+
+
+def test_model_html_replay_log_load_uses_nonce_abort_and_stale_guards() -> None:
+    html = _model_html()
+    assert "loadReplayLogNonce: 0," in html
+    assert "loadReplayLogActiveNonce: 0," in html
+    assert "loadReplayLogAbortController: null," in html
+    assert "const logNonce = Number(replayState.loadReplayLogNonce || 0) + 1;" in html
+    assert "replayState.loadReplayLogActiveNonce = logNonce;" in html
+    assert "replayState.loadReplayLogAbortController.abort();" in html
+    assert "const logAbortController = (typeof AbortController !== \"undefined\") ? new AbortController() : null;" in html
+    assert "const replayLogLoadIsCurrent = function () {" in html
+    assert "if (!replayLogLoadIsCurrent()) return;" in html
+    assert "const resp = logSignal ? await fetch(url, { signal: logSignal }) : await fetch(url);" in html
+    assert "if (replayLogLoadIsCurrent() && replayState.loadReplayLogAbortController === logAbortController) {" in html
+
+
+def test_model_html_replay_progressive_load_wiring_exists() -> None:
+    html = _model_html()
+    assert "async function loadReplayMoreTransitions(targetStep, reason)" in html
+    assert "function ensureReplayStepLoaded(targetStep)" in html
+    assert "replayState.replayLoadEpochNonce = loadNonce;" in html
+    assert "setReplayLoadStatusIfCurrent(\"loading initial...\", \"info\");" in html
+    assert "setReplayLoadStatusIfCurrent(\"loading more...\", \"info\");" in html
+    assert "setReplayLoadStatusIfCurrent(\"ready\", \"ok\");" in html
+    assert "replayRangeInput.oninput = () => {" in html
+    assert "ensureReplayStepLoaded(replayState.step);" in html

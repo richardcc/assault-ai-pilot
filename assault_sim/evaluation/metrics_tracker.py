@@ -1,4 +1,5 @@
 from collections import defaultdict
+from assault_model.core.victory_outcomes import evaluate_scenario_outcome
 
 
 class MetricsTracker:
@@ -295,45 +296,17 @@ class MetricsTracker:
 
         victory_level = None
         if self.scenario is not None:
-            outcomes = getattr(self.scenario, "victory_outcomes", None) or {}
-            if (
-                str(outcomes.get("metric", "")).strip() == "objectives_captured"
-                and str(outcomes.get("timing", "")).strip() == "end_of_last_turn"
-                and outcomes.get("table")
-            ):
-                tracked_side = str(outcomes.get("tracked_side", "")).strip().upper()
-                captured = 0
-                initial_captured = 0
-                total_obj = 0
-                if tracked_side and game_state is not None:
-                    points = getattr(getattr(game_state, "victory", None), "points", []) or []
-                    total_obj = len(points)
-                    side_to_ownership = getattr(game_state, "side_to_ownership", {}) or {}
-                    tracked_owner = side_to_ownership.get(tracked_side)
-                    for vp in points:
-                        if str(getattr(vp, "initial_owner", "") or "").strip().upper() == tracked_side:
-                            initial_captured += 1
-                        hs = game_state.hex_states.get(vp.hex_coords)
-                        if hs is not None and hs.ownership == tracked_owner:
-                            captured += 1
-                matched = None
-                for row in outcomes.get("table", []):
-                    cap = row.get("captured", {}) if isinstance(row, dict) else {}
-                    try:
-                        min_cap = int(cap.get("min", -10**9))
-                        max_cap = int(cap.get("max", 10**9))
-                    except Exception:
-                        continue
-                    if min_cap <= captured <= max_cap:
-                        matched = row
-                        break
+            outcome = evaluate_scenario_outcome(state=game_state, scenario=self.scenario)
+            if outcome.matched_table_row:
+                tracked_s = outcome.tracked_side or ""
+                init_cap = outcome.initial_captured_by_side.get(tracked_s, 0)
                 victory_level = {
-                    "tracked_side": tracked_side,
-                    "initial_captured": initial_captured,
-                    "captured": captured,
-                    "captured_delta": (captured - initial_captured),
-                    "objectives_total": total_obj,
-                    "result": (matched or {}).get("result"),
+                    "tracked_side": tracked_s,
+                    "initial_captured": init_cap,
+                    "captured": outcome.captured,
+                    "captured_delta": (outcome.captured - init_cap),
+                    "objectives_total": outcome.objectives_total,
+                    "result": outcome.result_text,
                 }
         tracked_result = (victory_level or {}).get("result")
         winner = getattr(game_state, "winner", None)

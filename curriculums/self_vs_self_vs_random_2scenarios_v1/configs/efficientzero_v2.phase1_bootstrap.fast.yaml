@@ -1,0 +1,10 @@
+base_config: curriculums/self_vs_self_vs_random_2scenarios_v1/configs/efficientzero_v2.phase1_bootstrap.yaml
+
+selfplay:
+  device: cpu
+  num_workers: 1
+  parallel_backend: process
+
+train:
+  amp_dtype: bf16
+  matmul_precision: high

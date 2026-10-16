@@ -21,6 +21,8 @@ This is the central index for the documentation set.
 - [XAI Report Spec](XAI_REPORT_SPEC.md)
 - [Guia de Interfaces, Visores y Simulador](INTERFACES_Y_VISORES.md)
 - [Plan de Accion: Optimizacion de Rendimiento (RL & Curriculum)](PLAN_ACCION_OPTIMIZACION_RENDIMIENTO.md)
+- [Analisis de la Red Neuronal y Cobertura del Dashboard MLOps](RED_NEURONAL_Y_COBERTURA_DASHBOARD.md)
+
 
 ## Rules Documentation
 

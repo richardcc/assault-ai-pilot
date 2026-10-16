@@ -94,12 +94,16 @@ def run_mcts_puct(
     chance_noise_std = max(0.0, float(chance_value_noise_std))
     chance_enabled = chance_mode_key in {"sampled_expectation", "sampled", "mc"} and chance_k > 1
     min_root_k = max(0, int(min_root_visits_per_action))
-    min_root_n = max(0, min(int(min_root_visits_top_n), n))
+    configured_top_n = int(min_root_visits_top_n)
+    # Contract parity with EZv2: top_n <= 0 means force coverage on all legal root actions.
+    min_root_n = n if configured_top_n <= 0 else max(0, min(configured_top_n, n))
     forced_root_indices: list[int] = []
     if min_root_k > 0 and min_root_n > 0:
         forced_root_indices = sorted(range(n), key=lambda i: float(priors[i]), reverse=True)[:min_root_n]
 
-    for _ in range(max(1, num_simulations)):
+    required_root_visits = int(min_root_k * min_root_n) if (min_root_k > 0 and min_root_n > 0) else 0
+    total_simulations = max(1, int(num_simulations), int(required_root_visits))
+    for _ in range(total_simulations):
         total_visits = sum(visits)
         best_idx = 0
         best_score = float("-inf")

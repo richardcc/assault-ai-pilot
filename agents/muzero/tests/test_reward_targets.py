@@ -198,6 +198,29 @@ def test_shaped_reward_progress_and_conversion_outweigh_no_progress_path():
     assert progress_total > stall_total
 
 
+def test_shaped_reward_masks_progress_delta_when_objective_converted() -> None:
+    tr = _Transition(done=False, state=_State(winner=None), action_id="CAPTURE:IT_1:2:0")
+    converted_total, converted_comp = shaped_training_reward(
+        root_to_play="IT",
+        transition=tr,
+        action_kind="CAPTURE",
+        damage_dealt=0.0,
+        kills_dealt=0,
+        objective_had_opportunity=True,
+        objective_converted=True,
+        objective_progress_delta=-3.0,
+        reward_shaping={
+            "objective_progress_bonus_per_hex": 0.44,
+            "objective_no_progress_penalty": 0.17,
+            "objective_no_progress_attack_penalty": 0.24,
+            "idle_penalty": 0.0,
+        },
+    )
+    assert converted_comp["objective_progress"] == 0.0
+    assert converted_comp["objective_no_progress"] == 0.0
+    assert converted_comp["objective_no_progress_attack"] == 0.0
+
+
 def test_shaped_reward_prefers_opportunity_skip_to_preserve_near_vp_capture():
     tr = _Transition(done=False, state=_State(winner=None), action_id="OPPORTUNITY_SKIP:IT_1:US_1")
     skip_total, skip_comp = shaped_training_reward(

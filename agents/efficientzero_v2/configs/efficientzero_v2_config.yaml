@@ -22,22 +22,29 @@ model:
 
 selfplay:
   device: cpu
-  num_workers: 1
+  num_workers: 6
+  parallel_backend: process
+  matchup_modes: [self_vs_self, self_vs_random]
+  matchup_mode_weights:
+    self_vs_self: 1
+    self_vs_random: 0
   max_steps: 100
   max_steps_override: 0
   max_turns_override: 0
-  mcts_simulations: 128
-  mcts_c_puct: 2.0
+  mcts_simulations: 256
+  mcts_c_puct: 2.3
   mcts_unroll_steps: 4
   mcts_discount: 0.997
-  mcts_temperature: 1.0
+  mcts_temperature: 1.1
   mcts_dirichlet_alpha: 0.3
   mcts_dirichlet_epsilon: 0.35
-  mcts_q_clip_abs: 25.0
-  mcts_min_root_visits_per_action: 1
-  mcts_min_root_visits_top_n: 999
+  mcts_q_clip_abs: 1000000.0
+  mcts_min_root_visits_per_action: 5
+  mcts_min_root_visits_top_n: 0
   mcts_q_root_normalization_mode: adaptive_minmax
-  mcts_q_root_normalization_strength: 0.40
+  mcts_q_root_normalization_strength: 0.90
+  mcts_value_rescale_mode: tanh
+  mcts_value_rescale_temperature: 1.5
   mcts_vp_tiebreak_epsilon: 0.05
   mcts_q_flat_spread_epsilon: 1.0e-6
   mcts_vp_flat_q_score_epsilon: 0.02
@@ -67,18 +74,18 @@ selfplay:
     kill_weight: 0.55
     vp_action_bonus: 0.14
     capture_bonus: 0.70
-    vp_capture_bonus_per_hex: 1.20
+    vp_capture_bonus_per_hex: 1.45
     vp_net_gain_bonus: 0.30
     vp_net_loss_penalty: 0.20
-    objective_progress_bonus_per_hex: 0.70
-    objective_no_progress_penalty: 0.46
-    objective_no_progress_attack_penalty: 0.40
+    objective_progress_bonus_per_hex: 1.05
+    objective_no_progress_penalty: 0.28
+    objective_no_progress_attack_penalty: 0.24
     reaction_fire_miss_penalty: 0.08
     reaction_fire_soft_signal_enabled: true
-    reaction_fire_soft_signal_weight: 0.16
+    reaction_fire_soft_signal_weight: 0.10
     reaction_fire_soft_signal_expected_damage_scale: 4.0
     reaction_exposure_component_enabled: true
-    reaction_exposure_component_weight: 0.10
+    reaction_exposure_component_weight: 0.06
     reaction_exposure_component_cap_abs: 0.20
     global_strategy_soft_enabled: true
     global_strategy_vp_control_net_gain_weight: 0.16
@@ -114,7 +121,7 @@ selfplay:
     terminal_loss_penalty: 0.20
 
 train:
-  iterations: 50
+  iterations: 60
   episodes_per_iter: 20
   train_updates_per_iter: 9
   checkpoint_every: 5

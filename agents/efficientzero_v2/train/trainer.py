@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from contextlib import nullcontext
 from dataclasses import dataclass
-from typing import Dict, List
+from typing import Callable, Dict, List
 
 import torch
 import torch.nn.functional as F
@@ -63,6 +63,8 @@ class EfficientZeroV2Trainer(EfficientZeroV2BaseTrainer):
         aux_intent_loss_weight: float = 0.5,
         aux_multi_vp_loss_weight: float = 0.5,
         aux_multi_vp_feature_dim: int = 0,
+        compute_grad_norm: bool = True,
+        progress_callback: Callable[[str], None] | None = None,
     ):
         super().__init__(
             model=model,
@@ -101,6 +103,17 @@ class EfficientZeroV2Trainer(EfficientZeroV2BaseTrainer):
         self.aux_intent_loss_weight = float(max(0.0, aux_intent_loss_weight))
         self.aux_multi_vp_loss_weight = float(max(0.0, aux_multi_vp_loss_weight))
         self.aux_multi_vp_feature_dim = int(max(0, aux_multi_vp_feature_dim))
+        self.compute_grad_norm = bool(compute_grad_norm)
+        self._progress_callback = progress_callback
+
+    def _progress(self, message: str) -> None:
+        cb = self._progress_callback
+        if cb is None:
+            return
+        try:
+            cb(str(message))
+        except Exception:
+            return
 
     def _autocast_ctx(self):
         if not self.amp_enabled:
@@ -118,6 +131,7 @@ class EfficientZeroV2Trainer(EfficientZeroV2BaseTrainer):
         return None
 
     def train_batch(self, batch: List[ReplaySample]) -> EfficientTrainMetrics:
+        self._progress("start")
         if not batch:
             return EfficientTrainMetrics(
                 loss=0.0,
@@ -138,13 +152,14 @@ class EfficientZeroV2Trainer(EfficientZeroV2BaseTrainer):
 
         obs = torch.stack(
             [
-                s.observation.detach().clone().to(torch.float32)
+                s.observation.detach().to(torch.float32)
                 if isinstance(s.observation, torch.Tensor)
                 else torch.tensor(s.observation, dtype=torch.float32)
                 for s in batch
             ],
             dim=0,
         ).to(self.device, non_blocking=True)
+        self._progress("batch_tensors_ready")
         policy_target = torch.tensor([s.policy_target for s in batch], dtype=torch.float32, device=self.device)
         value_target = torch.tensor([[s.value_target] for s in batch], dtype=torch.float32, device=self.device)
         reward_target = torch.tensor([[s.reward_target] for s in batch], dtype=torch.float32, device=self.device)
@@ -160,6 +175,7 @@ class EfficientZeroV2Trainer(EfficientZeroV2BaseTrainer):
         if self.reanalysis_ratio > 0.0 and (
             self.reanalysis_value_mix > 0.0 or self.reanalysis_policy_mix > 0.0
         ):
+            self._progress("reanalysis_start")
             with torch.no_grad():
                 with self._autocast_ctx():
                     _, policy_logits_rean, value_rean, _, _ = model.initial_inference(obs, return_aux=True)
@@ -167,7 +183,10 @@ class EfficientZeroV2Trainer(EfficientZeroV2BaseTrainer):
             if float(mask.sum().item()) > 0.0:
                 if self.reanalysis_value_mix > 0.0:
                     # N-step bootstrapped value target using rollout traces.
-                    boot_targets = []
+                    boot_targets: list[list[float]] = []
+                    bootstrap_obs: list[torch.Tensor] = []
+                    bootstrap_pos_by_sample: dict[int, int] = {}
+                    bootstrap_disc_by_sample: dict[int, float] = {}
                     for s in batch:
                         info = dict(s.info or {})
                         rewards = [float(x) for x in list(info.get("future_rewards", []) or [])]
@@ -185,17 +204,33 @@ class EfficientZeroV2Trainer(EfficientZeroV2BaseTrainer):
                         if disc > 0.0 and len(fobs) >= n and n > 0:
                             bobs = fobs[n - 1]
                             bobs_t = (
-                                bobs.detach().clone().to(torch.float32)
+                                bobs.detach().to(torch.float32)
                                 if isinstance(bobs, torch.Tensor)
                                 else torch.tensor(bobs, dtype=torch.float32)
-                            ).unsqueeze(0).to(self.device, non_blocking=True)
-                            with torch.no_grad():
-                                with self._autocast_ctx():
-                                    _, _, bval, _, _ = model.initial_inference(bobs_t, return_aux=True)
-                            ret += disc * float(bval.detach().cpu().item())
+                            )
+                            bootstrap_pos_by_sample[len(boot_targets)] = len(bootstrap_obs)
+                            bootstrap_disc_by_sample[len(boot_targets)] = float(disc)
+                            bootstrap_obs.append(bobs_t)
                         elif n == 0:
                             ret = float(s.value_target)
                         boot_targets.append([float(ret)])
+                    if bootstrap_obs:
+                        bobs_batch = torch.stack(bootstrap_obs, dim=0).to(
+                            self.device, non_blocking=True
+                        )
+                        with torch.no_grad():
+                            with self._autocast_ctx():
+                                _, _, bvals, _, _ = model.initial_inference(
+                                    bobs_batch, return_aux=True
+                                )
+                        bvals_cpu = bvals.detach().to(device="cpu", dtype=torch.float32).view(-1)
+                        for sample_idx, obs_idx in bootstrap_pos_by_sample.items():
+                            disc = float(bootstrap_disc_by_sample.get(sample_idx, 0.0))
+                            if disc <= 0.0:
+                                continue
+                            boot_targets[sample_idx][0] = float(boot_targets[sample_idx][0]) + (
+                                disc * float(bvals_cpu[int(obs_idx)].item())
+                            )
                     value_boot = torch.tensor(boot_targets, dtype=torch.float32, device=self.device)
                     blended = ((1.0 - self.reanalysis_value_mix) * value_target) + (
                         self.reanalysis_value_mix * value_boot
@@ -213,10 +248,14 @@ class EfficientZeroV2Trainer(EfficientZeroV2BaseTrainer):
                     policy_target = (mask * pol_blended) + ((1.0 - mask) * policy_target)
                     reanalysis_policy_drift = float((pol_drift * mask).sum().item() / mask.sum().item())
                 reanalysis_coverage = float(mask.mean().item())
+            self._progress("reanalysis_done")
 
+        self._progress("forward_start")
         with self._autocast_ctx():
             hidden, policy_logits, value_pred, reward_pred, aux = model.initial_inference(obs, return_aux=True)
-            policy_loss = F.mse_loss(torch.softmax(policy_logits, dim=-1), policy_target)
+            # Cross-entropy / KL divergence: avoids gradient saturation of MSE on softmax
+            log_policy_probs = F.log_softmax(policy_logits, dim=-1)
+            policy_loss = -(policy_target * log_policy_probs).sum(dim=-1).mean()
             value_loss = F.mse_loss(value_pred, value_target)
             reward_loss = F.mse_loss(reward_pred, reward_target)
             objective_loss = torch.tensor(0.0, dtype=torch.float32, device=self.device)
@@ -295,33 +334,76 @@ class EfficientZeroV2Trainer(EfficientZeroV2BaseTrainer):
             consistency_loss = torch.tensor(0.0, dtype=torch.float32, device=self.device)
             consistency_pairs = 0
             if self.consistency_loss_weight > 0.0 and self.consistency_unroll_steps > 0:
+                sample_future_obs: list[list] = []
+                sample_future_actions: list[list[int]] = []
+                sample_k_lims: list[int] = []
+                active_indices: list[int] = []
+                action_dim = int(model.action_dim)
                 for i, s in enumerate(batch):
                     info = dict(s.info or {})
                     future_obs = list(info.get("future_observations", []) or [])
-                    future_actions = list(info.get("future_actions", []) or [])
+                    future_actions = [int(x) for x in list(info.get("future_actions", []) or [])]
                     k_lim = min(self.consistency_unroll_steps, len(future_obs), len(future_actions))
-                    if k_lim <= 0:
-                        continue
-                    pred_hidden = hidden[i : i + 1]
-                    for k in range(k_lim):
-                        act_idx = int(future_actions[k])
-                        if act_idx < 0 or act_idx >= int(model.action_dim):
+                    sample_future_obs.append(future_obs)
+                    sample_future_actions.append(future_actions)
+                    sample_k_lims.append(int(k_lim))
+                    if k_lim > 0:
+                        active_indices.append(i)
+                if active_indices:
+                    pred_hidden_by_index: dict[int, torch.Tensor] = {
+                        i: hidden[i : i + 1] for i in active_indices
+                    }
+                    max_k = max(sample_k_lims) if sample_k_lims else 0
+                    for k in range(int(max_k)):
+                        step_indices: list[int] = []
+                        step_actions: list[int] = []
+                        step_obs_tensors: list[torch.Tensor] = []
+                        for i in list(active_indices):
+                            if k >= int(sample_k_lims[i]):
+                                continue
+                            act_idx = int(sample_future_actions[i][k])
+                            if act_idx < 0 or act_idx >= action_dim:
+                                continue
+                            tgt_obs = sample_future_obs[i][k]
+                            tgt_obs_t = (
+                                tgt_obs.detach().to(torch.float32)
+                                if isinstance(tgt_obs, torch.Tensor)
+                                else torch.tensor(tgt_obs, dtype=torch.float32)
+                            )
+                            step_indices.append(i)
+                            step_actions.append(act_idx)
+                            step_obs_tensors.append(tgt_obs_t)
+                        if not step_indices:
                             continue
-                        a = torch.zeros((1, int(model.action_dim)), dtype=torch.float32, device=self.device)
-                        a[0, act_idx] = 1.0
-                        pred_hidden, _, _, _ = model.recurrent_inference(pred_hidden, a, return_aux=False)
-                        tgt_obs = future_obs[k]
-                        tgt_obs_t = (
-                            tgt_obs.detach().clone().to(torch.float32)
-                            if isinstance(tgt_obs, torch.Tensor)
-                            else torch.tensor(tgt_obs, dtype=torch.float32)
-                        ).unsqueeze(0).to(self.device, non_blocking=True)
+                        pred_hidden_in = torch.cat(
+                            [pred_hidden_by_index[i] for i in step_indices], dim=0
+                        )
+                        a = torch.zeros(
+                            (len(step_indices), action_dim),
+                            dtype=torch.float32,
+                            device=self.device,
+                        )
+                        for row_i, act_idx in enumerate(step_actions):
+                            a[row_i, int(act_idx)] = 1.0
+                        pred_hidden_next, _, _, _ = model.recurrent_inference(
+                            pred_hidden_in, a, return_aux=False
+                        )
+                        for row_i, i in enumerate(step_indices):
+                            pred_hidden_by_index[i] = pred_hidden_next[row_i : row_i + 1]
+                        tgt_obs_batch = torch.stack(step_obs_tensors, dim=0).to(
+                            self.device, non_blocking=True
+                        )
                         with torch.no_grad():
-                            tgt_hidden, _, _, _, _ = model.initial_inference(tgt_obs_t, return_aux=True)
-                        z_pred = model.consistency_embedding(pred_hidden)
+                            with self._autocast_ctx():
+                                tgt_hidden, _, _, _, _ = model.initial_inference(
+                                    tgt_obs_batch, return_aux=True
+                                )
+                        z_pred = model.consistency_embedding(pred_hidden_next)
                         z_tgt = model.consistency_embedding(tgt_hidden).detach()
-                        consistency_loss = consistency_loss + F.mse_loss(z_pred, z_tgt)
-                        consistency_pairs += 1
+                        pair_mse = F.mse_loss(z_pred, z_tgt, reduction="none")
+                        pair_mse = pair_mse.view(pair_mse.shape[0], -1).mean(dim=1)
+                        consistency_loss = consistency_loss + pair_mse.sum()
+                        consistency_pairs += int(len(step_indices))
                 if consistency_pairs > 0:
                     consistency_loss = consistency_loss / float(consistency_pairs)
                 else:
@@ -335,40 +417,68 @@ class EfficientZeroV2Trainer(EfficientZeroV2BaseTrainer):
                 + (self.consistency_loss_weight * consistency_loss)
                 + (self.aux_objective_loss_weight * aux_objective_loss)
             )
-        self.optimizer.zero_grad()
+        self._progress("forward_done")
+        self.optimizer.zero_grad(set_to_none=True)
+        self._progress("backward_start")
         if self._scaler.is_enabled():
             self._scaler.scale(loss).backward()
         else:
             loss.backward()
+        self._progress("backward_done")
         if self._scaler.is_enabled():
             self._scaler.unscale_(self.optimizer)
-            grad_norm = float(
-                torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=float("inf")).item()
-            )
+            grad_norm_t = torch.tensor(0.0, dtype=torch.float32, device=self.device)
+            if self.compute_grad_norm:
+                grad_norm_t = torch.nn.utils.clip_grad_norm_(
+                    self.model.parameters(), max_norm=float("inf")
+                ).detach()
+            self._progress("optimizer_step_start")
             self._scaler.step(self.optimizer)
             self._scaler.update()
         else:
-            grad_norm = float(
-                torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=float("inf")).item()
-            )
+            grad_norm_t = torch.tensor(0.0, dtype=torch.float32, device=self.device)
+            if self.compute_grad_norm:
+                grad_norm_t = torch.nn.utils.clip_grad_norm_(
+                    self.model.parameters(), max_norm=float("inf")
+                ).detach()
+            self._progress("optimizer_step_start")
             self.optimizer.step()
+        self._progress("optimizer_step_done")
+
+        # Collapse GPU->CPU sync into one transfer instead of many .item() calls.
+        metrics_gpu = torch.stack(
+            [
+                loss.detach().to(torch.float32),
+                policy_loss.detach().to(torch.float32),
+                value_loss.detach().to(torch.float32),
+                reward_loss.detach().to(torch.float32),
+                objective_loss.detach().to(torch.float32),
+                consistency_loss.detach().to(torch.float32)
+                if consistency_pairs > 0
+                else torch.tensor(0.0, dtype=torch.float32, device=self.device),
+                aux_objective_loss.detach().to(torch.float32),
+                aux_intent_loss.detach().to(torch.float32),
+                aux_multi_vp_loss.detach().to(torch.float32),
+                grad_norm_t.detach().to(torch.float32),
+            ],
+            dim=0,
+        ).to(device="cpu")
+        mv = metrics_gpu.tolist()
 
         return EfficientTrainMetrics(
-            loss=float(loss.detach().cpu().item()),
-            policy_loss=float(policy_loss.detach().cpu().item()),
-            value_loss=float(value_loss.detach().cpu().item()),
-            reward_loss=float(reward_loss.detach().cpu().item()),
-            objective_loss=float(objective_loss.detach().cpu().item()),
-            grad_norm=float(grad_norm),
-            consistency_loss=float(consistency_loss.detach().cpu().item())
-            if consistency_pairs > 0
-            else 0.0,
+            loss=float(mv[0]),
+            policy_loss=float(mv[1]),
+            value_loss=float(mv[2]),
+            reward_loss=float(mv[3]),
+            objective_loss=float(mv[4]),
+            grad_norm=float(mv[9]),
+            consistency_loss=float(mv[5]),
             reanalysis_coverage=float(reanalysis_coverage),
             reanalysis_target_drift=float(reanalysis_target_drift),
             reanalysis_policy_drift=float(reanalysis_policy_drift),
             consistency_pairs=float(consistency_pairs),
-            aux_objective_loss=float(aux_objective_loss.detach().cpu().item()),
-            aux_intent_loss=float(aux_intent_loss.detach().cpu().item()),
-            aux_multi_vp_loss=float(aux_multi_vp_loss.detach().cpu().item()),
+            aux_objective_loss=float(mv[6]),
+            aux_intent_loss=float(mv[7]),
+            aux_multi_vp_loss=float(mv[8]),
         )
 

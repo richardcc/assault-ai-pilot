@@ -92,13 +92,19 @@ class InferenceService:
             batch = [item]
             t0 = time.perf_counter()
             while len(batch) < self.max_batch_size:
-                remaining = self.batch_wait_s - (time.perf_counter() - t0)
-                if remaining <= 0.0:
-                    break
-                try:
-                    nxt = self._q.get(timeout=remaining)
-                except queue.Empty:
-                    break
+                if self.batch_wait_s <= 0.0:
+                    try:
+                        nxt = self._q.get_nowait()
+                    except queue.Empty:
+                        break
+                else:
+                    remaining = self.batch_wait_s - (time.perf_counter() - t0)
+                    if remaining <= 0.0:
+                        break
+                    try:
+                        nxt = self._q.get(timeout=remaining)
+                    except queue.Empty:
+                        break
                 if nxt is None:
                     self._q.put(None)
                     break

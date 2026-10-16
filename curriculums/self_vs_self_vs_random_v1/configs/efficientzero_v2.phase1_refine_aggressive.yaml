@@ -1,0 +1,17 @@
+base_config: curriculums/self_vs_self_vs_random_v1/configs/efficientzero_v2.phase1_bootstrap.capture_aggressive.yaml
+
+selfplay:
+  matchup_modes: [self_vs_self, self_vs_random]
+  matchup_mode_weights:
+    self_vs_self: 8
+    self_vs_random: 2
+  mcts_simulations: 256
+  mcts_vp_flat_q_score_epsilon: 0.04
+  reward_shaping:
+    objective_no_progress_penalty: 0.46
+    objective_no_progress_attack_penalty: 0.36
+
+train:
+  iterations: 24
+  episodes_per_iter: 16
+  reanalysis_ratio: 0.28

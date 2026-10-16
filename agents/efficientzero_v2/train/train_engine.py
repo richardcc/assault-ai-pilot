@@ -2,9 +2,12 @@ from __future__ import annotations
 
 import json
 import os
+import random
 import time
 import uuid
 import multiprocessing as mp
+import threading
+from datetime import datetime
 from collections import Counter
 from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor, as_completed
 from contextlib import nullcontext
@@ -15,6 +18,9 @@ import torch
 
 from agents.efficientzero_v2.core.network import EfficientZeroV2Network
 from agents.efficientzero_v2.core.inference_service import InferenceService
+from agents.muzero.xai.decision_report import build_decision_report
+from agents.muzero.xai.episode_narrative import build_episode_narrative
+from agents.muzero.xai.search_tree_snapshot import build_search_snapshot
 from agents.efficientzero_v2.core.interop import (
     EZV2VOECAdapter,
     EventBus,
@@ -28,10 +34,68 @@ from agents.efficientzero_v2.core.selfplay import (
     play_episode,
     resolve_effective_step_budget,
 )
+from mlops.catalog_publisher_v2 import publish_train_run
 from voec_sim.configs.config_loader import load_voec_config
 from voec_sim.core.simulator import VOECSimulator
 
 _PROCESS_ACTOR_STATE: dict = {}
+
+
+def _resolve_scenario_mix(scenario_cfg: dict) -> tuple[str, list[str], list[float]]:
+    primary = str((scenario_cfg or {}).get("id", "") or "").strip()
+    ids_raw = list((scenario_cfg or {}).get("ids", []) or [])
+    if not ids_raw and primary:
+        ids_raw = [primary]
+    ids: list[str] = []
+    for item in ids_raw:
+        sid = str(item or "").strip()
+        if sid:
+            ids.append(sid)
+    if not ids:
+        ids = [primary] if primary else []
+    if not ids:
+        raise ValueError("scenario.id (or scenario.ids) must define at least one scenario")
+    if primary and primary not in ids:
+        ids = [primary] + ids
+    if not primary:
+        primary = str(ids[0])
+    weights_raw = list((scenario_cfg or {}).get("weights", []) or [])
+    if len(weights_raw) != len(ids):
+        weights = [1.0 for _ in ids]
+    else:
+        weights = []
+        for w in weights_raw:
+            try:
+                wf = float(w)
+            except Exception:
+                wf = 0.0
+            weights.append(max(0.0, wf))
+    if sum(weights) <= 0.0:
+        weights = [1.0 for _ in ids]
+    return primary, ids, weights
+
+
+def _pick_scenario_for_episode(
+    *,
+    scenario_ids: list[str],
+    scenario_weights: list[float],
+    base_seed: int,
+    iteration: int,
+    episode_index: int,
+) -> str:
+    if len(scenario_ids) <= 1:
+        return str(scenario_ids[0])
+    rng = random.Random(int(base_seed) * 1000003 + int(iteration) * 9176 + int(episode_index) * 37)
+    total = float(sum(float(w) for w in list(scenario_weights or [])))
+    if total <= 0.0:
+        return str(scenario_ids[0])
+    ticket = float(rng.random()) * total
+    acc = 0.0
+    for sid, w in zip(list(scenario_ids or []), list(scenario_weights or [])):
+        acc += max(0.0, float(w))
+        if ticket <= acc:
+            return str(sid)
+    return str(scenario_ids[-1])
 
 
 def _process_actor_init(
@@ -41,6 +105,7 @@ def _process_actor_init(
     selfplay_cfg: dict,
     scenario_id: str,
 ) -> None:
+    os.environ["CUDA_VISIBLE_DEVICES"] = ""
     sim = VOECSimulator(assets=voec_assets)
     adapter = EZV2VOECAdapter(sim)
     model = EfficientZeroV2Network(
@@ -54,6 +119,7 @@ def _process_actor_init(
         dynamics_blocks=int(model_spec["dynamics_blocks"]),
         prediction_blocks=int(model_spec["prediction_blocks"]),
     )
+    model.to("cpu")
     model.load_state_dict(model_state_dict)
     model.eval()
     _PROCESS_ACTOR_STATE.clear()
@@ -68,13 +134,14 @@ def _process_actor_init(
     )
 
 
-def _process_actor_run_episode(ep_seed: int) -> list:
+def _process_actor_run_episode(ep_seed: int, scenario_id: str | None = None) -> list:
     state = _PROCESS_ACTOR_STATE
     cfg = dict(state["selfplay_cfg"])
+    actual_scenario = str(scenario_id or state.get("scenario_id", "") or "")
     with torch.inference_mode():
         return play_episode(
             adapter=state["adapter"],
-            scenario_id=str(state["scenario_id"]),
+            scenario_id=actual_scenario,
             seed=int(ep_seed),
             max_steps=int(cfg["max_steps"]),
             max_steps_override=int(cfg["max_steps_override"]),
@@ -89,12 +156,18 @@ def _process_actor_run_episode(ep_seed: int) -> list:
             mcts_dirichlet_alpha=float(cfg["mcts_dirichlet_alpha"]),
             mcts_dirichlet_epsilon=float(cfg["mcts_dirichlet_epsilon"]),
             mcts_q_clip_abs=float(cfg.get("mcts_q_clip_abs", 10.0)),
+            mcts_min_root_visits_per_action=int(
+                cfg.get("mcts_min_root_visits_per_action", 0)
+            ),
+            mcts_min_root_visits_top_n=int(cfg.get("mcts_min_root_visits_top_n", 0)),
             mcts_q_root_normalization_mode=str(
                 cfg.get("mcts_q_root_normalization_mode", "adaptive_minmax")
             ),
             mcts_q_root_normalization_strength=float(
                 cfg.get("mcts_q_root_normalization_strength", 0.35)
             ),
+            mcts_value_rescale_mode=str(cfg.get("mcts_value_rescale_mode", "tanh")),
+            mcts_value_rescale_temperature=float(cfg.get("mcts_value_rescale_temperature", 10.0)),
             mcts_chance_mode=str(cfg.get("mcts_chance_mode", "off")),
             mcts_chance_samples_per_expansion=int(cfg.get("mcts_chance_samples_per_expansion", 1)),
             mcts_chance_value_noise_std=float(cfg.get("mcts_chance_value_noise_std", 0.0)),
@@ -120,6 +193,8 @@ def _process_actor_run_episode(ep_seed: int) -> list:
             ),
             unit_prefilter_enabled=bool(cfg.get("unit_prefilter_enabled", False)),
             collect_xai=bool(cfg.get("collect_xai", False)),
+            matchup_modes=list(cfg.get("matchup_modes", ["self_vs_self"]) or ["self_vs_self"]),
+            matchup_mode_weights=dict(cfg.get("matchup_mode_weights", {}) or {}),
         )
 
 
@@ -137,13 +212,26 @@ def _process_actor_update_weights(model_state_dict: dict, version: int) -> int:
 
 
 def _start_mlflow_run(experiment_name: str, run_name: str):
+    disable_mlflow = str(os.environ.get("ASSAULT_DISABLE_MLFLOW", "")).strip().lower()
+    if disable_mlflow in {"1", "true", "yes", "on"}:
+        print("[EfficientZeroV2] MLflow disabled by ASSAULT_DISABLE_MLFLOW")
+        return None, nullcontext()
     try:
         import mlflow  # type: ignore
     except Exception:
         return None, nullcontext()
-    mlflow.set_experiment(str(experiment_name))
-    ctx = mlflow.start_run(run_name=str(run_name) if str(run_name).strip() else None)
-    return mlflow, ctx
+    tracking_uri = str(os.environ.get("MLFLOW_TRACKING_URI", "") or "").strip().lower()
+    if tracking_uri.startswith("http://127.0.0.1") or tracking_uri.startswith("http://localhost"):
+        # Avoid long retry storms when local tracking server is down.
+        os.environ.setdefault("MLFLOW_HTTP_REQUEST_MAX_RETRIES", "1")
+        os.environ.setdefault("MLFLOW_HTTP_REQUEST_TIMEOUT", "3")
+    try:
+        mlflow.set_experiment(str(experiment_name))
+        ctx = mlflow.start_run(run_name=str(run_name) if str(run_name).strip() else None)
+        return mlflow, ctx
+    except Exception as exc:
+        print(f"[EfficientZeroV2][WARN] MLflow disabled for this run: {exc}")
+        return None, nullcontext()
 
 
 def _mlflow_log_params(mlflow_mod, params: dict) -> None:
@@ -181,13 +269,56 @@ def _collect_config_preflight_warnings(config_path: str | Path) -> list[str]:
         import yaml
     except Exception:
         return []
-    try:
-        loaded = yaml.safe_load(Path(config_path).read_text(encoding="utf-8"))
-    except Exception:
+    config_file = Path(config_path)
+
+    def _read_yaml_dict(path: Path) -> dict:
+        try:
+            loaded_local = yaml.safe_load(path.read_text(encoding="utf-8"))
+        except Exception:
+            return {}
+        return dict(loaded_local or {}) if isinstance(loaded_local, dict) else {}
+
+    def _deep_merge(base_obj, override_obj):
+        if not isinstance(base_obj, dict):
+            base_obj = {}
+        if not isinstance(override_obj, dict):
+            return dict(base_obj)
+        out_obj = dict(base_obj)
+        for k, v in override_obj.items():
+            if isinstance(v, dict) and isinstance(out_obj.get(k), dict):
+                out_obj[k] = _deep_merge(out_obj.get(k), v)
+            else:
+                out_obj[k] = v
+        return out_obj
+
+    def _load_recursive(p: Path, stack: set[Path]) -> dict:
+        p_res = p.resolve()
+        if p_res in stack or not p_res.exists():
+            return {}
+        stack.add(p_res)
+        cur = _read_yaml_dict(p_res)
+        base_rel = str(cur.get("base_config", "") or "").strip()
+        if not base_rel:
+            stack.remove(p_res)
+            return cur
+        candidate = (p_res.parent / base_rel).resolve()
+        if not candidate.exists():
+            for parent in [p_res.parent, *p_res.parents]:
+                test_path = (parent / base_rel).resolve()
+                if test_path.exists():
+                    candidate = test_path
+                    break
+        base_cfg = _load_recursive(candidate, stack) if candidate.exists() else {}
+        merged = _deep_merge(base_cfg, cur)
+        stack.remove(p_res)
+        return merged
+
+    merged = _load_recursive(config_file, set())
+    if not merged:
         return ["config_unreadable_or_invalid_yaml"]
-    raw = dict(loaded or {}) if isinstance(loaded, dict) else {}
-    train_cfg = dict(raw.get("train", {}) or {})
-    selfplay_cfg = dict(raw.get("selfplay", {}) or {})
+
+    train_cfg = dict(merged.get("train", {}) or {})
+    selfplay_cfg = dict(merged.get("selfplay", {}) or {})
     warnings: list[str] = []
     if "reward_shaping" not in selfplay_cfg:
         warnings.append("missing.selfplay.reward_shaping")
@@ -198,6 +329,15 @@ def _collect_config_preflight_warnings(config_path: str | Path) -> list[str]:
     if "objective_reporting" not in train_cfg:
         warnings.append("missing.train.objective_reporting")
     return warnings
+
+
+def _resolve_repo_root_from(start_path: str | Path) -> Path:
+    start = Path(start_path).resolve()
+    candidates = [start] + list(start.parents)
+    for p in candidates:
+        if (p / ".git").exists():
+            return p
+    return Path(".").resolve()
 
 
 def _atomic_torch_save(
@@ -356,6 +496,44 @@ def _percentile(values: list[float], q: float) -> float:
     vv = sorted(float(v) for v in values)
     pos = max(0, min(len(vv) - 1, int(round((len(vv) - 1) * float(q)))))
     return float(vv[pos])
+
+
+def _channel_name(index: int) -> str:
+    names = {
+        0: "ally_presence",
+        1: "enemy_presence",
+        2: "ally_hp_norm",
+        3: "enemy_hp_norm",
+        4: "ally_alive",
+        5: "enemy_alive",
+        6: "turn_norm",
+        7: "reaction_fire_threat",
+        8: "ally_infantry",
+        9: "enemy_infantry",
+        10: "ally_support",
+        11: "enemy_support",
+        12: "map_playable",
+        13: "vp_mask",
+        14: "vp_owner_relative",
+        15: "terrain_move_cost_norm",
+        16: "terrain_cover_norm",
+        17: "terrain_los_block",
+        18: "vp_distance_inv",
+        19: "q_coord_norm",
+        20: "r_coord_norm",
+        21: "frontline_control",
+        22: "ally_mobility_norm",
+        23: "enemy_mobility_norm",
+        24: "ally_direct_range_norm",
+        25: "enemy_direct_range_norm",
+        26: "ally_indirect_range_norm",
+        27: "enemy_indirect_range_norm",
+        28: "ally_attack_power_norm",
+        29: "enemy_attack_power_norm",
+        30: "ally_defense_power_norm",
+        31: "enemy_defense_power_norm",
+    }
+    return names.get(index, f"channel_{index}")
 
 
 def _episode_length_diagnostics(rows: list[dict], threshold: int) -> dict:
@@ -535,16 +713,28 @@ def run_training(
     mlflow_experiment: str = "assault_efficientzero_v2",
     mlflow_run_name: str = "",
 ) -> dict:
+    log_seq = 0
+    log_t0 = time.perf_counter()
+
+    def _log(msg: str) -> None:
+        nonlocal log_seq
+        log_seq += 1
+        ts = datetime.now().astimezone().strftime("%H:%M:%S.%f")[:-3]
+        elapsed_s = float(time.perf_counter() - log_t0)
+        print(f"[{ts} +{elapsed_s:09.3f}s #{log_seq:06d}] {msg}", flush=True)
+
     config_preflight_warnings = _collect_config_preflight_warnings(config_path)
     if config_preflight_warnings:
-        print(
+        _log(
             "[EfficientZeroV2][WARN] objective/reward config preflight: "
             f"{', '.join(config_preflight_warnings)}"
         )
-    cfg = load_efficientzero_config(Path(config_path))
+    config_path_abs = Path(config_path).resolve()
+    repo_root = _resolve_repo_root_from(config_path_abs)
+    cfg = load_efficientzero_config(config_path_abs)
     voec_cfg = load_voec_config(Path(cfg.paths["voec_config"]))
 
-    scenario_id = str(cfg.scenario["id"])
+    scenario_id, scenario_ids, scenario_weights = _resolve_scenario_mix(dict(cfg.scenario or {}))
     seed = int(cfg.scenario["seed"])
     iterations = int(cfg.train["iterations"])
     episodes_per_iter = int(cfg.train["episodes_per_iter"])
@@ -572,12 +762,18 @@ def run_training(
     mcts_dirichlet_alpha = float(cfg.selfplay.get("mcts_dirichlet_alpha", 0.3))
     mcts_dirichlet_epsilon = float(cfg.selfplay.get("mcts_dirichlet_epsilon", 0.0))
     mcts_q_clip_abs = float(cfg.selfplay.get("mcts_q_clip_abs", 10.0))
+    mcts_min_root_visits_per_action = int(
+        cfg.selfplay.get("mcts_min_root_visits_per_action", 0)
+    )
+    mcts_min_root_visits_top_n = int(cfg.selfplay.get("mcts_min_root_visits_top_n", 0))
     mcts_q_root_normalization_mode = str(
         cfg.selfplay.get("mcts_q_root_normalization_mode", "adaptive_minmax")
     )
     mcts_q_root_normalization_strength = float(
         cfg.selfplay.get("mcts_q_root_normalization_strength", 0.35)
     )
+    mcts_value_rescale_mode = str(cfg.selfplay.get("mcts_value_rescale_mode", "tanh"))
+    mcts_value_rescale_temperature = float(cfg.selfplay.get("mcts_value_rescale_temperature", 10.0))
     mcts_chance_mode = str(cfg.selfplay.get("mcts_chance_mode", "off"))
     mcts_chance_samples_per_expansion = int(
         cfg.selfplay.get("mcts_chance_samples_per_expansion", 1)
@@ -601,6 +797,12 @@ def run_training(
     inference_cache_limit = int(cfg.selfplay.get("inference_cache_limit", 2048))
     timeout_penalty = float(cfg.selfplay.get("timeout_penalty", -0.1))
     reward_shaping = dict(cfg.selfplay.get("reward_shaping", {}) or {})
+    matchup_modes = [
+        str(x)
+        for x in list(cfg.selfplay.get("matchup_modes", ["self_vs_self"]) or ["self_vs_self"])
+        if str(x)
+    ]
+    matchup_mode_weights = dict(cfg.selfplay.get("matchup_mode_weights", {}) or {})
 
     objective_loss_weight = float(cfg.train.get("objective_loss_weight", 0.12))
     consistency_loss_weight = float(cfg.train.get("consistency_loss_weight", 0.0))
@@ -657,6 +859,9 @@ def run_training(
     enable_post_train_analytics = bool(cfg.train.get("enable_post_train_analytics", False))
     collect_xai = bool(cfg.selfplay.get("collect_xai", cfg.train.get("collect_xai", False)))
     short_episode_threshold = int(cfg.train.get("short_episode_threshold", 80))
+    debug_train_batch_progress = bool(cfg.train.get("debug_train_batch_progress", False))
+    resume_checkpoint = str(cfg.train.get("resume_checkpoint", "") or "").strip()
+    compute_grad_norm = bool(cfg.train.get("compute_grad_norm", True))
 
     device = _resolve_device(str(cfg.model.get("device", "auto")))
     selfplay_device = str(
@@ -668,12 +873,19 @@ def run_training(
     run_id = f"efficientzero_v2_{uuid.uuid4().hex[:8]}"
     run_dir = run_root / run_id
 
-    print(f"[EfficientZeroV2] run_id={run_id}")
-    print(f"[EfficientZeroV2] config={config_path}")
-    print(f"[EfficientZeroV2] scenario={scenario_id} seed={seed}")
-    print(f"[EfficientZeroV2] device={device}")
-    print(f"[EfficientZeroV2] selfplay_device={selfplay_device}")
-    print(f"[EfficientZeroV2] selfplay_workers={num_workers}")
+    _log(f"[EfficientZeroV2] run_id={run_id}")
+    _log(f"[EfficientZeroV2] config={config_path_abs}")
+    _log(f"[EfficientZeroV2] repo_root={repo_root}")
+    if len(scenario_ids) > 1:
+        weight_txt = ",".join(
+            f"{str(sid)}:{float(w):g}" for sid, w in zip(list(scenario_ids), list(scenario_weights))
+        )
+        _log(f"[EfficientZeroV2] scenario_mix={weight_txt} seed={seed}")
+    else:
+        _log(f"[EfficientZeroV2] scenario={scenario_id} seed={seed}")
+    _log(f"[EfficientZeroV2] device={device}")
+    _log(f"[EfficientZeroV2] selfplay_device={selfplay_device}")
+    _log(f"[EfficientZeroV2] selfplay_workers={num_workers}")
 
     model = EfficientZeroV2Network(
         observation_dim=observation_dim,
@@ -688,6 +900,17 @@ def run_training(
         objective_intent_classes=aux_intent_classes if aux_objective_enabled else 0,
         multi_vp_feature_dim=aux_multi_vp_feature_dim if aux_objective_enabled else 0,
     )
+    if resume_checkpoint:
+        resume_path = Path(resume_checkpoint)
+        if not resume_path.is_absolute():
+            resume_path = (repo_root / resume_path).resolve()
+        if resume_path.exists():
+            ckpt_obj = torch.load(str(resume_path), map_location="cpu")
+            state_dict = ckpt_obj.get("state_dict", ckpt_obj) if isinstance(ckpt_obj, dict) else ckpt_obj
+            model.load_state_dict(state_dict)
+            _log(f"[EfficientZeroV2] resumed_from={resume_path}")
+        else:
+            _log(f"[EfficientZeroV2][WARN] resume_checkpoint not found: {resume_path}")
     if str(device) == "cuda":
         try:
             torch.set_float32_matmul_precision(matmul_precision)
@@ -726,6 +949,12 @@ def run_training(
         aux_intent_loss_weight=aux_intent_loss_weight,
         aux_multi_vp_loss_weight=aux_multi_vp_loss_weight,
         aux_multi_vp_feature_dim=aux_multi_vp_feature_dim,
+        compute_grad_norm=compute_grad_norm,
+        progress_callback=(
+            (lambda stage: _log(f"[EfficientZeroV2][train_batch] {stage}"))
+            if debug_train_batch_progress
+            else None
+        ),
     )
     model = trainer.model
     replay = ReplayBuffer(
@@ -773,6 +1002,8 @@ def run_training(
     iter_timing_rows: list[dict] = []
     run_phase29_totals: dict[str, float] = {}
     all_run_samples: list = []
+    episode_rewards: list[float] = []
+    episode_actions: list[str] = []
     short_episode_rows: list[dict] = []
     iter_diagnostics_rows: list[dict] = []
 
@@ -784,11 +1015,13 @@ def run_training(
         mlflow_mod,
         {
             "run_id": run_id,
-            "config_path": str(config_path),
+            "config_path": str(config_path_abs),
             "device": device,
             "iterations": iterations,
             "episodes_per_iter": episodes_per_iter,
             "mcts_simulations": mcts_simulations,
+            "mcts_min_root_visits_per_action": mcts_min_root_visits_per_action,
+            "mcts_min_root_visits_top_n": mcts_min_root_visits_top_n,
             "consistency_loss_weight": consistency_loss_weight,
             "consistency_unroll_steps": consistency_unroll_steps,
             "reanalysis_ratio": reanalysis_ratio,
@@ -804,6 +1037,8 @@ def run_training(
             "selfplay_device": selfplay_device,
             "collect_xai": collect_xai,
             "short_episode_threshold": short_episode_threshold,
+            "compute_grad_norm": compute_grad_norm,
+            "resume_checkpoint": (resume_checkpoint if resume_checkpoint else ""),
             "objective_loss_weight": objective_loss_weight,
             "objective_pos_weight": objective_pos_weight,
             "objective_opportunity_max_dist": objective_opportunity_max_dist,
@@ -886,8 +1121,12 @@ def run_training(
             "mcts_dirichlet_alpha": mcts_dirichlet_alpha,
             "mcts_dirichlet_epsilon": mcts_dirichlet_epsilon,
             "mcts_q_clip_abs": mcts_q_clip_abs,
+            "mcts_min_root_visits_per_action": mcts_min_root_visits_per_action,
+            "mcts_min_root_visits_top_n": mcts_min_root_visits_top_n,
             "mcts_q_root_normalization_mode": mcts_q_root_normalization_mode,
             "mcts_q_root_normalization_strength": mcts_q_root_normalization_strength,
+            "mcts_value_rescale_mode": mcts_value_rescale_mode,
+            "mcts_value_rescale_temperature": mcts_value_rescale_temperature,
             "mcts_chance_mode": mcts_chance_mode,
             "mcts_chance_samples_per_expansion": mcts_chance_samples_per_expansion,
             "mcts_chance_value_noise_std": mcts_chance_value_noise_std,
@@ -907,6 +1146,8 @@ def run_training(
             "reward_shaping": reward_shaping,
             "objective_opportunity_near_vp_max_dist": objective_opportunity_near_vp_max_dist,
             "collect_xai": collect_xai,
+            "matchup_modes": list(matchup_modes),
+            "matchup_mode_weights": dict(matchup_mode_weights),
         }
         model_state_dict_cpu = {
             k: v.detach().to(device="cpu").contiguous() for k, v in model.state_dict().items()
@@ -933,7 +1174,7 @@ def run_training(
     try:
         with mlflow_ctx:
             for it in range(iterations):
-                print(f"[EfficientZeroV2] iteration {it+1}/{iterations} - selfplay")
+                _log(f"[EfficientZeroV2] iteration {it+1}/{iterations} - selfplay")
                 iter_t0 = time.perf_counter()
                 model.eval()
                 if use_process_actors and process_pool is not None and it > 0:
@@ -961,7 +1202,7 @@ def run_training(
                             f"version={target_version} workers={len(updated_pids)} sync_s={sync_s:.2f}"
                         )
 
-                def _run_episode(ep_seed: int):
+                def _run_episode(ep_seed: int, ep_scenario_id: str):
                     local_adapter = seq_adapter
                     if local_adapter is None:
                         # Parallel path keeps per-task adapter isolation.
@@ -975,7 +1216,7 @@ def run_training(
                     with torch.inference_mode():
                         return play_episode(
                             adapter=local_adapter,
-                            scenario_id=scenario_id,
+                            scenario_id=str(ep_scenario_id),
                             seed=ep_seed,
                             max_steps=max_steps,
                             max_steps_override=max_steps_override,
@@ -990,8 +1231,12 @@ def run_training(
                             mcts_dirichlet_alpha=mcts_dirichlet_alpha,
                             mcts_dirichlet_epsilon=mcts_dirichlet_epsilon,
                             mcts_q_clip_abs=mcts_q_clip_abs,
+                            mcts_min_root_visits_per_action=mcts_min_root_visits_per_action,
+                            mcts_min_root_visits_top_n=mcts_min_root_visits_top_n,
                             mcts_q_root_normalization_mode=mcts_q_root_normalization_mode,
                             mcts_q_root_normalization_strength=mcts_q_root_normalization_strength,
+                            mcts_value_rescale_mode=mcts_value_rescale_mode,
+                            mcts_value_rescale_temperature=mcts_value_rescale_temperature,
                             mcts_chance_mode=mcts_chance_mode,
                             mcts_chance_samples_per_expansion=mcts_chance_samples_per_expansion,
                             mcts_chance_value_noise_std=mcts_chance_value_noise_std,
@@ -1011,6 +1256,8 @@ def run_training(
                             reward_shaping=reward_shaping,
                             objective_opportunity_near_vp_max_dist=objective_opportunity_near_vp_max_dist,
                             collect_xai=collect_xai,
+                            matchup_modes=list(matchup_modes),
+                            matchup_mode_weights=dict(matchup_mode_weights),
                         )
 
                 def _consume_episode(ep_idx: int, ep_seed: int, samples):
@@ -1063,7 +1310,9 @@ def run_training(
                                 info["future_dones"] = fut_dones
                     replay.extend(samples)
                     all_run_samples.extend(list(samples or []))
-                    print(
+                    episode_rewards.append(float(sum(float(getattr(s, "reward_target", 0.0) or 0.0) for s in list(samples or []))))
+                    episode_actions.append("episode_rollout")
+                    _log(
                         f"[EfficientZeroV2]   episode {ep_idx+1}/{episodes_per_iter} "
                         f"samples={len(samples)} replay_size={len(replay)}"
                     )
@@ -1107,7 +1356,14 @@ def run_training(
                 episode_plan = []
                 for ep in range(episodes_per_iter):
                     ep_seed = int(seed + it * episodes_per_iter + ep)
-                    episode_plan.append((ep, ep_seed))
+                    ep_scenario_id = _pick_scenario_for_episode(
+                        scenario_ids=list(scenario_ids),
+                        scenario_weights=list(scenario_weights),
+                        base_seed=int(seed),
+                        iteration=int(it),
+                        episode_index=int(ep),
+                    )
+                    episode_plan.append((ep, ep_seed, ep_scenario_id))
                     budget_source_detail = ""
                     if str(logged_budget_source) == "scenario_turn_limit*unit_count":
                         budget_source_detail = (
@@ -1117,9 +1373,9 @@ def run_training(
                         f"source={logged_budget_source}{budget_source_detail} "
                         f"effective_max_steps={int(logged_effective_budget)}"
                     )
-                    print(
+                    _log(
                         f"[EfficientZeroV2]   episode {ep+1}/{episodes_per_iter} "
-                        f"starting (seed={ep_seed}, sims={mcts_simulations}, budget={budget_label})"
+                        f"starting (seed={ep_seed}, scenario={ep_scenario_id}, sims={mcts_simulations}, budget={budget_label})"
                     )
 
                 parallel_selfplay = bool(parallel_selfplay_enabled)
@@ -1134,8 +1390,8 @@ def run_training(
                         if process_pool is None:
                             raise RuntimeError("Process actors pool not initialized")
                         fut_to_job = {
-                            process_pool.submit(_process_actor_run_episode, ep_seed): (ep_idx, ep_seed)
-                            for ep_idx, ep_seed in episode_plan
+                            process_pool.submit(_process_actor_run_episode, ep_seed, _ep_scenario): (ep_idx, ep_seed)
+                            for ep_idx, ep_seed, _ep_scenario in episode_plan
                         }
                         for fut in as_completed(fut_to_job):
                             ep_idx, ep_seed = fut_to_job[fut]
@@ -1143,14 +1399,14 @@ def run_training(
                     else:
                         with ThreadPoolExecutor(max_workers=int(num_workers)) as ex:
                             fut_to_job = {
-                                ex.submit(_run_episode, ep_seed): (ep_idx, ep_seed)
-                                for ep_idx, ep_seed in episode_plan
+                                ex.submit(_run_episode, ep_seed, ep_scenario): (ep_idx, ep_seed)
+                                for ep_idx, ep_seed, ep_scenario in episode_plan
                             }
                             for fut in as_completed(fut_to_job):
                                 ep_idx, ep_seed = fut_to_job[fut]
                                 completed[ep_idx] = (ep_seed, fut.result())
                     # Keep deterministic replay insertion order by episode index.
-                    for ep_idx, ep_seed in episode_plan:
+                    for ep_idx, ep_seed, _ep_scenario in episode_plan:
                         done_seed, samples = completed.get(ep_idx, (ep_seed, []))
                         _consume_episode(ep_idx, done_seed, samples)
                 else:
@@ -1159,8 +1415,8 @@ def run_training(
                             "[EfficientZeroV2]   parallel selfplay requires selfplay.device=cpu; "
                             "using sequential selfplay"
                         )
-                    for ep_idx, ep_seed in episode_plan:
-                        samples = _run_episode(ep_seed)
+                    for ep_idx, ep_seed, ep_scenario in episode_plan:
+                        samples = _run_episode(ep_seed, ep_scenario)
                         _consume_episode(ep_idx, ep_seed, samples)
                 selfplay_elapsed_s = float(time.perf_counter() - iter_t0)
 
@@ -1168,9 +1424,43 @@ def run_training(
                 update_metrics: list[dict] = []
                 replay_age_mean_vals: list[float] = []
                 replay_age_max_vals: list[float] = []
-                for _ in range(train_updates_per_iter):
+                _log(
+                    f"[EfficientZeroV2] iteration {it+1}/{iterations} - train "
+                    f"(updates={train_updates_per_iter}, batch_size={batch_size})"
+                )
+                for upd_idx in range(train_updates_per_iter):
+                    upd_t0 = time.perf_counter()
+                    _log(
+                        f"[EfficientZeroV2]   train update {upd_idx+1}/{train_updates_per_iter} sampling...",
+                    )
                     batch = replay.sample(batch_size)
+                    _log(
+                        f"[EfficientZeroV2]   train update {upd_idx+1}/{train_updates_per_iter} train_batch...",
+                    )
+                    hb_stop = threading.Event()
+                    hb_start_t = time.perf_counter()
+
+                    def _update_heartbeat() -> None:
+                        waited_s = 0.0
+                        while not hb_stop.wait(5.0):
+                            waited_s += 5.0
+                            if waited_s < 15.0:
+                                continue
+                            elapsed_s = float(time.perf_counter() - hb_start_t)
+                            _log(
+                                f"[EfficientZeroV2]   train update {upd_idx+1}/{train_updates_per_iter} "
+                                f"still running elapsed_s={elapsed_s:.1f}"
+                            )
+
+                    hb_thread = threading.Thread(
+                        target=_update_heartbeat,
+                        name="ezv2-train-update-heartbeat",
+                        daemon=True,
+                    )
+                    hb_thread.start()
                     metrics = trainer.train_batch(batch)
+                    hb_stop.set()
+                    hb_thread.join(timeout=0.2)
                     m = metrics.to_dict()
                     update_metrics.append(m)
                     replay_age_values = []
@@ -1184,6 +1474,14 @@ def run_training(
                         else 0.0
                     )
                     replay_age_max_vals.append(float(max(replay_age_values)) if replay_age_values else 0.0)
+                    upd_elapsed_s = float(time.perf_counter() - upd_t0)
+                    _log(
+                        f"[EfficientZeroV2]   train update {upd_idx+1}/{train_updates_per_iter} "
+                        f"loss={float(m.get('loss', 0.0)):.4f} "
+                        f"policy={float(m.get('policy_loss', 0.0)):.4f} "
+                        f"value={float(m.get('value_loss', 0.0)):.4f} "
+                        f"update_s={upd_elapsed_s:.2f}"
+                    )
                 latest_metrics = {}
                 if update_metrics:
                     metric_keys = [
@@ -1229,6 +1527,15 @@ def run_training(
                 latest_metrics["timing_selfplay_s"] = selfplay_elapsed_s
                 latest_metrics["timing_train_s"] = train_elapsed_s
                 latest_metrics["timing_iter_s"] = iter_elapsed_s
+                elapsed_total_s = float(time.perf_counter() - t_total)
+                done_iters = int(it + 1)
+                avg_iter_s = float(elapsed_total_s / float(max(1, done_iters)))
+                eta_s = float(avg_iter_s * float(max(0, iterations - done_iters)))
+                _log(
+                    f"[EfficientZeroV2] iteration {done_iters}/{iterations} done "
+                    f"selfplay_s={selfplay_elapsed_s:.2f} train_s={train_elapsed_s:.2f} "
+                    f"iter_s={iter_elapsed_s:.2f} avg_iter_s={avg_iter_s:.2f} eta_s={eta_s:.1f}"
+                )
                 xai_den = max(1.0, float(run_phase29_totals.get("xai_decision_steps", 0.0)))
                 cap_den = max(1.0, float(run_phase29_totals.get("xai_vp_capture_opportunity_steps", 0.0)))
                 reaction_den = max(
@@ -1390,6 +1697,20 @@ def run_training(
         if bool(enable_post_train_analytics):
             (run_dir / "xai").mkdir(parents=True, exist_ok=True)
             (run_dir / "events").mkdir(parents=True, exist_ok=True)
+        xai_dir = run_dir / "xai"
+        xai_dir.mkdir(parents=True, exist_ok=True)
+        (xai_dir / "decision_report.json").write_text(
+            json.dumps(build_decision_report(0, list(episode_actions), list(episode_rewards)), indent=2),
+            encoding="utf-8",
+        )
+        (xai_dir / "search_snapshot.json").write_text(
+            json.dumps(build_search_snapshot(list(episode_actions), [1 for _ in list(episode_actions)], list(episode_rewards)), indent=2),
+            encoding="utf-8",
+        )
+        (xai_dir / "episode_narrative.json").write_text(
+            json.dumps(build_episode_narrative(list(episode_rewards), list(episode_actions)), indent=2),
+            encoding="utf-8",
+        )
         final_ckpt_path = run_dir / "checkpoints" / "final.pt"
         _atomic_torch_save(model.state_dict(), final_ckpt_path)
         # Keep only the final checkpoint to reduce disk usage.
@@ -1401,6 +1722,64 @@ def run_training(
         (run_dir / "metrics" / "summary.json").write_text(
             json.dumps(latest_metrics, indent=2), encoding="utf-8"
         )
+        # Persist channel previews for first/mid/last snapshots (WebUI inspection).
+        if replay._items:
+            first_obs = replay._items[0].observation
+            if isinstance(first_obs, torch.Tensor) and first_obs.ndim == 3:
+                c, h, w = first_obs.shape
+
+                def _snapshot_payload(label: str, obs_tensor: torch.Tensor, index: int) -> dict:
+                    channels = []
+                    for idx in range(int(c)):
+                        plane = obs_tensor[idx]
+                        nonzero = int((plane != 0).sum().item())
+                        channels.append(
+                            {
+                                "index": idx,
+                                "name": _channel_name(idx),
+                                "nonzero_cells": nonzero,
+                                "nonzero_ratio": float(nonzero / float(max(1, h * w))),
+                                "mean_value": float(plane.mean().item()),
+                                "max_value": float(plane.max().item()),
+                                "min_value": float(plane.min().item()),
+                                "values": plane.tolist(),
+                            }
+                        )
+                    return {
+                        "label": label,
+                        "sample_index": int(index),
+                        "channels": channels,
+                    }
+
+                n = len(replay._items)
+                pick = [
+                    ("first", 0),
+                    ("mid", max(0, n // 2)),
+                    ("last", max(0, n - 1)),
+                ]
+                snapshots = []
+                for label, idx in pick:
+                    obs_tensor = replay._items[idx].observation
+                    if isinstance(obs_tensor, torch.Tensor) and obs_tensor.ndim == 3:
+                        snapshots.append(_snapshot_payload(label, obs_tensor, idx))
+
+                (run_dir / "metrics" / "observation_channels.json").write_text(
+                    json.dumps(
+                        {
+                            "encoder_type": str(getattr(model, "encoder_type", "mlp")),
+                            "shape": {
+                                "channels": int(c),
+                                "height": int(h),
+                                "width": int(w),
+                            },
+                            "snapshots": snapshots,
+                            # Backward-compat alias to first snapshot channel stats.
+                            "channels": snapshots[0]["channels"] if snapshots else [],
+                        },
+                        indent=2,
+                    ),
+                    encoding="utf-8",
+                )
         (run_dir / "metrics" / "iter_short_episode_diagnostics.json").write_text(
             json.dumps(iter_diagnostics_rows, indent=2), encoding="utf-8"
         )
@@ -1466,7 +1845,13 @@ def run_training(
                 "train_updates_per_iter": train_updates_per_iter,
                 "checkpoint_every": checkpoint_every,
                 "collect_xai": collect_xai,
+                "scenario_mix": {
+                    "ids": list(scenario_ids),
+                    "weights": [float(w) for w in list(scenario_weights)],
+                },
                 "short_episode_threshold": short_episode_threshold,
+                "compute_grad_norm": compute_grad_norm,
+                "resume_checkpoint": (resume_checkpoint if resume_checkpoint else ""),
                 "model": {
                     "encoder_type": encoder_type,
                     "observation_channels": observation_channels,
@@ -1477,6 +1862,16 @@ def run_training(
                     "dynamics_blocks": dynamics_blocks,
                     "prediction_blocks": prediction_blocks,
                     "device": device,
+                    "architecture_version": "ezv2_compact_bottleneck_v2",
+                    "total_parameters": sum(p.numel() for p in model.parameters()),
+                    "features": [
+                        "group_norm",
+                        "squeeze_and_excitation",
+                        "silu",
+                        "latent_minmax_scaling",
+                        "conv1x1_bottlenecks",
+                        "policy_cross_entropy",
+                    ],
                 },
                 "selfplay": {
                     "device": selfplay_device,
@@ -1492,8 +1887,12 @@ def run_training(
                     "mcts_dirichlet_alpha": mcts_dirichlet_alpha,
                     "mcts_dirichlet_epsilon": mcts_dirichlet_epsilon,
                     "mcts_q_clip_abs": mcts_q_clip_abs,
+                    "mcts_min_root_visits_per_action": mcts_min_root_visits_per_action,
+                    "mcts_min_root_visits_top_n": mcts_min_root_visits_top_n,
                     "mcts_q_root_normalization_mode": mcts_q_root_normalization_mode,
                     "mcts_q_root_normalization_strength": mcts_q_root_normalization_strength,
+                    "mcts_value_rescale_mode": mcts_value_rescale_mode,
+                    "mcts_value_rescale_temperature": mcts_value_rescale_temperature,
                     "mcts_chance_mode": mcts_chance_mode,
                     "mcts_chance_samples_per_expansion": mcts_chance_samples_per_expansion,
                     "mcts_chance_value_noise_std": mcts_chance_value_noise_std,
@@ -1517,6 +1916,19 @@ def run_training(
             },
         )
         manifest.write(run_dir / "run_manifest.json")
+        try:
+            publish_result = publish_train_run(repo_root=repo_root)
+            print(
+                "[EfficientZeroV2] catalog_publish="
+                f"{str(publish_result.get('publish_status', 'unknown'))} "
+                f"status_path={str(publish_result.get('publish_status_path', ''))}"
+            )
+        except Exception as exc:
+            print(f"[EfficientZeroV2][WARN] catalog publish failed: {exc}")
+            print(
+                "[EfficientZeroV2][WARN] run manual repair: "
+                "pwsh scripts/repair_catalog_publication_v2.ps1"
+            )
         print(f"[EfficientZeroV2] final_checkpoint={final_ckpt_path}")
         print(f"[EfficientZeroV2] completed run_dir={run_dir}")
         return {"run_id": run_id, "metrics": latest_metrics, "engine_mode": "efficient_core"}

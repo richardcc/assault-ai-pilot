@@ -7,6 +7,7 @@ from assault_sim.sim_env import SimEnv
 from assault_sim.debug.debug_config import DebugConfig
 from assault_sim.config.config_loader import load_sim_config
 from assault_sim.decision.mission_planner import MissionPlanner
+from assault_model.core.victory_outcomes import evaluate_scenario_outcome
 
 
 MAP_PIECE_CATALOG_PATH = (
@@ -316,25 +317,16 @@ class GameSession:
 
         # Scenario-level objective outcome (captured objectives table).
         victory_outcome_state = None
-        if victory_outcomes and vps:
-            tracked_side = str(victory_outcomes.get("tracked_side", "")).strip().upper()
-            if tracked_side:
-                captured = sum(1 for vp in vps if (vp.get("current_owner") or "").upper() == tracked_side)
-                matched_row = None
-                for row in victory_outcomes.get("table", []):
-                    captured_range = row.get("captured", {}) if isinstance(row, dict) else {}
-                    min_cap = int(captured_range.get("min", -10**9))
-                    max_cap = int(captured_range.get("max", 10**9))
-                    if min_cap <= captured <= max_cap:
-                        matched_row = row
-                        break
+        if victory_outcomes and vps and runtime is not None:
+            outcome = evaluate_scenario_outcome(state=runtime.base_state, scenario=runtime.scenario)
+            if outcome.matched_table_row:
                 victory_outcome_state = {
-                    "tracked_side": tracked_side,
-                    "metric": victory_outcomes.get("metric"),
-                    "timing": victory_outcomes.get("timing"),
-                    "captured": captured,
-                    "objectives_total": len(vps),
-                    "outcome": matched_row,
+                    "tracked_side": outcome.tracked_side,
+                    "metric": outcome.metric,
+                    "timing": outcome.timing,
+                    "captured": outcome.captured,
+                    "objectives_total": outcome.objectives_total,
+                    "outcome": outcome.matched_table_row,
                 }
 
         # ✅ FINAL

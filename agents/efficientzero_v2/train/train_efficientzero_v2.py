@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import argparse
 import json
+from pathlib import Path
 from agents.efficientzero_v2.train.train_engine import run_training as run_engine_training
+from mlops.catalog_publisher_v2 import publish_train_run
 
 
 def run_training(
@@ -15,6 +17,15 @@ def run_training(
         config_path=config_path,
         mlflow_experiment=mlflow_experiment,
         mlflow_run_name=mlflow_run_name,
+    )
+    repo_root = Path(__file__).resolve().parents[3]
+    publish_result = publish_train_run(
+        repo_root=repo_root,
+        run_id=str(result.get("run_id", "") or ""),
+    )
+    result["catalog_publish_status"] = str(publish_result.get("publish_status", "unknown"))
+    result["catalog_publish_status_path"] = str(
+        publish_result.get("publish_status_path", "")
     )
     result["engine_mode"] = str(result.get("engine_mode", "efficient_core") or "efficient_core")
     return result

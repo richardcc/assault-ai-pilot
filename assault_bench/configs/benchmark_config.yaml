@@ -1,11 +1,30 @@
 paths:
-  run_root: runs
+  run_root: runs_curriculum
   voec_config: voec_sim/configs/voec_config.yaml
   muzero_config: agents/muzero/configs/muzero_config.yaml
 
 benchmark:
   device: cuda
-  num_workers: 4
+  num_workers: 1
+  # Safety default: CUDA benchmarks force workers=1 unless this opt-in is true.
+  allow_cuda_parallel: false
+  # Max workers allowed when allow_cuda_parallel=true.
+  # For 8GB VRAM, start with 2 and monitor OOM/throughput.
+  cuda_parallel_workers: 2
+  # When running CUDA parallel, use threads + shared GPU micro-batching service.
+  # Recommended false for now (process parallel performed better in profiling).
+  cuda_parallel_use_threads: false
+  inference_max_batch_size: 16
+  inference_batch_wait_ms: 2.0
+  # Group multiple seeds per worker task to reduce dispatch overhead.
+  seed_batch_size: 2
+  # Keep per-episode replay JSON files; set false for faster publish-only runs.
+  persist_replay_episode_files: true
+  # Optional per-profile overrides to keep quality where it matters most.
+  mcts_simulations_by_profile:
+    muzero_selfplay: 384
+    muzero_vs_random_side_a: 256
+    muzero_vs_random_side_b: 256
   scenario_id: battaglia_cittadina_2_1
   matchup_profiles:
     - muzero_selfplay
@@ -13,18 +32,22 @@ benchmark:
     - muzero_vs_random_side_b
   # Optional opt-in baseline:
   # - random_selfplay
-  # Default "standard quality" matrix: 25 seeds x 3 matchups = 75 episodes.
-  seeds: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25]
-  max_steps: 80
+  # Default matrix: 40 seeds x 3 matchups = 120 episodes.
+  seeds: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40]
+  max_steps: 60
   max_steps_override: 0
-  mcts_simulations: 128
-  mcts_c_puct: 2.0
-  mcts_temperature: 1.0
+  mcts_simulations: 384
+  mcts_c_puct: 2.3
+  mcts_temperature: 1.1
   mcts_dirichlet_alpha: 0.3
   mcts_dirichlet_epsilon: 0.35
-  mcts_q_clip_abs: 25.0
-  mcts_min_root_visits_per_action: 1
-  mcts_min_root_visits_top_n: 999
+  mcts_q_clip_abs: 1000000.0
+  mcts_q_root_normalization_mode: adaptive_minmax
+  mcts_q_root_normalization_strength: 0.40
+  mcts_value_rescale_mode: signed_log_tanh
+  mcts_value_rescale_temperature: 8.0
+  mcts_min_root_visits_per_action: 5
+  mcts_min_root_visits_top_n: 0
   unit_prefilter_enabled: true
   unit_prefilter_replan_enabled: true
   unit_prefilter_top_k: 3

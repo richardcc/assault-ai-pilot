@@ -1,0 +1,11 @@
+{
+  "name": "phase1_self_vs_random_bootstrap",
+  "repo": "C:/repos/python/assault",
+  "runs_root": "runs_curriculum",
+  "tracked_files": [
+    "agents/efficientzero_v2/configs/efficientzero_v2_config.min_valid.yaml",
+    "assault_bench/configs/benchmark_config.yaml"
+  ],
+  "train_command": "python -m agents.efficientzero_v2.train.train_efficientzero_v2 --config agents/efficientzero_v2/configs/efficientzero_v2_config.min_valid.yaml --mlflow-experiment assault_efficientzero_v2 --mlflow-run-name curriculum_phase1_train",
+  "eval_command": "python -m assault_bench.runner --config assault_bench/configs/benchmark_config.yaml"
+}

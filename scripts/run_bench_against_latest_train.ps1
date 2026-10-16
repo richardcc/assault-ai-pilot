@@ -79,9 +79,19 @@ try {
     throw "Benchmark failed with exit code $LASTEXITCODE"
   }
 
+  Write-Host "Refreshing strict reporting catalog..."
+  $repairScript = Join-Path $Repo "scripts/repair_catalog_publication_v2.ps1"
+  if (-not (Test-Path $repairScript)) {
+    throw "Repair script not found: $repairScript"
+  }
+  & $repairScript -Repo $Repo
+  if ($LASTEXITCODE -ne 0) {
+    throw "Catalog refresh failed with exit code $LASTEXITCODE"
+  }
+
   Write-Host "Done."
-  Write-Host "Latest bench: runs\bench_latest.json"
-  Write-Host "Bench replay history: runs\$runId\xai\bench_replay_*.json"
+  Write-Host "Latest bench eval: runs\$runId\xai\bench_eval_*.json"
+  Write-Host "Bench replay index history: runs\$runId\xai\bench_replay_index_*.json"
 }
 finally {
   Pop-Location

@@ -304,6 +304,8 @@ Core scripts:
 - `scripts/experiment_queue_worker.ps1` - Long-running queue worker that polls manifests and auto-runs pending experiments.
 - `scripts/reset_experiment_status.ps1` - Bulk status reset helper for experiment manifests (supports dry-run).
 - `scripts/promote_experiment.ps1` - Promotes PASS experiments to `experiments_archive/passed` with `done_keep` and promotion log.
+- `scripts/curriculum_cycle.template.json` - Template for repeatable curriculum cycles (train/eval/publish).
+- `scripts/run_curriculum_cycle.ps1` - Executes repeatable curriculum cycles and writes lock/log artifacts per run.
 
 ### Experiment Definitions (all manifests)
 

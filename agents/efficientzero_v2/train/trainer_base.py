@@ -106,8 +106,9 @@ class EfficientZeroV2BaseTrainer:
         value_target = torch.tensor([[s.value_target] for s in batch], dtype=torch.float32, device=self.device)
         reward_target = torch.tensor([[s.reward_target] for s in batch], dtype=torch.float32, device=self.device)
 
-        _, policy_logits, value_pred, reward_pred, aux = self.model.initial_inference(obs, return_aux=True)
-        policy_loss = F.mse_loss(torch.softmax(policy_logits, dim=-1), policy_target)
+        # Cross-entropy / KL divergence: avoids gradient saturation of MSE on softmax
+        log_policy_probs = F.log_softmax(policy_logits, dim=-1)
+        policy_loss = -(policy_target * log_policy_probs).sum(dim=-1).mean()
         value_loss = F.mse_loss(value_pred, value_target)
         reward_loss = F.mse_loss(reward_pred, reward_target)
         objective_loss = torch.tensor(0.0, dtype=torch.float32, device=self.device)

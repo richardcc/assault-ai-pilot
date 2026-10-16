@@ -365,10 +365,48 @@ cd C:\repos\python\assault
 
 
 # 1) Train EfficientZero v2
+# 1) Train
 python -m agents.efficientzero_v2.train.train_efficientzero_v2 `
   --config agents/efficientzero_v2/configs/efficientzero_v2_config.yaml `
   --mlflow-experiment assault_efficientzero_v2 `
   --mlflow-run-name "ezv2_train_$(Get-Date -Format yyyyMMdd_HHmmss)"
-  
+
 python -m assault_bench.runner --config assault_bench/configs/benchmark_config.yaml --checkpoint latest
-powershell -ExecutionPolicy Bypass -File .\scripts\build_curriculum_reporting_catalog.ps1
+
+powershell -ExecutionPolicy Bypass -File .\scripts\gate_reporting_persistence_perf.ps1
+
+
+python -m agents.efficientzero_v2.train.train_efficientzero_v2 `
+  --config agents/efficientzero_v2/configs/efficientzero_v2_config.yaml `
+  --mlflow-experiment assault_efficientzero_v2 `
+  --mlflow-run-name "ezv2_train_$(Get-Date -Format yyyyMMdd_HHmmss)"
+
+python -m assault_bench.runner --config assault_bench/configs/benchmark_config.yaml --checkpoint latest
+
+powershell -ExecutionPolicy Bypass -File .\scripts\gate_reporting_persistence_perf.ps1
+
+
+powershell -ExecutionPolicy Bypass -File .\scripts\cleanup_all_generated_artifacts.ps1
+powershell -ExecutionPolicy Bypass -File .\scripts\cleanup_all_generated_artifacts.ps1 -Execute
+powershell -ExecutionPolicy Bypass -File .\scripts\verify_clean_workspace_state.ps1
+
+
+cd C:\repos\python\assault
+powershell -ExecutionPolicy Bypass -File .\scripts\cleanup_all_generated_artifacts.ps1 -Execute
+cd C:\repos\python\assault
+powershell -ExecutionPolicy Bypass -File .\curriculums\self_vs_self_vs_random_v1\run_all_phases.ps1
+
+.\scripts\run_curriculum_reporting_viewer.ps1 -Dev
+
+ Run un paso
+ powershell -ExecutionPolicy Bypass -File .\scripts\bench_one_step_current_model.ps1 -DisableMlflow
+ 
+ 
+ powershell -ExecutionPolicy Bypass -File ".\curriculums\self_vs_self_vs_random_recovery_v1\run_all_phases.ps1"
+ 
+ ** eval 
+cd mlops\reporting\viewer_frontend
+npm run build
+cd C:\repos\python\assault
+python -m mlops.reporting.viewer --repo-root . --host 127.0.0.1 --port 8777
+

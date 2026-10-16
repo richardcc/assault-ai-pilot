@@ -1,0 +1,81 @@
+name: self_vs_self_vs_random_recovery_v1
+engine: efficientzero_v2
+description: >
+  VP-first recovery curriculum to improve channel adaptation in early phases.
+  Keeps phase-specific eval sims aligned and promotes based on VP capture/control.
+
+phases:
+  - name: phase1_bootstrap
+    train_config: curriculums/self_vs_self_vs_random_recovery_v1/configs/efficientzero_v2.phase1_bootstrap.recovery.yaml
+    eval_config: assault_bench/configs/benchmark_config.curriculum_phase1_256.yaml
+    gate:
+      min_vp_capture_take_rate: 0.055
+      min_tracked_captured_avg: 2.35
+      min_vp_net_avg_tracked_side: 0.30
+
+  - name: phase1_channel_adapt
+    train_config: curriculums/self_vs_self_vs_random_recovery_v1/configs/efficientzero_v2.phase1_channel_adapt.yaml
+    eval_config: assault_bench/configs/benchmark_config.curriculum_phase1_256.yaml
+    gate:
+      no_regression_defeat_rate: true
+      min_vp_capture_take_rate: 0.060
+      min_tracked_captured_avg: 2.40
+      min_vp_net_avg_tracked_side: 0.34
+
+  - name: phase1_refine_aggressive
+    train_config: curriculums/self_vs_self_vs_random_recovery_v1/configs/efficientzero_v2.phase1_refine_recovery.yaml
+    eval_config: assault_bench/configs/benchmark_config.curriculum_phase1_256.yaml
+    gate:
+      no_regression_defeat_rate: true
+      min_vp_capture_take_rate_delta: 0.004
+      min_vp_capture_take_rate: 0.062
+      min_tracked_captured_avg: 2.42
+      min_vp_net_avg_tracked_side: 0.36
+
+  - name: phase2_mix_70_30
+    train_config: curriculums/self_vs_self_vs_random_v1/configs/efficientzero_v2.phase2_mix_70_30.yaml
+    eval_config: assault_bench/configs/benchmark_config.curriculum_phase2_320.yaml
+    gate:
+      no_regression_defeat_rate: true
+      min_vp_capture_take_rate: 0.065
+      min_tracked_captured_avg: 2.45
+      min_vp_net_avg_tracked_side: 0.38
+
+  - name: phase3_mix_50_50
+    train_config: curriculums/self_vs_self_vs_random_v1/configs/efficientzero_v2.phase3_mix_50_50.yaml
+    eval_config: assault_bench/configs/benchmark_config.curriculum_phase3_352.yaml
+    gate:
+      no_regression_defeat_rate: true
+      min_score: 0.60
+      min_vp_capture_take_rate: 0.070
+      min_tracked_captured_avg: 2.48
+      min_vp_net_avg_tracked_side: 0.40
+
+  - name: phase4_mix_30_70
+    train_config: curriculums/self_vs_self_vs_random_v1/configs/efficientzero_v2.phase4_mix_30_70.yaml
+    eval_config: assault_bench/configs/benchmark_config.curriculum_phase4_384.yaml
+    gate:
+      min_score: 0.62
+      min_vp_capture_take_rate: 0.080
+      min_tracked_captured_avg: 2.50
+      min_vp_net_avg_tracked_side: 0.44
+
+  - name: phase5_self_dominant_90_10
+    train_config: curriculums/self_vs_self_vs_random_v1/configs/efficientzero_v2.phase5_self_dominant_90_10.yaml
+    eval_config: assault_bench/configs/benchmark_config.curriculum_phase5_416.yaml
+    gate:
+      no_regression_defeat_rate: true
+      min_score: 0.64
+      min_vp_capture_take_rate: 0.095
+      min_tracked_captured_avg: 2.52
+      min_vp_net_avg_tracked_side: 0.47
+
+  - name: phase6_self_only_stabilize
+    train_config: curriculums/self_vs_self_vs_random_v1/configs/efficientzero_v2.phase6_self_only_stabilize.yaml
+    eval_config: assault_bench/configs/benchmark_config.curriculum_phase6_448.yaml
+    gate:
+      no_regression_defeat_rate: true
+      min_score: 0.66
+      min_vp_capture_take_rate: 0.105
+      min_tracked_captured_avg: 2.55
+      min_vp_net_avg_tracked_side: 0.50

@@ -182,6 +182,30 @@ def load_efficientzero_config(path: str | Path):
     """
     Local EZv2 config loader with merged defaults.
     """
-    loaded = yaml.safe_load(Path(path).read_text(encoding="utf-8"))
+    def _load_yaml_with_base(config_path: Path, stack: set[Path]) -> dict[str, Any]:
+        p = config_path.resolve()
+        if p in stack:
+            raise ValueError(f"cyclic base_config reference detected: {p}")
+        stack.add(p)
+        loaded_local = yaml.safe_load(p.read_text(encoding="utf-8"))
+        local_cfg = dict(loaded_local or {})
+        base_ref = str(local_cfg.get("base_config", "") or "").strip()
+        if not base_ref:
+            stack.remove(p)
+            return local_cfg
+        candidate_rel = (p.parent / base_ref).resolve()
+        candidate_cwd = (Path.cwd() / base_ref).resolve()
+        base_path = candidate_rel if candidate_rel.exists() else candidate_cwd
+        if not base_path.exists():
+            raise FileNotFoundError(
+                f"base_config not found: '{base_ref}' from '{p}'"
+            )
+        base_cfg = _load_yaml_with_base(base_path, stack)
+        merged = _deep_merge_dict(base_cfg, local_cfg)
+        merged.pop("base_config", None)
+        stack.remove(p)
+        return merged
+
+    loaded = _load_yaml_with_base(Path(path), set())
     raw = _deep_merge_dict(_DEFAULT_CONFIG, dict(loaded or {}))
     return EfficientZeroConfig(raw=dict(raw))

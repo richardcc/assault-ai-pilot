@@ -1,0 +1,11 @@
+{
+  "name": "self_vs_self_vs_random_recovery_v1_phase3_mix_50_50",
+  "repo": "C:/repos/python/assault",
+  "runs_root": "runs_curriculum",
+  "tracked_files": [
+    "curriculums/self_vs_self_vs_random_v1/configs/efficientzero_v2.phase3_mix_50_50.yaml",
+    "assault_bench/configs/benchmark_config.curriculum_phase3_352.yaml"
+  ],
+  "train_command": "python -m agents.efficientzero_v2.train.train_efficientzero_v2 --config curriculums/self_vs_self_vs_random_v1/configs/efficientzero_v2.phase3_mix_50_50.yaml --mlflow-experiment assault_efficientzero_v2 --mlflow-run-name curriculum_recovery_v1_phase3",
+  "eval_command": "python -m assault_bench.runner --config assault_bench/configs/benchmark_config.curriculum_phase3_352.yaml"
+}

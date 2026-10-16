@@ -29,6 +29,7 @@ from agents.muzero.train.trainer import MuZeroTrainer
 from agents.muzero.xai.decision_report import build_decision_report
 from agents.muzero.xai.episode_narrative import build_episode_narrative
 from agents.muzero.xai.search_tree_snapshot import build_search_snapshot
+from mlops.catalog_publisher_v2 import publish_train_run
 from voec_sim.configs.config_loader import load_voec_config
 from voec_sim.core.simulator import VOECSimulator
 
@@ -85,7 +86,7 @@ def _channel_name(index: int) -> str:
         4: "ally_alive",
         5: "enemy_alive",
         6: "turn_norm",
-        7: "done_flag",
+        7: "reaction_fire_threat",
         8: "ally_infantry",
         9: "enemy_infantry",
         10: "ally_support",
@@ -99,7 +100,7 @@ def _channel_name(index: int) -> str:
         18: "vp_distance_inv",
         19: "q_coord_norm",
         20: "r_coord_norm",
-        21: "has_vp_owner",
+        21: "frontline_control",
         22: "ally_mobility_norm",
         23: "enemy_mobility_norm",
         24: "ally_direct_range_norm",
@@ -193,6 +194,8 @@ def _selfplay_worker_task(payload: dict):
         timeout_penalty=payload["selfplay"]["timeout_penalty"],
         log_units_snapshot=bool(payload["selfplay"].get("log_units_snapshot", False)),
         reward_shaping=payload["selfplay"]["reward_shaping"],
+        matchup_modes=list(payload["selfplay"].get("matchup_modes", ["self_vs_self"]) or ["self_vs_self"]),
+        matchup_mode_weights=dict(payload["selfplay"].get("matchup_mode_weights", {}) or {}),
         objective_opportunity_near_vp_max_dist=float(
             payload["selfplay"].get("objective_opportunity_near_vp_max_dist", 2.0)
         ),
@@ -343,6 +346,8 @@ def run_training(
     timeout_penalty = float(cfg.selfplay.get("timeout_penalty", -0.1))
     log_units_snapshot = bool(cfg.selfplay.get("log_units_snapshot", False))
     reward_shaping = dict(cfg.selfplay.get("reward_shaping", {}) or {})
+    matchup_modes = [str(x) for x in list(cfg.selfplay.get("matchup_modes", ["self_vs_self"])) if str(x)]
+    matchup_mode_weights = dict(cfg.selfplay.get("matchup_mode_weights", {}) or {})
     enable_post_train_analytics = bool(cfg.train.get("enable_post_train_analytics", False))
     checkpoint_every = int(cfg.train.get("checkpoint_every", 1))
     checkpoint_every = max(1, checkpoint_every)
@@ -603,6 +608,8 @@ def run_training(
                             "timeout_penalty": timeout_penalty,
                             "log_units_snapshot": bool(log_units_snapshot),
                             "reward_shaping": reward_shaping,
+                            "matchup_modes": list(matchup_modes),
+                            "matchup_mode_weights": dict(matchup_mode_weights),
                             "objective_opportunity_near_vp_max_dist": objective_opportunity_near_vp_max_dist,
                             "collect_xai": bool(enable_post_train_analytics),
                         },
@@ -753,6 +760,8 @@ def run_training(
                     timeout_penalty=timeout_penalty,
                     log_units_snapshot=bool(log_units_snapshot),
                     reward_shaping=reward_shaping,
+                    matchup_modes=list(matchup_modes),
+                    matchup_mode_weights=dict(matchup_mode_weights),
                     objective_opportunity_near_vp_max_dist=objective_opportunity_near_vp_max_dist,
                     collect_xai=bool(enable_post_train_analytics),
                 )
@@ -2993,7 +3002,17 @@ def run_training(
         except Exception:
             pass
     print(f"[MuZero] completed run_dir={run_dir}")
-    return {"run_id": run_id, "metrics": latest_metrics}
+    repo_root = Path(__file__).resolve().parents[3]
+    publish_result = publish_train_run(
+        repo_root=repo_root,
+        run_id=str(run_id or ""),
+    )
+    return {
+        "run_id": run_id,
+        "metrics": latest_metrics,
+        "catalog_publish_status": str(publish_result.get("publish_status", "unknown")),
+        "catalog_publish_status_path": str(publish_result.get("publish_status_path", "")),
+    }
 
 
 def _build_arg_parser() -> argparse.ArgumentParser:

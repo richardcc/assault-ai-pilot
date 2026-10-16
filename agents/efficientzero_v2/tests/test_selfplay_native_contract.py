@@ -654,6 +654,46 @@ def test_best_enemy_vp_qr_for_side_supports_fallback_vp_id_format() -> None:
     assert (q, r) == (7, -1)
 
 
+def test_action_target_qr_supports_compact_hex_formats() -> None:
+    assert selfplay_module._action_target_qr("MOVE:US_1:2:3") == (2, 3)
+    assert selfplay_module._action_target_qr("MOVE:US_1:2,3") == (2, 3)
+    assert selfplay_module._action_target_qr("MOVE:US_1:(2,3)") == (2, 3)
+
+
+def test_observation_tensor_populates_declared_spatial_channels() -> None:
+    obs = SimpleNamespace(
+        turn=3,
+        to_play="A",
+        done=False,
+        units=[
+            {"unit_id": "u1", "unit_key": "US_RIFLE_SQUAD", "side": "A", "q": 0, "r": 0, "hp": 10, "alive": True},
+            {"unit_id": "u2", "unit_key": "GE_RIFLE_SQUAD", "side": "B", "q": 1, "r": 0, "hp": 8, "alive": True},
+        ],
+        playable_hexes=[{"q": 0, "r": 0}, {"q": 1, "r": 0}, {"q": 2, "r": 1}],
+        vp_hexes=[{"q": 2, "r": 1, "vp_id": "vp1"}],
+        vp_owner_by_hex={"2,1": "B"},
+        terrain_move_cost_by_hex={"0,0": 1.0, "1,0": 1.0, "2,1": 1.0},
+        terrain_cover_by_hex={"2,1": 0.4},
+        terrain_los_block_by_hex={"2,1": 0.2},
+        terrain_type_by_hex={"2,1": "urban"},
+        fortification_type_by_hex={},
+        fortification_edge_by_hex={},
+    )
+    ten = selfplay_module._observation_to_tensor(obs, channels=32, height=16, width=16)
+    assert isinstance(ten, torch.Tensor)
+    assert tuple(ten.shape) == (32, 16, 16)
+    # VP/terrain/coord and tactical channels should be populated for declared 32-channel contract.
+    assert float(ten[7].abs().sum().item()) > 0.0   # reaction_fire_threat
+    assert float(ten[13].abs().sum().item()) > 0.0  # vp_mask
+    assert float(ten[14].abs().sum().item()) > 0.0  # vp_owner_relative
+    assert float(ten[15].abs().sum().item()) > 0.0  # terrain_move_cost_norm
+    assert float(ten[16].abs().sum().item()) > 0.0  # terrain_cover_norm
+    assert float(ten[18].abs().sum().item()) > 0.0  # vp_distance_inv
+    assert float(ten[19].abs().sum().item()) > 0.0  # q_coord_norm
+    assert float(ten[20].abs().sum().item()) > 0.0  # r_coord_norm
+    assert float(ten[21].abs().sum().item()) > 0.0  # frontline_control
+
+
 def test_native_selfplay_applies_derived_scenario_budget_when_no_overrides() -> None:
     backend = _NativeEZV2SelfplayBackend()
     samples = backend.play_episode(
@@ -805,6 +845,7 @@ def test_objective_soft_signal_rewards_progress_over_stall_in_opportunity_window
             "objective_no_progress_attack_penalty": 0.82,
         },
         objective_had_opportunity=1,
+        objective_converted=0,
         objective_progress_delta=1.0,
         team_progress_delta=0.75,
         legal_capture_options=1,
@@ -820,6 +861,7 @@ def test_objective_soft_signal_rewards_progress_over_stall_in_opportunity_window
             "objective_no_progress_attack_penalty": 0.82,
         },
         objective_had_opportunity=1,
+        objective_converted=0,
         objective_progress_delta=0.0,
         team_progress_delta=0.0,
         legal_capture_options=1,
@@ -836,6 +878,7 @@ def test_objective_soft_signal_is_neutral_outside_opportunity_windows() -> None:
             "objective_no_progress_penalty": 1.20,
         },
         objective_had_opportunity=0,
+        objective_converted=0,
         objective_progress_delta=1.0,
         team_progress_delta=1.0,
         legal_capture_options=0,
@@ -843,6 +886,23 @@ def test_objective_soft_signal_is_neutral_outside_opportunity_windows() -> None:
     )
     assert float(component) == 0.0
     assert int(meta.get("objective_soft_had_opportunity", 1)) == 0
+
+
+def test_objective_soft_signal_masks_progress_when_converted() -> None:
+    component, meta = _objective_progress_soft_signal(
+        reward_shaping={
+            "objective_progress_bonus_per_hex": 1.65,
+            "objective_no_progress_penalty": 1.20,
+        },
+        objective_had_opportunity=1,
+        objective_converted=1,
+        objective_progress_delta=-3.0,
+        team_progress_delta=0.0,
+        legal_capture_options=1,
+        action_kind="MOVE",
+    )
+    assert float(component) == 0.0
+    assert bool(meta.get("objective_soft_progress_masked_on_convert", False)) is True
 
 
 def test_native_selfplay_keeps_per_die_attack_defense_components() -> None:
@@ -1288,6 +1348,10 @@ def test_native_selfplay_emits_enemy_threat_fields_and_candidate_component() -> 
     assert "enemy_can_capture_vp_next" in first
     assert "enemy_min_steps_to_vp" in first
     assert "enemy_threat_component" in first
+    assert "vp_target_id" in first
+    assert "vp_target_source" in first
+    assert "vp_distance_after" in first
+    assert "vp_distance_source" in first
 
 
 class _UnitPrefilterConstrainedAdapter:
