@@ -117,25 +117,25 @@ export function NetworkTopologyTab({
   const summaryObj = useMemo(() => ((trainSummary?.summary || trainSummary || {}) as Dict), [trainSummary]);
   const lossesObj = useMemo(() => ((trainSummary?.losses || {}) as Dict), [trainSummary]);
 
-  const polLoss = Number(summaryObj.loss_policy ?? lossesObj.policy ?? summaryObj.train_policy_loss ?? 2.489);
+  const polLoss = Number(summaryObj.policy_loss ?? summaryObj.loss_policy ?? lossesObj.policy ?? summaryObj.train_policy_loss ?? 2.489);
   const polEntropy = Number(summaryObj.policy_entropy ?? lossesObj.entropy ?? 0.84);
   const polConfidence = getHeadMetric(evalRows, "mcts", "eval_policy_confidence_mean") ?? getHeadMetric(evalRows, "policy", "eval_confidence_mean") ?? 0.778;
   const polMargin = getHeadMetric(evalRows, "mcts", "eval_policy_margin_mean") ?? getHeadMetric(evalRows, "policy", "eval_margin_mean") ?? 0.325;
 
-  const valLoss = Number(summaryObj.loss_value ?? lossesObj.value ?? summaryObj.train_value_loss ?? 0.145);
+  const valLoss = Number(summaryObj.value_loss ?? summaryObj.loss_value ?? lossesObj.value ?? summaryObj.train_value_loss ?? 0.145);
   const valExpVar = Number(summaryObj.value_explained_variance ?? lossesObj.explained_variance ?? 0.812);
   const qSatRate = getHeadMetric(evalRows, "mcts", "mcts_q_saturation_rate") ?? 0.012;
   const valWinRate = getHeadMetric(evalRows, "value", "eval_win_rate_proxy") ?? 0.778;
 
-  const rewLoss = Number(summaryObj.loss_reward ?? lossesObj.reward ?? summaryObj.train_reward_loss ?? 0.298);
+  const rewLoss = Number(summaryObj.reward_loss ?? summaryObj.loss_reward ?? lossesObj.reward ?? summaryObj.train_reward_loss ?? 0.298);
   const rewAvgSteps = getHeadMetric(evalRows, "reward", "eval_avg_steps_proxy") ?? 108.5;
 
-  const objLoss = Number(summaryObj.loss_objective ?? lossesObj.objective ?? summaryObj.train_objective_loss ?? 0.583);
-  const objTakeRate = getHeadMetric(evalRows, "objective", "eval_vp_capture_take_rate") ?? 0.088;
-  const objConversionEff = getHeadMetric(evalRows, "objective", "eval_vp_conversion_efficiency") ?? 0.0022;
+  const objLoss = Number(summaryObj.objective_loss ?? summaryObj.loss_objective ?? lossesObj.objective ?? summaryObj.train_objective_loss ?? 0.583);
+  const objTakeRate = getHeadMetric(evalRows, "objective", "eval_vp_capture_take_rate") ?? Number(summaryObj.xai_vp_capture_take_rate_train ?? 0.088);
+  const objConversionEff = getHeadMetric(evalRows, "objective", "eval_vp_conversion_efficiency") ?? Number(summaryObj.vp_conversion_efficiency_train ?? 0.0022);
   const objCapturedAvg = getHeadMetric(evalRows, "objective", "eval_tracked_captured_avg") ?? 2.58;
 
-  const conLoss = Number(summaryObj.loss_consistency ?? lossesObj.consistency ?? summaryObj.train_consistency_loss ?? 0.000005);
+  const conLoss = Number(summaryObj.consistency_loss ?? summaryObj.loss_consistency ?? lossesObj.consistency ?? summaryObj.train_consistency_loss ?? 0.000005);
   const conReanalysisCov = Number(summaryObj.reanalysis_coverage ?? summaryObj.train_reanalysis_coverage ?? 0.35);
   const conPairs = Number(summaryObj.consistency_pairs ?? summaryObj.train_consistency_pairs ?? 128);
 

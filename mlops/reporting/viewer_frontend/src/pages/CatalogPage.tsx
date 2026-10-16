@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { fetchCatalog, fetchCurriculumCompareLatest, fetchModel, fetchTraceability } from "../api";
+import { fetchCatalog, fetchCurriculumCompareLatest, fetchModel, fetchTraceability, fetchTrainSummary } from "../api";
 import { formatLocalDate } from "../dateUtils";
 import type { Dict, EvalResultRow, EvalRow, ModelPayload, TrainRow } from "../types";
 import { NetworkTopologyTab } from "./model-tabs/NetworkTopologyTab";
@@ -155,6 +155,29 @@ export function CatalogPage() {
     () => (Array.isArray(modelDetail?.eval_history) ? (modelDetail!.eval_history as EvalRow[]) : []),
     [modelDetail]
   );
+
+  const [trainSummary, setTrainSummary] = useState<Dict | null>(null);
+
+  useEffect(() => {
+    const firstRunId = trains[0]?.run_id ? String(trains[0].run_id) : "";
+    if (!firstRunId) {
+      setTrainSummary(null);
+      return;
+    }
+    let cancelled = false;
+    async function fetchSummary() {
+      try {
+        const s = await fetchTrainSummary(firstRunId);
+        if (!cancelled) setTrainSummary(s);
+      } catch {
+        if (!cancelled) setTrainSummary(null);
+      }
+    }
+    void fetchSummary();
+    return () => {
+      cancelled = true;
+    };
+  }, [trains]);
   const trainCounts = (modelDetail?.scenario_train_counts || {}) as Record<string, number>;
   const evalCounts = (modelDetail?.scenario_eval_counts || {}) as Record<string, number>;
   const scenariosSeen = Array.from(
@@ -481,7 +504,8 @@ export function CatalogPage() {
               </div>
               <NetworkTopologyTab
                 trainRow={trains[0] || null}
-                trainSummary={null}
+                trainSummary={trainSummary}
+                evalRows={evals}
               />
             </div>
           )}

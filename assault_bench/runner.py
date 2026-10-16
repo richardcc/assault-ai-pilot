@@ -59,6 +59,16 @@ from assault_bench.decision_signals import (
     select_action_with_probability_tie_break as _ds_select_action_with_probability_tie_break,
     vp_horizon_soft_components_for_step as _ds_vp_horizon_soft_components_for_step,
 )
+from assault_bench.trace_metrics_utils import build_eval_decision_steps_top as _build_eval_decision_steps_top
+from assault_bench.phase29_contract import build_head_diagnostics_eval as _build_head_diagnostics_eval
+from assault_bench.benchmark_serialization import json_dumps as _json_dumps
+from assault_bench.benchmark_entry import _build_arg_parser
+from assault_bench.benchmark_orchestrator import (
+    resolve_bench_device_choice as _resolve_bench_device_choice,
+    run_benchmark,
+)
+from assault_bench.benchmark_matchup_planner import resolve_enabled_profiles as _resolve_enabled_profiles
+
 from assault_bench.decision_candidate_utils import canonicalize_decision_candidates
 from assault_bench.episode_runner_helpers import (
     build_post_unit_snapshots,

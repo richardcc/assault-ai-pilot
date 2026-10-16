@@ -78,6 +78,7 @@ function getOpponentInfo(side: string, allSides: string[], main: EvalResultRow |
 
 interface BilateralMatchupRow {
   key: string;
+  scenarioId: string;
   matchupProfile: string;
   side: string;
   sideColor: string;
@@ -111,6 +112,7 @@ export function VpSummaryTab({
   evalRows: EvalRow[];
   selectedEval: EvalRow | null;
 }) {
+  const [selectedScenario, setSelectedScenario] = useState<string>("all");
   const [selectedEngine, setSelectedEngine] = useState<string>("all");
   const [selectedProfile, setSelectedProfile] = useState<string>("all");
   const [selectedSide, setSelectedSide] = useState<string>("all");
@@ -155,15 +157,27 @@ export function VpSummaryTab({
   }, [scenarioId]);
 
   // Discover available filter options from current evaluation results
-  const { availableEngines, availableProfiles, availableSides, availableOpponents } = useMemo(() => {
+  const { availableEngines, availableProfiles, availableSides, availableOpponents, availableScenarios } = useMemo(() => {
     const engines = new Set<string>();
     const profiles = new Set<string>();
     const sides = new Set<string>();
     const opponents = new Set<string>();
+    const scenarios = new Set<string>();
 
     if (currentEval?.engine) engines.add(currentEval.engine);
+    if (currentEval?.scenario_id) scenarios.add(currentEval.scenario_id);
+    if (Array.isArray(currentEval?.scenario_ids)) {
+      currentEval!.scenario_ids.forEach((s) => s && scenarios.add(s));
+    }
 
     for (const r of rawResults) {
+      if (r.scenario_id) scenarios.add(String(r.scenario_id));
+      if (r.scenario) scenarios.add(String(r.scenario));
+      if (Array.isArray(r.seed_games)) {
+        for (const sg of r.seed_games) {
+          if (sg?.scenario_id) scenarios.add(String(sg.scenario_id));
+        }
+      }
       if (r.matchup_profile) profiles.add(r.matchup_profile);
       if (r.matchup_group) profiles.add(r.matchup_group);
       if (r.tracked_side) sides.add(r.tracked_side);
@@ -203,6 +217,7 @@ export function VpSummaryTab({
       availableProfiles: Array.from(profiles).sort(),
       availableSides: Array.from(sides).sort(),
       availableOpponents: Array.from(opponents).sort(),
+      availableScenarios: Array.from(scenarios).sort(),
     };
   }, [currentEval, rawResults]);
 
@@ -210,6 +225,21 @@ export function VpSummaryTab({
   const filteredResults = useMemo(() => {
     const rowEngine = String(currentEval?.engine || "").toLowerCase();
     return rawResults.filter((r) => {
+      // 0. Scenario Filter
+      if (selectedScenario !== "all") {
+        const selScen = selectedScenario.toLowerCase();
+        const rScen = String(
+          r.scenario_id ||
+          r.scenario ||
+          (Array.isArray(r.seed_games) && r.seed_games[0]?.scenario_id) ||
+          currentEval?.scenario_id ||
+          ""
+        ).toLowerCase();
+        if (!rScen.includes(selScen)) {
+          return false;
+        }
+      }
+
       // 1. Engine
       if (selectedEngine !== "all") {
         const selEng = selectedEngine.toLowerCase();
@@ -417,6 +447,23 @@ export function VpSummaryTab({
       // Ensure we only have the distinct participating sides
       const resultSides = Array.from(new Set(matchSides)).sort();
 
+      // Determine scenario for this result row:
+      let rowScenario = String(
+        r.scenario_id ||
+        r.scenario ||
+        (Array.isArray(r.seed_games) && r.seed_games[0]?.scenario_id) ||
+        ""
+      );
+      if (!rowScenario) {
+        if (resultSides.includes("IT")) {
+          rowScenario = currentEval?.scenario_ids?.[0] || currentEval?.scenario_id || "battaglia_cittadina_2_1";
+        } else if (resultSides.includes("GE")) {
+          rowScenario = currentEval?.scenario_ids?.[1] || "colline_d_acciaio_2_2";
+        } else {
+          rowScenario = currentEval?.scenario_id || "-";
+        }
+      }
+
       // Casualties in this specific result
       const seedGames = (r.seed_games || []) as Dict[];
       const rTactical: Record<string, { lost: number; kills: number; damage: number; games: number }> = {};
@@ -503,7 +550,8 @@ export function VpSummaryTab({
         const avgDmg = tact && tact.games > 0 ? (tact.damage / tact.games).toFixed(1) : "-";
 
         list.push({
-          key: `${prof}-${sNorm}-${oppNorm}-${rIdx}`,
+          key: `${rowScenario}-${prof}-${sNorm}-${oppNorm}-${rIdx}`,
+          scenarioId: rowScenario,
           matchupProfile: prof,
           side: sNorm,
           sideColor,
@@ -533,15 +581,17 @@ export function VpSummaryTab({
     });
 
     return list;
-  }, [filteredResults, selectedSide, selectedEngine, selectedOpponent, currentEval]);
+  }, [filteredResults, selectedSide, selectedEngine, selectedOpponent, selectedScenario, currentEval]);
 
   const hasActiveFilters =
+    selectedScenario !== "all" ||
     selectedEngine !== "all" ||
     selectedProfile !== "all" ||
     selectedSide !== "all" ||
     selectedOpponent !== "all";
 
   const resetFilters = () => {
+    setSelectedScenario("all");
     setSelectedEngine("all");
     setSelectedProfile("all");
     setSelectedSide("all");
@@ -574,6 +624,35 @@ export function VpSummaryTab({
         <span style={{ fontSize: 13, fontWeight: 700, color: "#38bdf8", display: "flex", alignItems: "center", gap: 5 }}>
           <span>🔍</span> Filtros:
         </span>
+
+        {/* Scenario Filter */}
+        {availableScenarios.length > 0 && (
+          <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+            <label htmlFor="vp-filter-scenario" style={{ fontSize: 12, color: "#94a3b8", fontWeight: 600 }}>
+              Escenario:
+            </label>
+            <select
+              id="vp-filter-scenario"
+              value={selectedScenario}
+              onChange={(e) => setSelectedScenario(e.target.value)}
+              style={{
+                padding: "4px 8px",
+                background: "#1e293b",
+                color: "#e2e8f0",
+                border: selectedScenario !== "all" ? "1px solid #38bdf8" : "1px solid #475569",
+                borderRadius: 5,
+                fontSize: 12,
+              }}
+            >
+              <option value="all">Todos los escenarios ({availableScenarios.length})</option>
+              {availableScenarios.map((scen) => (
+                <option key={scen} value={scen}>
+                  {scen}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
 
         {/* Side Filter */}
         <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
@@ -899,6 +978,7 @@ export function VpSummaryTab({
       <table>
         <thead>
           <tr>
+            <th>Escenario</th>
             <th>Bando</th>
             <th>Oponente</th>
             <th>Perfil / Enfrentamiento</th>
@@ -919,6 +999,11 @@ export function VpSummaryTab({
 
               return (
                 <tr key={m.key}>
+                  <td>
+                    <span style={{ color: "#38bdf8", fontWeight: 600, fontSize: 11 }}>
+                      {m.scenarioId || "-"}
+                    </span>
+                  </td>
                   <td>
                     <span style={{ color: m.sideColor, fontWeight: 700, fontSize: 13 }}>
                       {m.side === "US" ? "🇺🇸 US" : m.side === "IT" ? "🇮🇹 IT" : m.side === "GE" ? "🇩🇪 GE" : m.side}
@@ -992,7 +1077,7 @@ export function VpSummaryTab({
             })
           ) : (
             <tr>
-              <td colSpan={11} className="muted" style={{ textAlign: "center", padding: "16px 0" }}>
+              <td colSpan={12} className="muted" style={{ textAlign: "center", padding: "16px 0" }}>
                 No hay enfrentamientos que coincidan con los filtros seleccionados.
               </td>
             </tr>
@@ -1010,6 +1095,7 @@ export function VpSummaryTab({
       <table>
         <thead>
           <tr>
+            <th>Escenario</th>
             <th>Bando</th>
             <th>Oponente</th>
             <th>Perfil / Enfrentamiento</th>
@@ -1032,6 +1118,11 @@ export function VpSummaryTab({
 
               return (
                 <tr key={m.key}>
+                  <td>
+                    <span style={{ color: "#38bdf8", fontWeight: 600, fontSize: 11 }}>
+                      {m.scenarioId || "-"}
+                    </span>
+                  </td>
                   <td>
                     <span style={{ color: m.sideColor, fontWeight: 700, fontSize: 13 }}>
                       {m.side === "US" ? "🇺🇸 US" : m.side === "IT" ? "🇮🇹 IT" : m.side === "GE" ? "🇩🇪 GE" : m.side}
@@ -1096,7 +1187,7 @@ export function VpSummaryTab({
             })
           ) : (
             <tr>
-              <td colSpan={12} className="muted" style={{ textAlign: "center", padding: "16px 0" }}>
+              <td colSpan={13} className="muted" style={{ textAlign: "center", padding: "16px 0" }}>
                 No hay enfrentamientos que coincidan con los filtros seleccionados.
               </td>
             </tr>
