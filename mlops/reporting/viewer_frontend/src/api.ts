@@ -82,15 +82,29 @@ export function fetchChannelAttribution(runId: string): Promise<Dict> {
 }
 
 export async function runChannelAttribution(runId: string): Promise<Dict> {
-  const res = await fetch("/api/channel-attribution/run", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ run_id: runId }),
-  });
+  const url = `/api/channel-attribution/run?run_id=${encodeURIComponent(runId)}`;
+  let res: Response;
+  try {
+    res = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ run_id: runId }),
+    });
+  } catch (err: any) {
+    // If POST is blocked by proxy or environment, fallback to GET
+    res = await fetch(url, { method: "GET" });
+  }
+
   const txt = await res.text();
-  const payload = txt ? JSON.parse(txt) : {};
+  let payload: any = {};
+  try {
+    payload = txt ? JSON.parse(txt) : {};
+  } catch {
+    payload = { error: `El servidor no devolvió JSON (HTTP ${res.status}): ${txt.slice(0, 120)}` };
+  }
+
   if (!res.ok) {
-    throw new Error(String((payload as Dict).error || (payload as Dict).message || `HTTP ${res.status}`));
+    throw new Error(String(payload?.error || payload?.message || `HTTP ${res.status}`));
   }
   return payload as Dict;
 }

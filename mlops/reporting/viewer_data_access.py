@@ -673,7 +673,7 @@ def load_scenario_overlay(repo_root: Path, scenario_id: str) -> dict:
     def _build_map_cells(raw_scenario: dict) -> list[dict]:
         pieces = list((raw_scenario.get("map", {}) or {}).get("pieces", []) or [])
         cat_pieces = dict((map_piece_catalog.get("pieces", {}) or {}))
-        cells: set[tuple[int, int]] = set()
+        cells: dict[tuple[int, int], str] = {}
         for entry in pieces:
             if not isinstance(entry, dict):
                 continue
@@ -692,11 +692,18 @@ def load_scenario_overlay(repo_root: Path, scenario_id: str) -> dict:
             oq = int(origin[0] or 0)
             orr = int(origin[1] or 0)
             qturns = _rot_quarters(int(entry.get("rotation", 0) or 0))
+
+            hex_terrain_map: dict[tuple[int, int], str] = {}
+            for h in list(piece.get("hexes", []) or []):
+                if isinstance(h, dict) and "q" in h and "r" in h:
+                    hex_terrain_map[(int(h["q"]), int(h["r"]))] = str(h.get("terrain", "clear") or "clear")
+
             for lq in range(width):
                 for lr in range(height):
                     rq, rr = _rotate_local(lq, lr, width, height, qturns)
-                    cells.add((int(rq + oq), int(rr + orr)))
-        return [{"q": int(q), "r": int(r)} for q, r in sorted(cells, key=lambda x: (x[1], x[0]))]
+                    t = hex_terrain_map.get((lq, lr), "clear")
+                    cells[(int(rq + oq), int(rr + orr))] = t
+        return [{"q": int(q), "r": int(r), "terrain": t} for (q, r), t in sorted(cells.items(), key=lambda x: (x[0][1], x[0][0]))]
 
     candidates = [scenarios_dir / f"{sid}.json"]
     for c in candidates:
@@ -709,10 +716,15 @@ def load_scenario_overlay(repo_root: Path, scenario_id: str) -> dict:
             hexes = list(vp.get("hexes", []) or [])
             shape = list(raw.get("shape", []) or [])
             map_cells = _build_map_cells(raw)
+            forts = list((raw.get("map", {}) or {}).get("fortifications", []) or [])
+            pieces_list = list((raw.get("map", {}) or {}).get("pieces", []) or [])
             return {
                 "path": str(c),
+                "scenario_id": sid,
                 "shape": shape if len(shape) >= 2 else [],
                 "map_cells": map_cells,
+                "fortifications": forts,
+                "pieces": pieces_list,
                 "vp_hexes": [
                     {
                         "q": int(h.get("q", 0) or 0),
@@ -736,10 +748,15 @@ def load_scenario_overlay(repo_root: Path, scenario_id: str) -> dict:
         hexes = list(vp.get("hexes", []) or [])
         shape = list(raw.get("shape", []) or [])
         map_cells = _build_map_cells(raw)
+        forts = list((raw.get("map", {}) or {}).get("fortifications", []) or [])
+        pieces_list = list((raw.get("map", {}) or {}).get("pieces", []) or [])
         return {
             "path": str(p),
+            "scenario_id": sid,
             "shape": shape if len(shape) >= 2 else [],
             "map_cells": map_cells,
+            "fortifications": forts,
+            "pieces": pieces_list,
             "vp_hexes": [
                 {
                     "q": int(h.get("q", 0) or 0),

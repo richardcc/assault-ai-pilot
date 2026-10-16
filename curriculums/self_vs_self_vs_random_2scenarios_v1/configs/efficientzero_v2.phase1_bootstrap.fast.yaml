@@ -2,7 +2,7 @@ base_config: curriculums/self_vs_self_vs_random_2scenarios_v1/configs/efficientz
 
 selfplay:
   device: cpu
-  num_workers: 1
+  num_workers: 6
   parallel_backend: process
 
 train:

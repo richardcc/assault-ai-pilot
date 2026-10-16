@@ -9,7 +9,7 @@ import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
-from urllib.parse import parse_qs, urlparse
+from urllib.parse import parse_qs, unquote, urlparse
 
 from mlops.reporting.catalog_api import (
     build_publish_status_payload as _build_publish_status_payload,
@@ -337,6 +337,7 @@ def serve(
             self.send_response(200)
             self.send_header("Content-Type", content_type)
             self.send_header("Content-Length", str(len(body)))
+            self.send_header("Access-Control-Allow-Origin", "*")
             self.send_header("Cache-Control", "no-store, max-age=0, must-revalidate")
             self.send_header("Pragma", "no-cache")
             self.send_header("Expires", "0")
@@ -348,6 +349,7 @@ def serve(
             self.send_response(int(status_code))
             self.send_header("Content-Type", "application/json; charset=utf-8")
             self.send_header("Content-Length", str(len(body)))
+            self.send_header("Access-Control-Allow-Origin", "*")
             self.send_header("Cache-Control", "no-store, max-age=0, must-revalidate")
             self.send_header("Pragma", "no-cache")
             self.send_header("Expires", "0")
@@ -364,25 +366,25 @@ def serve(
                 return "application/javascript; charset=utf-8"
             if sfx == ".json":
                 return "application/json; charset=utf-8"
+            if sfx == ".png":
+                return "image/png"
+            if sfx in [".jpg", ".jpeg"]:
+                return "image/jpeg"
+            if sfx == ".svg":
+                return "image/svg+xml"
             return "application/octet-stream"
 
         def _send_static_file(self, path: Path, root: Path) -> bool:
             try:
                 p = path.resolve()
                 if not str(p).startswith(str(root)):
-                    self.send_response(403)
-                    self.end_headers()
-                    return True
+                    return False
                 if not p.exists() or not p.is_file():
-                    self.send_response(404)
-                    self.end_headers()
-                    return True
+                    return False
                 self._send_bytes(p.read_bytes(), self._content_type_for_path(p))
                 return True
             except Exception:
-                self.send_response(500)
-                self.end_headers()
-                return True
+                return False
 
         def do_GET(self):  # noqa: N802
             parsed = urlparse(self.path)
@@ -395,8 +397,16 @@ def serve(
                 self._send_static_file(react_root / "index.html", react_root)
                 return
             if parsed.path.startswith("/assets/"):
-                rel = parsed.path[len("/assets/") :]
+                rel = unquote(parsed.path[len("/assets/") :])
                 if self._send_static_file(react_root / "assets" / rel, react_root):
+                    return
+            if parsed.path.startswith("/art/"):
+                rel = unquote(parsed.path[len("/art/") :])
+                art_dist = (react_root / "art").resolve()
+                art_src = (repo_root / "assault_ai_ui" / "public" / "art").resolve()
+                if art_dist.exists() and self._send_static_file(art_dist / rel, art_dist):
+                    return
+                if art_src.exists() and self._send_static_file(art_src / rel, art_src):
                     return
 
             # Legacy fallback/reference
@@ -567,18 +577,38 @@ def serve(
                 )
                 self._send_bytes(_json_bytes(payload), "application/json; charset=utf-8")
                 return
-            if parsed.path == "/api/channel-attribution":
+            norm_path = parsed.path.rstrip("/")
+            if norm_path == "/api/channel-attribution":
                 qs = parse_qs(parsed.query)
                 run_id = str(qs.get("run_id", [""])[0] or "").strip()
                 payload = _read_channel_attribution_report(repo_root=repo_root, run_id=run_id)
                 self._send_bytes(_json_bytes(payload), "application/json; charset=utf-8")
                 return
-            self.send_response(404)
+            if norm_path == "/api/channel-attribution/run":
+                qs = parse_qs(parsed.query)
+                run_id = str(qs.get("run_id", [""])[0] or "").strip()
+                if not run_id:
+                    self._send_json_status({"ok": False, "error": "missing_run_id"}, status_code=400)
+                    return
+                try:
+                    report = _run_channel_attribution_job(repo_root=repo_root, run_id=run_id)
+                    self._send_json_status({"ok": True, "report": report}, status_code=200)
+                except Exception as exc:
+                    self._send_json_status({"ok": False, "error": str(exc)}, status_code=500)
+                return
+            self._send_json_status({"ok": False, "error": "not_found", "path": parsed.path}, status_code=404)
+
+        def do_OPTIONS(self):  # noqa: N802
+            self.send_response(204)
+            self.send_header("Access-Control-Allow-Origin", "*")
+            self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+            self.send_header("Access-Control-Allow-Headers", "Content-Type, Authorization")
             self.end_headers()
 
         def do_POST(self):  # noqa: N802
             parsed = urlparse(self.path)
-            if parsed.path == "/api/channel-attribution/run":
+            norm_path = parsed.path.rstrip("/")
+            if norm_path == "/api/channel-attribution/run":
                 try:
                     content_length = int(self.headers.get("Content-Length", 0))
                     body = self.rfile.read(content_length) if content_length > 0 else b"{}"
@@ -595,8 +625,7 @@ def serve(
                 except Exception as exc:
                     self._send_json_status({"ok": False, "error": str(exc)}, status_code=500)
                 return
-            self.send_response(404)
-            self.end_headers()
+            self._send_json_status({"ok": False, "error": "not_found", "path": parsed.path}, status_code=404)
 
         def log_message(self, format, *args):  # noqa: A003
             return

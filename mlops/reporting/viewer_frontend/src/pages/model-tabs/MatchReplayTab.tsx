@@ -11,6 +11,173 @@ function parseSuppressed(val: unknown): boolean | null {
   return null;
 }
 
+function getFortificationLabel(type: string): string {
+  switch (type.toLowerCase()) {
+    case "bunker":
+      return "Búnker Reforzado";
+    case "casemate":
+      return "Casamata Blindada";
+    case "pillbox":
+      return "Pillbox / Nido Blindado";
+    case "gun_emplacement":
+      return "Emplazamiento de Artillería";
+    case "trench":
+      return "Trinchera";
+    case "barbed_wire":
+      return "Alambradas";
+    case "sandbag":
+      return "Posición Sacos de Arena";
+    case "tank_barricades":
+      return "Barricadas Anticarro";
+    case "minefield":
+      return "Campo de Minas";
+    default:
+      return type.replace(/_/g, " ");
+  }
+}
+
+function getFortificationShort(type: string): string {
+  switch (type.toLowerCase()) {
+    case "bunker":
+      return "BK";
+    case "casemate":
+      return "CS";
+    case "pillbox":
+      return "PB";
+    case "gun_emplacement":
+      return "GN";
+    case "trench":
+      return "TR";
+    case "barbed_wire":
+      return "WR";
+    case "sandbag":
+      return "SB";
+    case "tank_barricades":
+      return "TB";
+    case "minefield":
+      return "MN";
+    default:
+      return type.slice(0, 2).toUpperCase();
+  }
+}
+
+function getFortificationArt(type: string): string {
+  switch (type.toLowerCase()) {
+    case "bunker":
+      return "/art/terrain/Terrain Bunker.png";
+    case "casemate":
+    case "pillbox":
+      return "/art/terrain/Terrain Pillbox.png";
+    case "gun_emplacement":
+      return "/art/terrain/Terrain Gun Emplacement.png";
+    case "trench":
+      return "/art/terrain/Terrain Trenches.png";
+    case "barbed_wire":
+      return "/art/terrain/Terrain Barbed Wire.png";
+    case "sandbag":
+      return "/art/terrain/Terrain Sandbag Position.png";
+    case "tank_barricades":
+      return "/art/terrain/Terrain Tank Barricades.png";
+    default:
+      return "";
+  }
+}
+
+function getFortificationIconEmoji(type: string): string {
+  switch (type.toLowerCase()) {
+    case "bunker":
+      return "🛡️";
+    case "casemate":
+    case "pillbox":
+      return "🏰";
+    case "gun_emplacement":
+      return "🎯";
+    case "trench":
+      return "⛏️";
+    case "barbed_wire":
+      return "🪤";
+    case "sandbag":
+      return "🧱";
+    case "tank_barricades":
+      return "🚧";
+    case "minefield":
+      return "💣";
+    default:
+      return "🛡️";
+  }
+}
+
+function getTerrainColorCss(t: string): string {
+  switch (t.toLowerCase()) {
+    case "building_single":
+      return "#5c3a21";
+    case "building_multi":
+      return "#4a2a14";
+    case "light_forest":
+      return "#1e3d20";
+    case "heavy_forest":
+      return "#142e16";
+    case "olive_vine_grove":
+      return "#2d4420";
+    case "brush":
+      return "#383f1e";
+    case "rocky":
+      return "#3a3d45";
+    case "water":
+      return "#1e3a5f";
+    default:
+      return "rgba(15, 23, 42, 0.70)";
+  }
+}
+
+function getTerrainLabel(t: string): string {
+  switch (t.toLowerCase()) {
+    case "building_single":
+      return "Edificio Simple";
+    case "building_multi":
+      return "Edificio Robusto";
+    case "light_forest":
+      return "Bosque Ligero";
+    case "heavy_forest":
+      return "Bosque Denso";
+    case "olive_vine_grove":
+      return "Olivar / Viñedo";
+    case "brush":
+      return "Matorral";
+    case "rocky":
+      return "Terreno Rocoso";
+    case "water":
+      return "Agua / Río";
+    case "clear":
+      return "Campo Abierto";
+    default:
+      return t;
+  }
+}
+
+function getTerrainShort(t: string): string {
+  switch (t.toLowerCase()) {
+    case "building_single":
+      return "ED";
+    case "building_multi":
+      return "ED+";
+    case "light_forest":
+      return "BQ";
+    case "heavy_forest":
+      return "B+";
+    case "olive_vine_grove":
+      return "OL";
+    case "brush":
+      return "MT";
+    case "rocky":
+      return "RC";
+    case "water":
+      return "AG";
+    default:
+      return "";
+  }
+}
+
 export function MatchReplayTab({
   selectedEvalSourcePath,
   replayMeta,
