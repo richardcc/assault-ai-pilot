@@ -205,7 +205,29 @@ export function MatchReplayTab({
   const [showHpBars, setShowHpBars] = useState(true);
   const [showCoords, setShowCoords] = useState(true);
   const [showVectors, setShowVectors] = useState(true);
+  const [showForts, setShowForts] = useState(true);
+  const [showTerrain, setShowTerrain] = useState(true);
+  const [theaterMode, setTheaterMode] = useState(false);
+  const [mapHeight, setMapHeight] = useState(660);
   const [zoomLevel, setZoomLevel] = useState(1.0);
+  const [imgLoadVersion, setImgLoadVersion] = useState(0);
+
+  // Cache loaded PNG assets for 2D canvas drawing
+  const imageCacheRef = useRef<Map<string, HTMLImageElement>>(new Map());
+  const getLoadedImage = useCallback((src: string): HTMLImageElement | null => {
+    if (!src) return null;
+    let img = imageCacheRef.current.get(src);
+    if (img) {
+      return img.complete && img.naturalWidth > 0 ? img : null;
+    }
+    img = new Image();
+    img.src = src;
+    img.onload = () => {
+      setImgLoadVersion((v) => v + 1);
+    };
+    imageCacheRef.current.set(src, img);
+    return null;
+  }, []);
 
   // Canvas hover & tooltip state
   const [hoveredHex, setHoveredHex] = useState<{ q: number; r: number; x: number; y: number } | null>(null);
@@ -275,6 +297,88 @@ export function MatchReplayTab({
     }
     return tally;
   }, [vpMap]);
+
+  // Scenario Shape bounds [width, height]
+  const scenarioShape = useMemo(() => {
+    const overlay = replayMeta?.scenario_overlay as Dict | undefined;
+    if (Array.isArray(overlay?.shape) && overlay.shape.length >= 2) {
+      return [Number(overlay.shape[0]), Number(overlay.shape[1])] as [number, number];
+    }
+    return [18, 12] as [number, number];
+  }, [replayMeta?.scenario_overlay]);
+
+  // Scenario Fortifications (Bunkers, Pillboxes, Trenches, Wire, etc.)
+  const fortifications = useMemo(() => {
+    const list: Array<{ q: number; r: number; type: string; side?: string; label?: string }> = [];
+    const seen = new Set<string>();
+
+    // 1. From scenario_overlay
+    const overlayForts = (replayMeta?.scenario_overlay as Dict | undefined)?.fortifications;
+    if (Array.isArray(overlayForts)) {
+      for (const f of overlayForts) {
+        if (f && Number.isFinite(Number(f.q)) && Number.isFinite(Number(f.r))) {
+          const q = Number(f.q);
+          const r = Number(f.r);
+          const ftype = String(f.type || "bunker");
+          const key = `${q},${r}:${ftype}`;
+          if (!seen.has(key)) {
+            seen.add(key);
+            list.push({
+              q,
+              r,
+              type: ftype,
+              side: f.side ? String(f.side) : undefined,
+              label: f.label ? String(f.label) : undefined,
+            });
+          }
+        }
+      }
+    }
+
+    // 2. From current step if present
+    const stepForts = (currentStep.obs_fortification_type_map || currentStep.fortifications_map || {}) as Record<string, string>;
+    for (const [k, v] of Object.entries(stepForts)) {
+      const parts = k.split(",");
+      if (parts.length === 2 && v) {
+        const q = Number(parts[0]);
+        const r = Number(parts[1]);
+        const key = `${q},${r}:${v}`;
+        if (!seen.has(key)) {
+          seen.add(key);
+          list.push({ q, r, type: String(v) });
+        }
+      }
+    }
+    return list;
+  }, [replayMeta?.scenario_overlay, currentStep.obs_fortification_type_map, currentStep.fortifications_map]);
+
+  // Scenario Terrain Map (Buildings, woods, olive groves, etc.)
+  const terrainMap = useMemo(() => {
+    const map = new Map<string, string>();
+    // 1. From scenario_overlay map_cells (array or record)
+    const overlayCells = (replayMeta?.scenario_overlay as Dict | undefined)?.map_cells;
+    if (Array.isArray(overlayCells)) {
+      for (const cell of overlayCells) {
+        if (cell && Number.isFinite(Number(cell.q)) && Number.isFinite(Number(cell.r)) && cell.terrain) {
+          map.set(`${cell.q},${cell.r}`, String(cell.terrain));
+        }
+      }
+    } else if (overlayCells && typeof overlayCells === "object") {
+      for (const [coord, cellData] of Object.entries(overlayCells as Record<string, Dict>)) {
+        if (cellData?.terrain) {
+          map.set(coord, String(cellData.terrain));
+        }
+      }
+    }
+    // 2. From step if present
+    const stepTerrain = (currentStep.obs_terrain_type_map || currentStep.terrain_map || {}) as Record<string, string>;
+    for (const [coord, t] of Object.entries(stepTerrain)) {
+      if (t) {
+        map.set(coord, String(t));
+      }
+    }
+    return map;
+  }, [replayMeta?.scenario_overlay, currentStep.obs_terrain_type_map, currentStep.terrain_map]);
 
   // Parse Action vector and targets
   const actionVector = useMemo(() => {
@@ -457,22 +561,27 @@ export function MatchReplayTab({
     ctx.fillStyle = grad;
     ctx.fillRect(0, 0, cssWidth, cssHeight);
 
-    // Compute coordinate bounding box
+    // Compute coordinate bounding box using scenario shape and entities
+    const [shapeW, shapeH] = scenarioShape;
     const qs = unitPoints.map((p) => p.q);
     const rs = unitPoints.map((p) => p.r);
     for (const vp of vpMap) {
       qs.push(vp.q);
       rs.push(vp.r);
     }
+    for (const f of fortifications) {
+      qs.push(f.q);
+      rs.push(f.r);
+    }
     if (actionVector.toQ !== null && actionVector.toR !== null) {
       qs.push(actionVector.toQ);
       rs.push(actionVector.toR);
     }
 
-    const minQ = Math.max(0, (qs.length ? Math.min(...qs) : 0) - 2);
-    const maxQ = Math.min(18, (qs.length ? Math.max(...qs) : 16) + 2);
-    const minR = Math.max(0, (rs.length ? Math.min(...rs) : 0) - 2);
-    const maxR = Math.min(12, (rs.length ? Math.max(...rs) : 10) + 2);
+    const minQ = 0;
+    const maxQ = Math.max(shapeW - 1, ...qs, 15);
+    const minR = 0;
+    const maxR = Math.max(shapeH - 1, ...rs, 9);
 
     // Odd-r Pointy-Topped Hexagon Geometry
     const oddRRaw = (q: number, r: number) => ({
@@ -529,27 +638,78 @@ export function MatchReplayTab({
       ctx.stroke();
     };
 
-    // 1. Draw Board Hex Grid Cells
+    // 1. Draw Board Hex Grid Cells (Terrain + Outline + Coords)
     for (const cell of raws) {
       const p = toPixel(cell.q, cell.r);
       const isHovered = hoveredHex && hoveredHex.q === cell.q && hoveredHex.r === cell.r;
+      const coordKey = `${cell.q},${cell.r}`;
+      const terrainType = terrainMap.get(coordKey) || "clear";
+      const terrainColor = showTerrain ? getTerrainColorCss(terrainType) : "rgba(15, 23, 42, 0.70)";
 
       drawHex(
         p.x,
         p.y,
         scale * 0.95,
         isHovered ? "#38bdf8" : "#243247",
-        isHovered ? "rgba(56, 189, 248, 0.18)" : "rgba(15, 23, 42, 0.70)",
+        isHovered ? "rgba(56, 189, 248, 0.28)" : terrainColor,
         isHovered ? 2 : 1
       );
 
+      // Terrain short label
+      if (showTerrain && terrainType !== "clear") {
+        const shortCode = getTerrainShort(terrainType);
+        if (shortCode) {
+          ctx.fillStyle = "rgba(255, 255, 255, 0.40)";
+          ctx.font = `bold ${Math.max(7, Math.floor(scale * 0.22))}px sans-serif`;
+          ctx.textAlign = "center";
+          ctx.textBaseline = "middle";
+          ctx.fillText(shortCode, p.x, p.y + scale * 0.38);
+        }
+      }
+
       // Coordinates text
       if (showCoords) {
-        ctx.fillStyle = isHovered ? "#38bdf8" : "#64748b";
-        ctx.font = `${Math.max(8, Math.floor(scale * 0.32))}px monospace`;
+        ctx.fillStyle = isHovered ? "#38bdf8" : "rgba(148, 163, 184, 0.70)";
+        ctx.font = `${Math.max(7, Math.floor(scale * 0.28))}px monospace`;
         ctx.textAlign = "center";
         ctx.textBaseline = "middle";
         ctx.fillText(`${cell.q},${cell.r}`, p.x, p.y - scale * 0.42);
+      }
+    }
+
+    // 2. Draw Scenario Fortifications (Bunkers, Pillboxes, Trenches, Barbed Wire, etc.)
+    if (showForts && fortifications.length > 0) {
+      for (const fort of fortifications) {
+        const p = toPixel(fort.q, fort.r);
+        const artSrc = getFortificationArt(fort.type);
+        const img = artSrc ? getLoadedImage(artSrc) : null;
+
+        if (img) {
+          // Draw authentic art sprite centered on hex
+          const imgSize = scale * 1.35;
+          ctx.drawImage(img, p.x - imgSize / 2, p.y - imgSize / 2, imgSize, imgSize);
+        } else {
+          // Tactical fortification badge fallback
+          const emoji = getFortificationIconEmoji(fort.type);
+          const shortCode = getFortificationShort(fort.type);
+
+          ctx.beginPath();
+          ctx.arc(p.x, p.y, scale * 0.45, 0, Math.PI * 2);
+          ctx.fillStyle = "rgba(30, 41, 59, 0.85)";
+          ctx.fill();
+          ctx.strokeStyle = "#eab308";
+          ctx.lineWidth = 1.5;
+          ctx.stroke();
+
+          ctx.font = `${Math.max(10, Math.floor(scale * 0.38))}px sans-serif`;
+          ctx.textAlign = "center";
+          ctx.textBaseline = "middle";
+          ctx.fillText(emoji, p.x, p.y - scale * 0.08);
+
+          ctx.fillStyle = "#facc15";
+          ctx.font = `bold ${Math.max(7, Math.floor(scale * 0.22))}px sans-serif`;
+          ctx.fillText(shortCode, p.x, p.y + scale * 0.28);
+        }
       }
     }
 
@@ -786,7 +946,15 @@ export function MatchReplayTab({
     showHpBars,
     showCoords,
     showVectors,
+    showForts,
+    showTerrain,
     zoomLevel,
+    fortifications,
+    terrainMap,
+    scenarioShape,
+    imgLoadVersion,
+    mapHeight,
+    getLoadedImage,
   ]);
 
   // Canvas Mouse Move Event
@@ -797,17 +965,22 @@ export function MatchReplayTab({
     const x = e.clientX - rect.left;
     const y = e.clientY - rect.top;
 
-    // Inverse odd-r hex picking
+    // Inverse odd-r hex picking using scenario bounds
+    const [shapeW, shapeH] = scenarioShape;
     const qs = unitPoints.map((p) => p.q);
     const rs = unitPoints.map((p) => p.r);
     for (const vp of vpMap) {
       qs.push(vp.q);
       rs.push(vp.r);
     }
-    const minQ = Math.max(0, (qs.length ? Math.min(...qs) : 0) - 2);
-    const maxQ = Math.min(18, (qs.length ? Math.max(...qs) : 16) + 2);
-    const minR = Math.max(0, (rs.length ? Math.min(...rs) : 0) - 2);
-    const maxR = Math.min(12, (rs.length ? Math.max(...rs) : 10) + 2);
+    for (const f of fortifications) {
+      qs.push(f.q);
+      rs.push(f.r);
+    }
+    const minQ = 0;
+    const maxQ = Math.max(shapeW - 1, ...qs, 15);
+    const minR = 0;
+    const maxR = Math.max(shapeH - 1, ...rs, 9);
 
     const oddRRaw = (q: number, r: number) => ({
       x: Math.sqrt(3) * (q + 0.5 * (r % 2)) + Math.sqrt(3) / 2,
@@ -1044,14 +1217,18 @@ export function MatchReplayTab({
         </div>
       </div>
 
-      {/* 2. Main Split Tactical Arena (Left Map, Right Inspector) */}
+      {/* 2. Main Tactical Arena (Left Map, Right Inspector or Full Width Theater Mode) */}
       <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: "minmax(480px, 680px) minmax(420px, 1fr)",
-          gap: 14,
-          alignItems: "start",
-        }}
+        style={
+          theaterMode
+            ? { display: "flex", flexDirection: "column", gap: 14 }
+            : {
+                display: "grid",
+                gridTemplateColumns: "minmax(640px, 1.8fr) minmax(380px, 1fr)",
+                gap: 14,
+                alignItems: "start",
+              }
+        }
       >
         {/* LEFT COLUMN: Tactical Map & Event Feed */}
         <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
@@ -1127,9 +1304,75 @@ export function MatchReplayTab({
               >
                 🎯 Vectores Acción
               </button>
+              <button
+                onClick={() => setShowForts(!showForts)}
+                title="Mostrar / Ocultar búnkers y fortificaciones del escenario"
+                style={{
+                  fontSize: 10,
+                  padding: "2px 6px",
+                  borderRadius: 3,
+                  background: showForts ? "#854d0e" : "#0f172a",
+                  color: showForts ? "#facc15" : "#64748b",
+                  border: "1px solid #334155",
+                  cursor: "pointer",
+                }}
+              >
+                🛡️ Fortificaciones ({fortifications.length})
+              </button>
+              <button
+                onClick={() => setShowTerrain(!showTerrain)}
+                title="Mostrar / Ocultar tipos de terreno del escenario"
+                style={{
+                  fontSize: 10,
+                  padding: "2px 6px",
+                  borderRadius: 3,
+                  background: showTerrain ? "#14532d" : "#0f172a",
+                  color: showTerrain ? "#4ade80" : "#64748b",
+                  border: "1px solid #334155",
+                  cursor: "pointer",
+                }}
+              >
+                🏞️ Terreno
+              </button>
             </div>
 
-            <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 2 }}>
+                <span style={{ fontSize: 10, color: "#94a3b8" }}>Alto:</span>
+                {[520, 660, 840].map((h) => (
+                  <button
+                    key={h}
+                    onClick={() => setMapHeight(h)}
+                    style={{
+                      fontSize: 10,
+                      padding: "2px 5px",
+                      borderRadius: 3,
+                      background: mapHeight === h ? "#0284c7" : "#0f172a",
+                      color: mapHeight === h ? "#ffffff" : "#94a3b8",
+                      border: "1px solid #334155",
+                      cursor: "pointer",
+                    }}
+                  >
+                    {h}px
+                  </button>
+                ))}
+              </div>
+              <button
+                onClick={() => setTheaterMode(!theaterMode)}
+                title={theaterMode ? "Volver a vista dividida" : "Expandir mapa a ancho completo"}
+                style={{
+                  fontSize: 10,
+                  fontWeight: 600,
+                  padding: "2px 8px",
+                  borderRadius: 3,
+                  background: theaterMode ? "#854d0e" : "#1e293b",
+                  color: theaterMode ? "#fef08a" : "#f8fafc",
+                  border: `1px solid ${theaterMode ? "#eab308" : "#475569"}`,
+                  cursor: "pointer",
+                }}
+              >
+                {theaterMode ? "🗗 Dividida" : "🖥️ Maximizar"}
+              </button>
               <button
                 onClick={() => setZoomLevel((z) => Math.max(0.7, z - 0.1))}
                 title="Alejar mapa"
@@ -1166,7 +1409,7 @@ export function MatchReplayTab({
               onClick={handleCanvasClick}
               style={{
                 width: "100%",
-                height: 480,
+                height: mapHeight,
                 border: "1px solid #334155",
                 borderRadius: 8,
                 display: "block",
@@ -1197,6 +1440,16 @@ export function MatchReplayTab({
                 <div style={{ fontWeight: 700, color: "#38bdf8", marginBottom: 2 }}>
                   Casilla Hex ({hoveredHex.q}, {hoveredHex.r})
                 </div>
+                {terrainMap.get(`${hoveredHex.q},${hoveredHex.r}`) && (
+                  <div style={{ color: "#94a3b8", fontSize: 10, marginBottom: 2 }}>
+                    🏞️ {getTerrainLabel(terrainMap.get(`${hoveredHex.q},${hoveredHex.r}`) || "")}
+                  </div>
+                )}
+                {fortifications.filter((f) => f.q === hoveredHex.q && f.r === hoveredHex.r).map((f, i) => (
+                  <div key={i} style={{ color: "#facc15", fontSize: 10, fontWeight: 600, marginBottom: 2 }}>
+                    {getFortificationIconEmoji(f.type)} {getFortificationLabel(f.type)}
+                  </div>
+                ))}
                 {vpMap.find((v) => v.q === hoveredHex.q && v.r === hoveredHex.r) && (
                   <div style={{ color: "#facc15", fontSize: 10, fontWeight: 600 }}>
                     ★ Punto de Victoria ({vpMap.find((v) => v.q === hoveredHex.q && v.r === hoveredHex.r)?.owner})

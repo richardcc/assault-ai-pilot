@@ -8,6 +8,7 @@ import torch.nn.functional as F
 
 from agents.efficientzero_v2.core.network_base import EfficientZeroV2BaseNetwork
 from agents.efficientzero_v2.core.replay import ReplaySample
+from agents.efficientzero_v2.core.support import cross_entropy_two_hot
 
 
 @dataclass

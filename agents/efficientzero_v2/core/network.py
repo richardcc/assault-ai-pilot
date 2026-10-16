@@ -25,6 +25,8 @@ class EfficientZeroV2Network(EfficientZeroV2BaseNetwork):
         consistency_proj_dim: int = 128,
         objective_intent_classes: int = 0,
         multi_vp_feature_dim: int = 0,
+        support_size: int = 0,
+        use_spatial_attention: bool = False,
     ):
         super().__init__(
             observation_dim=observation_dim,
@@ -38,6 +40,8 @@ class EfficientZeroV2Network(EfficientZeroV2BaseNetwork):
             prediction_blocks=prediction_blocks,
             objective_intent_classes=objective_intent_classes,
             multi_vp_feature_dim=multi_vp_feature_dim,
+            support_size=support_size,
+            use_spatial_attention=use_spatial_attention,
         )
         self.consistency_proj_dim = int(max(16, consistency_proj_dim))
         if self.encoder_type == "cnn":

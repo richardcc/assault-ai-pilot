@@ -3,6 +3,8 @@ from __future__ import annotations
 import torch
 from torch import nn
 
+from agents.efficientzero_v2.core.support import support_to_scalar
+
 
 def _make_group_norm(channels: int) -> nn.GroupNorm:
     num_groups = min(8, channels)
@@ -54,10 +56,32 @@ class ResidualConvBlock(nn.Module):
         return self.act2(x + z)
 
 
+class SpatialAttentionBlock(nn.Module):
+    """
+    Spatial Attention Bottleneck: Computes 1x1 projection, GroupNorm, and a spatial
+    gating map followed by AdaptiveAvgPool2d to preserve spatial topology while reducing dimension.
+    """
+    def __init__(self, in_channels: int, out_channels: int, pool_size: tuple[int, int] = (4, 4)):
+        super().__init__()
+        self.conv = nn.Conv2d(in_channels, out_channels, kernel_size=1, bias=False)
+        self.norm = _make_group_norm(out_channels)
+        self.act = nn.SiLU()
+        self.spatial_gate = nn.Sequential(
+            nn.Conv2d(out_channels, 1, kernel_size=1),
+            nn.Sigmoid(),
+        )
+        self.pool = nn.AdaptiveAvgPool2d(pool_size)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        h = self.act(self.norm(self.conv(x)))
+        gate = self.spatial_gate(h)
+        return self.pool(h * gate)
+
+
 class EfficientZeroV2BaseNetwork(nn.Module):
     """
     Local base network for EZv2 with GroupNorm, Squeeze-and-Excitation,
-    1x1 Conv bottlenecks, and latent state stabilization.
+    1x1 Conv bottlenecks, spatial attention pooling, two-hot support, and latent state stabilization.
     """
 
     def __init__(
@@ -73,6 +97,8 @@ class EfficientZeroV2BaseNetwork(nn.Module):
         prediction_blocks: int = 1,
         objective_intent_classes: int = 0,
         multi_vp_feature_dim: int = 0,
+        support_size: int = 0,
+        use_spatial_attention: bool = False,
     ):
         super().__init__()
         self.encoder_type = str(encoder_type).lower().strip()
@@ -86,6 +112,9 @@ class EfficientZeroV2BaseNetwork(nn.Module):
         self.prediction_blocks = max(1, int(prediction_blocks))
         self.objective_intent_classes = max(0, int(objective_intent_classes))
         self.multi_vp_feature_dim = max(0, int(multi_vp_feature_dim))
+        self.support_size = max(0, int(support_size))
+        self.use_spatial_attention = bool(use_spatial_attention)
+        self.val_out_dim = (2 * self.support_size + 1) if self.support_size > 0 else 1
 
         if self.encoder_type == "cnn":
             self.representation_input = nn.Sequential(
@@ -116,60 +145,107 @@ class EfficientZeroV2BaseNetwork(nn.Module):
                 *[ResidualConvBlock(self.hidden_dim) for _ in range(max(1, int(prediction_blocks)))]
             )
 
-            # Conv 1x1 bottlenecks for spatial-to-decision projection
             head_channels = max(8, self.hidden_dim // 4)
             val_channels = max(4, self.hidden_dim // 8)
-            flat_policy_dim = head_channels * self.observation_height * self.observation_width
-            flat_val_dim = val_channels * self.observation_height * self.observation_width
 
-            self.dynamics_reward = nn.Sequential(
-                nn.Conv2d(self.hidden_dim, val_channels, kernel_size=1),
-                nn.SiLU(),
-                nn.Flatten(start_dim=1),
-                nn.Linear(flat_val_dim, 64),
-                nn.SiLU(),
-                nn.Linear(64, 1),
-            )
-            self.prediction_policy = nn.Sequential(
-                nn.Conv2d(self.hidden_dim, head_channels, kernel_size=1),
-                nn.SiLU(),
-                nn.Flatten(start_dim=1),
-                nn.Linear(flat_policy_dim, action_dim),
-            )
-            self.prediction_value = nn.Sequential(
-                nn.Conv2d(self.hidden_dim, val_channels, kernel_size=1),
-                nn.SiLU(),
-                nn.Flatten(start_dim=1),
-                nn.Linear(flat_val_dim, 64),
-                nn.SiLU(),
-                nn.Linear(64, 1),
-            )
-            self.prediction_objective = nn.Sequential(
-                nn.Conv2d(self.hidden_dim, val_channels, kernel_size=1),
-                nn.SiLU(),
-                nn.Flatten(start_dim=1),
-                nn.Linear(flat_val_dim, 1),
-            )
-            self.prediction_intent = (
-                nn.Sequential(
+            if self.use_spatial_attention:
+                pool_h, pool_w = 4, 4
+                flat_policy_dim = head_channels * pool_h * pool_w
+                flat_val_dim = val_channels * pool_h * pool_w
+                self.dynamics_reward = nn.Sequential(
+                    SpatialAttentionBlock(self.hidden_dim, val_channels, (pool_h, pool_w)),
+                    nn.Flatten(start_dim=1),
+                    nn.Linear(flat_val_dim, 64),
+                    nn.SiLU(),
+                    nn.Linear(64, self.val_out_dim),
+                )
+                self.prediction_policy = nn.Sequential(
+                    SpatialAttentionBlock(self.hidden_dim, head_channels, (pool_h, pool_w)),
+                    nn.Flatten(start_dim=1),
+                    nn.Linear(flat_policy_dim, action_dim),
+                )
+                self.prediction_value = nn.Sequential(
+                    SpatialAttentionBlock(self.hidden_dim, val_channels, (pool_h, pool_w)),
+                    nn.Flatten(start_dim=1),
+                    nn.Linear(flat_val_dim, 64),
+                    nn.SiLU(),
+                    nn.Linear(64, self.val_out_dim),
+                )
+                self.prediction_objective = nn.Sequential(
+                    SpatialAttentionBlock(self.hidden_dim, val_channels, (pool_h, pool_w)),
+                    nn.Flatten(start_dim=1),
+                    nn.Linear(flat_val_dim, 1),
+                )
+                self.prediction_intent = (
+                    nn.Sequential(
+                        SpatialAttentionBlock(self.hidden_dim, val_channels, (pool_h, pool_w)),
+                        nn.Flatten(start_dim=1),
+                        nn.Linear(flat_val_dim, self.objective_intent_classes),
+                    )
+                    if self.objective_intent_classes > 0
+                    else None
+                )
+                self.prediction_multi_vp = (
+                    nn.Sequential(
+                        SpatialAttentionBlock(self.hidden_dim, val_channels, (pool_h, pool_w)),
+                        nn.Flatten(start_dim=1),
+                        nn.Linear(flat_val_dim, self.multi_vp_feature_dim),
+                    )
+                    if self.multi_vp_feature_dim > 0
+                    else None
+                )
+            else:
+                flat_policy_dim = head_channels * self.observation_height * self.observation_width
+                flat_val_dim = val_channels * self.observation_height * self.observation_width
+
+                self.dynamics_reward = nn.Sequential(
                     nn.Conv2d(self.hidden_dim, val_channels, kernel_size=1),
                     nn.SiLU(),
                     nn.Flatten(start_dim=1),
-                    nn.Linear(flat_val_dim, self.objective_intent_classes),
+                    nn.Linear(flat_val_dim, 64),
+                    nn.SiLU(),
+                    nn.Linear(64, self.val_out_dim),
                 )
-                if self.objective_intent_classes > 0
-                else None
-            )
-            self.prediction_multi_vp = (
-                nn.Sequential(
+                self.prediction_policy = nn.Sequential(
+                    nn.Conv2d(self.hidden_dim, head_channels, kernel_size=1),
+                    nn.SiLU(),
+                    nn.Flatten(start_dim=1),
+                    nn.Linear(flat_policy_dim, action_dim),
+                )
+                self.prediction_value = nn.Sequential(
                     nn.Conv2d(self.hidden_dim, val_channels, kernel_size=1),
                     nn.SiLU(),
                     nn.Flatten(start_dim=1),
-                    nn.Linear(flat_val_dim, self.multi_vp_feature_dim),
+                    nn.Linear(flat_val_dim, 64),
+                    nn.SiLU(),
+                    nn.Linear(64, self.val_out_dim),
                 )
-                if self.multi_vp_feature_dim > 0
-                else None
-            )
+                self.prediction_objective = nn.Sequential(
+                    nn.Conv2d(self.hidden_dim, val_channels, kernel_size=1),
+                    nn.SiLU(),
+                    nn.Flatten(start_dim=1),
+                    nn.Linear(flat_val_dim, 1),
+                )
+                self.prediction_intent = (
+                    nn.Sequential(
+                        nn.Conv2d(self.hidden_dim, val_channels, kernel_size=1),
+                        nn.SiLU(),
+                        nn.Flatten(start_dim=1),
+                        nn.Linear(flat_val_dim, self.objective_intent_classes),
+                    )
+                    if self.objective_intent_classes > 0
+                    else None
+                )
+                self.prediction_multi_vp = (
+                    nn.Sequential(
+                        nn.Conv2d(self.hidden_dim, val_channels, kernel_size=1),
+                        nn.SiLU(),
+                        nn.Flatten(start_dim=1),
+                        nn.Linear(flat_val_dim, self.multi_vp_feature_dim),
+                    )
+                    if self.multi_vp_feature_dim > 0
+                    else None
+                )
         else:
             self.representation = nn.Sequential(
                 nn.Linear(observation_dim, hidden_dim),
@@ -193,13 +269,13 @@ class EfficientZeroV2BaseNetwork(nn.Module):
             self.dynamics_reward = nn.Sequential(
                 nn.Linear(hidden_dim, 64),
                 nn.SiLU(),
-                nn.Linear(64, 1),
+                nn.Linear(64, self.val_out_dim),
             )
             self.prediction_policy = nn.Linear(hidden_dim, action_dim)
             self.prediction_value = nn.Sequential(
                 nn.Linear(hidden_dim, 64),
                 nn.SiLU(),
-                nn.Linear(64, 1),
+                nn.Linear(64, self.val_out_dim),
             )
             self.prediction_objective = nn.Linear(hidden_dim, 1)
             self.prediction_intent = (
@@ -212,7 +288,6 @@ class EfficientZeroV2BaseNetwork(nn.Module):
                 if self.multi_vp_feature_dim > 0
                 else None
             )
-
     def _scale_latent(self, s: torch.Tensor) -> torch.Tensor:
         """Normalize latent state representation to prevent drift during MCTS unrolls."""
         if s.dim() == 4:
@@ -234,8 +309,14 @@ class EfficientZeroV2BaseNetwork(nn.Module):
             hidden = self._scale_latent(self.representation_tower(self.representation_input(observation)))
             pred_hidden = self.prediction_trunk(hidden)
             policy_logits = self.prediction_policy(pred_hidden)
-            value = self.prediction_value(pred_hidden)
+            if self.support_size > 0:
+                val_logits = self.prediction_value(pred_hidden)
+                value = support_to_scalar(val_logits, support_size=self.support_size)
+            else:
+                value = self.prediction_value(pred_hidden)
+                val_logits = None
             reward = torch.zeros_like(value)
+            rew_logits = torch.zeros_like(val_logits) if val_logits is not None else None
             objective_logit = self.prediction_objective(pred_hidden)
             objective_intent_logits = (
                 self.prediction_intent(pred_hidden) if self.prediction_intent is not None else None
@@ -247,8 +328,14 @@ class EfficientZeroV2BaseNetwork(nn.Module):
             hidden = self._scale_latent(self.representation(observation))
             pred_hidden = self.prediction_trunk(hidden)
             policy_logits = self.prediction_policy(pred_hidden)
-            value = self.prediction_value(pred_hidden)
+            if self.support_size > 0:
+                val_logits = self.prediction_value(pred_hidden)
+                value = support_to_scalar(val_logits, support_size=self.support_size)
+            else:
+                value = self.prediction_value(pred_hidden)
+                val_logits = None
             reward = torch.zeros_like(value)
+            rew_logits = torch.zeros_like(val_logits) if val_logits is not None else None
             objective_logit = self.prediction_objective(pred_hidden)
             objective_intent_logits = (
                 self.prediction_intent(pred_hidden) if self.prediction_intent is not None else None
@@ -258,6 +345,10 @@ class EfficientZeroV2BaseNetwork(nn.Module):
             )
         if return_aux:
             aux = {"objective_logit": objective_logit}
+            if val_logits is not None:
+                aux["value_logits"] = val_logits
+            if rew_logits is not None:
+                aux["reward_logits"] = rew_logits
             if objective_intent_logits is not None:
                 aux["objective_intent_logits"] = objective_intent_logits
             if multi_vp_pred is not None:
@@ -285,10 +376,20 @@ class EfficientZeroV2BaseNetwork(nn.Module):
             )
             merged = self.dynamics_merge(torch.cat([hidden, action_planes], dim=1))
             next_hidden = self._scale_latent(self.dynamics_state(merged))
-            reward = self.dynamics_reward(next_hidden)
+            if self.support_size > 0:
+                rew_logits = self.dynamics_reward(next_hidden)
+                reward = support_to_scalar(rew_logits, support_size=self.support_size)
+            else:
+                reward = self.dynamics_reward(next_hidden)
+                rew_logits = None
             pred_hidden = self.prediction_trunk(next_hidden)
             policy_logits = self.prediction_policy(pred_hidden)
-            value = self.prediction_value(pred_hidden)
+            if self.support_size > 0:
+                val_logits = self.prediction_value(pred_hidden)
+                value = support_to_scalar(val_logits, support_size=self.support_size)
+            else:
+                value = self.prediction_value(pred_hidden)
+                val_logits = None
             objective_logit = self.prediction_objective(pred_hidden)
             objective_intent_logits = (
                 self.prediction_intent(pred_hidden) if self.prediction_intent is not None else None
@@ -299,10 +400,20 @@ class EfficientZeroV2BaseNetwork(nn.Module):
         else:
             x = torch.cat([hidden, action_onehot], dim=-1)
             next_hidden = self._scale_latent(self.dynamics_state(self.dynamics_input(x)))
-            reward = self.dynamics_reward(next_hidden)
+            if self.support_size > 0:
+                rew_logits = self.dynamics_reward(next_hidden)
+                reward = support_to_scalar(rew_logits, support_size=self.support_size)
+            else:
+                reward = self.dynamics_reward(next_hidden)
+                rew_logits = None
             pred_hidden = self.prediction_trunk(next_hidden)
             policy_logits = self.prediction_policy(pred_hidden)
-            value = self.prediction_value(pred_hidden)
+            if self.support_size > 0:
+                val_logits = self.prediction_value(pred_hidden)
+                value = support_to_scalar(val_logits, support_size=self.support_size)
+            else:
+                value = self.prediction_value(pred_hidden)
+                val_logits = None
             objective_logit = self.prediction_objective(pred_hidden)
             objective_intent_logits = (
                 self.prediction_intent(pred_hidden) if self.prediction_intent is not None else None
@@ -312,6 +423,10 @@ class EfficientZeroV2BaseNetwork(nn.Module):
             )
         if return_aux:
             aux = {"objective_logit": objective_logit}
+            if val_logits is not None:
+                aux["value_logits"] = val_logits
+            if rew_logits is not None:
+                aux["reward_logits"] = rew_logits
             if objective_intent_logits is not None:
                 aux["objective_intent_logits"] = objective_intent_logits
             if multi_vp_pred is not None:

@@ -644,6 +644,10 @@ def load_scenario_overlay(repo_root: Path, scenario_id: str) -> dict:
     sid = str(scenario_id or "").strip()
     if not sid:
         return {}
+    if sid.startswith("multi:"):
+        sub_sids = [s.strip() for s in sid[len("multi:") :].split("|") if s.strip()]
+        if sub_sids:
+            sid = sub_sids[0]
     scenarios_dir = (repo_root / "assault_sim" / "assets" / "scenarios").resolve()
     if not scenarios_dir.exists():
         return {}

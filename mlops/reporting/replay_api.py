@@ -119,7 +119,12 @@ def build_replay_log_payload(
     return payload
 
 
-def build_v2_replay_meta_payload(eval_source_path: str) -> dict[str, Any]:
+def build_v2_replay_meta_payload(
+    eval_source_path: str,
+    *,
+    repo_root: Path | None = None,
+    load_scenario_overlay: Callable[[Path, str], dict[str, Any]] | None = None,
+) -> dict[str, Any]:
     eval_root = eval_root_from_source(eval_source_path)
     payload: dict[str, Any] = {"schema_version": "reporting_v2_strict", "episodes_meta": []}
     if eval_root is None:
@@ -145,6 +150,9 @@ def build_v2_replay_meta_payload(eval_source_path: str) -> dict[str, Any]:
         for ep in eps
         if isinstance(ep, dict)
     ]
+    if repo_root is not None and load_scenario_overlay is not None:
+        scenario_id = str((payload.get("manifest", {}) or {}).get("scenario_id", "") or "")
+        payload["scenario_overlay"] = load_scenario_overlay(repo_root, scenario_id)
     return payload
 
 

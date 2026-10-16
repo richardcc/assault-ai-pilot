@@ -552,7 +552,11 @@ def serve(
                 return
             if parsed.path == "/api/v2/replay/meta":
                 qs = parse_qs(parsed.query)
-                payload = _build_v2_replay_meta_payload(str(qs.get("eval_source_path", [""])[0] or ""))
+                payload = _build_v2_replay_meta_payload(
+                    str(qs.get("eval_source_path", [""])[0] or ""),
+                    repo_root=repo_root,
+                    load_scenario_overlay=_load_scenario_overlay,
+                )
                 self._send_bytes(_json_bytes(payload), "application/json; charset=utf-8")
                 return
             if parsed.path == "/api/v2/replay/steps":

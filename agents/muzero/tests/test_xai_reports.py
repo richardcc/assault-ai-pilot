@@ -106,3 +106,76 @@ def test_episode_narrative_snapshot_deterministic():
     assert narrative["unstable_decision_steps"] == [1]
     assert abs(narrative["unstable_decision_rate"] - 0.5) < 1e-12
     assert narrative["dominant_factors"][0]["factor"] == "vp_pressure"
+
+
+def test_decision_report_with_heads_analysis_and_overrides():
+    report = build_decision_report(
+        step=5,
+        actions=["fire:u1:enemy", "move:u1:cover", "wait:u1"],
+        probs=[0.7, 0.2, 0.1],      # MCTS chosen action is fire
+        priors=[0.2, 0.7, 0.1],     # Policy prior preferred move
+        values=[0.85, 0.1, -0.2],
+        visits=[25, 7, 3],
+        rewards=[0.5, 0.0, 0.0],
+        q_values=[0.82, 0.15, -0.1],
+        u_values=[0.08, 0.12, 0.05],
+        root_value=0.6,
+        aux_outputs={
+            "objective_logit": 1.5,
+            "intent_logits": [0.1, 2.5, 0.2],
+            "multi_vp_pred": [1.5, 3.2, 5.0],
+            "consistency_drift": 0.04,
+        },
+    )
+
+    assert "heads_analysis" in report
+    heads = report["heads_analysis"]
+
+    # 1. Policy head check
+    policy_info = heads["policy_head"]
+    assert policy_info["top_action_id"] == "move:u1:cover"
+    assert policy_info["mcts_chosen_action_id"] == "fire:u1:enemy"
+    assert policy_info["is_overridden_by_mcts"] is True
+    assert policy_info["kl_divergence_mcts_prior"] > 0.0
+
+    # 2. Value head check
+    value_info = heads["value_head"]
+    assert value_info["root_value"] == 0.6
+    assert value_info["chosen_action_value"] == 0.85
+    assert abs(value_info["value_spread"] - 1.05) < 1e-6
+
+    # 3. Reward head check
+    assert "reward_head" in heads
+    reward_info = heads["reward_head"]
+    assert reward_info["chosen_action_reward"] == 0.5
+    assert reward_info["has_immediate_reward"] is True
+
+    # 4. Aux heads check
+    assert "auxiliary_heads" in heads
+    aux = heads["auxiliary_heads"]
+    assert "objective" in aux
+    assert aux["objective"]["predicted_prob"] > 0.8
+    assert aux["objective"]["predicted_conversion"] is True
+
+    assert "intent" in aux
+    assert aux["intent"]["predicted_intent_class"] == 1
+    assert aux["intent"]["confidence"] > 0.7
+
+    assert "multi_vp" in aux
+    assert aux["multi_vp"]["min_distance"] == 1.5
+
+    assert "consistency" in aux
+    assert aux["consistency"]["is_stable"] is True
+
+    # 5. Tactical insights check
+    assert len(heads["tactical_insights"]) >= 2
+    assert any("overrode" in s for s in heads["tactical_insights"])
+    assert any("Objective Head predicts" in s for s in heads["tactical_insights"])
+
+    # 6. Top-K custom metrics check
+    top_action = report["top_k"][0]
+    assert top_action["action_id"] == "fire:u1:enemy"
+    assert top_action["score"]["reward"] == 0.5
+    assert top_action["score"]["q_value"] == 0.82
+    assert top_action["score"]["u_value"] == 0.08
+
