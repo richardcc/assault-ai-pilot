@@ -17,15 +17,29 @@ Este documento registra la configuración canónica, comandos y arquitectura del
 
 ---
 
-## 2. Comando Único para Ejecutar el Experimento
+## 2. Comandos de Ejecución
 
-Para lanzar este experimento directamente en PowerShell:
+### A. Ejecutar el Curriculum Completo (6 Fases Progresivas)
+Para lanzar la ejecución encadenada de todo el curriculum (`phase1_bootstrap` hasta `phase6_self_only_stabilize`) con transferencia automática de checkpoints y evaluación de gates de promoción:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\curriculums\self_vs_self_vs_random_2scenarios_v1\run_all_phases.ps1
+```
+
+**Parámetros útiles:**
+- `-DryRun`: Realiza una comprobación en seco sin entrenar ni evaluar.
+- `-StartPhase <nombre_fase>`: Comienza directamente desde una fase específica (ej. `-StartPhase phase2_mix_70_30`).
+- `-ContinueFromLatestCheckpoint`: Reanuda el entrenamiento a partir del último checkpoint disponible en disco.
+- `-StopOnGateFail`: Detiene el curriculum si una fase no supera sus umbrales mínimos (VP capture rate, etc.).
+
+---
+
+### B. Ejecutar una Sola Fase Aislada (Fast Single Cycle)
+Para probar o iterar rápidamente solo sobre la Fase 1 (`bootstrap.fast`) de forma aislada:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\scripts\run_curriculum_cycle.ps1 -ManifestPath .\curriculums\self_vs_self_vs_random_2scenarios_v1\cycles\phase1_bootstrap.fast.cycle.json
 ```
-
-*(Si se desea realizar una validación previa en seco sin ejecutar entrenamiento ni evaluación, añadir `-DryRun` al final).*
 
 ---
 
@@ -35,8 +49,7 @@ powershell -ExecutionPolicy Bypass -File .\scripts\run_curriculum_cycle.ps1 -Man
 | :--- | :--- | :--- |
 | **Manifiesto del Ciclo** | [`curriculums/self_vs_self_vs_random_2scenarios_v1/cycles/phase1_bootstrap.fast.cycle.json`](file:///c:/repos/python/assault/curriculums/self_vs_self_vs_random_2scenarios_v1/cycles/phase1_bootstrap.fast.cycle.json) | Declara los comandos de entrenamiento, evaluación en benchmark y los archivos rastreados por hash. |
 | **Config Fast (Entrenamiento)** | [`curriculums/self_vs_self_vs_random_2scenarios_v1/configs/efficientzero_v2.phase1_bootstrap.fast.yaml`](file:///c:/repos/python/assault/curriculums/self_vs_self_vs_random_2scenarios_v1/configs/efficientzero_v2.phase1_bootstrap.fast.yaml) | `num_workers: 6`, `parallel_backend: process`, `device: cpu` para selfplay; `amp_dtype: bf16` para CUDA. |
-| **Config Base (Escenarios)** | [`curriculums/self_vs_self_vs_random_2scenarios_v1/configs/efficientzero_v2.phase1_bootstrap.yaml`](file:///c:/repos/python/assault/curriculums/self_vs_self_vs_random_2scenarios_v1/configs/efficientzero_v2.phase1_bootstrap.yaml) | Escenarios combinados: `[battaglia_cittadina_2_1, mettete_i_piedi_terra_1]` con pesos `[80, 20]`. |
-| **Config Benchmark (Evaluación)** | [`assault_bench/configs/benchmark_config.curriculum_2scenarios_phase1_256_80_20.fast.yaml`](file:///c:/repos/python/assault/assault_bench/configs/benchmark_config.curriculum_2scenarios_phase1_256_80_20.fast.yaml) | `cuda_parallel_workers: 6`, `cuda_parallel_use_threads: true`, 60 semillas evaluadas en matchups cruzados con 256 simulaciones MCTS. |
+| **Config Benchmark (Evaluación)** | [`assault_bench/configs/benchmark_config.curriculum_2scenarios_phase1_256_80_20.fast.yaml`](file:///c:/repos/python/assault/assault_bench/configs/benchmark_config.curriculum_2scenarios_phase1_256_80_20.fast.yaml) | `cuda_parallel_workers: 6`, `cuda_parallel_use_threads: true`, 20 semillas evaluadas en matchups cruzados con 128 simulaciones MCTS (~5 min). |
 
 ---
 
