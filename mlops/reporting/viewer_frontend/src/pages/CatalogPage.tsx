@@ -38,6 +38,25 @@ export function getModelLatestDate(m: ModelRow): string {
 export function CatalogPage() {
   const [catalog, setCatalog] = useState<Dict | null>(null);
   const [traceRows, setTraceRows] = useState<Dict[]>([]);
+  const [selectedCurriculumFilter, setSelectedCurriculumFilter] = useState("all");
+
+  const availableCurriculums = useMemo(() => {
+    const set = new Set<string>();
+    for (const r of traceRows) {
+      const name = String(r.curriculum_name || r.curriculum || "").trim();
+      if (name) set.add(name);
+    }
+    return Array.from(set).sort();
+  }, [traceRows]);
+
+  const filteredTraceRows = useMemo(() => {
+    if (selectedCurriculumFilter === "all") return traceRows;
+    return traceRows.filter((r) => {
+      const name = String(r.curriculum_name || r.curriculum || "").trim();
+      return name === selectedCurriculumFilter;
+    });
+  }, [traceRows, selectedCurriculumFilter]);
+
   const [selectedEngine, setSelectedEngine] = useState("");
   const [selectedModel, setSelectedModel] = useState("");
   const [modelDetail, setModelDetail] = useState<ModelPayload | null>(null);
@@ -89,6 +108,7 @@ export function CatalogPage() {
 
   // Fetch full model detail whenever selectedEngine & selectedModel change
   useEffect(() => {
+    setTrainSummary(null);
     if (!selectedEngine || !selectedModel) {
       setModelDetail(null);
       setLoadingModelDetail(false);
@@ -167,17 +187,31 @@ export function CatalogPage() {
   );
 
   const [trainSummary, setTrainSummary] = useState<Dict | null>(null);
+  const [selectedTrainRunId, setSelectedTrainRunId] = useState("");
 
   useEffect(() => {
-    const firstRunId = trains[0]?.run_id ? String(trains[0].run_id) : "";
-    if (!firstRunId) {
+    if (!trains.length) {
+      setSelectedTrainRunId("");
+      return;
+    }
+    setSelectedTrainRunId(String(trains[0].run_id || ""));
+  }, [trains]);
+
+  const activeTrainRow = useMemo(() => {
+    if (!trains.length) return null;
+    return trains.find((t) => String(t.run_id || "") === selectedTrainRunId) || trains[0];
+  }, [trains, selectedTrainRunId]);
+
+  useEffect(() => {
+    const activeRunId = activeTrainRow?.run_id ? String(activeTrainRow.run_id) : "";
+    if (!activeRunId) {
       setTrainSummary(null);
       return;
     }
     let cancelled = false;
     async function fetchSummary() {
       try {
-        const s = await fetchTrainSummary(firstRunId);
+        const s = await fetchTrainSummary(activeRunId);
         if (!cancelled) setTrainSummary(s);
       } catch {
         if (!cancelled) setTrainSummary(null);
@@ -187,7 +221,7 @@ export function CatalogPage() {
     return () => {
       cancelled = true;
     };
-  }, [trains]);
+  }, [activeTrainRow]);
   const trainCounts = (modelDetail?.scenario_train_counts || {}) as Record<string, number>;
   const evalCounts = (modelDetail?.scenario_eval_counts || {}) as Record<string, number>;
   const scenariosSeen = Array.from(
@@ -515,10 +549,28 @@ export function CatalogPage() {
           {/* TAB: NETWORK TOPOLOGY */}
           {summaryTab === "topology" && (
             <div>
-              <div className="bar" style={{ marginBottom: 12, justifyContent: "space-between" }}>
-                <span style={{ fontSize: 13, fontWeight: 700, color: "#38bdf8" }}>
-                  Topología Dinámica del Modelo: {catalogModel?.model_id || selectedModel}
-                </span>
+              <div className="bar" style={{ marginBottom: 12, justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+                  <span style={{ fontSize: 13, fontWeight: 700, color: "#38bdf8" }}>
+                    Topología Dinámica del Modelo: {catalogModel?.model_id || selectedModel}
+                  </span>
+                  {trains.length > 1 && (
+                    <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12 }}>
+                      <span className="muted">Run/Cycle:</span>
+                      <select
+                        value={selectedTrainRunId}
+                        onChange={(e) => setSelectedTrainRunId(e.target.value)}
+                        style={{ padding: "2px 6px", fontSize: 11, background: "#1e293b", color: "#e2e8f0", border: "1px solid #334155", borderRadius: 4 }}
+                      >
+                        {trains.map((t) => (
+                          <option key={String(t.run_id)} value={String(t.run_id)}>
+                            {String(t.run_id)} ({formatLocalDate(t.created_at_utc)})
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
+                </div>
                 <button
                   onClick={() => window.open(detailUrl, "_blank", "noopener,noreferrer")}
                   style={{ background: "#0ea5e9", color: "#0f172a", fontWeight: "bold", fontSize: 11, padding: "4px 8px" }}
@@ -527,7 +579,7 @@ export function CatalogPage() {
                 </button>
               </div>
               <NetworkTopologyTab
-                trainRow={trains[0] || null}
+                trainRow={activeTrainRow}
                 trainSummary={trainSummary}
                 evalRows={evals}
               />
@@ -537,14 +589,81 @@ export function CatalogPage() {
           {/* TAB 2: CURRICULUM TRACEABILITY */}
           {summaryTab === "curriculum" && (
             <div>
-              <h3 style={{ margin: "0 0 6px 0", fontSize: 13 }}>Curriculum Phase Traceability</h3>
-              <div className="muted" style={{ marginBottom: 8 }}>
-                Recorded history of phases, hard gates, promotion decisions, and diagnostics.
+              <div
+                style={{
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                  flexWrap: "wrap",
+                  gap: 12,
+                  marginBottom: 12,
+                  background: "#0f172a",
+                  padding: "10px 14px",
+                  borderRadius: 6,
+                  border: "1px solid #334155",
+                }}
+              >
+                <div>
+                  <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+                    <h3 style={{ margin: 0, fontSize: 14 }}>Curriculum Phase Traceability</h3>
+                    <div style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+                      <span className="muted" style={{ fontSize: 11, fontWeight: 600 }}>Currículum activo:</span>
+                      <span
+                        style={{
+                          background: "#0284c7",
+                          color: "#ffffff",
+                          fontSize: 12,
+                          fontWeight: 700,
+                          padding: "2px 8px",
+                          borderRadius: 4,
+                          fontFamily: "monospace",
+                          border: "1px solid #38bdf8",
+                        }}
+                      >
+                        {selectedCurriculumFilter === "all"
+                          ? (availableCurriculums[0] || "Todos los currículums")
+                          : selectedCurriculumFilter}
+                      </span>
+                    </div>
+                  </div>
+                  <div className="muted" style={{ fontSize: 11, marginTop: 4 }}>
+                    Historial de fases, hard gates de promoción, decisiones y métricas del currículum táctico.
+                  </div>
+                </div>
+
+                {availableCurriculums.length > 1 && (
+                  <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                    <span className="muted" style={{ fontSize: 11, fontWeight: 600 }}>Filtrar currículum:</span>
+                    <select
+                      value={selectedCurriculumFilter}
+                      onChange={(e) => setSelectedCurriculumFilter(e.target.value)}
+                      style={{
+                        padding: "3px 8px",
+                        fontSize: 12,
+                        background: "#1e293b",
+                        color: "#e2e8f0",
+                        border: "1px solid #475569",
+                        borderRadius: 4,
+                        fontWeight: 600,
+                      }}
+                    >
+                      <option value="all">Todos ({traceRows.length} registros)</option>
+                      {availableCurriculums.map((c) => (
+                        <option key={c} value={c}>
+                          {c} ({traceRows.filter((r) => String(r.curriculum_name || r.curriculum || "").trim() === c).length})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
               </div>
+
               <table>
                 <thead>
                   <tr>
+                    <th>currículum</th>
                     <th>phase</th>
+                    <th>scenario_mix</th>
                     <th>train_run_id</th>
                     <th>recorded_at</th>
                     <th>gate_status</th>
@@ -554,46 +673,67 @@ export function CatalogPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {!traceRows.length ? (
+                  {!filteredTraceRows.length ? (
                     <tr>
-                      <td colSpan={7} className="muted">No curriculum traceability records available.</td>
+                      <td colSpan={9} className="muted">No hay registros de trazabilidad para este currículum.</td>
                     </tr>
                   ) : (
-                    traceRows.slice(0, 50).map((r, idx) => (
-                      <tr key={idx}>
-                        <td><b>{String(r.phase_name || "-")}</b></td>
-                        <td><code>{String(r.train_run_id || "-")}</code></td>
-                        <td>{formatLocalDate(r.recorded_at_utc as string)}</td>
-                        <td>
-                          <span
-                            style={{
-                              color:
-                                String(r.gate_result_status).toUpperCase() === "PASSED" ||
-                                String(r.gate_result_status).toUpperCase() === "PASS"
-                                  ? "#22c55e"
-                                  : String(r.gate_result_status).toUpperCase() === "IN_PROGRESS"
-                                  ? "#f59e0b"
-                                  : "#ef4444",
-                              fontWeight: "bold",
-                            }}
-                          >
-                            {String(r.gate_result_status || "-")}
-                          </span>
-                        </td>
-                        <td>{String(r.hard_gate_badge || "-")}</td>
-                        <td>{String(r.diagnostic_badge || "-")}</td>
-                        <td>
-                          <span
-                            style={{
-                              color: String(r.promotion_decision) === "promoted" ? "#22c55e" : undefined,
-                              fontWeight: String(r.promotion_decision) === "promoted" ? "bold" : "normal",
-                            }}
-                          >
-                            {String(r.promotion_decision || "-")}
-                          </span>
-                        </td>
-                      </tr>
-                    ))
+                    filteredTraceRows.slice(0, 50).map((r, idx) => {
+                      const scenarioIds = Array.isArray(r.scenario_mix_ids) ? (r.scenario_mix_ids as string[]) : [];
+                      const cleanedScenarios = scenarioIds
+                        .map((s) => String(s).replace(/^multi:/, "").split("|"))
+                        .flat()
+                        .filter(Boolean);
+                      const scenarioDisplay = cleanedScenarios.length
+                        ? cleanedScenarios
+                            .map((s) => s.replace("battaglia_cittadina_2_1", "battaglia").replace("mettete_i_piedi_terra_1", "mettete"))
+                            .join(" + ")
+                        : "-";
+
+                      return (
+                        <tr key={idx}>
+                          <td>
+                            <code style={{ color: "#38bdf8", fontSize: 11 }}>
+                              {String(r.curriculum_name || r.curriculum || "-")}
+                            </code>
+                          </td>
+                          <td><b>{String(r.phase_name || "-")}</b></td>
+                          <td style={{ fontSize: 11 }} title={cleanedScenarios.join(", ")}>
+                            {scenarioDisplay}
+                          </td>
+                          <td><code>{String(r.train_run_id || "-")}</code></td>
+                          <td>{formatLocalDate(r.recorded_at_utc as string)}</td>
+                          <td>
+                            <span
+                              style={{
+                                color:
+                                  String(r.gate_result_status).toUpperCase() === "PASSED" ||
+                                  String(r.gate_result_status).toUpperCase() === "PASS"
+                                    ? "#22c55e"
+                                    : String(r.gate_result_status).toUpperCase() === "IN_PROGRESS"
+                                    ? "#f59e0b"
+                                    : "#ef4444",
+                                fontWeight: "bold",
+                              }}
+                            >
+                              {String(r.gate_result_status || "-")}
+                            </span>
+                          </td>
+                          <td>{String(r.hard_gate_badge || "-")}</td>
+                          <td>{String(r.diagnostic_badge || "-")}</td>
+                          <td>
+                            <span
+                              style={{
+                                color: String(r.promotion_decision) === "promoted" ? "#22c55e" : undefined,
+                                fontWeight: String(r.promotion_decision) === "promoted" ? "bold" : "normal",
+                              }}
+                            >
+                              {String(r.promotion_decision || "-")}
+                            </span>
+                          </td>
+                        </tr>
+                      );
+                    })
                   )}
                 </tbody>
               </table>
@@ -630,7 +770,28 @@ export function CatalogPage() {
 
             return (
               <div>
-                <h3 style={{ margin: "0 0 6px 0", fontSize: 13 }}>Curriculum Compare (Latest)</h3>
+                <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", marginBottom: 6 }}>
+                  <h3 style={{ margin: 0, fontSize: 13 }}>Curriculum Compare (Latest)</h3>
+                  {availableCurriculums.length > 0 && (
+                    <div style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+                      <span className="muted" style={{ fontSize: 11, fontWeight: 600 }}>Currículum:</span>
+                      <span
+                        style={{
+                          background: "#0284c7",
+                          color: "#ffffff",
+                          fontSize: 11,
+                          fontWeight: 700,
+                          padding: "2px 8px",
+                          borderRadius: 4,
+                          fontFamily: "monospace",
+                          border: "1px solid #38bdf8",
+                        }}
+                      >
+                        {availableCurriculums[0]}
+                      </span>
+                    </div>
+                  )}
+                </div>
                 <div className="muted" style={{ marginBottom: 10 }}>
                   Comparativa de métricas entre checkpoint candidato y baseline a través de fases de curriculum.
                 </div>
