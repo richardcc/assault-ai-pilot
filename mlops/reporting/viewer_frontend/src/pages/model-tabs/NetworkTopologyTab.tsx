@@ -785,6 +785,24 @@ export function NetworkTopologyTab({
             },
           }
         : {}),
+      macro_planner: {
+        id: "macro_planner",
+        name: "Planificador Macro (Nivel 1)",
+        math: `\\pi_{macro}(o_t) \\to (\\text{Postura}, \\text{Roles}, \\text{VP Target})`,
+        role: "Planificador estratégico de nivel superior (Nivel 1 de la jerarquía HRL). Evalúa el escenario completo y asigna la postura doctrinal global del equipo (ASSAULT, DEFENSIVE, ZONE_SUPPRESS) y los roles tácticos a cada escuadra (SPEARHEAD, FIRE_SUPPORT, OBJECTIVE_DEFENDER, FLANK_SCREEN), modulando directamente los priors de búsqueda del árbol MCTS en tiempo de inferencia.",
+        inShape: `B × ${inChannels} × ${boardH} × ${boardW} (Observación Directa del Tablero)`,
+        outShape: `Postura (1 de 3) + Roles por unidad + Modulación Prior (+35%)`,
+        architecture: [
+          "Evaluación Global del Escenario (Control de VPs, balance de bajas y mapa de amenaza)",
+          "Inferencia de Postura Estratégica: ASSAULT_VP / DEFENSIVE_HOLD / ZONE_SUPPRESS",
+          "Asignación Doctrinal de Roles: Spearhead, Fire Support, Defender, Flank Screen",
+          "Modulación de Priors MCTS: P_mod(a) = P(a) * (1 + α * Boost(Postura, Rol, a))",
+          "Integración en el bucle de auto-juego y evaluación de EfficientZero v2"
+        ],
+        paramEstimate: "Módulo Lógico-Estratégico HRL con Ponderación Doctrinal",
+        receptiveField: "Global (Todo el tablero y estado dinámico de unidades)",
+        details: "Actúa como Nivel 1 de la jerarquía de toma de decisiones. Impide que la búsqueda MCTS local (Nivel 2) se extravíe en mínimos locales o bucles pasivos al sesgar la exploración hacia los objetivos tácticos definidos.",
+      },
     };
   }, [inChannels, boardH, boardW, hiddenDim, actionDim, dynamicsBlocks, predictionBlocks, encoderType, maxUnroll, consistencyUnroll, runId, mctsSims, isV2Optimized, hasThreatHead, hasAttritionHead, hasMoraleHead]);
 
@@ -911,7 +929,7 @@ export function NetworkTopologyTab({
   const numHeads = activeHeads.length;
   const cardH = numHeads <= 4 ? 52 : numHeads <= 5 ? 46 : 42;
   const cardGap = numHeads <= 4 ? 8 : numHeads <= 5 ? 6 : 5;
-  const svgHeight = Math.max(255, 12 + numHeads * (cardH + cardGap) + 8);
+  const svgHeight = Math.max(265, 12 + numHeads * (cardH + cardGap) + 8);
 
   // Resilient channels parser supporting both array and dictionary shapes
   const dynamicChannelsList = useMemo(() => {

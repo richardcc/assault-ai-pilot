@@ -9,6 +9,11 @@ import {
   fetchTrainSummary,
 } from "../api";
 import { calculateDurationSeconds, formatDuration, formatDurationDetailed, formatLocalDate } from "../dateUtils";
+import {
+  buildCurriculumProgression,
+  extractStepTraceMetrics,
+  type CurriculumStepMetric,
+} from "../curriculumMetrics";
 import type { Dict, EvalResultRow, EvalRow, ModelPayload, TrainRow } from "../types";
 import { NetworkTopologyTab } from "./model-tabs/NetworkTopologyTab";
 
@@ -41,6 +46,223 @@ export function getModelLatestDate(m: ModelRow): string {
   if (dates.length === 0) return "";
   dates.sort();
   return dates[dates.length - 1];
+}
+
+function CurriculumProgressionChart({ steps }: { steps: CurriculumStepMetric[] }) {
+  const validSteps = steps.filter((s) => s.elo !== null);
+  if (validSteps.length === 0) return null;
+
+  const minElo = Math.min(...validSteps.map((s) => s.elo!)) - 60;
+  const maxElo = Math.max(...validSteps.map((s) => s.elo!)) + 60;
+  const rangeElo = Math.max(120, maxElo - minElo);
+
+  const width = 860;
+  const height = 125;
+  const padX = 55;
+  const padY = 28;
+  const chartW = width - padX * 2;
+  const chartH = height - padY * 2 - 10;
+
+  const points = validSteps.map((s, idx) => {
+    const x = padX + (validSteps.length > 1 ? (idx / (validSteps.length - 1)) * chartW : chartW / 2);
+    const y = padY + chartH - ((s.elo! - minElo) / rangeElo) * chartH;
+    return { x, y, step: s };
+  });
+
+  const pathD = points.map((p, idx) => `${idx === 0 ? "M" : "L"} ${p.x.toFixed(1)} ${p.y.toFixed(1)}`).join(" ");
+
+  const latest = validSteps[validSteps.length - 1];
+  const first = validSteps[0];
+  const deltaTotal = (latest && first) ? latest.elo! - first.elo! : 0;
+  const peak = Math.max(...validSteps.map((s) => s.elo!));
+  const avgWinRate =
+    validSteps.filter((s) => s.winRate !== null).reduce((acc, s) => acc + s.winRate!, 0) /
+    Math.max(1, validSteps.filter((s) => s.winRate !== null).length);
+
+  return (
+    <div
+      style={{
+        background: "#0b1220",
+        border: "1px solid #1e293b",
+        borderRadius: 8,
+        padding: "12px 16px",
+        marginBottom: 16,
+      }}
+    >
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+          marginBottom: 10,
+          flexWrap: "wrap",
+          gap: 10,
+        }}
+      >
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <span style={{ fontSize: 13, fontWeight: 700, color: "#38bdf8" }}>
+            📈 Curva de Progresión de ELO por Fase del Currículum
+          </span>
+          <span
+            style={{
+              fontSize: 11,
+              background: "#0284c725",
+              border: "1px solid #0284c750",
+              color: "#38bdf8",
+              padding: "1px 6px",
+              borderRadius: 4,
+              fontWeight: 600,
+            }}
+          >
+            {validSteps.length} Fases Cronometradas
+          </span>
+        </div>
+        <div style={{ display: "flex", gap: 14, fontSize: 12, flexWrap: "wrap", alignItems: "center" }}>
+          <div>
+            <span className="muted">ELO Inicial:</span>{" "}
+            <strong style={{ color: "#e2e8f0" }}>{first.elo}</strong>
+          </div>
+          <div>
+            <span className="muted">ELO Actual:</span>{" "}
+            <strong style={{ color: "#38bdf8" }}>{latest.elo}</strong>
+          </div>
+          <div>
+            <span className="muted">Pico ELO:</span>{" "}
+            <strong style={{ color: "#c084fc" }}>{peak}</strong>
+          </div>
+          <div>
+            <span className="muted">Win Rate Promedio:</span>{" "}
+            <strong style={{ color: "#34d399" }}>{(avgWinRate * 100).toFixed(1)}%</strong>
+          </div>
+          <div
+            style={{
+              background: deltaTotal >= 0 ? "#10b98118" : "#ef444418",
+              border: `1px solid ${deltaTotal >= 0 ? "#10b98140" : "#ef444440"}`,
+              padding: "2px 8px",
+              borderRadius: 4,
+            }}
+          >
+            <span className="muted">Δ Global:</span>{" "}
+            <strong style={{ color: deltaTotal >= 0 ? "#34d399" : "#f87171" }}>
+              {deltaTotal >= 0 ? `▲ +${deltaTotal}` : `▼ ${deltaTotal}`} pts
+            </strong>
+          </div>
+        </div>
+      </div>
+
+      <div style={{ width: "100%", overflowX: "auto" }}>
+        <svg
+          viewBox={`0 0 ${width} ${height}`}
+          style={{ width: "100%", minWidth: 620, height: 125, display: "block" }}
+        >
+          <defs>
+            <linearGradient id="eloAreaGrad" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor="#38bdf8" stopOpacity={0.28} />
+              <stop offset="100%" stopColor="#38bdf8" stopOpacity={0.0} />
+            </linearGradient>
+          </defs>
+
+          {/* Grid lines */}
+          <line x1={padX} y1={padY} x2={width - padX} y2={padY} stroke="#1e293b" strokeDasharray="3 3" />
+          <line
+            x1={padX}
+            y1={padY + chartH / 2}
+            x2={width - padX}
+            y2={padY + chartH / 2}
+            stroke="#1e293b"
+            strokeDasharray="3 3"
+          />
+          <line x1={padX} y1={padY + chartH} x2={width - padX} y2={padY + chartH} stroke="#1e293b" />
+
+          {/* Area fill */}
+          {points.length > 1 && (
+            <path
+              d={`${pathD} L ${points[points.length - 1].x.toFixed(1)} ${(padY + chartH).toFixed(1)} L ${points[0].x.toFixed(1)} ${(padY + chartH).toFixed(1)} Z`}
+              fill="url(#eloAreaGrad)"
+            />
+          )}
+
+          {/* Line */}
+          {points.length > 1 && (
+            <path
+              d={pathD}
+              fill="none"
+              stroke="#38bdf8"
+              strokeWidth="2.5"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+          )}
+
+          {/* Points & Labels */}
+          {points.map((p, idx) => {
+            const isLatest = idx === points.length - 1;
+            const isPeak = p.step.elo === peak;
+            const cleanPhaseName = p.step.phaseName.replace(/^phase\d*_?/, "");
+            return (
+              <g key={idx}>
+                {/* Connecting vertical tick */}
+                <line
+                  x1={p.x}
+                  y1={p.y}
+                  x2={p.x}
+                  y2={padY + chartH}
+                  stroke="#334155"
+                  strokeWidth="1"
+                  strokeDasharray="2 2"
+                  opacity={0.6}
+                />
+                {/* Point */}
+                <circle
+                  cx={p.x}
+                  cy={p.y}
+                  r={isLatest || isPeak ? 5.5 : 4}
+                  fill={isPeak ? "#a855f7" : isLatest ? "#38bdf8" : "#0284c7"}
+                  stroke="#0f172a"
+                  strokeWidth="2"
+                />
+                {/* ELO badge label */}
+                <text
+                  x={p.x}
+                  y={p.y - 10}
+                  textAnchor="middle"
+                  fill={isPeak ? "#c084fc" : isLatest ? "#38bdf8" : "#cbd5e1"}
+                  fontSize={11}
+                  fontWeight={700}
+                >
+                  {p.step.elo}
+                </text>
+                {/* Win rate subtext */}
+                {p.step.winRate !== null && (
+                  <text
+                    x={p.x}
+                    y={p.y + 16}
+                    textAnchor="middle"
+                    fill="#34d399"
+                    fontSize={9.5}
+                    fontWeight={600}
+                  >
+                    {(p.step.winRate * 100).toFixed(0)}%
+                  </text>
+                )}
+                {/* Phase bottom label */}
+                <text
+                  x={p.x}
+                  y={height - 2}
+                  textAnchor="middle"
+                  fill="#94a3b8"
+                  fontSize={9.5}
+                  fontWeight={isLatest ? 700 : 500}
+                >
+                  {cleanPhaseName.length > 13 ? `${cleanPhaseName.slice(0, 11)}..` : cleanPhaseName}
+                </text>
+              </g>
+            );
+          })}
+        </svg>
+      </div>
+    </div>
+  );
 }
 
 export function CatalogPage() {
@@ -278,6 +500,19 @@ export function CatalogPage() {
     }
     return { totalSec, count };
   }, [trains, traceByTrainRun]);
+
+  const curriculumProgression = useMemo(
+    () => buildCurriculumProgression(trains, traceByTrainRun),
+    [trains, traceByTrainRun]
+  );
+
+  const stepMetricByRunId = useMemo(() => {
+    const map = new Map<string, CurriculumStepMetric>();
+    for (const step of curriculumProgression) {
+      map.set(step.runId, step);
+    }
+    return map;
+  }, [curriculumProgression]);
 
   const [trainSummary, setTrainSummary] = useState<Dict | null>(null);
   const [selectedTrainRunId, setSelectedTrainRunId] = useState("");
@@ -763,18 +998,32 @@ export function CatalogPage() {
                     )}
                   </div>
 
-                  {/* Recent Training Runs */}
+                  {/* Curriculum Progression Chart & Recent Training Runs */}
                   <div style={{ marginBottom: 14 }}>
-                    <h3 style={{ margin: "0 0 6px 0", fontSize: 13 }}>Training Runs ({trains.length})</h3>
+                    {curriculumProgression.length > 0 && (
+                      <CurriculumProgressionChart steps={curriculumProgression} />
+                    )}
+
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6, flexWrap: "wrap", gap: 8 }}>
+                      <h3 style={{ margin: 0, fontSize: 13 }}>Training Runs & Progreso del Currículum ({trains.length})</h3>
+                      <span className="muted" style={{ fontSize: 11 }}>
+                        Métricas de ELO calibrado Bradley-Terry, Win Rate y evaluación de Gate por fase.
+                      </span>
+                    </div>
+
                     {trains.length > 0 ? (
                       <>
-                        <div className="scroll-table-container" style={{ maxHeight: 380 }}>
+                        <div className="scroll-table-container" style={{ maxHeight: 420 }}>
                           <table>
                             <thead>
                               <tr>
                                 <th>run_id</th>
                                 <th>fase currículum</th>
                                 <th>duración</th>
+                                <th title="Bradley-Terry Anchor ELO y delta respecto a la fase previa">🎯 ELO Calibrado (Δ)</th>
+                                <th title="Tasa de victorias en partidas resueltas sin timeout">⚔️ Win Rate</th>
+                                <th title="Estado de Puerta de Control (Gate) y decisión">🚪 Gate / Decisión</th>
+                                <th title="Saldo neto promedio de puntos de victoria y bajas causadas">📊 VP Net / Bajas</th>
                                 <th>scenario</th>
                                 <th>created_at</th>
                                 <th>git_commit</th>
@@ -785,6 +1034,7 @@ export function CatalogPage() {
                               {trains.map((t) => {
                                 const tid = String(t.run_id || "").trim();
                                 const trace = traceByTrainRun.get(tid);
+                                const sm = stepMetricByRunId.get(tid);
                                 const phaseName = String(trace?.phase_name || t.curriculum_phase || "-");
                                 let dur = typeof t.duration_seconds === "number" ? t.duration_seconds : null;
                                 if (dur === null || dur === undefined) {
@@ -832,6 +1082,118 @@ export function CatalogPage() {
                                         >
                                           ⏱️ {formatDuration(dur)}
                                         </span>
+                                      ) : (
+                                        <span className="muted">-</span>
+                                      )}
+                                    </td>
+                                    <td>
+                                      {sm?.elo !== null && sm?.elo !== undefined ? (
+                                        <div style={{ display: "inline-flex", alignItems: "center", gap: 5 }}>
+                                          <span
+                                            style={{
+                                              background: "#0284c725",
+                                              border: "1px solid #0284c760",
+                                              color: "#38bdf8",
+                                              padding: "2px 7px",
+                                              borderRadius: 4,
+                                              fontSize: 12,
+                                              fontWeight: 700,
+                                            }}
+                                          >
+                                            {sm.elo}
+                                          </span>
+                                          {sm.deltaElo !== null && (
+                                            <span
+                                              style={{
+                                                fontSize: 10,
+                                                fontWeight: 700,
+                                                color: sm.deltaElo > 0 ? "#34d399" : sm.deltaElo < 0 ? "#f87171" : "#94a3b8",
+                                              }}
+                                              title={`Delta respecto a la fase previa: ${sm.deltaElo >= 0 ? "+" : ""}${sm.deltaElo} pts`}
+                                            >
+                                              {sm.deltaElo > 0 ? `▲+${sm.deltaElo}` : sm.deltaElo < 0 ? `▼${sm.deltaElo}` : "=0"}
+                                            </span>
+                                          )}
+                                        </div>
+                                      ) : (
+                                        <span className="muted">-</span>
+                                      )}
+                                    </td>
+                                    <td>
+                                      {sm?.winRate !== null && sm?.winRate !== undefined ? (
+                                        <span
+                                          style={{
+                                            background: sm.winRate >= 0.85 ? "#10b98120" : sm.winRate >= 0.6 ? "#0284c720" : "#f59e0b20",
+                                            border: `1px solid ${sm.winRate >= 0.85 ? "#10b98150" : sm.winRate >= 0.6 ? "#0284c750" : "#f59e0b50"}`,
+                                            color: sm.winRate >= 0.85 ? "#34d399" : sm.winRate >= 0.6 ? "#38bdf8" : "#fbbf24",
+                                            padding: "2px 6px",
+                                            borderRadius: 4,
+                                            fontSize: 11,
+                                            fontWeight: 700,
+                                          }}
+                                          title={`Win Rate: ${(sm.winRate * 100).toFixed(1)}% | Score: ${sm.score !== null ? (sm.score * 100).toFixed(1) + '%' : '-'}`}
+                                        >
+                                          {(sm.winRate * 100).toFixed(1)}%
+                                        </span>
+                                      ) : (
+                                        <span className="muted">-</span>
+                                      )}
+                                    </td>
+                                    <td>
+                                      {sm?.gateStatus ? (
+                                        <div style={{ display: "inline-flex", flexDirection: "column", gap: 2 }}>
+                                          <span
+                                            style={{
+                                              background: sm.gateStatus === "PASS" || sm.gateStatus === "PASSED" ? "#10b98125" : "#ef444425",
+                                              border: `1px solid ${sm.gateStatus === "PASS" || sm.gateStatus === "PASSED" ? "#10b98160" : "#ef444460"}`,
+                                              color: sm.gateStatus === "PASS" || sm.gateStatus === "PASSED" ? "#34d399" : "#f87171",
+                                              padding: "1px 6px",
+                                              borderRadius: 3,
+                                              fontSize: 10,
+                                              fontWeight: 700,
+                                              textAlign: "center",
+                                            }}
+                                            title={sm.gateFailReasons.length ? sm.gateFailReasons.join("\n") : "Cumple los criterios de pase del Gate"}
+                                          >
+                                            {sm.gateStatus}
+                                          </span>
+                                          {sm.promotionDecision && (
+                                            <span
+                                              style={{
+                                                fontSize: 9.5,
+                                                color: sm.promotionDecision === "promoted" ? "#34d399" : "#fbbf24",
+                                                fontWeight: 600,
+                                                textTransform: "uppercase",
+                                                textAlign: "center",
+                                              }}
+                                            >
+                                              {sm.promotionDecision}
+                                            </span>
+                                          )}
+                                        </div>
+                                      ) : (
+                                        <span className="muted">-</span>
+                                      )}
+                                    </td>
+                                    <td>
+                                      {sm?.capturedAvg !== null || sm?.vpNet !== null ? (
+                                        <div style={{ fontSize: 11, whiteSpace: "nowrap" }}>
+                                          <span style={{ color: "#38bdf8", fontWeight: 600 }} title="Bajas infligidas promedio por partida">
+                                            🎯 {sm.capturedAvg !== null ? sm.capturedAvg.toFixed(1) : "-"} bajas
+                                          </span>
+                                          {sm.vpNet !== null && (
+                                            <span
+                                              style={{
+                                                marginLeft: 6,
+                                                color: sm.vpNet > 0 ? "#34d399" : sm.vpNet < 0 ? "#f87171" : "#94a3b8",
+                                                fontWeight: 600,
+                                              }}
+                                              title="Saldo neto promedio de puntos de victoria"
+                                            >
+                                              ({sm.vpNet > 0 ? `+${sm.vpNet.toFixed(2)}` : sm.vpNet.toFixed(2)} VP)
+                                            </span>
+                                          )}
+                                        </div>
                                       ) : (
                                         <span className="muted">-</span>
                                       )}
@@ -1147,6 +1509,9 @@ export function CatalogPage() {
                     <th>currículum</th>
                     <th>phase</th>
                     <th>duración</th>
+                    <th title="Bradley-Terry Anchor ELO">🎯 ELO Calibrado</th>
+                    <th title="Tasa de victorias en partidas resueltas sin timeout">⚔️ Win Rate</th>
+                    <th title="Promedio de bajas enemigas y saldo neto VP">📊 VP / Bajas</th>
                     <th>scenario_mix</th>
                     <th>train_run_id</th>
                     <th>recorded_at</th>
@@ -1159,10 +1524,11 @@ export function CatalogPage() {
                 <tbody>
                   {!filteredTraceRows.length ? (
                     <tr>
-                      <td colSpan={10} className="muted">No hay registros de trazabilidad para este currículum.</td>
+                      <td colSpan={13} className="muted">No hay registros de trazabilidad para este currículum.</td>
                     </tr>
                   ) : (
                     filteredTraceRows.slice(0, 50).map((r, idx) => {
+                      const sm = extractStepTraceMetrics(r);
                       const scenarioIds = Array.isArray(r.scenario_mix_ids) ? (r.scenario_mix_ids as string[]) : [];
                       const cleanedScenarios = scenarioIds
                         .map((s) => String(s).replace(/^multi:/, "").split("|"))
@@ -1203,6 +1569,50 @@ export function CatalogPage() {
                                 title={formatDurationDetailed(dur)}
                               >
                                 ⏱️ {formatDuration(dur)}
+                              </span>
+                            ) : (
+                              <span className="muted">-</span>
+                            )}
+                          </td>
+                          <td>
+                            {sm.elo !== null ? (
+                              <span
+                                style={{
+                                  fontWeight: 700,
+                                  color: "#38bdf8",
+                                  background: "#0284c725",
+                                  border: "1px solid #0284c750",
+                                  padding: "2px 6px",
+                                  borderRadius: 4,
+                                  fontSize: 11,
+                                }}
+                              >
+                                {sm.elo}
+                              </span>
+                            ) : (
+                              <span className="muted">-</span>
+                            )}
+                          </td>
+                          <td>
+                            {sm.winRate !== null ? (
+                              <span
+                                style={{
+                                  fontWeight: 700,
+                                  color: sm.winRate >= 0.85 ? "#34d399" : "#38bdf8",
+                                  fontSize: 11,
+                                }}
+                              >
+                                {(sm.winRate * 100).toFixed(1)}%
+                              </span>
+                            ) : (
+                              <span className="muted">-</span>
+                            )}
+                          </td>
+                          <td>
+                            {sm.capturedAvg !== null || sm.vpNet !== null ? (
+                              <span style={{ fontSize: 11, whiteSpace: "nowrap" }}>
+                                {sm.capturedAvg !== null ? `${sm.capturedAvg.toFixed(1)} bajas` : ""}
+                                {sm.vpNet !== null ? ` (${sm.vpNet > 0 ? "+" : ""}${sm.vpNet.toFixed(2)} VP)` : ""}
                               </span>
                             ) : (
                               <span className="muted">-</span>
