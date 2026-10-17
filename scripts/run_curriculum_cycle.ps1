@@ -12,19 +12,14 @@ function Invoke-LoggedCommand {
   )
   "`n>>> $Command`n" | Tee-Object -FilePath $LogPath -Append | Out-Null
   $prevEap = $ErrorActionPreference
-  $prevPythonFaulthandler = $env:PYTHONFAULTHANDLER
-  $prevPythonUnbuffered = $env:PYTHONUNBUFFERED
   try {
     # Some tools (e.g. mlflow) write informational lines to stderr.
-    # Keep streaming both stdout/stderr but fail only by process exit code.
+    # Execute natively via cmd.exe /c to stream merged stdout/stderr cleanly to Tee-Object
+    # without PowerShell ErrorRecord wrapping or pipe buffer corruption on Windows.
     $ErrorActionPreference = "Continue"
-    $env:PYTHONFAULTHANDLER = "1"
-    $env:PYTHONUNBUFFERED = "1"
-    Invoke-Expression "$Command" 2>&1 | Tee-Object -FilePath $LogPath -Append
+    cmd.exe /c "$Command 2>&1" | Tee-Object -FilePath $LogPath -Append
   } finally {
     $ErrorActionPreference = $prevEap
-    if ($null -eq $prevPythonFaulthandler) { Remove-Item Env:PYTHONFAULTHANDLER -ErrorAction SilentlyContinue } else { $env:PYTHONFAULTHANDLER = $prevPythonFaulthandler }
-    if ($null -eq $prevPythonUnbuffered) { Remove-Item Env:PYTHONUNBUFFERED -ErrorAction SilentlyContinue } else { $env:PYTHONUNBUFFERED = $prevPythonUnbuffered }
   }
   if ($LASTEXITCODE -ne 0) {
     Write-Host ""

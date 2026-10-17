@@ -9,9 +9,7 @@ from typing import Any, Protocol
 import torch
 
 from agents.efficientzero_v2.core.mcts import run_mcts_puct
-from agents.muzero.core.selfplay import (
-    observation_to_tensor as _muzero_observation_to_tensor,
-)
+from agents.efficientzero_v2.core.observation import observation_to_tensor
 from agents.efficientzero_v2.core.objective_signals import (
     hex_distance_axial,
     objective_min_distance_snapshot,
@@ -160,9 +158,7 @@ def _observation_to_vector(obs) -> list[float]:
 
 
 def _observation_to_tensor(obs, channels: int = DEFAULT_OBS_CHANNELS, height: int = DEFAULT_OBS_HEIGHT, width: int = DEFAULT_OBS_WIDTH):
-    # Keep EfficientZeroV2 channel contract aligned with MuZero: when
-    # observation_channels=32, all declared planes are populated producer-side.
-    return _muzero_observation_to_tensor(
+    return observation_to_tensor(
         obs,
         channels=int(channels),
         height=int(height),

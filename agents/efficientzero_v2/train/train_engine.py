@@ -18,9 +18,9 @@ import torch
 
 from agents.efficientzero_v2.core.network import EfficientZeroV2Network
 from agents.efficientzero_v2.core.inference_service import InferenceService
-from agents.muzero.xai.decision_report import build_decision_report
-from agents.muzero.xai.episode_narrative import build_episode_narrative
-from agents.muzero.xai.search_tree_snapshot import build_search_snapshot
+from agents.efficientzero_v2.xai.decision_report import build_decision_report
+from agents.efficientzero_v2.xai.episode_narrative import build_episode_narrative
+from agents.efficientzero_v2.xai.search_tree_snapshot import build_search_snapshot
 from agents.efficientzero_v2.core.interop import (
     EZV2VOECAdapter,
     EventBus,
@@ -138,9 +138,10 @@ def _process_actor_run_episode(ep_seed: int, scenario_id: str | None = None) -> 
     state = _PROCESS_ACTOR_STATE
     cfg = dict(state["selfplay_cfg"])
     actual_scenario = str(scenario_id or state.get("scenario_id", "") or "")
-    with torch.inference_mode():
-        return play_episode(
-            adapter=state["adapter"],
+    try:
+        with torch.inference_mode():
+            return play_episode(
+                adapter=state["adapter"],
             scenario_id=actual_scenario,
             seed=int(ep_seed),
             max_steps=int(cfg["max_steps"]),
@@ -196,6 +197,10 @@ def _process_actor_run_episode(ep_seed: int, scenario_id: str | None = None) -> 
             matchup_modes=list(cfg.get("matchup_modes", ["self_vs_self"]) or ["self_vs_self"]),
             matchup_mode_weights=dict(cfg.get("matchup_mode_weights", {}) or {}),
         )
+    except Exception as exc:
+        import traceback
+        traceback.print_exc()
+        raise
 
 
 def _process_actor_update_weights(model_state_dict: dict, version: int) -> int:
@@ -1185,17 +1190,22 @@ def run_training(
                             for k, v in model.state_dict().items()
                         }
                         target_version = int(it)
-                        futs = [
-                            process_pool.submit(
-                                _process_actor_update_weights,
-                                model_state_dict_cpu,
-                                target_version,
-                            )
-                            for _ in range(int(num_workers))
-                        ]
                         updated_pids = set()
-                        for fut in as_completed(futs):
-                            updated_pids.add(int(fut.result()))
+                        max_sync_submits = int(num_workers) * 3
+                        submits = 0
+                        while len(updated_pids) < int(num_workers) and submits < max_sync_submits:
+                            batch_size = max(1, int(num_workers) - len(updated_pids))
+                            batch_futs = [
+                                process_pool.submit(
+                                    _process_actor_update_weights,
+                                    model_state_dict_cpu,
+                                    target_version,
+                                )
+                                for _ in range(batch_size)
+                            ]
+                            for fut in as_completed(batch_futs):
+                                updated_pids.add(int(fut.result()))
+                                submits += 1
                         sync_s = float(time.perf_counter() - sync_t0)
                         print(
                             "[EfficientZeroV2]   process actor weights synced "
@@ -1390,21 +1400,37 @@ def run_training(
                         if process_pool is None:
                             raise RuntimeError("Process actors pool not initialized")
                         fut_to_job = {
-                            process_pool.submit(_process_actor_run_episode, ep_seed, _ep_scenario): (ep_idx, ep_seed)
+                            process_pool.submit(_process_actor_run_episode, ep_seed, _ep_scenario): (ep_idx, ep_seed, _ep_scenario)
                             for ep_idx, ep_seed, _ep_scenario in episode_plan
                         }
                         for fut in as_completed(fut_to_job):
-                            ep_idx, ep_seed = fut_to_job[fut]
-                            completed[ep_idx] = (ep_seed, fut.result())
+                            ep_idx, ep_seed, ep_scen = fut_to_job[fut]
+                            try:
+                                completed[ep_idx] = (ep_seed, fut.result())
+                            except Exception as exc:
+                                print(
+                                    f"[EfficientZeroV2][ERROR] Process actor worker failed on episode {ep_idx+1}/{len(episode_plan)} "
+                                    f"(seed={ep_seed}, scenario={ep_scen}): {exc}",
+                                    flush=True,
+                                )
+                                raise
                     else:
                         with ThreadPoolExecutor(max_workers=int(num_workers)) as ex:
                             fut_to_job = {
-                                ex.submit(_run_episode, ep_seed, ep_scenario): (ep_idx, ep_seed)
+                                ex.submit(_run_episode, ep_seed, ep_scenario): (ep_idx, ep_seed, ep_scenario)
                                 for ep_idx, ep_seed, ep_scenario in episode_plan
                             }
                             for fut in as_completed(fut_to_job):
-                                ep_idx, ep_seed = fut_to_job[fut]
-                                completed[ep_idx] = (ep_seed, fut.result())
+                                ep_idx, ep_seed, ep_scen = fut_to_job[fut]
+                                try:
+                                    completed[ep_idx] = (ep_seed, fut.result())
+                                except Exception as exc:
+                                    print(
+                                        f"[EfficientZeroV2][ERROR] Thread worker failed on episode {ep_idx+1}/{len(episode_plan)} "
+                                        f"(seed={ep_seed}, scenario={ep_scen}): {exc}",
+                                        flush=True,
+                                    )
+                                    raise
                     # Keep deterministic replay insertion order by episode index.
                     for ep_idx, ep_seed, _ep_scenario in episode_plan:
                         done_seed, samples = completed.get(ep_idx, (ep_seed, []))
@@ -1498,6 +1524,9 @@ def run_training(
                         "aux_objective_loss",
                         "aux_intent_loss",
                         "aux_multi_vp_loss",
+                        "aux_threat_loss",
+                        "aux_attrition_loss",
+                        "aux_morale_loss",
                         "grad_norm",
                     ]
                     for k in metric_keys:

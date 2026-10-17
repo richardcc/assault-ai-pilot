@@ -15,6 +15,7 @@ def test_q_root_normalization_breaks_saturation_ties_in_extreme_case() -> None:
         q_clip_abs=0.01,
         q_root_normalization_mode="none",
         q_root_normalization_strength=0.0,
+        value_rescale_mode="none",
     )
     patched = run_mcts_puct(
         legal_actions=legal,
@@ -25,6 +26,7 @@ def test_q_root_normalization_breaks_saturation_ties_in_extreme_case() -> None:
         q_clip_abs=0.01,
         q_root_normalization_mode="adaptive_minmax",
         q_root_normalization_strength=0.5,
+        value_rescale_mode="none",
     )
 
     assert float(baseline.q_root_score_spread) == 0.0
