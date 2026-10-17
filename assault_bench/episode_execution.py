@@ -77,7 +77,7 @@ def execute_benchmark_seed_task(
                 prediction_blocks=int(payload["model"].get("prediction_blocks", 1)),
             )
             state_dict = load_state_dict_fn(payload["checkpoint_path"], bench_device)
-            model.load_state_dict(state_dict)
+            model.load_state_dict(state_dict, strict=False)
             if bench_device == "cuda":
                 model = model.to("cuda")
             model.eval()

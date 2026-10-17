@@ -108,5 +108,6 @@ _artifacts/
 *.sqlite3
 !mlops/reporting/viewer_frontend/index.html
 !mlops/reporting/viewer_frontend/dist/**
+scratch/
 
 

@@ -58,3 +58,43 @@ def test_analyze_channels_with_all_heads():
         assert "grad_threat" in ha
         assert "grad_attrition" in ha
         assert "grad_morale" in ha
+
+
+def test_observation_enhanced_channels_contract():
+    """Verify that channels 4, 5, 18, and 27 are populated and named correctly."""
+    from types import SimpleNamespace
+    from agents.efficientzero_v2.core.observation import observation_to_tensor
+    from agents.efficientzero_v2.train.train_engine import _channel_name
+
+    assert _channel_name(4) == "ally_crossfire_risk"
+    assert _channel_name(5) == "enemy_target_engagement"
+    assert _channel_name(18) == "vp_delta_pressure"
+    assert _channel_name(27) == "fortification_and_urban_chokepoint"
+
+    obs = SimpleNamespace(
+        turn=1,
+        done=False,
+        to_play="ALLIES",
+        units=[
+            {"q": 0, "r": 0, "side": "ALLIES", "unit_key": "US_INFANTRY_RIFLES", "alive": True, "hp": 10},
+            {"q": 1, "r": 0, "side": "AXIS", "unit_key": "GER_INFANTRY_RIFLES", "alive": True, "hp": 10},
+        ],
+        playable_hexes=[{"q": 0, "r": 0}, {"q": 1, "r": 0}, {"q": 2, "r": 0}],
+        vp_hexes=[{"q": 2, "r": 0}],
+        vp_owner_by_hex={"2,0": "AXIS"},
+        terrain_move_cost_by_hex={"0,0": 1.0, "1,0": 1.0, "2,0": 1.0},
+        terrain_cover_by_hex={"0,0": 0.4, "1,0": 0.4, "2,0": 0.4},
+        terrain_los_block_by_hex={"0,0": 0.5, "1,0": 0.5, "2,0": 0.5},
+        fortification_type_by_hex={},
+    )
+    ten = observation_to_tensor(obs, channels=32, height=16, width=16)
+    assert ten.shape == (32, 16, 16)
+    # Channel 4 (crossfire risk) should be populated for allied position
+    assert ten[4].sum().item() >= 0.0
+    # Channel 5 (target engagement) should be populated for enemy position
+    assert ten[5].sum().item() >= 0.0
+    # Channel 18 (vp delta pressure) should be positive near playable hexes
+    assert ten[18].sum().item() > 0.0
+    # Channel 27 (fortification / urban chokepoint) should reflect cover/los bottleneck
+    assert ten[27].sum().item() > 0.0
+

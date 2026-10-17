@@ -207,7 +207,15 @@ def observation_to_tensor(
                 ally_threat_sources.append((int(q), int(r), max(1.0, raw_direct_range), max(0.1, attack_power_norm)))
             put(0, y, x, 1.0)  # ally_presence
             put(2, y, x, hp_norm)  # ally_hp_norm
-            put(4, y, x, 1.0 if (alive and suppressed) else 0.0)  # ally_suppressed
+            # Channel 4: ally_crossfire_risk / suppression (replaces dead ally_suppressed)
+            crossfire = sum(
+                1 for eq, er, edrange, _ in enemy_threat_sources
+                if 1 <= _hex_distance(int(q), int(r), eq, er) <= edrange
+            )
+            crossfire_score = min(1.0, float(crossfire) / 3.0)
+            if alive and suppressed:
+                crossfire_score = 1.0
+            put(4, y, x, crossfire_score)
             if _is_infantry(unit_key):
                 put(8, y, x, 1.0)  # ally_infantry
             if _is_support(unit_key):
@@ -221,7 +229,13 @@ def observation_to_tensor(
                 enemy_threat_sources.append((int(q), int(r), max(1.0, raw_direct_range), max(0.1, attack_power_norm)))
             put(1, y, x, 1.0)  # enemy_presence
             put(3, y, x, hp_norm)  # enemy_hp_norm
-            put(5, y, x, 1.0 if (alive and suppressed) else 0.0)  # enemy_suppressed
+            # Channel 5: enemy_target_engagement / suppression (replaces dead enemy_suppressed)
+            has_ally_target = any(
+                1 <= _hex_distance(int(q), int(r), aq, ar) <= raw_direct_range
+                for aq, ar in ally_alive_coords
+            )
+            engagement_score = 1.0 if has_ally_target else (1.0 if (alive and suppressed) else 0.0)
+            put(5, y, x, engagement_score)
             if _is_infantry(unit_key):
                 put(9, y, x, 1.0)  # enemy_infantry
             put(23, y, x, movement_norm)  # enemy_mobility_norm
@@ -271,7 +285,17 @@ def observation_to_tensor(
                 vp_owner_by_hex=vp_owner_by_hex,
             )
             if float(dmin) >= 0.0:
-                put(18, y, x, 1.0 / float(1 + max(0.0, float(dmin))))  # vp_distance_inv
+                base_inv = 1.0 / float(1 + max(0.0, float(dmin)))
+                # Channel 18: vp_delta_pressure (amplifies signal based on distance race to VP)
+                if enemy_threat_sources:
+                    d_enemy_vp = min(
+                        (_hex_distance(eq, er, int(vp.get("q", 0)), int(vp.get("r", 0)))
+                         for vp in vp_list for eq, er, _, _ in enemy_threat_sources),
+                        default=99,
+                    )
+                    adv = float(d_enemy_vp - float(dmin)) / max(1.0, float(d_enemy_vp + float(dmin)))
+                    base_inv = base_inv * (1.0 + 0.4 * max(-1.0, min(1.0, adv)))
+                put(18, y, x, min(1.0, max(0.0, base_inv)))
         put(19, y, x, float(q) / max_q_norm)  # q_coord_norm
         put(20, y, x, float(r) / max_r_norm)  # r_coord_norm
 
@@ -337,7 +361,7 @@ def observation_to_tensor(
                 ctrl = 0.0
             put(21, y, x, max(-1.0, min(1.0, ctrl)))
 
-        # Channel 27: fortification_defensive_tier
+        # Channel 27: fortification_and_urban_chokepoint
         if channels > 27:
             fort_type = str((getattr(obs, "fortification_type_by_hex", {}) or {}).get(key, "")).lower()
             fort_val = 0.0
@@ -349,5 +373,11 @@ def observation_to_tensor(
                 fort_val = -0.6
             elif "wire" in fort_type:
                 fort_val = -0.3
+            else:
+                # Urban defensible choke point: high cover and restricted sightlines
+                if cov >= 0.35 and los_blk >= 0.50:
+                    fort_val = 0.50
+                elif cov >= 0.25:
+                    fort_val = 0.25
             put(27, y, x, fort_val)
     return grid

@@ -126,34 +126,73 @@ def build_v2_replay_meta_payload(
     load_scenario_overlay: Callable[[Path, str], dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     eval_root = eval_root_from_source(eval_source_path)
+    rp = resolve_replay_path(eval_source_path=eval_source_path)
     payload: dict[str, Any] = {"schema_version": "reporting_v2_strict", "episodes_meta": []}
-    if eval_root is None:
-        payload["error"] = "v2 eval bundle not found"
-        return payload
-    manifest_path = eval_root / "eval_manifest.json"
-    if not manifest_path.exists():
-        payload["error"] = "eval_manifest.json missing"
-        return payload
-    try:
-        import json
 
-        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-    except Exception as exc:
-        manifest = {"error": f"failed to parse manifest: {exc}"}
-    payload["manifest"] = manifest if isinstance(manifest, dict) else {}
-    eps = list((payload.get("manifest", {}) or {}).get("episodes", []) or [])
-    payload["episodes_meta"] = [
-        {
-            "episode_id": str(ep.get("episode_id", "")),
-            "rows": int(ep.get("rows", 0) or 0),
-        }
-        for ep in eps
-        if isinstance(ep, dict)
-    ]
+    # 1. Prefer replay index if available (bench_replay_index_*.json has all episodes & full transitions)
+    if rp is not None and rp.exists():
+        try:
+            raw_index = read_replay_json_cached(rp)
+            payload["replay_path"] = str(rp)
+            payload["run_id"] = str(raw_index.get("run_id", "") or "")
+            payload["scenario_id"] = str(raw_index.get("scenario_id", "") or "")
+            payload["bench_id"] = str(raw_index.get("bench_id", "") or "")
+            raw_meta = list(raw_index.get("episodes_meta", []) or [])
+            if raw_meta:
+                payload["episodes_meta"] = [
+                    {
+                        "episode_id": f"episode_{int(ep.get('episode_index', idx) or idx)}",
+                        "episode_index": int(ep.get("episode_index", idx) or idx),
+                        "seed": int(ep.get("seed", 0) or 0),
+                        "agent_name": str(ep.get("agent_name", "") or ""),
+                        "rows": int(ep.get("transitions", 0) or 0),
+                        "steps_count": int(ep.get("transitions", 0) or 0),
+                        "episode_path": str(ep.get("episode_path", "") or ""),
+                    }
+                    for idx, ep in enumerate(raw_meta)
+                    if isinstance(ep, dict)
+                ]
+        except Exception:
+            pass
+
+    # 2. Check eval bundle manifest if available
+    if eval_root is not None:
+        manifest_path = eval_root / "eval_manifest.json"
+        if manifest_path.exists():
+            try:
+                import json
+
+                manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+                payload["manifest"] = manifest if isinstance(manifest, dict) else {}
+            except Exception as exc:
+                payload["manifest"] = {"error": f"failed to parse manifest: {exc}"}
+            if not payload["episodes_meta"]:
+                eps = list((payload.get("manifest", {}) or {}).get("episodes", []) or [])
+                payload["episodes_meta"] = [
+                    {
+                        "episode_id": str(ep.get("episode_id", "")),
+                        "rows": int(ep.get("rows", 0) or 0),
+                        "steps_count": int(ep.get("rows", 0) or 0),
+                    }
+                    for ep in eps
+                    if isinstance(ep, dict)
+                ]
+
+    if not payload["episodes_meta"] and eval_root is None and rp is None:
+        payload["error"] = "eval bundle or replay index not found"
+        return payload
+
+    # 3. Load scenario overlay
     if repo_root is not None and load_scenario_overlay is not None:
-        scenario_id = str((payload.get("manifest", {}) or {}).get("scenario_id", "") or "")
+        scenario_id = str(
+            payload.get("scenario_id", "")
+            or (payload.get("manifest", {}) or {}).get("scenario_id", "")
+            or ""
+        )
         if not scenario_id and eval_source_path:
             try:
+                import json
+
                 p = Path(eval_source_path)
                 if p.exists() and p.suffix == ".json":
                     raw_eval = json.loads(p.read_text(encoding="utf-8"))
@@ -171,7 +210,6 @@ def build_v2_replay_steps_payload(
     from_step: int,
     to_step: int,
 ) -> dict[str, Any]:
-    eval_root = eval_root_from_source(eval_source_path)
     payload: dict[str, Any] = {
         "schema_version": "reporting_v2_strict",
         "episode_id": str(episode_id or "episode_0"),
@@ -179,8 +217,44 @@ def build_v2_replay_steps_payload(
         "to_step": int(max(int(from_step), int(to_step))),
         "steps": [],
     }
+
+    # 1. Prefer full transitions from bench_replay_episodes if replay index is available
+    rp = resolve_replay_path(eval_source_path=eval_source_path)
+    if rp is not None and rp.exists():
+        ep_id_str = str(payload["episode_id"]).strip()
+        ep_idx = 0
+        if ep_id_str.startswith("episode_"):
+            try:
+                ep_idx = int(ep_id_str.split("_")[1])
+            except Exception:
+                ep_idx = 0
+        else:
+            try:
+                ep_idx = int(ep_id_str)
+            except Exception:
+                ep_idx = 0
+
+        try:
+            ep_payload = load_replay_episode_payload(rp, ep_idx)
+            raw_transitions = list((ep_payload or {}).get("transitions", []) or [])
+            if raw_transitions:
+                for i, t in enumerate(raw_transitions):
+                    if isinstance(t, dict):
+                        t.setdefault("step", i)
+                        t.setdefault("episode_id", payload["episode_id"])
+                start = int(payload["from_step"])
+                end = int(payload["to_step"]) + 1
+                payload["steps"] = raw_transitions[start:end]
+                payload["count"] = int(len(payload["steps"]))
+                payload["total_steps"] = int(len(raw_transitions))
+                return payload
+        except Exception:
+            pass
+
+    # 2. Fall back to ndjson.zst bundle
+    eval_root = eval_root_from_source(eval_source_path)
     if eval_root is None:
-        payload["error"] = "v2 eval bundle not found"
+        payload["error"] = "eval bundle or replay index not found"
         return payload
     ep_path = eval_root / "episodes" / f"{payload['episode_id']}.ndjson.zst"
     limit = int(max(1, (payload["to_step"] - payload["from_step"] + 1)))

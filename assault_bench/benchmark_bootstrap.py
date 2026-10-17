@@ -179,7 +179,7 @@ def bootstrap_checkpoint_runtime(
         if not ckpt.is_absolute():
             ckpt = (Path.cwd() / ckpt).resolve()
         state_dict = load_state_dict_fn(ckpt, bench_device)
-        model.load_state_dict(state_dict)
+        model.load_state_dict(state_dict, strict=False)
         if bench_device == "cuda":
             model = model.to("cuda")
         model.eval()

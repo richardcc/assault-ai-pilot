@@ -16,6 +16,7 @@ from agents.efficientzero_v2.core.objective_signals import (
     objective_step_signal,
     parse_hex_key_to_qr,
 )
+from agents.efficientzero_v2.core.macro_planner import MacroStrategyPlanner
 from agents.efficientzero_v2.core.targets import build_sample
 
 DEFAULT_ACTION_DIM = 32
@@ -2031,6 +2032,7 @@ class _NativeEZV2SelfplayBackend:
         sustained_advantage_turns_by_side: dict[str, int] = {}
         pending_setup_strength_by_side: dict[str, float] = {}
 
+        macro_planner = MacroStrategyPlanner()
         activated_units_by_side_turn: dict[tuple[str, int], set[str]] = {}
         for step_idx in range(max(1, effective_max_steps)):
             global_legal = list(adapter.legal_actions() or [])
@@ -2038,6 +2040,7 @@ class _NativeEZV2SelfplayBackend:
                 break
             turn_now = int(getattr(obs, "turn", 0) or 0)
             side_now = _normalize_side(str(getattr(obs, "to_play", "") or ""))
+            macro_plan = macro_planner.compute_macro_plan(obs)
             legal_reaction_options = sum(1 for a in global_legal if str(a).upper().startswith("OPPORTUNITY_"))
             legal_capture_options = _count_capture_options(global_legal, dict(getattr(obs, "vp_owner_by_hex", {}) or {}), str(getattr(obs, "to_play", "") or ""))
             if str(getattr(model, "encoder_type", "mlp")) == "cnn":
@@ -2116,6 +2119,13 @@ class _NativeEZV2SelfplayBackend:
                         if not unit_actions:
                             continue
                         priors_u, values_u, xai_u = _priors_and_values(model, obs_encoded, unit_actions, int(action_dim))
+                        priors_u = macro_planner.modulate_priors(
+                            priors_u,
+                            macro_plan,
+                            unit_actions,
+                            dict(getattr(obs, "vp_owner_by_hex", {}) or {}),
+                            str(getattr(obs, "to_play", "") or ""),
+                        )
                         success_prob_by_action_u: dict[str, float] = {}
                         expected_damage_by_action_u: dict[str, float] = {}
                         success_damage_scale_u = max(1e-6, float(mcts_success_prob_expected_damage_scale))
@@ -2224,6 +2234,13 @@ class _NativeEZV2SelfplayBackend:
                 xai = dict(precomputed_plan.get("xai", {}) or {})
             else:
                 priors, values, xai = _priors_and_values(model, obs_encoded, legal, int(action_dim))
+                priors = macro_planner.modulate_priors(
+                    priors,
+                    macro_plan,
+                    legal,
+                    dict(getattr(obs, "vp_owner_by_hex", {}) or {}),
+                    str(getattr(obs, "to_play", "") or ""),
+                )
             success_prob_by_action: dict[str, float] = {}
             expected_damage_by_action: dict[str, float] = {}
             success_damage_scale = max(1e-6, float(mcts_success_prob_expected_damage_scale))
@@ -2890,6 +2907,9 @@ class _NativeEZV2SelfplayBackend:
                         "action_kind": str(action_kind),
                         "unit_id": str(unit_id),
                         "unit_side": str(side),
+                        "macro_posture": str(macro_plan.posture),
+                        "macro_target_vp_id": str(macro_plan.target_vp_id),
+                        "unit_macro_role": str(macro_plan.get_role(unit_id)),
                         "game_turn": int(getattr(obs, "turn", 0) or 0),
                         "to_play": str(getattr(obs, "to_play", "") or ""),
                         "damage_dealt": float(damage_dealt),

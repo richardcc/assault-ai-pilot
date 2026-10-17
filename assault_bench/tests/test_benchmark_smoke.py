@@ -146,6 +146,10 @@ def test_eval_trace_rows_entropy_uses_visit_distribution_and_sets_collapse_label
         )
 
     monkeypatch.setattr("assault_bench.runner.run_mcts_puct", _fake_mcts)
+    monkeypatch.setattr("assault_bench.runner.run_mcts_puct_muzero", _fake_mcts)
+    monkeypatch.setattr("assault_bench.runner.run_mcts_puct_ezv2", _fake_mcts)
+    monkeypatch.setattr("assault_bench.episode_runner_impl.run_mcts_puct_muzero", _fake_mcts)
+    monkeypatch.setattr("assault_bench.episode_runner_impl.run_mcts_puct_ezv2", _fake_mcts)
 
     _, _, _, _, _, _, _, _, _, _, _, _, trace_rows = _run_episode_with_policy(
         adapter=adapter,

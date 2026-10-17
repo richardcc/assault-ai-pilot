@@ -104,9 +104,9 @@ def _normalize_result_controllers(result_row: dict[str, Any]) -> dict[str, Any]:
     out = dict(result_row or {})
     raw_policy_by_side = dict(out.get("policy_by_side", {}) or {})
     policy_by_side_norm = {
-        _canonical_reporting_side(side): str(policy or "").strip().lower()
+        str(side or "").strip().upper(): str(policy or "").strip().lower()
         for side, policy in raw_policy_by_side.items()
-        if _canonical_reporting_side(side)
+        if str(side or "").strip()
     }
     known_sides = _result_sides_from_decision_summary(out)
     if not known_sides:
@@ -114,7 +114,13 @@ def _normalize_result_controllers(result_row: dict[str, Any]) -> dict[str, Any]:
     controller_by_side: dict[str, str] = {}
     unknown_controller_label_count = 0
     for side in sorted(known_sides):
-        policy_name = str(policy_by_side_norm.get(side, "")).strip()
+        policy_name = str(policy_by_side_norm.get(side, "")).strip().lower()
+        if not policy_name:
+            if side == "IT" and "GE" in policy_by_side_norm:
+                policy_name = str(policy_by_side_norm["GE"]).strip().lower()
+            elif side == "GE" and "IT" in policy_by_side_norm:
+                policy_name = str(policy_by_side_norm["IT"]).strip().lower()
+
         if not policy_name:
             controller_by_side[side] = "Unknown"
             unknown_controller_label_count += 1
@@ -582,14 +588,34 @@ def _canonical_reporting_side(side: Any) -> str:
 
 def _controller_label_for_side(result_row: dict[str, Any], side: str) -> str:
     controller = str(_side_value_from_map(result_row.get("controller_by_side", {}), side) or "").strip()
-    if controller:
+    if controller and controller.lower() != "unknown":
         return controller
+    side_up = _canonical_reporting_side(side)
+    alt_side = "GE" if side_up == "IT" else "IT" if side_up == "GE" else ""
+    if alt_side:
+        alt_ctrl = str(_side_value_from_map(result_row.get("controller_by_side", {}), alt_side) or "").strip()
+        if alt_ctrl and alt_ctrl.lower() != "unknown":
+            return alt_ctrl
+
     pol = str(_side_value_from_map(result_row.get("policy_by_side", {}), side) or "").strip().lower()
+    if not pol and alt_side:
+        pol = str(_side_value_from_map(result_row.get("policy_by_side", {}), alt_side) or "").strip().lower()
+
     if pol == "mcts":
         return "MuZero"
     if pol == "random":
         return "Random"
-    return "Unknown"
+
+    prof = str(result_row.get("matchup_profile", "")).strip().lower()
+    if prof:
+        if "selfplay" in prof:
+            return "Random" if "random" in prof else "MuZero"
+        if "side_a" in prof:
+            return "MuZero" if side_up in ("IT", "GE") else "Random"
+        if "side_b" in prof:
+            return "Random" if side_up in ("IT", "GE") else "MuZero"
+
+    return controller if controller else "Unknown"
 
 
 def _opponent_controller_for_side(result_row: dict[str, Any], side: str) -> str:
@@ -603,6 +629,10 @@ def _opponent_controller_for_side(result_row: dict[str, Any], side: str) -> str:
                 continue
             candidates.add(_controller_label_for_side(result_row, other_side))
     if not candidates:
+        opp_side = "US" if side_up in ("IT", "GE") else "GE"
+        cand = _controller_label_for_side(result_row, opp_side)
+        if cand and cand.lower() != "unknown":
+            return cand
         return "Unknown"
     if len(candidates) == 1:
         return list(candidates)[0]
@@ -1022,7 +1052,6 @@ def merge_catalog_indexes_parquet(catalog_payload: dict[str, Any], out_dir: Path
             str(r.get("matchup_profile", "")),
             str(r.get("agent_name", "")),
             str(r.get("side", "")),
-            str(r.get("controller", "")),
             str(r.get("seed", "")),
         ),
     )

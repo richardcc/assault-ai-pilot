@@ -279,6 +279,26 @@ def build_trace_row(
             else "missing_objective_best_vp_id"
         ),
         "strategy_label": str(signals.strategy_label),
+        "macro_posture": str(
+            getattr(signals, "macro_posture", None)
+            or field_fn(transition_info, "macro_posture", None)
+            or (
+                "ASSAULT_VP"
+                if sum(1 for owner in after_vp_owner.values() if str(owner).upper() == str(core.active_side).upper())
+                <= sum(1 for owner in after_vp_owner.values() if str(owner).upper() not in {"", "NEUTRAL", str(core.active_side).upper()})
+                else "DEFENSIVE_HOLD"
+            )
+        ),
+        "macro_target_vp_id": str(
+            getattr(signals, "macro_target_vp_id", None)
+            or field_fn(transition_info, "macro_target_vp_id", None)
+            or str(signals.objective_best_vp_id or "")
+        ),
+        "unit_macro_role": str(
+            getattr(signals, "unit_macro_role", None)
+            or field_fn(transition_info, "unit_macro_role", None)
+            or "ROLE_SPEARHEAD"
+        ),
         "tie_break_term": (float(signals.selected_tie_break_term) if signals.selected_tie_break_term is not None else None),
         "vp_distance_vector": dict(signals.vp_distance_vector),
         "vp_distance_vector_size": int(len(signals.vp_distance_vector)),

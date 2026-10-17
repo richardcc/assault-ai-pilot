@@ -1,5 +1,13 @@
 import { useEffect, useMemo, useState } from "react";
-import { deleteModelExperiment, fetchCatalog, fetchCurriculumCompareLatest, fetchModel, fetchTraceability, fetchTrainSummary } from "../api";
+import {
+  deleteModelExperiment,
+  fetchCatalog,
+  fetchCurriculumCompareLatest,
+  fetchModel,
+  fetchModelTacticalQuality,
+  fetchTraceability,
+  fetchTrainSummary,
+} from "../api";
 import { calculateDurationSeconds, formatDuration, formatDurationDetailed, formatLocalDate } from "../dateUtils";
 import type { Dict, EvalResultRow, EvalRow, ModelPayload, TrainRow } from "../types";
 import { NetworkTopologyTab } from "./model-tabs/NetworkTopologyTab";
@@ -92,6 +100,7 @@ export function CatalogPage() {
   const [selectedEngine, setSelectedEngine] = useState("");
   const [selectedModel, setSelectedModel] = useState("");
   const [modelDetail, setModelDetail] = useState<ModelPayload | null>(null);
+  const [tacticalQuality, setTacticalQuality] = useState<Dict | null>(null);
   const [compareRows, setCompareRows] = useState<Dict[]>([]);
   const [compareProfileFilter, setCompareProfileFilter] = useState("all");
   const [compareSideFilter, setCompareSideFilter] = useState("all");
@@ -166,6 +175,7 @@ export function CatalogPage() {
   // Fetch full model detail whenever selectedEngine & selectedModel change
   useEffect(() => {
     setTrainSummary(null);
+    setTacticalQuality(null);
     if (!selectedEngine || !selectedModel) {
       setModelDetail(null);
       setLoadingModelDetail(false);
@@ -175,14 +185,19 @@ export function CatalogPage() {
     setLoadingModelDetail(true);
     async function fetchDetail() {
       try {
-        const m = await fetchModel(selectedEngine, selectedModel);
+        const [m, q] = await Promise.all([
+          fetchModel(selectedEngine, selectedModel),
+          fetchModelTacticalQuality(selectedEngine, selectedModel).catch(() => null),
+        ]);
         if (!cancelled) {
           setModelDetail(m);
+          setTacticalQuality(q);
           setLoadingModelDetail(false);
         }
       } catch {
         if (!cancelled) {
           setModelDetail(null);
+          setTacticalQuality(null);
           setLoadingModelDetail(false);
         }
       }
@@ -571,6 +586,146 @@ export function CatalogPage() {
                     </div>
                   </div>
 
+                  {/* Tactical Quality & Asymmetric Balance Panel */}
+                  {tacticalQuality && tacticalQuality.status === "ok" && (
+                    <div
+                      style={{
+                        marginBottom: 16,
+                        background: "#0b1220",
+                        border: "1px solid #334155",
+                        borderRadius: 6,
+                        padding: "12px 14px",
+                      }}
+                    >
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10, flexWrap: "wrap", gap: 8 }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                          <span style={{ fontSize: 14, fontWeight: 700, color: "#38bdf8" }}>
+                            🎯 Calidad Táctica & Resistencia Asimétrica
+                          </span>
+                          <span
+                            style={{
+                              background:
+                                (tacticalQuality.quality_gate as Dict)?.status === "PASS"
+                                  ? "#22c55e20"
+                                  : (tacticalQuality.quality_gate as Dict)?.status === "WARN"
+                                  ? "#f59e0b20"
+                                  : "#ef444420",
+                              border: `1px solid ${
+                                (tacticalQuality.quality_gate as Dict)?.status === "PASS"
+                                  ? "#22c55e"
+                                  : (tacticalQuality.quality_gate as Dict)?.status === "WARN"
+                                  ? "#f59e0b"
+                                  : "#ef4444"
+                              }`,
+                              color:
+                                (tacticalQuality.quality_gate as Dict)?.status === "PASS"
+                                  ? "#4ade80"
+                                  : (tacticalQuality.quality_gate as Dict)?.status === "WARN"
+                                  ? "#fbbf24"
+                                  : "#f87171",
+                              padding: "2px 8px",
+                              borderRadius: 4,
+                              fontSize: 11,
+                              fontWeight: 700,
+                            }}
+                          >
+                            {String((tacticalQuality.quality_gate as Dict)?.status || "EVAL")}
+                          </span>
+                        </div>
+                        <span style={{ fontSize: 12, fontWeight: 600, color: "#cbd5e1" }}>
+                          Rango: <strong style={{ color: "#38bdf8" }}>{String(tacticalQuality.tactical_grade || "-")}</strong>
+                        </span>
+                      </div>
+
+                      <div className="kpi-grid" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))", marginBottom: 10 }}>
+                        <div className="kpi" style={{ borderLeft: "3px solid #38bdf8" }}>
+                          <div className="k">TQS (Tactical Quality Score)</div>
+                          <div className="v" style={{ color: "#38bdf8", fontWeight: 700, fontSize: 18 }}>
+                            {Number(tacticalQuality.tactical_quality_score || 0).toFixed(1)} / 100
+                          </div>
+                          <div className="muted" style={{ fontSize: 10 }}>Puntuación compuesta ponderada</div>
+                        </div>
+
+                        <div className="kpi" style={{ borderLeft: "3px solid #60a5fa" }}>
+                          <div className="k">Calibrated Anchor ELO</div>
+                          <div className="v" style={{ color: "#93c5fd", fontWeight: 700, fontSize: 18 }}>
+                            {Number(tacticalQuality.anchor_elo || 1200).toFixed(0)}
+                          </div>
+                          <div className="muted" style={{ fontSize: 10 }}>Bradley-Terry vs Random y MCTS</div>
+                        </div>
+
+                        <div className="kpi" style={{ borderLeft: "3px solid #34d399" }}>
+                          <div className="k">⚔️ Mirror Score vs Random</div>
+                          <div className="v" style={{ color: "#34d399", fontWeight: 700, fontSize: 18 }}>
+                            {(Number(tacticalQuality.global_mirror_score_vs_random || 0) * 100).toFixed(1)}%
+                          </div>
+                          <div className="muted" style={{ fontSize: 10 }}>Equilibrado (cancela sesgo bando)</div>
+                        </div>
+
+                        <div className="kpi" style={{ borderLeft: "3px solid #fbbf24" }}>
+                          <div className="k">⚖️ Asymmetry Gap (Brecha Bando)</div>
+                          <div className="v" style={{ color: "#fcd34d", fontWeight: 700, fontSize: 18 }}>
+                            {(Number(tacticalQuality.mean_asymmetry_gap || 0) * 100).toFixed(1)}%
+                          </div>
+                          <div className="muted" style={{ fontSize: 10 }}>Fragilidad de bando desfavorable</div>
+                        </div>
+
+                        <div className="kpi" style={{ borderLeft: "3px solid #f43f5e" }}>
+                          <div className="k">💥 Combat Exchange Ratio (CER)</div>
+                          <div className="v" style={{ color: "#fb7185", fontWeight: 700, fontSize: 18 }}>
+                            {Number(tacticalQuality.combat_exchange_ratio || 1.0).toFixed(2)}x
+                          </div>
+                          <div className="muted" style={{ fontSize: 10 }}>Bajas infligidas vs sufridas</div>
+                        </div>
+
+                        <div className="kpi" style={{ borderLeft: "3px solid #a855f7" }}>
+                          <div className="k">🚩 Net Victory Points (VP Net)</div>
+                          <div className="v" style={{ color: "#c084fc", fontWeight: 700, fontSize: 18 }}>
+                            {Number(tacticalQuality.vp_net_avg || 0) > 0 ? "+" : ""}
+                            {Number(tacticalQuality.vp_net_avg || 0).toFixed(2)}
+                          </div>
+                          <div className="muted" style={{ fontSize: 10 }}>Media de objetivos controlados</div>
+                        </div>
+                      </div>
+
+                      {Array.isArray((tacticalQuality.quality_gate as Dict)?.reasons) &&
+                        ((tacticalQuality.quality_gate as Dict).reasons as string[]).length > 0 && (
+                          <div style={{ marginTop: 6, fontSize: 11, color: "#fca5a5", background: "#450a0a30", padding: "6px 10px", borderRadius: 4 }}>
+                            <b>Alertas de Puerta Táctica:</b> {((tacticalQuality.quality_gate as Dict).reasons as string[]).join(" • ")}
+                          </div>
+                        )}
+                    </div>
+                  )}
+
+                  {!loadingModelDetail && (!tacticalQuality || tacticalQuality.status !== "ok") && (
+                    <div
+                      style={{
+                        marginBottom: 16,
+                        background: "#0b1220",
+                        border: "1px dashed #334155",
+                        borderRadius: 6,
+                        padding: "10px 14px",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "space-between",
+                        flexWrap: "wrap",
+                        gap: 10,
+                      }}
+                    >
+                      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                        <span style={{ fontSize: 13, fontWeight: 700, color: "#94a3b8" }}>
+                          🎯 Calidad Táctica & Resistencia Asimétrica
+                        </span>
+                        <span style={{ fontSize: 10, background: "#1e293b", border: "1px solid #475569", color: "#94a3b8", padding: "1px 6px", borderRadius: 3, fontWeight: 600 }}>
+                          PENDIENTE DE EVALUACIÓN
+                        </span>
+                      </div>
+                      <div className="muted" style={{ fontSize: 11 }}>
+                        Calcula TQS (0-100), Anchor ELO, Mirror Score y Brecha de Bando automáticamente al registrarse partidas de benchmark.
+                      </div>
+                    </div>
+                  )}
+
                   {/* Loading indicator */}
                   {loadingModelDetail && (
                     <div style={{ padding: "12px 0", color: "#38bdf8", fontSize: 13, display: "flex", alignItems: "center", gap: 8 }}>
@@ -583,24 +738,26 @@ export function CatalogPage() {
                   <div style={{ marginBottom: 14 }}>
                     <h3 style={{ margin: "0 0 6px 0", fontSize: 13 }}>Scenarios Seen ({scenariosSeen.length})</h3>
                     {scenariosSeen.length > 0 ? (
-                      <table>
-                        <thead>
-                          <tr>
-                            <th>scenario_id</th>
-                            <th>train_count</th>
-                            <th>eval_count</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {scenariosSeen.map((s) => (
-                            <tr key={s}>
-                              <td><b>{s}</b></td>
-                              <td>{trainCounts[s] ?? 0}</td>
-                              <td>{evalCounts[s] ?? 0}</td>
+                      <div className="scroll-table-container" style={{ maxHeight: 220 }}>
+                        <table>
+                          <thead>
+                            <tr>
+                              <th>scenario_id</th>
+                              <th>train_count</th>
+                              <th>eval_count</th>
                             </tr>
-                          ))}
-                        </tbody>
-                      </table>
+                          </thead>
+                          <tbody>
+                            {scenariosSeen.map((s) => (
+                              <tr key={s}>
+                                <td><b>{s}</b></td>
+                                <td>{trainCounts[s] ?? 0}</td>
+                                <td>{evalCounts[s] ?? 0}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
                     ) : (
                       <div className="muted" style={{ fontSize: 12 }}>No scenarios recorded for this model yet.</div>
                     )}
@@ -611,111 +768,113 @@ export function CatalogPage() {
                     <h3 style={{ margin: "0 0 6px 0", fontSize: 13 }}>Training Runs ({trains.length})</h3>
                     {trains.length > 0 ? (
                       <>
-                        <table>
-                        <thead>
-                          <tr>
-                            <th>run_id</th>
-                            <th>fase currículum</th>
-                            <th>duración</th>
-                            <th>scenario</th>
-                            <th>created_at</th>
-                            <th>git_commit</th>
-                            <th>checkpoint</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {trains.slice(0, 8).map((t) => {
-                            const tid = String(t.run_id || "").trim();
-                            const trace = traceByTrainRun.get(tid);
-                            const phaseName = String(trace?.phase_name || t.curriculum_phase || "-");
-                            let dur = typeof t.duration_seconds === "number" ? t.duration_seconds : null;
-                            if (dur === null || dur === undefined) {
-                              dur = calculateDurationSeconds(
-                                (trace?.phase_started_at || t.phase_started_at) as string | undefined,
-                                (trace?.phase_finished_at || t.phase_finished_at) as string | undefined
-                              );
-                            }
-                            return (
-                              <tr key={String(t.run_id || Math.random())}>
-                                <td><b>{String(t.run_id || "-")}</b></td>
-                                <td>
-                                  {phaseName !== "-" ? (
-                                    <span
-                                      style={{
-                                        background: "#0284c720",
-                                        border: "1px solid #0284c740",
-                                        color: "#38bdf8",
-                                        padding: "2px 6px",
-                                        borderRadius: 4,
-                                        fontSize: 11,
-                                        fontWeight: 600,
-                                      }}
-                                    >
-                                      {phaseName}
-                                    </span>
-                                  ) : (
-                                    <span className="muted">-</span>
-                                  )}
-                                </td>
-                                <td>
-                                  {dur !== null && dur !== undefined && dur >= 0 ? (
-                                    <span
-                                      style={{
-                                        background: "#10b98118",
-                                        border: "1px solid #10b98140",
-                                        color: "#34d399",
-                                        padding: "2px 6px",
-                                        borderRadius: 4,
-                                        fontSize: 11,
-                                        fontWeight: 700,
-                                        whiteSpace: "nowrap",
-                                      }}
-                                      title={formatDurationDetailed(dur)}
-                                    >
-                                      ⏱️ {formatDuration(dur)}
-                                    </span>
-                                  ) : (
-                                    <span className="muted">-</span>
-                                  )}
-                                </td>
-                                <td>{String(t.scenario_id || "-")}</td>
-                                <td>{formatLocalDate(t.created_at_utc)}</td>
-                                <td><code>{String(t.git_commit || "-").slice(0, 8)}</code></td>
-                                <td className="muted" style={{ fontSize: 11 }}>{String(t.latest_checkpoint || "-")}</td>
+                        <div className="scroll-table-container" style={{ maxHeight: 380 }}>
+                          <table>
+                            <thead>
+                              <tr>
+                                <th>run_id</th>
+                                <th>fase currículum</th>
+                                <th>duración</th>
+                                <th>scenario</th>
+                                <th>created_at</th>
+                                <th>git_commit</th>
+                                <th>checkpoint</th>
                               </tr>
-                            );
-                          })}
-                        </tbody>
-                      </table>
-                      <div
-                        style={{
-                          marginTop: 6,
-                          padding: "6px 12px",
-                          background: "#0f172a",
-                          borderRadius: 4,
-                          border: "1px solid #1e293b",
-                          display: "flex",
-                          justifyContent: "space-between",
-                          alignItems: "center",
-                          fontSize: 12,
-                          flexWrap: "wrap",
-                          gap: 6,
-                        }}
-                      >
-                        <span className="muted">
-                          Mostrando {Math.min(trains.length, 8)} de {trains.length} ejecuciones de entrenamiento
-                        </span>
-                        <span style={{ fontWeight: 600, color: "#e2e8f0" }}>
-                          ⏱️ Tiempo total consumido de entrenamiento:{" "}
-                          <strong style={{ color: "#34d399" }}>
-                            {modelTrainDurationStats.totalSec > 0
-                              ? formatDurationDetailed(modelTrainDurationStats.totalSec)
-                              : "No disponible"}
-                          </strong>
-                        </span>
-                      </div>
-                    </>
-                  ) : (
+                            </thead>
+                            <tbody>
+                              {trains.map((t) => {
+                                const tid = String(t.run_id || "").trim();
+                                const trace = traceByTrainRun.get(tid);
+                                const phaseName = String(trace?.phase_name || t.curriculum_phase || "-");
+                                let dur = typeof t.duration_seconds === "number" ? t.duration_seconds : null;
+                                if (dur === null || dur === undefined) {
+                                  dur = calculateDurationSeconds(
+                                    (trace?.phase_started_at || t.phase_started_at) as string | undefined,
+                                    (trace?.phase_finished_at || t.phase_finished_at) as string | undefined
+                                  );
+                                }
+                                return (
+                                  <tr key={String(t.run_id || Math.random())}>
+                                    <td><b>{String(t.run_id || "-")}</b></td>
+                                    <td>
+                                      {phaseName !== "-" ? (
+                                        <span
+                                          style={{
+                                            background: "#0284c720",
+                                            border: "1px solid #0284c740",
+                                            color: "#38bdf8",
+                                            padding: "2px 6px",
+                                            borderRadius: 4,
+                                            fontSize: 11,
+                                            fontWeight: 600,
+                                          }}
+                                        >
+                                          {phaseName}
+                                        </span>
+                                      ) : (
+                                        <span className="muted">-</span>
+                                      )}
+                                    </td>
+                                    <td>
+                                      {dur !== null && dur !== undefined && dur >= 0 ? (
+                                        <span
+                                          style={{
+                                            background: "#10b98118",
+                                            border: "1px solid #10b98140",
+                                            color: "#34d399",
+                                            padding: "2px 6px",
+                                            borderRadius: 4,
+                                            fontSize: 11,
+                                            fontWeight: 700,
+                                            whiteSpace: "nowrap",
+                                          }}
+                                          title={formatDurationDetailed(dur)}
+                                        >
+                                          ⏱️ {formatDuration(dur)}
+                                        </span>
+                                      ) : (
+                                        <span className="muted">-</span>
+                                      )}
+                                    </td>
+                                    <td>{String(t.scenario_id || "-")}</td>
+                                    <td>{formatLocalDate(t.created_at_utc)}</td>
+                                    <td><code>{String(t.git_commit || "-").slice(0, 8)}</code></td>
+                                    <td className="muted" style={{ fontSize: 11 }}>{String(t.latest_checkpoint || "-")}</td>
+                                  </tr>
+                                );
+                              })}
+                            </tbody>
+                          </table>
+                        </div>
+                        <div
+                          style={{
+                            marginTop: 6,
+                            padding: "6px 12px",
+                            background: "#0f172a",
+                            borderRadius: 4,
+                            border: "1px solid #1e293b",
+                            display: "flex",
+                            justifyContent: "space-between",
+                            alignItems: "center",
+                            fontSize: 12,
+                            flexWrap: "wrap",
+                            gap: 6,
+                          }}
+                        >
+                          <span className="muted">
+                            Mostrando todas las {trains.length} ejecuciones de entrenamiento (con desplazamiento vertical)
+                          </span>
+                          <span style={{ fontWeight: 600, color: "#e2e8f0" }}>
+                            ⏱️ Tiempo total consumido de entrenamiento:{" "}
+                            <strong style={{ color: "#34d399" }}>
+                              {modelTrainDurationStats.totalSec > 0
+                                ? formatDurationDetailed(modelTrainDurationStats.totalSec)
+                                : "No disponible"}
+                            </strong>
+                          </span>
+                        </div>
+                      </>
+                    ) : (
                       <div className="muted" style={{ fontSize: 12 }}>No training runs found in DuckDB catalog.</div>
                     )}
                   </div>
@@ -724,44 +883,67 @@ export function CatalogPage() {
                   <div>
                     <h3 style={{ margin: "0 0 6px 0", fontSize: 13 }}>Evaluation Runs ({evals.length})</h3>
                     {evals.length > 0 ? (
-                      <table>
-                        <thead>
-                          <tr>
-                            <th>eval_id</th>
-                            <th>scenario</th>
-                            <th>created_at</th>
-                            <th>profiles</th>
-                            <th>win_rate</th>
-                            <th>status</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {evals.slice(0, 8).map((ev) => {
-                            const results = Array.isArray(ev.results) ? (ev.results as EvalResultRow[]) : [];
-                            const r0 = results[0];
-                            return (
-                              <tr key={String(ev.eval_id || Math.random())}>
-                                <td><b>{String(ev.eval_id || "-")}</b></td>
-                                <td>{String(ev.scenario_id || "-")}</td>
-                                <td>{formatLocalDate(ev.created_at_utc)}</td>
-                                <td>{results.length}</td>
-                                <td>
-                                  {r0?.win_rate !== undefined ? `${(Number(r0.win_rate) * 100).toFixed(1)}%` : "-"}
-                                </td>
-                                <td>
-                                  {r0 ? (
-                                    <span style={{ color: r0.gate_ok ? "#22c55e" : "#ef4444", fontWeight: "bold" }}>
-                                      {r0.gate_ok ? "PASS" : "FAIL"}
-                                    </span>
-                                  ) : (
-                                    <span className="muted">-</span>
-                                  )}
-                                </td>
+                      <>
+                        <div className="scroll-table-container" style={{ maxHeight: 380 }}>
+                          <table>
+                            <thead>
+                              <tr>
+                                <th>eval_id</th>
+                                <th>scenario</th>
+                                <th>created_at</th>
+                                <th>profiles</th>
+                                <th>win_rate</th>
+                                <th>status</th>
                               </tr>
-                            );
-                          })}
-                        </tbody>
-                      </table>
+                            </thead>
+                            <tbody>
+                              {evals.map((ev) => {
+                                const results = Array.isArray(ev.results) ? (ev.results as EvalResultRow[]) : [];
+                                const r0 = results[0];
+                                return (
+                                  <tr key={String(ev.eval_id || Math.random())}>
+                                    <td><b>{String(ev.eval_id || "-")}</b></td>
+                                    <td>{String(ev.scenario_id || "-")}</td>
+                                    <td>{formatLocalDate(ev.created_at_utc)}</td>
+                                    <td>{results.length}</td>
+                                    <td>
+                                      {r0?.win_rate !== undefined ? `${(Number(r0.win_rate) * 100).toFixed(1)}%` : "-"}
+                                    </td>
+                                    <td>
+                                      {r0 ? (
+                                        <span style={{ color: r0.gate_ok ? "#22c55e" : "#ef4444", fontWeight: "bold" }}>
+                                          {r0.gate_ok ? "PASS" : "FAIL"}
+                                        </span>
+                                      ) : (
+                                        <span className="muted">-</span>
+                                      )}
+                                    </td>
+                                  </tr>
+                                );
+                              })}
+                            </tbody>
+                          </table>
+                        </div>
+                        <div
+                          style={{
+                            marginTop: 6,
+                            padding: "6px 12px",
+                            background: "#0f172a",
+                            borderRadius: 4,
+                            border: "1px solid #1e293b",
+                            display: "flex",
+                            justifyContent: "space-between",
+                            alignItems: "center",
+                            fontSize: 12,
+                            flexWrap: "wrap",
+                            gap: 6,
+                          }}
+                        >
+                          <span className="muted">
+                            Mostrando todas las {evals.length} ejecuciones de evaluación
+                          </span>
+                        </div>
+                      </>
                     ) : (
                       <div className="muted" style={{ fontSize: 12 }}>No evaluation runs found in index.</div>
                     )}

@@ -4,6 +4,7 @@ import random
 from typing import Dict, List, Optional
 
 from agents.muzero.adapter_voec import MuZeroVOECAdapter
+from agents.efficientzero_v2.core.macro_planner import MacroStrategyPlanner
 from assault_bench import runner as _runner
 
 HEAD_NAMES = _runner.HEAD_NAMES
@@ -182,12 +183,17 @@ def _run_episode_with_policy_impl(
     trace_rows_by_side: Dict[str, List[Dict[str, object]]] = {}
     sustained_advantage_turns_by_side: Dict[str, int] = {}
     pending_setup_strength_by_side: Dict[str, float] = {}
+    macro_planner = MacroStrategyPlanner()
     trace_rows: List[Dict[str, object]] = []
     policy_by_side_norm = {
         _normalize_side_key(side): str(policy_name_for_side or "")
         for side, policy_name_for_side in dict(policy_by_side or {}).items()
         if _normalize_side_key(side)
     }
+    if "GE" in policy_by_side_norm and "IT" not in policy_by_side_norm:
+        policy_by_side_norm["IT"] = policy_by_side_norm["GE"]
+    elif "IT" in policy_by_side_norm and "GE" not in policy_by_side_norm:
+        policy_by_side_norm["GE"] = policy_by_side_norm["IT"]
     for _ in range(effective_max_steps):
         if adapter.sim.reached_turn_limit() and not adapter.terminal():
             timeout_reason = "scenario_turn_limit"
@@ -245,6 +251,7 @@ def _run_episode_with_policy_impl(
         replan_evaluated_units: list[dict[str, object]] = []
         root_actions_for_explain: List[str] = [str(a) for a in list(legal_for_step or []) if str(a or "").strip()]
         unit_prefilter_requested = False
+        acting_unit_id_probe = ""
         mcts_out = None
         policy_top_action = ""
         policy_overridden_by_mcts = None
@@ -271,6 +278,7 @@ def _run_episode_with_policy_impl(
         }
         mcts_action_candidates: List[Dict[str, object]] = []
         head_states = {h: _head_state("none", "missing") for h in HEAD_NAMES}
+        macro_plan = macro_planner.compute_macro_plan(obs)
         if active_policy == "random":
             action = random.choice(legal)
             head_states = {h: _head_state("none", "random_policy_no_model") for h in HEAD_NAMES}
@@ -327,6 +335,14 @@ def _run_episode_with_policy_impl(
                 except Exception:
                     latent_top_dims = ""
                     xai_root = {}
+            if isinstance(priors, dict) and priors:
+                priors = macro_planner.modulate_priors(
+                    priors,
+                    macro_plan,
+                    legal,
+                    dict(obs_vp_owner_by_hex),
+                    str(active_side),
+                )
             unit_prefilter_requested = bool(unit_prefilter_enabled) or bool(unit_prefilter_replan_enabled)
             mcts_out = None
             action = ""
@@ -531,6 +547,9 @@ def _run_episode_with_policy_impl(
                     head_states["morale"] = _head_state("complete", "")
             else:
                 head_states = {h: _head_state("none", "model_not_loaded") for h in HEAD_NAMES}
+        if not acting_unit_id_probe and action:
+            _probe_parts = str(action or "").split(":")
+            acting_unit_id_probe = _probe_parts[1] if len(_probe_parts) > 1 else ""
         action_kind = _action_kind_from_id(action)
         capture_like_action_taken = _is_capture_like_action_kind(action_kind)
         objective_signal = None
@@ -968,6 +987,9 @@ def _run_episode_with_policy_impl(
                 strategy_label=str(strategy_label),
                 vp_distance_vector=dict(vp_distance_vector),
                 obs_enemy_reaction_fire_risk_value=obs_enemy_reaction_fire_risk_value,
+                macro_posture=str(macro_plan.posture),
+                macro_target_vp_id=str(macro_plan.target_vp_id or ""),
+                unit_macro_role=str(macro_plan.get_role(acting_unit_id_probe)),
             ),
             prefilter=StepPrefilterData(
                 unit_prefilter_enabled=bool(unit_prefilter_enabled),

@@ -127,9 +127,17 @@ def _process_actor_init(
         observation_width=int(model_spec["observation_width"]),
         dynamics_blocks=int(model_spec["dynamics_blocks"]),
         prediction_blocks=int(model_spec["prediction_blocks"]),
+        objective_intent_classes=int(model_spec.get("objective_intent_classes", 0)),
+        multi_vp_feature_dim=int(model_spec.get("multi_vp_feature_dim", 0)),
+        support_size=int(model_spec.get("support_size", 0)),
+        use_spatial_attention=bool(model_spec.get("use_spatial_attention", False)),
+        enable_threat_head=bool(model_spec.get("enable_threat_head", True)),
+        enable_attrition_head=bool(model_spec.get("enable_attrition_head", True)),
+        enable_morale_head=bool(model_spec.get("enable_morale_head", True)),
+        morale_classes=int(model_spec.get("morale_classes", 4)),
     )
     model.to("cpu")
-    model.load_state_dict(model_state_dict)
+    model.load_state_dict(model_state_dict, strict=False)
     model.eval()
     _PROCESS_ACTOR_STATE.clear()
     _PROCESS_ACTOR_STATE.update(
@@ -219,7 +227,7 @@ def _process_actor_update_weights(model_state_dict: dict, version: int) -> int:
     if new_version <= current:
         return int(os.getpid())
     model = state["model"]
-    model.load_state_dict(model_state_dict)
+    model.load_state_dict(model_state_dict, strict=False)
     model.eval()
     state["weights_version"] = new_version
     return int(os.getpid())
@@ -518,8 +526,8 @@ def _channel_name(index: int) -> str:
         1: "enemy_presence",
         2: "ally_hp_norm",
         3: "enemy_hp_norm",
-        4: "ally_suppressed",
-        5: "enemy_suppressed",
+        4: "ally_crossfire_risk",
+        5: "enemy_target_engagement",
         6: "vp_contest_race",
         7: "reaction_fire_threat",
         8: "ally_infantry",
@@ -532,7 +540,7 @@ def _channel_name(index: int) -> str:
         15: "terrain_move_cost_norm",
         16: "terrain_cover_norm",
         17: "terrain_los_block",
-        18: "vp_distance_inv",
+        18: "vp_delta_pressure",
         19: "q_coord_norm",
         20: "r_coord_norm",
         21: "frontline_control",
@@ -541,7 +549,7 @@ def _channel_name(index: int) -> str:
         24: "ally_direct_range_norm",
         25: "enemy_direct_range_norm",
         26: "ally_fire_coverage",
-        27: "fortification_defensive_tier",
+        27: "fortification_and_urban_chokepoint",
         28: "ally_attack_power_norm",
         29: "enemy_attack_power_norm",
         30: "ally_defense_power_norm",
@@ -846,6 +854,10 @@ def run_training(
     aux_multi_vp_loss_weight = float(cfg.train.get("aux_multi_vp_loss_weight", 0.5))
     aux_multi_vp_feature_dim = int(cfg.train.get("aux_multi_vp_feature_dim", 4))
     aux_intent_classes = int(cfg.train.get("aux_intent_classes", 8))
+    aux_threat_loss_weight = float(cfg.train.get("aux_threat_loss_weight", 0.2))
+    aux_attrition_loss_weight = float(cfg.train.get("aux_attrition_loss_weight", 0.2))
+    aux_morale_loss_weight = float(cfg.train.get("aux_morale_loss_weight", 0.2))
+    gradient_balance_mode = str(cfg.train.get("gradient_balance_mode", "none")).strip().lower()
     objective_signal_cfg = dict(cfg.train.get("objective_signal", {}) or {})
     objective_head_cfg = dict(cfg.train.get("objective_head", {}) or {})
     objective_reporting_cfg = dict(cfg.train.get("objective_reporting", {}) or {})
@@ -913,6 +925,12 @@ def run_training(
         prediction_blocks=prediction_blocks,
         objective_intent_classes=aux_intent_classes if aux_objective_enabled else 0,
         multi_vp_feature_dim=aux_multi_vp_feature_dim if aux_objective_enabled else 0,
+        support_size=int(cfg.model.get("support_size", 0)),
+        use_spatial_attention=bool(cfg.model.get("use_spatial_attention", False)),
+        enable_threat_head=bool(cfg.model.get("enable_threat_head", True)),
+        enable_attrition_head=bool(cfg.model.get("enable_attrition_head", True)),
+        enable_morale_head=bool(cfg.model.get("enable_morale_head", True)),
+        morale_classes=int(cfg.model.get("morale_classes", 4)),
     )
     if resume_checkpoint:
         resume_path = Path(resume_checkpoint)
@@ -921,7 +939,7 @@ def run_training(
         if resume_path.exists():
             ckpt_obj = torch.load(str(resume_path), map_location="cpu")
             state_dict = ckpt_obj.get("state_dict", ckpt_obj) if isinstance(ckpt_obj, dict) else ckpt_obj
-            model.load_state_dict(state_dict)
+            model.load_state_dict(state_dict, strict=False)
             _log(f"[EfficientZeroV2] resumed_from={resume_path}")
         else:
             _log(f"[EfficientZeroV2][WARN] resume_checkpoint not found: {resume_path}")
@@ -963,6 +981,10 @@ def run_training(
         aux_intent_loss_weight=aux_intent_loss_weight,
         aux_multi_vp_loss_weight=aux_multi_vp_loss_weight,
         aux_multi_vp_feature_dim=aux_multi_vp_feature_dim,
+        aux_threat_loss_weight=aux_threat_loss_weight,
+        aux_attrition_loss_weight=aux_attrition_loss_weight,
+        aux_morale_loss_weight=aux_morale_loss_weight,
+        gradient_balance_mode=gradient_balance_mode,
         compute_grad_norm=compute_grad_norm,
         progress_callback=(
             (lambda stage: _log(f"[EfficientZeroV2][train_batch] {stage}"))
@@ -1121,6 +1143,14 @@ def run_training(
             "observation_width": observation_width,
             "dynamics_blocks": dynamics_blocks,
             "prediction_blocks": prediction_blocks,
+            "objective_intent_classes": int(aux_intent_classes if aux_objective_enabled else 0),
+            "multi_vp_feature_dim": int(aux_multi_vp_feature_dim if aux_objective_enabled else 0),
+            "support_size": int(cfg.model.get("support_size", 0)),
+            "use_spatial_attention": bool(cfg.model.get("use_spatial_attention", False)),
+            "enable_threat_head": bool(cfg.model.get("enable_threat_head", True)),
+            "enable_attrition_head": bool(cfg.model.get("enable_attrition_head", True)),
+            "enable_morale_head": bool(cfg.model.get("enable_morale_head", True)),
+            "morale_classes": int(cfg.model.get("morale_classes", 4)),
         }
         selfplay_cfg = {
             "max_steps": max_steps,

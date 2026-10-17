@@ -49,19 +49,33 @@ export function ModelPage() {
 
   // Navegación de secciones
   const [section, setSection] = useState<SectionKey>("topology");
-  const [topologyTab, setTopologyTab] = useState<"diagram" | "head-diagnostics" | "channel-attribution">("diagram");
+  const [topologyTab, setTopologyTab] = useState<"diagram" | "head-diagnostics" | "channel-attribution" | "macro-planner">("diagram");
   const [trainTab, setTrainTab] = useState<TrainTabKey>("train-detail");
   const [evalTab, setEvalTab] = useState<EvalTabKey>("vp-summary");
   const [metaTab, setMetaTab] = useState<MetaTabKey>("overview");
 
   const [evalRowsByKey, setEvalRowsByKey] = useState<Record<string, EvalRow[]>>({});
   const [selectedEvalId, setSelectedEvalId] = useState("");
+  const [loadingEvals, setLoadingEvals] = useState(false);
+  const [refreshKey, setRefreshKey] = useState(0);
 
   const [replayMeta, setReplayMeta] = useState<ReplayMetaPayload | null>(null);
   const [replaySteps, setReplaySteps] = useState<Dict | null>(null);
   const [replayLog, setReplayLog] = useState<Dict | null>(null);
   const [selectedEpisodeId, setSelectedEpisodeId] = useState("episode_0");
   const [selectedStepIndex, setSelectedStepIndex] = useState(0);
+
+  const handleRefresh = async () => {
+    setEvalRowsByKey({});
+    setTrainSummaryByRun({});
+    setRefreshKey((k) => k + 1);
+    try {
+      const m = await fetchModel(engine, modelId);
+      setModel(m);
+    } catch {
+      // ignore
+    }
+  };
 
   // 1. Cargar modelo al iniciar
   useEffect(() => {
@@ -74,7 +88,7 @@ export function ModelPage() {
       }
     }
     void run();
-  }, [engine, modelId]);
+  }, [engine, modelId, refreshKey]);
 
   // 2. Cargar train summary al cambiar selectedTrainRun (con caché cliente en memoria)
   useEffect(() => {
@@ -104,9 +118,10 @@ export function ModelPage() {
   useEffect(() => {
     if (!selectedTrainRun) return;
     const key = `${selectedTrainRun}::${selectedScenario}`;
-    if (evalRowsByKey[key]) return;
+    if (evalRowsByKey[key] && evalRowsByKey[key].length > 0) return;
 
     let cancelled = false;
+    setLoadingEvals(true);
     async function run() {
       try {
         const payload = await fetchModelEvals(engine, modelId, selectedTrainRun, selectedScenario);
@@ -115,13 +130,15 @@ export function ModelPage() {
         setEvalRowsByKey((prev) => ({ ...prev, [key]: rows }));
       } catch {
         // ignore
+      } finally {
+        if (!cancelled) setLoadingEvals(false);
       }
     }
     void run();
     return () => {
       cancelled = true;
     };
-  }, [engine, modelId, selectedTrainRun, selectedScenario, evalRowsByKey]);
+  }, [engine, modelId, selectedTrainRun, selectedScenario, refreshKey]);
 
   const trains = useMemo(
     () => (Array.isArray(model?.train_history) ? (model!.train_history as TrainRow[]) : []),
@@ -206,11 +223,14 @@ export function ModelPage() {
         setReplayMeta(meta);
         const eps = Array.isArray(meta.episodes_meta) ? meta.episodes_meta : [];
         const episodeId = String((eps[0] || {}).episode_id || "episode_0");
-        setSelectedEpisodeId(episodeId);
-
+        let epIdx = 0;
+        if (episodeId.startsWith("episode_")) {
+          const parsed = parseInt(episodeId.split("_")[1], 10);
+          if (!isNaN(parsed)) epIdx = parsed;
+        }
         const [steps, log] = await Promise.all([
-          fetchReplaySteps(selectedEvalSourcePath, episodeId, 0, 499),
-          fetchReplayLog(selectedEvalSourcePath, 0, 40, false),
+          fetchReplaySteps(selectedEvalSourcePath, episodeId, 0, 1999),
+          fetchReplayLog(selectedEvalSourcePath, epIdx, 2000, true),
         ]);
         if (cancelled) return;
         setReplaySteps(steps);
@@ -229,13 +249,22 @@ export function ModelPage() {
     };
   }, [isReplayActive, selectedEvalSourcePath]);
 
-  // Cargar steps si cambia episodio
+  // Cargar steps y log si cambia episodio
   useEffect(() => {
     async function run() {
       if (!selectedEvalSourcePath || !selectedEpisodeId) return;
       try {
-        const steps = await fetchReplaySteps(selectedEvalSourcePath, selectedEpisodeId, 0, 499);
+        let epIdx = 0;
+        if (selectedEpisodeId.startsWith("episode_")) {
+          const parsed = parseInt(selectedEpisodeId.split("_")[1], 10);
+          if (!isNaN(parsed)) epIdx = parsed;
+        }
+        const [steps, log] = await Promise.all([
+          fetchReplaySteps(selectedEvalSourcePath, selectedEpisodeId, 0, 1999),
+          fetchReplayLog(selectedEvalSourcePath, epIdx, 2000, true),
+        ]);
         setReplaySteps(steps);
+        setReplayLog(log);
         setSelectedStepIndex(0);
       } catch {
         // episode steps not available
@@ -260,6 +289,22 @@ export function ModelPage() {
             }
           >
             ELO Leaderboard
+          </button>
+          <button
+            onClick={() => void handleRefresh()}
+            style={{
+              background: "#38bdf820",
+              border: "1px solid #38bdf880",
+              color: "#38bdf8",
+              fontWeight: "bold",
+              fontSize: 11,
+              padding: "4px 8px",
+              cursor: "pointer",
+              borderRadius: 4,
+            }}
+            title="Refrescar catálogo y evaluaciones"
+          >
+            🔄 Actualizar Datos
           </button>
           <button
             onClick={async () => {
@@ -429,6 +474,9 @@ export function ModelPage() {
                 <button className={`tabBtn ${topologyTab === "channel-attribution" ? "active" : ""}`} onClick={() => setTopologyTab("channel-attribution")}>
                   📊 Atribución de Canales
                 </button>
+                <button className={`tabBtn ${topologyTab === "macro-planner" ? "active" : ""}`} onClick={() => setTopologyTab("macro-planner")}>
+                  ♟️ Planificador Macro (Nivel 1)
+                </button>
               </>
             )}
 
@@ -496,7 +544,11 @@ export function ModelPage() {
                   <select value={selectedEpisodeId} onChange={(e) => setSelectedEpisodeId(e.target.value)}>
                     {(Array.isArray(replayMeta?.episodes_meta) ? replayMeta!.episodes_meta! : []).map((ep, i) => {
                       const id = String(ep.episode_id || `episode_${i}`);
-                      return <option key={id} value={id}>{id}</option>;
+                      const stepCount = ep.rows || ep.steps_count || 0;
+                      const seedText = ep.seed !== undefined && ep.seed !== null ? `Seed ${ep.seed}` : "";
+                      const infoParts = [seedText, stepCount ? `${stepCount} pasos` : ""].filter(Boolean);
+                      const label = infoParts.length > 0 ? `${id} (${infoParts.join(" - ")})` : id;
+                      return <option key={id} value={id}>{label}</option>;
                     })}
                   </select>
                 </>
@@ -534,13 +586,16 @@ export function ModelPage() {
               <ObjectiveRewardConfigTab trainRow={selectedTrainRow} />
             )}
 
-            {section === "eval" && evalTab === "vp-summary" && (
+            {section === "eval" && loadingEvals && !evalRows.length && (
+              <div className="muted" style={{ padding: 16 }}>⏳ Cargando evaluaciones del run seleccionado...</div>
+            )}
+            {section === "eval" && (!loadingEvals || evalRows.length > 0) && evalTab === "vp-summary" && (
               <VpSummaryTab evalRows={evalRows} selectedEval={selectedEval} />
             )}
-            {section === "eval" && evalTab === "eval-head-diagnostics" && (
+            {section === "eval" && (!loadingEvals || evalRows.length > 0) && evalTab === "eval-head-diagnostics" && (
               <HeadDiagnosticsTab evalRows={evalRows} />
             )}
-            {section === "eval" && evalTab === "eval-metrics" && (
+            {section === "eval" && (!loadingEvals || evalRows.length > 0) && evalTab === "eval-metrics" && (
               <EvalMetricsTab evalRows={evalRows} />
             )}
             {section === "eval" && evalTab === "eval-decisions" && (

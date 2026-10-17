@@ -40,26 +40,72 @@ function resolveController(
   side: string,
   ctrlsMap: Record<string, string>,
   policiesMap?: Record<string, string>,
-  defaultFallback: string = ""
+  defaultFallback: string = "",
+  matchupProfile: string = ""
 ): string {
   const norm = String(side || "").toUpperCase();
-  if (ctrlsMap[norm]) return ctrlsMap[norm];
-  if (ctrlsMap[side]) return ctrlsMap[side];
-  for (const [k, v] of Object.entries(ctrlsMap)) {
-    if (k.toUpperCase() === norm) return v;
-  }
-  // In 2-scenario curriculum benchmarks, Side A is Italian (IT) in scenario 1 and German (GE) in scenario 2:
-  if (norm === "GE" && (ctrlsMap["IT"] || ctrlsMap["it"])) return ctrlsMap["IT"] || ctrlsMap["it"];
-  if (norm === "IT" && (ctrlsMap["GE"] || ctrlsMap["ge"])) return ctrlsMap["GE"] || ctrlsMap["ge"];
+  const formatPolicy = (p: string) => {
+    const pl = String(p || "").trim().toLowerCase();
+    if (pl === "mcts") return "MuZero";
+    if (pl === "random") return "Random";
+    return p;
+  };
 
+  const isUnknown = (val?: string) => !val || String(val).trim().toLowerCase() === "unknown";
+
+  // 1. Direct match if known
+  const direct = ctrlsMap[norm] || ctrlsMap[side];
+  if (!isUnknown(direct)) return direct;
+  for (const [k, v] of Object.entries(ctrlsMap || {})) {
+    if (k.toUpperCase() === norm && !isUnknown(v)) return v;
+  }
+
+  // 2. Direct policy match if present
   if (policiesMap) {
-    if (policiesMap[norm]) return policiesMap[norm];
-    if (policiesMap[side]) return policiesMap[side];
-    if (norm === "GE" && (policiesMap["IT"] || policiesMap["it"])) return policiesMap["IT"] || policiesMap["it"];
-    if (norm === "IT" && (policiesMap["GE"] || policiesMap["ge"])) return policiesMap["GE"] || policiesMap["ge"];
+    const pDirect = policiesMap[norm] || policiesMap[side];
+    if (!isUnknown(pDirect)) return formatPolicy(pDirect);
+    for (const [k, v] of Object.entries(policiesMap || {})) {
+      if (k.toUpperCase() === norm && !isUnknown(v)) return formatPolicy(v);
+    }
   }
 
-  return defaultFallback;
+  // 3. In 2-scenario curriculum benchmarks, Side A is Italian (IT) in scenario 1 and German (GE) in scenario 2:
+  if (norm === "GE") {
+    const itVal = ctrlsMap["IT"] || ctrlsMap["it"];
+    if (!isUnknown(itVal)) return itVal;
+    if (policiesMap) {
+      const itPol = policiesMap["IT"] || policiesMap["it"];
+      if (!isUnknown(itPol)) return formatPolicy(itPol);
+    }
+  }
+  if (norm === "IT") {
+    const geVal = ctrlsMap["GE"] || ctrlsMap["ge"];
+    if (!isUnknown(geVal)) return geVal;
+    if (policiesMap) {
+      const gePol = policiesMap["GE"] || policiesMap["ge"];
+      if (!isUnknown(gePol)) return formatPolicy(gePol);
+    }
+  }
+
+  // 4. Infer from matchup_profile if available
+  const prof = String(matchupProfile || "").toLowerCase();
+  if (prof) {
+    if (prof.includes("selfplay")) {
+      return prof.includes("random") ? "Random" : "MuZero";
+    }
+    if (prof.includes("side_a")) {
+      return (norm === "IT" || norm === "GE") ? "MuZero" : "Random";
+    }
+    if (prof.includes("side_b")) {
+      return (norm === "IT" || norm === "GE") ? "Random" : "MuZero";
+    }
+  }
+
+  if (defaultFallback && !isUnknown(defaultFallback)) {
+    return defaultFallback;
+  }
+
+  return direct || defaultFallback || "Unknown";
 }
 
 function getOpponentInfo(side: string, allSides: string[], main: EvalResultRow | null) {
@@ -72,7 +118,7 @@ function getOpponentInfo(side: string, allSides: string[], main: EvalResultRow |
 
   const ctrlMap = (main?.controller_by_side || {}) as Record<string, string>;
   const policyMap = (main?.policy_by_side || {}) as Record<string, string>;
-  const ctrl = resolveController(oppNorm, ctrlMap, policyMap, "");
+  const ctrl = resolveController(oppNorm, ctrlMap, policyMap, "", main?.matchup_profile || "");
   return { side: oppNorm, label, color, controller: ctrl };
 }
 
@@ -496,8 +542,8 @@ export function VpSummaryTab({
 
         const policies = (r.policy_by_side || {}) as Record<string, string>;
         const defaultEng = String(currentEval?.engine || "");
-        const ownCtrl = resolveController(sNorm, ctrls, policies, defaultEng);
-        const oppCtrl = resolveController(oppNorm, ctrls, policies, defaultEng);
+        const ownCtrl = resolveController(sNorm, ctrls, policies, defaultEng, prof);
+        const oppCtrl = resolveController(oppNorm, ctrls, policies, defaultEng, prof);
 
         // Filter 1: Engine filter strictly targets the first column (the side being evaluated)
         if (selectedEngine !== "all") {

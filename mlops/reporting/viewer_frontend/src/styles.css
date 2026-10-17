@@ -163,3 +163,17 @@ code {
 button:hover {
   background: #475569;
 }
+.scroll-table-container {
+  max-height: 380px;
+  overflow-y: auto;
+  border: 1px solid #334155;
+  border-radius: 6px;
+}
+.scroll-table-container th {
+  position: sticky;
+  top: 0;
+  background: #1f2937;
+  z-index: 2;
+  box-shadow: 0 1px 0 #334155;
+}
+

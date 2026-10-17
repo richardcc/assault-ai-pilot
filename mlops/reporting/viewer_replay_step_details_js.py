@@ -123,9 +123,18 @@ def replay_step_details_helpers_js() -> str:
         + " | eval_id=" + evalId
         + " | episode_index=" + String(episodeIndex)
         + " | step=" + String(Math.max(0, Number(stepIdx || 0)))
-        + " | unit_id=" + String(stepRow.unit_id || "");
+      const macroPosture = String((stepRow && stepRow.macro_posture) || "ASSAULT_VP");
+      const macroTargetVp = String((stepRow && stepRow.macro_target_vp_id) || targetVp || "-");
+      const unitMacroRole = String((stepRow && stepRow.unit_macro_role) || "ROLE_SPEARHEAD");
+      const postureColor = macroPosture === "DEFENSIVE_HOLD" ? "#0284c7" : (macroPosture === "ZONE_SUPPRESS" ? "#8b5cf6" : "#ef4444");
+      const postureBadge = '<span style="background:' + postureColor + ';color:#ffffff;padding:2px 8px;border-radius:4px;font-weight:800;font-size:11px;">' + esc(macroPosture) + '</span>';
+      const roleColor = unitMacroRole.includes("SPEARHEAD") ? "#f59e0b" : (unitMacroRole.includes("FIRE_SUPPORT") ? "#ea580c" : (unitMacroRole.includes("DEFENDER") ? "#3b82f6" : "#64748b"));
+      const roleBadge = '<span style="background:' + roleColor + ';color:#ffffff;padding:2px 6px;border-radius:3px;font-weight:700;font-size:10px;">' + esc(unitMacroRole) + '</span>';
       return '<table style="width:100%;border-collapse:collapse;font-size:12px;">' +
         '<tbody>' +
+          '<tr><td style="border:1px solid #334155;padding:6px;font-weight:bold;color:#38bdf8;">Macro Postura (N1)</td><td style="border:1px solid #334155;padding:6px;">' + postureBadge + '</td></tr>' +
+          '<tr><td style="border:1px solid #334155;padding:6px;font-weight:bold;color:#38bdf8;">Rol Táctico Unidad</td><td style="border:1px solid #334155;padding:6px;">' + roleBadge + '</td></tr>' +
+          '<tr><td style="border:1px solid #334155;padding:6px;color:#94a3b8;">Objetivo Prioritario VP</td><td style="border:1px solid #334155;padding:6px;font-weight:bold;">' + esc(macroTargetVp) + '</td></tr>' +
           '<tr><td style="border:1px solid #334155;padding:6px;">json_locator</td><td style="border:1px solid #334155;padding:6px;font-family:monospace;">' + esc(locator) + '</td></tr>' +
           '<tr><td style="border:1px solid #334155;padding:6px;">episode_path</td><td style="border:1px solid #334155;padding:6px;font-family:monospace;">' + esc(episodePath || "N/A") + '</td></tr>' +
           '<tr><td style="border:1px solid #334155;padding:6px;">to_play</td><td style="border:1px solid #334155;padding:6px;">' + esc(stepRow.to_play) + '</td></tr>' +

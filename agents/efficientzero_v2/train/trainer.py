@@ -370,6 +370,9 @@ class EfficientZeroV2Trainer(EfficientZeroV2BaseTrainer):
                     info_dict = dict(s.info or {})
                     if "threat_map_target" in info_dict:
                         t = torch.as_tensor(info_dict["threat_map_target"], dtype=torch.float32)
+                    elif isinstance(s.observation, torch.Tensor) and s.observation.dim() == 3 and s.observation.shape[0] > 7:
+                        # Extract the enemy threat map directly from observation tensor (Channel 7: reaction_fire_threat)
+                        t = s.observation[7:8].detach().to(dtype=torch.float32)
                     else:
                         t = torch.zeros((1, getattr(self.model, "observation_height", 16), getattr(self.model, "observation_width", 16)), dtype=torch.float32)
                     target_threats.append(t)
@@ -398,8 +401,9 @@ class EfficientZeroV2Trainer(EfficientZeroV2BaseTrainer):
                         target_attritions.append(list(info_dict["attrition_target"][:2]))
                     else:
                         dmg = float(info_dict.get("damage_dealt", 0.0) or 0.0)
-                        edmg = float(info_dict.get("enemy_damage", 0.0) or 0.0)
-                        target_attritions.append([min(1.0, edmg / 10.0), min(1.0, dmg / 10.0)])
+                        edmg = float(info_dict.get("enemy_damage", 0.0) or info_dict.get("damage_received", 0.0) or 0.0)
+                        kills = float(info_dict.get("kills_dealt", 0) or 0)
+                        target_attritions.append([min(1.0, (edmg + 5.0 * kills) / 10.0), min(1.0, dmg / 10.0)])
                 attrition_targets_t = torch.tensor(target_attritions, dtype=torch.float32, device=self.device)
                 aux_attrition_loss = F.smooth_l1_loss(aux["attrition_pred"], attrition_targets_t)
 
@@ -418,7 +422,16 @@ class EfficientZeroV2Trainer(EfficientZeroV2BaseTrainer):
                     else:
                         is_supp = bool(info_dict.get("suppressed", False))
                         is_pin = bool(info_dict.get("pinned", False))
-                        target_morales.append(2 if is_supp else (1 if is_pin else 0))
+                        dmg_rec = float(info_dict.get("damage_received", 0.0) or 0.0)
+                        rf_risk = float(info_dict.get("obs_enemy_reaction_fire_risk", 0.0) or 0.0)
+                        if is_supp or dmg_rec >= 2.0:
+                            target_morales.append(3)
+                        elif is_pin or dmg_rec > 0.0:
+                            target_morales.append(2)
+                        elif rf_risk > 0.25:
+                            target_morales.append(1)
+                        else:
+                            target_morales.append(0)
                 morale_targets_t = torch.tensor(target_morales, dtype=torch.long, device=self.device)
                 morale_classes = int(aux["morale_pred"].shape[-1])
                 morale_targets_t = torch.clamp(morale_targets_t, min=0, max=morale_classes - 1)

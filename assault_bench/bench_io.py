@@ -141,13 +141,20 @@ def persist_bench_artifacts(
         if selected_row is not None:
             model_id = str(run_id)
             eval_id = f"{run_id}__{bench_stamp}"
+            full_step_rows = []
+            if bench_replay_episodes:
+                first_ep = to_dict_rows(bench_replay_episodes)[0]
+                full_step_rows = list(first_ep.get("transitions", []) or [])
+            if not full_step_rows:
+                full_step_rows = list(getattr(selected_row, "eval_decision_steps_top", []) or [])
+
             write_eval_bundle_v2(
                 out_root=run_root,
                 eval_id=eval_id,
                 model_id=model_id,
                 run_id=run_id,
                 scenario_id=str(scenario_id),
-                eval_decision_steps_top=list(getattr(selected_row, "eval_decision_steps_top", []) or []),
+                eval_decision_steps_top=full_step_rows,
                 eval_decisions_top=list(getattr(selected_row, "eval_decisions_top", []) or []),
                 eval_decision_summary=dict(getattr(selected_row, "eval_decision_summary", {}) or {}),
             )

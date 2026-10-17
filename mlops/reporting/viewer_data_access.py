@@ -16,19 +16,20 @@ def _model_id_aliases(model_id: str, engine: str = "") -> list[str]:
         return []
     eng = str(engine or "").strip()
     out = {m}
-    if eng:
-        out.add(f"{eng}_{m}")
-        out.add(f"{eng}_{eng}_{m}")
-        if m.startswith(f"{eng}_"):
-            stripped = m[len(eng) + 1 :]
+    engines = [eng] if eng and eng != "__all__" else ["efficientzero_v2"]
+    for e in engines:
+        out.add(f"{e}_{m}")
+        out.add(f"{e}_{e}_{m}")
+        if m.startswith(f"{e}_"):
+            stripped = m[len(e) + 1 :]
             out.add(stripped)
-            if stripped.startswith(f"{eng}_"):
-                out.add(stripped[len(eng) + 1 :])
-        clean = m.replace(f"{eng}_", "")
+            if stripped.startswith(f"{e}_"):
+                out.add(stripped[len(e) + 1 :])
+        clean = m.replace(f"{e}_", "")
         if clean:
             out.add(clean)
-            out.add(f"{eng}_{clean}")
-            out.add(f"{eng}_{eng}_{clean}")
+            out.add(f"{e}_{clean}")
+            out.add(f"{e}_{e}_{clean}")
     return sorted(out)
 
 
@@ -495,7 +496,7 @@ def load_elo_rows_from_duckdb(
         where: list[str] = []
         params: list[Any] = []
         engine_s = str(engine or "").strip()
-        if engine_s:
+        if engine_s and engine_s != "__all__":
             where.append("engine = ?")
             params.append(engine_s)
         model_s = str(model_id or "").strip()
@@ -591,8 +592,8 @@ def load_elo_rows_from_duckdb(
                 "created_at_utc": str(r[1] or ""),
                 "eval_id": str(r[2] or ""),
                 "scenario_id": str(r[3] or ""),
-                "curriculum_phase": str(r[4] or ""),
-                "matchup_profile": str(r[5] or ""),
+                "matchup_profile": str(r[4] or ""),
+                "curriculum_phase": str(r[5] or ""),
                 "side": str(r[6] or ""),
                 "controller": str(r[7] or ""),
                 "opponent_controller": str(r[8] or ""),
@@ -601,6 +602,9 @@ def load_elo_rows_from_duckdb(
                 "wins": int(wins),
                 "draws": int(draws),
                 "losses": int(losses),
+                "win_rate": float(win_rate),
+                "draw_rate": float(draw_rate),
+                "loss_rate": float(loss_rate),
                 "score": float(score),
                 "total_victory_rate": float(total_victory_rate),
                 "victory_rate": float(victory_rate),
@@ -722,17 +726,26 @@ def load_model_detail_index_first(
         train_run_id=initial_train_run_id,
         include_payload=True,
     )
+    all_eval_page = load_eval_history_page_from_parquet(
+        repo_root=repo_root,
+        engine=str(engine or ""),
+        model_id=canonical_model_id,
+        offset=0,
+        limit=1,
+        include_payload=False,
+    )
+    total_model_evals = int(all_eval_page.get("total", 0) or 0)
     eval_rows = list(eval_page.get("rows", []) or [])
-    total_evals = int(eval_page.get("total", len(eval_rows)) or len(eval_rows))
+    total_initial_evals = int(eval_page.get("total", len(eval_rows)) or len(eval_rows))
     eval_out: list[dict[str, Any]] = [dict(x or {}) for x in eval_rows]
     out["train_history"] = train_rows
     out["eval_history"] = eval_out
     out["train_history_total_count"] = int(total_trains)
     out["train_history_visible_count"] = int(len(train_rows))
     out["train_history_truncated"] = bool(len(train_rows) < total_trains)
-    out["eval_history_total_count"] = int(total_evals)
+    out["eval_history_total_count"] = int(total_model_evals)
     out["eval_history_visible_count"] = int(len(eval_out))
-    out["eval_history_truncated"] = bool(len(eval_out) < total_evals)
+    out["eval_history_truncated"] = bool(len(eval_out) < total_initial_evals)
     out["initial_train_run_id"] = initial_train_run_id
     scenario_train_counts: dict[str, int] = {}
     scenario_eval_counts: dict[str, int] = {}

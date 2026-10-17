@@ -33,7 +33,7 @@ selfplay:
   max_turns_override: 0
   mcts_simulations: 512
   mcts_c_puct: 2.3
-  mcts_unroll_steps: 4
+  mcts_unroll_steps: 6
   mcts_discount: 0.997
   mcts_temperature: 1.1
   mcts_dirichlet_alpha: 0.3
@@ -141,8 +141,12 @@ train:
   matmul_precision: high
   objective_target_mode: progress
   objective_pos_weight: 6.8
-  aux_objective_enabled: false
-  aux_objective_loss_weight: 0.0
+  aux_objective_enabled: true
+  aux_objective_loss_weight: 0.15
+  aux_threat_loss_weight: 0.25
+  aux_attrition_loss_weight: 0.20
+  aux_morale_loss_weight: 0.20
+  gradient_balance_mode: adaptive
   aux_intent_loss_weight: 0.5
   aux_multi_vp_loss_weight: 0.5
   aux_multi_vp_feature_dim: 4

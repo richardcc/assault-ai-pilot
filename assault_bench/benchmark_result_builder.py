@@ -60,9 +60,15 @@ def build_benchmark_result(
     side_keys = sorted(set(vp_initial_counts_by_side.keys()) | set(vp_final_counts_by_side.keys()))
     tracked_values = [int(x) for x in list(tracked_captured_values or [])]
     seed_games = to_dict_rows(seed_games_rows)
+    eff_policy_by_side = dict(policy_by_side or {})
+    if "GE" in eff_policy_by_side and "IT" not in eff_policy_by_side:
+        eff_policy_by_side["IT"] = eff_policy_by_side["GE"]
+    elif "IT" in eff_policy_by_side and "GE" not in eff_policy_by_side:
+        eff_policy_by_side["GE"] = eff_policy_by_side["IT"]
+
     controller_by_side = {
         str(side): _controller_label_from_policy(str(policy_name_for_side))
-        for side, policy_name_for_side in dict(policy_by_side or {}).items()
+        for side, policy_name_for_side in eff_policy_by_side.items()
         if str(side or "").strip()
     }
     timings = sorted(
@@ -97,7 +103,7 @@ def build_benchmark_result(
         matchup_group=group,
         measurement_goal=goal,
         policy_name=policy,
-        policy_by_side=dict(policy_by_side),
+        policy_by_side=dict(eff_policy_by_side),
         controller_by_side=controller_by_side,
         episodes=len(seeds),
         avg_return=sum(returns) / len(returns),

@@ -152,7 +152,22 @@ def _load_model(run_dir: Path) -> nn.Module:
     has_threat = any("prediction_threat_map" in k for k in state_dict.keys())
     has_attrition = any("prediction_attrition" in k for k in state_dict.keys())
     has_morale = any("prediction_morale" in k for k in state_dict.keys())
-    has_spatial_att = any("spatial_attention" in k for k in state_dict.keys())
+    has_spatial_att = any("spatial_attention" in k for k in state_dict.keys()) or any("spatial_gate" in k for k in state_dict.keys())
+    has_intent = any("prediction_intent" in k for k in state_dict.keys())
+    intent_classes = 0
+    if has_intent:
+        for k in sorted(state_dict.keys(), reverse=True):
+            if "prediction_intent" in k and k.endswith(".bias"):
+                intent_classes = int(state_dict[k].shape[0])
+                break
+    has_multi_vp = any("prediction_multi_vp" in k for k in state_dict.keys())
+    multi_vp_dim = 0
+    if has_multi_vp:
+        for k in sorted(state_dict.keys(), reverse=True):
+            if "prediction_multi_vp" in k and k.endswith(".bias"):
+                multi_vp_dim = int(state_dict[k].shape[0])
+                break
+    is_legacy = "prediction_trunk.0.conv1.weight" in state_dict and "representation_tower.0.gn1.weight" not in state_dict
 
     if is_legacy:
         model = LegacyEZV2CNN(
@@ -177,9 +192,16 @@ def _load_model(run_dir: Path) -> nn.Module:
             enable_attrition_head=has_attrition,
             enable_morale_head=has_morale,
             use_spatial_attention=has_spatial_att,
+            objective_intent_classes=intent_classes,
+            multi_vp_feature_dim=multi_vp_dim,
         )
 
-    model.load_state_dict(state_dict)
+    model_state = model.state_dict()
+    matched_state = {
+        k: v for k, v in state_dict.items()
+        if k in model_state and model_state[k].shape == v.shape
+    }
+    model.load_state_dict(matched_state, strict=False)
     model.eval()
     return model
 

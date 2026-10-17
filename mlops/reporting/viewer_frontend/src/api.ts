@@ -23,6 +23,21 @@ export function fetchModel(engine: string, model: string): Promise<ModelPayload>
   return getJson(`/api/v2/model?${q.toString()}`) as Promise<ModelPayload>;
 }
 
+export function fetchModelTacticalQuality(
+  engine: string,
+  model: string,
+  scenarioId = "__all__",
+  curriculumPhase = "__all__"
+): Promise<Dict> {
+  const q = new URLSearchParams({
+    engine,
+    model,
+    scenario_id: scenarioId,
+    curriculum_phase: curriculumPhase,
+  });
+  return getJson(`/api/v2/model/tactical-quality?${q.toString()}`);
+}
+
 export function fetchModelEvals(engine: string, model: string, trainRunId: string, scenarioId: string): Promise<{ rows?: EvalRow[] } & Dict> {
   const q = new URLSearchParams({
     engine,
@@ -45,7 +60,7 @@ export function fetchReplayMeta(evalSourcePath: string): Promise<ReplayMetaPaylo
   return getJson(`/api/v2/replay/meta?${q.toString()}`) as Promise<ReplayMetaPayload>;
 }
 
-export function fetchReplaySteps(evalSourcePath: string, episodeId: string, fromStep = 0, toStep = 499): Promise<Dict> {
+export function fetchReplaySteps(evalSourcePath: string, episodeId: string, fromStep = 0, toStep = 1999): Promise<Dict> {
   const q = new URLSearchParams({
     eval_source_path: String(evalSourcePath || ""),
     episode_id: String(episodeId || "episode_0"),

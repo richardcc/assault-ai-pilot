@@ -270,9 +270,14 @@ def _read_channel_attribution_report(repo_root: Path, run_id: str) -> dict[str, 
 
 def _run_channel_attribution_job(repo_root: Path, run_id: str) -> dict[str, Any]:
     import sys
+    import importlib
     if str(repo_root) not in sys.path:
         sys.path.insert(0, str(repo_root))
-    from scripts.analyze_channel_attribution import _load_model, _collect_observations, analyze_channels
+    import scripts.analyze_channel_attribution as aca
+    importlib.reload(aca)
+    _load_model = aca._load_model
+    _collect_observations = aca._collect_observations
+    analyze_channels = aca.analyze_channels
 
     found_rd = None
     cands = [
@@ -527,6 +532,26 @@ def serve(
                     limit=max(1, min(50000, int(qs.get("limit", ["20000"])[0] or 20000))),
                 )
                 self._send_bytes(_json_bytes(out), "application/json; charset=utf-8")
+                return
+            if parsed.path == "/api/v2/model/tactical-quality":
+                from mlops.reporting.quality_metrics import compute_tactical_quality_metrics
+                qs = parse_qs(parsed.query)
+                engine = str(qs.get("engine", [""])[0] or "")
+                model = str(qs.get("model", [qs.get("model_id", [""])[0] or ""])[0] or "")
+                scenario = str(qs.get("scenario_id", ["__all__"])[0] or "__all__")
+                phase = str(qs.get("curriculum_phase", ["__all__"])[0] or "__all__")
+                eval_rows = _load_elo_rows_from_duckdb(
+                    repo_root=repo_root,
+                    engine=engine,
+                    model_id=model if model else "__all__",
+                    scenario_id=scenario,
+                    limit=20000,
+                )
+                rows = eval_rows.get("rows", [])
+                if phase != "__all__":
+                    rows = [r for r in rows if str(r.get("curriculum_phase", "")).strip() == phase]
+                quality = compute_tactical_quality_metrics(rows)
+                self._send_bytes(_json_bytes(quality), "application/json; charset=utf-8")
                 return
             if parsed.path == "/api/train-summary":
                 qs = parse_qs(parsed.query)

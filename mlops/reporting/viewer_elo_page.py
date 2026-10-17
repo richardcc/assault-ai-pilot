@@ -94,7 +94,7 @@ def elo_page_html() -> str:
     let selectedModels = [];
     let selectedModelsInitialized = false;
     let selectedSide = "__all__";
-    let selectedController = "MuZero";
+    let selectedController = "__all__";
     let scenarioFilter = "__all__";
     let profileFilter = "__all__";
     let curriculumPhaseFilter = "__all__";
@@ -297,7 +297,45 @@ def elo_page_html() -> str:
           "<td>" + esc(String(r.episodes || 0)) + "</td>" +
           "</tr>";
       }).join("");
-      root.innerHTML = "<div class='muted' style='margin-bottom:8px;'>rows: " + esc(String(rows.length)) + (eloLastError ? (" | source error: " + esc(eloLastError)) : "") + "</div>" +
+      // Calculate Tactical Quality Summary KPIs
+      let scA = 0, epsA = 0, scB = 0, epsB = 0, vicCount = 0, defCount = 0;
+      for (const r of rows) {
+        if (String(r.controller || "").toLowerCase() === "random") continue;
+        const eps = Math.max(1, Number(r.episodes || 1));
+        const prof = String(r.matchup_profile || "").toLowerCase();
+        const score = Number(r.score || 0);
+        if (prof.includes("side_a")) { scA += score * eps; epsA += eps; }
+        if (prof.includes("side_b")) { scB += score * eps; epsB += eps; }
+        vicCount += (Number(r.victory_rate || 0) + 1.5 * Number(r.total_victory_rate || 0)) * eps;
+        defCount += (Number(r.defeat_rate || 0) + 1.5 * Number(r.total_defeat_rate || 0)) * eps;
+      }
+      const avgA = epsA > 0 ? (scA / epsA) : null;
+      const avgB = epsB > 0 ? (scB / epsB) : null;
+      const mirror = (avgA !== null && avgB !== null) ? ((avgA + avgB) / 2) : (avgA !== null ? avgA : avgB);
+      const asymm = (avgA !== null && avgB !== null) ? Math.abs(avgA - avgB) : 0;
+      const cer = (vicCount + 0.05) / Math.max(0.1, defCount + 0.05);
+
+      const kpiBanner = (
+        "<div style='display:flex;gap:12px;margin-bottom:12px;flex-wrap:wrap;'>" +
+        "<div style='background:#1e293b;border:1px solid #38bdf840;border-left:3px solid #38bdf8;padding:8px 12px;border-radius:6px;min-width:180px;'>" +
+        "<div class='muted' style='font-size:10px;'>⚔️ MIRROR SCORE (SIN SESGO DE BANDO)</div>" +
+        "<div style='font-size:16px;font-weight:700;color:#38bdf8;'>" + (mirror !== null ? ((mirror * 100).toFixed(1) + "%") : "-") + "</div>" +
+        "<div class='muted' style='font-size:10px;'>Promedio equilibrado de ambos bandos</div>" +
+        "</div>" +
+        "<div style='background:#1e293b;border:1px solid #f59e0b40;border-left:3px solid #f59e0b;padding:8px 12px;border-radius:6px;min-width:180px;'>" +
+        "<div class='muted' style='font-size:10px;'>⚖️ ASYMMETRY GAP (BRECHA DE BANDO)</div>" +
+        "<div style='font-size:16px;font-weight:700;color:#fbbf24;'>" + (avgA !== null && avgB !== null ? ((asymm * 100).toFixed(1) + "%") : "-") + "</div>" +
+        "<div class='muted' style='font-size:10px;'>Side A: " + (avgA !== null ? ((avgA * 100).toFixed(1) + "%") : "-") + " | Side B: " + (avgB !== null ? ((avgB * 100).toFixed(1) + "%") : "-") + "</div>" +
+        "</div>" +
+        "<div style='background:#1e293b;border:1px solid #10b98140;border-left:3px solid #10b981;padding:8px 12px;border-radius:6px;min-width:180px;'>" +
+        "<div class='muted' style='font-size:10px;'>💥 COMBAT EXCHANGE RATIO (CER)</div>" +
+        "<div style='font-size:16px;font-weight:700;color:#34d399;'>" + cer.toFixed(2) + "x</div>" +
+        "<div class='muted' style='font-size:10px;'>Ratio bajas infligidas / pérdidas sufridas</div>" +
+        "</div>" +
+        "</div>"
+      );
+
+      root.innerHTML = kpiBanner + "<div class='muted' style='margin-bottom:8px;'>rows: " + esc(String(rows.length)) + (eloLastError ? (" | source error: " + esc(eloLastError)) : "") + "</div>" +
         "<table><thead><tr>" +
         "<th>model</th><th>eval_id</th><th>created_at</th><th>side</th><th>controller</th><th>scenario</th><th>profile</th><th>score</th><th>episodes</th>" +
         "</tr></thead><tbody>" + tr + "</tbody></table>";
@@ -306,13 +344,13 @@ def elo_page_html() -> str:
       const host = el("chartRoot");
       if (!host) return;
       const raw = Array.isArray(rows) ? rows.slice() : [];
-      const muzeroOnly = raw.filter(function (r) {
-        return String((r && r.controller) || "").toLowerCase() === "muzero";
+      const modelOnly = raw.filter(function (r) {
+        return String((r && r.controller) || "").toLowerCase() !== "random";
       });
-      const src = (muzeroOnly.length > 0) ? muzeroOnly : raw;
-      eloCalcNote = (muzeroOnly.length > 0)
-        ? "ELO input filtered to controller=MuZero rows."
-        : "ELO input uses all rows (MuZero-only rows not found).";
+      const src = (modelOnly.length > 0) ? modelOnly : raw;
+      eloCalcNote = (modelOnly.length > 0)
+        ? "Evaluando ejecuciones del agente modelo (controller != Random)."
+        : "Evaluando todas las filas de evaluación.";
       if (!src.length) {
         host.innerHTML = "<div class='muted'>No chart data.</div>";
         return;

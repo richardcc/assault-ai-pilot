@@ -17,7 +17,7 @@ def test_reporting_catalog_groups_train_and_eval(tmp_path: Path) -> None:
             '"objective_head":{"progress_positive_threshold":0.0},'
             '"objective_reporting":{"conversion_window_steps_after_progress":2},'
             '"selfplay":{"reward_shaping":{"capture_bonus":0.55}},'
-            '"config_preflight_warnings":["missing.selfplay.reward_shaping"]}}'
+            '"config_preflight_warnings":["custom.preflight.warning"]}}'
         ),
         encoding="utf-8",
     )
@@ -61,7 +61,7 @@ def test_reporting_catalog_groups_train_and_eval(tmp_path: Path) -> None:
     assert obj_cfg["objective_head"]["progress_positive_threshold"] == 0.0
     assert obj_cfg["objective_reporting"]["conversion_window_steps_after_progress"] == 2
     assert obj_cfg["reward_shaping"]["capture_bonus"] == 0.55
-    assert obj_cfg["preflight_warnings"] == ["missing.selfplay.reward_shaping"]
+    assert obj_cfg["preflight_warnings"] == ["custom.preflight.warning"]
 
 
 def test_reporting_catalog_can_opt_in_random_selfplay(tmp_path: Path) -> None:

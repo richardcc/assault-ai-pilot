@@ -170,6 +170,9 @@ export interface ReplayStepRow extends Dict {
   target_r?: number;
   target_vp?: string;
   target_vp_why?: string;
+  macro_posture?: string;
+  macro_target_vp_id?: string;
+  unit_macro_role?: string;
   reward?: number;
   damage_dealt?: number;
   kills_dealt?: number;

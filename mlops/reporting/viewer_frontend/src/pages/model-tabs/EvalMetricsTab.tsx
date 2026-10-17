@@ -336,7 +336,13 @@ export function EvalMetricsTab({ evalRows }: { evalRows: EvalRow[] }) {
                 const oppLabel = oppSide === "US" ? "🇺🇸 US" : oppSide === "IT" ? "🇮🇹 IT" : oppSide === "GE" ? "🇩🇪 GE" : oppSide;
                 const oppColor = oppSide === "US" ? "#60a5fa" : oppSide === "IT" ? "#34d399" : oppSide === "GE" ? "#f87171" : "#cbd5e1";
                 const oppCtrlMap = (r.controller_by_side || r.policy_by_side || {}) as Record<string, string>;
-                const oppCtrl = oppCtrlMap[oppSide] || oppCtrlMap[oppSide.toLowerCase()] || "";
+                let oppCtrl = oppCtrlMap[oppSide] || oppCtrlMap[oppSide.toLowerCase()] || "";
+                if (!oppCtrl || oppCtrl.toLowerCase() === "unknown") {
+                  if (oppSide === "IT") oppCtrl = oppCtrlMap["GE"] || oppCtrlMap["ge"] || "";
+                  else if (oppSide === "GE") oppCtrl = oppCtrlMap["IT"] || oppCtrlMap["it"] || "";
+                }
+                if (oppCtrl.toLowerCase() === "mcts") oppCtrl = "MuZero";
+                else if (oppCtrl.toLowerCase() === "random") oppCtrl = "Random";
 
                 return (
                   <tr key={`${er.eval_id}-${r.matchup_profile || idx}-${idx}`}>

@@ -75,6 +75,9 @@ class StepSignalData:
     strategy_label: str
     vp_distance_vector: Dict[str, float]
     obs_enemy_reaction_fire_risk_value: Optional[float]
+    macro_posture: Optional[str] = None
+    macro_target_vp_id: Optional[str] = None
+    unit_macro_role: Optional[str] = None
 
 
 @dataclass
