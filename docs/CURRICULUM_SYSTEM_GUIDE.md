@@ -139,41 +139,71 @@ phases:
 
 ---
 
-## 5. Cómo se Ejecuta el Currículum
+## 5. Cómo se Ejecuta el Currículum (`self_vs_self_vs_random_2scenarios_v1`)
 
-Todos los comandos se ejecutan desde la raíz del proyecto (`C:\repos\python\assault`) utilizando PowerShell.
+Todos los comandos se ejecutan desde el directorio raíz del proyecto (`C:\repos\python\assault`).
 
-### A. Simulación / Validación Rápida (*Dry Run*)
-Verifica que las rutas, configuraciones YAML y parámetros de todas las fases existen y son coherentes sin arrancar los entrenamientos pesados:
+### Línea de Comandos Principal (Ejecución Completa)
 
-```powershell
-powershell -ExecutionPolicy Bypass -File .\curriculums\self_vs_self_vs_random_2scenarios_v1\run_all_phases.ps1 -DryRun
-```
-
-### B. Ejecución Completa con Parada Estricta en Fallos (Recomendado)
-Ejecuta secuencialmente todas las fases del currículum. Si una fase no supera su *Hard Gate* o produce un error de ejecución, el proceso se detiene inmediatamente protegiendo el último checkpoint válido:
+Para lanzar el currículum **`self_vs_self_vs_random_2scenarios_v1`** completo de 2 escenarios (`battaglia_cittadina_2_1` + `mettete_i_piedi_terra_1`) con verificación estricta de puertas de promoción:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\curriculums\self_vs_self_vs_random_2scenarios_v1\run_all_phases.ps1 -StopOnGateFail -StopOnPhaseError
 ```
 
-### C. Reanudar desde una Fase Específica o Checkpoint Previo
-Si una fase falló o se interrumpió, se puede continuar a partir de esa fase utilizando el último checkpoint generado:
+> **Desde el Símbolo del Sistema (`cmd.exe` o terminal externa):**
+> ```cmd
+> powershell -ExecutionPolicy Bypass -File "C:\repos\python\assault\curriculums\self_vs_self_vs_random_2scenarios_v1\run_all_phases.ps1" -StopOnGateFail -StopOnPhaseError
+> ```
+
+---
+
+### Modos de Ejecución y Opciones Avanzadas
+
+#### A. Simulación / Comprobación en Seco (*Dry Run*)
+Verifica que las rutas, dependencias, configuraciones YAML de EfficientZero V2 y parámetros de todas las fases existen y son válidos sin arrancar entrenamientos reales ni consumir GPU:
 
 ```powershell
-# Reanudar desde la Fase 1 permitiendo carga de checkpoint existente
+powershell -ExecutionPolicy Bypass -File .\curriculums\self_vs_self_vs_random_2scenarios_v1\run_all_phases.ps1 -DryRun
+```
+
+#### B. Reanudar desde una Fase Concreta o Checkpoint Previo
+Permite retomar el entrenamiento si una fase se interrumpió o tras ajustar hiperparámetros:
+
+```powershell
+# Reanudar desde la Fase 1 reutilizando el último checkpoint iter_*.pt generado
 powershell -ExecutionPolicy Bypass -File .\curriculums\self_vs_self_vs_random_2scenarios_v1\run_all_phases.ps1 -StartPhase "phase1_bootstrap" -ContinueFromLatestCheckpoint -AllowPhase1Resume -StopOnGateFail
 
-# Reanudar directamente en la Fase 2 continuando desde el mejor modelo de la Fase 1
+# Reanudar directamente en la fase de adaptación de canales (Canales 4, 5, 6, 11, 26, 27)
+powershell -ExecutionPolicy Bypass -File .\curriculums\self_vs_self_vs_random_2scenarios_v1\run_all_phases.ps1 -StartPhase "phase1_channel_adapt" -ContinueFromLatestCheckpoint -StopOnGateFail
+
+# Reanudar directamente en la Fase 2 (Mix 70/30) continuando con los pesos del modelo promovido en Fase 1
 powershell -ExecutionPolicy Bypass -File .\curriculums\self_vs_self_vs_random_2scenarios_v1\run_all_phases.ps1 -StartPhase "phase2_mix_70_30" -ContinueFromLatestCheckpoint -StopOnGateFail
 ```
 
-### D. Ejecución Aislada de un Ciclo Individual (*Atomic Cycle*)
-Para depurar o entrenar una única fase de forma manual mediante su manifiesto:
+#### C. Ciclo Acelerado Aislado (*Fast Single Cycle* con 6 Workers)
+Para iterar de forma ultra-rápida sobre la Fase 1 con multiproceso acelerado (`num_workers: 6`), `amp_dtype: bf16` y 60 partidas de benchmark:
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File .\scripts\run_curriculum_cycle.ps1 -ManifestPath .\curriculums\self_vs_self_vs_random_2scenarios_v1\cycles\phase1_bootstrap.cycle.json
+powershell -ExecutionPolicy Bypass -File .\scripts\run_curriculum_cycle.ps1 -ManifestPath .\curriculums\self_vs_self_vs_random_2scenarios_v1\cycles\phase1_bootstrap.fast.cycle.json
 ```
+
+#### D. Invocación Explícita vía Orquestador Delegado
+Si se desea invocar el runner base pasando explícitamente el archivo de currículum deseado:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\curriculums\self_vs_self_vs_random_v1\run_all_phases.ps1 -CurriculumYaml .\curriculums\self_vs_self_vs_random_2scenarios_v1\curriculum.yaml -StopOnGateFail -StopOnPhaseError
+```
+
+#### Resumen de Parámetros del Script:
+| Parámetro | Tipo | Descripción |
+| :--- | :--- | :--- |
+| `-StopOnGateFail` | `switch` | Detiene inmediatamente la ejecución si una fase no supera su Hard Gate. |
+| `-StopOnPhaseError` | `switch` | Aborta el pipeline si ocurre cualquier excepción durante el train o el eval. |
+| `-StartPhase <fase>` | `string` | Fase inicial a ejecutar (ej. `phase1_bootstrap`, `phase1_channel_adapt`, `phase2_mix_70_30`). |
+| `-ContinueFromLatestCheckpoint` | `switch` | Inyecta el último checkpoint disponible en disco en lugar de inicializar aleatoriamente. |
+| `-AllowPhase1Resume` | `switch` | Permite que incluso la Fase 1 cargue un checkpoint previo si existe. |
+| `-DryRun` | `switch` | Realiza una comprobación de integridad sin ejecutar procesos pesados. |
 
 ---
 
