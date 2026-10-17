@@ -149,10 +149,10 @@ def _load_model(run_dir: Path) -> nn.Module:
 
     state_dict = torch.load(ckpt_path, map_location="cpu", weights_only=True)
 
-    # Check whether state_dict has modern (GroupNorm / SE) or legacy keys
-    is_legacy = any("conv1.bias" in k for k in state_dict.keys()) or any(
-        "representation_tower.0.conv1.bias" in k for k in state_dict.keys()
-    )
+    has_threat = any("prediction_threat_map" in k for k in state_dict.keys())
+    has_attrition = any("prediction_attrition" in k for k in state_dict.keys())
+    has_morale = any("prediction_morale" in k for k in state_dict.keys())
+    has_spatial_att = any("spatial_attention" in k for k in state_dict.keys())
 
     if is_legacy:
         model = LegacyEZV2CNN(
@@ -173,11 +173,29 @@ def _load_model(run_dir: Path) -> nn.Module:
             observation_width=int(m_cfg.get("observation_width", 16)),
             dynamics_blocks=int(m_cfg.get("dynamics_blocks", 3)),
             prediction_blocks=int(m_cfg.get("prediction_blocks", 2)),
+            enable_threat_head=has_threat,
+            enable_attrition_head=has_attrition,
+            enable_morale_head=has_morale,
+            use_spatial_attention=has_spatial_att,
         )
 
     model.load_state_dict(state_dict)
     model.eval()
     return model
+
+
+def _infer_with_aux(model: nn.Module, obs: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, dict[str, Any]]:
+    """Safe helper to call initial_inference and guarantee aux dict is returned."""
+    try:
+        out = model.initial_inference(obs, return_aux=True)
+        if isinstance(out, tuple) and len(out) >= 5:
+            return out[0], out[1], out[2], out[3], dict(out[4] or {})
+        elif isinstance(out, tuple) and len(out) >= 4:
+            return out[0], out[1], out[2], out[3], {}
+    except TypeError:
+        pass
+    out = model.initial_inference(obs)
+    return out[0], out[1], out[2], out[3], {}
 
 
 def analyze_channels(
@@ -194,31 +212,67 @@ def analyze_channels(
     height = getattr(model, "observation_height", 16)
     width = getattr(model, "observation_width", 16)
 
+    # Detect which heads are active on the model
+    has_threat = (
+        getattr(model, "enable_threat_head", False)
+        and hasattr(model, "prediction_threat_map")
+        and model.prediction_threat_map is not None
+    )
+    has_attrition = (
+        getattr(model, "enable_attrition_head", False)
+        and hasattr(model, "prediction_attrition")
+        and model.prediction_attrition is not None
+    )
+    has_morale = (
+        getattr(model, "enable_morale_head", False)
+        and hasattr(model, "prediction_morale")
+        and model.prediction_morale is not None
+    )
+    has_objective = hasattr(model, "prediction_objective") and model.prediction_objective is not None
+
+    active_heads_list = ["policy", "value"]
+    if has_objective:
+        active_heads_list.append("objective")
+    if has_threat:
+        active_heads_list.append("threat_map")
+    if has_attrition:
+        active_heads_list.append("attrition")
+    if has_morale:
+        active_heads_list.append("morale")
+
     # Channel stats accumulators
     nonzero_ratios = [0.0] * num_channels
     mean_abs_values = [0.0] * num_channels
     std_values = [0.0] * num_channels
 
-    # Attribution / Saliency accumulators
+    # Attribution / Saliency accumulators across all heads
     grad_saliency_value = [0.0] * num_channels
     grad_saliency_policy = [0.0] * num_channels
+    grad_saliency_threat = [0.0] * num_channels
+    grad_saliency_attrition = [0.0] * num_channels
+    grad_saliency_morale = [0.0] * num_channels
+    grad_saliency_objective = [0.0] * num_channels
 
-    # Ablation accumulators
+    # Ablation accumulators across all heads
     kl_divergence = [0.0] * num_channels
     value_shift = [0.0] * num_channels
     decision_flips = [0] * num_channels
+    threat_shift = [0.0] * num_channels
+    attrition_shift = [0.0] * num_channels
+    morale_shift = [0.0] * num_channels
+    objective_shift = [0.0] * num_channels
 
     for obs in observations:
         obs_tensor = obs.to(device).unsqueeze(0)  # Shape (1, C, H, W)
 
-        # Baseline forward pass with gradients for saliency
+        # Baseline forward pass with gradients for saliency across all heads
         obs_req = obs_tensor.clone().detach().requires_grad_(True)
-        _, policy_logits_base, value_base, _ = model.initial_inference(obs_req)
+        _, policy_logits_base, value_base, _, aux_base = _infer_with_aux(model, obs_req)
 
         probs_base = F.softmax(policy_logits_base, dim=-1)
         top_action_base = int(torch.argmax(policy_logits_base, dim=-1).item())
 
-        # Gradient Saliency for Value
+        # 1. Gradient Saliency for Value Head
         model.zero_grad()
         if obs_req.grad is not None:
             obs_req.grad.zero_()
@@ -228,24 +282,79 @@ def analyze_channels(
             for c in range(num_channels):
                 grad_saliency_value[c] += float(v_grad[c].mean().item())
 
-        # Gradient Saliency for Policy (Entropy-weighted / expected logits)
+        # 2. Gradient Saliency for Policy Head (Entropy-weighted / expected logits)
         model.zero_grad()
         if obs_req.grad is not None:
             obs_req.grad.zero_()
         policy_scalar = (probs_base * policy_logits_base).sum()
-        policy_scalar.backward()
+        policy_scalar.backward(retain_graph=True)
         if obs_req.grad is not None:
             p_grad = obs_req.grad.abs().squeeze(0)
             for c in range(num_channels):
                 grad_saliency_policy[c] += float(p_grad[c].mean().item())
 
+        # 3. Gradient Saliency for Threat Map Head
+        if has_threat and "threat_map_pred" in aux_base and aux_base["threat_map_pred"] is not None:
+            model.zero_grad()
+            if obs_req.grad is not None:
+                obs_req.grad.zero_()
+            aux_base["threat_map_pred"].sum().backward(retain_graph=True)
+            if obs_req.grad is not None:
+                t_grad = obs_req.grad.abs().squeeze(0)
+                for c in range(num_channels):
+                    grad_saliency_threat[c] += float(t_grad[c].mean().item())
+
+        # 4. Gradient Saliency for Attrition Head
+        if has_attrition and "attrition_pred" in aux_base and aux_base["attrition_pred"] is not None:
+            model.zero_grad()
+            if obs_req.grad is not None:
+                obs_req.grad.zero_()
+            aux_base["attrition_pred"].sum().backward(retain_graph=True)
+            if obs_req.grad is not None:
+                a_grad = obs_req.grad.abs().squeeze(0)
+                for c in range(num_channels):
+                    grad_saliency_attrition[c] += float(a_grad[c].mean().item())
+
+        # 5. Gradient Saliency for Morale Head
+        if has_morale and "morale_pred" in aux_base and aux_base["morale_pred"] is not None:
+            model.zero_grad()
+            if obs_req.grad is not None:
+                obs_req.grad.zero_()
+            aux_base["morale_pred"].sum().backward(retain_graph=True)
+            if obs_req.grad is not None:
+                m_grad = obs_req.grad.abs().squeeze(0)
+                for c in range(num_channels):
+                    grad_saliency_morale[c] += float(m_grad[c].mean().item())
+
+        # 6. Gradient Saliency for Objective Head
+        if has_objective and "objective_logit" in aux_base and aux_base["objective_logit"] is not None:
+            model.zero_grad()
+            if obs_req.grad is not None:
+                obs_req.grad.zero_()
+            aux_base["objective_logit"].sum().backward()
+            if obs_req.grad is not None:
+                o_grad = obs_req.grad.abs().squeeze(0)
+                for c in range(num_channels):
+                    grad_saliency_objective[c] += float(o_grad[c].mean().item())
+
         # Baseline values for ablation comparison (without grad)
         with torch.no_grad():
-            _, base_p_logits, base_val, _ = model.initial_inference(obs_tensor)
+            _, base_p_logits, base_val, _, aux_eval_base = _infer_with_aux(model, obs_tensor)
             p_base_dist = F.softmax(base_p_logits, dim=-1)
             v_base_val = float(base_val.item())
 
-            # Basic spatial stats
+            base_threat = aux_eval_base.get("threat_map_pred")
+            if base_threat is not None:
+                base_threat = base_threat.detach()
+            base_attrition = aux_eval_base.get("attrition_pred")
+            if base_attrition is not None:
+                base_attrition = base_attrition.detach()
+            base_morale = aux_eval_base.get("morale_pred")
+            base_morale_dist = F.softmax(base_morale.detach(), dim=-1) if base_morale is not None else None
+            base_obj_logit = aux_eval_base.get("objective_logit")
+            base_obj_prob = float(torch.sigmoid(base_obj_logit.detach()).item()) if base_obj_logit is not None else None
+
+            # Basic spatial stats and ablation per channel
             for c in range(num_channels):
                 plane = obs_tensor[0, c]
                 nonzero_count = float((plane != 0).sum().item())
@@ -257,7 +366,7 @@ def analyze_channels(
                 ablated_obs = obs_tensor.clone()
                 ablated_obs[0, c, :, :] = 0.0
 
-                _, abl_p_logits, abl_val, _ = model.initial_inference(ablated_obs)
+                _, abl_p_logits, abl_val, _, aux_abl = _infer_with_aux(model, ablated_obs)
                 p_abl_dist = F.softmax(abl_p_logits, dim=-1)
                 v_abl_val = float(abl_val.item())
 
@@ -270,11 +379,35 @@ def analyze_channels(
                 if top_action_abl != top_action_base:
                     decision_flips[c] += 1
 
+                # Tactical heads shifts under ablation
+                if base_threat is not None and "threat_map_pred" in aux_abl and aux_abl["threat_map_pred"] is not None:
+                    t_diff = (base_threat - aux_abl["threat_map_pred"].detach()).abs().mean().item()
+                    threat_shift[c] += float(t_diff)
+
+                if base_attrition is not None and "attrition_pred" in aux_abl and aux_abl["attrition_pred"] is not None:
+                    a_diff = (base_attrition - aux_abl["attrition_pred"].detach()).abs().mean().item()
+                    attrition_shift[c] += float(a_diff)
+
+                if base_morale_dist is not None and "morale_pred" in aux_abl and aux_abl["morale_pred"] is not None:
+                    abl_m_dist = F.softmax(aux_abl["morale_pred"].detach(), dim=-1)
+                    m_diff = (base_morale_dist - abl_m_dist).abs().mean().item()
+                    morale_shift[c] += float(m_diff)
+
+                if base_obj_prob is not None and "objective_logit" in aux_abl and aux_abl["objective_logit"] is not None:
+                    abl_obj_prob = float(torch.sigmoid(aux_abl["objective_logit"].detach()).item())
+                    objective_shift[c] += abs(base_obj_prob - abl_obj_prob)
+
     # Normalize by sample count
     results_per_channel: list[dict[str, Any]] = []
     max_kl = max(kl_divergence) / float(num_samples) if max(kl_divergence) > 0 else 1.0
     max_v_shift = max(value_shift) / float(num_samples) if max(value_shift) > 0 else 1.0
     max_p_grad = max(grad_saliency_policy) / float(num_samples) if max(grad_saliency_policy) > 0 else 1.0
+    max_t_shift = max(threat_shift) / float(num_samples) if max(threat_shift) > 0 else 1.0
+    max_a_shift = max(attrition_shift) / float(num_samples) if max(attrition_shift) > 0 else 1.0
+    max_m_shift = max(morale_shift) / float(num_samples) if max(morale_shift) > 0 else 1.0
+    max_o_shift = max(objective_shift) / float(num_samples) if max(objective_shift) > 0 else 1.0
+
+    has_tactical_heads = has_threat or has_attrition or has_morale or has_objective
 
     for c in range(num_channels):
         name = _channel_name(c)
@@ -286,28 +419,54 @@ def analyze_channels(
         flips = decision_flips[c] / float(num_samples)
         v_grad = grad_saliency_value[c] / float(num_samples)
         p_grad = grad_saliency_policy[c] / float(num_samples)
+        t_diff = threat_shift[c] / float(num_samples)
+        a_diff = attrition_shift[c] / float(num_samples)
+        m_diff = morale_shift[c] / float(num_samples)
+        o_diff = objective_shift[c] / float(num_samples)
+        t_grad = grad_saliency_threat[c] / float(num_samples)
+        a_grad = grad_saliency_attrition[c] / float(num_samples)
+        m_grad = grad_saliency_morale[c] / float(num_samples)
+        o_grad = grad_saliency_objective[c] / float(num_samples)
 
-        # Composite score
-        comp_score = (
-            0.40 * (kl / max_kl if max_kl > 0 else 0)
-            + 0.30 * (v_diff / max_v_shift if max_v_shift > 0 else 0)
-            + 0.20 * flips
-            + 0.10 * (p_grad / max_p_grad if max_p_grad > 0 else 0)
-        )
+        # Composite score balanced across all active heads
+        if has_tactical_heads:
+            norm_kl = kl / max_kl if max_kl > 0 else 0.0
+            norm_v = v_diff / max_v_shift if max_v_shift > 0 else 0.0
+            norm_t = t_diff / max_t_shift if max_t_shift > 0 else 0.0
+            norm_a = a_diff / max_a_shift if max_a_shift > 0 else 0.0
+            norm_m = m_diff / max_m_shift if max_m_shift > 0 else 0.0
+            norm_o = o_diff / max_o_shift if max_o_shift > 0 else 0.0
+
+            comp_score = (
+                0.30 * norm_kl
+                + 0.20 * norm_v
+                + 0.15 * flips
+                + 0.15 * norm_t
+                + 0.10 * norm_a
+                + 0.05 * norm_m
+                + 0.05 * norm_o
+            )
+        else:
+            comp_score = (
+                0.40 * (kl / max_kl if max_kl > 0 else 0)
+                + 0.30 * (v_diff / max_v_shift if max_v_shift > 0 else 0)
+                + 0.20 * flips
+                + 0.10 * (p_grad / max_p_grad if max_p_grad > 0 else 0)
+            )
 
         # Classification
         if nz_ratio == 0.0 or std_v < 1e-6:
             status = "INACTIVE_OR_CONSTANT"
             recommendation = "Canal nulo/constante. Revisar extracción si se esperaba activo."
-        elif comp_score >= 0.30 or flips >= 0.15:
+        elif comp_score >= 0.25 or flips >= 0.15:
             status = "HIGH_EFFECTIVENESS"
-            recommendation = "Canal clave para decisiones tácticas. Mantener indispensable."
-        elif comp_score >= 0.10 or flips >= 0.05:
+            recommendation = "Canal clave para decisiones tácticas y balance de cabezas. Mantener indispensable."
+        elif comp_score >= 0.08 or flips >= 0.05 or t_diff > 0.10:
             status = "MODERATE_EFFECTIVENESS"
-            recommendation = "Aporta contexto táctico complementario."
+            recommendation = "Aporta contexto táctico y espacial complementario."
         else:
             status = "LOW_EFFECTIVENESS"
-            recommendation = "Bajo impacto en política/valor; potencial candidato a poda/refactor."
+            recommendation = "Bajo impacto en política/valor/tácticas; potencial candidato a optimización."
 
         # Category
         if 0 <= c <= 5:
@@ -331,12 +490,32 @@ def analyze_channels(
                 "decision_flip_rate": round(flips * 100.0, 2),
                 "kl_divergence": round(kl, 5),
                 "value_shift_mean": round(v_diff, 5),
+                "threat_shift_mean": round(t_diff, 5) if has_threat else 0.0,
+                "attrition_shift_mean": round(a_diff, 5) if has_attrition else 0.0,
+                "morale_shift_mean": round(m_diff, 5) if has_morale else 0.0,
+                "objective_shift_mean": round(o_diff, 5) if has_objective else 0.0,
                 "nonzero_ratio": round(nz_ratio, 4),
                 "mean_abs": round(m_abs, 4),
                 "std": round(std_v, 4),
                 "grad_saliency_policy": round(p_grad, 6),
                 "grad_saliency_value": round(v_grad, 6),
+                "grad_saliency_threat": round(t_grad, 6) if has_threat else 0.0,
+                "grad_saliency_attrition": round(a_grad, 6) if has_attrition else 0.0,
+                "grad_saliency_morale": round(m_grad, 6) if has_morale else 0.0,
                 "recommendation": recommendation,
+                "head_attributions": {
+                    "policy_kl": round(kl, 5),
+                    "value_shift": round(v_diff, 5),
+                    "threat_shift": round(t_diff, 5) if has_threat else None,
+                    "attrition_shift": round(a_diff, 5) if has_attrition else None,
+                    "morale_shift": round(m_diff, 5) if has_morale else None,
+                    "objective_shift": round(o_diff, 5) if has_objective else None,
+                    "grad_policy": round(p_grad, 6),
+                    "grad_value": round(v_grad, 6),
+                    "grad_threat": round(t_grad, 6) if has_threat else None,
+                    "grad_attrition": round(a_grad, 6) if has_attrition else None,
+                    "grad_morale": round(m_grad, 6) if has_morale else None,
+                },
             }
         )
 
@@ -359,6 +538,7 @@ def analyze_channels(
     return {
         "num_observations_analyzed": num_samples,
         "channels_analyzed": num_channels,
+        "heads_analyzed": active_heads_list,
         "categories_summary": categories_summary,
         "ranked_channels": ranked_channels,
     }

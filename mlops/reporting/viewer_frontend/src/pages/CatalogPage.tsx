@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
-import { fetchCatalog, fetchCurriculumCompareLatest, fetchModel, fetchTraceability, fetchTrainSummary } from "../api";
-import { formatLocalDate } from "../dateUtils";
+import { deleteModelExperiment, fetchCatalog, fetchCurriculumCompareLatest, fetchModel, fetchTraceability, fetchTrainSummary } from "../api";
+import { calculateDurationSeconds, formatDuration, formatDurationDetailed, formatLocalDate } from "../dateUtils";
 import type { Dict, EvalResultRow, EvalRow, ModelPayload, TrainRow } from "../types";
 import { NetworkTopologyTab } from "./model-tabs/NetworkTopologyTab";
 
@@ -57,6 +57,38 @@ export function CatalogPage() {
     });
   }, [traceRows, selectedCurriculumFilter]);
 
+  const traceByTrainRun = useMemo(() => {
+    const map = new Map<string, Dict>();
+    for (const r of traceRows) {
+      const tid = String(r.train_run_id || "").trim();
+      if (tid) map.set(tid, r);
+    }
+    return map;
+  }, [traceRows]);
+
+  const curriculumDurationStats = useMemo(() => {
+    let totalSec = 0;
+    let count = 0;
+    let maxSec = 0;
+    let maxRow: Dict | null = null;
+    for (const r of filteredTraceRows) {
+      const dur = calculateDurationSeconds(
+        r.phase_started_at as string | undefined,
+        r.phase_finished_at as string | undefined
+      );
+      if (dur !== null && dur >= 0) {
+        totalSec += dur;
+        count += 1;
+        if (dur > maxSec) {
+          maxSec = dur;
+          maxRow = r;
+        }
+      }
+    }
+    const avgSec = count > 0 ? totalSec / count : null;
+    return { totalSec, count, avgSec, maxSec, maxRow };
+  }, [filteredTraceRows]);
+
   const [selectedEngine, setSelectedEngine] = useState("");
   const [selectedModel, setSelectedModel] = useState("");
   const [modelDetail, setModelDetail] = useState<ModelPayload | null>(null);
@@ -66,6 +98,31 @@ export function CatalogPage() {
   const [compareEngineFilter, setCompareEngineFilter] = useState("all");
   const [error, setError] = useState("");
   const [summaryTab, setSummaryTab] = useState<"overview" | "topology" | "curriculum" | "compare">("overview");
+  const [deletingModelId, setDeletingModelId] = useState("");
+
+  async function handleDeleteModel(targetModelId: string) {
+    if (!targetModelId) return;
+    const ok = window.confirm(
+      `⚠️ ¿Estás seguro de que deseas ELIMINAR COMPLETAMENTE el experimento:\n"${targetModelId}"?\n\nEsta acción borrará todos sus checkpoints, ficheros de self-play, logs y registros en la base de datos DuckDB y Parquet.`
+    );
+    if (!ok) return;
+
+    setDeletingModelId(targetModelId);
+    try {
+      const res = await deleteModelExperiment(targetModelId, selectedEngine);
+      alert(
+        `✅ Experimento eliminado con éxito:\n${targetModelId}\nEspacio liberado: ${res.freed_mb ?? 0} MB (${(res.deleted_directories as string[])?.length ?? 0} directorios)`
+      );
+      await load();
+      if (selectedModel === targetModelId) {
+        setSelectedModel("");
+      }
+    } catch (err: any) {
+      alert(`❌ Error al eliminar experimento: ${err.message || err}`);
+    } finally {
+      setDeletingModelId("");
+    }
+  }
 
   async function load() {
     try {
@@ -186,6 +243,27 @@ export function CatalogPage() {
     [modelDetail]
   );
 
+  const modelTrainDurationStats = useMemo(() => {
+    let totalSec = 0;
+    let count = 0;
+    for (const t of trains) {
+      const tid = String(t.run_id || "").trim();
+      const trace = traceByTrainRun.get(tid);
+      let dur = typeof t.duration_seconds === "number" ? t.duration_seconds : null;
+      if (dur === null || dur === undefined) {
+        dur = calculateDurationSeconds(
+          (trace?.phase_started_at || t.phase_started_at) as string | undefined,
+          (trace?.phase_finished_at || t.phase_finished_at) as string | undefined
+        );
+      }
+      if (dur !== null && dur !== undefined && dur >= 0) {
+        totalSec += dur;
+        count += 1;
+      }
+    }
+    return { totalSec, count };
+  }, [trains, traceByTrainRun]);
+
   const [trainSummary, setTrainSummary] = useState<Dict | null>(null);
   const [selectedTrainRunId, setSelectedTrainRunId] = useState("");
 
@@ -291,21 +369,44 @@ export function CatalogPage() {
                     window.open(detailUrl, "_blank", "noopener,noreferrer");
                   }}
                 >
-                  <div className="bar" style={{ justifyContent: "space-between", alignItems: "center" }}>
+                  <div className="bar" style={{ justifyContent: "space-between", alignItems: "center", gap: 6 }}>
                     <b style={{ fontSize: 12, wordBreak: "break-all" }}>{m.model_id}</b>
-                    <button
-                      onClick={(ev) => {
-                        ev.stopPropagation();
-                        window.open(
-                          `/model?engine=${encodeURIComponent(selectedEngine)}&model=${encodeURIComponent(m.model_id)}`,
-                          "_blank",
-                          "noopener,noreferrer"
-                        );
-                      }}
-                      style={{ fontSize: 11, padding: "3px 8px", whiteSpace: "nowrap" }}
-                    >
-                      View Detail
-                    </button>
+                    <div style={{ display: "flex", gap: 4, alignItems: "center" }}>
+                      <button
+                        onClick={(ev) => {
+                          ev.stopPropagation();
+                          window.open(
+                            `/model?engine=${encodeURIComponent(selectedEngine)}&model=${encodeURIComponent(m.model_id)}`,
+                            "_blank",
+                            "noopener,noreferrer"
+                          );
+                        }}
+                        style={{ fontSize: 11, padding: "3px 8px", whiteSpace: "nowrap" }}
+                      >
+                        View Detail
+                      </button>
+                      <button
+                        onClick={(ev) => {
+                          ev.stopPropagation();
+                          void handleDeleteModel(m.model_id);
+                        }}
+                        disabled={deletingModelId === m.model_id}
+                        style={{
+                          fontSize: 11,
+                          padding: "3px 8px",
+                          whiteSpace: "nowrap",
+                          background: "#dc2626",
+                          color: "#ffffff",
+                          border: "none",
+                          borderRadius: 4,
+                          cursor: "pointer",
+                          fontWeight: 600,
+                        }}
+                        title="Eliminar este experimento y todos sus ficheros en disco"
+                      >
+                        {deletingModelId === m.model_id ? "Borrando..." : "🗑️ Borrar"}
+                      </button>
+                    </div>
                   </div>
                   <div
                     className="muted"
@@ -371,15 +472,34 @@ export function CatalogPage() {
               {catalogModel ? (
                 <div>
                   {/* Action buttons */}
-                  <div className="bar" style={{ marginBottom: 12 }}>
+                  <div className="bar" style={{ marginBottom: 12, justifyContent: "space-between", alignItems: "center" }}>
+                    <div className="bar">
+                      <button
+                        onClick={() => window.open(detailUrl, "_blank", "noopener,noreferrer")}
+                        style={{ background: "#0ea5e9", color: "#0f172a", fontWeight: "bold" }}
+                      >
+                        → Open Full Model Detail
+                      </button>
+                      <button onClick={() => window.open(eloUrl, "_blank", "noopener,noreferrer")}>
+                        View in ELO Leaderboard
+                      </button>
+                    </div>
                     <button
-                      onClick={() => window.open(detailUrl, "_blank", "noopener,noreferrer")}
-                      style={{ background: "#0ea5e9", color: "#0f172a", fontWeight: "bold" }}
+                      onClick={() => void handleDeleteModel(catalogModel.model_id)}
+                      disabled={deletingModelId === catalogModel.model_id}
+                      style={{
+                        background: "#dc2626",
+                        color: "#ffffff",
+                        border: "none",
+                        fontWeight: "bold",
+                        fontSize: 11,
+                        padding: "6px 12px",
+                        borderRadius: 4,
+                        cursor: "pointer",
+                      }}
+                      title="Eliminar este experimento y todos sus datos en disco"
                     >
-                      → Open Full Model Detail
-                    </button>
-                    <button onClick={() => window.open(eloUrl, "_blank", "noopener,noreferrer")}>
-                      View in ELO Leaderboard
+                      {deletingModelId === catalogModel.model_id ? "Eliminando..." : "🗑️ Eliminar Experimento"}
                     </button>
                   </div>
 
@@ -425,6 +545,30 @@ export function CatalogPage() {
                         {formatLocalDate(catalogModel.latest_eval_created_at_utc)}
                       </div>
                     </div>
+                    <div className="kpi" style={{ borderLeft: "2px solid #38bdf8" }}>
+                      <div className="k">⏱️ training_duration_total</div>
+                      <div
+                        className="v"
+                        style={{ color: "#38bdf8", fontWeight: 700, fontSize: 13 }}
+                        title={formatDurationDetailed(modelTrainDurationStats.totalSec)}
+                      >
+                        {modelTrainDurationStats.totalSec > 0
+                          ? formatDuration(modelTrainDurationStats.totalSec)
+                          : "-"}
+                      </div>
+                    </div>
+                    <div className="kpi" style={{ borderLeft: "2px solid #a78bfa" }}>
+                      <div className="k">⏱️ curriculum_total_time</div>
+                      <div
+                        className="v"
+                        style={{ color: "#c084fc", fontWeight: 700, fontSize: 13 }}
+                        title={formatDurationDetailed(curriculumDurationStats.totalSec)}
+                      >
+                        {curriculumDurationStats.totalSec > 0
+                          ? formatDuration(curriculumDurationStats.totalSec)
+                          : "-"}
+                      </div>
+                    </div>
                   </div>
 
                   {/* Loading indicator */}
@@ -466,10 +610,13 @@ export function CatalogPage() {
                   <div style={{ marginBottom: 14 }}>
                     <h3 style={{ margin: "0 0 6px 0", fontSize: 13 }}>Training Runs ({trains.length})</h3>
                     {trains.length > 0 ? (
-                      <table>
+                      <>
+                        <table>
                         <thead>
                           <tr>
                             <th>run_id</th>
+                            <th>fase currículum</th>
+                            <th>duración</th>
                             <th>scenario</th>
                             <th>created_at</th>
                             <th>git_commit</th>
@@ -477,18 +624,98 @@ export function CatalogPage() {
                           </tr>
                         </thead>
                         <tbody>
-                          {trains.slice(0, 8).map((t) => (
-                            <tr key={String(t.run_id || Math.random())}>
-                              <td><b>{String(t.run_id || "-")}</b></td>
-                              <td>{String(t.scenario_id || "-")}</td>
-                              <td>{formatLocalDate(t.created_at_utc)}</td>
-                              <td><code>{String(t.git_commit || "-").slice(0, 8)}</code></td>
-                              <td className="muted" style={{ fontSize: 11 }}>{String(t.latest_checkpoint || "-")}</td>
-                            </tr>
-                          ))}
+                          {trains.slice(0, 8).map((t) => {
+                            const tid = String(t.run_id || "").trim();
+                            const trace = traceByTrainRun.get(tid);
+                            const phaseName = String(trace?.phase_name || t.curriculum_phase || "-");
+                            let dur = typeof t.duration_seconds === "number" ? t.duration_seconds : null;
+                            if (dur === null || dur === undefined) {
+                              dur = calculateDurationSeconds(
+                                (trace?.phase_started_at || t.phase_started_at) as string | undefined,
+                                (trace?.phase_finished_at || t.phase_finished_at) as string | undefined
+                              );
+                            }
+                            return (
+                              <tr key={String(t.run_id || Math.random())}>
+                                <td><b>{String(t.run_id || "-")}</b></td>
+                                <td>
+                                  {phaseName !== "-" ? (
+                                    <span
+                                      style={{
+                                        background: "#0284c720",
+                                        border: "1px solid #0284c740",
+                                        color: "#38bdf8",
+                                        padding: "2px 6px",
+                                        borderRadius: 4,
+                                        fontSize: 11,
+                                        fontWeight: 600,
+                                      }}
+                                    >
+                                      {phaseName}
+                                    </span>
+                                  ) : (
+                                    <span className="muted">-</span>
+                                  )}
+                                </td>
+                                <td>
+                                  {dur !== null && dur !== undefined && dur >= 0 ? (
+                                    <span
+                                      style={{
+                                        background: "#10b98118",
+                                        border: "1px solid #10b98140",
+                                        color: "#34d399",
+                                        padding: "2px 6px",
+                                        borderRadius: 4,
+                                        fontSize: 11,
+                                        fontWeight: 700,
+                                        whiteSpace: "nowrap",
+                                      }}
+                                      title={formatDurationDetailed(dur)}
+                                    >
+                                      ⏱️ {formatDuration(dur)}
+                                    </span>
+                                  ) : (
+                                    <span className="muted">-</span>
+                                  )}
+                                </td>
+                                <td>{String(t.scenario_id || "-")}</td>
+                                <td>{formatLocalDate(t.created_at_utc)}</td>
+                                <td><code>{String(t.git_commit || "-").slice(0, 8)}</code></td>
+                                <td className="muted" style={{ fontSize: 11 }}>{String(t.latest_checkpoint || "-")}</td>
+                              </tr>
+                            );
+                          })}
                         </tbody>
                       </table>
-                    ) : (
+                      <div
+                        style={{
+                          marginTop: 6,
+                          padding: "6px 12px",
+                          background: "#0f172a",
+                          borderRadius: 4,
+                          border: "1px solid #1e293b",
+                          display: "flex",
+                          justifyContent: "space-between",
+                          alignItems: "center",
+                          fontSize: 12,
+                          flexWrap: "wrap",
+                          gap: 6,
+                        }}
+                      >
+                        <span className="muted">
+                          Mostrando {Math.min(trains.length, 8)} de {trains.length} ejecuciones de entrenamiento
+                        </span>
+                        <span style={{ fontWeight: 600, color: "#e2e8f0" }}>
+                          ⏱️ Tiempo total consumido de entrenamiento:{" "}
+                          <strong style={{ color: "#34d399" }}>
+                            {modelTrainDurationStats.totalSec > 0
+                              ? formatDurationDetailed(modelTrainDurationStats.totalSec)
+                              : "No disponible"}
+                          </strong>
+                        </span>
+                      </div>
+                    </>
+                  ) : (
                       <div className="muted" style={{ fontSize: 12 }}>No training runs found in DuckDB catalog.</div>
                     )}
                   </div>
@@ -571,12 +798,31 @@ export function CatalogPage() {
                     </div>
                   )}
                 </div>
-                <button
-                  onClick={() => window.open(detailUrl, "_blank", "noopener,noreferrer")}
-                  style={{ background: "#0ea5e9", color: "#0f172a", fontWeight: "bold", fontSize: 11, padding: "4px 8px" }}
-                >
-                  Abrir Detalle Completo ➔
-                </button>
+                <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                  <button
+                    onClick={() => window.open(detailUrl, "_blank", "noopener,noreferrer")}
+                    style={{ background: "#0ea5e9", color: "#0f172a", fontWeight: "bold", fontSize: 11, padding: "4px 8px" }}
+                  >
+                    Abrir Detalle Completo ➔
+                  </button>
+                  <button
+                    onClick={() => void handleDeleteModel(catalogModel?.model_id || selectedModel)}
+                    disabled={deletingModelId === (catalogModel?.model_id || selectedModel)}
+                    style={{
+                      background: "#ef444420",
+                      border: "1px solid #ef444480",
+                      color: "#fca5a5",
+                      fontWeight: "bold",
+                      fontSize: 11,
+                      padding: "4px 8px",
+                      borderRadius: 4,
+                      cursor: "pointer",
+                    }}
+                    title="Eliminar este experimento y todos sus datos en disco"
+                  >
+                    {deletingModelId === (catalogModel?.model_id || selectedModel) ? "Eliminando..." : "🗑️ Eliminar"}
+                  </button>
+                </div>
               </div>
               <NetworkTopologyTab
                 trainRow={activeTrainRow}
@@ -658,11 +904,67 @@ export function CatalogPage() {
                 )}
               </div>
 
+              {/* KPI Summary for Curriculum Times */}
+              <div
+                className="kpi-grid"
+                style={{
+                  marginBottom: 14,
+                  gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
+                }}
+              >
+                <div className="kpi" style={{ borderLeft: "3px solid #38bdf8" }}>
+                  <div className="k">⏱️ TIEMPO TOTAL CONSUMIDO</div>
+                  <div className="v" style={{ color: "#38bdf8", fontWeight: 700, fontSize: 16 }}>
+                    {curriculumDurationStats.totalSec > 0
+                      ? formatDurationDetailed(curriculumDurationStats.totalSec)
+                      : "-"}
+                  </div>
+                  <div className="muted" style={{ fontSize: 10, marginTop: 2 }}>
+                    Suma en {curriculumDurationStats.count} fases registradas
+                  </div>
+                </div>
+
+                <div className="kpi" style={{ borderLeft: "3px solid #34d399" }}>
+                  <div className="k">📊 PROMEDIO POR FASE</div>
+                  <div className="v" style={{ color: "#34d399", fontWeight: 700, fontSize: 16 }}>
+                    {curriculumDurationStats.avgSec !== null
+                      ? formatDuration(curriculumDurationStats.avgSec)
+                      : "-"}
+                  </div>
+                  <div className="muted" style={{ fontSize: 10, marginTop: 2 }}>
+                    Tiempo medio por fase ejecutada
+                  </div>
+                </div>
+
+                <div className="kpi" style={{ borderLeft: "3px solid #f59e0b" }}>
+                  <div className="k">🚀 FASE MÁS LARGA</div>
+                  <div className="v" style={{ color: "#fbbf24", fontWeight: 700, fontSize: 12, wordBreak: "break-all" }}>
+                    {curriculumDurationStats.maxRow
+                      ? `${String(curriculumDurationStats.maxRow.phase_name || "")} (${formatDuration(curriculumDurationStats.maxSec)})`
+                      : "-"}
+                  </div>
+                  <div className="muted" style={{ fontSize: 10, marginTop: 2 }}>
+                    Pico de duración en currículum
+                  </div>
+                </div>
+
+                <div className="kpi" style={{ borderLeft: "3px solid #a78bfa" }}>
+                  <div className="k">🏁 FASES EN HISTORIAL</div>
+                  <div className="v" style={{ color: "#c084fc", fontWeight: 700, fontSize: 16 }}>
+                    {filteredTraceRows.length} fases
+                  </div>
+                  <div className="muted" style={{ fontSize: 10, marginTop: 2 }}>
+                    {curriculumDurationStats.count} con tiempos cronometrados
+                  </div>
+                </div>
+              </div>
+
               <table>
                 <thead>
                   <tr>
                     <th>currículum</th>
                     <th>phase</th>
+                    <th>duración</th>
                     <th>scenario_mix</th>
                     <th>train_run_id</th>
                     <th>recorded_at</th>
@@ -675,7 +977,7 @@ export function CatalogPage() {
                 <tbody>
                   {!filteredTraceRows.length ? (
                     <tr>
-                      <td colSpan={9} className="muted">No hay registros de trazabilidad para este currículum.</td>
+                      <td colSpan={10} className="muted">No hay registros de trazabilidad para este currículum.</td>
                     </tr>
                   ) : (
                     filteredTraceRows.slice(0, 50).map((r, idx) => {
@@ -690,6 +992,11 @@ export function CatalogPage() {
                             .join(" + ")
                         : "-";
 
+                      const dur = calculateDurationSeconds(
+                        r.phase_started_at as string | undefined,
+                        r.phase_finished_at as string | undefined
+                      );
+
                       return (
                         <tr key={idx}>
                           <td>
@@ -698,6 +1005,27 @@ export function CatalogPage() {
                             </code>
                           </td>
                           <td><b>{String(r.phase_name || "-")}</b></td>
+                          <td>
+                            {dur !== null && dur >= 0 ? (
+                              <span
+                                style={{
+                                  background: "#0284c718",
+                                  border: "1px solid #0284c740",
+                                  color: "#38bdf8",
+                                  padding: "2px 7px",
+                                  borderRadius: 4,
+                                  fontSize: 11,
+                                  fontWeight: 700,
+                                  whiteSpace: "nowrap",
+                                }}
+                                title={formatDurationDetailed(dur)}
+                              >
+                                ⏱️ {formatDuration(dur)}
+                              </span>
+                            ) : (
+                              <span className="muted">-</span>
+                            )}
+                          </td>
                           <td style={{ fontSize: 11 }} title={cleanedScenarios.join(", ")}>
                             {scenarioDisplay}
                           </td>
@@ -737,6 +1065,34 @@ export function CatalogPage() {
                   )}
                 </tbody>
               </table>
+
+              <div
+                style={{
+                  marginTop: 8,
+                  padding: "8px 12px",
+                  background: "#0f172a",
+                  borderRadius: 4,
+                  border: "1px solid #334155",
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                  fontSize: 12,
+                  flexWrap: "wrap",
+                  gap: 8,
+                }}
+              >
+                <span className="muted">
+                  Mostrando {Math.min(filteredTraceRows.length, 50)} de {filteredTraceRows.length} fases registradas
+                </span>
+                <span style={{ fontWeight: 600, color: "#e2e8f0" }}>
+                  ⏱️ Tiempo total consumido del currículum:{" "}
+                  <strong style={{ color: "#38bdf8", fontSize: 13 }}>
+                    {curriculumDurationStats.totalSec > 0
+                      ? formatDurationDetailed(curriculumDurationStats.totalSec)
+                      : "No disponible"}
+                  </strong>
+                </span>
+              </div>
             </div>
           )}
 

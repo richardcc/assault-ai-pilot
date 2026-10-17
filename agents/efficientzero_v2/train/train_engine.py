@@ -106,6 +106,15 @@ def _process_actor_init(
     scenario_id: str,
 ) -> None:
     os.environ["CUDA_VISIBLE_DEVICES"] = ""
+    os.environ["OMP_NUM_THREADS"] = "1"
+    os.environ["MKL_NUM_THREADS"] = "1"
+    os.environ["OPENBLAS_NUM_THREADS"] = "1"
+    os.environ["VECLIB_MAXIMUM_THREADS"] = "1"
+    os.environ["NUMEXPR_NUM_THREADS"] = "1"
+    try:
+        torch.set_num_threads(1)
+    except Exception:
+        pass
     sim = VOECSimulator(assets=voec_assets)
     adapter = EZV2VOECAdapter(sim)
     model = EfficientZeroV2Network(

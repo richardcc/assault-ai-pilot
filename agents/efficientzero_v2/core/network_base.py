@@ -99,6 +99,10 @@ class EfficientZeroV2BaseNetwork(nn.Module):
         multi_vp_feature_dim: int = 0,
         support_size: int = 0,
         use_spatial_attention: bool = False,
+        enable_threat_head: bool = True,
+        enable_attrition_head: bool = True,
+        enable_morale_head: bool = True,
+        morale_classes: int = 4,
     ):
         super().__init__()
         self.encoder_type = str(encoder_type).lower().strip()
@@ -114,6 +118,10 @@ class EfficientZeroV2BaseNetwork(nn.Module):
         self.multi_vp_feature_dim = max(0, int(multi_vp_feature_dim))
         self.support_size = max(0, int(support_size))
         self.use_spatial_attention = bool(use_spatial_attention)
+        self.enable_threat_head = bool(enable_threat_head)
+        self.enable_attrition_head = bool(enable_attrition_head)
+        self.enable_morale_head = bool(enable_morale_head)
+        self.morale_classes = max(2, int(morale_classes))
         self.val_out_dim = (2 * self.support_size + 1) if self.support_size > 0 else 1
 
         if self.encoder_type == "cnn":
@@ -194,6 +202,38 @@ class EfficientZeroV2BaseNetwork(nn.Module):
                     if self.multi_vp_feature_dim > 0
                     else None
                 )
+                self.prediction_threat_map = (
+                    nn.Sequential(
+                        nn.Conv2d(self.hidden_dim, 16, kernel_size=3, padding=1, bias=False),
+                        _make_group_norm(16),
+                        nn.SiLU(),
+                        nn.Conv2d(16, 1, kernel_size=1),
+                    )
+                    if self.enable_threat_head
+                    else None
+                )
+                self.prediction_attrition = (
+                    nn.Sequential(
+                        SpatialAttentionBlock(self.hidden_dim, val_channels, (pool_h, pool_w)),
+                        nn.Flatten(start_dim=1),
+                        nn.Linear(flat_val_dim, 64),
+                        nn.SiLU(),
+                        nn.Linear(64, 2),
+                    )
+                    if self.enable_attrition_head
+                    else None
+                )
+                self.prediction_morale = (
+                    nn.Sequential(
+                        SpatialAttentionBlock(self.hidden_dim, val_channels, (pool_h, pool_w)),
+                        nn.Flatten(start_dim=1),
+                        nn.Linear(flat_val_dim, 64),
+                        nn.SiLU(),
+                        nn.Linear(64, self.morale_classes),
+                    )
+                    if self.enable_morale_head
+                    else None
+                )
             else:
                 flat_policy_dim = head_channels * self.observation_height * self.observation_width
                 flat_val_dim = val_channels * self.observation_height * self.observation_width
@@ -246,6 +286,40 @@ class EfficientZeroV2BaseNetwork(nn.Module):
                     if self.multi_vp_feature_dim > 0
                     else None
                 )
+                self.prediction_threat_map = (
+                    nn.Sequential(
+                        nn.Conv2d(self.hidden_dim, 16, kernel_size=3, padding=1, bias=False),
+                        _make_group_norm(16),
+                        nn.SiLU(),
+                        nn.Conv2d(16, 1, kernel_size=1),
+                    )
+                    if self.enable_threat_head
+                    else None
+                )
+                self.prediction_attrition = (
+                    nn.Sequential(
+                        nn.Conv2d(self.hidden_dim, val_channels, kernel_size=1),
+                        nn.SiLU(),
+                        nn.Flatten(start_dim=1),
+                        nn.Linear(flat_val_dim, 64),
+                        nn.SiLU(),
+                        nn.Linear(64, 2),
+                    )
+                    if self.enable_attrition_head
+                    else None
+                )
+                self.prediction_morale = (
+                    nn.Sequential(
+                        nn.Conv2d(self.hidden_dim, val_channels, kernel_size=1),
+                        nn.SiLU(),
+                        nn.Flatten(start_dim=1),
+                        nn.Linear(flat_val_dim, 64),
+                        nn.SiLU(),
+                        nn.Linear(64, self.morale_classes),
+                    )
+                    if self.enable_morale_head
+                    else None
+                )
         else:
             self.representation = nn.Sequential(
                 nn.Linear(observation_dim, hidden_dim),
@@ -288,6 +362,33 @@ class EfficientZeroV2BaseNetwork(nn.Module):
                 if self.multi_vp_feature_dim > 0
                 else None
             )
+            self.prediction_threat_map = (
+                nn.Sequential(
+                    nn.Linear(hidden_dim, 64),
+                    nn.SiLU(),
+                    nn.Linear(64, self.observation_height * self.observation_width),
+                )
+                if self.enable_threat_head
+                else None
+            )
+            self.prediction_attrition = (
+                nn.Sequential(
+                    nn.Linear(hidden_dim, 64),
+                    nn.SiLU(),
+                    nn.Linear(64, 2),
+                )
+                if self.enable_attrition_head
+                else None
+            )
+            self.prediction_morale = (
+                nn.Sequential(
+                    nn.Linear(hidden_dim, 64),
+                    nn.SiLU(),
+                    nn.Linear(64, self.morale_classes),
+                )
+                if self.enable_morale_head
+                else None
+            )
     def _scale_latent(self, s: torch.Tensor) -> torch.Tensor:
         """Normalize latent state representation to prevent drift during MCTS unrolls."""
         if s.dim() == 4:
@@ -324,6 +425,15 @@ class EfficientZeroV2BaseNetwork(nn.Module):
             multi_vp_pred = (
                 self.prediction_multi_vp(pred_hidden) if self.prediction_multi_vp is not None else None
             )
+            threat_map_pred = (
+                self.prediction_threat_map(pred_hidden) if self.prediction_threat_map is not None else None
+            )
+            attrition_pred = (
+                self.prediction_attrition(pred_hidden) if self.prediction_attrition is not None else None
+            )
+            morale_pred = (
+                self.prediction_morale(pred_hidden) if self.prediction_morale is not None else None
+            )
         else:
             hidden = self._scale_latent(self.representation(observation))
             pred_hidden = self.prediction_trunk(hidden)
@@ -343,6 +453,15 @@ class EfficientZeroV2BaseNetwork(nn.Module):
             multi_vp_pred = (
                 self.prediction_multi_vp(pred_hidden) if self.prediction_multi_vp is not None else None
             )
+            threat_map_pred = (
+                self.prediction_threat_map(pred_hidden) if self.prediction_threat_map is not None else None
+            )
+            attrition_pred = (
+                self.prediction_attrition(pred_hidden) if self.prediction_attrition is not None else None
+            )
+            morale_pred = (
+                self.prediction_morale(pred_hidden) if self.prediction_morale is not None else None
+            )
         if return_aux:
             aux = {"objective_logit": objective_logit}
             if val_logits is not None:
@@ -353,6 +472,12 @@ class EfficientZeroV2BaseNetwork(nn.Module):
                 aux["objective_intent_logits"] = objective_intent_logits
             if multi_vp_pred is not None:
                 aux["multi_vp_pred"] = multi_vp_pred
+            if threat_map_pred is not None:
+                aux["threat_map_pred"] = threat_map_pred
+            if attrition_pred is not None:
+                aux["attrition_pred"] = attrition_pred
+            if morale_pred is not None:
+                aux["morale_pred"] = morale_pred
             return hidden, policy_logits, value, reward, aux
         return hidden, policy_logits, value, reward
 
@@ -397,6 +522,15 @@ class EfficientZeroV2BaseNetwork(nn.Module):
             multi_vp_pred = (
                 self.prediction_multi_vp(pred_hidden) if self.prediction_multi_vp is not None else None
             )
+            threat_map_pred = (
+                self.prediction_threat_map(pred_hidden) if self.prediction_threat_map is not None else None
+            )
+            attrition_pred = (
+                self.prediction_attrition(pred_hidden) if self.prediction_attrition is not None else None
+            )
+            morale_pred = (
+                self.prediction_morale(pred_hidden) if self.prediction_morale is not None else None
+            )
         else:
             x = torch.cat([hidden, action_onehot], dim=-1)
             next_hidden = self._scale_latent(self.dynamics_state(self.dynamics_input(x)))
@@ -421,6 +555,15 @@ class EfficientZeroV2BaseNetwork(nn.Module):
             multi_vp_pred = (
                 self.prediction_multi_vp(pred_hidden) if self.prediction_multi_vp is not None else None
             )
+            threat_map_pred = (
+                self.prediction_threat_map(pred_hidden) if self.prediction_threat_map is not None else None
+            )
+            attrition_pred = (
+                self.prediction_attrition(pred_hidden) if self.prediction_attrition is not None else None
+            )
+            morale_pred = (
+                self.prediction_morale(pred_hidden) if self.prediction_morale is not None else None
+            )
         if return_aux:
             aux = {"objective_logit": objective_logit}
             if val_logits is not None:
@@ -431,5 +574,12 @@ class EfficientZeroV2BaseNetwork(nn.Module):
                 aux["objective_intent_logits"] = objective_intent_logits
             if multi_vp_pred is not None:
                 aux["multi_vp_pred"] = multi_vp_pred
+            if threat_map_pred is not None:
+                aux["threat_map_pred"] = threat_map_pred
+            if attrition_pred is not None:
+                aux["attrition_pred"] = attrition_pred
+            if morale_pred is not None:
+                aux["morale_pred"] = morale_pred
             return next_hidden, policy_logits, value, reward, aux
         return next_hidden, policy_logits, value, reward
+

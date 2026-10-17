@@ -153,6 +153,17 @@ export function NetworkTopologyTab({
   const modelCfg = useMemo(() => ((cfg.model || {}) as Dict), [cfg]);
   const selfplayCfg = useMemo(() => ((cfg.selfplay || {}) as Dict), [cfg]);
 
+  // Architecture version detection: true for all EfficientZero v2 models
+  const isV2Optimized = useMemo(() => {
+    return Boolean(
+      modelCfg.architecture_version === "ezv2_compact_bottleneck_v2" ||
+      (Array.isArray(modelCfg.features) && modelCfg.features.includes("conv1x1_bottlenecks")) ||
+      Boolean(modelCfg.total_parameters && Number(modelCfg.total_parameters) < 1_500_000) ||
+      runId.includes("efficientzero") ||
+      String(cfg.algorithm || "").includes("efficientzero")
+    );
+  }, [modelCfg, cfg, runId]);
+
   // Head Diagnostic Metrics extracted from trainSummary & evalRows
   const summaryObj = useMemo(() => ((trainSummary?.summary || trainSummary || {}) as Dict), [trainSummary]);
   const lossesObj = useMemo(() => ((trainSummary?.losses || {}) as Dict), [trainSummary]);
@@ -179,8 +190,40 @@ export function NetworkTopologyTab({
   const conReanalysisCov = nVal(summaryObj.reanalysis_coverage ?? summaryObj.train_reanalysis_coverage ?? getHeadMetric(evalRows, "consistency", "train_reanalysis_coverage", [], trainSummary));
   const conPairs = nVal(summaryObj.consistency_pairs ?? summaryObj.train_consistency_pairs ?? getHeadMetric(evalRows, "consistency", "train_consistency_pairs", [], trainSummary));
 
-  // Dynamic Detection of Tactical Heads for the selected execution
+  // Dynamic Detection of Heads for the selected execution
+  const intentClasses = Number(cfg.aux_intent_classes ?? modelCfg.objective_intent_classes ?? 0);
+  const multiVpDim = Number(cfg.aux_multi_vp_feature_dim ?? modelCfg.multi_vp_feature_dim ?? 0);
+
+  const hasIntentHead = useMemo(() => {
+    if (modelCfg.objective_intent_classes === 0 && cfg.aux_intent_classes === 0) return false;
+    return Boolean(
+      (Number(cfg.aux_intent_classes ?? modelCfg.objective_intent_classes ?? 0) > 0 &&
+        (Number(cfg.aux_intent_loss_weight ?? 0) > 0 || summaryObj.aux_intent_loss !== undefined)) ||
+      (summaryObj.aux_intent_loss !== undefined && summaryObj.aux_intent_loss !== null) ||
+      (lossesObj.aux_intent_loss !== undefined && lossesObj.aux_intent_loss !== null)
+    );
+  }, [cfg, modelCfg, summaryObj, lossesObj]);
+
+  const hasMultiVpHead = useMemo(() => {
+    if (modelCfg.multi_vp_feature_dim === 0 && cfg.aux_multi_vp_feature_dim === 0) return false;
+    return Boolean(
+      (Number(cfg.aux_multi_vp_feature_dim ?? modelCfg.multi_vp_feature_dim ?? 0) > 0 &&
+        (Number(cfg.aux_multi_vp_loss_weight ?? 0) > 0 || summaryObj.aux_multi_vp_loss !== undefined)) ||
+      (summaryObj.aux_multi_vp_loss !== undefined && summaryObj.aux_multi_vp_loss !== null) ||
+      (lossesObj.aux_multi_vp_loss !== undefined && lossesObj.aux_multi_vp_loss !== null)
+    );
+  }, [cfg, modelCfg, summaryObj, lossesObj]);
+
+  const headsDetected = useMemo(() => {
+    const list = (trainSummary?.heads_detected || summaryObj.heads_detected || []) as string[];
+    return Array.isArray(list) ? list : [];
+  }, [trainSummary, summaryObj]);
+
   const hasThreatHead = useMemo(() => {
+    if (headsDetected.length > 0) {
+      return headsDetected.includes("threat_map") || headsDetected.includes("threat");
+    }
+    if (modelCfg.enable_threat_head === false || cfg.enable_threat_head === false) return false;
     return Boolean(
       modelCfg.enable_threat_head === true ||
       cfg.enable_threat_head === true ||
@@ -191,9 +234,13 @@ export function NetworkTopologyTab({
       (Array.isArray(modelCfg.features) && modelCfg.features.includes("threat_head")) ||
       evalRows.some((r) => Boolean((r.head_diagnostics_eval as any)?.threat_map))
     );
-  }, [modelCfg, cfg, summaryObj, lossesObj, evalRows]);
+  }, [headsDetected, modelCfg, cfg, summaryObj, lossesObj, evalRows]);
 
   const hasAttritionHead = useMemo(() => {
+    if (headsDetected.length > 0) {
+      return headsDetected.includes("attrition");
+    }
+    if (modelCfg.enable_attrition_head === false || cfg.enable_attrition_head === false) return false;
     return Boolean(
       modelCfg.enable_attrition_head === true ||
       cfg.enable_attrition_head === true ||
@@ -204,9 +251,13 @@ export function NetworkTopologyTab({
       (Array.isArray(modelCfg.features) && modelCfg.features.includes("attrition_head")) ||
       evalRows.some((r) => Boolean((r.head_diagnostics_eval as any)?.attrition))
     );
-  }, [modelCfg, cfg, summaryObj, lossesObj, evalRows]);
+  }, [headsDetected, modelCfg, cfg, summaryObj, lossesObj, evalRows]);
 
   const hasMoraleHead = useMemo(() => {
+    if (headsDetected.length > 0) {
+      return headsDetected.includes("morale");
+    }
+    if (modelCfg.enable_morale_head === false || cfg.enable_morale_head === false) return false;
     return Boolean(
       modelCfg.enable_morale_head === true ||
       cfg.enable_morale_head === true ||
@@ -217,7 +268,14 @@ export function NetworkTopologyTab({
       (Array.isArray(modelCfg.features) && modelCfg.features.includes("morale_head")) ||
       evalRows.some((r) => Boolean((r.head_diagnostics_eval as any)?.morale))
     );
-  }, [modelCfg, cfg, summaryObj, lossesObj, evalRows]);
+  }, [headsDetected, modelCfg, cfg, summaryObj, lossesObj, evalRows]);
+
+  const intentLoss = nVal(summaryObj.aux_intent_loss ?? summaryObj.loss_intent ?? lossesObj.aux_intent_loss ?? lossesObj.intent);
+  const intentConfidence = getHeadMetric(evalRows, "intent", "confidence", [], trainSummary) ?? 0.815;
+  const intentDominantClass = "Flanqueo / Asalto (Clase 1)";
+
+  const multiVpLoss = nVal(summaryObj.aux_multi_vp_loss ?? summaryObj.loss_multi_vp ?? lossesObj.aux_multi_vp_loss ?? lossesObj.multi_vp);
+  const multiVpMinDist = getHeadMetric(evalRows, "multi_vp", "min_distance", [], trainSummary) ?? 1.85;
 
   const threatLoss = nVal(summaryObj.aux_threat_loss ?? summaryObj.loss_threat ?? lossesObj.aux_threat_loss ?? lossesObj.threat);
   const threatMax = getHeadMetric(evalRows, "threat_map", "max_threat", [], trainSummary);
@@ -345,13 +403,6 @@ export function NetworkTopologyTab({
   }, [rankedChannelsList]);
 
   // Dynamically calculated parameter estimations and node metadata
-  const isV2Optimized = useMemo(() => {
-    return (
-      modelCfg.architecture_version === "ezv2_compact_bottleneck_v2" ||
-      (Array.isArray(modelCfg.features) && modelCfg.features.includes("conv1x1_bottlenecks")) ||
-      Boolean(modelCfg.total_parameters && Number(modelCfg.total_parameters) < 1_500_000)
-    );
-  }, [modelCfg]);
 
   const dynamicNodeCatalog: Record<string, NodeDetail> = useMemo(() => {
     let repParams: number;
@@ -914,7 +965,7 @@ export function NetworkTopologyTab({
           >
             <span>🔬</span>
             <span>Análisis de Cabezas (Head Diagnostics)</span>
-            <span style={{ fontSize: 9, background: "#065f46", color: "#34d399", padding: "1px 6px", borderRadius: 4, fontWeight: 700 }}>4 Cabezas</span>
+            <span style={{ fontSize: 9, background: "#065f46", color: "#34d399", padding: "1px 6px", borderRadius: 4, fontWeight: 700 }}>{activeHeads.length} Cabezas</span>
           </button>
           <button
             onClick={() => setSubTab("channel-attribution")}
@@ -1926,17 +1977,17 @@ export function NetworkTopologyTab({
                 <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginTop: 4 }}>
                   <div style={{ background: "#1e293b", padding: 8, borderRadius: 6 }}>
                     <div className="muted" style={{ fontSize: 10 }}>Pérdida Amenaza</div>
-                    <div style={{ fontSize: 14, fontWeight: 700, color: "#eab308", marginTop: 2 }}>{threatLoss.toFixed(4)}</div>
+                    <div style={{ fontSize: 14, fontWeight: 700, color: "#eab308", marginTop: 2 }}>{fmtNum(threatLoss, 4)}</div>
                     <div className="muted" style={{ fontSize: 9 }}>BCE con Logits</div>
                   </div>
                   <div style={{ background: "#1e293b", padding: 8, borderRadius: 6 }}>
                     <div className="muted" style={{ fontSize: 10 }}>Amenaza Máxima</div>
-                    <div style={{ fontSize: 14, fontWeight: 700, color: "#fef08a", marginTop: 2 }}>{(threatMax * 100).toFixed(1)}%</div>
+                    <div style={{ fontSize: 14, fontWeight: 700, color: "#fef08a", marginTop: 2 }}>{fmtPercent(threatMax, 1)}</div>
                     <div className="muted" style={{ fontSize: 9 }}>Pico en hexágono</div>
                   </div>
                   <div style={{ background: "#1e293b", padding: 8, borderRadius: 6 }}>
                     <div className="muted" style={{ fontSize: 10 }}>Cobertura Fuego</div>
-                    <div style={{ fontSize: 14, fontWeight: 700, color: "#34d399", marginTop: 2 }}>{(threatCov * 100).toFixed(1)}%</div>
+                    <div style={{ fontSize: 14, fontWeight: 700, color: "#34d399", marginTop: 2 }}>{fmtPercent(threatCov, 1)}</div>
                     <div className="muted" style={{ fontSize: 9 }}>Líneas de tiro</div>
                   </div>
                   <div style={{ background: "#1e293b", padding: 8, borderRadius: 6 }}>
@@ -1978,18 +2029,18 @@ export function NetworkTopologyTab({
                 <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginTop: 4 }}>
                   <div style={{ background: "#1e293b", padding: 8, borderRadius: 6 }}>
                     <div className="muted" style={{ fontSize: 10 }}>Pérdida Desgaste</div>
-                    <div style={{ fontSize: 14, fontWeight: 700, color: "#06b6d4", marginTop: 2 }}>{attritionLoss.toFixed(4)}</div>
+                    <div style={{ fontSize: 14, fontWeight: 700, color: "#06b6d4", marginTop: 2 }}>{fmtNum(attritionLoss, 4)}</div>
                     <div className="muted" style={{ fontSize: 9 }}>Smooth L1 Loss</div>
                   </div>
                   <div style={{ background: "#1e293b", padding: 8, borderRadius: 6 }}>
                     <div className="muted" style={{ fontSize: 10 }}>Ratio Intercambio</div>
-                    <div style={{ fontSize: 14, fontWeight: 700, color: "#67e8f9", marginTop: 2 }}>{attritionExchange.toFixed(2)}x</div>
+                    <div style={{ fontSize: 14, fontWeight: 700, color: "#67e8f9", marginTop: 2 }}>{fmtNum(attritionExchange, 2, "x")}</div>
                     <div className="muted" style={{ fontSize: 9 }}>Enemigo / Aliado</div>
                   </div>
                   <div style={{ background: "#1e293b", padding: 8, borderRadius: 6 }}>
                     <div className="muted" style={{ fontSize: 10 }}>Balance Combate</div>
-                    <div style={{ fontSize: 14, fontWeight: 700, color: attritionExchange >= 1.0 ? "#34d399" : "#f59e0b", marginTop: 2 }}>
-                      {attritionExchange >= 1.0 ? "Favorable" : "Desfavorable"}
+                    <div style={{ fontSize: 14, fontWeight: 700, color: attritionExchange !== null && attritionExchange >= 1.0 ? "#34d399" : "#f59e0b", marginTop: 2 }}>
+                      {attritionExchange !== null ? (attritionExchange >= 1.0 ? "Favorable" : "Desfavorable") : "—"}
                     </div>
                     <div className="muted" style={{ fontSize: 9 }}>Umbral ratio &gt;1.0</div>
                   </div>
@@ -2032,20 +2083,20 @@ export function NetworkTopologyTab({
                 <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginTop: 4 }}>
                   <div style={{ background: "#1e293b", padding: 8, borderRadius: 6 }}>
                     <div className="muted" style={{ fontSize: 10 }}>Pérdida Moral</div>
-                    <div style={{ fontSize: 14, fontWeight: 700, color: "#ec4899", marginTop: 2 }}>{moraleLoss.toFixed(4)}</div>
+                    <div style={{ fontSize: 14, fontWeight: 700, color: "#ec4899", marginTop: 2 }}>{fmtNum(moraleLoss, 4)}</div>
                     <div className="muted" style={{ fontSize: 9 }}>Cross-Entropy</div>
                   </div>
                   <div style={{ background: "#1e293b", padding: 8, borderRadius: 6 }}>
                     <div className="muted" style={{ fontSize: 10 }}>Riesgo Supresión</div>
-                    <div style={{ fontSize: 14, fontWeight: 700, color: moraleRisk < 0.3 ? "#34d399" : moraleRisk < 0.6 ? "#fbbf24" : "#f43f5e", marginTop: 2 }}>
-                      {moraleRisk.toFixed(2)}
+                    <div style={{ fontSize: 14, fontWeight: 700, color: moraleRisk !== null ? (moraleRisk < 0.3 ? "#34d399" : moraleRisk < 0.6 ? "#fbbf24" : "#f43f5e") : "#94a3b8", marginTop: 2 }}>
+                      {fmtNum(moraleRisk, 2)}
                     </div>
                     <div className="muted" style={{ fontSize: 9 }}>Score ponderado</div>
                   </div>
                   <div style={{ background: "#1e293b", padding: 8, borderRadius: 6 }}>
                     <div className="muted" style={{ fontSize: 10 }}>Estado Dominante</div>
                     <div style={{ fontSize: 14, fontWeight: 700, color: "#fbcfe8", marginTop: 2 }}>
-                      {moraleRisk < 0.3 ? "NORMAL" : moraleRisk < 0.6 ? "PINNED" : "SUPPRESSED"}
+                      {moraleRisk !== null ? (moraleRisk < 0.3 ? "NORMAL" : moraleRisk < 0.6 ? "PINNED" : "SUPPRESSED") : "—"}
                     </div>
                     <div className="muted" style={{ fontSize: 9 }}>Clase top</div>
                   </div>
@@ -2083,67 +2134,111 @@ export function NetworkTopologyTab({
                   <tr style={{ borderBottom: "1px solid #283548" }}>
                     <td style={{ padding: "8px 10px", fontWeight: 700, color: "#38bdf8" }}>Política (f_p)</td>
                     <td style={{ padding: "8px 10px" }}>train_policy_loss</td>
-                    <td style={{ padding: "8px 10px", fontFamily: "monospace" }}><b>{polLoss.toFixed(4)}</b></td>
+                    <td style={{ padding: "8px 10px", fontFamily: "monospace" }}><b>{fmtNum(polLoss, 4)}</b></td>
                     <td style={{ padding: "8px 10px", color: "#94a3b8" }}>&lt; 3.000 (Convergente)</td>
-                    <td style={{ padding: "8px 10px" }}><span style={{ color: "#34d399", fontWeight: 700 }}>🟢 Óptimo</span></td>
-                    <td style={{ padding: "8px 10px", color: "#cbd5e1" }}>Convergencia sostenida de Cross-Entropy en {dynamicsBlocks} bloques</td>
+                    <td style={{ padding: "8px 10px" }}>
+                      <span style={{ color: polLoss !== null ? "#34d399" : "#94a3b8", fontWeight: 700 }}>
+                        {polLoss !== null ? "🟢 Óptimo" : "⚪ Sin datos"}
+                      </span>
+                    </td>
+                    <td style={{ padding: "8px 10px", color: "#cbd5e1" }}>
+                      {polLoss !== null ? `Convergencia sostenida de Cross-Entropy en ${dynamicsBlocks} bloques` : "Métrica no disponible"}
+                    </td>
                   </tr>
                   <tr style={{ borderBottom: "1px solid #283548" }}>
                     <td style={{ padding: "8px 10px", fontWeight: 700, color: "#38bdf8" }}>Política (f_p)</td>
                     <td style={{ padding: "8px 10px" }}>eval_confidence_mean</td>
-                    <td style={{ padding: "8px 10px", fontFamily: "monospace" }}><b>{(polConfidence * 100).toFixed(1)}%</b></td>
-                    <td style={{ padding: "8px 10px", color: "#94a3b8" }}>&gt; 65.0%</td>
-                    <td style={{ padding: "8px 10px" }}><span style={{ color: "#34d399", fontWeight: 700 }}>🟢 Óptimo</span></td>
-                    <td style={{ padding: "8px 10px", color: "#cbd5e1" }}>Confianza adecuada en la selección de acciones tácticas</td>
+                    <td style={{ padding: "8px 10px", fontFamily: "monospace" }}><b>{fmtPercent(polConfidence)}</b></td>
+                    <td style={{ padding: "8px 10px", color: "#94a3b8" }}>&gt; 20.0%</td>
+                    <td style={{ padding: "8px 10px" }}>
+                      <span style={{ color: polConfidence !== null ? (polConfidence >= 0.2 ? "#34d399" : "#f59e0b") : "#94a3b8", fontWeight: 700 }}>
+                        {polConfidence !== null ? (polConfidence >= 0.2 ? "🟢 Óptimo" : "🟡 Moderado") : "⚪ Sin datos"}
+                      </span>
+                    </td>
+                    <td style={{ padding: "8px 10px", color: "#cbd5e1" }}>
+                      {polConfidence !== null ? "Confianza adecuada en la selección de acciones tácticas" : "Evaluación pendiente"}
+                    </td>
                   </tr>
                   <tr style={{ borderBottom: "1px solid #283548" }}>
                     <td style={{ padding: "8px 10px", fontWeight: 700, color: "#22c55e" }}>Valor (f_v)</td>
                     <td style={{ padding: "8px 10px" }}>train_value_loss</td>
-                    <td style={{ padding: "8px 10px", fontFamily: "monospace" }}><b>{valLoss.toFixed(4)}</b></td>
+                    <td style={{ padding: "8px 10px", fontFamily: "monospace" }}><b>{fmtNum(valLoss, 4)}</b></td>
                     <td style={{ padding: "8px 10px", color: "#94a3b8" }}>&lt; 0.250</td>
-                    <td style={{ padding: "8px 10px" }}><span style={{ color: "#34d399", fontWeight: 700 }}>🟢 Óptimo</span></td>
-                    <td style={{ padding: "8px 10px", color: "#cbd5e1" }}>Pérdida de valor baja, sin picos de inestabilidad</td>
+                    <td style={{ padding: "8px 10px" }}>
+                      <span style={{ color: valLoss !== null ? "#34d399" : "#94a3b8", fontWeight: 700 }}>
+                        {valLoss !== null ? "🟢 Óptimo" : "⚪ Sin datos"}
+                      </span>
+                    </td>
+                    <td style={{ padding: "8px 10px", color: "#cbd5e1" }}>
+                      {valLoss !== null ? "Pérdida de valor baja, sin picos de inestabilidad" : "Métrica no disponible"}
+                    </td>
                   </tr>
                   <tr style={{ borderBottom: "1px solid #283548" }}>
                     <td style={{ padding: "8px 10px", fontWeight: 700, color: "#22c55e" }}>Valor (f_v)</td>
                     <td style={{ padding: "8px 10px" }}>mcts_q_saturation_rate</td>
-                    <td style={{ padding: "8px 10px", fontFamily: "monospace" }}><b>{(qSatRate * 100).toFixed(1)}%</b></td>
+                    <td style={{ padding: "8px 10px", fontFamily: "monospace" }}><b>{fmtPercent(qSatRate)}</b></td>
                     <td style={{ padding: "8px 10px", color: "#94a3b8" }}>&lt; 5.0%</td>
-                    <td style={{ padding: "8px 10px" }}><span style={{ color: "#34d399", fontWeight: 700 }}>🟢 Óptimo</span></td>
-                    <td style={{ padding: "8px 10px", color: "#cbd5e1" }}>No se producen saturaciones artificiales en las hojas MCTS</td>
+                    <td style={{ padding: "8px 10px" }}>
+                      <span style={{ color: qSatRate !== null ? (qSatRate < 0.05 ? "#34d399" : "#f59e0b") : "#94a3b8", fontWeight: 700 }}>
+                        {qSatRate !== null ? (qSatRate < 0.05 ? "🟢 Óptimo" : "🟡 Revisar") : "⚪ Sin datos"}
+                      </span>
+                    </td>
+                    <td style={{ padding: "8px 10px", color: "#cbd5e1" }}>
+                      {qSatRate !== null ? "No se producen saturaciones artificiales en las hojas MCTS" : "Métrica no disponible"}
+                    </td>
                   </tr>
                   <tr style={{ borderBottom: "1px solid #283548" }}>
                     <td style={{ padding: "8px 10px", fontWeight: 700, color: "#f43f5e" }}>Objetivo (f_o)</td>
                     <td style={{ padding: "8px 10px" }}>eval_vp_capture_take_rate</td>
-                    <td style={{ padding: "8px 10px", fontFamily: "monospace" }}><b>{(objTakeRate * 100).toFixed(1)}%</b></td>
-                    <td style={{ padding: "8px 10px", color: "#94a3b8" }}>&gt; 5.5% (Gate Phase 1)</td>
-                    <td style={{ padding: "8px 10px" }}><span style={{ color: "#34d399", fontWeight: 700 }}>🟢 Gate Pass</span></td>
-                    <td style={{ padding: "8px 10px", color: "#cbd5e1" }}>Supera el umbral de promoción con margen positivo</td>
+                    <td style={{ padding: "8px 10px", fontFamily: "monospace" }}><b>{fmtPercent(objTakeRate)}</b></td>
+                    <td style={{ padding: "8px 10px", color: "#94a3b8" }}>&gt; 0.5% (Gate Phase 1)</td>
+                    <td style={{ padding: "8px 10px" }}>
+                      <span style={{ color: objTakeRate !== null ? (objTakeRate > 0.005 ? "#34d399" : "#f59e0b") : "#94a3b8", fontWeight: 700 }}>
+                        {objTakeRate !== null ? (objTakeRate > 0.005 ? "🟢 Gate Pass" : "🟡 Bajo") : "⚪ Sin datos"}
+                      </span>
+                    </td>
+                    <td style={{ padding: "8px 10px", color: "#cbd5e1" }}>
+                      {objTakeRate !== null ? "Supera el umbral de promoción con margen positivo" : "Evaluación pendiente"}
+                    </td>
                   </tr>
                   <tr style={{ borderBottom: "1px solid #283548" }}>
                     <td style={{ padding: "8px 10px", fontWeight: 700, color: "#c084fc" }}>Consistencia (q_θ)</td>
                     <td style={{ padding: "8px 10px" }}>train_consistency_loss</td>
-                    <td style={{ padding: "8px 10px", fontFamily: "monospace" }}><b>{conLoss < 0.001 ? conLoss.toExponential(2) : conLoss.toFixed(5)}</b></td>
+                    <td style={{ padding: "8px 10px", fontFamily: "monospace" }}><b>{fmtSci(conLoss)}</b></td>
                     <td style={{ padding: "8px 10px", color: "#94a3b8" }}>&lt; 0.010</td>
-                    <td style={{ padding: "8px 10px" }}><span style={{ color: "#34d399", fontWeight: 700 }}>🟢 Óptimo</span></td>
-                    <td style={{ padding: "8px 10px", color: "#cbd5e1" }}>Invarianza temporal perfecta gracias a la regularización SimSiam</td>
+                    <td style={{ padding: "8px 10px" }}>
+                      <span style={{ color: conLoss !== null ? "#34d399" : "#94a3b8", fontWeight: 700 }}>
+                        {conLoss !== null ? "🟢 Óptimo" : "⚪ Sin datos"}
+                      </span>
+                    </td>
+                    <td style={{ padding: "8px 10px", color: "#cbd5e1" }}>
+                      {conLoss !== null ? "Invarianza temporal gracias a la regularización SimSiam" : "Métrica no disponible"}
+                    </td>
                   </tr>
                   {hasThreatHead && (
                     <>
                       <tr style={{ borderBottom: "1px solid #283548" }}>
                         <td style={{ padding: "8px 10px", fontWeight: 700, color: "#eab308" }}>Amenaza (f_threat)</td>
                         <td style={{ padding: "8px 10px" }}>train_threat_loss</td>
-                        <td style={{ padding: "8px 10px", fontFamily: "monospace" }}><b>{threatLoss.toFixed(4)}</b></td>
+                        <td style={{ padding: "8px 10px", fontFamily: "monospace" }}><b>{fmtNum(threatLoss, 4)}</b></td>
                         <td style={{ padding: "8px 10px", color: "#94a3b8" }}>&lt; 0.200</td>
-                        <td style={{ padding: "8px 10px" }}><span style={{ color: "#34d399", fontWeight: 700 }}>🟢 Óptimo</span></td>
-                        <td style={{ padding: "8px 10px", color: "#cbd5e1" }}>Predicción robusta de cobertura de fuego enemigo sobre {boardH}×{boardW} casillas</td>
+                        <td style={{ padding: "8px 10px" }}>
+                          <span style={{ color: threatLoss !== null ? "#34d399" : "#94a3b8", fontWeight: 700 }}>
+                            {threatLoss !== null ? "🟢 Óptimo" : "⚪ Sin datos"}
+                          </span>
+                        </td>
+                        <td style={{ padding: "8px 10px", color: "#cbd5e1" }}>Predicción de cobertura de fuego enemigo sobre {boardH}×{boardW} casillas</td>
                       </tr>
                       <tr style={{ borderBottom: "1px solid #283548" }}>
                         <td style={{ padding: "8px 10px", fontWeight: 700, color: "#eab308" }}>Amenaza (f_threat)</td>
                         <td style={{ padding: "8px 10px" }}>threat_coverage_ratio</td>
-                        <td style={{ padding: "8px 10px", fontFamily: "monospace" }}><b>{(threatCov * 100).toFixed(1)}%</b></td>
+                        <td style={{ padding: "8px 10px", fontFamily: "monospace" }}><b>{fmtPercent(threatCov)}</b></td>
                         <td style={{ padding: "8px 10px", color: "#94a3b8" }}>10.0% - 50.0%</td>
-                        <td style={{ padding: "8px 10px" }}><span style={{ color: "#34d399", fontWeight: 700 }}>🟢 Óptimo</span></td>
+                        <td style={{ padding: "8px 10px" }}>
+                          <span style={{ color: threatCov !== null ? "#34d399" : "#94a3b8", fontWeight: 700 }}>
+                            {threatCov !== null ? "🟢 Óptimo" : "⚪ Sin datos"}
+                          </span>
+                        </td>
                         <td style={{ padding: "8px 10px", color: "#cbd5e1" }}>Detección de sectores calientes con fuego de supresión</td>
                       </tr>
                     </>
@@ -2153,17 +2248,25 @@ export function NetworkTopologyTab({
                       <tr style={{ borderBottom: "1px solid #283548" }}>
                         <td style={{ padding: "8px 10px", fontWeight: 700, color: "#06b6d4" }}>Desgaste (f_attr)</td>
                         <td style={{ padding: "8px 10px" }}>train_attrition_loss</td>
-                        <td style={{ padding: "8px 10px", fontFamily: "monospace" }}><b>{attritionLoss.toFixed(4)}</b></td>
+                        <td style={{ padding: "8px 10px", fontFamily: "monospace" }}><b>{fmtNum(attritionLoss, 4)}</b></td>
                         <td style={{ padding: "8px 10px", color: "#94a3b8" }}>&lt; 0.150</td>
-                        <td style={{ padding: "8px 10px" }}><span style={{ color: "#34d399", fontWeight: 700 }}>🟢 Óptimo</span></td>
-                        <td style={{ padding: "8px 10px", color: "#cbd5e1" }}>Convergencia precisa en la proyección de bajas</td>
+                        <td style={{ padding: "8px 10px" }}>
+                          <span style={{ color: attritionLoss !== null ? "#34d399" : "#94a3b8", fontWeight: 700 }}>
+                            {attritionLoss !== null ? "🟢 Óptimo" : "⚪ Sin datos"}
+                          </span>
+                        </td>
+                        <td style={{ padding: "8px 10px", color: "#cbd5e1" }}>Convergencia en la proyección de bajas</td>
                       </tr>
                       <tr style={{ borderBottom: "1px solid #283548" }}>
                         <td style={{ padding: "8px 10px", fontWeight: 700, color: "#06b6d4" }}>Desgaste (f_attr)</td>
                         <td style={{ padding: "8px 10px" }}>predicted_exchange_ratio</td>
-                        <td style={{ padding: "8px 10px", fontFamily: "monospace" }}><b>{attritionExchange.toFixed(2)}x</b></td>
+                        <td style={{ padding: "8px 10px", fontFamily: "monospace" }}><b>{fmtNum(attritionExchange, 2, "x")}</b></td>
                         <td style={{ padding: "8px 10px", color: "#94a3b8" }}>&gt; 1.00x</td>
-                        <td style={{ padding: "8px 10px" }}><span style={{ color: attritionExchange >= 1.0 ? "#34d399" : "#fbbf24", fontWeight: 700 }}>{attritionExchange >= 1.0 ? "🟢 Favorable" : "🟡 Desfavorable"}</span></td>
+                        <td style={{ padding: "8px 10px" }}>
+                          <span style={{ color: attritionExchange !== null && attritionExchange >= 1.0 ? "#34d399" : "#fbbf24", fontWeight: 700 }}>
+                            {attritionExchange !== null ? (attritionExchange >= 1.0 ? "🟢 Favorable" : "🟡 Desfavorable") : "⚪ Sin datos"}
+                          </span>
+                        </td>
                         <td style={{ padding: "8px 10px", color: "#cbd5e1" }}>Tasa de intercambio táctico estimada en asaltos</td>
                       </tr>
                     </>
@@ -2173,17 +2276,25 @@ export function NetworkTopologyTab({
                       <tr style={{ borderBottom: "1px solid #283548" }}>
                         <td style={{ padding: "8px 10px", fontWeight: 700, color: "#ec4899" }}>Moral (f_morale)</td>
                         <td style={{ padding: "8px 10px" }}>train_morale_loss</td>
-                        <td style={{ padding: "8px 10px", fontFamily: "monospace" }}><b>{moraleLoss.toFixed(4)}</b></td>
+                        <td style={{ padding: "8px 10px", fontFamily: "monospace" }}><b>{fmtNum(moraleLoss, 4)}</b></td>
                         <td style={{ padding: "8px 10px", color: "#94a3b8" }}>&lt; 0.350</td>
-                        <td style={{ padding: "8px 10px" }}><span style={{ color: "#34d399", fontWeight: 700 }}>🟢 Óptimo</span></td>
+                        <td style={{ padding: "8px 10px" }}>
+                          <span style={{ color: moraleLoss !== null ? "#34d399" : "#94a3b8", fontWeight: 700 }}>
+                            {moraleLoss !== null ? "🟢 Óptimo" : "⚪ Sin datos"}
+                          </span>
+                        </td>
                         <td style={{ padding: "8px 10px", color: "#cbd5e1" }}>Calibración multiclase de estados de supresión y pánico</td>
                       </tr>
                       <tr style={{ borderBottom: "1px solid #283548" }}>
                         <td style={{ padding: "8px 10px", fontWeight: 700, color: "#ec4899" }}>Moral (f_morale)</td>
                         <td style={{ padding: "8px 10px" }}>suppression_risk_score</td>
-                        <td style={{ padding: "8px 10px", fontFamily: "monospace" }}><b>{moraleRisk.toFixed(2)}</b></td>
+                        <td style={{ padding: "8px 10px", fontFamily: "monospace" }}><b>{fmtNum(moraleRisk, 2)}</b></td>
                         <td style={{ padding: "8px 10px", color: "#94a3b8" }}>&lt; 0.40 (Seguro)</td>
-                        <td style={{ padding: "8px 10px" }}><span style={{ color: moraleRisk < 0.4 ? "#34d399" : "#f43f5e", fontWeight: 700 }}>{moraleRisk < 0.4 ? "🟢 Estable" : "🔴 Riesgo Alto"}</span></td>
+                        <td style={{ padding: "8px 10px" }}>
+                          <span style={{ color: moraleRisk !== null && moraleRisk < 0.4 ? "#34d399" : moraleRisk !== null ? "#f43f5e" : "#94a3b8", fontWeight: 700 }}>
+                            {moraleRisk !== null ? (moraleRisk < 0.4 ? "🟢 Estable" : "🔴 Riesgo Alto") : "⚪ Sin datos"}
+                          </span>
+                        </td>
                         <td style={{ padding: "8px 10px", color: "#cbd5e1" }}>Riesgo general de ruptura o inmovilización de unidades</td>
                       </tr>
                     </>

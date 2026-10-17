@@ -112,6 +112,14 @@ def aggregate_muzero_eval_kpis(result_rows: List[Dict]) -> Dict[str, float]:
         "opportunity_conversion_early_rate",
         "opportunity_conversion_mid_rate",
         "opportunity_conversion_late_rate",
+        "threat_coverage_ratio",
+        "threat_max",
+        "threat_mean",
+        "predicted_exchange_ratio",
+        "predicted_friendly_casualties",
+        "predicted_enemy_casualties",
+        "suppression_risk_score",
+        "objective_pred_prob",
     ]
     out: Dict[str, float] = {}
     out.update(_sum_kpi_keys(muzero_rows, count_keys))
@@ -158,6 +166,14 @@ def build_phase29_eval_kpis_from_seed_rows(
         "xai_latent_signal_coverage",
         "xai_vp_capture_take_rate",
         "xai_vp_immediate_capture_take_rate",
+        "threat_coverage_ratio",
+        "threat_max",
+        "threat_mean",
+        "predicted_exchange_ratio",
+        "predicted_friendly_casualties",
+        "predicted_enemy_casualties",
+        "suppression_risk_score",
+        "objective_pred_prob",
     ]
     sum_keys = [
         "reaction_fire_damage_sum",
@@ -203,6 +219,14 @@ def build_phase29_eval_kpis_from_seed_rows(
         "xai_latent_signal_coverage": float(means["xai_latent_signal_coverage"]),
         "xai_vp_capture_take_rate": float(means["xai_vp_capture_take_rate"]),
         "xai_vp_immediate_capture_take_rate": float(means["xai_vp_immediate_capture_take_rate"]),
+        "threat_coverage_ratio": float(means.get("threat_coverage_ratio", 0.0)),
+        "threat_max": float(means.get("threat_max", 0.0)),
+        "threat_mean": float(means.get("threat_mean", 0.0)),
+        "predicted_exchange_ratio": float(means.get("predicted_exchange_ratio", 0.0)),
+        "predicted_friendly_casualties": float(means.get("predicted_friendly_casualties", 0.0)),
+        "predicted_enemy_casualties": float(means.get("predicted_enemy_casualties", 0.0)),
+        "suppression_risk_score": float(means.get("suppression_risk_score", 0.0)),
+        "objective_pred_prob": float(means.get("objective_pred_prob", 0.0)),
         "opportunity_conversion_early_opportunity_steps": opp_early,
         "opportunity_conversion_early_converted_steps": conv_early,
         "opportunity_conversion_early_rate": (

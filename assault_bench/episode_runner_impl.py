@@ -162,7 +162,13 @@ def _run_episode_with_policy_impl(
     if int(max_steps_override) > 0:
         effective_max_steps = int(max_steps_override)
     elif scenario_turn_limit is not None and int(scenario_turn_limit) > 0 and unit_count > 0:
-        effective_max_steps = int(scenario_turn_limit) * int(unit_count)
+        # Guarantee fidelity to scenario: allow sufficient step budget for all turns,
+        # including unit activations, reaction/opportunity fire windows, and combat phases.
+        # Step cap acts as a safety watchdog against infinite loops, not an early cutoff.
+        scenario_step_budget = int(scenario_turn_limit) * max(int(unit_count) * 3, 25)
+        effective_max_steps = max(int(max_steps), scenario_step_budget, 200)
+    else:
+        effective_max_steps = max(int(max_steps), 200)
     total_reward = 0.0
     steps = 0
     terminal = False
@@ -517,6 +523,12 @@ def _run_episode_with_policy_impl(
                     ),
                     "mcts": _head_state("complete", ""),
                 }
+                if "threat_coverage_ratio" in xai_root:
+                    head_states["threat_map"] = _head_state("complete", "")
+                if "predicted_exchange_ratio" in xai_root:
+                    head_states["attrition"] = _head_state("complete", "")
+                if "suppression_risk_score" in xai_root:
+                    head_states["morale"] = _head_state("complete", "")
             else:
                 head_states = {h: _head_state("none", "model_not_loaded") for h in HEAD_NAMES}
         action_kind = _action_kind_from_id(action)
@@ -537,12 +549,47 @@ def _run_episode_with_policy_impl(
             phase29["xai_policy_margin_sum"] += float(margin)
             if str(latent_top_dims).strip():
                 phase29["xai_latent_signal_steps"] += 1
+
+            if "threat_coverage_ratio" in xai_root:
+                phase29["threat_coverage_sum"] += float(xai_root.get("threat_coverage_ratio", 0.0))
+                phase29["threat_max_sum"] += float(xai_root.get("threat_max", 0.0))
+                phase29["threat_mean_sum"] += float(xai_root.get("threat_mean", 0.0))
+                phase29["tactical_steps"] += 1
+            if "predicted_exchange_ratio" in xai_root:
+                phase29["attrition_exchange_sum"] += float(xai_root.get("predicted_exchange_ratio", 0.0))
+                phase29["attrition_friendly_cas_sum"] += float(xai_root.get("predicted_friendly_casualties", 0.0))
+                phase29["attrition_enemy_cas_sum"] += float(xai_root.get("predicted_enemy_casualties", 0.0))
+                phase29["attrition_steps"] += 1
+            if "suppression_risk_score" in xai_root:
+                phase29["morale_risk_sum"] += float(xai_root.get("suppression_risk_score", 0.0))
+                phase29["morale_steps"] += 1
+            if "objective_pred_prob" in xai_root:
+                phase29["objective_pred_prob_sum"] += float(xai_root.get("objective_pred_prob", 0.0))
+                phase29["objective_steps"] += 1
+
             side_bucket = phase29_by_side.setdefault(active_side, _new_phase29_bucket())
             side_bucket["xai_decision_steps"] += 1
             side_bucket["xai_policy_confidence_sum"] += float(chosen_prob)
             side_bucket["xai_policy_margin_sum"] += float(margin)
             if str(latent_top_dims).strip():
                 side_bucket["xai_latent_signal_steps"] += 1
+
+            if "threat_coverage_ratio" in xai_root:
+                side_bucket["threat_coverage_sum"] += float(xai_root.get("threat_coverage_ratio", 0.0))
+                side_bucket["threat_max_sum"] += float(xai_root.get("threat_max", 0.0))
+                side_bucket["threat_mean_sum"] += float(xai_root.get("threat_mean", 0.0))
+                side_bucket["tactical_steps"] += 1
+            if "predicted_exchange_ratio" in xai_root:
+                side_bucket["attrition_exchange_sum"] += float(xai_root.get("predicted_exchange_ratio", 0.0))
+                side_bucket["attrition_friendly_cas_sum"] += float(xai_root.get("predicted_friendly_casualties", 0.0))
+                side_bucket["attrition_enemy_cas_sum"] += float(xai_root.get("predicted_enemy_casualties", 0.0))
+                side_bucket["attrition_steps"] += 1
+            if "suppression_risk_score" in xai_root:
+                side_bucket["morale_risk_sum"] += float(xai_root.get("suppression_risk_score", 0.0))
+                side_bucket["morale_steps"] += 1
+            if "objective_pred_prob" in xai_root:
+                side_bucket["objective_pred_prob_sum"] += float(xai_root.get("objective_pred_prob", 0.0))
+                side_bucket["objective_steps"] += 1
         action_parts = str(action or "").split(":")
         acting_unit_id = action_parts[1] if len(action_parts) > 1 else ""
         acting_unit = obs_unit_by_id.get(str(acting_unit_id), None)

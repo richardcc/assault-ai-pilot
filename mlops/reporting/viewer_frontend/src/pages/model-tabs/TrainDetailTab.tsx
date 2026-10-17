@@ -1,5 +1,5 @@
 import type { Dict, TrainRow } from "../../types";
-import { formatLocalDate } from "../../dateUtils";
+import { calculateDurationSeconds, formatDuration, formatDurationDetailed, formatLocalDate } from "../../dateUtils";
 
 export function TrainDetailTab({
   trainRow,
@@ -25,8 +25,22 @@ export function TrainDetailTab({
   const optCfg = (config.optimization || {}) as Dict;
   const selfplayCfg = (config.selfplay || {}) as Dict;
 
+  let dur = typeof trainRow.duration_seconds === "number" ? trainRow.duration_seconds : null;
+  if (dur === null || dur === undefined) {
+    dur = calculateDurationSeconds(
+      trainRow.phase_started_at as string | undefined,
+      trainRow.phase_finished_at as string | undefined
+    );
+  }
+
   const kpis: Array<{ k: string; v: string; highlight?: boolean }> = [
     { k: "run_id", v: String(trainRow.run_id || "-") },
+    { k: "curriculum_phase", v: String(trainRow.curriculum_phase || "-"), highlight: Boolean(trainRow.curriculum_phase) },
+    {
+      k: "⏱️ phase_duration",
+      v: dur !== null && dur >= 0 ? formatDurationDetailed(dur) : "-",
+      highlight: dur !== null && dur >= 0,
+    },
     { k: "scenario_id", v: String(trainRow.scenario_id || "-") },
     { k: "created_at", v: formatLocalDate(trainRow.created_at_utc) },
     { k: "git_commit", v: String(trainRow.git_commit || "-").slice(0, 10) },
@@ -55,7 +69,11 @@ export function TrainDetailTab({
   for (const sk of statKeys) {
     if (sk in summary && summary[sk] !== undefined && summary[sk] !== null) {
       const num = Number(summary[sk]);
-      metricCards.push({ k: sk, v: Number.isFinite(num) ? (num < 0.01 && num > 0 ? num.toExponential(3) : num.toFixed(2)) : String(summary[sk]) });
+      let displayVal = Number.isFinite(num) ? (num < 0.01 && num > 0 ? num.toExponential(3) : num.toFixed(2)) : String(summary[sk]);
+      if ((sk === "wall_time_seconds" || sk === "elapsed_s") && Number.isFinite(num)) {
+        displayVal = `${formatDuration(num)} (${num.toFixed(1)}s)`;
+      }
+      metricCards.push({ k: sk, v: displayVal });
     }
   }
 

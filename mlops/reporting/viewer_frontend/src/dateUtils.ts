@@ -28,3 +28,45 @@ export function formatLocalDate(isoUtc?: string | null): string {
 
   return `${year}-${month}-${day} ${hours}:${mins}:${secs}`;
 }
+
+export function calculateDurationSeconds(startIso?: string | null, endIso?: string | null): number | null {
+  if (!startIso || !endIso) return null;
+  const rawS = String(startIso).trim();
+  const rawE = String(endIso).trim();
+  if (!rawS || !rawE || rawS === "-" || rawE === "-") return null;
+
+  const sHasTz = rawS.endsWith("Z") || rawS.includes("+") || /-\d{2}:\d{2}$/.test(rawS);
+  const eHasTz = rawE.endsWith("Z") || rawE.includes("+") || /-\d{2}:\d{2}$/.test(rawE);
+
+  const startMs = new Date(sHasTz ? rawS : `${rawS}Z`).getTime();
+  const endMs = new Date(eHasTz ? rawE : `${rawE}Z`).getTime();
+
+  if (isNaN(startMs) || isNaN(endMs) || endMs < startMs) return null;
+  return (endMs - startMs) / 1000;
+}
+
+export function formatDuration(seconds?: number | null): string {
+  if (seconds === undefined || seconds === null || isNaN(seconds) || seconds < 0) return "-";
+  if (seconds < 60) return `${Math.round(seconds)}s`;
+  const totalMins = Math.floor(seconds / 60);
+  const remainingSecs = Math.round(seconds % 60);
+  if (totalMins < 60) {
+    return remainingSecs > 0 ? `${totalMins}m ${remainingSecs}s` : `${totalMins}m`;
+  }
+  const hours = Math.floor(totalMins / 60);
+  const mins = totalMins % 60;
+  return mins > 0 ? `${hours}h ${mins}m` : `${hours}h`;
+}
+
+export function formatDurationDetailed(seconds?: number | null): string {
+  if (seconds === undefined || seconds === null || isNaN(seconds) || seconds < 0) return "-";
+  if (seconds < 60) return `${Math.round(seconds)} segundos`;
+  const totalMins = Math.floor(seconds / 60);
+  const remainingSecs = Math.round(seconds % 60);
+  if (totalMins < 60) {
+    return `${totalMins} min ${remainingSecs} seg`;
+  }
+  const hours = Math.floor(totalMins / 60);
+  const mins = totalMins % 60;
+  return `${hours}h ${mins}m ${remainingSecs}s`;
+}

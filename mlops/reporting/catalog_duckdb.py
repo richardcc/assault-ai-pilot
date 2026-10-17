@@ -58,6 +58,13 @@ def build_catalog_duckdb_from_parquet(
             )
         try:
             con.execute(f"CREATE OR REPLACE TABLE catalog_evals AS SELECT * FROM read_parquet('{evals_pq.as_posix()}')")
+            con.execute("ALTER TABLE catalog_evals ADD COLUMN IF NOT EXISTS results_count BIGINT")
+            con.execute("ALTER TABLE catalog_evals ADD COLUMN IF NOT EXISTS has_results BOOLEAN")
+            con.execute("ALTER TABLE catalog_evals ADD COLUMN IF NOT EXISTS head_diagnostics_json VARCHAR")
+            con.execute("ALTER TABLE catalog_evals ADD COLUMN IF NOT EXISTS diagnostics_summary_json VARCHAR")
+            con.execute("ALTER TABLE catalog_evals ADD COLUMN IF NOT EXISTS phase_gate_json VARCHAR")
+            con.execute("ALTER TABLE catalog_evals ADD COLUMN IF NOT EXISTS scenario_ids_json VARCHAR")
+            con.execute("ALTER TABLE catalog_evals ADD COLUMN IF NOT EXISTS compact_results_json VARCHAR")
         except Exception:
             con.execute(
                 """
@@ -70,12 +77,23 @@ def build_catalog_duckdb_from_parquet(
                     ''::VARCHAR AS train_run_id,
                     ''::VARCHAR AS scenario_id,
                     ''::VARCHAR AS created_at_utc,
-                    ''::VARCHAR AS source_path
+                    ''::VARCHAR AS source_path,
+                    ''::VARCHAR AS curriculum_phase,
+                    0::BIGINT AS results_count,
+                    FALSE::BOOLEAN AS has_results,
+                    NULL::VARCHAR AS head_diagnostics_json,
+                    NULL::VARCHAR AS diagnostics_summary_json,
+                    NULL::VARCHAR AS phase_gate_json,
+                    NULL::VARCHAR AS scenario_ids_json,
+                    NULL::VARCHAR AS compact_results_json
                 WHERE FALSE
                 """
             )
         try:
             con.execute(f"CREATE OR REPLACE TABLE catalog_trains AS SELECT * FROM read_parquet('{trains_pq.as_posix()}')")
+            con.execute("ALTER TABLE catalog_trains ADD COLUMN IF NOT EXISTS summary_json VARCHAR")
+            con.execute("ALTER TABLE catalog_trains ADD COLUMN IF NOT EXISTS observation_channels_json VARCHAR")
+            con.execute("ALTER TABLE catalog_trains ADD COLUMN IF NOT EXISTS channel_effectiveness_json VARCHAR")
         except Exception:
             con.execute(
                 """
@@ -90,7 +108,11 @@ def build_catalog_duckdb_from_parquet(
                     ''::VARCHAR AS git_commit,
                     FALSE::BOOLEAN AS is_retrain,
                     ''::VARCHAR AS parent_run_id,
-                    ''::VARCHAR AS latest_checkpoint
+                    ''::VARCHAR AS curriculum_phase,
+                    ''::VARCHAR AS latest_checkpoint,
+                    NULL::VARCHAR AS summary_json,
+                    NULL::VARCHAR AS observation_channels_json,
+                    NULL::VARCHAR AS channel_effectiveness_json
                 WHERE FALSE
                 """
             )

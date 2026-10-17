@@ -67,7 +67,7 @@ from assault_bench.benchmark_orchestrator import (
     resolve_bench_device_choice as _resolve_bench_device_choice,
     run_benchmark,
 )
-from assault_bench.benchmark_matchup_planner import resolve_enabled_profiles as _resolve_enabled_profiles
+from assault_bench.benchmark_runtime_utils import resolve_enabled_profiles as _resolve_enabled_profiles
 
 from assault_bench.decision_candidate_utils import canonicalize_decision_candidates
 from assault_bench.episode_runner_helpers import (
@@ -114,6 +114,8 @@ from agents.efficientzero_v2.core.selfplay import (
 from agents.efficientzero_v2.core.mcts import run_mcts_puct as run_mcts_puct_ezv2
 from agents.muzero.adapter_voec import MuZeroVOECAdapter
 from agents.muzero.core.mcts import run_mcts_puct as run_mcts_puct_muzero
+
+run_mcts_puct = run_mcts_puct_muzero
 from agents.muzero.core.selfplay import (
     observation_to_tensor,
     observation_to_vector,
@@ -144,6 +146,7 @@ _is_vp_capture_taken_for_metrics = _vp_is_vp_capture_taken_for_metrics
 _axial_distance = _vx_axial_distance
 _parse_action_target_hex = _vp_parse_action_target_hex
 _extract_vp_hexes = _vp_extract_vp_hexes
+_resolve_vp_horizon_selected_fields = _es_resolve_vp_horizon_selected_fields
 
 
 _outcome_bucket_from_class = _om_outcome_bucket_from_class

@@ -22,6 +22,9 @@ from mlops.reporting.catalog_duckdb import load_catalog_summary_from_duckdb
 from mlops.reporting.model_api import (
     build_train_summary_payload as _build_train_summary_payload,
 )
+from mlops.reporting.model_deletion import (
+    delete_model_experiment as _delete_model_experiment,
+)
 from mlops.reporting.replay_api import (
     build_muzero_replay_payload as _build_muzero_replay_payload,
     build_replay_log_payload as _build_replay_log_payload,
@@ -628,6 +631,25 @@ def serve(
                         return
                     report = _run_channel_attribution_job(repo_root=repo_root, run_id=run_id)
                     self._send_json_status({"ok": True, "report": report}, status_code=200)
+                except Exception as exc:
+                    self._send_json_status({"ok": False, "error": str(exc)}, status_code=500)
+                return
+            if norm_path == "/api/v2/delete-model":
+                try:
+                    content_length = int(self.headers.get("Content-Length", 0))
+                    body = self.rfile.read(content_length) if content_length > 0 else b"{}"
+                    data = json.loads(body.decode("utf-8")) if body else {}
+                    model_id = str(data.get("model_id") or "").strip()
+                    engine = str(data.get("engine") or "").strip()
+                    if not model_id:
+                        qs = parse_qs(parsed.query)
+                        model_id = str(qs.get("model_id", [""])[0] or "").strip()
+                        engine = str(qs.get("engine", [""])[0] or "").strip()
+                    if not model_id:
+                        self._send_json_status({"ok": False, "error": "missing_model_id"}, status_code=400)
+                        return
+                    result = _delete_model_experiment(repo_root=repo_root, model_id=model_id, engine=engine)
+                    self._send_json_status(result, status_code=200)
                 except Exception as exc:
                     self._send_json_status({"ok": False, "error": str(exc)}, status_code=500)
                 return

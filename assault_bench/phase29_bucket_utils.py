@@ -27,6 +27,18 @@ def new_phase29_bucket() -> Dict[str, float]:
         "xai_vp_capture_taken_steps": 0,
         "xai_vp_immediate_capture_opportunity_steps": 0,
         "xai_vp_immediate_capture_taken_steps": 0,
+        "threat_coverage_sum": 0.0,
+        "threat_max_sum": 0.0,
+        "threat_mean_sum": 0.0,
+        "tactical_steps": 0,
+        "attrition_exchange_sum": 0.0,
+        "attrition_friendly_cas_sum": 0.0,
+        "attrition_enemy_cas_sum": 0.0,
+        "attrition_steps": 0,
+        "morale_risk_sum": 0.0,
+        "morale_steps": 0,
+        "objective_pred_prob_sum": 0.0,
+        "objective_steps": 0,
     }
 
 
@@ -36,6 +48,10 @@ def finalize_phase29(bucket: Dict[str, float]) -> Dict[str, float]:
     xai_den = max(1, int(bucket["xai_decision_steps"]))
     xai_cap_den = max(1, int(bucket["xai_vp_capture_opportunity_steps"]))
     xai_immediate_cap_den = max(1, int(bucket["xai_vp_immediate_capture_opportunity_steps"]))
+    tactical_den = max(1, int(bucket.get("tactical_steps", 0)))
+    attrition_den = max(1, int(bucket.get("attrition_steps", 0)))
+    morale_den = max(1, int(bucket.get("morale_steps", 0)))
+    objective_den = max(1, int(bucket.get("objective_steps", 0)))
     return {
         "reaction_window_count": int(bucket["reaction_window_count"]),
         "reaction_fire_count": int(bucket["reaction_fire_count"]),
@@ -79,4 +95,12 @@ def finalize_phase29(bucket: Dict[str, float]) -> Dict[str, float]:
         "xai_vp_immediate_capture_take_rate": (
             float(bucket["xai_vp_immediate_capture_taken_steps"]) / float(xai_immediate_cap_den)
         ),
+        "threat_coverage_ratio": (float(bucket.get("threat_coverage_sum", 0.0)) / float(tactical_den)) if int(bucket.get("tactical_steps", 0)) > 0 else 0.0,
+        "threat_max": (float(bucket.get("threat_max_sum", 0.0)) / float(tactical_den)) if int(bucket.get("tactical_steps", 0)) > 0 else 0.0,
+        "threat_mean": (float(bucket.get("threat_mean_sum", 0.0)) / float(tactical_den)) if int(bucket.get("tactical_steps", 0)) > 0 else 0.0,
+        "predicted_exchange_ratio": (float(bucket.get("attrition_exchange_sum", 0.0)) / float(attrition_den)) if int(bucket.get("attrition_steps", 0)) > 0 else 0.0,
+        "predicted_friendly_casualties": (float(bucket.get("attrition_friendly_cas_sum", 0.0)) / float(attrition_den)) if int(bucket.get("attrition_steps", 0)) > 0 else 0.0,
+        "predicted_enemy_casualties": (float(bucket.get("attrition_enemy_cas_sum", 0.0)) / float(attrition_den)) if int(bucket.get("attrition_steps", 0)) > 0 else 0.0,
+        "suppression_risk_score": (float(bucket.get("morale_risk_sum", 0.0)) / float(morale_den)) if int(bucket.get("morale_steps", 0)) > 0 else 0.0,
+        "objective_pred_prob": (float(bucket.get("objective_pred_prob_sum", 0.0)) / float(objective_den)) if int(bucket.get("objective_steps", 0)) > 0 else 0.0,
     }

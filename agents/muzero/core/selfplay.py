@@ -1077,7 +1077,18 @@ def priors_and_values_from_model(
             obs_tensor = observation.unsqueeze(0).to(model_device)
         else:
             obs_tensor = torch.tensor([observation], dtype=torch.float32, device=model_device)
-        hidden, policy_logits, value_root, _ = model.initial_inference(obs_tensor)
+        aux_dict = {}
+        try:
+            inf_res = model.initial_inference(obs_tensor, return_aux=True)
+            if isinstance(inf_res, tuple) and len(inf_res) >= 5:
+                hidden, policy_logits, value_root, _, aux_dict = inf_res
+                aux_dict = dict(aux_dict or {})
+            elif isinstance(inf_res, tuple) and len(inf_res) >= 4:
+                hidden, policy_logits, value_root, _ = inf_res[:4]
+            else:
+                hidden, policy_logits, value_root, _ = model.initial_inference(obs_tensor)
+        except TypeError:
+            hidden, policy_logits, value_root, _ = model.initial_inference(obs_tensor)
         logits = policy_logits[0]
 
         legal_indices = [
@@ -1133,6 +1144,7 @@ def priors_and_values_from_model(
         "hidden": hidden.detach(),
         "policy_logits": logits.detach(),
         "value_root": value_root.detach(),
+        "aux": aux_dict,
     }
     return priors, values, root_cache
 
@@ -1148,6 +1160,42 @@ def xai_root_signals_from_root_cache(
     hidden = (dict(root_cache or {})).get("hidden", None)
     logits = (dict(root_cache or {})).get("policy_logits", None)
     value_root = (dict(root_cache or {})).get("value_root", None)
+    aux = dict((dict(root_cache or {})).get("aux", {}) or {})
+
+    tactical_signals: dict[str, Any] = {}
+    if aux:
+        threat_pred = aux.get("threat_map_pred")
+        if threat_pred is not None:
+            t_flat = threat_pred.detach().cpu().float().view(-1)
+            if (t_flat < 0.0).any() or (t_flat > 1.0).any():
+                t_probs = torch.sigmoid(t_flat)
+            else:
+                t_probs = t_flat
+            tactical_signals["threat_coverage_ratio"] = float((t_probs >= 0.5).float().mean().item())
+            tactical_signals["threat_max"] = float(t_probs.max().item())
+            tactical_signals["threat_mean"] = float(t_probs.mean().item())
+
+        attr_pred = aux.get("attrition_pred")
+        if attr_pred is not None:
+            a_flat = attr_pred.detach().cpu().float().view(-1)
+            f_cas = max(0.0, float(a_flat[0].item())) if len(a_flat) >= 1 else 0.0
+            e_cas = max(0.0, float(a_flat[1].item())) if len(a_flat) >= 2 else 0.0
+            ratio = float(e_cas / max(1e-4, f_cas))
+            tactical_signals["predicted_friendly_casualties"] = f_cas
+            tactical_signals["predicted_enemy_casualties"] = e_cas
+            tactical_signals["predicted_exchange_ratio"] = ratio
+
+        morale_pred = aux.get("morale_pred")
+        if morale_pred is not None:
+            m_flat = morale_pred.detach().cpu().float().view(-1)
+            m_probs = torch.softmax(m_flat, dim=-1)
+            risk = float(sum(m_probs[i].item() * (i / max(1, len(m_probs) - 1)) for i in range(len(m_probs))))
+            tactical_signals["suppression_risk_score"] = risk
+
+        obj_pred = aux.get("objective_logit")
+        if obj_pred is not None:
+            tactical_signals["objective_pred_prob"] = float(torch.sigmoid(obj_pred.detach().cpu().float()).item())
+
     if hidden is None or logits is None or value_root is None:
         return {
             "policy_top_actions": [],
@@ -1156,6 +1204,7 @@ def xai_root_signals_from_root_cache(
             "latent_top_values": [],
             "latent_l2_norm": None,
             "predicted_value_root": None,
+            **tactical_signals,
         }
     hidden_vec = hidden[0].detach()
     hidden_flat = torch.flatten(hidden_vec)
@@ -1191,6 +1240,7 @@ def xai_root_signals_from_root_cache(
         "latent_top_values": latent_top_values,
         "latent_l2_norm": latent_l2_norm,
         "predicted_value_root": predicted_value_root,
+        **tactical_signals,
     }
 
 
@@ -1208,11 +1258,23 @@ def xai_root_signals_from_model(
             obs_tensor = observation.unsqueeze(0).to(model_device)
         else:
             obs_tensor = torch.tensor([observation], dtype=torch.float32, device=model_device)
-        hidden, policy_logits, value_root, _ = model.initial_inference(obs_tensor)
+        aux_dict = {}
+        try:
+            inf_res = model.initial_inference(obs_tensor, return_aux=True)
+            if isinstance(inf_res, tuple) and len(inf_res) >= 5:
+                hidden, policy_logits, value_root, _, aux_dict = inf_res
+                aux_dict = dict(aux_dict or {})
+            elif isinstance(inf_res, tuple) and len(inf_res) >= 4:
+                hidden, policy_logits, value_root, _ = inf_res[:4]
+            else:
+                hidden, policy_logits, value_root, _ = model.initial_inference(obs_tensor)
+        except TypeError:
+            hidden, policy_logits, value_root, _ = model.initial_inference(obs_tensor)
         cache = {
             "hidden": hidden.detach(),
             "policy_logits": policy_logits[0].detach(),
             "value_root": value_root.detach(),
+            "aux": aux_dict,
         }
     return xai_root_signals_from_root_cache(
         root_cache=cache,

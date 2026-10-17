@@ -7,6 +7,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Iterable
 from mlops.contracts_v2 import SCHEMA_VERSION_V2
+from mlops.reporting.viewer_data_access import _compact_eval_results
 
 
 def _read_json(path: Path) -> dict[str, Any]:
@@ -659,6 +660,9 @@ def _build_catalog_index_rows(
                 }
             )
             for tr in list((model or {}).get("train_history", []) or []):
+                summary_raw = dict((tr or {}).get("summary", {}) or (tr or {}).get("train_summary", {}) or {})
+                obs_raw = dict((tr or {}).get("observation_channels", {}) or {})
+                eff_raw = dict((tr or {}).get("channel_effectiveness", {}) or {})
                 rows_trains.append(
                     {
                         "schema_version": SCHEMA_VERSION_V2,
@@ -672,6 +676,9 @@ def _build_catalog_index_rows(
                         "parent_run_id": str((tr or {}).get("parent_run_id", "") or ""),
                         "curriculum_phase": str((tr or {}).get("curriculum_phase", "") or ""),
                         "latest_checkpoint": str((tr or {}).get("latest_checkpoint", "") or ""),
+                        "summary_json": json.dumps(summary_raw) if summary_raw else None,
+                        "observation_channels_json": json.dumps(obs_raw) if obs_raw else None,
+                        "channel_effectiveness_json": json.dumps(eff_raw) if eff_raw else None,
                     }
                 )
             for ev in list((model or {}).get("eval_history", []) or []):
@@ -686,6 +693,11 @@ def _build_catalog_index_rows(
                     for r in list((ev or {}).get("results", []) or [])
                     if isinstance(r, dict)
                 ]
+                compact_results = _compact_eval_results(eval_results_rows)
+                head_diag = dict((ev or {}).get("head_diagnostics_eval", {}) or {})
+                diag_summary = dict((ev or {}).get("diagnostics_summary_eval", {}) or {})
+                phase_gate = dict((ev or {}).get("phase_2_9_promotion_gate", {}) or {})
+                scen_ids = list((ev or {}).get("scenario_ids", []) or [])
                 rows_evals.append(
                     {
                         "schema_version": SCHEMA_VERSION_V2,
@@ -699,6 +711,11 @@ def _build_catalog_index_rows(
                         "curriculum_phase": curriculum_phase,
                         "results_count": int(len(eval_results_rows)),
                         "has_results": bool(len(eval_results_rows) > 0),
+                        "head_diagnostics_json": json.dumps(head_diag) if head_diag else None,
+                        "diagnostics_summary_json": json.dumps(diag_summary) if diag_summary else None,
+                        "phase_gate_json": json.dumps(phase_gate) if phase_gate else None,
+                        "scenario_ids_json": json.dumps(scen_ids) if scen_ids else None,
+                        "compact_results_json": json.dumps(compact_results) if compact_results else None,
                     }
                 )
                 for rr in eval_results_rows:

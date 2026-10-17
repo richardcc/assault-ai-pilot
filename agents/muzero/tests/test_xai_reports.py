@@ -179,3 +179,52 @@ def test_decision_report_with_heads_analysis_and_overrides():
     assert top_action["score"]["q_value"] == 0.82
     assert top_action["score"]["u_value"] == 0.08
 
+
+def test_decision_report_with_tactical_heads():
+    report = build_decision_report(
+        step=8,
+        actions=["flank:u2:left", "suppress:u1:target", "retreat:u3"],
+        probs=[0.6, 0.3, 0.1],
+        priors=[0.5, 0.3, 0.2],
+        values=[0.6, 0.4, -0.3],
+        visits=[18, 9, 3],
+        aux_outputs={
+            "threat_map_pred": [[0.8, 0.9], [0.1, 0.2]],
+            "attrition_pred": [0.1, 0.9],
+            "morale_pred": [-1.0, 0.5, 2.5, -0.5],
+        },
+    )
+
+    assert "heads_analysis" in report
+    heads = report["heads_analysis"]
+    aux = heads["auxiliary_heads"]
+
+    # Threat map assertions
+    assert "threat_map" in aux
+    threat = aux["threat_map"]
+    assert threat["max_threat"] >= 0.8
+    assert threat["high_threat_hex_count"] >= 2
+    assert threat["threat_coverage_ratio"] == 0.5
+
+    # Attrition assertions
+    assert "attrition" in aux
+    attr = aux["attrition"]
+    assert attr["predicted_friendly_casualties"] == 0.1
+    assert attr["predicted_enemy_casualties"] == 0.9
+    assert attr["is_favorable_exchange"] is True
+    assert attr["predicted_exchange_ratio"] > 1.0
+
+    # Morale assertions
+    assert "morale" in aux
+    morale = aux["morale"]
+    assert morale["predicted_morale_class"] == "SUPPRESSED"
+    assert morale["suppression_risk_score"] > 0.5
+
+    # Tactical insights check
+    insights = heads["tactical_insights"]
+    assert any("High battlefield threat detected" in s for s in insights)
+    assert any("Favorable tactical exchange predicted" in s for s in insights)
+    assert any("elevated morale/suppression risk" in s for s in insights)
+
+
+

@@ -37,6 +37,22 @@ const METRIC_ALIASES: Record<string, Record<string, string[]>> = {
     eval_vp_conversion_efficiency: ["vp_conversion_efficiency"],
     eval_vp_immediate_conversion_efficiency: ["vp_immediate_conversion_efficiency"],
   },
+  threat_map: {
+    threat_coverage_ratio: ["threat_coverage_ratio", "eval_threat_coverage_ratio"],
+    max_threat: ["max_threat", "eval_threat_max"],
+    mean_threat: ["mean_threat", "eval_threat_mean"],
+    train_threat_loss: ["aux_threat_loss", "threat_loss", "loss_threat"],
+  },
+  attrition: {
+    predicted_exchange_ratio: ["predicted_exchange_ratio", "eval_attrition_exchange_ratio"],
+    predicted_friendly_casualties: ["predicted_friendly_casualties", "eval_attrition_friendly_casualties"],
+    predicted_enemy_casualties: ["predicted_enemy_casualties", "eval_attrition_enemy_casualties"],
+    train_attrition_loss: ["aux_attrition_loss", "attrition_loss", "loss_attrition"],
+  },
+  morale: {
+    suppression_risk_score: ["suppression_risk_score", "eval_morale_suppression_risk"],
+    train_morale_loss: ["aux_morale_loss", "morale_loss", "loss_morale"],
+  },
 };
 
 function readMetricFromEvalRow(row: EvalRow, head: string, key: string): number | null {
@@ -223,6 +239,21 @@ export function HeadDiagnosticsTab({ evalRows }: { evalRows: EvalRow[] }) {
       ],
     },
     {
+      head: "Threat Map Head (Tactical)",
+      key: "threat_map",
+      metrics: ["train_threat_loss", "threat_coverage_ratio", "mean_threat", "max_threat"],
+    },
+    {
+      head: "Attrition Head (Tactical)",
+      key: "attrition",
+      metrics: ["train_attrition_loss", "predicted_exchange_ratio", "predicted_friendly_casualties", "predicted_enemy_casualties"],
+    },
+    {
+      head: "Morale Head (Tactical)",
+      key: "morale",
+      metrics: ["train_morale_loss", "suppression_risk_score"],
+    },
+    {
       head: "MCTS Search & Signals",
       key: "mcts",
       metrics: [
@@ -293,7 +324,13 @@ export function HeadDiagnosticsTab({ evalRows }: { evalRows: EvalRow[] }) {
             return {
               m,
               val: v,
-              fmt: v === null ? "N/A" : m.includes("rate") || m.includes("coverage") || m.includes("efficiency") ? pct(v) : num(v),
+              fmt: v === null
+                ? "N/A"
+                : m.includes("exchange_ratio")
+                ? `${v.toFixed(2)}x`
+                : m.includes("rate") || m.includes("coverage") || m.includes("efficiency")
+                ? pct(v)
+                : num(v),
             };
           });
           const available = rows.filter((r) => r.val !== null).length;

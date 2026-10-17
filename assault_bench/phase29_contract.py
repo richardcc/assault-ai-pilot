@@ -211,6 +211,22 @@ def build_head_diagnostics_eval(
             "eval_reaction_window_count": float(eval_kpis.get("reaction_window_count", 0.0)),
             "eval_melee_attempts": float(eval_kpis.get("melee_attempts", 0.0)),
         },
+        "threat_map": {
+            "train_threat_loss": float(train_summary.get("aux_threat_loss", 0.0) or train_summary.get("threat_loss", 0.0) or 0.0),
+            "threat_coverage_ratio": float(eval_kpis.get("threat_coverage_ratio", 0.0)),
+            "max_threat": float(eval_kpis.get("threat_max", 0.0)),
+            "mean_threat": float(eval_kpis.get("threat_mean", 0.0)),
+        },
+        "attrition": {
+            "train_attrition_loss": float(train_summary.get("aux_attrition_loss", 0.0) or train_summary.get("attrition_loss", 0.0) or 0.0),
+            "predicted_exchange_ratio": float(eval_kpis.get("predicted_exchange_ratio", 0.0)),
+            "predicted_friendly_casualties": float(eval_kpis.get("predicted_friendly_casualties", 0.0)),
+            "predicted_enemy_casualties": float(eval_kpis.get("predicted_enemy_casualties", 0.0)),
+        },
+        "morale": {
+            "train_morale_loss": float(train_summary.get("aux_morale_loss", 0.0) or train_summary.get("morale_loss", 0.0) or 0.0),
+            "suppression_risk_score": float(eval_kpis.get("suppression_risk_score", 0.0)),
+        },
         "source": {"train": "metrics/summary.json", "eval": "bench.phase_2_9_eval_kpis + benchmark results"},
     }
 

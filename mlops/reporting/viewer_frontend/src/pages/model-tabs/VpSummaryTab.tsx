@@ -103,6 +103,12 @@ interface BilateralMatchupRow {
   avgLost: string;
   avgKills: string;
   avgDmg: string;
+  isFirstInGroup?: boolean;
+  groupSize?: number;
+  isLastInGroup?: boolean;
+  isFirstInSideGroup?: boolean;
+  sideGroupSize?: number;
+  isLastInSideGroup?: boolean;
 }
 
 export function VpSummaryTab({
@@ -580,7 +586,53 @@ export function VpSummaryTab({
       });
     });
 
-    return list;
+    // 1. Group all rows by scenarioId so identical scenarios are strictly contiguous
+    const scenarioGroups = new Map<string, BilateralMatchupRow[]>();
+    for (const item of list) {
+      const scenKey = item.scenarioId || "-";
+      if (!scenarioGroups.has(scenKey)) {
+        scenarioGroups.set(scenKey, []);
+      }
+      scenarioGroups.get(scenKey)!.push(item);
+    }
+
+    const groupedList: BilateralMatchupRow[] = [];
+    for (const [, scenItems] of scenarioGroups) {
+      // 2. Within each scenario, group by sideKey (side + ownController) so identical sides are contiguous
+      const sideGroups = new Map<string, BilateralMatchupRow[]>();
+      for (const item of scenItems) {
+        const sideKey = `${item.side}__${item.ownController || ""}`;
+        if (!sideGroups.has(sideKey)) {
+          sideGroups.set(sideKey, []);
+        }
+        sideGroups.get(sideKey)!.push(item);
+      }
+
+      // Collect all rows for this scenario with side grouping metadata
+      const orderedScenRows: BilateralMatchupRow[] = [];
+      for (const [, sItems] of sideGroups) {
+        sItems.forEach((item, sIdx) => {
+          orderedScenRows.push({
+            ...item,
+            isFirstInSideGroup: sIdx === 0,
+            sideGroupSize: sItems.length,
+            isLastInSideGroup: sIdx === sItems.length - 1,
+          });
+        });
+      }
+
+      // Add scenario grouping metadata
+      orderedScenRows.forEach((item, scIdx) => {
+        groupedList.push({
+          ...item,
+          isFirstInGroup: scIdx === 0,
+          groupSize: orderedScenRows.length,
+          isLastInGroup: scIdx === orderedScenRows.length - 1,
+        });
+      });
+    }
+
+    return groupedList;
   }, [filteredResults, selectedSide, selectedEngine, selectedOpponent, selectedScenario, currentEval]);
 
   const hasActiveFilters =
@@ -998,22 +1050,60 @@ export function VpSummaryTab({
               const scoreColor = m.outcome_score > 0 ? "#22c55e" : m.outcome_score < 0 ? "#ef4444" : "#e2e8f0";
 
               return (
-                <tr key={m.key}>
-                  <td>
-                    <span style={{ color: "#38bdf8", fontWeight: 600, fontSize: 11 }}>
-                      {m.scenarioId || "-"}
-                    </span>
-                  </td>
-                  <td>
-                    <span style={{ color: m.sideColor, fontWeight: 700, fontSize: 13 }}>
-                      {m.side === "US" ? "🇺🇸 US" : m.side === "IT" ? "🇮🇹 IT" : m.side === "GE" ? "🇩🇪 GE" : m.side}
-                    </span>
-                    {Boolean(m.ownController) && (
-                      <span className="muted" style={{ fontSize: 11, marginLeft: 4 }}>
-                        ({m.ownController})
+                <tr
+                  key={m.key}
+                  style={{
+                    borderBottom: m.isLastInGroup ? "2px solid #334155" : "1px solid #1e293b",
+                  }}
+                >
+                  {m.isFirstInGroup && (
+                    <td
+                      rowSpan={m.groupSize}
+                      style={{
+                        verticalAlign: "middle",
+                        textAlign: "center",
+                        background: "#0c1527",
+                        borderRight: "1px solid #334155",
+                        borderBottom: "2px solid #334155",
+                        padding: "10px 8px",
+                      }}
+                    >
+                      <span style={{ color: "#38bdf8", fontWeight: 700, fontSize: 12, display: "inline-block" }}>
+                        {m.scenarioId || "-"}
                       </span>
-                    )}
-                  </td>
+                      <div className="muted" style={{ fontSize: 10, marginTop: 4 }}>
+                        ({m.groupSize} {m.groupSize === 1 ? "enfrentamiento" : "enfrentamientos"})
+                      </div>
+                    </td>
+                  )}
+                  {m.isFirstInSideGroup && (
+                    <td
+                      rowSpan={m.sideGroupSize}
+                      style={{
+                        verticalAlign: "middle",
+                        background: "#0f172a",
+                        borderRight: "1px solid #334155",
+                        borderBottom: m.isLastInGroup ? "2px solid #334155" : m.isLastInSideGroup ? "1px solid #334155" : undefined,
+                        padding: "8px 10px",
+                      }}
+                    >
+                      <div style={{ display: "flex", alignItems: "center", gap: 5, flexWrap: "wrap" }}>
+                        <span style={{ color: m.sideColor, fontWeight: 700, fontSize: 13 }}>
+                          {m.side === "US" ? "🇺🇸 US" : m.side === "IT" ? "🇮🇹 IT" : m.side === "GE" ? "🇩🇪 GE" : m.side}
+                        </span>
+                        {Boolean(m.ownController) && (
+                          <span className="muted" style={{ fontSize: 11 }}>
+                            ({m.ownController})
+                          </span>
+                        )}
+                      </div>
+                      {m.sideGroupSize && m.sideGroupSize > 1 ? (
+                        <div className="muted" style={{ fontSize: 10, marginTop: 4 }}>
+                          ({m.sideGroupSize} enf.)
+                        </div>
+                      ) : null}
+                    </td>
+                  )}
                   <td>
                     <span style={{ color: m.oppColor, fontWeight: 600, fontSize: 12 }}>
                       {m.oppSide === "US" ? "🇺🇸 US" : m.oppSide === "IT" ? "🇮🇹 IT" : m.oppSide === "GE" ? "🇩🇪 GE" : m.oppSide}
@@ -1117,22 +1207,60 @@ export function VpSummaryTab({
               const netColor = netVal > 0 ? "#22c55e" : netVal < 0 ? "#ef4444" : "#e2e8f0";
 
               return (
-                <tr key={m.key}>
-                  <td>
-                    <span style={{ color: "#38bdf8", fontWeight: 600, fontSize: 11 }}>
-                      {m.scenarioId || "-"}
-                    </span>
-                  </td>
-                  <td>
-                    <span style={{ color: m.sideColor, fontWeight: 700, fontSize: 13 }}>
-                      {m.side === "US" ? "🇺🇸 US" : m.side === "IT" ? "🇮🇹 IT" : m.side === "GE" ? "🇩🇪 GE" : m.side}
-                    </span>
-                    {Boolean(m.ownController) && (
-                      <span className="muted" style={{ fontSize: 11, marginLeft: 4 }}>
-                        ({m.ownController})
+                <tr
+                  key={m.key}
+                  style={{
+                    borderBottom: m.isLastInGroup ? "2px solid #334155" : "1px solid #1e293b",
+                  }}
+                >
+                  {m.isFirstInGroup && (
+                    <td
+                      rowSpan={m.groupSize}
+                      style={{
+                        verticalAlign: "middle",
+                        textAlign: "center",
+                        background: "#0c1527",
+                        borderRight: "1px solid #334155",
+                        borderBottom: "2px solid #334155",
+                        padding: "10px 8px",
+                      }}
+                    >
+                      <span style={{ color: "#38bdf8", fontWeight: 700, fontSize: 12, display: "inline-block" }}>
+                        {m.scenarioId || "-"}
                       </span>
-                    )}
-                  </td>
+                      <div className="muted" style={{ fontSize: 10, marginTop: 4 }}>
+                        ({m.groupSize} {m.groupSize === 1 ? "enfrentamiento" : "enfrentamientos"})
+                      </div>
+                    </td>
+                  )}
+                  {m.isFirstInSideGroup && (
+                    <td
+                      rowSpan={m.sideGroupSize}
+                      style={{
+                        verticalAlign: "middle",
+                        background: "#0f172a",
+                        borderRight: "1px solid #334155",
+                        borderBottom: m.isLastInGroup ? "2px solid #334155" : m.isLastInSideGroup ? "1px solid #334155" : undefined,
+                        padding: "8px 10px",
+                      }}
+                    >
+                      <div style={{ display: "flex", alignItems: "center", gap: 5, flexWrap: "wrap" }}>
+                        <span style={{ color: m.sideColor, fontWeight: 700, fontSize: 13 }}>
+                          {m.side === "US" ? "🇺🇸 US" : m.side === "IT" ? "🇮🇹 IT" : m.side === "GE" ? "🇩🇪 GE" : m.side}
+                        </span>
+                        {Boolean(m.ownController) && (
+                          <span className="muted" style={{ fontSize: 11 }}>
+                            ({m.ownController})
+                          </span>
+                        )}
+                      </div>
+                      {m.sideGroupSize && m.sideGroupSize > 1 ? (
+                        <div className="muted" style={{ fontSize: 10, marginTop: 3 }}>
+                          ({m.sideGroupSize} enf.)
+                        </div>
+                      ) : null}
+                    </td>
+                  )}
                   <td>
                     <span style={{ color: m.oppColor, fontWeight: 600, fontSize: 12 }}>
                       {m.oppSide === "US" ? "🇺🇸 US" : m.oppSide === "IT" ? "🇮🇹 IT" : m.oppSide === "GE" ? "🇩🇪 GE" : m.oppSide}

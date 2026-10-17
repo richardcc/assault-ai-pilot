@@ -78,6 +78,77 @@ def _compact_eval_results(results_raw: Any) -> list[dict[str, Any]]:
     return out
 
 
+_EVAL_FILE_CACHE: dict[str, tuple[float, dict[str, Any]]] = {}
+_TRACEABILITY_CACHE: tuple[float, dict[str, dict[str, Any]]] = (0.0, {})
+
+
+def _get_traceability_index(repo_root: Path) -> dict[str, dict[str, Any]]:
+    global _TRACEABILITY_CACHE
+    trace_path = (repo_root / "runs_curriculum/experiments/reporting/curriculum_phase_traceability.jsonl").resolve()
+    if not trace_path.exists():
+        return {}
+    try:
+        mtime = trace_path.stat().st_mtime
+        if _TRACEABILITY_CACHE[0] == mtime and _TRACEABILITY_CACHE[1]:
+            return _TRACEABILITY_CACHE[1]
+
+        index: dict[str, dict[str, Any]] = {}
+        from datetime import datetime
+
+        with trace_path.open("r", encoding="utf-8") as f:
+            for line in f:
+                if not line.strip():
+                    continue
+                d = json.loads(line)
+                tid = str(d.get("train_run_id") or "").strip()
+                eid = str(d.get("eval_run_id") or "").strip()
+                s = str(d.get("phase_started_at") or "").strip()
+                e = str(d.get("phase_finished_at") or "").strip()
+                dur = None
+                if s and e:
+                    try:
+                        t0 = datetime.fromisoformat(s.replace("Z", "+00:00"))
+                        t1 = datetime.fromisoformat(e.replace("Z", "+00:00"))
+                        dur = max(0.0, (t1 - t0).total_seconds())
+                    except Exception:
+                        pass
+                entry = {
+                    "phase_name": str(d.get("phase_name") or ""),
+                    "phase_started_at": s,
+                    "phase_finished_at": e,
+                    "duration_seconds": dur,
+                    "curriculum_name": str(d.get("curriculum_name") or ""),
+                    "promotion_decision": str(d.get("promotion_decision") or ""),
+                    "gate_result_status": str(d.get("gate_result_status") or ""),
+                }
+                if tid:
+                    index[tid] = entry
+                if eid:
+                    index[eid] = entry
+        _TRACEABILITY_CACHE = (mtime, index)
+        return index
+    except Exception:
+        return {}
+
+
+def _get_eval_file_payload(source_path: Path) -> dict[str, Any]:
+    if not source_path.exists():
+        return {}
+    try:
+        mtime = source_path.stat().st_mtime
+        key = str(source_path.resolve())
+        cached = _EVAL_FILE_CACHE.get(key)
+        if cached and cached[0] == mtime:
+            return cached[1]
+        loaded = json.loads(source_path.read_text(encoding="utf-8"))
+        if isinstance(loaded, dict):
+            _EVAL_FILE_CACHE[key] = (mtime, loaded)
+            return loaded
+    except Exception:
+        pass
+    return {}
+
+
 def load_eval_history_page_from_parquet(
     *,
     repo_root: Path,
@@ -158,20 +229,38 @@ def load_eval_history_page_from_parquet(
         row_sid = str(dict(result_row or {}).get("scenario_id", "") or "").strip()
         return bool(row_sid and row_sid == target and not row_sid.startswith("multi:"))
     for ev in page_rows:
-        source_path = Path(str(ev.get("source_path", "") or "")).expanduser()
+        head_diag_raw = ev.get("head_diagnostics_json")
+        compact_results_raw = ev.get("compact_results_json")
         parsed_payload: dict[str, Any] = {}
-        if source_path.exists():
+        source_path = Path(str(ev.get("source_path", "") or "")).expanduser()
+
+        if head_diag_raw or compact_results_raw:
+            # FAST PATH: Read directly from Parquet / DuckDB!
             try:
-                loaded = json.loads(source_path.read_text(encoding="utf-8"))
-                if isinstance(loaded, dict):
-                    parsed_payload = loaded
+                head_diag = json.loads(str(head_diag_raw)) if head_diag_raw else {}
             except Exception:
-                parsed_payload = {}
-        phase_gate = parsed_payload.get("phase_2_9_promotion_gate", ev.get("phase_2_9_promotion_gate", {}))
-        head_diag = parsed_payload.get("head_diagnostics_eval", ev.get("head_diagnostics_eval", {}))
-        diag_summary = parsed_payload.get("diagnostics_summary_eval", ev.get("diagnostics_summary_eval", {}))
-        results_raw = parsed_payload.get("results", ev.get("results", []))
-        results_all = _compact_eval_results(results_raw)
+                head_diag = {}
+            try:
+                diag_summary = json.loads(str(ev.get("diagnostics_summary_json", "{}"))) if ev.get("diagnostics_summary_json") else {}
+            except Exception:
+                diag_summary = {}
+            try:
+                phase_gate = json.loads(str(ev.get("phase_gate_json", "{}"))) if ev.get("phase_gate_json") else {}
+            except Exception:
+                phase_gate = {}
+            try:
+                results_all = json.loads(str(compact_results_raw)) if compact_results_raw else []
+            except Exception:
+                results_all = []
+        else:
+            # FALLBACK PATH: Read from disk with memory cache
+            parsed_payload = _get_eval_file_payload(source_path)
+            phase_gate = parsed_payload.get("phase_2_9_promotion_gate", ev.get("phase_2_9_promotion_gate", {}))
+            head_diag = parsed_payload.get("head_diagnostics_eval", ev.get("head_diagnostics_eval", {}))
+            diag_summary = parsed_payload.get("diagnostics_summary_eval", ev.get("diagnostics_summary_eval", {}))
+            results_raw = parsed_payload.get("results", ev.get("results", []))
+            results_all = _compact_eval_results(results_raw)
+
         results = [
             r for r in results_all
             if _result_matches_scenario(dict(r or {}), wanted_scenario)
@@ -271,9 +360,11 @@ def load_train_history_page_from_duckdb(
         ).fetchall()
         out_rows = []
         runs_roots = ["runs_curriculum", "runs"]
+        trace_index = _get_traceability_index(repo_root)
         for r in rows:
             run_id = str(r[0] or "")
             scenario_id = str(r[1] or "")
+            trace_entry = trace_index.get(run_id, {})
             row_obj: dict[str, Any] = {
                 "run_id": run_id,
                 "scenario_id": scenario_id,
@@ -282,6 +373,10 @@ def load_train_history_page_from_duckdb(
                 "is_retrain": bool(r[4]),
                 "parent_run_id": str(r[5] or ""),
                 "latest_checkpoint": str(r[6] or ""),
+                "curriculum_phase": str(trace_entry.get("phase_name") or ""),
+                "phase_started_at": str(trace_entry.get("phase_started_at") or ""),
+                "phase_finished_at": str(trace_entry.get("phase_finished_at") or ""),
+                "duration_seconds": trace_entry.get("duration_seconds"),
             }
             manifest = _load_train_manifest_by_run_id(
                 repo_root=repo_root, runs_roots=runs_roots, run_id=run_id
@@ -558,10 +653,7 @@ def load_model_detail_index_first(
     train_limit: int = 64,
     eval_limit: int = 64,
 ) -> dict[str, Any]:
-    catalog_payload = _load_catalog_payload_runtime(
-        repo_root=repo_root, catalog_rel_path=catalog_rel_path
-    )
-    runs_roots = list(catalog_payload.get("runs_roots", []) or ["runs_curriculum", "runs"])
+    runs_roots = ["runs_curriculum/experiments", "runs_curriculum", "runs"]
     summary = load_catalog_summary_from_duckdb(repo_root=repo_root)
     if str((summary or {}).get("error", "") or "").strip():
         return {"error": str(summary.get("error", ""))}

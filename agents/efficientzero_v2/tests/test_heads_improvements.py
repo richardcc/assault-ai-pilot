@@ -132,3 +132,144 @@ def test_trainer_with_two_hot_and_loss_balancer():
     assert metrics.loss > 0.0
     assert metrics.value_loss > 0.0
     assert metrics.reward_loss >= 0.0
+
+
+def test_tactical_heads_inference_and_aux():
+    """Verify inference and aux dictionary outputs for threat, attrition, and morale heads."""
+    # 1. Test CNN architecture with Spatial Attention
+    net_cnn = EfficientZeroV2Network(
+        observation_dim=4,
+        hidden_dim=32,
+        action_dim=16,
+        encoder_type="cnn",
+        observation_channels=8,
+        observation_height=16,
+        observation_width=16,
+        use_spatial_attention=True,
+        enable_threat_head=True,
+        enable_attrition_head=True,
+        enable_morale_head=True,
+        morale_classes=4,
+    )
+    b = 2
+    obs = torch.randn(b, 8, 16, 16)
+    hidden, policy, value, reward, aux = net_cnn.initial_inference(obs, return_aux=True)
+
+    assert "threat_map_pred" in aux
+    assert aux["threat_map_pred"].shape == (b, 1, 16, 16)
+    assert "attrition_pred" in aux
+    assert aux["attrition_pred"].shape == (b, 2)
+    assert "morale_pred" in aux
+    assert aux["morale_pred"].shape == (b, 4)
+
+    # Recurrent step
+    action = torch.zeros(b, 16)
+    action[0, 1] = 1.0
+    action[1, 5] = 1.0
+    next_h, next_p, next_v, next_r, next_aux = net_cnn.recurrent_inference(hidden, action, return_aux=True)
+    assert "threat_map_pred" in next_aux
+    assert next_aux["threat_map_pred"].shape == (b, 1, 16, 16)
+    assert "attrition_pred" in next_aux
+    assert next_aux["attrition_pred"].shape == (b, 2)
+    assert "morale_pred" in next_aux
+    assert next_aux["morale_pred"].shape == (b, 4)
+
+    # 2. Test MLP architecture
+    net_mlp = EfficientZeroV2Network(
+        observation_dim=8,
+        hidden_dim=16,
+        action_dim=4,
+        encoder_type="mlp",
+        observation_height=4,
+        observation_width=4,
+        enable_threat_head=True,
+        enable_attrition_head=True,
+        enable_morale_head=True,
+        morale_classes=4,
+    )
+    obs_mlp = torch.randn(b, 8)
+    h_m, p_m, v_m, r_m, aux_m = net_mlp.initial_inference(obs_mlp, return_aux=True)
+    assert aux_m["threat_map_pred"].shape == (b, 16)
+    assert aux_m["attrition_pred"].shape == (b, 2)
+    assert aux_m["morale_pred"].shape == (b, 4)
+
+    # 3. Test with heads disabled
+    net_disabled = EfficientZeroV2Network(
+        observation_dim=8,
+        hidden_dim=16,
+        action_dim=4,
+        encoder_type="mlp",
+        enable_threat_head=False,
+        enable_attrition_head=False,
+        enable_morale_head=False,
+    )
+    _, _, _, _, aux_dis = net_disabled.initial_inference(obs_mlp, return_aux=True)
+    assert "threat_map_pred" not in aux_dis
+    assert "attrition_pred" not in aux_dis
+    assert "morale_pred" not in aux_dis
+
+
+def test_trainer_with_tactical_heads_losses():
+    """Verify trainer computes threat, attrition, and morale aux losses with targets and fallbacks."""
+    model = EfficientZeroV2Network(
+        observation_dim=4,
+        hidden_dim=16,
+        action_dim=4,
+        encoder_type="cnn",
+        observation_channels=2,
+        observation_height=4,
+        observation_width=4,
+        enable_threat_head=True,
+        enable_attrition_head=True,
+        enable_morale_head=True,
+        morale_classes=4,
+    )
+    trainer = EfficientZeroV2Trainer(
+        model=model,
+        lr=1e-3,
+        aux_objective_enabled=True,
+        aux_threat_loss_weight=0.5,
+        aux_attrition_loss_weight=0.5,
+        aux_morale_loss_weight=0.5,
+        amp_enabled=False,
+    )
+
+    # Sample 1: Explicit targets
+    # Sample 2: Fallback target inference from gameplay metrics
+    batch = [
+        ReplaySample(
+            observation=torch.randn(2, 4, 4),
+            policy_target=[1.0, 0.0, 0.0, 0.0],
+            value_target=0.5,
+            reward_target=0.1,
+            info={
+                "threat_map_target": torch.ones(1, 4, 4),
+                "attrition_target": [0.2, 0.8],
+                "morale_target": 2,
+            },
+        ),
+        ReplaySample(
+            observation=torch.randn(2, 4, 4),
+            policy_target=[0.0, 1.0, 0.0, 0.0],
+            value_target=-0.2,
+            reward_target=0.0,
+            info={
+                "damage_dealt": 5.0,
+                "enemy_damage": 2.0,
+                "pinned": True,
+            },
+        ),
+    ]
+
+    metrics = trainer.train_batch(batch)
+    assert metrics.loss > 0.0
+    assert metrics.aux_objective_loss > 0.0
+    assert metrics.aux_threat_loss > 0.0
+    assert metrics.aux_attrition_loss > 0.0
+    assert metrics.aux_morale_loss > 0.0
+
+    metrics_dict = metrics.to_dict()
+    assert "aux_threat_loss" in metrics_dict
+    assert "aux_attrition_loss" in metrics_dict
+    assert "aux_morale_loss" in metrics_dict
+

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import {
+  deleteModelExperiment,
   fetchModel,
   fetchModelEvals,
   fetchReplayLog,
@@ -7,7 +8,7 @@ import {
   fetchReplaySteps,
   fetchTrainSummary,
 } from "../api";
-import { formatLocalDate } from "../dateUtils";
+import { calculateDurationSeconds, formatDuration, formatDurationDetailed, formatLocalDate } from "../dateUtils";
 import type { Dict, EvalResultRow, EvalRow, ModelPayload, ReplayMetaPayload, TrainRow } from "../types";
 import { TrainDetailTab } from "./model-tabs/TrainDetailTab";
 import { TrainHeadDiagnosticsTab } from "./model-tabs/TrainHeadDiagnosticsTab";
@@ -44,6 +45,7 @@ export function ModelPage() {
   const [selectedScenario, setSelectedScenario] = useState("__all__");
   const [selectedTrainRun, setSelectedTrainRun] = useState("");
   const [trainSummary, setTrainSummary] = useState<Dict | null>(null);
+  const [trainSummaryByRun, setTrainSummaryByRun] = useState<Record<string, Dict>>({});
 
   // Navegación de secciones
   const [section, setSection] = useState<SectionKey>("topology");
@@ -74,19 +76,29 @@ export function ModelPage() {
     void run();
   }, [engine, modelId]);
 
-  // 2. Cargar train summary al cambiar selectedTrainRun
+  // 2. Cargar train summary al cambiar selectedTrainRun (con caché cliente en memoria)
   useEffect(() => {
     if (!selectedTrainRun) return;
+    if (trainSummaryByRun[selectedTrainRun]) {
+      setTrainSummary(trainSummaryByRun[selectedTrainRun]);
+      return;
+    }
+    let cancelled = false;
     async function run() {
       try {
         const s = await fetchTrainSummary(selectedTrainRun);
+        if (cancelled) return;
         setTrainSummary(s);
+        setTrainSummaryByRun((prev) => ({ ...prev, [selectedTrainRun]: s }));
       } catch {
-        setTrainSummary(null);
+        if (!cancelled) setTrainSummary(null);
       }
     }
     void run();
-  }, [selectedTrainRun]);
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedTrainRun, trainSummaryByRun]);
 
   // 3. Cargar eval rows al cambiar train_run o scenario (con caché en memoria)
   useEffect(() => {
@@ -115,6 +127,23 @@ export function ModelPage() {
     () => (Array.isArray(model?.train_history) ? (model!.train_history as TrainRow[]) : []),
     [model]
   );
+
+  const totalModelTrainDurationSec = useMemo(() => {
+    let total = 0;
+    for (const t of trains) {
+      let dur = typeof t.duration_seconds === "number" ? t.duration_seconds : null;
+      if (dur === null || dur === undefined) {
+        dur = calculateDurationSeconds(
+          t.phase_started_at as string | undefined,
+          t.phase_finished_at as string | undefined
+        );
+      }
+      if (dur !== null && dur >= 0) {
+        total += dur;
+      }
+    }
+    return total;
+  }, [trains]);
 
   const selectedTrainRow = useMemo(
     () => trains.find((t) => String(t.run_id || "") === selectedTrainRun) || trains[0] || null,
@@ -232,6 +261,38 @@ export function ModelPage() {
           >
             ELO Leaderboard
           </button>
+          <button
+            onClick={async () => {
+              const target = String(model?.model_id || modelId || "");
+              if (!target) return;
+              if (
+                !window.confirm(
+                  `⚠️ ¿Estás seguro de que deseas ELIMINAR COMPLETAMENTE el experimento "${target}" y todos sus ficheros en disco?\nEsta acción no se puede deshacer.`
+                )
+              ) {
+                return;
+              }
+              try {
+                const res = await deleteModelExperiment(target, String(model?.engine || engine));
+                alert(`✅ Experimento eliminado con éxito (${res.freed_mb ?? 0} MB liberados).`);
+                window.location.href = "/";
+              } catch (err: any) {
+                alert(`❌ Error al eliminar experimento: ${err.message || err}`);
+              }
+            }}
+            style={{
+              background: "#ef444420",
+              border: "1px solid #ef444480",
+              color: "#fca5a5",
+              fontWeight: "bold",
+              fontSize: 11,
+              padding: "4px 8px",
+              cursor: "pointer",
+            }}
+            title="Eliminar este modelo y todos sus ficheros en disco"
+          >
+            🗑️ Eliminar Experimento
+          </button>
         </div>
       </div>
 
@@ -252,6 +313,16 @@ export function ModelPage() {
           <div className="kpi">
             <div className="k">config_fingerprint</div>
             <div className="v" style={{ wordBreak: "break-all", fontSize: 10 }}>{String(model?.config_fingerprint || "-")}</div>
+          </div>
+          <div className="kpi" style={{ borderLeft: "2px solid #38bdf8" }}>
+            <div className="k">⏱️ training_duration_total</div>
+            <div
+              className="v"
+              style={{ color: "#38bdf8", fontWeight: 700, fontSize: 13 }}
+              title={formatDurationDetailed(totalModelTrainDurationSec)}
+            >
+              {totalModelTrainDurationSec > 0 ? formatDuration(totalModelTrainDurationSec) : "-"}
+            </div>
           </div>
         </div>
       </div>
@@ -277,8 +348,31 @@ export function ModelPage() {
                   className={`item ${selectedTrainRun === String(t.run_id || "") ? "active" : ""}`}
                   onClick={() => setSelectedTrainRun(String(t.run_id || ""))}
                 >
-                  <div><b>{String(t.run_id || "")}</b></div>
-                  <div className="muted" style={{ fontSize: 11 }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                    <b>{String(t.run_id || "")}</b>
+                    {typeof t.duration_seconds === "number" && t.duration_seconds >= 0 && (
+                      <span
+                        style={{
+                          fontSize: 11,
+                          color: "#34d399",
+                          fontWeight: 700,
+                          background: "#10b98118",
+                          border: "1px solid #10b98140",
+                          padding: "1px 5px",
+                          borderRadius: 3,
+                        }}
+                        title={formatDurationDetailed(t.duration_seconds)}
+                      >
+                        ⏱️ {formatDuration(t.duration_seconds)}
+                      </span>
+                    )}
+                  </div>
+                  <div className="muted" style={{ fontSize: 11, marginTop: 3 }}>
+                    {t.curriculum_phase ? (
+                      <span style={{ color: "#38bdf8", fontWeight: 600, marginRight: 4 }}>
+                        [{t.curriculum_phase}]
+                      </span>
+                    ) : null}
                     {formatLocalDate(t.created_at_utc)} | {String(t.scenario_id || "")}
                   </div>
                 </div>

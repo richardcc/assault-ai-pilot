@@ -11,6 +11,10 @@ export interface TrainRow extends Dict {
   is_retrain?: boolean;
   parent_run_id?: string;
   latest_checkpoint?: string;
+  curriculum_phase?: string;
+  phase_started_at?: string;
+  phase_finished_at?: string;
+  duration_seconds?: number;
   config?: Dict;
   objective_reward_config?: {
     objective_signal?: Dict;

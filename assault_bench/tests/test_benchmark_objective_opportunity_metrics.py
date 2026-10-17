@@ -175,3 +175,41 @@ def test_opportunity_conversion_uses_objective_converted_not_only_capture_label(
     assert out["opportunity_conversion_early_opportunity_steps"] == 1
     assert out["opportunity_conversion_early_converted_steps"] == 1
     assert out["opportunity_conversion_early_rate"] == 1.0
+
+
+def test_head_diagnostics_includes_tactical_heads() -> None:
+    out = _build_head_diagnostics_eval(
+        train_summary={
+            "objective_loss": 0.1,
+            "aux_threat_loss": 0.045,
+            "aux_attrition_loss": 0.12,
+            "aux_morale_loss": 0.08,
+        },
+        eval_kpis={
+            "xai_decision_steps": 10.0,
+            "threat_coverage_ratio": 0.35,
+            "threat_max": 0.88,
+            "threat_mean": 0.22,
+            "predicted_exchange_ratio": 1.45,
+            "predicted_friendly_casualties": 0.8,
+            "predicted_enemy_casualties": 1.16,
+            "suppression_risk_score": 0.18,
+        },
+        muzero_row={"tracked_captured_avg": 0.0},
+    )
+    assert "threat_map" in out
+    assert out["threat_map"]["train_threat_loss"] == 0.045
+    assert out["threat_map"]["threat_coverage_ratio"] == 0.35
+    assert out["threat_map"]["max_threat"] == 0.88
+    assert out["threat_map"]["mean_threat"] == 0.22
+
+    assert "attrition" in out
+    assert out["attrition"]["train_attrition_loss"] == 0.12
+    assert out["attrition"]["predicted_exchange_ratio"] == 1.45
+    assert out["attrition"]["predicted_friendly_casualties"] == 0.8
+    assert out["attrition"]["predicted_enemy_casualties"] == 1.16
+
+    assert "morale" in out
+    assert out["morale"]["train_morale_loss"] == 0.08
+    assert out["morale"]["suppression_risk_score"] == 0.18
+

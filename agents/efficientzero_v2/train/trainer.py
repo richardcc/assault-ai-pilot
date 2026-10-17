@@ -24,6 +24,9 @@ class EfficientTrainMetrics(TrainMetrics):
     aux_objective_loss: float = 0.0
     aux_intent_loss: float = 0.0
     aux_multi_vp_loss: float = 0.0
+    aux_threat_loss: float = 0.0
+    aux_attrition_loss: float = 0.0
+    aux_morale_loss: float = 0.0
 
     def to_dict(self) -> Dict[str, float]:
         d = super().to_dict()
@@ -35,6 +38,9 @@ class EfficientTrainMetrics(TrainMetrics):
         d["aux_objective_loss"] = float(self.aux_objective_loss)
         d["aux_intent_loss"] = float(self.aux_intent_loss)
         d["aux_multi_vp_loss"] = float(self.aux_multi_vp_loss)
+        d["aux_threat_loss"] = float(self.aux_threat_loss)
+        d["aux_attrition_loss"] = float(self.aux_attrition_loss)
+        d["aux_morale_loss"] = float(self.aux_morale_loss)
         return d
 
 
@@ -65,6 +71,9 @@ class EfficientZeroV2Trainer(EfficientZeroV2BaseTrainer):
         aux_intent_loss_weight: float = 0.5,
         aux_multi_vp_loss_weight: float = 0.5,
         aux_multi_vp_feature_dim: int = 0,
+        aux_threat_loss_weight: float = 0.2,
+        aux_attrition_loss_weight: float = 0.2,
+        aux_morale_loss_weight: float = 0.2,
         compute_grad_norm: bool = True,
         progress_callback: Callable[[str], None] | None = None,
         gradient_balance_mode: str = "none",
@@ -106,6 +115,9 @@ class EfficientZeroV2Trainer(EfficientZeroV2BaseTrainer):
         self.aux_intent_loss_weight = float(max(0.0, aux_intent_loss_weight))
         self.aux_multi_vp_loss_weight = float(max(0.0, aux_multi_vp_loss_weight))
         self.aux_multi_vp_feature_dim = int(max(0, aux_multi_vp_feature_dim))
+        self.aux_threat_loss_weight = float(max(0.0, aux_threat_loss_weight))
+        self.aux_attrition_loss_weight = float(max(0.0, aux_attrition_loss_weight))
+        self.aux_morale_loss_weight = float(max(0.0, aux_morale_loss_weight))
         self.compute_grad_norm = bool(compute_grad_norm)
         self._progress_callback = progress_callback
         self.gradient_balance_mode = str(gradient_balance_mode or "none").lower().strip()
@@ -344,9 +356,80 @@ class EfficientZeroV2Trainer(EfficientZeroV2BaseTrainer):
                     target_rows.append(vals)
                 multi_vp_target = torch.tensor(target_rows, dtype=torch.float32, device=self.device)
                 aux_multi_vp_loss = F.smooth_l1_loss(aux["multi_vp_pred"], multi_vp_target)
+
+            aux_threat_loss = torch.tensor(0.0, dtype=torch.float32, device=self.device)
+            if (
+                isinstance(aux, dict)
+                and "threat_map_pred" in aux
+                and aux["threat_map_pred"] is not None
+                and self.aux_threat_loss_weight > 0.0
+            ):
+                threat_preds = aux["threat_map_pred"]
+                target_threats = []
+                for s in batch:
+                    info_dict = dict(s.info or {})
+                    if "threat_map_target" in info_dict:
+                        t = torch.as_tensor(info_dict["threat_map_target"], dtype=torch.float32)
+                    else:
+                        t = torch.zeros((1, getattr(self.model, "observation_height", 16), getattr(self.model, "observation_width", 16)), dtype=torch.float32)
+                    target_threats.append(t)
+                target_threats_t = torch.stack(target_threats, dim=0).to(self.device, non_blocking=True)
+                if target_threats_t.shape != threat_preds.shape:
+                    try:
+                        target_threats_t = target_threats_t.view_as(threat_preds)
+                    except Exception:
+                        if threat_preds.dim() == 2 and target_threats_t.dim() >= 3:
+                            target_threats_t = target_threats_t.view(target_threats_t.shape[0], -1)
+                        elif threat_preds.dim() == 4 and target_threats_t.dim() == 3:
+                            target_threats_t = target_threats_t.unsqueeze(1)
+                aux_threat_loss = F.binary_cross_entropy_with_logits(threat_preds, target_threats_t)
+
+            aux_attrition_loss = torch.tensor(0.0, dtype=torch.float32, device=self.device)
+            if (
+                isinstance(aux, dict)
+                and "attrition_pred" in aux
+                and aux["attrition_pred"] is not None
+                and self.aux_attrition_loss_weight > 0.0
+            ):
+                target_attritions = []
+                for s in batch:
+                    info_dict = dict(s.info or {})
+                    if "attrition_target" in info_dict:
+                        target_attritions.append(list(info_dict["attrition_target"][:2]))
+                    else:
+                        dmg = float(info_dict.get("damage_dealt", 0.0) or 0.0)
+                        edmg = float(info_dict.get("enemy_damage", 0.0) or 0.0)
+                        target_attritions.append([min(1.0, edmg / 10.0), min(1.0, dmg / 10.0)])
+                attrition_targets_t = torch.tensor(target_attritions, dtype=torch.float32, device=self.device)
+                aux_attrition_loss = F.smooth_l1_loss(aux["attrition_pred"], attrition_targets_t)
+
+            aux_morale_loss = torch.tensor(0.0, dtype=torch.float32, device=self.device)
+            if (
+                isinstance(aux, dict)
+                and "morale_pred" in aux
+                and aux["morale_pred"] is not None
+                and self.aux_morale_loss_weight > 0.0
+            ):
+                target_morales = []
+                for s in batch:
+                    info_dict = dict(s.info or {})
+                    if "morale_target" in info_dict:
+                        target_morales.append(int(info_dict["morale_target"]))
+                    else:
+                        is_supp = bool(info_dict.get("suppressed", False))
+                        is_pin = bool(info_dict.get("pinned", False))
+                        target_morales.append(2 if is_supp else (1 if is_pin else 0))
+                morale_targets_t = torch.tensor(target_morales, dtype=torch.long, device=self.device)
+                morale_classes = int(aux["morale_pred"].shape[-1])
+                morale_targets_t = torch.clamp(morale_targets_t, min=0, max=morale_classes - 1)
+                aux_morale_loss = F.cross_entropy(aux["morale_pred"], morale_targets_t)
+
             aux_objective_loss = (
                 (self.aux_intent_loss_weight * aux_intent_loss)
                 + (self.aux_multi_vp_loss_weight * aux_multi_vp_loss)
+                + (self.aux_threat_loss_weight * aux_threat_loss)
+                + (self.aux_attrition_loss_weight * aux_attrition_loss)
+                + (self.aux_morale_loss_weight * aux_morale_loss)
             )
 
             consistency_loss = torch.tensor(0.0, dtype=torch.float32, device=self.device)
@@ -491,6 +574,9 @@ class EfficientZeroV2Trainer(EfficientZeroV2BaseTrainer):
                 aux_objective_loss.detach().to(torch.float32),
                 aux_intent_loss.detach().to(torch.float32),
                 aux_multi_vp_loss.detach().to(torch.float32),
+                aux_threat_loss.detach().to(torch.float32),
+                aux_attrition_loss.detach().to(torch.float32),
+                aux_morale_loss.detach().to(torch.float32),
                 grad_norm_t.detach().to(torch.float32),
             ],
             dim=0,
@@ -503,7 +589,7 @@ class EfficientZeroV2Trainer(EfficientZeroV2BaseTrainer):
             value_loss=float(mv[2]),
             reward_loss=float(mv[3]),
             objective_loss=float(mv[4]),
-            grad_norm=float(mv[9]),
+            grad_norm=float(mv[12]),
             consistency_loss=float(mv[5]),
             reanalysis_coverage=float(reanalysis_coverage),
             reanalysis_target_drift=float(reanalysis_target_drift),
@@ -512,5 +598,8 @@ class EfficientZeroV2Trainer(EfficientZeroV2BaseTrainer):
             aux_objective_loss=float(mv[6]),
             aux_intent_loss=float(mv[7]),
             aux_multi_vp_loss=float(mv[8]),
+            aux_threat_loss=float(mv[9]),
+            aux_attrition_loss=float(mv[10]),
+            aux_morale_loss=float(mv[11]),
         )
 

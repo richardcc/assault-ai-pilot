@@ -17,6 +17,20 @@ from mlops.reporting.catalog_duckdb import (
 )
 
 
+def _is_pid_alive(pid: int) -> bool:
+    if pid <= 0:
+        return False
+    try:
+        os.kill(pid, 0)
+        return True
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True
+    except OSError:
+        return False
+
+
 @contextmanager
 def _catalog_publish_lock(repo_root: Path, timeout_s: float = 30.0, poll_s: float = 0.1):
     lock_path = (repo_root / "runs_curriculum" / "experiments" / "reporting" / ".catalog_v2_publish.lock").resolve()
@@ -29,7 +43,21 @@ def _catalog_publish_lock(repo_root: Path, timeout_s: float = 30.0, poll_s: floa
             os.write(lock_fd, str(os.getpid()).encode("utf-8"))
             break
         except FileExistsError:
+            try:
+                content = lock_path.read_text(encoding="utf-8").strip()
+                owning_pid = int(content) if content.isdigit() else -1
+                if owning_pid > 0 and not _is_pid_alive(owning_pid):
+                    lock_path.unlink(missing_ok=True)
+                    continue
+            except Exception:
+                pass
             if (time.monotonic() - start) >= float(timeout_s):
+                try:
+                    if (time.time() - lock_path.stat().st_mtime) >= float(timeout_s):
+                        lock_path.unlink(missing_ok=True)
+                        continue
+                except Exception:
+                    pass
                 raise TimeoutError(f"timeout acquiring catalog publish lock: {lock_path}")
             time.sleep(float(poll_s))
     try:

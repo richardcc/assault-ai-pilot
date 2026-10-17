@@ -109,4 +109,24 @@ export async function runChannelAttribution(runId: string): Promise<Dict> {
   return payload as Dict;
 }
 
+export async function deleteModelExperiment(modelId: string, engine = ""): Promise<Dict> {
+  const url = "/api/v2/delete-model";
+  const res = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ model_id: modelId, engine }),
+  });
+  const txt = await res.text();
+  let payload: any = {};
+  try {
+    payload = txt ? JSON.parse(txt) : {};
+  } catch {
+    payload = { error: `HTTP ${res.status}: ${txt.slice(0, 120)}` };
+  }
+  if (!res.ok) {
+    throw new Error(String(payload?.error || payload?.message || `HTTP ${res.status}`));
+  }
+  return payload as Dict;
+}
+
 

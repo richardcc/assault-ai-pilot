@@ -68,6 +68,27 @@ def _clean_list(v: Any) -> list:
     return [v]
 
 
+def _flatten_list(v: Any) -> list:
+    if v is None:
+        return []
+    if hasattr(v, "detach"):
+        v = v.detach()
+    if hasattr(v, "cpu"):
+        v = v.cpu()
+    if hasattr(v, "tolist"):
+        v = v.tolist()
+    if isinstance(v, (list, tuple)):
+        res = []
+        for item in v:
+            res.extend(_flatten_list(item))
+        return res
+    try:
+        return [float(v)]
+    except Exception:
+        return []
+
+
+
 def build_decision_report(
     step: int,
     actions: List[str],
@@ -278,6 +299,66 @@ def build_decision_report(
         if consistency_payload:
             auxiliary_summary["consistency"] = consistency_payload
 
+        # Threat map head
+        threat_payload: Dict[str, Any] = {}
+        if "threat_map_pred" in aux_dict and aux_dict["threat_map_pred"] is not None:
+            flat_vals = [float(x) for x in _flatten_list(aux_dict["threat_map_pred"])]
+            if flat_vals:
+                if any(v < 0.0 or v > 1.0 for v in flat_vals):
+                    probs = [_sigmoid(v) for v in flat_vals]
+                else:
+                    probs = flat_vals
+                max_t = float(max(probs))
+                mean_t = float(sum(probs) / len(probs))
+                high_threat_count = int(sum(1 for p in probs if p >= 0.5))
+                threat_payload = {
+                    "max_threat": max_t,
+                    "mean_threat": mean_t,
+                    "high_threat_hex_count": high_threat_count,
+                    "threat_coverage_ratio": float(high_threat_count / max(1, len(probs))),
+                }
+        if threat_payload:
+            auxiliary_summary["threat_map"] = threat_payload
+
+        # Attrition head
+        attrition_payload: Dict[str, Any] = {}
+        if "attrition_pred" in aux_dict and aux_dict["attrition_pred"] is not None:
+            vals = [float(x) for x in _flatten_list(aux_dict["attrition_pred"])]
+            if len(vals) >= 2:
+                f_cas = max(0.0, float(vals[0]))
+                e_cas = max(0.0, float(vals[1]))
+                exchange_ratio = float(e_cas / max(1e-4, f_cas))
+                attrition_payload = {
+                    "predicted_friendly_casualties": f_cas,
+                    "predicted_enemy_casualties": e_cas,
+                    "predicted_exchange_ratio": exchange_ratio,
+                    "is_favorable_exchange": bool(exchange_ratio >= 1.0),
+                }
+        if attrition_payload:
+            auxiliary_summary["attrition"] = attrition_payload
+
+        # Morale head
+        morale_payload: Dict[str, Any] = {}
+        if "morale_pred" in aux_dict and aux_dict["morale_pred"] is not None:
+            logits = [float(x) for x in _flatten_list(aux_dict["morale_pred"])]
+            probs = _softmax(logits)
+            morale_names = ["NORMAL", "PINNED", "SUPPRESSED", "ROUTED"]
+            if probs:
+                best_idx = int(max(range(len(probs)), key=lambda i: probs[i]))
+                best_name = morale_names[best_idx] if best_idx < len(morale_names) else f"CLASS_{best_idx}"
+                risk = float(sum(probs[i] * (i / max(1, len(probs) - 1)) for i in range(len(probs))))
+                morale_payload = {
+                    "predicted_morale_class": best_name,
+                    "class_probabilities": {
+                        (morale_names[i] if i < len(morale_names) else str(i)): float(probs[i])
+                        for i in range(len(probs))
+                    },
+                    "suppression_risk_score": risk,
+                    "is_high_suppression_risk": bool(risk >= 0.4),
+                }
+        if morale_payload:
+            auxiliary_summary["morale"] = morale_payload
+
         # 5. Tactical Insights generation
         tactical_insights: List[str] = []
         if is_overridden:
@@ -296,6 +377,27 @@ def build_decision_report(
             tactical_insights.append(
                 f"High action-value spread ({value_head_summary['value_spread']:.2f}) indicates a critical decision fork."
             )
+
+        if "threat_map" in auxiliary_summary:
+            t_info = auxiliary_summary["threat_map"]
+            if t_info.get("threat_coverage_ratio", 0.0) >= 0.3:
+                tactical_insights.append(
+                    f"High battlefield threat detected ({t_info['threat_coverage_ratio']*100:.1f}% hexes under enemy fire lines)."
+                )
+
+        if "attrition" in auxiliary_summary:
+            a_info = auxiliary_summary["attrition"]
+            if a_info.get("is_favorable_exchange", False):
+                tactical_insights.append(
+                    f"Favorable tactical exchange predicted (ratio {a_info['predicted_exchange_ratio']:.2f})."
+                )
+
+        if "morale" in auxiliary_summary:
+            m_info = auxiliary_summary["morale"]
+            if m_info.get("is_high_suppression_risk", False):
+                tactical_insights.append(
+                    f"Warning: elevated morale/suppression risk ({m_info['predicted_morale_class']}, risk={m_info['suppression_risk_score']:.2f})."
+                )
 
         if "objective" in auxiliary_summary:
             prob_obj = auxiliary_summary["objective"].get("predicted_prob")
