@@ -2731,7 +2731,23 @@ class _NativeEZV2SelfplayBackend:
             )
             done = bool(getattr(transition, "done", False))
             terminal_reason = str(getattr(getattr(transition, "state", None), "end_reason", "") or "")
-            reward = 0.0 if not done else (1.0 if str(getattr(getattr(transition, "state", None), "winner", "") or "") == str(getattr(obs, "to_play", "") or "") else -1.0)
+            cfg_shaping = dict(reward_shaping or {})
+            terminal_scale = float(cfg_shaping.get("terminal_scale", 1.0) or 1.0)
+            terminal_win_bonus = float(cfg_shaping.get("terminal_win_bonus", 0.0) or 0.0)
+            terminal_loss_penalty = float(cfg_shaping.get("terminal_loss_penalty", 0.0) or 0.0)
+            terminal_draw_bonus = float(cfg_shaping.get("terminal_draw_bonus", 0.0) or 0.0)
+
+            if not done:
+                reward = 0.0
+            else:
+                winner = getattr(getattr(transition, "state", None), "winner", None)
+                to_play = getattr(obs, "to_play", None)
+                if winner is not None and str(winner) == str(to_play):
+                    reward = terminal_scale * (1.0 + terminal_win_bonus)
+                elif winner is not None and str(winner) != str(to_play):
+                    reward = terminal_scale * (-1.0 - terminal_loss_penalty)
+                else:
+                    reward = terminal_scale * terminal_draw_bonus
             reaction_fire_soft_component, reaction_fire_success_proxy, reaction_fire_proxy_source = _reaction_fire_soft_signal(
                 action_kind=str(action_kind),
                 attack_dice_rolls=list(attack_dice_rolls),
@@ -2854,8 +2870,27 @@ class _NativeEZV2SelfplayBackend:
                 ),
                 float(cross_unit_synergy_component_default),
             )
+            damage_weight = float(cfg_shaping.get("damage_weight", 0.0) or 0.0)
+            kill_weight = float(cfg_shaping.get("kill_weight", 0.0) or 0.0)
+            capture_bonus = float(cfg_shaping.get("capture_bonus", 0.0) or 0.0)
+            vp_capture_bonus_per_hex = float(cfg_shaping.get("vp_capture_bonus_per_hex", 0.0) or 0.0)
+            idle_penalty = float(cfg_shaping.get("idle_penalty", 0.0) or 0.0)
+
+            combat_reward = (float(damage_dealt) * damage_weight) + (float(kills_dealt) * kill_weight)
+            capture_reward = (
+                float(vp_captures) * (capture_bonus + vp_capture_bonus_per_hex)
+                if int(vp_captures) > 0
+                else 0.0
+            )
+
+            is_wait_or_pass = "WAIT" in str(action_kind).upper() or "PASS" in str(action_kind).upper()
+            idle_component = idle_penalty if (is_wait_or_pass and not done and idle_penalty != 0.0) else 0.0
+
             reward = (
                 float(reward)
+                + float(combat_reward)
+                + float(capture_reward)
+                + float(idle_component)
                 + float(reaction_fire_soft_component)
                 + float(reaction_exposure_component)
                 + float(global_strategy_soft_component)
@@ -2914,6 +2949,9 @@ class _NativeEZV2SelfplayBackend:
                         "to_play": str(getattr(obs, "to_play", "") or ""),
                         "damage_dealt": float(damage_dealt),
                         "kills_dealt": int(kills_dealt),
+                        "combat_reward": float(combat_reward),
+                        "capture_reward": float(capture_reward),
+                        "idle_component": float(idle_component),
                         "expected_damage_proxy_selected": float(chosen_expected_damage_proxy),
                         "reaction_fire_success_proxy": float(reaction_fire_success_proxy),
                         "reaction_fire_proxy_source": str(reaction_fire_proxy_source),

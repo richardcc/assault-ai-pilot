@@ -1,0 +1,52 @@
+name: self_vs_self_deep_800sims_v1
+engine: efficientzero_v2
+version: v1
+description: >
+  Deep Assault Curriculum with high MCTS depth (640-800 simulations),
+  dynamic quality gated progression, Tactical Quality Score (TQS),
+  and multi-cycle reinforcement loops.
+
+phases:
+  - name: deep_phase1_mix_640sims
+    max_reinforcement_cycles: 4
+    train_config: curriculums/self_vs_self_deep_800sims_v1/configs/efficientzero_v2.deep_phase1_mix_640sims.yaml
+    eval_config: assault_bench/configs/benchmark_config.deep_phase1_640.yaml
+    gate:
+      min_tqs: 0.85
+      max_loss_rate: 0.0
+      min_tracked_captured_avg: 2.20
+      min_score: 0.85
+      profile_soft_guardrail:
+        muzero_vs_random_side_b:
+          severe_min_score: 0.03
+          max_score_drop_vs_prev: 0.20
+
+  - name: deep_phase2_dominant_720sims
+    max_reinforcement_cycles: 4
+    train_config: curriculums/self_vs_self_deep_800sims_v1/configs/efficientzero_v2.deep_phase2_dominant_720sims.yaml
+    eval_config: assault_bench/configs/benchmark_config.deep_phase2_720.yaml
+    gate:
+      min_tqs: 0.87
+      max_loss_rate: 0.0
+      min_tracked_captured_avg: 2.30
+      min_score: 0.88
+      no_regression_defeat_rate: true
+      profile_soft_guardrail:
+        muzero_vs_random_side_b:
+          severe_min_score: 0.03
+          max_score_drop_vs_prev: 0.20
+
+  - name: deep_phase3_pure_self_800sims
+    max_reinforcement_cycles: 5
+    train_config: curriculums/self_vs_self_deep_800sims_v1/configs/efficientzero_v2.deep_phase3_pure_self_800sims.yaml
+    eval_config: assault_bench/configs/benchmark_config.deep_phase3_800.yaml
+    gate:
+      min_tqs: 0.90
+      max_loss_rate: 0.0
+      min_tracked_captured_avg: 2.40
+      min_score: 0.90
+      no_regression_defeat_rate: true
+      profile_soft_guardrail:
+        muzero_vs_random_side_b:
+          severe_min_score: 0.03
+          max_score_drop_vs_prev: 0.20

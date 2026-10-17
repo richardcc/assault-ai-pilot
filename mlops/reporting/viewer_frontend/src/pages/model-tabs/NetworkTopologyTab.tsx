@@ -1338,6 +1338,9 @@ export function NetworkTopologyTab({
                 <marker id="arrow-green" viewBox="0 0 10 10" refX="6" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
                   <path d="M 0 1 L 8 5 L 0 9 z" fill="#10b981" />
                 </marker>
+                <marker id="arrow-purple" viewBox="0 0 10 10" refX="6" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+                  <path d="M 0 1 L 8 5 L 0 9 z" fill="#a855f7" />
+                </marker>
                 <filter id="glow-cyan" x="-20%" y="-20%" width="140%" height="140%">
                   <feGaussianBlur stdDeviation="3" result="blur" />
                   <feComposite in="SourceGraphic" in2="blur" operator="over" />
@@ -1354,6 +1357,14 @@ export function NetworkTopologyTab({
               {/* Rep -> Latent */}
               <line x1="335" y1="60" x2="360" y2="60" stroke="#38bdf8" strokeWidth="2.5" markerEnd="url(#arrow)" strokeDasharray={unrollStep === 0 ? "none" : "4 4"} />
               
+              {/* Obs -> Macro Planner (Jerarquía Nivel 1) */}
+              <line x1="82" y1="105" x2="82" y2="140" stroke="#a855f7" strokeWidth="2" markerEnd="url(#arrow-purple)" strokeDasharray={unrollStep === 0 ? "none" : "3 3"} />
+              <text x="88" y="125" fill="#c084fc" fontSize="8" fontWeight="700">Jerarquía N1</text>
+
+              {/* Macro Planner -> MCTS Action Conditioning (Modulación de Priors) */}
+              <path d="M 82 230 C 82 254, 430 254, 430 225" fill="none" stroke="#a855f7" strokeWidth="2" strokeDasharray="3 3" markerEnd="url(#arrow-purple)" />
+              <text x="257" y="250" fill="#c084fc" fontSize="8" fontWeight="600" textAnchor="middle">Modulación Priors MCTS (Postura + Roles)</text>
+
               {/* Latent -> Active Heads Dynamic Connection Arrows */}
               {activeHeads.map((head, idx) => {
                 const headY = 10 + idx * (cardH + cardGap);
@@ -1375,7 +1386,7 @@ export function NetworkTopologyTab({
               <line x1="365" y1="182" x2="340" y2="182" stroke={unrollStep > 0 ? "#f59e0b" : "#475569"} strokeWidth="2" markerEnd="url(#arrow-amber)" />
               <path d="M 430 108 L 430 135 C 430 150, 410 165, 340 165" fill="none" stroke={unrollStep > 0 ? "#f59e0b" : "#475569"} strokeWidth="2" markerEnd="url(#arrow-amber)" strokeDasharray={unrollStep > 0 ? "none" : "3 3"} />
               {/* Dynamics Feedback: Dynamics -> Latent (s_{t+1}) */}
-              <path d="M 180 187 C 140 187, 140 85, 360 85" fill="none" stroke={unrollStep > 0 ? "#10b981" : "#334155"} strokeWidth="2.5" markerEnd="url(#arrow-green)" strokeDasharray={unrollStep > 0 ? "none" : "4 4"} />
+              <path d="M 180 187 C 165 187, 165 85, 360 85" fill="none" stroke={unrollStep > 0 ? "#10b981" : "#334155"} strokeWidth="2.5" markerEnd="url(#arrow-green)" strokeDasharray={unrollStep > 0 ? "none" : "4 4"} />
 
               {/* Node 1: Observation Tensor */}
               <g
@@ -1485,6 +1496,27 @@ export function NetworkTopologyTab({
                 <text x="257" y="186" fill="#ffffff" fontSize="11" fontWeight="800" textAnchor="middle">g_θ(s, a) ➔ s_{Math.min(unrollStep + 1, maxUnroll)}</text>
                 <text x="257" y="204" fill="#fdba74" fontSize="9" textAnchor="middle">{dynamicsBlocks} ResBlocks {isV2Optimized ? "+ SE + Bottleneck" : "+ Reward Head"}</text>
                 <text x="257" y="219" fill="#94a3b8" fontSize="8.5" textAnchor="middle">{isV2Optimized ? `Unroll ${maxUnroll} pasos (MinMax Scaling)` : `Unroll máx = ${maxUnroll} pasos`}</text>
+              </g>
+
+              {/* Node 6: Hierarchical Strategic Macro Planner (Level 1) */}
+              <g
+                onClick={() => setSelectedNodeId("macro_planner")}
+                style={{ cursor: "pointer" }}
+              >
+                <rect
+                  x="15"
+                  y="145"
+                  width="135"
+                  height="85"
+                  rx="8"
+                  fill={selectedNodeId === "macro_planner" ? "#581c87" : "#1e1b4b"}
+                  stroke={selectedNodeId === "macro_planner" ? "#d8b4fe" : "#a855f7"}
+                  strokeWidth={selectedNodeId === "macro_planner" ? "2.5" : "1.5"}
+                />
+                <text x="82" y="166" fill="#c084fc" fontSize="9" fontWeight="700" textAnchor="middle">NIVEL 1 • JERARQUÍA</text>
+                <text x="82" y="184" fill="#ffffff" fontSize="11" fontWeight="800" textAnchor="middle">Planificador Macro</text>
+                <text x="82" y="200" fill="#e9d5ff" fontSize="9" textAnchor="middle">Posturas &amp; Roles</text>
+                <text x="82" y="215" fill="#c084fc" fontSize="8.5" fontWeight="600" textAnchor="middle">⚡ Priors MCTS (+35%)</text>
               </g>
 
               {/* Dynamic Active Prediction Heads */}
@@ -1625,6 +1657,49 @@ export function NetworkTopologyTab({
                 }}
               >
                 🔬 Ver Análisis de Cabezas Completo ➔
+              </button>
+            </div>
+          )}
+
+          {/* Dedicated Macro Planner Diagnostics & Quick Actions Banner */}
+          {selectedNodeId === "macro_planner" && (
+            <div style={{ background: "rgba(168, 85, 247, 0.1)", border: "1px solid #a855f7", borderRadius: 6, padding: "8px 10px" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
+                <span style={{ fontSize: 11, fontWeight: 700, color: "#d8b4fe", display: "flex", alignItems: "center", gap: 4 }}>
+                  <span>♟️</span> Estado del Planificador Macro (Nivel 1)
+                </span>
+                <span style={{ fontSize: 9, background: "#581c87", color: "#e9d5ff", padding: "1px 6px", borderRadius: 3, fontWeight: 700 }}>
+                  JERÁRQUICO ACTIVO
+                </span>
+              </div>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6, fontSize: 11 }}>
+                <div><span className="muted">Postura Dominante:</span> <b style={{ color: "#c084fc" }}>{macroStats.assaultPct >= 50 ? "ASSAULT_VP" : "DEFENSIVE_HOLD"}</b></div>
+                <div><span className="muted">Asalto VP:</span> <b style={{ color: "#38bdf8" }}>{macroStats.assaultPct.toFixed(1)}%</b></div>
+                <div><span className="muted">Rol Vanguardia:</span> <b style={{ color: "#fbbf24" }}>{macroStats.spearheadPct.toFixed(1)}%</b></div>
+                <div><span className="muted">Apoyo de Fuego:</span> <b style={{ color: "#34d399" }}>{macroStats.fireSupportPct.toFixed(1)}%</b></div>
+                <div><span className="muted">Shaping Priors:</span> <b style={{ color: "#a855f7" }}>+35% Boost</b></div>
+                <div><span className="muted">Sobreescritura MCTS:</span> <b style={{ color: "#f59e0b" }}>{macroStats.mctsOverridePct.toFixed(1)}%</b></div>
+              </div>
+              <button
+                onClick={() => setSubTab("macro-planner")}
+                style={{
+                  width: "100%",
+                  marginTop: 8,
+                  background: "#7e22ce",
+                  color: "#ffffff",
+                  border: "none",
+                  borderRadius: 4,
+                  padding: "5px 8px",
+                  fontSize: 10,
+                  fontWeight: 700,
+                  cursor: "pointer",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  gap: 6,
+                }}
+              >
+                <span>♟️</span> Abrir Panel Completo de Planificador Macro ➔
               </button>
             </div>
           )}

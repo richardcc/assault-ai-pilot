@@ -1,0 +1,11 @@
+{
+  "name": "self_vs_self_deep_800sims_v1_phase1",
+  "repo": "C:/repos/python/assault",
+  "runs_root": "runs_curriculum",
+  "tracked_files": [
+    "curriculums/self_vs_self_deep_800sims_v1/configs/efficientzero_v2.deep_phase1_mix_640sims.yaml",
+    "assault_bench/configs/benchmark_config.deep_phase1_640.yaml"
+  ],
+  "train_command": "python -m agents.efficientzero_v2.train.train_efficientzero_v2 --config curriculums/self_vs_self_deep_800sims_v1/configs/efficientzero_v2.deep_phase1_mix_640sims.yaml --mlflow-experiment assault_efficientzero_v2 --mlflow-run-name deep_curriculum_phase1_640sims",
+  "eval_command": "python -m assault_bench.runner --config assault_bench/configs/benchmark_config.deep_phase1_640.yaml"
+}

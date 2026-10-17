@@ -1504,3 +1504,74 @@ def test_unit_prefilter_falls_back_to_global_actions_when_constrained_empty(monk
     assert str(info.get("unit_prefilter_selected_unit_id", "")) == ""
     assert int(info.get("unit_prefilter_constrained_count", -1)) == 2
     assert int(info.get("unit_prefilter_global_count", -1)) == 2
+
+
+class _CombatRewardAdapter:
+    def __init__(self) -> None:
+        self._done = False
+
+    def initial_state(self, scenario_id: str, seed: int = 0):
+        return SimpleNamespace(
+            turn=1,
+            to_play="A",
+            done=False,
+            units=[
+                {"unit_id": "u1", "side": "A", "q": 0, "r": 0, "hp": 10, "alive": True},
+                {"unit_id": "e1", "side": "B", "q": 1, "r": 0, "hp": 5, "alive": True},
+            ],
+            vp_hexes=[{"q": 1, "r": 0, "vp_id": "vp1"}],
+            vp_owner_by_hex={"1,0": "B"},
+        )
+
+    def legal_actions(self):
+        return ["ATTACK:u1:1:0"] if not self._done else []
+
+    def apply(self, action_id: str):
+        self._done = True
+        return SimpleNamespace(
+            done=True,
+            info={"damage_dealt": 5.0, "kills_dealt": 1, "vp_captures": 1},
+            state=SimpleNamespace(end_reason="annihilation", winner="A"),
+        )
+
+    def observation(self):
+        return SimpleNamespace(
+            turn=2,
+            to_play="A",
+            done=True,
+            units=[
+                {"unit_id": "u1", "side": "A", "q": 1, "r": 0, "hp": 10, "alive": True},
+                {"unit_id": "e1", "side": "B", "q": 1, "r": 0, "hp": 0, "alive": False},
+            ],
+            vp_hexes=[{"q": 1, "r": 0, "vp_id": "vp1"}],
+            vp_owner_by_hex={"1,0": "A"},
+        )
+
+    def terminal(self):
+        return self._done
+
+
+def test_native_selfplay_combat_and_capture_reward_shaping() -> None:
+    backend = _NativeEZV2SelfplayBackend()
+    samples = backend.play_episode(
+        adapter=_CombatRewardAdapter(),
+        scenario_id="s1",
+        seed=401,
+        max_steps=2,
+        action_dim=32,
+        model=None,
+        reward_shaping={
+            "damage_weight": 0.10,
+            "kill_weight": 0.50,
+            "vp_capture_bonus_per_hex": 1.20,
+            "terminal_win_bonus": 0.20,
+        },
+    )
+    assert samples
+    info = dict(samples[0].info or {})
+    # damage: 5 * 0.10 = 0.50, kill: 1 * 0.50 = 0.50 => combat_reward = 1.00
+    assert abs(float(info.get("combat_reward", 0.0)) - 1.00) < 1e-4
+    # capture: 1 * 1.20 = 1.20
+    assert abs(float(info.get("capture_reward", 0.0)) - 1.20) < 1e-4
+    # terminal win: 1.0 + 0.20 = 1.20 => total base >= 3.40
+    assert float(samples[0].reward_target) >= 3.20
