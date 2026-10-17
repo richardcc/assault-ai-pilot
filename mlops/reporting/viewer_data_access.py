@@ -10,6 +10,28 @@ from mlops.reporting.catalog_runtime import (
 )
 
 
+def _model_id_aliases(model_id: str, engine: str = "") -> list[str]:
+    m = str(model_id or "").strip()
+    if not m:
+        return []
+    eng = str(engine or "").strip()
+    out = {m}
+    if eng:
+        out.add(f"{eng}_{m}")
+        out.add(f"{eng}_{eng}_{m}")
+        if m.startswith(f"{eng}_"):
+            stripped = m[len(eng) + 1 :]
+            out.add(stripped)
+            if stripped.startswith(f"{eng}_"):
+                out.add(stripped[len(eng) + 1 :])
+        clean = m.replace(f"{eng}_", "")
+        if clean:
+            out.add(clean)
+            out.add(f"{eng}_{clean}")
+            out.add(f"{eng}_{eng}_{clean}")
+    return sorted(out)
+
+
 def _compact_eval_results(results_raw: Any) -> list[dict[str, Any]]:
     """Shrink eval payload for /api/v2/model to avoid giant JSON responses.
 
@@ -20,20 +42,11 @@ def _compact_eval_results(results_raw: Any) -> list[dict[str, Any]]:
     if not isinstance(results_raw, list):
         return []
     out: list[dict[str, Any]] = []
-    heavy_keys = {
-        "obs_reachable_hex_mask_by_unit",
-        "obs_attackable_hex_mask_by_unit",
-        "obs_terrain_type_map",
-        "obs_terrain_cover_map",
-        "obs_terrain_los_block_map",
-        "obs_terrain_move_cost_map",
-        "obs_fortification_type_map",
-        "obs_fortification_edge_map",
-        "obs_enemy_vp_threat_map",
-        "unit_positions",
-        "unit_hp_map",
-        "unit_alive_map",
-        "vp_map",
+    allowed_step_keys = {
+        "mcts_q_clipped_count", "mcts_q_guardrail_clipped_count",
+        "mcts_q_clip_denominator_count", "mcts_total_visits",
+        "mcts_active_actions", "telemetry_coverage_status",
+        "step", "game_turn", "action_id", "action_kind", "unit_side"
     }
     for item in results_raw:
         if not isinstance(item, dict):
@@ -45,24 +58,15 @@ def _compact_eval_results(results_raw: Any) -> list[dict[str, Any]]:
         steps = row.get("eval_decision_steps_top")
         if isinstance(steps, list):
             compact_steps = []
-            for s in steps:
+            for s in steps[:64]:
                 if not isinstance(s, dict):
                     continue
-                s_copy = {k: v for k, v in s.items() if k not in heavy_keys}
-                w = s_copy.get("why_action_vs_vp")
-                if isinstance(w, dict) and "candidate_actions" in w:
-                    w = dict(w)
-                    w.pop("candidate_actions", None)
-                    s_copy["why_action_vs_vp"] = w
-
+                s_copy = {k: v for k, v in s.items() if k in allowed_step_keys}
                 cands = s.get("mcts_action_candidates")
                 if isinstance(cands, list):
                     s_copy["mcts_action_candidates"] = [
                         {
-                            "action_id": c.get("action_id"),
-                            "visit_count": c.get("visit_count"),
-                            "real_decision_score": c.get("real_decision_score"),
-                            "mcts_q_value": c.get("mcts_q_value"),
+                            "visit_count": c.get("visit_count", 0),
                         }
                         for c in cands
                         if isinstance(c, dict)
@@ -98,12 +102,12 @@ def load_eval_history_page_from_parquet(
         return {"rows": [], "total": 0, "error": f"failed reading parquet eval index: {exc}"}
 
     wanted_engine = str(engine or "")
-    wanted_model = str(model_id or "")
+    model_aliases = set(_model_id_aliases(model_id, engine))
     filtered = [
         r
         for r in rows
         if str(r.get("engine", "") or "") == wanted_engine
-        and str(r.get("model_id", "") or "") == wanted_model
+        and (str(r.get("model_id", "") or "") in model_aliases if model_aliases else True)
     ]
     wanted_train = str(train_run_id or "").strip()
     wanted_scenario = str(scenario_id or "__all__").strip() or "__all__"
@@ -234,27 +238,36 @@ def load_train_history_page_from_duckdb(
     if con is None:
         return {"rows": [], "total": 0, "error": f"duckdb temporarily busy: {last_exc}"}
     try:
+        aliases = _model_id_aliases(model_id, engine)
+        if aliases:
+            placeholders = ", ".join(["?"] * len(aliases))
+            model_clause = f"AND model_id IN ({placeholders})"
+            model_params = aliases
+        else:
+            model_clause = "AND model_id = ?"
+            model_params = [str(model_id or "")]
+
         total = int(
             con.execute(
-                """
+                f"""
                 SELECT COUNT(*) FROM catalog_trains
-                WHERE engine = ? AND model_id = ?
+                WHERE engine = ? {model_clause}
                 """,
-                [str(engine or ""), str(model_id or "")],
+                [str(engine or "")] + model_params,
             ).fetchone()[0]
         )
         start = max(0, min(int(offset), total))
         rows = con.execute(
-            """
+            f"""
             SELECT
                 run_id, scenario_id, created_at_utc, git_commit,
                 is_retrain, parent_run_id, latest_checkpoint
             FROM catalog_trains
-            WHERE engine = ? AND model_id = ?
+            WHERE engine = ? {model_clause}
             ORDER BY created_at_utc DESC
             LIMIT ? OFFSET ?
             """,
-            [str(engine or ""), str(model_id or ""), int(limit), int(start)],
+            [str(engine or "")] + model_params + [int(limit), int(start)],
         ).fetchall()
         out_rows = []
         runs_roots = ["runs_curriculum", "runs"]
@@ -392,8 +405,14 @@ def load_elo_rows_from_duckdb(
             params.append(engine_s)
         model_s = str(model_id or "").strip()
         if model_s and model_s != "__all__":
-            where.append("model_id = ?")
-            params.append(model_s)
+            aliases = _model_id_aliases(model_s, engine_s)
+            if aliases:
+                placeholders = ", ".join(["?"] * len(aliases))
+                where.append(f"model_id IN ({placeholders})")
+                params.extend(aliases)
+            else:
+                where.append("model_id = ?")
+                params.append(model_s)
         side_s = str(side or "").strip()
         if side_s and side_s != "__all__":
             where.append("side = ?")
@@ -546,10 +565,11 @@ def load_model_detail_index_first(
     summary = load_catalog_summary_from_duckdb(repo_root=repo_root)
     if str((summary or {}).get("error", "") or "").strip():
         return {"error": str(summary.get("error", ""))}
+    aliases = set(_model_id_aliases(model_id, engine))
     engines = list(summary.get("engines", []) or [])
     engine_row = next((e for e in engines if str(e.get("engine", "")) == str(engine or "")), {})
     model_row = next(
-        (m for m in list(engine_row.get("models", []) or []) if str(m.get("model_id", "")) == str(model_id or "")),
+        (m for m in list(engine_row.get("models", []) or []) if (str(m.get("model_id", "")) in aliases if aliases else str(m.get("model_id", "")) == str(model_id or ""))),
         {},
     )
     if not isinstance(model_row, dict) or not model_row:
@@ -565,10 +585,11 @@ def load_model_detail_index_first(
             "scenario_eval_counts": {},
         }
     out = dict(model_row)
+    canonical_model_id = str(model_row.get("model_id", "") or model_id or "")
     train_page = load_train_history_page_from_duckdb(
         repo_root=repo_root,
         engine=str(engine or ""),
-        model_id=str(model_id or ""),
+        model_id=canonical_model_id,
         offset=0,
         limit=max(1, int(train_limit)),
     )
@@ -603,7 +624,7 @@ def load_model_detail_index_first(
     eval_page = load_eval_history_page_from_parquet(
         repo_root=repo_root,
         engine=str(engine or ""),
-        model_id=str(model_id or ""),
+        model_id=canonical_model_id,
         offset=0,
         limit=max(1, int(eval_limit)),
         train_run_id=initial_train_run_id,

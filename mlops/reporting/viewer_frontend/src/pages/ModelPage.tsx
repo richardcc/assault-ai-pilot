@@ -180,7 +180,7 @@ export function ModelPage() {
         setSelectedEpisodeId(episodeId);
 
         const [steps, log] = await Promise.all([
-          fetchReplaySteps(selectedEvalSourcePath, episodeId, 0, 79),
+          fetchReplaySteps(selectedEvalSourcePath, episodeId, 0, 499),
           fetchReplayLog(selectedEvalSourcePath, 0, 40, false),
         ]);
         if (cancelled) return;
@@ -205,7 +205,7 @@ export function ModelPage() {
     async function run() {
       if (!selectedEvalSourcePath || !selectedEpisodeId) return;
       try {
-        const steps = await fetchReplaySteps(selectedEvalSourcePath, selectedEpisodeId, 0, 79);
+        const steps = await fetchReplaySteps(selectedEvalSourcePath, selectedEpisodeId, 0, 499);
         setReplaySteps(steps);
         setSelectedStepIndex(0);
       } catch {

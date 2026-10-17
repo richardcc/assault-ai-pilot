@@ -85,19 +85,29 @@ export function CatalogPage() {
     void load();
   }, []);
 
+  const [loadingModelDetail, setLoadingModelDetail] = useState(false);
+
   // Fetch full model detail whenever selectedEngine & selectedModel change
   useEffect(() => {
     if (!selectedEngine || !selectedModel) {
       setModelDetail(null);
+      setLoadingModelDetail(false);
       return;
     }
     let cancelled = false;
+    setLoadingModelDetail(true);
     async function fetchDetail() {
       try {
         const m = await fetchModel(selectedEngine, selectedModel);
-        if (!cancelled) setModelDetail(m);
+        if (!cancelled) {
+          setModelDetail(m);
+          setLoadingModelDetail(false);
+        }
       } catch {
-        if (!cancelled) setModelDetail(null);
+        if (!cancelled) {
+          setModelDetail(null);
+          setLoadingModelDetail(false);
+        }
       }
     }
     void fetchDetail();
@@ -383,10 +393,18 @@ export function CatalogPage() {
                     </div>
                   </div>
 
+                  {/* Loading indicator */}
+                  {loadingModelDetail && (
+                    <div style={{ padding: "12px 0", color: "#38bdf8", fontSize: 13, display: "flex", alignItems: "center", gap: 8 }}>
+                      <span style={{ display: "inline-block", width: 14, height: 14, border: "2px solid #555", borderTopColor: "#38bdf8", borderRadius: "50%", animation: "spin 0.8s linear infinite" }} />
+                      Loading execution history and scenario details...
+                    </div>
+                  )}
+
                   {/* Scenarios Seen */}
-                  {scenariosSeen.length > 0 && (
-                    <div style={{ marginBottom: 14 }}>
-                      <h3 style={{ margin: "0 0 6px 0", fontSize: 13 }}>Scenarios Seen ({scenariosSeen.length})</h3>
+                  <div style={{ marginBottom: 14 }}>
+                    <h3 style={{ margin: "0 0 6px 0", fontSize: 13 }}>Scenarios Seen ({scenariosSeen.length})</h3>
+                    {scenariosSeen.length > 0 ? (
                       <table>
                         <thead>
                           <tr>
@@ -405,13 +423,15 @@ export function CatalogPage() {
                           ))}
                         </tbody>
                       </table>
-                    </div>
-                  )}
+                    ) : (
+                      <div className="muted" style={{ fontSize: 12 }}>No scenarios recorded for this model yet.</div>
+                    )}
+                  </div>
 
                   {/* Recent Training Runs */}
-                  {trains.length > 0 && (
-                    <div style={{ marginBottom: 14 }}>
-                      <h3 style={{ margin: "0 0 6px 0", fontSize: 13 }}>Training Runs ({trains.length})</h3>
+                  <div style={{ marginBottom: 14 }}>
+                    <h3 style={{ margin: "0 0 6px 0", fontSize: 13 }}>Training Runs ({trains.length})</h3>
+                    {trains.length > 0 ? (
                       <table>
                         <thead>
                           <tr>
@@ -434,13 +454,15 @@ export function CatalogPage() {
                           ))}
                         </tbody>
                       </table>
-                    </div>
-                  )}
+                    ) : (
+                      <div className="muted" style={{ fontSize: 12 }}>No training runs found in DuckDB catalog.</div>
+                    )}
+                  </div>
 
                   {/* Recent Evaluations */}
-                  {evals.length > 0 && (
-                    <div>
-                      <h3 style={{ margin: "0 0 6px 0", fontSize: 13 }}>Evaluation Runs ({evals.length})</h3>
+                  <div>
+                    <h3 style={{ margin: "0 0 6px 0", fontSize: 13 }}>Evaluation Runs ({evals.length})</h3>
+                    {evals.length > 0 ? (
                       <table>
                         <thead>
                           <tr>
@@ -479,8 +501,10 @@ export function CatalogPage() {
                           })}
                         </tbody>
                       </table>
-                    </div>
-                  )}
+                    ) : (
+                      <div className="muted" style={{ fontSize: 12 }}>No evaluation runs found in index.</div>
+                    )}
+                  </div>
                 </div>
               ) : (
                 <div className="muted">Select an engine and model to view summary.</div>

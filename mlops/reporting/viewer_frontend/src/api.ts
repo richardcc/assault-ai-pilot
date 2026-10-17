@@ -45,7 +45,7 @@ export function fetchReplayMeta(evalSourcePath: string): Promise<ReplayMetaPaylo
   return getJson(`/api/v2/replay/meta?${q.toString()}`) as Promise<ReplayMetaPayload>;
 }
 
-export function fetchReplaySteps(evalSourcePath: string, episodeId: string, fromStep = 0, toStep = 79): Promise<Dict> {
+export function fetchReplaySteps(evalSourcePath: string, episodeId: string, fromStep = 0, toStep = 499): Promise<Dict> {
   const q = new URLSearchParams({
     eval_source_path: String(evalSourcePath || ""),
     episode_id: String(episodeId || "episode_0"),
