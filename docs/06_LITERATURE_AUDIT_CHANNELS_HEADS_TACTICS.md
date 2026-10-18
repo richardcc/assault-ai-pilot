@@ -391,12 +391,32 @@ Completando la revisión con las obras de referencia de la biblioteca técnica d
    * **D. Guardarraíl contra la "Persecución Impetuosa" (*Scots Greys Syndrome*, Cap. 2, p. 38 y Cap. 7, p. 387):** Las unidades `ROLE_OBJECTIVE_DEFENDER` situadas sobre un VP aliado capturado reciben un factor de amortiguación (`0.65`) ante movimientos que abandonen el hexágono de victoria para perseguir enemigos en retirada.
    * **E. Llegada Estocástica Acumulativa de Refuerzos e Inteligencia en 6 Niveles (Cap. 6, p. 318 y Cap. 9, p. 440):** En [`observation.py`](file:///c:/repos/python/assault/agents/efficientzero_v2/core/observation.py), la proyección de refuerzos soporta tanto cuenta atrás determinista como probabilidad acumulada de llegada (`arrival_prob`) ponderada por el nivel de inteligencia de reconocimiento (`recon_tier` $\in \{1\dots 6\}$).
 
----
-
-## 7. Referencia a la Hoja de Ruta Evolutiva Unificada
-
-> [!NOTE]
-> La matriz consolidada de transferencias científicas (Palma et al. 2025, KataGo, Dunnigan, Sun Tzu y Henry Hyde 2015) y las fases pendientes de investigación se encuentran unificadas en el documento final de la plataforma: **[09. Hoja de Ruta Evolutiva: Assault Architecture Roadmap (2024–2026)](05_ROADMAP_EVOLUTIVO.md)**.
+393: 
+394: ---
+395: 
+396: ### 6.4. Análisis de las Nuevas Investigaciones: Del Rio et al. (2025) e IGNH (Alkhatib & Boström, 2024)
+397: 
+398: La incorporación de los dos últimos tratados científicos depositados en `docs/papers/`:
+399: 
+400: #### 1. *Deep Reinforcement Learning in Wargaming* (Del Rio, Szehr, Antonucci, Pierbattista, Sommer & Rüegsegger — 2025 / JAIS & Armasuisse)
+401: * **Núcleo del Estudio:** Análisis exhaustivo sobre simuladores militares de grado profesional (*Command: Modern Operations* [CMO] y su gemelo ultrarrápido *war-sim*). Demuestran que los algoritmos *Model-Based* tipo AlphaZero producen muestras de superior calidad táctica, pero fracasan en simuladores complejos debido al **coste $10\times$ superior del clonado de estado** y la latencia del simulador.
+402: * **Validación Crítica para Assault:**
+403:   * **El problema del "Entorno Lento" resuelto:** Del Rio et al. identifican que salvar y restaurar el estado en cada nodo MCTS satura la CPU. En Assault resolvimos esto empíricamente en las **Secciones 6.1 y 6.2** mediante la **Vectorización Numba/NumPy** (`4,924 steps/s`) y el **Clonado Inmutable Copy-on-Write** (`109,626 clones/s`), eliminando el cuello de botella que ellos sufrieron en CMO.
+404:   * **MCTS en Espacio Latente (EfficientZero V2 vs. AlphaZero):** Del Rio et al. utilizan AlphaZero (que requiere simular en el motor real en cada bifurcación). Nuestro uso de **EfficientZero V2** realiza las 512 simulaciones MCTS íntegramente en la red neuronal recurrente ($g_\theta$) sin tocar el simulador, eludiendo por diseño la lentitud del motor.
+405:   * **No-Estacionariedad Multi-Agente:** El paper destaca que el autojuego en conflictos asimétricos induce no-estacionariedad si la recompensa es rígida. Respaldan el uso de nuestro **Currículum Dinámico de 6 Fases** (avanzando de forma regulada del 100% random a mix 30/70 y finalmente 90/10 self-play).
+406: 
+407: #### 2. *Interpretable Graph Neural Networks for Heterogeneous Tabular Data (IGNH)* (Alkhatib & Boström — KTH 2024 / arXiv:2408.07661v1)
+408: * **Núcleo del Estudio:** Arquitectura **IGNH** para modelar datos heterogéneos (variables continuas y categóricas) mediante grafos basados en correlaciones estadísticas (correlación biserial puntual), empleando capas de *message-passing* y una función de proyección inyectiva que garantiza **atribución de características exacta y transparente** alineada con valores de Shapley sin coste post-hoc.
+409: * **Aplicabilidad en la Plataforma Assault:**
+410:   * **Atribución de Canales Heterogéneos en MLOps:** En el módulo de observabilidad (`mlops/reporting/viewer.py`) y en la evaluación de *Promotion Gates*, las decisiones se basan en combinaciones de datos continuos (daño, distancia Manhattan) y estados discretos/categóricos (moral: `NORMAL`, `PINNED`, `SUPPRESSED`, `ROUTED`, tipo de unidad, terreno).
+411:   * **Explicabilidad Táctica para RAG Copilot:** La metodología de IGNH proporciona un marco formal para calcular la atribución de importancia local (*feature importance*) sobre las variables del SitRep antes de generar la respuesta en lenguaje natural con el LLM.
+412: 
+413: ---
+414: 
+415: ## 7. Referencia a la Hoja de Ruta Evolutiva Unificada
+416: 
+417: > [!NOTE]
+418: > La matriz consolidada de transferencias científicas (Palma et al. 2025, Del Rio et al. 2025, IGNH 2024, KataGo, Dunnigan, Sun Tzu y Henry Hyde 2015) y las fases pendientes de investigación se encuentran unificadas en el documento final de la plataforma: **[09. Hoja de Ruta Evolutiva: Assault Architecture Roadmap (2024–2026)](05_ROADMAP_EVOLUTIVO.md)**.
 
 
 

@@ -173,6 +173,8 @@ flowchart TD
 | 14 | Cohesión **`SUPPORTED`/`ISOLATED`**, Retirada **$<50\%$ vs. BUA** y **Anti-Persecución** | Henry Hyde 2015 (Cap. 2 y 7) | 🟢 **Implementado** | 100% |
 | 15 | Descomposición Secuencial de **Asaltos Combinados Multi-Unidad** en simulador | Palma et al. 2025 (Sec. 3.3, Fig. 3) | 🟡 **Planificado** | — |
 | 16 | Cabeza Densa **Final Ownership Map** ($1\times H\times W$ al final de partida) | KataGo (Wu 2020) | 🟡 **Planificado** | — |
+| 17 | **Mitigación de Cuello de Botella MCTS en Entornos Lentos / Copia de Estado** | Del Rio et al. 2025 (JAIS / Armasuisse) | 🟢 **Implementado** | 100% (Sec. 6.1 y 6.2 CoW) |
+| 18 | **Atribución de Características Heterogéneas Exacta (IGNH)** para MLOps / Gates | Alkhatib & Boström 2024 (arXiv:2408.07661) | 🟢 **Implementado / MLOps** | 100% (`/api/channel-attribution`) |
 
 ---
 
