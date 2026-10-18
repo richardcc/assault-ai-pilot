@@ -5,6 +5,7 @@ from assault_model.actions.ranged_indirect import RangedIndirectAttack  # ✅ NU
 from assault_model.actions.status import WaitAction
 from assault_model.actions.composite_fire import MoveThenFireAction, FireThenMoveAction
 from assault_model.actions.action_catalog import ActionCatalog
+from assault_model.map.hex_coord import HexCoord
 
 def _normalize_side(value):
     if value is None:
@@ -151,6 +152,10 @@ def get_unit_actions(env, unit):
                 moves.append({
                     "q": last.q,
                     "r": last.r,
+                    "move_q": last.q,
+                    "move_r": last.r,
+                    "target_q": last.q,
+                    "target_r": last.r,
                     "action_id": action.action_id
                 })
 
@@ -158,9 +163,15 @@ def get_unit_actions(env, unit):
         # ASSAULT
         # -------------------------
         elif isinstance(action, AssaultAction):
+            target_u = next((u for u in state.units if getattr(u, "unit_id", None) == action.target_id), None)
+            target_pos = getattr(target_u, "position", None)
             attacks.append({
                 "type": "assault",
                 "target_id": action.target_id,
+                "target_q": target_pos.q if target_pos else None,
+                "target_r": target_pos.r if target_pos else None,
+                "q": target_pos.q if target_pos else None,
+                "r": target_pos.r if target_pos else None,
                 "action_id": action.action_id
             })
 
@@ -168,9 +179,15 @@ def get_unit_actions(env, unit):
         # RANGED DIRECT
         # -------------------------
         elif isinstance(action, RangedDirectAttack):
+            target_u = next((u for u in state.units if getattr(u, "unit_id", None) == action.target_id), None)
+            target_pos = getattr(target_u, "position", None)
             attacks.append({
                 "type": "ranged",
                 "target_id": action.target_id,
+                "target_q": target_pos.q if target_pos else None,
+                "target_r": target_pos.r if target_pos else None,
+                "q": target_pos.q if target_pos else None,
+                "r": target_pos.r if target_pos else None,
                 "action_id": action.action_id
             })
 
@@ -178,9 +195,15 @@ def get_unit_actions(env, unit):
         # RANGED INDIRECT ✅ NUEVO
         # -------------------------
         elif isinstance(action, RangedIndirectAttack):
+            target_coord = HexCoord.from_any(action.target_hex) if action.target_hex else None
             attacks.append({
                 "type": "ranged_indirect",
                 "target_id": action.target_id,
+                "target_hex": [target_coord.q, target_coord.r] if target_coord else None,
+                "target_q": target_coord.q if target_coord else None,
+                "target_r": target_coord.r if target_coord else None,
+                "q": target_coord.q if target_coord else None,
+                "r": target_coord.r if target_coord else None,
                 "action_id": action.action_id
             })
 
@@ -189,11 +212,22 @@ def get_unit_actions(env, unit):
         # -------------------------
         elif isinstance(action, MoveThenFireAction):
             dst = action.move_path[-1] if getattr(action, "move_path", None) else None
+            fire_hex = getattr(action.fire_action, "target_hex", None)
+            fire_coord = HexCoord.from_any(fire_hex) if fire_hex else None
+            target_id = getattr(action, "target_id", None)
+            if not fire_coord and target_id:
+                tu = next((u for u in state.units if getattr(u, "unit_id", None) == target_id), None)
+                if tu and tu.position:
+                    fire_coord = HexCoord.from_any(tu.position)
             attacks.append({
                 "type": "move_then_fire",
-                "target_id": getattr(action, "target_id", None),
-                "target_hex": getattr(action.fire_action, "target_hex", None),
+                "target_id": target_id,
+                "target_hex": [fire_coord.q, fire_coord.r] if fire_coord else None,
+                "target_q": fire_coord.q if fire_coord else None,
+                "target_r": fire_coord.r if fire_coord else None,
                 "move_to": {"q": getattr(dst, "q", None), "r": getattr(dst, "r", None)} if dst is not None else None,
+                "move_q": getattr(dst, "q", None) if dst is not None else None,
+                "move_r": getattr(dst, "r", None) if dst is not None else None,
                 "action_id": action.action_id,
             })
 
@@ -202,11 +236,22 @@ def get_unit_actions(env, unit):
         # -------------------------
         elif isinstance(action, FireThenMoveAction):
             dst = action.move_path[-1] if getattr(action, "move_path", None) else None
+            fire_hex = getattr(action.fire_action, "target_hex", None)
+            fire_coord = HexCoord.from_any(fire_hex) if fire_hex else None
+            target_id = getattr(action, "target_id", None)
+            if not fire_coord and target_id:
+                tu = next((u for u in state.units if getattr(u, "unit_id", None) == target_id), None)
+                if tu and tu.position:
+                    fire_coord = HexCoord.from_any(tu.position)
             attacks.append({
                 "type": "fire_then_move",
-                "target_id": getattr(action, "target_id", None),
-                "target_hex": getattr(action.fire_action, "target_hex", None),
+                "target_id": target_id,
+                "target_hex": [fire_coord.q, fire_coord.r] if fire_coord else None,
+                "target_q": fire_coord.q if fire_coord else None,
+                "target_r": fire_coord.r if fire_coord else None,
                 "move_to": {"q": getattr(dst, "q", None), "r": getattr(dst, "r", None)} if dst is not None else None,
+                "move_q": getattr(dst, "q", None) if dst is not None else None,
+                "move_r": getattr(dst, "r", None) if dst is not None else None,
                 "action_id": action.action_id,
             })
 

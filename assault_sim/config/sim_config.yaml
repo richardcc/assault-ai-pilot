@@ -5,7 +5,7 @@
 # It does NOT control low-level tracing (ASSAULT_DEBUG_TRACE).
 # All visibility here is high-level, structured, and event-based.
 
-data_root: assault_sim/assets   # Root directory for all game data
+data_root: assets   # Root directory for all game data
 
 catalogs:
   unit_catalog: catalogs/unit_catalog.json        # Unit definitions

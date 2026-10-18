@@ -1,26 +1,13 @@
 import json
 from pathlib import Path
 
+from assault_model.map.hex_coord import HexCoord
+
 
 # ---------------------------------------------
 # PATHS
 # ---------------------------------------------
-SCENARIOS_PATH = (
-    Path(__file__).resolve()
-    .parents[2]
-    / "assault_sim"
-    / "assets"
-    / "scenarios"
-)
-
-MAP_PIECE_CATALOG_PATH = (
-    Path(__file__).resolve()
-    .parents[2]
-    / "assault_sim"
-    / "assets"
-    / "catalogs"
-    / "map_piece_catalog.json"
-)
+from assault_model.paths import SCENARIOS_DIR as SCENARIOS_PATH, MAP_PIECE_CATALOG_PATH
 
 
 def load_ui_scenario(scenario_id: str) -> dict:
@@ -60,7 +47,8 @@ def load_ui_scenario(scenario_id: str) -> dict:
 
     for piece in scenario.get("map", {}).get("pieces", []):
         piece_id = piece.get("id")
-        origin_q, origin_r = piece.get("origin", [0, 0])
+        origin_coord = HexCoord.from_any(piece.get("origin", piece))
+        origin_q, origin_r = origin_coord.q, origin_coord.r
 
         piece_def = pieces_catalog.get(piece_id)
 
@@ -70,13 +58,17 @@ def load_ui_scenario(scenario_id: str) -> dict:
         ui_pieces.append({
             "id": piece_id,
             "origin": [origin_q, origin_r],
+            "q": origin_q,
+            "r": origin_r,
             "shape": piece_def.get("shape", [1, 1]),
         })
 
         for h in piece_def.get("hexes", []):
+            hq = int(h.get("q", 0))
+            hr = int(h.get("r", 0))
             hexes.append({
-                "q": origin_q + h.get("q", 0),
-                "r": origin_r + h.get("r", 0),
+                "q": origin_q + hq,
+                "r": origin_r + hr,
                 "terrain": h.get("terrain", "clear"),
             })
 
@@ -84,12 +76,13 @@ def load_ui_scenario(scenario_id: str) -> dict:
     # BUILD UNITS (STATIC ONLY)
     # ---------------------------------------------
     for u in scenario.get("units", []):
-        q, r = u.get("position", [0, 0])
+        u_coord = HexCoord.from_any(u.get("position", u))
         units.append({
             "id": u.get("unit_id"),
             "unit_key": u.get("unit_key"),
-            "q": q,
-            "r": r,
+            "q": u_coord.q,
+            "r": u_coord.r,
+            "position": {"q": u_coord.q, "r": u_coord.r},
             "side": u.get("side"),
         })
     # ---------------------------------------------

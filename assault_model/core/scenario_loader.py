@@ -113,7 +113,8 @@ def load_scenario(
             )
 
         piece = map_piece_catalog[piece_id]
-        origin = tuple(entry["origin"])
+        origin_coord = HexCoord.from_any(entry.get("origin", entry))
+        origin = (origin_coord.q, origin_coord.r)
         rotation_deg = int(entry.get("rotation", 0))
         quarter_turns = _rotation_to_quarter_turns(rotation_deg)
         piece_width, piece_height = piece.shape
@@ -178,8 +179,9 @@ def load_scenario(
     # APPLY FORTIFICATIONS (optional scenario overlays)
     # =================================================
     for fort in raw.get("map", {}).get("fortifications", []):
-        q = int(fort["q"])
-        r = int(fort["r"])
+        fort_coord = HexCoord.from_any(fort)
+        q = fort_coord.q
+        r = fort_coord.r
         fort_type = str(fort["type"])
         vertex_start = fort.get("vertex_start")
         vertex_end = fort.get("vertex_end")
@@ -223,13 +225,12 @@ def load_scenario(
                 f"UnitType '{unit_key}' not found in unit catalog"
             )
 
-        pos_tuple = tuple(u["position"])
-        if game_map.get_hex(*pos_tuple) is None:
+        pos = HexCoord.from_any(u.get("position", u))
+        if game_map.get_hex(pos.q, pos.r) is None:
             raise ScenarioLoaderError(
-                f"Unit {u['unit_id']} outside map at {pos_tuple}"
+                f"Unit {u['unit_id']} outside map at {(pos.q, pos.r)}"
             )
 
-        pos = HexCoord(*pos_tuple)
         unit_type = unit_catalog[unit_key]
 
         units.append(

@@ -56,12 +56,11 @@ assault-web/data/
 # 🚨 GAME ART (PROTECTED / VASSAL)
 # 🚨 CRÍTICO PARA NO ROMPER LICENCIA
 # ===============================
+assets/art/
+assets/media/
 public/art/
 public/assets/
-
-# fallback general (por si cambian rutas)
 **/art/
-**/assets/
 
 # ===============================
 # Personal / private material
@@ -88,6 +87,8 @@ site/audit_*
 # ===============================
 .DS_Store
 Thumbs.db
+* - copia.*
+
 
 # ===============================
 # Packaging artifacts

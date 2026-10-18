@@ -1,0 +1,47 @@
+{
+  "manifest_id": "assault-rules-tables",
+  "version": "v1",
+  "generated_utc": "2026-06-27T00:00:00Z",
+  "tables": [
+    {
+      "table_id": "terrain_modifiers",
+      "canonical_path": "assets/rules_tables/terrain/terrain_modifiers.v1.json",
+      "legacy_source_path": "assault_model/map/terrain_modifiers.json",
+      "source_pdf": "docs/pdfs/2024_09_18_Rulebook_rev6_web.pdf",
+      "source_ref": "9.4, 9.6.x, 10.2-10.4",
+      "status": "canonical-active"
+    },
+    {
+      "table_id": "fortification_modifiers",
+      "canonical_path": "assets/rules_tables/fortification/fortification_modifiers.v1.json",
+      "legacy_source_path": "assault_model/map/fortification_modifiers.json",
+      "source_pdf": "docs/pdfs/2024_09_18_Rulebook_rev6_web.pdf",
+      "source_ref": "9.6.4, 10.3, 10.9",
+      "status": "canonical-active"
+    },
+    {
+      "table_id": "dice_face_table",
+      "canonical_path": "assets/rules_tables/combat/dice_face_table.v1.json",
+      "legacy_source_path": "assault_model/combat/battle_die.py",
+      "source_pdf": "docs/pdfs/2024_09_18_Rulebook_rev6_web.pdf",
+      "source_ref": "10.x, 11.x",
+      "status": "canonical-active"
+    },
+    {
+      "table_id": "critical_table",
+      "canonical_path": "assets/rules_tables/combat/critical_table.v1.json",
+      "legacy_source_path": "assault_model/combat/critical_table.py",
+      "source_pdf": "docs/pdfs/2024_09_18_Rulebook_rev6_web.pdf",
+      "source_ref": "10.7, 10.9.6",
+      "status": "canonical-active"
+    },
+    {
+      "table_id": "los_terrain_classes",
+      "canonical_path": "assets/rules_tables/los/los_terrain_classes.v1.json",
+      "legacy_source_path": "assault_model/map/terrain_modifiers.json",
+      "source_pdf": "docs/pdfs/2024_09_18_Rulebook_rev6_web.pdf",
+      "source_ref": "10.2-10.4",
+      "status": "pending-migration"
+    }
+  ]
+}

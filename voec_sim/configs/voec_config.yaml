@@ -1,5 +1,5 @@
 assets:
-  root: assault_sim/assets
+  root: assets
   unit_catalog: catalogs/unit_catalog.json
   map_piece_catalog: catalogs/map_piece_catalog.json
   scenarios_dir: scenarios

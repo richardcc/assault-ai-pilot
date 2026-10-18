@@ -76,8 +76,7 @@ def _make_env_factory(
     return _init
 
 
-def _scenario_sides(repo_root: Path, scenario_id: str) -> set[str]:
-    scenario_path = repo_root / "assault_sim" / "assets" / "scenarios" / f"{scenario_id}.json"
+    scenario_path = repo_root / "assets" / "scenarios" / f"{scenario_id}.json"
     if not scenario_path.exists():
         return set()
     try:

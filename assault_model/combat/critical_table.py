@@ -6,15 +6,8 @@ from assault_model.combat.critical_effect import CriticalEffect
 
 
 def _load_critical_table():
-    table_path = (
-        Path(__file__).resolve().parents[2]
-        / "assault_sim"
-        / "assets"
-        / "rules_tables"
-        / "combat"
-        / "critical_table.v1.json"
-    )
-    payload = json.loads(table_path.read_text(encoding="utf-8"))
+    from assault_model.paths import CRITICAL_TABLE_PATH
+    payload = json.loads(CRITICAL_TABLE_PATH.read_text(encoding="utf-8"))
     raw = payload.get("critical_effects", {})
     parsed = {}
     for unit_class_name, effect_name in raw.items():

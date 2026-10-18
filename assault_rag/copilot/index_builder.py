@@ -7,17 +7,12 @@ ROOT = Path(__file__).resolve().parents[2]
 RULE_CHUNKS_PATH = ROOT / "assault_rag" / "data" / "rulebook" / "chunks" / "rulebook_chunks.json"
 RULE_TYPED_PATH = ROOT / "assault_rag" / "data" / "rulebook" / "typed" / "rulebook_typed.json"
 RULEBOOK_DOCS_DIR = ROOT / "docs" / "game_rules"
-UNIT_CATALOG_PATH = ROOT / "assault_sim" / "assets" / "catalogs" / "unit_catalog.json"
-SCENARIOS_DIR = ROOT / "assault_sim" / "assets" / "scenarios"
-GAME_DATA_CHUNKS_PATH = ROOT / "assault_rag" / "data" / "game_data" / "chunks" / "game_data_chunks.json"
-FORTIFICATION_TABLE_PATH = (
-    ROOT
-    / "assault_sim"
-    / "assets"
-    / "rules_tables"
-    / "fortification"
-    / "fortification_modifiers.v1.json"
+from assault_model.paths import (
+    UNIT_CATALOG_PATH,
+    SCENARIOS_DIR,
+    FORTIFICATION_MODIFIERS_PATH as FORTIFICATION_TABLE_PATH,
 )
+GAME_DATA_CHUNKS_PATH = ROOT / "assault_rag" / "data" / "game_data" / "chunks" / "game_data_chunks.json"
 
 
 def _flatten_attack(attack: Dict) -> List[str]:

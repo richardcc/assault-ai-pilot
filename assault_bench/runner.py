@@ -65,11 +65,16 @@ from assault_bench.trace_metrics_utils import build_eval_decision_steps_top as _
 from assault_bench.phase29_contract import build_head_diagnostics_eval as _build_head_diagnostics_eval
 from assault_bench.benchmark_serialization import json_dumps as _json_dumps
 from assault_bench.benchmark_entry import _build_arg_parser
-from assault_bench.benchmark_orchestrator import (
-    resolve_bench_device_choice as _resolve_bench_device_choice,
-    run_benchmark,
+from assault_bench.benchmark_runtime_utils import (
+    resolve_bench_device as _resolve_bench_device,
+    resolve_enabled_profiles as _resolve_enabled_profiles,
 )
-from assault_bench.benchmark_runtime_utils import resolve_enabled_profiles as _resolve_enabled_profiles
+
+def _resolve_bench_device_choice(config_device_cfg: str, cli_device: str = "") -> str:
+    raw_cli = str(cli_device or "").strip().lower()
+    if raw_cli in {"cpu", "cuda", "auto"}:
+        return _resolve_bench_device(raw_cli)
+    return _resolve_bench_device(str(config_device_cfg or "auto"))
 
 from assault_bench.decision_candidate_utils import canonicalize_decision_candidates
 from assault_bench.episode_runner_helpers import (

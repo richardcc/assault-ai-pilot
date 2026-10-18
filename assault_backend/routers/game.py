@@ -15,6 +15,7 @@ from assault_backend.session_state import ezv2_service, game_session
 from assault_model.actions.action_catalog import ActionCatalog
 from assault_model.actions.status import WaitAction
 from assault_model.map.hex_utils import safe_hex_distance
+from assault_model.map.hex_coord import HexCoord
 from assault_model.map.terrain_config import terrain_config
 from assault_model.runtime.execution_context import ExecutionContext
 from assault_sim.decision.decision_engine import DecisionEngine
@@ -612,6 +613,17 @@ def game_ai_turn():
     target_id = getattr(action, "target_id", None)
     if target_id is not None:
         step_info["target_id"] = target_id
+        tu = next((u for u in getattr(getattr(env, "game_state", None), "units", []) if getattr(u, "unit_id", None) == target_id), None)
+        if tu and getattr(tu, "position", None):
+            step_info["target_q"] = tu.position.q
+            step_info["target_r"] = tu.position.r
+
+    target_hex = getattr(action, "target_hex", None) or getattr(getattr(action, "fire_action", None), "target_hex", None)
+    if target_hex is not None:
+        th = HexCoord.from_any(target_hex)
+        step_info["target_hex"] = [th.q, th.r]
+        step_info["target_q"] = th.q
+        step_info["target_r"] = th.r
 
     steps = [step_info]
     game_session.last_backend_ai_decision = {

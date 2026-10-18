@@ -4,17 +4,7 @@
 # =================================================
 
 import json
-from pathlib import Path
-
-UNIT_CATALOG_PATH = (
-    Path(__file__)
-    .resolve()
-    .parents[2]
-    / "assault_sim"
-    / "assets"
-    / "catalogs"
-    / "unit_catalog.json"
-)
+from assault_model.paths import UNIT_CATALOG_PATH
 
 # -------------------------------------------------
 # Load full unit catalog

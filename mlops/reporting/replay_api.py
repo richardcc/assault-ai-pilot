@@ -320,7 +320,7 @@ def detect_scenario_id_from_transitions(
         return "battaglia_cittadina_2_1"
 
     if repo_root is not None:
-        scenarios_dir = (repo_root / "assault_sim" / "assets" / "scenarios").resolve()
+        from assault_model.paths import SCENARIOS_DIR as scenarios_dir
         if scenarios_dir.exists():
             best_sid = default_scenario_id
             best_score = 0

@@ -8,7 +8,7 @@ from assault_model.map.map_piece_loader import load_map_piece_catalog
 from assault_model.units.catalog_loader import load_unit_catalog
 
 
-DEFAULT_ASSETS_ROOT = Path("assault_sim/assets")
+DEFAULT_ASSETS_ROOT = Path("assets")
 DEFAULT_UNIT_CATALOG = Path("catalogs/unit_catalog.json")
 DEFAULT_MAP_PIECES = Path("catalogs/map_piece_catalog.json")
 DEFAULT_SCENARIOS_DIR = Path("scenarios")

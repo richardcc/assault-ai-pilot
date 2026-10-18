@@ -24,8 +24,7 @@ class AssaultSimulation:
         self.scenario_name = cfg["scenario_schedule"][0]["id"]
 
         # ✅ rutas robustas
-        repo_root = Path(__file__).resolve().parents[2]
-        self.assets_root = repo_root / "assault_sim" / "assets"
+        self.assets_root = repo_root / "assets"
 
         # -------------------------
         # CARGA DE DATOS

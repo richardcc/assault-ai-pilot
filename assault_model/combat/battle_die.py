@@ -7,15 +7,8 @@ from assault_model.combat.dice_color import DiceColor
 from assault_model.combat.dice_face import DiceFace
 
 def _load_dice_face_table():
-    table_path = (
-        Path(__file__).resolve().parents[2]
-        / "assault_sim"
-        / "assets"
-        / "rules_tables"
-        / "combat"
-        / "dice_face_table.v1.json"
-    )
-    payload = json.loads(table_path.read_text(encoding="utf-8"))
+    from assault_model.paths import DICE_FACE_TABLE_PATH
+    payload = json.loads(DICE_FACE_TABLE_PATH.read_text(encoding="utf-8"))
     raw = payload.get("dice_faces", {})
     parsed = {}
     for color_name, faces in raw.items():

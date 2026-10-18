@@ -18,12 +18,7 @@ from assault_backend.session_state import game_session
 
 router = APIRouter(tags=["scenarios"])
 
-SCENARIOS_PATH = (
-    Path(__file__).resolve().parents[2]
-    / "assault_sim"
-    / "assets"
-    / "scenarios"
-)
+from assault_model.paths import SCENARIOS_DIR as SCENARIOS_PATH
 
 
 @router.get("/api/ui/scenarios")

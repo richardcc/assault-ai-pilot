@@ -1,16 +1,7 @@
 # services/map_piece_service.py
 
 import json
-from pathlib import Path
-
-MAP_PIECE_CATALOG_PATH = (
-    Path(__file__).resolve()
-    .parents[2]
-    / "assault_sim"
-    / "assets"
-    / "catalogs"
-    / "map_piece_catalog.json"
-)
+from assault_model.paths import MAP_PIECE_CATALOG_PATH
 
 def load_map_piece_catalog_raw() -> dict:
     if not MAP_PIECE_CATALOG_PATH.exists():

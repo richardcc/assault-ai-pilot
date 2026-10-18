@@ -123,3 +123,14 @@ app.include_router(game_router)
 app.include_router(scenarios_router)
 app.include_router(explain_router)
 app.include_router(rag_router)
+
+# Mount Static Art Assets
+from fastapi.staticfiles import StaticFiles
+from assault_model.paths import ART_DIR
+
+if ART_DIR.exists():
+    app.mount("/art", StaticFiles(directory=str(ART_DIR)), name="art")
+    dice_dir = ART_DIR / "dice"
+    if dice_dir.exists():
+        app.mount("/assets/dice", StaticFiles(directory=str(dice_dir)), name="dice")
+

@@ -56,14 +56,8 @@ def _dice_power(dice_values: list) -> float:
 
 @lru_cache(maxsize=1)
 def _unit_combat_feature_table() -> dict:
-    catalog_path = (
-        Path(__file__).resolve().parents[3]
-        / "assault_sim"
-        / "assets"
-        / "catalogs"
-        / "unit_catalog.json"
-    )
-    raw = json.loads(catalog_path.read_text(encoding="utf-8"))
+    from assault_model.paths import UNIT_CATALOG_PATH
+    raw = json.loads(UNIT_CATALOG_PATH.read_text(encoding="utf-8"))
     units = dict(raw.get("units", {}) or {})
     table: dict[str, dict[str, float]] = {}
     for unit_key, payload in units.items():

@@ -425,8 +425,7 @@ def _resolve_vecnorm_path_for_side(repo_root: Path, rl_side: str, models_subdir:
     return None
 
 
-def _scenario_sides(repo_root: Path, scenario_id: str) -> set[str]:
-    scenario_path = repo_root / "assault_sim" / "assets" / "scenarios" / f"{scenario_id}.json"
+    scenario_path = repo_root / "assets" / "scenarios" / f"{scenario_id}.json"
     if not scenario_path.exists():
         return set()
     try:

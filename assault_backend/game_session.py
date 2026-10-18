@@ -8,22 +8,10 @@ from assault_sim.debug.debug_config import DebugConfig
 from assault_sim.config.config_loader import load_sim_config
 from assault_sim.decision.mission_planner import MissionPlanner
 from assault_model.core.victory_outcomes import evaluate_scenario_outcome
+from assault_model.map.hex_coord import HexCoord
 
 
-MAP_PIECE_CATALOG_PATH = (
-    Path(__file__).resolve().parents[1]
-    / "assault_sim"
-    / "assets"
-    / "catalogs"
-    / "map_piece_catalog.json"
-)
-
-SCENARIOS_PATH = (
-    Path(__file__).resolve().parents[1]
-    / "assault_sim"
-    / "assets"
-    / "scenarios"
-)
+from assault_model.paths import MAP_PIECE_CATALOG_PATH, SCENARIOS_DIR as SCENARIOS_PATH, ASSETS_DIR
 
 
 class GameSession:
@@ -98,11 +86,8 @@ class GameSession:
 
         config = load_sim_config(config_path)
 
-        config.data_root = (
-            base_path
-            / "assault_sim"
-            / "assets"
-        )
+        from assault_model.paths import ASSETS_DIR
+        config.data_root = ASSETS_DIR
 
         config.scenario_name = scenario_id
 
@@ -137,16 +122,15 @@ class GameSession:
             f.write(json.dumps(header, ensure_ascii=False) + "\n")
         if self.env.event_bus:
             def on_event(event):
-                # ✅ Collect only serializable events consumed by the UI.
-                # UNIT_MOVED / MAP_STATE contain HexCoord objects that break JSON serialization.
+                # ✅ Collect serializable events consumed by the UI.
                 event_type = event.get("type")
-                should_emit_ui = event_type in {"ACTION_EFFECT", "VP_CAPTURED", "REACTION_FIRE", "REACTION_WINDOW"}
-                should_trace = event_type in {"ACTION", "ACTION_EFFECT", "VP_CAPTURED", "TURN_END", "MATCH_END", "REACTION_FIRE", "REACTION_WINDOW"}
+                should_emit_ui = event_type in {"ACTION_EFFECT", "VP_CAPTURED", "REACTION_FIRE", "REACTION_WINDOW", "UNIT_MOVED"}
+                should_trace = event_type in {"ACTION", "ACTION_EFFECT", "VP_CAPTURED", "TURN_END", "MATCH_END", "REACTION_FIRE", "REACTION_WINDOW", "UNIT_MOVED"}
                 if not (should_emit_ui or should_trace):
                     return
                 self._event_seq += 1
+                payload = self._to_jsonable(event.get("payload", {}))
                 if event_type in {"ACTION_EFFECT", "VP_CAPTURED"}:
-                    payload = event.get("payload", {})
                     if payload.get("action") == "RangedCombat":
                         defender = payload.get("defender")
                         fort = payload.get("fortification", {})
@@ -164,10 +148,14 @@ class GameSession:
                 if should_emit_ui:
                     # Stable id lets the frontend dedupe log entries regardless
                     # of which endpoint (step / ai-turn / state) delivers them.
-                    event["id"] = self._event_seq
-                    self.last_events.append(event)
+                    safe_event = {
+                        **event,
+                        "id": self._event_seq,
+                        "payload": payload,
+                    }
+                    self.last_events.append(safe_event)
                 if should_trace:
-                    self._append_trace_event(event_type, event.get("payload", {}))
+                    self._append_trace_event(event_type, payload)
             self.env.event_bus.subscribe(on_event)
 
         self.env.reset()
@@ -261,6 +249,7 @@ class GameSession:
                 "unit_key": str(u_type.code) if u_type else "UNKNOWN",
                 "q": u.position.q,
                 "r": u.position.r,
+                "position": {"q": u.position.q, "r": u.position.r},
                 "side": u.side,
                 "hp": curr_hp,
                 "max_hp": max_hp,
@@ -317,12 +306,14 @@ class GameSession:
 
                 for piece in scenario.get("map", {}).get("pieces", []):
                     piece_id = piece.get("id")
-                    origin = piece.get("origin", [0, 0])
+                    origin_coord = HexCoord.from_any(piece.get("origin", piece))
                     rotation = int(piece.get("rotation", 0))
 
                     pieces.append({
                         "id": piece_id,
-                        "origin": origin,
+                        "origin": [origin_coord.q, origin_coord.r],
+                        "q": origin_coord.q,
+                        "r": origin_coord.r,
                         "rotation": rotation,
                         "shape": pieces_catalog.get(piece_id, {}).get("shape", [1, 1]),
                     })

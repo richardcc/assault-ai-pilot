@@ -293,6 +293,7 @@ class SimEnv:
                         "id": u.unit_id,
                         "q": u.position.q if u.position else None,
                         "r": u.position.r if u.position else None,
+                        "position": {"q": u.position.q, "r": u.position.r} if u.position else None,
                         "side": u.side,
                         "hp": getattr(u, "hp", None),
                     }

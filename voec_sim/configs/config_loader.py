@@ -20,7 +20,7 @@ def load_voec_config(path: Path | str) -> VOECConfig:
     assets_raw = raw.get("assets", {})
     defaults = raw.get("defaults", {})
     assets = AssetPaths(
-        root=Path(assets_raw.get("root", "assault_sim/assets")),
+        root=Path(assets_raw.get("root", "assets")),
         unit_catalog=Path(assets_raw.get("unit_catalog", "catalogs/unit_catalog.json")),
         map_piece_catalog=Path(
             assets_raw.get("map_piece_catalog", "catalogs/map_piece_catalog.json")

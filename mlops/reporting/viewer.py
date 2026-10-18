@@ -469,11 +469,11 @@ def serve(
                     return
             if parsed.path.startswith("/art/"):
                 rel = unquote(parsed.path[len("/art/") :])
-                art_dist = (react_root / "art").resolve()
-                art_src = (repo_root / "assault_ai_ui" / "public" / "art").resolve()
-                if art_dist.exists() and self._send_static_file(art_dist / rel, art_dist):
+                root_art = (repo_root / "assets" / "art").resolve()
+                if root_art.exists() and self._send_static_file(root_art / rel, root_art):
                     return
-                if art_src.exists() and self._send_static_file(art_src / rel, art_src):
+                art_dist = (react_root / "art").resolve()
+                if art_dist.exists() and self._send_static_file(art_dist / rel, art_dist):
                     return
 
             # Legacy fallback/reference

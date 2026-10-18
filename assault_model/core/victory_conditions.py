@@ -1,5 +1,6 @@
 from typing import List, Dict, Any
 from assault_model.core.victory_point import VictoryPoint
+from assault_model.map.hex_coord import HexCoord
 
 
 class VictoryConditions:
@@ -68,34 +69,18 @@ class VictoryConditions:
             entry: Any,
             default_value: int,
         ) -> tuple[tuple[int, int], str | None, int]:
-            # Backward-compatible format: [q, r]
-            if isinstance(entry, (list, tuple)) and len(entry) == 2:
-                q, r = entry
-                return (int(q), int(r)), None, default_value
-
-            # Extended format:
-            # { "q": 4, "r": 8, "initial_owner": "GE" }
-            # { "coords": [4, 8], "owner": "US" }
+            coord = HexCoord.from_any(entry)
+            owner = None
+            per_turn = default_value
             if isinstance(entry, dict):
-                if "coords" in entry:
-                    q, r = entry["coords"]
-                elif "hex" in entry:
-                    q, r = entry["hex"]
-                else:
-                    q = entry.get("q")
-                    r = entry.get("r")
-                if q is None or r is None:
-                    raise ValueError(f"Invalid VP hex entry: {entry}")
                 owner = (
                     entry.get("initial_owner")
                     or entry.get("owner")
                     or entry.get("occupied_by")
                 )
                 owner = str(owner).strip().upper() if owner else None
-                per_turn = entry.get("value", entry.get("per_turn", default_value))
-                return (int(q), int(r)), owner, int(per_turn)
-
-            raise ValueError(f"Invalid VP hex entry: {entry}")
+                per_turn = int(entry.get("value", entry.get("per_turn", default_value)))
+            return (coord.q, coord.r), owner, per_turn
 
         points: List[VictoryPoint] = []
         for hex_entry in raw.get("hexes", []):

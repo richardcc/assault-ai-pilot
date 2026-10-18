@@ -1,0 +1,37 @@
+{
+  "_comment": "Canonical battle-die faces by color. Source ref: 10.x, 11.x",
+  "dice_faces": {
+    "RED": [
+      [],
+      ["DAMAGE"],
+      ["DAMAGE", "SUPPRESS"],
+      ["DAMAGE", "DAMAGE"],
+      ["DAMAGE", "DAMAGE"],
+      ["CRITICAL", "DAMAGE"]
+    ],
+    "YELLOW": [
+      [],
+      ["DAMAGE"],
+      ["DAMAGE"],
+      ["DAMAGE", "DAMAGE"],
+      ["CRITICAL", "DAMAGE"],
+      ["CRITICAL", "DAMAGE"]
+    ],
+    "GREEN": [
+      [],
+      ["DAMAGE"],
+      ["DAMAGE"],
+      ["DAMAGE"],
+      ["CRITICAL", "DAMAGE"],
+      []
+    ],
+    "BLUE": [
+      [],
+      [],
+      ["DAMAGE"],
+      ["DAMAGE"],
+      [],
+      []
+    ]
+  }
+}

@@ -934,11 +934,16 @@ def load_scenario_overlay(repo_root: Path, scenario_id: str) -> dict:
             height = int(shape[1] or 0)
             if width <= 0 or height <= 0:
                 continue
-            origin = list(entry.get("origin", []) or [])
-            if len(origin) < 2:
-                continue
-            oq = int(origin[0] or 0)
-            orr = int(origin[1] or 0)
+            origin_raw = entry.get("origin", entry)
+            if isinstance(origin_raw, dict):
+                oq = int(origin_raw.get("q", 0) or 0)
+                orr = int(origin_raw.get("r", 0) or 0)
+            elif isinstance(origin_raw, (list, tuple)) and len(origin_raw) >= 2:
+                oq = int(origin_raw[0] or 0)
+                orr = int(origin_raw[1] or 0)
+            else:
+                oq = int(entry.get("q", 0) or 0)
+                orr = int(entry.get("r", 0) or 0)
             qturns = _rot_quarters(int(entry.get("rotation", 0) or 0))
 
             hex_terrain_map: dict[tuple[int, int], str] = {}
@@ -962,13 +967,47 @@ def load_scenario_overlay(repo_root: Path, scenario_id: str) -> dict:
             pid = str(pentry.get("id", "") or "")
             cat_p = dict(cat_pieces.get(pid, {}) or {})
             shape = list(pentry.get("shape", cat_p.get("shape", [])) or cat_p.get("shape", []) or [9, 4])
+            origin_raw = pentry.get("origin", pentry)
+            if isinstance(origin_raw, dict):
+                oq = int(origin_raw.get("q", 0) or 0)
+                orr = int(origin_raw.get("r", 0) or 0)
+            elif isinstance(origin_raw, (list, tuple)) and len(origin_raw) >= 2:
+                oq = int(origin_raw[0] or 0)
+                orr = int(origin_raw[1] or 0)
+            else:
+                oq = int(pentry.get("q", 0) or 0)
+                orr = int(pentry.get("r", 0) or 0)
             out.append({
                 "id": pid,
-                "origin": list(pentry.get("origin", [0, 0]) or [0, 0]),
+                "origin": [oq, orr],
+                "q": oq,
+                "r": orr,
                 "rotation": int(pentry.get("rotation", 0) or 0),
                 "shape": shape,
             })
         return out
+
+    def _enrich_units(raw_units: list) -> list[dict]:
+        out_u = []
+        for u in raw_units:
+            if not isinstance(u, dict):
+                continue
+            row = dict(u)
+            pos = u.get("position", u)
+            if isinstance(pos, dict):
+                uq = int(pos.get("q", 0) or 0)
+                ur = int(pos.get("r", 0) or 0)
+            elif isinstance(pos, (list, tuple)) and len(pos) >= 2:
+                uq = int(pos[0] or 0)
+                ur = int(pos[1] or 0)
+            else:
+                uq = int(u.get("q", 0) or 0)
+                ur = int(u.get("r", 0) or 0)
+            row["q"] = uq
+            row["r"] = ur
+            row["position"] = {"q": uq, "r": ur}
+            out_u.append(row)
+        return out_u
 
     candidates = [scenarios_dir / f"{sid}.json"]
     for c in candidates:
@@ -991,7 +1030,7 @@ def load_scenario_overlay(repo_root: Path, scenario_id: str) -> dict:
                 "map_cells": map_cells,
                 "fortifications": forts,
                 "pieces": pieces_list,
-                "scenario_units": list(raw.get("units", []) or []),
+                "scenario_units": _enrich_units(list(raw.get("units", []) or [])),
                 "vp_hexes": [
                     {
                         "q": int(h.get("q", 0) or 0),
@@ -1025,7 +1064,7 @@ def load_scenario_overlay(repo_root: Path, scenario_id: str) -> dict:
             "map_cells": map_cells,
             "fortifications": forts,
             "pieces": pieces_list,
-            "scenario_units": list(raw.get("units", []) or []),
+            "scenario_units": _enrich_units(list(raw.get("units", []) or [])),
             "vp_hexes": [
                 {
                     "q": int(h.get("q", 0) or 0),

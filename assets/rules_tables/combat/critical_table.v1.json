@@ -1,0 +1,8 @@
+{
+  "_comment": "Canonical critical table by unit class. Source ref: 10.7, 10.9.6",
+  "critical_effects": {
+    "INFANTRY": "ELIMINATED",
+    "VEHICLE": "DAMAGED",
+    "ARTILLERY": "SUPPRESSED"
+  }
+}
