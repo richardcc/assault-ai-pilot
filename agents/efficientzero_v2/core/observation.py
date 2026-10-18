@@ -258,6 +258,43 @@ def observation_to_tensor(
             put(25, y, x, direct_range_norm)  # enemy_direct_range_norm
             put(31, y, x, defense_power_norm)  # enemy_defense_power_norm
 
+    # Palma et al. (2025, Sec. 3.2.3): Project scheduled incoming reinforcements
+    # onto their entry hexes weighted by arrival countdown (T_max - dt) / T_max
+    # without changing the 32-channel tensor layout.
+    turn_now = int(getattr(obs, "turn", 1) or 1)
+    max_turns_est = max(1, int(getattr(obs, "max_turns", 8) or 8))
+    reinf_list = list(
+        getattr(obs, "reinforcements", None)
+        or getattr(obs, "reinforcement_schedule", None)
+        or []
+    )
+    for reinf in reinf_list:
+        if not isinstance(reinf, dict):
+            continue
+        pos = reinf.get("position") or reinf.get("entry_hex") or {}
+        q = pos.get("q", reinf.get("q"))
+        r = pos.get("r", reinf.get("r"))
+        if not isinstance(q, int) or not isinstance(r, int):
+            continue
+        x, y = to_xy(int(q), int(r))
+        if not (0 <= x < width and 0 <= y < height):
+            continue
+        arrival_turn = int(reinf.get("turn", reinf.get("arrival_turn", turn_now + 1)) or (turn_now + 1))
+        dt = max(0, arrival_turn - turn_now)
+        if dt > max_turns_est:
+            continue
+        countdown_w = max(0.1, min(1.0, float(max_turns_est - dt) / float(max_turns_est)))
+        side = str(reinf.get("side", ""))
+        strength_val = 0.5 * countdown_w
+        if side == to_play:
+            if grid[0, y, x] <= 0.0:
+                put(0, y, x, strength_val)
+            put(21, y, x, max(float(grid[21, y, x]), 0.5 * countdown_w))
+        elif side:
+            if grid[4, y, x] <= 0.0:
+                put(4, y, x, strength_val)
+            put(7, y, x, max(float(grid[7, y, x]), 0.35 * countdown_w))
+
     vp_owner_by_hex = dict(getattr(obs, "vp_owner_by_hex", {}) or {})
     vp_list = list(getattr(obs, "vp_hexes", []) or [])
     for hx in getattr(obs, "playable_hexes", []) or []:

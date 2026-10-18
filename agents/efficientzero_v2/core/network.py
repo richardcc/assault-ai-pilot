@@ -32,6 +32,10 @@ class EfficientZeroV2Network(EfficientZeroV2BaseNetwork):
         enable_morale_head: bool = True,
         morale_classes: int = 4,
         dynamics_recurrent_steps: int = 1,
+        use_hex_mask: bool = True,
+        use_recall: bool = True,
+        enable_input_channel_gate: bool = False,
+        enable_temporal_context: bool = False,
     ):
         super().__init__(
             observation_dim=observation_dim,
@@ -52,6 +56,10 @@ class EfficientZeroV2Network(EfficientZeroV2BaseNetwork):
             enable_morale_head=enable_morale_head,
             morale_classes=morale_classes,
             dynamics_recurrent_steps=dynamics_recurrent_steps,
+            use_hex_mask=use_hex_mask,
+            use_recall=use_recall,
+            enable_input_channel_gate=enable_input_channel_gate,
+            enable_temporal_context=enable_temporal_context,
         )
         self.consistency_proj_dim = int(max(16, consistency_proj_dim))
         if self.encoder_type == "cnn":

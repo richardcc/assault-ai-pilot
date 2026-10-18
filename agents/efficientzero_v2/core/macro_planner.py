@@ -35,6 +35,7 @@ class MacroPlan:
     friendly_vp_count: int = 0
     enemy_vp_count: int = 0
     neutral_vp_count: int = 0
+    neural_intent_class: int | None = None
 
     def get_role(self, unit_id: str) -> str:
         return self.unit_roles.get(str(unit_id), "ROLE_MANEUVER")
@@ -48,13 +49,15 @@ class MacroPlan:
             "friendly_vp_count": int(self.friendly_vp_count),
             "enemy_vp_count": int(self.enemy_vp_count),
             "neutral_vp_count": int(self.neutral_vp_count),
+            "neural_intent_class": self.neural_intent_class,
         }
 
 
 class MacroStrategyPlanner:
     """
     Evaluates global board state and establishes a hierarchical macro plan.
-    Provides strategic priors to guide and accelerate MCTS tree search.
+    Supports both geometric heuristics and neural-guided intent (prediction_intent & multi_vp_pred),
+    plus Dunnigan's Tactical Reserve (ROLE_TACTICAL_RESERVE) and Sun Tzu's Pin-and-Flank modulation.
     """
 
     def __init__(
@@ -67,11 +70,21 @@ class MacroStrategyPlanner:
         self.support_boost = float(support_boost)
         self.defense_boost = float(defense_boost)
 
-    def compute_macro_plan(self, obs: Any) -> MacroPlan:
+    def compute_macro_plan(
+        self,
+        obs: Any,
+        intent_logits: List[float] | None = None,
+        multi_vp_pred: List[float] | None = None,
+    ) -> MacroPlan:
         to_play = str(getattr(obs, "to_play", "") or "")
         units = list(getattr(obs, "units", []) or [])
         vp_hexes = list(getattr(obs, "vp_hexes", []) or [])
         vp_owner_by_hex = dict(getattr(obs, "vp_owner_by_hex", {}) or {})
+
+        if intent_logits is None:
+            intent_logits = getattr(obs, "neural_intent_logits", None)
+        if multi_vp_pred is None:
+            multi_vp_pred = getattr(obs, "neural_multi_vp_pred", None)
 
         friendly_units: list[dict] = []
         enemy_units: list[dict] = []
@@ -106,36 +119,52 @@ class MacroStrategyPlanner:
                 neutral_vp += 1
                 uncaptured_vps.append((vq, vr, str(vp.get("vp_id", key))))
 
-        # 2. Determine Primary Target VP
+        # 2. Determine Primary Target VP (Neural Intent guided when available, else geometric)
         target_vp_id = ""
         target_vp_coords: Tuple[int, int] | None = None
+        neural_intent_class: int | None = None
+
+        if intent_logits and len(intent_logits) > 0:
+            neural_intent_class = int(max(range(len(intent_logits)), key=lambda i: float(intent_logits[i])))
 
         if uncaptured_vps:
-            # Find closest uncaptured VP to friendly team center
-            best_dist = 999
-            for vq, vr, vid in uncaptured_vps:
-                min_u_dist = min(
-                    (_hex_distance(int(u.get("q", 0)), int(u.get("r", 0)), vq, vr) for u in friendly_units),
-                    default=99,
-                )
-                if min_u_dist < best_dist:
-                    best_dist = min_u_dist
-                    target_vp_id = vid
-                    target_vp_coords = (vq, vr)
+            if neural_intent_class is not None and len(uncaptured_vps) > 1:
+                ordered_vps = sorted(uncaptured_vps, key=lambda item: str(item[2]))
+                chosen_vp = ordered_vps[neural_intent_class % len(ordered_vps)]
+                target_vp_coords = (chosen_vp[0], chosen_vp[1])
+                target_vp_id = chosen_vp[2]
+            else:
+                best_dist = 999
+                for vq, vr, vid in uncaptured_vps:
+                    min_u_dist = min(
+                        (_hex_distance(int(u.get("q", 0)), int(u.get("r", 0)), vq, vr) for u in friendly_units),
+                        default=99,
+                    )
+                    if min_u_dist < best_dist:
+                        best_dist = min_u_dist
+                        target_vp_id = vid
+                        target_vp_coords = (vq, vr)
 
-        # 3. Macro Posture
+        # 3. Macro Posture (modulated by neural multi_vp_pred when present)
         if friendly_vp > enemy_vp and uncaptured_vps:
-            # We lead in VPs -> Defend lead while consolidating
             posture = "DEFENSIVE_HOLD"
         elif friendly_vp <= enemy_vp and uncaptured_vps:
-            # Tied or behind -> Push aggressively for target VP
             posture = "ASSAULT_VP"
         else:
-            # All VPs captured or combat focus
             posture = "ZONE_SUPPRESS"
+
+        if multi_vp_pred and len(multi_vp_pred) >= 4 and uncaptured_vps:
+            # multi_vp_pred = [control_ratio, contested_ratio, threat_near_vp, time_pressure]
+            time_pressure = float(multi_vp_pred[3])
+            threat_near_vp = float(multi_vp_pred[2])
+            if time_pressure > 0.75 and friendly_vp <= enemy_vp:
+                posture = "ASSAULT_VP"
+            elif threat_near_vp > 0.80 and friendly_vp > enemy_vp:
+                posture = "DEFENSIVE_HOLD"
 
         # 4. Role Assignment per Friendly Unit
         unit_roles: dict[str, str] = {}
+        rear_candidates: list[tuple[int, str]] = []
         for u in friendly_units:
             uid = str(u.get("unit_id", ""))
             ukey = str(u.get("unit_key", "")).upper()
@@ -156,6 +185,14 @@ class MacroStrategyPlanner:
                 unit_roles[uid] = "ROLE_SPEARHEAD"
             else:
                 unit_roles[uid] = "ROLE_FLANK_SCREEN"
+                rear_candidates.append((dist_to_target, uid))
+
+        # Dunnigan's Force-to-Space & Tactical Reserve Doctrine:
+        # When force size >= 4 and rear units exist beyond distance 5, keep 1 rear squad as ROLE_TACTICAL_RESERVE
+        if len(friendly_units) >= 4 and rear_candidates:
+            rear_candidates.sort(reverse=True)
+            _, reserve_uid = rear_candidates[0]
+            unit_roles[reserve_uid] = "ROLE_TACTICAL_RESERVE"
 
         return MacroPlan(
             posture=posture,
@@ -165,6 +202,7 @@ class MacroStrategyPlanner:
             friendly_vp_count=friendly_vp,
             enemy_vp_count=enemy_vp,
             neutral_vp_count=neutral_vp,
+            neural_intent_class=neural_intent_class,
         )
 
     def modulate_priors(
@@ -183,7 +221,6 @@ class MacroStrategyPlanner:
             return priors_by_action
 
         adjusted: dict[str, float] = {}
-        target_coords = macro_plan.target_vp_coords
 
         for aid in legal_actions:
             prior = float(priors_by_action.get(aid, 1e-4))
@@ -195,14 +232,26 @@ class MacroStrategyPlanner:
             if role == "ROLE_SPEARHEAD":
                 if "CAPTURE" in kind_upper:
                     boost = self.assault_boost * 1.2
-                elif "MOVE" in kind_upper:
+                elif "MOVE" in kind_upper or "ASSAULT" in kind_upper:
                     boost = self.assault_boost
             elif role == "ROLE_FIRE_SUPPORT":
-                if "ATTACK" in kind_upper or "FIRE" in kind_upper:
+                if "ATTACK" in kind_upper or "FIRE" in kind_upper or "INDIRECT" in kind_upper:
                     boost = self.support_boost
             elif role == "ROLE_OBJECTIVE_DEFENDER":
                 if "DEFEND" in kind_upper or "OVERWATCH" in kind_upper or "ATTACK" in kind_upper:
                     boost = self.defense_boost
+            elif role == "ROLE_FLANK_SCREEN":
+                # Sun Tzu Pin-and-Flank: screen units suppress/fix enemies or maneuver on flanks
+                if "ATTACK" in kind_upper or "FIRE" in kind_upper:
+                    boost = 1.0 + 0.5 * (self.support_boost - 1.0)
+                elif "MOVE" in kind_upper:
+                    boost = 1.0 + 0.5 * (self.assault_boost - 1.0)
+            elif role == "ROLE_TACTICAL_RESERVE":
+                # Dunnigan Tactical Reserve: preserve cohesion and overwatch until committed
+                if "OVERWATCH" in kind_upper or "DEFEND" in kind_upper or "RALLY" in kind_upper:
+                    boost = self.defense_boost
+                elif "MOVE" in kind_upper and macro_plan.posture == "ASSAULT_VP":
+                    boost = 1.0 + 0.4 * (self.assault_boost - 1.0)
 
             adjusted[aid] = max(1e-6, prior * boost)
 

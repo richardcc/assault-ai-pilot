@@ -180,3 +180,120 @@ def test_procedural_asymmetric_scenario_mutator():
     # Hex control must match new jittered positions
     u1_pos = (state_a.units[0].position.q, state_a.units[0].position.r)
     assert state_a.hex_states[u1_pos].ownership == state_a.side_to_ownership["US"]
+
+
+def test_hexagonal_masked_conv_and_depthwise_separable():
+    """
+    Verify HexagonalMaskConv2d is active by default across towers without adding
+    state_dict keys, and HexagonalDepthwiseSeparableConv2d zeroes out non-hex corners.
+    """
+    from agents.efficientzero_v2.core.network_base import (
+        HexagonalMaskConv2d,
+        HexagonalDepthwiseSeparableConv2d,
+    )
+
+    net = EfficientZeroV2Network(
+        observation_dim=32 * 16 * 16,
+        hidden_dim=48,
+        action_dim=32,
+        encoder_type="cnn",
+        observation_channels=32,
+        dynamics_blocks=2,
+        prediction_blocks=2,
+        use_hex_mask=True,
+    )
+    assert isinstance(net.representation_input[0], HexagonalMaskConv2d)
+    assert isinstance(net.dynamics_merge[0], HexagonalMaskConv2d)
+    # Verify non-persistent buffer does not pollute state_dict
+    assert not any("hex_mask" in k for k in net.state_dict().keys())
+
+    dw = HexagonalDepthwiseSeparableConv2d(16, 32, bias=False)
+    x = torch.randn(2, 16, 8, 8)
+    out = dw(x)
+    assert out.shape == (2, 32, 8, 8)
+
+
+def test_recall_skip_connection_and_progressive_loss_truncation():
+    """
+    Verify Palma et al. (2025, Sec. 2.2) Recall skip-connection and Progressive Loss
+    gradient truncation (no_grad_steps > 0).
+    """
+    net = EfficientZeroV2Network(
+        observation_dim=32 * 16 * 16,
+        hidden_dim=48,
+        action_dim=32,
+        encoder_type="cnn",
+        observation_channels=32,
+        dynamics_blocks=2,
+        prediction_blocks=2,
+        dynamics_recurrent_steps=3,
+        use_recall=True,
+    )
+    obs = torch.randn(2, 32, 16, 16)
+    actions = torch.tensor([1, 2], dtype=torch.long)
+    hidden, _, _, _ = net.initial_inference(obs)
+
+    # Progressive loss pass: 1 no-grad step + 2 grad steps
+    next_h, pol, val, rew = net.recurrent_inference(
+        hidden, actions, recurrent_steps=3, no_grad_steps=1
+    )
+    loss = pol.sum() + val.sum() + rew.sum()
+    loss.backward()
+    assert next_h.shape == (2, 48, 16, 16)
+    assert any(p.grad is not None and p.grad.abs().sum() > 0 for p in net.dynamics_state.parameters())
+
+
+def test_input_channel_gate_and_temporal_context_block():
+    """Verify InputChannelGate and TemporalContextBlock optional modules."""
+    net = EfficientZeroV2Network(
+        observation_dim=32 * 16 * 16,
+        hidden_dim=48,
+        action_dim=32,
+        encoder_type="cnn",
+        observation_channels=32,
+        enable_input_channel_gate=True,
+        enable_temporal_context=True,
+    )
+    obs = torch.randn(2, 32, 16, 16)
+    # Zero out channel 5 completely to test dead-channel suppression
+    obs[:, 5, :, :] = 0.0
+    h0, _, _, _ = net.initial_inference(obs)
+    h_fused = net.update_temporal_context(h0, prev_state=None)
+    h_fused_2 = net.update_temporal_context(h0, prev_state=h_fused)
+    assert h_fused_2.shape == (2, 48, 16, 16)
+
+
+def test_reinforcement_schedule_projection_and_adaptive_simulations():
+    """
+    Verify Palma et al. (Sec. 3.2.3) incoming reinforcement schedule countdown
+    projection in observation_to_tensor and PonderNet-style compute_adaptive_simulations.
+    """
+    from agents.efficientzero_v2.core.observation import observation_to_tensor
+    from agents.efficientzero_v2.core.mcts import compute_adaptive_simulations
+
+    obs = SimpleNamespace(
+        to_play="US",
+        turn=2,
+        max_turns=8,
+        units=[],
+        playable_hexes=[{"q": 0, "r": 0}, {"q": 1, "r": 0}],
+        vp_hexes=[],
+        vp_owner_by_hex={},
+        reinforcements=[
+            {"side": "US", "q": 0, "r": 0, "turn": 3},
+            {"side": "GER", "q": 1, "r": 0, "turn": 4},
+        ],
+    )
+    grid = observation_to_tensor(obs, channels=32, height=8, width=8)
+    assert grid[0][0][0] > 0.0  # US incoming reinforcement projected on ch 0
+    assert grid[4][0][1] > 0.0  # GER incoming reinforcement projected on ch 4
+
+    # Low entropy (dominant action) -> fewer simulations than high entropy (uniform)
+    sims_easy = compute_adaptive_simulations(
+        32, priors_by_action={"a": 0.98, "b": 0.01, "c": 0.01}, values_by_action={"a": 0.5, "b": 0.5, "c": 0.5}
+    )
+    sims_hard = compute_adaptive_simulations(
+        32, priors_by_action={"a": 0.33, "b": 0.33, "c": 0.34}, values_by_action={"a": 0.9, "b": -0.8, "c": 0.1}
+    )
+    assert sims_hard > sims_easy
+

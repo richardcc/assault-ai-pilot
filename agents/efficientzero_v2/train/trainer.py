@@ -77,6 +77,7 @@ class EfficientZeroV2Trainer(EfficientZeroV2BaseTrainer):
         compute_grad_norm: bool = True,
         progress_callback: Callable[[str], None] | None = None,
         gradient_balance_mode: str = "none",
+        progressive_loss_alpha: float = 0.25,
     ):
         super().__init__(
             model=model,
@@ -121,6 +122,7 @@ class EfficientZeroV2Trainer(EfficientZeroV2BaseTrainer):
         self.compute_grad_norm = bool(compute_grad_norm)
         self._progress_callback = progress_callback
         self.gradient_balance_mode = str(gradient_balance_mode or "none").lower().strip()
+        self.progressive_loss_alpha = float(max(0.0, min(1.0, progressive_loss_alpha)))
         self.adaptive_scaler = (
             AdaptiveLossScaler() if self.gradient_balance_mode == "adaptive" else None
         )
@@ -516,6 +518,26 @@ class EfficientZeroV2Trainer(EfficientZeroV2BaseTrainer):
                         z_tgt = model.consistency_embedding(tgt_hidden).detach()
                         pair_mse = F.mse_loss(z_pred, z_tgt, reduction="none")
                         pair_mse = pair_mse.view(pair_mse.shape[0], -1).mean(dim=1)
+                        rec_steps_max = int(getattr(model, "dynamics_recurrent_steps", 1))
+                        if rec_steps_max > 1 and self.progressive_loss_alpha > 0.0:
+                            # Progressive Loss (Palma et al. 2025, Sec. 2.2, Eq. 1):
+                            # Sample random n (no-grad) and k_prog (grad) steps with n + k_prog <= rec_steps_max
+                            n_nograd = int(torch.randint(1, rec_steps_max, (1,)).item())
+                            k_prog = int(torch.randint(1, rec_steps_max - n_nograd + 1, (1,)).item())
+                            pred_hidden_prog, _, _, _ = model.recurrent_inference(
+                                pred_hidden_in.detach(),
+                                a,
+                                return_aux=False,
+                                recurrent_steps=n_nograd + k_prog,
+                                no_grad_steps=n_nograd,
+                            )
+                            z_prog = model.consistency_embedding(pred_hidden_prog)
+                            prog_mse = F.mse_loss(z_prog, z_tgt, reduction="none")
+                            prog_mse = prog_mse.view(prog_mse.shape[0], -1).mean(dim=1)
+                            pair_mse = (
+                                (1.0 - self.progressive_loss_alpha) * pair_mse
+                                + self.progressive_loss_alpha * prog_mse
+                            )
                         consistency_loss = consistency_loss + pair_mse.sum()
                         consistency_pairs += int(len(step_indices))
                 if consistency_pairs > 0:

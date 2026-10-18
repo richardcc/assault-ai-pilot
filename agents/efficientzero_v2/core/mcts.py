@@ -69,6 +69,48 @@ def _normalize_root_q(
     return blended, True
 
 
+def compute_adaptive_simulations(
+    base_simulations: int,
+    priors_by_action: Optional[Dict[str, float]] = None,
+    values_by_action: Optional[Dict[str, float]] = None,
+    min_simulations: int = 8,
+    max_multiplier: float = 2.0,
+) -> int:
+    """Adaptive Computation Time (PonderNet / Graves 2016) MCTS simulation budget.
+
+    Allocates fewer simulations when a single legal action dominates the policy
+    prior with low value variance, and up to ``base_simulations * max_multiplier``
+    when the root policy entropy or value spread is high (critical tactical state).
+    """
+    base = max(1, int(base_simulations))
+    if not priors_by_action or len(priors_by_action) <= 1:
+        return max(1, min(base, int(min_simulations)))
+
+    probs = [max(0.0, float(p)) for p in priors_by_action.values()]
+    total_p = sum(probs)
+    if total_p <= 1e-12:
+        return base
+    probs = [p / total_p for p in probs]
+    n = len(probs)
+
+    # Normalized Shannon entropy in [0, 1]
+    from math import log
+    entropy = -sum(p * log(max(p, 1e-12)) for p in probs if p > 0.0)
+    max_entropy = max(1e-6, log(float(n)))
+    norm_entropy = max(0.0, min(1.0, entropy / max_entropy))
+
+    # Value uncertainty spread in [0, 1]
+    val_spread = 0.0
+    if values_by_action and len(values_by_action) > 1:
+        vals = [float(v) for v in values_by_action.values()]
+        val_spread = max(0.0, min(1.0, (max(vals) - min(vals)) * 0.5))
+
+    complexity = 0.65 * norm_entropy + 0.35 * val_spread
+    scale = 0.5 + complexity * max(0.5, float(max_multiplier) - 0.5)
+    target = int(round(base * scale))
+    return max(int(min_simulations), min(int(round(base * float(max_multiplier))), target))
+
+
 def run_mcts_puct(
     legal_actions: List[str],
     num_simulations: int = 32,

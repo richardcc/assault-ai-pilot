@@ -1894,7 +1894,11 @@ def _priors_and_values(model, obs_encoded, legal_actions: list[str], action_dim:
             obs_tensor = obs_encoded.unsqueeze(0).to(model_device)
         else:
             obs_tensor = torch.tensor([obs_encoded], dtype=torch.float32, device=model_device)
-        _, policy_logits, value_root, _ = model.initial_inference(obs_tensor)
+        aux_out: dict = {}
+        try:
+            _, policy_logits, value_root, _, aux_out = model.initial_inference(obs_tensor, return_aux=True)
+        except TypeError:
+            _, policy_logits, value_root, _ = model.initial_inference(obs_tensor)
         logits = policy_logits[0]
         idx = [_action_id_to_index(a, action_dim) for a in legal_actions]
         idx_t = torch.tensor(idx, dtype=torch.long, device=model_device)
@@ -1904,13 +1908,21 @@ def _priors_and_values(model, obs_encoded, legal_actions: list[str], action_dim:
         # Producer-first contract: initial_inference provides only a root state-value.
         # Do not broadcast that scalar across actions as pseudo action-conditional values.
         values = None
-        return priors, values, {
+        xai_payload = {
             "latent_top_indices": [],
             "latent_top_values": [],
             "predicted_value_root": float(value_root[0, 0].item()),
             "mcts_action_value_source": "root_only_no_broadcast",
             "mcts_action_value_fallback_expected": True,
         }
+        if isinstance(aux_out, dict):
+            intent_t = aux_out.get("objective_intent_logits")
+            if isinstance(intent_t, torch.Tensor) and intent_t.numel() > 0:
+                xai_payload["neural_intent_logits"] = intent_t[0].detach().to(torch.float32).cpu().tolist()
+            mvp_t = aux_out.get("multi_vp_pred")
+            if isinstance(mvp_t, torch.Tensor) and mvp_t.numel() > 0:
+                xai_payload["neural_multi_vp_pred"] = mvp_t[0].detach().to(torch.float32).cpu().tolist()
+        return priors, values, xai_payload
 
 
 class SelfplayBackend(Protocol):
@@ -2132,6 +2144,12 @@ class _NativeEZV2SelfplayBackend:
                         if not unit_actions:
                             continue
                         priors_u, values_u, xai_u = _priors_and_values(model, obs_encoded, unit_actions, int(action_dim))
+                        if isinstance(xai_u, dict) and (xai_u.get("neural_intent_logits") or xai_u.get("neural_multi_vp_pred")):
+                            macro_plan = macro_planner.compute_macro_plan(
+                                obs,
+                                intent_logits=xai_u.get("neural_intent_logits"),
+                                multi_vp_pred=xai_u.get("neural_multi_vp_pred"),
+                            )
                         priors_u = macro_planner.modulate_priors(
                             priors_u,
                             macro_plan,
@@ -2247,6 +2265,12 @@ class _NativeEZV2SelfplayBackend:
                 xai = dict(precomputed_plan.get("xai", {}) or {})
             else:
                 priors, values, xai = _priors_and_values(model, obs_encoded, legal, int(action_dim))
+                if isinstance(xai, dict) and (xai.get("neural_intent_logits") or xai.get("neural_multi_vp_pred")):
+                    macro_plan = macro_planner.compute_macro_plan(
+                        obs,
+                        intent_logits=xai.get("neural_intent_logits"),
+                        multi_vp_pred=xai.get("neural_multi_vp_pred"),
+                    )
                 priors = macro_planner.modulate_priors(
                     priors,
                     macro_plan,

@@ -46,7 +46,7 @@ class HexagonalMaskConv2d(nn.Conv2d):
                 [1.0, 1.0, 1.0],
                 [1.0, 1.0, 0.0]
             ], dtype=torch.float32).view(1, 1, 3, 3)
-            self.register_buffer("hex_mask", mask)
+            self.register_buffer("hex_mask", mask, persistent=False)
         else:
             self.hex_mask = None
 
@@ -57,8 +57,56 @@ class HexagonalMaskConv2d(nn.Conv2d):
         return super().forward(x)
 
 
+class HexagonalDepthwiseSeparableConv2d(nn.Module):
+    """
+    Depthwise-Separable Hexagonal Convolution (Palma et al. 2025, Sec. 5):
+    Applies a 6-neighbor masked 3x3 depthwise convolution per channel followed by
+    a 1x1 pointwise projection, reducing FLOPs and parameters by ~70% on large maps.
+    """
+    def __init__(self, in_channels: int, out_channels: int, bias: bool = False):
+        super().__init__()
+        self.depthwise = nn.Conv2d(
+            in_channels, in_channels, kernel_size=3, padding=1, groups=in_channels, bias=False
+        )
+        mask = torch.tensor([
+            [0.0, 1.0, 1.0],
+            [1.0, 1.0, 1.0],
+            [1.0, 1.0, 0.0]
+        ], dtype=torch.float32).view(1, 1, 3, 3)
+        self.register_buffer("hex_mask", mask, persistent=False)
+        self.pointwise = nn.Conv2d(in_channels, out_channels, kernel_size=1, bias=bias)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        w = self.depthwise.weight * self.hex_mask
+        dw = F.conv2d(x, w, None, self.depthwise.stride, self.depthwise.padding, self.depthwise.dilation, self.depthwise.groups)
+        return self.pointwise(dw)
+
+
+class InputChannelGate(nn.Module):
+    """
+    Dynamic Input Channel Attention Gate (SENet / CBAM):
+    Recalibrates raw observation channels (e.g., 32 channels) before the representation trunk
+    and suppresses scenario-inactive dead channels.
+    """
+    def __init__(self, channels: int, reduction: int = 4):
+        super().__init__()
+        mid = max(4, int(channels) // max(1, int(reduction)))
+        self.gate = nn.Sequential(
+            nn.AdaptiveAvgPool2d(1),
+            nn.Conv2d(channels, mid, kernel_size=1),
+            nn.SiLU(),
+            nn.Conv2d(mid, channels, kernel_size=1),
+            nn.Sigmoid(),
+        )
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        # Also zero out completely inactive channels so bias terms cannot leak noise
+        active_mask = (x.abs().amax(dim=(-2, -1), keepdim=True) > 1e-6).to(x.dtype)
+        return x * self.gate(x) * active_mask
+
+
 class ResidualConvBlock(nn.Module):
-    def __init__(self, channels: int, use_hex_mask: bool = False):
+    def __init__(self, channels: int, use_hex_mask: bool = True):
         super().__init__()
         conv_cls = HexagonalMaskConv2d if use_hex_mask else nn.Conv2d
         self.conv1 = conv_cls(channels, channels, kernel_size=3, padding=1, bias=False)
@@ -149,6 +197,10 @@ class EfficientZeroV2BaseNetwork(nn.Module):
         enable_morale_head: bool = True,
         morale_classes: int = 4,
         dynamics_recurrent_steps: int = 1,
+        use_hex_mask: bool = True,
+        use_recall: bool = True,
+        enable_input_channel_gate: bool = False,
+        enable_temporal_context: bool = False,
     ):
         super().__init__()
         self.encoder_type = str(encoder_type).lower().strip()
@@ -160,6 +212,10 @@ class EfficientZeroV2BaseNetwork(nn.Module):
         self.latent_shape = (self.hidden_dim, self.observation_height, self.observation_width)
         self.dynamics_blocks = max(1, int(dynamics_blocks))
         self.dynamics_recurrent_steps = max(1, int(dynamics_recurrent_steps))
+        self.use_hex_mask = bool(use_hex_mask)
+        self.use_recall = bool(use_recall)
+        self.enable_input_channel_gate = bool(enable_input_channel_gate)
+        self.enable_temporal_context = bool(enable_temporal_context)
         self.prediction_blocks = max(1, int(prediction_blocks))
         self.objective_intent_classes = max(0, int(objective_intent_classes))
         self.multi_vp_feature_dim = max(0, int(multi_vp_feature_dim))
@@ -172,18 +228,25 @@ class EfficientZeroV2BaseNetwork(nn.Module):
         self.val_out_dim = (2 * self.support_size + 1) if self.support_size > 0 else 1
 
         if self.encoder_type == "cnn":
+            conv_cls = HexagonalMaskConv2d if self.use_hex_mask else nn.Conv2d
+            self.input_channel_gate = (
+                InputChannelGate(self.observation_channels) if self.enable_input_channel_gate else None
+            )
+            self.temporal_context = (
+                TemporalContextBlock(self.hidden_dim) if self.enable_temporal_context else None
+            )
             self.representation_input = nn.Sequential(
-                nn.Conv2d(self.observation_channels, self.hidden_dim, kernel_size=3, padding=1, bias=False),
+                conv_cls(self.observation_channels, self.hidden_dim, kernel_size=3, padding=1, bias=False),
                 _make_group_norm(self.hidden_dim),
                 nn.SiLU(),
             )
             self.representation_tower = nn.Sequential(
-                *[ResidualConvBlock(self.hidden_dim) for _ in range(max(1, int(prediction_blocks)))]
+                *[ResidualConvBlock(self.hidden_dim, use_hex_mask=self.use_hex_mask) for _ in range(max(1, int(prediction_blocks)))]
             )
             self.action_plane_dim = max(4, min(self.hidden_dim, 16))
             self.action_embedding = nn.Embedding(self.action_dim, self.action_plane_dim)
             self.dynamics_merge = nn.Sequential(
-                nn.Conv2d(
+                conv_cls(
                     self.hidden_dim + self.action_plane_dim,
                     self.hidden_dim,
                     kernel_size=3,
@@ -194,10 +257,10 @@ class EfficientZeroV2BaseNetwork(nn.Module):
                 nn.SiLU(),
             )
             self.dynamics_state = nn.Sequential(
-                *[ResidualConvBlock(self.hidden_dim) for _ in range(max(1, int(dynamics_blocks)))]
+                *[ResidualConvBlock(self.hidden_dim, use_hex_mask=self.use_hex_mask) for _ in range(max(1, int(dynamics_blocks)))]
             )
             self.prediction_trunk = nn.Sequential(
-                *[ResidualConvBlock(self.hidden_dim) for _ in range(max(1, int(prediction_blocks)))]
+                *[ResidualConvBlock(self.hidden_dim, use_hex_mask=self.use_hex_mask) for _ in range(max(1, int(prediction_blocks)))]
             )
 
             head_channels = max(8, self.hidden_dim // 4)
@@ -463,9 +526,40 @@ class EfficientZeroV2BaseNetwork(nn.Module):
                 return F.adaptive_avg_pool2d(t, (self.observation_height, self.observation_width))
         return t
 
+    def _gate_input_channels(self, observation: torch.Tensor) -> torch.Tensor:
+        """Applies learned InputChannelGate when enabled."""
+        if getattr(self, "input_channel_gate", None) is not None and observation.dim() == 4:
+            return self.input_channel_gate(observation)
+        return observation
+
+    def update_temporal_context(
+        self, hidden: torch.Tensor, prev_state: torch.Tensor | None = None
+    ) -> torch.Tensor:
+        """
+        Updates POMDP / Fog-of-War GRU belief state from spatial or vector latent representation.
+        Preserves 4D spatial latent shape (B, C, H, W) when hidden is 4D.
+        """
+        is_spatial = hidden.dim() == 4
+        pooled = hidden.mean(dim=(-2, -1)) if is_spatial else hidden
+        prev_vec = (
+            prev_state.mean(dim=(-2, -1))
+            if (prev_state is not None and prev_state.dim() == 4)
+            else prev_state
+        )
+        if getattr(self, "temporal_context", None) is not None:
+            ctx = self.temporal_context(pooled, prev_vec)
+        elif prev_vec is None:
+            ctx = pooled
+        else:
+            ctx = 0.5 * (pooled + prev_vec)
+        if is_spatial:
+            return self._scale_latent(hidden + ctx.unsqueeze(-1).unsqueeze(-1))
+        return ctx
+
     def initial_inference(self, observation: torch.Tensor, return_aux: bool = False):
         if self.encoder_type == "cnn":
-            hidden = self._scale_latent(self.representation_tower(self.representation_input(observation)))
+            obs_in = self._gate_input_channels(observation)
+            hidden = self._scale_latent(self.representation_tower(self.representation_input(obs_in)))
             pred_hidden = self.prediction_trunk(hidden)
             head_in = self._adapt_spatial(pred_hidden)
             policy_logits = self.prediction_policy(head_in)
@@ -537,6 +631,8 @@ class EfficientZeroV2BaseNetwork(nn.Module):
                 aux["attrition_pred"] = attrition_pred
             if morale_pred is not None:
                 aux["morale_pred"] = morale_pred
+            if getattr(self, "temporal_context", None) is not None:
+                aux["temporal_context_state"] = self.update_temporal_context(hidden)
             return hidden, policy_logits, value, reward, aux
         return hidden, policy_logits, value, reward
 
@@ -546,6 +642,8 @@ class EfficientZeroV2BaseNetwork(nn.Module):
         action_onehot: torch.Tensor,
         return_aux: bool = False,
         recurrent_steps: int | None = None,
+        use_recall: bool | None = None,
+        no_grad_steps: int = 0,
     ):
         steps = max(
             1,
@@ -555,6 +653,9 @@ class EfficientZeroV2BaseNetwork(nn.Module):
                 else getattr(self, "dynamics_recurrent_steps", 1)
             ),
         )
+        recall_active = bool(self.use_recall if use_recall is None else use_recall)
+        n_nograd = max(0, min(steps - 1, int(no_grad_steps)))
+
         if self.encoder_type == "cnn":
             if action_onehot.dim() == 1:
                 action_emb = self.action_embedding(action_onehot.long())
@@ -572,11 +673,28 @@ class EfficientZeroV2BaseNetwork(nn.Module):
             action_planes = action_emb.unsqueeze(-1).unsqueeze(-1).expand(
                 -1, -1, h_dim, w_dim
             )
-            merged = self.dynamics_merge(torch.cat([hidden, action_planes], dim=1))
-            # Weight-tied recurrent reasoning depth k without extra parameters (Palma et al.)
-            z = merged
-            for _ in range(steps):
-                z = self.dynamics_state(z)
+
+            def _step_cnn(z_curr: torch.Tensor, step_idx: int) -> torch.Tensor:
+                if step_idx == 0:
+                    merged_in = self.dynamics_merge(torch.cat([hidden, action_planes], dim=1))
+                    return self.dynamics_state(merged_in)
+                if recall_active:
+                    # Recall skip-connection (Palma et al. 2025, Fig. 1 / Bansal et al. 2022):
+                    # Re-injects original step input (hidden, action_planes) at every recurrent step
+                    recalled = self.dynamics_merge(
+                        torch.cat([0.5 * (z_curr + hidden), action_planes], dim=1)
+                    )
+                    return self.dynamics_state(recalled)
+                return self.dynamics_state(z_curr)
+
+            z = hidden
+            if n_nograd > 0:
+                with torch.no_grad():
+                    for s_idx in range(n_nograd):
+                        z = _step_cnn(z, s_idx)
+                z = z.detach()
+            for s_idx in range(n_nograd, steps):
+                z = _step_cnn(z, s_idx)
             next_hidden = self._scale_latent(z)
 
             rew_in = self._adapt_spatial(next_hidden)
@@ -614,8 +732,15 @@ class EfficientZeroV2BaseNetwork(nn.Module):
         else:
             x = self.dynamics_input(torch.cat([hidden, action_onehot], dim=-1))
             z = x
-            for _ in range(steps):
-                z = self.dynamics_state(z)
+            if n_nograd > 0:
+                with torch.no_grad():
+                    for s_idx in range(n_nograd):
+                        z_in = 0.5 * (z + x) if (s_idx > 0 and recall_active) else z
+                        z = self.dynamics_state(z_in)
+                z = z.detach()
+            for s_idx in range(n_nograd, steps):
+                z_in = 0.5 * (z + x) if (s_idx > 0 and recall_active) else z
+                z = self.dynamics_state(z_in)
             next_hidden = self._scale_latent(z)
             if self.support_size > 0:
                 rew_logits = self.dynamics_reward(next_hidden)
