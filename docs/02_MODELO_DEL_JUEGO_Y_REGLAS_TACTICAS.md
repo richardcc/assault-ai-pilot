@@ -137,6 +137,27 @@ Cuando una escuadra entra físicamente en el mismo hexágono ocupado por tropas 
 * Se calcula el ratio de combate cuerpo a cuerpo relativo.
 * Es una resolución simultánea y letal: el perdedor es aniquilado o forzado a una retirada desesperada, sufriendo chequeos de moral inmediatos.
 
+### 7.1. Descomposición Secuencial de Asaltos Combinados Multi-Unidad (Palma et al. 2025, Sec. 3.3)
+Para reflejar asaltos combinados doctrinales donde una unidad asalta mientras escuadras adyacentes proporcionan apoyo de supresión y cobertura antes de la melé cuerpo a cuerpo:
+
+```mermaid
+flowchart LR
+    A["Escuadra de Asalto Principal"] --> CC["Asalto en Hexágono Objetivo (q, r)"]
+    S1["Escuadra Adyacente 1 (Apoyo Flanqueo)"] -->|commit_support_unit| CC
+    S2["Escuadra Pesada (HMG / Mortero)"] -->|commit_support_unit| CC
+    CC --> DICE["Ronda 1: Inyección de Dados de Apoyo:\n+1 Verde (Infantería)\n+1 Rojo (Armas Pesadas)"]
+    DICE --> RES["Resolución Simultánea de Bajas y Retirada"]
+```
+
+1. **Sub-Fase de Compromiso de Apoyo (`commit_support_unit`)**:
+   * En [`assault_model/combat/close_combat_context.py`](file:///c:/repos/python/assault/assault_model/combat/close_combat_context.py), el objeto `CombatResolutionContext` permite registrar escuadras adyacentes que apoyan la maniobra tanto en el bando atacante (`supporting_attackers`) como en el defensor (`supporting_defenders`).
+2. **Inyección de Dados de Apoyo en Ronda 1**:
+   * En [`assault_model/combat/close_combat_resolver.py`](file:///c:/repos/python/assault/assault_model/combat/close_combat_resolver.py), durante la primera ronda del asalto, cada unidad de apoyo viva y no suprimida aporta un dado de ataque adicional:
+     * **Infantería Estándar (Fusileros / Asalto)**: $+1$ dado `DiceColor.GREEN`.
+     * **Armas Pesadas (`MMG`, `HMG`, `MORTAR`)**: $+1$ dado de alta letalidad `DiceColor.RED`.
+3. **Manejo de Bajas y Continuidad**:
+   * Si tras la ronda 1 ambos bandos conservan unidades vivas en el hexágono, el combate continúa hasta que un bando es aniquilado o forzado a romper el contacto.
+
 ---
 
 ## 8. Condiciones de Victoria y Puntos de Victoria (VP)

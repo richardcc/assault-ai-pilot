@@ -46,40 +46,56 @@ flowchart TD
 
 ## 2. Motor Analítico: DuckDB y Apache Parquet
 
-Para evitar bases de datos pesadas (PostgreSQL/MySQL) o la fragilidad de archivos JSON no indexados:
-* **Formato Parquet**: Las partidas de evaluación y los registros de decisión de MCTS se serializan en archivos `.parquet` fuertemente tipados con compresión Snappy/ZSTD.
-* **DuckDB Integrado**: Cada consulta del dashboard se ejecuta mediante SQL analítico vectorizado directamente sobre los ficheros Parquet, permitiendo calcular promedios, tasas de conversión de VPs y percentiles de confianza en milisegundos sobre cientos de miles de pasos de decisión.
+Para evitar bases de datos pesadas (PostgreSQL/MySQL) o la fragilidad y crecimiento ilimitado de archivos JSON monolíticos:
+* **Formato Parquet + DuckDB (`model_catalog.duckdb` y `parquet/*.parquet`)**: Los entrenamientos, partidas de evaluación y registros de decisión de MCTS se almacenan en tablas relacionales de DuckDB (`models`, `train_runs`, `eval_runs`, `eval_results`, `curriculum_trace`) sincronizadas con particiones `.parquet` comprimidas.
+* **Desactivación de JSON Monolítico (`include_debug_full_catalog = False`)**: El publicador `mlops/catalog_publisher_v2.py` genera únicamente el resumen ligero (`model_catalog_latest.json`, ~5 KB) y delega todo el histórico detallado en DuckDB/Parquet, evitando archivos `model_catalog_full_*.json` de varios gigabytes.
+* **Borrado Instantáneo In-Place (`mlops/reporting/model_deletion.py`)**: La eliminación de un experimento desde la UI borra los directorios físicos de checkpoints/self-play y ejecuta sentencias `DELETE FROM ... WHERE model_id = ?` directamente sobre DuckDB seguidas de `COPY ... TO ... (FORMAT PARQUET)`, completándose en milisegundos sin escanear ni reconstruir todo el árbol de directorios.
 
 ---
 
-## 3. Puertas de Promoción de Modelos (*Promotion Gates*)
+## 3. Puertas de Promoción (*Promotion Gates*) y Currículum Dinámico (`BEST-OF-3`)
 
-Para que un modelo candidato sea promocionado a baseline oficial del proyecto, debe superar de forma determinista una batería de **Gates de Calidad**:
+El orquestador [`curriculums/common/run_dynamic_gated_curriculum.ps1`](file:///c:/repos/python/assault/curriculums/common/run_dynamic_gated_curriculum.ps1) ejecuta cada fase del currículum con hasta **3 intentos independientes (`C1`, `C2`, `C3`)** que parten siempre del **mismo checkpoint ganador (`★`) de la fase anterior (`$phaseBaselineCheckpoint`)**:
 
 ```mermaid
 graph TD
-    M["Modelo Candidato Entrenado"] --> G1{"Gate 1: Win Rate\n>= 65% vs Random"}
-    G1 -- Pasa --> G2{"Gate 2: Timeout Rate\n<= 25% Empates"}
-    G2 -- Pasa --> G3{"Gate 3: VP Net\n>= +0.50 Saldo de VP"}
-    G3 -- Pasa --> G4{"Gate 4: Estabilidad de Cabezas\nLosses Calibradas y Varianza Explicada > 0.4"}
-    G4 -- Pasa --> PROMOTE["🏆 PROMOCIONADO A BASELINE OFICIAL"]
+    BASE["★ Checkpoint Elegido de la Fase Anterior\n($phaseBaselineCheckpoint)"] --> C1["Intento C1 (Config Base)"]
+    BASE --> C2["Intento C2 (Overlay Nivel 1\nsi C1 falla el Gate)"]
+    BASE --> C3["Intento C3 (Overlay Nivel 2\nsi C2 falla el Gate)"]
     
-    G1 -- Falla --> REJECT["❌ RECHAZADO / RETRAIN"]
-    G2 -- Falla --> REJECT
-    G3 -- Falla --> REJECT
-    G4 -- Falla --> REJECT
+    C1 --> EVAL{"Evaluación de Gate:\nWinRate, DefeatRate, VPs, TQS"}
+    C2 --> EVAL
+    C3 --> EVAL
+    
+    EVAL -- "Pasa al primer intento" --> PROMOTE["🏆 Promoción Inmediata a Siguiente Fase"]
+    EVAL -- "Agota los 3 intentos" --> BEST["★ Selección BEST-OF-3: max(C1, C2, C3) por TQS y WinRate\n+ Auto-Persistencia de Hiperparámetros Ganadores en el YAML Base"]
 ```
 
-* **Criterio de Victoria Neta**: Supervivencia superior y capacidad demostrada para tomar la iniciativa.
-* **Criterio Anti-Pasividad (Timeouts)**: Penaliza severamente a los modelos que se atrincheran indefinidamente sin avanzar hacia los objetivos designados.
-* **Criterio de Captura Territorial (VP Net)**: Mide el saldo neto entre hexágonos de victoria capturados y banderas cedidas al adversario.
+* **Independencia entre intentos (`C1`, `C2`, `C3`)**: Si `C2` prueba hiperparámetros más agresivos y degrada la red, `C3` **no hereda el modelo degradado de `C2`**, sino que vuelve a partir limpio desde `$phaseBaselineCheckpoint`.
+* **Ajuste Adaptativo de Hiperparámetros (`Build-ResumeOverlayConfig`)**: Según qué criterio del Gate haya quedado pendiente (`vp_unmet` vs `score_unmet`), `C2` y `C3` escalan automáticamente `vp_capture_bonus_per_hex` (`+12%` / `+24%`), `objective_progress_bonus_per_hex`, `capture_bonus`, `objective_loss_weight`, `kill_weight`, `reanalysis_ratio` y `train_updates_per_iter`.
+* **Auto-Persistencia para Futuras Ejecuciones desde 0 (`Save-WinningCycleParamsToPhaseConfig`)**: Cuando el ciclo ganador (`★`) de una fase es `C2` o `C3`, sus hiperparámetros se guardan automáticamente en el YAML base de esa fase para que el próximo currículum desde 0 los utilice directamente desde `C1`.
+
+### 3.1. Auto-Calibración de Quality Gates al Escenario y Dominant WinRate Override (Fase 7)
+En versiones previas, los Quality Gates empleaban umbrales fijos de captura de banderas (ej. `min_tracked_captured_vps: 2.5`), provocando falsos rechazos en escenarios de 3 VPs o transiciones de escala:
+
+1. **Detección Dinámica de Capacidad de VPs (`$scenarioVpMax`)**:
+   * En [`curriculums/common/run_dynamic_gated_curriculum.ps1`](file:///c:/repos/python/assault/curriculums/common/run_dynamic_gated_curriculum.ps1), el evaluador lee la configuración del mapa objetivo (ej. 5.0 VPs en *Battaglia Cittadina*, 3.0 VPs en *Mettete i Piedi a Terra*) y calcula percentiles normalizados:
+     $$\text{vp\_ratio} = \frac{\text{VPs Capturados}}{\$scenarioVpMax}$$
+2. **Dominant WinRate Override**:
+   * Si en el Ciclo 1 la red demuestra una superioridad táctica dominante:
+     $$\text{WinRate} \ge 80\%, \quad \text{LossRate} \le 15\%, \quad \text{TimeoutRate} \le 5\%$$
+   * Se concede la promoción inmediata a la siguiente fase, eliminando el bloqueo innecesario por tomas lentas de banderas mientras el agente aún optimiza la velocidad de resolución táctica.
 
 ---
 
 ## 4. Módulos y Pestañas del Visor de Reporting (`http://127.0.0.1:8778`)
 
-### 4.1. Catálogo General de Modelos (`CatalogPage.tsx`)
-* Tabla clasificatoria con todos los entrenamientos registrados, filtrado por motor (`efficientzero_v2`), número de episodios, fecha, badges de calidad superados y opción de eliminación limpia de artefactos.
+### 4.1. Catálogo General y Curva de Progresión de ELO (`CatalogPage.tsx`)
+* **Tabla Clasificatoria de Modelos**: Filtrado por motor (`efficientzero_v2`), número de episodios, fecha, calidad táctica (`TQS`) y botón de eliminación instantánea en DuckDB/Parquet.
+* **Gráfica `📈 Curva de Progresión de ELO por Fase del Currículum` (`CurriculumProgressionChart`)**:
+  * Enmarca visualmente los ciclos (`C1`, `C2`, `C3`) de cada fase con bandas verticales alternadas.
+  * Destaca el **ciclo elegido (`★`) de cada fase** con un anillo dorado brillante, etiqueta superior dorada (`★ ELO`), indicador inferior (`★ C1/C2/C3`) y una **línea de tendencia dorada discontinua** que une los puntos ganadores (`★`) de fase en fase.
+* **Tabla `Training Runs & Progreso del Currículum`**: Muestra el ciclo `(C1/3, C2/3, C3/3)` y resalta el ciclo elegido de cada fase con borde izquierdo dorado y el badge **`★ ELEGIDO`**.
 
 ### 4.2. Topología de Red y Desenrollado Interactivo (`NetworkTopologyTab.tsx`)
 * **Diagrama SVG Dinámico**: Visualiza las conexiones entre `Observación o_t`, `Planificador Macro (Nivel 1)`, `h(o)`, `s_t`, `Red de Dinámica g(s, a)`, `Acción MCTS a_t` y todas las cabezas de predicción activas.

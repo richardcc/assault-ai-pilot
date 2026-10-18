@@ -117,12 +117,13 @@ graph LR
 | **2** | **Policy (`policy_logits`)** | `prediction_policy` | `[B, 32]` | Distribución prior sobre las 32 ranuras de acciones legales candidatas en MCTS. |
 | **3** | **Value (`value_logits`)** | `prediction_value` | `[B, 2K+1]` | Distribución Two-Hot / HL-Gauss del retorno descontado esperado desde $s_t$. |
 | **4** | **Objective (`objective_logit`)** | `prediction_objective` | `[B, 1]` | Estimador escalar auxiliar de progreso global hacia la victoria por objetivos. |
-| **5** | **Threat Map (`threat_map_logits`)** | `prediction_threat_map` | `[B, 1, H, W]` | Mapa espacial 2D totalmente convolucional (FCN) de riesgo de fuego y LOS enemiga por hexágono. |
-| **6** | **Attrition (`attrition_pred`)** | `prediction_attrition` | `[B, 2]` | Vector de desgaste esperado `[bajas_aliadas, bajas_enemigas]` para evitar victorias pírricas. |
-| **7** | **Morale (`morale_logits`)** | `prediction_morale` | `[B, 4]` | Distribución de cohesión sobre 4 estados: `NORMAL`, `PINNED`, `SUPPRESSED`, `ROUTED`. |
-| **8** | **Objective Intent (`objective_intent_logits`)** | `prediction_intent` | `[B, 8]` | Clasificador doctrinal de intención operativa (8 clases tácticas sobre el objetivo activo). |
-| **9** | **Multi-VP (`multi_vp_pred`)** | `prediction_multi_vp` | `[B, 4]` | Predicción vectorial desagregada `[control_ratio, contested_ratio, threat_near_vp, time_pressure]`. |
-| **10** | **Consistency (`latent_proj` / `pred`)** | `consistency_projector` | `[B, 128]` | Embedding auto-supervisado SimSiam normalizado ($\ell_2$) para alineación temporal latente. |
+| **5** | **Threat Map (`threat_map_logits`)** | `prediction_threat_map` | `[B, 1, H, W]` | Mapa espacial 2D totalmente convolucional (FCN) de riesgo de fuego y LOS enemiga inmediata por hexágono. |
+| **6** | **Final Ownership Map (`final_ownership_pred`)** | `prediction_final_ownership` | `[B, 1, H, W]` | Mapa espacial 2D (KataGo — Wu 2020) que predice el propietario final del hexágono al término del episodio $T$. |
+| **7** | **Attrition (`attrition_pred`)** | `prediction_attrition` | `[B, 2]` | Vector de desgaste esperado `[bajas_aliadas, bajas_enemigas]` para evitar victorias pírricas. |
+| **8** | **Morale (`morale_logits`)** | `prediction_morale` | `[B, 4]` | Distribución de cohesión sobre 4 estados: `NORMAL`, `PINNED`, `SUPPRESSED`, `ROUTED`. |
+| **9** | **Objective Intent (`objective_intent_logits`)** | `prediction_intent` | `[B, 8]` | Clasificador doctrinal de intención operativa (8 clases tácticas sobre el objetivo activo). |
+| **10** | **Multi-VP (`multi_vp_pred`)** | `prediction_multi_vp` | `[B, 4]` | Predicción vectorial desagregada `[control_ratio, contested_ratio, threat_near_vp, time_pressure]`. |
+| **11** | **Consistency (`latent_proj` / `pred`)** | `consistency_projector` | `[B, 128]` | Embedding auto-supervisado SimSiam normalizado ($\ell_2$) para alineación temporal latente. |
 
 ---
 
@@ -146,6 +147,17 @@ Para comprimir la escala dinámica sin perder resolución en torno a cero:
 | **Función Objetivo** | Cross-Entropy sobre átomos discretos. | Cross-Entropy / Divergencia KL contra la campana gaussiana. |
 | **Efecto de Regularización**| Puede sufrir sobreajuste o picos de varianza en horizontes largos. | Actúa como *label smoothing* estocástico natural; gradientes notablemente más suaves y estables. |
 | **Recuperación Escalar** | $\hat{v} = h^{-1}\left(\sum_{i=-K}^{K} i \cdot p_i\right)$ | $\hat{v} = \text{symexp}\left(\sum_{i=-K}^{K} z_i \cdot p_i\right)$ |
+
+### 4.3. Two-Hot Asimétrico con Warp Exponencial en Torno a Cero (Discriminación de Micro-Desgaste)
+En wargames tácticos, las micro-ventajas de desgaste en las primeras escaramuzas (ej. forzar una retirada o causar una baja de 0.05 puntos de VP) caían en el mismo átomo central cero del soporte estándar $[-30, +30]$, generando gradientes nulos o ceguera táctica.
+
+Para solucionarlo, [`agents/efficientzero_v2/core/support.py`](file:///c:/repos/python/assault/agents/efficientzero_v2/core/support.py) implementa el soporte asimétrico no lineal con `asym_zero_boost=True` y $\alpha = 0.75$:
+
+$$\text{warp}(x) = \text{sign}(x) \cdot |x|^{\alpha}, \quad \alpha = 0.75$$
+$$\text{unwarp}(y) = \text{sign}(y) \cdot |y|^{1/\alpha}$$
+
+* **Efecto de Resolución**: Un valor pequeño de $x = 0.04$ se proyecta a $\approx 0.089$, expandiendo su representación a lo largo de los átomos discretos adyacentes sin modificar los 61 átomos totales ni romper la compatibilidad con checkpoints existentes.
+* **Inversión Exacta**: Durante la inferencia escalar en MCTS (`support_to_scalar`), el valor esperado se des-transforma simétricamente mediante $1/\alpha \approx 1.3333$, recuperando la métrica continua real.
 
 ---
 
