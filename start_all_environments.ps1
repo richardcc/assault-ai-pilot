@@ -73,8 +73,15 @@ $cmdBackend = "Write-Host '========================================' -Foreground
     "if (Test-Path '$VenvActivate') { . '$VenvActivate' }; " +
     "python -m uvicorn assault_backend.main:app --host 127.0.0.1 --port 8001 --reload"
 
+$cmdUnitEditor = "Write-Host '========================================' -ForegroundColor Cyan; " +
+    "Write-Host ' Unit Catalog Editor & Approval Workflow' -ForegroundColor Yellow; " +
+    "Write-Host ' URL: http://127.0.0.1:8780/            ' -ForegroundColor Green; " +
+    "Write-Host '========================================' -ForegroundColor Cyan; " +
+    "if (Test-Path '$VenvActivate') { . '$VenvActivate' }; " +
+    "python tools/unit_editor_server.py --port 8780"
+
 $cmdFrontend = "Write-Host '========================================' -ForegroundColor Cyan; " +
-    "Write-Host ' [4/6] Frontend Simulador Tactico (Vite)' -ForegroundColor Yellow; " +
+    "Write-Host ' Frontend Simulador Tactico (Vite)     ' -ForegroundColor Yellow; " +
     "Write-Host ' URL: http://localhost:5173/            ' -ForegroundColor Green; " +
     "Write-Host '========================================' -ForegroundColor Cyan; " +
     "npm run dev -- --host"
@@ -82,7 +89,7 @@ $cmdFrontend = "Write-Host '========================================' -Foregroun
 $cmdShell1 = "if (Test-Path '$VenvActivate') { . '$VenvActivate' }; " +
     "Clear-Host; " +
     "Write-Host '===================================================' -ForegroundColor Green; " +
-    "Write-Host ' [5/6] Terminal Dev 1 - Entorno .venv Activo        ' -ForegroundColor Yellow; " +
+    "Write-Host ' Terminal Dev 1 - Entorno .venv Activo             ' -ForegroundColor Yellow; " +
     "Write-Host ' Carpeta: $RepoRoot' -ForegroundColor Gray; " +
     "Write-Host ' Listo para ejecutar comandos y scripts             ' -ForegroundColor Cyan; " +
     "Write-Host '===================================================' -ForegroundColor Green; " +
@@ -91,7 +98,7 @@ $cmdShell1 = "if (Test-Path '$VenvActivate') { . '$VenvActivate' }; " +
 $cmdShell2 = "if (Test-Path '$VenvActivate') { . '$VenvActivate' }; " +
     "Clear-Host; " +
     "Write-Host '===================================================' -ForegroundColor Green; " +
-    "Write-Host ' [6/6] Terminal Dev 2 - Entorno .venv Activo        ' -ForegroundColor Yellow; " +
+    "Write-Host ' Terminal Dev 2 - Entorno .venv Activo             ' -ForegroundColor Yellow; " +
     "Write-Host ' Carpeta: $RepoRoot' -ForegroundColor Gray; " +
     "Write-Host ' Listo para ejecutar comandos y scripts             ' -ForegroundColor Cyan; " +
     "Write-Host '===================================================' -ForegroundColor Green; " +
@@ -99,7 +106,8 @@ $cmdShell2 = "if (Test-Path '$VenvActivate') { . '$VenvActivate' }; " +
 
 # Lista de especificaciones de pestañas
 $tabSpecs = @(
-    @{ Title = "Reporting-8777";   Dir = $RepoRoot; Cmd = $cmdReporting }
+    @{ Title = "Reporting-8777";   Dir = $RepoRoot; Cmd = $cmdReporting },
+    @{ Title = "UnitEditor-8780";  Dir = $RepoRoot; Cmd = $cmdUnitEditor }
 )
 
 if (-not $SkipLegacySB3) {
