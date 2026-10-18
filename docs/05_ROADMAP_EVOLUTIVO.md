@@ -178,7 +178,7 @@ flowchart TD
 
 ## 6. Hoja de Ruta Unificada de Trabajo Pendiente (Siguiente Frontera 2026–2027)
 
-Este apartado final consolida en un único punto **todos los desarrollos pendientes** procedentes de la auditoría de rendimiento del engine ([Sección 5.4](#54-64-algoritmo-de-retirada-doctrinal-completo-friendly-edge--defilade-pathing--pendiente-)), la auditoría de literatura científica ([`06_LITERATURE_AUDIT_CHANNELS_HEADS_TACTICS.md`](06_LITERATURE_AUDIT_CHANNELS_HEADS_TACTICS.md)), la calibración de currículum y la auditoría de paridad del reglamento oficial ([`08_AUDITORIA_REGLAMENTO_VS_ENGINE.md`](08_AUDITORIA_REGLAMENTO_VS_ENGINE.md)):
+Este apartado final consolida en un único punto **todos los desarrollos pendientes** procedentes de la auditoría de rendimiento del engine (**Sección 5.4 / 6.4**), la auditoría de literatura científica ([`06_LITERATURE_AUDIT_CHANNELS_HEADS_TACTICS.md`](06_LITERATURE_AUDIT_CHANNELS_HEADS_TACTICS.md)), la calibración de currículum y la auditoría de paridad del reglamento oficial ([`08_AUDITORIA_REGLAMENTO_VS_ENGINE.md`](08_AUDITORIA_REGLAMENTO_VS_ENGINE.md)):
 
 ```mermaid
 flowchart LR
