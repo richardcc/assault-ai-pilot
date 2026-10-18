@@ -220,9 +220,31 @@ flowchart TD
 
 ---
 
-## 4. Estándares de Calidad y Reglas del Código
+---
 
-1. **Aislamiento Total del Motor de Reglas**: `assault_model` no debe importar PyTorch, NumPy ni módulos de MLOps.
-2. **Determinismo y Semillas**: Todas las decisiones estocásticas (tiradas de dados, tiradas de moral) utilizan generadores de números pseudoaleatorios explícitos (`random_seed`), garantizando reproducibilidad exacta de partidas.
-3. **Inferencia Eficiente**: Todo forward pass de inferencia durante self-play se ejecuta en modo `torch.inference_mode()` con tensores `bfloat16`/`float32` y asignación de memoria sin fugas.
+## 5. Arquitectura de Documentación Canónica y Pipeline de Compilación HTML
+
+La documentación técnica del proyecto se rige por el principio de **Fuente Única de Verdad (Single Source of Truth - SSoT)** en Markdown (`docs/*.md`) con compilación automatizada al 100% hacia los portales HTML:
+
+```mermaid
+flowchart LR
+    MD_SRC["Archivos Markdown Canónicos\n(docs/*.md)"]
+    SYNC_SCRIPT["scripts/sync_docs_html.py\n(Verificador Estricto 1:1)"]
+    HTML_STANDALONE["docs/index.html\n(Portal Interactivo Autocontenido)"]
+    SITE_MKDOCS["site/\n(Portal MkDocs Material :8778/docs/)"]
+
+    MD_SRC --> SYNC_SCRIPT
+    SYNC_SCRIPT -->|Inyección JSON + Assert 100%| HTML_STANDALONE
+    SYNC_SCRIPT -->|mkdocs build| SITE_MKDOCS
+```
+
+### 5.1. Reglas Estrictas de la Documentación:
+1. **Markdown como Fuente de Verdad**: Todo contenido normativo, científico, arquitectónico y operativo se redacta en `docs/*.md`. Nunca se edita HTML de documentación directamente a mano.
+2. **Posición del Roadmap**: La **Hoja de Ruta Evolutiva (`05_ROADMAP_EVOLUTIVO.md`)** debe figurar **SIEMPRE como el último punto (`09. Hoja de Ruta Evolutiva (Roadmap)`)**, unificando todos los planes y deudas técnicas del sistema.
+3. **Sincronización Automática Obligatoria**: Tras modificar cualquier archivo en `docs/`, se ejecuta:
+   ```bash
+   python scripts/sync_docs_html.py
+   ```
+   El script inyecta el 100% del texto íntegro en `docs/index.html`, verifica mediante aserciones carácter por carácter que no haya discrepancias, y compila el árbol estático completo en `site/`.
+
 
