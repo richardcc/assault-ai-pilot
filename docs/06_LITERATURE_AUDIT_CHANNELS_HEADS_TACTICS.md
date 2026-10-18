@@ -393,50 +393,11 @@ Completando la revisión con las obras de referencia de la biblioteca técnica d
 
 ---
 
-## 7. Matriz Actualizada de Hoja de Ruta de Investigación (SOTA + Literatura)
+## 7. Referencia a la Hoja de Ruta Evolutiva Unificada
 
-```mermaid
-flowchart TD
-    subgraph Implementado["1. Implementado y Verificado en EfficientZeroV2"]
-        I1["Modelo Latente EZ-v2 + Two-Hot / HL-Gauss + Symlog"]
-        I2["10 Cabezas + PCGrad Orthogonal Balancing"]
-        I3["Invarianza Espacial FCN + _adapt_spatial (16x16 a 64x64)"]
-        I4["Dinamica Recurrente k-Step + Recall Skip-Connection + Progressive Loss"]
-        I5["Mutador Procedural Asimetrico + Clumping Espacial de Hyde + Refuerzos Entrantes"]
-        I6["HexagonalMaskConv2d Activo + HexagonalDepthwiseSeparableConv2d"]
-        I7["InputChannelGate (32ch) + TemporalContextBlock (GRU POMDP)"]
-        I8["MacroStrategyPlanner Neuronal (Intent + Reserva Dunnigan + Flanqueo Sun Tzu + Doctrina Hyde)"]
-        I9["Presupuesto MCTS Adaptativo por Entropia (compute_adaptive_simulations)"]
-    end
+> [!NOTE]
+> La matriz consolidada de transferencias científicas (Palma et al. 2025, KataGo, Dunnigan, Sun Tzu y Henry Hyde 2015) y las fases pendientes de investigación se encuentran unificadas en el documento final de la plataforma: **[09. Hoja de Ruta Evolutiva: Assault Architecture Roadmap (2024–2026)](05_ROADMAP_EVOLUTIVO.md)**.
 
-    subgraph Fase_Avanzada["2. Siguiente Frontera de Motor y Red"]
-        A1["Sub-fases de Asalto Combinado Multi-Unidad en voec_sim"]
-        A2["Cabeza Densa Final Ownership Map 1xHxW (KataGo)"]
-    end
-
-    Implementado --> Fase_Avanzada
-```
-
-### Tabla Resumen de Estado de Implementación Frente a la Literatura
-
-| # | Innovación / Mecanismo de la Literatura | Fuente Científica | Estado en Assault | Compatibilidad Checkpoints |
-| :---: | :--- | :--- | :---: | :---: |
-| 1 | Valor/Recompensa Distribucional Two-Hot + HL-Gauss + Symlog | DeepMind 2024 / DreamerV3 | 🟢 **Implementado** | 100% |
-| 2 | 10 Cabezas Multitarea + Proyección Ortogonal PCGrad | Yu et al. 2020 / EZ-v2 | 🟢 **Implementado** | 100% |
-| 3 | Invariancia Espacial Zero-Shot ($16\times 16 \leftrightarrow 32\times 32 \leftrightarrow 64\times 64$) | Palma et al. 2025 (Sec. 3.1) | 🟢 **Implementado** | 100% |
-| 4 | Dinámica Recurrente Weight-Tied de $k$ pasos (`dynamics_recurrent_steps`) | Palma et al. 2025 (Sec. 3.1) | 🟢 **Implementado** | 100% |
-| 5 | Mutación Procedural Asimétrica + **Clumping Espacial de Terreno** | Palma et al. 2025 / Henry Hyde 2015 | 🟢 **Implementado** | 100% |
-| 6 | Activación por defecto de `HexagonalMaskConv2d` + `HexagonalDepthwiseSeparableConv2d` | Palma et al. 2025 (Hexagdly) | 🟢 **Implementado** | 100% (`persistent=False`) |
-| 7 | Cableado activo de `TemporalContextBlock` (GRU) en el flujo latente | Palma et al. 2025 / POMDP RL | 🟢 **Implementado** | 100% (Opt-in flag) |
-| 8 | Conexión neuronal de `prediction_intent` y `multi_vp_pred` al `MacroStrategyPlanner` | Feudal Networks / AlphaStar | 🟢 **Implementado** | 100% |
-| 9 | `InputChannelGate` (SE + supresión de canales muertos sobre los 32 canales) | SENet / CBAM | 🟢 **Implementado** | 100% (Opt-in flag) |
-| 10 | Conexión **Recall** (`use_recall=True`) + Entrenamiento **Progressive Loss** $(n, k)$ | Palma et al. 2025 / Bansal 2022 | 🟢 **Implementado** | 100% (0 params extra) |
-| 11 | Proyección de **Refuerzos Entrantes** + **Probabilidad Acumulada e Intel 6 Niveles** | Palma et al. 2025 / Henry Hyde 2015 | 🟢 **Implementado** | 100% (32 canales intactos) |
-| 12 | **ACT / Presupuesto MCTS Adaptativo** (`compute_adaptive_simulations`) | Palma et al. 2025 (Sec. 5) / Graves 2016 | 🟢 **Implementado** | 100% |
-| 13 | Rol Doctrinal **`ROLE_TACTICAL_RESERVE`** (Dunnigan) y **`ROLE_FLANK_SCREEN`** (Sun Tzu) | Dunnigan / Sun Tzu | 🟢 **Implementado** | 100% |
-| 14 | Cohesión **`SUPPORTED`/`ISOLATED`**, Retirada **$<50\%$ vs. BUA** y **Anti-Persecución** | Henry Hyde 2015 (Cap. 2 y 7) | 🟢 **Implementado** | 100% |
-| 15 | Descomposición Secuencial de **Asaltos Combinados Multi-Unidad** en simulador | Palma et al. 2025 (Sec. 3.3, Fig. 3) | 🟡 **Planificado (Motor Sim)** | — |
-| 16 | Cabeza Densa **Final Ownership Map** ($1\times H\times W$ al final de partida) | KataGo (Wu 2020) | 🟡 **Planificado (Fase 7)** | — |
 
 
 

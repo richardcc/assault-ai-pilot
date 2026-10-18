@@ -150,33 +150,8 @@ El libro de campaña oficial (*ITA_Assault_Libro_Campagna_v1.0.pdf*) contiene la
 
 ---
 
-## 4. Plan de Acción Priorizado para Completitud del Motor y Escenarios
+## 4. Referencia al Plan de Acción y Hoja de Ruta Evolutiva Unificada
 
-Para elevar la paridad del simulador del **72% al 100% de fidelidad de reglamento** y disponer del **100% del compendio de batallas**, se establece la siguiente hoja de ruta:
+> [!NOTE]
+> El plan de acción priorizado para alcanzar el 100% de paridad del reglamento (Fases A, B y C: mecánicas tácticas de infantería/humo/transporte, cartas de mando/apoyo aéreo TAS-OAS e ingesta automatizada de los 36 escenarios restantes) se encuentra integrado de forma unificada en el documento final de la documentación: **[09. Hoja de Ruta Evolutiva: Assault Architecture Roadmap (2024–2026)](05_ROADMAP_EVOLUTIVO.md)**.
 
-### Fase A: Mecánicas Tácticas Críticas Faltantes en `assault_model/`
-1. **Acción de Infantería "Cavar / Dig In" (Pág. 22)**:
-   - Crear `DigInAction` en `assault_model/actions/status.py`.
-   - Modifica el hexágono añadiendo un marcador de `Foxhole` (`pozo de tirador`), otorgando el dado de defensa correspondiente sin requerir reinicio de escenario.
-2. **Sistema de Humo Táctico (Pág. 14–15)**:
-   - Añadir acción `FireSmokeAction` en `assault_model/actions/ranged_indirect.py`.
-   - Modificar `combat/line_of_sight.py` para bloquear trazas que crucen hexágonos con humo.
-   - En `Organization Phase`, reducir contadores de humo y retirarlos al disiparse.
-3. **Arrollamiento de Artillería (Overrun, Pág. 23)**:
-   - Implementar `OverrunAction` para blindados pesados que entran en hex con artillería descubierta, destruyéndola o forzando chequeo de moral sin entrar en fase lenta de asalto.
-4. **Transporte de Tropas y Desembarco de Emergencia (Pág. 23–24, 31)**:
-   - Implementar `LoadUnitAction` y `UnloadUnitAction` con verificación de capacidad de transporte.
-   - En caso de vehículo destruido o crítico, forzar tirada de supervivencia y desembarco de emergencia bajo fuego.
-
-### Fase B: Expansiones y Cartas de Mando (Pág. 9, 12, 38–45)
-1. **Fase de Iniciativa Dinámica y Puntos de Mando (CP)**:
-   - Tirada D6 de iniciativa al inicio del turno en `state/turn.py`.
-   - Asignación de 2 a 5 CPs por facción para activaciones reactivas múltiples.
-2. **Subsistema TAS / OAS**:
-   - Crear `assault_model/combat/support_strike.py` con tiradas de dispersión hexagonal (1D6 dirección, 1D6 distancia) y área de saturación en racimo.
-
-### Fase C: Pipeline Automatizado de Ingesta de Escenarios
-1. **Parser Automatizado de Escenarios PDF a JSON**:
-   - Desarrollar un script en `scripts/scenario_ingestor.py` que lea las tablas de composición de tropas, piezas de mapa (ej. `Map A`, `Map B`, `Map C`), coordenadas de objetivos y condiciones de victoria desde el PDF.
-   - Generar automáticamente los 36 ficheros `.json` en `assault_sim/assets/scenarios/`.
-   - Habilitar los nuevos escenarios en la UI del simulador (`/api/ui/scenarios/catalog`).

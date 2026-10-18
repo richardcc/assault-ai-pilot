@@ -190,21 +190,10 @@ Esto garantiza matemáticamente que ninguna cabeza táctica auxiliar degrade la 
 
 ---
 
-## 7. Matriz de Síntesis y Hoja de Ruta Evolutiva (Roadmap 2024–2026)
+## 7. Referencia a la Hoja de Ruta Evolutiva Unificada
 
-A partir de la auditoría de la arquitectura original y los hallazgos recientes en la literatura científica de Model-Based RL (EfficientZero V2 en ICML 2024, Google DeepMind *"Stop Regressing"* 2024, DreamerV3 y Palma et al. Feb 2025 sobre wargames hexagonales con redes recurrentes), se establece la siguiente matriz de síntesis y hoja de ruta evolutiva:
+> [!NOTE]
+> Toda la matriz de síntesis evolutiva, el estado de implementación de las mejoras de `EfficientZero V2` y las fases futuras de investigación se han unificado canónicamente en el documento final de la documentación: **[09. Hoja de Ruta Evolutiva: Assault Architecture Roadmap (2024–2026)](05_ROADMAP_EVOLUTIVO.md)**.
 
-| Área | Estado Assault Original | Estado Actual (EZ-v2) | Recomendación Literatura Reciente (2024–2026) | Impacto Esperado | Estado de Implementación |
-| :--- | :--- | :--- | :--- | :--- | :---: |
-| **Búsqueda MCTS** | PUCT clásico (512 sims) | PUCT + Modulación Priors N1 + Gumbel | **Gumbel Sequential Halving** (muestreo sin reemplazo de $k$ acciones) | Reducción de $\sim 60\%$ en tiempo de self-play sin pérdida táctica | 🟢 Implementado en `mcts.py` |
-| **Distribución de Valor** | Regresión escalar MSE | Two-Hot ($K=30$, 61 átomos) | **HL-Gauss** (discretización con suavizado gaussiano $\mathcal{N}(y, \sigma^2)$) | Menor sobreajuste y curvas de Loss de valor más suaves | 🟢 Implementado en `support.py` |
-| **Niebla de Guerra (POMDP)** | Canales de observación $o_t$ | Canales + Cabeza Threat Map | **Capa Recurrente / Memoria de Avistamiento** (`TemporalContextBlock` GRU) | Seguimiento de unidades enemigas ocultas en niebla | 🟢 Implementado en `network_base.py` |
-| **Topología Espacial** | Conv2D $3\times 3$ cartesiana | Conv2D + SE + Spatial Attention | **Hexagonal Masking** en kernels $3\times 3$ (`HexagonalMaskConv2d`) | Eliminación de sesgos diagonales inexistentes en el hexágono | 🟢 Implementado en `network_base.py` |
-| **Invarianza al Mapa** | Fijo a $16\times 16$ | FCN + `_adapt_spatial` + `AdaptiveAvgPool2d` | **Adaptive Spatial Processing** (Palma et al. 2025) | Despliegue Zero-Shot en mapas $16\times 16$, $32\times 32$ y $64\times 64$ sin reentrenar | 🟢 Implementado en `network_base.py` |
-| **Profundidad Causal** | 1 paso por acción en $g_\theta$ | `dynamics_recurrent_steps` ($k$ iteraciones) | **Weight-Tied Recurrent Reasoning** (Palma et al. 2025) | Mayor horizonte causal en $g_\theta$ con 0 parámetros adicionales | 🟢 Implementado en `network_base.py` |
-| **Currículo de Terreno** | Escenarios estáticos | Mutador Procedural Asimétrico | **Procedural Scenario & Force Mutation** (Palma et al. 2025) | Generalización Zero-Shot ante terrenos y fuerzas no vistas | 🟢 Implementado en `procedural_mutator.py` |
-| **Escala de Recompensas** | Escalado lineal manual | Two-Hot contractivo $h(x)$ | **Symlog Transform** ($\text{sign}(x)\ln(\|x\|+1)$) | Robustez universal ante recompensas extremas de victoria/derrota | 🟢 Implementado en `support.py` |
-| **Jerarquía Táctica** | Acciones combinatorias planas | Planificador Macro N1 HRL | **Roles Doctrinales + Posturas Operativas** (Spearhead, Fire Support, Defender, Screen) | Eliminación de pasividad y triplicación de captura neta de VPs | 🟢 Implementado en `macro_planner.py` |
-| **Balance de Gradientes** | Suma ponderada fija | PCGrad / AdaptiveLossScaler | **Proyección Ortogonal de Gradientes Opuestos** | Coexistencia estable de las 10 cabezas sin degradación de política | 🟢 Implementado en `loss_balancer.py` |
 
 
