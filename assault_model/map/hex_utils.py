@@ -95,3 +95,24 @@ def safe_hex_distance(a, b) -> int:
         )
     except Exception:
         return 999
+
+
+def hex_range(center: CoordLike, radius: int) -> list[Tuple[int, int]]:
+    """
+    Return all hexes within hex_distance <= radius from center,
+    in odd-r offset coordinates (q, r) in O(R^2) closed-form arithmetic.
+    """
+    if radius < 0:
+        return []
+    q0, r0 = _as_qr(center)
+    if radius == 0:
+        return [(q0, r0)]
+
+    aq0, ar0 = _offset_to_axial(q0, r0)
+    results: list[Tuple[int, int]] = []
+    for dq in range(-radius, radius + 1):
+        dr_min = max(-radius, -dq - radius)
+        dr_max = min(radius, -dq + radius)
+        for dr in range(dr_min, dr_max + 1):
+            results.append(_axial_to_offset(aq0 + dq, ar0 + dr))
+    return results

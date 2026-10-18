@@ -2,7 +2,7 @@
 GameState represents the canonical, observable state of the game.
 """
 
-from typing import Dict, List, Optional, TYPE_CHECKING
+from typing import Dict, List, Optional, Set, Tuple, Iterable, TYPE_CHECKING
 import os
 
 from assault_model.map.map import Map
@@ -13,6 +13,7 @@ from assault_model.core.victory_conditions import VictoryConditions
 from assault_model.core.vp_tracker import VictoryPointTracker
 from assault_model.state.turn import TurnState
 from assault_model.map.hex_coord import HexCoord
+from assault_model.map.hex_utils import hex_range, _as_qr, CoordLike
 
 # --- COMBAT IMPORTS ---
 from assault_model.actions.combat_mode import CombatMode
@@ -94,11 +95,15 @@ class GameState:
         self.winner: Optional[str] = None
         self.end_reason: Optional[str] = None
         self.outcome: Optional["ScenarioOutcomeResult"] = None
-        self._previously_occupied_hexes: set[tuple[int, int]] = set(self.hex_states.keys())
+        self._dirty_control_hexes: Set[Tuple[int, int]] = set()
+        self._units_by_hex: Dict[Tuple[int, int], Set[str]] = {}
+        self._unit_sides: Dict[str, str] = {}
+        self._unit_last_known_state: Dict[str, Tuple[Optional[Tuple[int, int]], bool, bool]] = {}
+        self._previously_occupied_hexes: Set[Tuple[int, int]] = set()
 
         # init
-        self.recalculate_hex_control()
         self._apply_initial_vp_control_on_start()
+        self.recalculate_hex_control(force_full=True)
 
     # =================================================
     # TURN ORDER
@@ -135,34 +140,131 @@ class GameState:
         )
 
     # =================================================
-    # HEX CONTROL (Optimized delta update)
+    # HEX CONTROL (Incremental O(k * R^2) update)
     # =================================================
-    def recalculate_hex_control(self) -> None:
-        units_by_hex: Dict[tuple[int, int], set[str]] = {}
+    def record_dirty_control_hex(self, coords: CoordLike) -> None:
+        """
+        Record a single hex coordinate that suffered tactical changes
+        (movement, casualties, suppression, morale retreat).
+        """
+        try:
+            q, r = _as_qr(coords)
+            if not hasattr(self, "_dirty_control_hexes"):
+                self._dirty_control_hexes = set()
+            self._dirty_control_hexes.add((q, r))
+        except Exception:
+            pass
+
+    def record_unit_event(
+        self,
+        unit: UnitInstance,
+        prev_coords: Optional[CoordLike] = None,
+    ) -> None:
+        """
+        Record affected origin coordinates for a unit action/event.
+        """
+        if prev_coords is not None:
+            self.record_dirty_control_hex(prev_coords)
+        if unit is not None and getattr(unit, "position", None) is not None:
+            self.record_dirty_control_hex(unit.position)
+
+    def _rebuild_unit_spatial_index(self) -> None:
+        """Full rebuild of unit spatial index and state snapshot."""
+        self._units_by_hex = {}
+        self._unit_sides = {}
+        self._unit_last_known_state = {}
+
+        for unit in self.units:
+            self._unit_sides[unit.unit_id] = unit.side
+            pos = (unit.position.q, unit.position.r) if (unit.alive and unit.position) else None
+            self._unit_last_known_state[unit.unit_id] = (pos, unit.alive, unit.suppressed)
+            if pos is not None:
+                self._units_by_hex.setdefault(pos, set()).add(unit.unit_id)
+
+    def recalculate_hex_control(
+        self,
+        affected_positions: Optional[Iterable[CoordLike]] = None,
+        influence_radius: int = 3,
+        force_full: bool = False,
+    ) -> Set[Tuple[int, int]]:
+        """
+        Incremental territorial control recalculation in O(k * R^2) amortized.
+
+        Brecha Resuelta (Roadmap 6.3):
+        En lugar de iterar sobre toda la cuadrícula (W * H * N), solo se recalculan
+        los hexágonos dentro del radio de influencia táctica (R <= 3) alrededor de
+        las unidades que ejecutaron movimientos, sufrieron bajas o quedaron suprimidas.
+        """
         vp_hexes = set()
         if self.victory:
             vp_hexes = {vp.hex_coords for vp in self.victory.points}
 
-        for unit in self.units:
-            if not unit.alive or not unit.position:
-                continue
-
-            coords = (unit.position.q, unit.position.r)
-            units_by_hex.setdefault(coords, set()).add(unit.side)
-
-        # Optimization: only inspect hexes whose occupancy or control could change
-        prev = getattr(self, "_previously_occupied_hexes", None)
-        if prev is None:
+        if (
+            force_full
+            or not hasattr(self, "_units_by_hex")
+            or not hasattr(self, "_unit_last_known_state")
+            or not hasattr(self, "_dirty_control_hexes")
+        ):
+            self._rebuild_unit_spatial_index()
+            self._dirty_control_hexes = set()
             active_coords = set(self.hex_states.keys())
         else:
-            active_coords = set(units_by_hex.keys()) | prev | vp_hexes
+            dirty_origins: Set[Tuple[int, int]] = set(self._dirty_control_hexes)
+            if affected_positions:
+                for p in affected_positions:
+                    try:
+                        dirty_origins.add(_as_qr(p))
+                    except Exception:
+                        pass
 
+            # Detect automatic delta in unit positions, casualties, suppression, or desynced hex ownership
+            for unit in self.units:
+                self._unit_sides[unit.unit_id] = unit.side
+                pos = (unit.position.q, unit.position.r) if (unit.alive and unit.position) else None
+                last_pos, last_alive, last_suppressed = self._unit_last_known_state.get(
+                    unit.unit_id, (None, False, False)
+                )
+
+                expected_owner = self.side_to_ownership.get(unit.side, HexOwnership.NONE) if unit.alive else None
+                ownership_desynced = (
+                    pos is not None
+                    and pos in self.hex_states
+                    and self.hex_states[pos].ownership != expected_owner
+                )
+
+                if pos != last_pos or unit.alive != last_alive or unit.suppressed != last_suppressed or ownership_desynced:
+                    if last_pos is not None:
+                        dirty_origins.add(last_pos)
+                        if last_pos in self._units_by_hex:
+                            self._units_by_hex[last_pos].discard(unit.unit_id)
+                            if not self._units_by_hex[last_pos]:
+                                del self._units_by_hex[last_pos]
+                    if pos is not None:
+                        dirty_origins.add(pos)
+                        self._units_by_hex.setdefault(pos, set()).add(unit.unit_id)
+
+                    self._unit_last_known_state[unit.unit_id] = (pos, unit.alive, unit.suppressed)
+
+            self._dirty_control_hexes.clear()
+
+            if not dirty_origins:
+                return set()
+
+            # Expand dirty centers by tactical influence radius R <= 3 (O(k * R^2))
+            active_coords = set()
+            for origin in dirty_origins:
+                for h in hex_range(origin, radius=influence_radius):
+                    if h in self.hex_states:
+                        active_coords.add(h)
+
+        # Update active hexes in O(k * R^2)
         for coords in active_coords:
             hex_state = self.hex_states.get(coords)
             if hex_state is None:
                 continue
 
-            present_sides = units_by_hex.get(coords, set())
+            unit_ids = self._units_by_hex.get(coords, set())
+            present_sides = {self._unit_sides[uid] for uid in unit_ids if uid in self._unit_sides}
 
             if len(present_sides) == 1:
                 side = next(iter(present_sides))
@@ -182,7 +284,8 @@ class GameState:
                     hex_state.ownership = HexOwnership.NONE
                 hex_state.contested = False
 
-        self._previously_occupied_hexes = set(units_by_hex.keys())
+        self._previously_occupied_hexes = set(self._units_by_hex.keys())
+        return active_coords
 
     def _apply_initial_vp_control_on_start(self) -> None:
         """

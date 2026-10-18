@@ -210,11 +210,14 @@ flowchart TD
     * El estado dinámico se gestiona como un registro delta de cambios ($\Delta \text{posiciones}$, $\Delta \text{salud}$, $\Delta \text{moral}$, $\Delta \text{activaciones}$).
   * **Impacto Proyectado:** Reducción del **$45\%$** en consumo de memoria RAM y aceleración del **$35\%$** en la fase de expansión de nodos de búsqueda.
 
-### 6.3 Recálculo Incremental de Control Territorial ($O(R^2)$ Amortizado)
-* **Brecha Actual:** Al finalizar cada turno, la función `recalculate_hex_control()` itera sobre toda la cuadrícula del mapa ($W \times H$) evaluando la presencia e influencia de todas las unidades vivas ($O(W \times H \times N)$), recalculando hexágonos distantes que no sufrieron alteración alguna.
-* **Mejora Propuesta:**
-  * Implementar actualización incremental basada en eventos: solo se recalculan los hexágonos comprendidos en el radio de influencia táctica ($R_{\text{influence}} \le 3$) de las unidades que ejecutaron movimientos, sufrieron bajas o quedaron suprimidas durante el turno.
-  * **Impacto Proyectado:** El recálculo pasa de $O(W \times H \times N)$ a $O(k \cdot R^2)$, resultando en una operación prácticamente instantánea e independiente de las dimensiones totales del tablero.
+### 6.3 Recálculo Incremental de Control Territorial ($O(k \cdot R^2)$ Amortizado) — `[COMPLETADO]`
+* **Estado:** ✅ **IMPLEMENTADO Y VERIFICADO** (`assault_model/state/game_state.py`, `assault_model/map/hex_utils.py`, `assault_model/tests/test_incremental_hex_control.py`).
+* **Brecha Previa:** Al finalizar cada turno o acción, `recalculate_hex_control()` iteraba sobre toda la cuadrícula del mapa ($W \times H$) evaluando la presencia e influencia de todas las unidades vivas ($O(W \times H \times N)$), recalculando hexágonos distantes que no sufrieron alteración alguna.
+* **Solución Implementada:**
+  1. **Generación Aritmética de Radio Hexagonal $O(R^2)$:** Se implementó `hex_range(center, radius)` en `hex_utils.py` mediante aritmética directa cerrada en coordenadas axiales odd-r, generando los $3R^2 + 3R + 1$ hexágonos en radio $R \le 3$ (37 hexágonos exactos para $R=3$) sin grafos ni BFS.
+  2. **Indexación Espacial Invertida y Snapshot Delta:** `GameState` mantiene `_units_by_hex: dict[(q, r), set[unit_id]]` y `_unit_last_known_state` para detectar en $O(1)$ la presencia por bando con soporte completo para apilamiento (*stacking* de unidades múltiples en un mismo hexágono).
+  3. **Recálculo Bounded $O(k \cdot R^2)$:** Ante movimientos, bajas o supresiones, solo se recalculan los hexágonos en el radio de influencia táctica ($R \le 3$) de las $k$ unidades afectadas. Si ninguna unidad se alteró, el recálculo retorna en $O(1)$. Hexágonos de puntos de victoria (VP) distantes persisten sin recómputo innecesario.
+* **Impacto:** Reducción del coste de cálculo de $O(W \times H \times N)$ a $O(k \cdot R^2)$, haciendo la operación independiente del tamaño del mapa y acelerando los rollouts de simulación en MCTS.
 
 ### 6.4 Algoritmo de Retirada Doctrinal Completo (Friendly Edge & Defilade Pathing)
 * **Brecha Actual:** Tras resolver el fallo de tipado, la retirada táctica en `morale.py` selecciona el primer hexágono contiguo libre no ocupado. Aunque previene errores en tiempo de ejecución, no obedece a doctrina militar: la unidad puede retirarse lateralmente o incluso hacia hexágonos expuestos a la línea de fuego directa del enemigo causante del pánico.
