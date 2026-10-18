@@ -1,5 +1,6 @@
 from assault_model.units.unit_type import UnitType
 from assault_model.map.hex_utils import safe_hex_distance
+from assault_model.map.hex_coord import HexCoord
 import os
 
 DEBUG_TRACE = os.getenv("ASSAULT_DEBUG_TRACE", "0") == "1"
@@ -78,7 +79,7 @@ class UnitInstance:
     def move_to(self, q: int, r: int):
         if self.embarked:
             raise RuntimeError(f"Embarked unit {self.unit_id} cannot move")
-        self.position = (q, r)
+        self.position = HexCoord(q, r)
 
     # ----------------------------
     def get_distance_to(self, other: "UnitInstance") -> int:

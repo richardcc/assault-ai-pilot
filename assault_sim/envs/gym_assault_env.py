@@ -10,9 +10,13 @@ import numpy as np
 try:
     import gymnasium as gym
     from gymnasium import spaces
-except ImportError:  # pragma: no cover
-    import gym as gym  # type: ignore
-    from gym import spaces  # type: ignore
+except ImportError:
+    try:
+        import gym as gym  # type: ignore
+        from gym import spaces  # type: ignore
+    except ImportError:
+        gym = None
+        spaces = None
 
 from assault_model.actions.status import WaitAction
 from assault_model.map.hex_utils import safe_hex_distance
@@ -446,7 +450,10 @@ class _GymActionController:
         return action
 
 
-class GymAssaultEnv(gym.Env):
+_GymEnvBase = gym.Env if gym is not None else object
+
+
+class GymAssaultEnv(_GymEnvBase):
     metadata = {"render_modes": []}
 
     def __init__(

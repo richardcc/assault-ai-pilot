@@ -210,24 +210,29 @@ class ActionCatalog:
 
     # ==================================================
     def _in_weapon_range(self, attacker, target):
+        distance = safe_hex_distance(attacker.position, target.position)
+        unit_type = getattr(attacker, "unit_type", None)
+        target_type = getattr(target, "unit_type", None)
+        if not unit_type or not target_type:
+            return False
 
-        distance =safe_hex_distance(attacker.position, target.position)
-        attack = attacker.unit_type._attack_raw
+        if hasattr(unit_type, "has_attack_against"):
+            return unit_type.has_attack_against(distance, target_type.category)
 
+        # Fallback for mock unit objects in tests
+        attack = getattr(unit_type, "_attack_raw", {}) or {}
+        cat_val = target_type.category.value if hasattr(target_type.category, "value") else str(target_type.category)
         for mode_data in attack.values():
-            table = mode_data.get(target.unit_type.category.value)
+            table = mode_data.get(cat_val)
             if not table:
                 continue
-
             for key in table.keys():
-
-                if "-" in key:
-                    start, end = map(int, key.split("-"))
+                if "-" in str(key):
+                    start, end = map(int, str(key).split("-"))
                     if start <= distance <= end:
                         return True
-                else:
-                    if int(key) == distance:
-                        return True
+                elif int(key) == distance:
+                    return True
 
         return False
 

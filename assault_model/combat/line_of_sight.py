@@ -169,16 +169,25 @@ def check_line_of_sight(attacker, target, game_map, terrain_config):
     if start is None or end is None:
         return LineOfSight.BLOCKED
 
+    # Map-bound cache to isolate scenarios and prevent cross-scenario contamination
+    if game_map is not None:
+        cache = getattr(game_map, "_los_cache", None)
+        if cache is None:
+            cache = {}
+            game_map._los_cache = cache
+    else:
+        cache = _los_cache
+
     key = _make_key(start, end)
 
-    if key in _los_cache:
-        result, cached_debug = _los_cache[key]
+    if key in cache:
+        result, cached_debug = cache[key]
         attacker._los_debug = cached_debug
         return result
 
     reverse_key = (_LOS_CACHE_VERSION, end.q, end.r, start.q, start.r)
-    if reverse_key in _los_cache:
-        result, cached_debug = _los_cache[reverse_key]
+    if reverse_key in cache:
+        result, cached_debug = cache[reverse_key]
         attacker._los_debug = {
             "blocking": cached_debug["blocking"],
             "hindrance": cached_debug["hindrance"],
@@ -234,7 +243,7 @@ def check_line_of_sight(attacker, target, game_map, terrain_config):
     }
     attacker._los_debug = debug_data
 
-    _los_cache[key] = (result, debug_data)
+    cache[key] = (result, debug_data)
     return result
 
 

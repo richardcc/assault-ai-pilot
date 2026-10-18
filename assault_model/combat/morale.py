@@ -2,6 +2,7 @@
 
 import os
 from assault_model.units.unit_instance import UnitInstance
+from assault_model.map.hex_coord import HexCoord
 
 DEBUG_TRACE = os.getenv("ASSAULT_DEBUG_TRACE", "0") == "1"
 
@@ -99,33 +100,18 @@ def resolve_fallback(unit: UnitInstance):
 
 def retreat_unit_simple(unit: UnitInstance):
     """
-    Minimal fallback movement (safe implementation).
-
-    ✅ No dependency on map system
-    ✅ Does not break engine
-    ✅ Replace later with real pathfinding
+    Fallback retreat movement: moves unit 1 hex away.
     """
-
     if unit.position is None:
-        return  # embarked or invalid
+        return
 
-    try:
-        q, r = unit.position
+    q, r = unit.position
+    new_pos = HexCoord(q - 1, r)
 
-        # simple retreat backwards (placeholder)
-        new_pos = (q - 1, r)
-
-        _trace(
-            "FALLBACK_MOVE",
-            unit=unit.unit_id,
-            from_pos=unit.position,
-            to=new_pos,
-        )
-
-        unit.position = new_pos
-
-    except Exception:
-        _trace(
-            "FALLBACK_MOVE_FAILED",
-            unit=unit.unit_id,
-        )
+    _trace(
+        "FALLBACK_MOVE",
+        unit=unit.unit_id,
+        from_pos=unit.position,
+        to=new_pos,
+    )
+    unit.position = new_pos

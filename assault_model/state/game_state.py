@@ -94,6 +94,7 @@ class GameState:
         self.winner: Optional[str] = None
         self.end_reason: Optional[str] = None
         self.outcome: Optional["ScenarioOutcomeResult"] = None
+        self._previously_occupied_hexes: set[tuple[int, int]] = set(self.hex_states.keys())
 
         # init
         self.recalculate_hex_control()
@@ -134,10 +135,9 @@ class GameState:
         )
 
     # =================================================
-    # HEX CONTROL
+    # HEX CONTROL (Optimized delta update)
     # =================================================
     def recalculate_hex_control(self) -> None:
-
         units_by_hex: Dict[tuple[int, int], set[str]] = {}
         vp_hexes = set()
         if self.victory:
@@ -150,7 +150,18 @@ class GameState:
             coords = (unit.position.q, unit.position.r)
             units_by_hex.setdefault(coords, set()).add(unit.side)
 
-        for coords, hex_state in self.hex_states.items():
+        # Optimization: only inspect hexes whose occupancy or control could change
+        prev = getattr(self, "_previously_occupied_hexes", None)
+        if prev is None:
+            active_coords = set(self.hex_states.keys())
+        else:
+            active_coords = set(units_by_hex.keys()) | prev | vp_hexes
+
+        for coords in active_coords:
+            hex_state = self.hex_states.get(coords)
+            if hex_state is None:
+                continue
+
             present_sides = units_by_hex.get(coords, set())
 
             if len(present_sides) == 1:
@@ -170,6 +181,8 @@ class GameState:
                 if coords not in vp_hexes:
                     hex_state.ownership = HexOwnership.NONE
                 hex_state.contested = False
+
+        self._previously_occupied_hexes = set(units_by_hex.keys())
 
     def _apply_initial_vp_control_on_start(self) -> None:
         """

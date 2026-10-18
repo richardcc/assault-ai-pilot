@@ -60,29 +60,36 @@ class UnitType:
         self._base_defense_raw = base_defense
         self._attack_raw = attack
         self.traits = traits
+        self._compile_attack_tables()
+
+    def _compile_attack_tables(self) -> None:
+        """Precompile raw attack dictionary into fast integer tuples."""
+        compiled = {}
+        mode_ranges = {}
+        for mode, targets in (self._attack_raw or {}).items():
+            mode_ranges[mode] = []
+            for target_type, table in (targets or {}).items():
+                bands = []
+                for key, value in (table or {}).items():
+                    if "-" in str(key):
+                        parts = str(key).split("-")
+                        start, end = int(parts[0]), int(parts[1])
+                    else:
+                        start = end = int(key)
+                    mode_ranges[mode].append((start, end))
+                    dice_colors = [DiceColor[d] for d in value.get("dice", [])] if isinstance(value, dict) else []
+                    bands.append((start, end, dice_colors))
+                compiled[(mode, target_type)] = bands
+        self._compiled_attacks = compiled
+        self._mode_ranges = mode_ranges
 
     # =================================================
-    # ✅ NEW: MODE RESOLUTION
+    # ✅ MODE RESOLUTION (Optimized integer lookups)
     # =================================================
     def _resolve_attack_mode(self, distance: int) -> str | None:
         """
-        Decide which attack mode to use based on actual attack tables.
+        Decide which attack mode to use based on compiled attack tables.
         """
-        def _mode_has_distance(mode_name: str) -> bool:
-            mode_payload = self._attack_raw.get(mode_name, {}) or {}
-            for table in mode_payload.values():
-                for key in table.keys():
-                    if "-" in key:
-                        start, end = map(int, key.split("-"))
-                        if start <= distance <= end:
-                            return True
-                    else:
-                        if int(key) == distance:
-                            return True
-            return False
-
-        # Rifle-grenade style units should prefer indirect profile when available
-        # at the same range band, so indirect-only effects are applied correctly.
         traits_u = {str(t).upper() for t in (self.traits or [])}
         classification_u = str(self.classification or "").upper()
         prefer_indirect = (
@@ -90,30 +97,29 @@ class UnitType:
             or "NO_LINE_OF_SIGHT" in traits_u
             or "INDIRECT_FIRE_UNIT" in classification_u
         )
-        if prefer_indirect and _mode_has_distance("INDIRECT_FIRE"):
-            return "INDIRECT_FIRE"
+        if prefer_indirect:
+            for start, end in self._mode_ranges.get("INDIRECT_FIRE", []):
+                if start <= distance <= end:
+                    return "INDIRECT_FIRE"
 
-        for mode, targets in self._attack_raw.items():
-
-            for target_type, table in targets.items():
-
-                for key in table.keys():
-
-                    if "-" in key:
-                        start, end = map(int, key.split("-"))
-
-                        if start <= distance <= end:
-                            return mode
-
-                    else:
-                        if int(key) == distance:
-                            return mode
+        for mode, ranges in self._mode_ranges.items():
+            for start, end in ranges:
+                if start <= distance <= end:
+                    return mode
 
         return None
-    
+
+    def has_attack_against(self, distance: int, target_category: UnitCategory) -> bool:
+        """Fast check if weapon has an active profile against target at distance."""
+        cat_val = target_category.value if hasattr(target_category, "value") else str(target_category)
+        for mode in self._mode_ranges.keys():
+            for start, end, _ in self._compiled_attacks.get((mode, cat_val), []):
+                if start <= distance <= end:
+                    return True
+        return False
 
     # =================================================
-    # ✅ NEW CORE FUNCTION (replaces old logic)
+    # ✅ CORE FUNCTION (Zero string parsing)
     # =================================================
     def get_attack_dice(
         self,
@@ -124,26 +130,17 @@ class UnitType:
         Return attack dice given distance and target type.
         Supports multiple attack modes (DIRECT / INDIRECT).
         """
-
         try:
             mode = self._resolve_attack_mode(distance)
+            if not mode:
+                return []
 
             _trace("ATTACK_MODE", unit=self.code, mode=mode, dist=distance)
 
-            attack_mode = self._attack_raw.get(mode, {})
-            target_table = attack_mode.get(target_category.value, {})
-
-            # Iterate range bands
-            for key, value in target_table.items():
-
-                if "-" in key:
-                    start, end = map(int, key.split("-"))
-                    if start <= distance <= end:
-                        return [DiceColor[d] for d in value["dice"]]
-
-                else:
-                    if int(key) == distance:
-                        return [DiceColor[d] for d in value["dice"]]
+            cat_val = target_category.value if hasattr(target_category, "value") else str(target_category)
+            for start, end, dice in self._compiled_attacks.get((mode, cat_val), []):
+                if start <= distance <= end:
+                    return list(dice)
 
         except Exception as e:
             _trace("ATTACK_ERROR", error=str(e), unit=self.code)
