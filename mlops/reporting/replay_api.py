@@ -119,6 +119,114 @@ def build_replay_log_payload(
     return payload
 
 
+def _enrich_episodes_meta(rp: Path, raw_meta: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    import json
+
+    cache_file = rp.parent / f".cache_meta_{rp.stem}.json"
+    if cache_file.exists():
+        try:
+            cached_data = json.loads(cache_file.read_text(encoding="utf-8"))
+            if isinstance(cached_data, list) and len(cached_data) == len(raw_meta):
+                return cached_data
+        except Exception:
+            pass
+
+    enriched: list[dict[str, Any]] = []
+    for idx, ep in enumerate(raw_meta):
+        if not isinstance(ep, dict):
+            continue
+        ep_idx = idx
+        raw_ep_num = int(ep.get("episode_index", idx) or idx)
+        seed = int(ep.get("seed", 0) or 0)
+        agent_name = str(ep.get("agent_name", "") or "")
+        trans_count = int(ep.get("transitions", 0) or ep.get("rows", 0) or 0)
+        ep_path = str(ep.get("episode_path", "") or "")
+
+        sid = str(ep.get("scenario_id", "") or "")
+        if sid.startswith("multi:"):
+            sid = ""
+        winner = str(ep.get("winner", "") or "")
+        outcome = str(ep.get("outcome", "") or "")
+
+        matchup = "selfplay"
+        matchup_label = "Self-Play (MCTS vs MCTS)"
+        an_lower = agent_name.lower()
+        if "random_us" in an_lower or "side_b" in an_lower:
+            matchup = "mcts_vs_random_def"
+            matchup_label = "MCTS Defensor vs Random Atacante (US)"
+        elif "random_it" in an_lower or "random_ge" in an_lower or "side_a" in an_lower:
+            matchup = "mcts_vs_random_atk"
+            matchup_label = "MCTS Atacante vs Random Defensor (Eje)"
+        elif "random" in an_lower:
+            matchup = "vs_random"
+            matchup_label = "MCTS vs Random"
+
+        full_path = rp.parent / ep_path if ep_path else None
+        if full_path and full_path.exists() and (not sid or not winner):
+            try:
+                ep_data = json.loads(full_path.read_text(encoding="utf-8"))
+                transitions = ep_data.get("transitions", [])
+                if transitions:
+                    t0 = transitions[0]
+                    t_last = transitions[-1]
+                    if not sid:
+                        uids = {str(u.get("unit_id", "")) for u in t0.get("units", []) if isinstance(u, dict)}
+                        to_play0 = str(t0.get("to_play", ""))
+                        if any("GE" in u for u in uids) or to_play0 == "GE":
+                            sid = "mettete_i_piedi_terra_1"
+                        elif any("IT" in u for u in uids) or to_play0 == "IT":
+                            sid = "battaglia_cittadina_2_1"
+
+                    if not winner:
+                        vp_map = t_last.get("vp_map", {})
+                        if isinstance(vp_map, dict):
+                            us_vps = sum(1 for o in vp_map.values() if str(o).upper() == "US")
+                            if sid == "mettete_i_piedi_terra_1":
+                                if us_vps >= 2:
+                                    winner = "US"
+                                    outcome = "Victoria US (Aliados)"
+                                else:
+                                    winner = "GE"
+                                    outcome = "Victoria GE (Alemania)"
+                            else:
+                                if us_vps >= 4:
+                                    winner = "US"
+                                    outcome = "Victoria US (Aliados)"
+                                elif us_vps == 3:
+                                    winner = "EMPATE"
+                                    outcome = "Empate Táctico"
+                                else:
+                                    winner = "IT"
+                                    outcome = "Victoria IT (Italia)"
+            except Exception:
+                pass
+
+        scenario_name = "Mettete i piedi a terra" if "mettete" in sid else ("Battaglia Cittadina" if "cittadina" in sid else (sid or "Escenario Wargame"))
+
+        enriched.append({
+            "episode_id": f"episode_{ep_idx}",
+            "episode_index": ep_idx,
+            "seed": seed,
+            "agent_name": agent_name,
+            "matchup": matchup,
+            "matchup_label": matchup_label,
+            "scenario_id": sid,
+            "scenario_name": scenario_name,
+            "winner": winner,
+            "outcome": outcome,
+            "rows": trans_count,
+            "steps_count": trans_count,
+            "episode_path": ep_path,
+        })
+
+    try:
+        cache_file.write_text(json.dumps(enriched, indent=2), encoding="utf-8")
+    except Exception:
+        pass
+
+    return enriched
+
+
 def build_v2_replay_meta_payload(
     eval_source_path: str,
     *,
@@ -139,19 +247,7 @@ def build_v2_replay_meta_payload(
             payload["bench_id"] = str(raw_index.get("bench_id", "") or "")
             raw_meta = list(raw_index.get("episodes_meta", []) or [])
             if raw_meta:
-                payload["episodes_meta"] = [
-                    {
-                        "episode_id": f"episode_{int(ep.get('episode_index', idx) or idx)}",
-                        "episode_index": int(ep.get("episode_index", idx) or idx),
-                        "seed": int(ep.get("seed", 0) or 0),
-                        "agent_name": str(ep.get("agent_name", "") or ""),
-                        "rows": int(ep.get("transitions", 0) or 0),
-                        "steps_count": int(ep.get("transitions", 0) or 0),
-                        "episode_path": str(ep.get("episode_path", "") or ""),
-                    }
-                    for idx, ep in enumerate(raw_meta)
-                    if isinstance(ep, dict)
-                ]
+                payload["episodes_meta"] = _enrich_episodes_meta(rp, raw_meta)
         except Exception:
             pass
 
@@ -203,12 +299,63 @@ def build_v2_replay_meta_payload(
     return payload
 
 
+def detect_scenario_id_from_transitions(
+    transitions: list[dict[str, Any]],
+    repo_root: Path | None = None,
+    default_scenario_id: str = "",
+) -> str:
+    if not transitions:
+        return default_scenario_id
+    t0 = transitions[0] if isinstance(transitions[0], dict) else {}
+    uids = {
+        str(u.get("unit_id", "") or "")
+        for u in t0.get("units", [])
+        if isinstance(u, dict)
+    }
+    vp_keys = {str(k) for k in (t0.get("vp_map", {}) or {}).keys()}
+
+    if any(uid.startswith("GE_") for uid in uids):
+        return "mettete_i_piedi_terra_1"
+    if any(uid.startswith("IT_") for uid in uids):
+        return "battaglia_cittadina_2_1"
+
+    if repo_root is not None:
+        scenarios_dir = (repo_root / "assault_sim" / "assets" / "scenarios").resolve()
+        if scenarios_dir.exists():
+            best_sid = default_scenario_id
+            best_score = 0
+            for p in scenarios_dir.glob("*.json"):
+                try:
+                    import json
+
+                    raw = json.loads(p.read_text(encoding="utf-8"))
+                    scen_units = {
+                        str(u.get("unit_id", "")) for u in raw.get("units", [])
+                    }
+                    scen_vps = {
+                        f"{h.get('q')},{h.get('r')}"
+                        for h in (raw.get("vp", {}) or {}).get("hexes", [])
+                    }
+                    score = len(uids & scen_units) * 2 + len(vp_keys & scen_vps) * 3
+                    if score > best_score:
+                        best_score = score
+                        best_sid = str(raw.get("id", p.stem))
+                except Exception:
+                    pass
+            if best_score > 0:
+                return best_sid
+
+    return default_scenario_id
+
+
 def build_v2_replay_steps_payload(
     *,
     eval_source_path: str,
     episode_id: str,
     from_step: int,
     to_step: int,
+    repo_root: Path | None = None,
+    load_scenario_overlay: Callable[[Path, str], dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     payload: dict[str, Any] = {
         "schema_version": "reporting_v2_strict",
@@ -247,6 +394,13 @@ def build_v2_replay_steps_payload(
                 payload["steps"] = raw_transitions[start:end]
                 payload["count"] = int(len(payload["steps"]))
                 payload["total_steps"] = int(len(raw_transitions))
+                if repo_root is not None and load_scenario_overlay is not None:
+                    detected_sid = detect_scenario_id_from_transitions(
+                        raw_transitions, repo_root, default_scenario_id=str(ep_payload.get("scenario_id", "") or "")
+                    )
+                    if detected_sid:
+                        payload["scenario_id"] = detected_sid
+                        payload["scenario_overlay"] = load_scenario_overlay(repo_root, detected_sid)
                 return payload
         except Exception:
             pass
@@ -260,4 +414,9 @@ def build_v2_replay_steps_payload(
     limit = int(max(1, (payload["to_step"] - payload["from_step"] + 1)))
     payload["steps"] = read_ndjson_rows(ep_path, int(payload["from_step"]), limit)
     payload["count"] = int(len(payload["steps"]))
+    if repo_root is not None and load_scenario_overlay is not None and payload["steps"]:
+        detected_sid = detect_scenario_id_from_transitions(payload["steps"], repo_root)
+        if detected_sid:
+            payload["scenario_id"] = detected_sid
+            payload["scenario_overlay"] = load_scenario_overlay(repo_root, detected_sid)
     return payload

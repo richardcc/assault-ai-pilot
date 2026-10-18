@@ -329,26 +329,7 @@ function axialToLabel(q: number, r: number): string {
   return `${String.fromCharCode(65 + q)}${r + 1}`;
 }
 
-const DEFAULT_MAP_PIECES = [
-  { id: "Z1", origin: [0, 0] as [number, number], rotation: 0, shape: [9, 4] as [number, number] },
-  { id: "Z2", origin: [9, 0] as [number, number], rotation: 0, shape: [9, 4] as [number, number] },
-  { id: "S3", origin: [0, 4] as [number, number], rotation: 0, shape: [9, 8] as [number, number] },
-  { id: "S4", origin: [9, 4] as [number, number], rotation: 0, shape: [9, 8] as [number, number] },
-];
 
-const DEFAULT_FORTIFICATIONS = [
-  { type: "gun_emplacement", q: 6, r: 2, orientation: 4, vertex_start: 1, vertex_end: 2 },
-  { type: "casemate", q: 3, r: 4, orientation: 3, vertex_start: 1, vertex_end: 2 },
-  { type: "casemate", q: 12, r: 3, orientation: 4, vertex_start: 1, vertex_end: 2 },
-];
-
-const DEFAULT_VP_HEXES = [
-  { q: 16, r: 1, owner: "IT", value: 2 },
-  { q: 9, r: 1, owner: "IT", value: 3 },
-  { q: 2, r: 6, owner: "IT", value: 2 },
-  { q: 8, r: 9, owner: "US", value: 2 },
-  { q: 16, r: 8, owner: "US", value: 3 },
-];
 
 function getTerrainColorCss(t: string): string {
   switch (t.toLowerCase()) {
@@ -450,6 +431,7 @@ export function MatchReplayTab({
   const [showVectors, setShowVectors] = useState(true);
   const [showForts, setShowForts] = useState(true);
   const [showTerrain, setShowTerrain] = useState(true);
+  const [showBriefing, setShowBriefing] = useState(true);
   const [theaterMode, setTheaterMode] = useState(false);
   const [mapHeight, setMapHeight] = useState(520);
   const [zoomLevel, setZoomLevel] = useState(1.0);
@@ -528,12 +510,17 @@ export function MatchReplayTab({
   const clamped = Math.max(0, Math.min(stepIndex, Math.max(0, steps.length - 1)));
   const currentStep = steps[clamped] || {};
 
+  // Active Scenario Overlay (prefers per-episode overlay from replaySteps if available, falls back to replayMeta)
+  const activeOverlay = useMemo(() => {
+    return (replaySteps?.scenario_overlay || replayMeta?.scenario_overlay || {}) as Dict;
+  }, [replaySteps?.scenario_overlay, replayMeta?.scenario_overlay]);
+
   // Scenario Units definitions (unit_id -> unit_key mapping)
   const scenarioUnitMap = useMemo(() => {
-    const raw = (replayMeta?.scenario_overlay as Dict | undefined)?.scenario_units;
+    const raw = (activeOverlay?.scenario_units as unknown[]) || [];
     const map = new Map<string, { unit_key: string; side: string }>();
     if (Array.isArray(raw)) {
-      for (const u of raw) {
+      for (const u of raw as Dict[]) {
         if (u && u.unit_id) {
           map.set(String(u.unit_id), {
             unit_key: String(u.unit_key || ""),
@@ -543,7 +530,7 @@ export function MatchReplayTab({
       }
     }
     return map;
-  }, [replayMeta?.scenario_overlay]);
+  }, [activeOverlay]);
 
   // Units list for current step
   const units = useMemo(() => {
@@ -587,42 +574,41 @@ export function MatchReplayTab({
     return (currentStep.controller_by_side || currentStep.side_controller_map || {}) as Record<string, string>;
   }, [currentStep]);
 
-  // VP Map for current step
+  // VP Map for current step (strictly based on the active scenario definition)
   const vpMap = useMemo(() => {
     const raw = (currentStep.vp_map || {}) as Record<string, string>;
-    const overlayVps = (replayMeta?.scenario_overlay as Dict | undefined)?.vp_hexes as Array<{ q: number; r: number; initial_owner?: string; value?: number }> | undefined;
-    const vpValues = new Map<string, number>();
-    const initialOwners = new Map<string, string>();
+    const overlayVps = activeOverlay?.vp_hexes as Array<{ q: number; r: number; initial_owner?: string; value?: number }> | undefined;
 
     if (Array.isArray(overlayVps) && overlayVps.length > 0) {
-      for (const v of overlayVps) {
+      return overlayVps.map((v) => {
         const k = `${v.q},${v.r}`;
-        vpValues.set(k, Number(v.value || 2));
-        if (v.initial_owner) initialOwners.set(k, String(v.initial_owner).toUpperCase());
-      }
-    } else {
-      for (const d of DEFAULT_VP_HEXES) {
-        const k = `${d.q},${d.r}`;
-        vpValues.set(k, d.value);
-        initialOwners.set(k, d.owner);
-      }
+        const stepOwner = raw[k];
+        const owner = String(stepOwner || v.initial_owner || "NEUTRAL").toUpperCase();
+        return {
+          q: v.q,
+          r: v.r,
+          owner,
+          key: k,
+          value: Number(v.value || 2),
+        };
+      });
     }
 
     const list: Array<{ q: number; r: number; owner: string; key: string; value: number }> = [];
-    const keys = new Set([...Object.keys(raw), ...initialOwners.keys()]);
-    for (const k of keys) {
+    for (const [k, stepOwner] of Object.entries(raw)) {
       const parts = k.split(",");
       if (parts.length === 2) {
-        const q = Number(parts[0]);
-        const r = Number(parts[1]);
-        const stepOwner = raw[k];
-        const owner = String(stepOwner || initialOwners.get(k) || "NEUTRAL").toUpperCase();
-        const value = vpValues.get(k) || 2;
-        list.push({ q, r, owner, key: k, value });
+        list.push({
+          q: Number(parts[0]),
+          r: Number(parts[1]),
+          owner: String(stepOwner || "NEUTRAL").toUpperCase(),
+          key: k,
+          value: 2,
+        });
       }
     }
     return list;
-  }, [currentStep.vp_map, replayMeta?.scenario_overlay]);
+  }, [currentStep.vp_map, activeOverlay]);
 
   // VP tally counts
   const vpTally = useMemo(() => {
@@ -633,21 +619,20 @@ export function MatchReplayTab({
     return tally;
   }, [vpMap]);
 
-  // Scenario Shape bounds [width, height]
+  // Scenario Shape bounds [width, height] strictly from the authentic scenario definition
   const scenarioShape = useMemo(() => {
-    const overlay = replayMeta?.scenario_overlay as Dict | undefined;
-    if (Array.isArray(overlay?.shape) && overlay.shape.length >= 2) {
-      return [Number(overlay.shape[0]), Number(overlay.shape[1])] as [number, number];
+    if (Array.isArray(activeOverlay?.shape) && activeOverlay.shape.length >= 2) {
+      return [Number(activeOverlay.shape[0]) || 18, Number(activeOverlay.shape[1]) || 12] as [number, number];
     }
     return [18, 12] as [number, number];
-  }, [replayMeta?.scenario_overlay]);
+  }, [activeOverlay]);
 
   // Scenario Max Turns
   const maxTurns = useMemo(() => {
-    const raw = (replayMeta?.scenario_overlay as Dict | undefined)?.max_turns;
+    const raw = activeOverlay?.max_turns;
     if (raw !== undefined && Number(raw) > 0) return Number(raw);
     return 8;
-  }, [replayMeta?.scenario_overlay]);
+  }, [activeOverlay]);
 
   // Exact optimal pixel width of the map so no horizontal space is wasted
   const optimalMapWidth = useMemo(() => {
@@ -660,12 +645,12 @@ export function MatchReplayTab({
 
   // Scenario Map Pieces (Illustrated boards with buildings, streets, etc.)
   const mapPieces = useMemo(() => {
-    const raw = (replayMeta?.scenario_overlay as Dict | undefined)?.pieces;
+    const raw = activeOverlay?.pieces;
     if (Array.isArray(raw) && raw.length > 0) {
       return raw as Array<{ id: string; origin: [number, number]; rotation?: number; shape: [number, number] }>;
     }
-    return DEFAULT_MAP_PIECES;
-  }, [replayMeta?.scenario_overlay]);
+    return [];
+  }, [activeOverlay]);
 
   // Scenario Fortifications (Bunkers, Pillboxes, Trenches, Wire, etc.)
   const fortifications = useMemo(() => {
@@ -681,10 +666,10 @@ export function MatchReplayTab({
     }> = [];
     const seen = new Set<string>();
 
-    // 1. From scenario_overlay
-    const overlayForts = (replayMeta?.scenario_overlay as Dict | undefined)?.fortifications;
+    // 1. From activeOverlay
+    const overlayForts = activeOverlay?.fortifications;
     if (Array.isArray(overlayForts) && overlayForts.length > 0) {
-      for (const f of overlayForts) {
+      for (const f of overlayForts as Dict[]) {
         if (f && Number.isFinite(Number(f.q)) && Number.isFinite(Number(f.r))) {
           const q = Number(f.q);
           const r = Number(f.r);
@@ -705,10 +690,6 @@ export function MatchReplayTab({
           }
         }
       }
-    } else {
-      for (const f of DEFAULT_FORTIFICATIONS) {
-        list.push({ ...f });
-      }
     }
 
     // 2. From current step if present
@@ -726,15 +707,15 @@ export function MatchReplayTab({
       }
     }
     return list;
-  }, [replayMeta?.scenario_overlay, currentStep.obs_fortification_type_map, currentStep.fortifications_map]);
+  }, [activeOverlay, currentStep.obs_fortification_type_map, currentStep.fortifications_map]);
 
   // Scenario Terrain Map (Buildings, woods, olive groves, etc.)
   const terrainMap = useMemo(() => {
     const map = new Map<string, string>();
-    // 1. From scenario_overlay map_cells (array or record)
-    const overlayCells = (replayMeta?.scenario_overlay as Dict | undefined)?.map_cells;
+    // 1. From activeOverlay map_cells (array or record)
+    const overlayCells = activeOverlay?.map_cells;
     if (Array.isArray(overlayCells)) {
-      for (const cell of overlayCells) {
+      for (const cell of overlayCells as Dict[]) {
         if (cell && Number.isFinite(Number(cell.q)) && Number.isFinite(Number(cell.r)) && cell.terrain) {
           map.set(`${cell.q},${cell.r}`, String(cell.terrain));
         }
@@ -754,7 +735,159 @@ export function MatchReplayTab({
       }
     }
     return map;
-  }, [replayMeta?.scenario_overlay, currentStep.obs_terrain_type_map, currentStep.terrain_map]);
+  }, [activeOverlay, currentStep.obs_terrain_type_map, currentStep.terrain_map]);
+
+  // Fortifications text summary
+  const fortSummary = useMemo(() => {
+    const counts: Record<string, number> = {};
+    for (const f of fortifications) {
+      const t = String(f.type || "").toLowerCase();
+      counts[t] = (counts[t] || 0) + 1;
+    }
+    const parts: string[] = [];
+    if (counts["bunker"]) parts.push(`${counts["bunker"]} Búnker${counts["bunker"] > 1 ? "es" : ""}`);
+    if (counts["casemate"]) parts.push(`${counts["casemate"]} Casamata${counts["casemate"] > 1 ? "s" : ""}`);
+    if (counts["gun_emplacement"]) parts.push(`${counts["gun_emplacement"]} Emplazamiento${counts["gun_emplacement"] > 1 ? "s" : ""}`);
+    if (counts["trench"]) parts.push(`${counts["trench"]} Trinchera${counts["trench"] > 1 ? "s" : ""}`);
+    if (counts["barbed_wire"]) parts.push(`${counts["barbed_wire"]} Alambrada${counts["barbed_wire"] > 1 ? "s" : ""}`);
+    if (counts["minefield"]) parts.push(`${counts["minefield"]} Campo${counts["minefield"] > 1 ? "s" : ""} de minas`);
+    return parts.join(", ");
+  }, [fortifications]);
+
+  // Scenario & Tactical Forces Briefing Data
+  const scenarioBriefing = useMemo(() => {
+    const rawId = String(
+      activeOverlay?.scenario_id ||
+      replaySteps?.scenario_id ||
+      (replayMeta?.scenario_id && !String(replayMeta.scenario_id).startsWith("multi:") ? replayMeta.scenario_id : "") ||
+      ""
+    ).toLowerCase();
+
+    const shape = scenarioShape;
+    const isMettete = rawId.includes("mettete") || (shape[0] === 9 && shape[1] === 16);
+    const isCittadina = rawId.includes("cittadina") || (shape[0] === 18 && shape[1] === 12);
+
+    // Units inventory
+    const rawScenarioUnits = (activeOverlay?.scenario_units as Dict[]) || [];
+    const sourceUnits = rawScenarioUnits.length > 0 ? rawScenarioUnits : (units as Dict[]);
+
+    const unitsBySide: Record<string, { total: number; alive: number; keys: Record<string, number> }> = {};
+
+    // Alive lookup from current step units
+    const aliveMap = new Map<string, boolean>();
+    for (const u of units) {
+      const uid = String(u.unit_id || "");
+      const isAlive = u.alive !== false && (u.hp === undefined || Number(u.hp) > 0);
+      aliveMap.set(uid, isAlive);
+    }
+
+    for (const su of sourceUnits) {
+      const uid = String(su.unit_id || "");
+      const side = String(su.side || (uid.startsWith("US") ? "US" : uid.startsWith("GE") ? "GE" : uid.startsWith("IT") ? "IT" : "UNKNOWN")).toUpperCase();
+      if (!unitsBySide[side]) {
+        unitsBySide[side] = { total: 0, alive: 0, keys: {} };
+      }
+      unitsBySide[side].total += 1;
+
+      const isAlive = aliveMap.has(uid) ? aliveMap.get(uid)! : true;
+      if (isAlive) {
+        unitsBySide[side].alive += 1;
+      }
+
+      const ukey = String(su.unit_key || su.unit_id || "Unidad")
+        .replace(/^(US_|GE_|IT_)/i, "")
+        .replace(/_/g, " ");
+      unitsBySide[side].keys[ukey] = (unitsBySide[side].keys[ukey] || 0) + 1;
+    }
+
+    let title = "Escenario Wargame";
+    let subtitle = "Combate Táctico por Turnos";
+    let idLabel = rawId || "escenario_activo";
+    let desc = "";
+
+    if (isMettete) {
+      title = "Mettete i piedi a terra";
+      subtitle = "Escenario 1 · Asalto Anfibio y Desembarco Fortificado";
+      idLabel = "mettete_i_piedi_terra_1";
+      desc = "Asalto de infantería aliada desembarcando desde el agua hacia una línea fortificada en profundidad del Eje defendida con búnkeres, casamatas, trincheras, campos de minas y alambradas.";
+    } else if (isCittadina) {
+      title = "Battaglia Cittadina";
+      subtitle = "Escenario 2.1 · Combate Urbano Casa por Casa";
+      idLabel = "battaglia_cittadina_2_1";
+      desc = "Intenso combate de infantería en el entramado urbano disputando puntos de control en edificios de varias plantas, casamatas y emplazamientos con apoyo de morteros y francotiradores.";
+    }
+
+    return {
+      isMettete,
+      isCittadina,
+      title,
+      subtitle,
+      idLabel,
+      desc,
+      shapeText: `${shape[0]}×${shape[1]} hex`,
+      totalVps: vpMap.length,
+      unitsBySide,
+    };
+  }, [activeOverlay?.scenario_id, activeOverlay?.scenario_units, replaySteps?.scenario_id, replayMeta?.scenario_id, scenarioShape, units, vpMap]);
+
+  const factions = useMemo(() => {
+    const sides = Object.keys(scenarioBriefing.unitsBySide);
+    const sideList = sides.length > 0 ? sides : (scenarioBriefing.isCittadina ? ["US", "IT"] : ["US", "GE"]);
+
+    return sideList.map((side) => {
+      const isUS = side === "US";
+      const isGE = side === "GE";
+      const isIT = side === "IT";
+
+      const flag = isUS ? "🇺🇸" : isGE ? "🇩🇪" : isIT ? "🇮🇹" : "🏳️";
+      const name = isUS
+        ? "Estados Unidos (US Army)"
+        : isGE
+        ? "Alemania (Wehrmacht / FJ)"
+        : isIT
+        ? "Italia (Regio Esercito)"
+        : `Fuerza ${side}`;
+      const roleBadge = isUS ? "ATACANTE" : "DEFENSOR";
+      const roleColor = isUS ? "#38bdf8" : isGE ? "#f87171" : "#34d399";
+      const borderColor = isUS ? "rgba(56, 189, 248, 0.45)" : isGE ? "rgba(248, 113, 113, 0.45)" : "rgba(52, 211, 153, 0.45)";
+      const bgGrad = isUS
+        ? "linear-gradient(135deg, rgba(30, 58, 138, 0.35), rgba(15, 23, 42, 0.65))"
+        : isGE
+        ? "linear-gradient(135deg, rgba(127, 29, 29, 0.35), rgba(15, 23, 42, 0.65))"
+        : "linear-gradient(135deg, rgba(6, 78, 59, 0.35), rgba(15, 23, 42, 0.65))";
+
+      let mission = "";
+      if (scenarioBriefing.isMettete) {
+        mission = isUS
+          ? "Desembarco y ruptura: Romper alambradas y minas para capturar ≥ 2 de 3 VPs en 12 turnos."
+          : "Defensa fortificada: Retener ≥ 2 de 3 VPs aprovechando búnker, casamata, MG42 y minas.";
+      } else if (scenarioBriefing.isCittadina) {
+        mission = isUS
+          ? "Asalto urbano: Limpiar calles y casamatas para capturar ≥ 4 de los 5 VPs en 8 turnos."
+          : "Defensa sectorial: Retener al menos 3 VPs usando cobertura urbana y fuego de contención.";
+      } else {
+        mission = isUS ? "Atacar y capturar hexágonos de victoria prioritarios." : "Defender posiciones y hexágonos clave.";
+      }
+
+      const data = scenarioBriefing.unitsBySide[side] || { total: 0, alive: 0, keys: {} };
+      const keyBreakdown = Object.entries(data.keys).map(([k, count]) => `${count}x ${k}`).join(" · ");
+
+      return {
+        side,
+        flag,
+        name,
+        roleBadge,
+        roleColor,
+        borderColor,
+        bgGrad,
+        mission,
+        total: data.total,
+        alive: data.alive,
+        keyBreakdown: keyBreakdown || `${data.total} unidades`,
+        fortifications: !isUS && fortSummary ? fortSummary : null,
+      };
+    });
+  }, [scenarioBriefing, fortSummary]);
 
   // Parse Action vector and targets
   const actionVector = useMemo(() => {
@@ -1693,6 +1826,143 @@ export function MatchReplayTab({
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+      {/* 0. Tactical Scenario & Forces Briefing Banner */}
+      <div
+        style={{
+          background: "linear-gradient(180deg, #1e293b, #0f172a)",
+          border: "1px solid #334155",
+          borderRadius: 8,
+          padding: "10px 14px",
+          boxShadow: "0 4px 12px rgba(0,0,0,0.3)",
+          display: "flex",
+          flexDirection: "column",
+          gap: 10,
+        }}
+      >
+        {/* Top Summary Row */}
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+              <span style={{ fontSize: 18 }}>🗺️</span>
+              <span style={{ fontSize: 15, fontWeight: 800, color: "#f8fafc", letterSpacing: "0.2px" }}>
+                {scenarioBriefing.title}
+              </span>
+            </div>
+            <code
+              style={{
+                fontSize: 11,
+                background: "#0f172a",
+                border: "1px solid #334155",
+                padding: "2px 6px",
+                borderRadius: 4,
+                color: "#38bdf8",
+              }}
+            >
+              {scenarioBriefing.idLabel}
+            </code>
+            <span style={{ fontSize: 12, color: "#94a3b8", fontWeight: 500 }}>
+              — {scenarioBriefing.subtitle}
+            </span>
+          </div>
+
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <span style={{ fontSize: 11, color: "#94a3b8", background: "rgba(15, 23, 42, 0.6)", padding: "2px 8px", borderRadius: 4, border: "1px solid #334155" }}>
+              ⏱️ {maxTurns} Turnos máx
+            </span>
+            <span style={{ fontSize: 11, color: "#94a3b8", background: "rgba(15, 23, 42, 0.6)", padding: "2px 8px", borderRadius: 4, border: "1px solid #334155" }}>
+              📐 {scenarioBriefing.shapeText}
+            </span>
+            <span style={{ fontSize: 11, color: "#facc15", background: "rgba(250, 204, 21, 0.12)", padding: "2px 8px", borderRadius: 4, border: "1px solid rgba(250, 204, 21, 0.3)" }}>
+              🎯 {scenarioBriefing.totalVps} VPs
+            </span>
+            <button
+              onClick={() => setShowBriefing(!showBriefing)}
+              style={{
+                padding: "3px 8px",
+                fontSize: 11,
+                background: "#1e293b",
+                border: "1px solid #475569",
+                borderRadius: 4,
+                color: "#e2e8f0",
+                cursor: "pointer",
+                fontWeight: 600,
+              }}
+            >
+              {showBriefing ? "▲ Minimizar" : "▼ Detalles de Bandos"}
+            </button>
+          </div>
+        </div>
+
+        {/* Collapsible Factions & Tactical Mission Cards */}
+        {showBriefing && (
+          <div style={{ display: "flex", flexDirection: "column", gap: 8, paddingTop: 4, borderTop: "1px solid #334155" }}>
+            {scenarioBriefing.desc && (
+              <div style={{ fontSize: 12, color: "#94a3b8", lineHeight: 1.4 }}>
+                {scenarioBriefing.desc}
+              </div>
+            )}
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(340px, 1fr))", gap: 10 }}>
+              {factions.map((f) => (
+                <div
+                  key={f.side}
+                  style={{
+                    background: f.bgGrad,
+                    border: `1px solid ${f.borderColor}`,
+                    borderRadius: 6,
+                    padding: "8px 12px",
+                    display: "flex",
+                    flexDirection: "column",
+                    gap: 5,
+                  }}
+                >
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                      <span style={{ fontSize: 16 }}>{f.flag}</span>
+                      <b style={{ color: "#f8fafc", fontSize: 13 }}>{f.name}</b>
+                    </div>
+                    <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                      <span
+                        style={{
+                          fontSize: 10,
+                          fontWeight: 800,
+                          padding: "1px 6px",
+                          borderRadius: 4,
+                          background: `${f.roleColor}25`,
+                          color: f.roleColor,
+                          border: `1px solid ${f.roleColor}60`,
+                        }}
+                      >
+                        {f.roleBadge}
+                      </span>
+                      <span style={{ fontSize: 11, color: "#cbd5e1" }}>
+                        <b>{f.alive}</b>/{f.total} activas
+                      </span>
+                    </div>
+                  </div>
+
+                  <div style={{ fontSize: 11, color: "#e2e8f0" }}>
+                    <span style={{ color: "#94a3b8" }}>🎯 Objetivo: </span>
+                    {f.mission}
+                  </div>
+
+                  <div style={{ fontSize: 11, color: "#cbd5e1" }}>
+                    <span style={{ color: "#94a3b8" }}>🪖 Fuerzas: </span>
+                    <span style={{ color: "#e2e8f0" }}>{f.keyBreakdown}</span>
+                  </div>
+
+                  {f.fortifications && (
+                    <div style={{ fontSize: 11, color: "#facc15" }}>
+                      <span style={{ color: "#ca8a04" }}>🛡️ Fortificaciones: </span>
+                      {f.fortifications}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+
       {/* 1. Header & Interactive VCR Playback Console */}
       <div
         style={{
@@ -1872,38 +2142,80 @@ export function MatchReplayTab({
             </select>
           </div>
 
-          {/* VP Tally Badges */}
-          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            <div
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: 5,
-                background: "rgba(37, 99, 235, 0.15)",
-                border: "1px solid #2563eb",
-                padding: "2px 8px",
-                borderRadius: 4,
-                fontSize: 11,
-              }}
-            >
-              <span>🇺🇸 US:</span>
-              <b style={{ color: "#60a5fa" }}>{vpTally.US || 0} VPs</b>
-            </div>
-            <div
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: 5,
-                background: "rgba(5, 150, 105, 0.15)",
-                border: "1px solid #059669",
-                padding: "2px 8px",
-                borderRadius: 4,
-                fontSize: 11,
-              }}
-            >
-              <span>🇮🇹 IT:</span>
-              <b style={{ color: "#34d399" }}>{vpTally.IT || 0} VPs</b>
-            </div>
+          {/* Dynamic VP Tally Badges for active sides */}
+          <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+            {/* US Badge */}
+            {(vpTally.US > 0 || factions.some((f) => f.side === "US")) && (
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 5,
+                  background: "rgba(37, 99, 235, 0.15)",
+                  border: "1px solid #2563eb",
+                  padding: "2px 8px",
+                  borderRadius: 4,
+                  fontSize: 11,
+                }}
+              >
+                <span>🇺🇸 US:</span>
+                <b style={{ color: "#60a5fa" }}>{vpTally.US || 0} VPs</b>
+              </div>
+            )}
+            {/* GE Badge */}
+            {(vpTally.GE > 0 || factions.some((f) => f.side === "GE")) && (
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 5,
+                  background: "rgba(220, 38, 38, 0.15)",
+                  border: "1px solid #dc2626",
+                  padding: "2px 8px",
+                  borderRadius: 4,
+                  fontSize: 11,
+                }}
+              >
+                <span>🇩🇪 GE:</span>
+                <b style={{ color: "#f87171" }}>{vpTally.GE || 0} VPs</b>
+              </div>
+            )}
+            {/* IT Badge */}
+            {(vpTally.IT > 0 || factions.some((f) => f.side === "IT")) && (
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 5,
+                  background: "rgba(5, 150, 105, 0.15)",
+                  border: "1px solid #059669",
+                  padding: "2px 8px",
+                  borderRadius: 4,
+                  fontSize: 11,
+                }}
+              >
+                <span>🇮🇹 IT:</span>
+                <b style={{ color: "#34d399" }}>{vpTally.IT || 0} VPs</b>
+              </div>
+            )}
+            {/* Neutral Badge if any */}
+            {(vpTally.NEUTRAL || 0) > 0 && (
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 5,
+                  background: "rgba(148, 163, 184, 0.15)",
+                  border: "1px solid #64748b",
+                  padding: "2px 8px",
+                  borderRadius: 4,
+                  fontSize: 11,
+                }}
+              >
+                <span>⚪ Neutro:</span>
+                <b style={{ color: "#cbd5e1" }}>{vpTally.NEUTRAL} VPs</b>
+              </div>
+            )}
           </div>
         </div>
       </div>

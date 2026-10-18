@@ -20,7 +20,8 @@ export class GameController {
   }
 
   private getControllerForSide(state: any, side: any): string {
-    const sides = (state && typeof state === "object" ? state.sides : null) || {};
+    const stateSides = state && typeof state === "object" && state.sides && Object.keys(state.sides).length > 0 ? state.sides : null;
+    const sides = stateSides || this.sidesConfig || {};
     const wanted = this.normalizeSideId(side);
     if (!wanted) return "";
     for (const [k, v] of Object.entries(sides)) {
@@ -113,7 +114,7 @@ export class GameController {
   private mode: GameMode = "human";
   private state: any = null;
   private scenarioId = "mettete_i_piedi_terra_1_min";
-  private sidesConfig: Record<string, string> = { GE: "human", US: "ai" };
+  private sidesConfig: Record<string, string> = { GE: "human", US: "ai", IT: "human" };
 
   private listeners: Listener[] = [];
   private turnFlowListeners: TurnFlowListener[] = [];
@@ -244,6 +245,16 @@ export class GameController {
         // needed by roster/status panels and action selection.
         this.mergeIncrementalState(msg.payload);
         this.emit();
+
+        const activeSide = this.state?.active_side;
+        const controller = this.getControllerForSide(this.state, activeSide);
+        if (controller === "ai" && !this.state?.done && !this.waitingForManualAdvance) {
+          if (!this.loopFn) {
+            this.startLoop();
+          } else {
+            this.scheduleLoop(this.loopFn, 250);
+          }
+        }
         return;
       }
       if (
@@ -355,10 +366,12 @@ export class GameController {
   }
 
   continueAfterHumanAction() {
-    if (!this.waitingForManualAdvance) return;
     this.waitingForManualAdvance = false;
     this.emitTurnFlow();
-    if (this.loopFn) {
+    this.aiTurnInFlight = false;
+    if (!this.loopFn) {
+      this.startLoop();
+    } else {
       this.scheduleLoop(this.loopFn, 20);
     }
   }
@@ -389,6 +402,18 @@ export class GameController {
       (window as any).__setGameState?.(newState);
     } catch {
       // ignore UI bridge failures
+    }
+
+    // Auto-advance AI turn when active_side is an AI controller and match is ongoing
+    const activeSide = newState?.active_side;
+    const controller = this.getControllerForSide(newState, activeSide);
+    if (controller === "ai" && !newState.done && !this.waitingForManualAdvance) {
+      this.aiTurnInFlight = false;
+      if (!this.loopFn) {
+        this.startLoop();
+      } else {
+        this.scheduleLoop(this.loopFn, 200);
+      }
     }
   }
 
@@ -506,7 +531,18 @@ export class GameController {
           const sb3Status = String(step0?.sb3_status || "unknown");
           const sb3Reason = String(step0?.sb3_reason || "unknown");
           const sb3Meta = `sb3=${sb3Status}:${sb3Reason}`;
-          if (aiSource.startsWith("heuristic")) {
+          if (aiSource.includes("efficientzero") || aiSource.includes("mcts")) {
+            const actionId = step0?.action_id || "?";
+            const ax = this.actionIdToAx(actionId);
+            const v = step0?.telemetry?.root_value;
+            const vStr = v != null ? (v > 0 ? `+${v.toFixed(3)}` : v.toFixed(3)) : "?";
+            const winP = step0?.telemetry?.win_prob;
+            const winStr = winP != null ? `${Math.round(winP * 100)}%` : "?";
+            (window as any).logSystemEvent?.(
+              "ai",
+              `🧠 EfficientZeroV2 MCTS (${unitId || "?"}): ${actionId} ${ax} [WinEst: ${winStr}, v: ${vStr}]`
+            );
+          } else if (aiSource.startsWith("heuristic")) {
             const actionId = step0?.action_id || "?";
             const ax = this.actionIdToAx(actionId);
             (window as any).logSystemEvent?.(
@@ -527,7 +563,7 @@ export class GameController {
             );
             (window as any).logSystemEvent?.(
               "alert",
-              `⚠️ AI corrected (${unitId || "?"}): ${proposed} ${proposedAx} -> ${executed} ${executedAx} [${reason}] [${sb3Meta}]`
+              `⚠️ AI corrected (${unitId || "?"}): ${proposed} ${proposedAx} -> ${executed} ${executedAx} [${reason}]`
             );
           }
           if (unitId) {
@@ -575,6 +611,9 @@ export class GameController {
 
         const aiTurnState = result?.state || null;
         if (aiTurnState) {
+          if (result?.telemetry) {
+            aiTurnState.telemetry = result.telemetry;
+          }
           // Apply backend state after animating AI steps. If we sync first, unit
           // sprites snap to final coordinates and movement animations become no-op.
           this.updateState(aiTurnState);

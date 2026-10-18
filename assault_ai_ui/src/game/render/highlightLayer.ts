@@ -81,21 +81,72 @@ export class HighlightLayer {
   }
 
   // ---------------------------------------------
-  // Draw attack targets
+  // Draw attack targets (differentiated by tactical weapon type)
   // ---------------------------------------------
-  drawAttacks(targets: { q: number; r: number }[]) {
+  drawAttacks(targets: any[]) {
     for (const t of targets) {
       const { x, y } = this.getCenter(t.q, t.r);
+      const isIndirect = t.type === "ranged_indirect" || t.kind === "indirect";
+      const isAssault = t.type === "assault";
 
       const g = new PIXI.Graphics();
 
-      g.circle(x, y, HEX_SIZE * 0.45);
-      g.fill({ color: 0xff3333, alpha: 0.35 });
-      g.stroke({ width: 2, color: 0xff6666, alpha: 0.9 });
+      if (isIndirect) {
+        // 💥 Purple Mortar / Indirect Artillery Bombardment Reticle (No-LOS required)
+        g.circle(x, y, HEX_SIZE * 0.52);
+        g.fill({ color: 0x9933ff, alpha: 0.28 });
+        g.stroke({ width: 2.5, color: 0xcc66ff, alpha: 0.95 });
+
+        const cross = HEX_SIZE * 0.28;
+        g.moveTo(x - cross, y);
+        g.lineTo(x + cross, y);
+        g.moveTo(x, y - cross);
+        g.lineTo(x, y + cross);
+        g.stroke({ width: 2, color: 0xee99ff, alpha: 0.95 });
+
+        g.circle(x, y, HEX_SIZE * 0.12);
+        g.fill({ color: 0xffffff, alpha: 0.9 });
+      } else if (isAssault) {
+        // ⚔️ Crimson Close-Quarters Assault Breach Reticle
+        g.circle(x, y, HEX_SIZE * 0.48);
+        g.fill({ color: 0xff0044, alpha: 0.35 });
+        g.stroke({ width: 2.5, color: 0xff3366, alpha: 1.0 });
+
+        g.circle(x, y, HEX_SIZE * 0.22);
+        g.fill({ color: 0xff2255, alpha: 0.85 });
+      } else {
+        // 🛡️ Standard Direct Ranged Fire / HMG Reticle
+        g.circle(x, y, HEX_SIZE * 0.45);
+        g.fill({ color: 0xff3333, alpha: 0.35 });
+        g.stroke({ width: 2, color: 0xff6666, alpha: 0.9 });
+
+        g.circle(x, y, HEX_SIZE * 0.14);
+        g.fill({ color: 0xff5555, alpha: 0.9 });
+      }
 
       g.zIndex = 1;
       this.container.addChild(g);
     }
+  }
+
+  // ---------------------------------------------
+  // Draw weapon range / suppression aura
+  // ---------------------------------------------
+  drawWeaponAura(q: number, r: number, rangeHexes: number, role: string) {
+    if (!rangeHexes || rangeHexes <= 0) return;
+    const { x, y } = this.getCenter(q, r);
+    const radius = Math.min(rangeHexes * HEX_SIZE * 1.55, 360);
+
+    const isMortar = role === "indirect_mortar";
+    const color = isMortar ? 0xaa44ff : 0xff9900;
+
+    const g = new PIXI.Graphics();
+    g.circle(x, y, radius);
+    g.fill({ color, alpha: 0.05 });
+    g.stroke({ width: 1.5, color, alpha: 0.35 });
+
+    g.zIndex = 0;
+    this.container.addChild(g);
   }
 
   // ---------------------------------------------
@@ -196,15 +247,16 @@ export class HighlightLayer {
       const target = state.units?.find(
         (u: any) => u.id === targetId || u.unit_id === targetId
       );
+      const isIndirect = type.includes("INDIRECT") || Boolean(unit?.has_indirect_fire);
 
-      this.drawUnitHighlight(unit, 0xff4444);
+      this.drawUnitHighlight(unit, isIndirect ? 0xaa44ff : 0xff4444);
 
       if (target) {
-        this.drawUnitHighlight(target, 0xffa500);
-        this.drawArrow(unit.q, unit.r, target.q, target.r, true);
+        this.drawUnitHighlight(target, isIndirect ? 0xcc66ff : 0xffa500);
+        this.drawArrow(unit.q, unit.r, target.q, target.r, true, isIndirect);
       } else if (attackQ != null && attackR != null) {
-        this.drawHexHighlight(attackQ, attackR, 0xff6644);
-        this.drawArrow(unit.q, unit.r, attackQ, attackR, true);
+        this.drawHexHighlight(attackQ, attackR, isIndirect ? 0x9933ff : 0xff6644);
+        this.drawArrow(unit.q, unit.r, attackQ, attackR, true, isIndirect);
       }
     }
 
@@ -215,9 +267,9 @@ export class HighlightLayer {
   }
 
   // ---------------------------------------------
-  // Arrow (sin cambios)
+  // Arrow (supports direct line and indirect mortar parabolic arc)
   // ---------------------------------------------
-  drawArrow(fromQ: number, fromR: number, toQ: number, toR: number, isAttack = false) {
+  drawArrow(fromQ: number, fromR: number, toQ: number, toR: number, isAttack = false, isIndirect = false) {
 
     const from = this.getCenter(fromQ, fromR);
     const to = this.getCenter(toQ, toR);
@@ -239,32 +291,59 @@ export class HighlightLayer {
     const ex = to.x - nx * endGap;
     const ey = to.y - ny * endGap;
 
-    const arrowColor = isAttack ? 0xff4444 : 0x00f0ff;
-    const arrowAlpha = 0.85;
+    const arrowColor = isIndirect ? 0xcc55ff : (isAttack ? 0xff4444 : 0x00f0ff);
+    const arrowAlpha = 0.88;
     const headLen = 12;
     const headAngle = Math.PI / 5;
-    const angle = Math.atan2(dy, dx);
 
     const g = new PIXI.Graphics();
 
-    g.moveTo(sx, sy);
-    g.lineTo(ex, ey);
-    g.stroke({ width: 2.5, color: arrowColor, alpha: arrowAlpha });
+    if (isIndirect) {
+      // Parabolic high-angle mortar flight trajectory
+      const midX = (sx + ex) / 2;
+      const midY = Math.min(sy, ey) - HEX_SIZE * 1.1;
+      const tangAngle = Math.atan2(ey - midY, ex - midX);
 
-    g.moveTo(ex, ey);
-    g.lineTo(
-      ex - headLen * Math.cos(angle - headAngle),
-      ey - headLen * Math.sin(angle - headAngle)
-    );
-    g.moveTo(ex, ey);
-    g.lineTo(
-      ex - headLen * Math.cos(angle + headAngle),
-      ey - headLen * Math.sin(angle + headAngle)
-    );
-    g.stroke({ width: 2.5, color: arrowColor, alpha: arrowAlpha });
+      g.moveTo(sx, sy);
+      g.quadraticCurveTo(midX, midY, ex, ey);
+      g.stroke({ width: 2.5, color: arrowColor, alpha: arrowAlpha });
 
-    g.circle(ex + nx * 4, ey + ny * 4, 4);
-    g.fill({ color: arrowColor, alpha: 0.9 });
+      g.moveTo(ex, ey);
+      g.lineTo(
+        ex - headLen * Math.cos(tangAngle - headAngle),
+        ey - headLen * Math.sin(tangAngle - headAngle)
+      );
+      g.moveTo(ex, ey);
+      g.lineTo(
+        ex - headLen * Math.cos(tangAngle + headAngle),
+        ey - headLen * Math.sin(tangAngle + headAngle)
+      );
+      g.stroke({ width: 2.5, color: arrowColor, alpha: arrowAlpha });
+
+      g.circle(ex + nx * 4, ey + ny * 4, 4);
+      g.fill({ color: arrowColor, alpha: 0.9 });
+    } else {
+      const angle = Math.atan2(dy, dx);
+
+      g.moveTo(sx, sy);
+      g.lineTo(ex, ey);
+      g.stroke({ width: 2.5, color: arrowColor, alpha: arrowAlpha });
+
+      g.moveTo(ex, ey);
+      g.lineTo(
+        ex - headLen * Math.cos(angle - headAngle),
+        ey - headLen * Math.sin(angle - headAngle)
+      );
+      g.moveTo(ex, ey);
+      g.lineTo(
+        ex - headLen * Math.cos(angle + headAngle),
+        ey - headLen * Math.sin(angle + headAngle)
+      );
+      g.stroke({ width: 2.5, color: arrowColor, alpha: arrowAlpha });
+
+      g.circle(ex + nx * 4, ey + ny * 4, 4);
+      g.fill({ color: arrowColor, alpha: 0.9 });
+    }
 
     g.zIndex = 5;
     this.container.addChild(g);

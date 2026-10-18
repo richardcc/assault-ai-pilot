@@ -48,6 +48,13 @@ from mlops.reporting.viewer_io import (
     read_catalog as _read_catalog,
 )
 
+
+def _model_html() -> str:
+    path = Path(__file__).resolve().parent / "viewer_web" / "model.html"
+    if path.exists():
+        return path.read_text(encoding="utf-8")
+    return ""
+
 _TRACE_RUN_ID_RE = re.compile(r"run_id=(efficientzero_v2_[0-9a-f]+|muzero_[0-9a-f]+)")
 _TRACE_RESUMED_FROM_RE = re.compile(r"resumed_from=(.+)")
 _TRACE_CYCLE_RE = re.compile(r"^\d{8}_\d{6}_(.+)_(phase\d+_.+)$")
@@ -342,27 +349,33 @@ def serve(
 
     class Handler(BaseHTTPRequestHandler):
         def _send_bytes(self, body: bytes, content_type: str) -> None:
-            self.send_response(200)
-            self.send_header("Content-Type", content_type)
-            self.send_header("Content-Length", str(len(body)))
-            self.send_header("Access-Control-Allow-Origin", "*")
-            self.send_header("Cache-Control", "no-store, max-age=0, must-revalidate")
-            self.send_header("Pragma", "no-cache")
-            self.send_header("Expires", "0")
-            self.end_headers()
-            self.wfile.write(body)
+            try:
+                self.send_response(200)
+                self.send_header("Content-Type", content_type)
+                self.send_header("Content-Length", str(len(body)))
+                self.send_header("Access-Control-Allow-Origin", "*")
+                self.send_header("Cache-Control", "no-store, max-age=0, must-revalidate")
+                self.send_header("Pragma", "no-cache")
+                self.send_header("Expires", "0")
+                self.end_headers()
+                self.wfile.write(body)
+            except Exception:
+                pass
 
         def _send_json_status(self, payload: dict, status_code: int = 200) -> None:
-            body = _json_bytes(payload)
-            self.send_response(int(status_code))
-            self.send_header("Content-Type", "application/json; charset=utf-8")
-            self.send_header("Content-Length", str(len(body)))
-            self.send_header("Access-Control-Allow-Origin", "*")
-            self.send_header("Cache-Control", "no-store, max-age=0, must-revalidate")
-            self.send_header("Pragma", "no-cache")
-            self.send_header("Expires", "0")
-            self.end_headers()
-            self.wfile.write(body)
+            try:
+                body = _json_bytes(payload)
+                self.send_response(int(status_code))
+                self.send_header("Content-Type", "application/json; charset=utf-8")
+                self.send_header("Content-Length", str(len(body)))
+                self.send_header("Access-Control-Allow-Origin", "*")
+                self.send_header("Cache-Control", "no-store, max-age=0, must-revalidate")
+                self.send_header("Pragma", "no-cache")
+                self.send_header("Expires", "0")
+                self.end_headers()
+                self.wfile.write(body)
+            except Exception:
+                pass
 
         def _content_type_for_path(self, path: Path) -> str:
             sfx = str(path.suffix or "").lower()
@@ -380,12 +393,15 @@ def serve(
                 return "image/jpeg"
             if sfx == ".svg":
                 return "image/svg+xml"
+            if sfx in [".md", ".markdown"]:
+                return "text/markdown; charset=utf-8"
             return "application/octet-stream"
 
         def _send_static_file(self, path: Path, root: Path) -> bool:
             try:
                 p = path.resolve()
-                if not str(p).startswith(str(root)):
+                r = root.resolve()
+                if not str(p).lower().startswith(str(r).lower()):
                     return False
                 if not p.exists() or not p.is_file():
                     return False
@@ -404,6 +420,19 @@ def serve(
             if parsed.path == "/model":
                 self._send_static_file(react_root / "index.html", react_root)
                 return
+            if parsed.path == "/docs" or parsed.path.startswith("/docs/"):
+                subpath = parsed.path[len("/docs") :].lstrip("/")
+                if not subpath or subpath in ("index.html", ""):
+                    docs_file = (repo_root / "docs" / "index.html").resolve()
+                    if docs_file.exists():
+                        self._send_static_file(docs_file, repo_root / "docs")
+                        return
+                else:
+                    rel_doc = unquote(subpath)
+                    doc_target = (repo_root / "docs" / rel_doc).resolve()
+                    if doc_target.exists() and doc_target.is_file():
+                        self._send_static_file(doc_target, repo_root / "docs")
+                        return
             if parsed.path.startswith("/assets/"):
                 rel = unquote(parsed.path[len("/assets/") :])
                 if self._send_static_file(react_root / "assets" / rel, react_root):
@@ -597,6 +626,8 @@ def serve(
                     episode_id=str(qs.get("episode_id", ["episode_0"])[0] or "episode_0"),
                     from_step=int(from_step),
                     to_step=max(from_step, int(qs.get("to_step", ["79"])[0] or 79)),
+                    repo_root=repo_root,
+                    load_scenario_overlay=_load_scenario_overlay,
                 )
                 self._send_bytes(_json_bytes(payload), "application/json; charset=utf-8")
                 return
@@ -683,9 +714,34 @@ def serve(
         def log_message(self, format, *args):  # noqa: A003
             return
 
-    httpd = ThreadingHTTPServer((host, port), Handler)
-    print(f"[ReportingViewer] http://{host}:{port} catalog={catalog_path} ui=react")
-    print(f"[ReportingViewer] Legacy fallback: http://{host}:{port}/legacy")
+    import socket
+
+    class DualStackServer(ThreadingHTTPServer):
+        daemon_threads = True
+
+        def server_bind(self):
+            try:
+                self.socket.setsockopt(socket.IPPROTO_IPV6, socket.IPV6_V6ONLY, 0)
+            except Exception:
+                pass
+            return super().server_bind()
+
+        def handle_error(self, request, client_address):
+            pass
+
+    httpd = None
+    if host in {"127.0.0.1", "localhost", "0.0.0.0", "", "::", "::1"}:
+        try:
+            DualStackServer.address_family = socket.AF_INET6
+            httpd = DualStackServer(("::", port), Handler)
+        except Exception:
+            httpd = None
+
+    if httpd is None:
+        httpd = ThreadingHTTPServer((host, port), Handler)
+
+    print(f"[ReportingViewer] http://127.0.0.1:{port} (and http://localhost:{port}) catalog={catalog_path} ui=react")
+    print(f"[ReportingViewer] Legacy fallback: http://127.0.0.1:{port}/legacy")
     httpd.serve_forever()
 
 

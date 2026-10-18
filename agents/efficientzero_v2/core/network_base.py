@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import torch
 from torch import nn
+import torch.nn.functional as F
 
 from agents.efficientzero_v2.core.support import support_to_scalar
 
@@ -29,13 +30,41 @@ class ResidualMLPBlock(nn.Module):
         return self.act2(x + z)
 
 
+class HexagonalMaskConv2d(nn.Conv2d):
+    """
+    2D Convolution constrained to a 6-neighbor hexagonal topology.
+    In hexagonal axial/offset representations, the corners (0, 0) and (2, 2)
+    do not share a physical hexagonal edge. Applying a static binary mask ensures the network
+    does not propagate spurious diagonal interactions across non-adjacent cells.
+    """
+    def __init__(self, in_channels: int, out_channels: int, kernel_size: int = 3, padding: int = 1, bias: bool = False):
+        super().__init__(in_channels, out_channels, kernel_size=kernel_size, padding=padding, bias=bias)
+        if kernel_size == 3:
+            # Hex neighbors in axial coordinates: 6 equidistant neighbors, 2 non-adjacent diagonal corners
+            mask = torch.tensor([
+                [0.0, 1.0, 1.0],
+                [1.0, 1.0, 1.0],
+                [1.0, 1.0, 0.0]
+            ], dtype=torch.float32).view(1, 1, 3, 3)
+            self.register_buffer("hex_mask", mask)
+        else:
+            self.hex_mask = None
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        if self.hex_mask is not None:
+            w = self.weight * self.hex_mask
+            return F.conv2d(x, w, self.bias, self.stride, self.padding, self.dilation, self.groups)
+        return super().forward(x)
+
+
 class ResidualConvBlock(nn.Module):
-    def __init__(self, channels: int):
+    def __init__(self, channels: int, use_hex_mask: bool = False):
         super().__init__()
-        self.conv1 = nn.Conv2d(channels, channels, kernel_size=3, padding=1, bias=False)
+        conv_cls = HexagonalMaskConv2d if use_hex_mask else nn.Conv2d
+        self.conv1 = conv_cls(channels, channels, kernel_size=3, padding=1, bias=False)
         self.gn1 = _make_group_norm(channels)
         self.act1 = nn.SiLU()
-        self.conv2 = nn.Conv2d(channels, channels, kernel_size=3, padding=1, bias=False)
+        self.conv2 = conv_cls(channels, channels, kernel_size=3, padding=1, bias=False)
         self.gn2 = _make_group_norm(channels)
         self.act2 = nn.SiLU()
 
@@ -54,6 +83,22 @@ class ResidualConvBlock(nn.Module):
         z = self.gn2(self.conv2(z))
         z = z * self.se(z)
         return self.act2(x + z)
+
+
+class TemporalContextBlock(nn.Module):
+    """
+    Lightweight GRU-based temporal context cell to resolve POMDP state ambiguities
+    under Fog of War / Hidden Information in tactical wargames (Palma et al., 2025).
+    """
+    def __init__(self, hidden_dim: int):
+        super().__init__()
+        self.hidden_dim = hidden_dim
+        self.gru_cell = nn.GRUCell(hidden_dim, hidden_dim)
+
+    def forward(self, latent_pooled: torch.Tensor, prev_state: torch.Tensor | None = None) -> torch.Tensor:
+        if prev_state is None:
+            prev_state = torch.zeros_like(latent_pooled)
+        return self.gru_cell(latent_pooled, prev_state)
 
 
 class SpatialAttentionBlock(nn.Module):

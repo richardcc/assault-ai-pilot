@@ -36,11 +36,13 @@ class GameSession:
         self.trace_events: list[dict] = []
         self.trace_path: Optional[Path] = None
         self.last_backend_ai_decision: Optional[dict] = None
+        self.last_telemetry: Optional[dict] = None
         self.mission_planner: Optional[MissionPlanner] = None
         self.ai_observability: dict = {
             "total_decisions": 0,
             "by_source": {},
-            "sb3_status_counts": {},
+            "ai_status_counts": {},
+            "ezv2_status_counts": {},
             "corrected_count": 0,
             "recent_decisions": [],
         }
@@ -120,7 +122,8 @@ class GameSession:
         self.ai_observability = {
             "total_decisions": 0,
             "by_source": {},
-            "sb3_status_counts": {},
+            "ai_status_counts": {},
+            "ezv2_status_counts": {},
             "corrected_count": 0,
             "recent_decisions": [],
         }
@@ -183,13 +186,14 @@ class GameSession:
         obs = self.ai_observability
         obs["total_decisions"] = int(obs.get("total_decisions", 0) or 0) + 1
         src = str(payload.get("source", "unknown") or "unknown")
-        sb3_status = str(payload.get("sb3_status", "unknown") or "unknown")
+        ai_status = str(payload.get("ai_status", payload.get("sb3_status", "unknown")) or "unknown")
         by_source = dict(obs.get("by_source", {}) or {})
         by_source[src] = int(by_source.get(src, 0) or 0) + 1
         obs["by_source"] = by_source
-        sb3_counts = dict(obs.get("sb3_status_counts", {}) or {})
-        sb3_counts[sb3_status] = int(sb3_counts.get(sb3_status, 0) or 0) + 1
-        obs["sb3_status_counts"] = sb3_counts
+        ai_counts = dict(obs.get("ai_status_counts", {}) or {})
+        ai_counts[ai_status] = int(ai_counts.get(ai_status, 0) or 0) + 1
+        obs["ai_status_counts"] = ai_counts
+        obs["sb3_status_counts"] = ai_counts  # backwards compatibility alias
         if bool(payload.get("corrected", False)):
             obs["corrected_count"] = int(obs.get("corrected_count", 0) or 0) + 1
         recent = list(obs.get("recent_decisions", []) or [])
@@ -199,12 +203,14 @@ class GameSession:
 
     # ---------------------------------------------
     def get_state(self) -> Dict[str, Any]:
-        if self.env is None:
+        if self.env is None or getattr(self.env, "game_state", None) is None:
             return {"units": []}
 
         state = self.env.game_state
-        runtime = self.env.runtime
-        game_map = state.game_map
+        runtime = getattr(self.env, "runtime", None)
+        game_map = getattr(state, "game_map", None)
+        if game_map is None:
+            return {"units": []}
 
         # ✅ cargar catálogo
         with open(MAP_PIECE_CATALOG_PATH, "r", encoding="utf-8") as f:
@@ -219,13 +225,53 @@ class GameSession:
                 continue
 
             alive = getattr(u, "alive", True)
+            u_type = getattr(u, "unit_type", None)
+            max_hp = getattr(u, "max_strength", None) or getattr(u_type, "max_strength", 2) or 2
+            curr_hp = 0 if not alive else (getattr(u, "hp", None) if getattr(u, "hp", None) is not None else max_hp)
+            health_pct = round(float(curr_hp) / max(1.0, float(max_hp)), 2)
+            
+            attack_raw = getattr(u_type, "_attack_raw", {}) if u_type else {}
+            classification = str(getattr(u_type, "classification", "") or "")
+            code = str(getattr(u_type, "code", "") or "")
+
+            traits = list(getattr(u_type, "traits", []) or [])
+            movement = int(getattr(u_type, "movement", 2) or 2)
+
+            is_mortar = "MORTAR" in code or "BRIXIA" in code or classification == "INDIRECT_FIRE_UNIT"
+            has_indirect = is_mortar or ("INDIRECT_FIRE" in attack_raw) or ("INDIRECT_FIRE" in traits)
+            is_hmg = "MG" in code or "HMG" in code or "MMG" in code or "BREDA" in code or "BROWNING" in code
+            is_assault = "RIFLE" in code or "RANGER" in code or "GRENADIER" in code or classification in {"STANDARD_INFANTRY", "SPECIALIZED_INFANTRY"}
+
+            max_range = 10
+            for t in traits:
+                if t.startswith("MAX_RANGE_"):
+                    try:
+                        max_range = int(t.split("_")[-1])
+                    except (ValueError, IndexError):
+                        pass
+            if is_mortar and max_range == 10:
+                max_range = 8
+            elif is_hmg and max_range == 10:
+                max_range = 6
+
+            tactical_role = "indirect_mortar" if is_mortar else ("suppression_mg" if is_hmg else ("assault_squad" if is_assault else "infantry"))
+
             units.append({
                 "id": u.unit_id,
-                "unit_key": str(u.unit_type.code),
+                "unit_key": str(u_type.code) if u_type else "UNKNOWN",
                 "q": u.position.q,
                 "r": u.position.r,
                 "side": u.side,
-                "hp": 0 if not alive else getattr(u, "hp", None),
+                "hp": curr_hp,
+                "max_hp": max_hp,
+                "health_pct": health_pct,
+                "tactical_role": tactical_role,
+                "has_indirect_fire": has_indirect,
+                "is_suppression_mg": is_hmg,
+                "is_assault_squad": is_assault,
+                "traits": traits,
+                "movement": movement,
+                "max_range": max_range,
                 "alive": alive,
             })
 
@@ -362,5 +408,6 @@ class GameSession:
             "last_events": copied_events,
             "trace_path": str(self.trace_path) if self.trace_path is not None else None,
             "ai_observability": self._to_jsonable(self.ai_observability),
+            "telemetry": self.last_telemetry,
         }
         return payload

@@ -39,7 +39,7 @@ type Props = {
   units: Unit[];
 };
 
-function labelForUnit(unitId?: string | null, units: Unit[]) {
+function labelForUnit(unitId: string | null | undefined, units: Unit[]) {
   if (!unitId) return "Unknown";
 
   const unit = units.find((u) => u.id === unitId);

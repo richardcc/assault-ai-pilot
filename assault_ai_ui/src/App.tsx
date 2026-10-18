@@ -8,12 +8,13 @@ import { unitImages } from "./game/config/unitImages";
 import { sides } from "./game/config/sides";
 import { formatCoords } from "./game/render/hexGridRenderer";
 import { DispatchedOrdersPanel } from "./game/ui/DispatchedOrdersPanel";
-import { RagSituationPanel } from "./game/ui/RagSituationPanel";
-import { RagRulesPanel } from "./game/ui/RagRulesPanel";
+import { RagAssistantPanel } from "./game/ui/RagAssistantPanel";
 import { DraggableWindow } from "./game/ui/DraggableWindow";
 import { logCombatEvents } from "./game/systems/combatLog";
 import { getUnitActionMarker } from "./game/state/actionMarkers";
 import { apiUrl } from "./config/backend";
+
+import { EfficientZeroV2TelemetryPanel } from "./game/ui/EfficientZeroV2TelemetryPanel";
 
 type LogEntry = {
   type: string;
@@ -26,6 +27,13 @@ type Unit = {
   unit_key: string;
   side: string;
   hp?: number;
+  max_hp?: number;
+  health_pct?: number;
+  tactical_role?: string;
+  has_indirect_fire?: boolean;
+  is_suppression_mg?: boolean;
+  is_assault_squad?: boolean;
+  alive?: boolean;
   q: number;
   r: number;
 };
@@ -33,9 +41,9 @@ type Unit = {
 function App() {
   const floatWindowIds = [
     "tactical-intel",
+    "tactical-ezv2",
     "tactical-log",
-    "tactical-situation",
-    "tactical-rules",
+    "tactical-rag",
     "tactical-status",
     "tactical-units",
     "tactical-dice",
@@ -56,6 +64,21 @@ function App() {
   const [stickyCombatEvent, setStickyCombatEvent] = useState<any>(null);
   const [autoAdvanceAfterHuman, setAutoAdvanceAfterHuman] = useState(true);
   const [waitingForManualAdvance, setWaitingForManualAdvance] = useState(false);
+  const [telemetry, setTelemetry] = useState<any>(null);
+
+  const fetchTelemetry = async () => {
+    try {
+      const res = await fetch(apiUrl("/api/game/telemetry"));
+      if (res.ok) {
+        const data = await res.json();
+        if (data && Object.keys(data).length > 0) {
+          setTelemetry(data);
+        }
+      }
+    } catch {
+      // ignore
+    }
+  };
 
   const lastTurnRef = useRef<number>(-1);
   const lastActiveSideRef = useRef<string>("");
@@ -756,6 +779,46 @@ function App() {
                       </button>
                     )}
                   </div>
+                  {/* NORMALIZED TACTICAL HEALTH BAR */}
+                  {selectedUnit.health_pct != null && (
+                    <div style={{ marginTop: 6 }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", fontSize: 10, color: "#94a3b8", marginBottom: 2 }}>
+                        <span>Salud Operativa:</span>
+                        <strong style={{ color: selectedUnit.health_pct > 0.6 ? "#4ade80" : (selectedUnit.health_pct > 0.35 ? "#fbbf24" : "#f87171") }}>
+                          {Math.round(selectedUnit.health_pct * 100)}% ({selectedUnit.hp} / {selectedUnit.max_hp ?? selectedUnit.hp} HP)
+                        </strong>
+                      </div>
+                      <div style={{ width: "100%", height: 5, background: "#1e293b", borderRadius: 3, overflow: "hidden" }}>
+                        <div
+                          style={{
+                            width: `${Math.round(selectedUnit.health_pct * 100)}%`,
+                            height: "100%",
+                            background: selectedUnit.health_pct > 0.6 ? "linear-gradient(90deg, #16a34a, #22c55e)" : (selectedUnit.health_pct > 0.35 ? "linear-gradient(90deg, #d97706, #f59e0b)" : "linear-gradient(90deg, #dc2626, #ef4444)"),
+                            transition: "width 0.3s ease",
+                          }}
+                        />
+                      </div>
+                    </div>
+                  )}
+
+                  {/* TACTICAL SPECIALIZATION BADGES */}
+                  <div style={{ display: "flex", gap: 4, marginTop: 6, flexWrap: "wrap" }}>
+                    {(selectedUnit.has_indirect_fire || selectedUnit.tactical_role === "indirect_mortar") && (
+                      <span style={{ fontSize: 10, background: "#7c2d12", color: "#fdba74", padding: "2px 6px", borderRadius: 4, fontWeight: "bold" }}>
+                        💥 Fuego Indirecto (Mortero / No-LOS)
+                      </span>
+                    )}
+                    {(selectedUnit.is_suppression_mg || selectedUnit.tactical_role === "suppression_mg") && (
+                      <span style={{ fontSize: 10, background: "#1e3a8a", color: "#93c5fd", padding: "2px 6px", borderRadius: 4, fontWeight: "bold" }}>
+                        🛡️ Supresión / HMG (Cono &gt; 6)
+                      </span>
+                    )}
+                    {(selectedUnit.is_assault_squad || selectedUnit.tactical_role === "assault_squad") && (
+                      <span style={{ fontSize: 10, background: "#14532d", color: "#86efac", padding: "2px 6px", borderRadius: 4, fontWeight: "bold" }}>
+                        ⚔️ Escuadra de Asalto y Brecha
+                      </span>
+                    )}
+                  </div>
                 </div>
               </div>
               <div className="spec-stats">
@@ -809,6 +872,23 @@ function App() {
           </div>
         )}
       </DraggableWindow>
+
+      {/* ========================================================
+          EFFICIENTZERO V2 TELEMETRY & TACTICAL BRAIN WINDOW
+      ======================================================== */}
+      <DraggableWindow
+        windowId="tactical-ezv2"
+        title="🧠 EfficientZero V2 Telemetry"
+        initialX={1120}
+        initialY={92}
+        width={400}
+        bodyMaxHeight={640}
+      >
+        <EfficientZeroV2TelemetryPanel
+          telemetry={telemetry || gameData?.telemetry}
+          onRefreshTelemetry={fetchTelemetry}
+        />
+      </DraggableWindow>
       <DraggableWindow windowId="tactical-log" title="System Log" initialX={1540} initialY={92} width={360} bodyMaxHeight={640}>
         <div className="log-container">
           {logEvents.length > 0 ? (
@@ -825,11 +905,8 @@ function App() {
           )}
         </div>
       </DraggableWindow>
-      <DraggableWindow windowId="tactical-situation" title="Asistente Tactico: Situacion" initialX={1080} initialY={95} width={390}>
-        <RagSituationPanel gameData={gameData} />
-      </DraggableWindow>
-      <DraggableWindow windowId="tactical-rules" title="Asistente Tactico: Reglas" initialX={1080} initialY={420} width={390}>
-        <RagRulesPanel gameData={gameData} />
+      <DraggableWindow windowId="tactical-rag" title="🧠 Asistente Táctico RAG (Reglas & Situación)" initialX={1080} initialY={95} width={430} bodyMaxHeight={660}>
+        <RagAssistantPanel gameData={gameData} />
       </DraggableWindow>
       <DraggableWindow windowId="tactical-status" title="Estado de Partida" initialX={360} initialY={82} width={700}>
         <div style={{ display: "grid", gap: 8, fontSize: 12 }}>

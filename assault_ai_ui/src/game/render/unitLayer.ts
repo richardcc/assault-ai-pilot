@@ -1,7 +1,7 @@
 import * as PIXI from "pixi.js";
 import { axialToPixel, HEX_SIZE } from "./hexGridRenderer";
 import { initUnitLayerState, getSelectedUnitId, getHighlightedUnitId } from "./unitLayerState";
-import { createUnitSprite, updateUnitActionMarker } from "./unitLayerSprite";
+import { createUnitSprite, updateUnitActionMarker, updateUnitTacticalIndicators } from "./unitLayerSprite";
 import { updateHighlight } from "./unitLayerHighlight";
 import { moveUnit } from "./unitLayerMovement";
 
@@ -86,7 +86,7 @@ export class UnitLayer {
       const newX = Math.round(x);
       const newY = Math.round(y + HEX_SIZE);
 
-      const isMoving = sprite.__isMoving === true;
+      const isMoving = (sprite as any).__isMoving === true;
       if (!isMoving) {
         sprite.x = newX;
         sprite.y = newY;
@@ -124,6 +124,9 @@ export class UnitLayer {
 
       // Update highlight
       updateHighlight(this.container, sprite, id, isAvailable);
+
+      // Update tactical indicators and health pip bar
+      updateUnitTacticalIndicators(sprite, unit);
 
       seen.add(id);
     }

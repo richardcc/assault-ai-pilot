@@ -560,7 +560,26 @@ export function CatalogPage() {
     <div className="wrap">
       <div className="bar" style={{ justifyContent: "space-between" }}>
         <h1 style={{ margin: 0, fontSize: 18 }}>Curriculum Reporting Viewer</h1>
-        <div className="bar">
+        <div className="bar" style={{ gap: 8 }}>
+          <button
+            onClick={() => window.open("/docs", "_blank")}
+            style={{
+              background: "#0284c7",
+              color: "#ffffff",
+              border: "none",
+              borderRadius: 4,
+              padding: "4px 10px",
+              fontSize: 12,
+              fontWeight: 700,
+              cursor: "pointer",
+              display: "flex",
+              alignItems: "center",
+              gap: 5,
+            }}
+            title="Abrir Centro Interactivo de Documentación Técnica"
+          >
+            <span>📚</span> Documentación
+          </button>
           <button onClick={() => void load()}>Reload</button>
           <span className="muted">
             schema={String(catalog?.schema_version || "")} | source={String(catalog?.catalog_source || "")}

@@ -185,6 +185,9 @@ def build_catalog_duckdb_from_parquet(
         con.close()
 
 
+_CATALOG_SUMMARY_CACHE: dict[str, tuple[float, dict[str, Any]]] = {}
+
+
 def load_catalog_summary_from_duckdb(
     *,
     repo_root: Path,
@@ -193,6 +196,11 @@ def load_catalog_summary_from_duckdb(
     db_path = (repo_root / str(duckdb_rel_path)).resolve()
     if not db_path.exists():
         return {"error": f"duckdb catalog not found: {db_path}"}
+    mtime = db_path.stat().st_mtime
+    key = str(db_path)
+    cached = _CATALOG_SUMMARY_CACHE.get(key)
+    if cached and cached[0] == mtime:
+        return cached[1]
     try:
         import duckdb  # type: ignore
     except Exception as exc:
@@ -332,11 +340,13 @@ def load_catalog_summary_from_duckdb(
                 "models": eng_models,
             }
         )
-    return {
+    res = {
         "schema_version": SCHEMA_VERSION_V2,
         "catalog_mode": "duckdb_primary",
         "catalog_source": "duckdb",
         "repo_root": str(repo_root),
         "engines": engines,
     }
+    _CATALOG_SUMMARY_CACHE[key] = (mtime, res)
+    return res
 

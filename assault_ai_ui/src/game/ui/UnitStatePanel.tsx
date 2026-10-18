@@ -10,6 +10,12 @@ type Unit = {
   unit_key: string;
   side: string;
   hp?: number;
+  max_hp?: number;
+  health_pct?: number;
+  tactical_role?: string;
+  has_indirect_fire?: boolean;
+  is_suppression_mg?: boolean;
+  is_assault_squad?: boolean;
   alive?: boolean;
   q: number;
   r: number;
@@ -245,21 +251,66 @@ export function UnitStatePanel({
                     {u.id}
                   </div>
 
-                  {/* HP + compact action display */}
-                  <div className="trooper-card-hp-row">
-                    <div className="trooper-card-hp">
+                  {/* TACTICAL ROLE BADGES */}
+                  <div style={{ display: "flex", gap: 3, margin: "2px 0", flexWrap: "wrap", justifyContent: "center" }}>
+                    {(u.has_indirect_fire || u.tactical_role === "indirect_mortar") && (
+                      <span
+                        style={{ fontSize: 9, background: "#7c2d12", color: "#fdba74", padding: "1px 4px", borderRadius: 3, fontWeight: "bold" }}
+                        title="Fuego Indirecto: Sin LOS requerida / Mortero"
+                      >
+                        💥 MORTERO
+                      </span>
+                    )}
+                    {(u.is_suppression_mg || u.tactical_role === "suppression_mg") && (
+                      <span
+                        style={{ fontSize: 9, background: "#1e3a8a", color: "#93c5fd", padding: "1px 4px", borderRadius: 3, fontWeight: "bold" }}
+                        title="Fuego de Supresión: HMG alcance > 6"
+                      >
+                        🛡️ HMG
+                      </span>
+                    )}
+                    {(u.is_assault_squad || u.tactical_role === "assault_squad") && (
+                      <span
+                        style={{ fontSize: 9, background: "#14532d", color: "#86efac", padding: "1px 4px", borderRadius: 3, fontWeight: "bold" }}
+                        title="Escuadra de Asalto y Brecha"
+                      >
+                        ⚔️ ASALTO
+                      </span>
+                    )}
+                  </div>
+
+                  {/* HP + NORMALIZED TACTICAL HEALTH BAR */}
+                  <div className="trooper-card-hp-row" style={{ flexDirection: "column", gap: 2 }}>
+                    <div className="trooper-card-hp" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", width: "100%" }}>
                       {dead ? (
-                        <span style={{ color: "#ff3838", fontWeight: 700 }}>DEAD</span>
+                        <span style={{ color: "#ff3838", fontWeight: 700 }}>DEAD (0%)</span>
                       ) : u.hp != null ? (
-                        Array.from({ length: u.hp }).map((_, i) => (
-                          <span key={i} style={{ color: "#ff3838" }}>❤️</span>
-                        ))
+                        <>
+                          <span>
+                            {Array.from({ length: u.hp }).map((_, i) => (
+                              <span key={i} style={{ color: "#ff3838" }}>❤️</span>
+                            ))}
+                          </span>
+                          <span style={{ fontSize: 10, color: (u.health_pct ?? 1.0) < 0.5 ? "#f87171" : "#94a3b8", fontWeight: "bold" }}>
+                            {u.health_pct != null ? `${Math.round(u.health_pct * 100)}%` : ""}
+                          </span>
+                        </>
                       ) : (
                         "-"
                       )}
                     </div>
-                    {/* Keep marker-only visualization for consumed actions;
-                        avoid forcing WAIT text for all normal markers. */}
+                    {!dead && u.health_pct != null && (
+                      <div style={{ width: "100%", height: 3, background: "#1e293b", borderRadius: 2, overflow: "hidden" }}>
+                        <div
+                          style={{
+                            width: `${Math.round(u.health_pct * 100)}%`,
+                            height: "100%",
+                            background: u.health_pct > 0.6 ? "#22c55e" : (u.health_pct > 0.35 ? "#eab308" : "#ef4444"),
+                            transition: "width 0.3s ease",
+                          }}
+                        />
+                      </div>
+                    )}
                   </div>
                 </div>
               );

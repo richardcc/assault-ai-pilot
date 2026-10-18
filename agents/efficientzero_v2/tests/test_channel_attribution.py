@@ -68,8 +68,8 @@ def test_observation_enhanced_channels_contract():
 
     assert _channel_name(4) == "ally_crossfire_risk"
     assert _channel_name(5) == "enemy_target_engagement"
-    assert _channel_name(18) == "vp_delta_pressure"
-    assert _channel_name(27) == "fortification_and_urban_chokepoint"
+    assert _channel_name(18) == "vp_distance_field"
+    assert _channel_name(27) == "heavy_fortifications"
 
     obs = SimpleNamespace(
         turn=1,

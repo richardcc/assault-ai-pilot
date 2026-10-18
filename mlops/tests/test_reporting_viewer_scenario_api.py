@@ -38,3 +38,18 @@ def test_load_scenario_detail_mettete():
     assert res["opponent_side"] == "GE"
     assert res["vp"]["total_objectives"] == 3
     assert len(res["victory_outcomes"]["table"]) == 4
+
+
+def test_replay_steps_payload_scenario_overlay_detection():
+    from mlops.reporting.replay_api import detect_scenario_id_from_transitions
+    repo_root = Path(__file__).resolve().parents[2]
+
+    # German units -> mettete_i_piedi_terra_1
+    transitions_ge = [{"units": [{"unit_id": "GE_1"}, {"unit_id": "US_1"}], "vp_map": {"3,4": "GE"}}]
+    sid_ge = detect_scenario_id_from_transitions(transitions_ge, repo_root)
+    assert sid_ge == "mettete_i_piedi_terra_1"
+
+    # Italian units -> battaglia_cittadina_2_1
+    transitions_it = [{"units": [{"unit_id": "IT_1"}, {"unit_id": "US_1"}], "vp_map": {"16,1": "IT"}}]
+    sid_it = detect_scenario_id_from_transitions(transitions_it, repo_root)
+    assert sid_it == "battaglia_cittadina_2_1"

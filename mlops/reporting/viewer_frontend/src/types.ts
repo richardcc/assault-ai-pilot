@@ -15,6 +15,7 @@ export interface TrainRow extends Dict {
   phase_started_at?: string;
   phase_finished_at?: string;
   duration_seconds?: number;
+  evals_count?: number;
   config?: Dict;
   objective_reward_config?: {
     objective_signal?: Dict;
@@ -139,6 +140,14 @@ export interface ReplayMetaEpisode extends Dict {
   episode_path?: string;
   rows?: number;
   steps_count?: number;
+  seed?: number;
+  agent_name?: string;
+  scenario_id?: string;
+  scenario_name?: string;
+  matchup?: string;
+  matchup_label?: string;
+  winner?: string;
+  outcome?: string;
 }
 
 export interface ReplayMetaPayload extends Dict {

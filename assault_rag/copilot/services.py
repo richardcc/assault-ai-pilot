@@ -76,7 +76,15 @@ def _query_terms(query: str) -> List[str]:
 
 def _looks_like_unit_catalog_query(query: str) -> bool:
     terms = set(_query_terms(query))
-    return bool(terms & UNIT_QUERY_HINTS)
+    if terms & UNIT_QUERY_HINTS:
+        return True
+    for t in terms:
+        parts = set(t.split("_"))
+        if parts & UNIT_QUERY_HINTS:
+            return True
+        if re.match(r"^[a-z]{2}_[a-z0-9_]+$", t.lower()):
+            return True
+    return False
 
 
 def _looks_like_counter_query(query: str) -> bool:
@@ -360,15 +368,15 @@ def _fallback_answer_from_state(query: str, context: Dict | None) -> str | None:
         action_name = str(last.get("action", "") or "")
         side = str(last.get("side", compact.get("active_side", "UNKNOWN")) or "UNKNOWN")
         turn = int(last.get("turn", compact.get("turn", 0)) or 0)
-        source = str(last.get("source", "") or "")
-        sb3_status = str(last.get("sb3_status", "") or "")
+        source = str(last.get("source", "") or "EfficientZeroV2_MCTS")
+        ai_status = str(last.get("ai_status", last.get("ezv2_status", "")) or "")
         corrected = bool(last.get("corrected", False))
         correction_note = " (acción corregida por backend)" if corrected else ""
         action_desc = action_id or action_name or "acción desconocida"
+        status_note = f", estado={ai_status}" if ai_status else ""
         return (
             f"Última decisión IA registrada: turno {turn}, lado {side}, unidad {unit_id}, "
-            f"acción {action_desc}, fuente={source or 'unknown'}"
-            f"{f', sb3_status={sb3_status}' if sb3_status else ''}{correction_note}."
+            f"acción {action_desc}, motor={source}{status_note}{correction_note}."
         )
     if compact.get("turn") is None and not compact.get("vp_score_live"):
         return None
@@ -540,7 +548,9 @@ def _situation_llm_enabled() -> bool:
     return str(os.getenv("ASSAULT_RAG_SITUATION_LLM_ENABLED", "1")).strip().lower() in {"1", "true", "yes", "on"}
 
 
-def _ollama_chat(model: str, prompt: str, timeout_s: float = 25.0) -> str:
+def _ollama_chat(model: str, prompt: str, timeout_s: float | None = None) -> str:
+    if timeout_s is None:
+        timeout_s = float(os.getenv("ASSAULT_OLLAMA_TIMEOUT_S", "4.0"))
     base = str(os.getenv("ASSAULT_OLLAMA_BASE_URL", "http://127.0.0.1:11434")).rstrip("/")
     url = f"{base}/api/generate"
     payload = {

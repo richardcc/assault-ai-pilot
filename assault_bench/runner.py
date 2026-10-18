@@ -43,6 +43,8 @@ from assault_bench.trace_metrics_utils import (
     extract_unit_suppressed_from_runtime_events as _tm_extract_unit_suppressed_from_runtime_events,
     metric_from_row as _tm_metric_from_row,
 )
+_extract_unit_suppressed_from_runtime_events = _tm_extract_unit_suppressed_from_runtime_events
+extract_unit_suppressed_from_runtime_events = _tm_extract_unit_suppressed_from_runtime_events
 from assault_bench.action_utils import (
     action_kind_from_id as _au_action_kind_from_id,
     count_capture_like_actions as _au_count_capture_like_actions,

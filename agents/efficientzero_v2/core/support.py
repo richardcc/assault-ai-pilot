@@ -112,3 +112,77 @@ def cross_entropy_two_hot(
     elif reduction == "sum":
         return loss.sum()
     return loss
+
+
+def symlog(x: torch.Tensor) -> torch.Tensor:
+    """
+    Symmetric logarithmic compression function: symlog(x) = sign(x) * ln(|x| + 1).
+    Used in DreamerV3 and modern model-based RL to compress values across multiple orders of magnitude.
+    """
+    return torch.sign(x) * torch.log1p(torch.abs(x))
+
+
+def symexp(y: torch.Tensor) -> torch.Tensor:
+    """
+    Inverse of symmetric logarithmic compression: symexp(y) = sign(y) * (exp(|y|) - 1).
+    """
+    return torch.sign(y) * torch.expm1(torch.abs(y))
+
+
+def scalar_to_hl_gauss(
+    scalar: torch.Tensor,
+    support_size: int = 30,
+    sigma: float = 0.75,
+    use_phi: bool = True,
+    use_symlog: bool = False,
+    eps: float = 0.001,
+) -> torch.Tensor:
+    """
+    Encodes scalar values into an HL-Gauss (Histogram Loss with Gaussian Targets)
+    distribution across the support grid [-support_size, +support_size].
+    Introduced in DeepMind's 'Stop Regressing' (2024) to provide smooth, non-overfitting
+    targets for RL value and reward distributions.
+    """
+    if use_symlog:
+        transformed = symlog(scalar)
+    elif use_phi:
+        transformed = phi_transform(scalar, eps=eps)
+    else:
+        transformed = scalar
+
+    clamped = torch.clamp(transformed, -float(support_size), float(support_size))
+    # Support grid: [-K, ..., 0, ..., +K] -> shape (2K + 1)
+    support_grid = torch.arange(
+        -support_size, support_size + 1, dtype=torch.float32, device=scalar.device
+    )
+    diff = support_grid - clamped.unsqueeze(-1)
+    # Gaussian density: exp(-0.5 * (diff / sigma)^2)
+    weights = torch.exp(-0.5 * torch.square(diff / max(1e-4, sigma)))
+    # Normalize across atoms so probabilities sum to 1.0
+    probs = weights / torch.clamp(weights.sum(dim=-1, keepdim=True), min=1e-8)
+    return probs
+
+
+def cross_entropy_hl_gauss(
+    logits: torch.Tensor,
+    targets: torch.Tensor,
+    support_size: int = 30,
+    sigma: float = 0.75,
+    use_phi: bool = True,
+    use_symlog: bool = False,
+    reduction: str = "mean",
+) -> torch.Tensor:
+    """
+    Computes cross-entropy loss against an HL-Gauss smoothed target distribution.
+    """
+    target_dist = scalar_to_hl_gauss(
+        targets, support_size=support_size, sigma=sigma, use_phi=use_phi, use_symlog=use_symlog
+    )
+    log_probs = F.log_softmax(logits, dim=-1)
+    loss = -(target_dist * log_probs).sum(dim=-1)
+    if reduction == "mean":
+        return loss.mean()
+    elif reduction == "sum":
+        return loss.sum()
+    return loss
+

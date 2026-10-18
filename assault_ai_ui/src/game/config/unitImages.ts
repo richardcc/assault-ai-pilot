@@ -1,4 +1,12 @@
-export const unitImages = {
+export interface UnitImageEntry {
+  label: string;
+  full: string;
+  half: string;
+  card?: string;
+  card_half?: string;
+}
+
+export const unitImages: Record<string, UnitImageEntry> = {
   GE_RIFLES_43: {
     label: "GE Rifles 43",
     full: "/art/counters/GE Rifles 43.png",

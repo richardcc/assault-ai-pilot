@@ -81,6 +81,10 @@ def _compact_eval_results(results_raw: Any) -> list[dict[str, Any]]:
 
 _EVAL_FILE_CACHE: dict[str, tuple[float, dict[str, Any]]] = {}
 _TRACEABILITY_CACHE: tuple[float, dict[str, dict[str, Any]]] = (0.0, {})
+_PARQUET_ROWS_CACHE: dict[str, tuple[float, list[dict[str, Any]]]] = {}
+_TRAIN_MANIFEST_CACHE: dict[str, tuple[float, dict[str, Any]]] = {}
+_TRAIN_PAGE_CACHE: dict[tuple[str, float, str, str, int, int], dict[str, Any]] = {}
+_SCHEMA_COLUMNS_CACHE: dict[str, set[str]] = {}
 
 
 def _get_traceability_index(repo_root: Path) -> dict[str, dict[str, Any]]:
@@ -163,15 +167,47 @@ def load_eval_history_page_from_parquet(
     parquet_rel_path: str = "runs_curriculum/experiments/reporting/indexes/catalog_evals.parquet",
 ) -> dict[str, Any]:
     pq_path = (repo_root / str(parquet_rel_path)).resolve()
+    rows: list[dict[str, Any]] = []
     if not pq_path.exists():
-        return {"rows": [], "total": 0, "error": f"parquet eval index not found: {pq_path}"}
-    try:
-        import pyarrow.parquet as pq  # type: ignore
+        alt_path = (repo_root / "runs_curriculum" / "experiments" / "reporting" / "catalog_evals.parquet").resolve()
+        if alt_path.exists():
+            pq_path = alt_path
 
-        table = pq.read_table(pq_path)
-        rows = [dict(r or {}) for r in (table.to_pylist() or [])]
-    except Exception as exc:
-        return {"rows": [], "total": 0, "error": f"failed reading parquet eval index: {exc}"}
+    if pq_path.exists():
+        try:
+            mtime = pq_path.stat().st_mtime
+            key = str(pq_path)
+            cached_pq = _PARQUET_ROWS_CACHE.get(key)
+            if cached_pq and cached_pq[0] == mtime:
+                rows = cached_pq[1]
+            else:
+                import pyarrow.parquet as pq  # type: ignore
+
+                table = pq.read_table(pq_path)
+                rows = [dict(r or {}) for r in (table.to_pylist() or [])]
+                _PARQUET_ROWS_CACHE[key] = (mtime, rows)
+        except Exception:
+            rows = []
+
+    if not rows:
+        # Fallback to DuckDB catalog_evals if parquet is unavailable or empty
+        db_path = (repo_root / "runs_curriculum" / "experiments" / "reporting" / "reporting.duckdb").resolve()
+        if db_path.exists():
+            try:
+                import duckdb  # type: ignore
+                con = duckdb.connect(str(db_path), read_only=True)
+                aliases = _model_id_aliases(model_id, engine)
+                m_clause = f"AND model_id IN ({', '.join(['?'] * len(aliases))})" if aliases else "AND model_id = ?"
+                m_params = [str(engine or "")] + (aliases if aliases else [str(model_id or "")])
+                t_clause = ""
+                if str(train_run_id or "").strip():
+                    t_clause = "AND train_run_id = ?"
+                    m_params.append(str(train_run_id or "").strip())
+                df = con.execute(f"SELECT * FROM catalog_evals WHERE engine = ? {m_clause} {t_clause}", m_params).df()
+                con.close()
+                rows = [dict(r or {}) for r in df.to_dict(orient="records")]
+            except Exception:
+                rows = []
 
     wanted_engine = str(engine or "")
     model_aliases = set(_model_id_aliases(model_id, engine))
@@ -200,6 +236,44 @@ def load_eval_history_page_from_parquet(
         return True
 
     filtered = [r for r in filtered if _row_has_results(r)]
+    if not filtered and wanted_train:
+        for runs_root in ["runs_curriculum", "runs"]:
+            xai_dir = repo_root / runs_root / wanted_train / "xai"
+            if xai_dir.exists():
+                for p in sorted(xai_dir.glob("bench_eval_*.json"), key=lambda x: x.stat().st_mtime, reverse=True):
+                    try:
+                        p_data = json.loads(p.read_text(encoding="utf-8"))
+                        p_res = list(p_data.get("results", []) or [])
+                        p_hd = dict(p_data.get("head_diagnostics_eval", {}) or {})
+                        p_diag = dict(p_data.get("diagnostics_summary_eval", {}) or {})
+                        p_gate = dict(p_data.get("phase_2_9_promotion_gate", {}) or {})
+                        eval_obj = {
+                            "schema_version": "reporting_v2_strict",
+                            "engine": wanted_engine or "efficientzero_v2",
+                            "model_id": model_id,
+                            "eval_id": p.stem.replace("bench_eval_", ""),
+                            "train_run_id": wanted_train,
+                            "scenario_id": str(p_data.get("scenario_id", "") or ""),
+                            "created_at_utc": datetime.fromtimestamp(p.stat().st_mtime, timezone.utc).isoformat(),
+                            "source_path": str(p),
+                            "curriculum_phase": "",
+                            "results_count": len(p_res),
+                            "has_results": len(p_res) > 0,
+                            "head_diagnostics_json": json.dumps(p_hd),
+                            "diagnostics_summary_json": json.dumps(p_diag),
+                            "phase_gate_json": json.dumps(p_gate),
+                            "scenario_ids_json": json.dumps(list(dict.fromkeys([
+                                str(sg.get("scenario_id", "")).strip()
+                                for r in p_res for sg in list(r.get("seed_games", []) or [])
+                                if str(sg.get("scenario_id", "")).strip()
+                            ]))),
+                            "compact_results_json": json.dumps(p_res),
+                        }
+                        filtered.append(eval_obj)
+                    except Exception:
+                        pass
+                if filtered:
+                    break
     filtered.sort(key=lambda r: str(r.get("created_at_utc", "") or ""), reverse=True)
     total = int(len(filtered))
     start = max(0, min(int(offset), total))
@@ -310,6 +384,11 @@ def load_train_history_page_from_duckdb(
     db_path = (repo_root / str(duckdb_rel_path)).resolve()
     if not db_path.exists():
         return {"rows": [], "total": 0, "error": f"duckdb catalog not found: {db_path}"}
+    mtime = db_path.stat().st_mtime
+    cache_key = (str(db_path), mtime, str(engine or ""), str(model_id or ""), int(offset), int(limit))
+    cached_trains = _TRAIN_PAGE_CACHE.get(cache_key)
+    if cached_trains is not None:
+        return cached_trains
     try:
         import duckdb  # type: ignore
     except Exception as exc:
@@ -347,14 +426,18 @@ def load_train_history_page_from_duckdb(
             ).fetchone()[0]
         )
         start = max(0, min(int(offset), total))
+        model_clause_t = model_clause.replace("model_id", "t.model_id")
         rows = con.execute(
             f"""
             SELECT
-                run_id, scenario_id, created_at_utc, git_commit,
-                is_retrain, parent_run_id, latest_checkpoint
-            FROM catalog_trains
-            WHERE engine = ? {model_clause}
-            ORDER BY created_at_utc DESC
+                t.run_id, t.scenario_id, t.created_at_utc, t.git_commit,
+                t.is_retrain, t.parent_run_id, t.latest_checkpoint,
+                COUNT(e.eval_id) AS evals_count
+            FROM catalog_trains t
+            LEFT JOIN catalog_evals e ON t.run_id = e.train_run_id
+            WHERE t.engine = ? {model_clause_t}
+            GROUP BY t.run_id, t.scenario_id, t.created_at_utc, t.git_commit, t.is_retrain, t.parent_run_id, t.latest_checkpoint
+            ORDER BY t.created_at_utc DESC
             LIMIT ? OFFSET ?
             """,
             [str(engine or "")] + model_params + [int(limit), int(start)],
@@ -374,6 +457,7 @@ def load_train_history_page_from_duckdb(
                 "is_retrain": bool(r[4]),
                 "parent_run_id": str(r[5] or ""),
                 "latest_checkpoint": str(r[6] or ""),
+                "evals_count": int(r[7] or 0),
                 "curriculum_phase": str(trace_entry.get("phase_name") or ""),
                 "phase_started_at": str(trace_entry.get("phase_started_at") or ""),
                 "phase_finished_at": str(trace_entry.get("phase_finished_at") or ""),
@@ -407,7 +491,9 @@ def load_train_history_page_from_duckdb(
                     continue
             row_obj["scenario_mix_weights"] = parsed_weights
             out_rows.append(row_obj)
-        return {"rows": out_rows, "total": total}
+        res = {"rows": out_rows, "total": total}
+        _TRAIN_PAGE_CACHE[cache_key] = res
+        return res
     except Exception as exc:
         return {"rows": [], "total": 0, "error": f"duckdb train query failed: {exc}"}
     finally:
@@ -477,11 +563,14 @@ def load_elo_rows_from_duckdb(
             "enemy_units_eliminated",
             "damage_dealt",
         }
-        schema_rows = con.execute(
-            "SELECT column_name FROM information_schema.columns "
-            "WHERE table_name = 'catalog_eval_result_sides'"
-        ).fetchall()
-        available_cols = {str(r[0] or "").strip() for r in schema_rows}
+        available_cols = _SCHEMA_COLUMNS_CACHE.get("catalog_eval_result_sides")
+        if available_cols is None:
+            schema_rows = con.execute(
+                "SELECT column_name FROM information_schema.columns "
+                "WHERE table_name = 'catalog_eval_result_sides'"
+            ).fetchall()
+            available_cols = {str(r[0] or "").strip() for r in schema_rows}
+            _SCHEMA_COLUMNS_CACHE["catalog_eval_result_sides"] = available_cols
         missing_cols = sorted([c for c in required_cols if c not in available_cols])
         if missing_cols:
             return {
@@ -641,8 +730,15 @@ def _load_train_manifest_by_run_id(
         if not p.exists():
             continue
         try:
+            mtime = p.stat().st_mtime
+            key = str(p)
+            cached = _TRAIN_MANIFEST_CACHE.get(key)
+            if cached and cached[0] == mtime:
+                return cached[1]
             payload = json.loads(p.read_text(encoding="utf-8"))
-            return payload if isinstance(payload, dict) else {}
+            res = payload if isinstance(payload, dict) else {}
+            _TRAIN_MANIFEST_CACHE[key] = (mtime, res)
+            return res
         except Exception:
             return {}
     return {}
@@ -692,11 +788,13 @@ def load_model_detail_index_first(
     train_rows = list(train_page.get("rows", []) or [])
     total_trains = int(train_page.get("total", len(train_rows)) or len(train_rows))
     for tr in train_rows:
-        manifest = _load_train_manifest_by_run_id(
-            repo_root=repo_root, runs_roots=runs_roots, run_id=str(tr.get("run_id", ""))
-        )
-        cfg = dict(manifest.get("config", {}) or {})
-        tr["config"] = cfg
+        cfg = dict(tr.get("config", {}) or {})
+        if not cfg:
+            manifest = _load_train_manifest_by_run_id(
+                repo_root=repo_root, runs_roots=runs_roots, run_id=str(tr.get("run_id", ""))
+            )
+            cfg = dict(manifest.get("config", {}) or {})
+            tr["config"] = cfg
         obj_sig = dict(cfg.get("objective_signal", {}) or {})
         obj_head = dict(cfg.get("objective_head", {}) or {})
         obj_rep = dict(cfg.get("objective_reporting", {}) or {})
@@ -716,7 +814,13 @@ def load_model_detail_index_first(
             "reward_shaping": rw_shaping,
             "preflight_warnings": clean_warn,
         }
-    initial_train_run_id = str((train_rows[0].get("run_id", "") if train_rows else "") or "")
+    initial_train_run_id = ""
+    for tr in train_rows:
+        if int(tr.get("evals_count", 0) or 0) > 0:
+            initial_train_run_id = str(tr.get("run_id", "") or "")
+            break
+    if not initial_train_run_id and train_rows:
+        initial_train_run_id = str(train_rows[0].get("run_id", "") or "")
     eval_page = load_eval_history_page_from_parquet(
         repo_root=repo_root,
         engine=str(engine or ""),
@@ -726,6 +830,20 @@ def load_model_detail_index_first(
         train_run_id=initial_train_run_id,
         include_payload=True,
     )
+    if not eval_page.get("rows"):
+        eval_page = load_eval_history_page_from_parquet(
+            repo_root=repo_root,
+            engine=str(engine or ""),
+            model_id=canonical_model_id,
+            offset=0,
+            limit=max(1, int(eval_limit)),
+            train_run_id="",
+            include_payload=True,
+        )
+        if eval_page.get("rows"):
+            first_row_train = str((eval_page["rows"][0].get("train_run_id", "") or "")).strip()
+            if first_row_train:
+                initial_train_run_id = first_row_train
     all_eval_page = load_eval_history_page_from_parquet(
         repo_root=repo_root,
         engine=str(engine or ""),

@@ -197,6 +197,7 @@ def accumulate_seed_episode(
             "agent_name": str(agent_name),
             "seed": int(seed_used),
             "episode_index": int(episode_index),
+            "scenario_id": str(scenario_id),
             "transitions": list(trace_rows or []),
         }
     )

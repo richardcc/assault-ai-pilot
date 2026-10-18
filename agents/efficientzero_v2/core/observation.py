@@ -61,6 +61,10 @@ def _unit_feature_table() -> dict:
         "indirect_range": 1.0,
         "attack_power": 1.0,
         "defense_power": 1.0,
+        "max_strength": 4.0,
+        "is_mortar": 1.0,
+        "is_mg": 1.0,
+        "is_assault": 1.0,
     }
     for unit_key, payload in units.items():
         movement = float(payload.get("movement", 0) or 0)
@@ -87,6 +91,12 @@ def _unit_feature_table() -> dict:
             defense_power += _dice_power(dice)
         if sides > 0:
             defense_power /= float(sides)
+        max_strength = float(payload.get("max_strength", 4) or 4)
+        subtype = str(payload.get("subtype", "")).upper()
+        classification = str(payload.get("classification", "")).upper()
+        is_mortar = "MORTAR" in subtype or "INDIRECT_FIRE" in classification
+        is_mg = "MG" in subtype or "MMG" in str(unit_key).upper() or "HMG" in str(unit_key).upper()
+        is_assault = "FJ" in str(unit_key).upper() or "SNIPER" in str(unit_key).upper() or ("RIFLES" in str(unit_key).upper() and not is_mg and not is_mortar)
         attack_power = max(direct_power, indirect_power)
         f = {
             "movement": movement,
@@ -94,6 +104,10 @@ def _unit_feature_table() -> dict:
             "indirect_range": max_indirect_range,
             "attack_power": attack_power,
             "defense_power": defense_power,
+            "max_strength": max_strength,
+            "is_mortar": 1.0 if is_mortar else 0.0,
+            "is_mg": 1.0 if is_mg else 0.0,
+            "is_assault": 1.0 if is_assault else 0.0,
         }
         for k, v in f.items():
             max_vals[k] = max(max_vals[k], float(v))
@@ -197,16 +211,17 @@ def observation_to_tensor(
         defense_power_norm = float(feat.get("defense_power", 0.0)) / float(max(1e-9, feature_max.get("defense_power", 1.0)))
         alive = bool(unit.get("alive", True))
         suppressed = bool(unit.get("suppressed", False) or unit.get("is_suppressed", False))
-        hp = unit.get("hp")
+        max_str = float(feat.get("max_strength", 4.0) or 4.0)
+        hp = unit.get("hp", max_str)
         hp_norm = 0.0
         if isinstance(hp, (int, float)):
-            hp_norm = max(0.0, min(1.0, float(hp) / 10.0))
+            hp_norm = max(0.0, min(1.0, float(hp) / max(1.0, max_str)))
         if side == to_play:
             if alive:
                 ally_alive_coords.append((int(q), int(r)))
                 ally_threat_sources.append((int(q), int(r), max(1.0, raw_direct_range), max(0.1, attack_power_norm)))
             put(0, y, x, 1.0)  # ally_presence
-            put(2, y, x, hp_norm)  # ally_hp_norm
+            put(2, y, x, hp_norm)  # ally_hp_norm (normalized by actual max_strength)
             # Channel 4: ally_crossfire_risk / suppression (replaces dead ally_suppressed)
             crossfire = sum(
                 1 for eq, er, edrange, _ in enemy_threat_sources
@@ -216,10 +231,13 @@ def observation_to_tensor(
             if alive and suppressed:
                 crossfire_score = 1.0
             put(4, y, x, crossfire_score)
-            if _is_infantry(unit_key):
-                put(8, y, x, 1.0)  # ally_infantry
-            if _is_support(unit_key):
-                put(10, y, x, 1.0)  # ally_support
+            
+            # Channel 8: ally_heavy_mg_support (HMG, MMG, MG42)
+            if float(feat.get("is_mg", 0.0)) > 0.0:
+                put(8, y, x, 1.0)
+            # Channel 10: ally_indirect_mortar (Mortars, Indirect fire)
+            if float(feat.get("is_mortar", 0.0)) > 0.0:
+                put(10, y, x, 1.0)
             put(22, y, x, movement_norm)  # ally_mobility_norm
             put(24, y, x, direct_range_norm)  # ally_direct_range_norm
             put(28, y, x, attack_power_norm)  # ally_attack_power_norm
@@ -228,19 +246,22 @@ def observation_to_tensor(
             if alive:
                 enemy_threat_sources.append((int(q), int(r), max(1.0, raw_direct_range), max(0.1, attack_power_norm)))
             put(1, y, x, 1.0)  # enemy_presence
-            put(3, y, x, hp_norm)  # enemy_hp_norm
-            # Channel 5: enemy_target_engagement / suppression (replaces dead enemy_suppressed)
+            put(3, y, x, hp_norm)  # enemy_hp_norm (normalized by actual max_strength)
+            # Channel 5: enemy_target_engagement / suppression
             has_ally_target = any(
                 1 <= _hex_distance(int(q), int(r), aq, ar) <= raw_direct_range
                 for aq, ar in ally_alive_coords
             )
             engagement_score = 1.0 if has_ally_target else (1.0 if (alive and suppressed) else 0.0)
             put(5, y, x, engagement_score)
-            if _is_infantry(unit_key):
-                put(9, y, x, 1.0)  # enemy_infantry
-            put(23, y, x, movement_norm)  # enemy_mobility_norm
+            
+            # Channel 9: enemy_heavy_mg_support (HMG, MMG, MG42)
+            if float(feat.get("is_mg", 0.0)) > 0.0:
+                put(9, y, x, 1.0)
+            # Channel 23: enemy_indirect_mortar (Mortars, Indirect fire)
+            if float(feat.get("is_mortar", 0.0)) > 0.0:
+                put(23, y, x, 1.0)
             put(25, y, x, direct_range_norm)  # enemy_direct_range_norm
-            put(29, y, x, attack_power_norm)  # enemy_attack_power_norm
             put(31, y, x, defense_power_norm)  # enemy_defense_power_norm
 
     vp_owner_by_hex = dict(getattr(obs, "vp_owner_by_hex", {}) or {})
@@ -277,25 +298,11 @@ def observation_to_tensor(
         put(15, y, x, float((getattr(obs, "terrain_move_cost_by_hex", {}) or {}).get(key, 0.0)))
         put(16, y, x, float((getattr(obs, "terrain_cover_by_hex", {}) or {}).get(key, 0.0)))
         put(17, y, x, float((getattr(obs, "terrain_los_block_by_hex", {}) or {}).get(key, 0.0)))
+        # Channel 18: vp_distance_field (continuous radial Euclidean guidance toward nearest VP)
         if vp_list:
-            dmin, _, _ = objective_min_distance_snapshot(
-                units=[{"side": str(to_play), "alive": True, "q": int(q), "r": int(r)}],
-                side=str(to_play),
-                vp_hexes=vp_list,
-                vp_owner_by_hex=vp_owner_by_hex,
-            )
-            if float(dmin) >= 0.0:
-                base_inv = 1.0 / float(1 + max(0.0, float(dmin)))
-                # Channel 18: vp_delta_pressure (amplifies signal based on distance race to VP)
-                if enemy_threat_sources:
-                    d_enemy_vp = min(
-                        (_hex_distance(eq, er, int(vp.get("q", 0)), int(vp.get("r", 0)))
-                         for vp in vp_list for eq, er, _, _ in enemy_threat_sources),
-                        default=99,
-                    )
-                    adv = float(d_enemy_vp - float(dmin)) / max(1.0, float(d_enemy_vp + float(dmin)))
-                    base_inv = base_inv * (1.0 + 0.4 * max(-1.0, min(1.0, adv)))
-                put(18, y, x, min(1.0, max(0.0, base_inv)))
+            d_min_vp = min((_hex_distance(int(q), int(r), int(vp.get("q", 0)), int(vp.get("r", 0))) for vp in vp_list), default=99)
+            grad_val = 1.0 / float(1 + max(0, d_min_vp))
+            put(18, y, x, grad_val)
         put(19, y, x, float(q) / max_q_norm)  # q_coord_norm
         put(20, y, x, float(r) / max_r_norm)  # r_coord_norm
 
@@ -361,23 +368,24 @@ def observation_to_tensor(
                 ctrl = 0.0
             put(21, y, x, max(-1.0, min(1.0, ctrl)))
 
-        # Channel 27: fortification_and_urban_chokepoint
+        # Channel 27: heavy_fortifications (Bunkers, Casemates, Trenches, Gun Emplacements)
+        fort_type = str((getattr(obs, "fortification_type_by_hex", {}) or {}).get(key, "")).lower()
         if channels > 27:
-            fort_type = str((getattr(obs, "fortification_type_by_hex", {}) or {}).get(key, "")).lower()
             fort_val = 0.0
             if "bunker" in fort_type or "casemate" in fort_type:
                 fort_val = 1.0
             elif "gun_emplacement" in fort_type or "trench" in fort_type:
-                fort_val = 0.6
-            elif "mine" in fort_type:
-                fort_val = -0.6
-            elif "wire" in fort_type:
-                fort_val = -0.3
-            else:
-                # Urban defensible choke point: high cover and restricted sightlines
-                if cov >= 0.35 and los_blk >= 0.50:
-                    fort_val = 0.50
-                elif cov >= 0.25:
-                    fort_val = 0.25
+                fort_val = 0.70
+            elif cov >= 0.35 and los_blk >= 0.50:
+                fort_val = 0.40  # defensible urban stone building
             put(27, y, x, fort_val)
+
+        # Channel 29: hazard_mines_and_wire (Minefields = 1.0, Barbed Wire = 0.6)
+        if channels > 29:
+            hazard_val = 0.0
+            if "mine" in fort_type:
+                hazard_val = 1.0
+            elif "wire" in fort_type:
+                hazard_val = 0.60
+            put(29, y, x, hazard_val)
     return grid

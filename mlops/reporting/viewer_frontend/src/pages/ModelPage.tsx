@@ -9,7 +9,7 @@ import {
   fetchTrainSummary,
 } from "../api";
 import { calculateDurationSeconds, formatDuration, formatDurationDetailed, formatLocalDate } from "../dateUtils";
-import type { Dict, EvalResultRow, EvalRow, ModelPayload, ReplayMetaPayload, TrainRow } from "../types";
+import type { Dict, EvalResultRow, EvalRow, ModelPayload, ReplayMetaEpisode, ReplayMetaPayload, TrainRow } from "../types";
 import { TrainDetailTab } from "./model-tabs/TrainDetailTab";
 import { TrainHeadDiagnosticsTab } from "./model-tabs/TrainHeadDiagnosticsTab";
 import { ObjectiveRewardConfigTab } from "./model-tabs/ObjectiveRewardConfigTab";
@@ -64,6 +64,10 @@ export function ModelPage() {
   const [replayLog, setReplayLog] = useState<Dict | null>(null);
   const [selectedEpisodeId, setSelectedEpisodeId] = useState("episode_0");
   const [selectedStepIndex, setSelectedStepIndex] = useState(0);
+  const [filterScenario, setFilterScenario] = useState<string>("all");
+  const [filterMatchup, setFilterMatchup] = useState<string>("all");
+  const [filterWinner, setFilterWinner] = useState<string>("all");
+  const [searchSeedOrId, setSearchSeedOrId] = useState<string>("");
 
   const handleRefresh = async () => {
     setEvalRowsByKey({});
@@ -83,8 +87,15 @@ export function ModelPage() {
       const m = await fetchModel(engine, modelId);
       setModel(m);
       const trains = Array.isArray(m.train_history) ? (m.train_history as TrainRow[]) : [];
-      if (trains.length > 0 && trains[0].run_id) {
-        setSelectedTrainRun(String(trains[0].run_id));
+      const preferredRun = m.initial_train_run_id
+        ? String(m.initial_train_run_id)
+        : trains.find((t) => Number(t.evals_count ?? 0) > 0)?.run_id
+        ? String(trains.find((t) => Number(t.evals_count ?? 0) > 0)!.run_id)
+        : trains[0]?.run_id
+        ? String(trains[0].run_id)
+        : "";
+      if (preferredRun) {
+        setSelectedTrainRun(preferredRun);
       }
     }
     void run();
@@ -273,12 +284,151 @@ export function ModelPage() {
     void run();
   }, [selectedEvalSourcePath, selectedEpisodeId]);
 
+  const rawEpisodesMeta = useMemo(
+    () => (Array.isArray(replayMeta?.episodes_meta) ? (replayMeta!.episodes_meta! as ReplayMetaEpisode[]) : []),
+    [replayMeta]
+  );
+
+  const getEpisodeMatchup = (ep: ReplayMetaEpisode): string => {
+    if (ep.matchup) return String(ep.matchup).toLowerCase();
+    const an = String(ep.agent_name || "").toLowerCase();
+    if (an.includes("random_us") || an.includes("side_b")) return "mcts_vs_random_def";
+    if (an.includes("random_it") || an.includes("random_ge") || an.includes("side_a")) return "mcts_vs_random_atk";
+    if (an.includes("random")) return "vs_random";
+    return "selfplay";
+  };
+
+  const filteredEpisodes = useMemo(() => {
+    return rawEpisodesMeta.filter((ep) => {
+      // 1. Scenario Filter
+      if (filterScenario !== "all") {
+        const sid = String(ep.scenario_id || "").toLowerCase();
+        if (filterScenario === "mettete" && !sid.includes("mettete")) return false;
+        if (filterScenario === "cittadina" && !sid.includes("cittadina")) return false;
+      }
+
+      // 2. Matchup Filter
+      if (filterMatchup !== "all") {
+        const m = getEpisodeMatchup(ep);
+        if (filterMatchup === "selfplay" && m !== "selfplay") return false;
+        if (filterMatchup === "vs_random" && !m.includes("random")) return false;
+        if (filterMatchup === "vs_random_def" && m !== "mcts_vs_random_def") return false;
+        if (filterMatchup === "vs_random_atk" && m !== "mcts_vs_random_atk") return false;
+      }
+
+      // 3. Winner Filter
+      if (filterWinner !== "all") {
+        const w = String(ep.winner || "").toUpperCase();
+        const m = getEpisodeMatchup(ep);
+        if (filterWinner === "US" && w !== "US") return false;
+        if (filterWinner === "GE" && w !== "GE") return false;
+        if (filterWinner === "IT" && w !== "IT") return false;
+        if (filterWinner === "EJE" && w !== "GE" && w !== "IT") return false;
+        if (filterWinner === "EMPATE" && w !== "EMPATE" && !w.includes("DRAW")) return false;
+        if (filterWinner === "MCTS_WIN") {
+          if (m === "selfplay") return true;
+          if (m === "mcts_vs_random_def") return w === "GE" || w === "IT";
+          if (m === "mcts_vs_random_atk") return w === "US";
+          return w !== "" && w !== "EMPATE";
+        }
+        if (filterWinner === "MCTS_LOSS") {
+          if (m === "selfplay") return false;
+          if (m === "mcts_vs_random_def") return w === "US";
+          if (m === "mcts_vs_random_atk") return w === "GE" || w === "IT";
+          return false;
+        }
+      }
+
+      // 4. Text/Seed Search
+      if (searchSeedOrId.trim()) {
+        const query = searchSeedOrId.trim().toLowerCase();
+        const epId = String(ep.episode_id || "").toLowerCase();
+        const seedStr = ep.seed !== undefined ? String(ep.seed) : "";
+        if (!epId.includes(query) && !seedStr.includes(query) && !`seed ${seedStr}`.includes(query)) {
+          return false;
+        }
+      }
+
+      return true;
+    });
+  }, [rawEpisodesMeta, filterScenario, filterMatchup, filterWinner, searchSeedOrId]);
+
+  useEffect(() => {
+    if (filteredEpisodes.length > 0) {
+      const exists = filteredEpisodes.some((ep) => ep.episode_id === selectedEpisodeId);
+      if (!exists) {
+        setSelectedEpisodeId(String(filteredEpisodes[0].episode_id));
+      }
+    }
+  }, [filteredEpisodes, selectedEpisodeId]);
+
+  const getEpisodeOptionLabel = (ep: ReplayMetaEpisode, index: number) => {
+    const id = String(ep.episode_id || `episode_${index}`);
+    const winner = ep.winner ? String(ep.winner).toUpperCase() : "";
+    const winBadge =
+      winner === "GE"
+        ? "🔴 GE Ganó"
+        : winner === "IT"
+        ? "🟢 IT Ganó"
+        : winner === "US"
+        ? "🔵 US Ganó"
+        : winner === "EMPATE"
+        ? "⚖️ Empate"
+        : "";
+    const scenBadge = ep.scenario_id?.includes("mettete")
+      ? "🏖️ Mettete"
+      : ep.scenario_id?.includes("cittadina")
+      ? "🏙️ Cittadina"
+      : "";
+    const m = getEpisodeMatchup(ep);
+    const matchupBadge =
+      m === "selfplay"
+        ? "⚔️ Self-Play"
+        : m === "mcts_vs_random_def"
+        ? "🛡️ vs Rand(US)"
+        : m === "mcts_vs_random_atk"
+        ? "⚔️ vs Rand(Eje)"
+        : "🎲 vs Random";
+    const seedText = ep.seed !== undefined ? `Seed ${ep.seed}` : "";
+    const stepCount = ep.rows || ep.steps_count || 0;
+
+    const parts = [
+      id,
+      winBadge,
+      scenBadge,
+      matchupBadge,
+      seedText,
+      stepCount ? `${stepCount}p` : "",
+    ].filter(Boolean);
+
+    return parts.join(" | ");
+  };
+
   return (
     <div className="wrap">
       <div className="bar" style={{ justifyContent: "space-between" }}>
         <h1 style={{ margin: 0, fontSize: 18 }}>Model Detail - {String(model?.model_id || modelId || "")}</h1>
         <div className="bar">
           <button onClick={() => window.open("/", "_self")}>Back to Catalog</button>
+          <button
+            onClick={() => window.open("/docs", "_blank")}
+            style={{
+              background: "#0284c7",
+              color: "#ffffff",
+              border: "none",
+              borderRadius: 4,
+              padding: "4px 10px",
+              fontSize: 11,
+              fontWeight: 700,
+              cursor: "pointer",
+              display: "flex",
+              alignItems: "center",
+              gap: 4,
+            }}
+            title="Abrir Centro Interactivo de Documentación Técnica"
+          >
+            <span>📚</span> Documentación
+          </button>
           <button
             onClick={() =>
               window.open(
@@ -395,22 +545,54 @@ export function ModelPage() {
                 >
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                     <b>{String(t.run_id || "")}</b>
-                    {typeof t.duration_seconds === "number" && t.duration_seconds >= 0 && (
-                      <span
-                        style={{
-                          fontSize: 11,
-                          color: "#34d399",
-                          fontWeight: 700,
-                          background: "#10b98118",
-                          border: "1px solid #10b98140",
-                          padding: "1px 5px",
-                          borderRadius: 3,
-                        }}
-                        title={formatDurationDetailed(t.duration_seconds)}
-                      >
-                        ⏱️ {formatDuration(t.duration_seconds)}
-                      </span>
-                    )}
+                    <div style={{ display: "flex", gap: 4, alignItems: "center" }}>
+                      {typeof t.evals_count === "number" && t.evals_count > 0 ? (
+                        <span
+                          style={{
+                            fontSize: 10,
+                            color: "#38bdf8",
+                            background: "#0284c720",
+                            border: "1px solid #0284c750",
+                            padding: "1px 5px",
+                            borderRadius: 3,
+                            fontWeight: 600,
+                          }}
+                          title={`${t.evals_count} evaluación(es) asociada(s)`}
+                        >
+                          🎯 {t.evals_count} eval{t.evals_count > 1 ? "s" : ""}
+                        </span>
+                      ) : (
+                        <span
+                          style={{
+                            fontSize: 10,
+                            color: "#64748b",
+                            background: "#33415520",
+                            border: "1px solid #33415550",
+                            padding: "1px 5px",
+                            borderRadius: 3,
+                          }}
+                          title="Sin evaluaciones directas para esta fase"
+                        >
+                          sin evals
+                        </span>
+                      )}
+                      {typeof t.duration_seconds === "number" && t.duration_seconds >= 0 && (
+                        <span
+                          style={{
+                            fontSize: 11,
+                            color: "#34d399",
+                            fontWeight: 700,
+                            background: "#10b98118",
+                            border: "1px solid #10b98140",
+                            padding: "1px 5px",
+                            borderRadius: 3,
+                          }}
+                          title={formatDurationDetailed(t.duration_seconds)}
+                        >
+                          ⏱️ {formatDuration(t.duration_seconds)}
+                        </span>
+                      )}
+                    </div>
                   </div>
                   <div className="muted" style={{ fontSize: 11, marginTop: 3 }}>
                     {t.curriculum_phase ? (
@@ -527,31 +709,301 @@ export function ModelPage() {
             )}
           </div>
 
-          {/* Barra de filtros de evaluación (visible solo en sección Eval) */}
-          {section === "eval" && (
-            <div className="bar" style={{ marginBottom: 12, padding: "6px 8px", background: "#1e293b", borderRadius: 6 }}>
-              <div className="muted" style={{ fontSize: 12 }}>Eval:</div>
-              <select value={selectedEvalId} onChange={(e) => setSelectedEvalId(e.target.value)} style={{ maxWidth: 300 }}>
-                {evalRows.map((r) => {
-                  const id = String(r.eval_id || "");
-                  return <option key={id} value={id}>{id || "(no eval_id)"}</option>;
-                })}
-              </select>
-
-              {(evalTab === "match-replay" || evalTab === "replay-log") && (
-                <>
-                  <div className="muted" style={{ fontSize: 12, marginLeft: 8 }}>Episode:</div>
-                  <select value={selectedEpisodeId} onChange={(e) => setSelectedEpisodeId(e.target.value)}>
-                    {(Array.isArray(replayMeta?.episodes_meta) ? replayMeta!.episodes_meta! : []).map((ep, i) => {
-                      const id = String(ep.episode_id || `episode_${i}`);
-                      const stepCount = ep.rows || ep.steps_count || 0;
-                      const seedText = ep.seed !== undefined && ep.seed !== null ? `Seed ${ep.seed}` : "";
-                      const infoParts = [seedText, stepCount ? `${stepCount} pasos` : ""].filter(Boolean);
-                      const label = infoParts.length > 0 ? `${id} (${infoParts.join(" - ")})` : id;
-                      return <option key={id} value={id}>{label}</option>;
+          {/* Barra de filtros de evaluación y selector de partidas */}
+          {section === "eval" && evalRows.length > 0 && (
+            <div
+              style={{
+                marginBottom: 12,
+                padding: "10px 12px",
+                background: "linear-gradient(180deg, #1e293b, #0f172a)",
+                border: "1px solid #334155",
+                borderRadius: 8,
+                boxShadow: "0 4px 10px rgba(0,0,0,0.25)",
+                display: "flex",
+                flexDirection: "column",
+                gap: 8,
+              }}
+            >
+              {/* Fila 1: Selectores principales */}
+              <div style={{ display: "flex", alignItems: "center", flexWrap: "wrap", gap: 10 }}>
+                {/* Selector de Benchmark Eval */}
+                <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                  <span className="muted" style={{ fontSize: 12, fontWeight: 700 }}>📊 Benchmark:</span>
+                  <select
+                    value={selectedEvalId}
+                    onChange={(e) => setSelectedEvalId(e.target.value)}
+                    style={{
+                      background: "#0f172a",
+                      border: "1px solid #475569",
+                      color: "#f8fafc",
+                      padding: "4px 8px",
+                      borderRadius: 4,
+                      fontSize: 12,
+                      maxWidth: 240,
+                    }}
+                  >
+                    {evalRows.map((r) => {
+                      const id = String(r.eval_id || "");
+                      return <option key={id} value={id}>{id || "(no eval_id)"}</option>;
                     })}
                   </select>
-                </>
+                </div>
+
+                {(evalTab === "match-replay" || evalTab === "replay-log") && (
+                  <>
+                    {/* Filtro por Escenario */}
+                    <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
+                      <span className="muted" style={{ fontSize: 12, fontWeight: 600 }}>🗺️ Escenario:</span>
+                      <select
+                        value={filterScenario}
+                        onChange={(e) => setFilterScenario(e.target.value)}
+                        style={{
+                          background: "#0f172a",
+                          border: filterScenario !== "all" ? "1px solid #38bdf8" : "1px solid #475569",
+                          color: filterScenario !== "all" ? "#38bdf8" : "#f8fafc",
+                          padding: "4px 8px",
+                          borderRadius: 4,
+                          fontSize: 12,
+                          fontWeight: filterScenario !== "all" ? 700 : 400,
+                        }}
+                      >
+                        <option value="all">Todos los escenarios ({rawEpisodesMeta.length})</option>
+                        <option value="mettete">🏖️ Mettete i piedi a terra (Playas)</option>
+                        <option value="cittadina">🏙️ Battaglia Cittadina (Urbano)</option>
+                      </select>
+                    </div>
+
+                    {/* Filtro por Matchup / Jugador */}
+                    <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
+                      <span className="muted" style={{ fontSize: 12, fontWeight: 600 }}>🎮 Tipo Jugador:</span>
+                      <select
+                        value={filterMatchup}
+                        onChange={(e) => setFilterMatchup(e.target.value)}
+                        style={{
+                          background: "#0f172a",
+                          border: filterMatchup !== "all" ? "1px solid #a855f7" : "1px solid #475569",
+                          color: filterMatchup !== "all" ? "#c084fc" : "#f8fafc",
+                          padding: "4px 8px",
+                          borderRadius: 4,
+                          fontSize: 12,
+                          fontWeight: filterMatchup !== "all" ? 700 : 400,
+                        }}
+                      >
+                        <option value="all">Todos los matchups</option>
+                        <option value="selfplay">⚔️ Self-Play (MCTS vs MCTS)</option>
+                        <option value="vs_random">🎲 MCTS vs Random (Todos)</option>
+                        <option value="vs_random_def">🛡️ MCTS Defensor vs Random Atacante (US)</option>
+                        <option value="vs_random_atk">⚔️ MCTS Atacante vs Random Defensor (Eje)</option>
+                      </select>
+                    </div>
+
+                    {/* Filtro por Ganador / Resultado */}
+                    <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
+                      <span className="muted" style={{ fontSize: 12, fontWeight: 600 }}>🏆 Ganador:</span>
+                      <select
+                        value={filterWinner}
+                        onChange={(e) => setFilterWinner(e.target.value)}
+                        style={{
+                          background: "#0f172a",
+                          border: filterWinner !== "all" ? "1px solid #22c55e" : "1px solid #475569",
+                          color: filterWinner !== "all" ? "#4ade80" : "#f8fafc",
+                          padding: "4px 8px",
+                          borderRadius: 4,
+                          fontSize: 12,
+                          fontWeight: filterWinner !== "all" ? 700 : 400,
+                        }}
+                      >
+                        <option value="all">Todos los resultados</option>
+                        <option value="MCTS_WIN">🏆 Victorias MCTS (Modelo Gana)</option>
+                        <option value="MCTS_LOSS">⚠️ Derrotas MCTS (Random Gana)</option>
+                        <option value="US">🔵 Ganó US (Aliados)</option>
+                        <option value="GE">🔴 Ganó GE (Alemania)</option>
+                        <option value="IT">🟢 Ganó IT (Italia)</option>
+                        <option value="EJE">🛡️ Ganó Eje (GE o IT)</option>
+                        <option value="EMPATE">⚖️ Empates Tácticos</option>
+                      </select>
+                    </div>
+
+                    {/* Buscador de Seed o ID */}
+                    <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
+                      <span className="muted" style={{ fontSize: 12 }}>🔍</span>
+                      <input
+                        type="text"
+                        placeholder="Buscar seed o ep..."
+                        value={searchSeedOrId}
+                        onChange={(e) => setSearchSeedOrId(e.target.value)}
+                        style={{
+                          background: "#0f172a",
+                          border: searchSeedOrId ? "1px solid #facc15" : "1px solid #475569",
+                          color: "#f8fafc",
+                          padding: "4px 8px",
+                          borderRadius: 4,
+                          fontSize: 12,
+                          width: 130,
+                        }}
+                      />
+                    </div>
+                  </>
+                )}
+              </div>
+
+              {/* Fila 2: Chips de acceso rápido y selector de partida activa */}
+              {(evalTab === "match-replay" || evalTab === "replay-log") && (
+                <div style={{ display: "flex", flexDirection: "column", gap: 6, paddingTop: 4, borderTop: "1px dashed #334155" }}>
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 6 }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 4, flexWrap: "wrap" }}>
+                      <span style={{ fontSize: 11, color: "#64748b", fontWeight: 700, marginRight: 2 }}>FILTROS RÁPIDOS:</span>
+                      <button
+                        onClick={() => { setFilterScenario("all"); setFilterMatchup("all"); setFilterWinner("all"); setSearchSeedOrId(""); }}
+                        style={{
+                          padding: "2px 7px", fontSize: 11, borderRadius: 4, cursor: "pointer", border: "1px solid #475569",
+                          background: filterScenario === "all" && filterMatchup === "all" && filterWinner === "all" && !searchSeedOrId ? "#334155" : "transparent",
+                          color: "#cbd5e1"
+                        }}
+                      >
+                        Todas
+                      </button>
+                      <button
+                        onClick={() => setFilterScenario((prev) => (prev === "mettete" ? "all" : "mettete"))}
+                        style={{
+                          padding: "2px 7px", fontSize: 11, borderRadius: 4, cursor: "pointer",
+                          border: filterScenario === "mettete" ? "1px solid #38bdf8" : "1px solid #475569",
+                          background: filterScenario === "mettete" ? "rgba(56, 189, 248, 0.2)" : "transparent",
+                          color: filterScenario === "mettete" ? "#38bdf8" : "#cbd5e1"
+                        }}
+                      >
+                        🏖️ Mettete
+                      </button>
+                      <button
+                        onClick={() => setFilterScenario((prev) => (prev === "cittadina" ? "all" : "cittadina"))}
+                        style={{
+                          padding: "2px 7px", fontSize: 11, borderRadius: 4, cursor: "pointer",
+                          border: filterScenario === "cittadina" ? "1px solid #38bdf8" : "1px solid #475569",
+                          background: filterScenario === "cittadina" ? "rgba(56, 189, 248, 0.2)" : "transparent",
+                          color: filterScenario === "cittadina" ? "#38bdf8" : "#cbd5e1"
+                        }}
+                      >
+                        🏙️ Cittadina
+                      </button>
+                      <button
+                        onClick={() => setFilterMatchup((prev) => (prev === "selfplay" ? "all" : "selfplay"))}
+                        style={{
+                          padding: "2px 7px", fontSize: 11, borderRadius: 4, cursor: "pointer",
+                          border: filterMatchup === "selfplay" ? "1px solid #a855f7" : "1px solid #475569",
+                          background: filterMatchup === "selfplay" ? "rgba(168, 85, 247, 0.2)" : "transparent",
+                          color: filterMatchup === "selfplay" ? "#c084fc" : "#cbd5e1"
+                        }}
+                      >
+                        ⚔️ Self-Play MCTS
+                      </button>
+                      <button
+                        onClick={() => setFilterMatchup((prev) => (prev === "vs_random" ? "all" : "vs_random"))}
+                        style={{
+                          padding: "2px 7px", fontSize: 11, borderRadius: 4, cursor: "pointer",
+                          border: filterMatchup === "vs_random" ? "1px solid #a855f7" : "1px solid #475569",
+                          background: filterMatchup === "vs_random" ? "rgba(168, 85, 247, 0.2)" : "transparent",
+                          color: filterMatchup === "vs_random" ? "#c084fc" : "#cbd5e1"
+                        }}
+                      >
+                        🎲 vs Random
+                      </button>
+                      <button
+                        onClick={() => setFilterWinner((prev) => (prev === "MCTS_WIN" ? "all" : "MCTS_WIN"))}
+                        style={{
+                          padding: "2px 7px", fontSize: 11, borderRadius: 4, cursor: "pointer",
+                          border: filterWinner === "MCTS_WIN" ? "1px solid #22c55e" : "1px solid #475569",
+                          background: filterWinner === "MCTS_WIN" ? "rgba(34, 197, 94, 0.2)" : "transparent",
+                          color: filterWinner === "MCTS_WIN" ? "#4ade80" : "#cbd5e1"
+                        }}
+                      >
+                        🏆 Victorias MCTS
+                      </button>
+                      <button
+                        onClick={() => setFilterWinner((prev) => (prev === "MCTS_LOSS" ? "all" : "MCTS_LOSS"))}
+                        style={{
+                          padding: "2px 7px", fontSize: 11, borderRadius: 4, cursor: "pointer",
+                          border: filterWinner === "MCTS_LOSS" ? "1px solid #ef4444" : "1px solid #475569",
+                          background: filterWinner === "MCTS_LOSS" ? "rgba(239, 68, 68, 0.2)" : "transparent",
+                          color: filterWinner === "MCTS_LOSS" ? "#f87171" : "#cbd5e1"
+                        }}
+                      >
+                        ⚠️ Derrotas / Casos Límite
+                      </button>
+                    </div>
+
+                    <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                      <span
+                        style={{
+                          fontSize: 11,
+                          fontWeight: 700,
+                          color: filteredEpisodes.length > 0 ? "#38bdf8" : "#ef4444",
+                          background: "rgba(15, 23, 42, 0.8)",
+                          padding: "2px 8px",
+                          borderRadius: 4,
+                          border: "1px solid #334155",
+                        }}
+                      >
+                        {filteredEpisodes.length} de {rawEpisodesMeta.length} partidas
+                      </span>
+                      {(filterScenario !== "all" || filterMatchup !== "all" || filterWinner !== "all" || Boolean(searchSeedOrId)) && (
+                        <button
+                          onClick={() => { setFilterScenario("all"); setFilterMatchup("all"); setFilterWinner("all"); setSearchSeedOrId(""); }}
+                          title="Restablecer todos los filtros"
+                          style={{
+                            padding: "2px 6px",
+                            fontSize: 11,
+                            background: "rgba(239, 68, 68, 0.15)",
+                            border: "1px solid #ef4444",
+                            color: "#f87171",
+                            borderRadius: 4,
+                            cursor: "pointer",
+                            fontWeight: 600,
+                          }}
+                        >
+                          ✕ Limpiar
+                        </button>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Selector desplegable de partida */}
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 2 }}>
+                    <span style={{ fontSize: 12, fontWeight: 700, color: "#f8fafc", whiteSpace: "nowrap" }}>
+                      🎬 Partida Activa:
+                    </span>
+                    {filteredEpisodes.length > 0 ? (
+                      <select
+                        key={`sel_${selectedEvalId}_${filterScenario}_${filterMatchup}_${filterWinner}_${searchSeedOrId}_${filteredEpisodes.length}`}
+                        value={selectedEpisodeId}
+                        onChange={(e) => setSelectedEpisodeId(e.target.value)}
+                        style={{
+                          flex: 1,
+                          background: "#0f172a",
+                          border: "1px solid #38bdf8",
+                          color: "#f8fafc",
+                          padding: "6px 10px",
+                          borderRadius: 6,
+                          fontSize: 12,
+                          fontWeight: 600,
+                          cursor: "pointer",
+                        }}
+                      >
+                        {filteredEpisodes.map((ep, i) => {
+                          const id = String(ep.episode_id || `episode_${i}`);
+                          return (
+                            <option key={`ep_opt_${id}_${i}`} value={id}>
+                              {getEpisodeOptionLabel(ep, i)}
+                            </option>
+                          );
+                        })}
+                      </select>
+                    ) : (
+                      <div style={{ fontSize: 12, color: "#f87171", padding: "4px 8px", background: "rgba(239, 68, 68, 0.1)", borderRadius: 4, border: "1px solid rgba(239, 68, 68, 0.3)", flex: 1 }}>
+                        ⚠️ Ninguna partida coincide con los filtros seleccionados. Cambia los filtros o pulsa "Limpiar".
+                      </div>
+                    )}
+                  </div>
+                </div>
               )}
             </div>
           )}
@@ -589,19 +1041,59 @@ export function ModelPage() {
             {section === "eval" && loadingEvals && !evalRows.length && (
               <div className="muted" style={{ padding: 16 }}>⏳ Cargando evaluaciones del run seleccionado...</div>
             )}
-            {section === "eval" && (!loadingEvals || evalRows.length > 0) && evalTab === "vp-summary" && (
+            {section === "eval" && !loadingEvals && !evalRows.length && (
+              <div
+                style={{
+                  padding: "28px 24px",
+                  textAlign: "center",
+                  background: "#1e293b80",
+                  borderRadius: 8,
+                  border: "1px dashed #475569",
+                  margin: "12px 0",
+                }}
+              >
+                <div style={{ fontSize: 32, marginBottom: 10 }}>ℹ️</div>
+                <div style={{ fontSize: 15, fontWeight: 700, color: "#f8fafc", marginBottom: 6 }}>
+                  Sin evaluaciones asociadas a la ejecución seleccionada
+                </div>
+                <div style={{ fontSize: 12, color: "#94a3b8", maxWidth: 560, margin: "0 auto 16px auto", lineHeight: 1.5 }}>
+                  La ejecución de entrenamiento <code style={{ color: "#38bdf8" }}>{selectedTrainRun}</code> no contiene benchmarks de evaluación (XAI / Head Diagnostics).
+                </div>
+                {trains.find((t) => Number(t.evals_count ?? 0) > 0) && (
+                  <button
+                    onClick={() => {
+                      const evaluatedRun = trains.find((t) => Number(t.evals_count ?? 0) > 0);
+                      if (evaluatedRun?.run_id) setSelectedTrainRun(String(evaluatedRun.run_id));
+                    }}
+                    style={{
+                      background: "#0284c725",
+                      border: "1px solid #38bdf8",
+                      color: "#38bdf8",
+                      padding: "8px 16px",
+                      borderRadius: 6,
+                      fontWeight: 600,
+                      cursor: "pointer",
+                      fontSize: 12,
+                    }}
+                  >
+                    👉 Cambiar a la última ejecución evaluada ({trains.find((t) => Number(t.evals_count ?? 0) > 0)?.run_id})
+                  </button>
+                )}
+              </div>
+            )}
+            {section === "eval" && evalRows.length > 0 && evalTab === "vp-summary" && (
               <VpSummaryTab evalRows={evalRows} selectedEval={selectedEval} />
             )}
-            {section === "eval" && (!loadingEvals || evalRows.length > 0) && evalTab === "eval-head-diagnostics" && (
+            {section === "eval" && evalRows.length > 0 && evalTab === "eval-head-diagnostics" && (
               <HeadDiagnosticsTab evalRows={evalRows} />
             )}
-            {section === "eval" && (!loadingEvals || evalRows.length > 0) && evalTab === "eval-metrics" && (
+            {section === "eval" && evalRows.length > 0 && evalTab === "eval-metrics" && (
               <EvalMetricsTab evalRows={evalRows} />
             )}
-            {section === "eval" && evalTab === "eval-decisions" && (
+            {section === "eval" && evalRows.length > 0 && evalTab === "eval-decisions" && (
               <EvalDecisionsTab mainResult={mainResult} />
             )}
-            {section === "eval" && evalTab === "match-replay" && (
+            {section === "eval" && evalRows.length > 0 && evalTab === "match-replay" && (
               <MatchReplayTab
                 selectedEvalSourcePath={selectedEvalSourcePath}
                 replayMeta={replayMeta}
@@ -610,7 +1102,7 @@ export function ModelPage() {
                 onStepIndexChange={setSelectedStepIndex}
               />
             )}
-            {section === "eval" && evalTab === "replay-log" && (
+            {section === "eval" && evalRows.length > 0 && evalTab === "replay-log" && (
               <ReplayTab
                 selectedEvalSourcePath={selectedEvalSourcePath}
                 replayLog={replayLog}

@@ -38,6 +38,18 @@ module.exports = {
       },
     },
     {
+      name: "assault-reporting-viewer",
+      cwd: "C:/repos/python/assault",
+      script: "C:/repos/python/assault/.venv/Scripts/python.exe",
+      args: "-m mlops.reporting.viewer --port 8778",
+      autorestart: true,
+      max_restarts: 10,
+      restart_delay: 2000,
+      env: {
+        PYTHONUNBUFFERED: "1",
+      },
+    },
+    {
       name: "assault-orchestrator-prefect-server",
       cwd: "C:/repos/python/assault-experiments-orchestrator",
       script: "powershell.exe",

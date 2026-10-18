@@ -26,14 +26,14 @@ class SoundService {
     const sound =
       this.moveSounds[Math.floor(Math.random() * this.moveSounds.length)];
 
-    sound.cloneNode().play().catch(() => {});
+    (sound.cloneNode() as HTMLAudioElement).play().catch(() => {});
   }
 
   playAttack() {
     const sound =
       this.attackSounds[Math.floor(Math.random() * this.attackSounds.length)];
 
-    sound.cloneNode().play().catch(() => {});
+    (sound.cloneNode() as HTMLAudioElement).play().catch(() => {});
   }
 }
 

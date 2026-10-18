@@ -80,11 +80,12 @@ def persist_bench_artifacts(
         transitions = list(ep_row.get("transitions", []) or [])
         episode_file = f"episode_{episode_index:04d}.json"
         episode_rel_path = f"bench_replay_episodes/{episode_file}"
+        ep_scenario_id = str(ep_row.get("scenario_id", scenario_id))
         if bool(persist_replay_episode_files):
             episode_payload = {
                 "schema_version": "bench_replay_episode_v2",
                 "run_id": str(run_id),
-                "scenario_id": str(scenario_id),
+                "scenario_id": ep_scenario_id,
                 "bench_id": str(bench_stamp),
                 "episode_index": int(episode_index),
                 "seed": int(seed),
@@ -100,6 +101,7 @@ def persist_bench_artifacts(
                 "episode_index": int(episode_index),
                 "seed": int(seed),
                 "agent_name": str(agent_name),
+                "scenario_id": ep_scenario_id,
                 "transitions": int(len(transitions)),
                 "episode_path": (str(episode_rel_path) if bool(persist_replay_episode_files) else ""),
             }

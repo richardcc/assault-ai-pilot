@@ -21,10 +21,20 @@ export function updateHighlights(
 
     if (selectedUnit) {
       layer.drawSelected(selectedUnit.q, selectedUnit.r);
+
+      // Draw tactical engagement aura for mortars / HMGs
+      if (selectedUnit.has_indirect_fire || selectedUnit.is_suppression_mg) {
+        layer.drawWeaponAura(
+          selectedUnit.q,
+          selectedUnit.r,
+          selectedUnit.max_range || (selectedUnit.has_indirect_fire ? 8 : 6),
+          selectedUnit.tactical_role
+        );
+      }
     }
   }
 
-  // 2. Draw all valid move/attack destinations
+  // 2. Draw all valid move/attack destinations (tactically styled)
   const moves   = availableMoves.filter((m: any) => m.kind !== "attack");
   const attacks = availableMoves.filter((m: any) => m.kind === "attack");
 
@@ -38,10 +48,12 @@ export function updateHighlights(
 
     if (hoverMove || hoverAttack) {
       layer.drawHover(hoverHex.q, hoverHex.r);
+      const isIndirect = hoverAttack?.type === "ranged_indirect" || (Boolean(hoverAttack) && Boolean(selectedUnit.has_indirect_fire));
       layer.drawArrow(
         selectedUnit.q, selectedUnit.r,
         hoverHex.q,     hoverHex.r,
-        !!hoverAttack
+        !!hoverAttack,
+        isIndirect
       );
 
       if (hoverAttack && hoverAttack.target_id) {
@@ -50,7 +62,7 @@ export function updateHighlights(
         );
 
         if (targetUnit) {
-          layer.drawUnitHighlight(targetUnit, 0xffcc44);
+          layer.drawUnitHighlight(targetUnit, isIndirect ? 0xcc66ff : 0xffcc44);
         }
       }
     }
@@ -109,12 +121,14 @@ export function updateHighlights(
       }
 
       if (sourceUnit) {
+        const isIndirect = /INDIRECT|MORTAR/i.test(String(orderHoverTarget.type || orderHoverTarget.kind || "")) || Boolean(sourceUnit.has_indirect_fire);
         layer.drawArrow(
           sourceUnit.q,
           sourceUnit.r,
           destQ,
           destR,
-          isAttack
+          isAttack,
+          isIndirect
         );
       }
     }

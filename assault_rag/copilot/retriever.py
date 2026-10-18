@@ -1,3 +1,5 @@
+import json
+import math
 import re
 from functools import lru_cache
 from typing import Dict, List, Set, Tuple
@@ -193,33 +195,95 @@ def _expanded_query_tokens_for_query(query: str) -> frozenset[str]:
     return frozenset(_expand_query_tokens(_tokenize(query)))
 
 
+class BM25Index:
+    """
+    High-performance Okapi BM25 Index with Inverted Postings and Field Boosting.
+    Based on modern IR/RAG literature (Robertson et al., Trotman et al. 2014).
+    """
+    def __init__(self, chunks: List[Dict], k1: float = 1.2, b: float = 0.75):
+        self.chunks = chunks
+        self.N = len(chunks)
+        self.k1 = k1
+        self.b = b
+        self.doc_lengths: List[int] = []
+        # Inverted index: token -> list of (doc_idx, tf, is_meta)
+        self.inverted_index: Dict[str, List[Tuple[int, int, bool]]] = {}
+
+        for idx, chunk in enumerate(chunks):
+            text_tokens = list(_tokenize(str(chunk.get("text", "") or "")))
+            meta_str = " ".join([
+                str(chunk.get("chunk_id", "") or ""),
+                str(chunk.get("source_id", "") or ""),
+                str(chunk.get("rule_id", "") or ""),
+                str(chunk.get("title", "") or ""),
+                json.dumps(chunk.get("metadata", {}) or {}),
+            ])
+            meta_tokens = set(_tokenize(meta_str))
+            doc_len = len(text_tokens) + len(meta_tokens)
+            self.doc_lengths.append(max(1, doc_len))
+
+            tf_map: Dict[str, int] = {}
+            for t in text_tokens:
+                tf_map[t] = tf_map.get(t, 0) + 1
+            for t in meta_tokens:
+                tf_map[t] = tf_map.get(t, 0) + 2
+
+            for t, tf in tf_map.items():
+                is_meta = t in meta_tokens
+                if t not in self.inverted_index:
+                    self.inverted_index[t] = []
+                self.inverted_index[t].append((idx, tf, is_meta))
+
+        self.avgdl = sum(self.doc_lengths) / max(1, self.N)
+        self.idf: Dict[str, float] = {}
+        for t, postings in self.inverted_index.items():
+            df = len(postings)
+            self.idf[t] = math.log(1.0 + (self.N - df + 0.5) / (df + 0.5))
+
+    def search(self, query_tokens: Set[str], top_k: int = 5) -> List[Tuple[float, Dict]]:
+        scores: Dict[int, float] = {}
+        for t in query_tokens:
+            if t not in self.inverted_index:
+                continue
+            idf_t = self.idf[t]
+            for doc_idx, tf, is_meta in self.inverted_index[t]:
+                boost = 2.5 if is_meta else 1.0
+                dl = self.doc_lengths[doc_idx]
+                denom = tf * boost + self.k1 * (1.0 - self.b + self.b * (dl / self.avgdl))
+                num = (tf * boost) * (self.k1 + 1.0)
+                term_score = idf_t * (num / denom)
+                scores[doc_idx] = scores.get(doc_idx, 0.0) + term_score
+
+        ranked = sorted(scores.items(), key=lambda x: x[1], reverse=True)
+        return [(score, self.chunks[idx]) for idx, score in ranked[:top_k]]
+
+
 @lru_cache(maxsize=1)
-def _rule_index() -> tuple[tuple[Dict, frozenset[str]], ...]:
+def _get_rule_bm25() -> BM25Index:
     chunks = load_rule_chunks()
-    return tuple((chunk, _tokenize_cached(str(chunk.get("text", "") or ""))) for chunk in chunks)
+    return BM25Index(chunks)
 
 
 @lru_cache(maxsize=1)
-def _data_index() -> tuple[tuple[Dict, frozenset[str]], ...]:
-    # ensure_game_data_chunks already backfills fortification chunks when needed.
+def _get_data_bm25() -> BM25Index:
     all_data_chunks = ensure_game_data_chunks()
     seen_chunk_ids: Set[str] = set()
-    indexed: List[tuple[Dict, frozenset[str]]] = []
+    deduped: List[Dict] = []
     for chunk in all_data_chunks:
         chunk_id = str(chunk.get("chunk_id", ""))
         if chunk_id and chunk_id in seen_chunk_ids:
             continue
         if chunk_id:
             seen_chunk_ids.add(chunk_id)
-        indexed.append((chunk, _tokenize_cached(str(chunk.get("text", "") or ""))))
-    return tuple(indexed)
+        deduped.append(chunk)
+    return BM25Index(deduped)
 
 
 def invalidate_retriever_caches() -> None:
     _tokenize_cached.cache_clear()
     _expanded_query_tokens_for_query.cache_clear()
-    _rule_index.cache_clear()
-    _data_index.cache_clear()
+    _get_rule_bm25.cache_clear()
+    _get_data_bm25.cache_clear()
 
 
 def classify_query_mode(query: str, requested_mode: str | None = None) -> str:
@@ -264,24 +328,20 @@ def retrieve_evidence(
 ) -> Dict[str, List[Dict]]:
     query_tokens = set(_expanded_query_tokens_for_query(str(query or "")))
 
-    rules_ranked: List[Tuple[int, Dict]] = []
-    data_ranked: List[Tuple[int, Dict]] = []
+    rules_results: List[Dict] = []
+    data_results: List[Dict] = []
 
     if mode in {"rules", "hybrid"}:
-        for chunk, chunk_tokens in _rule_index():
-            score = len(chunk_tokens & query_tokens)
-            if score > 0:
-                rules_ranked.append((score, chunk))
-        rules_ranked.sort(key=lambda x: x[0], reverse=True)
+        rule_bm25 = _get_rule_bm25()
+        rules_ranked = rule_bm25.search(query_tokens, top_k=max_rules)
+        rules_results = [chunk for _, chunk in rules_ranked]
 
     if mode in {"data", "hybrid"}:
-        for chunk, chunk_tokens in _data_index():
-            score = len(chunk_tokens & query_tokens)
-            if score > 0:
-                data_ranked.append((score, chunk))
-        data_ranked.sort(key=lambda x: x[0], reverse=True)
+        data_bm25 = _get_data_bm25()
+        data_ranked = data_bm25.search(query_tokens, top_k=max_data)
+        data_results = [chunk for _, chunk in data_ranked]
 
     return {
-        "rules": [c for _, c in rules_ranked[:max_rules]],
-        "game_data": [c for _, c in data_ranked[:max_data]],
+        "rules": rules_results,
+        "game_data": data_results,
     }

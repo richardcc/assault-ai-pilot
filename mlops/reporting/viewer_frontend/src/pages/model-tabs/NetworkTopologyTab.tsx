@@ -1816,7 +1816,17 @@ export function NetworkTopologyTab({
           </div>
         </div>
 
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(260px, 1fr))", gap: 8, maxHeight: 320, overflowY: "auto", paddingRight: 4 }}>
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "repeat(auto-fill, minmax(260px, 1fr))",
+            gap: 8,
+            minHeight: 320,
+            maxHeight: "calc(100vh - 360px)",
+            overflowY: "auto",
+            paddingRight: 4,
+          }}
+        >
           {filteredChannels.map((c) => (
             <div
               key={c.idx}
@@ -2575,12 +2585,12 @@ export function NetworkTopologyTab({
               </div>
 
               <div style={{ background: "#0f172a", borderRadius: 6, padding: "8px 12px", border: "1px solid #334155" }}>
-                <div className="muted" style={{ fontSize: 10, textTransform: "uppercase" }}>Nuevos Canales (Opción C)</div>
-                <div style={{ fontSize: 12, fontWeight: 700, color: "#fbbf24", marginTop: 2 }}>
-                  Ch 21: #{ch21Info?.rank ?? "-"} (Score {ch21Info ? Number(ch21Info.importance_score).toFixed(3) : "-"})
+                <div className="muted" style={{ fontSize: 10, textTransform: "uppercase" }}>Canales Tácticos Clave</div>
+                <div style={{ fontSize: 12, fontWeight: 700, color: "#38bdf8", marginTop: 2 }}>
+                  Ch 21 (Frontline): #{ch21Info?.rank ?? "-"} (Score {ch21Info ? Number(ch21Info.importance_score).toFixed(3) : "-"})
                 </div>
-                <div style={{ fontSize: 12, fontWeight: 700, color: "#fbbf24" }}>
-                  Ch 07: #{ch7Info?.rank ?? "-"} (Score {ch7Info ? Number(ch7Info.importance_score).toFixed(3) : "-"})
+                <div style={{ fontSize: 12, fontWeight: 700, color: "#34d399" }}>
+                  Ch 07 (Threat): #{ch7Info?.rank ?? "-"} (Score {ch7Info ? Number(ch7Info.importance_score).toFixed(3) : "-"})
                 </div>
               </div>
 
@@ -2660,7 +2670,17 @@ export function NetworkTopologyTab({
             </div>
 
             {/* Table */}
-            <div style={{ overflowX: "auto", border: "1px solid #334155", borderRadius: 6, maxHeight: 360, overflowY: "auto" }}>
+            <div
+              style={{
+                overflowX: "auto",
+                border: "1px solid #334155",
+                borderRadius: 6,
+                flex: 1,
+                minHeight: 360,
+                maxHeight: "calc(100vh - 310px)",
+                overflowY: "auto",
+              }}
+            >
               <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 11, textAlign: "left" }}>
                 <thead style={{ background: "#0f172a", position: "sticky", top: 0, zIndex: 1, borderBottom: "1px solid #334155" }}>
                   <tr>
@@ -2678,12 +2698,11 @@ export function NetworkTopologyTab({
                   {filteredRankedChannels.map((rc, idx) => {
                     const score = Number(rc.importance_score ?? 0);
                     const pct = Math.min(100, Math.max(0, score * 100));
-                    const isNewOptC = rc.index === 7 || rc.index === 21;
                     return (
                       <tr
                         key={rc.index}
                         style={{
-                          background: isNewOptC ? "rgba(245, 158, 11, 0.08)" : idx % 2 === 0 ? "#1e293b" : "#182234",
+                          background: idx % 2 === 0 ? "#1e293b" : "#182234",
                           borderBottom: "1px solid #283548",
                         }}
                       >
@@ -2691,14 +2710,9 @@ export function NetworkTopologyTab({
                           #{rc.rank}
                         </td>
                         <td style={{ padding: "6px 10px" }}>
-                          <span style={{ fontWeight: 700, color: isNewOptC ? "#fbbf24" : "#f8fafc" }}>
+                          <span style={{ fontWeight: 700, color: "#f8fafc" }}>
                             Ch {String(rc.index).padStart(2, "0")}: <code>{rc.name}</code>
                           </span>
-                          {isNewOptC && (
-                            <span style={{ marginLeft: 6, fontSize: 9, background: "#78350f", color: "#fef3c7", padding: "1px 4px", borderRadius: 3, fontWeight: 700 }}>
-                              OPCIÓN C
-                            </span>
-                          )}
                         </td>
                         <td style={{ padding: "6px 10px", color: "#94a3b8" }}>
                           {rc.category}
