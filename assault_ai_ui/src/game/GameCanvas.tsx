@@ -36,8 +36,8 @@ function isCombatOrder(order: any): boolean {
 
 function resolveAttackTargetHex(order: any, state: any): { q: number; r: number } | null {
   if (!order) return null;
-  const q = order?.target_q ?? order?.q;
-  const r = order?.target_r ?? order?.r;
+  const q = order?.target_q ?? order?.q ?? order?.target_hex?.q ?? (Array.isArray(order?.target_hex) ? order?.target_hex[0] : null);
+  const r = order?.target_r ?? order?.r ?? order?.target_hex?.r ?? (Array.isArray(order?.target_hex) ? order?.target_hex[1] : null);
   if (q != null && r != null) {
     return { q: Number(q), r: Number(r) };
   }
@@ -45,7 +45,12 @@ function resolveAttackTargetHex(order: any, state: any): { q: number; r: number 
   if (!targetId || !Array.isArray(state?.units)) return null;
   const target = state.units.find((u: any) => u.id === targetId || u.unit_id === targetId);
   if (!target) return null;
-  return { q: Number(target.q), r: Number(target.r) };
+  const tq = target.q ?? target.position?.q;
+  const tr = target.r ?? target.position?.r;
+  if (tq != null && tr != null) {
+    return { q: Number(tq), r: Number(tr) };
+  }
+  return null;
 }
 
 export default function GameCanvas({
@@ -538,8 +543,8 @@ export default function GameCanvas({
 
         const actionType = (order?.type || order?.kind || "").toString().toUpperCase();
         const isAttack = isCombatOrder(order);
-        const moveQ = order?.move_q ?? order?.move_to?.q;
-        const moveR = order?.move_r ?? order?.move_to?.r;
+        const moveQ = order?.move_q ?? order?.q ?? order?.move_to?.q;
+        const moveR = order?.move_r ?? order?.r ?? order?.move_to?.r;
         const isMoveThenFire = actionType === "MOVE_THEN_FIRE";
         const isFireThenMove = actionType === "FIRE_THEN_MOVE";
         setUnitActionMarker(unitId, resolveActionMarker(order));

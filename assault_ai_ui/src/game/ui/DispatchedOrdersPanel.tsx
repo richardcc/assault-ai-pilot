@@ -71,11 +71,11 @@ export function DispatchedOrdersPanel({
       : "MOVE").toUpperCase(),
     kind: a.kind,
 
-    target_q: a.q ?? a.target_q,
-    target_r: a.r ?? a.target_r,
+    target_q: a.target_q ?? a.q,
+    target_r: a.target_r ?? a.r,
     target_id: a.target_id,
-    move_q: a.move_q,
-    move_r: a.move_r,
+    move_q: a.move_q ?? a.q,
+    move_r: a.move_r ?? a.r,
     move_to: a.move_to,
     action_id: (a as any).action_id,
 
@@ -134,8 +134,8 @@ export function DispatchedOrdersPanel({
             const coords = targetQ != null && targetR != null
               ? formatCoords(targetQ, targetR)
               : "?";
-            const moveQ = (order as any).move_q ?? (order as any).move_to?.q;
-            const moveR = (order as any).move_r ?? (order as any).move_to?.r;
+            const moveQ = (order as any).move_q ?? (order as any).q ?? (order as any).move_to?.q;
+            const moveR = (order as any).move_r ?? (order as any).r ?? (order as any).move_to?.r;
             const moveCoords = moveQ != null && moveR != null
               ? formatCoords(moveQ, moveR)
               : null;

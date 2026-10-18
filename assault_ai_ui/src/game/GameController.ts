@@ -62,8 +62,8 @@ export class GameController {
       return { label, target: targetId };
     }
 
-    const q = step?.target_q ?? step?.q;
-    const r = step?.target_r ?? step?.r;
+    const q = step?.target_q ?? step?.q ?? step?.target_hex?.q ?? (Array.isArray(step?.target_hex) ? step?.target_hex[0] : null);
+    const r = step?.target_r ?? step?.r ?? step?.target_hex?.r ?? (Array.isArray(step?.target_hex) ? step?.target_hex[1] : null);
     if (q != null && r != null) {
       return { label, target: formatCoords(Number(q), Number(r)) };
     }
