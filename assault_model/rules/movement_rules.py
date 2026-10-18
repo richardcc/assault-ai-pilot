@@ -69,7 +69,7 @@ class MovementRules:
         paths: list[MovementPath] = []
 
         start = getattr(unit, "position", None)
-        if start is None:
+        if start is None or not getattr(unit, "alive", True):
             return paths
 
         max_mp = getattr(unit.unit_type, "movement", 0) or 0
@@ -97,6 +97,13 @@ class MovementRules:
 
         frontier = [(0, start.q, start.r)]
 
+        # Precomputed static adjacency & enter costs (Roadmap 6.1)
+        gmap = game_state.game_map
+        get_static_graph = getattr(gmap, "get_static_movement_graph", None)
+        static_adj_tuples = None
+        if callable(get_static_graph):
+            static_adj_tuples = get_static_graph(move_type, terrain_config)[0]
+
         # -------------------------------------------------
         # DIJKSTRA por presupuesto de puntos de movimiento
         # -------------------------------------------------
@@ -106,25 +113,21 @@ class MovementRules:
             if cost > best_cost.get((q, r), float("inf")):
                 continue
 
-            for nq, nr in hex_neighbors((q, r)):
+            if static_adj_tuples is not None:
+                neighbor_entries = static_adj_tuples.get((q, r), ())
+            else:
+                neighbor_entries = []
+                for nq, nr in hex_neighbors((q, r)):
+                    tile = gmap.get_hex(nq, nr)
+                    if tile is None or not MovementTerrainRules.can_enter_hex(unit, tile):
+                        continue
+                    ec = terrain_config.get_move_cost(tile.get_terrain(), move_type)
+                    ft = gmap.get_hex_fortification(nq, nr)
+                    ec = FortificationRules.movement_cost_for_fortification(ft, move_type, ec)
+                    if ec is not None:
+                        neighbor_entries.append((nq, nr, ec))
 
-                tile = game_state.game_map.get_hex(nq, nr)
-                if tile is None:
-                    continue
-
-                if not MovementTerrainRules.can_enter_hex(unit, tile):
-                    continue
-
-                enter_cost = terrain_config.get_move_cost(
-                    tile.get_terrain(), move_type
-                )
-                fort_type = game_state.game_map.get_hex_fortification(nq, nr)
-                enter_cost = FortificationRules.movement_cost_for_fortification(
-                    fort_type, move_type, enter_cost
-                )
-                if enter_cost is None:
-                    continue  # impasable para este tipo de movimiento
-
+            for nq, nr, enter_cost in neighbor_entries:
                 new_cost = cost + enter_cost
                 if new_cost > max_mp:
                     continue
@@ -175,31 +178,44 @@ class MovementRules:
         # entrada supera la allowance -> 1 hex desde adyacente,
         # gasta todo el MP. Solo hexes vacios.
         # -------------------------------------------------
-        for nq, nr in hex_neighbors((start.q, start.r)):
-            key = (nq, nr)
-            if key in best_cost or key in empty_dests:
-                continue
-            if key in enemy_dests or key in vehicle_dests:
-                continue
-
-            tile = game_state.game_map.get_hex(nq, nr)
-            if tile is None:
-                continue
-            if not MovementTerrainRules.can_enter_hex(unit, tile):
-                continue
-            if occupants.get(key) is not None:
-                continue
-
-            enter_cost = terrain_config.get_move_cost(tile.get_terrain(), move_type)
-            fort_type = game_state.game_map.get_hex_fortification(nq, nr)
-            enter_cost = FortificationRules.movement_cost_for_fortification(
-                fort_type, move_type, enter_cost
-            )
-            if enter_cost is None:
-                continue
-            if enter_cost > max_mp:
+        if static_adj_tuples is not None:
+            start_neighbors = static_adj_tuples.get(start_key, ())
+            for nq, nr, enter_cost in start_neighbors:
+                if enter_cost <= max_mp:
+                    continue
+                key = (nq, nr)
+                if key in best_cost or key in empty_dests or key in enemy_dests or key in vehicle_dests:
+                    continue
+                if occupants.get(key) is not None:
+                    continue
                 empty_dests.add(key)
                 came_from[key] = start_key
+        else:
+            for nq, nr in hex_neighbors((start.q, start.r)):
+                key = (nq, nr)
+                if key in best_cost or key in empty_dests:
+                    continue
+                if key in enemy_dests or key in vehicle_dests:
+                    continue
+
+                tile = gmap.get_hex(nq, nr)
+                if tile is None:
+                    continue
+                if not MovementTerrainRules.can_enter_hex(unit, tile):
+                    continue
+                if occupants.get(key) is not None:
+                    continue
+
+                enter_cost = terrain_config.get_move_cost(tile.get_terrain(), move_type)
+                fort_type = gmap.get_hex_fortification(nq, nr)
+                enter_cost = FortificationRules.movement_cost_for_fortification(
+                    fort_type, move_type, enter_cost
+                )
+                if enter_cost is None:
+                    continue
+                if enter_cost > max_mp:
+                    empty_dests.add(key)
+                    came_from[key] = start_key
 
         # -------------------------------------------------
         # CONSTRUIR MovementPaths

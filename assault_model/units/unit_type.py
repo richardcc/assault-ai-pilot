@@ -118,6 +118,11 @@ class UnitType:
                     return True
         return False
 
+    def __deepcopy__(self, memo):
+        # UnitType is an immutable static catalog template; share across CoW clones.
+        return self
+
+
     # =================================================
     # ✅ CORE FUNCTION (Zero string parsing)
     # =================================================

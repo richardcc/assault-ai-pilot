@@ -238,8 +238,38 @@ class UnitInstance:
             _trace("FALLBACK_CLEARED", unit=self.unit_id)
 
     # ==================================================
-    # ✅ 🔥 CRÍTICO: optimización deepcopy
+    # ✅ 🔥 CRÍTICO: optimización Copy-on-Write / deepcopy (Roadmap 6.2)
     # ==================================================
+    def clone_cow(self) -> "UnitInstance":
+        """
+        Fast Copy-on-Write clone sharing immutable static catalog data
+        (`unit_type`, `unit_id`, `side`, `experience`, `max_strength`)
+        and copying only dynamic delta fields.
+        """
+        u = object.__new__(UnitInstance)
+        u.unit_id = self.unit_id
+        u.unit_type = self.unit_type
+        u.side = self.side
+        pos = self.position
+        u.position = HexCoord(pos.q, pos.r) if pos is not None else None
+        u.experience = self.experience
+        u._event_bus = None
+        u.max_strength = self.max_strength
+        u.strength = self.strength
+        u.alive = self.alive
+        u.suppressed = self.suppressed
+        u.fallback = self.fallback
+        u.spotted_enemies = set()
+        u.last_seen_turn = {}
+        u.embarked = self.embarked
+        u.carrier_id = self.carrier_id
+        if hasattr(self, "passengers"):
+            u.passengers = list(self.passengers)
+        return u
+
+    def __deepcopy__(self, memo) -> "UnitInstance":
+        return self.clone_cow()
+
     def __getstate__(self):
         state = self.__dict__.copy()
 
@@ -248,6 +278,7 @@ class UnitInstance:
         state["last_seen_turn"] = {}
 
         return state
+
     
     # ==================================================
     # 🔥 COMBAT MODELING HELPERS

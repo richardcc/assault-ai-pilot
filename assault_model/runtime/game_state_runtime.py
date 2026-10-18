@@ -74,6 +74,25 @@ class RuntimeGameState:
         # Side controller mapping can be injected by orchestrator (human/ai).
         self.side_controller_map: dict[str, str] = {}
 
+    def clone_cow(self) -> "RuntimeGameState":
+        """Fast Copy-on-Write clone of RuntimeGameState and its base GameState."""
+        cloned = object.__new__(RuntimeGameState)
+        cloned.base_state = self.base_state.clone_cow()
+        cloned.scenario = self.scenario
+        cloned.turn = TurnState(turn_number=cloned.base_state.turn)
+        cloned.activated_units = set(self.activated_units)
+        cloned.sides = list(self.sides)
+        cloned.active_side = self.active_side
+        cloned.first_player_side = self.first_player_side
+        cloned.reaction_used_this_turn = set(self.reaction_used_this_turn)
+        cloned.pending_reaction = dict(self.pending_reaction) if self.pending_reaction is not None else None
+        cloned.side_controller_map = dict(self.side_controller_map)
+        return cloned
+
+    def __deepcopy__(self, memo) -> "RuntimeGameState":
+        return self.clone_cow()
+
+
     # =================================================
     # SIDES (NEW)
     # =================================================

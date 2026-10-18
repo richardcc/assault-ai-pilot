@@ -97,3 +97,7 @@ class VictoryConditions:
             )
 
         return cls(points)
+
+    def __deepcopy__(self, memo):
+        # Static scenario-level victory definition; share across CoW clones.
+        return self

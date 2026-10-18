@@ -8,6 +8,13 @@ import os
 from assault_model.map.map import Map
 from assault_model.map.hex_ownership import HexOwnership
 from assault_model.map.hex_state import HexState
+from assault_model.state.cow_state import (
+    CoWHexStateMap,
+    GameStateDelta,
+    apply_state_delta,
+    capture_full_checkpoint,
+    compute_state_delta,
+)
 from assault_model.units.unit_instance import UnitInstance
 from assault_model.core.victory_conditions import VictoryConditions
 from assault_model.core.vp_tracker import VictoryPointTracker
@@ -71,11 +78,11 @@ class GameState:
         self.side_to_ownership = self._build_side_ownership()
 
         # -----------------------------
-        # MAP STATE
+        # MAP STATE (Copy-on-Write layered dict, Roadmap 6.2)
         # -----------------------------
-        self.hex_states: Dict[tuple[int, int], HexState] = {
+        self.hex_states: CoWHexStateMap = CoWHexStateMap({
             (h.q, h.r): HexState(h) for h in game_map.hexes
-        }
+        })
 
         # -----------------------------
         # VICTORY SYSTEM
@@ -226,10 +233,14 @@ class GameState:
                 )
 
                 expected_owner = self.side_to_ownership.get(unit.side, HexOwnership.NONE) if unit.alive else None
+                ro_hs = (
+                    self.hex_states.get_readonly(pos)
+                    if isinstance(self.hex_states, CoWHexStateMap) and pos is not None
+                    else (self.hex_states.get(pos) if pos is not None else None)
+                )
                 ownership_desynced = (
-                    pos is not None
-                    and pos in self.hex_states
-                    and self.hex_states[pos].ownership != expected_owner
+                    ro_hs is not None
+                    and ro_hs.ownership != expected_owner
                 )
 
                 if pos != last_pos or unit.alive != last_alive or unit.suppressed != last_suppressed or ownership_desynced:
@@ -257,10 +268,11 @@ class GameState:
                     if h in self.hex_states:
                         active_coords.add(h)
 
-        # Update active hexes in O(k * R^2)
+        is_cow = isinstance(self.hex_states, CoWHexStateMap)
+        # Update active hexes in O(k * R^2), mutating CoW deltas only when ownership/contested changes
         for coords in active_coords:
-            hex_state = self.hex_states.get(coords)
-            if hex_state is None:
+            ro_state = self.hex_states.get_readonly(coords) if is_cow else self.hex_states.get(coords)
+            if ro_state is None:
                 continue
 
             unit_ids = self._units_by_hex.get(coords, set())
@@ -268,21 +280,29 @@ class GameState:
 
             if len(present_sides) == 1:
                 side = next(iter(present_sides))
-                hex_state.ownership = self.side_to_ownership.get(
+                new_ownership = self.side_to_ownership.get(
                     side,
                     HexOwnership.NONE,
                 )
-                hex_state.contested = False
+                new_contested = False
 
             elif len(present_sides) > 1:
-                hex_state.ownership = HexOwnership.NONE
-                hex_state.contested = True
+                new_ownership = HexOwnership.NONE
+                new_contested = True
 
             else:
                 # VP control persists until another side occupies the hex.
                 if coords not in vp_hexes:
-                    hex_state.ownership = HexOwnership.NONE
-                hex_state.contested = False
+                    new_ownership = HexOwnership.NONE
+                else:
+                    new_ownership = ro_state.ownership
+                new_contested = False
+
+            if ro_state.ownership != new_ownership or ro_state.contested != new_contested:
+                hex_state = self.hex_states.get(coords)
+                if hex_state is not None:
+                    hex_state.ownership = new_ownership
+                    hex_state.contested = new_contested
 
         self._previously_occupied_hexes = set(self._units_by_hex.keys())
         return active_coords
@@ -365,3 +385,66 @@ class GameState:
 
     def clear_reaction(self) -> None:
         self.reaction_context = None
+
+    # =================================================
+    # COPY-ON-WRITE (CoW) & TRANSACTIONAL DELTAS (Roadmap 6.2)
+    # =================================================
+    def clone_cow(self) -> "GameState":
+        """
+        Create an isolated Copy-on-Write (CoW) transactional clone of GameState.
+
+        - Shares immutable singletons: `game_map`, `victory`, `turn_order`,
+          `side_to_ownership`, and unit static `UnitType` templates.
+        - Branches `hex_states` via `CoWHexStateMap.branch()` in O(1) without
+          duplicating untouched `HexState` objects.
+        - Clones dynamic unit deltas via `UnitInstance.clone_cow()`.
+        """
+        cloned = object.__new__(GameState)
+        cloned.game_map = self.game_map
+        cloned.units = [u.clone_cow() for u in self.units]
+        cloned.turn = self.turn
+        cloned.turn_state = TurnState(turn_number=self.turn)
+        cloned.turn_order = self.turn_order
+        cloned.side_to_ownership = self.side_to_ownership
+
+        if isinstance(self.hex_states, CoWHexStateMap):
+            cloned.hex_states = self.hex_states.branch()
+        else:
+            cloned.hex_states = CoWHexStateMap(self.hex_states).branch()
+
+        cloned.victory = self.victory
+        cloned.vp_tracker = self.vp_tracker.clone_cow() if self.vp_tracker is not None else None
+        cloned.reaction_context = self.reaction_context
+        cloned.done = self.done
+        cloned.winner = self.winner
+        cloned.end_reason = self.end_reason
+        cloned.outcome = self.outcome
+        cloned._cache_version = int(getattr(self, "_cache_version", 0))
+
+        cloned._dirty_control_hexes = set(getattr(self, "_dirty_control_hexes", ()))
+        cloned._units_by_hex = {
+            k: set(v) for k, v in getattr(self, "_units_by_hex", {}).items()
+        }
+        cloned._unit_sides = dict(getattr(self, "_unit_sides", {}))
+        cloned._unit_last_known_state = dict(getattr(self, "_unit_last_known_state", {}))
+        cloned._previously_occupied_hexes = set(getattr(self, "_previously_occupied_hexes", ()))
+        return cloned
+
+    def __deepcopy__(self, memo) -> "GameState":
+        return self.clone_cow()
+
+    def compute_delta(self, other: "GameState") -> GameStateDelta:
+        """Compute minimal transactional delta from `self` to `other`."""
+        return compute_state_delta(self, other)
+
+    def create_checkpoint(
+        self,
+        activated_units: Optional[set] = None,
+        active_side: Optional[str] = None,
+    ) -> GameStateDelta:
+        """Capture a lightweight transactional checkpoint for O(Delta) rollback."""
+        return capture_full_checkpoint(self, activated_units=activated_units, active_side=active_side)
+
+    def restore_checkpoint(self, delta: GameStateDelta) -> None:
+        """Restore `self` in-place from a previously captured GameStateDelta."""
+        apply_state_delta(self, delta)

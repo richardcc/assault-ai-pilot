@@ -116,3 +116,159 @@ def hex_range(center: CoordLike, radius: int) -> list[Tuple[int, int]]:
         for dr in range(dr_min, dr_max + 1):
             results.append(_axial_to_offset(aq0 + dq, ar0 + dr))
     return results
+
+
+# =====================================================================
+# VECTORIZED NUMPY / NUMBA HEX TOPOLOGY & PATHFINDER KERNELS (Roadmap 6.1)
+# =====================================================================
+
+import heapq
+import numpy as np
+
+try:
+    from numba import njit as _numba_njit  # type: ignore
+
+    NUMBA_AVAILABLE = True
+except ImportError:
+    NUMBA_AVAILABLE = False
+
+    def _numba_njit(*args, **kwargs):
+        def _decorator(fn):
+            return fn
+
+        if len(args) == 1 and callable(args[0]):
+            return args[0]
+        return _decorator
+
+
+_EVEN_R_DELTAS_NP = np.array(
+    [[-1, 0], [1, 0], [0, -1], [0, 1], [-1, -1], [-1, 1]], dtype=np.int32
+)
+_ODD_R_DELTAS_NP = np.array(
+    [[-1, 0], [1, 0], [0, -1], [0, 1], [1, -1], [1, 1]], dtype=np.int32
+)
+_PARITY_DELTAS_NP = np.stack([_EVEN_R_DELTAS_NP, _ODD_R_DELTAS_NP], axis=0)  # (2, 6, 2)
+
+
+def hex_distance_batch(coords_a: np.ndarray, coords_b: np.ndarray) -> np.ndarray:
+    """
+    Vectorized pairwise hex distance matrix for odd-r offset coordinates.
+
+    Parameters:
+    - coords_a: (N, 2) integer array of (q, r)
+    - coords_b: (M, 2) integer array of (q, r)
+
+    Returns:
+    - dist_matrix: (N, M) int16 array of exact hexagonal distances.
+    """
+    a = np.asarray(coords_a, dtype=np.int32)
+    b = np.asarray(coords_b, dtype=np.int32)
+    if a.ndim == 1:
+        a = a[None, :]
+    if b.ndim == 1:
+        b = b[None, :]
+
+    aq = a[:, 0] - ((a[:, 1] - (a[:, 1] & 1)) // 2)
+    ar = a[:, 1]
+    bq = b[:, 0] - ((b[:, 1] - (b[:, 1] & 1)) // 2)
+    br = b[:, 1]
+
+    dq = np.abs(aq[:, None] - bq[None, :])
+    dr = np.abs(ar[:, None] - br[None, :])
+    ds = np.abs((aq + ar)[:, None] - (bq + br)[None, :])
+    return np.maximum(np.maximum(dq, dr), ds).astype(np.int16)
+
+
+def precompute_adjacency_tensors(
+    hex_coords: list[Tuple[int, int]],
+) -> Tuple[np.ndarray, dict[Tuple[int, int], int], np.ndarray]:
+    """
+    Precompute static tensorial adjacency matrix and pairwise distance matrix
+    for a list of map coordinates (q, r).
+
+    Returns:
+    - adj_indices: (N, 6) int32 tensor where adj_indices[i, d] is the index of
+      the d-th neighbor of hex i, or -1 if off-map.
+    - coord_to_idx: dict mapping (q, r) -> int index in [0, N).
+    - dist_matrix: (N, N) int16 tensor of pairwise hex distances.
+    """
+    n = len(hex_coords)
+    coord_to_idx = {c: idx for idx, c in enumerate(hex_coords)}
+    if n == 0:
+        return (
+            np.empty((0, 6), dtype=np.int32),
+            coord_to_idx,
+            np.empty((0, 0), dtype=np.int16),
+        )
+
+    coords_np = np.asarray(hex_coords, dtype=np.int32)
+    parities = coords_np[:, 1] & 1  # (N,)
+    deltas = _PARITY_DELTAS_NP[parities]  # (N, 6, 2)
+    neighbor_coords = coords_np[:, None, :] + deltas  # (N, 6, 2)
+
+    adj_indices = np.full((n, 6), -1, dtype=np.int32)
+    for i in range(n):
+        for d in range(6):
+            nq = int(neighbor_coords[i, d, 0])
+            nr = int(neighbor_coords[i, d, 1])
+            adj_indices[i, d] = coord_to_idx.get((nq, nr), -1)
+
+    dist_matrix = hex_distance_batch(coords_np, coords_np)
+    return adj_indices, coord_to_idx, dist_matrix
+
+
+@_numba_njit(cache=True)
+def vectorized_kinematic_dijkstra(
+    adj_indices: np.ndarray,
+    adj_enter_costs: np.ndarray,
+    start_idx: int,
+    max_mp: int,
+    impassable_mask: np.ndarray,
+) -> Tuple[np.ndarray, np.ndarray]:
+    """
+    Compiled / vectorized kinematic Dijkstra over precomputed integer adjacency tensors.
+
+    Parameters:
+    - adj_indices: (N, 6) int32 neighbor indices (-1 if off-map)
+    - adj_enter_costs: (N, 6) int16 movement cost to enter neighbor (-1 if impassable)
+    - start_idx: origin hex index
+    - max_mp: movement allowance
+    - impassable_mask: (N,) bool array (True if hex cannot be traversed, e.g. enemy/vehicle)
+
+    Returns:
+    - best_cost: (N,) int32 array (999999 if unreachable)
+    - came_from: (N,) int32 parent index (-1 for root/unreachable)
+    """
+    n = adj_indices.shape[0]
+    inf = 999999
+    best_cost = np.full(n, inf, dtype=np.int32)
+    came_from = np.full(n, -1, dtype=np.int32)
+    if start_idx < 0 or start_idx >= n or max_mp <= 0:
+        return best_cost, came_from
+
+    best_cost[start_idx] = 0
+    frontier = [(0, start_idx)]
+
+    while frontier:
+        cost, u = heapq.heappop(frontier)
+        if cost > best_cost[u]:
+            continue
+        for d in range(6):
+            v = int(adj_indices[u, d])
+            if v < 0:
+                continue
+            step_cost = int(adj_enter_costs[u, d])
+            if step_cost < 0:
+                continue
+            new_cost = cost + step_cost
+            if new_cost > max_mp:
+                continue
+            if impassable_mask[v]:
+                continue
+            if new_cost < best_cost[v]:
+                best_cost[v] = new_cost
+                came_from[v] = u
+                heapq.heappush(frontier, (new_cost, v))
+
+    return best_cost, came_from
+

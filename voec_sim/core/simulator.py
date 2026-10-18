@@ -86,7 +86,7 @@ class VOECSimulator:
 
     def clone_state(self) -> GameState:
         self._require_state()
-        return deepcopy(self._state)
+        return self._state.clone_cow()
 
     def legal_actions(self) -> List[str]:
         state = self._require_state()

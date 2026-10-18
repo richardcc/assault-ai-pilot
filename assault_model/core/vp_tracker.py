@@ -44,3 +44,13 @@ class VictoryPointTracker:
         Return a copy of the VP score per side.
         """
         return dict(self.score)
+
+    def clone_cow(self) -> "VictoryPointTracker":
+        cloned = object.__new__(VictoryPointTracker)
+        cloned.conditions = self.conditions
+        cloned.score = dict(self.score)
+        return cloned
+
+    def __deepcopy__(self, memo) -> "VictoryPointTracker":
+        return self.clone_cow()
+
