@@ -45,6 +45,7 @@ from mlops.reporting.viewer_elo_page import (
 from mlops.reporting.viewer_io import (
     json_bytes as _json_bytes,
     load_catalog_payload as _load_catalog_payload,
+    msgpack_bytes as _msgpack_bytes,
     read_catalog as _read_catalog,
 )
 
@@ -364,9 +365,17 @@ def serve(
 
         def _send_json_status(self, payload: dict, status_code: int = 200) -> None:
             try:
-                body = _json_bytes(payload)
+                parsed_q = parse_qs(urlparse(self.path).query)
+                fmt = str(parsed_q.get("format", [""])[0] or "").strip().lower()
+                accept = str(self.headers.get("Accept", "") or "").lower()
+                if fmt in {"msgpack", "binary", "mp"} or "application/x-msgpack" in accept:
+                    body = _msgpack_bytes(payload)
+                    ctype = "application/x-msgpack"
+                else:
+                    body = _json_bytes(payload)
+                    ctype = "application/json; charset=utf-8"
                 self.send_response(int(status_code))
-                self.send_header("Content-Type", "application/json; charset=utf-8")
+                self.send_header("Content-Type", ctype)
                 self.send_header("Content-Length", str(len(body)))
                 self.send_header("Access-Control-Allow-Origin", "*")
                 self.send_header("Cache-Control", "no-store, max-age=0, must-revalidate")
@@ -635,7 +644,7 @@ def serve(
                     chunk_limit=max(1, int(qs.get("chunk_limit", ["80"])[0] or 80)),
                     load_scenario_overlay=_load_scenario_overlay,
                 )
-                self._send_bytes(_json_bytes(payload), "application/json; charset=utf-8")
+                self._send_json_status(payload)
                 return
             if parsed.path == "/api/v2/replay/meta":
                 qs = parse_qs(parsed.query)
@@ -645,7 +654,7 @@ def serve(
                     repo_root=repo_root,
                     load_scenario_overlay=_load_scenario_overlay,
                 )
-                self._send_bytes(_json_bytes(payload), "application/json; charset=utf-8")
+                self._send_json_status(payload)
                 return
             if parsed.path == "/api/v2/replay/steps":
                 qs = parse_qs(parsed.query)
@@ -659,7 +668,7 @@ def serve(
                     repo_root=repo_root,
                     load_scenario_overlay=_load_scenario_overlay,
                 )
-                self._send_bytes(_json_bytes(payload), "application/json; charset=utf-8")
+                self._send_json_status(payload)
                 return
             if parsed.path == "/api/replay-log":
                 qs = parse_qs(parsed.query)
@@ -670,7 +679,7 @@ def serve(
                     upto_step=int(qs.get("upto_step", ["0"])[0] or 0),
                     full_episode_log=str(qs.get("full_episode_log", ["0"])[0] or "0").strip().lower() in {"1", "true", "yes", "on"},
                 )
-                self._send_bytes(_json_bytes(payload), "application/json; charset=utf-8")
+                self._send_json_status(payload)
                 return
             norm_path = parsed.path.rstrip("/")
             if norm_path == "/api/channel-attribution":

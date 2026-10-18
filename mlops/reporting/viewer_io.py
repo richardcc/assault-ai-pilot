@@ -31,6 +31,13 @@ def json_bytes(payload: dict) -> bytes:
     return json.dumps(safe_payload, indent=2, allow_nan=False).encode("utf-8")
 
 
+def msgpack_bytes(payload: dict, compress_threshold: int = 0) -> bytes:
+    from assault_backend.telemetry_codec import encode_msgpack
+
+    safe_payload = _sanitize_json_value(payload if isinstance(payload, dict) else {})
+    return encode_msgpack(safe_payload, compress_threshold=compress_threshold)
+
+
 def read_catalog(path: Path) -> dict:
     return _read_catalog_runtime(path)
 
@@ -39,3 +46,4 @@ def load_catalog_payload(repo_root: Path, catalog_rel_path: str) -> dict:
     return _load_catalog_payload_runtime(
         repo_root=repo_root, catalog_rel_path=catalog_rel_path
     )
+

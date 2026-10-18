@@ -4,14 +4,15 @@ import asyncio
 import time
 from typing import Dict
 
-from fastapi import APIRouter, HTTPException, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, HTTPException, Request, WebSocket, WebSocketDisconnect
 from fastapi.encoders import jsonable_encoder
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
 from pydantic import BaseModel
 
 from assault_backend.services.action_service import get_unit_actions
 from assault_backend.services.targeting_service import compute_targeting_info
 from assault_backend.session_state import ezv2_service, game_session
+from assault_backend.telemetry_codec import MSGPACK_MIME_TYPE, encode_msgpack
 from assault_model.actions.action_catalog import ActionCatalog
 from assault_model.actions.status import WaitAction
 from assault_model.map.hex_utils import safe_hex_distance
@@ -21,6 +22,16 @@ from assault_model.runtime.execution_context import ExecutionContext
 from assault_sim.decision.decision_engine import DecisionEngine
 
 router = APIRouter(tags=["game"])
+
+
+def _wants_msgpack(format_param: str | None, request: Request | None = None) -> bool:
+    if str(format_param or "").strip().lower() in {"msgpack", "binary", "mp"}:
+        return True
+    if request is not None:
+        accept = str(request.headers.get("accept", "") or "").lower()
+        if MSGPACK_MIME_TYPE in accept or "application/msgpack" in accept:
+            return True
+    return False
 
 
 class GameStartRequest(BaseModel):
@@ -73,8 +84,11 @@ def update_ai_config(req: AIConfigRequest):
 
 
 @router.get("/api/game/telemetry")
-def get_game_telemetry():
-    return getattr(game_session, "last_telemetry", {}) or {}
+def get_game_telemetry(format: str = "json", request: Request = None):
+    payload = getattr(game_session, "last_telemetry", {}) or {}
+    if _wants_msgpack(format, request):
+        return Response(content=encode_msgpack(payload), media_type=MSGPACK_MIME_TYPE)
+    return payload
 
 
 def _is_human_turn_for_side(side: str | None) -> bool:
@@ -121,21 +135,27 @@ def game_start(req: GameStartRequest):
 
 
 @router.get("/api/game/state")
-def game_state():
-    return game_session.get_state()
+def game_state(format: str = "json", request: Request = None):
+    payload = game_session.get_state()
+    if _wants_msgpack(format, request):
+        return Response(content=encode_msgpack(payload), media_type=MSGPACK_MIME_TYPE)
+    return payload
 
 
 @router.get("/api/game/trace")
-def game_trace(limit: int = 5000):
+def game_trace(limit: int = 5000, format: str = "json", request: Request = None):
     if game_session.env is None:
         raise HTTPException(status_code=400, detail="no game")
     n = max(1, min(int(limit or 5000), 50000))
     events = game_session.trace_events[-n:]
-    return {
+    payload = {
         "trace_path": str(game_session.trace_path) if game_session.trace_path is not None else None,
         "events_count": len(game_session.trace_events),
         "events": events,
     }
+    if _wants_msgpack(format, request):
+        return Response(content=encode_msgpack(payload), media_type=MSGPACK_MIME_TYPE)
+    return payload
 
 
 @router.post("/api/game/step")
@@ -245,6 +265,9 @@ def game_resolve_reaction(req: ResolveReactionRequest):
 @router.websocket("/ws/game")
 async def websocket_game(ws: WebSocket):
     await ws.accept()
+    use_binary = str(ws.query_params.get("format", "") or "").lower() in {"msgpack", "binary", "mp", "1"} or (
+        str(ws.query_params.get("binary", "") or "") == "1"
+    )
     try:
         while game_session.env is None:
             await asyncio.sleep(0.1)
@@ -255,7 +278,11 @@ async def websocket_game(ws: WebSocket):
             if event["type"] in {"MAP_STATE", "REACTION_WINDOW", "REACTION_FIRE", "REACTION_FIRE_SKIPPED"}:
                 async def safe_send():
                     try:
-                        await ws.send_json({"type": event["type"], "payload": event.get("payload", {})})
+                        frame = {"type": event["type"], "payload": event.get("payload", {})}
+                        if use_binary:
+                            await ws.send_bytes(encode_msgpack(frame))
+                        else:
+                            await ws.send_json(frame)
                     except Exception:
                         pass
                 try:

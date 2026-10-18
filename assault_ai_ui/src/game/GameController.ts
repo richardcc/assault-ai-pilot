@@ -2,6 +2,7 @@ import { formatCoords } from "./render/hexGridRenderer";
 import { logCombatEvents } from "./systems/combatLog";
 import { clearUnitActionMarkers, resolveActionMarker, setUnitActionMarker } from "./state/actionMarkers";
 import { apiUrl, wsUrl } from "../config/backend";
+import { decodeMsgpack } from "../utils/msgpackCodec";
 
 type ControllerType = "human" | "ai";
 type GameMode = "human" | "ai" | "ai_vs_ai" | "replay";
@@ -219,10 +220,11 @@ export class GameController {
       return;
     }
 
-    this.socket = new WebSocket(wsUrl("/ws/game"));
+    this.socket = new WebSocket(wsUrl("/ws/game?format=msgpack"));
+    this.socket.binaryType = "arraybuffer";
 
     this.socket.onopen = () => {
-      console.log("✅ WS connected");
+      console.log("✅ WS connected (msgpack binary stream)");
     };
 
     this.socket.onerror = (err) => {
@@ -230,7 +232,10 @@ export class GameController {
     };
 
     this.socket.onmessage = (event) => {
-      const msg = JSON.parse(event.data);
+      const msg =
+        event.data instanceof ArrayBuffer
+          ? decodeMsgpack(event.data)
+          : JSON.parse(event.data);
 
       if (msg.type === "MAP_STATE" && msg.payload) {
         // During backend-driven AI turn animation, defer websocket sync.
