@@ -31,6 +31,7 @@ class EfficientZeroV2Network(EfficientZeroV2BaseNetwork):
         enable_attrition_head: bool = True,
         enable_morale_head: bool = True,
         morale_classes: int = 4,
+        dynamics_recurrent_steps: int = 1,
     ):
         super().__init__(
             observation_dim=observation_dim,
@@ -50,6 +51,7 @@ class EfficientZeroV2Network(EfficientZeroV2BaseNetwork):
             enable_attrition_head=enable_attrition_head,
             enable_morale_head=enable_morale_head,
             morale_classes=morale_classes,
+            dynamics_recurrent_steps=dynamics_recurrent_steps,
         )
         self.consistency_proj_dim = int(max(16, consistency_proj_dim))
         if self.encoder_type == "cnn":

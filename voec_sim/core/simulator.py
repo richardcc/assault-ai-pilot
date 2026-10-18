@@ -41,7 +41,14 @@ class VOECSimulator:
         self._legal_actions_cache_key: Optional[tuple] = None
         self._legal_actions_cache_value: List[str] = []
 
-    def new_episode(self, scenario_id: str, seed: int = 0) -> EpisodeHandle:
+    def new_episode(
+        self,
+        scenario_id: str,
+        seed: int = 0,
+        terrain_mutation_prob: float = 0.0,
+        unit_jitter_prob: float = 0.0,
+        asymmetric_strength_jitter: float = 0.0,
+    ) -> EpisodeHandle:
         self._seed = int(seed)
         unit_catalog, map_piece_catalog = load_catalogs(self.assets)
         scenario_path = _resolve_repo_path(
@@ -53,10 +60,19 @@ class VOECSimulator:
             map_piece_catalog=map_piece_catalog,
         )
         state = GameState.from_scenario(scenario)
+        if terrain_mutation_prob > 0.0 or unit_jitter_prob > 0.0 or asymmetric_strength_jitter > 0.0:
+            from assault_model.core.procedural_mutator import apply_procedural_mutation
+            apply_procedural_mutation(
+                state=state,
+                seed=self._seed,
+                terrain_mutation_prob=float(terrain_mutation_prob),
+                unit_jitter_prob=float(unit_jitter_prob),
+                asymmetric_strength_jitter=float(asymmetric_strength_jitter),
+            )
         # Keep parity with the stable simulation path used in assault_sim.
         state.game_map.terrain_config = terrain_config
         runtime = RuntimeGameState(state, scenario)
-        # In VOEC/MuZero we expose reaction windows as explicit decisions.
+        # In VOEC/EfficientZero we expose reaction windows as explicit decisions.
         runtime.side_controller_map = {str(side): "human" for side in list(state.turn_order or [])}
         runtime.start_turn()
 

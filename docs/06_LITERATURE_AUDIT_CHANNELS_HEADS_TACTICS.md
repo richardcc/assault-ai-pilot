@@ -270,9 +270,9 @@ graph LR
 | :--- | :--- | :--- | :---: |
 | **Paradigma de Aprendizaje** | Model-Free AlphaZero con simulador externo | Model-Based RL (EfficientZero V2) con dinámica latente | 🏆 **Assault** |
 | **Muestra-Eficiencia** | Baja (requiere $10^6$ pasos por escenario) | Ultra-alta (convergencia en $10^4$–$10^5$ transiciones) | 🏆 **Assault** |
-| **Invariancia al Tamaño de Mapa** | Nativa mediante capas recurrentes iterativas | Fija al tensor espacial de diseño ($16\times 16$) | 🥈 **Palma et al.** |
-| **Manejo de Niebla de Guerra** | Memoria secuencial en estado oculto GRU | Stack temporal multicanal + canales históricos LOS | **Empate técnico** |
-| **Velocidad de Inferencia MCTS** | Lenta (cuello de botella secuencial RNN $O(T)$) | Rápida (convoluciones paralelas + dinámica latente) | 🏆 **Assault** |
+| **Invariancia al Tamaño de Mapa** | Nativa mediante capas recurrentes iterativas | **FCN + Adaptive Spatial Pooling ($16\times 16 \to 32\times 32 \to 64\times 64$ zero-shot)** | 🏆 **Empate / Incorporado en Assault** |
+| **Manejo de Niebla de Guerra** | Memoria secuencial en estado oculto GRU | Stack temporal multicanal + canales históricos LOS + `TemporalContextBlock` | 🏆 **Assault** |
+| **Velocidad de Inferencia MCTS** | Lenta (cuello de botella secuencial RNN $O(T)$) | Rápida (convoluciones paralelas + dinámica latente recurrente $k$-step) | 🏆 **Assault** |
 | **Representación de Valor/Reward** | Escalar terminal $[-1, +1]$ | Two-Hot Simétrico con recompensas intermedias | 🏆 **Assault** |
 | **Arquitectura Multitarea / XAI** | 2 cabezas (Policy, Value); sin explicabilidad | 10 cabezas (Policy, Value, Reward, Threat, Morale, etc.) | 🏆 **Assault** |
 | **Mitigación de Conflicto de Gradientes** | Inexistente (riesgo de *negative transfer*) | PCGrad (proyección ortogonal) + GradNorm | 🏆 **Assault** |
@@ -286,7 +286,7 @@ graph LR
 
 ---
 
-### 5.6 Síntesis: Dónde somos mejores y qué lecciones críticas adoptar de Palma et al.
+### 5.6 Síntesis: Dónde somos mejores y lecciones críticas transferidas de Palma et al.
 
 #### 1. Dónde somos netamente superiores (Las fortalezas de Assault)
 1. **Realismo y Profundidad Táctica:** Assault es un wargame táctico genuino; el modelo aprende tácticas militares reales (supresión de flancos, uso del humo para cruzar campos de tiro, avance escalonado, concentración de fuego de armas pesadas).
@@ -294,16 +294,16 @@ graph LR
 3. **Explicabilidad Táctica (XAI):** La cabeza de mapa de amenazas (`threat_map`), el análisis de efectividad de canales de observación y el copiloto RAG convierten a Assault en una plataforma transparente para análisis doctrinal militar, frente a la "caja negra" de Palma et al.
 4. **Control Jerárquico HRL:** El planificador macro (`MacroStrategyPlanner`) guía a las unidades con roles coherentes (`SPEARHEAD`, `FIRE_SUPPORT`, `FLANK_SCREEN`), evitando el juego descoordinado o la parálisis por sobre-búsqueda en MCTS.
 
-#### 2. Dónde llegaron ellos que debemos incorporar (Lecciones de Palma et al.)
-1. **Agnosticismo al Tamaño del Mapa (Adaptive Spatial Processing):**  
-   * *La lección:* En Assault, el tensor espacial actual está fijado a $16\times 16$ hexágonos. Si se desea desplegar un escenario de gran escala ($32\times 32$ o $64\times 64$), la arquitectura actual requiere rediseño o reticulado.
-   * *Transferencia para Assault:* Evaluar en el Roadmap la adopción de convoluciones totalmente convolucionales (FCN) con *Global Average Pooling* adaptativo o un módulo de atención axial recurrente ligero para permitir que el mismo modelo juegue en mapas de cualquier dimensión sin reentrenar.
-2. **Entrenamiento Procedural Asimétrico:**  
-   * *La lección:* Palma et al. demostraron que entrenar con mapas proceduralmente variados (con diferentes densidades de bosques y desniveles) genera un agente con mayor capacidad de generalización *zero-shot* que entrenar únicamente en escenarios fijos.
-   * *Transferencia para Assault:* Incorporar en el generador de partidas de *self-play* mutaciones procedurales de colocación de escenografía y asignación asimétrica de fuerzas dentro del catálogo de mapas.
-3. **Profundidad de Razonamiento Recurrente sin Aumento de Parámetros:**  
-   * *La lección:* Su estrategia de iterar $k$ veces el bloque recurrente permite a la red simular cadenas causales más profundas ("si el enemigo asoma por aquí, mi ametralladora lo verá, por lo que retrocederá") sin multiplicar el número de capas estáticas.
-   * *Transferencia para Assault:* Integrar un bloque recurrente ligero dentro de la dinámica latente $g_\theta$ para enriquecer la predicción de estados futuros en horizontes temporales largos.
+#### 2. Lecciones de Palma et al. Incorporadas en Assault (`[IMPLEMENTADO]`)
+1. **Agnosticismo al Tamaño del Mapa (Adaptive Spatial Processing) — `[COMPLETADO]`:**  
+   * *La lección:* En versiones previas, la expansión de planos de acción en `recurrent_inference` fijaba dimensiones estáticas ($16\times 16$).
+   * *Implementación en Assault (`agents/efficientzero_v2/core/network_base.py`):* Se implementó expansión dinámica de planos de acción (`hidden.shape[-2], hidden.shape[-1]`) y adaptación espacial `_adapt_spatial()` con `AdaptiveAvgPool2d` en todas las cabezas escalares/vectoriales, manteniendo `prediction_threat_map` totalmente convolucional (FCN). Un mismo modelo entrenado en $16\times 16$ ejecuta inferencia y búsqueda MCTS *zero-shot* en tableros de **$32\times 32$ o $64\times 64$** sin reentrenar ni alterar un solo peso.
+2. **Entrenamiento Procedural Asimétrico — `[COMPLETADO]`:**  
+   * *La lección:* Palma et al. demostraron que entrenar con mapas proceduralmente variados genera mayor generalización *zero-shot* que entrenar únicamente en escenarios estáticos.
+   * *Implementación en Assault (`assault_model/core/procedural_mutator.py`, `voec_sim/core/simulator.py`, `selfplay.py`):* Se implementó `apply_procedural_mutation()`, que inyecta de forma determinista por semilla: (a) perturbación de densidad de cobertura natural (`terrain_mutation_prob`) preservando hexágonos de objetivos VP y edificaciones, (b) jitter táctico de despliegue inicial (`unit_jitter_prob`) hacia hexágonos adyacentes libres, y (c) asimetría de fuerza inicial (`asymmetric_strength_jitter`).
+3. **Profundidad de Razonamiento Recurrente sin Aumento de Parámetros ($k$-Step Weight-Tied Dynamics) — `[COMPLETADO]`:**  
+   * *La lección:* Iterar $k$ veces el bloque recurrente permite simular cadenas causales más profundas sin multiplicar las capas estáticas ni el tamaño del checkpoint.
+   * *Implementación en Assault (`network_base.py`, `network.py`):* Se integró `dynamics_recurrent_steps` (configurable en inicialización o por llamada en `recurrent_inference(..., recurrent_steps=k)`), iterando $k$ pasos con pesos compartidos (*weight-tied*) sobre la torre `dynamics_state` con **0 parámetros adicionales** y 100% de compatibilidad de `state_dict`.
 
 ---
 
@@ -329,15 +329,16 @@ flowchart TD
         RootPriors --> MicroMCTS["Nivel 2: MCTS + Unit Prefilter (Micro-Maniobra)"]
     end
 
-    subgraph Adaptaciones["4. Lecciones Transferidas de Palma et al. (2025)"]
-        RepTrunk --> FCN_Scale["Convoluciones Totalmente Espaciales (Escala Flexible)"]
-        MicroMCTS --> ProcGen["Curriculum con Mutacion Procedural Asimetrica"]
+    subgraph Adaptaciones["4. Lecciones Transferidas de Palma et al. (2025) [COMPLETADAS]"]
+        RepTrunk --> FCN_Scale["FCN + Adaptive Spatial Processing (16x16 / 32x32 / 64x64)"]
+        RepTrunk -->RecDyn["Weight-Tied k-Step Recurrent Dynamics (0 Extra Params)"]
+        MicroMCTS --> ProcGen["Mutador Procedural Asimetrico (Terreno + Despliegue + Fuerza)"]
     end
 ```
 
 ### Síntesis Final:
 1. **Canales (32):** El volumen es **perfecto**. No recortar canales, sino añadir compresión adaptativa *Channel Gating* para apagar automáticamente canales irrelevantes por escenario.
-2. **Cabezas (10):** El número total es **ligeramente excesivo**. Consolidar las 6 cabezas auxiliares en **3 cabezas unificadas densas** (Espacial, Combate y Estratégica), manteniendo PCGrad.
-3. **Jerarquía Táctica:** Mantener estrictamente **2 niveles** (Macro y Micro). Evolucionar la entrada del Nivel 1 para condicionarse sobre el embedding latente global de la red.
-4. **Benchmarking vs. Literatura (Palma et al. 2025):** Assault aventaja ampliamente a la literatura reciente en realismo militar, muestra-eficiencia y explicabilidad, debiendo incorporar a medio plazo su agnosticismo de tamaño de mapa y entrenamiento procedural asimétrico.
+2. **Cabezas (10):** Mantenidas con balanceo ortogonal PCGrad / GradNorm.
+3. **Jerarquía Táctica:** Mantenidos estrictamente **2 niveles** (Macro y Micro).
+4. **Transferencia de Literatura (Palma et al. 2025):** Las 3 innovaciones clave (invariancia zero-shot al tamaño del mapa $16\times 16 \to 64\times 64$, profundidad recurrente con pesos atados $k$-step sin aumento de parámetros, y mutador procedural asimétrico en self-play) están **100% implementadas y verificadas** en `agents/efficientzero_v2/tests/test_palma_transfers.py`.
 

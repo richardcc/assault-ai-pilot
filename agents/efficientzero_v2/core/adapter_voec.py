@@ -29,8 +29,21 @@ class EZV2VOECAdapter:
     def __init__(self, simulator: VOECSimulator):
         self.sim = simulator
 
-    def initial_state(self, scenario_id: str, seed: int = 0) -> EZV2Observation:
-        self.sim.new_episode(scenario_id=scenario_id, seed=seed)
+    def initial_state(
+        self,
+        scenario_id: str,
+        seed: int = 0,
+        terrain_mutation_prob: float = 0.0,
+        unit_jitter_prob: float = 0.0,
+        asymmetric_strength_jitter: float = 0.0,
+    ) -> EZV2Observation:
+        self.sim.new_episode(
+            scenario_id=scenario_id,
+            seed=seed,
+            terrain_mutation_prob=terrain_mutation_prob,
+            unit_jitter_prob=unit_jitter_prob,
+            asymmetric_strength_jitter=asymmetric_strength_jitter,
+        )
         return self.observation()
 
     def legal_actions(self) -> List[str]:

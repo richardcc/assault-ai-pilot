@@ -235,4 +235,18 @@ flowchart TD
   * Mantener exportación JSON únicamente para inspección offline humana y depuración forense.
   * **Impacto Proyectado:** Reducción del $80\%$ en el ancho de banda y latencia de streaming $<5\,\text{ms}$ en el panel de órdenes y visualizador en vivo.
 
+### 6.6 Transferencia Científica de Palma et al. (2025) — `[COMPLETADO]`
+* **Estado:** ✅ **IMPLEMENTADO Y VERIFICADO** (`agents/efficientzero_v2/core/network_base.py`, `agents/efficientzero_v2/core/network.py`, `assault_model/core/procedural_mutator.py`, `agents/efficientzero_v2/tests/test_palma_transfers.py`).
+* **Mejoras Incorporadas:**
+  1. **Agnosticismo al Tamaño del Mapa (Adaptive Spatial Processing):**
+     * Eliminada la dependencia de resolución fija ($16\times 16$) en la expansión de planos de acción (`recurrent_inference`) y añadido `_adapt_spatial()` con `AdaptiveAvgPool2d`.
+     * La red `EfficientZeroV2Network` procesa ahora tensores de **$16\times 16$, $32\times 32$ o $64\times 64$** *zero-shot* con los mismos pesos y 100% de compatibilidad de `state_dict`.
+  2. **Profundidad de Razonamiento Recurrente sin Aumento de Parámetros ($k$-Step Weight-Tied Dynamics):**
+     * Incorporado el parámetro `dynamics_recurrent_steps` ($k \ge 1$) en `EfficientZeroV2BaseNetwork` y `recurrent_inference(..., recurrent_steps=k)`.
+     * Permite iterar $k$ veces la torre residual de dinámica latente $g_\theta$ compartiendo pesos (*weight-tied*), multiplicando por $k$ la profundidad efectiva de razonamiento causal sin añadir un solo parámetro entrenable.
+  3. **Entrenamiento Procedural Asimétrico en Self-Play:**
+     * Implementado `apply_procedural_mutation()` en `assault_model/core/procedural_mutator.py` e integrado en `VOECSimulator.new_episode()`, `EZV2VOECAdapter.initial_state()` y `_NativeEZV2SelfplayBackend`.
+     * Soporta mutación determinista por semilla de densidad de cobertura natural (`terrain_mutation_prob`), jitter de despliegue inicial (`unit_jitter_prob`) y asimetría de fuerza (`asymmetric_strength_jitter`), protegiendo siempre los hexágonos de objetivos VP.
+
+
 

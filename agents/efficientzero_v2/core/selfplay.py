@@ -1973,6 +1973,9 @@ class _NativeEZV2SelfplayBackend:
         unit_prefilter_threat_weight: float = 0.25,
         matchup_modes: list[str] | None = None,
         matchup_mode_weights: dict | None = None,
+        procedural_terrain_mutation_prob: float = 0.0,
+        procedural_unit_jitter_prob: float = 0.0,
+        procedural_asymmetric_strength_jitter: float = 0.0,
         **_: Any,
     ) -> list:
         def _normalize_mode(raw: object) -> str:
@@ -2012,7 +2015,23 @@ class _NativeEZV2SelfplayBackend:
             return mode, policy_map
 
         samples = []
-        obs = adapter.initial_state(scenario_id=str(scenario_id), seed=int(seed))
+        if (
+            procedural_terrain_mutation_prob > 0.0
+            or procedural_unit_jitter_prob > 0.0
+            or procedural_asymmetric_strength_jitter > 0.0
+        ):
+            try:
+                obs = adapter.initial_state(
+                    scenario_id=str(scenario_id),
+                    seed=int(seed),
+                    terrain_mutation_prob=float(procedural_terrain_mutation_prob),
+                    unit_jitter_prob=float(procedural_unit_jitter_prob),
+                    asymmetric_strength_jitter=float(procedural_asymmetric_strength_jitter),
+                )
+            except TypeError:
+                obs = adapter.initial_state(scenario_id=str(scenario_id), seed=int(seed))
+        else:
+            obs = adapter.initial_state(scenario_id=str(scenario_id), seed=int(seed))
         episode_matchup_mode, episode_policy_by_side = _resolve_policy_by_side(obs, int(seed))
         unit_count = len(getattr(obs, "units", []) or [])
         scenario_turn_limit = _scenario_turn_limit_from_adapter(adapter)

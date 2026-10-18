@@ -148,6 +148,7 @@ class EfficientZeroV2BaseNetwork(nn.Module):
         enable_attrition_head: bool = True,
         enable_morale_head: bool = True,
         morale_classes: int = 4,
+        dynamics_recurrent_steps: int = 1,
     ):
         super().__init__()
         self.encoder_type = str(encoder_type).lower().strip()
@@ -158,6 +159,7 @@ class EfficientZeroV2BaseNetwork(nn.Module):
         self.action_dim = int(action_dim)
         self.latent_shape = (self.hidden_dim, self.observation_height, self.observation_width)
         self.dynamics_blocks = max(1, int(dynamics_blocks))
+        self.dynamics_recurrent_steps = max(1, int(dynamics_recurrent_steps))
         self.prediction_blocks = max(1, int(prediction_blocks))
         self.objective_intent_classes = max(0, int(objective_intent_classes))
         self.multi_vp_feature_dim = max(0, int(multi_vp_feature_dim))
@@ -450,34 +452,46 @@ class EfficientZeroV2BaseNetwork(nn.Module):
             return (s - s_min) / denom
         return s
 
+    def _adapt_spatial(self, t: torch.Tensor) -> torch.Tensor:
+        """
+        Adaptive Spatial Processing (Palma et al.):
+        Ensures resolution invariance (16x16, 32x32, 64x64) for non-attention heads
+        without modifying state_dict keys or trainable parameters.
+        """
+        if not self.use_spatial_attention and t.dim() == 4:
+            if t.shape[-2] != self.observation_height or t.shape[-1] != self.observation_width:
+                return F.adaptive_avg_pool2d(t, (self.observation_height, self.observation_width))
+        return t
+
     def initial_inference(self, observation: torch.Tensor, return_aux: bool = False):
         if self.encoder_type == "cnn":
             hidden = self._scale_latent(self.representation_tower(self.representation_input(observation)))
             pred_hidden = self.prediction_trunk(hidden)
-            policy_logits = self.prediction_policy(pred_hidden)
+            head_in = self._adapt_spatial(pred_hidden)
+            policy_logits = self.prediction_policy(head_in)
             if self.support_size > 0:
-                val_logits = self.prediction_value(pred_hidden)
+                val_logits = self.prediction_value(head_in)
                 value = support_to_scalar(val_logits, support_size=self.support_size)
             else:
-                value = self.prediction_value(pred_hidden)
+                value = self.prediction_value(head_in)
                 val_logits = None
             reward = torch.zeros_like(value)
             rew_logits = torch.zeros_like(val_logits) if val_logits is not None else None
-            objective_logit = self.prediction_objective(pred_hidden)
+            objective_logit = self.prediction_objective(head_in)
             objective_intent_logits = (
-                self.prediction_intent(pred_hidden) if self.prediction_intent is not None else None
+                self.prediction_intent(head_in) if self.prediction_intent is not None else None
             )
             multi_vp_pred = (
-                self.prediction_multi_vp(pred_hidden) if self.prediction_multi_vp is not None else None
+                self.prediction_multi_vp(head_in) if self.prediction_multi_vp is not None else None
             )
             threat_map_pred = (
                 self.prediction_threat_map(pred_hidden) if self.prediction_threat_map is not None else None
             )
             attrition_pred = (
-                self.prediction_attrition(pred_hidden) if self.prediction_attrition is not None else None
+                self.prediction_attrition(head_in) if self.prediction_attrition is not None else None
             )
             morale_pred = (
-                self.prediction_morale(pred_hidden) if self.prediction_morale is not None else None
+                self.prediction_morale(head_in) if self.prediction_morale is not None else None
             )
         else:
             hidden = self._scale_latent(self.representation(observation))
@@ -527,8 +541,20 @@ class EfficientZeroV2BaseNetwork(nn.Module):
         return hidden, policy_logits, value, reward
 
     def recurrent_inference(
-        self, hidden: torch.Tensor, action_onehot: torch.Tensor, return_aux: bool = False
+        self,
+        hidden: torch.Tensor,
+        action_onehot: torch.Tensor,
+        return_aux: bool = False,
+        recurrent_steps: int | None = None,
     ):
+        steps = max(
+            1,
+            int(
+                recurrent_steps
+                if recurrent_steps is not None
+                else getattr(self, "dynamics_recurrent_steps", 1)
+            ),
+        )
         if self.encoder_type == "cnn":
             if action_onehot.dim() == 1:
                 action_emb = self.action_embedding(action_onehot.long())
@@ -541,44 +567,56 @@ class EfficientZeroV2BaseNetwork(nn.Module):
                 action_idx = torch.argmax(action_onehot, dim=-1)
                 action_emb = self.action_embedding(action_idx.long())
 
+            # Map-size agnostic dynamic expansion (supports 16x16, 32x32, 64x64 zero-shot)
+            h_dim, w_dim = int(hidden.shape[-2]), int(hidden.shape[-1])
             action_planes = action_emb.unsqueeze(-1).unsqueeze(-1).expand(
-                -1, -1, self.observation_height, self.observation_width
+                -1, -1, h_dim, w_dim
             )
             merged = self.dynamics_merge(torch.cat([hidden, action_planes], dim=1))
-            next_hidden = self._scale_latent(self.dynamics_state(merged))
+            # Weight-tied recurrent reasoning depth k without extra parameters (Palma et al.)
+            z = merged
+            for _ in range(steps):
+                z = self.dynamics_state(z)
+            next_hidden = self._scale_latent(z)
+
+            rew_in = self._adapt_spatial(next_hidden)
             if self.support_size > 0:
-                rew_logits = self.dynamics_reward(next_hidden)
+                rew_logits = self.dynamics_reward(rew_in)
                 reward = support_to_scalar(rew_logits, support_size=self.support_size)
             else:
-                reward = self.dynamics_reward(next_hidden)
+                reward = self.dynamics_reward(rew_in)
                 rew_logits = None
             pred_hidden = self.prediction_trunk(next_hidden)
-            policy_logits = self.prediction_policy(pred_hidden)
+            head_in = self._adapt_spatial(pred_hidden)
+            policy_logits = self.prediction_policy(head_in)
             if self.support_size > 0:
-                val_logits = self.prediction_value(pred_hidden)
+                val_logits = self.prediction_value(head_in)
                 value = support_to_scalar(val_logits, support_size=self.support_size)
             else:
-                value = self.prediction_value(pred_hidden)
+                value = self.prediction_value(head_in)
                 val_logits = None
-            objective_logit = self.prediction_objective(pred_hidden)
+            objective_logit = self.prediction_objective(head_in)
             objective_intent_logits = (
-                self.prediction_intent(pred_hidden) if self.prediction_intent is not None else None
+                self.prediction_intent(head_in) if self.prediction_intent is not None else None
             )
             multi_vp_pred = (
-                self.prediction_multi_vp(pred_hidden) if self.prediction_multi_vp is not None else None
+                self.prediction_multi_vp(head_in) if self.prediction_multi_vp is not None else None
             )
             threat_map_pred = (
                 self.prediction_threat_map(pred_hidden) if self.prediction_threat_map is not None else None
             )
             attrition_pred = (
-                self.prediction_attrition(pred_hidden) if self.prediction_attrition is not None else None
+                self.prediction_attrition(head_in) if self.prediction_attrition is not None else None
             )
             morale_pred = (
-                self.prediction_morale(pred_hidden) if self.prediction_morale is not None else None
+                self.prediction_morale(head_in) if self.prediction_morale is not None else None
             )
         else:
-            x = torch.cat([hidden, action_onehot], dim=-1)
-            next_hidden = self._scale_latent(self.dynamics_state(self.dynamics_input(x)))
+            x = self.dynamics_input(torch.cat([hidden, action_onehot], dim=-1))
+            z = x
+            for _ in range(steps):
+                z = self.dynamics_state(z)
+            next_hidden = self._scale_latent(z)
             if self.support_size > 0:
                 rew_logits = self.dynamics_reward(next_hidden)
                 reward = support_to_scalar(rew_logits, support_size=self.support_size)
