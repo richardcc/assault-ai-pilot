@@ -420,8 +420,13 @@ def serve(
             if parsed.path == "/model":
                 self._send_static_file(react_root / "index.html", react_root)
                 return
-            if parsed.path == "/docs" or parsed.path.startswith("/docs/"):
-                subpath = parsed.path[len("/docs") :].lstrip("/")
+            if parsed.path == "/docs":
+                self.send_response(301)
+                self.send_header("Location", "/docs/")
+                self.end_headers()
+                return
+            if parsed.path.startswith("/docs/"):
+                subpath = parsed.path[len("/docs/") :]
                 site_root = (repo_root / "site").resolve()
                 docs_root = (repo_root / "docs").resolve()
                 preferred_root = site_root if (site_root / "index.html").exists() else docs_root
@@ -435,12 +440,22 @@ def serve(
                     rel_doc = unquote(subpath)
                     doc_target = (preferred_root / rel_doc).resolve()
                     if doc_target.is_dir():
+                        if not parsed.path.endswith("/"):
+                            self.send_response(301)
+                            self.send_header("Location", parsed.path + "/")
+                            self.end_headers()
+                            return
                         doc_target = doc_target / "index.html"
                     if doc_target.exists() and doc_target.is_file():
                         self._send_static_file(doc_target, preferred_root)
                         return
                     alt_target = (docs_root / rel_doc).resolve()
                     if alt_target.is_dir():
+                        if not parsed.path.endswith("/"):
+                            self.send_response(301)
+                            self.send_header("Location", parsed.path + "/")
+                            self.end_headers()
+                            return
                         alt_target = alt_target / "index.html"
                     if alt_target.exists() and alt_target.is_file():
                         self._send_static_file(alt_target, docs_root)
@@ -448,6 +463,9 @@ def serve(
             if parsed.path.startswith("/assets/"):
                 rel = unquote(parsed.path[len("/assets/") :])
                 if self._send_static_file(react_root / "assets" / rel, react_root):
+                    return
+                site_root = (repo_root / "site").resolve()
+                if self._send_static_file(site_root / "assets" / rel, site_root):
                     return
             if parsed.path.startswith("/art/"):
                 rel = unquote(parsed.path[len("/art/") :])

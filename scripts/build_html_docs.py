@@ -58,6 +58,13 @@ DOC_FILES = [
         "icon": "⚡",
         "file": "07_SERVICIOS_BACKEND_Y_CATALOGO_APIS.md",
         "desc": "Catálogo exhaustivo de endpoints REST, WebSocket, esquemas OpenAPI y Swagger UI (8001 y 8778)."
+    },
+    {
+        "id": "doc-08",
+        "title": "08. Auditoría Reglamento vs Engine",
+        "icon": "⚖️",
+        "file": "08_AUDITORIA_REGLAMENTO_VS_ENGINE.md",
+        "desc": "Auditoría exhaustiva página a página (52 págs del manual) y compendio de escenarios (38 batallas)."
     }
 ]
 

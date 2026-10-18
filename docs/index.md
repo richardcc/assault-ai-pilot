@@ -1,90 +1,100 @@
-# Documentación Central del Proyecto Assault (Assault Wargame & AI)
+# Portal Canónico de Documentación — Assault Wargame & AI Platform
 
-Bienvenido a la documentación técnica oficial del proyecto **Assault**, una plataforma de simulación táctica militar por turnos sobre tablero hexagonal combinada con inteligencia artificial basada en **EfficientZero V2**.
+Bienvenido al portal oficial de documentación técnica del proyecto **Assault**, plataforma integral de simulación táctica militar por turnos sobre tablero hexagonal e inteligencia artificial militar basada en **EfficientZero V2**.
 
-> 🌐 **Centro de Documentación Interactivo**: Puedes abrir directamente [`docs/index.html`](file:///c:/repos/python/assault/docs/index.html) en cualquier navegador o acceder desde el Visor MLOps en `http://127.0.0.1:8778/docs` para disfrutar de una experiencia navegable interactiva con gráficos SVG, fórmulas KaTeX y simuladores de combate y red neuronal.
+> [!NOTE]
+> **Arquitectura Activa:** Todo el entrenamiento, autojuego, inferencia y MCTS operan exclusivamente sobre **EfficientZero V2** (`agents/efficientzero_v2/`). El stack legacy MuZero v1 se encuentra 100% decomisionado.
 
 ---
 
-## 📚 Estructura Canónica de la Documentación
-
-La documentación se organiza en cuatro pilares modulares exhaustivos:
+## 🗺️ Mapa de Navegación del Sistema
 
 ```mermaid
 graph TD
-    DOC_ROOT["📚 Documentación Central (docs/)"]
+    ROOT["Assault Wargame & AI Platform"]
     
-    P1["1. Arquitectura del Sistema\n(docs/01_ARQUITECTURA_DEL_SISTEMA.md)"]
-    P2["2. Modelo del Juego y Reglas Tácticas\n(docs/02_MODELO_DEL_JUEGO_Y_REGLAS_TACTICAS.md)"]
-    P3["3. Red Neuronal EfficientZero V2\n(docs/03_RED_NEURONAL_EFFICIENTZERO_V2.md)"]
-    P4["4. Plataforma MLOps y Telemetría\n(docs/04_PLATAFORMA_MLOPS_Y_TELEMETRIA.md)"]
-    P5["5. Hoja de Ruta Evolutiva (Roadmap)\n(docs/05_ROADMAP_EVOLUTIVO.md)"]
-    P6["6. Sistema RAG Copilot\n(docs/06_SISTEMA_RAG_COPILOT.md)"]
-    P7["7. Servicios Backend y Catálogo de APIs\n(docs/07_SERVICIOS_BACKEND_Y_CATALOGO_APIS.md)"]
+    C1["1. Arquitectura del Sistema"]
+    C2["2. Reglas Tácticas y VOEC"]
+    C3["3. EfficientZero V2"]
+    C4["4. MLOps y Telemetría"]
+    C5["5. Hoja de Ruta (Roadmap)"]
+    C6["6. Auditoría Palma et al. 2025"]
+    C7["7. Copilot RAG"]
+    C8["8. Backend y APIs"]
+    C9["9. Auditoría Reglamento vs Engine"]
     
-    DOC_ROOT --> P1
-    DOC_ROOT --> P2
-    DOC_ROOT --> P3
-    DOC_ROOT --> P4
-    DOC_ROOT --> P5
-    DOC_ROOT --> P6
-    DOC_ROOT --> P7
+    ROOT --> C1
+    ROOT --> C2
+    ROOT --> C3
+    ROOT --> C4
+    ROOT --> C5
+    ROOT --> C6
+    ROOT --> C7
+    ROOT --> C8
+    ROOT --> C9
 ```
-
-### 1. [Arquitectura del Sistema (`01_ARQUITECTURA_DEL_SISTEMA.md`)](file:///c:/repos/python/assault/docs/01_ARQUITECTURA_DEL_SISTEMA.md)
-* Principios de diseño y desacoplamiento limpio entre subsistemas.
-* Roles de `assault_model` (reglas puras), `voec_sim` (tensor sensorial), `agents/efficientzero_v2` (IA) y `mlops` (observabilidad).
-* Ciclo de vida de auto-juego (*self-play*), inferencia y contratos de datos.
-
-### 2. [Modelo del Juego y Reglas Tácticas (`02_MODELO_DEL_JUEGO_Y_REGLAS_TACTICAS.md`)](file:///c:/repos/python/assault/docs/02_MODELO_DEL_JUEGO_Y_REGLAS_TACTICAS.md)
-* Geometría hexagonal, coordenadas axiales $(q, r)$ y distancias Manhattan hexagonal.
-* Catálogo de terrenos (despejado, bosque, urbano, elevaciones, ríos) y modificadores de cobertura.
-* Línea de Visión (LOS), algoritmo de trazado de rayos y niebla de guerra (*Partial Observability* / POMDP).
-* Sistema de combate a distancia, dados de batalla blancos y negros, tiradas de salvación y bajas.
-* Cohesión y estados de moral de escuadra (`NORMAL`, `PINNED`, `SUPPRESSED`, `ROUTED`).
-* Fuego de reacción (*Opportunity Fire*), asaltos cuerpo a cuerpo (*Close Combat*) y condiciones de victoria por Puntos de Victoria (VP).
-
-### 3. [Red Neuronal y Algoritmo EfficientZero V2 (`03_RED_NEURONAL_EFFICIENTZERO_V2.md`)](file:///c:/repos/python/assault/docs/03_RED_NEURONAL_EFFICIENTZERO_V2.md)
-* Modelo de mundo diferenciable: representación $h_\theta(o)$, espacio latente $s_t$, dinámica recurrente $g_\theta(s, a)$, predicción $f_\theta(s)$ y consistencia $q_\theta(s)$.
-* Convoluciones con máscara hexagonal (`HexagonalMaskConv2d`) para anular distorsiones diagonales espurias.
-* Cabezas tácticas auxiliares: mapa 2D de amenazas (`threat_map`), balance de bajas (`attrition`) y cohesión (`morale`).
-* Representaciones de valor: Two-Hot, **HL-Gauss** (*Histogram Loss with Gaussian Targets*, DeepMind 2024) y compresión **Symlog** (DreamerV3).
-* Planificador Macro Jerárquico HRL (Nivel 1): Selección de posturas (`ASSAULT_VP`, `DEFENSIVE_HOLD`, `ZONE_SUPPRESS`) y roles doctrinales de escuadra con modulación de priors MCTS (+35%).
-* Búsqueda en árbol MCTS PUCT y Gumbel Search; mitigación de conflicto de gradientes mediante **PCGrad**.
-* **Matriz de Síntesis y Hoja de Ruta Evolutiva (Sección 7)**.
-
-### 4. [Plataforma MLOps, Telemetría y Reporting (`04_PLATAFORMA_MLOPS_Y_TELEMETRIA.md`)](file:///c:/repos/python/assault/docs/04_PLATAFORMA_MLOPS_Y_TELEMETRIA.md)
-* Almacenamiento columnar en archivos Apache Parquet y base de datos analítica **DuckDB**.
-* Puertas automáticas de promoción de modelos (*Promotion Gates*) para control de calidad.
-* Guía del Visor Web (puerto `8778`): catálogo de modelos, topología dinámica con simulador de unroll, atribución de canales y reproductor hexagonal de partidas paso a paso (*Match Replay*).
-
-### 5. [Hoja de Ruta Evolutiva (Roadmap 2024–2026) (`05_ROADMAP_EVOLUTIVO.md`)](file:///c:/repos/python/assault/docs/05_ROADMAP_EVOLUTIVO.md)
-* Matriz de síntesis de la auditoría técnica y literatura reciente.
-* Fases técnicas de evolución (Fases 1 a 4 completadas, Fase 5 en curso).
-
-### 6. [Auditoría Científica y Estudio Comparativo Palma et al. 2025 (`06_LITERATURE_AUDIT_CHANNELS_HEADS_TACTICS.md`)](file:///c:/repos/python/assault/docs/06_LITERATURE_AUDIT_CHANNELS_HEADS_TACTICS.md)
-* Análisis de canales de observación (32 canales), cabezas auxiliares y jerarquía táctica de 2 niveles.
-* **Estudio comparativo exhaustivo vs. Hex-Wargame AI (Palma et al. Feb 2025 / arXiv:2502.13918v1)**:
-  * Evaluación del módulo de aprendizaje: Model-Based EfficientZero V2 vs. Model-Free AlphaZero con RNN, muestra-eficiencia, Two-Hot simétrico y balanceo ortogonal PCGrad.
-  * Evaluación de la profundidad táctica: Wargame militar VOEC (balística real, blindaje direccional, moral, supresión, overwatch y elevación 3D) vs. Simple Conflict Simulation (SCS).
-  * Matriz dimensional de fortalezas, ventajas competitivas de Assault y lecciones asimiladas (invariancia de mapa procedural).
-
-### 7. [Sistema RAG Copilot y Explicabilidad Normativa (`06_SISTEMA_RAG_COPILOT.md`)](file:///c:/repos/python/assault/docs/06_SISTEMA_RAG_COPILOT.md)
-* Ingesta y particionado: 114 chunks de reglamento y 24 chunks de catálogo técnico (`assault_rag/`).
-* Recuperador híbrido con BM25, scoring por sección, expansión bilingüe y normalización de erratas.
-* Servicios especializados: `rag_query` con memoria conversacional, `explain_action_short`, `explain_game_situation` (SitRep en vivo), `recommend_actions_advisory` y `analyze_training_level1`.
-* Motor generativo dual: Integración con LLM local Ollama (`qwen2.5:14b`) y fallback extractivo determinista instantáneo.
-* Endpoints REST FastAPI en puerto `8001` y paneles arrastrables en el simulador `assault_ai_ui` (puerto `5173`).
-
-### 8. [Servicios Backend y Catálogo de APIs (`07_SERVICIOS_BACKEND_Y_CATALOGO_APIS.md`)](file:///c:/repos/python/assault/docs/07_SERVICIOS_BACKEND_Y_CATALOGO_APIS.md)
-* Enlaces directos de publicación interactiva: **Swagger UI** (`http://127.0.0.1:8001/docs`), **ReDoc** (`http://127.0.0.1:8001/redoc`) y **OpenAPI JSON**.
-* Microservicio de Simulación Táctica y Sesión (`:8001`): ciclo de vida de partidas, acciones, combate, niebla y canal en tiempo real WebSocket (`/ws/game`).
-* Microservicio RAG Copilot (`/api/rag/*`): búsquedas semánticas, recomendaciones tácticas y telemetría Ollama.
-* Microservicio de Telemetría MLOps y DuckDB (`:8778`): catálogo de modelos, promoción por puertas (*gates*), curvas de pérdida y reproducción paso a paso (*replays*).
 
 ---
 
-## 📂 Archivos y Recursos Históricos
-* `docs/papers/`: Publicaciones científicas de referencia (incluyendo `2502.13918v1.pdf`, el trabajo seminal de Palma et al. 2025 sobre wargames hexagonales con RL y RNNs).
-* `docs/pdfs/`: Manuales de reglas oficiales y libros de campaña del juego.
+## 📚 Módulos Canónicos de Documentación
 
+### 1. [Arquitectura del Sistema](01_ARQUITECTURA_DEL_SISTEMA.md)
+* **Principios de diseño:** Desacoplamiento estricto por contratos entre capas.
+* **Subsistemas:** `assault_model` (reglas puras autoritativas), `voec_sim` (observación sensorial y simulación), `agents/efficientzero_v2` (red neuronal e inferencia MCTS) y `mlops` (telemetría y linaje).
+* **Ciclo de vida:** Flujo de autojuego (*self-play*), reincorporación a buffer de repeticiones y entrenamiento distribuido.
+
+### 2. [Modelo del Juego y Reglas Tácticas](02_MODELO_DEL_JUEGO_Y_REGLAS_TACTICAS.md)
+* **Geometría hexagonal:** Coordenadas axiales $(q, r)$, métricas de distancia y adyacencia.
+* **Terreno y balística:** Catálogo de terrenos, cobertura, cálculo 3D de Línea de Visión (LOS) y Niebla de Guerra (*POMDP*).
+* **Mecánica de combate:** Dados de batalla (Rojo, Azul, Verde, Amarillo), tiradas de salvación y asignación de bajas.
+* **Psicología militar:** Estados de cohesión y moral (`NORMAL`, `PINNED`, `SUPPRESSED`, `ROUTED`), fuego de reacción (*Opportunity Fire*) y combate cerrado (*Close Combat*).
+
+### 3. [Red Neuronal y Algoritmo EfficientZero V2](03_RED_NEURONAL_EFFICIENTZERO_V2.md)
+* **Modelo de mundo recurrente:** Funciones de representación $h_\theta$, dinámica $g_\theta$, predicción $f_\theta$ y consistencia temporal $q_\theta$.
+* **Convoluciones hexagonales:** `HexagonalMaskConv2d` para eliminación de artefactos direccionales espurios.
+* **Cabezas auxiliares:** Mapa 2D de amenazas (`threat_map`), balance de bajas (`attrition`) y estimación de cohesión (`morale`).
+* **Representaciones de valor:** Two-Hot simétrico, **HL-Gauss** (*Histogram Loss with Gaussian Targets*, DeepMind 2024) y compresión **Symlog**.
+* **HRL y optimización:** Planificador jerárquico Macro (Nivel 1), búsqueda MCTS PUCT / Gumbel y balanceo de gradientes mediante **PCGrad**.
+
+### 4. [Plataforma MLOps, Telemetría y Reporting](04_PLATAFORMA_MLOPS_Y_TELEMETRIA.md)
+* **Almacenamiento analítico:** Registro columnar de partidas en Apache Parquet y base de datos OLAP **DuckDB**.
+* **Puertas de promoción:** Reglas automatizadas (*Promotion Gates*) para validación de checkpoints contra baselines.
+* **Visor Web MLOps (Puerto 8778):** Catálogo de modelos, simulador de unroll del espacio latente, atribución de canales y reproductor paso a paso de partidas (*Match Replay*).
+
+### 5. [Hoja de Ruta Evolutiva (Roadmap 2024–2026)](05_ROADMAP_EVOLUTIVO.md)
+* **Fases técnicas:** De la Fase 1 a la 4 (completadas) a la Fase 5 (curriculum táctico y HRL multiescala).
+* **Matriz de hitos:** Entregables, dependencias y criterios de éxito del sistema de autoaprendizaje.
+
+### 6. [Auditoría Científica: Hex-Wargame AI (Palma et al. 2025) vs. Assault](06_LITERATURE_AUDIT_CHANNELS_HEADS_TACTICS.md)
+* **Estudio comparativo exhaustivo:** Evaluación frente al paper seminal de Palma et al. (Feb 2025 / arXiv:2502.13918v1).
+* **Módulo de aprendizaje:** Model-Based EfficientZero V2 vs. Model-Free AlphaZero con RNNs; análisis de muestra-eficiencia y ratios de convergencia.
+* **Profundidad táctica:** Wargame militar VOEC (balística real, blindaje direccional, moral, supresión, overwatch) vs. Simple Conflict Simulation (SCS).
+* **Lecciones asimiladas:** Invariancia topológica mediante generación procedural y normalización de canales.
+
+### 7. [Sistema RAG Copilot y Explicabilidad Normativa](06_SISTEMA_RAG_COPILOT.md)
+* **Base de conocimiento unificada:** 114 fragmentos de reglamento y 24 fragmentos de catálogo técnico en `assault_rag/`.
+* **Motor de búsqueda híbrido:** BM25 balanceado con scoring por relevancia de sección y normalización bilingüe.
+* **Servicios tácticos:** Consultas normativas (`rag_query`), reporte de situación (`explain_game_situation` SitRep en vivo), recomendaciones tácticas consultivas y análisis de partidas.
+* **Motor generativo dual:** Soporte para LLM local (Ollama `qwen2.5:14b`) con fallback extractivo instantáneo de alta precisión.
+
+### 8. [Servicios Backend y Catálogo de APIs](07_SERVICIOS_BACKEND_Y_CATALOGO_APIS.md)
+* **Documentación interactiva OpenAPI:** [Swagger UI](http://127.0.0.1:8001/docs) y [ReDoc](http://127.0.0.1:8001/redoc).
+* **Servicio de Simulación Táctica (`:8001`):** Endpoints REST para ciclos de juego, combate y canal bidireccional WebSocket (`/ws/game`).
+* **Servicio RAG Copilot (`/api/rag/*`):** Endpoints de asistencia, consulta normativa y estado del LLM.
+* **Servicio de Telemetría MLOps (`:8778`):** DuckDB REST API, visor de métricas y servidor de documentación estática integrada.
+
+### 9. [Auditoría Exhaustiva: Reglamento Oficial vs. Engine y Escenarios](08_AUDITORIA_REGLAMENTO_VS_ENGINE.md)
+* **Auditoría página a página del Manual de Reglas:** 52 páginas del *Rulebook rev6* auditadas respecto a `assault_model/`.
+* **Auditoría del Compendio de Escenarios:** Análisis de los 38 escenarios oficiales (26 de la Campaña de Gela + 12 Standalone) frente al catálogo modelado en JSON.
+* **Plan de paridad 100%:** Fases priorizadas para implementación de soporte táctico (TAS/OAS), cartas de mando y transporte.
+
+---
+
+## 🚀 Servicios en Vivo y Puertos Locales
+
+| Servicio | Puerto | Descripción | URL Directa |
+| :--- | :---: | :--- | :--- |
+| **Documentación Central** | `8778` | MkDocs Material Portal Canónico | [http://127.0.0.1:8778/docs/](http://127.0.0.1:8778/docs/) |
+| **Visor Web MLOps** | `8778` | Dashboard de modelos, métricas y replays | [http://127.0.0.1:8778/](http://127.0.0.1:8778/) |
+| **Backend Táctico FastAPI** | `8001` | API de simulación, combate y RAG | [http://127.0.0.1:8001/docs](http://127.0.0.1:8001/docs) |
+| **Simulador UI (Vite / React)** | `5173` | Tablero hexagonal interactivo | [http://127.0.0.1:5173/](http://127.0.0.1:5173/) |
