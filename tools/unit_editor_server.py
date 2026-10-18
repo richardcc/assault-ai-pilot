@@ -469,7 +469,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
 class UnitEditorHandler(BaseHTTPRequestHandler):
     def do_GET(self):
         parsed = urlparse(self.path)
-        path = parsed.path
+        path = unquote(parsed.path)
 
         if path == "/" or path == "/index.html":
             self.send_response(200)
@@ -496,7 +496,7 @@ class UnitEditorHandler(BaseHTTPRequestHandler):
         # Serve static assets (images from assets/art/...)
         if path.startswith("/assets/art/"):
             rel_path = path.lstrip("/")
-            full_path = REPO_ROOT / rel_path
+            full_path = (REPO_ROOT / rel_path).resolve()
             if full_path.exists() and full_path.is_file():
                 ext = full_path.suffix.lower()
                 mime = "image/png" if ext == ".png" else "image/jpeg"
