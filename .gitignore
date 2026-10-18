@@ -70,9 +70,12 @@ notes_private/
 notes/
 *.docx
 *.pdf
+*.zip
 resume_work.md
 files.txt
 documentation_files.txt
+docs/audit_*
+site/audit_*
 
 # ===============================
 # Editors / IDEs

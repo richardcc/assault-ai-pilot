@@ -422,16 +422,28 @@ def serve(
                 return
             if parsed.path == "/docs" or parsed.path.startswith("/docs/"):
                 subpath = parsed.path[len("/docs") :].lstrip("/")
+                site_root = (repo_root / "site").resolve()
+                docs_root = (repo_root / "docs").resolve()
+                preferred_root = site_root if (site_root / "index.html").exists() else docs_root
+
                 if not subpath or subpath in ("index.html", ""):
-                    docs_file = (repo_root / "docs" / "index.html").resolve()
-                    if docs_file.exists():
-                        self._send_static_file(docs_file, repo_root / "docs")
+                    target = preferred_root / "index.html"
+                    if target.exists():
+                        self._send_static_file(target, preferred_root)
                         return
                 else:
                     rel_doc = unquote(subpath)
-                    doc_target = (repo_root / "docs" / rel_doc).resolve()
+                    doc_target = (preferred_root / rel_doc).resolve()
+                    if doc_target.is_dir():
+                        doc_target = doc_target / "index.html"
                     if doc_target.exists() and doc_target.is_file():
-                        self._send_static_file(doc_target, repo_root / "docs")
+                        self._send_static_file(doc_target, preferred_root)
+                        return
+                    alt_target = (docs_root / rel_doc).resolve()
+                    if alt_target.is_dir():
+                        alt_target = alt_target / "index.html"
+                    if alt_target.exists() and alt_target.is_file():
+                        self._send_static_file(alt_target, docs_root)
                         return
             if parsed.path.startswith("/assets/"):
                 rel = unquote(parsed.path[len("/assets/") :])
