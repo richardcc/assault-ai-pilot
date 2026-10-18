@@ -31,7 +31,10 @@ theme:
     - navigation.tabs
     - navigation.sections
     - navigation.expand
+    - navigation.path
+    - navigation.footer
     - navigation.top
+    - toc.follow
     - search.suggest
     - search.highlight
     - content.code.copy

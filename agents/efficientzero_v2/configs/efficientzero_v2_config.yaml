@@ -22,7 +22,7 @@ model:
 
 selfplay:
   device: cpu
-  num_workers: 6
+  num_workers: 20
   parallel_backend: process
   matchup_modes: [self_vs_self, self_vs_random]
   matchup_mode_weights:

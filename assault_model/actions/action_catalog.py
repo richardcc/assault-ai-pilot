@@ -9,6 +9,7 @@ from assault_model.rules.movement_outcome import MovementOutcome
 from assault_model.map.hex_utils import safe_hex_distance
 from assault_model.combat.line_of_sight import has_line_of_sight
 from assault_model.actions.ranged_indirect import RangedIndirectAttack
+from assault_model.actions.smoke import FireSmokeAction
 from assault_model.actions.composite_fire import MoveThenFireAction, FireThenMoveAction
 
 import os
@@ -194,6 +195,14 @@ class ActionCatalog:
                 act.target_id = other.unit_id
                 act.attack_mode = "INDIRECT_FIRE"
                 actions.append(act)
+
+                # Rule 7.2: If unit can fire smoke ordnance, generate FireSmokeAction
+                if getattr(active.unit_type, "can_fire_smoke", lambda: False)():
+                    smoke_act = FireSmokeAction(
+                        active.unit_id,
+                        (other.position.q, other.position.r),
+                    )
+                    actions.append(smoke_act)
             else:
                 _trace(
                     "ACTION_ADD",
@@ -222,8 +231,15 @@ class ActionCatalog:
         # Fallback for mock unit objects in tests
         attack = getattr(unit_type, "_attack_raw", {}) or {}
         cat_val = target_type.category.value if hasattr(target_type.category, "value") else str(target_type.category)
-        for mode_data in attack.values():
-            table = mode_data.get(cat_val)
+        for mode, mode_data in attack.items():
+            if not isinstance(mode_data, dict):
+                continue
+            if any(isinstance(v, dict) and "dice" in v for k, v in mode_data.items()):
+                table = mode_data
+            else:
+                table = mode_data.get(cat_val) or mode_data.get("ALL")
+                if not table and mode == "INDIRECT_FIRE":
+                    table = mode_data.get("INFANTRY") or mode_data.get("VEHICLE")
             if not table:
                 continue
             for key in table.keys():

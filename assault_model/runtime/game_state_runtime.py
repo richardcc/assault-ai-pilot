@@ -195,6 +195,8 @@ class RuntimeGameState:
         self.pending_reaction = None
 
         for unit in self.base_state.units:
+            unit.has_fired_this_turn = False
+            unit.has_fast_action_this_turn = False
 
             if getattr(unit, "suppressed", False):
                 unit.clear_suppression()
@@ -336,8 +338,15 @@ class RuntimeGameState:
             self._check_match_end(context)
             return {
                 "type": "WAIT",
-                "unit": attacker.unit_id if attacker else None
+                "unit": attacker.unit_id if attacker else None,
             }
+
+        if attacker:
+            action_cls_name = action.__class__.__name__
+            if "Attack" in action_cls_name or "Fire" in action_cls_name or "Assault" in action_cls_name:
+                attacker.has_fired_this_turn = True
+            if isinstance(action, (MoveThenFireAction, FireThenMoveAction)) or "Fast" in action_cls_name:
+                attacker.has_fast_action_this_turn = True
 
         result = resolve_action(
             state=self.base_state,

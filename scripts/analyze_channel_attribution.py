@@ -150,6 +150,7 @@ def _load_model(run_dir: Path) -> nn.Module:
     state_dict = torch.load(ckpt_path, map_location="cpu", weights_only=True)
 
     has_threat = any("prediction_threat_map" in k for k in state_dict.keys())
+    has_final_ownership = any("prediction_final_ownership" in k for k in state_dict.keys())
     has_attrition = any("prediction_attrition" in k for k in state_dict.keys())
     has_morale = any("prediction_morale" in k for k in state_dict.keys())
     has_spatial_att = any("spatial_attention" in k for k in state_dict.keys()) or any("spatial_gate" in k for k in state_dict.keys())
@@ -189,6 +190,7 @@ def _load_model(run_dir: Path) -> nn.Module:
             dynamics_blocks=int(m_cfg.get("dynamics_blocks", 3)),
             prediction_blocks=int(m_cfg.get("prediction_blocks", 2)),
             enable_threat_head=has_threat,
+            enable_final_ownership_head=has_final_ownership,
             enable_attrition_head=has_attrition,
             enable_morale_head=has_morale,
             use_spatial_attention=has_spatial_att,
@@ -240,6 +242,11 @@ def analyze_channels(
         and hasattr(model, "prediction_threat_map")
         and model.prediction_threat_map is not None
     )
+    has_final_ownership = (
+        getattr(model, "enable_final_ownership_head", False)
+        and hasattr(model, "prediction_final_ownership")
+        and model.prediction_final_ownership is not None
+    )
     has_attrition = (
         getattr(model, "enable_attrition_head", False)
         and hasattr(model, "prediction_attrition")
@@ -259,6 +266,8 @@ def analyze_channels(
         active_heads_list.append("objective")
     if has_threat:
         active_heads_list.append("threat_map")
+    if has_final_ownership:
+        active_heads_list.append("final_ownership")
     if has_attrition:
         active_heads_list.append("attrition")
     if has_morale:
@@ -277,6 +286,7 @@ def analyze_channels(
     grad_saliency_value = [0.0] * num_channels
     grad_saliency_policy = [0.0] * num_channels
     grad_saliency_threat = [0.0] * num_channels
+    grad_saliency_ownership = [0.0] * num_channels
     grad_saliency_attrition = [0.0] * num_channels
     grad_saliency_morale = [0.0] * num_channels
     grad_saliency_objective = [0.0] * num_channels
@@ -288,6 +298,7 @@ def analyze_channels(
     value_shift = [0.0] * num_channels
     decision_flips = [0] * num_channels
     threat_shift = [0.0] * num_channels
+    ownership_shift = [0.0] * num_channels
     attrition_shift = [0.0] * num_channels
     morale_shift = [0.0] * num_channels
     objective_shift = [0.0] * num_channels
@@ -385,11 +396,22 @@ def analyze_channels(
             model.zero_grad()
             if obs_req.grad is not None:
                 obs_req.grad.zero_()
-            aux_base["multi_vp_pred"].sum().backward()
+            aux_base["multi_vp_pred"].sum().backward(retain_graph=True)
             if obs_req.grad is not None:
                 mvp_grad = obs_req.grad.abs().squeeze(0)
                 for c in range(num_channels):
                     grad_saliency_multi_vp[c] += float(mvp_grad[c].mean().item())
+
+        # 9. Gradient Saliency for Final Ownership Head (KataGo)
+        if has_final_ownership and "final_ownership_pred" in aux_base and aux_base["final_ownership_pred"] is not None:
+            model.zero_grad()
+            if obs_req.grad is not None:
+                obs_req.grad.zero_()
+            aux_base["final_ownership_pred"].sum().backward()
+            if obs_req.grad is not None:
+                fo_grad = obs_req.grad.abs().squeeze(0)
+                for c in range(num_channels):
+                    grad_saliency_ownership[c] += float(fo_grad[c].mean().item())
 
         # Baseline values for ablation comparison (without grad)
         with torch.no_grad():
@@ -400,6 +422,9 @@ def analyze_channels(
             base_threat = aux_eval_base.get("threat_map_pred")
             if base_threat is not None:
                 base_threat = base_threat.detach()
+            base_ownership = aux_eval_base.get("final_ownership_pred")
+            if base_ownership is not None:
+                base_ownership = base_ownership.detach()
             base_attrition = aux_eval_base.get("attrition_pred")
             if base_attrition is not None:
                 base_attrition = base_attrition.detach()
@@ -443,6 +468,10 @@ def analyze_channels(
                     t_diff = (base_threat - aux_abl["threat_map_pred"].detach()).abs().mean().item()
                     threat_shift[c] += float(t_diff)
 
+                if base_ownership is not None and "final_ownership_pred" in aux_abl and aux_abl["final_ownership_pred"] is not None:
+                    fo_diff = (base_ownership - aux_abl["final_ownership_pred"].detach()).abs().mean().item()
+                    ownership_shift[c] += float(fo_diff)
+
                 if base_attrition is not None and "attrition_pred" in aux_abl and aux_abl["attrition_pred"] is not None:
                     a_diff = (base_attrition - aux_abl["attrition_pred"].detach()).abs().mean().item()
                     attrition_shift[c] += float(a_diff)
@@ -471,11 +500,20 @@ def analyze_channels(
     max_v_shift = max(value_shift) / float(num_samples) if max(value_shift) > 0 else 1.0
     max_p_grad = max(grad_saliency_policy) / float(num_samples) if max(grad_saliency_policy) > 0 else 1.0
     max_t_shift = max(threat_shift) / float(num_samples) if max(threat_shift) > 0 else 1.0
+    max_fo_shift = max(ownership_shift) / float(num_samples) if max(ownership_shift) > 0 else 1.0
     max_a_shift = max(attrition_shift) / float(num_samples) if max(attrition_shift) > 0 else 1.0
     max_m_shift = max(morale_shift) / float(num_samples) if max(morale_shift) > 0 else 1.0
     max_o_shift = max(objective_shift) / float(num_samples) if max(objective_shift) > 0 else 1.0
 
-    has_tactical_heads = has_threat or has_attrition or has_morale or has_objective or has_intent or has_multi_vp
+    has_tactical_heads = (
+        has_threat
+        or has_final_ownership
+        or has_attrition
+        or has_morale
+        or has_objective
+        or has_intent
+        or has_multi_vp
+    )
 
     for c in range(num_channels):
         name = _channel_name(c)
@@ -488,12 +526,14 @@ def analyze_channels(
         v_grad = grad_saliency_value[c] / float(num_samples)
         p_grad = grad_saliency_policy[c] / float(num_samples)
         t_diff = threat_shift[c] / float(num_samples)
+        fo_diff = ownership_shift[c] / float(num_samples)
         a_diff = attrition_shift[c] / float(num_samples)
         m_diff = morale_shift[c] / float(num_samples)
         o_diff = objective_shift[c] / float(num_samples)
         i_diff = intent_shift[c] / float(num_samples)
         mvp_diff = multi_vp_shift[c] / float(num_samples)
         t_grad = grad_saliency_threat[c] / float(num_samples)
+        fo_grad = grad_saliency_ownership[c] / float(num_samples)
         a_grad = grad_saliency_attrition[c] / float(num_samples)
         m_grad = grad_saliency_morale[c] / float(num_samples)
         o_grad = grad_saliency_objective[c] / float(num_samples)
@@ -505,15 +545,17 @@ def analyze_channels(
             norm_kl = kl / max_kl if max_kl > 0 else 0.0
             norm_v = v_diff / max_v_shift if max_v_shift > 0 else 0.0
             norm_t = t_diff / max_t_shift if max_t_shift > 0 else 0.0
+            norm_fo = fo_diff / max_fo_shift if max_fo_shift > 0 else 0.0
             norm_a = a_diff / max_a_shift if max_a_shift > 0 else 0.0
             norm_m = m_diff / max_m_shift if max_m_shift > 0 else 0.0
             norm_o = o_diff / max_o_shift if max_o_shift > 0 else 0.0
 
             comp_score = (
-                0.30 * norm_kl
-                + 0.20 * norm_v
+                0.25 * norm_kl
+                + 0.15 * norm_v
                 + 0.15 * flips
                 + 0.15 * norm_t
+                + 0.10 * norm_fo
                 + 0.10 * norm_a
                 + 0.05 * norm_m
                 + 0.05 * norm_o
@@ -533,7 +575,7 @@ def analyze_channels(
         elif comp_score >= 0.25 or flips >= 0.15:
             status = "HIGH_EFFECTIVENESS"
             recommendation = "Canal clave para decisiones tácticas y balance de cabezas. Mantener indispensable."
-        elif comp_score >= 0.08 or flips >= 0.05 or t_diff > 0.10:
+        elif comp_score >= 0.08 or flips >= 0.05 or t_diff > 0.10 or fo_diff > 0.10:
             status = "MODERATE_EFFECTIVENESS"
             recommendation = "Aporta contexto táctico y espacial complementario."
         else:
@@ -563,6 +605,7 @@ def analyze_channels(
                 "kl_divergence": round(kl, 5),
                 "value_shift_mean": round(v_diff, 5),
                 "threat_shift_mean": round(t_diff, 5) if has_threat else 0.0,
+                "final_ownership_shift_mean": round(fo_diff, 5) if has_final_ownership else 0.0,
                 "attrition_shift_mean": round(a_diff, 5) if has_attrition else 0.0,
                 "morale_shift_mean": round(m_diff, 5) if has_morale else 0.0,
                 "objective_shift_mean": round(o_diff, 5) if has_objective else 0.0,
@@ -574,6 +617,7 @@ def analyze_channels(
                 "grad_saliency_policy": round(p_grad, 6),
                 "grad_saliency_value": round(v_grad, 6),
                 "grad_saliency_threat": round(t_grad, 6) if has_threat else 0.0,
+                "grad_saliency_final_ownership": round(fo_grad, 6) if has_final_ownership else 0.0,
                 "grad_saliency_attrition": round(a_grad, 6) if has_attrition else 0.0,
                 "grad_saliency_morale": round(m_grad, 6) if has_morale else 0.0,
                 "grad_saliency_objective": round(o_grad, 6) if has_objective else 0.0,
@@ -584,6 +628,7 @@ def analyze_channels(
                     "policy_kl": round(kl, 5),
                     "value_shift": round(v_diff, 5),
                     "threat_shift": round(t_diff, 5) if has_threat else None,
+                    "final_ownership_shift": round(fo_diff, 5) if has_final_ownership else None,
                     "attrition_shift": round(a_diff, 5) if has_attrition else None,
                     "morale_shift": round(m_diff, 5) if has_morale else None,
                     "objective_shift": round(o_diff, 5) if has_objective else None,
@@ -592,6 +637,7 @@ def analyze_channels(
                     "grad_policy": round(p_grad, 6),
                     "grad_value": round(v_grad, 6),
                     "grad_threat": round(t_grad, 6) if has_threat else None,
+                    "grad_final_ownership": round(fo_grad, 6) if has_final_ownership else None,
                     "grad_attrition": round(a_grad, 6) if has_attrition else None,
                     "grad_morale": round(m_grad, 6) if has_morale else None,
                     "grad_objective": round(o_grad, 6) if has_objective else None,

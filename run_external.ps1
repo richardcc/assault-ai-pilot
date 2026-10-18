@@ -14,6 +14,8 @@ if (Test-Path $venvPython) {
     Write-Host "[Python] Usando Python del sistema" -ForegroundColor Yellow
 }
 
+$env:MLFLOW_TRACKING_URI = "http://127.0.0.1:5001"
+
 # 3. Buscar el ultimo checkpoint valido en runs_curriculum
 $ckpt = Get-ChildItem -Path (Join-Path $Repo "runs_curriculum") -Recurse -File -Filter "*.pt" -ErrorAction SilentlyContinue |
     Where-Object { $_.FullName -match "efficientzero_v2_.+\\checkpoints\\(final|iter_\d+)\.pt$" } |

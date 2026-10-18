@@ -202,6 +202,7 @@ def build_head_diagnostics_eval(
             "train_reanalysis_coverage": float(train_summary.get("reanalysis_coverage", 0.0) or 0.0),
             "train_reanalysis_target_drift": float(train_summary.get("reanalysis_target_drift", 0.0) or 0.0),
             "train_reanalysis_policy_drift": float(train_summary.get("reanalysis_policy_drift", 0.0) or 0.0),
+            "eval_latent_drift": float(eval_kpis.get("eval_latent_drift", 0.0) or eval_kpis.get("latent_drift", 0.0) or 0.0),
         },
         "mcts": {
             "eval_decision_steps": float(eval_kpis.get("xai_decision_steps", 0.0)),
@@ -217,15 +218,30 @@ def build_head_diagnostics_eval(
             "max_threat": float(eval_kpis.get("threat_max", 0.0)),
             "mean_threat": float(eval_kpis.get("threat_mean", 0.0)),
         },
+        "final_ownership": {
+            "train_final_ownership_loss": float(train_summary.get("aux_final_ownership_loss", 0.0) or train_summary.get("final_ownership_loss", 0.0) or 0.0),
+            "eval_ownership_mae": float(eval_kpis.get("final_ownership_mae", 0.0) or eval_kpis.get("ownership_mae", 0.0) or 0.0),
+            "territory_control_score": float(eval_kpis.get("territory_control_score", 0.0) or 0.0),
+        },
         "attrition": {
             "train_attrition_loss": float(train_summary.get("aux_attrition_loss", 0.0) or train_summary.get("attrition_loss", 0.0) or 0.0),
             "predicted_exchange_ratio": float(eval_kpis.get("predicted_exchange_ratio", 0.0)),
             "predicted_friendly_casualties": float(eval_kpis.get("predicted_friendly_casualties", 0.0)),
             "predicted_enemy_casualties": float(eval_kpis.get("predicted_enemy_casualties", 0.0)),
+            "casualty_prediction_error_mae": float(eval_kpis.get("casualty_prediction_error_mae", 0.0) or eval_kpis.get("casualty_prediction_error", 0.0) or 0.0),
         },
         "morale": {
             "train_morale_loss": float(train_summary.get("aux_morale_loss", 0.0) or train_summary.get("morale_loss", 0.0) or 0.0),
             "suppression_risk_score": float(eval_kpis.get("suppression_risk_score", 0.0)),
+            "suppression_accuracy": float(eval_kpis.get("suppression_accuracy", 0.0) or 0.0),
+        },
+        "macro_intent": {
+            "train_intent_loss": float(train_summary.get("aux_intent_loss", 0.0) or 0.0),
+            "eval_intent_accuracy": float(eval_kpis.get("macro_intent_accuracy", 0.0) or eval_kpis.get("intent_accuracy", 0.0) or 0.0),
+        },
+        "multi_vp": {
+            "train_multi_vp_loss": float(train_summary.get("aux_multi_vp_loss", 0.0) or 0.0),
+            "eval_multi_vp_mae": float(eval_kpis.get("multi_vp_mae", 0.0) or 0.0),
         },
         "source": {"train": "metrics/summary.json", "eval": "bench.phase_2_9_eval_kpis + benchmark results"},
     }

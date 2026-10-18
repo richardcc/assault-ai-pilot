@@ -30,6 +30,7 @@ def _clone_hex_state(src: HexState) -> HexState:
     dst.hex = src.hex
     dst.ownership = src.ownership
     dst.contested = src.contested
+    dst.smoke_markers = getattr(src, "smoke_markers", 0)
     return dst
 
 

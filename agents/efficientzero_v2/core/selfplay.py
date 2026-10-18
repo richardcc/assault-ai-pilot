@@ -64,11 +64,23 @@ def _unit_combat_feature_table() -> dict:
         attack = dict(payload.get("attack", {}) or {})
         max_range = 0.0
         attack_power = 0.0
-        for mode_payload in attack.values():
-            for target_ranges in dict(mode_payload or {}).values():
-                for rk, rv in dict(target_ranges or {}).items():
-                    max_range = max(max_range, float(_range_high(rk)))
-                    attack_power = max(attack_power, _dice_power(dict(rv or {}).get("dice", [])))
+        direct = dict(attack.get("DIRECT_FIRE", {}) or {})
+        for target_ranges in direct.values():
+            if isinstance(target_ranges, dict):
+                for rk, rv in target_ranges.items():
+                    if isinstance(rv, dict) and "dice" in rv:
+                        max_range = max(max_range, float(_range_high(rk)))
+                        attack_power = max(attack_power, _dice_power(rv.get("dice", [])))
+        indirect = dict(attack.get("INDIRECT_FIRE", {}) or {})
+        for rk, rv in indirect.items():
+            if isinstance(rv, dict) and "dice" in rv:
+                max_range = max(max_range, float(_range_high(rk)))
+                attack_power = max(attack_power, _dice_power(rv.get("dice", [])))
+            elif isinstance(rv, dict):
+                for sub_rk, sub_rv in rv.items():
+                    if isinstance(sub_rv, dict) and "dice" in sub_rv:
+                        max_range = max(max_range, float(_range_high(sub_rk)))
+                        attack_power = max(attack_power, _dice_power(sub_rv.get("dice", [])))
         defense = dict(payload.get("base_defense", {}) or {})
         defense_power = 0.0
         sides = 0

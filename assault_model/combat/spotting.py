@@ -9,6 +9,17 @@ def can_spot(attacker, target, los, game_map, terrain_config):
     """
 
     # --------------------------------------
+    # HIDDEN trait (Rule: Automatic spotting never applies.
+    # Can only be spotted when marked with fire status marker or fast action)
+    # --------------------------------------
+    traits = getattr(getattr(target, "unit_type", None), "traits", []) or []
+    if any(str(t).upper() == "HIDDEN" for t in traits):
+        has_fired = bool(getattr(target, "has_fired_this_turn", False))
+        has_fast = bool(getattr(target, "has_fast_action_this_turn", False))
+        if not (has_fired or has_fast):
+            return False
+
+    # --------------------------------------
     # BLOCKED → nunca visible
     # --------------------------------------
     if los == LineOfSight.BLOCKED:

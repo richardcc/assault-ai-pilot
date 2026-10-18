@@ -87,6 +87,16 @@ def load_scenario(
     map_piece_catalog: Dict[str, MapPieceDefinition],
 ) -> Scenario:
 
+    scenario_path = Path(scenario_path)
+    if not scenario_path.exists():
+        try:
+            from assault_model.paths import SCENARIOS_DIR
+            alt_path = SCENARIOS_DIR / scenario_path.name
+            if alt_path.exists():
+                scenario_path = alt_path
+        except Exception:
+            pass
+
     if not scenario_path.exists():
         raise ScenarioLoaderError(f"Scenario not found: {scenario_path}")
 

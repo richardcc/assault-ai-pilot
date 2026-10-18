@@ -103,7 +103,7 @@ def _compute_combat_dice(attacker, target, distance, los, game_map):
         if is_indirect and _has_trait(attacker, "REMOVE_WEAKEST_TERRAIN_DEFENSE") and terrain_bonus:
             _remove_weakest_die(terrain_bonus)
         if (
-            _has_trait(attacker, "REMOVE_STRONGEST_TERRAIN_DEFENSE")
+            (_has_trait(attacker, "REMOVE_STRONGEST_TERRAIN_DEFENSE") or _has_trait(attacker, "SNIPER"))
             and str(getattr(target.unit_type.category, "value", target.unit_type.category)).upper() != "VEHICLE"
             and terrain_bonus
         ):

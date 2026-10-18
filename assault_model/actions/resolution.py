@@ -36,6 +36,7 @@ from assault_model.runtime.execution_context import ExecutionContext
 
 from assault_model.combat.close_combat_resolver import resolve_close_combat
 from assault_model.combat.ranged_combat_resolver import resolve_ranged_combat
+from assault_model.combat.smoke_resolver import resolve_smoke_fire
 
 
 from assault_model.map.hex_utils import safe_hex_distance
@@ -270,6 +271,25 @@ def resolve_action(
                 attacker=attacker,
                 target=target,
                 distance=distance,
+                context=context,
+            )
+
+        # ------------------------------
+        # SMOKE ORDNANCE (Rule 7.2)
+        # ------------------------------
+        elif action.combat_mode == CombatMode.SMOKE:
+            attacker = next(
+                (u for u in new_state.units if u.unit_id == action.unit_id),
+                None,
+            )
+            if attacker is None:
+                raise RuntimeError(
+                    f"Invalid attacker for smoke fire (attacker={action.unit_id})"
+                )
+            result_combat = resolve_smoke_fire(
+                action=action,
+                attacker=attacker,
+                game_map=new_state.game_map,
                 context=context,
             )
 

@@ -51,8 +51,8 @@ def main() -> int:
     )
     parser.add_argument(
         "--catalog",
-        default="runs_curriculum/experiments/reporting/model_catalog_full_latest.json",
-        help="Path to model_catalog_full_latest.json",
+        default="runs_curriculum/experiments/reporting/model_catalog_latest.json",
+        help="Path to model_catalog_latest.json",
     )
     parser.add_argument("--eval-id", default="", help="Filter by eval_id")
     parser.add_argument("--agent-name", default="", help="Filter by result.agent_name")

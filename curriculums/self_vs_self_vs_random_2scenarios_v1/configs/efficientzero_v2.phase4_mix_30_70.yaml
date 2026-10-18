@@ -6,5 +6,13 @@ scenario:
   weights: [30, 70]
 
 selfplay:
-  num_workers: 6
+  num_workers: 20
   parallel_backend: process
+  reward_shaping:
+    vp_capture_bonus_per_hex: 2.30
+    objective_progress_bonus_per_hex: 1.75
+    capture_bonus: 0.80
+
+train:
+  episodes_per_iter: 20
+  objective_loss_weight: 0.16

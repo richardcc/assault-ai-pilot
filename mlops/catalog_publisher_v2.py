@@ -135,7 +135,7 @@ def publish_catalog_snapshot(
     parquet_rel_dir: str = "runs_curriculum/experiments/reporting/indexes",
     max_eval_history_per_model_slim: int = 32,
     debug_full_history_keep: int = 12,
-    include_debug_full_catalog: bool = True,
+    include_debug_full_catalog: bool = False,
     incremental_run_ids: Iterable[str] | None = None,
 ) -> dict:
     with _catalog_publish_lock(repo_root=repo_root):
@@ -283,6 +283,12 @@ def _build_arg_parser() -> argparse.ArgumentParser:
         default=12,
         help="How many debug full catalog snapshots to keep.",
     )
+    parser.add_argument(
+        "--include-debug-full-catalog",
+        action="store_true",
+        default=False,
+        help="Whether to write full debug JSON catalog (can be several GBs).",
+    )
     return parser
 
 
@@ -293,5 +299,6 @@ if __name__ == "__main__":
         repo_root=repo_root,
         max_eval_history_per_model_slim=max(1, int(args.max_eval_history_per_model_slim)),
         debug_full_history_keep=max(1, int(args.debug_full_history_keep)),
+        include_debug_full_catalog=bool(args.include_debug_full_catalog),
     )
     print(json.dumps(out, indent=2))

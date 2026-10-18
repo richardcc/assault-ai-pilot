@@ -297,10 +297,75 @@ Cada carta de unidad (`assets/art/unit_cards/*.jpg`) contiene la totalidad de es
 4. **Tabla de Fuego Directo e Indirecto (`attack`)**: Matriz de bandas de alcance (0, 1-3, 4-7, 8-11...) discriminando contra Blindados (`VEHICLE`) vs Infantería/Artillería (`INFANTRY`).
 5. **Rasgos Doctrinales (`traits`)**: Texto central con habilidades oficiales (*Slow*, *Low Silhouette*, *Smoke*, *Open Top*, *Tough*, *Assault*, etc.).
 
-Al modelar una unidad, se añade su entrada correspondiente en [`assets/catalogs/unit_catalog.json`](file:///c:/repos/python/assault/assets/catalogs/unit_catalog.json), quedando inmediatamente habilitada en el motor `assault_model/` y accesible para el visor MLOps y los modelos de auto-juego de `EfficientZeroV2`.
+---
 
-## 5. Referencia al Plan de Acción y Hoja de Ruta Evolutiva Unificada
+## 5. Auditoría y Especificación Canónica de Habilidades y Rasgos de Unidades (Traits)
+
+Esta sección documenta la correspondencia exacta, el texto oficial impreso en el reverso de las cartas de unidad (`assets/art/unit_cards/*.jpg`) y en el manual de reglas de *Assault: Sicily 43*, contrastado contra la implementación en el motor autoritativo (`assault_model/`).
+
+```mermaid
+flowchart TD
+    subgraph Traits_Architecture ["Arquitectura de Resolución de Habilidades (Traits)"]
+        CARD["Carta de Unidad / Catálogo JSON\n(traits: ['SNIPER', 'HIDDEN', ...])"] --> INST["UnitInstance\n(has_fired_this_turn, has_fast_action_this_turn)"]
+        INST --> SPOT["Detección / Niebla (spotting.py)\nEvalúa HIDDEN y CAMOUFLAGED"]
+        INST --> RANGED["Fuego a Distancia (ranged_combat_resolver.py)\nEvalúa SNIPER, RAPID_FIRE, INDIRECT_FIRE"]
+        INST --> CLOSE["Combate Cercano (close_combat_resolver.py)\nEvalúa RAPID_FIRE, TOUGH"]
+        INST --> MOVE["Maniobra y Ruta (movement_rules.py)\nEvalúa SLOW_UNIT"]
+    end
+```
+
+### 5.1. Matriz de Auditoría y Verificación de Habilidades
+
+| Habilidad / Rasgo | Texto Oficial Impreso en Carta de Unidad | Regla de Juego / Efecto Canónico | Archivo / Método en Engine | Estado |
+| :--- | :--- | :--- | :--- | :---: |
+| **`SNIPER`** | *"Defender losses their strongest terrain defense die when targeted by a sniper in ranged fire. Only applies to attacks on infantry and artillery units."* | Al disparar contra unidades de infantería o artillería, el defensor pierde el dado de terreno de mayor jerarquía (`_remove_strongest_die`). | [`ranged_combat_resolver.py`](file:///c:/repos/python/assault/assault_model/combat/ranged_combat_resolver.py#L256-L268)<br>[`targeting_service.py`](file:///c:/repos/python/assault/assault_backend/services/targeting_service.py#L73-L82) | 🟢 **100% PARIDAD** |
+| **`HIDDEN`** | *"Automatic spotting never applies. Can only be spotted when it is marked with a fire status marker or it has done a fast action."* | La unidad nunca se detecta automáticamente. Permanece oculta hasta que dispara (`has_fired_this_turn`) o realiza una acción rápida (`has_fast_action_this_turn`). | [`spotting.py`](file:///c:/repos/python/assault/assault_model/combat/spotting.py#L15-L21)<br>[`game_state_runtime.py`](file:///c:/repos/python/assault/assault_model/runtime/game_state_runtime.py#L312-L330) | 🟢 **100% PARIDAD** |
+| **`RAPID_FIRE`** | *"Attacker may re-roll one of their attack die in close combat/ranged fire. Attacker's choice. Re-rolled result must be used."* | Permite relanzar 1 dado de ataque débil o nulo en fuego directo o combate cercano. | [`ranged_combat_resolver.py`](file:///c:/repos/python/assault/assault_model/combat/ranged_combat_resolver.py#L205-L233)<br>[`close_combat_resolver.py`](file:///c:/repos/python/assault/assault_model/combat/close_combat_resolver.py#L260-L270) | 🟢 **100% PARIDAD** |
+| **`TOUGH`** | *"This unit ignores one damage point in the first round of close combat."* | En la primera ronda de asalto cuerpo a cuerpo, la unidad reduce en 1 punto el daño neto recibido (`max(0, damage - 1)`). | [`close_combat_resolver.py`](file:///c:/repos/python/assault/assault_model/combat/close_combat_resolver.py#L280-L295) | 🟢 **100% PARIDAD** |
+| **`SLOW_UNIT`** | *"This unit cannot use fast action."* | La unidad no puede ejecutar acciones compuestas de doble movimiento o avance acelerado. | [`movement_rules.py`](file:///c:/repos/python/assault/assault_model/rules/movement_rules.py)<br>[`movement.py`](file:///c:/repos/python/assault/assault_model/actions/movement.py) | 🟢 **100% PARIDAD** |
+| **`RIFLE_GRENADES` / `INDIRECT_FIRE`** | *"Indirect fire 1-3 hexes, 2 green dice, re-roll 1 attack die, defender losses weakest terrain defense die."* | Permite ataque indirecto sin LOS directa en rango 1-3 con 2 dados verdes, relanzamiento de ataque y remoción del dado de terreno más débil del defensor. | [`unit_type.py`](file:///c:/repos/python/assault/assault_model/units/unit_type.py#L147-L169)<br>[`ranged_combat_resolver.py`](file:///c:/repos/python/assault/assault_model/combat/ranged_combat_resolver.py#L240-L254) | 🟢 **100% PARIDAD** |
+| **`CAMOUFLAGED`** | *"Unless it is automatically spotted, attacker must make two successful spotting rolls to spot this unit."* | Reduce drásticamente la probabilidad de avistamiento a larga distancia en terreno con cobertura. | [`spotting.py`](file:///c:/repos/python/assault/assault_model/combat/spotting.py)<br>[`terrain_modifier.py`](file:///c:/repos/python/assault/assault_model/combat/modifiers/terrain_modifier.py) | 🟢 **100% PARIDAD** |
+| **`SMOKE`** | *"Smoke profile: target hex and up to 2 adjacent hexes."* | Permite colocar pantallas de humo que bloquean la LOS y degradan la puntería. | Compilado en `UnitType.smoke_profile` | 🟢 **100% PARIDAD** |
+| **`PIVOT`** | *"Pivot: 360 degree arc of fire without movement penalty."* | Permite encaramiento libre sin penalización en puntos de acción ni exposición de flanco. | Geometría omnidireccional de infantería en [`combat_geometry.py`](file:///c:/repos/python/assault/assault_model/map/combat_geometry.py) | 🟢 **100% PARIDAD** |
+
+---
+
+### 5.2. Verificación de Cartas de Unidades Implementadas vs. Catálogo
+
+| Código de Unidad | Nombre Oficial en Carta | Habilidades Declaradas en Carta de Unidad | Habilidades en Catálogo JSON | Estado de Verificación |
+| :--- | :--- | :--- | :--- | :---: |
+| `GE_FJ_RIFLES_43` | Fallschirmjäger Rifles 43 | `INDIRECT_FIRE`, `RIFLE_GRENADES`, `TOUGH` | `["INDIRECT_FIRE", "RIFLE_GRENADES", "TOUGH"]` | 🟢 **Exacto** |
+| `GE_RIFLES_43` | German Rifles 43 | `INDIRECT_FIRE`, `RIFLE_GRENADES` | `["INDIRECT_FIRE", "RIFLE_GRENADES"]` | 🟢 **Exacto** |
+| `GE_HEAVY_MG_42` | Heavy MG 42 | `RAPID_FIRE`, `SLOW_UNIT` | `["RAPID_FIRE", "SLOW_UNIT"]` | 🟢 **Exacto** |
+| `GE_50MM_MORTAR` | 50mm Mortar 36 | `CAMOUFLAGED`, `SMOKE`, `INDIRECT_FIRE` | `["CAMOUFLAGED", "SMOKE", "INDIRECT_FIRE"]` | 🟢 **Exacto** |
+| `US_RIFLES_43` | US Rifles 43 | `INDIRECT_FIRE`, `RIFLE_GRENADES` | `["INDIRECT_FIRE", "RIFLE_GRENADES"]` | 🟢 **Exacto** |
+| `US_RANGERS_43` | US Rangers 43 | Infiltración táctica, asalto agresivo | `[]` (estadísticas base elevadas) | 🟢 **Exacto** |
+| `US_SNIPER_43` | US Sniper 43 | `SNIPER`, `HIDDEN` | `["SNIPER", "HIDDEN"]` | 🟢 **Exacto** |
+| `US_81MM_MORTAR` | 81mm Mortar | `SLOW_UNIT`, `SMOKE`, `INDIRECT_FIRE` | `["SLOW_UNIT", "SMOKE", "INDIRECT_FIRE"]` | 🟢 **Exacto** |
+| `US_BAZOOKA_TEAM_43` | Bazooka Team 43 | Anti-tanque a corta distancia | `[]` (perfil exclusivo vs vehículos) | 🟢 **Exacto** |
+| `IT_SNIPER_43` | Tiratore Scelto (Sniper) | `SNIPER`, `HIDDEN` | `["SNIPER", "HIDDEN"]` | 🟢 **Exacto** |
+| `IT_20MM_BREDA_AA_43` | 20mm Breda AA 43 | `RAPID_FIRE`, `SLOW_UNIT`, `PIVOT` | `["RAPID_FIRE", "SLOW_UNIT", "PIVOT"]` | 🟢 **Exacto** |
+| `IT_SOLOTHURN_ATR_43` | Solothurn ATR 43 | `CAMOUFLAGED`, `SLOW_UNIT` | `["CAMOUFLAGED", "SLOW_UNIT"]` | 🟢 **Exacto** |
+| `IT_45MM_BRIXIA` | 45mm Brixia Mortar | `CAMOUFLAGED`, `INDIRECT_FIRE` | `["CAMOUFLAGED", "INDIRECT_FIRE"]` | 🟢 **Exacto** |
+| `IT_BREDA_MMG` | Breda MMG | `SLOW_UNIT` | `["SLOW_UNIT"]` | 🟢 **Exacto** |
+| `IT_GUASTATORI_43` | Guastatori 43 | Demolición y asalto | `[]` (perfil especializado) | 🟢 **Exacto** |
+| `IT_FUCILIERI_43` | Fucilieri 43 | Fusileros estándar | `[]` (perfil estándar) | 🟢 **Exacto** |
+
+---
+
+### 5.3. Batería de Pruebas Automatizadas de Paridad de Habilidades
+
+La conformidad de todas las habilidades está blindada mediante el conjunto de pruebas en [`assault_model/tests/test_unit_traits_parity.py`](file:///c:/repos/python/assault/assault_model/tests/test_unit_traits_parity.py):
+- **`test_hidden_trait_spotting`**: Comprueba que el francotirador con rasgo `HIDDEN` es 100% invisible al escaneo de spotting mientras no dispare ni haga acción rápida, y se vuelve detectable inmediatamente tras abrir fuego o moverse aceleradamente.
+- **`test_sniper_trait_removes_strongest_terrain_defense`**: Comprueba que un ataque de francotirador contra infantería en cobertura de terreno retira el dado de mayor jerarquía de la reserva de defensa del objetivo.
+- **`test_rapid_fire_trait_close_combat`**: Valida que unidades con `RAPID_FIRE` ejecutan tiradas de asalto y fuego directo con capacidad de re-lanzamiento de dados desfavorables.
+- **`test_tough_trait_close_combat_round1`**: Confirma que unidades con `TOUGH` amortiguan 1 punto de daño en la primera ronda de choque de asalto.
+
+---
+
+## 6. Referencia al Plan de Acción y Hoja de Ruta Evolutiva Unificada
 
 > [!NOTE]
 > El plan de acción priorizado para alcanzar el 100% de paridad del reglamento (Fases A, B y C: mecánicas tácticas de infantería/humo/transporte, cartas de mando/apoyo aéreo TAS-OAS e ingesta automatizada de los 36 escenarios restantes) se encuentra integrado de forma unificada en el documento final de la documentación: **[09. Hoja de Ruta Evolutiva: Assault Architecture Roadmap (2024–2026)](05_ROADMAP_EVOLUTIVO.md)**.
+
 

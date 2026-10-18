@@ -33,6 +33,9 @@ class Map:
         # Vertex convention: 1=N and clockwise.
         self.hex_fortifications: Dict[Tuple[int, int], Dict[str, object]] = {}
 
+        # Dynamic smoke markers indexed by axial coordinate (q, r) -> count (Rule 7.2)
+        self.smoke_markers: Dict[Tuple[int, int], int] = {}
+
     # ---------------------------------------------------------
     # Hex retrieval
     # ---------------------------------------------------------
@@ -110,6 +113,86 @@ class Map:
 
     def get_hex_fortification_data(self, q: int, r: int) -> Optional[Dict[str, object]]:
         return self.hex_fortifications.get((q, r))
+
+    # ---------------------------------------------------------
+    # Smoke marker handling (Rule 7.2 & Rule 6.5 Organization Phase)
+    # ---------------------------------------------------------
+    def _normalize_coord(self, q_or_coord, r: Optional[int] = None) -> Tuple[int, int]:
+        if r is None:
+            if hasattr(q_or_coord, "q") and hasattr(q_or_coord, "r"):
+                return (int(q_or_coord.q), int(q_or_coord.r))
+            return (int(q_or_coord[0]), int(q_or_coord[1]))
+        return (int(q_or_coord), int(r))
+
+    def get_smoke_markers(self, q_or_coord, r: Optional[int] = None) -> int:
+        """Return the number of smoke markers on a hex."""
+        coord = self._normalize_coord(q_or_coord, r)
+        return self.smoke_markers.get(coord, 0)
+
+    def add_smoke_markers(
+        self,
+        q_or_coord,
+        count: int,
+        r: Optional[int] = None,
+        max_per_hex: int = 4,
+    ) -> int:
+        """
+        Add smoke markers to a hex up to max_per_hex (Rule 7.2: max 4).
+        Returns the number of markers actually added.
+        """
+        coord = self._normalize_coord(q_or_coord, r)
+        current = self.smoke_markers.get(coord, 0)
+        new_total = min(max_per_hex, current + max(0, count))
+        added = new_total - current
+        if new_total > 0:
+            self.smoke_markers[coord] = new_total
+        # Invalidate map-bound LOS cache
+        if hasattr(self, "_los_cache"):
+            self._los_cache.clear()
+        return added
+
+    def remove_smoke_markers(
+        self,
+        q_or_coord,
+        count: int = 1,
+        r: Optional[int] = None,
+    ) -> int:
+        """Remove smoke markers from a hex. Returns remaining count."""
+        coord = self._normalize_coord(q_or_coord, r)
+        current = self.smoke_markers.get(coord, 0)
+        remaining = max(0, current - count)
+        if remaining == 0:
+            self.smoke_markers.pop(coord, None)
+        else:
+            self.smoke_markers[coord] = remaining
+        if hasattr(self, "_los_cache"):
+            self._los_cache.clear()
+        return remaining
+
+    def dissipate_smoke_markers(self) -> Dict[Tuple[int, int], int]:
+        """
+        Rule 6.5 Organization Phase:
+        Reduce the number of smoke markers on each hex by 1.
+        Markers reduced to 0 are removed.
+        Returns the updated smoke_markers dictionary.
+        """
+        to_remove = []
+        for coord, count in list(self.smoke_markers.items()):
+            if count <= 1:
+                to_remove.append(coord)
+            else:
+                self.smoke_markers[coord] = count - 1
+        for coord in to_remove:
+            self.smoke_markers.pop(coord, None)
+        if hasattr(self, "_los_cache"):
+            self._los_cache.clear()
+        return self.smoke_markers
+
+    def clear_smoke_markers(self) -> None:
+        """Clear all smoke markers from the map."""
+        self.smoke_markers.clear()
+        if hasattr(self, "_los_cache"):
+            self._los_cache.clear()
 
     # ---------------------------------------------------------
     # Vectorized Topology & Static Movement Graph (Roadmap 6.1 & 6.2)

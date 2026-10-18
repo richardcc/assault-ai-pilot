@@ -12,6 +12,7 @@ class ActionType(Enum):
     # Combat
     RANGED_DIRECT = (ActionCategory.COMBAT, "RANGED_DIRECT")
     RANGED_INDIRECT = (ActionCategory.COMBAT, "RANGED_INDIRECT")
+    FIRE_SMOKE = (ActionCategory.COMBAT, "FIRE_SMOKE")
     CLOSE_COMBAT = (ActionCategory.COMBAT, "CLOSE_COMBAT")
 
     # Control / status

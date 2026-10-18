@@ -13,3 +13,4 @@ class AttackSector(Enum):
     FLANK_LEFT = auto()
     FLANK_RIGHT = auto()
     REAR = auto()
+    ABOVE = auto()

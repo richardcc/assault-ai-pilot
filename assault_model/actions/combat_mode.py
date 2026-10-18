@@ -5,4 +5,5 @@ from enum import Enum
 class CombatMode(Enum):
     RANGED_DIRECT = "RANGED_DIRECT"
     RANGED_INDIRECT = "RANGED_INDIRECT"
+    SMOKE = "SMOKE"
     ASSAULT = "ASSAULT"

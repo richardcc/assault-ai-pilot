@@ -43,6 +43,8 @@ class UnitInstance:
         # Spotting (runtime)
         self.spotted_enemies: set[str] = set()
         self.last_seen_turn: dict[str, int] = {}
+        self.has_fired_this_turn: bool = False
+        self.has_fast_action_this_turn: bool = False
 
         # Transport
         self.embarked = False
@@ -263,6 +265,8 @@ class UnitInstance:
         u.last_seen_turn = {}
         u.embarked = self.embarked
         u.carrier_id = self.carrier_id
+        u.has_fired_this_turn = getattr(self, "has_fired_this_turn", False)
+        u.has_fast_action_this_turn = getattr(self, "has_fast_action_this_turn", False)
         if hasattr(self, "passengers"):
             u.passengers = list(self.passengers)
         return u

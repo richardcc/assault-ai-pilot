@@ -210,7 +210,7 @@ def test_tactical_heads_inference_and_aux():
 
 
 def test_trainer_with_tactical_heads_losses():
-    """Verify trainer computes threat, attrition, and morale aux losses with targets and fallbacks."""
+    """Verify trainer computes threat, final ownership, attrition, and morale aux losses with targets and fallbacks."""
     model = EfficientZeroV2Network(
         observation_dim=4,
         hidden_dim=16,
@@ -220,6 +220,7 @@ def test_trainer_with_tactical_heads_losses():
         observation_height=4,
         observation_width=4,
         enable_threat_head=True,
+        enable_final_ownership_head=True,
         enable_attrition_head=True,
         enable_morale_head=True,
         morale_classes=4,
@@ -229,6 +230,7 @@ def test_trainer_with_tactical_heads_losses():
         lr=1e-3,
         aux_objective_enabled=True,
         aux_threat_loss_weight=0.5,
+        aux_final_ownership_loss_weight=0.5,
         aux_attrition_loss_weight=0.5,
         aux_morale_loss_weight=0.5,
         amp_enabled=False,
@@ -244,6 +246,7 @@ def test_trainer_with_tactical_heads_losses():
             reward_target=0.1,
             info={
                 "threat_map_target": torch.ones(1, 4, 4),
+                "final_ownership_target": torch.ones(1, 4, 4),
                 "attrition_target": [0.2, 0.8],
                 "morale_target": 2,
             },
@@ -265,28 +268,31 @@ def test_trainer_with_tactical_heads_losses():
     assert metrics.loss > 0.0
     assert metrics.aux_objective_loss > 0.0
     assert metrics.aux_threat_loss > 0.0
+    assert metrics.aux_final_ownership_loss > 0.0
     assert metrics.aux_attrition_loss > 0.0
     assert metrics.aux_morale_loss > 0.0
 
     metrics_dict = metrics.to_dict()
     assert "aux_threat_loss" in metrics_dict
+    assert "aux_final_ownership_loss" in metrics_dict
     assert "aux_attrition_loss" in metrics_dict
     assert "aux_morale_loss" in metrics_dict
 
 
-def test_all_10_network_heads_topology_and_shapes():
+def test_all_11_network_heads_topology_and_shapes():
     """
-    Verify simultaneously all 10 heads of the production EfficientZeroV2Network:
+    Verify simultaneously all 11 heads of the production EfficientZeroV2Network:
     1. Policy (pi)
     2. Value (v + Two-Hot support logits)
     3. Reward (r + Two-Hot support logits)
     4. Consistency Projection (SimSiam hypersphere)
     5. Threat Map 2D (Spatial heatmap)
-    6. Attrition (Allied/Enemy casualties)
-    7. Morale (4 cohesion classes)
-    8. Macro-Intent (8 HRL doctrinal postures)
-    9. Multi-VP (4 objective features)
-    10. Objective Scalar (1 binary/progress logit)
+    6. Final Ownership Map 2D (KataGo final territory prediction)
+    7. Attrition (Allied/Enemy casualties)
+    8. Morale (4 cohesion classes)
+    9. Macro-Intent (8 HRL doctrinal postures)
+    10. Multi-VP (4 objective features)
+    11. Objective Scalar (1 binary/progress logit)
     """
     net = EfficientZeroV2Network(
         observation_dim=32 * 16 * 16,
@@ -304,6 +310,7 @@ def test_all_10_network_heads_topology_and_shapes():
         support_size=30,
         use_spatial_attention=True,
         enable_threat_head=True,
+        enable_final_ownership_head=True,
         enable_attrition_head=True,
         enable_morale_head=True,
         morale_classes=4,
@@ -324,6 +331,7 @@ def test_all_10_network_heads_topology_and_shapes():
     assert aux["objective_intent_logits"].shape == (b, 8)
     assert aux["multi_vp_pred"].shape == (b, 4)
     assert aux["threat_map_pred"].shape == (b, 1, 16, 16)
+    assert aux["final_ownership_pred"].shape == (b, 1, 16, 16)
     assert aux["attrition_pred"].shape == (b, 2)
     assert aux["morale_pred"].shape == (b, 4)
 
@@ -338,6 +346,7 @@ def test_all_10_network_heads_topology_and_shapes():
     assert next_aux["objective_intent_logits"].shape == (b, 8)
     assert next_aux["multi_vp_pred"].shape == (b, 4)
     assert next_aux["threat_map_pred"].shape == (b, 1, 16, 16)
+    assert next_aux["final_ownership_pred"].shape == (b, 1, 16, 16)
     assert next_aux["attrition_pred"].shape == (b, 2)
     assert next_aux["morale_pred"].shape == (b, 4)
 

@@ -58,5 +58,14 @@ if __name__ == "__main__":
         mlflow_experiment=str(args.mlflow_experiment),
         mlflow_run_name=str(args.mlflow_run_name),
     )
-    print(json.dumps(output, indent=2))
+    run_id = output.get("run_id", "unknown")
+    metrics = output.get("metrics", {})
+    timing = metrics.get("timing_summary", {})
+    print(
+        f"[EfficientZeroV2] Training finished successfully! run_id={run_id} | "
+        f"loss={metrics.get('loss', 0.0):.4f} | "
+        f"total_time={timing.get('total_elapsed_s', 0.0):.1f}s "
+        f"(avg_iter={timing.get('iter_avg_s', 0.0):.2f}s) | "
+        f"summary saved to metrics/summary.json"
+    )
 

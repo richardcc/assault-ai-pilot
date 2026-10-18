@@ -25,6 +25,7 @@ class EfficientTrainMetrics(TrainMetrics):
     aux_intent_loss: float = 0.0
     aux_multi_vp_loss: float = 0.0
     aux_threat_loss: float = 0.0
+    aux_final_ownership_loss: float = 0.0
     aux_attrition_loss: float = 0.0
     aux_morale_loss: float = 0.0
 
@@ -39,6 +40,7 @@ class EfficientTrainMetrics(TrainMetrics):
         d["aux_intent_loss"] = float(self.aux_intent_loss)
         d["aux_multi_vp_loss"] = float(self.aux_multi_vp_loss)
         d["aux_threat_loss"] = float(self.aux_threat_loss)
+        d["aux_final_ownership_loss"] = float(self.aux_final_ownership_loss)
         d["aux_attrition_loss"] = float(self.aux_attrition_loss)
         d["aux_morale_loss"] = float(self.aux_morale_loss)
         return d
@@ -72,6 +74,7 @@ class EfficientZeroV2Trainer(EfficientZeroV2BaseTrainer):
         aux_multi_vp_loss_weight: float = 0.5,
         aux_multi_vp_feature_dim: int = 0,
         aux_threat_loss_weight: float = 0.2,
+        aux_final_ownership_loss_weight: float = 0.2,
         aux_attrition_loss_weight: float = 0.2,
         aux_morale_loss_weight: float = 0.2,
         compute_grad_norm: bool = True,
@@ -117,6 +120,7 @@ class EfficientZeroV2Trainer(EfficientZeroV2BaseTrainer):
         self.aux_multi_vp_loss_weight = float(max(0.0, aux_multi_vp_loss_weight))
         self.aux_multi_vp_feature_dim = int(max(0, aux_multi_vp_feature_dim))
         self.aux_threat_loss_weight = float(max(0.0, aux_threat_loss_weight))
+        self.aux_final_ownership_loss_weight = float(max(0.0, aux_final_ownership_loss_weight))
         self.aux_attrition_loss_weight = float(max(0.0, aux_attrition_loss_weight))
         self.aux_morale_loss_weight = float(max(0.0, aux_morale_loss_weight))
         self.compute_grad_norm = bool(compute_grad_norm)
@@ -389,6 +393,36 @@ class EfficientZeroV2Trainer(EfficientZeroV2BaseTrainer):
                             target_threats_t = target_threats_t.unsqueeze(1)
                 aux_threat_loss = F.binary_cross_entropy_with_logits(threat_preds, target_threats_t)
 
+            aux_final_ownership_loss = torch.tensor(0.0, dtype=torch.float32, device=self.device)
+            if (
+                isinstance(aux, dict)
+                and "final_ownership_pred" in aux
+                and aux["final_ownership_pred"] is not None
+                and self.aux_final_ownership_loss_weight > 0.0
+            ):
+                fo_preds = aux["final_ownership_pred"]
+                target_ownerships = []
+                for s in batch:
+                    info_dict = dict(s.info or {})
+                    if "final_ownership_target" in info_dict and isinstance(info_dict["final_ownership_target"], torch.Tensor):
+                        target_ownerships.append(info_dict["final_ownership_target"].to(self.device))
+                    elif "final_ownership_target" in info_dict and isinstance(info_dict["final_ownership_target"], (list, tuple)):
+                        target_ownerships.append(torch.tensor(info_dict["final_ownership_target"], dtype=torch.float32, device=self.device))
+                    else:
+                        h = int(getattr(model, "observation_height", 16))
+                        w = int(getattr(model, "observation_width", 16))
+                        target_ownerships.append(torch.zeros(1, h, w, dtype=torch.float32, device=self.device))
+                target_ownerships_t = torch.stack(target_ownerships, dim=0).to(self.device, non_blocking=True)
+                if target_ownerships_t.shape != fo_preds.shape:
+                    try:
+                        target_ownerships_t = target_ownerships_t.view_as(fo_preds)
+                    except Exception:
+                        if fo_preds.dim() == 2 and target_ownerships_t.dim() >= 3:
+                            target_ownerships_t = target_ownerships_t.view(target_ownerships_t.shape[0], -1)
+                        elif fo_preds.dim() == 4 and target_ownerships_t.dim() == 3:
+                            target_ownerships_t = target_ownerships_t.unsqueeze(1)
+                aux_final_ownership_loss = F.binary_cross_entropy_with_logits(fo_preds, target_ownerships_t)
+
             aux_attrition_loss = torch.tensor(0.0, dtype=torch.float32, device=self.device)
             if (
                 isinstance(aux, dict)
@@ -443,6 +477,7 @@ class EfficientZeroV2Trainer(EfficientZeroV2BaseTrainer):
                 (self.aux_intent_loss_weight * aux_intent_loss)
                 + (self.aux_multi_vp_loss_weight * aux_multi_vp_loss)
                 + (self.aux_threat_loss_weight * aux_threat_loss)
+                + (self.aux_final_ownership_loss_weight * aux_final_ownership_loss)
                 + (self.aux_attrition_loss_weight * aux_attrition_loss)
                 + (self.aux_morale_loss_weight * aux_morale_loss)
             )
@@ -610,6 +645,7 @@ class EfficientZeroV2Trainer(EfficientZeroV2BaseTrainer):
                 aux_intent_loss.detach().to(torch.float32),
                 aux_multi_vp_loss.detach().to(torch.float32),
                 aux_threat_loss.detach().to(torch.float32),
+                aux_final_ownership_loss.detach().to(torch.float32),
                 aux_attrition_loss.detach().to(torch.float32),
                 aux_morale_loss.detach().to(torch.float32),
                 grad_norm_t.detach().to(torch.float32),
@@ -624,7 +660,7 @@ class EfficientZeroV2Trainer(EfficientZeroV2BaseTrainer):
             value_loss=float(mv[2]),
             reward_loss=float(mv[3]),
             objective_loss=float(mv[4]),
-            grad_norm=float(mv[12]),
+            grad_norm=float(mv[13]),
             consistency_loss=float(mv[5]),
             reanalysis_coverage=float(reanalysis_coverage),
             reanalysis_target_drift=float(reanalysis_target_drift),
@@ -634,7 +670,8 @@ class EfficientZeroV2Trainer(EfficientZeroV2BaseTrainer):
             aux_intent_loss=float(mv[7]),
             aux_multi_vp_loss=float(mv[8]),
             aux_threat_loss=float(mv[9]),
-            aux_attrition_loss=float(mv[10]),
-            aux_morale_loss=float(mv[11]),
+            aux_final_ownership_loss=float(mv[10]),
+            aux_attrition_loss=float(mv[11]),
+            aux_morale_loss=float(mv[12]),
         )
 

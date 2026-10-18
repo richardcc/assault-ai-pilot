@@ -52,24 +52,53 @@ function CurriculumProgressionChart({ steps }: { steps: CurriculumStepMetric[] }
   const validSteps = steps.filter((s) => s.elo !== null);
   if (validSteps.length === 0) return null;
 
-  const minElo = Math.min(...validSteps.map((s) => s.elo!)) - 60;
-  const maxElo = Math.max(...validSteps.map((s) => s.elo!)) + 60;
-  const rangeElo = Math.max(120, maxElo - minElo);
+  const minElo = Math.min(...validSteps.map((s) => s.elo!)) - 70;
+  const maxElo = Math.max(...validSteps.map((s) => s.elo!)) + 75;
+  const rangeElo = Math.max(130, maxElo - minElo);
 
-  const width = 860;
-  const height = 125;
-  const padX = 55;
-  const padY = 28;
+  const width = Math.max(860, validSteps.length * 78);
+  const height = 152;
+  const padX = 56;
+  const padY = 34;
   const chartW = width - padX * 2;
-  const chartH = height - padY * 2 - 10;
+  const chartH = height - padY - 34;
 
   const points = validSteps.map((s, idx) => {
     const x = padX + (validSteps.length > 1 ? (idx / (validSteps.length - 1)) * chartW : chartW / 2);
     const y = padY + chartH - ((s.elo! - minElo) / rangeElo) * chartH;
-    return { x, y, step: s };
+    return { x, y, step: s, idx };
   });
 
   const pathD = points.map((p, idx) => `${idx === 0 ? "M" : "L"} ${p.x.toFixed(1)} ${p.y.toFixed(1)}`).join(" ");
+
+  const selectedPoints = points.filter((p) => p.step.isPhaseSelected);
+  const selectedPathD = selectedPoints
+    .map((p, idx) => `${idx === 0 ? "M" : "L"} ${p.x.toFixed(1)} ${p.y.toFixed(1)}`)
+    .join(" ");
+
+  // Compute contiguous phase groups on the chart for visual grouping bands
+  const phaseBands: Array<{
+    phaseName: string;
+    groupIdx: number;
+    startX: number;
+    endX: number;
+  }> = [];
+  points.forEach((p, i) => {
+    const stepSpacing = validSteps.length > 1 ? chartW / (validSteps.length - 1) : 60;
+    const halfStep = Math.min(36, stepSpacing * 0.44);
+    const last = phaseBands[phaseBands.length - 1];
+    if (!last || last.groupIdx !== p.step.phaseGroupIndex) {
+      phaseBands.push({
+        phaseName: p.step.phaseName,
+        groupIdx: p.step.phaseGroupIndex,
+        startX: p.x - halfStep,
+        endX: p.x + halfStep,
+      });
+    } else {
+      last.endX = p.x + halfStep;
+    }
+    void i;
+  });
 
   const latest = validSteps[validSteps.length - 1];
   const first = validSteps[0];
@@ -99,7 +128,7 @@ function CurriculumProgressionChart({ steps }: { steps: CurriculumStepMetric[] }
           gap: 10,
         }}
       >
-        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
           <span style={{ fontSize: 13, fontWeight: 700, color: "#38bdf8" }}>
             📈 Curva de Progresión de ELO por Fase del Currículum
           </span>
@@ -114,7 +143,24 @@ function CurriculumProgressionChart({ steps }: { steps: CurriculumStepMetric[] }
               fontWeight: 600,
             }}
           >
-            {validSteps.length} Fases Cronometradas
+            {validSteps.length} Ciclos ({phaseBands.length} Fases)
+          </span>
+          <span
+            style={{
+              fontSize: 11,
+              background: "#451a0390",
+              border: "1px solid #f59e0b80",
+              color: "#fde047",
+              padding: "1px 7px",
+              borderRadius: 4,
+              fontWeight: 700,
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 4,
+            }}
+            title="El ciclo con mayor calidad/ELO o que superó el Gate en cada fase queda marcado con ★ y conectado por la línea dorada"
+          >
+            ★ Elegido por Fase ({selectedPoints.length})
           </span>
         </div>
         <div style={{ display: "flex", gap: 14, fontSize: 12, flexWrap: "wrap", alignItems: "center" }}>
@@ -128,7 +174,7 @@ function CurriculumProgressionChart({ steps }: { steps: CurriculumStepMetric[] }
           </div>
           <div>
             <span className="muted">Pico ELO:</span>{" "}
-            <strong style={{ color: "#c084fc" }}>{peak}</strong>
+            <strong style={{ color: "#fde047" }}>★ {peak}</strong>
           </div>
           <div>
             <span className="muted">Win Rate Promedio:</span>{" "}
@@ -153,14 +199,29 @@ function CurriculumProgressionChart({ steps }: { steps: CurriculumStepMetric[] }
       <div style={{ width: "100%", overflowX: "auto" }}>
         <svg
           viewBox={`0 0 ${width} ${height}`}
-          style={{ width: "100%", minWidth: 620, height: 125, display: "block" }}
+          style={{ width: "100%", minWidth: 660, height: 152, display: "block" }}
         >
           <defs>
             <linearGradient id="eloAreaGrad" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor="#38bdf8" stopOpacity={0.28} />
+              <stop offset="0%" stopColor="#38bdf8" stopOpacity={0.24} />
               <stop offset="100%" stopColor="#38bdf8" stopOpacity={0.0} />
             </linearGradient>
           </defs>
+
+          {/* Phase group background bands */}
+          {phaseBands.map((band, bIdx) => (
+            <rect
+              key={`band-${bIdx}`}
+              x={band.startX}
+              y={padY - 18}
+              width={Math.max(24, band.endX - band.startX)}
+              height={chartH + 38}
+              rx={5}
+              fill={bIdx % 2 === 0 ? "#1e293b38" : "#0f172a45"}
+              stroke={bIdx % 2 === 0 ? "#33415555" : "#1e293b55"}
+              strokeWidth="1"
+            />
+          ))}
 
           {/* Grid lines */}
           <line x1={padX} y1={padY} x2={width - padX} y2={padY} stroke="#1e293b" strokeDasharray="3 3" />
@@ -182,79 +243,147 @@ function CurriculumProgressionChart({ steps }: { steps: CurriculumStepMetric[] }
             />
           )}
 
-          {/* Line */}
+          {/* All-cycles blue line */}
           {points.length > 1 && (
             <path
               d={pathD}
               fill="none"
               stroke="#38bdf8"
-              strokeWidth="2.5"
+              strokeWidth="2.2"
               strokeLinecap="round"
               strokeLinejoin="round"
+              opacity={0.75}
+            />
+          )}
+
+          {/* Chosen-per-phase gold trendline */}
+          {selectedPoints.length > 1 && (
+            <path
+              d={selectedPathD}
+              fill="none"
+              stroke="#f59e0b"
+              strokeWidth="2.2"
+              strokeDasharray="6 4"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              opacity={0.95}
             />
           )}
 
           {/* Points & Labels */}
           {points.map((p, idx) => {
-            const isLatest = idx === points.length - 1;
+            const isChosen = p.step.isPhaseSelected;
             const isPeak = p.step.elo === peak;
             const cleanPhaseName = p.step.phaseName.replace(/^phase\d*_?/, "");
+            const shortPhase = cleanPhaseName.length > 12 ? `${cleanPhaseName.slice(0, 10)}..` : cleanPhaseName;
+            const cycleTag = p.step.totalCyclesInPhase > 1 ? ` C${p.step.cycleInPhase}` : "";
+            const badgeText = isChosen ? `★ ${p.step.elo}` : `${p.step.elo}`;
+            const badgeWidth = isChosen ? 46 : 32;
+
             return (
               <g key={idx}>
+                <title>
+                  {`${p.step.phaseName} (Ciclo ${p.step.cycleInPhase}/${p.step.totalCyclesInPhase})${
+                    isChosen ? " — ★ ELEGIDO DE LA FASE" : ""
+                  }\nRun: ${p.step.runId}\nELO: ${p.step.elo}\nWin Rate: ${
+                    p.step.winRate !== null ? (p.step.winRate * 100).toFixed(1) + "%" : "-"
+                  }\nGate: ${p.step.gateStatus || "-"}`}
+                </title>
+
                 {/* Connecting vertical tick */}
                 <line
                   x1={p.x}
                   y1={p.y}
                   x2={p.x}
                   y2={padY + chartH}
-                  stroke="#334155"
-                  strokeWidth="1"
+                  stroke={isChosen ? "#f59e0b" : "#334155"}
+                  strokeWidth={isChosen ? "1.5" : "1"}
                   strokeDasharray="2 2"
-                  opacity={0.6}
+                  opacity={isChosen ? 0.85 : 0.5}
                 />
+
+                {/* Outer glowing ring for chosen cycle of phase */}
+                {isChosen && (
+                  <circle
+                    cx={p.x}
+                    cy={p.y}
+                    r={9.5}
+                    fill="#f59e0b28"
+                    stroke="#fbbf24"
+                    strokeWidth="1.6"
+                  />
+                )}
+
                 {/* Point */}
                 <circle
                   cx={p.x}
                   cy={p.y}
-                  r={isLatest || isPeak ? 5.5 : 4}
-                  fill={isPeak ? "#a855f7" : isLatest ? "#38bdf8" : "#0284c7"}
+                  r={isChosen ? 5.5 : 4}
+                  fill={isChosen ? "#fbbf24" : isPeak ? "#a855f7" : "#0284c7"}
                   stroke="#0f172a"
                   strokeWidth="2"
                 />
+
+                {/* Pill background for chosen ELO badge */}
+                {isChosen && (
+                  <rect
+                    x={p.x - badgeWidth / 2}
+                    y={p.y - 25}
+                    width={badgeWidth}
+                    height={15}
+                    rx={4}
+                    fill="#451a03"
+                    stroke="#f59e0b"
+                    strokeWidth="1"
+                  />
+                )}
+
                 {/* ELO badge label */}
                 <text
                   x={p.x}
-                  y={p.y - 10}
+                  y={isChosen ? p.y - 14 : p.y - 9}
                   textAnchor="middle"
-                  fill={isPeak ? "#c084fc" : isLatest ? "#38bdf8" : "#cbd5e1"}
-                  fontSize={11}
-                  fontWeight={700}
+                  fill={isChosen ? "#fef08a" : "#cbd5e1"}
+                  fontSize={isChosen ? 10.5 : 10.5}
+                  fontWeight={isChosen ? 800 : 600}
                 >
-                  {p.step.elo}
+                  {badgeText}
                 </text>
+
                 {/* Win rate subtext */}
                 {p.step.winRate !== null && (
                   <text
                     x={p.x}
-                    y={p.y + 16}
+                    y={p.y + 18}
                     textAnchor="middle"
-                    fill="#34d399"
+                    fill={isChosen ? "#4ade80" : "#34d399"}
                     fontSize={9.5}
-                    fontWeight={600}
+                    fontWeight={isChosen ? 700 : 600}
                   >
                     {(p.step.winRate * 100).toFixed(0)}%
                   </text>
                 )}
-                {/* Phase bottom label */}
+
+                {/* Cycle & Phase bottom label */}
                 <text
                   x={p.x}
-                  y={height - 2}
+                  y={height - 14}
                   textAnchor="middle"
-                  fill="#94a3b8"
+                  fill={isChosen ? "#fde047" : "#94a3b8"}
                   fontSize={9.5}
-                  fontWeight={isLatest ? 700 : 500}
+                  fontWeight={isChosen ? 700 : 500}
                 >
-                  {cleanPhaseName.length > 13 ? `${cleanPhaseName.slice(0, 11)}..` : cleanPhaseName}
+                  {shortPhase}
+                </text>
+                <text
+                  x={p.x}
+                  y={height - 3}
+                  textAnchor="middle"
+                  fill={isChosen ? "#fbbf24" : "#64748b"}
+                  fontSize={8.5}
+                  fontWeight={isChosen ? 800 : 600}
+                >
+                  {isChosen ? `★${cycleTag || " Elegido"}` : cycleTag.trim() || `F${p.step.stepIndex}`}
                 </text>
               </g>
             );
@@ -1063,23 +1192,55 @@ export function CatalogPage() {
                                   );
                                 }
                                 return (
-                                  <tr key={String(t.run_id || Math.random())}>
+                                  <tr
+                                    key={String(t.run_id || Math.random())}
+                                    style={
+                                      sm?.isPhaseSelected
+                                        ? {
+                                            background: "#451a0325",
+                                            borderLeft: "3px solid #f59e0b",
+                                          }
+                                        : undefined
+                                    }
+                                  >
                                     <td><b>{String(t.run_id || "-")}</b></td>
                                     <td>
                                       {phaseName !== "-" ? (
-                                        <span
-                                          style={{
-                                            background: "#0284c720",
-                                            border: "1px solid #0284c740",
-                                            color: "#38bdf8",
-                                            padding: "2px 6px",
-                                            borderRadius: 4,
-                                            fontSize: 11,
-                                            fontWeight: 600,
-                                          }}
-                                        >
-                                          {phaseName}
-                                        </span>
+                                        <div style={{ display: "inline-flex", alignItems: "center", gap: 5, flexWrap: "wrap" }}>
+                                          <span
+                                            style={{
+                                              background: sm?.isPhaseSelected ? "#451a0390" : "#0284c720",
+                                              border: `1px solid ${sm?.isPhaseSelected ? "#f59e0b80" : "#0284c740"}`,
+                                              color: sm?.isPhaseSelected ? "#fde047" : "#38bdf8",
+                                              padding: "2px 6px",
+                                              borderRadius: 4,
+                                              fontSize: 11,
+                                              fontWeight: 700,
+                                            }}
+                                          >
+                                            {phaseName}
+                                            {sm && sm.totalCyclesInPhase > 1
+                                              ? ` (C${sm.cycleInPhase}/${sm.totalCyclesInPhase})`
+                                              : ""}
+                                          </span>
+                                          {sm?.isPhaseSelected && (
+                                            <span
+                                              style={{
+                                                background: "#f59e0b25",
+                                                border: "1px solid #f59e0b90",
+                                                color: "#fbbf24",
+                                                padding: "1px 5px",
+                                                borderRadius: 3,
+                                                fontSize: 9.5,
+                                                fontWeight: 800,
+                                                whiteSpace: "nowrap",
+                                              }}
+                                              title="Mejor ciclo elegido de esta fase para promover a la siguiente fase"
+                                            >
+                                              ★ ELEGIDO
+                                            </span>
+                                          )}
+                                        </div>
                                       ) : (
                                         <span className="muted">-</span>
                                       )}
@@ -1110,16 +1271,16 @@ export function CatalogPage() {
                                         <div style={{ display: "inline-flex", alignItems: "center", gap: 5 }}>
                                           <span
                                             style={{
-                                              background: "#0284c725",
-                                              border: "1px solid #0284c760",
-                                              color: "#38bdf8",
+                                              background: sm.isPhaseSelected ? "#451a0390" : "#0284c725",
+                                              border: `1px solid ${sm.isPhaseSelected ? "#f59e0b90" : "#0284c760"}`,
+                                              color: sm.isPhaseSelected ? "#fde047" : "#38bdf8",
                                               padding: "2px 7px",
                                               borderRadius: 4,
                                               fontSize: 12,
                                               fontWeight: 700,
                                             }}
                                           >
-                                            {sm.elo}
+                                            {sm.isPhaseSelected ? `★ ${sm.elo}` : sm.elo}
                                           </span>
                                           {sm.deltaElo !== null && (
                                             <span

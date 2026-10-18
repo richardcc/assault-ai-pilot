@@ -117,17 +117,44 @@ def delete_model_experiment(
         except Exception:
             pass
 
-    # 6. Remove stale parquet indexes so merge doesn't retain deleted models
-    indexes_dir = reporting_dir / "indexes"
-    if indexes_dir.exists():
-        for pq in indexes_dir.glob("*.parquet"):
-            try:
-                pq.unlink(missing_ok=True)
-            except Exception:
-                pass
+    # 6. Delete directly from DuckDB and update Parquet indexes & slim catalog in-place
+    pub_res = {"catalog_mode": "duckdb_in_place_fast"}
+    try:
+        import duckdb  # type: ignore
+        from mlops.reporting.catalog_duckdb import load_catalog_summary_from_duckdb
+        from mlops.catalog_publisher_v2 import _atomic_write_json
+        from mlops.contracts_v2 import SCHEMA_VERSION_V2
 
-    # 7. Re-publish catalog from surviving disk runs
-    pub_res = publish_catalog_snapshot(repo_root=repo_root)
+        indexes_dir = reporting_dir / "indexes"
+        if duckdb_path.exists():
+            con = duckdb.connect(str(duckdb_path))
+            try:
+                for rid in run_ids:
+                    con.execute("DELETE FROM catalog_trains WHERE run_id = ?", [rid])
+                    con.execute("DELETE FROM catalog_evals WHERE train_run_id = ?", [rid])
+                    con.execute("DELETE FROM catalog_eval_result_sides WHERE train_run_id = ?", [rid])
+                con.execute("DELETE FROM catalog_models WHERE model_id = ?", [model_id])
+                con.execute("DELETE FROM catalog_trains WHERE model_id = ?", [model_id])
+                con.execute("DELETE FROM catalog_evals WHERE model_id = ?", [model_id])
+                con.execute("DELETE FROM catalog_eval_result_sides WHERE model_id = ?", [model_id])
+
+                if indexes_dir.exists():
+                    con.execute(f"COPY catalog_models TO '{(indexes_dir / 'catalog_models.parquet').as_posix()}' (FORMAT PARQUET)")
+                    con.execute(f"COPY catalog_trains TO '{(indexes_dir / 'catalog_trains.parquet').as_posix()}' (FORMAT PARQUET)")
+                    con.execute(f"COPY catalog_evals TO '{(indexes_dir / 'catalog_evals.parquet').as_posix()}' (FORMAT PARQUET)")
+                    con.execute(f"COPY catalog_eval_result_sides TO '{(indexes_dir / 'catalog_eval_result_sides.parquet').as_posix()}' (FORMAT PARQUET)")
+            finally:
+                con.close()
+
+            slim_payload = load_catalog_summary_from_duckdb(repo_root=repo_root)
+            if slim_payload:
+                slim_payload["schema_version"] = SCHEMA_VERSION_V2
+                slim_payload["catalog_mode"] = "duckdb_primary_fast_delete"
+                out_catalog = reporting_dir / "model_catalog_latest.json"
+                _atomic_write_json(out_catalog, slim_payload)
+    except Exception:
+        # Safe fallback: full publish with debug full catalog disabled
+        pub_res = publish_catalog_snapshot(repo_root=repo_root, include_debug_full_catalog=False)
 
     return {
         "ok": True,

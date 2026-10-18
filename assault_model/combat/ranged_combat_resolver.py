@@ -6,9 +6,10 @@ from assault_model.combat.critical_table import CRITICAL_TABLE
 from assault_model.combat.critical_effect import CriticalEffect
 from assault_model.combat.dice_color import DiceColor
 from assault_model.combat.dice_face import DiceFace
+from assault_model.combat.attack_sector import AttackSector
 from assault_model.map.combat_geometry import determine_attack_sector
 from assault_model.runtime.execution_context import ExecutionContext
-from assault_model.combat.battle_die import DiceResult
+from assault_model.combat.battle_die import DiceResult, BattleDie
 from assault_model.combat.dice_comparison import compare_dice
 from assault_model.map.terrain_config import terrain_config
 from assault_model.rules.fortification_rules import FortificationRules
@@ -85,12 +86,22 @@ def resolve_ranged_combat(
 ) -> CombatResolutionResult:
 
     game_map = context.game_map if context and context.game_map else None
-    terrain_cfg = context.terrain_config if context and hasattr(context, "terrain_config") else terrain_config
+    terrain_cfg = (
+        context.terrain_config
+        if context and hasattr(context, "terrain_config") and context.terrain_config is not None
+        else (getattr(game_map, "terrain_config", None) or terrain_config)
+    )
 
     # =================================================
     # FIRE MODE (consistent with ActionCatalog)
     # =================================================
-    attack_mode = attacker.unit_type._resolve_attack_mode(distance)
+    action_mode = getattr(action, "combat_mode", None)
+    if action_mode == CombatMode.RANGED_INDIRECT or getattr(action, "attack_mode", None) == "INDIRECT_FIRE":
+        attack_mode = "INDIRECT_FIRE"
+    elif action_mode == CombatMode.RANGED_DIRECT or getattr(action, "attack_mode", None) == "DIRECT_FIRE":
+        attack_mode = "DIRECT_FIRE"
+    else:
+        attack_mode = attacker.unit_type._resolve_attack_mode(distance)
     is_indirect = attack_mode == "INDIRECT_FIRE"
 
     # =================================================
@@ -160,31 +171,113 @@ def resolve_ranged_combat(
                 return CombatResolutionResult([], [], [])
 
     # ---------------- ATTACK ----------------
-    attack_colors = list(
-        attacker.unit_type.get_attack_dice(
-            distance=distance,
-            target_category=target.unit_type.category,
+    try:
+        attack_colors = list(
+            attacker.unit_type.get_attack_dice(
+                distance=distance,
+                target_category=target.unit_type.category,
+                mode=attack_mode,
+            )
         )
-    )
+    except TypeError:
+        # Backward-compatibility fallback for mock lambdas in older tests
+        attack_colors = list(
+            attacker.unit_type.get_attack_dice(
+                distance=distance,
+                target_category=target.unit_type.category,
+            )
+        )
 
     if getattr(attacker, "suppressed", False) and attack_colors:
         # Rulebook 10.8.1: a suppressed attacker loses its WEAKEST attack die.
         weakest = min(attack_colors, key=lambda c: int(c))
         attack_colors.remove(weakest)
 
-    attack_results = AttackDicePool(attack_colors).roll()
+    target_cat = getattr(getattr(target, "unit_type", None), "category", None)
+    target_cat_val = str(getattr(target_cat, "value", target_cat)).upper()
+    is_vehicle = target_cat_val == "VEHICLE"
+
+    # Rule 7.1.2: Indirect Fire on Vehicles
+    if is_indirect and is_vehicle:
+        preliminary_results = AttackDicePool(attack_colors).roll()
+        # Blank or suppressed results are put to one side. Keep only dice with damage or critical hit symbols.
+        remaining_dice_colors = []
+        for die in preliminary_results:
+            has_dmg = any(
+                "CRITICAL" in getattr(f, "name", str(f)).upper()
+                or "HIT" in getattr(f, "name", str(f)).upper()
+                or "DAMAGE" in getattr(f, "name", str(f)).upper()
+                for f in getattr(die, "faces", [])
+            )
+            if has_dmg:
+                remaining_dice_colors.append(die.color)
+
+        if not remaining_dice_colors:
+            _trace("INDIRECT_VEHICLE_INEFFECTIVE", attacker=attacker.unit_id, defender=target.unit_id)
+            return CombatResolutionResult([], [], [])
+
+        # The actual attack roll now takes place with any remaining dice
+        attack_results = AttackDicePool(remaining_dice_colors).roll()
+    else:
+        attack_results = AttackDicePool(attack_colors).roll()
+
+    # Rule Rifle Grenades / Indirect Reroll / Rapid Fire ("Attacker may re-roll one of their attack die. Re-rolled result must be used.")
+    indirect_profile = getattr(attacker.unit_type, "indirect_fire_profile", {}) or {}
+    can_reroll = (
+        (is_indirect and indirect_profile.get("reroll", False))
+        or _has_trait(attacker, "ATTACK_DIE_REROLL")
+        or _has_trait(attacker, "RAPID_FIRE")
+    )
+    if can_reroll and attack_results:
+        def _die_score(die):
+            score = 0
+            for f in getattr(die, "faces", []):
+                fn = getattr(f, "name", str(f)).upper()
+                if "CRITICAL" in fn:
+                    score += 3
+                elif "HIT" in fn or "DAMAGE" in fn:
+                    score += 2
+                elif "SUPPRESS" in fn:
+                    score += 1
+            return score
+
+        weakest_idx = min(range(len(attack_results)), key=lambda i: _die_score(attack_results[i]))
+        if _die_score(attack_results[weakest_idx]) < 2:
+            rerolled_die = BattleDie(attack_results[weakest_idx].color).roll()
+            _trace(
+                "ATTACK_DIE_REROLL",
+                attacker=attacker.unit_id,
+                old_faces=[f.name for f in attack_results[weakest_idx].faces],
+                new_faces=[f.name for f in rerolled_die.faces],
+            )
+            attack_results[weakest_idx] = rerolled_die
 
     # ---------------- SECTOR ----------------
-    sector = determine_attack_sector(
-        attacker_pos=attacker.position,
-        defender_pos=target.position,
-        defender_facing=getattr(target, "facing", "N"),
-    )
+    if is_indirect and is_vehicle:
+        # Rule 7.1.2: A vehicle will normally use its flank defense dice (10.9.3)
+        # when calculating which dice it receives from indirect fire.
+        # If at least one of the remaining attack dice shows a critical hit result,
+        # it is assumed to be a direct hit on that vehicle and the vehicle will instead use its above defense dice.
+        has_crit = any(
+            any("CRITICAL" in getattr(f, "name", str(f)).upper() for f in getattr(d, "faces", []))
+            for d in attack_results
+        )
+        sector = AttackSector.ABOVE if has_crit else AttackSector.FLANK_LEFT
+    else:
+        sector = determine_attack_sector(
+            attacker_pos=attacker.position,
+            defender_pos=target.position,
+            defender_facing=getattr(target, "facing", "N"),
+        )
 
     # ---------------- DEFENSE ----------------
     defense_base = list(
         target.unit_type.get_defense_dice(sector=sector)
     )
+    # Rule 7.1.2: In any case the vehicle receives one additional green die for its defense roll.
+    if is_indirect and is_vehicle:
+        defense_base.append(DiceColor.GREEN)
+
     # Rule 9.3 (MVP): defender gains extra defense when attacker uses
     # move&fire / fire&move composite actions.
     if bool(getattr(action, "move_fire_defense_bonus", False)):
@@ -200,11 +293,18 @@ def resolve_ranged_combat(
             terrain_mod = TerrainModifier.from_hex(
                 hex_,
                 target,
-                los=(None if is_indirect else los)
+                los=(None if is_indirect else los),
+                terrain_cfg=terrain_cfg,
             )
             defense_colors = terrain_mod.modify_defense(defense_colors)
             terrain_bonus = defense_colors[len(defense_base):]
-            if is_indirect and _has_trait(attacker, "REMOVE_WEAKEST_TERRAIN_DEFENSE") and terrain_bonus:
+
+            def_loss = indirect_profile.get("defense_loss", "NONE") if is_indirect else "NONE"
+            if (
+                is_indirect
+                and (def_loss == "WEAKEST_TERRAIN" or _has_trait(attacker, "REMOVE_WEAKEST_TERRAIN_DEFENSE"))
+                and terrain_bonus
+            ):
                 removed = _remove_weakest_die(terrain_bonus)
                 # Keep effective defense pool consistent with updated terrain bonus.
                 defense_colors = list(defense_base) + list(terrain_bonus)
@@ -217,7 +317,7 @@ def resolve_ranged_combat(
             target_cat = getattr(getattr(target, "unit_type", None), "category", None)
             target_cat_value = str(getattr(target_cat, "value", target_cat)).upper()
             if (
-                _has_trait(attacker, "REMOVE_STRONGEST_TERRAIN_DEFENSE")
+                (def_loss == "STRONGEST_TERRAIN" or _has_trait(attacker, "REMOVE_STRONGEST_TERRAIN_DEFENSE") or _has_trait(attacker, "SNIPER"))
                 and target_cat_value != "VEHICLE"
                 and terrain_bonus
             ):

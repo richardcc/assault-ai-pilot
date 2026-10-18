@@ -16,12 +16,13 @@ class TerrainModifier(DiceModifier):
 
 
     @staticmethod
-    def from_hex(hex_, unit, los=None):
+    def from_hex(hex_, unit, los=None, terrain_cfg=None):
         """
         Build a TerrainModifier using:
         - terrain (from hex)
         - unit class
         - LOS condition (optional)
+        - optional custom terrain_config
         """
 
         terrain_name = hex_.get_terrain()
@@ -34,7 +35,8 @@ class TerrainModifier(DiceModifier):
             class_name = unit.unit_type.category.name
 
         # ✅ base defense from terrain
-        dice_names = terrain_config.get_defense_dice(
+        cfg = terrain_cfg if terrain_cfg is not None else terrain_config
+        dice_names = cfg.get_defense_dice(
             terrain_name,
             class_name
         )

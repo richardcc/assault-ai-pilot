@@ -263,8 +263,10 @@ def _terrain_los_at(coord: HexCoord | tuple[int, int], game_map, terrain_config)
     if not hex_:
         return None
     terrain = hex_.get_terrain()
+    if not terrain_config or not hasattr(terrain_config, "get"):
+        return "CLEAR"
     config = terrain_config.get(terrain)
-    return config.get("los", "CLEAR") if config else "CLEAR"
+    return config.get("los", "CLEAR") if isinstance(config, dict) else "CLEAR"
 
 
 def _get_map_los_lookup(game_map, terrain_config) -> tuple[dict[tuple[int, int], str], int]:
@@ -284,10 +286,11 @@ def _get_map_los_lookup(game_map, terrain_config) -> tuple[dict[tuple[int, int],
         return cached[1], terrain_sig
 
     lookup: dict[tuple[int, int], str] = {}
+    has_get = terrain_config and hasattr(terrain_config, "get")
     for h in game_map.hexes:
         terrain = h.get_terrain()
-        cfg = terrain_config.get(terrain) if terrain_config else None
-        lookup[(h.q, h.r)] = cfg.get("los", "CLEAR") if cfg else "CLEAR"
+        cfg = terrain_config.get(terrain) if has_get else None
+        lookup[(h.q, h.r)] = cfg.get("los", "CLEAR") if isinstance(cfg, dict) else "CLEAR"
 
     game_map._los_terrain_lookup_cache = (cache_key, lookup)
     return lookup, terrain_sig
@@ -377,6 +380,16 @@ def precompute_visibility_matrix(game_map, terrain_config) -> tuple[np.ndarray, 
     return vis_matrix, coord_to_idx
 
 
+def _get_smoke_at(coord_t, game_map) -> int:
+    if game_map is None:
+        return 0
+    if hasattr(game_map, "get_smoke_markers"):
+        return game_map.get_smoke_markers(coord_t)
+    if hasattr(game_map, "smoke_markers") and isinstance(game_map.smoke_markers, dict):
+        return game_map.smoke_markers.get(coord_t, 0)
+    return 0
+
+
 def check_line_of_sight(attacker, target, game_map, terrain_config):
     start = getattr(attacker, "position", None)
     end = getattr(target, "position", None)
@@ -394,6 +407,9 @@ def check_line_of_sight(attacker, target, game_map, terrain_config):
             game_map._los_cache = cache
         if hasattr(game_map, "hexes"):
             los_lookup, terrain_sig = _get_map_los_lookup(game_map, terrain_config)
+            sm = getattr(game_map, "smoke_markers", None)
+            if sm:
+                terrain_sig = terrain_sig ^ hash(frozenset(sm.items()))
     else:
         cache = _los_cache
 
@@ -424,7 +440,29 @@ def check_line_of_sight(attacker, target, game_map, terrain_config):
     hindrance_hexes = []
     is_blocked = False
 
+    # Rule 10.3: Smoke on start or end hexes affects the ray
+    start_smoke = _get_smoke_at((start.q, start.r), game_map)
+    if start_smoke > 0:
+        hindrance += start_smoke
+        hindrance_hexes.append((start.q, start.r))
+        if hindrance >= 3:
+            is_blocked = True
+
+    end_smoke = _get_smoke_at((end.q, end.r), game_map)
+    if end_smoke > 0:
+        hindrance += end_smoke
+        hindrance_hexes.append((end.q, end.r))
+        if hindrance >= 3:
+            is_blocked = True
+
     for coord_t in inner_tuples:
+        smoke_count = _get_smoke_at(coord_t, game_map)
+        if smoke_count > 0:
+            hindrance += smoke_count
+            hindrance_hexes.append(coord_t)
+            if hindrance >= 3:
+                is_blocked = True
+
         if los_lookup is not None:
             los_type = los_lookup.get(coord_t)
         else:

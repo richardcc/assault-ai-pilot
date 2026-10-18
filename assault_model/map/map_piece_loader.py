@@ -13,6 +13,14 @@ class MapPieceCatalogError(Exception):
 
 
 def load_map_piece_catalog(path: Path) -> Dict[str, MapPieceDefinition]:
+    path = Path(path)
+    if not path.exists():
+        try:
+            from assault_model.paths import MAP_PIECE_CATALOG_PATH
+            if MAP_PIECE_CATALOG_PATH.exists():
+                path = MAP_PIECE_CATALOG_PATH
+        except Exception:
+            pass
 
     if not path.exists():
         raise MapPieceCatalogError(f"Map piece catalog not found: {path}")

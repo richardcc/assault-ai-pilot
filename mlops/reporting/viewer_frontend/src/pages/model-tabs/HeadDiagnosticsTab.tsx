@@ -37,21 +37,40 @@ const METRIC_ALIASES: Record<string, Record<string, string[]>> = {
     eval_vp_conversion_efficiency: ["vp_conversion_efficiency"],
     eval_vp_immediate_conversion_efficiency: ["vp_immediate_conversion_efficiency"],
   },
+  consistency: {
+    train_consistency_loss: ["consistency_loss"],
+    eval_latent_drift: ["latent_drift", "eval_consistency_drift"],
+  },
   threat_map: {
     threat_coverage_ratio: ["threat_coverage_ratio", "eval_threat_coverage_ratio"],
     max_threat: ["max_threat", "eval_threat_max"],
     mean_threat: ["mean_threat", "eval_threat_mean"],
     train_threat_loss: ["aux_threat_loss", "threat_loss", "loss_threat"],
   },
+  final_ownership: {
+    train_final_ownership_loss: ["aux_final_ownership_loss", "final_ownership_loss", "loss_final_ownership"],
+    eval_ownership_mae: ["final_ownership_mae", "ownership_mae"],
+    territory_control_score: ["territory_control_score", "eval_territory_control"],
+  },
   attrition: {
     predicted_exchange_ratio: ["predicted_exchange_ratio", "eval_attrition_exchange_ratio"],
     predicted_friendly_casualties: ["predicted_friendly_casualties", "eval_attrition_friendly_casualties"],
     predicted_enemy_casualties: ["predicted_enemy_casualties", "eval_attrition_enemy_casualties"],
+    casualty_prediction_error_mae: ["casualty_prediction_error_mae", "casualty_prediction_error"],
     train_attrition_loss: ["aux_attrition_loss", "attrition_loss", "loss_attrition"],
   },
   morale: {
     suppression_risk_score: ["suppression_risk_score", "eval_morale_suppression_risk"],
+    suppression_accuracy: ["suppression_accuracy", "eval_suppression_acc"],
     train_morale_loss: ["aux_morale_loss", "morale_loss", "loss_morale"],
+  },
+  macro_intent: {
+    train_intent_loss: ["aux_intent_loss", "intent_loss"],
+    eval_intent_accuracy: ["macro_intent_accuracy", "intent_accuracy"],
+  },
+  multi_vp: {
+    train_multi_vp_loss: ["aux_multi_vp_loss", "multi_vp_loss"],
+    eval_multi_vp_mae: ["multi_vp_mae"],
   },
 };
 
@@ -236,6 +255,7 @@ export function HeadDiagnosticsTab({ evalRows }: { evalRows: EvalRow[] }) {
         "train_reanalysis_coverage",
         "train_reanalysis_target_drift",
         "train_reanalysis_policy_drift",
+        "eval_latent_drift",
       ],
     },
     {
@@ -244,14 +264,35 @@ export function HeadDiagnosticsTab({ evalRows }: { evalRows: EvalRow[] }) {
       metrics: ["train_threat_loss", "threat_coverage_ratio", "mean_threat", "max_threat"],
     },
     {
+      head: "Final Ownership Head (KataGo)",
+      key: "final_ownership",
+      metrics: ["train_final_ownership_loss", "eval_ownership_mae", "territory_control_score"],
+    },
+    {
       head: "Attrition Head (Tactical)",
       key: "attrition",
-      metrics: ["train_attrition_loss", "predicted_exchange_ratio", "predicted_friendly_casualties", "predicted_enemy_casualties"],
+      metrics: [
+        "train_attrition_loss",
+        "predicted_exchange_ratio",
+        "predicted_friendly_casualties",
+        "predicted_enemy_casualties",
+        "casualty_prediction_error_mae",
+      ],
     },
     {
       head: "Morale Head (Tactical)",
       key: "morale",
-      metrics: ["train_morale_loss", "suppression_risk_score"],
+      metrics: ["train_morale_loss", "suppression_risk_score", "suppression_accuracy"],
+    },
+    {
+      head: "Macro-Intent Head (Doctrinal Roles)",
+      key: "macro_intent",
+      metrics: ["train_intent_loss", "eval_intent_accuracy"],
+    },
+    {
+      head: "Multi-VP Head (Spatial Features)",
+      key: "multi_vp",
+      metrics: ["train_multi_vp_loss", "eval_multi_vp_mae"],
     },
     {
       head: "MCTS Search & Signals",

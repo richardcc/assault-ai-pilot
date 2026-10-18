@@ -70,13 +70,20 @@ def _unit_feature_table() -> dict:
         direct_power = 0.0
         indirect_power = 0.0
         for target_ranges in direct.values():
-            for rk, rv in dict(target_ranges or {}).items():
-                max_direct_range = max(max_direct_range, float(_range_high(rk)))
-                direct_power = max(direct_power, _dice_power(dict(rv or {}).get("dice", [])))
-        for target_ranges in indirect.values():
-            for rk, rv in dict(target_ranges or {}).items():
+            if isinstance(target_ranges, dict):
+                for rk, rv in target_ranges.items():
+                    if isinstance(rv, dict) and "dice" in rv:
+                        max_direct_range = max(max_direct_range, float(_range_high(rk)))
+                        direct_power = max(direct_power, _dice_power(rv.get("dice", [])))
+        for rk, rv in indirect.items():
+            if isinstance(rv, dict) and "dice" in rv:
                 max_indirect_range = max(max_indirect_range, float(_range_high(rk)))
-                indirect_power = max(indirect_power, _dice_power(dict(rv or {}).get("dice", [])))
+                indirect_power = max(indirect_power, _dice_power(rv.get("dice", [])))
+            elif isinstance(rv, dict):
+                for sub_rk, sub_rv in rv.items():
+                    if isinstance(sub_rv, dict) and "dice" in sub_rv:
+                        max_indirect_range = max(max_indirect_range, float(_range_high(sub_rk)))
+                        indirect_power = max(indirect_power, _dice_power(sub_rv.get("dice", [])))
         defense = dict(payload.get("base_defense", {}) or {})
         defense_power = 0.0
         sides = 0

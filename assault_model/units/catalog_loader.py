@@ -60,11 +60,31 @@ def _validate_attack_structure(code: str, attack: dict):
                 f"Unit '{code}' INDIRECT_FIRE must be a dict"
             )
 
+    # ✅ SMOKE is optional but must be valid if present
+    if "SMOKE" in attack:
+        smoke = attack["SMOKE"]
+        if not isinstance(smoke, dict):
+            raise UnitCatalogError(
+                f"Unit '{code}' SMOKE must be a dict"
+            )
+        if "dice" in smoke and not isinstance(smoke["dice"], list):
+            raise UnitCatalogError(
+                f"Unit '{code}' SMOKE 'dice' must be a list"
+            )
+
 
 # -------------------------------------------------
 # Loader
 # -------------------------------------------------
 def load_unit_catalog(path: Path) -> Dict[str, UnitType]:
+    path = Path(path)
+    if not path.exists():
+        try:
+            from assault_model.paths import UNIT_CATALOG_PATH
+            if UNIT_CATALOG_PATH.exists():
+                path = UNIT_CATALOG_PATH
+        except Exception:
+            pass
 
     if not path.exists():
         raise UnitCatalogError(f"Unit catalog not found: {path}")

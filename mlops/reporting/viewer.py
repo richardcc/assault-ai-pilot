@@ -429,6 +429,11 @@ def serve(
             if parsed.path == "/model":
                 self._send_static_file(react_root / "index.html", react_root)
                 return
+            if parsed.path in ("/docs-hub", "/docs/hub", "/hub"):
+                self.send_response(301)
+                self.send_header("Location", "/docs/")
+                self.end_headers()
+                return
             if parsed.path == "/docs":
                 self.send_response(301)
                 self.send_header("Location", "/docs/")
@@ -436,39 +441,40 @@ def serve(
                 return
             if parsed.path.startswith("/docs/"):
                 subpath = parsed.path[len("/docs/") :]
-                site_root = (repo_root / "site").resolve()
                 docs_root = (repo_root / "docs").resolve()
-                preferred_root = site_root if (site_root / "index.html").exists() else docs_root
+                site_root = (repo_root / "site").resolve()
 
-                if not subpath or subpath in ("index.html", ""):
-                    target = preferred_root / "index.html"
+                # Default /docs/ -> el Hub Canónico interactivo (docs/index.html)
+                if not subpath or subpath in ("index.html", "", "hub", "hub.html", "standalone", "standalone.html"):
+                    target = docs_root / "index.html"
                     if target.exists():
-                        self._send_static_file(target, preferred_root)
+                        self._send_static_file(target, docs_root)
                         return
-                else:
-                    rel_doc = unquote(subpath)
-                    doc_target = (preferred_root / rel_doc).resolve()
-                    if doc_target.is_dir():
-                        if not parsed.path.endswith("/"):
-                            self.send_response(301)
-                            self.send_header("Location", parsed.path + "/")
-                            self.end_headers()
-                            return
-                        doc_target = doc_target / "index.html"
+
+                if subpath.startswith("mkdocs"):
+                    rel_mkdocs = subpath[len("mkdocs") :].lstrip("/") or "index.html"
+                    target = (site_root / rel_mkdocs).resolve()
+                    if target.exists() and target.is_file():
+                        self._send_static_file(target, site_root)
+                        return
+
+                rel_doc = unquote(subpath)
+                # Allow raw markdown downloads and images/assets
+                if rel_doc.endswith((".md", ".markdown", ".png", ".jpg", ".jpeg", ".svg", ".gif", ".pdf", ".json", ".txt", ".js", ".css")):
+                    doc_target = (docs_root / rel_doc).resolve()
                     if doc_target.exists() and doc_target.is_file():
-                        self._send_static_file(doc_target, preferred_root)
+                        self._send_static_file(doc_target, docs_root)
                         return
-                    alt_target = (docs_root / rel_doc).resolve()
-                    if alt_target.is_dir():
-                        if not parsed.path.endswith("/"):
-                            self.send_response(301)
-                            self.send_header("Location", parsed.path + "/")
-                            self.end_headers()
-                            return
-                        alt_target = alt_target / "index.html"
-                    if alt_target.exists() and alt_target.is_file():
-                        self._send_static_file(alt_target, docs_root)
+                    site_target = (site_root / rel_doc).resolve()
+                    if site_target.exists() and site_target.is_file():
+                        self._send_static_file(site_target, site_root)
                         return
+
+                # All other routes under /docs/ redirect to canonical Hub
+                self.send_response(301)
+                self.send_header("Location", "/docs/")
+                self.end_headers()
+                return
             if parsed.path.startswith("/assets/"):
                 rel = unquote(parsed.path[len("/assets/") :])
                 if self._send_static_file(react_root / "assets" / rel, react_root):

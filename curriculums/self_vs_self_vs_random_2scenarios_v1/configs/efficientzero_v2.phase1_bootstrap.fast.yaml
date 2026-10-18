@@ -2,9 +2,10 @@ base_config: curriculums/self_vs_self_vs_random_2scenarios_v1/configs/efficientz
 
 selfplay:
   device: cpu
-  num_workers: 6
+  num_workers: 20
   parallel_backend: process
 
 train:
+  episodes_per_iter: 20
   amp_dtype: bf16
   matmul_precision: high

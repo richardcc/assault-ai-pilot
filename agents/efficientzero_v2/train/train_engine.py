@@ -1422,10 +1422,10 @@ def run_training(
                         f"source={logged_budget_source}{budget_source_detail} "
                         f"effective_max_steps={int(logged_effective_budget)}"
                     )
-                    _log(
-                        f"[EfficientZeroV2]   episode {ep+1}/{episodes_per_iter} "
-                        f"starting (seed={ep_seed}, scenario={ep_scenario_id}, sims={mcts_simulations}, budget={budget_label})"
-                    )
+                _log(
+                    f"[EfficientZeroV2]   dispatched {len(episode_plan)} selfplay episodes across "
+                    f"{num_workers} workers (sims={mcts_simulations}, budget={int(logged_effective_budget)} steps)"
+                )
 
                 parallel_selfplay = bool(parallel_selfplay_enabled)
                 if parallel_selfplay:
@@ -1434,6 +1434,7 @@ def run_training(
                         f"(backend={parallel_backend}, train_device={device}, "
                         f"inference_service={bool(inference_service)})"
                     )
+                    t_selfplay_batch_start = time.perf_counter()
                     completed: dict[int, tuple[int, list]] = {}
                     if use_process_actors:
                         if process_pool is None:
@@ -1442,10 +1443,19 @@ def run_training(
                             process_pool.submit(_process_actor_run_episode, ep_seed, _ep_scenario): (ep_idx, ep_seed, _ep_scenario)
                             for ep_idx, ep_seed, _ep_scenario in episode_plan
                         }
+                        completed_count = 0
                         for fut in as_completed(fut_to_job):
                             ep_idx, ep_seed, ep_scen = fut_to_job[fut]
                             try:
-                                completed[ep_idx] = (ep_seed, fut.result())
+                                ep_res = fut.result()
+                                completed[ep_idx] = (ep_seed, ep_res)
+                                completed_count += 1
+                                ep_steps = len(ep_res) if isinstance(ep_res, list) else 0
+                                elapsed_so_far = time.perf_counter() - t_selfplay_batch_start
+                                _log(
+                                    f"[EfficientZeroV2]     progress [{completed_count:02d}/{len(episode_plan):02d}] "
+                                    f"ep #{ep_idx+1} finished in {elapsed_so_far:.2f}s (steps={ep_steps}, scenario={ep_scen})"
+                                )
                             except Exception as exc:
                                 print(
                                     f"[EfficientZeroV2][ERROR] Process actor worker failed on episode {ep_idx+1}/{len(episode_plan)} "
@@ -1459,10 +1469,19 @@ def run_training(
                                 ex.submit(_run_episode, ep_seed, ep_scenario): (ep_idx, ep_seed, ep_scenario)
                                 for ep_idx, ep_seed, ep_scenario in episode_plan
                             }
+                            completed_count = 0
                             for fut in as_completed(fut_to_job):
                                 ep_idx, ep_seed, ep_scen = fut_to_job[fut]
                                 try:
-                                    completed[ep_idx] = (ep_seed, fut.result())
+                                    ep_res = fut.result()
+                                    completed[ep_idx] = (ep_seed, ep_res)
+                                    completed_count += 1
+                                    ep_steps = len(ep_res) if isinstance(ep_res, list) else 0
+                                    elapsed_so_far = time.perf_counter() - t_selfplay_batch_start
+                                    _log(
+                                        f"[EfficientZeroV2]     progress [{completed_count:02d}/{len(episode_plan):02d}] "
+                                        f"ep #{ep_idx+1} finished in {elapsed_so_far:.2f}s (steps={ep_steps}, scenario={ep_scen})"
+                                    )
                                 except Exception as exc:
                                     print(
                                         f"[EfficientZeroV2][ERROR] Thread worker failed on episode {ep_idx+1}/{len(episode_plan)} "

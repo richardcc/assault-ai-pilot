@@ -25,3 +25,4 @@ class HexState:
         self.hex = hex_
         self.ownership = HexOwnership.NONE
         self.contested = False
+        self.smoke_markers: int = 0

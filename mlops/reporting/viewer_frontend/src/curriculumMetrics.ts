@@ -5,6 +5,10 @@ export interface CurriculumStepMetric {
   runId: string;
   phaseName: string;
   stepIndex: number;
+  cycleInPhase: number;
+  totalCyclesInPhase: number;
+  phaseGroupIndex: number;
+  isPhaseSelected: boolean;
   elo: number | null;
   deltaElo: number | null; // vs previous chronological step
   winRate: number | null;
@@ -122,8 +126,8 @@ export function extractStepTraceMetrics(trace?: Dict | null): {
 }
 
 /**
- * Computes step-by-step curriculum progression metrics with delta tracking.
- * Returns steps sorted chronologically (oldest to newest) or formatted for display.
+ * Computes step-by-step curriculum progression metrics with delta tracking
+ * and marks the chosen (best/promoted) cycle within each contiguous curriculum phase.
  */
 export function buildCurriculumProgression(
   trains: TrainRow[],
@@ -161,6 +165,10 @@ export function buildCurriculumProgression(
       runId: tid,
       phaseName: String(trace?.phase_name || t.curriculum_phase || `Fase ${index + 1}`),
       stepIndex: index + 1,
+      cycleInPhase: 1,
+      totalCyclesInPhase: 1,
+      phaseGroupIndex: 0,
+      isPhaseSelected: false,
       elo: m.elo,
       deltaElo,
       winRate: m.winRate,
@@ -174,6 +182,70 @@ export function buildCurriculumProgression(
       createdAt: String(t.created_at_utc || ""),
       checkpoint: String(t.latest_checkpoint || "-"),
     });
+  });
+
+  // 2. Group contiguous steps with the same phaseName and select the winning cycle per phase
+  const groups: CurriculumStepMetric[][] = [];
+  for (const step of steps) {
+    const lastGroup = groups[groups.length - 1];
+    if (!lastGroup || lastGroup[0].phaseName !== step.phaseName) {
+      groups.push([step]);
+    } else {
+      lastGroup.push(step);
+    }
+  }
+
+  groups.forEach((group, gIdx) => {
+    const total = group.length;
+    group.forEach((s, idx) => {
+      s.cycleInPhase = idx + 1;
+      s.totalCyclesInPhase = total;
+      s.phaseGroupIndex = gIdx;
+    });
+
+    // Pick the best cycle in this phase group:
+    // Priority 1: Explicit Gate PASS or promotionDecision === "promote" / "promoted"
+    // Priority 2: Highest ELO (with winRate & score as tie-breakers)
+    const evaluated = group.filter((s) => s.elo !== null || s.winRate !== null || s.gateStatus !== null);
+    const pool = evaluated.length > 0 ? evaluated : group;
+
+    let best = pool[0];
+    for (const cand of pool.slice(1)) {
+      const bestPassed =
+        best.gateStatus === "PASS" ||
+        best.gateStatus === "PASSED" ||
+        best.promotionDecision === "promote" ||
+        best.promotionDecision === "promoted";
+      const candPassed =
+        cand.gateStatus === "PASS" ||
+        cand.gateStatus === "PASSED" ||
+        cand.promotionDecision === "promote" ||
+        cand.promotionDecision === "promoted";
+
+      if (candPassed && !bestPassed) {
+        best = cand;
+        continue;
+      }
+      if (bestPassed && !candPassed) {
+        continue;
+      }
+
+      const bestElo = best.elo ?? -Infinity;
+      const candElo = cand.elo ?? -Infinity;
+      if (candElo > bestElo) {
+        best = cand;
+      } else if (candElo === bestElo) {
+        const bestWr = best.winRate ?? -Infinity;
+        const candWr = cand.winRate ?? -Infinity;
+        if (candWr > bestWr) {
+          best = cand;
+        }
+      }
+    }
+
+    if (best) {
+      best.isPhaseSelected = true;
+    }
   });
 
   return steps;

@@ -147,6 +147,27 @@ def build_mkdocs_site() -> None:
         print(res.stderr, file=sys.stderr)
         raise RuntimeError("Fallo al ejecutar mkdocs build")
     print("[OK] Sitio estático MkDocs regenerado en site/ al 100%.")
+    # Asegurar que el portal raíz de /docs/ sea el Hub Canónico interactivo
+    import shutil
+    shutil.copyfile(HTML_PATH, ROOT_DIR / "site" / "index.html")
+    for spec in CANONICAL_DOCS_ORDER:
+        doc_dir_name = spec["file"].replace(".md", "")
+        target_dir = ROOT_DIR / "site" / doc_dir_name
+        if target_dir.exists():
+            redirect_html = f'''<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Redirigiendo al Hub Canónico...</title>
+  <meta http-equiv="refresh" content="0; url=../#{spec["id"]}">
+  <script>window.location.replace("../#" + "{spec["id"]}");</script>
+</head>
+<body>
+  Redirigiendo al portal canónico: <a href="../#{spec["id"]}">{spec["title"]}</a>
+</body>
+</html>'''
+            (target_dir / "index.html").write_text(redirect_html, encoding="utf-8")
+    print("[OK] Hub Canónico interactivo (docs/index.html) unificado al 100% como portal principal en site/index.html.")
 
 
 if __name__ == "__main__":

@@ -80,8 +80,7 @@
     "traits": [
       "TOUGH",
       "RIFLE_GRENADES",
-      "PARATROOPS",
-      "ELITE"
+      "PARATROOPS"
     ]
   },
   "US_COMBAT_ENGINEERS_43": {
@@ -150,8 +149,7 @@
     },
     "traits": [
       "EXPLOSIVE_CHARGE",
-      "MINE_DETECTION",
-      "SMOKE"
+      "MINE_DETECTION"
     ]
   },
   "UK_RIFLES_43": {
@@ -220,9 +218,7 @@
         }
       }
     },
-    "traits": [
-      "SUPPORT_FIRE"
-    ]
+    "traits": []
   },
   "UK_COMMANDOS": {
     "side": "UK",
@@ -297,7 +293,6 @@
       "SCOUT",
       "CONCEALED",
       "RECON_PATROL",
-      "ELITE",
       "TOUGH"
     ]
   },
@@ -368,9 +363,8 @@
       }
     },
     "traits": [
-      "TOUGH",
       "PARATROOPS",
-      "ELITE"
+      "TOUGH"
     ]
   },
   "UK_ROYAL_ENGINEERS": {
@@ -440,85 +434,7 @@
     },
     "traits": [
       "EXPLOSIVE_CHARGE",
-      "MINE_DETECTION",
-      "SMOKE"
-    ]
-  },
-  "GE_GRENADIERS_43": {
-    "side": "GE",
-    "category": "INFANTRY",
-    "subtype": "PANZERGRENADIER",
-    "classification": "STANDARD_INFANTRY",
-    "card_id": "S43",
-    "cost": 7,
-    "movement": 2,
-    "max_strength": 4,
-    "has_counter_flip": true,
-    "base_defense": {
-      "FRONT": [
-        "YELLOW"
-      ],
-      "FLANK_LEFT": [
-        "YELLOW"
-      ],
-      "FLANK_RIGHT": [
-        "YELLOW"
-      ],
-      "REAR": [
-        "YELLOW"
-      ]
-    },
-    "attack": {
-      "DIRECT_FIRE": {
-        "VEHICLE": {
-          "0": {
-            "dice": [
-              "RED",
-              "YELLOW"
-            ]
-          },
-          "1": {
-            "dice": [
-              "RED",
-              "GREEN"
-            ]
-          }
-        },
-        "INFANTRY": {
-          "0": {
-            "dice": [
-              "RED",
-              "YELLOW",
-              "GREEN"
-            ]
-          },
-          "1-4": {
-            "dice": [
-              "RED",
-              "YELLOW",
-              "GREEN"
-            ]
-          },
-          "5-7": {
-            "dice": [
-              "RED",
-              "GREEN",
-              "BLUE"
-            ]
-          },
-          "8-10": {
-            "dice": [
-              "RED",
-              "GREEN"
-            ]
-          }
-        }
-      }
-    },
-    "traits": [
-      "FAST_DISEMBARK",
-      "ASSAULT",
-      "SUPPORT_FIRE"
+      "MINE_DETECTION"
     ]
   },
   "GE_TANK_HUNTERS_43": {
@@ -594,6 +510,81 @@
       "TANK_BUSTERS",
       "ANTI_TANK",
       "SLOW_UNIT"
+    ]
+  },
+  "GE_GRENADIERS_43": {
+    "side": "GE",
+    "category": "INFANTRY",
+    "subtype": "PANZERGRENADIER",
+    "classification": "SPECIALIZED_INFANTRY",
+    "card_id": "S43",
+    "cost": 7,
+    "movement": 2,
+    "max_strength": 4,
+    "has_counter_flip": true,
+    "base_defense": {
+      "FRONT": [
+        "YELLOW"
+      ],
+      "FLANK_LEFT": [
+        "YELLOW"
+      ],
+      "FLANK_RIGHT": [
+        "YELLOW"
+      ],
+      "REAR": [
+        "YELLOW"
+      ]
+    },
+    "attack": {
+      "DIRECT_FIRE": {
+        "VEHICLE": {
+          "0": {
+            "dice": [
+              "RED",
+              "YELLOW"
+            ]
+          },
+          "1": {
+            "dice": [
+              "RED",
+              "GREEN"
+            ]
+          }
+        },
+        "INFANTRY": {
+          "0": {
+            "dice": [
+              "RED",
+              "YELLOW",
+              "GREEN"
+            ]
+          },
+          "1-4": {
+            "dice": [
+              "RED",
+              "YELLOW",
+              "GREEN"
+            ]
+          },
+          "5-7": {
+            "dice": [
+              "RED",
+              "GREEN",
+              "BLUE"
+            ]
+          },
+          "8-10": {
+            "dice": [
+              "RED",
+              "GREEN"
+            ]
+          }
+        }
+      }
+    },
+    "traits": [
+      "FAST_DISEMBARK"
     ]
   }
 }

@@ -22,6 +22,11 @@ def _trace(tag: str, **data):
     print(f"[TRACE][{tag}] {payload}")
 
 
+def _has_trait(unit, trait_name: str) -> bool:
+    traits = getattr(getattr(unit, "unit_type", None), "traits", []) or []
+    return str(trait_name).upper() in {str(t).upper() for t in traits}
+
+
 # =================================================
 # Result containers
 # =================================================
@@ -254,12 +259,17 @@ def resolve_close_combat(
 
         rr.attacker_attack_dice = dice_results["attacker_attack"]
         if (
-            ctx.round_number == 1
-            and getattr(ctx.attack_sector, "name", None) in {AttackSector.FLANK_LEFT.name, AttackSector.FLANK_RIGHT.name, AttackSector.REAR.name}
+            (
+                ctx.round_number == 1
+                and getattr(ctx.attack_sector, "name", None) in {AttackSector.FLANK_LEFT.name, AttackSector.FLANK_RIGHT.name, AttackSector.REAR.name}
+            )
+            or _has_trait(ctx.attacker, "RAPID_FIRE")
         ):
             rr.attacker_attack_dice = _apply_cc002_outflank_reroll(rr.attacker_attack_dice)
         rr.attacker_defense_dice = dice_results["attacker_defense"]
         rr.defender_attack_dice = dice_results["defender_attack"]
+        if _has_trait(ctx.defender, "RAPID_FIRE"):
+            rr.defender_attack_dice = _apply_cc002_outflank_reroll(rr.defender_attack_dice)
         rr.defender_defense_dice = dice_results["defender_defense"]
 
         # =================================================
@@ -274,6 +284,10 @@ def resolve_close_combat(
             atk_vs_def["remaining_damage"]
             + atk_vs_def["remaining_criticals"]
         )
+        if ctx.round_number == 1 and _has_trait(ctx.defender, "TOUGH") and attacker_damage > 0:
+            attacker_damage = max(0, attacker_damage - 1)
+            _trace("TOUGH_TRAIT_DEFENDER_REDUCED_DAMAGE", unit=ctx.defender.unit_id)
+
         attacker_suppress = atk_vs_def["remaining_suppress"]
 
         # =================================================
@@ -288,6 +302,10 @@ def resolve_close_combat(
             def_vs_atk["remaining_damage"]
             + def_vs_atk["remaining_criticals"]
         )
+        if ctx.round_number == 1 and _has_trait(ctx.attacker, "TOUGH") and defender_damage > 0:
+            defender_damage = max(0, defender_damage - 1)
+            _trace("TOUGH_TRAIT_ATTACKER_REDUCED_DAMAGE", unit=ctx.attacker.unit_id)
+
         defender_suppress = def_vs_atk["remaining_suppress"]
 
         # ---------------- EFFECTS ----------------
