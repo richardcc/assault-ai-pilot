@@ -11,6 +11,7 @@ Evaluates:
 from __future__ import annotations
 
 import argparse
+import inspect
 import json
 import sys
 from pathlib import Path
@@ -179,24 +180,27 @@ def _load_model(run_dir: Path) -> nn.Module:
             prediction_blocks=int(m_cfg.get("prediction_blocks", 2)),
         )
     else:
-        model = EfficientZeroV2Network(
-            observation_dim=4,
-            hidden_dim=int(m_cfg.get("hidden_dim", 48)),
-            action_dim=int(m_cfg.get("action_dim", 32)),
-            encoder_type=str(m_cfg.get("encoder_type", "cnn")),
-            observation_channels=int(m_cfg.get("observation_channels", 32)),
-            observation_height=int(m_cfg.get("observation_height", 16)),
-            observation_width=int(m_cfg.get("observation_width", 16)),
-            dynamics_blocks=int(m_cfg.get("dynamics_blocks", 3)),
-            prediction_blocks=int(m_cfg.get("prediction_blocks", 2)),
-            enable_threat_head=has_threat,
-            enable_final_ownership_head=has_final_ownership,
-            enable_attrition_head=has_attrition,
-            enable_morale_head=has_morale,
-            use_spatial_attention=has_spatial_att,
-            objective_intent_classes=intent_classes,
-            multi_vp_feature_dim=multi_vp_dim,
-        )
+        init_kwargs = {
+            "observation_dim": 4,
+            "hidden_dim": int(m_cfg.get("hidden_dim", 48)),
+            "action_dim": int(m_cfg.get("action_dim", 32)),
+            "encoder_type": str(m_cfg.get("encoder_type", "cnn")),
+            "observation_channels": int(m_cfg.get("observation_channels", 32)),
+            "observation_height": int(m_cfg.get("observation_height", 16)),
+            "observation_width": int(m_cfg.get("observation_width", 16)),
+            "dynamics_blocks": int(m_cfg.get("dynamics_blocks", 3)),
+            "prediction_blocks": int(m_cfg.get("prediction_blocks", 2)),
+            "enable_threat_head": has_threat,
+            "enable_final_ownership_head": has_final_ownership,
+            "enable_attrition_head": has_attrition,
+            "enable_morale_head": has_morale,
+            "use_spatial_attention": has_spatial_att,
+            "objective_intent_classes": intent_classes,
+            "multi_vp_feature_dim": multi_vp_dim,
+        }
+        sig_params = set(inspect.signature(EfficientZeroV2Network.__init__).parameters.keys())
+        safe_kwargs = {k: v for k, v in init_kwargs.items() if k in sig_params}
+        model = EfficientZeroV2Network(**safe_kwargs)
 
     model_state = model.state_dict()
     matched_state = {

@@ -281,8 +281,10 @@ def _run_channel_attribution_job(repo_root: Path, run_id: str) -> dict[str, Any]
     import importlib
     if str(repo_root) not in sys.path:
         sys.path.insert(0, str(repo_root))
+    for mod_name in list(sys.modules.keys()):
+        if mod_name.startswith("agents.efficientzero_v2") or mod_name.startswith("scripts.analyze_channel"):
+            sys.modules.pop(mod_name, None)
     import scripts.analyze_channel_attribution as aca
-    importlib.reload(aca)
     _load_model = aca._load_model
     _collect_observations = aca._collect_observations
     analyze_channels = aca.analyze_channels
