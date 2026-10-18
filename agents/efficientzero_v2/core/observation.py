@@ -258,9 +258,10 @@ def observation_to_tensor(
             put(25, y, x, direct_range_norm)  # enemy_direct_range_norm
             put(31, y, x, defense_power_norm)  # enemy_defense_power_norm
 
-    # Palma et al. (2025, Sec. 3.2.3): Project scheduled incoming reinforcements
-    # onto their entry hexes weighted by arrival countdown (T_max - dt) / T_max
-    # without changing the 32-channel tensor layout.
+    # Palma et al. (2025, Sec. 3.2.3) & Henry Hyde (2015, Ch. 6 p. 318 & Ch. 9 p. 440):
+    # Project scheduled or stochastic incoming reinforcements onto their entry hexes
+    # weighted by arrival countdown (T_max - dt) / T_max, cumulative die-roll arrival_prob,
+    # and 6-tier reconnaissance intelligence confidence (recon_tier in 1..6).
     turn_now = int(getattr(obs, "turn", 1) or 1)
     max_turns_est = max(1, int(getattr(obs, "max_turns", 8) or 8))
     reinf_list = list(
@@ -279,21 +280,31 @@ def observation_to_tensor(
         x, y = to_xy(int(q), int(r))
         if not (0 <= x < width and 0 <= y < height):
             continue
-        arrival_turn = int(reinf.get("turn", reinf.get("arrival_turn", turn_now + 1)) or (turn_now + 1))
-        dt = max(0, arrival_turn - turn_now)
-        if dt > max_turns_est:
-            continue
-        countdown_w = max(0.1, min(1.0, float(max_turns_est - dt) / float(max_turns_est)))
+        if "arrival_prob" in reinf and reinf["arrival_prob"] is not None:
+            # Hyde (2015, p. 440) cumulative stochastic arrival probability (e.g. 1/6, 2/6, ..., 6/6)
+            countdown_w = max(0.1, min(1.0, float(reinf["arrival_prob"])))
+        else:
+            arrival_turn = int(reinf.get("turn", reinf.get("arrival_turn", turn_now + 1)) or (turn_now + 1))
+            dt = max(0, arrival_turn - turn_now)
+            if dt > max_turns_est:
+                continue
+            countdown_w = max(0.1, min(1.0, float(max_turns_est - dt) / float(max_turns_est)))
+
+        # Hyde (2015, p. 318) 6-Tier Reconnaissance Confidence (1=rumor -> 6=full intel)
+        recon_tier = float(reinf.get("recon_tier", 6) or 6)
+        recon_w = max(0.25, min(1.0, recon_tier / 6.0))
+        effective_w = countdown_w * recon_w
+
         side = str(reinf.get("side", ""))
-        strength_val = 0.5 * countdown_w
+        strength_val = 0.5 * effective_w
         if side == to_play:
             if grid[0, y, x] <= 0.0:
                 put(0, y, x, strength_val)
-            put(21, y, x, max(float(grid[21, y, x]), 0.5 * countdown_w))
+            put(21, y, x, max(float(grid[21, y, x]), 0.5 * effective_w))
         elif side:
             if grid[4, y, x] <= 0.0:
                 put(4, y, x, strength_val)
-            put(7, y, x, max(float(grid[7, y, x]), 0.35 * countdown_w))
+            put(7, y, x, max(float(grid[7, y, x]), 0.35 * effective_w))
 
     vp_owner_by_hex = dict(getattr(obs, "vp_owner_by_hex", {}) or {})
     vp_list = list(getattr(obs, "vp_hexes", []) or [])

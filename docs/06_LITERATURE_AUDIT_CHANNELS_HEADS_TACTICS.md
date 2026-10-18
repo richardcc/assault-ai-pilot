@@ -371,9 +371,9 @@ La lectura íntegra del artículo de Palma, Santos y Dias (*Secciones 2.2, 3.2.3
 
 ---
 
-### 6.3. Aportaciones de KataGo, Dunnigan y Sun Tzu (`docs/papers/`)
+### 6.3. Aportaciones de KataGo, Dunnigan, Sun Tzu y Henry Hyde (`docs/papers/`)
 
-Completando la revisión con las otras tres obras maestras de la biblioteca técnica del proyecto (`KataGo`, `Complete-Wargames-Handbook-Dunnigan.pdf` y `El_arte_de_la_guerra-Sun_Tzu.pdf`):
+Completando la revisión con las obras de referencia de la biblioteca técnica del proyecto (`KataGo`, `Complete-Wargames-Handbook-Dunnigan.pdf`, `El_arte_de_la_guerra-Sun_Tzu.pdf` y `The Wargaming Compendium -- Henry Hyde -- 2015.pdf`):
 
 1. **Mapa Denso de Propiedad Final (*Final Territory Ownership Head*, KataGo — Wu 2020) — `[FASE FUTURA]`:**
    * *Qué aporta KataGo:* Cabeza auxiliar convolucional $1\times H\times W$ que predice qué jugador controlará cada celda al final de la partida $T$, complementando nuestro `threat_map` actual del turno $t$.
@@ -383,6 +383,13 @@ Completando la revisión con las otras tres obras maestras de la biblioteca téc
 
 3. **Cuantificación de Finta, Engaño y Fijación + Flanqueo (*Pin-and-Flank*, Sun Tzu — *El Arte de la Guerra*) — `[IMPLEMENTADO]`:**
    * *Implementación (`macro_planner.py`):* Se incorporó el rol `ROLE_FLANK_SCREEN` para unidades secundarias en asalto y modulación de priors que premia fijar/suprimir al enemigo mientras la punta de lanza (`ROLE_SPEARHEAD`) maniobra hacia el objetivo.
+
+4. **Cinco Mecánicas Tácticas de *The Wargaming Compendium* (Henry Hyde, 2015) — `[IMPLEMENTADO]`:**
+   * **A. Autocorrelación Espacial (*Terrain Clumping*, Cap. 6, pp. 308–310):** En [`procedural_mutator.py`](file:///c:/repos/python/assault/assault_model/core/procedural_mutator.py), la mutación de terreno incorpora `spatial_clumping=True`, elevando la probabilidad de cobertura adyacente y propagando el tipo de terreno vecino con un $70\%$ de probabilidad para formar crestas y líneas de bosque continuas en lugar de *"toperas aisladas"* (*molehills*).
+   * **B. Anillos de Cohesión y Apoyo Mutuo (`SUPPORTED` vs. `ISOLATED`, Cap. 7, pp. 389–391):** En [`macro_planner.py`](file:///c:/repos/python/assault/agents/efficientzero_v2/core/macro_planner.py), cada unidad aliada recibe su estado de cohesión geométrica (`SUPPORTED` $\le 3$ hexes, `FRIENDS_CLOSE` $\le 6$ hexes, `ISOLATED` $> 6$ hexes). Las unidades `ISOLATED` reciben bonificación en MCTS por reagruparse hacia su pelotón y penalización por adentrarse solas.
+   * **C. Umbral de Retirada del 50% vs. Desesperación en Áreas Edificadas (*BUA*, Cap. 7, pp. 387–390):** Las unidades cuya fuerza cae por debajo del $50\%$ (`strength / max_strength < 0.50`) en terreno abierto reciben el rol `ROLE_RECOVER` (priorizando `RALLY`/`DEFEND`/`OVERWATCH` y penalizando asaltos frontales), *excepto* si están fortificadas en un área edificada (`is_bua` / `bunker`) o defendiendo un VP aliado, donde resisten a ultranza.
+   * **D. Guardarraíl contra la "Persecución Impetuosa" (*Scots Greys Syndrome*, Cap. 2, p. 38 y Cap. 7, p. 387):** Las unidades `ROLE_OBJECTIVE_DEFENDER` situadas sobre un VP aliado capturado reciben un factor de amortiguación (`0.65`) ante movimientos que abandonen el hexágono de victoria para perseguir enemigos en retirada.
+   * **E. Llegada Estocástica Acumulativa de Refuerzos e Inteligencia en 6 Niveles (Cap. 6, p. 318 y Cap. 9, p. 440):** En [`observation.py`](file:///c:/repos/python/assault/agents/efficientzero_v2/core/observation.py), la proyección de refuerzos soporta tanto cuenta atrás determinista como probabilidad acumulada de llegada (`arrival_prob`) ponderada por el nivel de inteligencia de reconocimiento (`recon_tier` $\in \{1\dots 6\}$).
 
 ---
 
@@ -395,10 +402,10 @@ flowchart TD
         I2["10 Cabezas + PCGrad Orthogonal Balancing"]
         I3["Invarianza Espacial FCN + _adapt_spatial (16x16 a 64x64)"]
         I4["Dinamica Recurrente k-Step + Recall Skip-Connection + Progressive Loss"]
-        I5["Mutador Procedural Asimetrico + Proyeccion de Refuerzos Entrantes"]
+        I5["Mutador Procedural Asimetrico + Clumping Espacial de Hyde + Refuerzos Entrantes"]
         I6["HexagonalMaskConv2d Activo + HexagonalDepthwiseSeparableConv2d"]
         I7["InputChannelGate (32ch) + TemporalContextBlock (GRU POMDP)"]
-        I8["MacroStrategyPlanner Neuronal (Intent + Multi-VP + Reserva Dunnigan + Flanqueo Sun Tzu)"]
+        I8["MacroStrategyPlanner Neuronal (Intent + Reserva Dunnigan + Flanqueo Sun Tzu + Doctrina Hyde)"]
         I9["Presupuesto MCTS Adaptativo por Entropia (compute_adaptive_simulations)"]
     end
 
@@ -418,17 +425,19 @@ flowchart TD
 | 2 | 10 Cabezas Multitarea + Proyección Ortogonal PCGrad | Yu et al. 2020 / EZ-v2 | 🟢 **Implementado** | 100% |
 | 3 | Invariancia Espacial Zero-Shot ($16\times 16 \leftrightarrow 32\times 32 \leftrightarrow 64\times 64$) | Palma et al. 2025 (Sec. 3.1) | 🟢 **Implementado** | 100% |
 | 4 | Dinámica Recurrente Weight-Tied de $k$ pasos (`dynamics_recurrent_steps`) | Palma et al. 2025 (Sec. 3.1) | 🟢 **Implementado** | 100% |
-| 5 | Mutación Procedural Asimétrica de Terreno, Despliegue y Fuerza | Palma et al. 2025 (Sec. 4.1.4) | 🟢 **Implementado** | 100% |
+| 5 | Mutación Procedural Asimétrica + **Clumping Espacial de Terreno** | Palma et al. 2025 / Henry Hyde 2015 | 🟢 **Implementado** | 100% |
 | 6 | Activación por defecto de `HexagonalMaskConv2d` + `HexagonalDepthwiseSeparableConv2d` | Palma et al. 2025 (Hexagdly) | 🟢 **Implementado** | 100% (`persistent=False`) |
 | 7 | Cableado activo de `TemporalContextBlock` (GRU) en el flujo latente | Palma et al. 2025 / POMDP RL | 🟢 **Implementado** | 100% (Opt-in flag) |
 | 8 | Conexión neuronal de `prediction_intent` y `multi_vp_pred` al `MacroStrategyPlanner` | Feudal Networks / AlphaStar | 🟢 **Implementado** | 100% |
 | 9 | `InputChannelGate` (SE + supresión de canales muertos sobre los 32 canales) | SENet / CBAM | 🟢 **Implementado** | 100% (Opt-in flag) |
 | 10 | Conexión **Recall** (`use_recall=True`) + Entrenamiento **Progressive Loss** $(n, k)$ | Palma et al. 2025 / Bansal 2022 | 🟢 **Implementado** | 100% (0 params extra) |
-| 11 | Proyección de **Calendario de Refuerzos Entrantes** (*Reinforcement Schedule*) | Palma et al. 2025 (Sec. 3.2.3) | 🟢 **Implementado** | 100% (32 canales intactos) |
+| 11 | Proyección de **Refuerzos Entrantes** + **Probabilidad Acumulada e Intel 6 Niveles** | Palma et al. 2025 / Henry Hyde 2015 | 🟢 **Implementado** | 100% (32 canales intactos) |
 | 12 | **ACT / Presupuesto MCTS Adaptativo** (`compute_adaptive_simulations`) | Palma et al. 2025 (Sec. 5) / Graves 2016 | 🟢 **Implementado** | 100% |
 | 13 | Rol Doctrinal **`ROLE_TACTICAL_RESERVE`** (Dunnigan) y **`ROLE_FLANK_SCREEN`** (Sun Tzu) | Dunnigan / Sun Tzu | 🟢 **Implementado** | 100% |
-| 14 | Descomposición Secuencial de **Asaltos Combinados Multi-Unidad** en simulador | Palma et al. 2025 (Sec. 3.3, Fig. 3) | 🟡 **Planificado (Motor Sim)** | — |
-| 15 | Cabeza Densa **Final Ownership Map** ($1\times H\times W$ al final de partida) | KataGo (Wu 2020) | 🟡 **Planificado (Fase 7)** | — |
+| 14 | Cohesión **`SUPPORTED`/`ISOLATED`**, Retirada **$<50\%$ vs. BUA** y **Anti-Persecución** | Henry Hyde 2015 (Cap. 2 y 7) | 🟢 **Implementado** | 100% |
+| 15 | Descomposición Secuencial de **Asaltos Combinados Multi-Unidad** en simulador | Palma et al. 2025 (Sec. 3.3, Fig. 3) | 🟡 **Planificado (Motor Sim)** | — |
+| 16 | Cabeza Densa **Final Ownership Map** ($1\times H\times W$ al final de partida) | KataGo (Wu 2020) | 🟡 **Planificado (Fase 7)** | — |
+
 
 
 

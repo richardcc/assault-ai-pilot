@@ -32,22 +32,15 @@ def apply_procedural_mutation(
     terrain_mutation_prob: float = 0.0,
     unit_jitter_prob: float = 0.0,
     asymmetric_strength_jitter: float = 0.0,
+    spatial_clumping: bool = True,
 ) -> Dict[str, Any]:
     """
     Mutate a GameState in-place using a deterministic RNG seeded by `seed`.
 
-    Parameters
-    ----------
-    state : GameState
-        The initialized game state prior to turn 1 execution.
-    seed : int
-        Episode seed for deterministic reproducibility.
-    terrain_mutation_prob : float
-        Probability [0.0, 1.0] of perturbing non-objective, unoccupied terrain hexes.
-    unit_jitter_prob : float
-        Probability [0.0, 1.0] of shifting a unit to an adjacent valid free hex.
-    asymmetric_strength_jitter : float
-        Probability [0.0, 1.0] of perturbing initial unit strength to create asymmetric matchups.
+    Incorporates Palma et al. (2025) asymmetric procedural perturbation and
+    Henry Hyde (2015, Ch. 6, pp. 308-310) spatial autocorrelation ("clumping")
+    so generated hills and woods form realistic contiguous ridges/hedgerows
+    instead of isolated "molehills".
     """
     rng = random.Random(int(seed) ^ 0x5A17C9)
     vp_hexes = set()
@@ -61,10 +54,11 @@ def apply_procedural_mutation(
     }
 
     mutated_terrain_count = 0
+    clumped_terrain_count = 0
     jittered_units_count = 0
     strength_jittered_count = 0
 
-    # 1. Procedural Scenery / Terrain Density Mutation
+    # 1. Procedural Scenery / Terrain Density Mutation with Hyde Spatial Clumping
     if terrain_mutation_prob > 0.0:
         for hex_obj in state.game_map.hexes:
             coords = (hex_obj.q, hex_obj.r)
@@ -72,13 +66,34 @@ def apply_procedural_mutation(
                 continue
             if hex_obj.terrain in (Terrain.WATER, Terrain.BUILDING_SINGLE, Terrain.BUILDING_MULTI):
                 continue
-            if rng.random() < terrain_mutation_prob:
+
+            # Check adjacent natural cover hexes for spatial autocorrelation (Hyde 2015, p. 310)
+            neighbor_cover_terrains = []
+            if spatial_clumping:
+                for nb in neighbors(coords):
+                    nb_state = state.hex_states.get(nb)
+                    if nb_state is not None and nb_state.hex.terrain in _NATURAL_COVER_TERRAINS:
+                        neighbor_cover_terrains.append(nb_state.hex.terrain)
+
+            effective_prob = float(terrain_mutation_prob)
+            if spatial_clumping and hex_obj.terrain == Terrain.CLEAR and neighbor_cover_terrains:
+                # Boost probability near existing hills/woods to form ridges/clusters
+                effective_prob = min(0.85, effective_prob * 1.45)
+
+            if rng.random() < effective_prob:
                 if hex_obj.terrain == Terrain.CLEAR:
-                    hex_obj.terrain = rng.choice(_NATURAL_COVER_TERRAINS)
+                    if spatial_clumping and neighbor_cover_terrains and rng.random() < 0.70:
+                        # 70% chance to propagate neighbor terrain type (Hyde p. 310)
+                        hex_obj.terrain = rng.choice(neighbor_cover_terrains)
+                        clumped_terrain_count += 1
+                    else:
+                        hex_obj.terrain = rng.choice(_NATURAL_COVER_TERRAINS)
                     mutated_terrain_count += 1
                 elif hex_obj.terrain in _NATURAL_COVER_TERRAINS:
-                    hex_obj.terrain = Terrain.CLEAR
-                    mutated_terrain_count += 1
+                    # Preserve contiguous clusters more often than isolated "molehills"
+                    if not (spatial_clumping and len(neighbor_cover_terrains) >= 2 and rng.random() < 0.60):
+                        hex_obj.terrain = Terrain.CLEAR
+                        mutated_terrain_count += 1
 
     # 2. Tactical Unit Deployment Position Jitter
     if unit_jitter_prob > 0.0:
@@ -123,6 +138,7 @@ def apply_procedural_mutation(
 
     return {
         "mutated_terrain_count": mutated_terrain_count,
+        "clumped_terrain_count": clumped_terrain_count,
         "jittered_units_count": jittered_units_count,
         "strength_jittered_count": strength_jittered_count,
     }

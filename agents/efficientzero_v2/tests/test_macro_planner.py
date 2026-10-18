@@ -102,3 +102,59 @@ def test_macro_planner_neural_intent_and_dunnigan_reserve():
     assert plan.target_vp_coords == (4, 0)
     assert plan.get_role("u_rear") == "ROLE_TACTICAL_RESERVE"
 
+
+def test_macro_planner_hyde_cohesion_bua_and_anti_pursuit():
+    """
+    Verify Henry Hyde (2015) Wargaming Compendium transfers:
+    1. SUPPORTED (<=3 hexes) vs. ISOLATED (>6 hexes) proximity cohesion tiers.
+    2. 50% Strength Retirement (ROLE_RECOVER) in open terrain vs. BUA Desperation in fortified buildings.
+    3. Anti-Impetuous Pursuit guardrail preventing OBJECTIVE_DEFENDER from abandoning captured VPs.
+    """
+    planner = MacroStrategyPlanner()
+    obs = SimpleNamespace(
+        to_play="ALLIES",
+        turn=4,
+        units=[
+            # u_def holds captured VP at (2,0)
+            {"unit_id": "u_def", "unit_key": "US_INFANTRY_RIFLES", "side": "ALLIES", "q": 2, "r": 0, "alive": True, "strength": 6, "max_strength": 6},
+            # u_hurt is in open terrain at (3,0) (within 1 hex of u_def -> SUPPORTED) but below 50% strength (2/6) -> ROLE_RECOVER
+            {"unit_id": "u_hurt", "unit_key": "US_INFANTRY_RIFLES", "side": "ALLIES", "q": 3, "r": 0, "alive": True, "strength": 2, "max_strength": 6},
+            # u_bua is below 50% strength (2/6) at (4,0) inside a fortified stone BUA -> fights on (ROLE_SPEARHEAD, not ROLE_RECOVER)
+            {"unit_id": "u_bua", "unit_key": "US_INFANTRY_RIFLES", "side": "ALLIES", "q": 4, "r": 0, "alive": True, "strength": 2, "max_strength": 6},
+            # u_iso is isolated at (12,12) (>6 hexes from all friends -> ISOLATED)
+            {"unit_id": "u_iso", "unit_key": "US_INFANTRY_RIFLES", "side": "ALLIES", "q": 12, "r": 12, "alive": True, "strength": 6, "max_strength": 6},
+        ],
+        vp_hexes=[
+            {"vp_id": "vp_home", "q": 2, "r": 0},
+            {"vp_id": "vp_target", "q": 5, "r": 0},
+        ],
+        vp_owner_by_hex={"2,0": "ALLIES", "5,0": "AXIS"},
+        terrain_cover_by_hex={"4,0": 0.45},
+        terrain_los_block_by_hex={"4,0": 0.60},
+        fortification_type_by_hex={"4,0": "bunker"},
+    )
+
+    plan = planner.compute_macro_plan(obs)
+    assert plan.get_role("u_def") == "ROLE_OBJECTIVE_DEFENDER"
+    assert plan.get_role("u_hurt") == "ROLE_RECOVER"
+    assert plan.get_role("u_bua") == "ROLE_SPEARHEAD"
+    assert plan.get_cohesion("u_def") == "SUPPORTED"
+    assert plan.get_cohesion("u_iso") == "ISOLATED"
+
+    # Anti-pursuit & anti-isolation modulation check
+    legal = [
+        "DEFEND:u_def:2,0",
+        "MOVE:u_def:3,1",       # Abandoning captured VP -> penalized
+        "RALLY:u_hurt:3,0",     # Recovering below 50% -> boosted
+        "ASSAULT:u_hurt:5,0",   # Frontal assault below 50% -> penalized
+        "MOVE:u_iso:10,10",     # Moving closer to friends -> boosted
+        "MOVE:u_iso:14,14",     # Moving deeper into isolation -> penalized
+    ]
+    base_priors = {a: 1.0 / len(legal) for a in legal}
+    mod = planner.modulate_priors(base_priors, plan, legal, {"2,0": "ALLIES"}, "ALLIES")
+
+    assert mod["DEFEND:u_def:2,0"] > mod["MOVE:u_def:3,1"]
+    assert mod["RALLY:u_hurt:3,0"] > mod["ASSAULT:u_hurt:5,0"]
+    assert mod["MOVE:u_iso:10,10"] > mod["MOVE:u_iso:14,14"]
+
+
