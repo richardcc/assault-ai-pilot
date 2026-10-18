@@ -13,5 +13,9 @@ if ($Serve) {
   if ($LASTEXITCODE -ne 0) {
     throw "mkdocs build failed (exit=$LASTEXITCODE)"
   }
-  Write-Host "Documentation site successfully generated at: site" -ForegroundColor Green
+  & $Py scripts/build_html_docs.py
+  if ($LASTEXITCODE -ne 0) {
+    throw "build_html_docs.py failed (exit=$LASTEXITCODE)"
+  }
+  Write-Host "Documentation site successfully generated with full embedded MDs at: site" -ForegroundColor Green
 }

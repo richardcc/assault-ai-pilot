@@ -46,22 +46,29 @@ DOC_FILES = [
         "desc": "Matriz de síntesis de la auditoría técnica y fases evolutivas 1 a 5."
     },
     {
-        "id": "doc-06",
-        "title": "06. Sistema RAG Copilot",
+        "id": "doc-06-audit",
+        "title": "06. Auditoría Palma et al. 2025 vs. Assault",
+        "icon": "🔬",
+        "file": "06_LITERATURE_AUDIT_CHANNELS_HEADS_TACTICS.md",
+        "desc": "Estudio comparativo exhaustivo vs. Hex-Wargame AI (Palma et al. Feb 2025 / arXiv:2502.13918v1)."
+    },
+    {
+        "id": "doc-07-rag",
+        "title": "07. Sistema RAG Copilot",
         "icon": "🤖",
         "file": "06_SISTEMA_RAG_COPILOT.md",
         "desc": "Base de conocimiento, recuperador híbrido BM25, Ollama y APIs REST."
     },
     {
-        "id": "doc-07",
-        "title": "07. Servicios Backend y Catálogo de APIs",
+        "id": "doc-08-apis",
+        "title": "08. Servicios Backend y Catálogo de APIs",
         "icon": "⚡",
         "file": "07_SERVICIOS_BACKEND_Y_CATALOGO_APIS.md",
         "desc": "Catálogo exhaustivo de endpoints REST, WebSocket, esquemas OpenAPI y Swagger UI (8001 y 8778)."
     },
     {
-        "id": "doc-08",
-        "title": "08. Auditoría Reglamento vs Engine",
+        "id": "doc-09-rules",
+        "title": "09. Auditoría Reglamento vs. Engine",
         "icon": "⚖️",
         "file": "08_AUDITORIA_REGLAMENTO_VS_ENGINE.md",
         "desc": "Auditoría exhaustiva página a página (52 págs del manual) y compendio de escenarios (38 batallas)."
@@ -980,6 +987,19 @@ HTML_TEMPLATE = """<!DOCTYPE html>
       });
     });
 
+    // Intercept clicks on internal markdown document links to switch smoothly
+    document.addEventListener('click', (e) => {
+      const target = e.target.closest('a');
+      if (!target) return;
+      const href = target.getAttribute('href');
+      if (!href) return;
+      const matched = docsData.find(d => href.includes(d.file));
+      if (matched && !target.classList.contains('btn-link')) {
+        e.preventDefault();
+        switchDocument(matched.id);
+      }
+    });
+
     // Initial render
     switchDocument(currentDocId);
   </script>
@@ -994,9 +1014,15 @@ def main():
     json_data = json_data.replace("</script>", "<\\/script>")
     output_html = HTML_TEMPLATE.replace("###EMBEDDED_JSON###", json_data)
     
-    out_file = DOCS_DIR / "index.html"
-    out_file.write_text(output_html, encoding="utf-8")
-    print(f"[OK] Generated {out_file} with {len(docs_data)} full embedded documents.")
+    out_docs = DOCS_DIR / "index.html"
+    out_docs.write_text(output_html, encoding="utf-8")
+    
+    site_dir = REPO_ROOT / "site"
+    site_dir.mkdir(parents=True, exist_ok=True)
+    out_site = site_dir / "index.html"
+    out_site.write_text(output_html, encoding="utf-8")
+    
+    print(f"[OK] Generated {out_docs} and {out_site} with {len(docs_data)} full embedded documents.")
 
 if __name__ == "__main__":
     main()
