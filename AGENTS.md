@@ -15,3 +15,8 @@
    - Las pruebas de desarrollo y experimentación deben correr sobre:
      `agents/efficientzero_v2/tests/`
    - No ejecutar ni basar nuevos desarrollos en el stack heredado de MuZero.
+
+4. **SINCRONIZACIÓN 100% OBLIGATORIA MD -> HTML (`docs/index.html` Y `site/`):**
+   - **REGLA A FUEGO:** El HTML de documentación (`docs/index.html` y el sitio compilado en `site/`) **SIEMPRE** debe contener el **100% íntegro y exacto** de todo el contenido de los archivos `.md` de `docs/`.
+   - **La Hoja de Ruta Evolutiva (`05_ROADMAP_EVOLUTIVO.md`) debe ser SIEMPRE el último punto (`09. Hoja de Ruta Evolutiva (Roadmap)`)** de la documentación y unificar cualquier apartado de roadmap.
+   - **Acción obligatoria tras cualquier cambio en `docs/*.md`:** Ejecutar siempre `python scripts/sync_docs_html.py` para inyectar el 100% de los `.md` en `docs/index.html` (`embeddedDocsData`) y regenerar `site/` con `mkdocs build`.
