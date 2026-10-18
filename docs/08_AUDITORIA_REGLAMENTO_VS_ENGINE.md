@@ -150,7 +150,156 @@ El libro de campaña oficial (*ITA_Assault_Libro_Campagna_v1.0.pdf*) contiene la
 
 ---
 
-## 4. Referencia al Plan de Acción y Hoja de Ruta Evolutiva Unificada
+## 4. Compendio e Inventario Canónico de Unidades: Counters (191) y Unit Cards (190)
+
+Para dar soporte a la totalidad de las fuerzas de la campaña de Sicilia (1943) y permitir la incorporación paulatina y modular de nuevas tropas al motor táctico y a la IA, se ha auditado y emparejado al 100% el repositorio de arte gráfico de fichas (`assets/art/counters/`) y cartas de unidad (`assets/art/unit_cards/`):
+
+```mermaid
+pie title Estado de Implementación de Tropas (95 Unidades Únicas)
+    "Implementadas en Catalog (16)" : 16
+    "Pendientes de Modelar (79)" : 79
+```
+
+### Resumen Ejecutivo por Facción
+
+| Facción | Fuerza Militar | Unidades Totales | Implementadas en Catálogo | Pendientes | Cobertura de Arte |
+| :---: | :--- | :---: | :---: | :---: | :---: |
+| **GE** | Alemania (Wehrmacht / Luftwaffe) | **27** | 4 | 23 | 100% (Anverso/Reverso) |
+| **IT** | Italia (Regio Esercito) | **21** | 7 | 14 | 100% (Anverso/Reverso) |
+| **UK** | Gran Bretaña (British Army / Commonwealth) | **25** | 0 | 25 | 100% (Anverso/Reverso) |
+| **US** | Estados Unidos (US Army / Rangers / Airborne) | **22** | 5 | 17 | 100% (Anverso/Reverso) |
+| **TOTAL** | **Todas las Facciones** | **95** | **16** (16.8%) | **79** | **100% Completo** |
+
+---
+
+### 4.1. Facción GE: Alemania (Wehrmacht / Luftwaffe) (27 Unidades)
+
+| ID Canónico | Nombre Unidad | Tipo / Rol | Estado | Ficha (Full / Half) | Carta (Anverso / Reverso) |
+| :--- | :--- | :---: | :---: | :--- | :--- |
+| `GE_2_8CM_SPZB_41` | **2-8cm sPzB 41** | `GUN_ARTILLERY` | 🟡 `PENDIENTE` | `GE 2-8cm sPzB 41.png`<br>`GE 2-8cm sPzB 41b.png` | `GE Unit 2-8cm sPzB41.jpg`<br>`GE Unit 2-8cm sPzB41b.jpg` |
+| `GE_3_7CM_FLAK_37` | **3-7cm Flak 37** | `GUN_ARTILLERY` | 🟡 `PENDIENTE` | `GE 3-7cm Flak 37.png`<br>`GE 3-7cm Flak 37b.png` | `GE Unit 3-7cm Flak 37.jpg`<br>`GE Unit 3-7cm Flak 37b.jpg` |
+| `GE_50MM_ATG_38` | **50mm ATG 38** | `GUN_ARTILLERY` | 🟡 `PENDIENTE` | `GE 50mm ATG 38.png`<br>`GE 50mm ATG 38b.png` | `GE Unit 50mm Flak 38.jpg`<br>`GE Unit 50mm Flak 38b.jpg` |
+| `GE_50MM_MORTAR` | **50mm Mortar** | `GUN_ARTILLERY` | 🟢 `IMPLEMENTADO` | `GE 50mm Mortar.png`<br>`GE 50mm Mortarb.png` | `GE Unit 50mm Mortar.jpg`<br>`GE Unit 50mm Mortarb.jpg` |
+| `GE_7_5CM_LG40` | **7-5cm LG40** | `GUN_ARTILLERY` | 🟡 `PENDIENTE` | `GE 7-5cm LG40.png`<br>`GE 7-5cm LG40b.png` | `GE Unit 7-5cm LG 40.jpg`<br>`GE Unit 7-5cm LG 40b.jpg` |
+| `GE_75MM_ATG_40` | **75mm ATG 40** | `GUN_ARTILLERY` | 🟡 `PENDIENTE` | `GE 75mm ATG 40.png`<br>`GE 75mm ATG 40b.png` | `GE Unit 75mm ATG 40.jpg`<br>`GE Unit 75mm ATG 40b.jpg` |
+| `GE_75MM_INFANTRY_GUN` | **75mm Infantry Gun** | `GUN_ARTILLERY` | 🟡 `PENDIENTE` | `GE 75mm Infantry Gun.png`<br>`GE 75mm Infantry Gunb.png` | `GE Unit 75mm Inf Gun.jpg`<br>`GE Unit 75mm Inf Gunb.jpg` |
+| `GE_8_8CM_FLAK_36` | **8-8cm Flak 36** | `GUN_ARTILLERY` | 🟡 `PENDIENTE` | `GE 8-8cm Flak 36.png`<br>`GE 8-8cm Flak 36b.png` | `GE Unit 8-8cm Flak 36.jpg`<br>`GE Unit 8-8cm Flak 36b.jpg` |
+| `GE_8_8CM_RW_43` | **8-8cm RW 43** | `GUN_ARTILLERY` | 🟡 `PENDIENTE` | `GE 8-8cm RW 43.png`<br>`GE 8-8cm RW 43b.png` | `GE Unit 8-8cm RW 43 Puppchen.jpg`<br>`GE Unit 8-8cm RW 43 Puppchenb.jpg` |
+| `GE_81MM_MORTAR` | **81mm Mortar** | `GUN_ARTILLERY` | 🟡 `PENDIENTE` | `GE 81mm Mortar.png`<br>`GE 81mm Mortarb.png` | `GE Unit 81mm Mortar.jpg`<br>`GE Unit 81mm Mortarb.jpg` |
+| `GE_FJ_RIFLES_43` | **FJ Rifles 43** | `INFANTRY` | 🟢 `IMPLEMENTADO` | `GE FJ Rifles 43.png`<br>`GE FJ Rifles 43b.png` | `GE Unit Fallschirmjager Rifles 43.jpg`<br>`GE Unit Fallschirmjager Rifles 43b.jpg` |
+| `GE_GRENADIERS_43` | **Grenadiers 43** | `INFANTRY` | 🟡 `PENDIENTE` | `GE Grenadiers 43.png`<br>`GE Grenadiers 43b.png` | `GE Unit Grenadiers 43.jpg`<br>`GE Unit Grenadiers 43b.jpg` |
+| `GE_HEAVY_MG_42` | **HMG 42** | `INFANTRY` | 🟢 `IMPLEMENTADO` | `GE HMG 42.png`<br>`GE HMG 42b.png` | `GE Unit Heavy MG42.jpg`<br>`GE Unit Heavy MG42b.jpg` |
+| `GE_KETTENKRADS` | **Kettenkrads** | `INFANTRY` | 🟡 `PENDIENTE` | `GE Kettenkrads.png`<br>`GE Kettenkradsb.png` | `GE Unit Kettenkrads.jpg`<br>`GE Unit Kettenkradsb.jpg` |
+| `GE_RIFLES_43` | **Rifles 43** | `INFANTRY` | 🟢 `IMPLEMENTADO` | `GE Rifles 43.png`<br>`GE Rifles 43b.png` | `GE Unit Rifles 43.jpg`<br>`GE Unit Rifles 43b.jpg` |
+| `GE_SDKFZ_231` | **SdKfz 231** | `INFANTRY` | 🟡 `PENDIENTE` | `GE SdKfz 231.png`<br>`GE SdKfz 231b.png` | `GE Unit SDKFZ 231.jpg`<br>`GE Unit SDKFZ 231b.jpg` |
+| `GE_SDKFZ_233` | **SdKfz 233** | `INFANTRY` | 🟡 `PENDIENTE` | `GE SdKfz 233.png`<br>`GE SdKfz 233b.png` | `GE Unit SDKFZ 233.jpg`<br>`GE Unit SDKFZ 233b.jpg` |
+| `GE_SDKFZ_251_1` | **SdKfz 251-1** | `INFANTRY` | 🟡 `PENDIENTE` | `GE SdKfz 251-1.png`<br>`GE SdKfz 251-1b.png` | `GE Unit SDKFZ 251-1.jpg`<br>`GE Unit SDKFZ 251-1b.jpg` |
+| `GE_SERVICE_TROOPS` | **Service Troops** | `INFANTRY` | 🟡 `PENDIENTE` | `GE Service Troops.png`<br>`GE Service Troopsb.png` | `GE Unit Service Troops.jpg`<br>`GE Unit Service Troopsb.jpg` |
+| `GE_SNIPER_43` | **Sniper 43** | `INFANTRY` | 🟡 `PENDIENTE` | `GE Sniper 43.png`<br>`GE Sniper 43b.png` | `GE Unit Sniper 43.jpg`<br>`GE Unit Sniper 43b.jpg` |
+| `GE_TRUCK` | **Truck** | `TRANSPORT` | 🟡 `PENDIENTE` | `GE Truck.png`<br>`GE Truckb.png` | `GE Unit Truck.jpg`<br>`GE Unit Truckb.jpg` |
+| `GE_PANZER_III_J` | **Panzer III J** | `VEHICLE` | 🟡 `PENDIENTE` | `GE Panzer III J.png`<br>`GE Panzer III Jb.png` | `GE Unit Panzer III J.jpg`<br>`GE Unit Panzer III Jb.jpg` |
+| `GE_PANZER_IV_G` | **Panzer IV G** | `VEHICLE` | 🟡 `PENDIENTE` | `GE Panzer IV G.png`<br>`GE Panzer IV Gb.png` | `GE Unit Panzer IV G.jpg`<br>`GE Unit Panzer IV Gb.jpg` |
+| `GE_STUG_III_G` | **StuG III G** | `VEHICLE` | 🟡 `PENDIENTE` | `GE StuG III G.png`<br>`GE StuG III Gb.png` | `GE Unit StuG III G.jpg`<br>`GE Unit StuG III Gb.jpg` |
+| `GE_STUH42` | **StuH42** | `VEHICLE` | 🟡 `PENDIENTE` | `GE StuH42.png`<br>`GE StuH42b.png` | `GE Unit StuH 42.jpg`<br>`GE Unit StuH 42b.jpg` |
+| `GE_TANK_HUNTERS_43` | **Tank Hunters 43** | `VEHICLE` | 🟡 `PENDIENTE` | `GE Tank Hunters 43.png`<br>`GE Tank Hunters 43b.png` | `GE Unit Tank Hunters 43.jpg`<br>`GE Unit Tank Hunters 43b.jpg` |
+| `GE_TIGER_E` | **Tiger E** | `VEHICLE` | 🟡 `PENDIENTE` | `GE Tiger E.png`<br>`GE Tiger Eb.png` | `GE Unit Tiger E.jpg`<br>`GE Unit Tiger Eb.jpg` |
+
+### 4.2. Facción IT: Italia (Regio Esercito) (21 Unidades)
+
+| ID Canónico | Nombre Unidad | Tipo / Rol | Estado | Ficha (Full / Half) | Carta (Anverso / Reverso) |
+| :--- | :--- | :---: | :---: | :--- | :--- |
+| `IT_47MM_ATG` | **47mm ATG** | `GUN_ARTILLERY` | 🟡 `PENDIENTE` | `IT 47mm ATG.png`<br>`IT 47mm ATGb.png` | `IT Unit 47mm ATG.jpg`<br>`IT Unit 47mm ATGb.jpg` |
+| `IT_65MM_FIELD_GUN` | **65mm Field Gun** | `GUN_ARTILLERY` | 🟡 `PENDIENTE` | `IT 65mm Field Gun.png`<br>`IT 65mm Field Gunb.png` | `IT Unit 65mm Field Gun.jpg`<br>`IT Unit 65mm Field Gunb.jpg` |
+| `IT_81MM_MORTAR` | **81mm Mortar** | `GUN_ARTILLERY` | 🟡 `PENDIENTE` | `IT 81mm Mortar.png`<br>`IT 81mm Mortarb.png` | `IT Unit 81mm Mortar.jpg`<br>`IT Unit 81mm Mortarb.jpg` |
+| `IT_90MM_AA_GUN` | **90mm AA Gun** | `GUN_ARTILLERY` | 🟡 `PENDIENTE` | `IT 90mm AA Gun.png`<br>`IT 90mm AA Gunb.png` | `IT Unit 90mm AA Gun.jpg`<br>`IT Unit 90mm AA Gunb.jpg` |
+| `IT_20MM_BREDA_AA_43` | **20mm Breda AA** | `INFANTRY` | 🟢 `IMPLEMENTADO` | `IT 20mm Breda AA.png`<br>`IT 20mm Breda AAb.png` | `IT Unit 20mm Breda AA.jpg`<br>`IT Unit 20mm Breda AAb.jpg` |
+| `IT_45MM_BRIXIA_TEAM` | **45mm Brixia Team** | `INFANTRY` | 🟢 `IMPLEMENTADO` | `IT 45mm Brixia Team.png`<br>`IT 45mm Brixia Teamb.png` | `IT Unit 45mm Brixia Mortar.jpg`<br>`IT Unit 45mm Brixia Mortarb.jpg` |
+| `IT_BREDA_MMG` | **Breda MMG** | `INFANTRY` | 🟢 `IMPLEMENTADO` | `IT Breda MMG.png`<br>`IT Breda MMGb.png` | `IT Unit Breda MMG.jpg`<br>`IT Unit Breda MMGb.jpg` |
+| `IT_LMG_SQUAD_43` | **LMG Squad 43** | `INFANTRY` | 🟢 `IMPLEMENTADO` | `IT LMG Squad 43.png`<br>`IT LMG Squad 43b.png` | `IT Unit LMG Squad 43.jpg`<br>`IT Unit LMG Squad 43b.jpg` |
+| `IT_LANCIA_90MM_L53` | **Lancia 90mm L53** | `INFANTRY` | 🟡 `PENDIENTE` | `IT Lancia 90mm L53.png`<br>`IT Lancia 90mm L53b.png` | `IT Unit Lancia 90mm L53.jpg`<br>`IT Unit Lancia 90mm L53b.jpg` |
+| `IT_RIFLES_43` | **Rifles 43** | `INFANTRY` | 🟢 `IMPLEMENTADO` | `IT Rifles 43.png`<br>`IT Rifles 43b.png` | `IT Unit Rifles 43.jpg`<br>`IT Unit Rifles 43b.jpg` |
+| `IT_SNIPER_43` | **Sniper 43** | `INFANTRY` | 🟢 `IMPLEMENTADO` | `IT Sniper 43.png`<br>`IT Sniper 43b.png` | `IT Unit Sniper 43.jpg`<br>`IT Unit Sniper 43b.jpg` |
+| `IT_SOLOTHURN_ATR_43` | **Solothum ATR** | `INFANTRY` | 🟢 `IMPLEMENTADO` | `IT Solothum ATR.png`<br>`IT Solothum ATRb.png` | `IT Unit Solothurn AT Rifle.jpg`<br>`IT Unit Solothurn AT Rifleb.jpg` |
+| `IT_TRUCK` | **Truck** | `TRANSPORT` | 🟡 `PENDIENTE` | `IT Truck.png`<br>`IT Truckb.png` | `IT Unit Truck.jpg`<br>`IT Unit Truckb.jpg` |
+| `IT_AUTOBLINDA_41` | **Autoblinda 41** | `VEHICLE` | 🟡 `PENDIENTE` | `IT Autoblinda 41.png`<br>`IT Autoblinda 41b.png` | `IT Unit Autoblinda 41.jpg`<br>`IT Unit Autoblinda 41b.jpg` |
+| `IT_CAMIONETTA_AS_42` | **Camionetta AS-42** | `VEHICLE` | 🟡 `PENDIENTE` | `IT Camionetta AS-42.png`<br>`IT Camionetta AS-42b.png` | `IT Unit Camionetta As42.jpg`<br>`IT Unit Camionetta As42b.jpg` |
+| `IT_L3_35` | **L3-35** | `VEHICLE` | 🟡 `PENDIENTE` | `IT L3-35.png`<br>`IT L3-35b.png` | `IT Unit L3-35.jpg`<br>`IT Unit L3-35b.jpg` |
+| `IT_L3_35_FLAME` | **L3-35 Flame** | `VEHICLE` | 🟡 `PENDIENTE` | `IT L3-35 Flame.png`<br>`IT L3-35 Flameb.png` | `IT Unit L3-35 Flame.jpg`<br>`IT Unit L3-35 Flameb.jpg` |
+| `IT_L6_40` | **L6-40** | `VEHICLE` | 🟡 `PENDIENTE` | `IT L6-40.png`<br>`IT L6-40b.png` | `IT Unit L6-40.jpg`<br>`IT Unit L6-40b.jpg` |
+| `IT_M_14_41` | **M 14-41** | `VEHICLE` | 🟡 `PENDIENTE` | `IT M 14-41.png`<br>`IT M14-41b.png` | `IT Unit M14-41.jpg`<br>`IT Unit M14-41b.jpg` |
+| `IT_RENAULT_R_35` | **Renault R-35** | `VEHICLE` | 🟡 `PENDIENTE` | `IT Renault R-35.png`<br>`IT Renault R-35b.png` | `IT Unit Renault R-35.jpg`<br>`IT Unit Renault R-35b.jpg` |
+| `IT_SEMOVENTE_75_41` | **Semovente 75-41** | `VEHICLE` | 🟡 `PENDIENTE` | `IT Semovente 75-41.png`<br>`IT Semovente 75-41b.png` | `IT Unit Semovente 75-41.jpg`<br>`IT Unit Semovente 75-41b.jpg` |
+
+### 4.3. Facción UK: Gran Bretaña (British Army / Commonwealth) (25 Unidades)
+
+| ID Canónico | Nombre Unidad | Tipo / Rol | Estado | Ficha (Full / Half) | Carta (Anverso / Reverso) |
+| :--- | :--- | :---: | :---: | :--- | :--- |
+| `UK_17_POUNDER_ATG` | **17-Pounder ATG** | `GUN_ARTILLERY` | 🟡 `PENDIENTE` | `UK 17-Pounder ATG.png`<br>`UK 17-Pounder ATGb.png` | `UK Unit 17-Pounder ATG.png`<br>`UK Unit 17-Pounder ATGb.png` |
+| `UK_2_INCH_MORTAR` | **2-Inch Mortar** | `GUN_ARTILLERY` | 🟡 `PENDIENTE` | `UK 2-Inch Mortar.png`<br>`UK 2-Inch Mortarb.png` | `UK Unit 2-Inch Mortar.png`<br>`UK Unit 2-Inch Mortarb.png` |
+| `UK_2_POUNDER_ATG` | **2-Pounder ATG** | `GUN_ARTILLERY` | 🟡 `PENDIENTE` | `UK 2-Pounder ATG.png`<br>`UK 2-Pounder ATGg.png` | `UK Unit 2-Pounder ATG.png`<br>`UK Unit 2-Pounder ATGb.png` |
+| `UK_25_POUNDER_HOW` | **25-Pounder How** | `GUN_ARTILLERY` | 🟡 `PENDIENTE` | `UK 25-Pounder How.png`<br>`UK 25-Pounder Howb.png` | `UK Unit 25-Pounder Howitzer.png`<br>`UK Unit 25-Pounder Howitzerb.png` |
+| `UK_3_INCH_MORTAR` | **3-Inch Mortar** | `GUN_ARTILLERY` | 🟡 `PENDIENTE` | `UK 3-Inch Mortar.png`<br>`UK 3-Inch Mortarb.png` | `UK Unit 3-Inch Mortar.png`<br>`UK Unit 3-Inch Mortarb.png` |
+| `UK_6_POUNDER_ATG` | **6-Pounder ATG** | `GUN_ARTILLERY` | 🟡 `PENDIENTE` | `UK 6-Pounder ATG.png`<br>`UK 6-Pounder ATGb.png` | `UK Unit 6-Pounder ATG.png`<br>`UK Unit 6-Pounder ATGb.png` |
+| `UK_40MM_BOFORS_AA` | **40mm Bofors AA** | `INFANTRY` | 🟡 `PENDIENTE` | `UK 40mm Bofors AA.png`<br>`UK 40mm Bofors AAb.png` | `UK Unit 40mm Bofors AA.png`<br>`UK Unit 40mm Bofors AAb.png` |
+| `UK_COMMANDOS` | **Commandos** | `INFANTRY` | 🟡 `PENDIENTE` | `UK Commandos.png`<br>`UK Commandosb.png` | `UK Unit Commandos.png`<br>`UK Unit Commandosb.png` |
+| `UK_PIAT_TEAM` | **PIAT Team** | `INFANTRY` | 🟡 `PENDIENTE` | `UK PIAT Team.png`<br>`UK PIAT Teamb.png` | `UK Unit PIAT Team.png`<br>`UK Unit PIAT Teamb.png` |
+| `UK_PARACHUTE_RIFLES` | **Parachute Rifles** | `INFANTRY` | 🟡 `PENDIENTE` | `UK Parachute Rifles.png`<br>`UK Parachute Riflesb.png` | `UK Unit Parachute Rifles 43.png`<br>`UK Unit Parachute Rifles 43b.png` |
+| `UK_RIFLES_43` | **Rifles 43** | `INFANTRY` | 🟡 `PENDIENTE` | `UK Rifles 43.png`<br>`UK Rifles 43b.png` | `UK Unit Rifles 43.png`<br>`UK Unit Rifles 43b.png` |
+| `UK_ROYAL_ENGINEERS` | **Royal Engineers** | `INFANTRY` | 🟡 `PENDIENTE` | `UK Royal Engineers.png`<br>`UK Royal Engineersb.png` | `UK Unit Royal Engineers.png`<br>`UK Unit Royal Engineersb.png` |
+| `UK_SERVICE_TROOPS` | **Service Troops** | `INFANTRY` | 🟡 `PENDIENTE` | `UK Service Troops.png`<br>`UK Service Troopsb.png` | `UK Unit Service Troops.png`<br>`UK Unit Service Troopsb.png` |
+| `UK_SNIPER_43` | **Sniper 43** | `INFANTRY` | 🟡 `PENDIENTE` | `UK Sniper 43.png`<br>`UK Sniper 43b.png` | `UK Unit Sniper 43.png`<br>`UK Unit Sniper 43b.png` |
+| `UK_VICKERS_MG` | **Vickers MG** | `INFANTRY` | 🟡 `PENDIENTE` | `UK Vickers MG.png`<br>`UK Vickers MGb.png` | `UK Unit Vickers MG.png`<br>`UK Unit Vickers MGb.png` |
+| `UK_TRUCK` | **Truck** | `TRANSPORT` | 🟡 `PENDIENTE` | `UK Truck.png`<br>`UK Truckb.png` | `UK Unit Truck.png`<br>`UK Unit Truckb.png` |
+| `UK_ATG_CARRIER` | **ATG Carrier** | `VEHICLE` | 🟡 `PENDIENTE` | `UK ATG Carrier.png`<br>`UK ATG Carrierb.png` | `UK Unit AT-Rifle Carrier.png`<br>`UK Unit AT-Rifle Carrierb.png` |
+| `UK_BREN_CARRIER` | **Bren Carrier** | `VEHICLE` | 🟡 `PENDIENTE` | `UK Bren Carrier.png`<br>`UK Bren Carrierb.png` | `UK Unit Bren Carrier.png`<br>`UK Unit Bren Carrierb.png` |
+| `UK_CHURCHILL_IV` | **Churchill IV** | `VEHICLE` | 🟡 `PENDIENTE` | `UK Churchill IV.png`<br>`UK Churchill IVb.png` | `UK Unit Churchill IV.png`<br>`UK Unit Churchill IVb.png` |
+| `UK_DAIMLER_AC` | **Daimler AC** | `VEHICLE` | 🟡 `PENDIENTE` | `UK Daimler AC.png`<br>`UK Daimler ACb.png` | `UK Unit Daimler AC.png`<br>`UK Unit Daimler ACb.png` |
+| `UK_M4A2_SHERMAN_III` | **M4A2 Sherman III** | `VEHICLE` | 🟡 `PENDIENTE` | `UK M4A2 Sherman III.png`<br>`UK M4A2 Sherman IIIb.png` | `UK Unit M4A2 Sherman III.png`<br>`UK Unit M4A2 Sherman IIIb.png` |
+| `UK_M5_HALFTRACK` | **M5 Halftrack** | `VEHICLE` | 🟡 `PENDIENTE` | `UK M5 Halftrack.png`<br>`UK M5 Halftrackb.png` | `UK Unit M5 Halftrack.png`<br>`UK Unit M5 Halftrackb.png` |
+| `UK_M7_PRIEST` | **M7 Priest** | `VEHICLE` | 🟡 `PENDIENTE` | `UK M7 Priest.png`<br>`UK M7 Priestb.png` | `UK Unit M7 Priest.png`<br>`UK Unit M7 Priestb.png` |
+| `UK_PIAT_CARRIER` | **PIAT Carrier** | `VEHICLE` | 🟡 `PENDIENTE` | `UK PIAT Carrier.png`<br>`UK PIAT Carrierb.png` | `UK Unit PIAT Carrier.png`<br>`UK Unit PIAT Carrierb.png` |
+| `UK_VALENTINE_X` | **Valentine X** | `VEHICLE` | 🟡 `PENDIENTE` | `UK Valentine X.png`<br>`UK Valentine Xb.png` | `UK Unit Valentine X.png`<br>`UK Unit Valentine Xb.png` |
+
+### 4.4. Facción US: Estados Unidos (US Army / Rangers / Airborne) (22 Unidades)
+
+| ID Canónico | Nombre Unidad | Tipo / Rol | Estado | Ficha (Full / Half) | Carta (Anverso / Reverso) |
+| :--- | :--- | :---: | :---: | :--- | :--- |
+| `US_37MM_ATG` | **37mm ATG** | `GUN_ARTILLERY` | 🟡 `PENDIENTE` | `US 37mm ATG.png`<br>`US 37mm ATGb.png` | `US Unit 37mm ATG.jpg`<br>`US Unit 37mm ATGb.jpg` |
+| `US_57MM_ATG` | **57mm ATG** | `GUN_ARTILLERY` | 🟡 `PENDIENTE` | `US 57mm ATG.png`<br>`US 57mm ATGb.png` | `US Unit 57mm ATG.jpg`<br>`US Unit 57mm ATGb.jpg` |
+| `US_60MM_MORTAR` | **60mm Mortar** | `GUN_ARTILLERY` | 🟡 `PENDIENTE` | `US 60mm Mortar.png`<br>`US 60mm Mortarb.png` | `US Unit 60mm Mortar.jpg`<br>`US Unit 60mm Mortarb.jpg` |
+| `US_75MM_FIELD_GUN` | **75mm Field Gun** | `GUN_ARTILLERY` | 🟡 `PENDIENTE` | `US 75mm Field Gun.png`<br>`US 75mm Field Gunb.png` | `US Unit 75mm Field Guns.jpg`<br>`US Unit 75mm Field Gunsb.jpg` |
+| `US_81MM_MORTAR` | **81mm Mortar** | `GUN_ARTILLERY` | 🟢 `IMPLEMENTADO` | `US 81mm Mortar.png`<br>`US 81mm Mortarb.png` | `US Unit 81mm Mortar.jpg`<br>`US Unit 81mm Mortarb.jpg` |
+| `US_40MM_BOFORS_AA` | **40mm Bofors AA** | `INFANTRY` | 🟡 `PENDIENTE` | `US 40mm Bofors AA.png`<br>`US 40mm Bofors AAb.png` | `US Unit 40mm Bofors AA.jpg`<br>`US Unit 40mm Bofors AAb.jpg` |
+| `US_50CAL_HMG` | **50Cal HMG** | `INFANTRY` | 🟡 `PENDIENTE` | `US 50Cal HMG.png`<br>`US 50Cal HMGb.png` | `US Unit Cal 50 HMG.jpg`<br>`US Unit Cal 50 HMGb.jpg` |
+| `US_AIRBORNE_RIFLES_43` | **Airborne Rifles 43** | `INFANTRY` | 🟡 `PENDIENTE` | `US Airborne Rifles 43.png`<br>`US Airborne Rifles 43b.png` | `US Unit Airborne Rifles.jpg`<br>`US Unit Airborne Riflesb.jpg` |
+| `US_BAZOOKA_TEAM_43` | **Bazooka Team 43** | `INFANTRY` | 🟢 `IMPLEMENTADO` | `US Bazooka Team 43.png`<br>`US Bazooka Team 43b.png` | `US Unit Bazooka Team 43.jpg`<br>`US Unit Bazooka Team 43b.jpg` |
+| `US_COMBAT_ENGINEERS_43` | **Combat Engineers 43** | `INFANTRY` | 🟡 `PENDIENTE` | `US Combat Engineers 43.png`<br>`US Combat Engineers 43b.png` | `US Unit Combat Engineers.jpg`<br>`US Unit Combat Engineersb.jpg` |
+| `US_M1919A4_30CAL_MMG` | **M1919A4 30cal MMG** | `INFANTRY` | 🟡 `PENDIENTE` | `US M1919A4 30cal MMG.png`<br>`US M1919A4 30cal MMGb.png` | `US Unit M1919A4 Cal 30 MMG.jpg`<br>`US Unit M1919A4 Cal 30 MMGb.jpg` |
+| `US_RANGERS_43` | **Rangers 43** | `INFANTRY` | 🟢 `IMPLEMENTADO` | `US Rangers 43.png`<br>`US Rangers 43b.png` | `US Unit Rangers 43.jpg`<br>`US Unit Rangers 43b.jpg` |
+| `US_RIFLES_43` | **Rifles 43** | `INFANTRY` | 🟢 `IMPLEMENTADO` | `US Rifles 43.png`<br>`US Rifles 43b.png` | `US Unit Rifles 43.jpg`<br>`US Unit Rifles 43b.jpg` |
+| `US_SNIPER_43` | **Sniper 43** | `INFANTRY` | 🟢 `IMPLEMENTADO` | `US Sniper 43.png`<br>`US Sniper 43b.png` | `US Unit Sniper 43.jpg`<br>`US Unit Sniper 43b.jpg` |
+| `US_TRUCK` | **Truck** | `TRANSPORT` | 🟡 `PENDIENTE` | `US Truck.png`<br>`US Truckb.png` | `US Unit Truck.jpg`<br>`US Unit Truckb.jpg` |
+| `US_M10_WOLVERINE` | **M10 Wolverine** | `VEHICLE` | 🟡 `PENDIENTE` | `US M10 Wolverine.png`<br>`US M10 Wolverineb.png` | `US Unit M10 Wolverine.jpg`<br>`US Unit M10 Wolverineb.jpg` |
+| `US_M3_GMC_TD` | **M3 GMC TD** | `VEHICLE` | 🟡 `PENDIENTE` | `US M3 GMC TD.png`<br>`US M3 GMC TDb.png` | `US Unit M3 GMC TD.jpg`<br>`US Unit M3 GMC TDb.jpg` |
+| `US_M3_HALFTRACK` | **M3 Halftrack** | `VEHICLE` | 🟡 `PENDIENTE` | `US M3 Halftrack.png`<br>`US M3 Halftrackb.png` | `US Unit M3 Halftrack.jpg`<br>`US Unit M3 Halftrackb.jpg` |
+| `US_M4A1_SHERMAN` | **M4A1 Sherman** | `VEHICLE` | 🟡 `PENDIENTE` | `US M4A1 Sherman.png`<br>`US M4A1 Shermanb.png` | `US Unit M4A1 Sherman.jpg`<br>`US Unit M4A1 Shermanb.jpg` |
+| `US_M5_STUART` | **M5 Stuart** | `VEHICLE` | 🟡 `PENDIENTE` | `US M5 Stuart.png`<br>`US M5 Stuartb.png` | `US Unit M5 Stuart.jpg`<br>`US Unit M5 Stuartb.jpg` |
+| `US_M7_PRIEST` | **M7 Priest** | `VEHICLE` | 🟡 `PENDIENTE` | `US M7 Priest.png`<br>`US M7 Priestb.png` | `US Unit M7 Priest.jpg`<br>`US Unit M7 Priestb.jpg` |
+| `US_M8_GREYHOUND` | **M8 Greyhound** | `VEHICLE` | 🟡 `PENDIENTE` | `US M8 Greyhound.png`<br>`US M8 Greyhoundb.png` | `US Unit M8 Greyhound.jpg`<br>`US Unit M8 Greyhoundb.jpg` |
+
+---
+
+### 4.5. Protocolo para la Incorporación Paso a Paso de Nuevas Unidades
+Cada carta de unidad (`assets/art/unit_cards/*.jpg`) contiene la totalidad de especificaciones tácticas oficiales impresas:
+1. **Coste en Puntos y Puntos de Vida (`max_strength`)**: Círculo superior izquierdo (coste) y corazones rojos (`HP` / steps).
+2. **Velocidad y Capacidad de Maniobra (`movement`)**: Hexágono superior derecho con icono de tracción (oruga, rueda o bípode/pie).
+3. **Escudos Defensivos (`base_defense`)**: 4 cuadrantes (Frontal, Flanco Izquierdo, Flanco Derecho, Retaguardia) con el color de dado de salvación (`YELLOW`, `RED`, `GREEN`).
+4. **Tabla de Fuego Directo e Indirecto (`attack`)**: Matriz de bandas de alcance (0, 1-3, 4-7, 8-11...) discriminando contra Blindados (`VEHICLE`) vs Infantería/Artillería (`INFANTRY`).
+5. **Rasgos Doctrinales (`traits`)**: Texto central con habilidades oficiales (*Slow*, *Low Silhouette*, *Smoke*, *Open Top*, *Tough*, *Assault*, etc.).
+
+Al modelar una unidad, se añade su entrada correspondiente en [`assets/catalogs/unit_catalog.json`](file:///c:/repos/python/assault/assets/catalogs/unit_catalog.json), quedando inmediatamente habilitada en el motor `assault_model/` y accesible para el visor MLOps y los modelos de auto-juego de `EfficientZeroV2`.
+
+## 5. Referencia al Plan de Acción y Hoja de Ruta Evolutiva Unificada
 
 > [!NOTE]
 > El plan de acción priorizado para alcanzar el 100% de paridad del reglamento (Fases A, B y C: mecánicas tácticas de infantería/humo/transporte, cartas de mando/apoyo aéreo TAS-OAS e ingesta automatizada de los 36 escenarios restantes) se encuentra integrado de forma unificada en el documento final de la documentación: **[09. Hoja de Ruta Evolutiva: Assault Architecture Roadmap (2024–2026)](05_ROADMAP_EVOLUTIVO.md)**.
