@@ -307,38 +307,140 @@ graph LR
 
 ---
 
-## 6. Matriz de Acciones para la Hoja de Ruta
+## 6. Auditoría de Brechas: ¿Qué Aportan Palma et al. (2025) y la Literatura SOTA que AÚN NO Hemos Implementado?
+
+Una inspección cruzada entre el código fuente actual (`agents/efficientzero_v2/`) y los textos completos de la literatura de referencia (`docs/papers/2502.13918v1.pdf` de Palma et al. 2025, *KataGo*, *AlphaStar*, *Dunnigan* y *Sun Tzu*) revela **tres categorías de mejoras de alto impacto que aún no están implementadas o activadas**:
 
 ```mermaid
 flowchart TD
-    subgraph Observacion["1. Espacio de Observacion"]
-        CH32["32 Canales Axiales"] --> Gating["Dynamic Channel Gating (CBAM)"]
-        Gating --> RepTrunk["Tronco Representacion Hexagonal"]
+    subgraph Brechas_Internas["A. Brechas en Codigo Actual (Definido pero No Cableado)"]
+        B1["1. Activar use_hex_mask=True por defecto\nen ResidualConvBlock y representation_input"]
+        B2["2. Cablear TemporalContextBlock (GRU)\nen el flujo de inferencia POMDP"]
+        B3["3. Input Channel Gating (SE 32ch)\npara apagar canales muertos por escenario"]
+        B4["4. Conectar prediction_intent (8 clases)\nal MacroStrategyPlanner Nivel 1"]
     end
 
-    subgraph Cabezas["2. Consolidacion de Cabezas"]
-        RepTrunk --> CoreHeads["Cabezas Primarias: Policy, Value, Reward, Consistency"]
-        RepTrunk --> AuxConsolidated["3 Cabezas Auxiliares Consolidadas:\n1. Threat Map (Espacial)\n2. Combat Status (Attrition + Morale)\n3. Strategic Intent (VP + Objective)"]
-        AuxConsolidated --> PCGrad["PCGrad Orthogonal Balancing"]
+    subgraph Brechas_Palma["B. Aportaciones de Palma et al. (2025) Pendientes"]
+        P1["5. Arquitectura 'Recall' (Bansal et al.)\nSkip-Concatenation de s_t en cada paso recurrente"]
+        P2["6. Entrenamiento 'Progressive Loss' (n sin grad + k con grad)\npara extrapolacion estable al aumentar k"]
+        P3["7. Canales de Calendario de Refuerzos Entrantes\n(Hexagono de llegada + Cuenta atras normalizada)"]
+        P4["8. Seleccion Secuencial de Ataques Combinados\n(Multi-Unit Coordinated Assault Sub-Phases)"]
+        P5["9. PonderNet / Adaptive Computation Time (ACT)\nParada adaptativa en dinamica y presupuesto MCTS"]
+        P6["10. Convoluciones Hexagonal Depthwise-Separable\ny Cabeza de Politica FCN Espacial"]
     end
 
-    subgraph Jerarquia["3. Jerarquia Tactica (2 Niveles)"]
-        RepTrunk --> LatentPooled["Pooled Global Latent Vector"]
-        LatentPooled --> MacroPolicy["Nivel 1: Macro-Policy (Postura y Roles)"]
-        MacroPolicy --> RootPriors["Modulacion de Priors MCTS (+30%)"]
-        RootPriors --> MicroMCTS["Nivel 2: MCTS + Unit Prefilter (Micro-Maniobra)"]
-    end
-
-    subgraph Adaptaciones["4. Lecciones Transferidas de Palma et al. (2025) [COMPLETADAS]"]
-        RepTrunk --> FCN_Scale["FCN + Adaptive Spatial Processing (16x16 / 32x32 / 64x64)"]
-        RepTrunk -->RecDyn["Weight-Tied k-Step Recurrent Dynamics (0 Extra Params)"]
-        MicroMCTS --> ProcGen["Mutador Procedural Asimetrico (Terreno + Despliegue + Fuerza)"]
+    subgraph Brechas_SOTA["C. Aportaciones de KataGo, Dunnigan y Sun Tzu Pendientes"]
+        S1["11. Cabeza Densa de Ownership Final (KataGo)\nPrediccion HxW de control territorial al final de partida"]
+        S2["12. Ratio Fuerza-Espacio y Reserva Tactica (Dunnigan)\nCanal de densidad de frente y bonificacion por reserva"]
+        S3["13. Vector de Engaño / Finta e Incertidumbre (Sun Tzu)\nRecompensa intrinseca por desviar reservas enemigas"]
     end
 ```
 
-### Síntesis Final:
-1. **Canales (32):** El volumen es **perfecto**. No recortar canales, sino añadir compresión adaptativa *Channel Gating* para apagar automáticamente canales irrelevantes por escenario.
-2. **Cabezas (10):** Mantenidas con balanceo ortogonal PCGrad / GradNorm.
-3. **Jerarquía Táctica:** Mantenidos estrictamente **2 niveles** (Macro y Micro).
-4. **Transferencia de Literatura (Palma et al. 2025):** Las 3 innovaciones clave (invariancia zero-shot al tamaño del mapa $16\times 16 \to 64\times 64$, profundidad recurrente con pesos atados $k$-step sin aumento de parámetros, y mutador procedural asimétrico en self-play) están **100% implementadas y verificadas** en `agents/efficientzero_v2/tests/test_palma_transfers.py`.
+---
+
+### 6.1. Brechas de Cableado Interno en el Código Actual (`network_base.py` y `macro_planner.py`)
+
+Al auditar `agents/efficientzero_v2/core/network_base.py` frente a la documentación arquitectónica, existen componentes ya programados cuyas clases existen pero **no están activadas en el grafo de ejecución**:
+
+1. **Activación Efectiva de `HexagonalMaskConv2d` (`use_hex_mask=True`) — `[PENDIENTE DE ACTIVAR]`:**
+   * *Estado en código (`network_base.py` líneas 33–69 y 175–201):* La clase `HexagonalMaskConv2d` está implementada, pero `ResidualConvBlock.__init__` tiene `use_hex_mask: bool = False` por defecto, y tanto `representation_tower` como `dynamics_state` y `prediction_trunk` instancian `ResidualConvBlock(self.hidden_dim)` sin pasar `use_hex_mask=True` (y `representation_input` usa `nn.Conv2d` estándar).
+   * *Qué debemos hacer:* Pasar `use_hex_mask=True` (controlado por flag de configuración para mantener compatibilidad con checkpoints antiguos) en `representation_input`, `representation_tower`, `dynamics_state` y `prediction_trunk`.
+
+2. **Cableado del `TemporalContextBlock` (GRU de Niebla de Guerra) — `[PENDIENTE DE CABLEAR]`:**
+   * *Estado en código (`network_base.py` líneas 88–102):* La clase `TemporalContextBlock(nn.Module)` con `nn.GRUCell` está declarada en `network_base.py`, pero nunca se instancia en `EfficientZeroV2BaseNetwork.__init__` ni se invoca en `initial_inference` / `recurrent_inference`.
+   * *Qué debemos hacer:* Instanciar `self.temporal_context = TemporalContextBlock(self.hidden_dim)` e integrarlo sobre el estado latente agrupado para mantener memoria explícita de unidades enemigas que desaparecen tras humo o edificios (*Fog of War*).
+
+3. **Compuerta de Atención en la Entrada Sensorial (`InputChannelGate` sobre los 32 Canales) — `[PENDIENTE]`:**
+   * *Estado en código:* Los bloques residuales tienen Squeeze-and-Excitation sobre los 48 canales latentes, pero la capa inicial `representation_input` recibe los 32 canales crudos sin filtrado previo. Canales que valen `0.0` durante todo un escenario (ej. `heavy_fortifications` o `hazard_mines_and_wire` en mapas sin minas) inyectan ruido de sesgo en la primera convolución.
+   * *Qué debemos hacer:* Añadir un módulo ligero `InputChannelGate(32)` antes de `representation_input` que pondere dinámicamente los 32 canales en $[0, 1]$ según el contexto global del mapa.
+
+4. **Cierre del Bucle Neuronal en el Nivel 1 (`prediction_intent` $\to$ `MacroStrategyPlanner`) — `[PENDIENTE]`:**
+   * *Estado en código:* La red entrena con éxito la cabeza `prediction_intent` (8 clases doctrinales, cuya pérdida ya converge a `0.067`), pero `MacroStrategyPlanner` (`agents/efficientzero_v2/tactics/macro_planner.py`) sigue eligiendo la postura macro (`ASSAULT_VP`, `DEFENSIVE_HOLD`, `ZONE_SUPPRESS`) mediante heurísticas geométricas fijas.
+   * *Qué debemos hacer:* Alimentar `objective_intent_logits` y `multi_vp_pred` directamente al `MacroStrategyPlanner` para que la postura de Nivel 1 sea híbrida o 100% guiada por la red aprendida.
+
+---
+
+### 6.2. Aportaciones Específicas de Palma et al. (2025, `arXiv:2502.13918v1`) que No Tenemos Implementadas
+
+La lectura íntegra del artículo de Palma, Santos y Dias (*Secciones 2.2, 3.2.3, 3.3, 4.2 y 5*) muestra **6 técnicas concretas** que ellos emplean o identifican como críticas y que aún no están en Assault:
+
+| # | Aportación de Palma et al. (2025) | Sección del Paper | ¿Qué aporta exactamente? | ¿Cómo implementarlo en `EfficientZeroV2`? |
+| :---: | :--- | :---: | :--- | :--- |
+| **1** | **Arquitectura "Recall" en el Módulo Recurrente** *(Bansal et al. 2022)* | Sec. 2.2 (Fig. 1) | Al iterar $k$ veces un bloque recurrente, el estado oculto sufre *olvido representacional* (*over-thinking*). La conexión **Recall** concatena la entrada original del paso ($s_t$) al inicio de **cada** iteración recurrente $i \in \{1 \dots k\}$ y la proyecta con una Conv $1\times 1$ de vuelta a $C$ canales, garantizando que la red nunca pierda el anclaje con la observación base. | Añadir en `dynamics_state` una proyección opcional `recall_proj = nn.Conv2d(2 * hidden_dim, hidden_dim, 1)`: en cada paso $i$ del bucle recurrente, calcular `z = dynamics_state(recall_proj(cat([z, merged], dim=1)))`. |
+| **2** | **Entrenamiento con "Progressive Loss" ($\mathcal{L}_{\text{progressive}}$)** | Sec. 2.2 (Ec. 1) y Sec. 4.2 | Palma et al. demuestran que entrenar un bloque recurrente con un número fijo de pasos $k$ no basta para que extrapole al aumentar $k$ en inferencia. El entrenamiento *Progressive Loss* elige al azar $n$ iteraciones **sin gradiente** (`torch.no_grad()`), seguidas de $k$ iteraciones **con gradiente** ($n+k \le T$), y optimiza $\mathcal{L} = (1-\alpha)\mathcal{L}_{\text{max}} + \alpha \mathcal{L}_{\text{prog}}$. Esto fuerza al bloque recurrente a ser un operador de punto fijo estable en cualquier horizonte. | En `trainer.py`, durante el unroll de dinámica con `dynamics_recurrent_steps > 1`, muestrear $(n, k)$ y ejecutar los primeros $n$ pasos bajo `with torch.no_grad():` antes de activar gradientes en los últimos $k$ pasos. |
+| **3** | **Canales de Calendario de Refuerzos Entrantes (*Incoming Reinforcements Schedule*)** | Sec. 3.2.3 | En muchos escenarios de wargame (y en los escenarios del libro de campaña de Assault), llegan refuerzos en turnos posteriores por hexágonos específicos. Palma et al. codifican las próximas $R$ oleadas marcando en los **hexágonos de entrada** los atributos de la unidad entrante y un plano con la cuenta atrás $(T_{\max} - t_{\text{llegada}})/T_{\max}$. Sin esto, el agente sufre sorpresas estratégicas cuando aparecen blindados o reservas enemigas en el borde del mapa. | Añadir soporte en el constructor de observaciones de `voec_sim` para proyectar las unidades en cola de refuerzo (`reinforcement_schedule`) sobre sus hexágonos de entrada con decaimiento temporal $(T_{\max} - \Delta t)/T_{\max}$. |
+| **4** | **Descomposición Secuencial de Ataques Combinados Multi-Unidad** | Sec. 3.2.4 y Sec. 3.3 (Fig. 3) | En lugar de que cada unidad ataque por separado o de sufrir una explosión combinatoria $\binom{N}{m}$ al coordinar múltiples escuadras contra un mismo hexágono fortificado, Palma et al. dividen el ataque combinado en micro-decisiones secuenciales: (1) marcar hexágono objetivo en un canal `target_hex`, (2) seleccionar una por una las unidades adyacentes que se suman al asalto marcándolas en `attacking_units`, y (3) ejecutar el asalto conjunto. | Incorporar en `assault_model` y `voec_sim` la acción de **Asalto Coordinado Multi-Hexágono** (*Multi-Squad Combined Assault*) mediante un bit de preparación/compromiso antes de resolver la tirada de combate cercano. |
+| **5** | **Cómputo Adaptativo por Complejidad (*PonderNet / ACT*)** | Sec. 5 (*Future Work*, refs [2, 3, 6]) | En tableros grandes o turnos de simple aproximación sin contacto enemigo, gastar 512 simulaciones MCTS y $k$ iteraciones recurrentes es innecesario; en cambio, en un cruce urbano con fuego de reacción activo se requiere máxima profundidad. Proponen integrar **PonderNet** (probabilidad aprendida de parada $\lambda_i$ por paso recurrente) para adaptar el tiempo de cómputo a la complejidad táctica del estado. | Añadir una cabeza escalar ligera `halting_prob = nn.Sigmoid(nn.Linear(hidden_dim, 1))` en el bucle recurrente y un escalador dinámico del presupuesto `num_simulations` en MCTS proporcional a la entropía de política $H(\pi)$ y al valor medio de `threat_map`. |
+| **6** | **Convoluciones Hexagonales Depthwise-Separable y Cabeza de Política FCN** | Sec. 3.4 (Fig. 4) y Sec. 5 | Su cabeza de política es 100% convolucional sobre el mapa $(C_{\text{act}} \times H \times W)$ sin capas lineales densas acopladas a $16\times 16$, y proponen sustituir convoluciones pesadas por **convoluciones separables en profundidad (*Depthwise-Separable*)** con máscara hexagonal para reducir drásticamente los FLOPs en mapas grandes. | Implementar `HexagonalDepthwiseSeparableConv2d` (Depthwise $3\times 3$ con `hex_mask` + Pointwise $1\times 1$), reduciendo en $\sim 70\%$ el coste computacional por capa en mapas $32\times 32$ y $64\times 64$. |
+
+---
+
+### 6.3. Aportaciones de KataGo, Dunnigan y Sun Tzu (`docs/papers/`) Pendientes de Incorporar
+
+Completando la revisión con las otras tres obras maestras de la biblioteca técnica del proyecto (`KataGo`, `Complete-Wargames-Handbook-Dunnigan.pdf` y `El_arte_de_la_guerra-Sun_Tzu.pdf`):
+
+1. **Mapa Denso de Propiedad Final (*Final Territory Ownership Head*, KataGo — Wu 2020):**
+   * *Qué aporta KataGo:* Además de predecir el valor escalar de victoria, KataGo entrena una cabeza auxiliar convolucional $1\times H\times W$ que predice qué jugador controlará cada celda **al final de la partida**. En KataGo, esta única cabeza aceleró el aprendizaje por un factor de $3\times$ porque asigna crédito espacial exacto a cada rincón del mapa.
+   * *Diferencia con nuestro `threat_map`:* Nuestro `threat_map` predice el peligro de fuego en el turno actual $t$, pero no tenemos una cabeza `ownership_map` que prediga el mapa de control territorial (`hex_control`) al final del episodio $T$.
+
+2. **Ratio Fuerza-Espacio y Doctrina de Reserva Táctica (*Force-to-Space Ratio & Tactical Reserve*, James F. Dunnigan — *Complete Wargames Handbook*):**
+   * *Qué aporta Dunnigan:* Demuestra que el factor determinante de ruptura en cualquier wargame hexagonal es la relación entre densidad de unidades por hexágono de frente (*Force-to-Space*) y el mantenimiento de un **$20\%$–$30\%$ de la fuerza en reserva fuera de la línea de visión enemiga** para explotar brechas o taponar penetraciones.
+   * *Estado en Assault:* Nuestros agentes tienden a comprometer el $100\%$ de sus escuadras en primera línea desde los primeros turnos. No existe un rol explícito `TACTICAL_RESERVE` en el `MacroStrategyPlanner` ni una señal que premie conservar una escuadra desenfilada detrás del frente.
+
+3. **Cuantificación de Finta, Engaño y Asimetría Informacional (*Deception & Pin-and-Flank*, Sun Tzu — *El Arte de la Guerra*):**
+   * *Qué aporta Sun Tzu:* *"Todo el arte de la guerra está basado en el engaño... Finge desorden y aplástalo; ataca donde no esté preparado"*. En un wargame con niebla de guerra y fuego de reacción, esto se traduce en **fijar el arco de fuego de reacción enemigo con una unidad secundaria a cubierto** (*Pin / Feint*) para vaciar su ventana de reacción (`reaction_window`) y penetrar por el flanco ciego con la fuerza principal (`SPEARHEAD`).
+   * *Estado en Assault:* Aunque el agente ya aprende a no disparar fuego de reacción indiscriminadamente (`reaction_rate` bajó a `0.407`), carece de una bonificación táctica explícita de coordinación binaria *"Cebo + Flanqueador"* (*Bait-and-Flank Synergy*) en el modelado de recompensas o en el `MacroStrategyPlanner`.
+
+---
+
+## 7. Matriz Actualizada de Hoja de Ruta de Investigación (SOTA + Literatura)
+
+```mermaid
+flowchart TD
+    subgraph Implementado["1. Ya Implementado en EfficientZeroV2"]
+        I1["Modelo Latente EZ-v2 + Two-Hot / HL-Gauss + Symlog"]
+        I2["10 Cabezas + PCGrad Orthogonal Balancing"]
+        I3["Invarianza Espacial FCN + _adapt_spatial (16x16 a 64x64)"]
+        I4["Bucle Recurrente Weight-Tied k-Step en g_theta"]
+        I5["Mutador Procedural Asimetrico en Self-Play"]
+        I6["Recalculo Incremental de Control Territorial O(k*R^2)"]
+    end
+
+    subgraph Fase_Inmediata["2. Cableado Interno Inmediato (Quick Wins)"]
+        Q1["Activar use_hex_mask=True en todas las torres Conv2D"]
+        Q2["Cablear TemporalContextBlock (GRU) en inferencia POMDP"]
+        Q3["Añadir InputChannelGate (SE 32ch) en la entrada sensorial"]
+        Q4["Conectar prediction_intent al MacroStrategyPlanner N1"]
+    end
+
+    subgraph Fase_Avanzada["3. Siguiente Frontera Cientifica (Palma 2025 + KataGo + Dunnigan)"]
+        A1["Arquitectura Recall + Entrenamiento Progressive Loss (n, k)"]
+        A2["Canales de Calendario de Refuerzos Entrantes (6R)"]
+        A3["PonderNet / Presupuesto MCTS Adaptativo por Entropia"]
+        A4["Cabeza Densa Final Ownership Map (KataGo) + Rol TACTICAL_RESERVE (Dunnigan)"]
+    end
+
+    Implementado --> Fase_Inmediata --> Fase_Avanzada
+```
+
+### Tabla Resumen de Estado de Implementación Frente a la Literatura
+
+| # | Innovación / Mecanismo de la Literatura | Fuente Científica | Estado en Assault | Prioridad Recomendada |
+| :---: | :--- | :--- | :---: | :---: |
+| 1 | Valor/Recompensa Distribucional Two-Hot + HL-Gauss + Symlog | DeepMind 2024 / DreamerV3 | 🟢 **Implementado** | — |
+| 2 | 10 Cabezas Multitarea + Proyección Ortogonal PCGrad | Yu et al. 2020 / EZ-v2 | 🟢 **Implementado** | — |
+| 3 | Invariancia Espacial Zero-Shot ($16\times 16 \leftrightarrow 32\times 32 \leftrightarrow 64\times 64$) | Palma et al. 2025 (Sec. 3.1) | 🟢 **Implementado** | — |
+| 4 | Dinámica Recurrente Weight-Tied de $k$ pasos (`dynamics_recurrent_steps`) | Palma et al. 2025 (Sec. 3.1) | 🟢 **Implementado** | — |
+| 5 | Mutación Procedural Asimétrica de Terreno, Despliegue y Fuerza | Palma et al. 2025 (Sec. 4.1.4) | 🟢 **Implementado** | — |
+| 6 | Activación por defecto de `HexagonalMaskConv2d` en todas las torres | Palma et al. 2025 (Hexagdly) | 🟡 **Clase creada, falta activar flag** | **Alta (Inmediata)** |
+| 7 | Cableado activo de `TemporalContextBlock` (GRU) en el flujo latente | Palma et al. 2025 / POMDP RL | 🟡 **Clase creada, falta cablear** | **Alta (Inmediata)** |
+| 8 | Conexión de `prediction_intent` (8 clases) al `MacroStrategyPlanner` | Feudal Networks / AlphaStar | 🟡 **Cabeza entrenada, falta conectar a N1** | **Alta (Inmediata)** |
+| 9 | `InputChannelGate` (SE sobre los 32 canales de entrada) | SENet / CBAM | 🔴 **Pendiente** | **Media-Alta** |
+| 10 | Conexión **Recall** + Entrenamiento **Progressive Loss** $(n, k)$ | Palma et al. 2025 / Bansal 2022 | 🔴 **Pendiente** | **Alta** |
+| 11 | Canales de **Calendario de Refuerzos Entrantes** (*Reinforcement Schedule*) | Palma et al. 2025 (Sec. 3.2.3) | 🔴 **Pendiente** | **Media** (Clave en Campaña) |
+| 12 | **PonderNet / ACT** (Parada adaptativa en dinámica y presupuesto MCTS) | Palma et al. 2025 (Sec. 5) / Banino 2021 | 🔴 **Pendiente** | **Media** |
+| 13 | Descomposición Secuencial de **Asaltos Combinados Multi-Unidad** | Palma et al. 2025 (Sec. 3.3, Fig. 3) | 🔴 **Pendiente** | **Media** |
+| 14 | Cabeza Densa **Final Ownership Map** ($1\times H\times W$ al final de partida) | KataGo (Wu 2020) | 🔴 **Pendiente** | **Media** |
+| 15 | Rol Doctrinal **`TACTICAL_RESERVE`** y Ratio Fuerza-Espacio | Dunnigan (*Wargames Handbook*) | 🔴 **Pendiente** | **Media** |
+
 
