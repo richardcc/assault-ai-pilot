@@ -193,6 +193,7 @@ class EfficientZeroV2BaseNetwork(nn.Module):
         support_size: int = 0,
         use_spatial_attention: bool = False,
         enable_threat_head: bool = True,
+        enable_final_ownership_head: bool = True,
         enable_attrition_head: bool = True,
         enable_morale_head: bool = True,
         morale_classes: int = 4,
@@ -222,6 +223,7 @@ class EfficientZeroV2BaseNetwork(nn.Module):
         self.support_size = max(0, int(support_size))
         self.use_spatial_attention = bool(use_spatial_attention)
         self.enable_threat_head = bool(enable_threat_head)
+        self.enable_final_ownership_head = bool(enable_final_ownership_head)
         self.enable_attrition_head = bool(enable_attrition_head)
         self.enable_morale_head = bool(enable_morale_head)
         self.morale_classes = max(2, int(morale_classes))
@@ -322,6 +324,16 @@ class EfficientZeroV2BaseNetwork(nn.Module):
                     if self.enable_threat_head
                     else None
                 )
+                self.prediction_final_ownership = (
+                    nn.Sequential(
+                        nn.Conv2d(self.hidden_dim, 16, kernel_size=3, padding=1, bias=False),
+                        _make_group_norm(16),
+                        nn.SiLU(),
+                        nn.Conv2d(16, 1, kernel_size=1),
+                    )
+                    if self.enable_final_ownership_head
+                    else None
+                )
                 self.prediction_attrition = (
                     nn.Sequential(
                         SpatialAttentionBlock(self.hidden_dim, val_channels, (pool_h, pool_w)),
@@ -406,6 +418,17 @@ class EfficientZeroV2BaseNetwork(nn.Module):
                     if self.enable_threat_head
                     else None
                 )
+                # KataGo-inspired Final Territory Ownership Map (1 x H x W):
+                self.prediction_final_ownership = (
+                    nn.Sequential(
+                        nn.Conv2d(self.hidden_dim, 16, kernel_size=3, padding=1, bias=False),
+                        _make_group_norm(16),
+                        nn.SiLU(),
+                        nn.Conv2d(16, 1, kernel_size=1),
+                    )
+                    if self.enable_final_ownership_head
+                    else None
+                )
                 self.prediction_attrition = (
                     nn.Sequential(
                         nn.Conv2d(self.hidden_dim, val_channels, kernel_size=1),
@@ -479,6 +502,15 @@ class EfficientZeroV2BaseNetwork(nn.Module):
                     nn.Linear(64, self.observation_height * self.observation_width),
                 )
                 if self.enable_threat_head
+                else None
+            )
+            self.prediction_final_ownership = (
+                nn.Sequential(
+                    nn.Linear(hidden_dim, 64),
+                    nn.SiLU(),
+                    nn.Linear(64, self.observation_height * self.observation_width),
+                )
+                if self.enable_final_ownership_head
                 else None
             )
             self.prediction_attrition = (
@@ -581,6 +613,9 @@ class EfficientZeroV2BaseNetwork(nn.Module):
             threat_map_pred = (
                 self.prediction_threat_map(pred_hidden) if self.prediction_threat_map is not None else None
             )
+            final_ownership_pred = (
+                self.prediction_final_ownership(pred_hidden) if self.prediction_final_ownership is not None else None
+            )
             attrition_pred = (
                 self.prediction_attrition(head_in) if self.prediction_attrition is not None else None
             )
@@ -609,6 +644,9 @@ class EfficientZeroV2BaseNetwork(nn.Module):
             threat_map_pred = (
                 self.prediction_threat_map(pred_hidden) if self.prediction_threat_map is not None else None
             )
+            final_ownership_pred = (
+                self.prediction_final_ownership(pred_hidden) if self.prediction_final_ownership is not None else None
+            )
             attrition_pred = (
                 self.prediction_attrition(pred_hidden) if self.prediction_attrition is not None else None
             )
@@ -627,6 +665,8 @@ class EfficientZeroV2BaseNetwork(nn.Module):
                 aux["multi_vp_pred"] = multi_vp_pred
             if threat_map_pred is not None:
                 aux["threat_map_pred"] = threat_map_pred
+            if final_ownership_pred is not None:
+                aux["final_ownership_pred"] = final_ownership_pred
             if attrition_pred is not None:
                 aux["attrition_pred"] = attrition_pred
             if morale_pred is not None:
@@ -723,6 +763,9 @@ class EfficientZeroV2BaseNetwork(nn.Module):
             threat_map_pred = (
                 self.prediction_threat_map(pred_hidden) if self.prediction_threat_map is not None else None
             )
+            final_ownership_pred = (
+                self.prediction_final_ownership(pred_hidden) if self.prediction_final_ownership is not None else None
+            )
             attrition_pred = (
                 self.prediction_attrition(head_in) if self.prediction_attrition is not None else None
             )
@@ -766,6 +809,9 @@ class EfficientZeroV2BaseNetwork(nn.Module):
             threat_map_pred = (
                 self.prediction_threat_map(pred_hidden) if self.prediction_threat_map is not None else None
             )
+            final_ownership_pred = (
+                self.prediction_final_ownership(pred_hidden) if self.prediction_final_ownership is not None else None
+            )
             attrition_pred = (
                 self.prediction_attrition(pred_hidden) if self.prediction_attrition is not None else None
             )
@@ -784,6 +830,8 @@ class EfficientZeroV2BaseNetwork(nn.Module):
                 aux["multi_vp_pred"] = multi_vp_pred
             if threat_map_pred is not None:
                 aux["threat_map_pred"] = threat_map_pred
+            if final_ownership_pred is not None:
+                aux["final_ownership_pred"] = final_ownership_pred
             if attrition_pred is not None:
                 aux["attrition_pred"] = attrition_pred
             if morale_pred is not None:

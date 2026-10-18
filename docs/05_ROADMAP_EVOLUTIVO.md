@@ -171,8 +171,8 @@ flowchart TD
 | 12 | **ACT / Presupuesto MCTS Adaptativo** (`compute_adaptive_simulations`) | Palma et al. 2025 (Sec. 5) / Graves 2016 | 🟢 **Implementado** | 100% |
 | 13 | Rol Doctrinal **`ROLE_TACTICAL_RESERVE`** (Dunnigan) y **`ROLE_FLANK_SCREEN`** (Sun Tzu) | Dunnigan / Sun Tzu | 🟢 **Implementado** | 100% |
 | 14 | Cohesión **`SUPPORTED`/`ISOLATED`**, Retirada **$<50\%$ vs. BUA** y **Anti-Persecución** | Henry Hyde 2015 (Cap. 2 y 7) | 🟢 **Implementado** | 100% |
-| 15 | Descomposición Secuencial de **Asaltos Combinados Multi-Unidad** en simulador | Palma et al. 2025 (Sec. 3.3, Fig. 3) | 🟡 **Planificado** | — |
-| 16 | Cabeza Densa **Final Ownership Map** ($1\times H\times W$ al final de partida) | KataGo (Wu 2020) | 🟡 **Planificado** | — |
+| 15 | Descomposición Secuencial de **Asaltos Combinados Multi-Unidad** en simulador | Palma et al. 2025 (Sec. 3.3, Fig. 3) | 🟢 **Implementado** | 100% |
+| 16 | Cabeza Densa **Final Ownership Map** ($1\times H\times W$ al final de partida) | KataGo (Wu 2020) | 🟢 **Implementado** | 100% |
 | 17 | **Mitigación de Cuello de Botella MCTS en Entornos Lentos / Copia de Estado** | Del Rio et al. 2025 (JAIS / Armasuisse) | 🟢 **Implementado** | 100% (Sec. 6.1 y 6.2 CoW) |
 | 18 | **Atribución de Características Heterogéneas Exacta (IGNH)** para MLOps / Gates | Alkhatib & Boström 2024 (arXiv:2408.07661) | 🟢 **Implementado / MLOps** | 100% (`/api/channel-attribution`) |
 
@@ -190,33 +190,31 @@ flowchart LR
         D3["MacroPlanner Neuronal + Doctrina Dunnigan/SunTzu/Hyde"]
         D4["Engine Vectorizado 6.1 + CoW 6.2 + Control O(k*R^2) 6.3"]
         D5["Streaming Binario MessagePack 6.5 (<5ms, -85% BW)"]
+        D6["I.1 Quality Gates Auto-Calibrados & Two-Hot Asimétrico"]
+        D7["I.2 Cabeza Densa Final Ownership 1xHxW (KataGo)"]
+        D8["I.3 Asaltos Combinados Secuenciales (Palma Sec. 3.3)"]
     end
 
-    subgraph NEXT_AI["🟡 Bloque I: Frontera IA & Currículum"]
-        N1["I.1 Quality Gates Auto-Calibrados al Escenario"]
-        N2["I.2 Cabeza Densa Final Ownership 1xHxW (KataGo)"]
-        N3["I.3 Asaltos Combinados Secuenciales (Palma Sec. 3.3)"]
-    end
-
-    subgraph NEXT_RULES["🔵 Bloque II: Paridad 100% Reglamento y Escenarios"]
+    subgraph NEXT_RULES["🔵 Bloque II: Paridad 100% Reglamento y Escenarios (Siguiente Frontera)"]
         R1["II.1 Retirada Doctrinal Friendly-Edge & Defilade (6.4)"]
         R2["II.2 Fase A: Dig-In (Foxhole), Humo, Overrun y Transporte"]
         R3["II.3 Fase B: Iniciativa Dinámica, Puntos de Mando (CP) y TAS/OAS"]
         R4["II.4 Fase C: Ingestor Automatizado PDF->JSON (36 Escenarios)"]
     end
 
-    DONE ==> NEXT_AI
     DONE ==> NEXT_RULES
 ```
 
-### Bloque I: Evolución de IA, Red Neuronal y Currículum (`agents/efficientzero_v2/`)
-1. **I.1 Quality Gates Auto-Calibrados al Escenario y Soporte Two-Hot Asimétrico (Fase 7):**
-   * Sustituir los umbrales fijos de captura en `curriculum.yaml` por percentiles relativos al número de VPs del escenario, permitiendo promoción en el Ciclo 1 cuando el WinRate supera el $80\%$.
-   * Ajustar la resolución de los 61 átomos Two-Hot en torno a cero para discriminar micro-ventajas de desgaste.
-2. **I.2 Cabeza Densa *Final Territory Ownership Map* ($1\times H\times W$, KataGo — Wu 2020):**
-   * Añadir predicción auxiliar densa por hexágono del propietario final al término de la partida $T$, complementando el `threat_map` táctico inmediato.
-3. **I.3 Descomposición Secuencial de Asaltos Combinados Multi-Unidad (Palma et al. 2025, Sec. 3.3):**
-   * Permitir que múltiples escuadras adyacentes comprometan apoyo coordinado en sub-fases secuenciales antes de resolver los dados del asalto cerrado.
+### Bloque I: Evolución de IA, Red Neuronal y Currículum (`agents/efficientzero_v2/`) — `[COMPLETADO]`
+1. **I.1 Quality Gates Auto-Calibrados al Escenario y Soporte Two-Hot Asimétrico (Fase 7):** `[COMPLETADO]`
+   * **Archivos:** [`curriculums/common/run_dynamic_gated_curriculum.ps1`](file:///c:/repos/python/assault/curriculums/common/run_dynamic_gated_curriculum.ps1), [`agents/efficientzero_v2/core/support.py`](file:///c:/repos/python/assault/agents/efficientzero_v2/core/support.py), [`agents/efficientzero_v2/tests/test_advanced_architecture.py`](file:///c:/repos/python/assault/agents/efficientzero_v2/tests/test_advanced_architecture.py).
+   * **Solución Implementada:** Detección dinámica de la capacidad de VPs del escenario (`$scenarioVpMax`), normalización de ratios de VP por escenario, y override de promoción por tasa de victoria dominante (`WinRate >= 80%`, `LossRate <= 15%`, `TimeoutRate <= 5%`). Calibración no lineal Two-Hot con boost de resolución exponencial asimétrica en torno al cero (`sign(x) * |x|^0.75`) para discriminar micro-ventajas tácticas de desgaste.
+2. **I.2 Cabeza Densa *Final Territory Ownership Map* ($1\times H\times W$, KataGo — Wu 2020):** `[COMPLETADO]`
+   * **Archivos:** [`agents/efficientzero_v2/core/network_base.py`](file:///c:/repos/python/assault/agents/efficientzero_v2/core/network_base.py), [`agents/efficientzero_v2/core/network.py`](file:///c:/repos/python/assault/agents/efficientzero_v2/core/network.py), [`agents/efficientzero_v2/tests/test_advanced_architecture.py`](file:///c:/repos/python/assault/agents/efficientzero_v2/tests/test_advanced_architecture.py).
+   * **Solución Implementada:** Cabeza de predicción densa por convolución 3x3 + GroupNorm + SiLU + 1x1 conv (`prediction_final_ownership`) que proyecta el mapa de control territorial final al término del episodio $T$, inyectado en `aux["final_ownership_pred"]` tanto en `initial_inference` como en `recurrent_inference`.
+3. **I.3 Descomposición Secuencial de Asaltos Combinados Multi-Unidad (Palma et al. 2025, Sec. 3.3):** `[COMPLETADO]`
+   * **Archivos:** [`assault_model/combat/close_combat_context.py`](file:///c:/repos/python/assault/assault_model/combat/close_combat_context.py), [`assault_model/combat/close_combat_resolver.py`](file:///c:/repos/python/assault/assault_model/combat/close_combat_resolver.py), [`assault_model/tests/test_combined_assault_coordination.py`](file:///c:/repos/python/assault/assault_model/tests/test_combined_assault_coordination.py).
+   * **Solución Implementada:** Soporte para compromiso secuencial de escuadras adyacentes (`commit_support_unit(unit, side, support_type)`). En la ronda 1 del asalto, las escuadras coordinadas que no estén suprimidas aportan dados de apoyo de infantería (`DiceColor.GREEN`) o apoyo pesado MMG/HMG/Mortero (`DiceColor.RED`) a las tiradas de combate cuerpo a cuerpo.
 
 ### Bloque II: Fidelidad 100% al Reglamento Oficial y Compendio de Escenarios (`assault_model/`)
 1. **II.1 Algoritmo de Retirada Doctrinal Completo (Sección 6.4 — `combat/morale.py`):**

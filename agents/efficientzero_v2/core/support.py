@@ -34,14 +34,28 @@ def scalar_to_two_hot(
     support_size: int = 30,
     use_phi: bool = True,
     eps: float = 0.001,
+    asym_zero_boost: bool = False,
+    zero_power: float = 0.75,
 ) -> torch.Tensor:
     """
     Encodes scalar values into a discrete two-hot probability distribution over
     the support range [-support_size, +support_size].
 
+    When asym_zero_boost=True, applies a power warp sign(x) * |x|^zero_power (default 0.75)
+    to expand small values near zero (e.g. 0.05 -> 0.105), allowing the 61 discrete atoms
+    to discriminate fine-grained tactical attrition micro-advantages.
+
     Output shape: (*scalar.shape, 2 * support_size + 1)
     """
-    if use_phi:
+    if asym_zero_boost:
+        # Non-linear warp around zero to discriminate micro-attrition:
+        sign = torch.sign(scalar)
+        warped = sign * torch.pow(torch.abs(scalar), zero_power)
+        if use_phi:
+            transformed = phi_transform(warped, eps=eps)
+        else:
+            transformed = warped
+    elif use_phi:
         transformed = phi_transform(scalar, eps=eps)
     else:
         transformed = scalar
@@ -76,10 +90,12 @@ def support_to_scalar(
     support_size: int = 30,
     use_phi: bool = True,
     eps: float = 0.001,
+    asym_zero_boost: bool = False,
+    zero_power: float = 0.75,
 ) -> torch.Tensor:
     """
     Converts two-hot support logits into continuous scalar values by taking the expected
-    value across the support grid and applying the inverse transformation phi^-1.
+    value across the support grid and applying the inverse transformation phi^-1 (and un-warping if asym_zero_boost).
 
     Output shape: (*logits.shape[:-1], 1)
     """
@@ -90,8 +106,15 @@ def support_to_scalar(
     )
     expected_transformed = (probs * support_grid).sum(dim=-1, keepdim=True)
     if use_phi:
-        return phi_inverse(expected_transformed, eps=eps)
-    return expected_transformed
+        unwarped = phi_inverse(expected_transformed, eps=eps)
+    else:
+        unwarped = expected_transformed
+
+    if asym_zero_boost:
+        # Invert the power-warp: sign(y) * |y|^(1 / zero_power)
+        inv_power = 1.0 / max(1e-4, float(zero_power))
+        return torch.sign(unwarped) * torch.pow(torch.abs(unwarped), inv_power)
+    return unwarped
 
 
 def cross_entropy_two_hot(

@@ -48,6 +48,11 @@ class CombatResolutionContext:
         # CC-001: attacker crossed obstacle edge into defender hex.
         self.crossed_obstacle: bool = False
 
+        # Multi-unit combined assault support sub-phases (Palma et al. 2025, Sec. 3.3):
+        # Adjacent units committing coordinated flanking/covering support prior to close melee
+        self.supporting_attackers: list = []
+        self.supporting_defenders: list = []
+
         _trace(
             "CC_CONTEXT_INIT",
             attacker_id=getattr(attacker, "unit_id", None),
@@ -57,4 +62,18 @@ class CombatResolutionContext:
             sector=attack_sector.name if attack_sector else None,
             crossed_obstacle=self.crossed_obstacle,
         )
+
+    def commit_support_unit(self, unit, side: str = "attacker", support_type: str = "combined_assault"):
+        """
+        Commits an adjacent squad into the coordinated assault sequence (Palma et al. 2025, Sec. 3.3, Fig. 3).
+        In round 1, contributing squads contribute coordinated suppression/flanking pressure.
+        """
+        if side == "attacker":
+            if unit not in self.supporting_attackers:
+                self.supporting_attackers.append(unit)
+                _trace("CC_SUPPORT_COMMITTED", side="attacker", unit_id=getattr(unit, "unit_id", None), support_type=support_type)
+        else:
+            if unit not in self.supporting_defenders:
+                self.supporting_defenders.append(unit)
+                _trace("CC_SUPPORT_COMMITTED", side="defender", unit_id=getattr(unit, "unit_id", None), support_type=support_type)
 

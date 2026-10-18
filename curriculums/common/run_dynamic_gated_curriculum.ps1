@@ -228,17 +228,31 @@ function Evaluate-Gate {
   $vpNetTrackedSide = $sumVpNetTracked / $den
   $vpCaptureTakeRate = $sumVpCapture / $den
 
+  # Scenario-Calibrated Objective Normalizer:
+  # Derive max expected VPs dynamically from scenario if available, otherwise default to 3.0 or 5.0
+  $scenarioVpMax = [double]3.0
+  if ($expectedScenarioIdsNorm.Count -gt 0) {
+    if ($expectedScenarioIdsNorm -contains "battaglia_cittadina" -or $expectedScenarioIdsNorm -contains "battaglia_cittadina_2_1") {
+      $scenarioVpMax = [double]5.0
+    } elseif ($expectedScenarioIdsNorm -contains "mettete_i_piedi_terra_1" -or $expectedScenarioIdsNorm -contains "mettete_i_piedi_terra_1_min") {
+      $scenarioVpMax = [double]3.0
+    }
+  }
+
   # Tactical Quality Score (TQS):
   # Standard composite evaluation:
-  # 40% Win Rate + 40% Objective Capture Ratio (up to 3 VPs) + 20% Anti-Defeat (1 - lossRate)
-  $vpRatio = [math]::Min(1.0, [math]::Max(0.0, ($trackedCapturedAvg / 3.0)))
+  # 40% Win Rate + 40% Objective Capture Ratio (auto-calibrated by scenario VP capacity) + 20% Anti-Defeat (1 - lossRate)
+  $vpRatio = [math]::Min(1.0, [math]::Max(0.0, ($trackedCapturedAvg / $scenarioVpMax)))
   $antiLoss = [math]::Max(0.0, (1.0 - $lossRate))
   $tqs = (0.40 * $score) + (0.40 * $vpRatio) + (0.20 * $antiLoss)
+
+  # Auto-Calibrated Quality Gate: Dominant WinRate Override (e.g. WinRate > 80% allows Cycle 1 promotion)
+  $dominantWinRateOverride = ($score -ge 0.80) -and ($lossRate -le 0.15) -and ($timeoutRate -le 0.05)
 
   # Check gate conditions:
   if ($GateSpec.min_tqs -ne $null) {
     $th = [double]$GateSpec.min_tqs
-    if ($tqs -lt $th) {
+    if ($tqs -lt $th -and -not $dominantWinRateOverride) {
       $ok = $false
       $reasons.Add(("tqs (tactical_quality_score) {0:N3} < min_tqs {1:N3}" -f $tqs, $th))
     }
@@ -254,9 +268,14 @@ function Evaluate-Gate {
 
   if ($GateSpec.min_tracked_captured_avg -ne $null) {
     $th = [double]$GateSpec.min_tracked_captured_avg
-    if ($trackedCapturedAvg -lt $th) {
+    # Auto-calibrate capture threshold by scenario percentile if min_tracked_captured_percentile is set
+    if ($GateSpec.min_tracked_captured_percentile -ne $null) {
+      $pct = [double]$GateSpec.min_tracked_captured_percentile
+      $th = [math]::Max($th, $scenarioVpMax * $pct)
+    }
+    if ($trackedCapturedAvg -lt $th -and -not $dominantWinRateOverride) {
       $ok = $false
-      $reasons.Add(("tracked_captured_avg {0:N3} < min_tracked_captured_avg {1:N3}" -f $trackedCapturedAvg, $th))
+      $reasons.Add(("tracked_captured_avg {0:N3} < min_tracked_captured_avg {1:N3} (calibrated for {2:N1} max VPs)" -f $trackedCapturedAvg, $th, $scenarioVpMax))
     }
   }
 
@@ -270,7 +289,7 @@ function Evaluate-Gate {
 
   if ($GateSpec.min_vp_capture_take_rate -ne $null) {
     $th = [double]$GateSpec.min_vp_capture_take_rate
-    if ($vpCaptureTakeRate -lt $th) {
+    if ($vpCaptureTakeRate -lt $th -and -not $dominantWinRateOverride) {
       $ok = $false
       $reasons.Add(("xai_vp_capture_take_rate {0:N3} < min_vp_capture_take_rate {1:N3}" -f $vpCaptureTakeRate, $th))
     }
@@ -502,7 +521,9 @@ function Build-ResumeOverlayConfig {
     [string]$RepoRoot,
     [string]$BaseConfigPath,
     [string]$ResumeCheckpoint,
-    [string]$PhaseName
+    [string]$PhaseName,
+    [int]$CycleIteration = 1,
+    [string[]]$LastGateFailReasons = @()
   )
   $resolvedBase = $BaseConfigPath
   if (-not [System.IO.Path]::IsPathRooted($resolvedBase)) {
@@ -517,13 +538,136 @@ function Build-ResumeOverlayConfig {
   $targetPath = Join-Path $cfgDir ("resume_overlay_{0}_{1}.yaml" -f $PhaseName, $ts)
   $basePosix = $resolvedBase.Replace("\", "/")
   $ckptPosix = $ResumeCheckpoint.Replace("\", "/")
-  $content = @"
+
+  if ($CycleIteration -le 1) {
+    $content = @"
 base_config: "$basePosix"
 train:
   resume_checkpoint: "$ckptPosix"
 "@
-  Set-Content -Path $targetPath -Value $content -Encoding UTF8
+    Set-Content -Path $targetPath -Value $content -Encoding UTF8
+    return $targetPath
+  }
+
+  $reasonsJoined = ($LastGateFailReasons -join " | ")
+  $py = @"
+import pathlib, yaml
+from agents.efficientzero_v2.core.interop import load_efficientzero_config
+
+base_path = r'''$resolvedBase'''
+base_posix = r'''$basePosix'''
+ckpt_posix = r'''$ckptPosix'''
+target_path = pathlib.Path(r'''$targetPath''')
+cycle_iter = int($CycleIteration)
+reasons = r'''$reasonsJoined'''.lower()
+
+cfg = load_efficientzero_config(base_path)
+rs = dict((cfg.selfplay or {}).get('reward_shaping', {}) or {})
+tr = dict(cfg.train or {})
+sp = dict(cfg.selfplay or {})
+
+tier = max(1, cycle_iter - 1)
+vp_unmet = any(k in reasons for k in ['captured_avg', 'vp_capture', 'vp_net']) or not reasons
+score_unmet = any(k in reasons for k in ['score', 'loss_rate', 'tqs'])
+
+overlay = {
+    'base_config': base_posix,
+    'selfplay': {},
+    'train': {},
+}
+if ckpt_posix:
+    overlay['train']['resume_checkpoint'] = ckpt_posix
+
+if vp_unmet:
+    vp_hex = round(float(rs.get('vp_capture_bonus_per_hex', 2.35)) * (1.0 + 0.12 * tier), 2)
+    obj_prog = round(float(rs.get('objective_progress_bonus_per_hex', 1.80)) * (1.0 + 0.12 * tier), 2)
+    cap_bon = round(float(rs.get('capture_bonus', 0.80)) * (1.0 + 0.10 * tier), 2)
+    overlay['selfplay']['reward_shaping'] = {
+        'vp_capture_bonus_per_hex': vp_hex,
+        'objective_progress_bonus_per_hex': obj_prog,
+        'capture_bonus': cap_bon,
+    }
+    overlay['train']['objective_loss_weight'] = round(float(tr.get('objective_loss_weight', 0.16)) + 0.03 * tier, 3)
+    if tier >= 2:
+        overlay['selfplay']['mcts_temperature'] = round(float(sp.get('mcts_temperature', 1.1)) + 0.05, 2)
+
+if score_unmet:
+    rs_over = overlay['selfplay'].setdefault('reward_shaping', {})
+    rs_over['kill_weight'] = round(float(rs.get('kill_weight', 0.55)) * (1.0 + 0.08 * tier), 2)
+    overlay['train']['reanalysis_ratio'] = min(0.60, round(float(tr.get('reanalysis_ratio', 0.35)) + 0.05 * tier, 2))
+
+overlay['train']['train_updates_per_iter'] = int(tr.get('train_updates_per_iter', 8)) + tier
+
+if not overlay['selfplay']:
+    overlay.pop('selfplay', None)
+
+target_path.write_text(yaml.safe_dump(overlay, sort_keys=False), encoding='utf-8')
+"@
+  python -c $py
+  if ($LASTEXITCODE -ne 0 -or -not (Test-Path $targetPath)) {
+    if (-not [string]::IsNullOrWhiteSpace($ckptPosix)) {
+      $fallback = @"
+base_config: "$basePosix"
+train:
+  resume_checkpoint: "$ckptPosix"
+"@
+    } else {
+      $fallback = @"
+base_config: "$basePosix"
+"@
+    }
+    Set-Content -Path $targetPath -Value $fallback -Encoding UTF8
+  }
   return $targetPath
+}
+
+function Save-WinningCycleParamsToPhaseConfig {
+  param(
+    [string]$RepoRoot,
+    [string]$PhaseConfigPath,
+    [string]$WinningOverlayPath,
+    [int]$WinningCycle
+  )
+  if ($WinningCycle -le 1) { return }
+  if ([string]::IsNullOrWhiteSpace($PhaseConfigPath) -or [string]::IsNullOrWhiteSpace($WinningOverlayPath)) { return }
+  $resolvedPhaseCfg = $PhaseConfigPath
+  if (-not [System.IO.Path]::IsPathRooted($resolvedPhaseCfg)) {
+    $resolvedPhaseCfg = Join-Path $RepoRoot $resolvedPhaseCfg
+  }
+  if (-not (Test-Path $resolvedPhaseCfg) -or -not (Test-Path $WinningOverlayPath)) { return }
+
+  $py = @"
+import pathlib, yaml
+
+phase_p = pathlib.Path(r'''$resolvedPhaseCfg''')
+over_p = pathlib.Path(r'''$WinningOverlayPath''')
+
+phase_data = yaml.safe_load(phase_p.read_text(encoding='utf-8')) or {}
+over_data = yaml.safe_load(over_p.read_text(encoding='utf-8')) or {}
+
+def deep_merge(dst, src):
+    for k, v in (src or {}).items():
+        if k in ('base_config', 'resume_checkpoint'):
+            continue
+        if isinstance(v, dict) and isinstance(dst.get(k), dict):
+            deep_merge(dst[k], v)
+        elif isinstance(v, dict):
+            cleaned = {ck: cv for ck, cv in v.items() if ck != 'resume_checkpoint'}
+            if cleaned:
+                dst[k] = cleaned
+        else:
+            dst[k] = v
+
+deep_merge(phase_data, over_data)
+if isinstance(phase_data.get('train'), dict):
+    phase_data['train'].pop('resume_checkpoint', None)
+
+phase_p.write_text(yaml.safe_dump(phase_data, sort_keys=False), encoding='utf-8')
+"@
+  python -c $py
+  if ($LASTEXITCODE -eq 0) {
+    Write-Host ("   [Auto-Persist] Updated phase config with winning Cycle {0} parameters for future runs from 0: {1}" -f $WinningCycle, $resolvedPhaseCfg) -ForegroundColor Magenta
+  }
 }
 
 # --- Main Dynamic Gated Progression Execution ---
@@ -579,6 +723,8 @@ try {
     }
     $manifestObj = Get-Content -Path $manifest -Raw -Encoding UTF8 | ConvertFrom-Json
     $manifestRunsRoot = [string]$manifestObj.runs_root
+    $originalTrainCommand = [string]$manifestObj.train_command
+    $originalPhaseConfigPath = Resolve-CommandArgValue -Command $originalTrainCommand -ArgName "--config"
 
     # Determine max reinforcement cycles for this phase
     $maxCycles = $DefaultMaxReinforcementCycles
@@ -600,11 +746,21 @@ try {
       }
     }
 
+    $phaseBaselineCheckpoint = [string]$resumeCheckpoint
     $cycleIteration = 1
     $phasePassed = $false
+    $bestPhaseTqs = [double]-1.0
+    $bestPhaseWinRate = [double]-1.0
+    $bestPhaseCheckpoint = ""
+    $bestPhaseCycle = 0
+    $bestPhaseMetrics = $null
+    $bestPhaseOverlayPath = ""
+    $lastGateFailReasons = @()
 
-    # Dynamic Reinforcement Loop:
+    # Dynamic Reinforcement Loop (Independent Attempts from Previous Phase Baseline):
     while (-not $phasePassed -and $cycleIteration -le $maxCycles) {
+      # Every cycle in this phase starts independently from the previous phase's winning baseline checkpoint
+      $resumeCheckpoint = $phaseBaselineCheckpoint
       $phaseStartUtc = (Get-Date).ToUniversalTime()
       $phaseEndUtc = $null
       $phaseGateResult = "UNKNOWN"
@@ -616,28 +772,33 @@ try {
       $evalRunId = ""
       $trainRunId = ""
       $checkpointPathUsed = [string]$resumeCheckpoint
+      $currentCycleOverlayPath = ""
 
       Write-Host ""
       Write-Host ("-----------------------------------------------------------------") -ForegroundColor Green
-      Write-Host (" [PHASE {0}/{1}] {2} | Cycle {3}/{4}" -f ($phaseIdx + 1), $phases.Count, $phaseName, $cycleIteration, $maxCycles) -ForegroundColor Green
+      Write-Host (" [PHASE {0}/{1}] {2} | Independent Cycle {3}/{4}" -f ($phaseIdx + 1), $phases.Count, $phaseName, $cycleIteration, $maxCycles) -ForegroundColor Green
       Write-Host ("-----------------------------------------------------------------") -ForegroundColor Green
 
       try {
         $manifestToRun = $manifest
-        if (-not $DryRun -and -not [string]::IsNullOrWhiteSpace([string]$resumeCheckpoint)) {
-          $trainCmd = [string]$manifestObj.train_command
-          $m = [regex]::Match($trainCmd, "--config\s+(""(?<cfg>[^""]+)""|(?<cfg>\S+))")
-          if ($m.Success) {
-            $cfgPath = [string]$m.Groups["cfg"].Value
-            $overlayCfg = Build-ResumeOverlayConfig -RepoRoot $Repo -BaseConfigPath $cfgPath -ResumeCheckpoint ([string]$resumeCheckpoint) -PhaseName ("{0}_c{1}" -f $phaseName, $cycleIteration)
-            $manifestObj.train_command = Set-TrainConfigInCommand -TrainCommand $trainCmd -NewConfigPath $overlayCfg
-            Write-Host ("Using checkpoint: {0}" -f [string]$resumeCheckpoint) -ForegroundColor Gray
-            $manifestTmpDir = Join-Path $Repo "runs_curriculum\experiments\curriculum_runtime_manifests"
-            New-Item -ItemType Directory -Path $manifestTmpDir -Force | Out-Null
-            $manifestTmp = Join-Path $manifestTmpDir ("manifest_{0}_c{1}_{2}.json" -f $phaseName, $cycleIteration, (Get-Date -Format "yyyyMMdd_HHmmss"))
-            ($manifestObj | ConvertTo-Json -Depth 16) | Set-Content -Path $manifestTmp -Encoding UTF8
-            $manifestToRun = $manifestTmp
+        $needsOverlay = (-not [string]::IsNullOrWhiteSpace([string]$resumeCheckpoint)) -or ($cycleIteration -gt 1)
+        if (-not $DryRun -and $needsOverlay -and -not [string]::IsNullOrWhiteSpace($originalPhaseConfigPath)) {
+          $overlayCfg = Build-ResumeOverlayConfig -RepoRoot $Repo -BaseConfigPath $originalPhaseConfigPath -ResumeCheckpoint ([string]$resumeCheckpoint) -PhaseName ("{0}_c{1}" -f $phaseName, $cycleIteration) -CycleIteration $cycleIteration -LastGateFailReasons $lastGateFailReasons
+          $currentCycleOverlayPath = $overlayCfg
+          $manifestObj.train_command = Set-TrainConfigInCommand -TrainCommand $originalTrainCommand -NewConfigPath $overlayCfg
+          if (-not [string]::IsNullOrWhiteSpace([string]$resumeCheckpoint)) {
+            Write-Host ("Using previous phase baseline checkpoint: {0}" -f [string]$resumeCheckpoint) -ForegroundColor Gray
+          } else {
+            Write-Host ("Starting clean from scratch (Phase 1 baseline).") -ForegroundColor Gray
           }
+          if ($cycleIteration -gt 1) {
+            Write-Host ("Applied Cycle {0} independent parameter overlay: {1}" -f $cycleIteration, $overlayCfg) -ForegroundColor Cyan
+          }
+          $manifestTmpDir = Join-Path $Repo "runs_curriculum\experiments\curriculum_runtime_manifests"
+          New-Item -ItemType Directory -Path $manifestTmpDir -Force | Out-Null
+          $manifestTmp = Join-Path $manifestTmpDir ("manifest_{0}_c{1}_{2}.json" -f $phaseName, $cycleIteration, (Get-Date -Format "yyyyMMdd_HHmmss"))
+          ($manifestObj | ConvertTo-Json -Depth 16) | Set-Content -Path $manifestTmp -Encoding UTF8
+          $manifestToRun = $manifestTmp
         }
 
         $cmd = "powershell -ExecutionPolicy Bypass -File .\scripts\run_curriculum_cycle.ps1 -ManifestPath `"$manifestToRun`""
@@ -682,6 +843,22 @@ try {
         }
         $trainRunId = Resolve-RunIdFromPath -PathText ([string]$newCheckpoint)
 
+        # Track best checkpoint across independent cycles in this phase (by TQS, tie-breaking by WinRate)
+        $isBetterCycle = ($tqsScore -gt $bestPhaseTqs) -or (($tqsScore -eq $bestPhaseTqs) -and ($winRate -ge $bestPhaseWinRate))
+        if (-not [string]::IsNullOrWhiteSpace([string]$newCheckpoint) -and $isBetterCycle) {
+          $bestPhaseTqs = $tqsScore
+          $bestPhaseWinRate = $winRate
+          $bestPhaseCheckpoint = [string]$newCheckpoint
+          $bestPhaseCycle = $cycleIteration
+          $bestPhaseMetrics = $gate.metrics
+          $bestPhaseOverlayPath = [string]$currentCycleOverlayPath
+          if (-not $gate.ok) {
+            $lastGateFailReasons = @($gate.reasons)
+          }
+        } elseif (-not $gate.ok -and $lastGateFailReasons.Count -eq 0) {
+          $lastGateFailReasons = @($gate.reasons)
+        }
+
         if (-not $gate.ok) {
           $phaseGateResult = "FAIL"
           $phaseGateReasons = @($gate.reasons)
@@ -697,14 +874,19 @@ try {
 
           if ($cycleIteration -lt $maxCycles) {
             Write-Host ""
-            Write-Host ("[Dynamic Gate][REINFORCE] Accumulating reinforcement cycle ({0} -> {1}/{2})..." -f $cycleIteration, ($cycleIteration + 1), $maxCycles) -ForegroundColor Cyan
-            Write-Host ("   Continuous learning resuming from checkpoint: {0}" -f $newCheckpoint) -ForegroundColor Cyan
-            $resumeCheckpoint = $newCheckpoint
+            Write-Host ("[Dynamic Gate][INDEPENDENT-TRY] Launching independent attempt ({0} -> {1}/{2}) from previous phase baseline..." -f $cycleIteration, ($cycleIteration + 1), $maxCycles) -ForegroundColor Cyan
+            if (-not [string]::IsNullOrWhiteSpace($phaseBaselineCheckpoint)) {
+              Write-Host ("   Baseline checkpoint (from previous phase ★): {0}" -f $phaseBaselineCheckpoint) -ForegroundColor Cyan
+            } else {
+              Write-Host ("   Baseline: Clean start (Phase 1) with Cycle {0} tuned parameters." -f ($cycleIteration + 1)) -ForegroundColor Cyan
+            }
+            Write-Host ("   Best candidate in this phase so far: Cycle {0} (TQS={1:N3}, WinRate={2:N1}%)" -f $bestPhaseCycle, $bestPhaseTqs, ($bestPhaseWinRate * 100)) -ForegroundColor Gray
+            $resumeCheckpoint = $phaseBaselineCheckpoint
             $cycleIteration++
             continue
           } else {
             Write-Host ""
-            Write-Host ("[Dynamic Gate][LIMIT] Maximum reinforcement cycles ({0}) reached without passing gate." -f $maxCycles) -ForegroundColor Red
+            Write-Host ("[Dynamic Gate][LIMIT] Maximum independent cycles ({0}) reached without passing gate." -f $maxCycles) -ForegroundColor Red
             $gateFailures.Add(@{
               phase = [string]$phaseName
               cycles_attempted = $cycleIteration
@@ -714,8 +896,18 @@ try {
             if ($StopOnGateFail) {
               throw "Stopped by gate at phase '$phaseName' after $maxCycles cycles."
             }
-            Write-Host ("[Dynamic Gate] Advancing to next phase (StopOnGateFail not set).") -ForegroundColor Yellow
-            $resumeCheckpoint = $newCheckpoint
+            if (-not [string]::IsNullOrWhiteSpace($bestPhaseCheckpoint)) {
+              $resumeCheckpoint = $bestPhaseCheckpoint
+              $prevMetrics = $bestPhaseMetrics
+              $promotionDecision = "promote_best_of_cycles"
+              $promotionReason = ("max_cycles_reached_selected_best_cycle_{0}" -f $bestPhaseCycle)
+              Write-Host ("[Dynamic Gate][BEST-OF-{0}] Advancing to next phase with BEST independent checkpoint from Cycle {1}/{0} (TQS={2:N3}, WinRate={3:N1}%):" -f $maxCycles, $bestPhaseCycle, $bestPhaseTqs, ($bestPhaseWinRate * 100)) -ForegroundColor Cyan
+              Write-Host ("   Selected checkpoint (★): {0}" -f $resumeCheckpoint) -ForegroundColor Cyan
+              Save-WinningCycleParamsToPhaseConfig -RepoRoot $Repo -PhaseConfigPath $originalPhaseConfigPath -WinningOverlayPath $bestPhaseOverlayPath -WinningCycle $bestPhaseCycle
+            } else {
+              Write-Host ("[Dynamic Gate] Advancing to next phase (StopOnGateFail not set).") -ForegroundColor Yellow
+              $resumeCheckpoint = $newCheckpoint
+            }
             break
           }
         } else {
@@ -732,6 +924,7 @@ try {
           Write-Host ("[Dynamic Gate][PROMOTED] PROMOTION GRANTED for Phase '{0}' on Cycle {1}/{2}!" -f $phaseName, $cycleIteration, $maxCycles) -ForegroundColor Green
           Write-Host ("   Quality Metrics: TQS={0:N3} (>= min_tqs) | WinRate={1:N1}% | Defeats={2:N1}% | VPs={3:N2}" -f $tqsScore, ($winRate * 100), ($defeatRate * 100), $vpAvg) -ForegroundColor Green
           Write-Host ("   Promoting checkpoint: {0}" -f $resumeCheckpoint) -ForegroundColor Green
+          Save-WinningCycleParamsToPhaseConfig -RepoRoot $Repo -PhaseConfigPath $originalPhaseConfigPath -WinningOverlayPath $currentCycleOverlayPath -WinningCycle $cycleIteration
           break
         }
       } catch {

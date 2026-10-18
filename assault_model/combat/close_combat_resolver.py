@@ -218,6 +218,23 @@ def resolve_close_combat(
         if ctx.round_number == 1 and bool(getattr(ctx.attacker, "ambush", False)):
             attacker_attack_colors = _apply_cc005_ambush_bonus(attacker_attack_colors)
 
+        # Palma et al. 2025 (Sec. 3.3, Fig. 3): Multi-unit combined assault coordination
+        # Each adjacent committed supporting attacker squad adds +1 supporting attack die (WHITE, or RED if heavy support)
+        if ctx.round_number == 1:
+            for sup_unit in list(getattr(ctx, "supporting_attackers", []) or []):
+                if bool(getattr(sup_unit, "alive", True)) and not bool(getattr(sup_unit, "suppressed", False)):
+                    sup_code = str(getattr(getattr(sup_unit, "unit_type", None), "code", "")).upper()
+                    added_color = DiceColor.RED if ("MMG" in sup_code or "HMG" in sup_code or "MORTAR" in sup_code) else DiceColor.GREEN
+                    attacker_attack_colors.append(added_color)
+                    _trace("CC_COMBINED_ASSAULT_BONUS", side="attacker", supporter=getattr(sup_unit, "unit_id", None), die=added_color.name)
+
+            for sup_def in list(getattr(ctx, "supporting_defenders", []) or []):
+                if bool(getattr(sup_def, "alive", True)) and not bool(getattr(sup_def, "suppressed", False)):
+                    sup_code = str(getattr(getattr(sup_def, "unit_type", None), "code", "")).upper()
+                    added_color = DiceColor.RED if ("MMG" in sup_code or "HMG" in sup_code or "MORTAR" in sup_code) else DiceColor.GREEN
+                    defender_attack_colors.append(added_color)
+                    _trace("CC_COMBINED_ASSAULT_BONUS", side="defender", supporter=getattr(sup_def, "unit_id", None), die=added_color.name)
+
         dice_pools = {
             "attacker_attack": AttackDicePool(
                 attacker_attack_colors

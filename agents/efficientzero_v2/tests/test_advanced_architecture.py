@@ -80,3 +80,39 @@ def test_temporal_context_block():
     h2 = ctx(step2_pooled, h1)
     assert h2.shape == (2, 32)
     assert not torch.allclose(h1, h2)
+
+
+def test_two_hot_asymmetric_zero_boost():
+    # Test fine discrimination of micro-attrition near zero (e.g. 0.05 vs 0.10)
+    micro1 = torch.tensor([[0.02]])
+    micro2 = torch.tensor([[0.08]])
+    dist1 = scalar_to_two_hot(micro1, support_size=30, asym_zero_boost=True, zero_power=0.75)
+    dist2 = scalar_to_two_hot(micro2, support_size=30, asym_zero_boost=True, zero_power=0.75)
+    assert dist1.shape == (1, 1, 61)
+    assert dist2.shape == (1, 1, 61)
+    # Distributions must be distinct and non-zero
+    assert not torch.allclose(dist1, dist2, atol=1e-3)
+    rec1 = support_to_scalar(torch.log(torch.clamp(dist1, min=1e-8)), support_size=30, asym_zero_boost=True, zero_power=0.75)
+    assert torch.isclose(rec1, micro1, atol=0.08)
+
+
+def test_katago_final_ownership_head():
+    from agents.efficientzero_v2.core.network_base import EfficientZeroV2BaseNetwork
+    net = EfficientZeroV2BaseNetwork(
+        observation_dim=32 * 16 * 16,
+        hidden_dim=32,
+        action_dim=10,
+        encoder_type="cnn",
+        observation_channels=32,
+        observation_height=16,
+        observation_width=16,
+        enable_final_ownership_head=True,
+    )
+    assert net.prediction_final_ownership is not None
+    obs = torch.randn(2, 32, 16, 16)
+    hidden, policy_logits, value, reward, aux = net.initial_inference(obs, return_aux=True)
+    assert "final_ownership_pred" in aux
+    ownership = aux["final_ownership_pred"]
+    # Final ownership map is 1 x H x W (KataGo)
+    assert ownership.shape == (2, 1, 16, 16)
+
