@@ -273,3 +273,76 @@ def test_trainer_with_tactical_heads_losses():
     assert "aux_attrition_loss" in metrics_dict
     assert "aux_morale_loss" in metrics_dict
 
+
+def test_all_10_network_heads_topology_and_shapes():
+    """
+    Verify simultaneously all 10 heads of the production EfficientZeroV2Network:
+    1. Policy (pi)
+    2. Value (v + Two-Hot support logits)
+    3. Reward (r + Two-Hot support logits)
+    4. Consistency Projection (SimSiam hypersphere)
+    5. Threat Map 2D (Spatial heatmap)
+    6. Attrition (Allied/Enemy casualties)
+    7. Morale (4 cohesion classes)
+    8. Macro-Intent (8 HRL doctrinal postures)
+    9. Multi-VP (4 objective features)
+    10. Objective Scalar (1 binary/progress logit)
+    """
+    net = EfficientZeroV2Network(
+        observation_dim=32 * 16 * 16,
+        hidden_dim=48,
+        action_dim=32,
+        encoder_type="cnn",
+        observation_channels=32,
+        observation_height=16,
+        observation_width=16,
+        dynamics_blocks=3,
+        prediction_blocks=2,
+        consistency_proj_dim=128,
+        objective_intent_classes=8,
+        multi_vp_feature_dim=4,
+        support_size=30,
+        use_spatial_attention=True,
+        enable_threat_head=True,
+        enable_attrition_head=True,
+        enable_morale_head=True,
+        morale_classes=4,
+        dynamics_recurrent_steps=2,
+    )
+    b = 3
+    obs = torch.randn(b, 32, 16, 16)
+    actions = torch.tensor([0, 15, 31], dtype=torch.long)
+
+    hidden, policy, value, reward, aux = net.initial_inference(obs, return_aux=True)
+    assert hidden.shape == (b, 48, 16, 16)
+    assert policy.shape == (b, 32)
+    assert value.shape == (b, 1)
+    assert reward.shape == (b, 1)
+    assert aux["value_logits"].shape == (b, 61)
+    assert aux["reward_logits"].shape == (b, 61)
+    assert aux["objective_logit"].shape == (b, 1)
+    assert aux["objective_intent_logits"].shape == (b, 8)
+    assert aux["multi_vp_pred"].shape == (b, 4)
+    assert aux["threat_map_pred"].shape == (b, 1, 16, 16)
+    assert aux["attrition_pred"].shape == (b, 2)
+    assert aux["morale_pred"].shape == (b, 4)
+
+    next_h, next_p, next_v, next_r, next_aux = net.recurrent_inference(hidden, actions, return_aux=True)
+    assert next_h.shape == (b, 48, 16, 16)
+    assert next_p.shape == (b, 32)
+    assert next_v.shape == (b, 1)
+    assert next_r.shape == (b, 1)
+    assert next_aux["value_logits"].shape == (b, 61)
+    assert next_aux["reward_logits"].shape == (b, 61)
+    assert next_aux["objective_logit"].shape == (b, 1)
+    assert next_aux["objective_intent_logits"].shape == (b, 8)
+    assert next_aux["multi_vp_pred"].shape == (b, 4)
+    assert next_aux["threat_map_pred"].shape == (b, 1, 16, 16)
+    assert next_aux["attrition_pred"].shape == (b, 2)
+    assert next_aux["morale_pred"].shape == (b, 4)
+
+    emb = net.consistency_embedding(next_h)
+    assert emb.shape == (b, 128)
+    assert torch.allclose(emb.norm(dim=-1), torch.ones(b), atol=1e-4)
+
+

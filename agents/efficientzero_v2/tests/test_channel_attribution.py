@@ -6,7 +6,7 @@ from scripts.analyze_channel_attribution import analyze_channels
 
 
 def test_analyze_channels_with_all_heads():
-    """Verify that channel attribution evaluates all active heads (policy, value, threat_map, attrition, morale, objective)."""
+    """Verify that channel attribution evaluates all 8 active prediction heads with Spatial Attention."""
     net = EfficientZeroV2Network(
         observation_dim=4,
         hidden_dim=32,
@@ -18,7 +18,10 @@ def test_analyze_channels_with_all_heads():
         enable_threat_head=True,
         enable_attrition_head=True,
         enable_morale_head=True,
-        use_spatial_attention=False,
+        objective_intent_classes=8,
+        multi_vp_feature_dim=4,
+        support_size=15,
+        use_spatial_attention=True,
     )
     net.eval()
 
@@ -30,7 +33,16 @@ def test_analyze_channels_with_all_heads():
     assert report["num_observations_analyzed"] == 4
     assert report["channels_analyzed"] == 8
     assert "heads_analyzed" in report
-    for expected_head in ["policy", "value", "threat_map", "attrition", "morale", "objective"]:
+    for expected_head in [
+        "policy",
+        "value",
+        "threat_map",
+        "attrition",
+        "morale",
+        "objective",
+        "objective_intent",
+        "multi_vp",
+    ]:
         assert expected_head in report["heads_analyzed"]
 
     ranked = report["ranked_channels"]
@@ -43,9 +55,14 @@ def test_analyze_channels_with_all_heads():
         assert "attrition_shift_mean" in row
         assert "morale_shift_mean" in row
         assert "objective_shift_mean" in row
+        assert "intent_shift_mean" in row
+        assert "multi_vp_shift_mean" in row
         assert "grad_saliency_threat" in row
         assert "grad_saliency_attrition" in row
         assert "grad_saliency_morale" in row
+        assert "grad_saliency_objective" in row
+        assert "grad_saliency_intent" in row
+        assert "grad_saliency_multi_vp" in row
 
         ha = row.get("head_attributions")
         assert ha is not None
@@ -55,16 +72,27 @@ def test_analyze_channels_with_all_heads():
         assert "attrition_shift" in ha
         assert "morale_shift" in ha
         assert "objective_shift" in ha
+        assert "intent_shift" in ha
+        assert "multi_vp_shift" in ha
         assert "grad_threat" in ha
         assert "grad_attrition" in ha
         assert "grad_morale" in ha
+        assert "grad_objective" in ha
+        assert "grad_intent" in ha
+        assert "grad_multi_vp" in ha
 
 
 def test_observation_enhanced_channels_contract():
-    """Verify that channels 4, 5, 18, and 27 are populated and named correctly."""
+    """Verify all 32 tactical channels are uniquely named and finite in observation_to_tensor."""
     from types import SimpleNamespace
     from agents.efficientzero_v2.core.observation import observation_to_tensor
     from agents.efficientzero_v2.train.train_engine import _channel_name
+
+    # Verify all 32 channels [0..31] have canonical semantic names (not fallback ch_X)
+    channel_names = [_channel_name(i) for i in range(32)]
+    assert len(set(channel_names)) == 32
+    for idx, cname in enumerate(channel_names):
+        assert not cname.startswith(f"ch_{idx}"), f"Channel {idx} has fallback name {cname}"
 
     assert _channel_name(4) == "ally_crossfire_risk"
     assert _channel_name(5) == "enemy_target_engagement"
@@ -89,6 +117,7 @@ def test_observation_enhanced_channels_contract():
     )
     ten = observation_to_tensor(obs, channels=32, height=16, width=16)
     assert ten.shape == (32, 16, 16)
+    assert torch.isfinite(ten).all()
     # Channel 4 (crossfire risk) should be populated for allied position
     assert ten[4].sum().item() >= 0.0
     # Channel 5 (target engagement) should be populated for enemy position
@@ -97,4 +126,5 @@ def test_observation_enhanced_channels_contract():
     assert ten[18].sum().item() > 0.0
     # Channel 27 (fortification / urban chokepoint) should reflect cover/los bottleneck
     assert ten[27].sum().item() > 0.0
+
 

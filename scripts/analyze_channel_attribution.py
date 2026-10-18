@@ -230,9 +230,9 @@ def analyze_channels(
     if num_samples == 0:
         raise ValueError("No observations provided for analysis.")
 
-    num_channels = getattr(model, "observation_channels", 32)
-    height = getattr(model, "observation_height", 16)
-    width = getattr(model, "observation_width", 16)
+    num_channels = int(observations[0].shape[0]) if observations else getattr(model, "observation_channels", 32)
+    height = int(observations[0].shape[-2]) if observations else getattr(model, "observation_height", 16)
+    width = int(observations[0].shape[-1]) if observations else getattr(model, "observation_width", 16)
 
     # Detect which heads are active on the model
     has_threat = (
@@ -251,6 +251,8 @@ def analyze_channels(
         and model.prediction_morale is not None
     )
     has_objective = hasattr(model, "prediction_objective") and model.prediction_objective is not None
+    has_intent = hasattr(model, "prediction_intent") and model.prediction_intent is not None
+    has_multi_vp = hasattr(model, "prediction_multi_vp") and model.prediction_multi_vp is not None
 
     active_heads_list = ["policy", "value"]
     if has_objective:
@@ -261,6 +263,10 @@ def analyze_channels(
         active_heads_list.append("attrition")
     if has_morale:
         active_heads_list.append("morale")
+    if has_intent:
+        active_heads_list.append("objective_intent")
+    if has_multi_vp:
+        active_heads_list.append("multi_vp")
 
     # Channel stats accumulators
     nonzero_ratios = [0.0] * num_channels
@@ -274,6 +280,8 @@ def analyze_channels(
     grad_saliency_attrition = [0.0] * num_channels
     grad_saliency_morale = [0.0] * num_channels
     grad_saliency_objective = [0.0] * num_channels
+    grad_saliency_intent = [0.0] * num_channels
+    grad_saliency_multi_vp = [0.0] * num_channels
 
     # Ablation accumulators across all heads
     kl_divergence = [0.0] * num_channels
@@ -283,6 +291,8 @@ def analyze_channels(
     attrition_shift = [0.0] * num_channels
     morale_shift = [0.0] * num_channels
     objective_shift = [0.0] * num_channels
+    intent_shift = [0.0] * num_channels
+    multi_vp_shift = [0.0] * num_channels
 
     for obs in observations:
         obs_tensor = obs.to(device).unsqueeze(0)  # Shape (1, C, H, W)
@@ -353,11 +363,33 @@ def analyze_channels(
             model.zero_grad()
             if obs_req.grad is not None:
                 obs_req.grad.zero_()
-            aux_base["objective_logit"].sum().backward()
+            aux_base["objective_logit"].sum().backward(retain_graph=True)
             if obs_req.grad is not None:
                 o_grad = obs_req.grad.abs().squeeze(0)
                 for c in range(num_channels):
                     grad_saliency_objective[c] += float(o_grad[c].mean().item())
+
+        # 7. Gradient Saliency for Macro-Intent Head
+        if has_intent and "objective_intent_logits" in aux_base and aux_base["objective_intent_logits"] is not None:
+            model.zero_grad()
+            if obs_req.grad is not None:
+                obs_req.grad.zero_()
+            aux_base["objective_intent_logits"].sum().backward(retain_graph=True)
+            if obs_req.grad is not None:
+                i_grad = obs_req.grad.abs().squeeze(0)
+                for c in range(num_channels):
+                    grad_saliency_intent[c] += float(i_grad[c].mean().item())
+
+        # 8. Gradient Saliency for Multi-VP Head
+        if has_multi_vp and "multi_vp_pred" in aux_base and aux_base["multi_vp_pred"] is not None:
+            model.zero_grad()
+            if obs_req.grad is not None:
+                obs_req.grad.zero_()
+            aux_base["multi_vp_pred"].sum().backward()
+            if obs_req.grad is not None:
+                mvp_grad = obs_req.grad.abs().squeeze(0)
+                for c in range(num_channels):
+                    grad_saliency_multi_vp[c] += float(mvp_grad[c].mean().item())
 
         # Baseline values for ablation comparison (without grad)
         with torch.no_grad():
@@ -375,6 +407,11 @@ def analyze_channels(
             base_morale_dist = F.softmax(base_morale.detach(), dim=-1) if base_morale is not None else None
             base_obj_logit = aux_eval_base.get("objective_logit")
             base_obj_prob = float(torch.sigmoid(base_obj_logit.detach()).item()) if base_obj_logit is not None else None
+            base_intent = aux_eval_base.get("objective_intent_logits")
+            base_intent_dist = F.softmax(base_intent.detach(), dim=-1) if base_intent is not None else None
+            base_multi_vp = aux_eval_base.get("multi_vp_pred")
+            if base_multi_vp is not None:
+                base_multi_vp = base_multi_vp.detach()
 
             # Basic spatial stats and ablation per channel
             for c in range(num_channels):
@@ -419,6 +456,15 @@ def analyze_channels(
                     abl_obj_prob = float(torch.sigmoid(aux_abl["objective_logit"].detach()).item())
                     objective_shift[c] += abs(base_obj_prob - abl_obj_prob)
 
+                if base_intent_dist is not None and "objective_intent_logits" in aux_abl and aux_abl["objective_intent_logits"] is not None:
+                    abl_i_dist = F.softmax(aux_abl["objective_intent_logits"].detach(), dim=-1)
+                    i_diff = (base_intent_dist - abl_i_dist).abs().mean().item()
+                    intent_shift[c] += float(i_diff)
+
+                if base_multi_vp is not None and "multi_vp_pred" in aux_abl and aux_abl["multi_vp_pred"] is not None:
+                    mvp_diff = (base_multi_vp - aux_abl["multi_vp_pred"].detach()).abs().mean().item()
+                    multi_vp_shift[c] += float(mvp_diff)
+
     # Normalize by sample count
     results_per_channel: list[dict[str, Any]] = []
     max_kl = max(kl_divergence) / float(num_samples) if max(kl_divergence) > 0 else 1.0
@@ -429,7 +475,7 @@ def analyze_channels(
     max_m_shift = max(morale_shift) / float(num_samples) if max(morale_shift) > 0 else 1.0
     max_o_shift = max(objective_shift) / float(num_samples) if max(objective_shift) > 0 else 1.0
 
-    has_tactical_heads = has_threat or has_attrition or has_morale or has_objective
+    has_tactical_heads = has_threat or has_attrition or has_morale or has_objective or has_intent or has_multi_vp
 
     for c in range(num_channels):
         name = _channel_name(c)
@@ -445,10 +491,14 @@ def analyze_channels(
         a_diff = attrition_shift[c] / float(num_samples)
         m_diff = morale_shift[c] / float(num_samples)
         o_diff = objective_shift[c] / float(num_samples)
+        i_diff = intent_shift[c] / float(num_samples)
+        mvp_diff = multi_vp_shift[c] / float(num_samples)
         t_grad = grad_saliency_threat[c] / float(num_samples)
         a_grad = grad_saliency_attrition[c] / float(num_samples)
         m_grad = grad_saliency_morale[c] / float(num_samples)
         o_grad = grad_saliency_objective[c] / float(num_samples)
+        i_grad = grad_saliency_intent[c] / float(num_samples)
+        mvp_grad = grad_saliency_multi_vp[c] / float(num_samples)
 
         # Composite score balanced across all active heads
         if has_tactical_heads:
@@ -516,6 +566,8 @@ def analyze_channels(
                 "attrition_shift_mean": round(a_diff, 5) if has_attrition else 0.0,
                 "morale_shift_mean": round(m_diff, 5) if has_morale else 0.0,
                 "objective_shift_mean": round(o_diff, 5) if has_objective else 0.0,
+                "intent_shift_mean": round(i_diff, 5) if has_intent else 0.0,
+                "multi_vp_shift_mean": round(mvp_diff, 5) if has_multi_vp else 0.0,
                 "nonzero_ratio": round(nz_ratio, 4),
                 "mean_abs": round(m_abs, 4),
                 "std": round(std_v, 4),
@@ -524,6 +576,9 @@ def analyze_channels(
                 "grad_saliency_threat": round(t_grad, 6) if has_threat else 0.0,
                 "grad_saliency_attrition": round(a_grad, 6) if has_attrition else 0.0,
                 "grad_saliency_morale": round(m_grad, 6) if has_morale else 0.0,
+                "grad_saliency_objective": round(o_grad, 6) if has_objective else 0.0,
+                "grad_saliency_intent": round(i_grad, 6) if has_intent else 0.0,
+                "grad_saliency_multi_vp": round(mvp_grad, 6) if has_multi_vp else 0.0,
                 "recommendation": recommendation,
                 "head_attributions": {
                     "policy_kl": round(kl, 5),
@@ -532,11 +587,16 @@ def analyze_channels(
                     "attrition_shift": round(a_diff, 5) if has_attrition else None,
                     "morale_shift": round(m_diff, 5) if has_morale else None,
                     "objective_shift": round(o_diff, 5) if has_objective else None,
+                    "intent_shift": round(i_diff, 5) if has_intent else None,
+                    "multi_vp_shift": round(mvp_diff, 5) if has_multi_vp else None,
                     "grad_policy": round(p_grad, 6),
                     "grad_value": round(v_grad, 6),
                     "grad_threat": round(t_grad, 6) if has_threat else None,
                     "grad_attrition": round(a_grad, 6) if has_attrition else None,
                     "grad_morale": round(m_grad, 6) if has_morale else None,
+                    "grad_objective": round(o_grad, 6) if has_objective else None,
+                    "grad_intent": round(i_grad, 6) if has_intent else None,
+                    "grad_multi_vp": round(mvp_grad, 6) if has_multi_vp else None,
                 },
             }
         )
