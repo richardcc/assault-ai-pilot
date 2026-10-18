@@ -1,0 +1,599 @@
+{
+  "US_AIRBORNE_RIFLES_43": {
+    "side": "US",
+    "category": "INFANTRY",
+    "subtype": "AIRBORNE",
+    "classification": "SPECIALIZED_INFANTRY",
+    "card_id": "S43",
+    "cost": 7,
+    "movement": 2,
+    "max_strength": 4,
+    "has_counter_flip": true,
+    "base_defense": {
+      "FRONT": [
+        "YELLOW"
+      ],
+      "FLANK_LEFT": [
+        "YELLOW"
+      ],
+      "FLANK_RIGHT": [
+        "YELLOW"
+      ],
+      "REAR": [
+        "YELLOW"
+      ]
+    },
+    "attack": {
+      "DIRECT_FIRE": {
+        "VEHICLE": {
+          "0": {
+            "dice": [
+              "YELLOW",
+              "GREEN"
+            ]
+          },
+          "1": {
+            "dice": [
+              "YELLOW",
+              "BLUE"
+            ]
+          },
+          "2": {
+            "dice": [
+              "GREEN",
+              "BLUE"
+            ]
+          }
+        },
+        "INFANTRY": {
+          "0": {
+            "dice": [
+              "RED",
+              "RED",
+              "YELLOW"
+            ]
+          },
+          "1-3": {
+            "dice": [
+              "RED",
+              "YELLOW",
+              "YELLOW",
+              "BLUE"
+            ]
+          },
+          "4-6": {
+            "dice": [
+              "RED",
+              "YELLOW",
+              "BLUE"
+            ]
+          },
+          "7-10": {
+            "dice": [
+              "GREEN",
+              "BLUE"
+            ]
+          }
+        }
+      }
+    },
+    "traits": [
+      "TOUGH",
+      "RIFLE_GRENADES",
+      "PARATROOPS",
+      "ELITE"
+    ]
+  },
+  "US_COMBAT_ENGINEERS_43": {
+    "side": "US",
+    "category": "INFANTRY",
+    "subtype": "COMBAT_ENGINEERS",
+    "classification": "SPECIALIZED_INFANTRY",
+    "card_id": "S43",
+    "cost": 6,
+    "movement": 2,
+    "max_strength": 4,
+    "has_counter_flip": true,
+    "base_defense": {
+      "FRONT": [
+        "YELLOW"
+      ],
+      "FLANK_LEFT": [
+        "YELLOW"
+      ],
+      "FLANK_RIGHT": [
+        "YELLOW"
+      ],
+      "REAR": [
+        "YELLOW"
+      ]
+    },
+    "attack": {
+      "DIRECT_FIRE": {
+        "VEHICLE": {
+          "0": {
+            "dice": [
+              "YELLOW",
+              "YELLOW",
+              "GREEN"
+            ]
+          }
+        },
+        "INFANTRY": {
+          "0": {
+            "dice": [
+              "RED",
+              "RED",
+              "YELLOW"
+            ]
+          },
+          "1-3": {
+            "dice": [
+              "RED",
+              "YELLOW"
+            ]
+          },
+          "4-6": {
+            "dice": [
+              "YELLOW",
+              "YELLOW"
+            ]
+          },
+          "7-9": {
+            "dice": [
+              "GREEN",
+              "GREEN"
+            ]
+          }
+        }
+      }
+    },
+    "traits": [
+      "EXPLOSIVE_CHARGE",
+      "MINE_DETECTION",
+      "SMOKE"
+    ]
+  },
+  "UK_RIFLES_43": {
+    "side": "UK",
+    "category": "INFANTRY",
+    "subtype": "STANDARD_INFANTRY",
+    "classification": "STANDARD_INFANTRY",
+    "card_id": "Pr43",
+    "cost": 5,
+    "movement": 2,
+    "max_strength": 4,
+    "has_counter_flip": true,
+    "base_defense": {
+      "FRONT": [
+        "YELLOW"
+      ],
+      "FLANK_LEFT": [
+        "YELLOW"
+      ],
+      "FLANK_RIGHT": [
+        "YELLOW"
+      ],
+      "REAR": [
+        "YELLOW"
+      ]
+    },
+    "attack": {
+      "DIRECT_FIRE": {
+        "VEHICLE": {
+          "0": {
+            "dice": [
+              "YELLOW",
+              "BLUE"
+            ]
+          }
+        },
+        "INFANTRY": {
+          "0": {
+            "dice": [
+              "RED",
+              "GREEN",
+              "GREEN",
+              "BLUE"
+            ]
+          },
+          "1-3": {
+            "dice": [
+              "RED",
+              "YELLOW",
+              "BLUE"
+            ]
+          },
+          "4-6": {
+            "dice": [
+              "YELLOW",
+              "GREEN",
+              "BLUE"
+            ]
+          },
+          "7-10": {
+            "dice": [
+              "GREEN",
+              "GREEN"
+            ]
+          }
+        }
+      }
+    },
+    "traits": [
+      "SUPPORT_FIRE"
+    ]
+  },
+  "UK_COMMANDOS": {
+    "side": "UK",
+    "category": "INFANTRY",
+    "subtype": "COMMANDOS",
+    "classification": "SPECIALIZED_INFANTRY",
+    "card_id": "Pr43",
+    "cost": 7,
+    "movement": 2,
+    "max_strength": 4,
+    "has_counter_flip": true,
+    "base_defense": {
+      "FRONT": [
+        "YELLOW"
+      ],
+      "FLANK_LEFT": [
+        "YELLOW"
+      ],
+      "FLANK_RIGHT": [
+        "YELLOW"
+      ],
+      "REAR": [
+        "YELLOW"
+      ]
+    },
+    "attack": {
+      "DIRECT_FIRE": {
+        "VEHICLE": {
+          "0": {
+            "dice": [
+              "RED",
+              "YELLOW",
+              "GREEN"
+            ]
+          }
+        },
+        "INFANTRY": {
+          "0": {
+            "dice": [
+              "RED",
+              "YELLOW",
+              "YELLOW",
+              "YELLOW"
+            ]
+          },
+          "1-2": {
+            "dice": [
+              "RED",
+              "RED",
+              "YELLOW",
+              "BLUE"
+            ]
+          },
+          "3-5": {
+            "dice": [
+              "RED",
+              "YELLOW",
+              "GREEN"
+            ]
+          },
+          "8-10": {
+            "dice": [
+              "GREEN",
+              "BLUE",
+              "BLUE"
+            ]
+          }
+        }
+      }
+    },
+    "traits": [
+      "SCOUT",
+      "CONCEALED",
+      "RECON_PATROL",
+      "ELITE",
+      "TOUGH"
+    ]
+  },
+  "UK_PARACHUTE_RIFLES": {
+    "side": "UK",
+    "category": "INFANTRY",
+    "subtype": "AIRBORNE",
+    "classification": "SPECIALIZED_INFANTRY",
+    "card_id": "Pr43",
+    "cost": 6,
+    "movement": 2,
+    "max_strength": 4,
+    "has_counter_flip": true,
+    "base_defense": {
+      "FRONT": [
+        "YELLOW"
+      ],
+      "FLANK_LEFT": [
+        "YELLOW"
+      ],
+      "FLANK_RIGHT": [
+        "YELLOW"
+      ],
+      "REAR": [
+        "YELLOW"
+      ]
+    },
+    "attack": {
+      "DIRECT_FIRE": {
+        "VEHICLE": {
+          "0": {
+            "dice": [
+              "YELLOW",
+              "GREEN"
+            ]
+          }
+        },
+        "INFANTRY": {
+          "0": {
+            "dice": [
+              "RED",
+              "YELLOW",
+              "GREEN",
+              "BLUE"
+            ]
+          },
+          "1-3": {
+            "dice": [
+              "RED",
+              "YELLOW",
+              "YELLOW"
+            ]
+          },
+          "4-6": {
+            "dice": [
+              "YELLOW",
+              "GREEN",
+              "GREEN"
+            ]
+          },
+          "7-10": {
+            "dice": [
+              "GREEN",
+              "GREEN"
+            ]
+          }
+        }
+      }
+    },
+    "traits": [
+      "TOUGH",
+      "PARATROOPS",
+      "ELITE"
+    ]
+  },
+  "UK_ROYAL_ENGINEERS": {
+    "side": "UK",
+    "category": "INFANTRY",
+    "subtype": "COMBAT_ENGINEERS",
+    "classification": "SPECIALIZED_INFANTRY",
+    "card_id": "Pr43",
+    "cost": 7,
+    "movement": 2,
+    "max_strength": 4,
+    "has_counter_flip": true,
+    "base_defense": {
+      "FRONT": [
+        "YELLOW"
+      ],
+      "FLANK_LEFT": [
+        "YELLOW"
+      ],
+      "FLANK_RIGHT": [
+        "YELLOW"
+      ],
+      "REAR": [
+        "YELLOW"
+      ]
+    },
+    "attack": {
+      "DIRECT_FIRE": {
+        "VEHICLE": {
+          "0": {
+            "dice": [
+              "RED",
+              "YELLOW",
+              "BLUE"
+            ]
+          }
+        },
+        "INFANTRY": {
+          "0": {
+            "dice": [
+              "RED",
+              "YELLOW",
+              "GREEN"
+            ]
+          },
+          "1-4": {
+            "dice": [
+              "RED",
+              "RED",
+              "GREEN"
+            ]
+          },
+          "5-7": {
+            "dice": [
+              "RED",
+              "YELLOW"
+            ]
+          },
+          "8-10": {
+            "dice": [
+              "YELLOW",
+              "GREEN"
+            ]
+          }
+        }
+      }
+    },
+    "traits": [
+      "EXPLOSIVE_CHARGE",
+      "MINE_DETECTION",
+      "SMOKE"
+    ]
+  },
+  "GE_GRENADIERS_43": {
+    "side": "GE",
+    "category": "INFANTRY",
+    "subtype": "PANZERGRENADIER",
+    "classification": "STANDARD_INFANTRY",
+    "card_id": "S43",
+    "cost": 7,
+    "movement": 2,
+    "max_strength": 4,
+    "has_counter_flip": true,
+    "base_defense": {
+      "FRONT": [
+        "YELLOW"
+      ],
+      "FLANK_LEFT": [
+        "YELLOW"
+      ],
+      "FLANK_RIGHT": [
+        "YELLOW"
+      ],
+      "REAR": [
+        "YELLOW"
+      ]
+    },
+    "attack": {
+      "DIRECT_FIRE": {
+        "VEHICLE": {
+          "0": {
+            "dice": [
+              "RED",
+              "YELLOW"
+            ]
+          },
+          "1": {
+            "dice": [
+              "RED",
+              "GREEN"
+            ]
+          }
+        },
+        "INFANTRY": {
+          "0": {
+            "dice": [
+              "RED",
+              "YELLOW",
+              "GREEN"
+            ]
+          },
+          "1-4": {
+            "dice": [
+              "RED",
+              "YELLOW",
+              "GREEN"
+            ]
+          },
+          "5-7": {
+            "dice": [
+              "RED",
+              "GREEN",
+              "BLUE"
+            ]
+          },
+          "8-10": {
+            "dice": [
+              "RED",
+              "GREEN"
+            ]
+          }
+        }
+      }
+    },
+    "traits": [
+      "FAST_DISEMBARK",
+      "ASSAULT",
+      "SUPPORT_FIRE"
+    ]
+  },
+  "GE_TANK_HUNTERS_43": {
+    "side": "GE",
+    "category": "INFANTRY",
+    "subtype": "TANK_HUNTERS",
+    "classification": "SPECIALIZED_INFANTRY",
+    "card_id": "S43",
+    "cost": 4,
+    "movement": 2,
+    "max_strength": 2,
+    "has_counter_flip": true,
+    "base_defense": {
+      "FRONT": [
+        "YELLOW"
+      ],
+      "FLANK_LEFT": [
+        "YELLOW"
+      ],
+      "FLANK_RIGHT": [
+        "YELLOW"
+      ],
+      "REAR": [
+        "YELLOW"
+      ]
+    },
+    "attack": {
+      "DIRECT_FIRE": {
+        "VEHICLE": {
+          "0": {
+            "dice": [
+              "RED",
+              "GREEN"
+            ]
+          },
+          "1": {
+            "dice": [
+              "RED",
+              "YELLOW"
+            ]
+          }
+        },
+        "INFANTRY": {
+          "0": {
+            "dice": [
+              "RED",
+              "YELLOW",
+              "YELLOW"
+            ]
+          },
+          "1-2": {
+            "dice": [
+              "RED",
+              "BLUE"
+            ]
+          },
+          "3-4": {
+            "dice": [
+              "YELLOW",
+              "BLUE"
+            ]
+          },
+          "5-8": {
+            "dice": [
+              "GREEN"
+            ]
+          }
+        }
+      }
+    },
+    "traits": [
+      "CAMOUFLAGED",
+      "TANK_BUSTERS",
+      "ANTI_TANK",
+      "SLOW_UNIT"
+    ]
+  }
+}

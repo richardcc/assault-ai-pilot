@@ -19,6 +19,7 @@ class UnitSide(Enum):
     GE = "GE"
     US = "US"
     IT = "IT"
+    UK = "UK"
 
 
 class UnitCategory(Enum):
