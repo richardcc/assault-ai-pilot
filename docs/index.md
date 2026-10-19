@@ -13,6 +13,7 @@ Bienvenido al portal oficial de documentación técnica del proyecto **Assault**
 graph TD
     ROOT["Assault Wargame & AI Platform"]
     
+    C0["0. Premisas del Proyecto y Gobernanza"]
     C1["1. Arquitectura del Sistema"]
     C2["2. Reglas Tácticas y VOEC"]
     C3["3. EfficientZero V2"]
@@ -21,8 +22,10 @@ graph TD
     C6["6. Copilot RAG"]
     C7["7. Backend y APIs"]
     C8["8. Auditoría Reglamento vs Engine"]
-    C9["9. Hoja de Ruta Evolutiva (Roadmap)"]
+    C13["9. Inventario Canónico de Métricas"]
+    C9["10. Hoja de Ruta Evolutiva (Roadmap)"]
     
+    ROOT --> C0
     ROOT --> C1
     ROOT --> C2
     ROOT --> C3
@@ -31,12 +34,20 @@ graph TD
     ROOT --> C6
     ROOT --> C7
     ROOT --> C8
+    ROOT --> C13
     ROOT --> C9
 ```
 
 ---
 
 ## 📚 Módulos Canónicos de Documentación
+
+### 0. [Premisas del Proyecto: Diseño, Arquitectura y Gobernanza](00_PREMISAS_DEL_PROYECTO.md)
+* **Marco Maestro de Diseño:** SSoT, decomisión estricta de MuZero, EfficientZero V2 como agente exclusivo.
+* **Economía de Hardware:** Viabilidad en GPU doméstica mediante MCTS latente, reanálisis off-policy y AMP FP16.
+* **Teoría de Palancas (Nudges):** Andamiaje conductual (*scaffolding*) sin anular la exploración ni la emergencia táctica.
+* **Nivel 0 Estratégico:** Perfilado vectorial 5D de tropas (OOB) e inteligencia topográfica de chokepoints (IPB).
+* **Instrumentación Fiel y Auditorías:** Manifiesto de cero invención en dashboards y protocolos de calidad anti-regresión.
 
 ### 1. [Arquitectura del Sistema](01_ARQUITECTURA_DEL_SISTEMA.md)
 * **Principios de diseño:** Desacoplamiento estricto por contratos entre capas.
@@ -82,7 +93,12 @@ graph TD
 * **Auditoría página a página del Manual de Reglas:** 52 páginas del *Rulebook rev6* auditadas respecto a `assault_model/`.
 * **Auditoría del Compendio de Escenarios:** Análisis de los 38 escenarios oficiales (26 de la Campaña de Gela + 12 Standalone) frente al catálogo modelado en JSON.
 
-### 9. [Hoja de Ruta Evolutiva: Assault Architecture Roadmap (2024–2026)](05_ROADMAP_EVOLUTIVO.md)
+### 9. [Inventario Jerárquico Canónico de Métricas y Registro Experimental](13_INVENTARIO_CANONICO_METRICAS.md)
+* **Taxonomía en 4 Niveles:** Desglose estricto de métricas del Motor, Búsqueda MCTS, Red Neuronal y Benchmarks MLOps.
+* **Gobernanza Cero-Invención (Zero-Mock):** Definición matemática formal y origen unívoco para cada campo en Parquet y DuckDB.
+* **Plan de Purgado de Redundancias:** Consolidación de campos duplicados y optimización de sobrecarga de sondas.
+
+### 10. [Hoja de Ruta Evolutiva: Assault Architecture Roadmap (2024–2026)](05_ROADMAP_EVOLUTIVO.md)
 * **Hitos consolidados (Fases 1–6):** Cimentación VOEC, cabezas auxiliares, HL-Gauss + Symlog, Macro-Planner HRL, motor de reglas completo (5.1–5.4), vectorización Numba/NumPy (`4,924 steps/s`), clonado transaccional Copy-on-Write (`109,626 clones/s`), telemetría binaria MessagePack y matriz de 16 contribuciones SOTA/Doctrinales completadas al 100%.
 * **Hoja de Ruta de Trabajo Pendiente Unificada:** Punto único de verdad para las líneas abiertas de investigación IA (Currículum 5 etapas, Gumbel Search, Transformer World Model) y el Plan de Paridad 100% del Reglamento Oficial (Sección 6.4 y Fases A, B y C).
 

@@ -332,16 +332,12 @@ export function EvalMetricsTab({ evalRows }: { evalRows: EvalRow[] }) {
 
                 const sideColor = displaySide === "US" ? "#60a5fa" : displaySide === "IT" ? "#34d399" : displaySide === "GE" ? "#f87171" : "#cbd5e1";
 
-                const oppSide = displaySide === "US" ? "IT" : displaySide === "IT" ? "US" : displaySide === "GE" ? "US" : String(r.opponent_side || "-");
+                const oppSide = String(r.opponent_side || (displaySide === "US" ? "IT" : displaySide === "IT" ? "US" : displaySide === "GE" ? "US" : "-"));
                 const oppLabel = oppSide === "US" ? "🇺🇸 US" : oppSide === "IT" ? "🇮🇹 IT" : oppSide === "GE" ? "🇩🇪 GE" : oppSide;
                 const oppColor = oppSide === "US" ? "#60a5fa" : oppSide === "IT" ? "#34d399" : oppSide === "GE" ? "#f87171" : "#cbd5e1";
                 const oppCtrlMap = (r.controller_by_side || r.policy_by_side || {}) as Record<string, string>;
-                let oppCtrl = oppCtrlMap[oppSide] || oppCtrlMap[oppSide.toLowerCase()] || "";
-                if (!oppCtrl || oppCtrl.toLowerCase() === "unknown") {
-                  if (oppSide === "IT") oppCtrl = oppCtrlMap["GE"] || oppCtrlMap["ge"] || "";
-                  else if (oppSide === "GE") oppCtrl = oppCtrlMap["IT"] || oppCtrlMap["it"] || "";
-                }
-                if (oppCtrl.toLowerCase() === "mcts") oppCtrl = "MuZero";
+                let oppCtrl = oppCtrlMap[oppSide] || oppCtrlMap[oppSide.toLowerCase()] || String(r.opponent_controller || "");
+                if (oppCtrl.toLowerCase() === "mcts") oppCtrl = "EfficientZeroV2";
                 else if (oppCtrl.toLowerCase() === "random") oppCtrl = "Random";
 
                 return (

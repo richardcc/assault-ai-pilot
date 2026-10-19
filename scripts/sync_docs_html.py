@@ -28,6 +28,13 @@ CANONICAL_DOCS_ORDER = [
         "desc": "Mapa de navegación del sistema, índice general de módulos y puertos activos.",
     },
     {
+        "id": "doc-00-premisas",
+        "title": "00. Premisas del Proyecto y Gobernanza",
+        "icon": "📜",
+        "file": "00_PREMISAS_DEL_PROYECTO.md",
+        "desc": "Marco maestro de diseño: límites HW, palancas en RL, nivel 0, instrumentación y calidad.",
+    },
+    {
         "id": "doc-01",
         "title": "01. Arquitectura del Sistema",
         "icon": "🏗️",
@@ -84,8 +91,15 @@ CANONICAL_DOCS_ORDER = [
         "desc": "Auditoría página a página del Rulebook rev6 (52 págs.) y Scenario Book (38 escenarios).",
     },
     {
+        "id": "doc-13-metrics",
+        "title": "09. Inventario Jerárquico Canónico de Métricas",
+        "icon": "📐",
+        "file": "13_INVENTARIO_CANONICO_METRICAS.md",
+        "desc": "Taxonomía de 4 niveles, origen autoritativo, cero-invención y purgado de redundancias.",
+    },
+    {
         "id": "doc-09-roadmap",
-        "title": "09. Hoja de Ruta Evolutiva (Roadmap)",
+        "title": "10. Hoja de Ruta Evolutiva (Roadmap)",
         "icon": "🗺️",
         "file": "05_ROADMAP_EVOLUTIVO.md",
         "desc": "Hitos completados (Fases 1-6, 6.1, 6.2, 6.5, Literatura SOTA) y Hoja de Ruta Unificada de Trabajo Pendiente.",

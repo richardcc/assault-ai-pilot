@@ -14,6 +14,7 @@ La documentación se organiza en nueve módulos canónicos exhaustivos:
 graph TD
     DOC_ROOT["📚 Documentación Central (docs/)"]
     
+    P0["0. Premisas del Proyecto\n(docs/00_PREMISAS_DEL_PROYECTO.md)"]
     P1["1. Arquitectura del Sistema\n(docs/01_ARQUITECTURA_DEL_SISTEMA.md)"]
     P2["2. Modelo del Juego y Reglas Tácticas\n(docs/02_MODELO_DEL_JUEGO_Y_REGLAS_TACTICAS.md)"]
     P3["3. Red Neuronal EfficientZero V2\n(docs/03_RED_NEURONAL_EFFICIENTZERO_V2.md)"]
@@ -22,8 +23,10 @@ graph TD
     P6["6. Sistema RAG Copilot\n(docs/06_SISTEMA_RAG_COPILOT.md)"]
     P7["7. Servicios Backend y Catálogo de APIs\n(docs/07_SERVICIOS_BACKEND_Y_CATALOGO_APIS.md)"]
     P8["8. Auditoría Reglamento vs. Engine\n(docs/08_AUDITORIA_REGLAMENTO_VS_ENGINE.md)"]
-    P9["9. Hoja de Ruta Evolutiva (Roadmap)\n(docs/05_ROADMAP_EVOLUTIVO.md)"]
+    P13["9. Inventario Canónico de Métricas\n(docs/13_INVENTARIO_CANONICO_METRICAS.md)"]
+    P9["10. Hoja de Ruta Evolutiva (Roadmap)\n(docs/05_ROADMAP_EVOLUTIVO.md)"]
     
+    DOC_ROOT --> P0
     DOC_ROOT --> P1
     DOC_ROOT --> P2
     DOC_ROOT --> P3
@@ -32,8 +35,16 @@ graph TD
     DOC_ROOT --> P6
     DOC_ROOT --> P7
     DOC_ROOT --> P8
+    DOC_ROOT --> P13
     DOC_ROOT --> P9
 ```
+
+### 0. [Premisas del Proyecto (`00_PREMISAS_DEL_PROYECTO.md`)](file:///c:/repos/python/assault/docs/00_PREMISAS_DEL_PROYECTO.md)
+* Marco Maestro de Diseño: SSoT, decomisión estricta de MuZero, EfficientZero V2 como agente exclusivo.
+* Economía de Hardware: Viabilidad en GPU doméstica mediante MCTS latente, reanálisis off-policy y AMP FP16.
+* Teoría de Palancas (Nudges): Andamiaje conductual (*scaffolding*) sin anular la exploración ni la emergencia táctica.
+* Nivel 0 Estratégico: Perfilado vectorial 5D de tropas (OOB) e inteligencia topográfica de chokepoints (IPB).
+* Instrumentación Fiel y Auditorías: Manifiesto de cero invención en dashboards y protocolos de calidad anti-regresión.
 
 ### 1. [Arquitectura del Sistema (`01_ARQUITECTURA_DEL_SISTEMA.md`)](file:///c:/repos/python/assault/docs/01_ARQUITECTURA_DEL_SISTEMA.md)
 * Principios de diseño y desacoplamiento limpio entre subsistemas.
@@ -80,7 +91,12 @@ graph TD
 * Auditoría página a página de las 52 páginas del *Rulebook rev6* frente a `assault_model/`.
 * Auditoría de los 38 escenarios oficiales del *Scenario Book* frente al catálogo JSON.
 
-### 9. [Hoja de Ruta Evolutiva: Assault Architecture Roadmap (2024–2026) (`05_ROADMAP_EVOLUTIVO.md`)](file:///c:/repos/python/assault/docs/05_ROADMAP_EVOLUTIVO.md)
+### 9. [Inventario Jerárquico Canónico de Métricas y Registro Experimental (`13_INVENTARIO_CANONICO_METRICAS.md`)](file:///c:/repos/python/assault/docs/13_INVENTARIO_CANONICO_METRICAS.md)
+* Taxonomía de 4 niveles: Motor de reglas, MCTS, Red Neuronal y Benchmarks MLOps.
+* Principio de Cero-Invención (Zero-Mocking): Definición matemática y unívoca de cada variable en Parquet y DuckDB.
+* Auditoría y purgado de duplicidades (`damage_dealt` vs `enemy_damage`, `kills_dealt` vs `enemy_kills`, etc.).
+
+### 10. [Hoja de Ruta Evolutiva: Assault Architecture Roadmap (2024–2026) (`05_ROADMAP_EVOLUTIVO.md`)](file:///c:/repos/python/assault/docs/05_ROADMAP_EVOLUTIVO.md)
 * **Punto único y final de consolidación de Roadmap:** Unifica todos los hitos completados (Fases 1–6, Motor Táctico 5.1–5.4, Optimización 6.1–6.6 y las 16 implementaciones de literatura científica/doctrinal) junto con la **Hoja de Ruta de Trabajo Pendiente Unificada** (Frontera IA & Currículum + Plan de Paridad 100% del Reglamento Oficial: Sección 6.4 y Fases A, B y C).
 
 ---
