@@ -46,7 +46,7 @@ function resolveController(
   const norm = String(side || "").toUpperCase();
   const formatPolicy = (p: string) => {
     const pl = String(p || "").trim().toLowerCase();
-    if (pl === "mcts") return "MuZero";
+    if (pl === "mcts") return "MCTS";
     if (pl === "random") return "Random";
     return p;
   };
@@ -69,43 +69,11 @@ function resolveController(
     }
   }
 
-  // 3. In 2-scenario curriculum benchmarks, Side A is Italian (IT) in scenario 1 and German (GE) in scenario 2:
-  if (norm === "GE") {
-    const itVal = ctrlsMap["IT"] || ctrlsMap["it"];
-    if (!isUnknown(itVal)) return itVal;
-    if (policiesMap) {
-      const itPol = policiesMap["IT"] || policiesMap["it"];
-      if (!isUnknown(itPol)) return formatPolicy(itPol);
-    }
-  }
-  if (norm === "IT") {
-    const geVal = ctrlsMap["GE"] || ctrlsMap["ge"];
-    if (!isUnknown(geVal)) return geVal;
-    if (policiesMap) {
-      const gePol = policiesMap["GE"] || policiesMap["ge"];
-      if (!isUnknown(gePol)) return formatPolicy(gePol);
-    }
-  }
-
-  // 4. Infer from matchup_profile if available
-  const prof = String(matchupProfile || "").toLowerCase();
-  if (prof) {
-    if (prof.includes("selfplay")) {
-      return prof.includes("random") ? "Random" : "MuZero";
-    }
-    if (prof.includes("side_a")) {
-      return (norm === "IT" || norm === "GE") ? "MuZero" : "Random";
-    }
-    if (prof.includes("side_b")) {
-      return (norm === "IT" || norm === "GE") ? "Random" : "MuZero";
-    }
-  }
-
   if (defaultFallback && !isUnknown(defaultFallback)) {
     return defaultFallback;
   }
 
-  return direct || defaultFallback || "Unknown";
+  return direct || defaultFallback || "-";
 }
 
 function getOpponentInfo(side: string, allSides: string[], main: EvalResultRow | null) {

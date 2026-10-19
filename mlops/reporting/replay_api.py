@@ -165,43 +165,16 @@ def _enrich_episodes_meta(rp: Path, raw_meta: list[dict[str, Any]]) -> list[dict
         if full_path and full_path.exists() and (not sid or not winner):
             try:
                 ep_data = json.loads(full_path.read_text(encoding="utf-8"))
-                transitions = ep_data.get("transitions", [])
-                if transitions:
-                    t0 = transitions[0]
-                    t_last = transitions[-1]
-                    if not sid:
-                        uids = {str(u.get("unit_id", "")) for u in t0.get("units", []) if isinstance(u, dict)}
-                        to_play0 = str(t0.get("to_play", ""))
-                        if any("GE" in u for u in uids) or to_play0 == "GE":
-                            sid = "mettete_i_piedi_terra_1"
-                        elif any("IT" in u for u in uids) or to_play0 == "IT":
-                            sid = "battaglia_cittadina_2_1"
-
-                    if not winner:
-                        vp_map = t_last.get("vp_map", {})
-                        if isinstance(vp_map, dict):
-                            us_vps = sum(1 for o in vp_map.values() if str(o).upper() == "US")
-                            if sid == "mettete_i_piedi_terra_1":
-                                if us_vps >= 2:
-                                    winner = "US"
-                                    outcome = "Victoria US (Aliados)"
-                                else:
-                                    winner = "GE"
-                                    outcome = "Victoria GE (Alemania)"
-                            else:
-                                if us_vps >= 4:
-                                    winner = "US"
-                                    outcome = "Victoria US (Aliados)"
-                                elif us_vps == 3:
-                                    winner = "EMPATE"
-                                    outcome = "Empate Táctico"
-                                else:
-                                    winner = "IT"
-                                    outcome = "Victoria IT (Italia)"
+                if not sid:
+                    sid = str(ep_data.get("scenario_id", "") or "")
+                if not winner:
+                    winner = str(ep_data.get("winner", "") or "")
+                if not outcome:
+                    outcome = str(ep_data.get("outcome", "") or "")
             except Exception:
                 pass
 
-        scenario_name = "Mettete i piedi a terra" if "mettete" in sid else ("Battaglia Cittadina" if "cittadina" in sid else (sid or "Escenario Wargame"))
+        scenario_name = sid or "Escenario Wargame"
 
         enriched.append({
             "episode_id": f"episode_{ep_idx}",
@@ -314,10 +287,6 @@ def detect_scenario_id_from_transitions(
     }
     vp_keys = {str(k) for k in (t0.get("vp_map", {}) or {}).keys()}
 
-    if any(uid.startswith("GE_") for uid in uids):
-        return "mettete_i_piedi_terra_1"
-    if any(uid.startswith("IT_") for uid in uids):
-        return "battaglia_cittadina_2_1"
 
     if repo_root is not None:
         from assault_model.paths import SCENARIOS_DIR as scenarios_dir
@@ -339,7 +308,7 @@ def detect_scenario_id_from_transitions(
                     score = len(uids & scen_units) * 2 + len(vp_keys & scen_vps) * 3
                     if score > best_score:
                         best_score = score
-                        best_sid = str(raw.get("id", p.stem))
+                        best_sid = str(p.stem)
                 except Exception:
                     pass
             if best_score > 0:

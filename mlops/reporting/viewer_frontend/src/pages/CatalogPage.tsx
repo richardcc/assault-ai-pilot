@@ -1871,8 +1871,12 @@ export function CatalogPage() {
           {/* TAB 3: CURRICULUM COMPARE */}
           {summaryTab === "compare" && (() => {
             const compareProfiles = Array.from(new Set(compareRows.map((r) => String(r.profile || "")).filter(Boolean))).sort();
-            const compareSides = ["US", "IT", "GE"];
-            const compareEngines = ["muzero", "efficientzero_v2"];
+            const compareEngines = Array.from(
+              new Set([
+                "efficientzero_v2",
+                ...compareRows.map((r) => String(r.engine || "")).filter((e) => e && e !== "muzero"),
+              ])
+            );
 
             const filteredCompareRows = compareRows.filter((r) => {
               if (compareProfileFilter !== "all" && String(r.profile || "") !== compareProfileFilter) {

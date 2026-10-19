@@ -82,9 +82,21 @@ export function extractStepTraceMetrics(trace?: Dict | null): {
 
   const gm = (trace.gate_metrics || {}) as Dict;
   const prof = (gm.profile_scores || {}) as Record<string, number>;
-  const scA = typeof prof.muzero_vs_random_side_a === "number" ? prof.muzero_vs_random_side_a : null;
-  const scB = typeof prof.muzero_vs_random_side_b === "number" ? prof.muzero_vs_random_side_b : null;
-  const scSelf = typeof prof.muzero_selfplay === "number" ? prof.muzero_selfplay : null;
+  let scA: number | null = null;
+  let scB: number | null = null;
+  let scSelf: number | null = null;
+
+  for (const [k, v] of Object.entries(prof)) {
+    if (typeof v !== "number" || isNaN(v)) continue;
+    const lk = k.toLowerCase();
+    if (lk.includes("side_a") && scA === null) {
+      scA = v;
+    } else if (lk.includes("side_b") && scB === null) {
+      scB = v;
+    } else if ((lk.includes("selfplay") || lk.includes("self_play")) && scSelf === null) {
+      scSelf = v;
+    }
+  }
 
   let mirrorRand: number | null = null;
   if (scA !== null && scB !== null) {

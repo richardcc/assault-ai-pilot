@@ -64,12 +64,18 @@ function getFortificationShort(type: string): string {
 function getUnitTacticalRole(
   unit: ReplayUnitSnapshot,
   step: ReplayStepRow,
-  posture: string,
-  targetVpId: string
+  _posture: string,
+  _targetVpId: string
 ): { role: string; label: string; icon: string; color: string; desc: string } {
-  const uid = String(unit.unit_id || "");
-  const isHeavy = uid.includes("HMG") || uid.includes("MORTAR") || uid.includes("GUN") || uid.includes("MG");
-  if (isHeavy) {
+  const explicitRole = String(
+    (unit as Record<string, unknown>).unit_macro_role ||
+    (unit as Record<string, unknown>).role ||
+    (unit as Record<string, unknown>).macro_role ||
+    (String(step.unit_id) === String(unit.unit_id) ? step.unit_macro_role : "") ||
+    ""
+  ).trim();
+
+  if (explicitRole.includes("FIRE_SUPPORT")) {
     return {
       role: "ROLE_FIRE_SUPPORT",
       label: "Apoyo Fuego",
@@ -78,23 +84,7 @@ function getUnitTacticalRole(
       desc: "Armas pesadas asegurando líneas de tiro y fuego de contención.",
     };
   }
-  const vpMap = (step.vp_map_after || step.vp_map || step.vp_owner_by_hex || {}) as Record<string, string>;
-  const uSide = String(unit.side || uid.split("_")[0] || "").toUpperCase();
-  let isNearFriendlyVp = false;
-  for (const [vpKey, owner] of Object.entries(vpMap)) {
-    if (String(owner).toUpperCase() === uSide) {
-      const parts = vpKey.split(",");
-      if (parts.length === 2) {
-        const vq = Number(parts[0]);
-        const vr = Number(parts[1]);
-        if (Math.abs(Number(unit.q) - vq) + Math.abs(Number(unit.r) - vr) <= 2) {
-          isNearFriendlyVp = true;
-          break;
-        }
-      }
-    }
-  }
-  if (isNearFriendlyVp && (posture === "DEFENSIVE_HOLD" || posture === "ASSAULT_VP")) {
+  if (explicitRole.includes("DEFENDER") || explicitRole.includes("OBJECTIVE_DEFENDER")) {
     return {
       role: "ROLE_OBJECTIVE_DEFENDER",
       label: "Defensor VP",
@@ -103,7 +93,7 @@ function getUnitTacticalRole(
       desc: "Atrincherado en perímetro asegurando el control del VP.",
     };
   }
-  if (posture === "ZONE_SUPPRESS") {
+  if (explicitRole.includes("SCREEN") || explicitRole.includes("FLANK")) {
     return {
       role: "ROLE_FLANK_SCREEN",
       label: "Flanqueo",
@@ -112,12 +102,30 @@ function getUnitTacticalRole(
       desc: "Vigilancia de sector y aniquilación de remanentes.",
     };
   }
+  if (explicitRole.includes("SPEARHEAD")) {
+    return {
+      role: "ROLE_SPEARHEAD",
+      label: "Punta Lanza",
+      icon: "⚡",
+      color: "#facc15",
+      desc: "Vanguardia de choque asignada al asalto directo del objetivo.",
+    };
+  }
+  if (explicitRole) {
+    return {
+      role: explicitRole,
+      label: explicitRole,
+      icon: "🎖️",
+      color: "#94a3b8",
+      desc: `Rol táctico asignado: ${explicitRole}`,
+    };
+  }
   return {
-    role: "ROLE_SPEARHEAD",
-    label: "Punta Lanza",
-    icon: "⚡",
-    color: "#facc15",
-    desc: "Vanguardia de choque asignada al asalto directo del objetivo.",
+    role: "",
+    label: "",
+    icon: "",
+    color: "#64748b",
+    desc: "Sin rol táctico asignado en la traza.",
   };
 }
 
@@ -961,52 +969,25 @@ export function MatchReplayTab({
 
   const getStepDetails = useCallback((s: ReplayStepRow, idx: number) => {
     const actionParts = String(s.action_id || "").split(":");
-    const inferredUnitId = String(s.unit_id || actionParts[1] || "-");
-    const inferredSide = String(s.to_play || s.unit_side || (inferredUnitId !== "-" ? inferredUnitId.split("_")[0] : "-")).toUpperCase();
-    const inferredTurn = s.game_turn ?? s.turn ?? (Math.floor(idx / 14) + 1);
-    const oppSide = inferredSide === "IT" ? "US" : inferredSide === "US" ? "IT" : inferredSide === "GE" ? "US" : "-";
-    const flag = inferredSide === "US" ? "🇺🇸" : inferredSide === "IT" ? "🇮🇹" : inferredSide === "GE" ? "🇩🇪" : "";
+    const unitId = String(s.unit_id || actionParts[1] || "-");
+    const side = String(s.to_play || s.unit_side || (unitId !== "-" ? unitId.split("_")[0] : "-")).toUpperCase();
+    const gameTurn = s.game_turn ?? s.turn ?? null;
+    const oppSide = String(s.opponent_side || (side === "IT" ? "US" : side === "US" ? "IT" : side === "GE" ? "US" : "-")).toUpperCase();
+    const flag = side === "US" ? "🇺🇸" : side === "IT" ? "🇮🇹" : side === "GE" ? "🇩🇪" : "";
     const oppFlag = oppSide === "US" ? "🇺🇸" : oppSide === "IT" ? "🇮🇹" : oppSide === "GE" ? "🇩🇪" : "";
 
-    // Macro posture & roles (Level 1 Hierarchical MacroStrategyPlanner)
-    let macroPosture = String(s.macro_posture || "");
+    const macroPosture = String(s.macro_posture || "");
     const macroTargetVpId = String(s.macro_target_vp_id || s.target_vp || "");
-    let unitMacroRole = String(s.unit_macro_role || "");
-
-    if (!macroPosture) {
-      const vpMap = (s.vp_map_after || s.vp_map || s.vp_owner_by_hex || {}) as Record<string, string>;
-      const myVps = Object.values(vpMap).filter((v) => String(v).toUpperCase() === inferredSide).length;
-      const enemyVps = Object.values(vpMap).filter((v) => {
-        const up = String(v).toUpperCase();
-        return up && up !== "NEUTRAL" && up !== inferredSide;
-      }).length;
-      const totalVps = Object.keys(vpMap).length || 3;
-      if (myVps >= totalVps && totalVps > 0) {
-        macroPosture = "ZONE_SUPPRESS";
-      } else if (myVps > enemyVps) {
-        macroPosture = "DEFENSIVE_HOLD";
-      } else {
-        macroPosture = "ASSAULT_VP";
-      }
-    }
-
-    if (!unitMacroRole) {
-      const isHeavy = String(inferredUnitId).includes("HMG") || String(inferredUnitId).includes("MORTAR") || String(inferredUnitId).includes("GUN") || String(inferredUnitId).includes("MG");
-      if (isHeavy) {
-        unitMacroRole = "ROLE_FIRE_SUPPORT";
-      } else {
-        unitMacroRole = macroPosture === "DEFENSIVE_HOLD" ? "ROLE_OBJECTIVE_DEFENDER" : "ROLE_SPEARHEAD";
-      }
-    }
+    const unitMacroRole = String(s.unit_macro_role || "");
 
     return {
       stepIndex: idx,
-      gameTurn: inferredTurn,
-      toPlay: inferredSide,
+      gameTurn,
+      toPlay: side,
       flag,
       opponentSide: oppSide,
       oppFlag,
-      unitId: inferredUnitId,
+      unitId,
       actionId: String(s.action_id || "-"),
       actionKind: String(s.action_kind || actionParts[0] || "-"),
       reward: Number(s.reward || 0),
@@ -2037,7 +2018,7 @@ export function MatchReplayTab({
                 boxShadow: "0 2px 6px rgba(0,0,0,0.5)",
               }}
             >
-              {currentDetails.gameTurn}
+              {currentDetails.gameTurn !== null ? currentDetails.gameTurn : "-"}
             </span>
             <span style={{ color: "#c084fc", fontSize: 11, fontWeight: 600 }}>/ {maxTurns}</span>
           </div>
@@ -2135,7 +2116,7 @@ export function MatchReplayTab({
                 const d = getStepDetails(st, i);
                 return (
                   <option key={i} value={i}>
-                    P{i} (T{d.gameTurn}) | {d.flag} {d.toPlay} ➔ {d.actionId}
+                    P{i} {d.gameTurn !== null ? `(T${d.gameTurn}) ` : ""}| {d.flag} {d.toPlay} ➔ {d.actionId}
                   </option>
                 );
               })}
@@ -2523,7 +2504,7 @@ export function MatchReplayTab({
                     borderRadius: 3,
                   }}
                 >
-                  {currentDetails.gameTurn}
+                  {currentDetails.gameTurn !== null ? currentDetails.gameTurn : "-"}
                 </span>
                 <span style={{ color: "#94a3b8", fontSize: 10 }}>/ {maxTurns}</span>
               </div>
@@ -2636,84 +2617,90 @@ export function MatchReplayTab({
               <div>
                 <div style={{ fontSize: 11, textTransform: "uppercase", color: "#cbd5e1", fontWeight: 700, display: "flex", alignItems: "center", gap: 6 }}>
                   <span style={{ background: "#7e22ce", color: "#ffffff", padding: "1px 6px", borderRadius: 3, fontWeight: 900, fontSize: 10 }}>
-                    TURNO {currentDetails.gameTurn}
+                    {currentDetails.gameTurn !== null ? `TURNO ${currentDetails.gameTurn}` : `PASO ${clamped}`}
                   </span>
                   <span style={{ color: "#38bdf8" }}>PASO {clamped}</span>
                   <span style={{ color: "#64748b" }}>•</span>
                   <span>{actionVector.isFire ? "FUEGO / ATAQUE" : actionVector.isMove ? "MOVIMIENTO" : "ACCIÓN"}</span>
-                  <span style={{ color: "#64748b" }}>•</span>
-                  <span
-                    style={{
-                      background: currentDetails.macroPosture === "DEFENSIVE_HOLD"
-                        ? "rgba(2, 132, 199, 0.25)"
-                        : currentDetails.macroPosture === "ZONE_SUPPRESS"
-                        ? "rgba(139, 92, 246, 0.25)"
-                        : "rgba(239, 68, 68, 0.25)",
-                      border: `1px solid ${
-                        currentDetails.macroPosture === "DEFENSIVE_HOLD"
-                          ? "#0284c7"
-                          : currentDetails.macroPosture === "ZONE_SUPPRESS"
-                          ? "#8b5cf6"
-                          : "#ef4444"
-                      }`,
-                      color: currentDetails.macroPosture === "DEFENSIVE_HOLD"
-                        ? "#38bdf8"
-                        : currentDetails.macroPosture === "ZONE_SUPPRESS"
-                        ? "#c084fc"
-                        : "#f87171",
-                      padding: "1px 6px",
-                      borderRadius: 3,
-                      fontWeight: 800,
-                      fontSize: 10,
-                      display: "inline-flex",
-                      alignItems: "center",
-                      gap: 4,
-                    }}
-                    title="Nivel 1: Postura Estratégica Macro del Turno"
-                  >
-                    <span>{currentDetails.macroPosture === "DEFENSIVE_HOLD" ? "🛡️" : currentDetails.macroPosture === "ZONE_SUPPRESS" ? "💥" : "⚔️"}</span>
-                    <span>{currentDetails.macroPosture}</span>
-                  </span>
+                  {currentDetails.macroPosture && (
+                    <>
+                      <span style={{ color: "#64748b" }}>•</span>
+                      <span
+                        style={{
+                          background: currentDetails.macroPosture === "DEFENSIVE_HOLD"
+                            ? "rgba(2, 132, 199, 0.25)"
+                            : currentDetails.macroPosture === "ZONE_SUPPRESS"
+                            ? "rgba(139, 92, 246, 0.25)"
+                            : "rgba(239, 68, 68, 0.25)",
+                          border: `1px solid ${
+                            currentDetails.macroPosture === "DEFENSIVE_HOLD"
+                              ? "#0284c7"
+                              : currentDetails.macroPosture === "ZONE_SUPPRESS"
+                              ? "#8b5cf6"
+                              : "#ef4444"
+                          }`,
+                          color: currentDetails.macroPosture === "DEFENSIVE_HOLD"
+                            ? "#38bdf8"
+                            : currentDetails.macroPosture === "ZONE_SUPPRESS"
+                            ? "#c084fc"
+                            : "#f87171",
+                          padding: "1px 6px",
+                          borderRadius: 3,
+                          fontWeight: 800,
+                          fontSize: 10,
+                          display: "inline-flex",
+                          alignItems: "center",
+                          gap: 4,
+                        }}
+                        title="Nivel 1: Postura Estratégica Macro del Turno"
+                      >
+                        <span>{currentDetails.macroPosture === "DEFENSIVE_HOLD" ? "🛡️" : currentDetails.macroPosture === "ZONE_SUPPRESS" ? "💥" : "⚔️"}</span>
+                        <span>{currentDetails.macroPosture}</span>
+                      </span>
+                    </>
+                  )}
                 </div>
                 <div style={{ fontSize: 13, fontWeight: 700, color: "#f8fafc", display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
                   <span style={{ color: currentDetails.toPlay === "US" ? "#60a5fa" : "#34d399" }}>
                     {currentDetails.flag} {currentDetails.unitId}
                   </span>{" "}
                   ➔ <code style={{ color: "#facc15" }}>{currentDetails.actionId}</code>
-                  <span
-                    style={{
-                      background: currentDetails.unitMacroRole.includes("FIRE_SUPPORT")
-                        ? "rgba(249, 115, 22, 0.2)"
-                        : currentDetails.unitMacroRole.includes("DEFENDER")
-                        ? "rgba(59, 130, 246, 0.2)"
-                        : currentDetails.unitMacroRole.includes("SCREEN")
-                        ? "rgba(139, 92, 246, 0.2)"
-                        : "rgba(234, 179, 8, 0.2)",
-                      border: `1px solid ${
-                        currentDetails.unitMacroRole.includes("FIRE_SUPPORT")
-                          ? "#f97316"
+                  {currentDetails.unitMacroRole && (
+                    <span
+                      style={{
+                        background: currentDetails.unitMacroRole.includes("FIRE_SUPPORT")
+                          ? "rgba(249, 115, 22, 0.2)"
                           : currentDetails.unitMacroRole.includes("DEFENDER")
-                          ? "#3b82f6"
+                          ? "rgba(59, 130, 246, 0.2)"
                           : currentDetails.unitMacroRole.includes("SCREEN")
-                          ? "#8b5cf6"
-                          : "#eab308"
-                      }`,
-                      color: currentDetails.unitMacroRole.includes("FIRE_SUPPORT")
-                        ? "#fb923c"
-                        : currentDetails.unitMacroRole.includes("DEFENDER")
-                        ? "#60a5fa"
-                        : currentDetails.unitMacroRole.includes("SCREEN")
-                        ? "#c084fc"
-                        : "#facc15",
-                      padding: "1px 6px",
-                      borderRadius: 3,
-                      fontWeight: 700,
-                      fontSize: 10,
-                    }}
-                    title={`Rol Táctico de Escuadra: ${currentDetails.unitMacroRole}`}
-                  >
-                    {currentDetails.unitMacroRole.includes("FIRE_SUPPORT") ? "🎯 APOYO FUEGO" : currentDetails.unitMacroRole.includes("DEFENDER") ? "🛡️ DEFENSOR VP" : currentDetails.unitMacroRole.includes("SCREEN") ? "👁️ FLANQUEO" : "⚡ PUNTA LANZA"}
-                  </span>
+                          ? "rgba(139, 92, 246, 0.2)"
+                          : "rgba(234, 179, 8, 0.2)",
+                        border: `1px solid ${
+                          currentDetails.unitMacroRole.includes("FIRE_SUPPORT")
+                            ? "#f97316"
+                            : currentDetails.unitMacroRole.includes("DEFENDER")
+                            ? "#3b82f6"
+                            : currentDetails.unitMacroRole.includes("SCREEN")
+                            ? "#8b5cf6"
+                            : "#eab308"
+                        }`,
+                        color: currentDetails.unitMacroRole.includes("FIRE_SUPPORT")
+                          ? "#fb923c"
+                          : currentDetails.unitMacroRole.includes("DEFENDER")
+                          ? "#60a5fa"
+                          : currentDetails.unitMacroRole.includes("SCREEN")
+                          ? "#c084fc"
+                          : "#facc15",
+                        padding: "1px 6px",
+                        borderRadius: 3,
+                        fontWeight: 700,
+                        fontSize: 10,
+                      }}
+                      title={`Rol Táctico de Escuadra: ${currentDetails.unitMacroRole}`}
+                    >
+                      {currentDetails.unitMacroRole.includes("FIRE_SUPPORT") ? "🎯 APOYO FUEGO" : currentDetails.unitMacroRole.includes("DEFENDER") ? "🛡️ DEFENSOR VP" : currentDetails.unitMacroRole.includes("SCREEN") ? "👁️ FLANQUEO" : "⚡ PUNTA LANZA"}
+                    </span>
+                  )}
                 </div>
               </div>
             </div>
@@ -2832,30 +2819,44 @@ export function MatchReplayTab({
 
                 <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6 }}>
                   {/* Postura Macro */}
-                  <div style={{ background: "#1e293b", padding: "6px 8px", borderRadius: 4, borderLeft: `3px solid ${currentDetails.macroPosture === "DEFENSIVE_HOLD" ? "#0284c7" : currentDetails.macroPosture === "ZONE_SUPPRESS" ? "#8b5cf6" : "#ef4444"}` }}>
+                  <div style={{ background: "#1e293b", padding: "6px 8px", borderRadius: 4, borderLeft: `3px solid ${currentDetails.macroPosture ? (currentDetails.macroPosture === "DEFENSIVE_HOLD" ? "#0284c7" : currentDetails.macroPosture === "ZONE_SUPPRESS" ? "#8b5cf6" : "#ef4444") : "#475569"}` }}>
                     <div className="muted" style={{ fontSize: 9, textTransform: "uppercase" }}>Postura Macro Turno</div>
-                    <div style={{ fontSize: 11, fontWeight: 800, color: currentDetails.macroPosture === "DEFENSIVE_HOLD" ? "#38bdf8" : currentDetails.macroPosture === "ZONE_SUPPRESS" ? "#c084fc" : "#f87171", display: "flex", alignItems: "center", gap: 4, marginTop: 1 }}>
-                      <span>{currentDetails.macroPosture === "DEFENSIVE_HOLD" ? "🛡️" : currentDetails.macroPosture === "ZONE_SUPPRESS" ? "💥" : "⚔️"}</span>
-                      <span>{currentDetails.macroPosture}</span>
+                    <div style={{ fontSize: 11, fontWeight: 800, color: currentDetails.macroPosture ? (currentDetails.macroPosture === "DEFENSIVE_HOLD" ? "#38bdf8" : currentDetails.macroPosture === "ZONE_SUPPRESS" ? "#c084fc" : "#f87171") : "#94a3b8", display: "flex", alignItems: "center", gap: 4, marginTop: 1 }}>
+                      {currentDetails.macroPosture ? (
+                        <>
+                          <span>{currentDetails.macroPosture === "DEFENSIVE_HOLD" ? "🛡️" : currentDetails.macroPosture === "ZONE_SUPPRESS" ? "💥" : "⚔️"}</span>
+                          <span>{currentDetails.macroPosture}</span>
+                        </>
+                      ) : (
+                        <span>- (No emitida)</span>
+                      )}
                     </div>
                     <div style={{ fontSize: 9, color: "#94a3b8", marginTop: 2, lineHeight: 1.2 }}>
                       {currentDetails.macroPosture === "DEFENSIVE_HOLD"
                         ? "Liderazgo en VPs. Consolidar y atrincherar posiciones bajo control."
                         : currentDetails.macroPosture === "ZONE_SUPPRESS"
                         ? "Todos los VPs controlados. Supresión y aniquilación de remanentes."
-                        : "Empate o desventaja en VPs. Asalto prioritario al VP más cercano."}
+                        : currentDetails.macroPosture === "ASSAULT_VP" || currentDetails.macroPosture === "ASSAULT"
+                        ? "Asalto prioritario al VP más cercano."
+                        : "El paso no registró postura macro explícita."}
                     </div>
                   </div>
 
                   {/* Rol Táctico Unidad */}
-                  <div style={{ background: "#1e293b", padding: "6px 8px", borderRadius: 4, borderLeft: `3px solid ${currentDetails.unitMacroRole.includes("FIRE_SUPPORT") ? "#f97316" : currentDetails.unitMacroRole.includes("DEFENDER") ? "#3b82f6" : currentDetails.unitMacroRole.includes("SCREEN") ? "#8b5cf6" : "#eab308"}` }}>
+                  <div style={{ background: "#1e293b", padding: "6px 8px", borderRadius: 4, borderLeft: `3px solid ${currentDetails.unitMacroRole ? (currentDetails.unitMacroRole.includes("FIRE_SUPPORT") ? "#f97316" : currentDetails.unitMacroRole.includes("DEFENDER") ? "#3b82f6" : currentDetails.unitMacroRole.includes("SCREEN") ? "#8b5cf6" : "#eab308") : "#475569"}` }}>
                     <div className="muted" style={{ fontSize: 9, textTransform: "uppercase" }}>Rol Táctico Escuadra</div>
-                    <div style={{ fontSize: 11, fontWeight: 800, color: currentDetails.unitMacroRole.includes("FIRE_SUPPORT") ? "#fb923c" : currentDetails.unitMacroRole.includes("DEFENDER") ? "#60a5fa" : currentDetails.unitMacroRole.includes("SCREEN") ? "#c084fc" : "#facc15", display: "flex", alignItems: "center", gap: 4, marginTop: 1 }}>
-                      <span>{currentDetails.unitMacroRole.includes("FIRE_SUPPORT") ? "🎯" : currentDetails.unitMacroRole.includes("DEFENDER") ? "🛡️" : currentDetails.unitMacroRole.includes("SCREEN") ? "👁️" : "⚡"}</span>
-                      <span>{currentDetails.unitMacroRole.replace("ROLE_", "")}</span>
+                    <div style={{ fontSize: 11, fontWeight: 800, color: currentDetails.unitMacroRole ? (currentDetails.unitMacroRole.includes("FIRE_SUPPORT") ? "#fb923c" : currentDetails.unitMacroRole.includes("DEFENDER") ? "#60a5fa" : currentDetails.unitMacroRole.includes("SCREEN") ? "#c084fc" : "#facc15") : "#94a3b8", display: "flex", alignItems: "center", gap: 4, marginTop: 1 }}>
+                      {currentDetails.unitMacroRole ? (
+                        <>
+                          <span>{currentDetails.unitMacroRole.includes("FIRE_SUPPORT") ? "🎯" : currentDetails.unitMacroRole.includes("DEFENDER") ? "🛡️" : currentDetails.unitMacroRole.includes("SCREEN") ? "👁️" : "⚡"}</span>
+                          <span>{currentDetails.unitMacroRole.replace("ROLE_", "")}</span>
+                        </>
+                      ) : (
+                        <span>- (No emitido)</span>
+                      )}
                     </div>
                     <div style={{ fontSize: 9, color: "#94a3b8", marginTop: 2, lineHeight: 1.2 }}>
-                      {currentDetails.macroTargetVpId ? `Objetivo Prioritario: VP ${currentDetails.macroTargetVpId}` : "Sin objetivo específico"}
+                      {currentDetails.macroTargetVpId ? `Objetivo Prioritario: VP ${currentDetails.macroTargetVpId}` : (currentDetails.unitMacroRole ? "Sin objetivo específico" : "El paso no registró rol táctico de escuadra.")}
                     </div>
                   </div>
                 </div>
@@ -2877,7 +2878,7 @@ export function MatchReplayTab({
                   <span style={{ fontSize: 11, color: "#60a5fa", fontWeight: 800, textTransform: "uppercase", display: "flex", alignItems: "center", gap: 6 }}>
                     <span>Decisión MCTS</span>
                     <span style={{ color: "#e9d5ff", background: "rgba(168, 85, 247, 0.25)", border: "1px solid #a855f7", padding: "1px 6px", borderRadius: 3, fontSize: 10, fontWeight: 800 }}>
-                      Turno {currentDetails.gameTurn} | Paso {clamped}
+                      {currentDetails.gameTurn !== null ? `Turno ${currentDetails.gameTurn} | ` : ""}Paso {clamped}
                     </span>
                   </span>
                   {currentStep.policy_overridden_by_mcts ? (
@@ -3057,24 +3058,26 @@ export function MatchReplayTab({
                           <span style={{ fontWeight: 700, color: "#f8fafc" }}>{u.unit_id}</span>
                           <span className="muted" style={{ fontSize: 10 }}>({u.q},{u.r})</span>
                           {isActing && <span style={{ fontSize: 9, color: "#facc15", fontWeight: 700 }}>ACTIVA</span>}
-                          <span
-                            style={{
-                              background: `${roleInfo.color}22`,
-                              border: `1px solid ${roleInfo.color}66`,
-                              color: roleInfo.color,
-                              fontSize: 9,
-                              padding: "1px 5px",
-                              borderRadius: 3,
-                              fontWeight: 700,
-                              display: "inline-flex",
-                              alignItems: "center",
-                              gap: 3,
-                            }}
-                            title={roleInfo.desc}
-                          >
-                            <span>{roleInfo.icon}</span>
-                            <span>{roleInfo.label}</span>
-                          </span>
+                          {roleInfo.label && (
+                            <span
+                              style={{
+                                background: `${roleInfo.color}22`,
+                                border: `1px solid ${roleInfo.color}66`,
+                                color: roleInfo.color,
+                                fontSize: 9,
+                                padding: "1px 5px",
+                                borderRadius: 3,
+                                fontWeight: 700,
+                                display: "inline-flex",
+                                alignItems: "center",
+                                gap: 3,
+                              }}
+                              title={roleInfo.desc}
+                            >
+                              <span>{roleInfo.icon}</span>
+                              <span>{roleInfo.label}</span>
+                            </span>
+                          )}
                         </div>
                         <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
                           <span style={{ color: u.alive ? (u.hp >= 3.0 ? "#22c55e" : "#f59e0b") : "#ef4444", fontWeight: 700 }}>
@@ -3119,24 +3122,26 @@ export function MatchReplayTab({
                           <span style={{ fontWeight: 700, color: "#f8fafc" }}>{u.unit_id}</span>
                           <span className="muted" style={{ fontSize: 10 }}>({u.q},{u.r})</span>
                           {isActing && <span style={{ fontSize: 9, color: "#facc15", fontWeight: 700 }}>ACTIVA</span>}
-                          <span
-                            style={{
-                              background: `${roleInfo.color}22`,
-                              border: `1px solid ${roleInfo.color}66`,
-                              color: roleInfo.color,
-                              fontSize: 9,
-                              padding: "1px 5px",
-                              borderRadius: 3,
-                              fontWeight: 700,
-                              display: "inline-flex",
-                              alignItems: "center",
-                              gap: 3,
-                            }}
-                            title={roleInfo.desc}
-                          >
-                            <span>{roleInfo.icon}</span>
-                            <span>{roleInfo.label}</span>
-                          </span>
+                          {roleInfo.label && (
+                            <span
+                              style={{
+                                background: `${roleInfo.color}22`,
+                                border: `1px solid ${roleInfo.color}66`,
+                                color: roleInfo.color,
+                                fontSize: 9,
+                                padding: "1px 5px",
+                                borderRadius: 3,
+                                fontWeight: 700,
+                                display: "inline-flex",
+                                alignItems: "center",
+                                gap: 3,
+                              }}
+                              title={roleInfo.desc}
+                            >
+                              <span>{roleInfo.icon}</span>
+                              <span>{roleInfo.label}</span>
+                            </span>
+                          )}
                         </div>
                         <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
                           <span style={{ color: u.alive ? (u.hp >= 3.0 ? "#22c55e" : "#f59e0b") : "#ef4444", fontWeight: 700 }}>

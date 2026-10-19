@@ -406,29 +406,29 @@ export function NetworkTopologyTab({
 
           if (posture === "DEFENSIVE_HOLD") defCount += 1;
           else if (posture === "ZONE_SUPPRESS") zoneCount += 1;
-          else assaultCount += 1;
+          else if (posture === "ASSAULT_VP" || posture === "ASSAULT") assaultCount += 1;
 
-          if (role.includes("FIRE_SUPPORT") || action.includes("HMG") || action.includes("MORTAR")) fireSupportCount += 1;
-          else if (role.includes("DEFENDER")) defenderCount += 1;
-          else if (role.includes("SCREEN")) flankCount += 1;
-          else spearheadCount += 1;
+          if (role.includes("FIRE_SUPPORT")) fireSupportCount += 1;
+          else if (role.includes("DEFENDER") || role.includes("OBJECTIVE_DEFENDER")) defenderCount += 1;
+          else if (role.includes("SCREEN") || role.includes("FLANK")) flankCount += 1;
+          else if (role.includes("SPEARHEAD")) spearheadCount += 1;
         }
       }
     }
 
     return {
       totalSteps,
-      assaultPct: totalSteps > 0 ? (assaultCount / totalSteps) * 100 : 58.4,
-      defPct: totalSteps > 0 ? (defCount / totalSteps) * 100 : 29.2,
-      zonePct: totalSteps > 0 ? (zoneCount / totalSteps) * 100 : 12.4,
-      spearheadPct: totalSteps > 0 ? (spearheadCount / totalSteps) * 100 : 48.0,
-      fireSupportPct: totalSteps > 0 ? (fireSupportCount / totalSteps) * 100 : 26.5,
-      defenderPct: totalSteps > 0 ? (defenderCount / totalSteps) * 100 : 16.0,
-      flankPct: totalSteps > 0 ? (flankCount / totalSteps) * 100 : 9.5,
-      movePct: totalSteps > 0 ? (moveCount / totalSteps) * 100 : 54.0,
-      firePct: totalSteps > 0 ? (fireCount / totalSteps) * 100 : 36.5,
-      oppPct: totalSteps > 0 ? (oppCount / totalSteps) * 100 : 9.5,
-      mctsOverridePct: totalSteps > 0 ? (mctsOverrideCount / totalSteps) * 100 : 17.8,
+      assaultPct: totalSteps > 0 ? (assaultCount / totalSteps) * 100 : 0.0,
+      defPct: totalSteps > 0 ? (defCount / totalSteps) * 100 : 0.0,
+      zonePct: totalSteps > 0 ? (zoneCount / totalSteps) * 100 : 0.0,
+      spearheadPct: totalSteps > 0 ? (spearheadCount / totalSteps) * 100 : 0.0,
+      fireSupportPct: totalSteps > 0 ? (fireSupportCount / totalSteps) * 100 : 0.0,
+      defenderPct: totalSteps > 0 ? (defenderCount / totalSteps) * 100 : 0.0,
+      flankPct: totalSteps > 0 ? (flankCount / totalSteps) * 100 : 0.0,
+      movePct: totalSteps > 0 ? (moveCount / totalSteps) * 100 : 0.0,
+      firePct: totalSteps > 0 ? (fireCount / totalSteps) * 100 : 0.0,
+      oppPct: totalSteps > 0 ? (oppCount / totalSteps) * 100 : 0.0,
+      mctsOverridePct: totalSteps > 0 ? (mctsOverrideCount / totalSteps) * 100 : 0.0,
       hasRealData: totalSteps > 0,
     };
   }, [evalRows]);
@@ -1673,12 +1673,11 @@ export function NetworkTopologyTab({
                 </span>
               </div>
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6, fontSize: 11 }}>
-                <div><span className="muted">Postura Dominante:</span> <b style={{ color: "#c084fc" }}>{macroStats.assaultPct >= 50 ? "ASSAULT_VP" : "DEFENSIVE_HOLD"}</b></div>
-                <div><span className="muted">Asalto VP:</span> <b style={{ color: "#38bdf8" }}>{macroStats.assaultPct.toFixed(1)}%</b></div>
-                <div><span className="muted">Rol Vanguardia:</span> <b style={{ color: "#fbbf24" }}>{macroStats.spearheadPct.toFixed(1)}%</b></div>
-                <div><span className="muted">Apoyo de Fuego:</span> <b style={{ color: "#34d399" }}>{macroStats.fireSupportPct.toFixed(1)}%</b></div>
-                <div><span className="muted">Shaping Priors:</span> <b style={{ color: "#a855f7" }}>+35% Boost</b></div>
-                <div><span className="muted">Sobreescritura MCTS:</span> <b style={{ color: "#f59e0b" }}>{macroStats.mctsOverridePct.toFixed(1)}%</b></div>
+                <div><span className="muted">Postura Dominante:</span> <b style={{ color: "#c084fc" }}>{macroStats.hasRealData ? (macroStats.assaultPct >= 50 ? "ASSAULT_VP" : "DEFENSIVE_HOLD") : "N/A"}</b></div>
+                <div><span className="muted">Asalto VP:</span> <b style={{ color: "#38bdf8" }}>{macroStats.hasRealData ? `${macroStats.assaultPct.toFixed(1)}%` : "N/A"}</b></div>
+                <div><span className="muted">Rol Vanguardia:</span> <b style={{ color: "#fbbf24" }}>{macroStats.hasRealData ? `${macroStats.spearheadPct.toFixed(1)}%` : "N/A"}</b></div>
+                <div><span className="muted">Apoyo de Fuego:</span> <b style={{ color: "#34d399" }}>{macroStats.hasRealData ? `${macroStats.fireSupportPct.toFixed(1)}%` : "N/A"}</b></div>
+                <div><span className="muted">Sobreescritura MCTS:</span> <b style={{ color: "#f59e0b" }}>{macroStats.hasRealData ? `${macroStats.mctsOverridePct.toFixed(1)}%` : "N/A"}</b></div>
               </div>
               <button
                 onClick={() => setSubTab("macro-planner")}
@@ -2887,12 +2886,12 @@ export function NetworkTopologyTab({
                 <div className="muted" style={{ fontSize: 11, marginTop: 2 }}>
                   {macroStats.hasRealData
                     ? `Calculado sobre ${macroStats.totalSteps} decisiones registradas en partidas de evaluación de ${runId}.`
-                    : `Estimación doctrinal ponderada de las decisiones para la arquitectura activa.`}
+                    : `No hay decisiones registradas en evaluaciones para este modelo. Ejecute una evaluación para recopilar telemetría empírica.`}
                 </div>
               </div>
               <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                <span style={{ fontSize: 10, background: macroStats.hasRealData ? "rgba(34, 197, 94, 0.2)" : "rgba(234, 179, 8, 0.2)", border: `1px solid ${macroStats.hasRealData ? "#22c55e" : "#eab308"}`, color: macroStats.hasRealData ? "#4ade80" : "#facc15", padding: "2px 8px", borderRadius: 4, fontWeight: 700 }}>
-                  {macroStats.hasRealData ? "✓ Partidas de Evaluación" : "Estimación de Arquitectura"}
+                <span style={{ fontSize: 10, background: macroStats.hasRealData ? "rgba(34, 197, 94, 0.2)" : "rgba(100, 116, 139, 0.2)", border: `1px solid ${macroStats.hasRealData ? "#22c55e" : "#64748b"}`, color: macroStats.hasRealData ? "#4ade80" : "#94a3b8", padding: "2px 8px", borderRadius: 4, fontWeight: 700 }}>
+                  {macroStats.hasRealData ? "✓ Partidas de Evaluación" : "Sin Datos de Evaluación"}
                 </span>
                 <button
                   onClick={() => {
@@ -2930,30 +2929,30 @@ export function NetworkTopologyTab({
                   <div>
                     <div style={{ display: "flex", justifyContent: "space-between", fontSize: 10, marginBottom: 2 }}>
                       <span style={{ color: "#f87171", fontWeight: 700 }}>⚔️ ASSAULT_VP (Asalto Ofensivo)</span>
-                      <span style={{ color: "#cbd5e1" }}>{macroStats.assaultPct.toFixed(1)}%</span>
+                      <span style={{ color: "#cbd5e1" }}>{macroStats.hasRealData ? `${macroStats.assaultPct.toFixed(1)}%` : "N/A"}</span>
                     </div>
                     <div style={{ background: "#0f172a", height: 6, borderRadius: 3, overflow: "hidden" }}>
-                      <div style={{ width: `${macroStats.assaultPct}%`, height: "100%", background: "#ef4444" }} />
+                      <div style={{ width: `${macroStats.hasRealData ? macroStats.assaultPct : 0}%`, height: "100%", background: "#ef4444" }} />
                     </div>
                   </div>
 
                   <div>
                     <div style={{ display: "flex", justifyContent: "space-between", fontSize: 10, marginBottom: 2 }}>
                       <span style={{ color: "#38bdf8", fontWeight: 700 }}>🛡️ DEFENSIVE_HOLD (Consolidación)</span>
-                      <span style={{ color: "#cbd5e1" }}>{macroStats.defPct.toFixed(1)}%</span>
+                      <span style={{ color: "#cbd5e1" }}>{macroStats.hasRealData ? `${macroStats.defPct.toFixed(1)}%` : "N/A"}</span>
                     </div>
                     <div style={{ background: "#0f172a", height: 6, borderRadius: 3, overflow: "hidden" }}>
-                      <div style={{ width: `${macroStats.defPct}%`, height: "100%", background: "#0284c7" }} />
+                      <div style={{ width: `${macroStats.hasRealData ? macroStats.defPct : 0}%`, height: "100%", background: "#0284c7" }} />
                     </div>
                   </div>
 
                   <div>
                     <div style={{ display: "flex", justifyContent: "space-between", fontSize: 10, marginBottom: 2 }}>
                       <span style={{ color: "#c084fc", fontWeight: 700 }}>💥 ZONE_SUPPRESS (Supresión)</span>
-                      <span style={{ color: "#cbd5e1" }}>{macroStats.zonePct.toFixed(1)}%</span>
+                      <span style={{ color: "#cbd5e1" }}>{macroStats.hasRealData ? `${macroStats.zonePct.toFixed(1)}%` : "N/A"}</span>
                     </div>
                     <div style={{ background: "#0f172a", height: 6, borderRadius: 3, overflow: "hidden" }}>
-                      <div style={{ width: `${macroStats.zonePct}%`, height: "100%", background: "#8b5cf6" }} />
+                      <div style={{ width: `${macroStats.hasRealData ? macroStats.zonePct : 0}%`, height: "100%", background: "#8b5cf6" }} />
                     </div>
                   </div>
                 </div>
@@ -2968,40 +2967,40 @@ export function NetworkTopologyTab({
                   <div>
                     <div style={{ display: "flex", justifyContent: "space-between", fontSize: 10, marginBottom: 2 }}>
                       <span style={{ color: "#facc15", fontWeight: 700 }}>⚡ Punta de Lanza (Choque)</span>
-                      <span style={{ color: "#cbd5e1" }}>{macroStats.spearheadPct.toFixed(1)}%</span>
+                      <span style={{ color: "#cbd5e1" }}>{macroStats.hasRealData ? `${macroStats.spearheadPct.toFixed(1)}%` : "N/A"}</span>
                     </div>
                     <div style={{ background: "#0f172a", height: 6, borderRadius: 3, overflow: "hidden" }}>
-                      <div style={{ width: `${macroStats.spearheadPct}%`, height: "100%", background: "#eab308" }} />
+                      <div style={{ width: `${macroStats.hasRealData ? macroStats.spearheadPct : 0}%`, height: "100%", background: "#eab308" }} />
                     </div>
                   </div>
 
                   <div>
                     <div style={{ display: "flex", justifyContent: "space-between", fontSize: 10, marginBottom: 2 }}>
                       <span style={{ color: "#fb923c", fontWeight: 700 }}>🎯 Apoyo de Fuego (Pesadas)</span>
-                      <span style={{ color: "#cbd5e1" }}>{macroStats.fireSupportPct.toFixed(1)}%</span>
+                      <span style={{ color: "#cbd5e1" }}>{macroStats.hasRealData ? `${macroStats.fireSupportPct.toFixed(1)}%` : "N/A"}</span>
                     </div>
                     <div style={{ background: "#0f172a", height: 6, borderRadius: 3, overflow: "hidden" }}>
-                      <div style={{ width: `${macroStats.fireSupportPct}%`, height: "100%", background: "#f97316" }} />
+                      <div style={{ width: `${macroStats.hasRealData ? macroStats.fireSupportPct : 0}%`, height: "100%", background: "#f97316" }} />
                     </div>
                   </div>
 
                   <div>
                     <div style={{ display: "flex", justifyContent: "space-between", fontSize: 10, marginBottom: 2 }}>
                       <span style={{ color: "#60a5fa", fontWeight: 700 }}>🛡️ Defensor VP (Perímetro)</span>
-                      <span style={{ color: "#cbd5e1" }}>{macroStats.defenderPct.toFixed(1)}%</span>
+                      <span style={{ color: "#cbd5e1" }}>{macroStats.hasRealData ? `${macroStats.defenderPct.toFixed(1)}%` : "N/A"}</span>
                     </div>
                     <div style={{ background: "#0f172a", height: 6, borderRadius: 3, overflow: "hidden" }}>
-                      <div style={{ width: `${macroStats.defenderPct}%`, height: "100%", background: "#3b82f6" }} />
+                      <div style={{ width: `${macroStats.hasRealData ? macroStats.defenderPct : 0}%`, height: "100%", background: "#3b82f6" }} />
                     </div>
                   </div>
 
                   <div>
                     <div style={{ display: "flex", justifyContent: "space-between", fontSize: 10, marginBottom: 2 }}>
                       <span style={{ color: "#c084fc", fontWeight: 700 }}>👁️ Flanqueo & Vigilancia</span>
-                      <span style={{ color: "#cbd5e1" }}>{macroStats.flankPct.toFixed(1)}%</span>
+                      <span style={{ color: "#cbd5e1" }}>{macroStats.hasRealData ? `${macroStats.flankPct.toFixed(1)}%` : "N/A"}</span>
                     </div>
                     <div style={{ background: "#0f172a", height: 6, borderRadius: 3, overflow: "hidden" }}>
-                      <div style={{ width: `${macroStats.flankPct}%`, height: "100%", background: "#8b5cf6" }} />
+                      <div style={{ width: `${macroStats.hasRealData ? macroStats.flankPct : 0}%`, height: "100%", background: "#8b5cf6" }} />
                     </div>
                   </div>
                 </div>
@@ -3016,30 +3015,30 @@ export function NetworkTopologyTab({
                   <div>
                     <div style={{ display: "flex", justifyContent: "space-between", fontSize: 10, marginBottom: 2 }}>
                       <span style={{ color: "#38bdf8", fontWeight: 700 }}>🏃 Maniobra / Avance</span>
-                      <span style={{ color: "#cbd5e1" }}>{macroStats.movePct.toFixed(1)}%</span>
+                      <span style={{ color: "#cbd5e1" }}>{macroStats.hasRealData ? `${macroStats.movePct.toFixed(1)}%` : "N/A"}</span>
                     </div>
                     <div style={{ background: "#0f172a", height: 6, borderRadius: 3, overflow: "hidden" }}>
-                      <div style={{ width: `${macroStats.movePct}%`, height: "100%", background: "#0284c7" }} />
+                      <div style={{ width: `${macroStats.hasRealData ? macroStats.movePct : 0}%`, height: "100%", background: "#0284c7" }} />
                     </div>
                   </div>
 
                   <div>
                     <div style={{ display: "flex", justifyContent: "space-between", fontSize: 10, marginBottom: 2 }}>
                       <span style={{ color: "#ef4444", fontWeight: 700 }}>💥 Fuego & Ataque</span>
-                      <span style={{ color: "#cbd5e1" }}>{macroStats.firePct.toFixed(1)}%</span>
+                      <span style={{ color: "#cbd5e1" }}>{macroStats.hasRealData ? `${macroStats.firePct.toFixed(1)}%` : "N/A"}</span>
                     </div>
                     <div style={{ background: "#0f172a", height: 6, borderRadius: 3, overflow: "hidden" }}>
-                      <div style={{ width: `${macroStats.firePct}%`, height: "100%", background: "#ef4444" }} />
+                      <div style={{ width: `${macroStats.hasRealData ? macroStats.firePct : 0}%`, height: "100%", background: "#ef4444" }} />
                     </div>
                   </div>
 
                   <div style={{ marginTop: 4, background: "#0f172a", padding: "6px 8px", borderRadius: 4, borderLeft: "3px solid #38bdf8" }}>
                     <div style={{ fontSize: 10, color: "#94a3b8" }}>Corrección Estratégica MCTS:</div>
                     <div style={{ fontSize: 11, fontWeight: 700, color: "#38bdf8", marginTop: 2 }}>
-                      {macroStats.mctsOverridePct.toFixed(1)}% de las decisiones
+                      {macroStats.hasRealData ? `${macroStats.mctsOverridePct.toFixed(1)}% de las decisiones` : "N/A"}
                     </div>
                     <div className="muted" style={{ fontSize: 9 }}>
-                      El árbol MCTS reorientó el prior neural para imponer la postura del planificador.
+                      {macroStats.hasRealData ? "El árbol MCTS reorientó el prior neural para imponer la postura del planificador." : "Requiere partidas evaluadas."}
                     </div>
                   </div>
                 </div>
