@@ -1,18 +1,20 @@
 base_config: curriculums/self_vs_self_vs_random_v1/configs/efficientzero_v2.phase6_self_only_stabilize.yaml
-
 scenario:
   id: battaglia_cittadina_2_1
-  ids: [battaglia_cittadina_2_1, mettete_i_piedi_terra_1]
-  weights: [100, 0]
-
+  ids:
+  - battaglia_cittadina_2_1
+  - mettete_i_piedi_terra_1
+  weights:
+  - 100
+  - 0
 selfplay:
   num_workers: 20
   parallel_backend: process
   reward_shaping:
-    vp_capture_bonus_per_hex: 2.20
-    objective_progress_bonus_per_hex: 1.65
-    capture_bonus: 0.75
-
+    vp_capture_bonus_per_hex: 2.46
+    objective_progress_bonus_per_hex: 1.85
+    capture_bonus: 0.83
 train:
   episodes_per_iter: 20
-  objective_loss_weight: 0.15
+  objective_loss_weight: 0.18
+  train_updates_per_iter: 10

@@ -7,6 +7,19 @@ function pct(value: number, total: number): string {
   return `${((100 * value) / total).toFixed(1)}%`;
 }
 
+const CANONICAL_CATALOG_ACTIONS: string[] = [
+  "MOVE",
+  "WAIT",
+  "OPPORTUNITY_FIRE",
+  "OPPORTUNITY_SKIP",
+  "RANGED_DIRECT",
+  "RANGED_INDIRECT",
+  "FIRE_SMOKE",
+  "FIRE_MOVE",
+  "MOVE_FIRE",
+  "ASSAULT",
+];
+
 export function EvalDecisionsTab({ mainResult }: { mainResult: EvalResultRow | null }) {
   if (!mainResult) return <div className="muted">No decision data available for this evaluation result.</div>;
 
@@ -24,11 +37,21 @@ export function EvalDecisionsTab({ mainResult }: { mainResult: EvalResultRow | n
   }));
   rows.sort((a, b) => b.count - a.count);
 
-  const sides = Array.from(new Set(rows.map((r) => r.side))).sort();
-  const actions = Array.from(new Set(rows.map((r) => r.action_kind))).sort((a, b) => {
+  const sides = Array.from(new Set([...rows.map((r) => r.side), ...Object.keys(own)]))
+    .filter((s) => s && s !== "UNKNOWN" && s !== "UNK")
+    .sort();
+
+  // Ensure all canonical actions from the game catalog appear in Table A alongside observed actions
+  const actions = Array.from(
+    new Set([...CANONICAL_CATALOG_ACTIONS, ...rows.map((r) => r.action_kind)])
+  ).sort((a, b) => {
     const sa = rows.filter((r) => r.action_kind === a).reduce((n, r) => n + r.count, 0);
     const sb = rows.filter((r) => r.action_kind === b).reduce((n, r) => n + r.count, 0);
-    return sb - sa;
+    if (sb !== sa) return sb - sa;
+    const ia = CANONICAL_CATALOG_ACTIONS.indexOf(a);
+    const ib = CANONICAL_CATALOG_ACTIONS.indexOf(b);
+    if (ia !== -1 && ib !== -1) return ia - ib;
+    return a.localeCompare(b);
   });
 
   const totalBySide = new Map<string, { count: number; damage: number; kills: number }>();
@@ -70,7 +93,7 @@ export function EvalDecisionsTab({ mainResult }: { mainResult: EvalResultRow | n
     <div>
       <h3 style={{ margin: "0 0 6px 0" }}>Table A: Action Kind x Side (Canonical Pivot)</h3>
       <div className="muted" style={{ marginBottom: 8 }}>
-        Distribution of action types, execution counts, damage dealt, and kills by side.
+        Distribution of action types, execution counts, damage dealt, and kills by side. Strictly extracted from episode traces.
       </div>
       <table style={{ marginBottom: 16 }}>
         <thead>
@@ -103,14 +126,14 @@ export function EvalDecisionsTab({ mainResult }: { mainResult: EvalResultRow | n
                 {sides.flatMap((s) => {
                   const r = pivot.get(`${a}::${s}`);
                   const t = totalBySide.get(s) || { count: 0, damage: 0, kills: 0 };
-                  if (!r) {
+                  if (!r || r.count === 0) {
                     return [
-                      <td key={`${a}-${s}-c`} className="muted">-</td>,
-                      <td key={`${a}-${s}-cp`} className="muted">-</td>,
-                      <td key={`${a}-${s}-d`} className="muted">-</td>,
-                      <td key={`${a}-${s}-dp`} className="muted">-</td>,
-                      <td key={`${a}-${s}-k`} className="muted">-</td>,
-                      <td key={`${a}-${s}-kp`} className="muted">-</td>,
+                      <td key={`${a}-${s}-c`} className="muted">0</td>,
+                      <td key={`${a}-${s}-cp`} className="muted">0.0%</td>,
+                      <td key={`${a}-${s}-d`} className="muted">0.00</td>,
+                      <td key={`${a}-${s}-dp`} className="muted">0.0%</td>,
+                      <td key={`${a}-${s}-k`} className="muted">0</td>,
+                      <td key={`${a}-${s}-kp`} className="muted">0.0%</td>,
                     ];
                   }
                   return [
@@ -126,6 +149,24 @@ export function EvalDecisionsTab({ mainResult }: { mainResult: EvalResultRow | n
             ))
           )}
         </tbody>
+        {sides.length > 0 && (
+          <tfoot>
+            <tr style={{ background: "#1e293b", fontWeight: "bold" }}>
+              <td>Total</td>
+              {sides.flatMap((s) => {
+                const t = totalBySide.get(s) || { count: 0, damage: 0, kills: 0 };
+                return [
+                  <td key={`total-${s}-c`}>{t.count}</td>,
+                  <td key={`total-${s}-cp`}>{t.count > 0 ? "100.0%" : "0.0%"}</td>,
+                  <td key={`total-${s}-d`}>{t.damage.toFixed(2)}</td>,
+                  <td key={`total-${s}-dp`}>{t.damage > 0 ? "100.0%" : "0.0%"}</td>,
+                  <td key={`total-${s}-k`}>{t.kills.toFixed(0)}</td>,
+                  <td key={`total-${s}-kp`}>{t.kills > 0 ? "100.0%" : "0.0%"}</td>,
+                ];
+              })}
+            </tr>
+          </tfoot>
+        )}
       </table>
 
       <h3 style={{ margin: "14px 0 6px 0" }}>Table B: Decision Ownership by Side</h3>

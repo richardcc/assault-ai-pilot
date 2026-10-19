@@ -160,15 +160,21 @@ class ActionCatalog:
         if not getattr(active, "can_fire", True):
             return actions
 
+        # Team spotting for Rule 7.1.1 (Indirect Fire forward observers) and Rule 7.2 (Smoke)
+        friendly_spotted = set()
+        for u in self.gs.units:
+            if u.side == active.side and getattr(u, "alive", True):
+                friendly_spotted.update(getattr(u, "spotted_enemies", set()) or set())
+        active_spotted = set(getattr(active, "spotted_enemies", set()) or set())
+
+        smoke_hexes_generated = set()
+
         for other in self.gs.units:
 
             if other.side == active.side:
                 continue
 
             if not other.alive:
-                continue
-
-            if other.unit_id not in getattr(active, "spotted_enemies", []):
                 continue
 
             distance = safe_hex_distance(active.position, other.position)
@@ -178,11 +184,30 @@ class ActionCatalog:
 
             mode = active.unit_type._resolve_attack_mode(distance)
 
+            # Direct fire requires unit's own direct spotting and direct LOS
             if mode == "DIRECT_FIRE":
+                if other.unit_id not in active_spotted:
+                    continue
                 if not self._has_line_of_sight(active, other):
                     continue
 
-            if mode == "INDIRECT_FIRE":
+                _trace(
+                    "ACTION_ADD",
+                    action="RangedDirectAttack",
+                    attacker=active.unit_id,
+                    target=other.unit_id,
+                    mode=mode,
+                )
+                act = RangedDirectAttack(active.unit_id, other.unit_id)
+                act.attack_mode = "DIRECT_FIRE"
+                actions.append(act)
+
+            # Rule 7.1.1: Indirect fire targets any enemy spotted by active unit OR friendly observer
+            elif mode == "INDIRECT_FIRE":
+                is_spotted = (other.unit_id in active_spotted) or (other.unit_id in friendly_spotted)
+                if not is_spotted:
+                    continue
+
                 _trace(
                     "ACTION_ADD",
                     action="RangedIndirectAttack",
@@ -196,24 +221,23 @@ class ActionCatalog:
                 act.attack_mode = "INDIRECT_FIRE"
                 actions.append(act)
 
-                # Rule 7.2: If unit can fire smoke ordnance, generate FireSmokeAction
-                if getattr(active.unit_type, "can_fire_smoke", lambda: False)():
-                    smoke_act = FireSmokeAction(
-                        active.unit_id,
-                        (other.position.q, other.position.r),
-                    )
-                    actions.append(smoke_act)
             else:
-                _trace(
-                    "ACTION_ADD",
-                    action="RangedDirectAttack",
-                    attacker=active.unit_id,
-                    target=other.unit_id,
-                    mode=mode,
-                )
+                if other.unit_id not in active_spotted:
+                    continue
+                if not self._has_line_of_sight(active, other):
+                    continue
                 act = RangedDirectAttack(active.unit_id, other.unit_id)
                 act.attack_mode = "DIRECT_FIRE"
                 actions.append(act)
+
+            # Rule 7.2: If unit can fire smoke ordnance, generate FireSmokeAction on spotted target hex
+            if getattr(active.unit_type, "can_fire_smoke", lambda: False)():
+                target_hex = (other.position.q, other.position.r)
+                is_target_spotted = (other.unit_id in active_spotted) or (other.unit_id in friendly_spotted)
+                if is_target_spotted and target_hex not in smoke_hexes_generated:
+                    smoke_hexes_generated.add(target_hex)
+                    smoke_act = FireSmokeAction(active.unit_id, target_hex)
+                    actions.append(smoke_act)
 
         return actions
 

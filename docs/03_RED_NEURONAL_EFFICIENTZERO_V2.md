@@ -188,6 +188,20 @@ flowchart TD
 * **Desacoplamiento Operativo**: El Nivel 1 no decide cada paso físico de una unidad; define la doctrina.
 * **Modulación de Priors**: Durante el paso raíz del MCTS, las acciones tácticas que coinciden con el rol de la unidad y la postura del equipo reciben un bono del $+35\%$ en su probabilidad prior $P(a)$. Esto guía la búsqueda de Monte Carlo hacia rutas coherentes con el plan general sin eliminar la libertad del árbol para encontrar maniobras tácticas imprevistas.
 
+### 5.1. Sintonización del Macro-Planner y Modulación de Priors de Asalto
+
+Durante la fase de juego táctico competitivo frente a políticas estocásticas y baselines, se detectaron y corrigieron tres aspectos clave del planificador macro:
+1. **Parseo Canónico de Acciones**: El motor serializa las acciones de movimiento con delimitadores de dos puntos (`MOVE:<unit_id>:<q>:<r>`), mientras que ciertas variantes emplean tuplas por coma. El parser ahora desacopla de forma robusta ambos esquemas y extrae de forma inequívoca las coordenadas de destino axiales $(q, r)$.
+2. **Prior de Asalto y Detección de Captura Inmediata**: Si una acción legal sitúa a la unidad sobre un hexágono de punto de victoria neutral o enemigo (`dest_qr in enemy_vps`), el Macro Planner inyecta un factor de amplificación de prior agresivo ($1.5 \times \text{assault\_boost}$), priorizando la exploración de ramas de captura en la raíz del árbol MCTS.
+3. **Dinámica de Roles en `ASSAULT_VP`**: Bajo la postura `ASSAULT_VP`, las unidades de infantería avanzada a distancia operativa ($\le 8$ hexágonos del objetivo) son asignadas doctrinariamente a `ROLE_SPEARHEAD`, impidiendo que queden indebidamente confinadas a `ROLE_OBJECTIVE_DEFENDER` en los VPs de despliegue inicial.
+
+### 5.2. Gradiente Continuo de Recompensa y Urgencia Terminal
+
+Para superar la aversión al riesgo excesiva donde las penalizaciones por fuego de oportunidad paralizaban el avance hacia los objetivos lejanos:
+1. **Eliminación del Corte Artificial de Distancia (`opportunity_near_vp_max_dist`)**: Anteriormente limitado a $2$ ó $4$ hexágonos, se extendió a un radio efectivo de mapa completo ($12.0$ hexágonos por defecto). Esto garantiza un gradiente continuo de recompensa de aproximación (`team_progress_delta` y `objective_progress_delta`) desde el primer turno de juego.
+2. **Atenuación del Factor de Exposición al Movimiento**: El factor de penalización preventiva por exposición a fuego de reacción durante el movimiento se redujo de $1.0$ a $0.6$, permitiendo que los beneficios proyectados de avance compensen razonablemente el riesgo táctico medido.
+3. **Penalización por Derrota Terminal (`terminal_loss_penalty` = 1.5, `terminal_scale` = 1.5)**: La derrota por llegar al límite de turnos sin controlar la mayoría de VPs acarrea un coste terminal que supera con creces cualquier daño individual acumulado en la aproximación. Esta calibración matemática fuerza al MCTS a asumir riesgos calculados para evitar la derrota por tiempo.
+
 ---
 
 ## 6. Mitigación de Conflicto de Gradientes: PCGrad

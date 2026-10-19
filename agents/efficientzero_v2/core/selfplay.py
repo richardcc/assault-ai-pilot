@@ -805,9 +805,9 @@ def _reaction_exposure_component(
     risk = _clamp01(float(obs_enemy_reaction_fire_risk))
     factor = 0.8
     if "MOVE" in kind:
-        factor = 1.0
+        factor = 0.6
     elif kind in {"ASSAULT", "MELEE", "ASSAULT_MELEE"}:
-        factor = 1.15
+        factor = 0.8
     elif kind in {"WAIT", "TIMEOUT"}:
         factor = 0.25
     component = -float(weight) * float(risk) * float(factor)
@@ -2706,7 +2706,15 @@ class _NativeEZV2SelfplayBackend:
                 capture_taken=("CAPTURE" in str(action_kind).upper()),
                 vp_captures=int(vp_captures),
                 vp_gain_for_side=int(vp_captures),
-                opportunity_near_vp_max_dist=float(objective_opportunity_near_vp_max_dist),
+                opportunity_near_vp_max_dist=float(
+                    dict(reward_shaping or {}).get(
+                        "opportunity_near_vp_max_dist",
+                        dict(reward_shaping or {}).get(
+                            "objective_opportunity_near_vp_max_dist",
+                            objective_opportunity_near_vp_max_dist if objective_opportunity_near_vp_max_dist > 2.0 else 12.0
+                        )
+                    ) or 12.0
+                ),
             )
             objective_progress_delta = float(objective.objective_progress_delta)
             selected_vp_q, selected_vp_r = _best_enemy_vp_qr_for_side(
@@ -2730,9 +2738,18 @@ class _NativeEZV2SelfplayBackend:
             if isinstance(selected_before, float) and isinstance(selected_after, float):
                 objective_progress_delta = float(selected_before - selected_after)
             # Keep progress diagnostics focused on actionable objective windows.
+            effective_near_dist = float(
+                dict(reward_shaping or {}).get(
+                    "opportunity_near_vp_max_dist",
+                    dict(reward_shaping or {}).get(
+                        "objective_opportunity_near_vp_max_dist",
+                        objective_opportunity_near_vp_max_dist if objective_opportunity_near_vp_max_dist > 2.0 else 12.0
+                    )
+                ) or 12.0
+            )
             if (
                 objective_progress_delta > 0.0
-                and float(objective.objective_min_dist_before) > float(objective_opportunity_near_vp_max_dist)
+                and float(objective.objective_min_dist_before) > float(effective_near_dist)
                 and int(legal_capture_options) <= 0
                 and not bool("CAPTURE" in str(action_kind).upper())
                 and int(vp_captures) <= 0

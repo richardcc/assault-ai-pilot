@@ -158,3 +158,43 @@ def test_macro_planner_hyde_cohesion_bua_and_anti_pursuit():
     assert mod["MOVE:u_iso:10,10"] > mod["MOVE:u_iso:14,14"]
 
 
+def test_macro_planner_colon_action_and_vp_capture_detection():
+    """Verify colon-formatted engine actions (e.g. MOVE:u1:2:0) correctly detect VP captures and approach."""
+    planner = MacroStrategyPlanner()
+    obs = SimpleNamespace(
+        to_play="US",
+        turn=1,
+        units=[
+            {"unit_id": "US_1", "unit_key": "US_RIFLES_43", "side": "US", "q": 0, "r": 9, "alive": True},
+            {"unit_id": "US_2", "unit_key": "US_RIFLES_43", "side": "US", "q": 1, "r": 9, "alive": True},
+        ],
+        vp_hexes=[
+            {"vp_id": "IT_VP_1", "q": 2, "r": 6},
+            {"vp_id": "US_VP_1", "q": 8, "r": 9},
+        ],
+        vp_owner_by_hex={"2,6": "IT", "8,9": "US"},
+    )
+    plan = planner.compute_macro_plan(obs)
+    assert plan.posture == "ASSAULT_VP"
+    assert plan.target_vp_id == "IT_VP_1"
+    assert plan.target_vp_coords == (2, 6)
+
+    # Actions formatted with colons as in real engine:
+    # MOVE:US_1:2:6 is moving directly into the enemy VP (capture)
+    # MOVE:US_1:1:8 is advancing towards the enemy VP (closer)
+    # MOVE:US_1:0:10 is moving away/backwards
+    legal = [
+        "MOVE:US_1:2:6",
+        "MOVE:US_1:1:8",
+        "MOVE:US_1:0:10",
+    ]
+    base_priors = {a: 1.0 / len(legal) for a in legal}
+    mod = planner.modulate_priors(base_priors, plan, legal, {"2,6": "IT", "8,9": "US"}, "US")
+
+    # Direct capture into enemy VP gets highest boost
+    assert mod["MOVE:US_1:2:6"] > mod["MOVE:US_1:1:8"]
+    # Advancing closer gets higher boost than moving backwards
+    assert mod["MOVE:US_1:1:8"] > mod["MOVE:US_1:0:10"]
+
+
+

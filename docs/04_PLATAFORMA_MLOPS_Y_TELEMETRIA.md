@@ -86,6 +86,12 @@ En versiones previas, los Quality Gates empleaban umbrales fijos de captura de b
      $$\text{WinRate} \ge 80\%, \quad \text{LossRate} \le 15\%, \quad \text{TimeoutRate} \le 5\%$$
    * Se concede la promoción inmediata a la siguiente fase, eliminando el bloqueo innecesario por tomas lentas de banderas mientras el agente aún optimiza la velocidad de resolución táctica.
 
+### 3.2. Evaluación Rigurosa de Bandos en Benchmarking (`eval_side`)
+
+En el motor de evaluación de episodios ([`assault_bench/episode_runner_impl.py`](file:///c:/repos/python/assault/assault_bench/episode_runner_impl.py)), se corrigió la asignación de bando evaluado:
+* **Problema Previo**: La condición de victoria evaluaba el bando activo en el turno inicial (`obs.to_play`). En escenarios asimétricos donde el rival tenía la iniciativa en el turno 0, la victoria del rival era contabilizada erróneamente como victoria del agente bajo test (generando falsos 100% Win Rate).
+* **Resolución Canónica**: El evaluador identifica de manera estricta el bando asignado a la política evaluada consultando `policy_by_side` para la clave correspondiente (ej. `"mcts"` o `"efficientzero_v2"`). De este modo, la métrica de victoria refleja con precisión matemática el resultado del agente evaluado con independencia de quién posea el turno inicial.
+
 ---
 
 ## 4. Módulos y Pestañas del Visor de Reporting (`http://127.0.0.1:8778`)

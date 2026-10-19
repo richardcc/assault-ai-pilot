@@ -1,18 +1,27 @@
 base_config: curriculums/self_vs_self_vs_random_recovery_v1/configs/efficientzero_v2.phase1_bootstrap.recovery.yaml
-
 scenario:
   id: battaglia_cittadina_2_1
-  ids: [battaglia_cittadina_2_1, mettete_i_piedi_terra_1]
-  weights: [80, 20]
-
+  ids:
+  - battaglia_cittadina_2_1
+  - mettete_i_piedi_terra_1
+  weights:
+  - 80
+  - 20
 selfplay:
   num_workers: 20
   parallel_backend: process
   reward_shaping:
-    vp_capture_bonus_per_hex: 2.40
-    objective_progress_bonus_per_hex: 1.85
-    capture_bonus: 0.80
-
+    vp_capture_bonus_per_hex: 2.98
+    objective_progress_bonus_per_hex: 2.29
+    capture_bonus: 0.96
+    terminal_scale: 1.5
+    terminal_loss_penalty: 1.5
+    opportunity_near_vp_max_dist: 12.0
+    reaction_exposure_component_weight: 0.03
+  mcts_temperature: 1.15
 train:
   episodes_per_iter: 20
-  objective_loss_weight: 0.16
+  objective_loss_weight: 0.22
+  train_updates_per_iter: 10
+  objective_signal:
+    opportunity_near_vp_max_dist: 12.0

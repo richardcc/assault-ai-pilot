@@ -151,7 +151,18 @@ def _run_episode_with_policy_impl(
 
     obs = adapter.initial_state(scenario_id=scenario_id, seed=seed)
     initial_vp_by_side = _vp_control_counts()
-    eval_side = str(obs.to_play) if obs.to_play is not None else ""
+    eval_side = ""
+    if policy_by_side:
+        target_policy = str(policy_name or "mcts").strip().lower()
+        eval_candidates = [
+            _normalize_side_key(s)
+            for s, pol in policy_by_side.items()
+            if str(pol).strip().lower() == target_policy
+        ]
+        if len(eval_candidates) == 1:
+            eval_side = eval_candidates[0]
+    if not eval_side:
+        eval_side = str(obs.to_play) if obs.to_play is not None else ""
     scenario_turn_limit = None
     if hasattr(adapter.sim, "scenario_max_turns"):
         try:

@@ -233,11 +233,11 @@ class MacroStrategyPlanner:
                 unit_roles[uid] = "ROLE_FIRE_SUPPORT"
             elif holding_vp_hex and (friendly_vp > 0):
                 unit_roles[uid] = "ROLE_OBJECTIVE_DEFENDER"
-            elif target_vp_coords and dist_to_target <= 3:
+            elif target_vp_coords and dist_to_target <= 6:
                 unit_roles[uid] = "ROLE_SPEARHEAD"
-            elif near_friendly_vp and (friendly_vp > 0):
+            elif posture == "DEFENSIVE_HOLD" and near_friendly_vp and (friendly_vp > 0):
                 unit_roles[uid] = "ROLE_OBJECTIVE_DEFENDER"
-            elif dist_to_target <= 5:
+            elif posture == "ASSAULT_VP" and dist_to_target <= 8:
                 unit_roles[uid] = "ROLE_SPEARHEAD"
             else:
                 unit_roles[uid] = "ROLE_FLANK_SCREEN"
@@ -287,34 +287,62 @@ class MacroStrategyPlanner:
             parts = str(aid).split(":")
             kind = parts[0] if parts else ""
             actor = parts[1] if len(parts) > 1 else ""
-            dest_part = parts[2] if len(parts) > 2 else ""
             kind_upper = kind.upper()
             role = macro_plan.get_role(actor)
             cohesion = macro_plan.get_cohesion(actor)
 
             dest_coords: Tuple[int, int] | None = None
-            if "," in dest_part:
+            if len(parts) >= 4:
                 try:
-                    dq_s, dr_s = dest_part.split(",", 1)
-                    dest_coords = (int(dq_s), int(dr_s))
-                except ValueError:
+                    dest_coords = (int(parts[2]), int(parts[3]))
+                except (ValueError, IndexError):
                     dest_coords = None
+            elif len(parts) == 3:
+                dest_part = parts[2]
+                if "," in dest_part:
+                    try:
+                        dq_s, dr_s = dest_part.split(",", 1)
+                        dest_coords = (int(dq_s), int(dr_s))
+                    except ValueError:
+                        dest_coords = None
+
+            is_capturing_vp = False
+            if dest_coords is not None:
+                vp_dest_key = f"{dest_coords[0]},{dest_coords[1]}"
+                if vp_dest_key in vp_owner_by_hex:
+                    vp_curr_owner = str(vp_owner_by_hex.get(vp_dest_key, "") or "").strip().upper()
+                    if vp_curr_owner != str(to_play or "").strip().upper():
+                        is_capturing_vp = True
+                elif macro_plan.target_vp_coords == dest_coords:
+                    is_capturing_vp = True
 
             boost = 1.0
             if role == "ROLE_SPEARHEAD":
-                if "CAPTURE" in kind_upper:
-                    boost = self.assault_boost * 1.2
+                if is_capturing_vp or "CAPTURE" in kind_upper:
+                    boost = self.assault_boost * 1.5
                 elif "MOVE" in kind_upper or "ASSAULT" in kind_upper:
-                    boost = self.assault_boost
+                    if dest_coords is not None and macro_plan.target_vp_coords is not None:
+                        actor_pos = all_coords.get(actor)
+                        if actor_pos is not None:
+                            d_before = _hex_distance(actor_pos[0], actor_pos[1], macro_plan.target_vp_coords[0], macro_plan.target_vp_coords[1])
+                            d_after = _hex_distance(dest_coords[0], dest_coords[1], macro_plan.target_vp_coords[0], macro_plan.target_vp_coords[1])
+                            if d_after < d_before:
+                                boost = self.assault_boost * 1.25
+                            else:
+                                boost = self.assault_boost
+                        else:
+                            boost = self.assault_boost
+                    else:
+                        boost = self.assault_boost
             elif role == "ROLE_FIRE_SUPPORT":
                 if "ATTACK" in kind_upper or "FIRE" in kind_upper or "INDIRECT" in kind_upper:
                     boost = self.support_boost
             elif role == "ROLE_OBJECTIVE_DEFENDER":
                 if "DEFEND" in kind_upper or "OVERWATCH" in kind_upper or "ATTACK" in kind_upper:
                     boost = self.defense_boost
-                elif "MOVE" in kind_upper:
+                elif "MOVE" in kind_upper and macro_plan.posture == "DEFENSIVE_HOLD":
                     # Hyde (2015, p. 38 & p. 387) Anti-Impetuous Pursuit Guardrail:
-                    # Do not abandon a captured friendly VP to chase retreating enemies
+                    # Do not abandon a captured friendly VP to chase retreating enemies when defending
                     actor_pos = all_coords.get(actor)
                     if actor_pos is not None and str(vp_owner_by_hex.get(f"{actor_pos[0]},{actor_pos[1]}", "")) == to_play:
                         boost = 0.65
