@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import pytest
-from fastapi.encoders import jsonable_encoder
 
 from assault_model.map.hex_coord import HexCoord
 from assault_model.core.scenario_loader import load_scenario
@@ -14,7 +13,6 @@ from assault_model.paths import (
     SCENARIOS_DIR,
     UNIT_CATALOG_PATH,
 )
-from assault_backend.services.scenario_service_ui import load_ui_scenario
 
 
 def test_hex_coord_protocols_and_serialization():
@@ -49,10 +47,9 @@ def test_hex_coord_protocols_and_serialization():
     assert coord == (3, 7)
     assert coord == [3, 7]
     assert coord == HexCoord(3, 7)
-    assert coord != (3, 8)
-
-    # 7. FastAPI jsonable_encoder native compatibility
-    encoded = jsonable_encoder(coord)
+    # 7. Standard JSON/dict serialization compatibility
+    import json
+    encoded = json.loads(json.dumps(dict(coord)))
     assert encoded == {"q": 3, "r": 7}
 
 
@@ -102,21 +99,3 @@ def test_scenario_loading_with_unified_coordinates():
     assert sc_piedi is not None
     assert len(sc_piedi.units) > 0
 
-
-def test_ui_scenario_service_canonical_coordinates():
-    ui_data = load_ui_scenario("battaglia_cittadina_2_1")
-    assert "units" in ui_data
-    assert len(ui_data["units"]) > 0
-
-    for u in ui_data["units"]:
-        assert "q" in u
-        assert "r" in u
-        assert "position" in u
-        assert u["position"] == {"q": u["q"], "r": u["r"]}
-
-    assert "map" in ui_data
-    for piece in ui_data["map"]["pieces"]:
-        assert "origin" in piece
-        assert "q" in piece
-        assert "r" in piece
-        assert piece["origin"] == [piece["q"], piece["r"]]

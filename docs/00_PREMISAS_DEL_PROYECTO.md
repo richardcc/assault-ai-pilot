@@ -18,6 +18,7 @@
 10. [Rendimiento Asintótico sin Pérdida de Fidelidad](#10-rendimiento-asintótico-sin-pérdida-de-fidelidad)
 11. [La Biblia Normativa y Protocolo de Pendientes de Revisión](#11-la-biblia-normativa-y-protocolo-de-pendientes-de-revisión)
 12. [Auditorías Continuas, Prevención de Regresiones y Arquitectura](#12-auditorías-continuas-prevención-de-regresiones-y-arquitectura)
+13. [Explicabilidad Máxima (XAI), Perfilado Causal y Análisis Táctico-Estratégico](#13-explicabilidad-máxima-xai-perfilado-causal-y-análisis-táctico-estratégico)
 
 ---
 
@@ -210,3 +211,41 @@ Ante cualquier contradicción en las cartas, caso borde no tipificado o ambigüe
 3. **Canary Check Pre-Entrenamiento**: Test de 100 pasos en un micro-lote sintético antes de cada sesión larga para comprobar descenso de pérdidas Two-Hot, estabilidad de norma de gradientes ($\|g\| \in [0.1, 5.0]$) y no-colapso en SimSiam.
 4. **Promotion Gates**: Promoción de checkpoints solo si superan:
    $$\text{WinRate vs Random} \ge 90\% \quad \wedge \quad \text{TimeoutRate} \le 8\% \quad \wedge \quad \text{WinRate vs Baseline Anterior} \ge 55\%$$
+
+---
+
+## 13. Explicabilidad Máxima (XAI), Perfilado Causal y Análisis Táctico-Estratégico
+
+> ### 🧠 Principio de IA de Cristal (Glass-Box Tactical RL)
+> En un simulador táctico militar y wargame de alta complejidad, un modelo que gana sin poder explicar **el porqué causal de sus decisiones** es científicamente estéril e inútil para la doctrina. La explicabilidad (XAI) no es un añadido estético de visualización: es una **herramienta analítica de primer orden** para auditar el perfil de tropas, diagnosticar asimetrías en escenarios y verificar la congruencia entre el plan macroestratégico y las microdecisiones del árbol MCTS.
+
+### 13.1. Utilidad en el Perfilado de Unidades (Unit Profiling)
+1. **Atribución Causal de Armamento y Terreno (IGNH)**:
+   - Mediante gradientes integrados (*Integrated Gradients*) sobre los 32 canales axiales, el sistema descompone qué factores perceptuales activan las maniobras de cada escuadra. Permite responder cuantitativamente:
+     - ¿La escuadra de ametralladoras pesadas (HMG) actúa motivada por líneas de interdicción y arcos de tiro (canales 8-11), o por proximidad accidental a objetivos?
+     - ¿Las unidades de infantería ligera priorizan la cobertura densa (canales 0-3) para su aproximación?
+2. **Detección de Sesgos de Uso y Roles Muertos (*Dead Roles*)**:
+   - Mapeo de la frecuencia de activación de cada unidad frente a su idoneidad teórica de manual. Permite identificar si el modelo subutiliza ciertas piezas (ej. morteros indirectos o armas contracarro) por dificultades de exploración, o si las emplea en roles suicidas contrarios a la preservación de fuerza.
+3. **Calibración del Radar Doctrinal 5D**:
+   - Cotejo empírico entre el rol asignado por el Macro-Planner (`SPEARHEAD`, `FIRE_SUPPORT`, `OBJECTIVE_DEFENDER`, `FLANK_SCREEN`) y los vectores de acción ejecutados en el árbol. La explicabilidad revela si una escuadra designada como *Apoyo de Fuego* efectivamente fijó al enemigo o si abandonó su posición por priorizar un movimiento oportunista.
+
+### 13.2. Utilidad en el Perfilado de Escenarios (Scenario Profiling)
+1. **Auditoría de Asimetría Intrínseca y Brecha Estructural**:
+   - El cruce entre el rendimiento bilateral espejo (*Mirror Score*) y la brecha de asimetría ($|S_A - S_B|$) cuantifica la ventaja inherente del terreno. La explicabilidad permite determinar si una ventaja se origina en:
+     - Asimetría balística de tropas iniciales.
+     - Estrangulamiento geográfico en cuellos de botella (*chokepoints*) con líneas de tiro inexpugnables.
+     - Insuficiencia del presupuesto temporal (*Tempo Index* $< 0.5$) que penaliza al atacante independientemente de su calidad táctica.
+2. **Mapas de Fricción y Puntos de Inflexión**:
+   - Integración espacial del mapa de amenazas proyectado (`threat_map`) con la máscara de control territorial (`final_ownership`). Revela en qué hexágonos exactos y en qué turnos se decantó el control de la partida, permitiendo perfilar si un escenario premia la maniobra envolvente o la guerra de desgaste frontal.
+
+### 13.3. Análisis del Plan Táctico-Estratégico (Congruencia Jerárquica Nivel 1 vs Nivel 2)
+1. **Trazabilidad Causal de la Jerarquía HRL**:
+   - **Nivel 1 (Planificador Macro)**: Evalúa el tablero completo y emite la postura doctrinal global (`ASSAULT_VP`, `DEFENSIVE_HOLD`, `ZONE_SUPPRESS`) y los objetivos clave.
+   - **Nivel 2 (Búsqueda MCTS PUCT)**: Explora el árbol en espacio latente modulando sus priors de búsqueda según la postura del Nivel 1.
+2. **Índice de Sobreescritura MCTS (*Policy Override Index*)**:
+   - Monitorea los pasos donde $\arg\max P_\theta(a) \neq a^*$. Un override no es un fallo; es una auditoría directa de cuándo el árbol de búsqueda descubrió que la intuición inmediata de la red (prior neural) conducía a una trampa táctica, forzando una corrección reflexiva hacia la maniobra segura.
+3. **Desglose Multitarea de Cabezas Tácticas Auxiliares**:
+   - **Mapa de Amenazas (*Threat Map*)**: Revela si la red percibe con precisión los arcos de fuego letal antes de penetrar en ellos.
+   - **Desgaste Proyectado (*Attrition*)**: Explica si el modelo asume bajas calculadas en una posición clave a cambio de un intercambio favorable (CER $> 1.0$).
+   - **Riesgo de Supresión (*Morale*)**: Explica si una decisión de pausar o buscar cobertura responde a la anticipación del colapso de cohesión bajo fuego de respuesta.
+   - **Control de VPs Multiobjetivo (*Multi-VP & Ownership*)**: Explica qué hexágonos de victoria valora el modelo como sostenibles en el tiempo frente a capturas efímeras o trampas de distracción.

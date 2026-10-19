@@ -70,3 +70,24 @@ def test_game_lifecycle_and_ai_turn():
     res_trace = client.get("/api/game/trace")
     assert res_trace.status_code == 200
     assert "events" in res_trace.json()
+
+
+def test_ui_scenario_service_canonical_coordinates():
+    from assault_backend.services.scenario_service_ui import load_ui_scenario
+    ui_data = load_ui_scenario("battaglia_cittadina_2_1")
+    assert "units" in ui_data
+    assert len(ui_data["units"]) > 0
+
+    for u in ui_data["units"]:
+        assert "q" in u
+        assert "r" in u
+        assert "position" in u
+        assert u["position"] == {"q": u["q"], "r": u["r"]}
+
+    assert "map" in ui_data
+    for piece in ui_data["map"]["pieces"]:
+        assert "origin" in piece
+        assert "q" in piece
+        assert "r" in piece
+        assert piece["origin"] == [piece["q"], piece["r"]]
+
