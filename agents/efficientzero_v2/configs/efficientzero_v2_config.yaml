@@ -11,7 +11,7 @@ model:
   device_benchmark_steps: 40
   observation_dim: 4
   encoder_type: cnn
-  observation_channels: 32
+  observation_channels: 38
   observation_height: 16
   observation_width: 16
   hidden_dim: 48
@@ -120,6 +120,11 @@ selfplay:
     idle_with_options_multiplier: 3.0
     terminal_win_bonus: 0.20
     terminal_draw_bonus: 0.02
+    vp_potential_weight: 1.5
+    vp_potential_gamma: 0.997
+    vp_potential_ctrl_bonus: 2.0
+    vp_urgency_lambda: 1.5
+    paralysis_penalty_weight: 0.05
 
 train:
   iterations: 60
@@ -147,7 +152,7 @@ train:
   aux_threat_loss_weight: 0.25
   aux_attrition_loss_weight: 0.20
   aux_morale_loss_weight: 0.20
-  gradient_balance_mode: adaptive
+  gradient_balance_mode: pcgrad
   aux_intent_loss_weight: 0.5
   aux_multi_vp_loss_weight: 0.5
   aux_multi_vp_feature_dim: 4

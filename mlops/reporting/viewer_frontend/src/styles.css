@@ -32,9 +32,38 @@ button {
 .grid {
   flex: 1;
   min-height: 0;
-  display: grid;
-  grid-template-columns: minmax(220px, 22vw) minmax(260px, 28vw) minmax(0, 1fr);
-  gap: 10px;
+  display: flex;
+  flex-direction: row;
+  gap: 0;
+  min-width: 0;
+  overflow: hidden;
+}
+.resizer-col {
+  width: 10px;
+  margin: 0 1px;
+  cursor: col-resize;
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  user-select: none;
+  touch-action: none;
+  z-index: 10;
+  background: transparent;
+}
+.resizer-col::after {
+  content: "";
+  width: 2px;
+  height: 100%;
+  background-color: #334155;
+  border-radius: 2px;
+  transition: background-color 0.15s ease, width 0.15s ease;
+}
+.resizer-col:hover::after,
+.resizer-col.dragging::after {
+  background-color: #38bdf8;
+  width: 4px;
 }
 .panel {
   border: 1px solid #334155;

@@ -40,23 +40,59 @@ export function MetaTab({
 
       {scenarios.length > 0 && (
         <>
-          <h3 style={{ margin: "14px 0 8px 0" }}>Scenarios Seen ({scenarios.length})</h3>
+          <h3 style={{ margin: "14px 0 8px 0", fontSize: 13, display: "flex", alignItems: "center", gap: 6 }}>
+            <span>🗺️</span> Escenarios Entrenados y Evaluados ({scenarios.length})
+          </h3>
           <table style={{ marginBottom: 16 }}>
             <thead>
               <tr>
-                <th>scenario_id</th>
-                <th>train_count</th>
-                <th>eval_count</th>
+                <th style={{ background: "#0f172a", textAlign: "left", padding: "8px 12px" }}>scenario_id</th>
+                <th style={{ background: "#0f172a", textAlign: "center", width: 140, padding: "8px 12px" }}>train_count</th>
+                <th style={{ background: "#0f172a", textAlign: "center", width: 140, padding: "8px 12px" }}>eval_count</th>
               </tr>
             </thead>
             <tbody>
-              {scenarios.map((s) => (
-                <tr key={s}>
-                  <td><b>{s}</b></td>
-                  <td>{trainCounts[s] ?? 0}</td>
-                  <td>{evalCounts[s] ?? 0}</td>
-                </tr>
-              ))}
+              {scenarios.map((s) => {
+                const tc = trainCounts[s] ?? 0;
+                const ec = evalCounts[s] ?? 0;
+                return (
+                  <tr key={s} style={{ lineHeight: 1.6 }}>
+                    <td style={{ padding: "6px 12px" }}>
+                      <code style={{ fontSize: 12, color: "#38bdf8", fontWeight: 600 }}>{s}</code>
+                    </td>
+                    <td style={{ textAlign: "center", padding: "6px 12px" }}>
+                      <span
+                        style={{
+                          background: tc > 0 ? "#172554" : "#1e293b",
+                          color: tc > 0 ? "#60a5fa" : "#64748b",
+                          padding: "2px 8px",
+                          borderRadius: 4,
+                          fontWeight: 700,
+                          fontSize: 12,
+                          border: `1px solid ${tc > 0 ? "#1d4ed8" : "#334155"}`,
+                        }}
+                      >
+                        {tc}
+                      </span>
+                    </td>
+                    <td style={{ textAlign: "center", padding: "6px 12px" }}>
+                      <span
+                        style={{
+                          background: ec > 0 ? "#064e3b" : "#1e293b",
+                          color: ec > 0 ? "#34d399" : "#64748b",
+                          padding: "2px 8px",
+                          borderRadius: 4,
+                          fontWeight: 700,
+                          fontSize: 12,
+                          border: `1px solid ${ec > 0 ? "#059669" : "#334155"}`,
+                        }}
+                      >
+                        {ec}
+                      </span>
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </>

@@ -61,19 +61,53 @@ function getFortificationShort(type: string): string {
   }
 }
 
+interface UnitTacticalRoleInfo {
+  role: string;
+  label: string;
+  icon: string;
+  color: string;
+  desc: string;
+  isMutated: boolean;
+  mutationReason: string;
+  priorBoost: number;
+}
+
 function getUnitTacticalRole(
   unit: ReplayUnitSnapshot,
   step: ReplayStepRow,
   _posture: string,
   _targetVpId: string
-): { role: string; label: string; icon: string; color: string; desc: string } {
+): UnitTacticalRoleInfo {
+  const unitRec = unit as Record<string, unknown>;
+  const stepRec = step as Record<string, unknown>;
+  const isActing = String(step.unit_id) === String(unit.unit_id);
+
   const explicitRole = String(
-    (unit as Record<string, unknown>).unit_macro_role ||
-    (unit as Record<string, unknown>).role ||
-    (unit as Record<string, unknown>).macro_role ||
-    (String(step.unit_id) === String(unit.unit_id) ? step.unit_macro_role : "") ||
+    unitRec.role_assigned ||
+    unitRec.active_role ||
+    unitRec.doctrine_role ||
+    unitRec.unit_macro_role ||
+    unitRec.role ||
+    unitRec.macro_role ||
+    (isActing ? (stepRec.role_assigned || step.unit_macro_role) : "") ||
     ""
   ).trim();
+
+  const isMutated = Boolean(
+    unitRec.role_is_mutated ??
+    (isActing ? stepRec.role_is_mutated : false)
+  );
+
+  const mutationReason = String(
+    unitRec.role_mutation_reason ||
+    (isActing ? stepRec.role_mutation_reason : "") ||
+    ""
+  ).trim();
+
+  const priorBoost = Number(
+    unitRec.prior_boost_applied ??
+    (isActing ? (stepRec.prior_boost_applied ?? 0) : 0)
+  ) || 0;
 
   if (explicitRole.includes("FIRE_SUPPORT")) {
     return {
@@ -82,24 +116,81 @@ function getUnitTacticalRole(
       icon: "🎯",
       color: "#f97316",
       desc: "Armas pesadas asegurando líneas de tiro y fuego de contención.",
+      isMutated,
+      mutationReason,
+      priorBoost,
+    };
+  }
+  if (explicitRole.includes("CLOSE_DEFENSE")) {
+    return {
+      role: "ROLE_CLOSE_DEFENSE",
+      label: "Defensa Cercana",
+      icon: "🛡️",
+      color: "#a855f7",
+      desc: "Arma pesada flanqueada asumiendo autodefensa a corta distancia.",
+      isMutated,
+      mutationReason,
+      priorBoost,
+    };
+  }
+  if (explicitRole.includes("RECON")) {
+    return {
+      role: "ROLE_RECON",
+      label: "Reconocimiento",
+      icon: "🔭",
+      color: "#06b6d4",
+      desc: "Exploración de vanguardia, detección y vigilancia.",
+      isMutated,
+      mutationReason,
+      priorBoost,
     };
   }
   if (explicitRole.includes("DEFENDER") || explicitRole.includes("OBJECTIVE_DEFENDER")) {
     return {
       role: "ROLE_OBJECTIVE_DEFENDER",
       label: "Defensor VP",
-      icon: "🛡️",
+      icon: "🏰",
       color: "#38bdf8",
       desc: "Atrincherado en perímetro asegurando el control del VP.",
+      isMutated,
+      mutationReason,
+      priorBoost,
     };
   }
   if (explicitRole.includes("SCREEN") || explicitRole.includes("FLANK")) {
     return {
       role: "ROLE_FLANK_SCREEN",
-      label: "Flanqueo",
+      label: "Cortina Flanco",
       icon: "👁️",
-      color: "#a855f7",
-      desc: "Vigilancia de sector y aniquilación de remanentes.",
+      color: "#10b981",
+      desc: "Vigilancia de sector y fijación de flancos.",
+      isMutated,
+      mutationReason,
+      priorBoost,
+    };
+  }
+  if (explicitRole.includes("TACTICAL_RESERVE") || explicitRole.includes("RESERVE")) {
+    return {
+      role: "ROLE_TACTICAL_RESERVE",
+      label: "Reserva Táctica",
+      icon: "⏱️",
+      color: "#8b5cf6",
+      desc: "Escuadra de retaguardia preservando cohesión hasta compromiso decisivo.",
+      isMutated,
+      mutationReason,
+      priorBoost,
+    };
+  }
+  if (explicitRole.includes("RECOVER")) {
+    return {
+      role: "ROLE_RECOVER",
+      label: "Recuperación",
+      icon: "🩹",
+      color: "#eab308",
+      desc: "Unidad bajo degradación de moral o salud replegándose en buen orden.",
+      isMutated,
+      mutationReason,
+      priorBoost,
     };
   }
   if (explicitRole.includes("SPEARHEAD")) {
@@ -107,17 +198,23 @@ function getUnitTacticalRole(
       role: "ROLE_SPEARHEAD",
       label: "Punta Lanza",
       icon: "⚡",
-      color: "#facc15",
+      color: "#ef4444",
       desc: "Vanguardia de choque asignada al asalto directo del objetivo.",
+      isMutated,
+      mutationReason,
+      priorBoost,
     };
   }
   if (explicitRole) {
     return {
       role: explicitRole,
-      label: explicitRole,
+      label: explicitRole.replace("ROLE_", ""),
       icon: "🎖️",
       color: "#94a3b8",
       desc: `Rol táctico asignado: ${explicitRole}`,
+      isMutated,
+      mutationReason,
+      priorBoost,
     };
   }
   return {
@@ -126,6 +223,9 @@ function getUnitTacticalRole(
     icon: "",
     color: "#64748b",
     desc: "Sin rol táctico asignado en la traza.",
+    isMutated: false,
+    mutationReason: "",
+    priorBoost: 0,
   };
 }
 
@@ -976,9 +1076,15 @@ export function MatchReplayTab({
     const flag = side === "US" ? "🇺🇸" : side === "IT" ? "🇮🇹" : side === "GE" ? "🇩🇪" : "";
     const oppFlag = oppSide === "US" ? "🇺🇸" : oppSide === "IT" ? "🇮🇹" : oppSide === "GE" ? "🇩🇪" : "";
 
+    const sRec = s as Record<string, unknown>;
     const macroPosture = String(s.macro_posture || "");
     const macroTargetVpId = String(s.macro_target_vp_id || s.target_vp || "");
-    const unitMacroRole = String(s.unit_macro_role || "");
+    const unitMacroRole = String(sRec.role_assigned || s.unit_macro_role || "");
+    const roleAssigned = String(sRec.role_assigned || s.unit_macro_role || "");
+    const roleIsMutated = Boolean(sRec.role_is_mutated ?? false);
+    const roleMutationReason = String(sRec.role_mutation_reason || "");
+    const priorBoostApplied = Number(sRec.prior_boost_applied || 0);
+    const badgeLabel = String(sRec.badge_label || (unitMacroRole ? unitMacroRole.replace("ROLE_", "") : ""));
 
     return {
       stepIndex: idx,
@@ -996,6 +1102,11 @@ export function MatchReplayTab({
       macroPosture,
       macroTargetVpId,
       unitMacroRole,
+      roleAssigned,
+      roleIsMutated,
+      roleMutationReason,
+      priorBoostApplied,
+      badgeLabel,
     };
   }, []);
 
@@ -2843,19 +2954,32 @@ export function MatchReplayTab({
                   </div>
 
                   {/* Rol Táctico Unidad */}
-                  <div style={{ background: "#1e293b", padding: "6px 8px", borderRadius: 4, borderLeft: `3px solid ${currentDetails.unitMacroRole ? (currentDetails.unitMacroRole.includes("FIRE_SUPPORT") ? "#f97316" : currentDetails.unitMacroRole.includes("DEFENDER") ? "#3b82f6" : currentDetails.unitMacroRole.includes("SCREEN") ? "#8b5cf6" : "#eab308") : "#475569"}` }}>
-                    <div className="muted" style={{ fontSize: 9, textTransform: "uppercase" }}>Rol Táctico Escuadra</div>
-                    <div style={{ fontSize: 11, fontWeight: 800, color: currentDetails.unitMacroRole ? (currentDetails.unitMacroRole.includes("FIRE_SUPPORT") ? "#fb923c" : currentDetails.unitMacroRole.includes("DEFENDER") ? "#60a5fa" : currentDetails.unitMacroRole.includes("SCREEN") ? "#c084fc" : "#facc15") : "#94a3b8", display: "flex", alignItems: "center", gap: 4, marginTop: 1 }}>
+                  <div style={{ background: "#1e293b", padding: "6px 8px", borderRadius: 4, borderLeft: `3px solid ${currentDetails.unitMacroRole ? (currentDetails.unitMacroRole.includes("FIRE_SUPPORT") ? "#f97316" : currentDetails.unitMacroRole.includes("DEFENDER") ? "#38bdf8" : currentDetails.unitMacroRole.includes("CLOSE_DEFENSE") ? "#a855f7" : currentDetails.unitMacroRole.includes("RECON") ? "#06b6d4" : currentDetails.unitMacroRole.includes("RECOVER") ? "#eab308" : currentDetails.unitMacroRole.includes("SCREEN") ? "#10b981" : "#ef4444") : "#475569"}` }}>
+                    <div className="muted" style={{ fontSize: 9, textTransform: "uppercase", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                      <span>Rol Táctico Escuadra</span>
+                      {currentDetails.roleIsMutated && (
+                        <span style={{ color: "#fca5a5", fontWeight: 700, fontSize: 8, background: "rgba(239, 68, 68, 0.25)", padding: "1px 4px", borderRadius: 3 }}>⚡ MUTADA</span>
+                      )}
+                    </div>
+                    <div style={{ fontSize: 11, fontWeight: 800, color: currentDetails.unitMacroRole ? (currentDetails.unitMacroRole.includes("FIRE_SUPPORT") ? "#fb923c" : currentDetails.unitMacroRole.includes("DEFENDER") ? "#60a5fa" : currentDetails.unitMacroRole.includes("CLOSE_DEFENSE") ? "#c084fc" : currentDetails.unitMacroRole.includes("RECON") ? "#67e8f9" : currentDetails.unitMacroRole.includes("RECOVER") ? "#fde047" : currentDetails.unitMacroRole.includes("SCREEN") ? "#6ee7b7" : "#f87171") : "#94a3b8", display: "flex", alignItems: "center", gap: 5, marginTop: 2, flexWrap: "wrap" }}>
                       {currentDetails.unitMacroRole ? (
                         <>
-                          <span>{currentDetails.unitMacroRole.includes("FIRE_SUPPORT") ? "🎯" : currentDetails.unitMacroRole.includes("DEFENDER") ? "🛡️" : currentDetails.unitMacroRole.includes("SCREEN") ? "👁️" : "⚡"}</span>
+                          <span>{currentDetails.unitMacroRole.includes("FIRE_SUPPORT") ? "🎯" : currentDetails.unitMacroRole.includes("DEFENDER") ? "🏰" : currentDetails.unitMacroRole.includes("CLOSE_DEFENSE") ? "🛡️" : currentDetails.unitMacroRole.includes("RECON") ? "🔭" : currentDetails.unitMacroRole.includes("RECOVER") ? "🩹" : currentDetails.unitMacroRole.includes("SCREEN") ? "👁️" : "⚡"}</span>
                           <span>{currentDetails.unitMacroRole.replace("ROLE_", "")}</span>
+                          {currentDetails.priorBoostApplied > 0 && (
+                            <span style={{ fontSize: 9, background: "rgba(34, 197, 94, 0.2)", color: "#86efac", border: "1px solid #22c55e", borderRadius: 3, padding: "0 4px", fontWeight: 700 }} title="Prior boost aplicado en raíz MCTS">
+                              +{Math.round(currentDetails.priorBoostApplied * 100)}% π
+                            </span>
+                          )}
                         </>
                       ) : (
                         <span>- (No emitido)</span>
                       )}
                     </div>
                     <div style={{ fontSize: 9, color: "#94a3b8", marginTop: 2, lineHeight: 1.2 }}>
+                      {currentDetails.roleIsMutated && currentDetails.roleMutationReason
+                        ? `Regla: ${currentDetails.roleMutationReason}. `
+                        : ""}
                       {currentDetails.macroTargetVpId ? `Objetivo Prioritario: VP ${currentDetails.macroTargetVpId}` : (currentDetails.unitMacroRole ? "Sin objetivo específico" : "El paso no registró rol táctico de escuadra.")}
                     </div>
                   </div>
@@ -3078,6 +3202,38 @@ export function MatchReplayTab({
                               <span>{roleInfo.label}</span>
                             </span>
                           )}
+                          {roleInfo.isMutated && (
+                            <span
+                              style={{
+                                background: "rgba(239, 68, 68, 0.2)",
+                                border: "1px solid #ef4444",
+                                color: "#fca5a5",
+                                fontSize: 8,
+                                padding: "1px 4px",
+                                borderRadius: 3,
+                                fontWeight: 700,
+                              }}
+                              title={`Rol mutado dinámicamente por regla: ${roleInfo.mutationReason}`}
+                            >
+                              ⚡ {roleInfo.mutationReason ? roleInfo.mutationReason.slice(0, 10) : "MUT"}
+                            </span>
+                          )}
+                          {roleInfo.priorBoost > 0 && (
+                            <span
+                              style={{
+                                background: "rgba(34, 197, 94, 0.15)",
+                                border: "1px solid #22c55e",
+                                color: "#86efac",
+                                fontSize: 8,
+                                padding: "1px 4px",
+                                borderRadius: 3,
+                                fontWeight: 700,
+                              }}
+                              title={`Prior boost doctrinal: +${Math.round(roleInfo.priorBoost * 100)}%`}
+                            >
+                              +{Math.round(roleInfo.priorBoost * 100)}% π
+                            </span>
+                          )}
                         </div>
                         <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
                           <span style={{ color: u.alive ? (u.hp >= 3.0 ? "#22c55e" : "#f59e0b") : "#ef4444", fontWeight: 700 }}>
@@ -3142,6 +3298,38 @@ export function MatchReplayTab({
                               <span>{roleInfo.label}</span>
                             </span>
                           )}
+                          {roleInfo.isMutated && (
+                            <span
+                              style={{
+                                background: "rgba(239, 68, 68, 0.2)",
+                                border: "1px solid #ef4444",
+                                color: "#fca5a5",
+                                fontSize: 8,
+                                padding: "1px 4px",
+                                borderRadius: 3,
+                                fontWeight: 700,
+                              }}
+                              title={`Rol mutado dinámicamente por regla: ${roleInfo.mutationReason}`}
+                            >
+                              ⚡ {roleInfo.mutationReason ? roleInfo.mutationReason.slice(0, 10) : "MUT"}
+                            </span>
+                          )}
+                          {roleInfo.priorBoost > 0 && (
+                            <span
+                              style={{
+                                background: "rgba(34, 197, 94, 0.15)",
+                                border: "1px solid #22c55e",
+                                color: "#86efac",
+                                fontSize: 8,
+                                padding: "1px 4px",
+                                borderRadius: 3,
+                                fontWeight: 700,
+                              }}
+                              title={`Prior boost doctrinal: +${Math.round(roleInfo.priorBoost * 100)}%`}
+                            >
+                              +{Math.round(roleInfo.priorBoost * 100)}% π
+                            </span>
+                          )}
                         </div>
                         <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
                           <span style={{ color: u.alive ? (u.hp >= 3.0 ? "#22c55e" : "#f59e0b") : "#ef4444", fontWeight: 700 }}>
@@ -3153,6 +3341,36 @@ export function MatchReplayTab({
                   })}
                 </div>
               </div>
+
+              {/* Selected Unit Forensic Doctrine Card */}
+              {selectedUnitId && (() => {
+                const selUnit = usUnits.concat(itUnits).find((u) => u.unit_id === selectedUnitId);
+                if (!selUnit) return null;
+                const rInfo = getUnitTacticalRole(selUnit, currentStep, currentDetails.macroPosture, currentDetails.macroTargetVpId);
+                return (
+                  <div style={{ marginTop: 8, background: "#0f172a", border: `1px solid ${rInfo.color || "#334155"}`, borderRadius: 6, padding: 10 }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
+                      <span style={{ fontWeight: 800, color: "#f8fafc", fontSize: 12 }}>{selUnit.unit_id}</span>
+                      <span style={{ background: `${rInfo.color}33`, color: rInfo.color, padding: "2px 6px", borderRadius: 4, fontWeight: 700, fontSize: 10 }}>
+                        {rInfo.icon} {rInfo.label || "Sin Rol"}
+                      </span>
+                    </div>
+                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6, fontSize: 10 }}>
+                      <div><b>Bando:</b> {selUnit.side}</div>
+                      <div><b>Posición:</b> ({selUnit.q}, {selUnit.r})</div>
+                      <div><b>Salud:</b> {selUnit.alive ? `${selUnit.hp.toFixed(1)} HP` : "BAJA"}</div>
+                      <div><b>Moral/Supresión:</b> {selUnit.suppressed ? "SUPRIMIDA" : "OK"}</div>
+                      <div><b>Rol Asignado:</b> <code style={{ color: rInfo.color }}>{rInfo.role || "-"}</code></div>
+                      <div><b>Mutación:</b> {rInfo.isMutated ? <span style={{ color: "#f87171", fontWeight: 700 }}>⚡ SÍ ({rInfo.mutationReason})</span> : <span style={{ color: "#34d399" }}>NO (Perfil Base)</span>}</div>
+                      {rInfo.priorBoost > 0 && (
+                        <div style={{ gridColumn: "span 2", color: "#86efac", fontWeight: 700 }}>
+                          🚀 Modulación MCTS Prior: +{Math.round(rInfo.priorBoost * 100)}%
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                );
+              })()}
             </div>
           )}
 

@@ -33,11 +33,11 @@ def _weighted_mean_kpi_keys(rows: List[Dict], keys: List[str]) -> Dict[str, floa
 
 
 def aggregate_muzero_eval_kpis(result_rows: List[Dict]) -> Dict[str, float]:
-    muzero_rows = filter_rows(
+    agent_rows = filter_rows(
         to_dict_rows(result_rows),
-        lambda r: str(r.get("agent_name", "")).startswith("muzero"),
+        lambda r: str(r.get("agent_name", "")).startswith("ezv2") or str(r.get("agent_name", "")).startswith("muzero"),
     )
-    if not muzero_rows:
+    if not agent_rows:
         return {}
     count_keys = [
         "reaction_window_count",
@@ -77,6 +77,16 @@ def aggregate_muzero_eval_kpis(result_rows: List[Dict]) -> Dict[str, float]:
         "opportunity_conversion_mid_converted_steps",
         "opportunity_conversion_late_opportunity_steps",
         "opportunity_conversion_late_converted_steps",
+        "recon_initial_count",
+        "recon_final_alive",
+        "fire_support_total_actions",
+        "fire_support_stationary_actions",
+        "vp_captures_total",
+        "spearhead_vp_captures",
+        "total_decisions",
+        "boosted_decisions",
+        "total_unit_steps",
+        "mutated_unit_steps",
     ]
     rate_keys = [
         "reaction_fire_activation_rate",
@@ -120,10 +130,15 @@ def aggregate_muzero_eval_kpis(result_rows: List[Dict]) -> Dict[str, float]:
         "predicted_enemy_casualties",
         "suppression_risk_score",
         "objective_pred_prob",
+        "recon_survival_rate",
+        "fire_support_stationarity",
+        "spearhead_vp_capture_rate",
+        "doctrine_adherence_rate",
+        "doctrine_mutation_rate",
     ]
     out: Dict[str, float] = {}
-    out.update(_sum_kpi_keys(muzero_rows, count_keys))
-    out.update(_weighted_mean_kpi_keys(muzero_rows, rate_keys))
+    out.update(_sum_kpi_keys(agent_rows, count_keys))
+    out.update(_weighted_mean_kpi_keys(agent_rows, rate_keys))
     return out
 
 
@@ -152,6 +167,16 @@ def build_phase29_eval_kpis_from_seed_rows(
         "opportunity_conversion_mid_converted_steps",
         "opportunity_conversion_late_opportunity_steps",
         "opportunity_conversion_late_converted_steps",
+        "recon_initial_count",
+        "recon_final_alive",
+        "fire_support_total_actions",
+        "fire_support_stationary_actions",
+        "vp_captures_total",
+        "spearhead_vp_captures",
+        "total_decisions",
+        "boosted_decisions",
+        "total_unit_steps",
+        "mutated_unit_steps",
     ]
     mean_keys = [
         "reaction_fire_activation_rate",
@@ -174,6 +199,11 @@ def build_phase29_eval_kpis_from_seed_rows(
         "predicted_enemy_casualties",
         "suppression_risk_score",
         "objective_pred_prob",
+        "recon_survival_rate",
+        "fire_support_stationarity",
+        "spearhead_vp_capture_rate",
+        "doctrine_adherence_rate",
+        "doctrine_mutation_rate",
     ]
     sum_keys = [
         "reaction_fire_damage_sum",
@@ -242,4 +272,9 @@ def build_phase29_eval_kpis_from_seed_rows(
         "opportunity_conversion_late_rate": (
             float(conv_late) / float(opp_late) if opp_late > 0 else None
         ),
+        "recon_survival_rate": float(means.get("recon_survival_rate", 1.0)),
+        "fire_support_stationarity": float(means.get("fire_support_stationarity", 1.0)),
+        "spearhead_vp_capture_rate": float(means.get("spearhead_vp_capture_rate", 0.0)),
+        "doctrine_adherence_rate": float(means.get("doctrine_adherence_rate", 0.0)),
+        "doctrine_mutation_rate": float(means.get("doctrine_mutation_rate", 0.0)),
     }

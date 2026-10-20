@@ -11,8 +11,8 @@ from assault_bench.transform_ops import to_dict_rows
 
 def _controller_label_from_policy(policy_name: str) -> str:
     policy = str(policy_name or "").strip().lower()
-    if policy == "mcts":
-        return "MuZero"
+    if policy in ("mcts", "ezv2", "efficientzero_v2"):
+        return "EfficientZeroV2"
     if policy == "random":
         return "Random"
     return "Unknown"

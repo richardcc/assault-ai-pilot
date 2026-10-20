@@ -50,21 +50,9 @@ def run_policy_mcts(
     model_kind_local: str,
     kwargs: Dict[str, Any],
     run_mcts_puct_ezv2_fn: Callable[..., Any],
-    run_mcts_puct_muzero_fn: Callable[..., Any],
+    run_mcts_puct_muzero_fn: Callable[..., Any] | None = None,
 ):
-    if model_kind_local == "efficientzero_v2":
-        return run_mcts_puct_ezv2_fn(**kwargs)
-    mz_kwargs = dict(kwargs or {})
-    mz_kwargs.pop("q_root_normalization_mode", None)
-    mz_kwargs.pop("q_root_normalization_strength", None)
-    mz_kwargs.pop("value_rescale_mode", None)
-    mz_kwargs.pop("value_rescale_temperature", None)
-    mz_kwargs.pop("success_prob_enabled", None)
-    mz_kwargs.pop("success_prob_alpha", None)
-    mz_kwargs.pop("success_prob_center", None)
-    mz_kwargs.pop("success_prob_scale", None)
-    mz_kwargs.pop("success_prob_centered_clip_abs", None)
-    return run_mcts_puct_muzero_fn(**mz_kwargs)
+    return run_mcts_puct_ezv2_fn(**kwargs)
 
 
 def scenario_outcome_from_final_vp(

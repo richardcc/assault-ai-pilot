@@ -17,6 +17,7 @@ from statistics import mean
 import torch
 
 from agents.efficientzero_v2.core.network import EfficientZeroV2Network
+from agents.efficientzero_v2.core.observation import DEFAULT_OBS_CHANNELS
 from agents.efficientzero_v2.core.inference_service import InferenceService
 from agents.efficientzero_v2.xai.decision_report import build_decision_report
 from agents.efficientzero_v2.xai.episode_narrative import build_episode_narrative
@@ -135,6 +136,9 @@ def _process_actor_init(
         enable_attrition_head=bool(model_spec.get("enable_attrition_head", True)),
         enable_morale_head=bool(model_spec.get("enable_morale_head", True)),
         morale_classes=int(model_spec.get("morale_classes", 4)),
+        use_coord_conv=bool(model_spec.get("use_coord_conv", False)),
+        dynamics_attention_type=str(model_spec.get("dynamics_attention_type", "se")),
+        policy_head_type=str(model_spec.get("policy_head_type", "linear")),
     )
     model.to("cpu")
     model.load_state_dict(model_state_dict, strict=False)
@@ -554,6 +558,12 @@ def _channel_name(index: int) -> str:
         29: "hazard_mines_and_wire",
         30: "ally_defense_power_norm",
         31: "enemy_defense_power_norm",
+        32: "ally_doctrine_role",
+        33: "enemy_doctrine_role",
+        34: "ally_optimal_range_2d",
+        35: "enemy_optimal_range_2d",
+        36: "turn_urgency_pressure",
+        37: "paralysis_exposure_risk",
     }
     return names.get(index, f"channel_{index}")
 
@@ -766,7 +776,7 @@ def run_training(
     observation_dim = int(cfg.model["observation_dim"])
     hidden_dim = int(cfg.model["hidden_dim"])
     encoder_type = str(cfg.model.get("encoder_type", "mlp"))
-    observation_channels = int(cfg.model.get("observation_channels", 8))
+    observation_channels = int(cfg.model.get("observation_channels", DEFAULT_OBS_CHANNELS))
     observation_height = int(cfg.model.get("observation_height", 16))
     observation_width = int(cfg.model.get("observation_width", 16))
     dynamics_blocks = int(cfg.model.get("dynamics_blocks", 1))
@@ -884,7 +894,7 @@ def run_training(
     )
     enable_post_train_analytics = bool(cfg.train.get("enable_post_train_analytics", False))
     collect_xai = bool(cfg.selfplay.get("collect_xai", cfg.train.get("collect_xai", False)))
-    short_episode_threshold = int(cfg.train.get("short_episode_threshold", 80))
+    short_episode_threshold_cfg = cfg.train.get("short_episode_threshold", None)
     debug_train_batch_progress = bool(cfg.train.get("debug_train_batch_progress", False))
     resume_checkpoint = str(cfg.train.get("resume_checkpoint", "") or "").strip()
     compute_grad_norm = bool(cfg.train.get("compute_grad_norm", True))
@@ -931,13 +941,19 @@ def run_training(
         enable_attrition_head=bool(cfg.model.get("enable_attrition_head", True)),
         enable_morale_head=bool(cfg.model.get("enable_morale_head", True)),
         morale_classes=int(cfg.model.get("morale_classes", 4)),
+        use_coord_conv=bool(cfg.model.get("use_coord_conv", False)),
+        dynamics_attention_type=str(cfg.model.get("dynamics_attention_type", "se")),
+        policy_head_type=str(cfg.model.get("policy_head_type", "linear")),
     )
     if resume_checkpoint:
         resume_path = Path(resume_checkpoint)
         if not resume_path.is_absolute():
             resume_path = (repo_root / resume_path).resolve()
         if resume_path.exists():
-            ckpt_obj = torch.load(str(resume_path), map_location="cpu")
+            try:
+                ckpt_obj = torch.load(str(resume_path), map_location="cpu", weights_only=True)
+            except Exception:
+                ckpt_obj = torch.load(str(resume_path), map_location="cpu", weights_only=False)
             state_dict = ckpt_obj.get("state_dict", ckpt_obj) if isinstance(ckpt_obj, dict) else ckpt_obj
             model.load_state_dict(state_dict, strict=False)
             _log(f"[EfficientZeroV2] resumed_from={resume_path}")
@@ -1028,6 +1044,10 @@ def run_training(
         unit_count=int(budget_unit_count),
         scenario_turn_limit=int(budget_turn_limit),
     )
+    if short_episode_threshold_cfg is not None:
+        short_episode_threshold = int(short_episode_threshold_cfg)
+    else:
+        short_episode_threshold = max(2, min(80, int(logged_effective_budget * 0.25)))
 
     events_writer = None
     if bool(enable_post_train_analytics):
@@ -1151,6 +1171,9 @@ def run_training(
             "enable_attrition_head": bool(cfg.model.get("enable_attrition_head", True)),
             "enable_morale_head": bool(cfg.model.get("enable_morale_head", True)),
             "morale_classes": int(cfg.model.get("morale_classes", 4)),
+            "use_coord_conv": bool(cfg.model.get("use_coord_conv", False)),
+            "dynamics_attention_type": str(cfg.model.get("dynamics_attention_type", "se")),
+            "policy_head_type": str(cfg.model.get("policy_head_type", "linear")),
         }
         selfplay_cfg = {
             "max_steps": max_steps,

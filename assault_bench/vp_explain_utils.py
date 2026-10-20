@@ -351,6 +351,8 @@ def build_why_action_vs_vp(
             fallback_progress_delta=fallback_progress,
             legal_capture_options=int(legal_capture_options),
         )
+        if not vp_cells_all:
+            vp_progress_source = "unavailable_no_vp_context"
         candidate_vp_owner = dict(vp_owner_by_hex or {})
         kind_now = str(_parse_action_id(str(action_id))[0] or "").strip().upper()
         if "CAPTURE" in kind_now:

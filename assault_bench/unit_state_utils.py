@@ -65,6 +65,15 @@ def unit_snapshot_dict(u) -> Dict[str, object]:
     else:
         getter = lambda key, default: getattr(u, key, default)
     suppressed_state = unit_suppressed_state_from_raw(u)
+    doctrine_role = str(getter("doctrine_role", "") or "")
+    active_role = str(getter("active_role", getter("current_role", getter("role_assigned", doctrine_role))) or doctrine_role)
+    role_is_mutated = bool(getter("role_is_mutated", getter("mutated", False)))
+    role_mutation_reason = str(getter("role_mutation_reason", getter("mutation_reason", "DEFAULT_PROFILE")) or "DEFAULT_PROFILE")
+    prior_boost_applied = float(getter("prior_boost_applied", 0.0) or 0.0)
+    badge_label = str(getter("badge_label", "") or "")
+    if not badge_label and active_role:
+        badge_label = f"{active_role.replace('ROLE_', '')}"
+
     return {
         "unit_id": str(getter("unit_id", "") or ""),
         "unit_key": str(getter("unit_key", "") or ""),
@@ -77,6 +86,13 @@ def unit_snapshot_dict(u) -> Dict[str, object]:
         "suppressed": (
             bool(suppressed_state) if suppressed_state is not None else None
         ),
+        "doctrine_role": doctrine_role,
+        "active_role": active_role,
+        "role_assigned": active_role,
+        "role_is_mutated": role_is_mutated,
+        "role_mutation_reason": role_mutation_reason,
+        "prior_boost_applied": prior_boost_applied,
+        "badge_label": badge_label,
     }
 
 

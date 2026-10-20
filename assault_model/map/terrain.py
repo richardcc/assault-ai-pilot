@@ -18,3 +18,5 @@ class Terrain(Enum):
     
     ROCKY = "rocky"
     OLIVE_GROVE = "olive_vine_grove"
+    RUINS = "ruins"
+

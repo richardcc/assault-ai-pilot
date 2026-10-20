@@ -1,0 +1,57 @@
+schema_version: adaptive_cycles.v1
+curriculum_name: vp_acceleration_v1
+phase_name: phase1_vp_sprint_unoccupied
+generation: 1
+last_updated_utc: '2026-10-20T18:07:00.667249+00:00'
+base_config_path: curriculums/vp_acceleration/configs/efficientzero_v2.phase1_unoccupied.yaml
+winning_history:
+- generation: 1
+  winning_cycle: 1
+  promoted_at_utc: '2026-10-20T11:08:06.923111+00:00'
+  win_rate: 1.0
+  tactical_quality_score: 0.7333333333333334
+  promotion_decision: promote
+- generation: 1
+  winning_cycle: 1
+  promoted_at_utc: '2026-10-20T16:45:46.367167+00:00'
+  win_rate: 1.0
+  tactical_quality_score: 0.7333333333333334
+  promotion_decision: promote
+- generation: 1
+  winning_cycle: 1
+  promoted_at_utc: '2026-10-20T18:07:00.667236+00:00'
+  win_rate: 1.0
+  tactical_quality_score: 0.7333333333333334
+  promotion_decision: promote
+cycles:
+  1:
+    strategy: promoted_baseline
+    description: Generation 1 Baseline (Promoted from Cycle 1 of previous generation).
+    overlay: {}
+  2:
+    strategy: adaptive_exploitation
+    description: 'Exploitation and convergence refinement: +5% reanalysis, tighter
+      MCTS temperature, higher potential weight.'
+    overlay:
+      train:
+        reanalysis_ratio: 0.45
+        train_updates_per_iter: 20
+      selfplay:
+        mcts_temperature: 1.3
+        reward_shaping:
+          vp_potential_weight: 1.3
+  3:
+    strategy: adaptive_exploration
+    description: 'Aggressive frontier exploration: +15% VP capture bonuses, higher
+      objective loss weight, expanded exploration.'
+    overlay:
+      train:
+        objective_loss_weight: 0.64
+        train_updates_per_iter: 22
+      selfplay:
+        mcts_temperature: 1.35
+        reward_shaping:
+          vp_capture_bonus_per_hex: 13.75
+          objective_progress_bonus_per_hex: 11.02
+          capture_bonus: 4.61
+          vp_urgency_lambda: 1.3

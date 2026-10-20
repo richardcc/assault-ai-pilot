@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Dict, List
 
 from voec_sim.core.simulator import VOECSimulator
@@ -8,19 +8,20 @@ from voec_sim.core.simulator import VOECSimulator
 
 @dataclass
 class EZV2Observation:
-    turn: int
-    to_play: str | None
-    done: bool
-    units: List[Dict]
-    playable_hexes: List[Dict]
-    vp_hexes: List[Dict]
-    vp_owner_by_hex: Dict[str, str]
-    terrain_move_cost_by_hex: Dict[str, float]
-    terrain_cover_by_hex: Dict[str, float]
-    terrain_los_block_by_hex: Dict[str, int]
-    terrain_type_by_hex: Dict[str, str]
-    fortification_type_by_hex: Dict[str, str]
-    fortification_edge_by_hex: Dict[str, Dict[str, int]]
+    turn: int = 1
+    to_play: str | None = None
+    done: bool = False
+    units: List[Dict] = field(default_factory=list)
+    playable_hexes: List[Dict] = field(default_factory=list)
+    vp_hexes: List[Dict] = field(default_factory=list)
+    vp_owner_by_hex: Dict[str, str] = field(default_factory=dict)
+    terrain_move_cost_by_hex: Dict[str, float] = field(default_factory=dict)
+    terrain_cover_by_hex: Dict[str, float] = field(default_factory=dict)
+    terrain_los_block_by_hex: Dict[str, int] = field(default_factory=dict)
+    terrain_type_by_hex: Dict[str, str] = field(default_factory=dict)
+    fortification_type_by_hex: Dict[str, str] = field(default_factory=dict)
+    fortification_edge_by_hex: Dict[str, Dict[str, int]] = field(default_factory=dict)
+    max_turns: int = 8
 
 
 class EZV2VOECAdapter:
@@ -55,6 +56,9 @@ class EZV2VOECAdapter:
     def terminal(self) -> bool:
         return self.sim.is_terminal()
 
+    def scenario_max_turns(self) -> int:
+        return int(self.sim.scenario_max_turns() or 8)
+
     def observation(self) -> EZV2Observation:
         snapshot = self.sim.snapshot()
         spatial = self.sim.spatial_features()
@@ -73,6 +77,8 @@ class EZV2VOECAdapter:
                     "r": u.r,
                     "hp": u.hp,
                     "alive": u.alive,
+                    "doctrine_role": getattr(u, "doctrine_role", None),
+                    "doctrine_profile": getattr(u, "doctrine_profile", None),
                 }
                 for u in snapshot.units
             ],
@@ -85,5 +91,6 @@ class EZV2VOECAdapter:
             terrain_type_by_hex=dict(spatial.get("terrain_type_by_hex", {})),
             fortification_type_by_hex=dict(spatial.get("fortification_type_by_hex", {})),
             fortification_edge_by_hex=dict(spatial.get("fortification_edge_by_hex", {})),
+            max_turns=int(self.sim.scenario_max_turns() or 8),
         )
 

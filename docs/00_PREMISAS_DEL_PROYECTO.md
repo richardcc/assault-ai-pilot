@@ -33,6 +33,10 @@
    - Cada decisión técnica se apoya en literatura contrastada: Model-Based RL (Schrittwieser et al., Hafner et al. / DreamerV3), transferencias de Palma et al. (2025), mitigación ortogonal de gradientes PCGrad (Yu et al., 2020), y doctrina militar clásica (Dunnigan, Sun Tzu, Hyde).
 4. **Unificación Canónica del Trabajo Pendiente**:
    - Existe un único punto centralizado y canónico para la hoja de ruta y la deuda técnica: el documento `05_ROADMAP_EVOLUTIVO.md` (presentado como punto final #10 de la documentación).
+5. **Cero Retrocompatibilidad con MuZero (Clean Break)**:
+   - **Tolerancia Cero a la Deuda Técnica**: Queda formalmente prohibido conservar capas de compatibilidad hacia atrás (*shims*, alias de transición o adaptadores tolerantes) con el stack de MuZero.
+   - Toda nomenclatura, perfiles de evaluación (`ezv2_selfplay`, `ezv2_vs_random_side_a`, `ezv2_vs_random_side_b`), adaptadores (`EZV2VOECAdapter`), tensores de 32 canales y configuraciones deben ser 100% nativos y puros de EfficientZero V2.
+
 
 ---
 

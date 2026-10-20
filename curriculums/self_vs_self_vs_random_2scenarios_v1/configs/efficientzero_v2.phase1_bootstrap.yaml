@@ -11,17 +11,24 @@ selfplay:
   num_workers: 20
   parallel_backend: process
   reward_shaping:
-    vp_capture_bonus_per_hex: 2.98
-    objective_progress_bonus_per_hex: 2.29
-    capture_bonus: 0.96
+    vp_capture_bonus_per_hex: 4.64
+    objective_progress_bonus_per_hex: 3.55
+    capture_bonus: 1.4
     terminal_scale: 1.5
     terminal_loss_penalty: 1.5
     opportunity_near_vp_max_dist: 12.0
     reaction_exposure_component_weight: 0.03
-  mcts_temperature: 1.15
+    kill_weight: 0.73
+    vp_potential_weight: 1.5
+    vp_potential_gamma: 0.997
+    vp_potential_ctrl_bonus: 2.0
+    vp_urgency_lambda: 1.5
+    paralysis_penalty_weight: 0.05
+  mcts_temperature: 1.2
 train:
   episodes_per_iter: 20
-  objective_loss_weight: 0.22
-  train_updates_per_iter: 10
+  objective_loss_weight: 0.34
+  train_updates_per_iter: 14
   objective_signal:
     opportunity_near_vp_max_dist: 12.0
+  reanalysis_ratio: 0.5

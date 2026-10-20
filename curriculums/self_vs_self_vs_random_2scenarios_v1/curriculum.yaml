@@ -2,31 +2,35 @@ name: self_vs_self_vs_random_2scenarios_v1
 engine: efficientzero_v2
 description: >
   Two-scenario progressive curriculum (battaglia + mettere) with VP-first gates,
-  global aggregated promotion, and soft guardrail for difficult vs_random_side_b profile.
+  38-channel sensory input (turn urgency + paralysis exposure risk), PCGrad gradient balancing,
+  and anti-paralysis offensive quality gates for vs_random_side_b (US Attacker).
 
 phases:
   - name: phase1_bootstrap
     train_config: curriculums/self_vs_self_vs_random_2scenarios_v1/configs/efficientzero_v2.phase1_bootstrap.yaml
     eval_config: assault_bench/configs/benchmark_config.curriculum_2scenarios_phase1_256_80_20.yaml
     gate:
-      min_vp_capture_take_rate: 0.055
-      min_tracked_captured_avg: 2.35
-      min_vp_net_avg_tracked_side: 0.30
+      min_vp_capture_take_rate: 0.080
+      min_tracked_captured_avg: 2.50
+      min_vp_net_avg_tracked_side: 0.35
+      min_recon_survival_rate: 0.40
+      min_fire_support_stationarity: 0.45
+      min_doctrine_adherence_rate: 0.35
       profile_soft_guardrail:
-        muzero_vs_random_side_b:
-          severe_min_score: 0.03
+        ezv2_vs_random_side_b:
+          severe_min_score: 0.20
 
   - name: phase1_channel_adapt
     train_config: curriculums/self_vs_self_vs_random_2scenarios_v1/configs/efficientzero_v2.phase1_channel_adapt.yaml
     eval_config: assault_bench/configs/benchmark_config.curriculum_2scenarios_phase1_256_70_30.yaml
     gate:
       no_regression_defeat_rate: true
-      min_vp_capture_take_rate: 0.060
-      min_tracked_captured_avg: 2.40
-      min_vp_net_avg_tracked_side: 0.34
+      min_vp_capture_take_rate: 0.090
+      min_tracked_captured_avg: 2.55
+      min_vp_net_avg_tracked_side: 0.38
       profile_soft_guardrail:
-        muzero_vs_random_side_b:
-          severe_min_score: 0.03
+        ezv2_vs_random_side_b:
+          severe_min_score: 0.30
           max_score_drop_vs_prev: 0.20
 
   - name: phase1_refine_aggressive
@@ -34,13 +38,13 @@ phases:
     eval_config: assault_bench/configs/benchmark_config.curriculum_2scenarios_phase1_256_60_40.yaml
     gate:
       no_regression_defeat_rate: true
-      min_vp_capture_take_rate_delta: 0.004
-      min_vp_capture_take_rate: 0.062
-      min_tracked_captured_avg: 2.42
-      min_vp_net_avg_tracked_side: 0.36
+      min_vp_capture_take_rate_delta: 0.005
+      min_vp_capture_take_rate: 0.100
+      min_tracked_captured_avg: 2.60
+      min_vp_net_avg_tracked_side: 0.40
       profile_soft_guardrail:
-        muzero_vs_random_side_b:
-          severe_min_score: 0.03
+        ezv2_vs_random_side_b:
+          severe_min_score: 0.40
           max_score_drop_vs_prev: 0.20
 
   - name: phase2_mix_70_30
@@ -48,12 +52,12 @@ phases:
     eval_config: assault_bench/configs/benchmark_config.curriculum_2scenarios_phase2_320_50_50.yaml
     gate:
       no_regression_defeat_rate: true
-      min_vp_capture_take_rate: 0.065
-      min_tracked_captured_avg: 2.45
-      min_vp_net_avg_tracked_side: 0.38
+      min_vp_capture_take_rate: 0.110
+      min_tracked_captured_avg: 2.65
+      min_vp_net_avg_tracked_side: 0.42
       profile_soft_guardrail:
-        muzero_vs_random_side_b:
-          severe_min_score: 0.03
+        ezv2_vs_random_side_b:
+          severe_min_score: 0.50
           max_score_drop_vs_prev: 0.20
 
   - name: phase3_mix_50_50
@@ -62,12 +66,12 @@ phases:
     gate:
       no_regression_defeat_rate: true
       min_score: 0.60
-      min_vp_capture_take_rate: 0.070
-      min_tracked_captured_avg: 2.48
-      min_vp_net_avg_tracked_side: 0.40
+      min_vp_capture_take_rate: 0.120
+      min_tracked_captured_avg: 2.70
+      min_vp_net_avg_tracked_side: 0.45
       profile_soft_guardrail:
-        muzero_vs_random_side_b:
-          severe_min_score: 0.03
+        ezv2_vs_random_side_b:
+          severe_min_score: 0.55
           max_score_drop_vs_prev: 0.20
 
   - name: phase4_mix_30_70
@@ -75,12 +79,12 @@ phases:
     eval_config: assault_bench/configs/benchmark_config.curriculum_2scenarios_phase4_384_50_50.yaml
     gate:
       min_score: 0.62
-      min_vp_capture_take_rate: 0.080
-      min_tracked_captured_avg: 2.50
-      min_vp_net_avg_tracked_side: 0.44
+      min_vp_capture_take_rate: 0.130
+      min_tracked_captured_avg: 2.75
+      min_vp_net_avg_tracked_side: 0.48
       profile_soft_guardrail:
-        muzero_vs_random_side_b:
-          severe_min_score: 0.03
+        ezv2_vs_random_side_b:
+          severe_min_score: 0.60
           max_score_drop_vs_prev: 0.20
 
   - name: phase5_self_dominant_90_10
@@ -89,12 +93,12 @@ phases:
     gate:
       no_regression_defeat_rate: true
       min_score: 0.64
-      min_vp_capture_take_rate: 0.095
-      min_tracked_captured_avg: 2.52
-      min_vp_net_avg_tracked_side: 0.47
+      min_vp_capture_take_rate: 0.140
+      min_tracked_captured_avg: 2.80
+      min_vp_net_avg_tracked_side: 0.50
       profile_soft_guardrail:
-        muzero_vs_random_side_b:
-          severe_min_score: 0.03
+        ezv2_vs_random_side_b:
+          severe_min_score: 0.65
           max_score_drop_vs_prev: 0.20
 
   - name: phase6_self_only_stabilize
@@ -103,10 +107,10 @@ phases:
     gate:
       no_regression_defeat_rate: true
       min_score: 0.66
-      min_vp_capture_take_rate: 0.105
-      min_tracked_captured_avg: 2.55
-      min_vp_net_avg_tracked_side: 0.50
+      min_vp_capture_take_rate: 0.150
+      min_tracked_captured_avg: 2.85
+      min_vp_net_avg_tracked_side: 0.52
       profile_soft_guardrail:
-        muzero_vs_random_side_b:
-          severe_min_score: 0.03
+        ezv2_vs_random_side_b:
+          severe_min_score: 0.70
           max_score_drop_vs_prev: 0.20

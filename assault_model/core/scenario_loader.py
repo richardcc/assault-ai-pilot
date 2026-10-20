@@ -222,6 +222,19 @@ def load_scenario(
         )
 
     # =================================================
+    # SMOKE MARKERS SETUP
+    # =================================================
+    smoke_list = raw.get("smoke_markers") or raw.get("map", {}).get("smoke_markers") or []
+    for sm in smoke_list:
+        pos = sm.get("position")
+        if pos is not None and isinstance(pos, (list, tuple)) and len(pos) >= 2:
+            sq, sr = int(pos[0]), int(pos[1])
+        else:
+            sq, sr = int(sm.get("q", 0)), int(sm.get("r", 0))
+        scount = int(sm.get("count", 1))
+        game_map.add_smoke_markers((sq, sr), count=scount)
+
+    # =================================================
     # UNIT INSTANTIATION
     # =================================================
     units: List[UnitInstance] = []
@@ -243,15 +256,18 @@ def load_scenario(
 
         unit_type = unit_catalog[unit_key]
 
-        units.append(
-            UnitInstance(
-                unit_id=u["unit_id"],
-                unit_type=unit_type,
-                side=u["side"],
-                position=pos,
-                experience=u.get("experience", "REGULAR"),
-            )
+        inst = UnitInstance(
+            unit_id=u["unit_id"],
+            unit_type=unit_type,
+            side=u["side"],
+            position=pos,
+            experience=u.get("experience", "REGULAR"),
         )
+        if bool(u.get("suppressed", False)):
+            inst.suppressed = True
+        if bool(u.get("fallback", False)):
+            inst.fallback = True
+        units.append(inst)
 
     # =================================================
     # SCENARIO

@@ -94,6 +94,11 @@ def build_phase29_train_eval(train_kpis: Dict[str, float], eval_kpis: Dict[str, 
         "opportunity_conversion_late_opportunity_steps",
         "opportunity_conversion_late_converted_steps",
         "opportunity_conversion_late_rate",
+        "recon_survival_rate",
+        "fire_support_stationarity",
+        "spearhead_vp_capture_rate",
+        "doctrine_adherence_rate",
+        "doctrine_mutation_rate",
     ]
     return {
         "train": {k: _phase29_value(train_kpis, k) for k in keys},

@@ -11,7 +11,7 @@ model:
   device_benchmark_steps: 40
   observation_dim: 4
   encoder_type: cnn
-  observation_channels: 32
+  observation_channels: 38
   observation_height: 16
   observation_width: 16
   hidden_dim: 48

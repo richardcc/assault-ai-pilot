@@ -15,7 +15,7 @@ from mlops.reporting.replay_v2 import (
 )
 
 
-def build_muzero_replay_payload(
+def build_efficientzero_v2_replay_payload(
     *,
     repo_root: Path,
     eval_source_path: str,
@@ -85,6 +85,9 @@ def build_muzero_replay_payload(
     except Exception as exc:
         payload["error"] = f"failed to load replay: {exc}"
     return payload
+
+
+build_muzero_replay_payload = build_efficientzero_v2_replay_payload
 
 
 def build_replay_log_payload(

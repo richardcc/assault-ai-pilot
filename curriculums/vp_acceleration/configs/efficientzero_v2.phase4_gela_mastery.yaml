@@ -1,0 +1,25 @@
+base_config: agents/efficientzero_v2/configs/efficientzero_v2_config.yaml
+scenario:
+  id: battaglia_cittadina_2_1
+selfplay:
+  num_workers: 10
+  parallel_backend: process
+  reward_shaping:
+    vp_capture_bonus_per_hex: 5.56
+    objective_progress_bonus_per_hex: 4.17
+    capture_bonus: 1.65
+    kill_weight: 0.68
+    terminal_scale: 1.5
+    terminal_loss_penalty: 1.5
+    opportunity_near_vp_max_dist: 12.0
+    vp_potential_weight: 1.0
+    vp_potential_gamma: 0.997
+    vp_potential_ctrl_bonus: 2.0
+    vp_urgency_lambda: 1.2
+    paralysis_penalty_weight: 0.05
+  mcts_temperature: 1.05
+train:
+  episodes_per_iter: 25
+  objective_loss_weight: 0.39
+  train_updates_per_iter: 18
+  reanalysis_ratio: 0.45

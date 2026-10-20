@@ -114,6 +114,28 @@ class Map:
     def get_hex_fortification_data(self, q: int, r: int) -> Optional[Dict[str, object]]:
         return self.hex_fortifications.get((q, r))
 
+    def remove_hex_fortification(self, q: int, r: int) -> Optional[Dict[str, object]]:
+        """Remove fortification or obstacle marker from hex (Rule 12.5)."""
+        return self.hex_fortifications.pop((q, r), None)
+
+    def set_hex_fortification_type(self, q: int, r: int, new_type: str) -> None:
+        """Change fortification type (e.g. bunker collapsing to trench, Rule 12.5)."""
+        if (q, r) in self.hex_fortifications:
+            self.hex_fortifications[(q, r)]["type"] = str(new_type)
+
+    def set_hex_fortification_identified(self, q: int, r: int, identified: bool = True) -> None:
+        """Mark a minefield or fortification as identified (Rule 9.6.6.2)."""
+        if (q, r) in self.hex_fortifications:
+            self.hex_fortifications[(q, r)]["identified"] = bool(identified)
+
+    def is_hex_fortification_identified(self, q: int, r: int) -> bool:
+        """Check if a fortification or minefield is identified."""
+        data = self.hex_fortifications.get((q, r))
+        if not data:
+            return False
+        return bool(data.get("identified", False))
+
+
     # ---------------------------------------------------------
     # Smoke marker handling (Rule 7.2 & Rule 6.5 Organization Phase)
     # ---------------------------------------------------------

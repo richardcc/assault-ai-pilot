@@ -9,6 +9,6 @@ benchmark:
   seeds: [42, 43, 44, 45, 46]
   max_steps: 60
   max_steps_override: 0
-  mcts_simulations: 24
+  mcts_simulations: 80
   mcts_c_puct: 1.5
   mcts_temperature: 0.5

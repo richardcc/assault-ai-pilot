@@ -9,3 +9,11 @@
 - NO reducir el número de simulaciones MCTS a ciegas.
 - Las simulaciones se incrementaron porque muchas ramas tácticas quedaban sin explorar (0 visitas).
 - Antes de cualquier ajuste en simulaciones de entrenamiento o evaluación, es OBLIGATORIO inspeccionar la telemetría real del árbol MCTS en los replays (visitas por acción, ramas legales vs exploradas, distribución de visitas en raíz).
+
+## LANGUAGE POLICY (STRICT)
+- UI 100% in English: All frontends, dashboards, replay viewers, inspect panels, buttons, labels, charts, tooltips, and alerts MUST be in English. No Spanish in UI.
+- Code 100% in English: All code, variable/function/class names, comments, docstrings, log messages, and exceptions MUST be written in English.
+- User Interaction in Spanish: Chat responses, explanations, and pair programming discussions with the user are in Spanish.
+- Documentation in Spanish: Canonical technical docs (`docs/*.md`) remain in Spanish for now.
+- Opportunistic Translation: Do not run a retroactive full codebase rewrite just for translation; but whenever any code or UI file is modified or created, immediately convert any residual Spanish text in that file/component into English. Never introduce Spanish into code or UI.
+

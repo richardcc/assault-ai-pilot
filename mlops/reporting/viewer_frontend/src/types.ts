@@ -168,6 +168,13 @@ export interface ReplayUnitSnapshot extends Dict {
   alive?: boolean;
   suppressed?: boolean;
   is_suppressed?: boolean;
+  doctrine_role?: string;
+  active_role?: string;
+  role_assigned?: string;
+  role_is_mutated?: boolean;
+  role_mutation_reason?: string;
+  prior_boost_applied?: number;
+  badge_label?: string;
 }
 
 export interface ReplayStepRow extends Dict {
@@ -182,6 +189,11 @@ export interface ReplayStepRow extends Dict {
   macro_posture?: string;
   macro_target_vp_id?: string;
   unit_macro_role?: string;
+  role_assigned?: string;
+  role_is_mutated?: boolean;
+  role_mutation_reason?: string;
+  prior_boost_applied?: number;
+  badge_label?: string;
   reward?: number;
   damage_dealt?: number;
   kills_dealt?: number;

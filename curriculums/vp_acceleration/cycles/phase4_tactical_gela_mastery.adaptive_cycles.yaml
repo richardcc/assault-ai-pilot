@@ -1,0 +1,57 @@
+schema_version: adaptive_cycles.v1
+curriculum_name: vp_acceleration_v1
+phase_name: phase4_tactical_gela_mastery
+generation: 4
+last_updated_utc: '2026-10-20T18:07:00.703281+00:00'
+base_config_path: curriculums/vp_acceleration/configs/efficientzero_v2.phase4_gela_mastery.yaml
+winning_history:
+- generation: 1
+  winning_cycle: 3
+  promoted_at_utc: '2026-10-20T11:08:06.950174+00:00'
+  win_rate: 1.0
+  tactical_quality_score: 0.7155555555555555
+  promotion_decision: promote_best_of_cycles
+- generation: 2
+  winning_cycle: 3
+  promoted_at_utc: '2026-10-20T16:45:46.404672+00:00'
+  win_rate: 0.31111111111111106
+  tactical_quality_score: 0.594074074074074
+  promotion_decision: promote_best_of_cycles
+- generation: 3
+  winning_cycle: 3
+  promoted_at_utc: '2026-10-20T18:07:00.703272+00:00'
+  win_rate: 1.0
+  tactical_quality_score: 0.7155555555555555
+  promotion_decision: promote_best_of_cycles
+cycles:
+  1:
+    strategy: promoted_baseline
+    description: Generation 4 Baseline (Promoted from Cycle 3 of previous generation).
+    overlay: {}
+  2:
+    strategy: adaptive_exploitation
+    description: 'Exploitation and convergence refinement: +5% reanalysis, tighter
+      MCTS temperature, higher potential weight.'
+    overlay:
+      train:
+        reanalysis_ratio: 0.5
+        train_updates_per_iter: 20
+      selfplay:
+        mcts_temperature: 1.0
+        reward_shaping:
+          vp_potential_weight: 1.1
+  3:
+    strategy: adaptive_exploration
+    description: 'Aggressive frontier exploration: +15% VP capture bonuses, higher
+      objective loss weight, expanded exploration.'
+    overlay:
+      train:
+        objective_loss_weight: 0.44
+        train_updates_per_iter: 22
+      selfplay:
+        mcts_temperature: 1.1
+        reward_shaping:
+          vp_capture_bonus_per_hex: 6.39
+          objective_progress_bonus_per_hex: 4.8
+          capture_bonus: 1.81
+          vp_urgency_lambda: 1.3

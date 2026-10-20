@@ -182,6 +182,8 @@ function Evaluate-Gate {
   $sumVpCapture = [double]0.0
   $sumTrackedCaptured = [double]0.0
   $sumVpNetTracked = [double]0.0
+  $sumNonTimeoutEpisodes = [double]0.0
+  $sumResolvedNonTimeoutWins = [double]0.0
   $profileScoreMap = @{}
   $profileLossRateMap = @{}
   foreach ($rowProfile in $mctsRows) {
@@ -195,9 +197,17 @@ function Evaluate-Gate {
     $eps = [double]([math]::Max(1, [int]($r.episodes)))
     $totEpisodes += $eps
     $sumScore += $eps * [double]($r.win_rate)
-    $sumTimeout += $eps * [double]($r.timeout_rate)
+    $rowTimeoutRate = [double]($r.timeout_rate)
+    $sumTimeout += $eps * $rowTimeoutRate
     $sumLoss += $eps * [double]($r.loss_rate)
     $sumTrackedCaptured += $eps * [double]($r.tracked_captured_avg)
+    $nonTimeoutEps = $eps * [math]::Max(0.0, 1.0 - $rowTimeoutRate)
+    $sumNonTimeoutEpisodes += $nonTimeoutEps
+    if ($r.PSObject.Properties.Name -contains "resolved_non_timeout_win_rate" -and $r.resolved_non_timeout_win_rate -ne $null) {
+      $sumResolvedNonTimeoutWins += $nonTimeoutEps * [double]($r.resolved_non_timeout_win_rate)
+    } else {
+      $sumResolvedNonTimeoutWins += $eps * [double]($r.win_rate)
+    }
     $rowTrackedSide = [string]($r.tracked_side)
     $rowVpNet = [double]0.0
     if ($r.vp_net_avg_by_side -and $rowTrackedSide) {
@@ -215,13 +225,7 @@ function Evaluate-Gate {
   $score = $sumScore / $den
   $timeoutRate = $sumTimeout / $den
   $nonTimeoutResolutionRate = 1.0 - $timeoutRate
-  if ($main.PSObject.Properties.Name -contains "non_timeout_resolution_rate" -and $main.non_timeout_resolution_rate -ne $null) {
-    $nonTimeoutResolutionRate = [double]($main.non_timeout_resolution_rate)
-  }
-  $resolvedNonTimeoutWinRate = $score
-  if ($main.PSObject.Properties.Name -contains "resolved_non_timeout_win_rate" -and $main.resolved_non_timeout_win_rate -ne $null) {
-    $resolvedNonTimeoutWinRate = [double]($main.resolved_non_timeout_win_rate)
-  }
+  $resolvedNonTimeoutWinRate = if ($sumNonTimeoutEpisodes -gt 0) { $sumResolvedNonTimeoutWins / $sumNonTimeoutEpisodes } else { $score }
   $lossRate = $sumLoss / $den
   $trackedCapturedAvg = $sumTrackedCaptured / $den
   $trackedSide = [string]($main.tracked_side)
@@ -540,26 +544,53 @@ function Build-ResumeOverlayConfig {
   $ckptPosix = $ResumeCheckpoint.Replace("\", "/")
 
   if ($CycleIteration -le 1) {
-    $content = @"
+    if ([string]::IsNullOrWhiteSpace($ckptPosix)) {
+      $content = @"
+base_config: "$basePosix"
+"@
+    } else {
+      $content = @"
 base_config: "$basePosix"
 train:
   resume_checkpoint: "$ckptPosix"
 "@
+    }
     Set-Content -Path $targetPath -Value $content -Encoding UTF8
     return $targetPath
   }
 
   $reasonsJoined = ($LastGateFailReasons -join " | ")
   $py = @"
-import pathlib, yaml
+import pathlib, copy, sys, yaml
 from agents.efficientzero_v2.core.interop import load_efficientzero_config
 
-base_path = r'''$resolvedBase'''
+base_path = pathlib.Path(r'''$resolvedBase''')
 base_posix = r'''$basePosix'''
 ckpt_posix = r'''$ckptPosix'''
 target_path = pathlib.Path(r'''$targetPath''')
 cycle_iter = int($CycleIteration)
+phase_name = r'''$PhaseName'''
 reasons = r'''$reasonsJoined'''.lower()
+
+# Check if adaptive cycle plan exists for this phase
+plan_path = base_path.parent.parent / "cycles" / f"{phase_name}.adaptive_cycles.yaml"
+if plan_path.exists():
+    try:
+        plan_data = yaml.safe_load(plan_path.read_text(encoding='utf-8')) or {}
+        cycle_specs = plan_data.get('cycles', {})
+        chosen_spec = cycle_specs.get(cycle_iter) or cycle_specs.get(str(cycle_iter))
+        if chosen_spec and 'overlay' in chosen_spec:
+            overlay = copy.deepcopy(chosen_spec.get('overlay') or {})
+            overlay['base_config'] = base_posix
+            if ckpt_posix:
+                if 'train' not in overlay or not isinstance(overlay['train'], dict):
+                    overlay['train'] = {}
+                overlay['train']['resume_checkpoint'] = ckpt_posix
+            target_path.write_text(yaml.safe_dump(overlay, sort_keys=False), encoding='utf-8')
+            print(f"   [Adaptive Plan] Applied Generation {plan_data.get('generation', 1)} Cycle {cycle_iter} ({chosen_spec.get('strategy', 'variant')})")
+            sys.exit(0)
+    except Exception as exc:
+        pass
 
 cfg = load_efficientzero_config(base_path)
 rs = dict((cfg.selfplay or {}).get('reward_shaping', {}) or {})
@@ -626,47 +657,46 @@ function Save-WinningCycleParamsToPhaseConfig {
     [string]$RepoRoot,
     [string]$PhaseConfigPath,
     [string]$WinningOverlayPath,
-    [int]$WinningCycle
+    [int]$WinningCycle,
+    [string]$PhaseName = "",
+    [string]$CurriculumName = "",
+    [double]$WinRate = 0.0,
+    [double]$TqsScore = 0.0
   )
   if ($WinningCycle -le 1) { return }
-  if ([string]::IsNullOrWhiteSpace($PhaseConfigPath) -or [string]::IsNullOrWhiteSpace($WinningOverlayPath)) { return }
+  if ([string]::IsNullOrWhiteSpace($PhaseConfigPath)) { return }
   $resolvedPhaseCfg = $PhaseConfigPath
   if (-not [System.IO.Path]::IsPathRooted($resolvedPhaseCfg)) {
     $resolvedPhaseCfg = Join-Path $RepoRoot $resolvedPhaseCfg
   }
-  if (-not (Test-Path $resolvedPhaseCfg) -or -not (Test-Path $WinningOverlayPath)) { return }
+  if (-not (Test-Path $resolvedPhaseCfg)) { return }
 
   $py = @"
-import pathlib, yaml
+import pathlib
+from agents.efficientzero_v2.curriculum.evolutionary_cycle_optimizer import evolve_phase_cycles
 
 phase_p = pathlib.Path(r'''$resolvedPhaseCfg''')
-over_p = pathlib.Path(r'''$WinningOverlayPath''')
+over_p = pathlib.Path(r'''$WinningOverlayPath''') if r'''$WinningOverlayPath''' and pathlib.Path(r'''$WinningOverlayPath''').exists() else None
 
-phase_data = yaml.safe_load(phase_p.read_text(encoding='utf-8')) or {}
-over_data = yaml.safe_load(over_p.read_text(encoding='utf-8')) or {}
-
-def deep_merge(dst, src):
-    for k, v in (src or {}).items():
-        if k in ('base_config', 'resume_checkpoint'):
-            continue
-        if isinstance(v, dict) and isinstance(dst.get(k), dict):
-            deep_merge(dst[k], v)
-        elif isinstance(v, dict):
-            cleaned = {ck: cv for ck, cv in v.items() if ck != 'resume_checkpoint'}
-            if cleaned:
-                dst[k] = cleaned
-        else:
-            dst[k] = v
-
-deep_merge(phase_data, over_data)
-if isinstance(phase_data.get('train'), dict):
-    phase_data['train'].pop('resume_checkpoint', None)
-
-phase_p.write_text(yaml.safe_dump(phase_data, sort_keys=False), encoding='utf-8')
+res = evolve_phase_cycles(
+    repo_root=pathlib.Path(r'''$RepoRoot'''),
+    phase_name=r'''$PhaseName''',
+    base_config_path=phase_p,
+    winning_cycle_info={
+        'curriculum_name': r'''$CurriculumName''',
+        'phase_name': r'''$PhaseName''',
+        'winning_cycle': int($WinningCycle),
+        'win_rate': float($WinRate),
+        'tactical_quality_score': float($TqsScore),
+        'promotion_decision': 'promote',
+    },
+    winning_overlay_path=over_p,
+)
+print(f"   [Evolutionary Plan] Promoted winning Cycle {WinningCycle} to Generation {res.get('generation')} C1 baseline.")
 "@
   python -c $py
   if ($LASTEXITCODE -eq 0) {
-    Write-Host ("   [Auto-Persist] Updated phase config with winning Cycle {0} parameters for future runs from 0: {1}" -f $WinningCycle, $resolvedPhaseCfg) -ForegroundColor Magenta
+    Write-Host ("   [Auto-Persist] Updated phase config and adaptive cycles for Phase '$PhaseName' from Cycle $WinningCycle" ) -ForegroundColor Magenta
   }
 }
 
@@ -698,7 +728,7 @@ try {
 
   $prevMetrics = $null
   $resumeCheckpoint = $null
-  if (-not [string]::IsNullOrWhiteSpace($ExplicitStartCheckpoint) -and (Test-Path $ExplicitStartCheckpoint)) {
+  if (-not [string]::IsNullOrWhiteSpace($ExplicitStartCheckpoint) -and ((Test-Path $ExplicitStartCheckpoint) -or $DryRun)) {
     $resumeCheckpoint = $ExplicitStartCheckpoint
     Write-Host ("Explicit start checkpoint supplied: {0}" -f $resumeCheckpoint) -ForegroundColor Magenta
   }
@@ -903,7 +933,7 @@ try {
               $promotionReason = ("max_cycles_reached_selected_best_cycle_{0}" -f $bestPhaseCycle)
               Write-Host ("[Dynamic Gate][BEST-OF-{0}] Advancing to next phase with BEST independent checkpoint from Cycle {1}/{0} (TQS={2:N3}, WinRate={3:N1}%):" -f $maxCycles, $bestPhaseCycle, $bestPhaseTqs, ($bestPhaseWinRate * 100)) -ForegroundColor Cyan
               Write-Host ("   Selected checkpoint (★): {0}" -f $resumeCheckpoint) -ForegroundColor Cyan
-              Save-WinningCycleParamsToPhaseConfig -RepoRoot $Repo -PhaseConfigPath $originalPhaseConfigPath -WinningOverlayPath $bestPhaseOverlayPath -WinningCycle $bestPhaseCycle
+              Save-WinningCycleParamsToPhaseConfig -RepoRoot $Repo -PhaseConfigPath $originalPhaseConfigPath -WinningOverlayPath $bestPhaseOverlayPath -WinningCycle $bestPhaseCycle -PhaseName $phaseName -CurriculumName $curriculumName -WinRate $bestPhaseWinRate -TqsScore $bestPhaseTqs
             } else {
               Write-Host ("[Dynamic Gate] Advancing to next phase (StopOnGateFail not set).") -ForegroundColor Yellow
               $resumeCheckpoint = $newCheckpoint
@@ -924,7 +954,7 @@ try {
           Write-Host ("[Dynamic Gate][PROMOTED] PROMOTION GRANTED for Phase '{0}' on Cycle {1}/{2}!" -f $phaseName, $cycleIteration, $maxCycles) -ForegroundColor Green
           Write-Host ("   Quality Metrics: TQS={0:N3} (>= min_tqs) | WinRate={1:N1}% | Defeats={2:N1}% | VPs={3:N2}" -f $tqsScore, ($winRate * 100), ($defeatRate * 100), $vpAvg) -ForegroundColor Green
           Write-Host ("   Promoting checkpoint: {0}" -f $resumeCheckpoint) -ForegroundColor Green
-          Save-WinningCycleParamsToPhaseConfig -RepoRoot $Repo -PhaseConfigPath $originalPhaseConfigPath -WinningOverlayPath $currentCycleOverlayPath -WinningCycle $cycleIteration
+          Save-WinningCycleParamsToPhaseConfig -RepoRoot $Repo -PhaseConfigPath $originalPhaseConfigPath -WinningOverlayPath $currentCycleOverlayPath -WinningCycle $cycleIteration -PhaseName $phaseName -CurriculumName $curriculumName -WinRate $winRate -TqsScore $tqsScore
           break
         }
       } catch {
@@ -941,6 +971,31 @@ try {
       } finally {
         if (-not $DryRun) {
           $phaseEndUtc = (Get-Date).ToUniversalTime()
+          $trainDurationSec = $null
+          $selfplayDurationSec = $null
+          $optDurationSec = $null
+          if (-not [string]::IsNullOrWhiteSpace($trainRunId)) {
+            $sumPath = Join-Path $Repo ("runs_curriculum\{0}\metrics\summary.json" -f $trainRunId)
+            if (Test-Path $sumPath) {
+              try {
+                $sumJson = Get-Content -Path $sumPath -Raw -Encoding UTF8 | ConvertFrom-Json
+                if ($sumJson.timing_summary) {
+                  $trainDurationSec = [double]$sumJson.timing_summary.total_elapsed_s
+                  $selfplayDurationSec = [double]$sumJson.timing_summary.selfplay_total_s
+                  $optDurationSec = [double]$sumJson.timing_summary.train_total_s
+                }
+              } catch {}
+            }
+          }
+          $benchDurationSec = $null
+          if (-not [string]::IsNullOrWhiteSpace($benchLatest) -and (Test-Path $benchLatest)) {
+            try {
+              $benchJson = Get-Content -Path $benchLatest -Raw -Encoding UTF8 | ConvertFrom-Json
+              if ($benchJson.benchmark_timing -and $benchJson.benchmark_timing.total_wall_s) {
+                $benchDurationSec = [double]$benchJson.benchmark_timing.total_wall_s
+              }
+            } catch {}
+          }
           $traceRow = [ordered]@{
             schema_version = "curriculum_traceability.v2"
             recorded_at_utc = (Get-Date).ToUniversalTime().ToString("o")
@@ -965,12 +1020,27 @@ try {
             bench_payload_path = [string]$benchLatest
             curriculum_yaml = [string]$curriculumPathResolved
             event = "phase_cycle_evaluated"
+            train_duration_seconds = $trainDurationSec
+            bench_duration_seconds = $benchDurationSec
+            selfplay_duration_seconds = $selfplayDurationSec
+            opt_duration_seconds = $optDurationSec
           }
           Write-CurriculumTraceRow -RepoRoot $Repo -Row $traceRow
         }
       }
     } # end while reinforcement loop
   } # end for phase
+
+  Write-Host ""
+  Write-Host "=================================================================" -ForegroundColor Magenta
+  Write-Host " ADAPTIVE CURRICULUM HYPERPARAMETER EVOLUTION" -ForegroundColor Magenta
+  Write-Host "=================================================================" -ForegroundColor Magenta
+  try {
+    $optCmd = "python -m agents.efficientzero_v2.curriculum.evolutionary_cycle_optimizer --repo-root `"$Repo`" --curriculum-yaml `"$curriculumPathResolved`""
+    Invoke-Expression $optCmd
+  } catch {
+    Write-Host ("Warning: Evolutionary cycle optimization step failed: {0}" -f $_.Exception.Message) -ForegroundColor Yellow
+  }
 
   Write-Host ""
   Write-Host "=================================================================" -ForegroundColor Cyan

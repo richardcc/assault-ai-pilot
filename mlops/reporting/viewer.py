@@ -26,7 +26,7 @@ from mlops.reporting.model_deletion import (
     delete_model_experiment as _delete_model_experiment,
 )
 from mlops.reporting.replay_api import (
-    build_muzero_replay_payload as _build_muzero_replay_payload,
+    build_efficientzero_v2_replay_payload as _build_replay_payload,
     build_replay_log_payload as _build_replay_log_payload,
     build_v2_replay_meta_payload as _build_v2_replay_meta_payload,
     build_v2_replay_steps_payload as _build_v2_replay_steps_payload,
@@ -59,6 +59,72 @@ def _model_html() -> str:
 _TRACE_RUN_ID_RE = re.compile(r"run_id=(efficientzero_v2_[0-9a-f]+|muzero_[0-9a-f]+)")
 _TRACE_RESUMED_FROM_RE = re.compile(r"resumed_from=(.+)")
 _TRACE_CYCLE_RE = re.compile(r"^\d{8}_\d{6}_(.+)_(phase\d+_.+)$")
+_TIMING_CACHE: dict[str, dict[str, Any]] = {}
+_BENCH_WALL_RE = re.compile(r'"total_wall_s":\s*([0-9.]+)')
+
+
+def _enrich_trace_timing(row: dict[str, Any], repo_root: Path) -> None:
+    tid = str(row.get("train_run_id") or "").strip()
+    eid = str(row.get("eval_run_id") or "").strip()
+    cache_key = f"{tid}|{eid}"
+
+    cached = _TIMING_CACHE.get(cache_key)
+    if cached is None:
+        train_s = None
+        selfplay_s = None
+        opt_s = None
+        if tid:
+            sp = repo_root / "runs_curriculum" / tid / "metrics" / "summary.json"
+            if not sp.exists():
+                sp = repo_root / "runs" / tid / "metrics" / "summary.json"
+            if sp.exists():
+                try:
+                    sdata = json.loads(sp.read_text(encoding="utf-8"))
+                    ts = sdata.get("timing_summary") or {}
+                    train_s = ts.get("total_elapsed_s")
+                    selfplay_s = ts.get("selfplay_total_s")
+                    opt_s = ts.get("train_total_s")
+                except Exception:
+                    pass
+
+        bench_s = None
+        bp_str = str(row.get("bench_payload_path") or "").strip()
+        bp_path = Path(bp_str) if bp_str else None
+        if bp_path is None or not bp_path.exists():
+            for target_id in (eid, tid):
+                if not target_id:
+                    continue
+                for parent_dir in ("runs_curriculum", "runs"):
+                    cand_dir = repo_root / parent_dir / target_id / "xai"
+                    if cand_dir.exists():
+                        cands = list(cand_dir.glob("bench_eval_*.json"))
+                        if cands:
+                            bp_path = sorted(cands, key=lambda p: p.stat().st_mtime)[-1]
+                            break
+                if bp_path and bp_path.exists():
+                    break
+        if bp_path and bp_path.exists():
+            try:
+                with open(bp_path, "rb") as f:
+                    f.seek(-4096, 2)
+                    tail = f.read().decode("utf-8", errors="ignore")
+                    m = _BENCH_WALL_RE.search(tail)
+                    if m:
+                        bench_s = float(m.group(1))
+            except Exception:
+                pass
+
+        cached = {
+            "train_duration_seconds": train_s,
+            "selfplay_duration_seconds": selfplay_s,
+            "opt_duration_seconds": opt_s,
+            "bench_duration_seconds": bench_s,
+        }
+        _TIMING_CACHE[cache_key] = cached
+
+    for k, v in cached.items():
+        if row.get(k) is None:
+            row[k] = v
 
 
 def _load_curriculum_traceability_payload(repo_root: Path, limit: int = 120) -> dict[str, Any]:
@@ -165,6 +231,9 @@ def _load_curriculum_traceability_payload(repo_root: Path, limit: int = 120) -> 
                     "cycle_id": cycle_id,
                 }
             )
+
+    for r in rows:
+        _enrich_trace_timing(r, repo_root)
 
     rows = sorted(rows, key=lambda r: str((r or {}).get("recorded_at_utc", "")), reverse=True)
     return {
@@ -640,9 +709,9 @@ def serve(
                 )
                 self._send_bytes(_json_bytes(payload if isinstance(payload, dict) else {}), "application/json; charset=utf-8")
                 return
-            if parsed.path == "/api/muzero-replay":
+            if parsed.path in ("/api/replay", "/api/muzero-replay"):
                 qs = parse_qs(parsed.query)
-                payload = _build_muzero_replay_payload(
+                payload = _build_replay_payload(
                     repo_root=repo_root,
                     eval_source_path=str(qs.get("eval_source_path", [""])[0] or ""),
                     replay_path=str(qs.get("replay_path", [""])[0] or ""),
@@ -708,6 +777,93 @@ def serve(
                 except Exception as exc:
                     self._send_json_status({"ok": False, "error": str(exc)}, status_code=500)
                 return
+            if norm_path in ("/api/model/export-onnx", "/api/v2/model/export-onnx"):
+                try:
+                    content_length = int(self.headers.get("Content-Length", 0))
+                    body = self.rfile.read(content_length) if content_length > 0 else b"{}"
+                    data = json.loads(body.decode("utf-8")) if body else {}
+                    run_id = str(data.get("run_id") or "").strip()
+                    if not run_id:
+                        qs = parse_qs(parsed.query)
+                        run_id = str(qs.get("run_id", [""])[0] or "").strip()
+                    if not run_id:
+                        self._send_json_status({"ok": False, "error": "missing_run_id"}, status_code=400)
+                        return
+                    from mlops.reporting.onnx_exporter import export_model_to_onnx
+                    res = export_model_to_onnx(repo_root=repo_root, run_id=run_id)
+                    self._send_json_status(res, status_code=200 if res.get("ok") else 500)
+                except Exception as exc:
+                    self._send_json_status({"ok": False, "error": str(exc)}, status_code=500)
+                return
+
+            if norm_path in ("/api/model/download-onnx", "/api/v2/model/download-onnx"):
+                qs = parse_qs(parsed.query)
+                run_id = str(qs.get("run_id", [""])[0] or "").strip()
+                file_name = str(qs.get("file", [""])[0] or "").strip()
+                if not run_id or not file_name:
+                    self._send_json_status({"ok": False, "error": "missing_parameters"}, status_code=400)
+                    return
+                safe_name = Path(file_name).name
+                candidate_paths = [
+                    repo_root / "runs" / run_id / "onnx" / safe_name,
+                    repo_root / "runs_curriculum" / run_id / "onnx" / safe_name,
+                ]
+                target_file = None
+                for cp in candidate_paths:
+                    if cp.exists() and cp.is_file():
+                        target_file = cp
+                        break
+                if target_file is None:
+                    self._send_json_status({"ok": False, "error": "file_not_found"}, status_code=404)
+                    return
+                try:
+                    content = target_file.read_bytes()
+                    self.send_response(200)
+                    self.send_header("Content-Type", "application/octet-stream")
+                    self.send_header("Content-Disposition", f'attachment; filename="{safe_name}"')
+                    self.send_header("Content-Length", str(len(content)))
+                    self.send_header("Access-Control-Allow-Origin", "*")
+                    self.end_headers()
+                    self.wfile.write(content)
+                except Exception as exc:
+                    self._send_json_status({"ok": False, "error": str(exc)}, status_code=500)
+                return
+
+            if norm_path in ("/api/model/open-folder", "/api/v2/model/open-folder"):
+                qs = parse_qs(parsed.query)
+                run_id = str(qs.get("run_id", [""])[0] or "").strip()
+                if not run_id:
+                    self._send_json_status({"ok": False, "error": "missing_run_id"}, status_code=400)
+                    return
+                candidate_paths = [
+                    repo_root / "runs" / run_id / "onnx",
+                    repo_root / "runs_curriculum" / run_id / "onnx",
+                    repo_root / "runs" / run_id,
+                    repo_root / "runs_curriculum" / run_id,
+                ]
+                target_dir = None
+                for cp in candidate_paths:
+                    if cp.exists() and cp.is_dir():
+                        target_dir = cp
+                        break
+                if target_dir is None:
+                    self._send_json_status({"ok": False, "error": "directory_not_found"}, status_code=404)
+                    return
+                try:
+                    import subprocess
+                    import sys
+                    resolved_dir = str(target_dir.resolve())
+                    if os.name == "nt":
+                        subprocess.Popen(["explorer.exe", resolved_dir])
+                    elif sys.platform == "darwin":
+                        subprocess.Popen(["open", resolved_dir])
+                    else:
+                        subprocess.Popen(["xdg-open", resolved_dir])
+                    self._send_json_status({"ok": True, "opened": resolved_dir})
+                except Exception as exc:
+                    self._send_json_status({"ok": False, "error": str(exc)}, status_code=500)
+                return
+
             self._send_json_status({"ok": False, "error": "not_found", "path": parsed.path}, status_code=404)
 
         def do_OPTIONS(self):  # noqa: N802
@@ -756,6 +912,93 @@ def serve(
                 except Exception as exc:
                     self._send_json_status({"ok": False, "error": str(exc)}, status_code=500)
                 return
+            if norm_path in ("/api/model/export-onnx", "/api/v2/model/export-onnx"):
+                try:
+                    content_length = int(self.headers.get("Content-Length", 0))
+                    body = self.rfile.read(content_length) if content_length > 0 else b"{}"
+                    data = json.loads(body.decode("utf-8")) if body else {}
+                    run_id = str(data.get("run_id") or "").strip()
+                    if not run_id:
+                        qs = parse_qs(parsed.query)
+                        run_id = str(qs.get("run_id", [""])[0] or "").strip()
+                    if not run_id:
+                        self._send_json_status({"ok": False, "error": "missing_run_id"}, status_code=400)
+                        return
+                    from mlops.reporting.onnx_exporter import export_model_to_onnx
+                    res = export_model_to_onnx(repo_root=repo_root, run_id=run_id)
+                    self._send_json_status(res, status_code=200 if res.get("ok") else 500)
+                except Exception as exc:
+                    self._send_json_status({"ok": False, "error": str(exc)}, status_code=500)
+                return
+
+            if norm_path in ("/api/model/download-onnx", "/api/v2/model/download-onnx"):
+                qs = parse_qs(parsed.query)
+                run_id = str(qs.get("run_id", [""])[0] or "").strip()
+                file_name = str(qs.get("file", [""])[0] or "").strip()
+                if not run_id or not file_name:
+                    self._send_json_status({"ok": False, "error": "missing_parameters"}, status_code=400)
+                    return
+                safe_name = Path(file_name).name
+                candidate_paths = [
+                    repo_root / "runs" / run_id / "onnx" / safe_name,
+                    repo_root / "runs_curriculum" / run_id / "onnx" / safe_name,
+                ]
+                target_file = None
+                for cp in candidate_paths:
+                    if cp.exists() and cp.is_file():
+                        target_file = cp
+                        break
+                if target_file is None:
+                    self._send_json_status({"ok": False, "error": "file_not_found"}, status_code=404)
+                    return
+                try:
+                    content = target_file.read_bytes()
+                    self.send_response(200)
+                    self.send_header("Content-Type", "application/octet-stream")
+                    self.send_header("Content-Disposition", f'attachment; filename="{safe_name}"')
+                    self.send_header("Content-Length", str(len(content)))
+                    self.send_header("Access-Control-Allow-Origin", "*")
+                    self.end_headers()
+                    self.wfile.write(content)
+                except Exception as exc:
+                    self._send_json_status({"ok": False, "error": str(exc)}, status_code=500)
+                return
+
+            if norm_path in ("/api/model/open-folder", "/api/v2/model/open-folder"):
+                qs = parse_qs(parsed.query)
+                run_id = str(qs.get("run_id", [""])[0] or "").strip()
+                if not run_id:
+                    self._send_json_status({"ok": False, "error": "missing_run_id"}, status_code=400)
+                    return
+                candidate_paths = [
+                    repo_root / "runs" / run_id / "onnx",
+                    repo_root / "runs_curriculum" / run_id / "onnx",
+                    repo_root / "runs" / run_id,
+                    repo_root / "runs_curriculum" / run_id,
+                ]
+                target_dir = None
+                for cp in candidate_paths:
+                    if cp.exists() and cp.is_dir():
+                        target_dir = cp
+                        break
+                if target_dir is None:
+                    self._send_json_status({"ok": False, "error": "directory_not_found"}, status_code=404)
+                    return
+                try:
+                    import subprocess
+                    import sys
+                    resolved_dir = str(target_dir.resolve())
+                    if os.name == "nt":
+                        subprocess.Popen(["explorer.exe", resolved_dir])
+                    elif sys.platform == "darwin":
+                        subprocess.Popen(["open", resolved_dir])
+                    else:
+                        subprocess.Popen(["xdg-open", resolved_dir])
+                    self._send_json_status({"ok": True, "opened": resolved_dir})
+                except Exception as exc:
+                    self._send_json_status({"ok": False, "error": str(exc)}, status_code=500)
+                return
+
             self._send_json_status({"ok": False, "error": "not_found", "path": parsed.path}, status_code=404)
 
         def log_message(self, format, *args):  # noqa: A003

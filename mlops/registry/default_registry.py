@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
 
-from agents.muzero.train.train_muzero import run_training
+from agents.efficientzero_v2.train.train_efficientzero_v2 import run_training as run_training_ezv2
 
 from mlops.registry.base import AgentAdapter, TrainResult
 
@@ -16,12 +16,12 @@ def _latest_checkpoint_from_run(run_root: Path, run_id: str) -> str:
 
 
 @dataclass
-class MuZeroAdapter:
+class EfficientZeroV2Adapter:
     run_root: Path
-    name: str = "muzero"
+    name: str = "efficientzero_v2"
 
     def train(self, *, config_path: str, stage_name: str, scenario_id: str) -> TrainResult:
-        out = run_training(config_path=config_path)
+        out = run_training_ezv2(config_path=config_path)
         run_id = str(out.get("run_id", "")).strip()
         checkpoint = _latest_checkpoint_from_run(self.run_root, run_id)
         return TrainResult(
@@ -51,10 +51,11 @@ class BaselineRandomAdapter:
 
 def build_default_registry(run_root: Path) -> dict[str, AgentAdapter]:
     return {
-        "muzero": MuZeroAdapter(run_root=run_root),
+        "efficientzero_v2": EfficientZeroV2Adapter(run_root=run_root),
         "baseline_random": BaselineRandomAdapter(),
     }
 
 
 def get_adapter(registry: dict[str, AgentAdapter], agent_name: str) -> Optional[AgentAdapter]:
     return registry.get(agent_name)
+

@@ -11,11 +11,13 @@ selfplay:
   num_workers: 20
   parallel_backend: process
   reward_shaping:
-    vp_capture_bonus_per_hex: 3.04
-    objective_progress_bonus_per_hex: 2.36
-    capture_bonus: 1.02
-  mcts_temperature: 1.15
+    vp_capture_bonus_per_hex: 4.67
+    objective_progress_bonus_per_hex: 3.63
+    capture_bonus: 1.46
+    kill_weight: 0.64
+  mcts_temperature: 1.25
 train:
   episodes_per_iter: 20
-  objective_loss_weight: 0.24
-  train_updates_per_iter: 10
+  objective_loss_weight: 0.36
+  train_updates_per_iter: 14
+  reanalysis_ratio: 0.42

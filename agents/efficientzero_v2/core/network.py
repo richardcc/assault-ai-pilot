@@ -37,6 +37,9 @@ class EfficientZeroV2Network(EfficientZeroV2BaseNetwork):
         use_recall: bool = True,
         enable_input_channel_gate: bool = False,
         enable_temporal_context: bool = False,
+        use_coord_conv: bool = False,
+        dynamics_attention_type: str = "se",
+        policy_head_type: str = "linear",
     ):
         super().__init__(
             observation_dim=observation_dim,
@@ -62,6 +65,9 @@ class EfficientZeroV2Network(EfficientZeroV2BaseNetwork):
             use_recall=use_recall,
             enable_input_channel_gate=enable_input_channel_gate,
             enable_temporal_context=enable_temporal_context,
+            use_coord_conv=use_coord_conv,
+            dynamics_attention_type=dynamics_attention_type,
+            policy_head_type=policy_head_type,
         )
         self.consistency_proj_dim = int(max(16, consistency_proj_dim))
         if self.encoder_type == "cnn":

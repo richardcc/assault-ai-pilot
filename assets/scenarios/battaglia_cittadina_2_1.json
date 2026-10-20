@@ -27,10 +27,10 @@
     { "unit_id": "US_2", "side": "US", "unit_key": "US_RIFLES_43", "position": [1, 10], "experience": "REGULAR" },
     { "unit_id": "US_3", "side": "US", "unit_key": "US_RIFLES_43", "position": [15, 8], "experience": "REGULAR" },
     { "unit_id": "US_4", "side": "US", "unit_key": "US_RIFLES_43", "position": [16, 8], "experience": "REGULAR" },
-    { "unit_id": "US_5", "side": "US", "unit_key": "US_BAZOOKA_TEAM", "position": [7, 9], "experience": "REGULAR" },
+    { "unit_id": "US_5", "side": "US", "unit_key": "US_COMBAT_ENGINEERS_43", "position": [7, 9], "experience": "REGULAR" },
     { "unit_id": "US_6", "side": "US", "unit_key": "US_SNIPER_43", "position": [8, 9], "experience": "REGULAR" },
     { "unit_id": "US_7", "side": "US", "unit_key": "US_81MM_MORTAR", "position": [9, 9], "experience": "REGULAR" }
-],
+  ],
   "vp": {
     "value_per_hex": 2,
     "hexes": [

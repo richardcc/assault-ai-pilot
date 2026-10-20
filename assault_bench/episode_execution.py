@@ -5,15 +5,14 @@ from pathlib import Path
 from typing import Any, Callable
 
 from agents.efficientzero_v2.core.network import EfficientZeroV2Network
-from agents.muzero.core.network import MuZeroNetwork
-from agents.muzero.core.selfplay import MuZeroVOECAdapter
+from agents.efficientzero_v2.core.adapter_voec import EZV2VOECAdapter
 from voec_sim.core.simulator import VOECSimulator
 
 _MODEL_CACHE: dict[str, Any] = {}
 
 
 def _model_cache_key(*, payload: dict, bench_device: str) -> str:
-    model_kind = str(payload.get("model_kind", "muzero")).strip().lower()
+    model_kind = str(payload.get("model_kind", "efficientzero_v2")).strip().lower()
     ckpt_path = str(payload.get("checkpoint_path", "") or "").strip()
     model_cfg = dict(payload.get("model", {}) or {})
     return "|".join(
@@ -51,7 +50,7 @@ def execute_benchmark_seed_task(
         scenarios_dir=Path(payload["assets"]["scenarios_dir"]),
     )
     sim = VOECSimulator(assets=assets)
-    adapter = MuZeroVOECAdapter(sim)
+    adapter = EZV2VOECAdapter(sim)
     model = payload.get("shared_model_proxy", None)
     bench_device = str(payload.get("bench_device", "cpu")).strip().lower()
     if model is None and payload.get("checkpoint_path"):
@@ -61,20 +60,20 @@ def execute_benchmark_seed_task(
         if cached_model is not None:
             model = cached_model
         else:
-            model_kind = str(payload.get("model_kind", "muzero")).strip().lower()
-            model_cls = (
-                EfficientZeroV2Network if model_kind == "efficientzero_v2" else MuZeroNetwork
-            )
+            model_cls = EfficientZeroV2Network
             model = model_cls(
                 observation_dim=int(payload["model"]["observation_dim"]),
                 hidden_dim=int(payload["model"]["hidden_dim"]),
                 action_dim=int(payload["model"]["action_dim"]),
                 encoder_type=str(payload["model"].get("encoder_type", "mlp")),
-                observation_channels=int(payload["model"].get("observation_channels", 8)),
+                observation_channels=int(payload["model"].get("observation_channels", 38)),
                 observation_height=int(payload["model"].get("observation_height", 16)),
                 observation_width=int(payload["model"].get("observation_width", 16)),
                 dynamics_blocks=int(payload["model"].get("dynamics_blocks", 1)),
                 prediction_blocks=int(payload["model"].get("prediction_blocks", 1)),
+                use_coord_conv=bool(payload["model"].get("use_coord_conv", False)),
+                dynamics_attention_type=str(payload["model"].get("dynamics_attention_type", "se")),
+                policy_head_type=str(payload["model"].get("policy_head_type", "linear")),
             )
             state_dict = load_state_dict_fn(payload["checkpoint_path"], bench_device)
             model.load_state_dict(state_dict, strict=False)

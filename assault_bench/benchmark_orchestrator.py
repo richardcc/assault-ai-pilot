@@ -4,9 +4,10 @@ from pathlib import Path
 from typing import Dict
 
 from agents.efficientzero_v2.core.network import EfficientZeroV2Network
-from agents.muzero.adapter_voec import MuZeroVOECAdapter
-from agents.muzero.configs.config_loader import load_muzero_config
-from agents.muzero.core.network import MuZeroNetwork
+from agents.efficientzero_v2.core.adapter_voec import EZV2VOECAdapter
+from agents.efficientzero_v2.core.interop import load_efficientzero_config
+MuZeroVOECAdapter = EZV2VOECAdapter
+MuZeroNetwork = EfficientZeroV2Network
 from assault_bench.bench_io import (
     mlflow_log_metrics,
     persist_bench_artifacts,
@@ -156,13 +157,22 @@ def _run_benchmark_impl(
     run_root_cfg = Path(str(cfg.paths["run_root"]))
     run_root = run_root_cfg if run_root_cfg.is_absolute() else (repo_root / run_root_cfg).resolve()
     checkpoint_path = resolve_checkpoint_path(checkpoint_path=checkpoint_path, run_root=run_root)
+    if checkpoint_path:
+        ckpt_p = Path(checkpoint_path).resolve()
+        if ckpt_p.parent.name == "checkpoints" and ckpt_p.parent.parent.parent.exists():
+            run_root = ckpt_p.parent.parent.parent
     model_kind_hint = engine_kind_from_checkpoint_path(checkpoint_path=checkpoint_path)
     if muzero_config_path:
         cfg_muzero_path = str(muzero_config_path)
-    elif model_kind_hint == "efficientzero_v2":
-        cfg_muzero_path = "agents/efficientzero_v2/configs/efficientzero_v2_config.yaml"
     else:
-        cfg_muzero_path = str(cfg.paths.get("muzero_config", "agents/muzero/configs/muzero_config.yaml"))
+        cfg_muzero_path = str(
+            cfg.paths.get("ezv2_config", "")
+            or (
+                "agents/efficientzero_v2/configs/efficientzero_v2_config.yaml"
+                if model_kind_hint == "efficientzero_v2"
+                else cfg.paths.get("muzero_config", "agents/efficientzero_v2/configs/efficientzero_v2_config.yaml")
+            )
+        )
 
     mlflow_mod, _mlflow_ctx = start_mlflow_run(
         experiment_name=str(mlflow_experiment),
@@ -172,7 +182,7 @@ def _run_benchmark_impl(
         cfg_benchmark=dict(cfg.benchmark or {}),
         checkpoint_path=str(checkpoint_path or ""),
         cfg_muzero_path=str(cfg_muzero_path),
-        model_kind_hint=str(model_kind_hint),
+        model_kind_hint=str(model_kind_hint or "efficientzero_v2"),
         bench_device=str(bench_device),
         mcts_q_clip_abs=float(mcts_q_clip_abs),
         mcts_q_root_normalization_mode=str(mcts_q_root_normalization_mode),
@@ -194,9 +204,9 @@ def _run_benchmark_impl(
         unit_prefilter_vp_progress_weight=float(unit_prefilter_vp_progress_weight),
         unit_prefilter_capture_opportunity_weight=float(unit_prefilter_capture_opportunity_weight),
         unit_prefilter_threat_weight=float(unit_prefilter_threat_weight),
-        load_muzero_config_fn=load_muzero_config,
+        load_muzero_config_fn=load_efficientzero_config,
         load_state_dict_fn=load_state_dict,
-        muzero_network_cls=MuZeroNetwork,
+        muzero_network_cls=EfficientZeroV2Network,
         efficientzero_v2_network_cls=EfficientZeroV2Network,
     )
     model = runtime_boot["model"]
@@ -209,7 +219,7 @@ def _run_benchmark_impl(
     reward_shaping_cfg = dict(runtime_boot["reward_shaping_cfg"] or {})
 
     sim = VOECSimulator(assets=voec_cfg.assets)
-    adapter = MuZeroVOECAdapter(sim)
+    adapter = EZV2VOECAdapter(sim)
     matchup_setup = prepare_matchup_matrix(
         adapter=adapter,
         scenario_id=str(scenario_ids[0]),

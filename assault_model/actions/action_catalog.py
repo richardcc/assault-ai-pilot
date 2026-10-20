@@ -11,6 +11,10 @@ from assault_model.combat.line_of_sight import has_line_of_sight
 from assault_model.actions.ranged_indirect import RangedIndirectAttack
 from assault_model.actions.smoke import FireSmokeAction
 from assault_model.actions.composite_fire import MoveThenFireAction, FireThenMoveAction
+from assault_model.actions.explosive_charge import ExplosiveChargeAction
+from assault_model.actions.mine_detection import MineDetectionAction
+from assault_model.map.hex_utils import neighbors as hex_neighbors
+
 
 import os
 
@@ -123,9 +127,16 @@ class ActionCatalog:
         actions.extend(self._move_fire_actions(active, movement_paths))
 
         # ----------------------------------
+        # ENGINEER ACTIONS (Rule 12.5 & 9.6.6.2)
+        # ----------------------------------
+        actions.extend(self._explosive_charge_actions(active))
+        actions.extend(self._mine_detection_actions(active))
+
+        # ----------------------------------
         # WAIT
         # ----------------------------------
         actions.append(WaitAction(active.unit_id))
+
 
         # ----------------------------------
         # DEBUG FINAL
@@ -402,3 +413,53 @@ class ActionCatalog:
                 composites.append(MoveThenFireAction(active.unit_id, move.path, fire))
 
         return composites
+
+    # ==================================================
+    # ENGINEER ACTIONS (Rule 12.5 & 9.6.6.2)
+    # ==================================================
+    def _explosive_charge_actions(self, active):
+        actions = []
+        if not getattr(active, "has_trait", lambda t: False)("EXPLOSIVE_CHARGE"):
+            return actions
+        if not getattr(active, "alive", True) or not getattr(active, "position", None):
+            return actions
+
+        pos = (active.position.q, active.position.r)
+        gmap = getattr(self.gs, "game_map", None)
+        if not gmap:
+            return actions
+
+        for nq, nr in hex_neighbors(pos):
+            tile = gmap.get_hex(nq, nr)
+            fort_type = gmap.get_hex_fortification(nq, nr)
+            is_building = False
+            if tile:
+                t_val = getattr(tile.terrain, "value", str(tile.terrain)).lower()
+                is_building = "building" in t_val
+
+            if is_building or fort_type:
+                target_feature = fort_type if fort_type else "building"
+                actions.append(ExplosiveChargeAction(active.unit_id, (nq, nr), target_feature))
+        return actions
+
+    def _mine_detection_actions(self, active):
+        actions = []
+        if not getattr(active, "has_trait", lambda t: False)("MINE_DETECTION"):
+            return actions
+        if not getattr(active, "alive", True) or not getattr(active, "position", None):
+            return actions
+
+        pos = (active.position.q, active.position.r)
+        gmap = getattr(self.gs, "game_map", None)
+        if not gmap:
+            return actions
+
+        # Check current hex and adjacent hexes
+        candidate_hexes = [pos] + list(hex_neighbors(pos))
+        for hq, hr in candidate_hexes:
+            fort_type = gmap.get_hex_fortification(hq, hr)
+            if fort_type in ("minefield", "dummy_minefield"):
+                if not gmap.is_hex_fortification_identified(hq, hr):
+                    actions.append(MineDetectionAction(active.unit_id, (hq, hr)))
+        return actions
+

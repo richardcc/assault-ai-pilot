@@ -1,0 +1,25 @@
+base_config: agents/efficientzero_v2/configs/efficientzero_v2_config.yaml
+scenario:
+  id: vp_phase3_race_2v2
+selfplay:
+  num_workers: 10
+  parallel_backend: process
+  reward_shaping:
+    vp_capture_bonus_per_hex: 8.18
+    objective_progress_bonus_per_hex: 6.24
+    capture_bonus: 2.63
+    kill_weight: 0.7
+    terminal_scale: 1.5
+    terminal_loss_penalty: 1.5
+    opportunity_near_vp_max_dist: 10.0
+    vp_potential_weight: 1.0
+    vp_potential_gamma: 0.997
+    vp_potential_ctrl_bonus: 2.0
+    vp_urgency_lambda: 1.2
+    paralysis_penalty_weight: 0.05
+  mcts_temperature: 1.15
+train:
+  episodes_per_iter: 20
+  objective_loss_weight: 0.5
+  train_updates_per_iter: 18
+  reanalysis_ratio: 0.45

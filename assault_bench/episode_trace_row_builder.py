@@ -86,6 +86,11 @@ def build_trace_row(
             "mcts_success_prob_proxy",
             "mcts_success_component",
             "mcts_puct_score",
+            "decision_components",
+            "vp_horizon_steps",
+            "vp_horizon_signal",
+            "vp_horizon_component",
+            "vp_horizon_decision_component",
         )
         compact_rows = []
         for row in list(mcts_action_candidates or []):
@@ -105,9 +110,9 @@ def build_trace_row(
     terrain_move_payload = dict(obs_terrain_move_cost_map or {}) if full_detail else {}
     fort_type_payload = dict(obs_fortification_type_map or {}) if full_detail else {}
     fort_edge_payload = dict(obs_fortification_edge_map or {}) if full_detail else {}
-    attack_components_payload = dict(attack_components_by_die) if full_detail else {}
-    defense_components_payload = dict(defense_components_by_die) if full_detail else {}
-    runtime_events_payload = list(runtime_events) if full_detail else []
+    attack_components_payload = dict(attack_components_by_die)
+    defense_components_payload = dict(defense_components_by_die)
+    runtime_events_payload = list(runtime_events)
 
     def _source_from_candidate(field_name: str, has_value: bool) -> str:
         if not has_value:
@@ -298,6 +303,34 @@ def build_trace_row(
             getattr(signals, "unit_macro_role", None)
             or field_fn(transition_info, "unit_macro_role", None)
             or "ROLE_SPEARHEAD"
+        ),
+        "role_assigned": str(
+            getattr(signals, "role_assigned", None)
+            or field_fn(transition_info, "role_assigned", None)
+            or getattr(signals, "unit_macro_role", None)
+            or field_fn(transition_info, "unit_macro_role", None)
+            or "ROLE_SPEARHEAD"
+        ),
+        "role_is_mutated": bool(
+            getattr(signals, "role_is_mutated", None)
+            if getattr(signals, "role_is_mutated", None) is not None
+            else field_fn(transition_info, "role_is_mutated", False)
+        ),
+        "role_mutation_reason": str(
+            getattr(signals, "role_mutation_reason", None)
+            or field_fn(transition_info, "role_mutation_reason", "DEFAULT_PROFILE")
+            or "DEFAULT_PROFILE"
+        ),
+        "prior_boost_applied": float(
+            getattr(signals, "prior_boost_applied", None)
+            if getattr(signals, "prior_boost_applied", None) is not None
+            else field_fn(transition_info, "prior_boost_applied", 0.0)
+            or 0.0
+        ),
+        "badge_label": str(
+            getattr(signals, "badge_label", None)
+            or field_fn(transition_info, "badge_label", "")
+            or ""
         ),
         "tie_break_term": (float(signals.selected_tie_break_term) if signals.selected_tie_break_term is not None else None),
         "vp_distance_vector": dict(signals.vp_distance_vector),

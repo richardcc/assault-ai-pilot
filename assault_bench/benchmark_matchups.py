@@ -5,9 +5,9 @@ from typing import Dict, List
 from assault_bench.transform_ops import filter_rows, map_rows, to_dict_rows
 
 DEFAULT_MATCHUP_PROFILES: tuple[str, ...] = (
-    "muzero_selfplay",
-    "muzero_vs_random_side_a",
-    "muzero_vs_random_side_b",
+    "ezv2_selfplay",
+    "ezv2_vs_random_side_a",
+    "ezv2_vs_random_side_b",
 )
 
 
@@ -15,12 +15,12 @@ def build_profile_defs(sides: List[str]) -> list[dict]:
     side_list = [str(s or "") for s in list(sides or []) if str(s or "").strip()]
     profile_defs: list[dict] = [
         {
-            "profile": "muzero_selfplay",
-            "agent_name": "muzero_stub",
+            "profile": "ezv2_selfplay",
+            "agent_name": "ezv2_stub",
             "policy": "mcts",
             "policy_by_side": {},
             "group": "selfplay",
-            "goal": "MuZero mirror baseline",
+            "goal": "EfficientZeroV2 mirror baseline",
         },
         {
             "profile": "random_selfplay",
@@ -36,20 +36,20 @@ def build_profile_defs(sides: List[str]) -> list[dict]:
         profile_defs.extend(
             [
                 {
-                    "profile": "muzero_vs_random_side_a",
-                    "agent_name": f"muzero_vs_random_{side_a}",
+                    "profile": "ezv2_vs_random_side_a",
+                    "agent_name": f"ezv2_vs_random_{side_a}",
                     "policy": "mcts",
                     "policy_by_side": {side_a: "mcts", side_b: "random"},
                     "group": "head_to_head_role",
-                    "goal": f"MuZero as {side_a}, random as {side_b}",
+                    "goal": f"EfficientZeroV2 as {side_a}, random as {side_b}",
                 },
                 {
-                    "profile": "muzero_vs_random_side_b",
-                    "agent_name": f"muzero_vs_random_{side_b}",
+                    "profile": "ezv2_vs_random_side_b",
+                    "agent_name": f"ezv2_vs_random_{side_b}",
                     "policy": "mcts",
                     "policy_by_side": {side_a: "random", side_b: "mcts"},
                     "group": "head_to_head_role",
-                    "goal": f"MuZero as {side_b}, random as {side_a}",
+                    "goal": f"EfficientZeroV2 as {side_b}, random as {side_a}",
                 },
             ]
         )

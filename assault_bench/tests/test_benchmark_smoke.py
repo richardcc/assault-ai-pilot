@@ -3,8 +3,8 @@ import pytest
 import yaml
 
 from assault_bench.runner import _resolve_enabled_profiles, _run_episode_with_policy, run_benchmark
-from agents.muzero.adapter_voec import MuZeroVOECAdapter
-from agents.muzero.core.mcts import MCTSOutput
+from agents.efficientzero_v2.core.adapter_voec import EZV2VOECAdapter
+from agents.efficientzero_v2.core.mcts import MCTSOutput
 from voec_sim.core.simulator import VOECSimulator
 
 
@@ -15,7 +15,7 @@ def test_benchmark_returns_results():
     assert "terminal_reasons" in payload["results"][0]
     assert "phase_2_9_train_eval" in payload
     assert "phase_2_9_promotion_gate" in payload
-    muzero_row = next(r for r in payload["results"] if r["agent_name"] == "muzero_stub")
+    muzero_row = next(r for r in payload["results"] if r["agent_name"] in {"ezv2_stub", "muzero_stub"})
     assert "phase_2_9_eval_kpis" in muzero_row
     assert "reaction_fire_count" in muzero_row["phase_2_9_eval_kpis"]
     steps_top = list(muzero_row.get("eval_decision_steps_top", []) or [])
@@ -31,7 +31,7 @@ def test_benchmark_returns_results():
 
 
 def test_eval_trace_rows_include_head_telemetry_coverage():
-    adapter = MuZeroVOECAdapter(VOECSimulator())
+    adapter = EZV2VOECAdapter(VOECSimulator())
     _, _, _, _, _, _, _, _, _, _, _, _, trace_rows = _run_episode_with_policy(
         adapter=adapter,
         scenario_id="battaglia_cittadina_2_1",
@@ -77,7 +77,7 @@ def test_eval_trace_rows_include_head_telemetry_coverage():
 
 
 def test_eval_objective_head_not_partial_when_distance_present():
-    adapter = MuZeroVOECAdapter(VOECSimulator())
+    adapter = EZV2VOECAdapter(VOECSimulator())
     _, _, _, _, _, _, _, _, _, _, _, _, trace_rows = _run_episode_with_policy(
         adapter=adapter,
         scenario_id="battaglia_cittadina_2_1",
@@ -104,7 +104,7 @@ def test_eval_objective_head_not_partial_when_distance_present():
 
 
 def test_eval_trace_rows_include_override_sanity_fields():
-    adapter = MuZeroVOECAdapter(VOECSimulator())
+    adapter = EZV2VOECAdapter(VOECSimulator())
     _, _, _, _, _, _, _, _, _, _, _, _, trace_rows = _run_episode_with_policy(
         adapter=adapter,
         scenario_id="battaglia_cittadina_2_1",
@@ -131,7 +131,7 @@ def test_eval_trace_rows_include_override_sanity_fields():
 
 
 def test_eval_trace_rows_entropy_uses_visit_distribution_and_sets_collapse_label(monkeypatch):
-    adapter = MuZeroVOECAdapter(VOECSimulator())
+    adapter = EZV2VOECAdapter(VOECSimulator())
 
     def _fake_mcts(**kwargs):
         legal_actions = list(kwargs.get("legal_actions", []) or [])
@@ -155,7 +155,7 @@ def test_eval_trace_rows_entropy_uses_visit_distribution_and_sets_collapse_label
         adapter=adapter,
         scenario_id="battaglia_cittadina_2_1",
         seed=17,
-        policy_name="muzero_stub",
+        policy_name="ezv2_stub",
         policy_by_side={},
         max_steps=1,
         max_steps_override=1,
@@ -184,7 +184,7 @@ def test_default_benchmark_config_is_not_quick_profile():
     profiles = list(
         bench.get(
             "matchup_profiles",
-            ["muzero_selfplay", "muzero_vs_random_side_a", "muzero_vs_random_side_b"],
+            ["ezv2_selfplay", "ezv2_vs_random_side_a", "ezv2_vs_random_side_b"],
         )
         or []
     )
@@ -196,9 +196,9 @@ def test_default_benchmark_config_is_not_quick_profile():
 def test_matchup_profile_defaults_exclude_random_selfplay():
     defaults = _resolve_enabled_profiles({})
     assert "random_selfplay" not in defaults
-    assert defaults == {"muzero_selfplay", "muzero_vs_random_side_a", "muzero_vs_random_side_b"}
+    assert defaults == {"ezv2_selfplay", "ezv2_vs_random_side_a", "ezv2_vs_random_side_b"}
 
 
 def test_matchup_profile_allows_explicit_random_selfplay_opt_in():
-    enabled = _resolve_enabled_profiles({"matchup_profiles": ["muzero_selfplay", "random_selfplay"]})
-    assert enabled == {"muzero_selfplay", "random_selfplay"}
+    enabled = _resolve_enabled_profiles({"matchup_profiles": ["ezv2_selfplay", "random_selfplay"]})
+    assert enabled == {"ezv2_selfplay", "random_selfplay"}

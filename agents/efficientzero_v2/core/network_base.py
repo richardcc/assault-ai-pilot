@@ -105,8 +105,41 @@ class InputChannelGate(nn.Module):
         return x * self.gate(x) * active_mask
 
 
+class ECABlock(nn.Module):
+    """
+    Efficient Channel Attention (ECA-Net, Wang et al., CVPR 2020):
+    Performs fast, parameter-efficient channel attention via a 1D convolution
+    over adaptive-averaged channels without dimensionality reduction.
+    """
+    def __init__(self, channels: int, kernel_size: int = 3):
+        super().__init__()
+        self.avg_pool = nn.AdaptiveAvgPool2d(1)
+        self.conv = nn.Conv1d(1, 1, kernel_size=kernel_size, padding=(kernel_size - 1) // 2, bias=False)
+        self.sigmoid = nn.Sigmoid()
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        y = self.avg_pool(x)
+        y = y.squeeze(-1).transpose(-1, -2)
+        y = self.conv(y)
+        y = y.transpose(-1, -2).unsqueeze(-1)
+        return x * self.sigmoid(y)
+
+
+def _add_coords(x: torch.Tensor) -> torch.Tensor:
+    """
+    CoordConv (Liu et al., 2018):
+    Appends normalized X and Y coordinate channels in [-1, 1] to a 4D tensor (B, C, H, W).
+    """
+    b, _, h, w = x.shape
+    device = x.device
+    dtype = x.dtype
+    y_coords = torch.linspace(-1.0, 1.0, h, device=device, dtype=dtype).view(1, 1, h, 1).expand(b, 1, h, w)
+    x_coords = torch.linspace(-1.0, 1.0, w, device=device, dtype=dtype).view(1, 1, 1, w).expand(b, 1, h, w)
+    return torch.cat([x, x_coords, y_coords], dim=1)
+
+
 class ResidualConvBlock(nn.Module):
-    def __init__(self, channels: int, use_hex_mask: bool = True):
+    def __init__(self, channels: int, use_hex_mask: bool = True, attention_type: str = "se"):
         super().__init__()
         conv_cls = HexagonalMaskConv2d if use_hex_mask else nn.Conv2d
         self.conv1 = conv_cls(channels, channels, kernel_size=3, padding=1, bias=False)
@@ -116,20 +149,25 @@ class ResidualConvBlock(nn.Module):
         self.gn2 = _make_group_norm(channels)
         self.act2 = nn.SiLU()
 
-        # Squeeze-and-Excitation (SE) channel attention gating
-        se_dim = max(4, channels // 4)
-        self.se = nn.Sequential(
-            nn.AdaptiveAvgPool2d(1),
-            nn.Conv2d(channels, se_dim, kernel_size=1),
-            nn.SiLU(),
-            nn.Conv2d(se_dim, channels, kernel_size=1),
-            nn.Sigmoid(),
-        )
+        self.attention_type = str(attention_type).lower().strip()
+        if self.attention_type == "eca":
+            self.attn = ECABlock(channels, kernel_size=3)
+        else:
+            # Squeeze-and-Excitation (SE) channel attention gating
+            se_dim = max(4, channels // 4)
+            self.attn = nn.Sequential(
+                nn.AdaptiveAvgPool2d(1),
+                nn.Conv2d(channels, se_dim, kernel_size=1),
+                nn.SiLU(),
+                nn.Conv2d(se_dim, channels, kernel_size=1),
+                nn.Sigmoid(),
+            )
+        self.se = self.attn
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         z = self.act1(self.gn1(self.conv1(x)))
         z = self.gn2(self.conv2(z))
-        z = z * self.se(z)
+        z = self.attn(z)
         return self.act2(x + z)
 
 
@@ -202,6 +240,9 @@ class EfficientZeroV2BaseNetwork(nn.Module):
         use_recall: bool = True,
         enable_input_channel_gate: bool = False,
         enable_temporal_context: bool = False,
+        use_coord_conv: bool = False,
+        dynamics_attention_type: str = "se",
+        policy_head_type: str = "linear",
     ):
         super().__init__()
         self.encoder_type = str(encoder_type).lower().strip()
@@ -217,6 +258,9 @@ class EfficientZeroV2BaseNetwork(nn.Module):
         self.use_recall = bool(use_recall)
         self.enable_input_channel_gate = bool(enable_input_channel_gate)
         self.enable_temporal_context = bool(enable_temporal_context)
+        self.use_coord_conv = bool(use_coord_conv)
+        self.dynamics_attention_type = str(dynamics_attention_type).lower().strip()
+        self.policy_head_type = str(policy_head_type).lower().strip()
         self.prediction_blocks = max(1, int(prediction_blocks))
         self.objective_intent_classes = max(0, int(objective_intent_classes))
         self.multi_vp_feature_dim = max(0, int(multi_vp_feature_dim))
@@ -237,8 +281,9 @@ class EfficientZeroV2BaseNetwork(nn.Module):
             self.temporal_context = (
                 TemporalContextBlock(self.hidden_dim) if self.enable_temporal_context else None
             )
+            rep_in_channels = self.observation_channels + (2 if self.use_coord_conv else 0)
             self.representation_input = nn.Sequential(
-                conv_cls(self.observation_channels, self.hidden_dim, kernel_size=3, padding=1, bias=False),
+                conv_cls(rep_in_channels, self.hidden_dim, kernel_size=3, padding=1, bias=False),
                 _make_group_norm(self.hidden_dim),
                 nn.SiLU(),
             )
@@ -259,7 +304,7 @@ class EfficientZeroV2BaseNetwork(nn.Module):
                 nn.SiLU(),
             )
             self.dynamics_state = nn.Sequential(
-                *[ResidualConvBlock(self.hidden_dim, use_hex_mask=self.use_hex_mask) for _ in range(max(1, int(dynamics_blocks)))]
+                *[ResidualConvBlock(self.hidden_dim, use_hex_mask=self.use_hex_mask, attention_type=self.dynamics_attention_type) for _ in range(max(1, int(dynamics_blocks)))]
             )
             self.prediction_trunk = nn.Sequential(
                 *[ResidualConvBlock(self.hidden_dim, use_hex_mask=self.use_hex_mask) for _ in range(max(1, int(prediction_blocks)))]
@@ -368,12 +413,25 @@ class EfficientZeroV2BaseNetwork(nn.Module):
                     nn.SiLU(),
                     nn.Linear(64, self.val_out_dim),
                 )
-                self.prediction_policy = nn.Sequential(
-                    nn.Conv2d(self.hidden_dim, head_channels, kernel_size=1),
-                    nn.SiLU(),
-                    nn.Flatten(start_dim=1),
-                    nn.Linear(flat_policy_dim, action_dim),
-                )
+                if self.policy_head_type == "bottleneck_mlp":
+                    bottleneck_ch = max(2, min(self.hidden_dim // 12, 4))
+                    flat_bottleneck_dim = bottleneck_ch * self.observation_height * self.observation_width
+                    self.prediction_policy = nn.Sequential(
+                        nn.Conv2d(self.hidden_dim, bottleneck_ch, kernel_size=1, bias=False),
+                        _make_group_norm(bottleneck_ch),
+                        nn.SiLU(),
+                        nn.Flatten(start_dim=1),
+                        nn.Linear(flat_bottleneck_dim, 64),
+                        nn.SiLU(),
+                        nn.Linear(64, action_dim),
+                    )
+                else:
+                    self.prediction_policy = nn.Sequential(
+                        nn.Conv2d(self.hidden_dim, head_channels, kernel_size=1),
+                        nn.SiLU(),
+                        nn.Flatten(start_dim=1),
+                        nn.Linear(flat_policy_dim, action_dim),
+                    )
                 self.prediction_value = nn.Sequential(
                     nn.Conv2d(self.hidden_dim, val_channels, kernel_size=1),
                     nn.SiLU(),
@@ -591,6 +649,8 @@ class EfficientZeroV2BaseNetwork(nn.Module):
     def initial_inference(self, observation: torch.Tensor, return_aux: bool = False):
         if self.encoder_type == "cnn":
             obs_in = self._gate_input_channels(observation)
+            if self.use_coord_conv and obs_in.dim() == 4:
+                obs_in = _add_coords(obs_in)
             hidden = self._scale_latent(self.representation_tower(self.representation_input(obs_in)))
             pred_hidden = self.prediction_trunk(hidden)
             head_in = self._adapt_spatial(pred_hidden)

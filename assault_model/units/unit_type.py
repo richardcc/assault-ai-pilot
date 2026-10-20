@@ -1,4 +1,5 @@
-from typing import Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
+from dataclasses import dataclass
 from enum import Enum
 import os
 
@@ -27,6 +28,54 @@ class UnitCategory(Enum):
     VEHICLE = "VEHICLE"
 
 
+@dataclass(frozen=True)
+class DoctrineProfile:
+    """
+    Doctrinal unit tactical profile for hierarchical planning and MCTS prior modulation.
+    """
+    default_role: str = "SCREEN"
+    optimal_engagement_range: Tuple[int, int] = (1, 4)
+    preferred_terrain: Tuple[str, ...] = ("BUILDING", "WOODS")
+    cohesion_weight: float = 1.0
+    fallback_threshold_hp: int = 1
+    allow_spearhead_if_vp_deficit: bool = True
+    allow_close_defense_on_flank: bool = True
+
+    @classmethod
+    def from_dict(cls, data: Optional[Dict[str, Any]]) -> "DoctrineProfile":
+        if not data or not isinstance(data, dict):
+            return cls()
+        rng = data.get("optimal_engagement_range", [1, 4])
+        if isinstance(rng, list) and len(rng) == 2:
+            optimal_rng = (int(rng[0]), int(rng[1]))
+        else:
+            optimal_rng = (1, 4)
+        terrains = tuple(str(t).upper() for t in data.get("preferred_terrain", ["BUILDING", "WOODS"]))
+        mut = data.get("mutation_rules", {})
+        return cls(
+            default_role=str(data.get("default_role", "SCREEN")).upper(),
+            optimal_engagement_range=optimal_rng,
+            preferred_terrain=terrains,
+            cohesion_weight=float(data.get("cohesion_weight", 1.0)),
+            fallback_threshold_hp=int(data.get("fallback_threshold_hp", 1)),
+            allow_spearhead_if_vp_deficit=bool(mut.get("allow_spearhead_if_vp_deficit", True)),
+            allow_close_defense_on_flank=bool(mut.get("allow_close_defense_on_flank", True)),
+        )
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "default_role": self.default_role,
+            "optimal_engagement_range": list(self.optimal_engagement_range),
+            "preferred_terrain": list(self.preferred_terrain),
+            "cohesion_weight": self.cohesion_weight,
+            "fallback_threshold_hp": self.fallback_threshold_hp,
+            "mutation_rules": {
+                "allow_spearhead_if_vp_deficit": self.allow_spearhead_if_vp_deficit,
+                "allow_close_defense_on_flank": self.allow_close_defense_on_flank,
+            },
+        }
+
+
 class UnitType:
     """
     Canonical unit type definition.
@@ -46,6 +95,7 @@ class UnitType:
         attack: Dict = None,
         traits: List[str] = None,
         movement_type: str = "foot",
+        doctrine_profile: Optional[DoctrineProfile | Dict[str, Any]] = None,
     ) -> None:
         self.code = code
         self.side = side
@@ -58,12 +108,25 @@ class UnitType:
         self.movement_type = movement_type
         self.max_strength = max_strength
 
+        if isinstance(doctrine_profile, DoctrineProfile):
+            self.doctrine_profile = doctrine_profile
+        else:
+            self.doctrine_profile = DoctrineProfile.from_dict(doctrine_profile)
+
         self._base_defense_raw = base_defense
         self._attack_raw = attack
         self.traits = traits
         self._compile_attack_tables()
 
+    def has_trait(self, trait_name: str) -> bool:
+        """Check if this unit type possesses a specific trait or keyword."""
+        if not self.traits:
+            return False
+        target = str(trait_name).upper()
+        return any(str(t).upper() == target for t in self.traits)
+
     def _compile_attack_tables(self) -> None:
+
         """Precompile raw attack dictionary into fast integer tuples."""
         compiled = {}
         mode_ranges = {}

@@ -12,12 +12,15 @@ class MCTSOutput:
     visits: List[int]
     probs: List[float]
     chosen_action: str
+    chosen_score: float = 0.0
     q_guardrail_clipped_count: int = 0
     q_guardrail_clip_limit: Optional[float] = None
     q_root_score_spread: float = 0.0
     q_root_normalization_applied: bool = False
     chance_samples_per_expansion: int = 1
+    sterile_branches_pruned_count: int = 0
     root_candidate_breakdown: Optional[List[Dict[str, float]]] = None
+
 
 
 def _clip_q_value(value: float, clip_abs: Optional[float]) -> tuple[float, bool]:
@@ -137,6 +140,10 @@ def run_mcts_puct(
     min_root_visits_top_n: int = 0,
     value_rescale_mode: str = "tanh",
     value_rescale_temperature: float = 10.0,
+    vp_race_prior_biasing: bool = False,
+    vp_race_bonus_by_action: Optional[Dict[str, float]] = None,
+    sterile_action_mask: Optional[Dict[str, bool]] = None,
+    sterile_prune_penalty: float = 0.40,
 ) -> MCTSOutput:
     if not legal_actions:
         return MCTSOutput(actions=[], visits=[], probs=[], chosen_action="")
@@ -150,7 +157,28 @@ def run_mcts_puct(
         priors = [_stable_prior(a) for a in legal_actions]
     prior_sum = sum(priors)
     priors = [p / prior_sum for p in priors]
+
+    # Task 2.2: VP Race Prior Biasing and Sterile Wandering Pruning (~40%)
+    sterile_branches_pruned_count = 0
+    if vp_race_prior_biasing and (vp_race_bonus_by_action or sterile_action_mask):
+        biasing_bonus = dict(vp_race_bonus_by_action or {})
+        sterile_mask = dict(sterile_action_mask or {})
+        adjusted_priors: list[float] = []
+        for a, p in zip(legal_actions, priors):
+            p_val = float(p)
+            bonus = float(biasing_bonus.get(a, 0.0) or 0.0)
+            if bonus > 0.0:
+                p_val *= (1.0 + bonus)
+            if sterile_mask.get(a, False) and sterile_prune_penalty > 0.0:
+                p_val *= max(0.01, 1.0 - float(sterile_prune_penalty))
+                sterile_branches_pruned_count += 1
+            adjusted_priors.append(max(1e-8, p_val))
+        adj_sum = sum(adjusted_priors)
+        if adj_sum > 0.0:
+            priors = [x / adj_sum for x in adjusted_priors]
+
     if dirichlet_epsilon > 0.0:
+
         noise = [random.gammavariate(dirichlet_alpha, 1.0) for _ in range(n)]
         noise_sum = sum(noise)
         if noise_sum > 0.0:
@@ -308,12 +336,16 @@ def run_mcts_puct(
         mode=q_root_normalization_mode,
         strength=q_root_normalization_strength,
     )
+    chosen_score = 0.0
     for i in range(n):
         q_value = float(normalized_q_values[i])
         q_unclipped = float(unclipped_q_values[i]) if i < len(unclipped_q_values) else 0.0
         q_clipped = float(clipped_q_values[i]) if i < len(clipped_q_values) else q_value
         u_value = c_puct * priors[i] * (root_sqrt / (1 + visits[i]))
         success_prob, success_centered, success_component = _success_components(legal_actions[i])
+        puct_score = float(q_value + u_value + success_component)
+        if i == chosen_idx:
+            chosen_score = puct_score
         root_candidate_breakdown.append(
             {
                 "action_id": str(legal_actions[i]),
@@ -325,7 +357,9 @@ def run_mcts_puct(
                 "success_prob_proxy": float(success_prob),
                 "success_prob_centered": float(success_centered),
                 "success_component": float(success_component),
-                "puct_score": float(q_value + u_value + success_component),
+                "puct_score": puct_score,
+                "vp_race_bonus": float((vp_race_bonus_by_action or {}).get(str(legal_actions[i]), 0.0) or 0.0),
+                "is_sterile": bool((sterile_action_mask or {}).get(str(legal_actions[i]), False)),
             }
         )
 
@@ -334,10 +368,13 @@ def run_mcts_puct(
         visits=visits,
         probs=probs_temp,
         chosen_action=legal_actions[chosen_idx],
+        chosen_score=float(chosen_score),
         q_guardrail_clipped_count=int(q_guardrail_clipped_count),
         q_guardrail_clip_limit=(float(q_clip_abs) if q_clip_abs is not None else None),
         q_root_score_spread=float(q_root_score_spread),
         q_root_normalization_applied=bool(q_root_normalization_applied),
         chance_samples_per_expansion=(int(chance_k) if chance_enabled else 1),
+        sterile_branches_pruned_count=int(sterile_branches_pruned_count),
         root_candidate_breakdown=list(root_candidate_breakdown),
     )
+

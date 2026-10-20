@@ -15,6 +15,8 @@ class UnitSnapshot:
     r: Optional[int]
     hp: Optional[int]
     alive: bool
+    doctrine_role: Optional[str] = None
+    doctrine_profile: Optional[Dict[str, Any]] = None
 
 
 @dataclass(frozen=True)

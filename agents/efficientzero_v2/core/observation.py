@@ -9,7 +9,7 @@ import torch
 
 from agents.efficientzero_v2.core.objective_signals import objective_min_distance_snapshot
 
-DEFAULT_OBS_CHANNELS = 32
+DEFAULT_OBS_CHANNELS = 38
 DEFAULT_OBS_HEIGHT = 16
 DEFAULT_OBS_WIDTH = 16
 
@@ -41,6 +41,21 @@ def _dice_power(dice_values: list) -> float:
     for d in list(dice_values or []):
         total += float(_DICE_WEIGHT.get(str(d).upper(), 0.0))
     return total
+
+
+DOCTRINE_ROLE_CODES: dict[str, float] = {
+    "SPEARHEAD": 1.0,
+    "FIRE_SUPPORT": 0.75,
+    "RECON": 0.50,
+    "SCREEN": 0.25,
+    "COMMAND": 0.10,
+}
+
+
+def encode_doctrine_role(role_name: str | None) -> float:
+    if not role_name:
+        return DOCTRINE_ROLE_CODES["SCREEN"]
+    return DOCTRINE_ROLE_CODES.get(str(role_name).strip().upper(), DOCTRINE_ROLE_CODES["SCREEN"])
 
 
 @lru_cache(maxsize=1)
@@ -99,6 +114,15 @@ def _unit_feature_table() -> dict:
         is_mg = "MG" in subtype or "MMG" in str(unit_key).upper() or "HMG" in str(unit_key).upper()
         is_assault = "FJ" in str(unit_key).upper() or "SNIPER" in str(unit_key).upper() or ("RIFLES" in str(unit_key).upper() and not is_mg and not is_mortar)
         attack_power = max(direct_power, indirect_power)
+
+        doc_prof = dict(payload.get("doctrine_profile", {}) or {})
+        default_role = str(doc_prof.get("default_role", "SCREEN")).upper()
+        rng = doc_prof.get("optimal_engagement_range", [1, 4])
+        opt_min = float(rng[0]) if isinstance(rng, (list, tuple)) and len(rng) >= 1 else 1.0
+        opt_max = float(rng[1]) if isinstance(rng, (list, tuple)) and len(rng) >= 2 else 4.0
+        cohesion = float(doc_prof.get("cohesion_weight", 1.0))
+        fallback_hp = float(doc_prof.get("fallback_threshold_hp", 1))
+
         f = {
             "movement": movement,
             "direct_range": max_direct_range,
@@ -109,9 +133,15 @@ def _unit_feature_table() -> dict:
             "is_mortar": 1.0 if is_mortar else 0.0,
             "is_mg": 1.0 if is_mg else 0.0,
             "is_assault": 1.0 if is_assault else 0.0,
+            "default_role": default_role,
+            "optimal_range_min": opt_min,
+            "optimal_range_max": opt_max,
+            "cohesion_weight": cohesion,
+            "fallback_threshold_hp": fallback_hp,
         }
         for k, v in f.items():
-            max_vals[k] = max(max_vals[k], float(v))
+            if isinstance(v, (int, float)):
+                max_vals[k] = max(max_vals.get(k, 1.0), float(v))
         table[str(unit_key)] = f
     return {"table": table, "max": max_vals}
 
@@ -192,6 +222,8 @@ def observation_to_tensor(
     ally_alive_coords: list[tuple[int, int]] = []
     ally_threat_sources: list[tuple[int, int, float, float]] = []
     enemy_threat_sources: list[tuple[int, int, float, float]] = []
+    ally_optimal_sources: list[tuple[int, int, float, float, float, float]] = []
+    enemy_optimal_sources: list[tuple[int, int, float, float, float, float]] = []
 
     for unit in obs.units:
         q = unit.get("q")
@@ -217,10 +249,21 @@ def observation_to_tensor(
         hp_norm = 0.0
         if isinstance(hp, (int, float)):
             hp_norm = max(0.0, min(1.0, float(hp) / max(1.0, max_str)))
+
+        doc_role = str(unit.get("doctrine_role") or unit.get("role") or feat.get("default_role", "SCREEN")).upper()
+        role_code = encode_doctrine_role(doc_role)
+        opt_min = float(feat.get("optimal_range_min", 1.0))
+        opt_max = float(feat.get("optimal_range_max", max(1.0, raw_direct_range)))
+        if "doctrine_profile" in unit and isinstance(unit["doctrine_profile"], dict):
+            u_rng = unit["doctrine_profile"].get("optimal_engagement_range")
+            if isinstance(u_rng, (list, tuple)) and len(u_rng) >= 2:
+                opt_min, opt_max = float(u_rng[0]), float(u_rng[1])
+
         if side == to_play:
             if alive:
                 ally_alive_coords.append((int(q), int(r)))
                 ally_threat_sources.append((int(q), int(r), max(1.0, raw_direct_range), max(0.1, attack_power_norm)))
+                ally_optimal_sources.append((int(q), int(r), opt_min, opt_max, direct_range_norm, role_code))
             put(0, y, x, 1.0)  # ally_presence
             put(2, y, x, hp_norm)  # ally_hp_norm (normalized by actual max_strength)
             # Channel 4: ally_crossfire_risk / suppression (replaces dead ally_suppressed)
@@ -233,9 +276,11 @@ def observation_to_tensor(
                 crossfire_score = 1.0
             put(4, y, x, crossfire_score)
             
-            # Channel 8: ally_heavy_mg_support (HMG, MMG, MG42)
+            # Channel 8: ally_heavy_mg_support (HMG, MMG, MG42 or FIRE_SUPPORT)
             if float(feat.get("is_mg", 0.0)) > 0.0:
                 put(8, y, x, 1.0)
+            elif doc_role == "FIRE_SUPPORT" and alive:
+                put(8, y, x, max(float(grid[8, y, x]), 0.75))
             # Channel 10: ally_indirect_mortar (Mortars, Indirect fire)
             if float(feat.get("is_mortar", 0.0)) > 0.0:
                 put(10, y, x, 1.0)
@@ -243,9 +288,12 @@ def observation_to_tensor(
             put(24, y, x, direct_range_norm)  # ally_direct_range_norm
             put(28, y, x, attack_power_norm)  # ally_attack_power_norm
             put(30, y, x, defense_power_norm)  # ally_defense_power_norm
+            if channels > 32:
+                put(32, y, x, role_code)  # ally_doctrine_role
         else:
             if alive:
                 enemy_threat_sources.append((int(q), int(r), max(1.0, raw_direct_range), max(0.1, attack_power_norm)))
+                enemy_optimal_sources.append((int(q), int(r), opt_min, opt_max, direct_range_norm, role_code))
             put(1, y, x, 1.0)  # enemy_presence
             put(3, y, x, hp_norm)  # enemy_hp_norm (normalized by actual max_strength)
             # Channel 5: enemy_target_engagement / suppression
@@ -256,14 +304,18 @@ def observation_to_tensor(
             engagement_score = 1.0 if has_ally_target else (1.0 if (alive and suppressed) else 0.0)
             put(5, y, x, engagement_score)
             
-            # Channel 9: enemy_heavy_mg_support (HMG, MMG, MG42)
+            # Channel 9: enemy_heavy_mg_support (HMG, MMG, MG42 or FIRE_SUPPORT)
             if float(feat.get("is_mg", 0.0)) > 0.0:
                 put(9, y, x, 1.0)
+            elif doc_role == "FIRE_SUPPORT" and alive:
+                put(9, y, x, max(float(grid[9, y, x]), 0.75))
             # Channel 23: enemy_indirect_mortar (Mortars, Indirect fire)
             if float(feat.get("is_mortar", 0.0)) > 0.0:
                 put(23, y, x, 1.0)
             put(25, y, x, direct_range_norm)  # enemy_direct_range_norm
             put(31, y, x, defense_power_norm)  # enemy_defense_power_norm
+            if channels > 33:
+                put(33, y, x, role_code)  # enemy_doctrine_role
 
     # Palma et al. (2025, Sec. 3.2.3) & Henry Hyde (2015, Ch. 6 p. 318 & Ch. 9 p. 440):
     # Project scheduled or stochastic incoming reinforcements onto their entry hexes
@@ -331,10 +383,12 @@ def observation_to_tensor(
         x, y = to_xy(int(q), int(r))
         if not (0 <= x < width and 0 <= y < height):
             continue
-        put(13, y, x, 1.0)  # vp_mask
+        val = float(vp.get("value", vp.get("per_turn", 2.0)) or 2.0)
+        v_rel = max(0.25, val / 2.0)
+        put(13, y, x, v_rel)  # vp_mask scaled by intrinsic relative value
         owner = str((getattr(obs, "vp_owner_by_hex", {}) or {}).get(f"{q},{r}", ""))
         if owner:
-            put(14, y, x, 1.0 if owner == to_play else -1.0)  # vp_owner_relative
+            put(14, y, x, v_rel if owner == to_play else -v_rel)  # vp_owner_relative scaled by value
     for hx in getattr(obs, "playable_hexes", []) or []:
         q = hx.get("q")
         r = hx.get("r")
@@ -348,9 +402,25 @@ def observation_to_tensor(
         put(16, y, x, float((getattr(obs, "terrain_cover_by_hex", {}) or {}).get(key, 0.0)))
         put(17, y, x, float((getattr(obs, "terrain_los_block_by_hex", {}) or {}).get(key, 0.0)))
         # Channel 18: vp_distance_field (continuous radial Euclidean guidance toward nearest VP)
+        # Modulated by Turn Urgency Factor (Task 2.3) and weighted by intrinsic relative value.
         if vp_list:
-            d_min_vp = min((_hex_distance(int(q), int(r), int(vp.get("q", 0)), int(vp.get("r", 0))) for vp in vp_list), default=99)
-            grad_val = 1.0 / float(1 + max(0, d_min_vp))
+            best_vp_grad = 0.0
+            for vp in vp_list:
+                vq = int(vp.get("q", 0) or 0)
+                vr = int(vp.get("r", 0) or 0)
+                vval = float(vp.get("value", vp.get("per_turn", 2.0)) or 2.0)
+                v_rel = max(0.25, vval / 2.0)
+                d = _hex_distance(int(q), int(r), vq, vr)
+                grad = v_rel / float(1 + max(0, d))
+                if grad > best_vp_grad:
+                    best_vp_grad = grad
+            grad_val = best_vp_grad
+            turn_now = int(getattr(obs, "turn", 1) or 1)
+            max_turns_est = max(1, int(getattr(obs, "max_turns", 8) or 8))
+            urgency_ratio = min(1.0, max(0.0, float(turn_now) / float(max_turns_est)))
+            vp_owner = str(vp_owner_by_hex.get(key, ""))
+            if vp_owner != to_play:
+                grad_val *= (1.0 + 0.5 * urgency_ratio)
             put(18, y, x, grad_val)
         put(19, y, x, float(q) / max_q_norm)  # q_coord_norm
         put(20, y, x, float(r) / max_r_norm)  # r_coord_norm
@@ -437,4 +507,54 @@ def observation_to_tensor(
             elif "wire" in fort_type:
                 hazard_val = 0.60
             put(29, y, x, hazard_val)
+
+        # Channel 24 & 25: 2D optimal combat range footprint projection
+        if channels > 24 and ally_optimal_sources:
+            ally_opt_val = float(grid[24, y, x])
+            for aq, ar, opt_min, opt_max, d_norm, _ in ally_optimal_sources:
+                dist = _hex_distance(int(q), int(r), aq, ar)
+                if dist > 0 and opt_min <= dist <= opt_max:
+                    footprint = 0.5 * d_norm * (1.0 - 0.3 * los_blk)
+                    if footprint > ally_opt_val:
+                        ally_opt_val = footprint
+            put(24, y, x, ally_opt_val)
+
+        if channels > 25 and enemy_optimal_sources:
+            enemy_opt_val = float(grid[25, y, x])
+            for eq, er, opt_min, opt_max, d_norm, _ in enemy_optimal_sources:
+                dist = _hex_distance(int(q), int(r), eq, er)
+                if dist > 0 and opt_min <= dist <= opt_max:
+                    footprint = 0.5 * d_norm * (1.0 - 0.3 * los_blk)
+                    if footprint > enemy_opt_val:
+                        enemy_opt_val = footprint
+            put(25, y, x, enemy_opt_val)
+
+        if channels > 34 and ally_optimal_sources:
+            put(34, y, x, float(grid[24, y, x]))
+        if channels > 35 and enemy_optimal_sources:
+            put(35, y, x, float(grid[25, y, x]))
+
+        # Channel 36: turn_urgency_pressure (Task 2.3)
+        # Global temporal pressure broadcasting t/T, amplified around uncaptured VPs
+        if channels > 36:
+            turn_now = int(getattr(obs, "turn", 1) or 1)
+            max_turns_est = max(1, int(getattr(obs, "max_turns", 8) or 8))
+            urgency_ratio = min(1.0, max(0.0, float(turn_now) / float(max_turns_est)))
+            base_urgency = urgency_ratio
+            if vp_list:
+                d_min_vp = min((_hex_distance(int(q), int(r), int(vp.get("q", 0)), int(vp.get("r", 0))) for vp in vp_list), default=99)
+                vp_prox = 1.0 / float(1 + max(0, d_min_vp))
+                base_urgency = min(1.0, urgency_ratio * (1.0 + 0.5 * vp_prox))
+            put(36, y, x, base_urgency)
+
+        # Channel 37: paralysis_exposure_risk (Task 2.3)
+        # Highlights hexes occupied by friendly units with low cover (< 0.35) outside VP perimeter
+        if channels > 37:
+            cov = float((getattr(obs, "terrain_cover_by_hex", {}) or {}).get(key, 0.0))
+            is_ally_here = any(aq == int(q) and ar == int(r) for aq, ar in ally_alive_coords)
+            paralysis_risk = 0.0
+            if is_ally_here and cov < 0.35:
+                d_min_vp = min((_hex_distance(int(q), int(r), int(vp.get("q", 0)), int(vp.get("r", 0))) for vp in vp_list), default=99) if vp_list else 99
+                paralysis_risk = min(1.0, 0.5 + 0.5 * (1.0 - cov) * (float(min(d_min_vp, 6)) / 6.0))
+            put(37, y, x, paralysis_risk)
     return grid

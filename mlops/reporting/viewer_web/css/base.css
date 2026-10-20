@@ -4,7 +4,7 @@ body { font-family: Arial, sans-serif; margin: 0; background: #0f172a; color: #e
 .bar { display: flex; gap: 8px; align-items: center; }
 button { background: #334155; color: #e2e8f0; border: 1px solid #475569; border-radius: 6px; padding: 8px 10px; cursor: pointer; }
 button:hover { background: #475569; }
-.grid { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(220px, 22vw) minmax(260px, 28vw) minmax(0, 1fr); gap: 10px; }
+.grid { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(180px, 14vw) minmax(280px, 20vw) minmax(0, 1fr); gap: 10px; }
 .panel { border: 1px solid #334155; border-radius: 8px; background: #111827; padding: 10px; min-height: 0; }
 .panel h2 { margin: 0 0 8px 0; font-size: 14px; }
 .list { overflow: auto; min-height: 0; display: flex; flex-direction: column; gap: 6px; }

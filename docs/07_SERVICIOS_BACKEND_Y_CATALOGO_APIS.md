@@ -358,6 +358,22 @@ El backend de telemetría reside en `mlops/reporting/viewer.py`. Proporciona acc
 #### `DELETE /api/v2/model`
 * **Descripción**: Eliminación segura de artefactos de un modelo en disco y actualización atómica del catálogo.
 
+#### `POST /api/model/export-onnx` y `GET /api/model/export-onnx`
+* **Descripción**: Exporta los pesos del modelo seleccionado a 3 grafos computacionales ONNX (`initial_inference.onnx`, `recurrent_inference.onnx`, `representation_tower.onnx`) para auditoría e inspección visual en Netron. El método `GET` verifica el estado de artefactos ya generados en disco.
+* **Query / Body Parameters**:
+  - `run_id`: Identificador de la ejecución o modelo.
+
+#### `GET /api/model/download-onnx`
+* **Descripción**: Descarga en streaming el archivo binario `.onnx` especificado generado para una ejecución.
+* **Query Parameters**:
+  - `run_id`: Identificador de la ejecución.
+  - `file`: Nombre del archivo ONNX a descargar (`initial_inference.onnx`, `recurrent_inference.onnx` o `representation_tower.onnx`).
+
+#### `GET /api/model/open-folder`
+* **Descripción**: Abre directamente en el explorador de archivos del sistema operativo (ej. Windows Explorer) el directorio donde residen los modelos exportados en disco (`runs/<run_id>/onnx/`).
+* **Query Parameters**:
+  - `run_id`: Identificador de la ejecución.
+
 ---
 
 ### 5.2. Replay y Trazabilidad de Curriculums

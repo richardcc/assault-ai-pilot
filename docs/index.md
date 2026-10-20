@@ -7,35 +7,70 @@ Bienvenido al portal oficial de documentación técnica del proyecto **Assault**
 
 ---
 
-## 🗺️ Mapa de Navegación del Sistema
+## 🗺️ Mapa Jerárquico de Navegación del Sistema
 
 ```mermaid
 graph TD
     ROOT["Assault Wargame & AI Platform"]
     
-    C0["0. Premisas del Proyecto y Gobernanza"]
-    C1["1. Arquitectura del Sistema"]
-    C2["2. Reglas Tácticas y VOEC"]
-    C3["3. EfficientZero V2"]
-    C4["4. MLOps y Telemetría"]
-    C5["5. Auditoría Literatura Científica"]
-    C6["6. Copilot RAG"]
-    C7["7. Backend y APIs"]
-    C8["8. Auditoría Reglamento vs Engine"]
-    C13["9. Inventario Canónico de Métricas"]
-    C9["10. Hoja de Ruta Evolutiva (Roadmap)"]
+    subgraph Fundamentos ["1. Fundamentos y Reglas"]
+        C0["0. Premisas del Proyecto y Gobernanza"]
+        C1["1. Arquitectura del Sistema"]
+        C2["2. Reglas Tácticas y VOEC"]
+    end
     
-    ROOT --> C0
-    ROOT --> C1
-    ROOT --> C2
-    ROOT --> C3
-    ROOT --> C4
-    ROOT --> C5
-    ROOT --> C6
-    ROOT --> C7
-    ROOT --> C8
-    ROOT --> C13
-    ROOT --> C9
+    subgraph IA ["2. Inteligencia Artificial y Modelos"]
+        C3["3. EfficientZero V2"]
+        C5["5. Auditoría Literatura Científica"]
+        C6["6. Copilot RAG y Explicabilidad"]
+    end
+    
+    subgraph Plataforma ["3. Plataforma MLOps y Servicios"]
+        C4["4. MLOps y Telemetría"]
+        C7["7. Backend y APIs"]
+        C13["9. Inventario Jerárquico de Métricas"]
+    end
+    
+    subgraph WargameRules ["4. Fidelidad Militar y Perfilado"]
+        C8["8. Auditoría Reglamento vs Engine"]
+        C14["10. Plan Estratégico Perfilado de Unidades"]
+    end
+
+    subgraph CurriculumsSection ["5. Currículums y Entrenamiento"]
+        C15["11. Currículums y Entrenamiento Progresivo"]
+    end
+
+    subgraph InformesSection ["6. Informes de Ejecución"]
+        INF_HEAD["12. Cabecera y Catálogo de Informes"]
+        INF_01["12.1. Informe 01: Currículum y Auditoría Táctica"]
+    end
+
+    subgraph RoadmapSection ["7. Hoja de Ruta Evolutiva (Roadmap)"]
+        L1["13.1. Línea 1: Observabilidad y Telemetría"]
+        L2["13.2. Línea 2: Captura de VPs y Paridad Humana"]
+        L3["13.3. Línea 3: Fidelidad Normativa y Wargame"]
+        L4["13.4. Línea 4: Explicabilidad XAI e IPB"]
+        L5["13.5. Línea 5: Generalización Procedural"]
+        C9["13. Hoja de Ruta Evolutiva (Roadmap Maestro)"]
+    end
+    
+    ROOT --> Fundamentos
+    ROOT --> IA
+    ROOT --> Plataforma
+    ROOT --> WargameRules
+    ROOT --> CurriculumsSection
+    ROOT --> InformesSection
+    ROOT --> RoadmapSection
+
+    InformesSection --> INF_HEAD
+    INF_HEAD --> INF_01
+
+    RoadmapSection --> L1
+    RoadmapSection --> L2
+    RoadmapSection --> L3
+    RoadmapSection --> L4
+    RoadmapSection --> L5
+    RoadmapSection --> C9
 ```
 
 ---
@@ -98,9 +133,36 @@ graph TD
 * **Gobernanza Cero-Invención (Zero-Mock):** Definición matemática formal y origen unívoco para cada campo en Parquet y DuckDB.
 * **Plan de Purgado de Redundancias:** Consolidación de campos duplicados y optimización de sobrecarga de sondas.
 
-### 10. [Hoja de Ruta Evolutiva: Assault Architecture Roadmap (2024–2026)](05_ROADMAP_EVOLUTIVO.md)
-* **Hitos consolidados (Fases 1–6):** Cimentación VOEC, cabezas auxiliares, HL-Gauss + Symlog, Macro-Planner HRL, motor de reglas completo (5.1–5.4), vectorización Numba/NumPy (`4,924 steps/s`), clonado transaccional Copy-on-Write (`109,626 clones/s`), telemetría binaria MessagePack y matriz de 16 contribuciones SOTA/Doctrinales completadas al 100%.
-* **Hoja de Ruta de Trabajo Pendiente Unificada:** Punto único de verdad para las líneas abiertas de investigación IA (Currículum 5 etapas, Gumbel Search, Transformer World Model) y el Plan de Paridad 100% del Reglamento Oficial (Sección 6.4 y Fases A, B y C).
+### 10. [Plan Estratégico: Perfilado Doctrinal de Unidades](14_PLAN_PERFILADO_UNIDADES_IA.md)
+* **Arquitectura Doctrinal 3 Capas:** Balística Fiel, Perfil Doctrinal y Emergencia Táctica Colectiva.
+* **Mutación y Adaptabilidad Dinámica:** Transiciones doctrinales en tiempo real ante eventos de desgaste, flanqueo y pérdida de líderes.
+* **Observabilidad MLOps:** Cuadro de mando de asignación doctrinal, dispersión de perfiles y fidelidad histórica.
+
+### 11. [Currículums y Entrenamiento Progresivo](15_CURRICULUMS_Y_ENTRENAMIENTO_PROGRESSIVO.md)
+* **Fundamentos de Aprendizaje por Currículum:** Mitigación de recompensa dispersa y colapso combinatorio en wargames tácticos hexagonales.
+* **Currículum de Aceleración de VPs (`vp_acceleration`):** 4 fases progresivas (acercamiento, supresión estática, carrera frontal 2v2 y Gela táctico completo) con puertas cuantitativas hacia paridad humana ($\ge 75\%$ win rate en $<15$ turnos).
+* **Currículum Multi-Escenario (`self_vs_self_vs_random_2scenarios_v1`):** 7 fases de consolidación competitiva con balanceo dinámico de escenarios (80/20 a 50/50), autojuego y matchmaking asimétrico.
+* **Guía Operativa y Telemetría MLOps:** Comandos de ejecución PowerShell (`run_dynamic_gated_curriculum.ps1`), benchmarking y monitorización DuckDB en puerto 8778.
+
+---
+
+### 12. Repositorio Canónico de Informes de Ejecución
+* 📋 [**12. Cabecera y Catálogo de Informes de Ejecución**](informes_ejecucion/00_CABECERA_INFORMES_EJECUCION.md): Protocolo de auditoría, taxonomía de veredictos (TQS) y catálogo maestro.
+* 📊 [**12.1. Informe 01: Currículum y Auditoría Táctica Forense**](informes_ejecucion/INFORME_01_CURRICULUM_Y_AUDITORIA_TACTICA.md): Auditoría de 31 ciclos, diagnóstico de parálisis ofensiva, bloqueo de canales 36/37, interferencia multi-tarea y plan de mitigación Tarea 3.6.
+
+---
+
+### 13. Hoja de Ruta Evolutiva (Roadmap 2026–2027)
+
+#### Ficheros Modulares por Línea Estratégica:
+* 🔴 [**Línea 1: Garantía de Instrumentos y Observabilidad Fiel (P0)**](roadmap/01_LINEA_1_OBSERVABILIDAD_Y_TELEMETRIA.md): Test de conformidad de esquema, profiling de sobrecarga de sondas, validador E2E Frontend-DuckDB y catálogo unificado.
+* 🔴 [**Línea 2: Aceleración de Captura de VPs y Paridad Humana (P0)**](roadmap/02_LINEA_2_ACELERACION_CAPTURA_VPS.md): Recompensa por potencial radial a VP, sesgo de prior MCTS orientado a objetivos, presión temporal y currículum acelerado.
+* 🟢 [**Línea 3: Fidelidad Normativa y Reglamento Oficial del Wargame (P1)**](roadmap/03_LINEA_3_FIDELIDAD_NORMATIVA_Y_REGLAMENTO.md): Retirada a borde amigo en desenfilada 6.4, Dig-in, Humo, Transporte, catálogo de 12 formaciones, rebalanceo OOB y Tarea 3.6 anti-parálisis.
+* 🟢 [**Línea 4: Explicabilidad Máxima (XAI), Perfilado Causal e Inteligencia Táctica (P1)**](roadmap/04_LINEA_4_EXPLICABILIDAD_XAI_E_IPB.md): Atribución causal espacial (IGNH/GradCAM), perfilador causal de partidas, análisis topográfico IPB y perfilado doctrinal dinámico.
+* 🔵 [**Línea 5: Generalización Procedural y Robustez en Terrenos Abiertos (P2)**](roadmap/05_LINEA_5_GENERALIZACION_PROCEDURAL.md): Mutación procedural con clumping geográfico y validación Zero-Shot en mapas masivos 32x32 y 64x64.
+
+#### Documento Coordinador Maestro:
+* 🗺️ [**13. Hoja de Ruta Evolutiva (Roadmap Maestro y Changelog)**](05_ROADMAP_EVOLUTIVO.md): Visión ejecutiva, matriz maestra de seguimiento, orden de ejecución global e historial canónico de versiones (v1.0.0 a v2.5.1).
 
 ---
 
@@ -112,3 +174,4 @@ graph TD
 | **Visor Web MLOps** | `8778` | Dashboard de modelos, métricas y replays | [http://127.0.0.1:8778/](http://127.0.0.1:8778/) |
 | **Backend Táctico FastAPI** | `8001` | API de simulación, combate y RAG | [http://127.0.0.1:8001/docs](http://127.0.0.1:8001/docs) |
 | **Simulador UI (Vite / React)** | `5173` | Tablero hexagonal interactivo | [http://127.0.0.1:5173/](http://127.0.0.1:5173/) |
+| **Editor de Unidades** | `8780` | Editor GUI de cartas y atributos balísticos | [http://127.0.0.1:8780/](http://127.0.0.1:8780/) |

@@ -1,0 +1,13 @@
+---
+description: Strict language policy - UI and Code in English, User and Docs in Spanish
+globs: *
+alwaysApply: true
+---
+
+# Strict Language Policy
+
+- **UI 100% in English**: All user interfaces, dashboards, visualizers, plots, tooltips, buttons, labels must be in English.
+- **Code 100% in English**: All source code, identifiers, comments, docstrings, log messages, exception messages must be in English.
+- **User Communication in Spanish**: Interaction and conversation with the user must be conducted in Spanish.
+- **Documentation in Spanish**: Markdown documentation in `docs/` is maintained in Spanish for now.
+- **Opportunistic Correction**: Do not perform an unsolicited mass codebase rewrite, but whenever any code or UI file is modified, convert all existing Spanish text in that file to English. Never introduce Spanish into code or UI.

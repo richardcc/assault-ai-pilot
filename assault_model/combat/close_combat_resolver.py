@@ -60,6 +60,21 @@ class CloseCombatResult:
         self.outcome = None
 
 
+
+def _apply_cc006_unsuppressed_solo_frontal_penalty(attack_colors):
+    if not attack_colors:
+        return attack_colors
+    # CC-006 (Task 2.4): Charging an alert, unsuppressed defender frontally without supporting attackers
+    # loses the weakest attack die due to unsuppressed defensive fire.
+    weakest = min(attack_colors, key=lambda c: int(c))
+    attack_colors.remove(weakest)
+    _trace(
+        "CC006_UNSUPPRESSED_SOLO_FRONTAL_PENALTY",
+        removed=getattr(weakest, "name", str(weakest)),
+    )
+    return attack_colors
+
+
 # =================================================
 # Resolver
 # =================================================
@@ -222,6 +237,12 @@ def resolve_close_combat(
             defender_attack_colors = _apply_cc004_suppression_penalty(defender_attack_colors, "defender")
         if ctx.round_number == 1 and bool(getattr(ctx.attacker, "ambush", False)):
             attacker_attack_colors = _apply_cc005_ambush_bonus(attacker_attack_colors)
+        if ctx.round_number == 1 and bool(getattr(ctx, "unsuppressed_solo_frontal_penalty_enabled", False)):
+            is_frontal = getattr(ctx, "attack_sector", AttackSector.FRONT) == AttackSector.FRONT
+            is_unsuppressed_def = not bool(getattr(ctx.defender, "suppressed", False))
+            has_no_supporters = len(list(getattr(ctx, "supporting_attackers", []) or [])) == 0
+            if is_frontal and is_unsuppressed_def and has_no_supporters and not bool(getattr(ctx.attacker, "ambush", False)):
+                attacker_attack_colors = _apply_cc006_unsuppressed_solo_frontal_penalty(attacker_attack_colors)
 
         # Palma et al. 2025 (Sec. 3.3, Fig. 3): Multi-unit combined assault coordination
         # Each adjacent committed supporting attacker squad adds +1 supporting attack die (WHITE, or RED if heavy support)

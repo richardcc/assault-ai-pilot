@@ -78,6 +78,11 @@ class StepSignalData:
     macro_posture: Optional[str] = None
     macro_target_vp_id: Optional[str] = None
     unit_macro_role: Optional[str] = None
+    role_assigned: Optional[str] = None
+    role_is_mutated: Optional[bool] = None
+    role_mutation_reason: Optional[str] = None
+    prior_boost_applied: Optional[float] = None
+    badge_label: Optional[str] = None
 
 
 @dataclass

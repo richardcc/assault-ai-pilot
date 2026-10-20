@@ -50,13 +50,34 @@ class UnitInstance:
         self.embarked = False
         self.carrier_id = None
 
+        # Tactical Doctrine
+        self.active_role: str | None = None
+
         if self.unit_type.category.name == "VEHICLE":
             self.passengers = []
 
-    # ----------------------------
+    def has_trait(self, trait_name: str) -> bool:
+        """Check if this unit possesses a specific trait or keyword."""
+        if self.unit_type is not None:
+            return self.unit_type.has_trait(trait_name)
+        return False
+
     @property
     def hp(self) -> int:
+
         return self.strength
+
+    @property
+    def current_role(self) -> str:
+        if self.active_role is not None:
+            return self.active_role
+        if self.unit_type and getattr(self.unit_type, "doctrine_profile", None):
+            return self.unit_type.doctrine_profile.default_role
+        return "SCREEN"
+
+    @property
+    def doctrine_profile(self):
+        return getattr(self.unit_type, "doctrine_profile", None)
 
     # ----------------------------
     def is_alive(self) -> bool:

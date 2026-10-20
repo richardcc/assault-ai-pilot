@@ -47,7 +47,14 @@ def _compact_eval_results(results_raw: Any) -> list[dict[str, Any]]:
         "mcts_q_clipped_count", "mcts_q_guardrail_clipped_count",
         "mcts_q_clip_denominator_count", "mcts_total_visits",
         "mcts_active_actions", "telemetry_coverage_status",
-        "step", "game_turn", "action_id", "action_kind", "unit_side"
+        "step", "game_turn", "action_id", "action_kind", "unit_side",
+        "macro_posture", "unit_macro_role", "role_assigned",
+        "role_is_mutated", "role_mutation_reason", "prior_boost_applied",
+        "badge_label", "policy_overridden_by_mcts", "strategy_label",
+        "is_mutated", "mutation_trigger", "unit_doctrine_role",
+        "vp_potential_reward_component", "vp_potential_delta",
+        "turn_urgency_factor", "turn_urgency_decay",
+        "paralysis_penalty", "paralysis_units_count"
     }
     for item in results_raw:
         if not isinstance(item, dict):
@@ -125,6 +132,10 @@ def _get_traceability_index(repo_root: Path) -> dict[str, dict[str, Any]]:
                     "curriculum_name": str(d.get("curriculum_name") or ""),
                     "promotion_decision": str(d.get("promotion_decision") or ""),
                     "gate_result_status": str(d.get("gate_result_status") or ""),
+                    "train_duration_seconds": d.get("train_duration_seconds"),
+                    "bench_duration_seconds": d.get("bench_duration_seconds"),
+                    "selfplay_duration_seconds": d.get("selfplay_duration_seconds"),
+                    "opt_duration_seconds": d.get("opt_duration_seconds"),
                 }
                 if tid:
                     index[tid] = entry
@@ -849,10 +860,12 @@ def load_model_detail_index_first(
         engine=str(engine or ""),
         model_id=canonical_model_id,
         offset=0,
-        limit=1,
+        limit=1000,
+        train_run_id="",
         include_payload=False,
     )
     total_model_evals = int(all_eval_page.get("total", 0) or 0)
+    all_eval_rows = list(all_eval_page.get("rows", []) or [])
     eval_rows = list(eval_page.get("rows", []) or [])
     total_initial_evals = int(eval_page.get("total", len(eval_rows)) or len(eval_rows))
     eval_out: list[dict[str, Any]] = [dict(x or {}) for x in eval_rows]
@@ -865,14 +878,51 @@ def load_model_detail_index_first(
     out["eval_history_visible_count"] = int(len(eval_out))
     out["eval_history_truncated"] = bool(len(eval_out) < total_initial_evals)
     out["initial_train_run_id"] = initial_train_run_id
+    def _unpack_scenarios(raw_items: Any) -> list[str]:
+        if not raw_items:
+            return []
+        if isinstance(raw_items, str):
+            candidates = [raw_items]
+        elif isinstance(raw_items, (list, tuple, set)):
+            candidates = list(raw_items)
+        else:
+            return []
+        out_sids: list[str] = []
+        for item in candidates:
+            s = str(item or "").strip()
+            if not s:
+                continue
+            if s.startswith("multi:"):
+                s = s[len("multi:") :].strip()
+            if "|" in s:
+                out_sids.extend([p.strip() for p in s.split("|") if p.strip()])
+            else:
+                out_sids.append(s)
+        seen_sids = set()
+        res_sids = []
+        for x in out_sids:
+            if x not in seen_sids:
+                seen_sids.add(x)
+                res_sids.append(x)
+        return res_sids
+
     scenario_train_counts: dict[str, int] = {}
     scenario_eval_counts: dict[str, int] = {}
     for tr in train_rows:
-        sids = [str(x).strip() for x in list(tr.get("scenario_ids", []) or []) if str(x).strip()]
+        sids = _unpack_scenarios(tr.get("scenario_ids") or tr.get("scenario_id"))
         for sid in sids:
             scenario_train_counts[sid] = scenario_train_counts.get(sid, 0) + 1
-    for ev in eval_out:
-        sids = [str(x).strip() for x in list(ev.get("scenario_ids", []) or []) if str(x).strip()]
+    for ev in all_eval_rows:
+        raw_sids = ev.get("scenario_ids")
+        if not raw_sids and ev.get("scenario_ids_json"):
+            try:
+                import json
+                raw_sids = json.loads(ev["scenario_ids_json"])
+            except Exception:
+                raw_sids = None
+        if not raw_sids:
+            raw_sids = ev.get("scenario_id")
+        sids = _unpack_scenarios(raw_sids)
         for sid in sids:
             scenario_eval_counts[sid] = scenario_eval_counts.get(sid, 0) + 1
     out["scenario_train_counts"] = scenario_train_counts

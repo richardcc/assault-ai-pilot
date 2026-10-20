@@ -31,7 +31,11 @@ class VOECSimulator:
     a stable, algorithm-agnostic contract.
     """
 
-    def __init__(self, assets: Optional[AssetPaths] = None):
+    def __init__(
+        self,
+        assets: Optional[AssetPaths] = None,
+        reward_shaping: Optional[Dict[str, Any]] = None,
+    ):
         self.assets = assets or AssetPaths()
         self._runtime: Optional[RuntimeGameState] = None
         self._state: Optional[GameState] = None
@@ -40,6 +44,11 @@ class VOECSimulator:
         self._max_turns: Optional[int] = None
         self._legal_actions_cache_key: Optional[tuple] = None
         self._legal_actions_cache_value: List[str] = []
+        self._reward_shaping_cfg: Optional[Dict[str, Any]] = reward_shaping
+        self._vp_calculator: Optional[Any] = None
+        self._passivity_tracker_by_side: Dict[str, Dict[str, int]] = {}
+        self._prev_snapshot: Optional[StateSnapshot] = None
+        self._prev_spatial: Optional[Dict[str, Any]] = None
 
     def new_episode(
         self,
@@ -82,6 +91,27 @@ class VOECSimulator:
         self._max_turns = int(scenario.max_turns) if scenario.max_turns is not None else None
         self._legal_actions_cache_key = None
         self._legal_actions_cache_value = []
+
+        if self._reward_shaping_cfg:
+            cfg = self._reward_shaping_cfg
+            from voec_sim.core.reward_calculator import VPPotentialCalculator
+            self._vp_calculator = VPPotentialCalculator(
+                controlled_vp_bonus=float(cfg.get("vp_potential_ctrl_bonus", 2.0) or 2.0),
+                gamma=float(cfg.get("vp_potential_gamma", 0.997) or 0.997),
+                shaping_scale=float(cfg.get("vp_potential_weight", 1.0) or 1.0),
+                urgency_decay_lambda=float(cfg.get("vp_urgency_lambda", 1.2) or 1.2),
+                paralysis_penalty_weight=float(cfg.get("paralysis_penalty_weight", 0.05) or 0.05),
+                cover_threshold=float(cfg.get("cover_threshold", 0.35) or 0.35),
+            )
+            self._passivity_tracker_by_side = {}
+            self._prev_snapshot = self.snapshot()
+            self._prev_spatial = self.spatial_features()
+        else:
+            self._vp_calculator = None
+            self._passivity_tracker_by_side = {}
+            self._prev_snapshot = None
+            self._prev_spatial = None
+
         return EpisodeHandle(scenario_id=scenario_id, seed=self._seed)
 
     def clone_state(self) -> GameState:
@@ -138,6 +168,11 @@ class VOECSimulator:
     def step(self, action_id: str) -> TransitionRecord:
         runtime = self._require_runtime()
         state = self._require_state()
+        before_snapshot = self._prev_snapshot or self.snapshot()
+        before_spatial = self._prev_spatial or self.spatial_features()
+        before_turn = int(before_snapshot.turn or 1)
+        active_side = str(getattr(runtime, "active_side", "") or "")
+
         class _StepEventBus:
             def __init__(self):
                 self.events = []
@@ -161,15 +196,59 @@ class VOECSimulator:
 
         done = bool(self._state.done)
         reward = self._terminal_reward(self._state)
+        current_snapshot = self.snapshot()
+        current_spatial = self.spatial_features()
+
+        info: Dict[str, Any] = {
+            "scenario_id": self._scenario_id,
+            "runtime_events": list(step_bus.events),
+        }
+
+        if self._vp_calculator is not None and active_side:
+            side_tracker = self._passivity_tracker_by_side.setdefault(active_side, {})
+            action_parts = str(action_id or "").split(":")
+            actor_uid = action_parts[1] if len(action_parts) > 1 else ""
+            action_kind = action_parts[0] if action_parts else ""
+
+            damage_dealt = 0.0
+            for evt in step_bus.events:
+                if str(evt.get("type", "")) == "ACTION_EFFECT":
+                    payload = dict(evt.get("payload", {}) or {})
+                    damage_dealt += float(payload.get("damage_applied", 0.0) or 0.0)
+
+            vp_shaping, vp_meta = self._vp_calculator.compute_step_shaping(
+                before_units=list(before_snapshot.units or []),
+                after_units=list(current_snapshot.units or []),
+                vp_hexes=list(current_spatial.get("vp_hexes", [])),
+                before_vp_owner=dict(before_spatial.get("vp_owner_by_hex", {})),
+                after_vp_owner=dict(current_spatial.get("vp_owner_by_hex", {})),
+                side=active_side,
+                done=done,
+                turn_before=before_turn,
+                turn_after=int(current_snapshot.turn or before_turn),
+                max_turns=self._max_turns or 8,
+                terrain_cover_by_hex=dict(current_spatial.get("terrain_cover_by_hex", {})),
+                action_kind=action_kind,
+                actor_unit_id=actor_uid,
+                damage_dealt=damage_dealt,
+                passivity_tracker=side_tracker,
+            )
+            reward += float(vp_shaping)
+            info["pbrs"] = vp_meta
+            info["turn_urgency_factor"] = float(vp_meta.get("turn_urgency_factor_before", 0.0))
+            info["turn_urgency_decay"] = float(vp_meta.get("turn_urgency_decay_before", 1.0))
+            info["paralysis_penalty"] = float(vp_meta.get("paralysis_penalty", 0.0))
+            info["paralysis_units_count"] = int(vp_meta.get("paralysis_units_count", 0))
+
+        self._prev_snapshot = current_snapshot
+        self._prev_spatial = current_spatial
+
         return TransitionRecord(
             action_id=action_id,
             reward=reward,
             done=done,
-            info={
-                "scenario_id": self._scenario_id,
-                "runtime_events": list(step_bus.events),
-            },
-            state=self.snapshot(),
+            info=info,
+            state=current_snapshot,
         )
 
     def is_terminal(self) -> bool:
@@ -211,6 +290,20 @@ class VOECSimulator:
                 r=u.position.r if u.position else None,
                 hp=getattr(u, "hp", None),
                 alive=bool(getattr(u, "alive", True)),
+                doctrine_role=getattr(
+                    u,
+                    "current_role",
+                    (
+                        getattr(u.unit_type.doctrine_profile, "default_role", None)
+                        if getattr(u, "unit_type", None) and getattr(u.unit_type, "doctrine_profile", None)
+                        else None
+                    ),
+                ),
+                doctrine_profile=(
+                    getattr(u.unit_type.doctrine_profile, "to_dict", lambda: None)()
+                    if getattr(u, "unit_type", None) and getattr(u.unit_type, "doctrine_profile", None)
+                    else None
+                ),
             )
             for u in state.units
         ]
@@ -338,7 +431,7 @@ class VOECSimulator:
             if q is None or r is None:
                 continue
             hex_state_by_key[f"{int(q)},{int(r)}"] = hex_state
-        vp_hexes: List[Dict[str, int]] = []
+        vp_hexes: List[Dict[str, Any]] = []
         vp_owner_by_hex: Dict[str, str] = {}
         victory = getattr(state, "victory", None)
         points = list(getattr(victory, "points", [])) if victory is not None else []
@@ -346,12 +439,24 @@ class VOECSimulator:
             q, r = _coord_to_qr(getattr(vp, "hex_coords", None))
             if q is None or r is None:
                 continue
-            vp_hexes.append({"q": int(q), "r": int(r)})
+            val = int(getattr(vp, "per_turn", 2) or 2)
+            vp_hexes.append({"q": int(q), "r": int(r), "value": val, "per_turn": val})
             key = f"{int(q)},{int(r)}"
             hex_state = hex_state_by_key.get(key)
             owner = getattr(hex_state, "ownership", None) if hex_state is not None else None
             side_owner = ownership_to_side.get(owner, "")
             vp_owner_by_hex[key] = str(side_owner)
+
+        unit_doctrine_roles: Dict[str, str] = {}
+        unit_optimal_ranges: Dict[str, List[int]] = {}
+        for u in state.units:
+            doc_prof = getattr(u.unit_type, "doctrine_profile", None) if getattr(u, "unit_type", None) else None
+            role = getattr(u, "current_role", None)
+            if role is None and doc_prof is not None:
+                role = getattr(doc_prof, "default_role", "SCREEN")
+            unit_doctrine_roles[u.unit_id] = str(role or "SCREEN")
+            if doc_prof is not None:
+                unit_optimal_ranges[u.unit_id] = list(doc_prof.optimal_engagement_range)
 
         return {
             "playable_hexes": playable_hexes,
@@ -363,6 +468,8 @@ class VOECSimulator:
             "terrain_type_by_hex": terrain_type_by_hex,
             "fortification_type_by_hex": fortification_type_by_hex,
             "fortification_edge_by_hex": fortification_edge_by_hex,
+            "unit_doctrine_roles": unit_doctrine_roles,
+            "unit_optimal_ranges": unit_optimal_ranges,
         }
 
     def _resolve_action_by_id(self, action_id: str) -> Any:

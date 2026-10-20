@@ -596,7 +596,7 @@ class EfficientZeroV2Trainer(EfficientZeroV2BaseTrainer):
         self._progress("forward_done")
         self.optimizer.zero_grad(set_to_none=True)
         self._progress("backward_start")
-        if self.gradient_balance_mode == "pcgrad" and not self._scaler.is_enabled():
+        if self.gradient_balance_mode == "pcgrad":
             task_losses = [policy_loss, value_loss, reward_loss]
             if self.objective_loss_weight > 0.0:
                 task_losses.append(self.objective_loss_weight * objective_loss)
@@ -610,7 +610,7 @@ class EfficientZeroV2Trainer(EfficientZeroV2BaseTrainer):
         else:
             loss.backward()
         self._progress("backward_done")
-        if self._scaler.is_enabled():
+        if self._scaler.is_enabled() and self.gradient_balance_mode != "pcgrad":
             self._scaler.unscale_(self.optimizer)
             grad_norm_t = torch.tensor(0.0, dtype=torch.float32, device=self.device)
             if self.compute_grad_norm:

@@ -3,6 +3,7 @@ from __future__ import annotations
 import math
 from typing import Dict, List, Optional
 
+from assault_bench.doctrine_metrics import compute_doctrine_role_metrics
 from assault_bench.telemetry_models import normalize_side_key
 from assault_bench.transform_ops import index_rows_by_int_key, to_dict_rows
 
@@ -554,7 +555,7 @@ def compute_decision_diagnostics_kpis(
         else None
     )
     rows_count = int(len(rows))
-    return {
+    diagnostics_dict = {
         "vp_approach_rate_eligible_steps": int(eligible_steps),
         "vp_approach_rate_positive_steps": int(vp_approach_steps),
         "vp_approach_rate": (
@@ -669,3 +670,5 @@ def compute_decision_diagnostics_kpis(
         ),
         "opportunity_conversion_turn_buckets_definition": "early: turn<=3, mid: turn 4-7, late: turn>=8",
     }
+    diagnostics_dict.update(compute_doctrine_role_metrics(rows))
+    return diagnostics_dict

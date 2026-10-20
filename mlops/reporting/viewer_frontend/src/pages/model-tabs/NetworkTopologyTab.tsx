@@ -111,14 +111,20 @@ const DEFAULT_CHANNELS_LIST: Array<{ idx: number; name: string; cat: string; des
   { idx: 21, name: "frontline_control", cat: "hex", desc: "Campo de potencial territorial [-1, +1] (difusión y control de línea de frente)." },
   { idx: 22, name: "ally_mobility_norm", cat: "units", desc: "Puntos de movimiento disponibles restantes de la escuadra activa." },
   { idx: 23, name: "enemy_indirect_mortar", cat: "units", desc: "1.0 para armas de tiro indirecto / morteros enemigos (50mm, 8cm)." },
-  { idx: 24, name: "ally_direct_range_norm", cat: "units", desc: "Alcance máximo de fuego directo de las armas aliadas." },
-  { idx: 25, name: "enemy_direct_range_norm", cat: "units", desc: "Alcance máximo de fuego directo enemigo." },
+  { idx: 24, name: "ally_direct_range_norm", cat: "units", desc: "Alcance de fuego directo y proyección 2D de footprint de alcance óptimo de combate aliado." },
+  { idx: 25, name: "enemy_direct_range_norm", cat: "units", desc: "Alcance de fuego directo y proyección 2D de footprint de alcance óptimo de combate enemigo." },
   { idx: 26, name: "ally_fire_coverage", cat: "units", desc: "Heatmap de cobertura de fuego directo aliado sobre cada casilla del mapa." },
   { idx: 27, name: "heavy_fortifications", cat: "terrain", desc: "Fortificaciones pesadas: +1.0 búnker/casamata, +0.70 trinchera/emplazamiento, +0.40 urbano de piedra defensivo." },
   { idx: 28, name: "ally_attack_power_norm", cat: "units", desc: "Poder de fuego ofensivo aliado (dados de combate normalizados)." },
   { idx: 29, name: "hazard_mines_and_wire", cat: "terrain", desc: "Peligros y obstáculos del terreno: +1.0 campos de minas, +0.60 alambradas de espino." },
   { idx: 30, name: "ally_defense_power_norm", cat: "units", desc: "Capacidad defensiva de las escuadras aliadas (dados de defensa normalizados)." },
   { idx: 31, name: "enemy_defense_power_norm", cat: "units", desc: "Capacidad defensiva de las escuadras enemigas (dados de defensa normalizados)." },
+  { idx: 32, name: "ally_doctrine_role", cat: "units", desc: "Codificación continua del rol doctrinal aliado (Spearhead=1.0, Fire Support=0.75, Recon=0.50, Screen=0.25)." },
+  { idx: 33, name: "enemy_doctrine_role", cat: "units", desc: "Codificación continua del rol doctrinal enemigo deducido o proyectado (Spearhead=1.0, Fire Support=0.75, Recon=0.50, Screen=0.25)." },
+  { idx: 34, name: "ally_optimal_footprint", cat: "units", desc: "Footprint 2D de alcance óptimo de combate aliado proyectado sobre el tablero." },
+  { idx: 35, name: "enemy_optimal_footprint", cat: "units", desc: "Footprint 2D de alcance óptimo de combate enemigo proyectado sobre el tablero." },
+  { idx: 36, name: "turn_urgency_pressure", cat: "global", desc: "Presión temporal continua (t/T) y campo de urgencia radial amplificado hacia VPs no capturados." },
+  { idx: 37, name: "paralysis_exposure_risk", cat: "units", desc: "Mapa de calor de riesgo de parálisis: escuadras aliadas expuestas fuera de cobertura sin maniobra ni fuego." },
 ];
 
 export function NetworkTopologyTab({
@@ -146,9 +152,85 @@ export function NetworkTopologyTab({
   const [isPlaying, setIsPlaying] = useState<boolean>(false);
   const [selectedNodeId, setSelectedNodeId] = useState<string>("representation");
   const [channelFilter, setChannelFilter] = useState<string>("all");
+  const [isExportingOnnx, setIsExportingOnnx] = useState(false);
+  const [onnxExportResult, setOnnxExportResult] = useState<any | null>(null);
+  const [onnxError, setOnnxError] = useState<string | null>(null);
+  const [copiedFolder, setCopiedFolder] = useState(false);
+
+  const handleOpenFolder = async () => {
+    if (!onnxExportResult?.run_id) return;
+    try {
+      await fetch(`/api/model/open-folder?run_id=${encodeURIComponent(onnxExportResult.run_id)}`);
+    } catch (err) {
+      console.warn('Failed to trigger open folder:', err);
+    }
+  };
+
+  const handleCopyFolder = () => {
+    if (!onnxExportResult?.export_dir) return;
+    navigator.clipboard?.writeText(onnxExportResult.export_dir);
+    setCopiedFolder(true);
+    setTimeout(() => setCopiedFolder(false), 2000);
+  };
+
+  const handleSaveFileWithPicker = async (downloadUrl: string, fileName: string) => {
+    if (typeof (window as any).showSaveFilePicker === 'function') {
+      try {
+        const handle = await (window as any).showSaveFilePicker({
+          suggestedName: fileName,
+          types: [
+            {
+              description: 'ONNX Neural Network Model (*.onnx)',
+              accept: { 'application/octet-stream': ['.onnx'] },
+            },
+          ],
+        });
+        const res = await fetch(downloadUrl);
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const blob = await res.blob();
+        const writable = await handle.createWritable();
+        await writable.write(blob);
+        await writable.close();
+        return;
+      } catch (err: any) {
+        if (err.name === 'AbortError') {
+          return;
+        }
+        console.warn('showSaveFilePicker failed, using fallback:', err);
+      }
+    }
+    const a = document.createElement('a');
+    a.href = downloadUrl;
+    a.download = fileName;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+  };
 
   // Dynamic parameters extracted from the selected train execution
   const runId = String(trainRow?.run_id || "execution");
+
+  const handleExportOnnx = async () => {
+    setIsExportingOnnx(true);
+    setOnnxError(null);
+    try {
+      const res = await fetch(`/api/model/export-onnx?run_id=${encodeURIComponent(runId)}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ run_id: runId }),
+      });
+      const data = await res.json();
+      if (data.ok) {
+        setOnnxExportResult(data);
+      } else {
+        setOnnxError(data.error || data.message || "Failed to export ONNX model.");
+      }
+    } catch (err: any) {
+      setOnnxError(err?.message || "Network error while exporting ONNX.");
+    } finally {
+      setIsExportingOnnx(false);
+    }
+  };
   const cfg = useMemo(() => (trainRow?.config || {}) as Dict, [trainRow]);
   const modelCfg = useMemo(() => ((cfg.model || {}) as Dict), [cfg]);
   const selfplayCfg = useMemo(() => ((cfg.selfplay || {}) as Dict), [cfg]);
@@ -382,6 +464,11 @@ export function NetworkTopologyTab({
     let fireSupportCount = 0;
     let defenderCount = 0;
     let flankCount = 0;
+    let reconCount = 0;
+    let closeDefCount = 0;
+    let reserveCount = 0;
+    let recoverCount = 0;
+    let mutatedCount = 0;
     let totalSteps = 0;
     let moveCount = 0;
     let fireCount = 0;
@@ -395,10 +482,20 @@ export function NetworkTopologyTab({
         for (const s of steps) {
           totalSteps += 1;
           const posture = String(s.macro_posture || "");
-          const role = String(s.unit_macro_role || "");
+          const role = String(s.unit_macro_role || s.role_assigned || s.unit_doctrine_role || "").toUpperCase();
           const action = String(s.action_id || s.action || "").toUpperCase();
 
           if (s.policy_overridden_by_mcts) mctsOverrideCount += 1;
+
+          if (
+            Boolean(s.is_mutated) ||
+            Boolean(s.role_is_mutated) ||
+            Boolean(s.doctrine_mutation) ||
+            (s.role_mutation_reason && s.role_mutation_reason !== "DEFAULT_PROFILE") ||
+            (s.mutation_trigger && s.mutation_trigger !== "DEFAULT_PROFILE")
+          ) {
+            mutatedCount += 1;
+          }
 
           if (action.startsWith("FIRE") || action.startsWith("ATTACK")) fireCount += 1;
           else if (action.startsWith("MOVE")) moveCount += 1;
@@ -409,7 +506,11 @@ export function NetworkTopologyTab({
           else if (posture === "ASSAULT_VP" || posture === "ASSAULT") assaultCount += 1;
 
           if (role.includes("FIRE_SUPPORT")) fireSupportCount += 1;
+          else if (role.includes("CLOSE_DEFENSE")) closeDefCount += 1;
           else if (role.includes("DEFENDER") || role.includes("OBJECTIVE_DEFENDER")) defenderCount += 1;
+          else if (role.includes("RECON")) reconCount += 1;
+          else if (role.includes("RESERVE") || role.includes("TACTICAL_RESERVE")) reserveCount += 1;
+          else if (role.includes("RECOVER")) recoverCount += 1;
           else if (role.includes("SCREEN") || role.includes("FLANK")) flankCount += 1;
           else if (role.includes("SPEARHEAD")) spearheadCount += 1;
         }
@@ -425,6 +526,12 @@ export function NetworkTopologyTab({
       fireSupportPct: totalSteps > 0 ? (fireSupportCount / totalSteps) * 100 : 0.0,
       defenderPct: totalSteps > 0 ? (defenderCount / totalSteps) * 100 : 0.0,
       flankPct: totalSteps > 0 ? (flankCount / totalSteps) * 100 : 0.0,
+      reconPct: totalSteps > 0 ? (reconCount / totalSteps) * 100 : 0.0,
+      closeDefPct: totalSteps > 0 ? (closeDefCount / totalSteps) * 100 : 0.0,
+      reservePct: totalSteps > 0 ? (reserveCount / totalSteps) * 100 : 0.0,
+      recoverPct: totalSteps > 0 ? (recoverCount / totalSteps) * 100 : 0.0,
+      mutatedPct: totalSteps > 0 ? (mutatedCount / totalSteps) * 100 : 0.0,
+      mutatedCount,
       movePct: totalSteps > 0 ? (moveCount / totalSteps) * 100 : 0.0,
       firePct: totalSteps > 0 ? (fireCount / totalSteps) * 100 : 0.0,
       oppPct: totalSteps > 0 ? (oppCount / totalSteps) * 100 : 0.0,
@@ -506,11 +613,13 @@ export function NetworkTopologyTab({
         inShape: `B × ${inChannels} canales × ${boardH} × ${boardW} hexágonos`,
         outShape: `B × ${inChannels} × ${boardH} × ${boardW}`,
         architecture: [
-          `Canales 0-5: Presencia y HP aliada/enemiga normalizada`,
-          `Canales 6-11: Turno, fin de partida, tipos infantería y apoyo`,
-          `Canales 12-18: Máscara jugable, costes terreno, cobertura, LOS y VP`,
-          `Canales 19-20: Coordenadas hexagonales axiales (q, r)`,
-          `Canales 21-${inChannels - 1}: Alcances directo/indirecto, movilidad y combate`
+          `Canales 0-5: Presencia y HP aliada/enemiga normalizada, supresión y crossfire`,
+          `Canales 6-11: Carrera de VPs, amenaza reactiva, HMGs, morteros indirectos y balance de fuego`,
+          `Canales 12-18: Máscara jugable, costes terreno, cobertura, LOS y campo radial hacia VPs`,
+          `Canales 19-20: Coordenadas hexagonales axiales normalizadas (q, r)`,
+          `Canales 21-25: Control de frente, movilidad y Footprint 2D de alcance óptimo de combate`,
+          `Canales 26-31: Cobertura de fuego aliada, fortificaciones pesadas, potencia ofensiva y defensiva`,
+          `Canales 32-${inChannels - 1}: Roles doctrinales continuos aliados/enemigos y proyecciones de footprint extendido`
         ],
         paramEstimate: "0 parámetros (Datos del Simulador)",
         receptiveField: `${boardH}×${boardW} Hexágonos (Resolución completa)`,
@@ -787,21 +896,22 @@ export function NetworkTopologyTab({
         : {}),
       macro_planner: {
         id: "macro_planner",
-        name: "Planificador Macro (Nivel 1)",
-        math: `\\pi_{macro}(o_t) \\to (\\text{Postura}, \\text{Roles}, \\text{VP Target})`,
-        role: "Planificador estratégico de nivel superior (Nivel 1 de la jerarquía HRL). Evalúa el escenario completo y asigna la postura doctrinal global del equipo (ASSAULT, DEFENSIVE, ZONE_SUPPRESS) y los roles tácticos a cada escuadra (SPEARHEAD, FIRE_SUPPORT, OBJECTIVE_DEFENDER, FLANK_SCREEN), modulando directamente los priors de búsqueda del árbol MCTS en tiempo de inferencia.",
+        name: "Planificador Macro & Perfilado Doctrinal (Jerarquía 3 Capas)",
+        math: `\\pi_{macro}(o_t) \\to (\\text{Postura}, \\text{Roles}_{[1..8]}, \\text{Mutaciones}) \\implies P_{mod}(a)`,
+        role: "Planificador estratégico de nivel superior (Nivel 1 de la jerarquía HRL v2.4.5). Evalúa el escenario completo, asigna la postura doctrinal global del equipo (ASSAULT_VP, DEFENSIVE_HOLD, ZONE_SUPPRESS), distribuye los 8 roles canónicos por unidad según su perfil doctrinal, y aplica reglas jerárquicas de mutación contextual modulando directamente los priors en la raíz del árbol MCTS (+35% π).",
         inShape: `B × ${inChannels} × ${boardH} × ${boardW} (Observación Directa del Tablero)`,
-        outShape: `Postura (1 de 3) + Roles por unidad + Modulación Prior (+35%)`,
+        outShape: `3 Posturas + 8 Roles Canónicos + 3 Reglas de Mutación Contextual + Prior Shaping (+35%)`,
         architecture: [
-          "Evaluación Global del Escenario (Control de VPs, balance de bajas y mapa de amenaza)",
-          "Inferencia de Postura Estratégica: ASSAULT_VP / DEFENSIVE_HOLD / ZONE_SUPPRESS",
-          "Asignación Doctrinal de Roles: Spearhead, Fire Support, Defender, Flank Screen",
-          "Modulación de Priors MCTS: P_mod(a) = P(a) * (1 + α * Boost(Postura, Rol, a))",
-          "Integración en el bucle de auto-juego y evaluación de EfficientZero v2"
+          "Capa 1: Invariantes Físico-Balísticas VOEC (Reglas, alcances, LOS, costes y resolución balística estricta)",
+          "Capa 2: Sesgo Doctrinal Inductivo y 8 Roles Canónicos (Spearhead, Fire Support, Close Def, Recon, Defender, Screen, Reserve, Recover)",
+          "3 Reglas Jerárquicas de Mutación Contextual (Presión VPs -> Spearhead, Moral/HP -> Recover, Aislamiento -> Close Defense)",
+          "Doctrina de Reserva Táctica Dunnigan & Cohesión Hyde (Supported / Friends Close / Isolated)",
+          "Modulación de Priors MCTS en Raíz: P_mod(a) = P(a) * (1 + α * Boost(Postura, Rol, a)) con +35%",
+          "Capa 3: Micro-táctica Autónoma Emergente (512 sims PUCT, 6 unroll, reanálisis off-policy, anulación por Q(s, a))"
         ],
-        paramEstimate: "Módulo Lógico-Estratégico HRL con Ponderación Doctrinal",
-        receptiveField: "Global (Todo el tablero y estado dinámico de unidades)",
-        details: "Actúa como Nivel 1 de la jerarquía de toma de decisiones. Impide que la búsqueda MCTS local (Nivel 2) se extravíe en mínimos locales o bucles pasivos al sesgar la exploración hacia los objetivos tácticos definidos.",
+        paramEstimate: "Módulo Lógico-Estratégico HRL con Ponderación Doctrinal de 3 Capas",
+        receptiveField: "Global (Todo el tablero, footprints 2D y estado dinámico de unidades)",
+        details: "Actúa como Nivel 1 de la jerarquía de toma de decisiones. Impide que la búsqueda MCTS local (Nivel 2) se extravíe en mínimos locales o bucles pasivos al sesgar la exploración hacia los objetivos tácticos definidos, manteniendo a la vez flexibilidad absoluta si Q(s,a) descubre una jugada superior imprevista.",
       },
     };
   }, [inChannels, boardH, boardW, hiddenDim, actionDim, dynamicsBlocks, predictionBlocks, encoderType, maxUnroll, consistencyUnroll, runId, mctsSims, isV2Optimized, hasThreatHead, hasAttritionHead, hasMoraleHead]);
@@ -1022,7 +1132,7 @@ export function NetworkTopologyTab({
             }}
           >
             <span>📐</span>
-            <span>Diagrama & Topología</span>
+            <span>Diagram &amp; Topology</span>
           </button>
           <button
             onClick={() => setSubTab("head-diagnostics")}
@@ -1041,8 +1151,8 @@ export function NetworkTopologyTab({
             }}
           >
             <span>🔬</span>
-            <span>Análisis de Cabezas (Head Diagnostics)</span>
-            <span style={{ fontSize: 9, background: "#065f46", color: "#34d399", padding: "1px 6px", borderRadius: 4, fontWeight: 700 }}>{activeHeads.length} Cabezas</span>
+            <span>Head Diagnostics</span>
+            <span style={{ fontSize: 9, background: "#065f46", color: "#34d399", padding: "1px 6px", borderRadius: 4, fontWeight: 700 }}>{activeHeads.length} Heads</span>
           </button>
           <button
             onClick={() => setSubTab("channel-attribution")}
@@ -1061,7 +1171,7 @@ export function NetworkTopologyTab({
             }}
           >
             <span>📊</span>
-            <span>Atribución de Canales</span>
+            <span>Channel Attribution</span>
             <span style={{ fontSize: 9, background: "#1e3a8a", color: "#93c5fd", padding: "1px 6px", borderRadius: 4, fontWeight: 700 }}>{inChannels} Ch</span>
           </button>
           <button
@@ -1081,13 +1191,13 @@ export function NetworkTopologyTab({
             }}
           >
             <span>♟️</span>
-            <span>Planificador Macro (Nivel 1)</span>
-            <span style={{ fontSize: 9, background: "#581c87", color: "#d8b4fe", padding: "1px 6px", borderRadius: 4, fontWeight: 700 }}>Jerarquía</span>
+            <span>Macro Planner &amp; Doctrine</span>
+            <span style={{ fontSize: 9, background: "#581c87", color: "#d8b4fe", padding: "1px 6px", borderRadius: 4, fontWeight: 700 }}>8 Roles • v2.4.5</span>
           </button>
         </div>
 
         <div style={{ display: "flex", alignItems: "center", gap: 3, background: "#0b1120", border: "1px solid #334155", borderRadius: 6, padding: "2px 4px" }}>
-          <span style={{ fontSize: 10, color: "#94a3b8", padding: "0 4px", fontWeight: 600 }}>Tamaño:</span>
+          <span style={{ fontSize: 10, color: "#94a3b8", padding: "0 4px", fontWeight: 600 }}>Size:</span>
           <button
             onClick={() => setDiagramSize("compact")}
             style={{
@@ -1132,12 +1242,220 @@ export function NetworkTopologyTab({
               fontWeight: diagramSize === "expanded" ? 700 : 500,
               cursor: "pointer",
             }}
-            title="Vista ampliada con máxima altura"
+            title="Expanded view with maximum height"
           >
-            🖥️ Ampliado
+            🖥️ Expanded
           </button>
         </div>
+
+        {/* ONNX Export Button */}
+        <button
+          onClick={handleExportOnnx}
+          disabled={isExportingOnnx}
+          style={{
+            background: isExportingOnnx ? "#334155" : "linear-gradient(135deg, #059669, #047857)",
+            color: "#ffffff",
+            border: "1px solid #10b981",
+            borderRadius: 6,
+            padding: "5px 12px",
+            fontSize: 11,
+            fontWeight: 700,
+            cursor: isExportingOnnx ? "wait" : "pointer",
+            display: "flex",
+            alignItems: "center",
+            gap: 6,
+            boxShadow: "0 2px 8px rgba(16, 185, 129, 0.25)",
+            transition: "all 0.15s ease-in-out",
+          }}
+          title="Export model components to ONNX format for visual inspection in Netron"
+        >
+          <span>{isExportingOnnx ? "⏳" : "📦"}</span>
+          <span>{isExportingOnnx ? "Exporting ONNX..." : "Export to ONNX (Netron)"}</span>
+        </button>
       </div>
+
+      {/* ONNX Export Result Card */}
+      {onnxExportResult && (
+        <div
+          style={{
+            background: "linear-gradient(145deg, #062419, #091a13)",
+            border: "1px solid #059669",
+            borderRadius: 8,
+            padding: "14px 18px",
+            marginBottom: 16,
+            boxShadow: "0 4px 20px rgba(5, 150, 105, 0.25)",
+            position: "relative",
+          }}
+        >
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 10 }}>
+            <div>
+              <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, fontWeight: 700, color: "#34d399" }}>
+                <span>✅</span>
+                <span>ONNX Models Successfully Generated</span>
+                <span style={{ fontSize: 10, background: "#065f46", color: "#a7f3d0", padding: "1px 6px", borderRadius: 4 }}>
+                  {onnxExportResult.files?.length || 0} Models Ready
+                </span>
+              </div>
+              <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", marginTop: 4 }}>
+                <div style={{ fontSize: 11, color: "#94a3b8" }}>
+                  Export directory: <code style={{ color: "#a7f3d0", background: "#0b1612", padding: "2px 6px", borderRadius: 4 }}>{onnxExportResult.export_dir}</code>
+                </div>
+                <button
+                  onClick={handleOpenFolder}
+                  style={{
+                    background: "#1e293b",
+                    color: "#38bdf8",
+                    border: "1px solid #0284c7",
+                    borderRadius: 4,
+                    padding: "2px 8px",
+                    fontSize: 10,
+                    fontWeight: 600,
+                    cursor: "pointer",
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: 4,
+                  }}
+                  title="Open folder in Windows File Explorer"
+                >
+                  <span>📂</span> Open Folder in Explorer
+                </button>
+                <button
+                  onClick={handleCopyFolder}
+                  style={{
+                    background: "#1e293b",
+                    color: copiedFolder ? "#34d399" : "#cbd5e1",
+                    border: "1px solid #475569",
+                    borderRadius: 4,
+                    padding: "2px 8px",
+                    fontSize: 10,
+                    fontWeight: 600,
+                    cursor: "pointer",
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: 4,
+                  }}
+                  title="Copy directory path to clipboard"
+                >
+                  <span>{copiedFolder ? "✓" : "📋"}</span> {copiedFolder ? "Copied!" : "Copy Path"}
+                </button>
+              </div>
+            </div>
+            <button
+              onClick={() => setOnnxExportResult(null)}
+              style={{
+                background: "transparent",
+                border: "none",
+                color: "#94a3b8",
+                cursor: "pointer",
+                fontSize: 16,
+                padding: "2px 6px",
+              }}
+              title="Close notification"
+            >
+              ✕
+            </button>
+          </div>
+
+          {/* Files List */}
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 10, marginTop: 10 }}>
+            {onnxExportResult.files?.map((f: any) => (
+              <div
+                key={f.name}
+                style={{
+                  background: "#0b1612",
+                  border: "1px solid #047857",
+                  borderRadius: 6,
+                  padding: "8px 12px",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  gap: 12,
+                  minWidth: 260,
+                  flex: "1 1 280px",
+                }}
+              >
+                <div>
+                  <div style={{ fontSize: 11, fontWeight: 700, color: "#f8fafc" }}>{f.name}</div>
+                  <div style={{ fontSize: 10, color: "#6ee7b7" }}>{f.label}</div>
+                  <div style={{ fontSize: 9, color: "#64748b" }}>{(f.size_bytes / 1024 / 1024).toFixed(2)} MB</div>
+                </div>
+                <button
+                  onClick={() => handleSaveFileWithPicker(f.download_url, f.name)}
+                  style={{
+                    background: "#059669",
+                    color: "#ffffff",
+                    border: "none",
+                    borderRadius: 4,
+                    padding: "6px 12px",
+                    fontSize: 11,
+                    fontWeight: 700,
+                    cursor: "pointer",
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 5,
+                    boxShadow: "0 2px 6px rgba(5, 150, 105, 0.4)",
+                    transition: "background 0.15s ease",
+                  }}
+                  title="Open 'Save As' window to choose destination folder"
+                >
+                  <span>💾</span> Save As...
+                </button>
+              </div>
+            ))}
+          </div>
+
+          {/* Netron Action Footer */}
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 12, paddingTop: 10, borderTop: "1px solid #04785750", flexWrap: "wrap", gap: 8 }}>
+            <span style={{ fontSize: 11, color: "#cbd5e1" }}>
+              💡 <strong>How to view:</strong> Download any file above and drag it into <a href="https://netron.app" target="_blank" rel="noopener noreferrer" style={{ color: "#38bdf8", textDecoration: "underline" }}>netron.app</a> or open in your Netron desktop app.
+            </span>
+            <a
+              href="https://netron.app"
+              target="_blank"
+              rel="noopener noreferrer"
+              style={{
+                background: "#0284c7",
+                color: "#ffffff",
+                borderRadius: 5,
+                padding: "5px 12px",
+                fontSize: 11,
+                fontWeight: 700,
+                textDecoration: "none",
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 5,
+              }}
+            >
+              <span>🌐</span> Open Netron (netron.app) ↗
+            </a>
+          </div>
+        </div>
+      )}
+
+      {onnxError && (
+        <div
+          style={{
+            background: "#450a0a",
+            border: "1px solid #b91c1c",
+            borderRadius: 6,
+            padding: "8px 12px",
+            marginBottom: 16,
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+            fontSize: 11,
+            color: "#fca5a5",
+          }}
+        >
+          <span>⚠️ {onnxError}</span>
+          <button
+            onClick={() => setOnnxError(null)}
+            style={{ background: "transparent", border: "none", color: "#fca5a5", cursor: "pointer" }}
+          >
+            ✕
+          </button>
+        </div>
+      )}
 
       {/* Execution Context Banner */}
       <div
@@ -1153,7 +1471,7 @@ export function NetworkTopologyTab({
         }}
       >
         <span style={{ fontSize: 12, color: "#60a5fa", fontWeight: 700, display: "flex", alignItems: "center", gap: 4 }}>
-          <span>📌</span> Ejecución activa:
+          <span>📌</span> Active Run:
         </span>
         <code style={{ color: "#38bdf8", fontWeight: 700, fontSize: 12 }}>{runId}</code>
         {trainRow?.created_at_utc ? (
@@ -1513,10 +1831,10 @@ export function NetworkTopologyTab({
                   stroke={selectedNodeId === "macro_planner" ? "#d8b4fe" : "#a855f7"}
                   strokeWidth={selectedNodeId === "macro_planner" ? "2.5" : "1.5"}
                 />
-                <text x="82" y="166" fill="#c084fc" fontSize="9" fontWeight="700" textAnchor="middle">NIVEL 1 • JERARQUÍA</text>
+                <text x="82" y="166" fill="#c084fc" fontSize="9" fontWeight="700" textAnchor="middle">NIVEL 1 • DOCTRINA</text>
                 <text x="82" y="184" fill="#ffffff" fontSize="11" fontWeight="800" textAnchor="middle">Planificador Macro</text>
-                <text x="82" y="200" fill="#e9d5ff" fontSize="9" textAnchor="middle">Posturas &amp; Roles</text>
-                <text x="82" y="215" fill="#c084fc" fontSize="8.5" fontWeight="600" textAnchor="middle">⚡ Priors MCTS (+35%)</text>
+                <text x="82" y="200" fill="#e9d5ff" fontSize="9" textAnchor="middle">8 Roles • Mutaciones</text>
+                <text x="82" y="215" fill="#38bdf8" fontSize="8.5" fontWeight="600" textAnchor="middle">⚡ Priors MCTS (+35% π)</text>
               </g>
 
               {/* Dynamic Active Prediction Heads */}
@@ -1666,17 +1984,18 @@ export function NetworkTopologyTab({
             <div style={{ background: "rgba(168, 85, 247, 0.1)", border: "1px solid #a855f7", borderRadius: 6, padding: "8px 10px" }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
                 <span style={{ fontSize: 11, fontWeight: 700, color: "#d8b4fe", display: "flex", alignItems: "center", gap: 4 }}>
-                  <span>♟️</span> Estado del Planificador Macro (Nivel 1)
+                  <span>♟️</span> Estado Doctrinal Macro (Jerarquía 3 Capas v2.4.5)
                 </span>
                 <span style={{ fontSize: 9, background: "#581c87", color: "#e9d5ff", padding: "1px 6px", borderRadius: 3, fontWeight: 700 }}>
-                  JERÁRQUICO ACTIVO
+                  8 ROLES CANÓNICOS
                 </span>
               </div>
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6, fontSize: 11 }}>
                 <div><span className="muted">Postura Dominante:</span> <b style={{ color: "#c084fc" }}>{macroStats.hasRealData ? (macroStats.assaultPct >= 50 ? "ASSAULT_VP" : "DEFENSIVE_HOLD") : "N/A"}</b></div>
                 <div><span className="muted">Asalto VP:</span> <b style={{ color: "#38bdf8" }}>{macroStats.hasRealData ? `${macroStats.assaultPct.toFixed(1)}%` : "N/A"}</b></div>
-                <div><span className="muted">Rol Vanguardia:</span> <b style={{ color: "#fbbf24" }}>{macroStats.hasRealData ? `${macroStats.spearheadPct.toFixed(1)}%` : "N/A"}</b></div>
-                <div><span className="muted">Apoyo de Fuego:</span> <b style={{ color: "#34d399" }}>{macroStats.hasRealData ? `${macroStats.fireSupportPct.toFixed(1)}%` : "N/A"}</b></div>
+                <div><span className="muted">Punta de Lanza:</span> <b style={{ color: "#fbbf24" }}>{macroStats.hasRealData ? `${macroStats.spearheadPct.toFixed(1)}%` : "N/A"}</b></div>
+                <div><span className="muted">Apoyo de Fuego:</span> <b style={{ color: "#fb923c" }}>{macroStats.hasRealData ? `${macroStats.fireSupportPct.toFixed(1)}%` : "N/A"}</b></div>
+                <div><span className="muted">Mutaciones Context.:</span> <b style={{ color: "#f43f5e" }}>{macroStats.hasRealData ? `${macroStats.mutatedPct.toFixed(1)}%` : "N/A"}</b></div>
                 <div><span className="muted">Sobreescritura MCTS:</span> <b style={{ color: "#f59e0b" }}>{macroStats.hasRealData ? `${macroStats.mctsOverridePct.toFixed(1)}%` : "N/A"}</b></div>
               </div>
               <button
@@ -1698,7 +2017,7 @@ export function NetworkTopologyTab({
                   gap: 6,
                 }}
               >
-                <span>♟️</span> Abrir Panel Completo de Planificador Macro ➔
+                <span>♟️</span> Abrir Panel de Planificador Macro &amp; Doctrina ➔
               </button>
             </div>
           )}
@@ -2836,43 +3155,97 @@ export function NetworkTopologyTab({
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: 10 }}>
             <div>
               <h4 style={{ margin: 0, fontSize: 16, color: "#38bdf8", display: "flex", alignItems: "center", gap: 8 }}>
-                <span>♟️</span> Planificador Jerárquico Estratégico (Nivel 1: Macro-Estrategia & Roles)
+                <span>♟️</span> Planificador Jerárquico Macro &amp; Perfilado Doctrinal (Jerarquía 3 Capas v2.4.5)
               </h4>
-              <div className="muted" style={{ fontSize: 12, marginTop: 4, maxWidth: 850 }}>
-                Arquitectura de toma de decisiones jerárquica en dos niveles: Desacopla la visión global del escenario (control de VPs, selección de postura macro y roles doctrinales por unidad) de la búsqueda en árbol de micro-maniobras tácticas (MCTS PUCT de 512 simulaciones y 6 pasos de unroll).
+              <div className="muted" style={{ fontSize: 12, marginTop: 4, maxWidth: 880 }}>
+                Arquitectura de toma de decisiones desacoplada en tres niveles: <b>Capa 1 Físico-Balística (VOEC)</b>, <b>Capa 2 Sesgo Doctrinal Inductivo (8 roles canónicos, footprints 2D y 3 reglas jerárquicas de mutación contextual)</b> y <b>Capa 3 Micro-Táctica Autónoma Emergente (MCTS PUCT de 512 simulaciones y 6 pasos de unroll)</b>.
               </div>
             </div>
-            <div style={{ display: "flex", gap: 6 }}>
+            <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
               <span style={{ fontSize: 11, background: "rgba(126, 34, 206, 0.25)", border: "1px solid #a855f7", color: "#d8b4fe", padding: "4px 10px", borderRadius: 6, fontWeight: 700 }}>
-                Hierarchical Reinforcement Learning (HRL)
+                3 Capas Ontológicas
+              </span>
+              <span style={{ fontSize: 11, background: "rgba(234, 179, 8, 0.25)", border: "1px solid #eab308", color: "#fef08a", padding: "4px 10px", borderRadius: 6, fontWeight: 700 }}>
+                8 Roles Canónicos
+              </span>
+              <span style={{ fontSize: 11, background: "rgba(34, 197, 94, 0.25)", border: "1px solid #22c55e", color: "#86efac", padding: "4px 10px", borderRadius: 6, fontWeight: 700 }}>
+                Prior Shaping (+35% π)
               </span>
               <span style={{ fontSize: 11, background: "rgba(2, 132, 199, 0.25)", border: "1px solid #0284c7", color: "#38bdf8", padding: "4px 10px", borderRadius: 6, fontWeight: 700 }}>
-                EfficientZero v2 Active
+                v2.4.5 Activo
               </span>
+            </div>
+          </div>
+
+          {/* TOP ARCHITECTURAL BREAKDOWN: THE 3 ONTOLOGICAL LAYERS */}
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: 12 }}>
+            {/* Layer 1 */}
+            <div style={{ background: "#0b1329", border: "1px solid #1e3a8a", borderRadius: 8, padding: 12, display: "flex", flexDirection: "column", gap: 6 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                <span style={{ fontSize: 12, fontWeight: 800, color: "#38bdf8", textTransform: "uppercase" }}>
+                  1. Capa Físico-Balística
+                </span>
+                <span style={{ fontSize: 9, background: "#1e3a8a", color: "#bfdbfe", padding: "1px 6px", borderRadius: 3, fontWeight: 700 }}>
+                  VOEC Hard Rules
+                </span>
+              </div>
+              <div style={{ fontSize: 11, color: "#cbd5e1", lineHeight: 1.4 }}>
+                Invariantes mecánicos e inviolables del simulador: línea de visión (LOS) hexágono a hexágono, alcances estrictos de tiro, costes de movimiento, blindajes y tabla balística. La IA no puede transgredir la física ni disparar fuera de alcance.
+              </div>
+            </div>
+
+            {/* Layer 2 */}
+            <div style={{ background: "#1a1329", border: "1px solid #7e22ce", borderRadius: 8, padding: 12, display: "flex", flexDirection: "column", gap: 6 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                <span style={{ fontSize: 12, fontWeight: 800, color: "#d8b4fe", textTransform: "uppercase" }}>
+                  2. Capa Doctrinal Inductiva
+                </span>
+                <span style={{ fontSize: 9, background: "#581c87", color: "#f3e8ff", padding: "1px 6px", borderRadius: 3, fontWeight: 700 }}>
+                  Soft Inductive Bias
+                </span>
+              </div>
+              <div style={{ fontSize: 11, color: "#cbd5e1", lineHeight: 1.4 }}>
+                Catálogo de 8 roles canónicos, huellas 2D de alcance óptimo (canales 24/25), 3 reglas jerárquicas de mutación contextual y modulación de priors (+35% π) en la raíz MCTS. Orienta inductivamente a las escuadras hacia su función militar idónea sin encorsetar rígidamente.
+              </div>
+            </div>
+
+            {/* Layer 3 */}
+            <div style={{ background: "#062318", border: "1px solid #047857", borderRadius: 8, padding: 12, display: "flex", flexDirection: "column", gap: 6 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                <span style={{ fontSize: 12, fontWeight: 800, color: "#4ade80", textTransform: "uppercase" }}>
+                  3. Capa Micro-Táctica
+                </span>
+                <span style={{ fontSize: 9, background: "#065f46", color: "#a7f3d0", padding: "1px 6px", borderRadius: 3, fontWeight: 700 }}>
+                  Emergente / RL Puro
+                </span>
+              </div>
+              <div style={{ fontSize: 11, color: "#cbd5e1", lineHeight: 1.4 }}>
+                Búsqueda Monte Carlo profunda (512 simulaciones, 6 pasos unroll) y reanálisis off-policy. Descubre sutilezas tácticas autónomas: emboscadas en cobertura, fuego combinado de supresión y asalto, y anulación del prior por Q(s, a) si halla una jugada superior.
+              </div>
             </div>
           </div>
 
           {/* KPI Summary Cards */}
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 10 }}>
             <div style={{ background: "#0f172a", border: "1px solid #334155", borderRadius: 6, padding: "10px 12px" }}>
-              <div className="muted" style={{ fontSize: 10, textTransform: "uppercase" }}>Posturas Estratégicas</div>
-              <div style={{ fontSize: 16, fontWeight: 800, color: "#f8fafc", marginTop: 2 }}>3 Modos Operacionales</div>
-              <div style={{ fontSize: 11, color: "#94a3b8", marginTop: 2 }}>ASSAULT_VP • DEFENSIVE_HOLD • ZONE_SUPPRESS</div>
+              <div className="muted" style={{ fontSize: 10, textTransform: "uppercase" }}>Posturas Estratégicas (Nivel 1)</div>
+              <div style={{ fontSize: 15, fontWeight: 800, color: "#f8fafc", marginTop: 2 }}>3 Modos Operacionales</div>
+              <div style={{ fontSize: 10.5, color: "#94a3b8", marginTop: 2 }}>ASSAULT_VP • DEFENSIVE_HOLD • ZONE_SUPPRESS</div>
             </div>
             <div style={{ background: "#0f172a", border: "1px solid #334155", borderRadius: 6, padding: "10px 12px" }}>
-              <div className="muted" style={{ fontSize: 10, textTransform: "uppercase" }}>Roles de Escuadra</div>
-              <div style={{ fontSize: 16, fontWeight: 800, color: "#facc15", marginTop: 2 }}>4 Doctrinas Tácticas</div>
-              <div style={{ fontSize: 11, color: "#94a3b8", marginTop: 2 }}>Spearhead • Fire Support • Defender • Screen</div>
+              <div className="muted" style={{ fontSize: 10, textTransform: "uppercase" }}>Roles Doctrinales de Escuadra</div>
+              <div style={{ fontSize: 15, fontWeight: 800, color: "#facc15", marginTop: 2 }}>8 Roles Canónicos</div>
+              <div style={{ fontSize: 10.5, color: "#94a3b8", marginTop: 2 }}>Spearhead • Fire Support • Close Def • Recon...</div>
+            </div>
+            <div style={{ background: "#0f172a", border: "1px solid #334155", borderRadius: 6, padding: "10px 12px" }}>
+              <div className="muted" style={{ fontSize: 10, textTransform: "uppercase" }}>Reglas de Mutación Contextual</div>
+              <div style={{ fontSize: 15, fontWeight: 800, color: "#f43f5e", marginTop: 2 }}>3 Reglas Jerárquicas</div>
+              <div style={{ fontSize: 10.5, color: "#94a3b8", marginTop: 2 }}>Presión VPs • Moral/Salud • Aislamiento Apoyo</div>
             </div>
             <div style={{ background: "#0f172a", border: "1px solid #334155", borderRadius: 6, padding: "10px 12px" }}>
               <div className="muted" style={{ fontSize: 10, textTransform: "uppercase" }}>Modulación MCTS Prior</div>
-              <div style={{ fontSize: 16, fontWeight: 800, color: "#22c55e", marginTop: 2 }}>+35% Prior Shaping</div>
-              <div style={{ fontSize: 11, color: "#94a3b8", marginTop: 2 }}>Guía el árbol hacia objetivos coherentes</div>
-            </div>
-            <div style={{ background: "#0f172a", border: "1px solid #334155", borderRadius: 6, padding: "10px 12px" }}>
-              <div className="muted" style={{ fontSize: 10, textTransform: "uppercase" }}>Profundidad MCTS Nivel 2</div>
-              <div style={{ fontSize: 16, fontWeight: 800, color: "#38bdf8", marginTop: 2 }}>512 Sims / 6 Unroll</div>
-              <div style={{ fontSize: 11, color: "#94a3b8", marginTop: 2 }}>Búsqueda profunda sin extravío táctico</div>
+              <div style={{ fontSize: 15, fontWeight: 800, color: "#22c55e", marginTop: 2 }}>+35% Prior Shaping</div>
+              <div style={{ fontSize: 10.5, color: "#94a3b8", marginTop: 2 }}>P_mod(a) = P(a) * (1 + 0.35) en la raíz</div>
             </div>
           </div>
 
@@ -2958,58 +3331,101 @@ export function NetworkTopologyTab({
                 </div>
               </div>
 
-              {/* Box 2: Roles de Escuadra */}
+              {/* Box 2: Los 8 Roles Doctrinales Canónicos */}
               <div style={{ background: "#1e293b", padding: 10, borderRadius: 6, display: "flex", flexDirection: "column", gap: 8 }}>
-                <div style={{ fontSize: 11, fontWeight: 700, color: "#f8fafc", textTransform: "uppercase" }}>
-                  2. Roles Tácticos de Unidades
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  <div style={{ fontSize: 11, fontWeight: 700, color: "#f8fafc", textTransform: "uppercase" }}>
+                    2. Los 8 Roles Doctrinales en Batalla
+                  </div>
+                  <span style={{ fontSize: 9, color: "#94a3b8" }}>Canónicos</span>
                 </div>
-                <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "6px 12px" }}>
                   <div>
-                    <div style={{ display: "flex", justifyContent: "space-between", fontSize: 10, marginBottom: 2 }}>
-                      <span style={{ color: "#facc15", fontWeight: 700 }}>⚡ Punta de Lanza (Choque)</span>
+                    <div style={{ display: "flex", justifyContent: "space-between", fontSize: 9.5, marginBottom: 2 }}>
+                      <span style={{ color: "#facc15", fontWeight: 700 }}>⚡ Punta de Lanza</span>
                       <span style={{ color: "#cbd5e1" }}>{macroStats.hasRealData ? `${macroStats.spearheadPct.toFixed(1)}%` : "N/A"}</span>
                     </div>
-                    <div style={{ background: "#0f172a", height: 6, borderRadius: 3, overflow: "hidden" }}>
+                    <div style={{ background: "#0f172a", height: 5, borderRadius: 3, overflow: "hidden" }}>
                       <div style={{ width: `${macroStats.hasRealData ? macroStats.spearheadPct : 0}%`, height: "100%", background: "#eab308" }} />
                     </div>
                   </div>
 
                   <div>
-                    <div style={{ display: "flex", justifyContent: "space-between", fontSize: 10, marginBottom: 2 }}>
-                      <span style={{ color: "#fb923c", fontWeight: 700 }}>🎯 Apoyo de Fuego (Pesadas)</span>
+                    <div style={{ display: "flex", justifyContent: "space-between", fontSize: 9.5, marginBottom: 2 }}>
+                      <span style={{ color: "#fb923c", fontWeight: 700 }}>🎯 Apoyo de Fuego</span>
                       <span style={{ color: "#cbd5e1" }}>{macroStats.hasRealData ? `${macroStats.fireSupportPct.toFixed(1)}%` : "N/A"}</span>
                     </div>
-                    <div style={{ background: "#0f172a", height: 6, borderRadius: 3, overflow: "hidden" }}>
+                    <div style={{ background: "#0f172a", height: 5, borderRadius: 3, overflow: "hidden" }}>
                       <div style={{ width: `${macroStats.hasRealData ? macroStats.fireSupportPct : 0}%`, height: "100%", background: "#f97316" }} />
                     </div>
                   </div>
 
                   <div>
-                    <div style={{ display: "flex", justifyContent: "space-between", fontSize: 10, marginBottom: 2 }}>
-                      <span style={{ color: "#60a5fa", fontWeight: 700 }}>🛡️ Defensor VP (Perímetro)</span>
+                    <div style={{ display: "flex", justifyContent: "space-between", fontSize: 9.5, marginBottom: 2 }}>
+                      <span style={{ color: "#ef4444", fontWeight: 700 }}>⚔️ Defensa Cercana</span>
+                      <span style={{ color: "#cbd5e1" }}>{macroStats.hasRealData ? `${macroStats.closeDefPct.toFixed(1)}%` : "N/A"}</span>
+                    </div>
+                    <div style={{ background: "#0f172a", height: 5, borderRadius: 3, overflow: "hidden" }}>
+                      <div style={{ width: `${macroStats.hasRealData ? macroStats.closeDefPct : 0}%`, height: "100%", background: "#ef4444" }} />
+                    </div>
+                  </div>
+
+                  <div>
+                    <div style={{ display: "flex", justifyContent: "space-between", fontSize: 9.5, marginBottom: 2 }}>
+                      <span style={{ color: "#38bdf8", fontWeight: 700 }}>🔭 Reconocimiento</span>
+                      <span style={{ color: "#cbd5e1" }}>{macroStats.hasRealData ? `${macroStats.reconPct.toFixed(1)}%` : "N/A"}</span>
+                    </div>
+                    <div style={{ background: "#0f172a", height: 5, borderRadius: 3, overflow: "hidden" }}>
+                      <div style={{ width: `${macroStats.hasRealData ? macroStats.reconPct : 0}%`, height: "100%", background: "#38bdf8" }} />
+                    </div>
+                  </div>
+
+                  <div>
+                    <div style={{ display: "flex", justifyContent: "space-between", fontSize: 9.5, marginBottom: 2 }}>
+                      <span style={{ color: "#60a5fa", fontWeight: 700 }}>🛡️ Defensor VP</span>
                       <span style={{ color: "#cbd5e1" }}>{macroStats.hasRealData ? `${macroStats.defenderPct.toFixed(1)}%` : "N/A"}</span>
                     </div>
-                    <div style={{ background: "#0f172a", height: 6, borderRadius: 3, overflow: "hidden" }}>
+                    <div style={{ background: "#0f172a", height: 5, borderRadius: 3, overflow: "hidden" }}>
                       <div style={{ width: `${macroStats.hasRealData ? macroStats.defenderPct : 0}%`, height: "100%", background: "#3b82f6" }} />
                     </div>
                   </div>
 
                   <div>
-                    <div style={{ display: "flex", justifyContent: "space-between", fontSize: 10, marginBottom: 2 }}>
-                      <span style={{ color: "#c084fc", fontWeight: 700 }}>👁️ Flanqueo & Vigilancia</span>
+                    <div style={{ display: "flex", justifyContent: "space-between", fontSize: 9.5, marginBottom: 2 }}>
+                      <span style={{ color: "#c084fc", fontWeight: 700 }}>👁️ Pantalla Flanco</span>
                       <span style={{ color: "#cbd5e1" }}>{macroStats.hasRealData ? `${macroStats.flankPct.toFixed(1)}%` : "N/A"}</span>
                     </div>
-                    <div style={{ background: "#0f172a", height: 6, borderRadius: 3, overflow: "hidden" }}>
+                    <div style={{ background: "#0f172a", height: 5, borderRadius: 3, overflow: "hidden" }}>
                       <div style={{ width: `${macroStats.hasRealData ? macroStats.flankPct : 0}%`, height: "100%", background: "#8b5cf6" }} />
+                    </div>
+                  </div>
+
+                  <div>
+                    <div style={{ display: "flex", justifyContent: "space-between", fontSize: 9.5, marginBottom: 2 }}>
+                      <span style={{ color: "#a855f7", fontWeight: 700 }}>🏛️ Reserva Táctica</span>
+                      <span style={{ color: "#cbd5e1" }}>{macroStats.hasRealData ? `${macroStats.reservePct.toFixed(1)}%` : "N/A"}</span>
+                    </div>
+                    <div style={{ background: "#0f172a", height: 5, borderRadius: 3, overflow: "hidden" }}>
+                      <div style={{ width: `${macroStats.hasRealData ? macroStats.reservePct : 0}%`, height: "100%", background: "#a855f7" }} />
+                    </div>
+                  </div>
+
+                  <div>
+                    <div style={{ display: "flex", justifyContent: "space-between", fontSize: 9.5, marginBottom: 2 }}>
+                      <span style={{ color: "#f43f5e", fontWeight: 700 }}>🩹 Recuperación</span>
+                      <span style={{ color: "#cbd5e1" }}>{macroStats.hasRealData ? `${macroStats.recoverPct.toFixed(1)}%` : "N/A"}</span>
+                    </div>
+                    <div style={{ background: "#0f172a", height: 5, borderRadius: 3, overflow: "hidden" }}>
+                      <div style={{ width: `${macroStats.hasRealData ? macroStats.recoverPct : 0}%`, height: "100%", background: "#f43f5e" }} />
                     </div>
                   </div>
                 </div>
               </div>
 
-              {/* Box 3: Maniobras y Corrección MCTS */}
+              {/* Box 3: Dinámica de Combate, Mutaciones & MCTS */}
               <div style={{ background: "#1e293b", padding: 10, borderRadius: 6, display: "flex", flexDirection: "column", gap: 8 }}>
                 <div style={{ fontSize: 11, fontWeight: 700, color: "#f8fafc", textTransform: "uppercase" }}>
-                  3. Tipo de Maniobras & Árbol MCTS
+                  3. Dinámica de Combate, Mutaciones &amp; MCTS
                 </div>
                 <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
                   <div>
@@ -3017,28 +3433,42 @@ export function NetworkTopologyTab({
                       <span style={{ color: "#38bdf8", fontWeight: 700 }}>🏃 Maniobra / Avance</span>
                       <span style={{ color: "#cbd5e1" }}>{macroStats.hasRealData ? `${macroStats.movePct.toFixed(1)}%` : "N/A"}</span>
                     </div>
-                    <div style={{ background: "#0f172a", height: 6, borderRadius: 3, overflow: "hidden" }}>
+                    <div style={{ background: "#0f172a", height: 5, borderRadius: 3, overflow: "hidden" }}>
                       <div style={{ width: `${macroStats.hasRealData ? macroStats.movePct : 0}%`, height: "100%", background: "#0284c7" }} />
                     </div>
                   </div>
 
                   <div>
                     <div style={{ display: "flex", justifyContent: "space-between", fontSize: 10, marginBottom: 2 }}>
-                      <span style={{ color: "#ef4444", fontWeight: 700 }}>💥 Fuego & Ataque</span>
+                      <span style={{ color: "#ef4444", fontWeight: 700 }}>💥 Fuego &amp; Ataque</span>
                       <span style={{ color: "#cbd5e1" }}>{macroStats.hasRealData ? `${macroStats.firePct.toFixed(1)}%` : "N/A"}</span>
                     </div>
-                    <div style={{ background: "#0f172a", height: 6, borderRadius: 3, overflow: "hidden" }}>
+                    <div style={{ background: "#0f172a", height: 5, borderRadius: 3, overflow: "hidden" }}>
                       <div style={{ width: `${macroStats.hasRealData ? macroStats.firePct : 0}%`, height: "100%", background: "#ef4444" }} />
                     </div>
                   </div>
 
-                  <div style={{ marginTop: 4, background: "#0f172a", padding: "6px 8px", borderRadius: 4, borderLeft: "3px solid #38bdf8" }}>
-                    <div style={{ fontSize: 10, color: "#94a3b8" }}>Corrección Estratégica MCTS:</div>
-                    <div style={{ fontSize: 11, fontWeight: 700, color: "#38bdf8", marginTop: 2 }}>
-                      {macroStats.hasRealData ? `${macroStats.mctsOverridePct.toFixed(1)}% de las decisiones` : "N/A"}
+                  <div style={{ marginTop: 2, background: "#0f172a", padding: "5px 8px", borderRadius: 4, borderLeft: "3px solid #f43f5e" }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                      <span style={{ fontSize: 9.5, color: "#f43f5e", fontWeight: 700 }}>⚡ Mutaciones Contextuales:</span>
+                      <span style={{ fontSize: 10.5, fontWeight: 800, color: "#f43f5e" }}>
+                        {macroStats.hasRealData ? `${macroStats.mutatedPct.toFixed(1)}%` : "N/A"}
+                      </span>
                     </div>
                     <div className="muted" style={{ fontSize: 9 }}>
-                      {macroStats.hasRealData ? "El árbol MCTS reorientó el prior neural para imponer la postura del planificador." : "Requiere partidas evaluadas."}
+                      {macroStats.hasRealData ? `${macroStats.mutatedCount} decisiones con cambio dinámico de rol.` : "Evaluación requerida."}
+                    </div>
+                  </div>
+
+                  <div style={{ background: "#0f172a", padding: "5px 8px", borderRadius: 4, borderLeft: "3px solid #38bdf8" }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                      <span style={{ fontSize: 9.5, color: "#38bdf8", fontWeight: 700 }}>🧠 Sobreescritura MCTS:</span>
+                      <span style={{ fontSize: 10.5, fontWeight: 800, color: "#38bdf8" }}>
+                        {macroStats.hasRealData ? `${macroStats.mctsOverridePct.toFixed(1)}%` : "N/A"}
+                      </span>
+                    </div>
+                    <div className="muted" style={{ fontSize: 9 }}>
+                      {macroStats.hasRealData ? "El árbol MCTS corrigió el prior neural para imponer la postura." : "Evaluación requerida."}
                     </div>
                   </div>
                 </div>
@@ -3046,7 +3476,7 @@ export function NetworkTopologyTab({
             </div>
           </div>
 
-          {/* TWO MAIN COLUMNS: POSTURES & ROLES */}
+          {/* TWO MAIN COLUMNS: POSTURES & COMPLETE 8 ROLES CATALOG */}
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
             {/* COLUMN 1: POSTURAS ESTRATÉGICAS */}
             <div style={{ background: "#0f172a", border: "1px solid #334155", borderRadius: 8, padding: 14, display: "flex", flexDirection: "column", gap: 10 }}>
@@ -3106,76 +3536,257 @@ export function NetworkTopologyTab({
               </div>
             </div>
 
-            {/* COLUMN 2: ROLES TÁCTICOS */}
+            {/* COLUMN 2: REGLAS JERÁRQUICAS DE MUTACIÓN CONTEXTUAL */}
             <div style={{ background: "#0f172a", border: "1px solid #334155", borderRadius: 8, padding: 14, display: "flex", flexDirection: "column", gap: 10 }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                <span style={{ fontSize: 13, fontWeight: 800, color: "#facc15", textTransform: "uppercase", display: "flex", alignItems: "center", gap: 6 }}>
-                  <span>👥</span> Asignación Dinámica de Roles
+                <span style={{ fontSize: 13, fontWeight: 800, color: "#f43f5e", textTransform: "uppercase", display: "flex", alignItems: "center", gap: 6 }}>
+                  <span>⚡</span> 3 Reglas Jerárquicas de Mutación Contextual
                 </span>
-                <span style={{ fontSize: 10, color: "#64748b" }}>Por unidad y armamento</span>
+                <span style={{ fontSize: 10, color: "#64748b" }}>Prioridad Estricta en Ejecución</span>
               </div>
               <div style={{ fontSize: 11, color: "#cbd5e1" }}>
-                Cada escuadra recibe un rol específico que condiciona su función en el combate y sus priors MCTS:
+                En cada paso de inferencia, las escuadras evalúan en cascada estas reglas para adaptar dinámicamente su rol frente a la evolución del combate:
               </div>
 
-              {/* ROLE 1: SPEARHEAD */}
+              {/* RULE 2: MORALE & CRITICAL HEALTH */}
+              <div style={{ background: "#1e293b", border: "1px solid #f43f5e", borderRadius: 6, padding: 10 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
+                  <span style={{ fontSize: 12, fontWeight: 800, color: "#fda4af", display: "flex", alignItems: "center", gap: 6 }}>
+                    <span>🚨</span> Prioridad 1: Moral y Salud Crítica
+                  </span>
+                  <span style={{ fontSize: 9, background: "rgba(244, 63, 94, 0.2)", color: "#fecdd3", padding: "1px 6px", borderRadius: 3, fontWeight: 700 }}>
+                    ➔ ROLE_RECOVER
+                  </span>
+                </div>
+                <div style={{ fontSize: 11, color: "#cbd5e1" }}>
+                  <b>Trigger:</b> Unidad en <code>PINNED</code>, <code>SUPPRESSED</code>, <code>FALLBACK</code>, o fuerza &le; umbral de repliegue o regla del 50% de Hyde fuera de edificios (BUA) o VPs. <b>Efecto:</b> Muta de inmediato a <code>ROLE_RECOVER</code> para priorizar cobertura, reagrupamiento y evitar la destrucción.
+                </div>
+              </div>
+
+              {/* RULE 3: FLANKED HEAVY SUPPORT */}
+              <div style={{ background: "#1e293b", border: "1px solid #ef4444", borderRadius: 6, padding: 10 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
+                  <span style={{ fontSize: 12, fontWeight: 800, color: "#f87171", display: "flex", alignItems: "center", gap: 6 }}>
+                    <span>⚠️</span> Prioridad 2: Aislamiento / Flanqueo Inmediato
+                  </span>
+                  <span style={{ fontSize: 9, background: "rgba(239, 68, 68, 0.2)", color: "#fca5a5", padding: "1px 6px", borderRadius: 3, fontWeight: 700 }}>
+                    ➔ ROLE_CLOSE_DEFENSE
+                  </span>
+                </div>
+                <div style={{ fontSize: 11, color: "#cbd5e1" }}>
+                  <b>Trigger:</b> Unidad de armas pesadas (<code>FIRE_SUPPORT</code>) con enemigo adyacente (distancia &le; 1 hex) sin escolta aliada cercana. <b>Efecto:</b> Muta a <code>ROLE_CLOSE_DEFENSE</code>, priorizando autodefensa y fuego a quemarropa.
+                </div>
+              </div>
+
+              {/* RULE 1: VP DEFICIT PRESSURE */}
+              <div style={{ background: "#1e293b", border: "1px solid #eab308", borderRadius: 6, padding: 10 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
+                  <span style={{ fontSize: 12, fontWeight: 800, color: "#fde047", display: "flex", alignItems: "center", gap: 6 }}>
+                    <span>⚔️</span> Prioridad 3: Presión Decisiva de VPs
+                  </span>
+                  <span style={{ fontSize: 9, background: "rgba(234, 179, 8, 0.2)", color: "#fef08a", padding: "1px 6px", borderRadius: 3, fontWeight: 700 }}>
+                    ➔ ROLE_SPEARHEAD
+                  </span>
+                </div>
+                <div style={{ fontSize: 11, color: "#cbd5e1" }}>
+                  <b>Trigger:</b> Déficit en marcador de VPs o fase tardía de la partida (t &ge; 2/3 T_max) con VPs sin capturar. <b>Efecto:</b> Tropas en roles de apoyo o pantalla con permiso mutan a <code>ROLE_SPEARHEAD</code> para un asalto decisivo coordinado.
+                </div>
+              </div>
+
+              {/* DUNNIGAN RESERVE */}
+              <div style={{ background: "#1e293b", border: "1px solid #a855f7", borderRadius: 6, padding: 10 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
+                  <span style={{ fontSize: 12, fontWeight: 800, color: "#d8b4fe", display: "flex", alignItems: "center", gap: 6 }}>
+                    <span>🏛️</span> Reserva Táctica Dunnigan
+                  </span>
+                  <span style={{ fontSize: 9, background: "rgba(168, 85, 247, 0.2)", color: "#e9d5ff", padding: "1px 6px", borderRadius: 3, fontWeight: 700 }}>
+                    ➔ ROLE_TACTICAL_RESERVE
+                  </span>
+                </div>
+                <div style={{ fontSize: 11, color: "#cbd5e1" }}>
+                  <b>Trigger:</b> Fuerza &ge; 4 escuadras y unidades en retaguardia a más de 5 hexágonos del objetivo. <b>Efecto:</b> Reserva táctica de reacción para taponar brechas o explotar rupturas.
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* COMPLETE 8 ROLES CANONICAL CATALOG (GRID 4x2) */}
+          <div style={{ background: "#0f172a", border: "1px solid #334155", borderRadius: 8, padding: 14, display: "flex", flexDirection: "column", gap: 10 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8 }}>
+              <div>
+                <span style={{ fontSize: 13, fontWeight: 800, color: "#facc15", textTransform: "uppercase", display: "flex", alignItems: "center", gap: 6 }}>
+                  <span>👥</span> Catálogo Canónico de los 8 Roles Doctrinales (Jerarquía de Perfiles)
+                </span>
+                <div className="muted" style={{ fontSize: 11, marginTop: 2 }}>
+                  Definidos en <code>assets/catalogs/unit_catalog.json</code> y tipados rígidamente en <code>DoctrineProfile</code>.
+                </div>
+              </div>
+              <span style={{ fontSize: 10, background: "rgba(234, 179, 8, 0.2)", color: "#fef08a", border: "1px solid #eab308", padding: "2px 8px", borderRadius: 4, fontWeight: 700 }}>
+                100% de 19 Unidades Cubiertas
+              </span>
+            </div>
+
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: 10 }}>
+              {/* Role 1: SPEARHEAD */}
               <div style={{ background: "#1e293b", border: "1px solid rgba(234, 179, 8, 0.4)", borderRadius: 6, padding: 10 }}>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
                   <span style={{ fontSize: 12, fontWeight: 800, color: "#facc15", display: "flex", alignItems: "center", gap: 6 }}>
-                    <span>⚡</span> ROLE_SPEARHEAD (Punta de Lanza)
+                    <span>⚡</span> ROLE_SPEARHEAD
                   </span>
                   <span style={{ fontSize: 9, background: "rgba(234, 179, 8, 0.15)", color: "#fef08a", padding: "1px 6px", borderRadius: 3, fontWeight: 700 }}>
-                    Infantería de Choque
+                    Punta de Lanza / Choque
                   </span>
                 </div>
-                <div style={{ fontSize: 11, color: "#cbd5e1" }}>
-                  Asignado a las escuadras de infantería más próximas al objetivo prioritario. Máxima agresividad para asaltar, desalojar al rival y consumar la captura del hexágono objetivo.
+                <div style={{ fontSize: 10.5, color: "#cbd5e1" }}>
+                  <b>Unidades:</b> Fusileros de asalto, Fallschirmjäger, Blindados medios. <b>Rango:</b> 0-2 hexes. <b>Misión:</b> Ruptura de línea enemiga y asalto directo a VPs prioritarios.
                 </div>
               </div>
 
-              {/* ROLE 2: FIRE_SUPPORT */}
+              {/* Role 2: FIRE_SUPPORT */}
               <div style={{ background: "#1e293b", border: "1px solid rgba(249, 115, 22, 0.4)", borderRadius: 6, padding: 10 }}>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
                   <span style={{ fontSize: 12, fontWeight: 800, color: "#fb923c", display: "flex", alignItems: "center", gap: 6 }}>
-                    <span>🎯</span> ROLE_FIRE_SUPPORT (Apoyo de Fuego)
+                    <span>🎯</span> ROLE_FIRE_SUPPORT
                   </span>
                   <span style={{ fontSize: 9, background: "rgba(249, 115, 22, 0.15)", color: "#fed7aa", padding: "1px 6px", borderRadius: 3, fontWeight: 700 }}>
-                    Armas Pesadas / Morteros
+                    Apoyo de Fuego Pesado
                   </span>
                 </div>
-                <div style={{ fontSize: 11, color: "#cbd5e1" }}>
-                  Asignado a escuadras con ametralladoras pesadas (HMG), morteros o cañones. Posicionamiento en puntos de tiro con línea de visión despejada (LOS) para suprimir y desorganizar al enemigo.
+                <div style={{ fontSize: 10.5, color: "#cbd5e1" }}>
+                  <b>Unidades:</b> HMG .50 M2HB, MMG M1919A4, MG42, Morteros 60mm/81mm, Cañones AT. <b>Rango:</b> 3-8 hexes. <b>Misión:</b> Supresión continua, fijación de enemigos e interdicción.
                 </div>
               </div>
 
-              {/* ROLE 3: OBJECTIVE_DEFENDER */}
-              <div style={{ background: "#1e293b", border: "1px solid rgba(59, 130, 246, 0.4)", borderRadius: 6, padding: 10 }}>
+              {/* Role 3: CLOSE_DEFENSE */}
+              <div style={{ background: "#1e293b", border: "1px solid rgba(239, 68, 68, 0.4)", borderRadius: 6, padding: 10 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
+                  <span style={{ fontSize: 12, fontWeight: 800, color: "#f87171", display: "flex", alignItems: "center", gap: 6 }}>
+                    <span>⚔️</span> ROLE_CLOSE_DEFENSE
+                  </span>
+                  <span style={{ fontSize: 9, background: "rgba(239, 68, 68, 0.15)", color: "#fca5a5", padding: "1px 6px", borderRadius: 3, fontWeight: 700 }}>
+                    Defensa Cercana / Quemarropa
+                  </span>
+                </div>
+                <div style={{ fontSize: 10.5, color: "#cbd5e1" }}>
+                  <b>Unidades:</b> Armas pesadas flanqueadas o escuadras amenazadas a distancia &le; 1 hex. <b>Rango:</b> 0-1 hex. <b>Misión:</b> Fuego reactivo defensivo de autoprotección inmediata.
+                </div>
+              </div>
+
+              {/* Role 4: RECON */}
+              <div style={{ background: "#1e293b", border: "1px solid rgba(56, 189, 248, 0.4)", borderRadius: 6, padding: 10 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
+                  <span style={{ fontSize: 12, fontWeight: 800, color: "#38bdf8", display: "flex", alignItems: "center", gap: 6 }}>
+                    <span>🔭</span> ROLE_RECON
+                  </span>
+                  <span style={{ fontSize: 9, background: "rgba(56, 189, 248, 0.15)", color: "#bae6fd", padding: "1px 6px", borderRadius: 3, fontWeight: 700 }}>
+                    Exploración &amp; Ojos Tácticos
+                  </span>
+                </div>
+                <div style={{ fontSize: 10.5, color: "#cbd5e1" }}>
+                  <b>Unidades:</b> Jeeps de reconocimiento, Rangers, Snipers, patrullas ligeras. <b>Rango:</b> 4-10 hexes. <b>Misión:</b> Despeje de niebla de guerra, detección temprana y señalamiento.
+                </div>
+              </div>
+
+              {/* Role 5: OBJECTIVE_DEFENDER */}
+              <div style={{ background: "#1e293b", border: "1px solid rgba(96, 165, 250, 0.4)", borderRadius: 6, padding: 10 }}>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
                   <span style={{ fontSize: 12, fontWeight: 800, color: "#60a5fa", display: "flex", alignItems: "center", gap: 6 }}>
-                    <span>🛡️</span> ROLE_OBJECTIVE_DEFENDER (Defensor VP)
+                    <span>🛡️</span> ROLE_OBJECTIVE_DEFENDER
                   </span>
-                  <span style={{ fontSize: 9, background: "rgba(59, 130, 246, 0.15)", color: "#bfdbfe", padding: "1px 6px", borderRadius: 3, fontWeight: 700 }}>
-                    Radio ≤ 1 de VP Aliado
+                  <span style={{ fontSize: 9, background: "rgba(96, 165, 250, 0.15)", color: "#bfdbfe", padding: "1px 6px", borderRadius: 3, fontWeight: 700 }}>
+                    Defensor de Objetivo VP
                   </span>
                 </div>
-                <div style={{ fontSize: 11, color: "#cbd5e1" }}>
-                  Asignado a unidades sobre o adyacentes a VPs bajo control del equipo. Prioriza atrincherarse, aprovechar coberturas de terreno urbano o fortificación y negar la recaptura enemiga.
+                <div style={{ fontSize: 10.5, color: "#cbd5e1" }}>
+                  <b>Unidades:</b> Escuadras sobre o a radio &le; 1 hex de VPs aliados. <b>Terreno:</b> Bunkers, trincheras, edificios de piedra. <b>Misión:</b> Atrincherarse y negar recaptura enemiga.
                 </div>
               </div>
 
-              {/* ROLE 4: FLANK_SCREEN */}
-              <div style={{ background: "#1e293b", border: "1px solid rgba(139, 92, 246, 0.4)", borderRadius: 6, padding: 10 }}>
+              {/* Role 6: FLANK_SCREEN */}
+              <div style={{ background: "#1e293b", border: "1px solid rgba(192, 132, 252, 0.4)", borderRadius: 6, padding: 10 }}>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
                   <span style={{ fontSize: 12, fontWeight: 800, color: "#c084fc", display: "flex", alignItems: "center", gap: 6 }}>
-                    <span>👁️</span> ROLE_FLANK_SCREEN (Pantalla de Flanco)
+                    <span>👁️</span> ROLE_FLANK_SCREEN
                   </span>
-                  <span style={{ fontSize: 9, background: "rgba(139, 92, 246, 0.15)", color: "#e9d5ff", padding: "1px 6px", borderRadius: 3, fontWeight: 700 }}>
-                    Flanqueo y Vigilancia
+                  <span style={{ fontSize: 9, background: "rgba(192, 132, 252, 0.15)", color: "#e9d5ff", padding: "1px 6px", borderRadius: 3, fontWeight: 700 }}>
+                    Pantalla de Flanco &amp; Seguridad
                   </span>
                 </div>
-                <div style={{ fontSize: 11, color: "#cbd5e1" }}>
-                  Asignado a escuadras periféricas para cubrir ángulos muertos, detectar maniobras envolventes rivales y proteger los flancos vulnerables del grueso de la fuerza.
+                <div style={{ fontSize: 10.5, color: "#cbd5e1" }}>
+                  <b>Unidades:</b> Infantería ligera, tropas secundarias. <b>Rango:</b> 2-4 hexes. <b>Misión:</b> Cobertura de ángulos ciegos, aviso temprano y contención de envolvimientos.
                 </div>
+              </div>
+
+              {/* Role 7: TACTICAL_RESERVE */}
+              <div style={{ background: "#1e293b", border: "1px solid rgba(168, 85, 247, 0.4)", borderRadius: 6, padding: 10 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
+                  <span style={{ fontSize: 12, fontWeight: 800, color: "#d8b4fe", display: "flex", alignItems: "center", gap: 6 }}>
+                    <span>🏛️</span> ROLE_TACTICAL_RESERVE
+                  </span>
+                  <span style={{ fontSize: 9, background: "rgba(168, 85, 247, 0.15)", color: "#f3e8ff", padding: "1px 6px", borderRadius: 3, fontWeight: 700 }}>
+                    Reserva Táctica Dunnigan
+                  </span>
+                </div>
+                <div style={{ fontSize: 10.5, color: "#cbd5e1" }}>
+                  <b>Unidades:</b> Escuadras en retaguardia (distancia &gt; 5 del objetivo activo). <b>Misión:</b> Fuerza de reacción móvil para taponar brechas imprevistas o consolidar rupturas.
+                </div>
+              </div>
+
+              {/* Role 8: RECOVER */}
+              <div style={{ background: "#1e293b", border: "1px solid rgba(244, 63, 94, 0.4)", borderRadius: 6, padding: 10 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
+                  <span style={{ fontSize: 12, fontWeight: 800, color: "#fda4af", display: "flex", alignItems: "center", gap: 6 }}>
+                    <span>🩹</span> ROLE_RECOVER
+                  </span>
+                  <span style={{ fontSize: 9, background: "rgba(244, 63, 94, 0.15)", color: "#fecdd3", padding: "1px 6px", borderRadius: 3, fontWeight: 700 }}>
+                    Recuperación / Repliegue
+                  </span>
+                </div>
+                <div style={{ fontSize: 10.5, color: "#cbd5e1" }}>
+                  <b>Unidades:</b> Escuadras en pánico, suprimidas o desorganizadas (&lt;50% HP). <b>Misión:</b> Repliegue a posiciones de cobertura y desenfilada, rally y estabilización de moral.
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* HYDE COHESION & PRIOR SHAPING MATHEMATICS */}
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
+            {/* Box A: Cohesión de Henry Hyde (2015) */}
+            <div style={{ background: "#0f172a", border: "1px solid #334155", borderRadius: 8, padding: 14, display: "flex", flexDirection: "column", gap: 8 }}>
+              <div style={{ fontSize: 13, fontWeight: 800, color: "#38bdf8", textTransform: "uppercase", display: "flex", alignItems: "center", gap: 6 }}>
+                <span>🛡️</span> Niveles de Cohesión Táctica (Henry Hyde, 2015)
+              </div>
+              <div style={{ fontSize: 11, color: "#cbd5e1" }}>
+                La proximidad entre escuadras amigas en buen orden modula la estabilidad táctica y la resistencia al pánico:
+              </div>
+              <div style={{ display: "flex", flexDirection: "column", gap: 6, fontSize: 11 }}>
+                <div style={{ background: "#1e293b", padding: "6px 10px", borderRadius: 4, borderLeft: "3px solid #22c55e" }}>
+                  <span style={{ color: "#4ade80", fontWeight: 700 }}>SUPPORTED (&le; 3 hexágonos):</span> Escuadra con apoyo mutuo inmediato. Moral óptima, bonificación de rally y sin penalización de pánico.
+                </div>
+                <div style={{ background: "#1e293b", padding: "6px 10px", borderRadius: 4, borderLeft: "3px solid #facc15" }}>
+                  <span style={{ color: "#facc15", fontWeight: 700 }}>FRIENDS_CLOSE (&le; 6 hexágonos):</span> Cohesión de línea operativa estándar. Soporte a distancia de armas de apoyo.
+                </div>
+                <div style={{ background: "#1e293b", padding: "6px 10px", borderRadius: 4, borderLeft: "3px solid #ef4444" }}>
+                  <span style={{ color: "#f87171", fontWeight: 700 }}>ISOLATED (&gt; 6 hexágonos):</span> Escuadra aislada en territorio hostil. Alta vulnerabilidad a supresión y riesgo de colapso de moral.
+                </div>
+              </div>
+            </div>
+
+            {/* Box B: Prior Shaping Mathematics */}
+            <div style={{ background: "#0f172a", border: "1px solid #334155", borderRadius: 8, padding: 14, display: "flex", flexDirection: "column", gap: 8 }}>
+              <div style={{ fontSize: 13, fontWeight: 800, color: "#22c55e", textTransform: "uppercase", display: "flex", alignItems: "center", gap: 6 }}>
+                <span>📐</span> Formulación Matemática del Prior Shaping en Raíz MCTS
+              </div>
+              <div style={{ fontSize: 11, color: "#cbd5e1" }}>
+                En la raíz del árbol MCTS, los logits de política neural \(P(s, a)\) son modulados por la postura y rol doctrinal:
+              </div>
+              <div style={{ background: "#1e293b", padding: 10, borderRadius: 6 }}>
+                <code style={{ fontSize: 11.5, color: "#86efac", display: "block" }}>
+                  P_{`{mod}`}(s, a) = P(s, a) \cdot \left(1 + \alpha_{`{boost}`} \cdot \mathbf{`{1}`}_{`{a \\in \\mathcal{A}_{role}}`}\right), \quad \alpha_{`{boost}`} = 0.35
+                </code>
+              </div>
+              <div style={{ fontSize: 11, color: "#94a3b8", lineHeight: 1.4 }}>
+                <b>Anulación Autónoma por \(Q(s, a)\):</b> Las 512 simulaciones en el espacio latente retienen la libertad de descartar este sesgo inductivo si el valor esperado acumulado demuestra que otra maniobra produce una recompensa terminal superior.
               </div>
             </div>
           </div>
@@ -3183,14 +3794,14 @@ export function NetworkTopologyTab({
           {/* HIERARCHICAL INTEGRATION DIAGRAM & PIPELINE */}
           <div style={{ background: "#0f172a", border: "1px solid #334155", borderRadius: 8, padding: 14 }}>
             <div style={{ fontSize: 13, fontWeight: 800, color: "#38bdf8", marginBottom: 8, textTransform: "uppercase" }}>
-              Flujo Operacional del Árbol Jerárquico en EfficientZero v2
+              Flujo Operacional del Árbol Jerárquico en EfficientZero v2 (3 Capas)
             </div>
             <div style={{ display: "grid", gridTemplateColumns: "1fr auto 1fr auto 1fr", alignItems: "center", gap: 10, textAlign: "center" }}>
               <div style={{ background: "#1e293b", border: "1px solid #a855f7", borderRadius: 6, padding: 12 }}>
                 <div style={{ fontSize: 10, color: "#d8b4fe", fontWeight: 700, textTransform: "uppercase" }}>NIVEL 1: Macro-Estrategia</div>
                 <div style={{ fontSize: 13, fontWeight: 800, color: "#f8fafc", marginTop: 2 }}>MacroStrategyPlanner</div>
                 <div style={{ fontSize: 10, color: "#94a3b8", marginTop: 4 }}>
-                  Evalúa VPs y tablero • Determina Postura • Asigna Roles a cada escuadra
+                  Postura Macro • 8 Roles Canónicos • Mutaciones Contextuales
                 </div>
               </div>
 
@@ -3198,9 +3809,9 @@ export function NetworkTopologyTab({
 
               <div style={{ background: "#1e293b", border: "1px solid #0284c7", borderRadius: 6, padding: 12 }}>
                 <div style={{ fontSize: 10, color: "#7dd3fc", fontWeight: 700, textTransform: "uppercase" }}>PUENTE: Prior Modulation</div>
-                <div style={{ fontSize: 13, fontWeight: 800, color: "#f8fafc", marginTop: 2 }}>Shaping P(s, a)</div>
+                <div style={{ fontSize: 13, fontWeight: 800, color: "#f8fafc", marginTop: 2 }}>Shaping P(s, a) (+35% π)</div>
                 <div style={{ fontSize: 10, color: "#94a3b8", marginTop: 4 }}>
-                  Modula priors de política neural antes de iniciar expansiones MCTS
+                  Modula priors de política neural en la raíz antes de búsquedas MCTS
                 </div>
               </div>
 
@@ -3210,7 +3821,7 @@ export function NetworkTopologyTab({
                 <div style={{ fontSize: 10, color: "#86efac", fontWeight: 700, textTransform: "uppercase" }}>NIVEL 2: Micro-Táctica</div>
                 <div style={{ fontSize: 13, fontWeight: 800, color: "#f8fafc", marginTop: 2 }}>MCTS PUCT Search</div>
                 <div style={{ fontSize: 10, color: "#94a3b8", marginTop: 4 }}>
-                  512 Simulaciones • 6 Pasos Unroll • Cabezas Tácticas Auxiliares
+                  512 Sims • 6 Unroll • Cabezas Auxiliares • Anulación por Q(s, a)
                 </div>
               </div>
             </div>

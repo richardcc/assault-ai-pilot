@@ -3,7 +3,7 @@ from __future__ import annotations
 import random
 from typing import Dict, List, Optional
 
-from agents.muzero.adapter_voec import MuZeroVOECAdapter
+from agents.efficientzero_v2.core.adapter_voec import EZV2VOECAdapter, EZV2VOECAdapter as MuZeroVOECAdapter
 from agents.efficientzero_v2.core.macro_planner import MacroStrategyPlanner
 from assault_bench import runner as _runner
 
@@ -72,6 +72,28 @@ _tm_extract_unit_suppressed_from_runtime_events = _runner._tm_extract_unit_suppr
 _tm_metric_from_row = _runner._tm_metric_from_row
 _units_snapshot = _runner._units_snapshot
 _vp_horizon_soft_components_for_step = _runner._vp_horizon_soft_components_for_step
+
+
+def _decorate_units_with_macro_plan(
+    units_list: list[dict[str, object]],
+    macro_plan,
+    acting_unit_id: str = "",
+    prior_boost: float = 0.0,
+) -> list[dict[str, object]]:
+    decorated = []
+    for u in list(units_list or []):
+        d = dict(u or {})
+        uid = str(d.get("unit_id", "") or "")
+        if macro_plan is not None and uid in getattr(macro_plan, "unit_roles", {}):
+            role = str(macro_plan.get_role(uid))
+            d["role_assigned"] = role
+            d["active_role"] = role
+            d["role_is_mutated"] = bool(macro_plan.is_mutated(uid))
+            d["role_mutation_reason"] = str(macro_plan.get_mutation_reason(uid))
+            d["prior_boost_applied"] = float(prior_boost) if uid == acting_unit_id else 0.0
+            d["badge_label"] = role.replace("ROLE_", "")
+        decorated.append(d)
+    return decorated
 
 
 def _run_episode_with_policy_impl(
@@ -161,6 +183,16 @@ def _run_episode_with_policy_impl(
         ]
         if len(eval_candidates) == 1:
             eval_side = eval_candidates[0]
+        elif len(eval_candidates) > 1:
+            # Self-play mirror: prioritize scenario designated tracked_side if present among candidates
+            runtime = getattr(adapter.sim, "_runtime", None)
+            scenario = getattr(runtime, "scenario", None) if runtime is not None else None
+            vo = getattr(scenario, "victory_outcomes", None) if scenario is not None else None
+            if vo is None and isinstance(scenario, dict):
+                vo = scenario.get("victory_outcomes")
+            sc_tracked = _normalize_side_key(str(dict(vo or {}).get("tracked_side", "")).strip())
+            if sc_tracked and sc_tracked in eval_candidates:
+                eval_side = sc_tracked
     if not eval_side:
         eval_side = str(obs.to_play) if obs.to_play is not None else ""
     scenario_turn_limit = None
@@ -303,7 +335,7 @@ def _run_episode_with_policy_impl(
                 if str(getattr(model, "encoder_type", "mlp")) == "cnn":
                     obs_vector = observation_to_tensor(
                         obs,
-                        channels=int(getattr(model, "observation_channels", 8)),
+                        channels=int(getattr(model, "observation_channels", 38)),
                         height=int(getattr(model, "observation_height", 16)),
                         width=int(getattr(model, "observation_width", 16)),
                     )
@@ -829,7 +861,15 @@ def _run_episode_with_policy_impl(
                 total_reward += 0.0
                 win = False
             else:
-                won = str(winner) == eval_side
+                is_selfplay = (
+                    len(set(str(p).strip().lower() for p in policy_by_side.values())) == 1
+                    if policy_by_side
+                    else False
+                )
+                if is_selfplay:
+                    won = str(winner) == eval_side
+                else:
+                    won = str(winner) in eval_candidates if eval_candidates else (str(winner) == eval_side)
                 total_reward += 1.0 if won else -1.0
                 win = won
         target_q = _to_int_or_none(action_parts[-2]) if len(action_parts) >= 4 else None
@@ -929,6 +969,18 @@ def _run_episode_with_policy_impl(
         pending_setup_strength_by_side = dict(
             signal_values.get("pending_setup_strength_by_side", {}) or {}
         )
+        step_prior_boost_applied = float(
+            max(
+                0.0,
+                macro_planner.compute_action_boost(
+                    str(action),
+                    macro_plan,
+                    dict(getattr(obs, "vp_owner_by_hex", {}) or {}),
+                    str(getattr(obs, "to_play", "") or ""),
+                )
+                - 1.0,
+            )
+        )
         trace_row = build_trace_row(
             core=StepCoreData(
                 step=int(steps),
@@ -1001,6 +1053,11 @@ def _run_episode_with_policy_impl(
                 macro_posture=str(macro_plan.posture),
                 macro_target_vp_id=str(macro_plan.target_vp_id or ""),
                 unit_macro_role=str(macro_plan.get_role(acting_unit_id_probe)),
+                role_assigned=str(macro_plan.get_role(acting_unit_id_probe)),
+                role_is_mutated=bool(macro_plan.is_mutated(acting_unit_id_probe)),
+                role_mutation_reason=str(macro_plan.get_mutation_reason(acting_unit_id_probe)),
+                prior_boost_applied=step_prior_boost_applied,
+                badge_label=f"{macro_plan.get_role(acting_unit_id_probe).replace('ROLE_', '')}",
             ),
             prefilter=StepPrefilterData(
                 unit_prefilter_enabled=bool(unit_prefilter_enabled),
@@ -1060,7 +1117,12 @@ def _run_episode_with_policy_impl(
             attack_components_by_die=dict(attack_components_by_die),
             defense_components_by_die=dict(defense_components_by_die),
             runtime_events=list(runtime_events),
-            post_units_snapshot=_units_snapshot(post_units),
+            post_units_snapshot=_decorate_units_with_macro_plan(
+                _units_snapshot(post_units),
+                macro_plan,
+                acting_unit_id=acting_unit_id_probe,
+                prior_boost=step_prior_boost_applied,
+            ),
             field_fn=_field,
             trace_detail_level=str(trace_detail_level or "core"),
         )
@@ -1084,7 +1146,15 @@ def _run_episode_with_policy_impl(
             total_reward += 0.0
             win = False
         else:
-            won = str(winner) == eval_side
+            is_selfplay = (
+                len(set(str(p).strip().lower() for p in policy_by_side.values())) == 1
+                if policy_by_side
+                else False
+            )
+            if is_selfplay:
+                won = str(winner) == eval_side
+            else:
+                won = str(winner) in eval_candidates if eval_candidates else (str(winner) == eval_side)
             total_reward += 1.0 if won else -1.0
             win = won
         terminal = True

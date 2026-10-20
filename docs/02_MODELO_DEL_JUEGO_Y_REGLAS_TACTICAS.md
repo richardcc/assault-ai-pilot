@@ -263,7 +263,99 @@ flowchart TD
     POST4 --> OUTCOME{¿Condición de Fin\nde Partida?}
     
     OUTCOME -- Sí --> TERMINAL([Fin de Partida: Victoria / Derrota / Recompensa Final])
-    OUTCOME -- No --> TENSOR[voec_sim: Extraer Tensor 32 Canales\ny Nueva Máscara de Acciones Legales]
+    OUTCOME -- No --> TENSOR[voec_sim: Extraer Tensor Sensorial 32-38 Canales,\nConformado de Recompensas PBRS y Nueva Máscara]
     TENSOR --> NEXT([Nuevo Estado o_t+1 Listo para MCTS / Red])
 ```
+
+---
+
+## 11. Marco de Conformado de Recompensas Invariante (PBRS, Urgencia y Parálisis)
+
+Para resolver el problema del aprendizaje con recompensas dispersas sin alterar el conjunto de políticas óptimas del wargame (teorema de Ng et al., 1999), la capa `voec_sim/core/reward_calculator.py` implementa un andamiaje matemático estricto:
+
+### 11.1. Potencial Radial a VPs ($\Phi$) e Invariancia Telescópica
+El potencial del estado respecto a los Puntos de Victoria se define como:
+$$\Phi(s) = \sum_{u \in \text{Amigos}} \frac{w_u}{1 + \min_{\text{VP}} d(u, \text{VP})} + B_{\text{ctrl}} \cdot N_{\text{VP\_Controlados}}$$
+donde $w_u$ pondera el rol táctico de la unidad (ej. $+25\%$ para unidades de choque `SPEARHEAD`) y $B_{\text{ctrl}} = 2.0$ bonifica el control efectivo.
+
+La función de recompensa adicional por paso satisface:
+$$F(s, a, s') = \gamma \Phi(s') - \Phi(s)$$
+Garantizando que al final del episodio la suma acumulada sea telescópica $\sum_{t=0}^T \gamma^t F(s_t, a_t, s_{t+1}) = -\Phi(s_0)$ (ya que en estado terminal $\Phi(s_T) \equiv 0.0$), preservando al 100% las garantías de convergencia óptima.
+
+### 11.2. Factor de Presión Temporal Dinámica ($\Psi_{\text{urgency}}$)
+Siguiendo la extensión de PBRS para MDPs dependientes del tiempo (Devlin & Kudenko, 2012), cuando el bando amigo controla $0$ VPs, el potencial de distancia se atenúa exponencialmente conforme avanza el horizonte de la batalla ($\tau = t / T_{\text{max}}$):
+$$\Phi(s, t) = \Phi_{\text{dist}}(s) \cdot \exp\left(-\lambda \cdot \frac{t}{T_{\text{max}}}\right)$$
+con $\lambda = 1.2$. Esto introduce una severa degradación en el valor del estado si la fuerza amiga deambula o se retrasa, incentivando una agresión inmediata y decisiva hacia los objetivos.
+
+### 11.3. Penalización Acumulativa por Parálisis de Unidades Expuestas
+Cualquier unidad que permanezca en terreno desprovisto de cobertura defensiva (`cover < 0.35`) fuera del perímetro de un VP controlado, y que pase el turno sin avanzar hacia un objetivo ni abrir fuego, incurre en una penalización por parálisis:
+$$\text{Penalty}_{\text{paralysis}} = -w_{\text{paralysis}} \cdot \left(1.0 + 0.5 \cdot \min(4, \text{streak} - 1)\right)$$
+* La racha acumula un $+50\%$ adicional por cada turno de pasividad consecutiva (hasta $4\times$).
+* Se resetea de forma inmediata a cero en cuanto la unidad realiza una maniobra de aproximación a un VP, abre fuego o entra en una posición con cobertura defensiva adecuada.
+
+---
+
+## 12. Habilidades Especiales de Ingenieros y Zapadores: Carga Explosiva y Detección de Minas
+
+Siguiendo las reglas canónicas del wargame (*Assault Rulebook* §9.6.6.2 y §12.5) y las especificaciones de las cartas de unidades especializadas (ej. *Combat Engineers 43 / US_COMBAT_ENGINEERS_43*), el motor integra dos acciones tácticas dedicadas:
+
+```mermaid
+flowchart TD
+    subgraph Zapadores ["Habilidades de Ingenieros / Zapadores"]
+        EC["💣 EXPLOSIVE_CHARGE (Regla 12.5)\nAcción Rápida de Demolición"]
+        MD["🔍 MINE_DETECTION (Regla 9.6.6.2)\nReconocimiento de Minas"]
+        
+        EC --> TGT["Objetivo Adyacente (Distancia 1):\n- Edificios (single/multi)\n- Fortificaciones (bunkers, trincheras)\n- Obstáculos (alambradas, minas)"]
+        TGT --> D_ROLL["Tirada de Combate:\n1 Dado ROJO vs Dado Defensa Terreno más fuerte\n(o 1 Dado VERDE si no hay)"]
+        D_ROLL --> EVAL["Resolución Regla 12.5:\n- Crit + Hit: Colapso y Eliminación unidades\n- Crit: Colapso y Mitad de Fuerza\n- 2+ Hits: Colapso y 1 Daño\n- 1 Hit: Obstáculo destruido / Repliegue\n- Supresión: Unidades suprimidas"]
+        
+        MD --> MD_TGT["Objetivo Hex Actual o Adyacente:\n- Campo de Minas Real o Dummy"]
+        MD_TGT --> MD_ROLL["Tirada D6 + Modificadores:\n- Base: 5+ Infantería, 6+ Vehículos\n- Bono +2 por MINE_DETECTION\n- Bono +1 por SCOUT"]
+        MD_ROLL --> MD_RES{"¿Éxito?"}
+        MD_RES -- Sí --> MD_OK["Campo Identificado con Seguridad\n(Dummy se retira del mapa)"]
+        MD_RES -- No --> MD_FAIL["Fallo en Detección\n(Riesgo de detonación al entrar)"]
+    end
+```
+
+### 12.1. Carga Explosiva (`EXPLOSIVE_CHARGE` - Regla 12.5)
+* **Tipo de Acción**: `ActionType.EXPLOSIVE_CHARGE`, `CombatMode.EXPLOSIVE_CHARGE` (`ExplosiveChargeAction`).
+* **Condición de Generación**: Unidad activa viva que posee el rasgo `EXPLOSIVE_CHARGE` adyacente a un hexágono con edificios, fortificaciones (`bunker`, `casemate`, `pillbox`, `gun_emplacement`, `trench`, `sandbag`) u obstáculos (`barbed_wire`, `minefield`, `tank_barricade`).
+* **Procedimiento de Resolución**:
+  1. El atacante tira **1 dado ROJO de combate** (`BattleDie(DiceColor.RED)`).
+  2. El defensor tira el **dado de defensa de terreno más fuerte** disponible en el hexágono objetivo. Si no dispone de ningún dado de defensa de terreno (ej. campo de minas en terreno abierto o alambrada), tira **1 dado VERDE por defecto** (`BattleDie(DiceColor.GREEN)`).
+  3. Se comparan los resultados mediante `compare_dice()`.
+  4. Los impactos y críticos no cancelados dictan el colapso de la estructura y el daño colateral a las unidades en su interior:
+     * `CRITICAL + HIT`: Estructura colapsa/destruida; todas las unidades en el hex son **eliminadas**.
+     * `CRITICAL`: Estructura colapsa/destruida; todas las unidades quedan reducidas a **media fuerza**.
+     * `2+ HITS`: Estructura colapsa/destruida; todas las unidades reciben **1 punto de daño**.
+     * `1 HIT`: Los obstáculos lineales (alambradas, campos de minas) son **destruidos y retirados del mapa**. Los edificios y fortificaciones resisten el colapso pero las unidades interiores sufren **repliegue forzado** (*fallback*).
+     * `SUPPRESSION`: Estructura no colapsa; unidades interiores quedan **suprimidas**.
+  5. **Transformación Física del Terreno**:
+     * Los edificios colapsados se transforman en **ruinas** (`Terrain.RUINS`).
+     * Los búnkers y posiciones blindadas colapsan al estado de trinchera (`trench`).
+     * Las trincheras, pozos de tirador, alambradas y minas se eliminan del tablero.
+
+### 12.2. Detección y Reconocimiento de Minas (`MINE_DETECTION` - Regla 9.6.6.2)
+* **Tipo de Acción**: `ActionType.MINE_DETECTION` (`MineDetectionAction`) y bonificador pasivo en movimiento.
+* **Condición de Generación**: Unidad con el rasgo `MINE_DETECTION` que se encuentre en el mismo hexágono o adyacente a un marcador de campo de minas no identificado.
+* **Mecánica del Bono**:
+  * Tirada básica en D6: Requiere un resultado de $5+$ para Infantería y $6+$ para Vehículos/Artillería.
+  * El rasgo `MINE_DETECTION` aplica un modificador directo de **$+2$ al dado D6** (acumulable con $+1$ de `SCOUT` o $+1$ de mina no oculta).
+  * En caso de éxito, si el marcador es un señuelo (*dummy minefield*), es retirado del tablero inmediatamente; si es un campo de minas real, queda marcado como **identificado** (*identified*), permitiendo al zapador y a las unidades aliadas planificar su cruce o demolición con carga explosiva de manera segura.
+
+### 12.3. Configuración e Inspección en la Interfaz del Editor de Unidades (Puerto 8780)
+Ambas habilidades están plenamente expuestas en el servidor visual de catálogo (`tools/unit_editor_server.py`):
+* Chips interactivos con estado activo, iconos visuales y tooltips reglamentarios detallados (`TRAIT_HELP`).
+* Compatibilidad con importación/exportación de perfiles estándar, inventario de cartas y propuestas de unidades en `assets/catalogs/unit_catalog.json` y `assets/catalogs/unit_staging_proposals.json`.
+
+### 12.4. Rebalanceo de OOB y Despliegue Dinámico de Humo en Escenarios Canónicos (Subtarea 3.5.4)
+Para garantizar la viabilidad táctica y el equilibrio competitivo en los escenarios históricos de asalto urbano y desembarco anfibio de Gela, manteniendo estricta fidelidad al manual oficial (Regla 7.2, donde el humo es una acción de combate generada dinámicamente y nunca un obstáculo pre-ubicado estático):
+* **Battaglia Cittadina (`assets/scenarios/battaglia_cittadina_2_1.json`)**:
+  * Sustitución del equipo `US_BAZOOKA_TEAM` (ineficaz ante fortificaciones y casamatas sin blindados) por **1x `US_COMBAT_ENGINEERS_43`** en la columna de aproximación (`[7, 9]`).
+  * **Humo Táctico Dinámico (Regla 7.2)**: Dotación de granadas de humo tácticas (`SMOKE_GRENADES` y modo de ataque `SMOKE` con dados `GREEN, GREEN, BLUE, BLUE`) a los zapadores, coordinados con el fuego indirecto del mortero de 81mm (`US_81MM_MORTAR`). Esto permite generar cortinas de humo en la calle mayor (`q=7, r=6`), cegando las líneas de visión directa de la casamata italiana (`IT_6` en `[3, 4]`) y del francotirador (`IT_7`), permitiendo el avance cubierto sin recurrir a marcadores estáticos artificiales.
+* **Mettete i Piedi a Terra (`assets/scenarios/mettete_i_piedi_terra_1.json`)**:
+  * Incorporación de **1x `US_COMBAT_ENGINEERS_43`** en el sector central de desembarco (`[4, 12]`), encarado frontalmente a la red de alambradas alemana (`q=4, r=9`).
+  * **Capacidad de Brecha y Cegado Táctico**: Empleo de torpedos Bangalore (`BANGALORE_TORPEDO`) y cargas explosivas (`EXPLOSIVE_CHARGE`) para neutralizar la alambrada y campos de minas en los primeros 3 turnos, apoyados por fumígenos dinámicos de ingenieros y mortero para aproximarse bajo fuego de la MG42 alemana.
+* **Efectividad Táctica Garantizada**: Con un perfil de asalto de 3 dados a bocajarro (`RED + RED + YELLOW`, 8 puntos de potencia de asalto) frente a defensas fijas de infantería regular (2 puntos), el ratio de asalto alcanza **4.0 $\ge 1.0$**, certificando la capacidad de ruptura y asalto coordinado.
+
 

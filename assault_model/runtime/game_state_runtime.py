@@ -194,17 +194,22 @@ class RuntimeGameState:
         self.reaction_used_this_turn.clear()
         self.pending_reaction = None
 
-        for unit in self.base_state.units:
-            unit.has_fired_this_turn = False
-            unit.has_fast_action_this_turn = False
+        if getattr(self.base_state, "turn", 1) > 1:
+            for unit in self.base_state.units:
+                unit.has_fired_this_turn = False
+                unit.has_fast_action_this_turn = False
 
-            if getattr(unit, "suppressed", False):
-                unit.clear_suppression()
-                _trace("SUPPRESSION_RECOVERED", unit=unit.unit_id)
+                if getattr(unit, "suppressed", False):
+                    unit.clear_suppression()
+                    _trace("SUPPRESSION_RECOVERED", unit=unit.unit_id)
 
-            if getattr(unit, "fallback", False):
-                unit.clear_fallback()
-                _trace("FALLBACK_RECOVERED", unit=unit.unit_id)
+                if getattr(unit, "fallback", False):
+                    unit.clear_fallback()
+                    _trace("FALLBACK_RECOVERED", unit=unit.unit_id)
+        else:
+            for unit in self.base_state.units:
+                unit.has_fired_this_turn = False
+                unit.has_fast_action_this_turn = False
 
         self._sync_eliminated_activation()
 
@@ -245,9 +250,30 @@ class RuntimeGameState:
         alive_sides = {u.side for u in alive_units}
         event_bus = context.event_bus if context else None
 
+        scenario_units = getattr(self.scenario, "units", None) or self.base_state.units
+        scenario_sides = {u.side for u in scenario_units}
+        lone_side_won = False
+        vp_cond = getattr(self.scenario, "vp_conditions", None)
+        vp_pts = getattr(vp_cond, "points", []) if vp_cond else []
+        if len(scenario_sides) == 1 and vp_pts:
+            lone_side = next(iter(scenario_sides))
+            lone_ownership = getattr(self.base_state, "side_to_ownership", {}).get(lone_side)
+            def _is_held(coords):
+                hs = self.base_state.hex_states.get(HexCoord(coords[0], coords[1])) or self.base_state.hex_states.get(coords)
+                if hs is None:
+                    return False
+                return (
+                    hs.ownership == lone_ownership
+                    or hs.ownership == lone_side
+                    or str(getattr(hs.ownership, "value", hs.ownership)).upper() == str(lone_side).upper()
+                )
+            if all(_is_held(p.hex_coords) for p in vp_pts):
+                lone_side_won = True
+
         is_terminal = (
             not alive_units
-            or len(alive_sides) == 1
+            or (len(scenario_sides) > 1 and len(alive_sides) <= 1)
+            or lone_side_won
             or (self.scenario.max_turns is not None and self.base_state.turn > self.scenario.max_turns)
         )
 

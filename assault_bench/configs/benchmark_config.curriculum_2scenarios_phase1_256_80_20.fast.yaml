@@ -1,7 +1,7 @@
 paths:
   run_root: runs_curriculum
   voec_config: voec_sim/configs/voec_config.yaml
-  muzero_config: agents/muzero/configs/muzero_config.yaml
+  ezv2_config: agents/efficientzero_v2/configs/efficientzero_v2_config.yaml
 
 benchmark:
   device: cuda
@@ -14,18 +14,18 @@ benchmark:
   seed_batch_size: 2
   persist_replay_episode_files: true
   mcts_simulations_by_profile:
-    muzero_selfplay: 128
-    muzero_vs_random_side_a: 128
-    muzero_vs_random_side_b: 128
+    ezv2_selfplay: 128
+    ezv2_vs_random_side_a: 128
+    ezv2_vs_random_side_b: 128
   scenario_id: battaglia_cittadina_2_1
   scenario_ids: [battaglia_cittadina_2_1, mettete_i_piedi_terra_1]
   scenario_weights: [80, 20]
   matchup_profiles:
-    - muzero_selfplay
-    - muzero_vs_random_side_a
-    - muzero_vs_random_side_b
+    - ezv2_selfplay
+    - ezv2_vs_random_side_a
+    - ezv2_vs_random_side_b
   seeds: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20]
-  max_steps: 60
+  max_steps: 120
   max_steps_override: 0
   mcts_simulations: 128
   mcts_c_puct: 2.3

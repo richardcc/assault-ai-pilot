@@ -1,0 +1,17 @@
+paths:
+  run_root: runs_curriculum
+  voec_config: voec_sim/configs/voec_config.yaml
+  ezv2_config: agents/efficientzero_v2/configs/efficientzero_v2_config.yaml
+
+benchmark:
+  scenario_id: vp_phase1_unoccupied_3hex
+  matchup_profiles:
+    - ezv2_selfplay
+    - ezv2_vs_random_side_a
+  seeds: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+  max_steps: 40
+  max_steps_override: 0
+  mcts_simulations: 128
+  mcts_c_puct: 2.3
+  mcts_temperature: 0.8
+  unit_prefilter_enabled: true

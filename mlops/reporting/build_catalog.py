@@ -509,14 +509,51 @@ def build_reporting_catalog(
             eval_total_count = int(len(eval_rows))
             if max_eval_history_per_model is not None:
                 eval_rows = eval_rows[: max(0, int(max_eval_history_per_model))]
+            def _unpack_scenarios(raw_items: Any) -> list[str]:
+                if not raw_items:
+                    return []
+                if isinstance(raw_items, str):
+                    candidates = [raw_items]
+                elif isinstance(raw_items, (list, tuple, set)):
+                    candidates = list(raw_items)
+                else:
+                    return []
+                out_sids: list[str] = []
+                for item in candidates:
+                    s = str(item or "").strip()
+                    if not s:
+                        continue
+                    if s.startswith("multi:"):
+                        s = s[len("multi:") :].strip()
+                    if "|" in s:
+                        out_sids.extend([p.strip() for p in s.split("|") if p.strip()])
+                    else:
+                        out_sids.append(s)
+                seen_sids = set()
+                res_sids = []
+                for x in out_sids:
+                    if x not in seen_sids:
+                        seen_sids.add(x)
+                        res_sids.append(x)
+                return res_sids
+
             scenario_train_counts: dict[str, int] = {}
             scenario_eval_counts: dict[str, int] = {}
             for tr in train_rows:
-                sids = [str(x).strip() for x in list(tr.get("scenario_ids", []) or []) if str(x).strip()]
+                sids = _unpack_scenarios(tr.get("scenario_ids") or tr.get("scenario_id"))
                 for sid in sids:
                     scenario_train_counts[sid] = scenario_train_counts.get(sid, 0) + 1
             for ev in eval_rows:
-                sids = [str(x).strip() for x in list(ev.get("scenario_ids", []) or []) if str(x).strip()]
+                raw_sids = ev.get("scenario_ids")
+                if not raw_sids and ev.get("scenario_ids_json"):
+                    try:
+                        import json
+                        raw_sids = json.loads(ev["scenario_ids_json"])
+                    except Exception:
+                        raw_sids = None
+                if not raw_sids:
+                    raw_sids = ev.get("scenario_id")
+                sids = _unpack_scenarios(raw_sids)
                 for sid in sids:
                     scenario_eval_counts[sid] = scenario_eval_counts.get(sid, 0) + 1
             scenarios_seen = sorted(set(list(scenario_train_counts.keys()) + list(scenario_eval_counts.keys())))

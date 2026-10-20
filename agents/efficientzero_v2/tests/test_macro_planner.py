@@ -197,4 +197,232 @@ def test_macro_planner_colon_action_and_vp_capture_detection():
     assert mod["MOVE:US_1:1:8"] > mod["MOVE:US_1:0:10"]
 
 
+def test_dynamic_mutation_rule_1_vp_deficit_spearhead():
+    """Verify Rule 1: Units with allow_spearhead_if_vp_deficit mutate to SPEARHEAD when behind in VPs."""
+    planner = MacroStrategyPlanner()
+    obs = SimpleNamespace(
+        to_play="US",
+        turn=5,
+        max_turns=6,  # Late game: turn 5 of 6
+        units=[
+            {
+                "unit_id": "screen_1",
+                "unit_key": "GE_RIFLES_43",
+                "side": "US",
+                "q": 0,
+                "r": 0,
+                "alive": True,
+                "doctrine_profile": {
+                    "default_role": "SCREEN",
+                    "mutation_rules": {"allow_spearhead_if_vp_deficit": True},
+                },
+            },
+            {
+                "unit_id": "support_no_mut",
+                "unit_key": "US_81MM_MORTAR",
+                "side": "US",
+                "q": 0,
+                "r": 1,
+                "alive": True,
+                "doctrine_profile": {
+                    "default_role": "FIRE_SUPPORT",
+                    "mutation_rules": {"allow_spearhead_if_vp_deficit": False},
+                },
+            },
+        ],
+        vp_hexes=[
+            {"vp_id": "enemy_vp", "q": 3, "r": 0},
+        ],
+        vp_owner_by_hex={"3,0": "GE"},  # Friendly: 0, Enemy: 1 -> Deficit!
+    )
+    plan = planner.compute_macro_plan(obs)
+
+    # screen_1 mutates to SPEARHEAD due to VP deficit
+    assert plan.get_role("screen_1") == "ROLE_SPEARHEAD"
+    assert plan.is_mutated("screen_1") is True
+    assert plan.get_mutation_reason("screen_1") == "VP_DEFICIT_PRESSURE"
+
+    # support_no_mut does NOT mutate because allow_spearhead_if_vp_deficit is False
+    assert plan.get_role("support_no_mut") == "ROLE_FIRE_SUPPORT"
+    assert plan.is_mutated("support_no_mut") is False
+    assert plan.get_mutation_reason("support_no_mut") == "DEFAULT_PROFILE"
+
+
+def test_dynamic_mutation_rule_2_morale_degradation_recovery():
+    """Verify Rule 2: Suppressed or low-HP spearhead units mutate to RECOVER."""
+    planner = MacroStrategyPlanner()
+    obs = SimpleNamespace(
+        to_play="US",
+        turn=2,
+        units=[
+            {
+                "unit_id": "spearhead_suppressed",
+                "unit_key": "US_AIRBORNE_RIFLES_43",
+                "side": "US",
+                "q": 1,
+                "r": 0,
+                "alive": True,
+                "suppressed": True,
+                "hp": 4,
+                "max_strength": 4,
+                "doctrine_profile": {
+                    "default_role": "SPEARHEAD",
+                    "fallback_threshold_hp": 2,
+                },
+            },
+            {
+                "unit_id": "spearhead_critically_wounded",
+                "unit_key": "US_AIRBORNE_RIFLES_43",
+                "side": "US",
+                "q": 2,
+                "r": 0,
+                "alive": True,
+                "hp": 1,
+                "strength": 1,
+                "max_strength": 4,
+                "doctrine_profile": {
+                    "default_role": "SPEARHEAD",
+                    "fallback_threshold_hp": 2,  # hp <= 2 triggers recover
+                },
+            },
+            {
+                "unit_id": "spearhead_healthy",
+                "unit_key": "US_AIRBORNE_RIFLES_43",
+                "side": "US",
+                "q": 3,
+                "r": 0,
+                "alive": True,
+                "hp": 4,
+                "max_strength": 4,
+                "doctrine_profile": {
+                    "default_role": "SPEARHEAD",
+                    "fallback_threshold_hp": 1,
+                },
+            },
+        ],
+        vp_hexes=[
+            {"vp_id": "vp_obj", "q": 4, "r": 0},
+        ],
+        vp_owner_by_hex={},
+    )
+    plan = planner.compute_macro_plan(obs)
+
+    # Suppressed spearhead mutates to ROLE_RECOVER
+    assert plan.get_role("spearhead_suppressed") == "ROLE_RECOVER"
+    assert plan.is_mutated("spearhead_suppressed") is True
+    assert plan.get_mutation_reason("spearhead_suppressed") == "MORALE_OR_HEALTH_DEGRADATION"
+
+    # Critically wounded spearhead mutates to ROLE_RECOVER
+    assert plan.get_role("spearhead_critically_wounded") == "ROLE_RECOVER"
+    assert plan.is_mutated("spearhead_critically_wounded") is True
+    assert plan.get_mutation_reason("spearhead_critically_wounded") == "MORALE_OR_HEALTH_DEGRADATION"
+
+    # Healthy spearhead stays SPEARHEAD
+    assert plan.get_role("spearhead_healthy") == "ROLE_SPEARHEAD"
+    assert plan.is_mutated("spearhead_healthy") is False
+
+
+def test_dynamic_mutation_rule_3_flanked_close_defense():
+    """Verify Rule 3: Heavy fire support flanked by adjacent enemy without escort mutates to CLOSE_DEFENSE."""
+    planner = MacroStrategyPlanner()
+    obs = SimpleNamespace(
+        to_play="ALLIES",
+        turn=2,
+        units=[
+            # Heavy MG at (0, 0)
+            {
+                "unit_id": "hmg_flanked",
+                "unit_key": "GE_HEAVY_MG_42",
+                "side": "ALLIES",
+                "q": 0,
+                "r": 0,
+                "alive": True,
+                "hp": 6,
+                "doctrine_profile": {
+                    "default_role": "FIRE_SUPPORT",
+                    "optimal_engagement_range": [3, 8],
+                    "mutation_rules": {"allow_close_defense_on_flank": True},
+                },
+            },
+            # Friendly escort far away at (5, 5) (> 1 hex)
+            {
+                "unit_id": "friendly_far",
+                "unit_key": "US_RIFLES_43",
+                "side": "ALLIES",
+                "q": 5,
+                "r": 5,
+                "alive": True,
+            },
+            # Adjacent enemy infantry at (1, 0) (distance 1 hex)
+            {
+                "unit_id": "enemy_adjacent",
+                "unit_key": "IT_RIFLES_43",
+                "side": "AXIS",
+                "q": 1,
+                "r": 0,
+                "alive": True,
+            },
+        ],
+        vp_hexes=[],
+        vp_owner_by_hex={},
+    )
+    plan = planner.compute_macro_plan(obs)
+
+    # Flanked heavy weapon mutates to ROLE_CLOSE_DEFENSE
+    assert plan.get_role("hmg_flanked") == "ROLE_CLOSE_DEFENSE"
+    assert plan.is_mutated("hmg_flanked") is True
+    assert plan.get_mutation_reason("hmg_flanked") == "FLANKED_CLOSE_DEFENSE"
+
+    # Prior modulation check for CLOSE_DEFENSE
+    legal = [
+        "DEFEND:hmg_flanked:0,0",
+        "ATTACK:hmg_flanked:enemy_adjacent",
+        "MOVE:hmg_flanked:1,1",  # Rejoining towards friendly_far at (5,5)
+        "MOVE:hmg_flanked:-1,-1",  # Moving away deeper into isolated void
+    ]
+    base_priors = {a: 0.25 for a in legal}
+    mod = planner.modulate_priors(base_priors, plan, legal, {}, "ALLIES")
+
+    # Defense and close-combat fire receive boost
+    assert mod["DEFEND:hmg_flanked:0,0"] > mod["MOVE:hmg_flanked:-1,-1"]
+    assert mod["ATTACK:hmg_flanked:enemy_adjacent"] > mod["MOVE:hmg_flanked:-1,-1"]
+    # Rejoining friendly escort gets higher boost than moving away into isolation
+    assert mod["MOVE:hmg_flanked:1,1"] > mod["MOVE:hmg_flanked:-1,-1"]
+    # Sum of priors is normalized
+    assert abs(sum(mod.values()) - 1.0) < 1e-5
+
+
+def test_macro_planner_vp_value_prioritization():
+    """
+    Verify that MacroPlanner prioritizes uncaptured VPs with higher intrinsic values
+    when distance is equal.
+    """
+    planner = MacroStrategyPlanner()
+
+    # Friendly unit at (0, 0)
+    # VP1 (standard 2.0 VP) at (2, 0) -> distance 2
+    # VP2 (high 3.0 VP) at (0, 2) -> distance 2
+    obs = SimpleNamespace(
+        to_play="US",
+        units=[
+            {"unit_id": "u1", "side": "US", "q": 0, "r": 0, "hp": 3, "alive": True},
+        ],
+        vp_hexes=[
+            {"q": 2, "r": 0, "value": 2.0, "vp_id": "vp_standard_2"},
+            {"q": 0, "r": 2, "value": 3.0, "vp_id": "vp_high_3"},
+        ],
+        vp_owner_by_hex={
+            "2,0": "NEUTRAL",
+            "0,2": "NEUTRAL",
+        },
+    )
+
+    plan = planner.compute_macro_plan(obs)
+
+    # MacroPlanner must select the 3-VP hex (0, 2) over the 2-VP hex (2, 0)
+    assert plan.target_vp_coords == (0, 2)
+    assert plan.target_vp_id == "vp_high_3"
+
+
+
 

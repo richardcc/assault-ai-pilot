@@ -112,7 +112,15 @@ def build_benchmark_payload(
         [dict(r or {}) for r in list(payload.get("results", []) or [])]
     )
     result_rows = to_dict_rows([getattr(r, "__dict__", {}) for r in list(results or [])])
-    muzero_row = next((r for r in result_rows if str(r.get("agent_name", "")) == "muzero_stub"), {})
+    muzero_row = next(
+        (
+            r
+            for r in result_rows
+            if str(r.get("agent_name", "")).strip().lower()
+            in {"ezv2_stub", "efficientzero_v2_stub", "muzero_stub"}
+        ),
+        {},
+    )
     baseline_row = next((r for r in result_rows if str(r.get("agent_name", "")) == "baseline_random"), {})
     train_summary = load_train_summary_fn(checkpoint_path=checkpoint_path)
     train_phase29 = dict(train_summary.get("phase_2_9_train_kpis", {}) or {})
@@ -138,6 +146,13 @@ def build_benchmark_payload(
         eval_kpis=eval_phase29,
         muzero_row=muzero_row,
     )
+    payload["doctrine_eval_kpis"] = {
+        "recon_survival_rate": float(eval_phase29.get("recon_survival_rate", 1.0)),
+        "fire_support_stationarity": float(eval_phase29.get("fire_support_stationarity", 1.0)),
+        "spearhead_vp_capture_rate": float(eval_phase29.get("spearhead_vp_capture_rate", 0.0)),
+        "doctrine_adherence_rate": float(eval_phase29.get("doctrine_adherence_rate", 0.0)),
+        "doctrine_mutation_rate": float(eval_phase29.get("doctrine_mutation_rate", 0.0)),
+    }
     profile_times = [
         float(r.get("profile_wall_s", 0.0) or 0.0)
         for r in result_rows

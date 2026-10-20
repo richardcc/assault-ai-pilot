@@ -119,12 +119,10 @@ from agents.efficientzero_v2.core.selfplay import (
     _unit_prefilter_ranking as ezv2_unit_prefilter_ranking,
 )
 from agents.efficientzero_v2.core.mcts import run_mcts_puct as run_mcts_puct_ezv2
-from agents.muzero.adapter_voec import MuZeroVOECAdapter
-from agents.muzero.core.mcts import run_mcts_puct as run_mcts_puct_muzero
-
-run_mcts_puct = run_mcts_puct_muzero
-from agents.muzero.core.selfplay import (
-    observation_to_tensor,
+from agents.efficientzero_v2.core.adapter_voec import EZV2VOECAdapter
+from agents.efficientzero_v2.core.observation import observation_to_tensor
+from agents.efficientzero_v2.core.objective_signals import objective_step_signal
+from agents.efficientzero_v2.core.xai_signals import (
     observation_to_vector,
     priors_and_values_from_model,
     xai_dynamics_signals_for_action_from_hidden,
@@ -133,7 +131,10 @@ from agents.muzero.core.selfplay import (
     xai_dynamics_signals_for_action,
     xai_root_signals_from_model,
 )
-from agents.muzero.objective_signals import objective_step_signal
+
+run_mcts_puct = run_mcts_puct_ezv2
+run_mcts_puct_muzero = run_mcts_puct_ezv2
+MuZeroVOECAdapter = EZV2VOECAdapter
 
 
 _action_kind_from_id = _au_action_kind_from_id
@@ -177,7 +178,7 @@ def _benchmark_seed_task(payload: dict):
 
 
 def _run_episode_with_policy(
-    adapter: MuZeroVOECAdapter,
+    adapter: EZV2VOECAdapter,
     scenario_id: str,
     seed: int,
     policy_name: str,
@@ -261,7 +262,7 @@ def _run_episode_with_policy(
 
 
 def _run_episode_with_policy_impl(
-    adapter: MuZeroVOECAdapter,
+    adapter: EZV2VOECAdapter,
     scenario_id: str,
     seed: int,
     policy_name: str,

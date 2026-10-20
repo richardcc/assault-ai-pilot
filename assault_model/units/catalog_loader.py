@@ -120,6 +120,7 @@ def load_unit_catalog(path: Path) -> Dict[str, UnitType]:
                 base_defense=data.get("base_defense", {}),
                 attack=attack_data,
                 traits=data.get("traits", []),
+                doctrine_profile=data.get("doctrine_profile"),
             )
         except Exception as exc:
             raise UnitCatalogError(

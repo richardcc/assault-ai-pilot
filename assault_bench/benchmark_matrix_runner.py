@@ -260,7 +260,11 @@ def execute_benchmark_matrix(
             policy_by_side = {str(side): str(policy) for side in sides}
         group = str(spec.get("group", ""))
         goal = str(spec.get("goal", ""))
-        collect_flow_metrics = bool("muzero" in agent_name.lower())
+        collect_flow_metrics = bool(
+            "ezv2" in agent_name.lower()
+            or "efficientzero" in agent_name.lower()
+            or "muzero" in agent_name.lower()
+        )
         mcts_simulations_eff = int(spec.get("mcts_simulations_override", mcts_simulations) or mcts_simulations)
         print(
             f"[Bench] profile={profile} agent={agent_name} policy={policy} "

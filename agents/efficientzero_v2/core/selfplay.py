@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import random
+import time
 from functools import lru_cache
 from pathlib import Path
 from typing import Any, Protocol
@@ -18,9 +19,12 @@ from agents.efficientzero_v2.core.objective_signals import (
 )
 from agents.efficientzero_v2.core.macro_planner import MacroStrategyPlanner
 from agents.efficientzero_v2.core.targets import build_sample
+from voec_sim.core.reward_calculator import VPPotentialCalculator
+from mlops.telemetry.probe_profiler import profile_probe, get_global_probe_profiler, LazyProbeSnapshot
+
 
 DEFAULT_ACTION_DIM = 32
-DEFAULT_OBS_CHANNELS = 32
+DEFAULT_OBS_CHANNELS = 38
 DEFAULT_OBS_HEIGHT = 16
 DEFAULT_OBS_WIDTH = 16
 
@@ -527,7 +531,7 @@ def _best_enemy_vp_qr_for_side(
         if q is None or r is None:
             continue
         owner = owners_by_qr.get((int(q), int(r)), "")
-        if owner == side_norm:
+        if side_norm and owner == side_norm:
             continue
         key = f"{int(q)},{int(r)}"
         vp_id = str(vp.get("vp_id", "")).strip() or f"VP_{idx}_{key}"
@@ -615,7 +619,7 @@ def _candidate_vp_target_after(
         if vq is None or vr is None:
             continue
         owner = owners_by_qr.get((int(vq), int(vr)), "")
-        if owner == side_norm:
+        if side_norm and owner == side_norm:
             continue
         vid = str(vp.get("vp_id", "")).strip() or f"VP_{idx}_{int(vq)},{int(vr)}"
         d = float(hex_distance_axial(int(tq), int(tr), int(vq), int(vr)))
@@ -635,60 +639,80 @@ def _candidate_expected_damage(
     terrain_los_block_by_hex: dict[str, float],
     units_by_id: dict[str, dict] | None = None,
     units_by_pos: dict[tuple[int, int], list[dict]] | None = None,
+    cache: dict[str, float] | None = None,
 ) -> float:
-    parts = str(action_id or "").split(":")
-    if len(parts) < 2:
+    action_str = str(action_id or "")
+    if cache is not None and action_str in cache:
+        return float(cache[action_str])
+
+    action_kind = action_str.split(":", 1)[0].strip().upper() if ":" in action_str else action_str.strip().upper()
+    if not _is_attack_like_action(action_kind):
+        if cache is not None:
+            cache[action_str] = 0.0
         return 0.0
-    actor_id = str(parts[1] or "")
-    actor = None
-    if isinstance(units_by_id, dict):
-        actor = units_by_id.get(actor_id, None)
-    if not isinstance(actor, dict):
-        actor = next((u for u in list(units or []) if str(u.get("unit_id", "")) == actor_id), None)
-    if not isinstance(actor, dict):
-        return 0.0
-    target = None
-    target_id = str(parts[2] or "") if len(parts) > 2 else ""
-    if target_id:
-        if isinstance(units_by_id, dict):
-            target = units_by_id.get(target_id, None)
-        if not isinstance(target, dict):
-            target = next((u for u in list(units or []) if str(u.get("unit_id", "")) == target_id), None)
-    if not isinstance(target, dict):
-        tq, tr = _action_target_qr(action_id)
-        if isinstance(tq, int) and isinstance(tr, int):
-            if isinstance(units_by_pos, dict):
-                same_hex = list(units_by_pos.get((int(tq), int(tr)), []) or [])
-                target = next((u for u in same_hex if str(u.get("side", "")) != str(actor.get("side", ""))), None)
-            if not isinstance(target, dict):
-                target = next(
-                    (
-                        u for u in list(units or [])
-                        if str(u.get("side", "")) != str(actor.get("side", ""))
-                        and int(u.get("q")) == int(tq)
-                        and int(u.get("r")) == int(tr)
-                    ),
-                    None,
-                )
-    if not isinstance(target, dict):
-        return 0.0
-    aq = actor.get("q")
-    ar = actor.get("r")
-    tq = target.get("q")
-    tr = target.get("r")
-    if not all(isinstance(v, int) for v in (aq, ar, tq, tr)):
-        return 0.0
-    dist = float(max(abs(int(aq) - int(tq)), abs(int(ar) - int(tr))))
-    key = f"{int(tq)},{int(tr)}"
-    return float(
-        _expected_damage_proxy(
-            attacker_key=str(actor.get("unit_key", "") or ""),
-            defender_key=str(target.get("unit_key", "") or ""),
-            distance=dist,
-            cover=float((terrain_cover_by_hex or {}).get(key, 0.0) or 0.0),
-            los_block=float((terrain_los_block_by_hex or {}).get(key, 0.0) or 0.0),
-        )
-    )
+
+    with profile_probe("combat_expected_damage"):
+        parts = str(action_id or "").split(":")
+        if len(parts) < 2:
+            val = 0.0
+        else:
+            actor_id = str(parts[1] or "")
+            actor = None
+            if isinstance(units_by_id, dict):
+                actor = units_by_id.get(actor_id, None)
+            if not isinstance(actor, dict):
+                actor = next((u for u in list(units or []) if str(u.get("unit_id", "")) == actor_id), None)
+            if not isinstance(actor, dict):
+                val = 0.0
+            else:
+                target = None
+                target_id = str(parts[2] or "") if len(parts) > 2 else ""
+                if target_id:
+                    if isinstance(units_by_id, dict):
+                        target = units_by_id.get(target_id, None)
+                    if not isinstance(target, dict):
+                        target = next((u for u in list(units or []) if str(u.get("unit_id", "")) == target_id), None)
+                if not isinstance(target, dict):
+                    tq, tr = _action_target_qr(action_id)
+                    if isinstance(tq, int) and isinstance(tr, int):
+                        if isinstance(units_by_pos, dict):
+                            same_hex = list(units_by_pos.get((int(tq), int(tr)), []) or [])
+                            target = next((u for u in same_hex if str(u.get("side", "")) != str(actor.get("side", ""))), None)
+                        if not isinstance(target, dict):
+                            target = next(
+                                (
+                                    u for u in list(units or [])
+                                    if str(u.get("side", "")) != str(actor.get("side", ""))
+                                    and int(u.get("q")) == int(tq)
+                                    and int(u.get("r")) == int(tr)
+                                ),
+                                None,
+                            )
+                if not isinstance(target, dict):
+                    val = 0.0
+                else:
+                    aq = actor.get("q")
+                    ar = actor.get("r")
+                    tq = target.get("q")
+                    tr = target.get("r")
+                    if not all(isinstance(v, int) for v in (aq, ar, tq, tr)):
+                        val = 0.0
+                    else:
+                        dist = float(max(abs(int(aq) - int(tq)), abs(int(ar) - int(tr))))
+                        key = f"{int(tq)},{int(tr)}"
+                        val = float(
+                            _expected_damage_proxy(
+                                attacker_key=str(actor.get("unit_key", "") or ""),
+                                defender_key=str(target.get("unit_key", "") or ""),
+                                distance=dist,
+                                cover=float((terrain_cover_by_hex or {}).get(key, 0.0) or 0.0),
+                                los_block=float((terrain_los_block_by_hex or {}).get(key, 0.0) or 0.0),
+                            )
+                        )
+
+    if cache is not None:
+        cache[str(action_id)] = val
+    return val
 
 
 def _build_unit_indexes(units: list[dict]) -> tuple[dict[str, dict], dict[tuple[int, int], list[dict]]]:
@@ -1084,52 +1108,62 @@ def _enemy_threat_component(
     return float(component), float(proximity_signal), "steps_to_vp"
 
 
-def _unit_hex_masks_from_actions(
-    *,
+def _obs_hex_masks_by_unit(
     legal_actions: list[str],
-    include_action: callable,
-) -> dict[str, list[dict[str, int]]]:
-    out: dict[str, dict[str, dict[str, int]]] = {}
+) -> tuple[dict[str, list[dict[str, int]]], dict[str, list[dict[str, int]]]]:
+    reachable_out: dict[str, set[tuple[int, int]]] = {}
+    attackable_out: dict[str, set[tuple[int, int]]] = {}
+
     for action_id in list(legal_actions or []):
-        action_kind, unit_id = _parse_action_id(str(action_id))
-        unit_key = str(unit_id or "").strip()
+        parts = str(action_id).split(":")
+        if len(parts) < 2:
+            continue
+        unit_key = parts[1].strip()
         if not unit_key:
             continue
-        kind_norm = str(action_kind or "").strip().upper()
-        if not include_action(kind_norm):
+        kind_norm = parts[0].strip().upper()
+        is_move = kind_norm.startswith(("MOVE", "STEP", "ADVANCE", "FLANK", "RETREAT"))
+        is_attack = _is_attack_like_action(kind_norm)
+        if not is_move and not is_attack:
             continue
-        tq, tr = _action_target_qr(str(action_id))
+
+        tq = None
+        tr = None
+        if len(parts) >= 4:
+            try:
+                tq = int(parts[-2])
+                tr = int(parts[-1])
+            except (ValueError, TypeError):
+                pass
+        if tq is None or tr is None:
+            tq, tr = _action_target_qr(str(action_id))
         if not isinstance(tq, int) or not isinstance(tr, int):
             continue
-        unit_map = out.setdefault(unit_key, {})
-        unit_map[f"{int(tq)},{int(tr)}"] = {"q": int(tq), "r": int(tr)}
-    return {
-        unit_id: sorted(
-            list(hexes.values()),
-            key=lambda h: (int(h.get("q", 0)), int(h.get("r", 0))),
-        )
-        for unit_id, hexes in out.items()
+
+        if is_move:
+            reachable_out.setdefault(unit_key, set()).add((tq, tr))
+        if is_attack:
+            attackable_out.setdefault(unit_key, set()).add((tq, tr))
+
+    reachable_mask = {
+        unit_id: [{"q": q, "r": r} for q, r in sorted(hex_set)]
+        for unit_id, hex_set in reachable_out.items()
     }
+    attackable_mask = {
+        unit_id: [{"q": q, "r": r} for q, r in sorted(hex_set)]
+        for unit_id, hex_set in attackable_out.items()
+    }
+    return reachable_mask, attackable_mask
 
 
 def _obs_reachable_hex_mask_by_unit(legal_actions: list[str]) -> dict[str, list[dict[str, int]]]:
-    return _unit_hex_masks_from_actions(
-        legal_actions=list(legal_actions or []),
-        include_action=lambda kind: (
-            kind.startswith("MOVE")
-            or kind.startswith("STEP")
-            or kind.startswith("ADVANCE")
-            or kind.startswith("FLANK")
-            or kind.startswith("RETREAT")
-        ),
-    )
+    r, _ = _obs_hex_masks_by_unit(legal_actions)
+    return r
 
 
 def _obs_attackable_hex_mask_by_unit(legal_actions: list[str]) -> dict[str, list[dict[str, int]]]:
-    return _unit_hex_masks_from_actions(
-        legal_actions=list(legal_actions or []),
-        include_action=lambda kind: _is_attack_like_action(kind),
-    )
+    _, a = _obs_hex_masks_by_unit(legal_actions)
+    return a
 
 
 def _obs_enemy_vp_threat_map(
@@ -1187,9 +1221,11 @@ def _obs_enemy_reaction_fire_risk(
     legal_actions: list[str],
     units: list[dict],
     actor_side: str,
+    units_by_id: dict[str, dict] | None = None,
 ) -> float:
     side_norm = _normalize_side(actor_side)
-    units_by_id = {str(u.get("unit_id", "")): dict(u or {}) for u in list(units or []) if isinstance(u, dict)}
+    if units_by_id is None:
+        units_by_id = {str(u.get("unit_id", "")): dict(u or {}) for u in list(units or []) if isinstance(u, dict)}
     total_reaction = 0
     enemy_reaction = 0
     for action_id in list(legal_actions or []):
@@ -2068,10 +2104,12 @@ class _NativeEZV2SelfplayBackend:
         )
         sustained_advantage_turns_by_side: dict[str, int] = {}
         pending_setup_strength_by_side: dict[str, float] = {}
+        unit_passivity_tracker_by_side: dict[str, dict[str, int]] = {}
 
         macro_planner = MacroStrategyPlanner()
         activated_units_by_side_turn: dict[tuple[str, int], set[str]] = {}
         for step_idx in range(max(1, effective_max_steps)):
+            _step_start_ns = time.perf_counter_ns()
             global_legal = list(adapter.legal_actions() or [])
             if not global_legal:
                 break
@@ -2096,6 +2134,7 @@ class _NativeEZV2SelfplayBackend:
             legal = list(global_legal)
             step_units = [dict(u or {}) for u in list(getattr(obs, "units", []) or []) if isinstance(u, dict)]
             step_units_by_id, step_units_by_pos = _build_unit_indexes(step_units)
+            step_expected_damage_cache: dict[str, float] = {}
             unit_prefilter_requested = bool(unit_prefilter_enabled) or bool(unit_prefilter_replan_enabled)
             precomputed_plan: dict[str, object] = {}
             if unit_prefilter_requested:
@@ -2180,8 +2219,9 @@ class _NativeEZV2SelfplayBackend:
                                     units=list(step_units),
                                     terrain_cover_by_hex=dict(getattr(obs, "terrain_cover_by_hex", {}) or {}),
                                     terrain_los_block_by_hex=dict(getattr(obs, "terrain_los_block_by_hex", {}) or {}),
-                                    units_by_id=dict(step_units_by_id),
-                                    units_by_pos=dict(step_units_by_pos),
+                                    units_by_id=step_units_by_id,
+                                    units_by_pos=step_units_by_pos,
+                                    cache=step_expected_damage_cache,
                                 )
                             )
                             expected_damage_by_action_u[str(aid)] = float(expected_damage_u)
@@ -2189,6 +2229,18 @@ class _NativeEZV2SelfplayBackend:
                                 success_prob_by_action_u[str(aid)] = _clamp01(expected_damage_u / success_damage_scale_u)
                             else:
                                 success_prob_by_action_u[str(aid)] = 0.5
+                        vp_race_bonus_u: dict[str, float] = {}
+                        sterile_mask_u: dict[str, bool] = {}
+                        if macro_plan is not None:
+                            _vp_owners_u = dict(getattr(obs, "vp_owner_by_hex", {}) or {})
+                            _to_play_u = str(getattr(obs, "to_play", "") or "")
+                            for aid in list(unit_actions or []):
+                                vp_race_bonus_u[str(aid)] = macro_planner.compute_vp_race_bonus(
+                                    str(aid), macro_plan, _vp_owners_u, _to_play_u
+                                )
+                                sterile_mask_u[str(aid)] = macro_planner.is_sterile_action(
+                                    str(aid), macro_plan, _vp_owners_u, _to_play_u
+                                )
                         mcts_u = run_mcts_puct(
                             legal_actions=unit_actions,
                             num_simulations=int(per_unit_sims),
@@ -2214,15 +2266,23 @@ class _NativeEZV2SelfplayBackend:
                             min_root_visits_top_n=int(mcts_min_root_visits_top_n),
                             value_rescale_mode=str(mcts_value_rescale_mode),
                             value_rescale_temperature=float(mcts_value_rescale_temperature),
+                            vp_race_prior_biasing=bool(macro_plan is not None and macro_plan.posture == "ASSAULT_VP"),
+                            vp_race_bonus_by_action=dict(vp_race_bonus_u),
+                            sterile_action_mask=dict(sterile_mask_u),
+                            sterile_prune_penalty=0.40,
                         )
+
                         chosen_u = str(mcts_u.chosen_action or "")
-                        breakdown_u = {
-                            str(row.get("action_id", "")): dict(row)
-                            for row in list(getattr(mcts_u, "root_candidate_breakdown", []) or [])
-                            if isinstance(row, dict)
-                        }
-                        chosen_breakdown_u = dict(breakdown_u.get(chosen_u, {}) or {})
-                        chosen_score_u = float(chosen_breakdown_u.get("puct_score", 0.0) or 0.0)
+                        chosen_score_u = float(getattr(mcts_u, "chosen_score", 0.0) or 0.0)
+                        if not chosen_score_u and getattr(mcts_u, "root_candidate_breakdown", None):
+                            breakdown_u = {
+                                str(row.get("action_id", "")): dict(row)
+                                for row in list(getattr(mcts_u, "root_candidate_breakdown", []) or [])
+                                if isinstance(row, dict)
+                            }
+                            chosen_breakdown_u = dict(breakdown_u.get(chosen_u, {}) or {})
+                            chosen_score_u = float(chosen_breakdown_u.get("puct_score", 0.0) or 0.0)
+
                         chosen_visits_u = 0
                         chosen_prob_u = 0.0
                         for aid_u, vis_u, prob_u in zip(
@@ -2306,8 +2366,9 @@ class _NativeEZV2SelfplayBackend:
                             units=list(step_units),
                             terrain_cover_by_hex=dict(getattr(obs, "terrain_cover_by_hex", {}) or {}),
                             terrain_los_block_by_hex=dict(getattr(obs, "terrain_los_block_by_hex", {}) or {}),
-                            units_by_id=dict(step_units_by_id),
-                            units_by_pos=dict(step_units_by_pos),
+                            units_by_id=step_units_by_id,
+                            units_by_pos=step_units_by_pos,
+                            cache=step_expected_damage_cache,
                         )
                     )
                     expected_damage_by_action[str(aid)] = float(expected_damage)
@@ -2316,6 +2377,18 @@ class _NativeEZV2SelfplayBackend:
                     else:
                         # Neutral for non-attack actions; centered term resolves to ~0 by default.
                         success_prob_by_action[str(aid)] = 0.5
+                vp_race_bonus_main: dict[str, float] = {}
+                sterile_mask_main: dict[str, bool] = {}
+                if macro_plan is not None:
+                    _vp_owners_m = dict(getattr(obs, "vp_owner_by_hex", {}) or {})
+                    _to_play_m = str(getattr(obs, "to_play", "") or "")
+                    for aid in list(legal or []):
+                        vp_race_bonus_main[str(aid)] = macro_planner.compute_vp_race_bonus(
+                            str(aid), macro_plan, _vp_owners_m, _to_play_m
+                        )
+                        sterile_mask_main[str(aid)] = macro_planner.is_sterile_action(
+                            str(aid), macro_plan, _vp_owners_m, _to_play_m
+                        )
                 mcts = run_mcts_puct(
                     legal_actions=legal,
                     num_simulations=int(mcts_simulations),
@@ -2341,6 +2414,10 @@ class _NativeEZV2SelfplayBackend:
                     min_root_visits_top_n=int(mcts_min_root_visits_top_n),
                     value_rescale_mode=str(mcts_value_rescale_mode),
                     value_rescale_temperature=float(mcts_value_rescale_temperature),
+                    vp_race_prior_biasing=bool(macro_plan is not None and macro_plan.posture == "ASSAULT_VP"),
+                    vp_race_bonus_by_action=dict(vp_race_bonus_main),
+                    sterile_action_mask=dict(sterile_mask_main),
+                    sterile_prune_penalty=0.40,
                 )
             sorted_probs = sorted([float(p) for p in list(mcts.probs or [])], reverse=True)
             mcts_margin = float((sorted_probs[0] if sorted_probs else 0.0) - (sorted_probs[1] if len(sorted_probs) > 1 else 0.0))
@@ -2378,28 +2455,60 @@ class _NativeEZV2SelfplayBackend:
                 vp_hexes=list(getattr(obs, "vp_hexes", []) or []),
                 vp_owner_by_hex=before_vp,
             )
-            obs_reachable_hex_mask_by_unit = _obs_reachable_hex_mask_by_unit(list(global_legal or []))
-            obs_attackable_hex_mask_by_unit = _obs_attackable_hex_mask_by_unit(list(global_legal or []))
-            obs_enemy_vp_threat_map = _obs_enemy_vp_threat_map(
-                units=list(getattr(obs, "units", []) or []),
-                vp_hexes=list(getattr(obs, "vp_hexes", []) or []),
-                vp_owner_by_hex=dict(before_vp),
-                actor_side=str(side),
-                threat_radius=int(
-                    dict(reward_shaping or {}).get("obs_enemy_vp_threat_radius", 6)
-                    or 6
+            _legal_for_masks = list(global_legal or [])
+            _masks_cache: list[tuple[dict, dict] | None] = [None]
+            def _get_reachable_mask():
+                if _masks_cache[0] is None:
+                    _masks_cache[0] = _obs_hex_masks_by_unit(_legal_for_masks)
+                return _masks_cache[0][0]
+
+            def _get_attackable_mask():
+                if _masks_cache[0] is None:
+                    _masks_cache[0] = _obs_hex_masks_by_unit(_legal_for_masks)
+                return _masks_cache[0][1]
+
+            obs_reachable_hex_mask_by_unit = LazyProbeSnapshot(
+                _get_reachable_mask,
+                probe_name="reachable_hex_mask",
+            )
+            obs_attackable_hex_mask_by_unit = LazyProbeSnapshot(
+                _get_attackable_mask,
+                probe_name="attackable_hex_mask",
+            )
+            _step_obs_units = list(getattr(obs, "units", []) or [])
+            _step_obs_vp_hexes = list(getattr(obs, "vp_hexes", []) or [])
+            _step_before_vp = dict(before_vp)
+            _step_actor_side = str(side)
+            _step_threat_radius = int(
+                dict(reward_shaping or {}).get("obs_enemy_vp_threat_radius", 6)
+                or 6
+            )
+            obs_enemy_vp_threat_map = LazyProbeSnapshot(
+                lambda: _obs_enemy_vp_threat_map(
+                    units=_step_obs_units,
+                    vp_hexes=_step_obs_vp_hexes,
+                    vp_owner_by_hex=_step_before_vp,
+                    actor_side=_step_actor_side,
+                    threat_radius=_step_threat_radius,
                 ),
+                probe_name="enemy_vp_threat_map",
             )
-            obs_enemy_reaction_fire_risk = _obs_enemy_reaction_fire_risk(
-                legal_actions=list(global_legal or []),
-                units=list(getattr(obs, "units", []) or []),
-                actor_side=str(side),
-            )
-            obs_vp_ownership_ttl = _obs_vp_ownership_ttl(
-                units=list(getattr(obs, "units", []) or []),
-                vp_hexes=list(getattr(obs, "vp_hexes", []) or []),
-                vp_owner_by_hex=dict(before_vp),
-                ttl_cap=int(dict(reward_shaping or {}).get("obs_vp_ownership_ttl_cap", 8) or 8),
+            with profile_probe("enemy_reaction_fire_risk"):
+                obs_enemy_reaction_fire_risk = _obs_enemy_reaction_fire_risk(
+                    legal_actions=list(global_legal or []),
+                    units=list(getattr(obs, "units", []) or []),
+                    actor_side=str(side),
+                    units_by_id=step_units_by_id,
+                )
+            _step_ttl_cap = int(dict(reward_shaping or {}).get("obs_vp_ownership_ttl_cap", 8) or 8)
+            obs_vp_ownership_ttl = LazyProbeSnapshot(
+                lambda: _obs_vp_ownership_ttl(
+                    units=_step_obs_units,
+                    vp_hexes=_step_obs_vp_hexes,
+                    vp_owner_by_hex=_step_before_vp,
+                    ttl_cap=_step_ttl_cap,
+                ),
+                probe_name="vp_ownership_ttl",
             )
             step_enemy_can_capture_vp_next, step_enemy_min_steps_to_vp = _safe_enemy_threat_defaults(
                 can_capture_default=int(enemy_can_capture_vp_next_default),
@@ -2559,11 +2668,11 @@ class _NativeEZV2SelfplayBackend:
                 )
                 row["enemy_threat_proximity_signal"] = float(enemy_threat_proximity_signal)
                 row["enemy_threat_source"] = str(enemy_threat_source)
-                row["obs_enemy_vp_threat_map"] = dict(obs_enemy_vp_threat_map)
-                row["obs_reachable_hex_mask_by_unit"] = dict(obs_reachable_hex_mask_by_unit)
-                row["obs_attackable_hex_mask_by_unit"] = dict(obs_attackable_hex_mask_by_unit)
+                row["obs_enemy_vp_threat_map"] = obs_enemy_vp_threat_map
+                row["obs_reachable_hex_mask_by_unit"] = obs_reachable_hex_mask_by_unit
+                row["obs_attackable_hex_mask_by_unit"] = obs_attackable_hex_mask_by_unit
                 row["obs_enemy_reaction_fire_risk"] = float(obs_enemy_reaction_fire_risk)
-                row["obs_vp_ownership_ttl"] = dict(obs_vp_ownership_ttl)
+                row["obs_vp_ownership_ttl"] = obs_vp_ownership_ttl
                 if vp_delta is not None:
                     vp_horizon_component, vp_horizon_steps, vp_horizon_signal, vp_horizon_source = _vp_horizon_soft_components(
                         reward_shaping=dict(reward_shaping or {}),
@@ -2611,8 +2720,8 @@ class _NativeEZV2SelfplayBackend:
                     actor_unit_id=str(row_unit_id),
                     actor_side=str(side),
                     units=list(getattr(obs, "units", []) or []),
-                    reachable_hex_mask_by_unit=dict(obs_reachable_hex_mask_by_unit),
-                    attackable_hex_mask_by_unit=dict(obs_attackable_hex_mask_by_unit),
+                    reachable_hex_mask_by_unit=obs_reachable_hex_mask_by_unit,
+                    attackable_hex_mask_by_unit=obs_attackable_hex_mask_by_unit,
                 )
                 if str(synergy_source) == "disabled":
                     synergy_component = float(cross_unit_synergy_component_default)
@@ -2663,22 +2772,14 @@ class _NativeEZV2SelfplayBackend:
                     row["selected_by"] = "direct_score_flat_q_vp_override"
                 else:
                     row["selected_by"] = str(tiebreak_path or "unknown")
-            chosen_prob = next(
-                (
-                    float(c.get("final_score", 0.0) or 0.0)
-                    for c in candidate_actions
-                    if str(c.get("action_id", "")) == str(chosen)
-                ),
-                0.0,
-            )
-            chosen_expected_damage_proxy = next(
-                (
-                    float(c.get("expected_damage_proxy", 0.0) or 0.0)
-                    for c in candidate_actions
-                    if str(c.get("action_id", "")) == str(chosen)
-                ),
-                0.0,
-            )
+            candidates_by_id: dict[str, dict] = {
+                str(c.get("action_id", "")): c
+                for c in candidate_actions
+                if isinstance(c, dict) and str(c.get("action_id", ""))
+            }
+            chosen_cand = dict(candidates_by_id.get(str(chosen), {}) or {})
+            chosen_prob = float(chosen_cand.get("final_score", 0.0) or 0.0)
+            chosen_expected_damage_proxy = float(chosen_cand.get("expected_damage_proxy", 0.0) or 0.0)
             transition = adapter.apply(chosen)
             post_obs = adapter.observation()
             action_kind, unit_id = _parse_action_id(chosen)
@@ -2877,70 +2978,72 @@ class _NativeEZV2SelfplayBackend:
                 legal_capture_options=int(legal_capture_options),
                 action_kind=str(action_kind),
             )
-            chosen_vp_horizon_component = next(
-                (
-                    float(c.get("vp_horizon_component"))
-                    for c in candidate_actions
-                    if str(c.get("action_id", "")) == str(chosen)
-                    and c.get("vp_horizon_component", None) is not None
-                ),
-                None,
+            chosen_vp_horizon_component = (
+                float(chosen_cand.get("vp_horizon_component"))
+                if chosen_cand.get("vp_horizon_component", None) is not None
+                else None
             )
-            chosen_vp_horizon_steps = next(
-                (
-                    float(c.get("vp_horizon_steps"))
-                    for c in candidate_actions
-                    if str(c.get("action_id", "")) == str(chosen)
-                    and c.get("vp_horizon_steps", None) is not None
-                ),
-                None,
+            chosen_vp_horizon_steps = (
+                float(chosen_cand.get("vp_horizon_steps"))
+                if chosen_cand.get("vp_horizon_steps", None) is not None
+                else None
             )
-            chosen_vp_horizon_signal = next(
-                (
-                    float(c.get("vp_horizon_signal"))
-                    for c in candidate_actions
-                    if str(c.get("action_id", "")) == str(chosen)
-                    and c.get("vp_horizon_signal", None) is not None
-                ),
-                None,
+            chosen_vp_horizon_signal = (
+                float(chosen_cand.get("vp_horizon_signal"))
+                if chosen_cand.get("vp_horizon_signal", None) is not None
+                else None
             )
-            chosen_vp_horizon_source = next(
-                (
-                    str(c.get("vp_horizon_source", "unknown") or "unknown")
-                    for c in candidate_actions
-                    if str(c.get("action_id", "")) == str(chosen)
-                ),
-                "unknown",
+            chosen_vp_horizon_source = str(chosen_cand.get("vp_horizon_source", "unknown") or "unknown")
+            chosen_enemy_threat_component = float(chosen_cand.get("enemy_threat_component", 0.0) or 0.0)
+            chosen_mobility_opportunity_cost_component = float(
+                chosen_cand.get("mobility_opportunity_cost_component", mobility_opportunity_cost_component_default)
+                if chosen_cand.get("mobility_opportunity_cost_component", None) is not None
+                else mobility_opportunity_cost_component_default
             )
-            chosen_enemy_threat_component = next(
-                (
-                    float(c.get("enemy_threat_component", 0.0) or 0.0)
-                    for c in candidate_actions
-                    if str(c.get("action_id", "")) == str(chosen)
-                ),
-                0.0,
-            )
-            chosen_mobility_opportunity_cost_component = next(
-                (
-                    float(c.get("mobility_opportunity_cost_component", 0.0) or 0.0)
-                    for c in candidate_actions
-                    if str(c.get("action_id", "")) == str(chosen)
-                ),
-                float(mobility_opportunity_cost_component_default),
-            )
-            chosen_cross_unit_synergy_component = next(
-                (
-                    float(c.get("cross_unit_synergy_component", 0.0) or 0.0)
-                    for c in candidate_actions
-                    if str(c.get("action_id", "")) == str(chosen)
-                ),
-                float(cross_unit_synergy_component_default),
+            chosen_cross_unit_synergy_component = float(
+                chosen_cand.get("cross_unit_synergy_component", cross_unit_synergy_component_default)
+                if chosen_cand.get("cross_unit_synergy_component", None) is not None
+                else cross_unit_synergy_component_default
             )
             damage_weight = float(cfg_shaping.get("damage_weight", 0.0) or 0.0)
             kill_weight = float(cfg_shaping.get("kill_weight", 0.0) or 0.0)
             capture_bonus = float(cfg_shaping.get("capture_bonus", 0.0) or 0.0)
             vp_capture_bonus_per_hex = float(cfg_shaping.get("vp_capture_bonus_per_hex", 0.0) or 0.0)
             idle_penalty = float(cfg_shaping.get("idle_penalty", 0.0) or 0.0)
+
+            # Progressive Radial Potential to VPs (Ng et al. 1999) - Task 2.1 & Turn Urgency / Paralysis - Task 2.3
+            vp_potential_weight = float(cfg_shaping.get("vp_potential_weight", 0.0) or 0.0)
+            vp_potential_gamma = float(cfg_shaping.get("vp_potential_gamma", 0.997) or 0.997)
+            vp_potential_ctrl_bonus = float(cfg_shaping.get("vp_potential_ctrl_bonus", 2.0) or 2.0)
+            vp_urgency_lambda = float(cfg_shaping.get("vp_urgency_lambda", 1.2) or 1.2)
+            paralysis_weight = float(cfg_shaping.get("paralysis_penalty_weight", 0.05) or 0.05)
+            vp_pot_calc = VPPotentialCalculator(
+                controlled_vp_bonus=vp_potential_ctrl_bonus,
+                gamma=vp_potential_gamma,
+                shaping_scale=vp_potential_weight,
+                urgency_decay_lambda=vp_urgency_lambda,
+                paralysis_penalty_weight=paralysis_weight,
+            )
+            side_passivity_tracker = unit_passivity_tracker_by_side.setdefault(str(side_norm), {})
+            action_parts = str(chosen or "").split(":")
+            actor_uid = action_parts[1] if len(action_parts) > 1 else ""
+            vp_potential_component, vp_pot_meta = vp_pot_calc.compute_step_shaping(
+                before_units=list(getattr(obs, "units", []) or []),
+                after_units=list(getattr(post_obs, "units", []) or []),
+                vp_hexes=list(getattr(obs, "vp_hexes", []) or []),
+                before_vp_owner=before_vp,
+                after_vp_owner=after_vp,
+                side=str(side_norm),
+                done=bool(done),
+                turn_before=int(getattr(obs, "turn", 1) or 1),
+                turn_after=int(getattr(post_obs, "turn", getattr(obs, "turn", 1)) or getattr(obs, "turn", 1)),
+                max_turns=int(getattr(obs, "max_turns", 8) or 8),
+                terrain_cover_by_hex=dict(getattr(obs, "terrain_cover_by_hex", {}) or {}),
+                action_kind=str(action_kind or ""),
+                actor_unit_id=str(actor_uid),
+                damage_dealt=float(damage_dealt or 0.0),
+                passivity_tracker=side_passivity_tracker,
+            )
 
             combat_reward = (float(damage_dealt) * damage_weight) + (float(kills_dealt) * kill_weight)
             capture_reward = (
@@ -2961,24 +3064,14 @@ class _NativeEZV2SelfplayBackend:
                 + float(reaction_exposure_component)
                 + float(global_strategy_soft_component)
                 + float(objective_soft_component)
+                + (float(vp_potential_component) if vp_potential_weight > 0.0 else 0.0)
             )
-            chosen_score = next(
-                (float(c.get("final_score", 0.0)) for c in candidate_actions if str(c.get("action_id", "")) == chosen),
-                0.0,
-            )
-            chosen_visit_count = next(
-                (int(c.get("visit_count", 0)) for c in candidate_actions if str(c.get("action_id", "")) == chosen),
-                0,
-            )
+
+            chosen_score = float(chosen_cand.get("final_score", 0.0) or 0.0)
+            chosen_visit_count = int(chosen_cand.get("visit_count", 0) or 0)
             best_visit_count = max([int(c.get("visit_count", 0) or 0) for c in candidate_actions], default=0)
-            vp_best_score = next(
-                (
-                    float(c.get("final_score", 0.0))
-                    for c in candidate_actions
-                    if str(c.get("action_id", "")) == str(vp_best_action_id)
-                ),
-                0.0,
-            )
+            vp_best_cand = dict(candidates_by_id.get(str(vp_best_action_id), {}) or {})
+            vp_best_score = float(vp_best_cand.get("final_score", 0.0) or 0.0)
             why_text = (
                 "selected action is also best toward VP"
                 if str(vp_best_action_id) == chosen
@@ -2995,6 +3088,15 @@ class _NativeEZV2SelfplayBackend:
                     decision_win_basis = "probability"
             else:
                 decision_win_basis = "direct_score_criterion"
+
+            prior_raw_boost = macro_planner.compute_action_boost(
+                chosen,
+                macro_plan,
+                dict(getattr(obs, "vp_owner_by_hex", {}) or {}),
+                str(getattr(obs, "to_play", "") or ""),
+            )
+            prior_boost_applied = float(max(0.0, prior_raw_boost - 1.0))
+
             samples.append(
                 build_sample(
                     observation=obs_encoded,
@@ -3011,6 +3113,33 @@ class _NativeEZV2SelfplayBackend:
                         "macro_posture": str(macro_plan.posture),
                         "macro_target_vp_id": str(macro_plan.target_vp_id),
                         "unit_macro_role": str(macro_plan.get_role(unit_id)),
+                        "role_assigned": str(macro_plan.get_role(unit_id)),
+                        "role_is_mutated": bool(macro_plan.is_mutated(unit_id)),
+                        "role_mutation_reason": str(macro_plan.get_mutation_reason(unit_id)),
+                        "prior_boost_applied": float(prior_boost_applied),
+                        "badge_label": f"{macro_plan.get_role(unit_id).replace('ROLE_', '')}",
+                        "units_snapshot": [
+                            {
+                                "unit_id": str(u.get("unit_id", "")),
+                                "unit_key": str(u.get("unit_key", "")),
+                                "unit_label": str(u.get("unit_label", "")),
+                                "side": str(u.get("side", "")),
+                                "q": int(u.get("q", 0) or 0),
+                                "r": int(u.get("r", 0) or 0),
+                                "hp": float(u.get("hp", 0.0) or 0.0),
+                                "alive": bool(u.get("alive", False)),
+                                "suppressed": bool(u.get("suppressed", False)),
+                                "doctrine_role": str(u.get("doctrine_role", "") or ""),
+                                "role_assigned": str(macro_plan.get_role(str(u.get("unit_id", "")))),
+                                "role_is_mutated": bool(macro_plan.is_mutated(str(u.get("unit_id", "")))),
+                                "role_mutation_reason": str(macro_plan.get_mutation_reason(str(u.get("unit_id", "")))),
+                                "prior_boost_applied": (
+                                    float(prior_boost_applied) if str(u.get("unit_id", "")) == str(unit_id) else 0.0
+                                ),
+                                "badge_label": f"{macro_plan.get_role(str(u.get('unit_id', ''))).replace('ROLE_', '')}",
+                            }
+                            for u in list(getattr(post_obs, "units", []) or [])
+                        ],
                         "game_turn": int(getattr(obs, "turn", 0) or 0),
                         "to_play": str(getattr(obs, "to_play", "") or ""),
                         "damage_dealt": float(damage_dealt),
@@ -3026,7 +3155,17 @@ class _NativeEZV2SelfplayBackend:
                         "reaction_exposure_source": str(reaction_exposure_source),
                         "global_strategy_soft_reward_component": float(global_strategy_soft_component),
                         "objective_soft_reward_component": float(objective_soft_component),
+                        "vp_potential_reward_component": float(vp_potential_component),
+                        "vp_potential_phi_before": float(vp_pot_meta.get("phi_before", 0.0)),
+                        "vp_potential_phi_after": float(vp_pot_meta.get("phi_after", 0.0)),
+                        "vp_potential_delta": float(vp_pot_meta.get("f_shaping_raw", 0.0)),
+                        "turn_urgency_factor": float(vp_pot_meta.get("turn_urgency_factor_before", 0.0)),
+                        "turn_urgency_decay": float(vp_pot_meta.get("turn_urgency_decay_before", 1.0)),
+                        "paralysis_penalty": float(vp_pot_meta.get("paralysis_penalty", 0.0)),
+                        "paralysis_units_count": int(vp_pot_meta.get("paralysis_units_count", 0)),
+                        "mcts_sterile_branches_pruned": int(getattr(mcts, "sterile_branches_pruned_count", 0)),
                         "vp_horizon_steps": (
+
                             float(chosen_vp_horizon_steps)
                             if chosen_vp_horizon_steps is not None
                             else None
@@ -3051,11 +3190,11 @@ class _NativeEZV2SelfplayBackend:
                         "enemy_threat_component": float(chosen_enemy_threat_component),
                         "mobility_opportunity_cost_component": float(chosen_mobility_opportunity_cost_component),
                         "cross_unit_synergy_component": float(chosen_cross_unit_synergy_component),
-                        "obs_enemy_vp_threat_map": dict(obs_enemy_vp_threat_map),
-                        "obs_reachable_hex_mask_by_unit": dict(obs_reachable_hex_mask_by_unit),
-                        "obs_attackable_hex_mask_by_unit": dict(obs_attackable_hex_mask_by_unit),
+                        "obs_enemy_vp_threat_map": obs_enemy_vp_threat_map,
+                        "obs_reachable_hex_mask_by_unit": obs_reachable_hex_mask_by_unit,
+                        "obs_attackable_hex_mask_by_unit": obs_attackable_hex_mask_by_unit,
                         "obs_enemy_reaction_fire_risk": float(obs_enemy_reaction_fire_risk),
-                        "obs_vp_ownership_ttl": dict(obs_vp_ownership_ttl),
+                        "obs_vp_ownership_ttl": obs_vp_ownership_ttl,
                         "objective_team_progress_delta": float(team_progress_delta),
                         "objective_soft_no_progress_triggered": bool(
                             objective_soft_meta.get("objective_soft_no_progress_triggered", False)
@@ -3192,6 +3331,10 @@ class _NativeEZV2SelfplayBackend:
                     },
                 )
             )
+            _step_end_ns = time.perf_counter_ns()
+            _step_prof = get_global_probe_profiler()
+            if _step_prof is not None and _step_prof.enabled:
+                _step_prof.record_step(_step_end_ns - _step_start_ns)
             obs = post_obs
             if done:
                 break

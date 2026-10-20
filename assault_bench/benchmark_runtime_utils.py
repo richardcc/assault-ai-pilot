@@ -27,11 +27,10 @@ def resolve_bench_device_choice(config_device_cfg: str, cli_device: str = "") ->
 
 def resolve_enabled_profiles(benchmark_cfg: Dict[str, object]) -> set[str]:
     default_profiles = {
-        "muzero_selfplay",
-        "muzero_vs_random_side_a",
-        "muzero_vs_random_side_b",
+        "ezv2_selfplay",
+        "ezv2_vs_random_side_a",
+        "ezv2_vs_random_side_b",
     }
-    # Backward compatible: old configs used enabled_profiles.
     raw = benchmark_cfg.get("matchup_profiles", None)
     if raw is None:
         raw = benchmark_cfg.get("enabled_profiles", None)
@@ -42,11 +41,13 @@ def resolve_enabled_profiles(benchmark_cfg: Dict[str, object]) -> set[str]:
         for x in list(raw or [])
         if str(x or "").strip()
     }
-    # Accept legacy aliases from earlier refactor iterations.
     aliases = {
-        "selfplay": "muzero_selfplay",
-        "vs_random_side_a": "muzero_vs_random_side_a",
-        "vs_random_side_b": "muzero_vs_random_side_b",
+        "selfplay": "ezv2_selfplay",
+        "vs_random_side_a": "ezv2_vs_random_side_a",
+        "vs_random_side_b": "ezv2_vs_random_side_b",
+        "muzero_selfplay": "ezv2_selfplay",
+        "muzero_vs_random_side_a": "ezv2_vs_random_side_a",
+        "muzero_vs_random_side_b": "ezv2_vs_random_side_b",
     }
     normalized = {aliases.get(v, v) for v in configured}
     return normalized or set(default_profiles)

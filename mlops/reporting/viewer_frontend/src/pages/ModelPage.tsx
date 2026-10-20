@@ -22,10 +22,11 @@ import { ReplayTab } from "./model-tabs/ReplayTab";
 import { MetaTab } from "./model-tabs/MetaTab";
 import { NetworkTopologyTab } from "./model-tabs/NetworkTopologyTab";
 
-type SectionKey = "topology" | "eval" | "train" | "meta";
+type SectionKey = "topology" | "train" | "eval" | "replay" | "meta";
 
-type TrainTabKey = "train-detail" | "train-head-diagnostics" | "objective-reward-config" | "network-topology";
-type EvalTabKey = "vp-summary" | "eval-head-diagnostics" | "eval-metrics" | "eval-decisions" | "match-replay" | "replay-log";
+type TrainTabKey = "train-detail" | "train-head-diagnostics" | "objective-reward-config";
+type EvalTabKey = "matchups-vp" | "benchmark-matrix" | "tactical-decisions" | "xai-heads";
+type ReplayTabKey = "tactical-map" | "event-log";
 type MetaTabKey = "overview";
 
 function rowScenarioIds(row: Dict): string[] {
@@ -48,10 +49,11 @@ export function ModelPage() {
   const [trainSummaryByRun, setTrainSummaryByRun] = useState<Record<string, Dict>>({});
 
   // Navegación de secciones
-  const [section, setSection] = useState<SectionKey>("topology");
+  const [section, setSection] = useState<SectionKey>("eval");
   const [topologyTab, setTopologyTab] = useState<"diagram" | "head-diagnostics" | "channel-attribution" | "macro-planner">("diagram");
   const [trainTab, setTrainTab] = useState<TrainTabKey>("train-detail");
-  const [evalTab, setEvalTab] = useState<EvalTabKey>("vp-summary");
+  const [evalTab, setEvalTab] = useState<EvalTabKey>("matchups-vp");
+  const [replayTab, setReplayTab] = useState<ReplayTabKey>("tactical-map");
   const [metaTab, setMetaTab] = useState<MetaTabKey>("overview");
 
   const [evalRowsByKey, setEvalRowsByKey] = useState<Record<string, EvalRow[]>>({});
@@ -182,8 +184,11 @@ export function ModelPage() {
     const out = new Set<string>();
     const seen = Array.isArray(model?.scenarios_seen) ? model!.scenarios_seen : [];
     for (const s of seen) {
-      const v = String(s || "").trim();
-      if (v && !v.startsWith("multi:")) out.add(v);
+      let v = String(s || "").trim();
+      if (!v) continue;
+      if (v.startsWith("multi:")) v = v.substring(6).trim();
+      const parts = v.includes("|") ? v.split("|").map((p) => p.trim()).filter(Boolean) : [v];
+      for (const p of parts) if (p) out.add(p);
     }
     for (const tr of trains) for (const sid of rowScenarioIds(tr)) out.add(sid);
     return Array.from(out).sort();
@@ -219,7 +224,7 @@ export function ModelPage() {
   }, [selectedEval]);
 
   // Cargar metadatos del Replay bajo demanda (SOLO si estamos en la pestaña de Replay)
-  const isReplayActive = section === "eval" && (evalTab === "match-replay" || evalTab === "replay-log");
+  const isReplayActive = section === "replay";
   useEffect(() => {
     if (!isReplayActive || !selectedEvalSourcePath) return;
 
@@ -406,121 +411,191 @@ export function ModelPage() {
 
   return (
     <div className="wrap">
-      <div className="bar" style={{ justifyContent: "space-between" }}>
-        <h1 style={{ margin: 0, fontSize: 18 }}>Model Detail - {String(model?.model_id || modelId || "")}</h1>
-        <div className="bar">
-          <button onClick={() => window.open("/", "_self")}>Back to Catalog</button>
-          <button
-            onClick={() => window.open("/docs", "_blank")}
-            style={{
-              background: "#0284c7",
-              color: "#ffffff",
-              border: "none",
-              borderRadius: 4,
-              padding: "4px 10px",
-              fontSize: 11,
-              fontWeight: 700,
-              cursor: "pointer",
-              display: "flex",
-              alignItems: "center",
-              gap: 4,
-            }}
-            title="Abrir Centro Interactivo de Documentación Técnica"
-          >
-            <span>📚</span> Documentación
-          </button>
-          <button
-            onClick={() =>
-              window.open(
-                `/elo?engine=${encodeURIComponent(String(model?.engine || engine))}&model=${encodeURIComponent(String(model?.model_id || modelId || "__all__"))}`,
-                "_blank",
-                "noopener,noreferrer"
-              )
-            }
-          >
-            ELO Leaderboard
-          </button>
-          <button
-            onClick={() => void handleRefresh()}
-            style={{
-              background: "#38bdf820",
-              border: "1px solid #38bdf880",
-              color: "#38bdf8",
-              fontWeight: "bold",
-              fontSize: 11,
-              padding: "4px 8px",
-              cursor: "pointer",
-              borderRadius: 4,
-            }}
-            title="Refrescar catálogo y evaluaciones"
-          >
-            🔄 Actualizar Datos
-          </button>
-          <button
-            onClick={async () => {
-              const target = String(model?.model_id || modelId || "");
-              if (!target) return;
-              if (
-                !window.confirm(
-                  `⚠️ ¿Estás seguro de que deseas ELIMINAR COMPLETAMENTE el experimento "${target}" y todos sus ficheros en disco?\nEsta acción no se puede deshacer.`
-                )
-              ) {
-                return;
-              }
-              try {
-                const res = await deleteModelExperiment(target, String(model?.engine || engine));
-                alert(`✅ Experimento eliminado con éxito (${res.freed_mb ?? 0} MB liberados).`);
-                window.location.href = "/";
-              } catch (err: any) {
-                alert(`❌ Error al eliminar experimento: ${err.message || err}`);
-              }
-            }}
-            style={{
-              background: "#ef444420",
-              border: "1px solid #ef444480",
-              color: "#fca5a5",
-              fontWeight: "bold",
-              fontSize: 11,
-              padding: "4px 8px",
-              cursor: "pointer",
-            }}
-            title="Eliminar este modelo y todos sus ficheros en disco"
-          >
-            🗑️ Eliminar Experimento
-          </button>
-        </div>
-      </div>
+      {/* Cabecera Compacta Unificada: Título, Acciones y Metadatos en espacio mínimo */}
+      <header
+        className="panel"
+        style={{
+          padding: "6px 12px",
+          display: "flex",
+          flexDirection: "column",
+          gap: 6,
+          flexShrink: 0,
+          background: "linear-gradient(180deg, #162032 0%, #0f172a 100%)",
+          border: "1px solid #334155",
+        }}
+      >
+        {/* Fila 1: Título y Acciones principales */}
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0, flex: 1 }}>
+            <span style={{ fontSize: 11, fontWeight: 700, color: "#94a3b8", textTransform: "uppercase", letterSpacing: "0.5px" }}>
+              Model Detail
+            </span>
+            <span style={{ color: "#475569" }}>|</span>
+            <h1
+              style={{
+                margin: 0,
+                fontSize: 14,
+                fontWeight: 700,
+                color: "#f8fafc",
+                whiteSpace: "nowrap",
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+              }}
+              title={String(model?.model_id || modelId || "")}
+            >
+              {String(model?.model_id || modelId || "")}
+            </h1>
+          </div>
 
-      <div className="panel" style={{ padding: "8px 10px" }}>
-        <div className="kpi-grid">
-          <div className="kpi">
-            <div className="k">model_id</div>
-            <div className="v" style={{ wordBreak: "break-all", fontSize: 11 }}>{String(model?.model_id || modelId || "")}</div>
+          <div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
+            <button
+              onClick={() => window.open("/", "_self")}
+              style={{ padding: "4px 8px", fontSize: 11, borderRadius: 4, background: "#1e293b", border: "1px solid #475569" }}
+            >
+              Back to Catalog
+            </button>
+            <button
+              onClick={() => window.open("/docs", "_blank")}
+              style={{
+                background: "#0284c7",
+                color: "#ffffff",
+                border: "none",
+                borderRadius: 4,
+                padding: "4px 8px",
+                fontSize: 11,
+                fontWeight: 700,
+                cursor: "pointer",
+                display: "flex",
+                alignItems: "center",
+                gap: 4,
+              }}
+              title="Abrir Centro Interactivo de Documentación Técnica"
+            >
+              <span>📚</span> Documentación
+            </button>
+            <button
+              onClick={() =>
+                window.open(
+                  `/elo?engine=${encodeURIComponent(String(model?.engine || engine))}&model=${encodeURIComponent(String(model?.model_id || modelId || "__all__"))}`,
+                  "_blank",
+                  "noopener,noreferrer"
+                )
+              }
+              style={{ padding: "4px 8px", fontSize: 11, borderRadius: 4, background: "#1e293b", border: "1px solid #475569" }}
+            >
+              ELO Leaderboard
+            </button>
+            <button
+              onClick={() => void handleRefresh()}
+              style={{
+                background: "#38bdf820",
+                border: "1px solid #38bdf880",
+                color: "#38bdf8",
+                fontWeight: "bold",
+                fontSize: 11,
+                padding: "4px 8px",
+                cursor: "pointer",
+                borderRadius: 4,
+              }}
+              title="Refrescar catálogo y evaluaciones"
+            >
+              🔄 Actualizar Datos
+            </button>
+            <button
+              onClick={async () => {
+                const target = String(model?.model_id || modelId || "");
+                if (!target) return;
+                if (
+                  !window.confirm(
+                    `⚠️ ¿Estás seguro de que deseas ELIMINAR COMPLETAMENTE el experimento "${target}" y todos sus ficheros en disco?\nEsta acción no se puede deshacer.`
+                  )
+                ) {
+                  return;
+                }
+                try {
+                  const res = await deleteModelExperiment(target, String(model?.engine || engine));
+                  alert(`✅ Experimento eliminado con éxito (${res.freed_mb ?? 0} MB liberados).`);
+                  window.location.href = "/";
+                } catch (err: any) {
+                  alert(`❌ Error al eliminar experimento: ${err.message || err}`);
+                }
+              }}
+              style={{
+                background: "#ef444420",
+                border: "1px solid #ef444480",
+                color: "#fca5a5",
+                fontWeight: "bold",
+                fontSize: 11,
+                padding: "4px 8px",
+                cursor: "pointer",
+                borderRadius: 4,
+              }}
+              title="Eliminar este modelo y todos sus ficheros en disco"
+            >
+              🗑️ Eliminar Experimento
+            </button>
           </div>
-          <div className="kpi">
-            <div className="k">engine / algorithm</div>
-            <div className="v">{String(model?.engine || engine)} / {String((model as Dict)?.algorithm || "-")}</div>
+        </div>
+
+        {/* Fila 2: Metadatos Compactos en una sola línea horizontal */}
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 12,
+            fontSize: 11,
+            flexWrap: "wrap",
+            paddingTop: 4,
+            borderTop: "1px solid #1e293b",
+          }}
+        >
+          <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+            <span style={{ color: "#64748b" }}>model_id:</span>
+            <code style={{ fontSize: 10, background: "#1e293b", padding: "1px 4px", borderRadius: 3, color: "#cbd5e1" }} title={String(model?.model_id || modelId || "")}>
+              {String(model?.model_id || modelId || "")}
+            </code>
           </div>
-          <div className="kpi">
-            <div className="k">trains / evals count</div>
-            <div className="v">{trains.length} trains / {String((model as Dict)?.eval_history_total_count ?? evalRows.length)} evals</div>
+
+          <span style={{ color: "#334155" }}>•</span>
+
+          <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+            <span style={{ color: "#64748b" }}>engine / algorithm:</span>
+            <span style={{ color: "#38bdf8", fontWeight: 600 }}>
+              {String(model?.engine || engine)} / {String((model as Dict)?.algorithm || "-")}
+            </span>
           </div>
-          <div className="kpi">
-            <div className="k">config_fingerprint</div>
-            <div className="v" style={{ wordBreak: "break-all", fontSize: 10 }}>{String(model?.config_fingerprint || "-")}</div>
+
+          <span style={{ color: "#334155" }}>•</span>
+
+          <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+            <span style={{ color: "#64748b" }}>trains / evals count:</span>
+            <span style={{ color: "#e2e8f0" }}>
+              <strong style={{ color: "#a78bfa" }}>{trains.length}</strong> trains / <strong style={{ color: "#34d399" }}>{String((model as Dict)?.eval_history_total_count ?? evalRows.length)}</strong> evals
+            </span>
           </div>
-          <div className="kpi" style={{ borderLeft: "2px solid #38bdf8" }}>
-            <div className="k">⏱️ training_duration_total</div>
-            <div
-              className="v"
-              style={{ color: "#38bdf8", fontWeight: 700, fontSize: 13 }}
+
+          <span style={{ color: "#334155" }}>•</span>
+
+          <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+            <span style={{ color: "#64748b" }}>config_fingerprint:</span>
+            <code style={{ fontSize: 10, background: "#1e293b", padding: "1px 4px", borderRadius: 3, color: "#94a3b8" }}>
+              {String(model?.config_fingerprint || "-")}
+            </code>
+          </div>
+
+          <span style={{ color: "#334155" }}>•</span>
+
+          <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+            <span style={{ color: "#64748b" }}>⏱️ training_duration_total:</span>
+            <span
+              style={{ color: "#38bdf8", fontWeight: 700 }}
               title={formatDurationDetailed(totalModelTrainDurationSec)}
             >
               {totalModelTrainDurationSec > 0 ? formatDuration(totalModelTrainDurationSec) : "-"}
-            </div>
+            </span>
           </div>
         </div>
-      </div>
+      </header>
 
       <div className="main">
         {/* Panel lateral: Train Runs & Scenarios */}
@@ -613,37 +688,72 @@ export function ModelPage() {
           {/* Main Sections */}
           <div style={{ display: "flex", gap: 6, alignItems: "center", marginBottom: 8, borderBottom: "1px solid #334155", paddingBottom: 6 }}>
             <button
-              className={`tabBtn ${section === "topology" ? "active" : ""}`}
-              onClick={() => setSection("topology")}
-              style={{ padding: "4px 10px", fontSize: 12, fontWeight: 700, color: section === "topology" ? "#38bdf8" : undefined }}
-            >
-              🧠 Network Topology
-            </button>
-            <button
               className={`tabBtn ${section === "eval" ? "active" : ""}`}
               onClick={() => setSection("eval")}
-              style={{ padding: "4px 10px", fontSize: 12 }}
+              style={{ padding: "5px 12px", fontSize: 12, fontWeight: 700, color: section === "eval" ? "#38bdf8" : undefined }}
             >
-              Eval Metrics
+              ⚔️ Evaluación & Benchmarks
+            </button>
+            <button
+              className={`tabBtn ${section === "replay" ? "active" : ""}`}
+              onClick={() => setSection("replay")}
+              style={{ padding: "5px 12px", fontSize: 12, fontWeight: 700, color: section === "replay" ? "#38bdf8" : undefined }}
+            >
+              🎬 Replay Forense
+            </button>
+            <button
+              className={`tabBtn ${section === "topology" ? "active" : ""}`}
+              onClick={() => setSection("topology")}
+              style={{ padding: "5px 12px", fontSize: 12, fontWeight: 700, color: section === "topology" ? "#38bdf8" : undefined }}
+            >
+              🧠 Topología & Red
             </button>
             <button
               className={`tabBtn ${section === "train" ? "active" : ""}`}
               onClick={() => setSection("train")}
-              style={{ padding: "4px 10px", fontSize: 12 }}
+              style={{ padding: "5px 12px", fontSize: 12, fontWeight: 700, color: section === "train" ? "#38bdf8" : undefined }}
             >
-              Train Runs & Metrics
+              📈 Entrenamiento
             </button>
             <button
               className={`tabBtn ${section === "meta" ? "active" : ""}`}
               onClick={() => setSection("meta")}
-              style={{ padding: "4px 10px", fontSize: 12 }}
+              style={{ padding: "5px 12px", fontSize: 12 }}
             >
-              Meta
+              ℹ️ Metadatos
             </button>
           </div>
 
           {/* Sub-tabs per section */}
           <div className="tabs" style={{ marginBottom: 10 }}>
+
+            {section === "eval" && (
+              <>
+                <button className={`tabBtn ${evalTab === "matchups-vp" ? "active" : ""}`} onClick={() => setEvalTab("matchups-vp")}>
+                  🏆 Resumen de Enfrentamientos & VP
+                </button>
+                <button className={`tabBtn ${evalTab === "benchmark-matrix" ? "active" : ""}`} onClick={() => setEvalTab("benchmark-matrix")}>
+                  📋 Matriz de Benchmarks & Gates
+                </button>
+                <button className={`tabBtn ${evalTab === "tactical-decisions" ? "active" : ""}`} onClick={() => setEvalTab("tactical-decisions")}>
+                  🎯 Decisiones Tácticas & Acciones
+                </button>
+                <button className={`tabBtn ${evalTab === "xai-heads" ? "active" : ""}`} onClick={() => setEvalTab("xai-heads")}>
+                  🔬 Diagnóstico de Cabezas (XAI)
+                </button>
+              </>
+            )}
+
+            {section === "replay" && (
+              <>
+                <button className={`tabBtn ${replayTab === "tactical-map" ? "active" : ""}`} onClick={() => setReplayTab("tactical-map")}>
+                  🗺️ Visor Táctico de Partida (2D Hex)
+                </button>
+                <button className={`tabBtn ${replayTab === "event-log" ? "active" : ""}`} onClick={() => setReplayTab("event-log")}>
+                  📜 Log Forense de Eventos
+                </button>
+              </>
+            )}
 
             {section === "topology" && (
               <>
@@ -651,13 +761,13 @@ export function ModelPage() {
                   📐 Topología & Arquitectura
                 </button>
                 <button className={`tabBtn ${topologyTab === "head-diagnostics" ? "active" : ""}`} onClick={() => setTopologyTab("head-diagnostics")}>
-                  🔬 Análisis de Cabezas (Head Diagnostics)
+                  🔬 Análisis Estructural de Cabezas
                 </button>
                 <button className={`tabBtn ${topologyTab === "channel-attribution" ? "active" : ""}`} onClick={() => setTopologyTab("channel-attribution")}>
-                  📊 Atribución de Canales
+                  📊 Atribución de Canales (32C)
                 </button>
                 <button className={`tabBtn ${topologyTab === "macro-planner" ? "active" : ""}`} onClick={() => setTopologyTab("macro-planner")}>
-                  ♟️ Planificador Macro (Nivel 1)
+                  ♟️ Planificador Doctrinal (Macro)
                 </button>
               </>
             )}
@@ -665,52 +775,69 @@ export function ModelPage() {
             {section === "train" && (
               <>
                 <button className={`tabBtn ${trainTab === "train-detail" ? "active" : ""}`} onClick={() => setTrainTab("train-detail")}>
-                  Train Detail
-                </button>
-                <button className={`tabBtn ${trainTab === "network-topology" ? "active" : ""}`} onClick={() => setTrainTab("network-topology")}>
-                  Network Topology
+                  📉 Curvas de Pérdidas & Dinámica
                 </button>
                 <button className={`tabBtn ${trainTab === "train-head-diagnostics" ? "active" : ""}`} onClick={() => setTrainTab("train-head-diagnostics")}>
-                  Train Head Diagnostics
+                  🩺 Pérdidas de Cabezas en Train
                 </button>
                 <button className={`tabBtn ${trainTab === "objective-reward-config" ? "active" : ""}`} onClick={() => setTrainTab("objective-reward-config")}>
-                  Objective/Reward Config
-                </button>
-              </>
-            )}
-
-            {section === "eval" && (
-              <>
-                <button className={`tabBtn ${evalTab === "vp-summary" ? "active" : ""}`} onClick={() => setEvalTab("vp-summary")}>
-                  VP Summary
-                </button>
-                <button className={`tabBtn ${evalTab === "eval-head-diagnostics" ? "active" : ""}`} onClick={() => setEvalTab("eval-head-diagnostics")}>
-                  Eval Head Diagnostics
-                </button>
-                <button className={`tabBtn ${evalTab === "eval-metrics" ? "active" : ""}`} onClick={() => setEvalTab("eval-metrics")}>
-                  Eval Metrics
-                </button>
-                <button className={`tabBtn ${evalTab === "eval-decisions" ? "active" : ""}`} onClick={() => setEvalTab("eval-decisions")}>
-                  Eval KBI Decisions
-                </button>
-                <button className={`tabBtn ${evalTab === "match-replay" ? "active" : ""}`} onClick={() => setEvalTab("match-replay")}>
-                  Match Replay
-                </button>
-                <button className={`tabBtn ${evalTab === "replay-log" ? "active" : ""}`} onClick={() => setEvalTab("replay-log")}>
-                  Replay Log
+                  🎯 Configuración de Recompensas & Objetivos
                 </button>
               </>
             )}
 
             {section === "meta" && (
               <button className={`tabBtn ${metaTab === "overview" ? "active" : ""}`} onClick={() => setMetaTab("overview")}>
-                Overview & Evals Index
+                📋 Índice de Evaluaciones & Trazabilidad
               </button>
             )}
           </div>
 
-          {/* Barra de filtros de evaluación y selector de partidas */}
+          {/* Selector limpio de Benchmark para la sección de Evaluación */}
           {section === "eval" && evalRows.length > 0 && (
+            <div
+              style={{
+                marginBottom: 12,
+                padding: "8px 12px",
+                background: "linear-gradient(180deg, #1e293b, #0f172a)",
+                border: "1px solid #334155",
+                borderRadius: 8,
+                display: "flex",
+                alignItems: "center",
+                flexWrap: "wrap",
+                gap: 12,
+              }}
+            >
+              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <span className="muted" style={{ fontSize: 12, fontWeight: 700 }}>📊 Benchmark Seleccionado:</span>
+                <select
+                  value={selectedEvalId}
+                  onChange={(e) => setSelectedEvalId(e.target.value)}
+                  style={{
+                    background: "#0f172a",
+                    border: "1px solid #38bdf8",
+                    color: "#f8fafc",
+                    padding: "4px 10px",
+                    borderRadius: 4,
+                    fontSize: 12,
+                    fontWeight: 600,
+                    maxWidth: 280,
+                  }}
+                >
+                  {evalRows.map((r) => {
+                    const id = String(r.eval_id || "");
+                    return <option key={id} value={id}>{id || "(no eval_id)"}</option>;
+                  })}
+                </select>
+              </div>
+              <div style={{ marginLeft: "auto", fontSize: 11, color: "#94a3b8" }}>
+                Total de benchmarks evaluados: <b style={{ color: "#38bdf8" }}>{evalRows.length}</b>
+              </div>
+            </div>
+          )}
+
+          {/* Barra completa de controles y filtros de Replay Forense */}
+          {section === "replay" && evalRows.length > 0 && (
             <div
               style={{
                 marginBottom: 12,
@@ -749,262 +876,256 @@ export function ModelPage() {
                   </select>
                 </div>
 
-                {(evalTab === "match-replay" || evalTab === "replay-log") && (
-                  <>
-                    {/* Filtro por Escenario */}
-                    <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
-                      <span className="muted" style={{ fontSize: 12, fontWeight: 600 }}>🗺️ Escenario:</span>
-                      <select
-                        value={filterScenario}
-                        onChange={(e) => setFilterScenario(e.target.value)}
-                        style={{
-                          background: "#0f172a",
-                          border: filterScenario !== "all" ? "1px solid #38bdf8" : "1px solid #475569",
-                          color: filterScenario !== "all" ? "#38bdf8" : "#f8fafc",
-                          padding: "4px 8px",
-                          borderRadius: 4,
-                          fontSize: 12,
-                          fontWeight: filterScenario !== "all" ? 700 : 400,
-                        }}
-                      >
-                        <option value="all">Todos los escenarios ({rawEpisodesMeta.length})</option>
-                        <option value="mettete">🏖️ Mettete i piedi a terra (Playas)</option>
-                        <option value="cittadina">🏙️ Battaglia Cittadina (Urbano)</option>
-                      </select>
-                    </div>
+                {/* Filtro por Escenario */}
+                <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
+                  <span className="muted" style={{ fontSize: 12, fontWeight: 600 }}>🗺️ Escenario:</span>
+                  <select
+                    value={filterScenario}
+                    onChange={(e) => setFilterScenario(e.target.value)}
+                    style={{
+                      background: "#0f172a",
+                      border: filterScenario !== "all" ? "1px solid #38bdf8" : "1px solid #475569",
+                      color: filterScenario !== "all" ? "#38bdf8" : "#f8fafc",
+                      padding: "4px 8px",
+                      borderRadius: 4,
+                      fontSize: 12,
+                      fontWeight: filterScenario !== "all" ? 700 : 400,
+                    }}
+                  >
+                    <option value="all">Todos los escenarios ({rawEpisodesMeta.length})</option>
+                    <option value="mettete">🏖️ Mettete i piedi a terra (Playas)</option>
+                    <option value="cittadina">🏙️ Battaglia Cittadina (Urbano)</option>
+                  </select>
+                </div>
 
-                    {/* Filtro por Matchup / Jugador */}
-                    <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
-                      <span className="muted" style={{ fontSize: 12, fontWeight: 600 }}>🎮 Tipo Jugador:</span>
-                      <select
-                        value={filterMatchup}
-                        onChange={(e) => setFilterMatchup(e.target.value)}
-                        style={{
-                          background: "#0f172a",
-                          border: filterMatchup !== "all" ? "1px solid #a855f7" : "1px solid #475569",
-                          color: filterMatchup !== "all" ? "#c084fc" : "#f8fafc",
-                          padding: "4px 8px",
-                          borderRadius: 4,
-                          fontSize: 12,
-                          fontWeight: filterMatchup !== "all" ? 700 : 400,
-                        }}
-                      >
-                        <option value="all">Todos los matchups</option>
-                        <option value="selfplay">⚔️ Self-Play (MCTS vs MCTS)</option>
-                        <option value="vs_random">🎲 MCTS vs Random (Todos)</option>
-                        <option value="vs_random_def">🛡️ MCTS Defensor vs Random Atacante (US)</option>
-                        <option value="vs_random_atk">⚔️ MCTS Atacante vs Random Defensor (Eje)</option>
-                      </select>
-                    </div>
+                {/* Filtro por Matchup / Jugador */}
+                <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
+                  <span className="muted" style={{ fontSize: 12, fontWeight: 600 }}>🎮 Tipo Jugador:</span>
+                  <select
+                    value={filterMatchup}
+                    onChange={(e) => setFilterMatchup(e.target.value)}
+                    style={{
+                      background: "#0f172a",
+                      border: filterMatchup !== "all" ? "1px solid #a855f7" : "1px solid #475569",
+                      color: filterMatchup !== "all" ? "#c084fc" : "#f8fafc",
+                      padding: "4px 8px",
+                      borderRadius: 4,
+                      fontSize: 12,
+                      fontWeight: filterMatchup !== "all" ? 700 : 400,
+                    }}
+                  >
+                    <option value="all">Todos los matchups</option>
+                    <option value="selfplay">⚔️ Self-Play (MCTS vs MCTS)</option>
+                    <option value="vs_random">🎲 MCTS vs Random (Todos)</option>
+                    <option value="vs_random_def">🛡️ MCTS Defensor vs Random Atacante (US)</option>
+                    <option value="vs_random_atk">⚔️ MCTS Atacante vs Random Defensor (Eje)</option>
+                  </select>
+                </div>
 
-                    {/* Filtro por Ganador / Resultado */}
-                    <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
-                      <span className="muted" style={{ fontSize: 12, fontWeight: 600 }}>🏆 Ganador:</span>
-                      <select
-                        value={filterWinner}
-                        onChange={(e) => setFilterWinner(e.target.value)}
-                        style={{
-                          background: "#0f172a",
-                          border: filterWinner !== "all" ? "1px solid #22c55e" : "1px solid #475569",
-                          color: filterWinner !== "all" ? "#4ade80" : "#f8fafc",
-                          padding: "4px 8px",
-                          borderRadius: 4,
-                          fontSize: 12,
-                          fontWeight: filterWinner !== "all" ? 700 : 400,
-                        }}
-                      >
-                        <option value="all">Todos los resultados</option>
-                        <option value="MCTS_WIN">🏆 Victorias MCTS (Modelo Gana)</option>
-                        <option value="MCTS_LOSS">⚠️ Derrotas MCTS (Random Gana)</option>
-                        <option value="US">🔵 Ganó US (Aliados)</option>
-                        <option value="GE">🔴 Ganó GE (Alemania)</option>
-                        <option value="IT">🟢 Ganó IT (Italia)</option>
-                        <option value="EJE">🛡️ Ganó Eje (GE o IT)</option>
-                        <option value="EMPATE">⚖️ Empates Tácticos</option>
-                      </select>
-                    </div>
+                {/* Filtro por Ganador / Resultado */}
+                <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
+                  <span className="muted" style={{ fontSize: 12, fontWeight: 600 }}>🏆 Ganador:</span>
+                  <select
+                    value={filterWinner}
+                    onChange={(e) => setFilterWinner(e.target.value)}
+                    style={{
+                      background: "#0f172a",
+                      border: filterWinner !== "all" ? "1px solid #22c55e" : "1px solid #475569",
+                      color: filterWinner !== "all" ? "#4ade80" : "#f8fafc",
+                      padding: "4px 8px",
+                      borderRadius: 4,
+                      fontSize: 12,
+                      fontWeight: filterWinner !== "all" ? 700 : 400,
+                    }}
+                  >
+                    <option value="all">Todos los resultados</option>
+                    <option value="MCTS_WIN">🏆 Victorias MCTS (Modelo Gana)</option>
+                    <option value="MCTS_LOSS">⚠️ Derrotas MCTS (Random Gana)</option>
+                    <option value="US">🔵 Ganó US (Aliados)</option>
+                    <option value="GE">🔴 Ganó GE (Alemania)</option>
+                    <option value="IT">🟢 Ganó IT (Italia)</option>
+                    <option value="EJE">🛡️ Ganó Eje (GE o IT)</option>
+                    <option value="EMPATE">⚖️ Empates Tácticos</option>
+                  </select>
+                </div>
 
-                    {/* Buscador de Seed o ID */}
-                    <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
-                      <span className="muted" style={{ fontSize: 12 }}>🔍</span>
-                      <input
-                        type="text"
-                        placeholder="Buscar seed o ep..."
-                        value={searchSeedOrId}
-                        onChange={(e) => setSearchSeedOrId(e.target.value)}
-                        style={{
-                          background: "#0f172a",
-                          border: searchSeedOrId ? "1px solid #facc15" : "1px solid #475569",
-                          color: "#f8fafc",
-                          padding: "4px 8px",
-                          borderRadius: 4,
-                          fontSize: 12,
-                          width: 130,
-                        }}
-                      />
-                    </div>
-                  </>
-                )}
+                {/* Buscador de Seed o ID */}
+                <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
+                  <span className="muted" style={{ fontSize: 12 }}>🔍</span>
+                  <input
+                    type="text"
+                    placeholder="Buscar seed o ep..."
+                    value={searchSeedOrId}
+                    onChange={(e) => setSearchSeedOrId(e.target.value)}
+                    style={{
+                      background: "#0f172a",
+                      border: searchSeedOrId ? "1px solid #facc15" : "1px solid #475569",
+                      color: "#f8fafc",
+                      padding: "4px 8px",
+                      borderRadius: 4,
+                      fontSize: 12,
+                      width: 130,
+                    }}
+                  />
+                </div>
               </div>
 
               {/* Fila 2: Chips de acceso rápido y selector de partida activa */}
-              {(evalTab === "match-replay" || evalTab === "replay-log") && (
-                <div style={{ display: "flex", flexDirection: "column", gap: 6, paddingTop: 4, borderTop: "1px dashed #334155" }}>
-                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 6 }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: 4, flexWrap: "wrap" }}>
-                      <span style={{ fontSize: 11, color: "#64748b", fontWeight: 700, marginRight: 2 }}>FILTROS RÁPIDOS:</span>
-                      <button
-                        onClick={() => { setFilterScenario("all"); setFilterMatchup("all"); setFilterWinner("all"); setSearchSeedOrId(""); }}
-                        style={{
-                          padding: "2px 7px", fontSize: 11, borderRadius: 4, cursor: "pointer", border: "1px solid #475569",
-                          background: filterScenario === "all" && filterMatchup === "all" && filterWinner === "all" && !searchSeedOrId ? "#334155" : "transparent",
-                          color: "#cbd5e1"
-                        }}
-                      >
-                        Todas
-                      </button>
-                      <button
-                        onClick={() => setFilterScenario((prev) => (prev === "mettete" ? "all" : "mettete"))}
-                        style={{
-                          padding: "2px 7px", fontSize: 11, borderRadius: 4, cursor: "pointer",
-                          border: filterScenario === "mettete" ? "1px solid #38bdf8" : "1px solid #475569",
-                          background: filterScenario === "mettete" ? "rgba(56, 189, 248, 0.2)" : "transparent",
-                          color: filterScenario === "mettete" ? "#38bdf8" : "#cbd5e1"
-                        }}
-                      >
-                        🏖️ Mettete
-                      </button>
-                      <button
-                        onClick={() => setFilterScenario((prev) => (prev === "cittadina" ? "all" : "cittadina"))}
-                        style={{
-                          padding: "2px 7px", fontSize: 11, borderRadius: 4, cursor: "pointer",
-                          border: filterScenario === "cittadina" ? "1px solid #38bdf8" : "1px solid #475569",
-                          background: filterScenario === "cittadina" ? "rgba(56, 189, 248, 0.2)" : "transparent",
-                          color: filterScenario === "cittadina" ? "#38bdf8" : "#cbd5e1"
-                        }}
-                      >
-                        🏙️ Cittadina
-                      </button>
-                      <button
-                        onClick={() => setFilterMatchup((prev) => (prev === "selfplay" ? "all" : "selfplay"))}
-                        style={{
-                          padding: "2px 7px", fontSize: 11, borderRadius: 4, cursor: "pointer",
-                          border: filterMatchup === "selfplay" ? "1px solid #a855f7" : "1px solid #475569",
-                          background: filterMatchup === "selfplay" ? "rgba(168, 85, 247, 0.2)" : "transparent",
-                          color: filterMatchup === "selfplay" ? "#c084fc" : "#cbd5e1"
-                        }}
-                      >
-                        ⚔️ Self-Play MCTS
-                      </button>
-                      <button
-                        onClick={() => setFilterMatchup((prev) => (prev === "vs_random" ? "all" : "vs_random"))}
-                        style={{
-                          padding: "2px 7px", fontSize: 11, borderRadius: 4, cursor: "pointer",
-                          border: filterMatchup === "vs_random" ? "1px solid #a855f7" : "1px solid #475569",
-                          background: filterMatchup === "vs_random" ? "rgba(168, 85, 247, 0.2)" : "transparent",
-                          color: filterMatchup === "vs_random" ? "#c084fc" : "#cbd5e1"
-                        }}
-                      >
-                        🎲 vs Random
-                      </button>
-                      <button
-                        onClick={() => setFilterWinner((prev) => (prev === "MCTS_WIN" ? "all" : "MCTS_WIN"))}
-                        style={{
-                          padding: "2px 7px", fontSize: 11, borderRadius: 4, cursor: "pointer",
-                          border: filterWinner === "MCTS_WIN" ? "1px solid #22c55e" : "1px solid #475569",
-                          background: filterWinner === "MCTS_WIN" ? "rgba(34, 197, 94, 0.2)" : "transparent",
-                          color: filterWinner === "MCTS_WIN" ? "#4ade80" : "#cbd5e1"
-                        }}
-                      >
-                        🏆 Victorias MCTS
-                      </button>
-                      <button
-                        onClick={() => setFilterWinner((prev) => (prev === "MCTS_LOSS" ? "all" : "MCTS_LOSS"))}
-                        style={{
-                          padding: "2px 7px", fontSize: 11, borderRadius: 4, cursor: "pointer",
-                          border: filterWinner === "MCTS_LOSS" ? "1px solid #ef4444" : "1px solid #475569",
-                          background: filterWinner === "MCTS_LOSS" ? "rgba(239, 68, 68, 0.2)" : "transparent",
-                          color: filterWinner === "MCTS_LOSS" ? "#f87171" : "#cbd5e1"
-                        }}
-                      >
-                        ⚠️ Derrotas / Casos Límite
-                      </button>
-                    </div>
-
-                    <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                      <span
-                        style={{
-                          fontSize: 11,
-                          fontWeight: 700,
-                          color: filteredEpisodes.length > 0 ? "#38bdf8" : "#ef4444",
-                          background: "rgba(15, 23, 42, 0.8)",
-                          padding: "2px 8px",
-                          borderRadius: 4,
-                          border: "1px solid #334155",
-                        }}
-                      >
-                        {filteredEpisodes.length} de {rawEpisodesMeta.length} partidas
-                      </span>
-                      {(filterScenario !== "all" || filterMatchup !== "all" || filterWinner !== "all" || Boolean(searchSeedOrId)) && (
-                        <button
-                          onClick={() => { setFilterScenario("all"); setFilterMatchup("all"); setFilterWinner("all"); setSearchSeedOrId(""); }}
-                          title="Restablecer todos los filtros"
-                          style={{
-                            padding: "2px 6px",
-                            fontSize: 11,
-                            background: "rgba(239, 68, 68, 0.15)",
-                            border: "1px solid #ef4444",
-                            color: "#f87171",
-                            borderRadius: 4,
-                            cursor: "pointer",
-                            fontWeight: 600,
-                          }}
-                        >
-                          ✕ Limpiar
-                        </button>
-                      )}
-                    </div>
+              <div style={{ display: "flex", flexDirection: "column", gap: 6, paddingTop: 4, borderTop: "1px dashed #334155" }}>
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 6 }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 4, flexWrap: "wrap" }}>
+                    <span style={{ fontSize: 11, color: "#64748b", fontWeight: 700, marginRight: 2 }}>FILTROS RÁPIDOS:</span>
+                    <button
+                      onClick={() => { setFilterScenario("all"); setFilterMatchup("all"); setFilterWinner("all"); setSearchSeedOrId(""); }}
+                      style={{
+                        padding: "2px 7px", fontSize: 11, borderRadius: 4, cursor: "pointer", border: "1px solid #475569",
+                        background: filterScenario === "all" && filterMatchup === "all" && filterWinner === "all" && !searchSeedOrId ? "#334155" : "transparent",
+                        color: "#cbd5e1"
+                      }}
+                    >
+                      Todas
+                    </button>
+                    <button
+                      onClick={() => setFilterScenario((prev) => (prev === "mettete" ? "all" : "mettete"))}
+                      style={{
+                        padding: "2px 7px", fontSize: 11, borderRadius: 4, cursor: "pointer",
+                        border: filterScenario === "mettete" ? "1px solid #38bdf8" : "1px solid #475569",
+                        background: filterScenario === "mettete" ? "rgba(56, 189, 248, 0.2)" : "transparent",
+                        color: filterScenario === "mettete" ? "#38bdf8" : "#cbd5e1"
+                      }}
+                    >
+                      🏖️ Mettete
+                    </button>
+                    <button
+                      onClick={() => setFilterScenario((prev) => (prev === "cittadina" ? "all" : "cittadina"))}
+                      style={{
+                        padding: "2px 7px", fontSize: 11, borderRadius: 4, cursor: "pointer",
+                        border: filterScenario === "cittadina" ? "1px solid #38bdf8" : "1px solid #475569",
+                        background: filterScenario === "cittadina" ? "rgba(56, 189, 248, 0.2)" : "transparent",
+                        color: filterScenario === "cittadina" ? "#38bdf8" : "#cbd5e1"
+                      }}
+                    >
+                      🏙️ Cittadina
+                    </button>
+                    <button
+                      onClick={() => setFilterMatchup((prev) => (prev === "selfplay" ? "all" : "selfplay"))}
+                      style={{
+                        padding: "2px 7px", fontSize: 11, borderRadius: 4, cursor: "pointer",
+                        border: filterMatchup === "selfplay" ? "1px solid #a855f7" : "1px solid #475569",
+                        background: filterMatchup === "selfplay" ? "rgba(168, 85, 247, 0.2)" : "transparent",
+                        color: filterMatchup === "selfplay" ? "#c084fc" : "#cbd5e1"
+                      }}
+                    >
+                      ⚔️ Self-Play MCTS
+                    </button>
+                    <button
+                      onClick={() => setFilterMatchup((prev) => (prev === "vs_random" ? "all" : "vs_random"))}
+                      style={{
+                        padding: "2px 7px", fontSize: 11, borderRadius: 4, cursor: "pointer",
+                        border: filterMatchup === "vs_random" ? "1px solid #a855f7" : "1px solid #475569",
+                        background: filterMatchup === "vs_random" ? "rgba(168, 85, 247, 0.2)" : "transparent",
+                        color: filterMatchup === "vs_random" ? "#c084fc" : "#cbd5e1"
+                      }}
+                    >
+                      🎲 vs Random
+                    </button>
+                    <button
+                      onClick={() => setFilterWinner((prev) => (prev === "MCTS_WIN" ? "all" : "MCTS_WIN"))}
+                      style={{
+                        padding: "2px 7px", fontSize: 11, borderRadius: 4, cursor: "pointer",
+                        border: filterWinner === "MCTS_WIN" ? "1px solid #22c55e" : "1px solid #475569",
+                        background: filterWinner === "MCTS_WIN" ? "rgba(34, 197, 94, 0.2)" : "transparent",
+                        color: filterWinner === "MCTS_WIN" ? "#4ade80" : "#cbd5e1"
+                      }}
+                    >
+                      🏆 Victorias MCTS
+                    </button>
+                    <button
+                      onClick={() => setFilterWinner((prev) => (prev === "MCTS_LOSS" ? "all" : "MCTS_LOSS"))}
+                      style={{
+                        padding: "2px 7px", fontSize: 11, borderRadius: 4, cursor: "pointer",
+                        border: filterWinner === "MCTS_LOSS" ? "1px solid #ef4444" : "1px solid #475569",
+                        background: filterWinner === "MCTS_LOSS" ? "rgba(239, 68, 68, 0.2)" : "transparent",
+                        color: filterWinner === "MCTS_LOSS" ? "#f87171" : "#cbd5e1"
+                      }}
+                    >
+                      ⚠️ Derrotas / Casos Límite
+                    </button>
                   </div>
 
-                  {/* Selector desplegable de partida */}
-                  <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 2 }}>
-                    <span style={{ fontSize: 12, fontWeight: 700, color: "#f8fafc", whiteSpace: "nowrap" }}>
-                      🎬 Partida Activa:
+                  <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                    <span
+                      style={{
+                        fontSize: 11,
+                        fontWeight: 700,
+                        color: filteredEpisodes.length > 0 ? "#38bdf8" : "#ef4444",
+                        background: "rgba(15, 23, 42, 0.8)",
+                        padding: "2px 8px",
+                        borderRadius: 4,
+                        border: "1px solid #334155",
+                      }}
+                    >
+                      {filteredEpisodes.length} de {rawEpisodesMeta.length} partidas
                     </span>
-                    {filteredEpisodes.length > 0 ? (
-                      <select
-                        key={`sel_${selectedEvalId}_${filterScenario}_${filterMatchup}_${filterWinner}_${searchSeedOrId}_${filteredEpisodes.length}`}
-                        value={selectedEpisodeId}
-                        onChange={(e) => setSelectedEpisodeId(e.target.value)}
+                    {(filterScenario !== "all" || filterMatchup !== "all" || filterWinner !== "all" || Boolean(searchSeedOrId)) && (
+                      <button
+                        onClick={() => { setFilterScenario("all"); setFilterMatchup("all"); setFilterWinner("all"); setSearchSeedOrId(""); }}
+                        title="Restablecer todos los filtros"
                         style={{
-                          flex: 1,
-                          background: "#0f172a",
-                          border: "1px solid #38bdf8",
-                          color: "#f8fafc",
-                          padding: "6px 10px",
-                          borderRadius: 6,
-                          fontSize: 12,
-                          fontWeight: 600,
+                          padding: "2px 6px",
+                          fontSize: 11,
+                          background: "rgba(239, 68, 68, 0.15)",
+                          border: "1px solid #ef4444",
+                          color: "#f87171",
+                          borderRadius: 4,
                           cursor: "pointer",
+                          fontWeight: 600,
                         }}
                       >
-                        {filteredEpisodes.map((ep, i) => {
-                          const id = String(ep.episode_id || `episode_${i}`);
-                          return (
-                            <option key={`ep_opt_${id}_${i}`} value={id}>
-                              {getEpisodeOptionLabel(ep, i)}
-                            </option>
-                          );
-                        })}
-                      </select>
-                    ) : (
-                      <div style={{ fontSize: 12, color: "#f87171", padding: "4px 8px", background: "rgba(239, 68, 68, 0.1)", borderRadius: 4, border: "1px solid rgba(239, 68, 68, 0.3)", flex: 1 }}>
-                        ⚠️ Ninguna partida coincide con los filtros seleccionados. Cambia los filtros o pulsa "Limpiar".
-                      </div>
+                        ✕ Limpiar
+                      </button>
                     )}
                   </div>
                 </div>
-              )}
+
+                {/* Selector desplegable de partida */}
+                <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 2 }}>
+                  <span style={{ fontSize: 12, fontWeight: 700, color: "#f8fafc", whiteSpace: "nowrap" }}>
+                    🎬 Partida Activa:
+                  </span>
+                  {filteredEpisodes.length > 0 ? (
+                    <select
+                      key={`sel_${selectedEvalId}_${filterScenario}_${filterMatchup}_${filterWinner}_${searchSeedOrId}_${filteredEpisodes.length}`}
+                      value={selectedEpisodeId}
+                      onChange={(e) => setSelectedEpisodeId(e.target.value)}
+                      style={{
+                        flex: 1,
+                        background: "#0f172a",
+                        border: "1px solid #38bdf8",
+                        color: "#f8fafc",
+                        padding: "6px 10px",
+                        borderRadius: 6,
+                        fontSize: 12,
+                        fontWeight: 600,
+                        cursor: "pointer",
+                      }}
+                    >
+                      {filteredEpisodes.map((ep, i) => {
+                        const id = String(ep.episode_id || `episode_${i}`);
+                        return (
+                          <option key={`ep_opt_${id}_${i}`} value={id}>
+                            {getEpisodeOptionLabel(ep, i)}
+                          </option>
+                        );
+                      })}
+                    </select>
+                  ) : (
+                    <div style={{ fontSize: 12, color: "#f87171", padding: "4px 8px", background: "rgba(239, 68, 68, 0.1)", borderRadius: 4, border: "1px solid rgba(239, 68, 68, 0.3)", flex: 1 }}>
+                      ⚠️ Ninguna partida coincide con los filtros seleccionados. Cambia los filtros o pulsa "Limpiar".
+                    </div>
+                  )}
+                </div>
+              </div>
             </div>
           )}
 
@@ -1022,15 +1143,6 @@ export function ModelPage() {
             {section === "train" && trainTab === "train-detail" && (
               <TrainDetailTab trainRow={selectedTrainRow} trainSummary={trainSummary} />
             )}
-            {section === "train" && trainTab === "network-topology" && (
-              <NetworkTopologyTab
-                trainRow={selectedTrainRow}
-                trainSummary={trainSummary}
-                evalRows={evalRows}
-                activeSubTab={topologyTab}
-                onSubTabChange={setTopologyTab}
-              />
-            )}
             {section === "train" && trainTab === "train-head-diagnostics" && (
               <TrainHeadDiagnosticsTab trainRow={selectedTrainRow} trainSummary={trainSummary} />
             )}
@@ -1038,10 +1150,10 @@ export function ModelPage() {
               <ObjectiveRewardConfigTab trainRow={selectedTrainRow} />
             )}
 
-            {section === "eval" && loadingEvals && !evalRows.length && (
+            {(section === "eval" || section === "replay") && loadingEvals && !evalRows.length && (
               <div className="muted" style={{ padding: 16 }}>⏳ Cargando evaluaciones del run seleccionado...</div>
             )}
-            {section === "eval" && !loadingEvals && !evalRows.length && (
+            {(section === "eval" || section === "replay") && !loadingEvals && !evalRows.length && (
               <div
                 style={{
                   padding: "28px 24px",
@@ -1081,19 +1193,20 @@ export function ModelPage() {
                 )}
               </div>
             )}
-            {section === "eval" && evalRows.length > 0 && evalTab === "vp-summary" && (
+            {section === "eval" && evalRows.length > 0 && evalTab === "matchups-vp" && (
               <VpSummaryTab evalRows={evalRows} selectedEval={selectedEval} />
             )}
-            {section === "eval" && evalRows.length > 0 && evalTab === "eval-head-diagnostics" && (
-              <HeadDiagnosticsTab evalRows={evalRows} />
-            )}
-            {section === "eval" && evalRows.length > 0 && evalTab === "eval-metrics" && (
+            {section === "eval" && evalRows.length > 0 && evalTab === "benchmark-matrix" && (
               <EvalMetricsTab evalRows={evalRows} />
             )}
-            {section === "eval" && evalRows.length > 0 && evalTab === "eval-decisions" && (
-              <EvalDecisionsTab mainResult={mainResult} />
+            {section === "eval" && evalRows.length > 0 && evalTab === "tactical-decisions" && (
+              <EvalDecisionsTab selectedEval={selectedEval} mainResult={mainResult} />
             )}
-            {section === "eval" && evalRows.length > 0 && evalTab === "match-replay" && (
+            {section === "eval" && evalRows.length > 0 && evalTab === "xai-heads" && (
+              <HeadDiagnosticsTab evalRows={evalRows} />
+            )}
+
+            {section === "replay" && evalRows.length > 0 && replayTab === "tactical-map" && (
               <MatchReplayTab
                 selectedEvalSourcePath={selectedEvalSourcePath}
                 replayMeta={replayMeta}
@@ -1102,7 +1215,7 @@ export function ModelPage() {
                 onStepIndexChange={setSelectedStepIndex}
               />
             )}
-            {section === "eval" && evalRows.length > 0 && evalTab === "replay-log" && (
+            {section === "replay" && evalRows.length > 0 && replayTab === "event-log" && (
               <ReplayTab
                 selectedEvalSourcePath={selectedEvalSourcePath}
                 replayLog={replayLog}

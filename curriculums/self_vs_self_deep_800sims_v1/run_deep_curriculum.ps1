@@ -2,7 +2,7 @@ param(
   [string]$Repo = "C:\repos\python\assault",
   [string]$StartPhase = "",
   [string]$ExplicitStartCheckpoint = "",
-  [switch]$ContinueFromLatestCheckpoint = $true,
+  [switch]$ContinueFromLatestCheckpoint,
   [switch]$WaitForActiveCurriculum,
   [switch]$StopOnGateFail,
   [switch]$StopOnPhaseError,

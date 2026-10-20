@@ -491,8 +491,47 @@ def build_eval_decision_steps_top(
                 "vp_progress_source": str(r.get("vp_progress_source", "missing") or "missing"),
                 "vp_progress_available": bool(r.get("vp_progress_available", None)),
                 "why_action_vs_vp_text": str(r.get("why_action_vs_vp_text", "") or ""),
+                "macro_posture": str(r.get("macro_posture", "") or ""),
+                "macro_target_vp_id": str(r.get("macro_target_vp_id", "") or ""),
+                "unit_macro_role": str(r.get("unit_macro_role", "") or ""),
+                "role_assigned": str(r.get("role_assigned", "") or ""),
+                "role_is_mutated": bool(r.get("role_is_mutated", False)),
+                "role_mutation_reason": str(r.get("role_mutation_reason", "") or ""),
+                "prior_boost_applied": float(r.get("prior_boost_applied", 0.0) or 0.0),
+                "badge_label": str(r.get("badge_label", "") or ""),
+                "policy_overridden_by_mcts": bool(r.get("policy_overridden_by_mcts", False)),
                 "mcts_action_candidates": normalized_candidates,
                 "why_action_vs_vp": why,
+                "vp_potential_reward_component": (
+                    float(r.get("vp_potential_reward_component", 0.0))
+                    if r.get("vp_potential_reward_component", None) is not None
+                    else None
+                ),
+                "vp_potential_delta": (
+                    float(r.get("vp_potential_delta", 0.0))
+                    if r.get("vp_potential_delta", None) is not None
+                    else None
+                ),
+                "turn_urgency_factor": (
+                    float(r.get("turn_urgency_factor", 0.0))
+                    if r.get("turn_urgency_factor", None) is not None
+                    else None
+                ),
+                "turn_urgency_decay": (
+                    float(r.get("turn_urgency_decay", 1.0))
+                    if r.get("turn_urgency_decay", None) is not None
+                    else None
+                ),
+                "paralysis_penalty": (
+                    float(r.get("paralysis_penalty", 0.0))
+                    if r.get("paralysis_penalty", None) is not None
+                    else None
+                ),
+                "paralysis_units_count": (
+                    int(r.get("paralysis_units_count", 0))
+                    if r.get("paralysis_units_count", None) is not None
+                    else None
+                ),
             }
         )
     return out

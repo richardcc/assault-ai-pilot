@@ -52,6 +52,8 @@ class CombatResolutionContext:
         # Adjacent units committing coordinated flanking/covering support prior to close melee
         self.supporting_attackers: list = []
         self.supporting_defenders: list = []
+        # CC-006 (Roadmap Task 2.4): Unsuppressed Solo Frontal Assault penalty flag
+        self.unsuppressed_solo_frontal_penalty_enabled: bool = False
 
         _trace(
             "CC_CONTEXT_INIT",
@@ -76,4 +78,20 @@ class CombatResolutionContext:
             if unit not in self.supporting_defenders:
                 self.supporting_defenders.append(unit)
                 _trace("CC_SUPPORT_COMMITTED", side="defender", unit_id=getattr(unit, "unit_id", None), support_type=support_type)
+
+    @property
+    def is_unsuppressed_solo_frontal_assault(self) -> bool:
+        """
+        CC-006 (Roadmap Task 2.4):
+        Returns True when an attacker makes an unsupported frontal assault against an unsuppressed defender.
+        """
+        if not self.unsuppressed_solo_frontal_penalty_enabled:
+            return False
+        if getattr(self, "attack_sector", None) != AttackSector.FRONT:
+            return False
+        if bool(getattr(self.defender, "suppressed", False) or getattr(self.defender, "is_suppressed", False)):
+            return False
+        if bool(getattr(self, "supporting_attackers", [])):
+            return False
+        return True
 

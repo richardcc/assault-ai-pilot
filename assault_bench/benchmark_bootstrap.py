@@ -163,22 +163,44 @@ def bootstrap_checkpoint_runtime(
             unit_prefilter_threat_weight = float(
                 muz_cfg.selfplay.get("unit_prefilter_threat_weight", unit_prefilter_threat_weight)
             )
-        model_cls = efficientzero_v2_network_cls if model_kind == "efficientzero_v2" else muzero_network_cls
-        model = model_cls(
-            observation_dim=int(muz_cfg.model["observation_dim"]),
-            hidden_dim=int(muz_cfg.model["hidden_dim"]),
-            action_dim=action_dim,
-            encoder_type=str(muz_cfg.model.get("encoder_type", "mlp")),
-            observation_channels=int(muz_cfg.model.get("observation_channels", 8)),
-            observation_height=int(muz_cfg.model.get("observation_height", 16)),
-            observation_width=int(muz_cfg.model.get("observation_width", 16)),
-            dynamics_blocks=int(muz_cfg.model.get("dynamics_blocks", 1)),
-            prediction_blocks=int(muz_cfg.model.get("prediction_blocks", 1)),
-        )
         ckpt = Path(checkpoint_path)
         if not ckpt.is_absolute():
             ckpt = (Path.cwd() / ckpt).resolve()
         state_dict = load_state_dict_fn(ckpt, bench_device)
+        model_cls = efficientzero_v2_network_cls if model_kind == "efficientzero_v2" else muzero_network_cls
+
+        resolved_hidden_dim = int(muz_cfg.model.get("hidden_dim", 48))
+        resolved_obs_channels = int(muz_cfg.model.get("observation_channels", 38))
+        if isinstance(state_dict, dict) and "representation_input.0.weight" in state_dict:
+            w_shape = state_dict["representation_input.0.weight"].shape
+            if len(w_shape) >= 2:
+                resolved_hidden_dim = int(w_shape[0])
+                resolved_obs_channels = int(w_shape[1])
+
+        resolved_dynamics_blocks = int(muz_cfg.model.get("dynamics_blocks", 1))
+        if isinstance(state_dict, dict):
+            dyn_keys = [k for k in state_dict.keys() if k.startswith("dynamics_state.") and k.endswith(".conv1.weight")]
+            if dyn_keys:
+                resolved_dynamics_blocks = max(1, len(dyn_keys))
+
+        use_coord = bool(muz_cfg.model.get("use_coord_conv", False))
+        if use_coord and resolved_obs_channels > int(muz_cfg.model.get("observation_channels", 38)):
+            resolved_obs_channels = resolved_obs_channels - 2
+
+        model = model_cls(
+            observation_dim=int(muz_cfg.model["observation_dim"]),
+            hidden_dim=resolved_hidden_dim,
+            action_dim=action_dim,
+            encoder_type=str(muz_cfg.model.get("encoder_type", "mlp")),
+            observation_channels=resolved_obs_channels,
+            observation_height=int(muz_cfg.model.get("observation_height", 16)),
+            observation_width=int(muz_cfg.model.get("observation_width", 16)),
+            dynamics_blocks=resolved_dynamics_blocks,
+            prediction_blocks=int(muz_cfg.model.get("prediction_blocks", 1)),
+            use_coord_conv=use_coord,
+            dynamics_attention_type=str(muz_cfg.model.get("dynamics_attention_type", "se")),
+            policy_head_type=str(muz_cfg.model.get("policy_head_type", "linear")),
+        )
         model.load_state_dict(state_dict, strict=False)
         if bench_device == "cuda":
             model = model.to("cuda")

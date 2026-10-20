@@ -37,10 +37,15 @@ from assault_model.runtime.execution_context import ExecutionContext
 from assault_model.combat.close_combat_resolver import resolve_close_combat
 from assault_model.combat.ranged_combat_resolver import resolve_ranged_combat
 from assault_model.combat.smoke_resolver import resolve_smoke_fire
+from assault_model.combat.explosive_charge_resolver import resolve_explosive_charge
+from assault_model.combat.mine_resolver import resolve_mine_detection
 
+from assault_model.actions.explosive_charge import ExplosiveChargeAction
+from assault_model.actions.mine_detection import MineDetectionAction
 
 from assault_model.map.hex_utils import safe_hex_distance
 from assault_model.map.hex_coord import HexCoord
+
 
 # -------------------------------------------------
 # DEVELOPMENT TRACE (INTERNAL ONLY)
@@ -294,12 +299,55 @@ def resolve_action(
             )
 
         # ------------------------------
+        # EXPLOSIVE CHARGE (Rule 12.5)
+        # ------------------------------
+        elif action.combat_mode == CombatMode.EXPLOSIVE_CHARGE:
+            attacker = next(
+                (u for u in new_state.units if u.unit_id == action.unit_id),
+                None,
+            )
+            if attacker is None:
+                raise RuntimeError(
+                    f"Invalid attacker for explosive charge (attacker={action.unit_id})"
+                )
+            result_combat = resolve_explosive_charge(
+                action=action,
+                attacker=attacker,
+                game_map=new_state.game_map,
+                game_state=new_state,
+                context=context,
+            )
+
+        # ------------------------------
         # UNKNOWN COMBAT MODE
         # ------------------------------
         else:
             raise NotImplementedError(
                 f"Combat mode {action.combat_mode} not supported"
             )
+
+    # ----------------------------------
+    # MINE DETECTION ACTION (Rule 9.6.6.2)
+    # ----------------------------------
+    elif isinstance(action, MineDetectionAction):
+        _trace("RESOLVE_MINE_DETECTION", unit=action.unit_id, target=action.target_hex)
+        new_state = state
+        scout_unit = next(
+            (u for u in new_state.units if u.unit_id == action.unit_id),
+            None,
+        )
+        if scout_unit is None:
+            raise RuntimeError(
+                f"Invalid scout unit for mine detection (unit={action.unit_id})"
+            )
+        result_combat = resolve_mine_detection(
+            action=action,
+            scout_unit=scout_unit,
+            game_map=new_state.game_map,
+            game_state=new_state,
+            context=context,
+        )
+
 
     # ----------------------------------
     # RETURN FINAL RESULT

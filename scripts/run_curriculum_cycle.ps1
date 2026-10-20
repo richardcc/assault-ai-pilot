@@ -39,14 +39,25 @@ function Resolve-BenchPayloadPath {
     [Parameter(Mandatory = $true)][string]$RepoRoot,
     [Parameter(Mandatory = $true)][string]$RunsRoot
   )
-  $benchLatest = Join-Path $RepoRoot (Join-Path $RunsRoot "bench_latest.json")
-  if (Test-Path $benchLatest) { return $benchLatest }
-  $xaiRoots = Get-ChildItem -Path (Join-Path $RepoRoot $RunsRoot) -Directory -ErrorAction SilentlyContinue
+  $roots = @()
+  if (-not [string]::IsNullOrWhiteSpace($RunsRoot)) {
+    $roots += (Join-Path $RepoRoot $RunsRoot)
+  }
+  $roots += (Join-Path $RepoRoot "runs")
+  $roots += (Join-Path $RepoRoot "runs_curriculum")
+
   $candidates = @()
-  foreach ($rd in $xaiRoots) {
-    $xai = Join-Path $rd.FullName "xai"
-    if (-not (Test-Path $xai)) { continue }
-    $candidates += Get-ChildItem -Path $xai -File -Filter "bench_eval_*.json" -ErrorAction SilentlyContinue
+  foreach ($r in $roots) {
+    if (-not (Test-Path $r)) { continue }
+    $benchLatest = Join-Path $r "bench_latest.json"
+    if (Test-Path $benchLatest) { $candidates += (Get-Item $benchLatest) }
+    $xaiRoots = Get-ChildItem -Path $r -Directory -ErrorAction SilentlyContinue
+    foreach ($rd in $xaiRoots) {
+      $xai = Join-Path $rd.FullName "xai"
+      if (-not (Test-Path $xai)) { continue }
+      $evals = Get-ChildItem -Path $xai -File -Filter "bench_eval_*.json" -ErrorAction SilentlyContinue
+      if ($evals) { $candidates += @($evals) }
+    }
   }
   if (-not $candidates -or $candidates.Count -eq 0) { return $null }
   $latest = $candidates | Sort-Object LastWriteTimeUtc -Descending | Select-Object -First 1
@@ -56,21 +67,37 @@ function Resolve-BenchPayloadPath {
 function Resolve-LatestCheckpointPath {
   param(
     [Parameter(Mandatory = $true)][string]$RepoRoot,
-    [Parameter(Mandatory = $true)][string]$RunsRoot
+    [Parameter(Mandatory = $true)][string]$RunsRoot,
+    [datetime]$NotBeforeUtc = [datetime]::MinValue
   )
-  $root = Join-Path $RepoRoot $RunsRoot
-  if (-not (Test-Path $root)) { return $null }
-  $finals = Get-ChildItem -Path $root -Recurse -File -Filter "final.pt" -ErrorAction SilentlyContinue |
-    Where-Object { $_.FullName -match "(efficientzero_v2_|muzero_).+\\checkpoints\\final\.pt$" }
-  if ($finals -and $finals.Count -gt 0) {
-    return [string](($finals | Sort-Object LastWriteTimeUtc -Descending | Select-Object -First 1).FullName)
+  $roots = @()
+  if (-not [string]::IsNullOrWhiteSpace($RunsRoot)) {
+    $roots += (Join-Path $RepoRoot $RunsRoot)
   }
-  $iters = Get-ChildItem -Path $root -Recurse -File -Filter "iter_*.pt" -ErrorAction SilentlyContinue |
-    Where-Object { $_.FullName -match "(efficientzero_v2_|muzero_).+\\checkpoints\\iter_\d+\.pt$" }
-  if ($iters -and $iters.Count -gt 0) {
-    return [string](($iters | Sort-Object LastWriteTimeUtc -Descending | Select-Object -First 1).FullName)
+  $roots += (Join-Path $RepoRoot "runs")
+  $roots += (Join-Path $RepoRoot "runs_curriculum")
+
+  $candidates = @()
+  foreach ($root in $roots) {
+    if (-not (Test-Path $root)) { continue }
+    $finals = Get-ChildItem -Path $root -Recurse -File -Filter "final.pt" -ErrorAction SilentlyContinue |
+      Where-Object { $_.FullName -match "(efficientzero_v2_|muzero_).+\\checkpoints\\final\.pt$" }
+    if ($finals) { $candidates += @($finals) }
+    $iters = Get-ChildItem -Path $root -Recurse -File -Filter "iter_*.pt" -ErrorAction SilentlyContinue |
+      Where-Object { $_.FullName -match "(efficientzero_v2_|muzero_).+\\checkpoints\\iter_\d+\.pt$" }
+    if ($iters) { $candidates += @($iters) }
   }
-  return $null
+  if (-not $candidates -or $candidates.Count -eq 0) { return $null }
+
+  if ($NotBeforeUtc -gt [datetime]::MinValue) {
+    $fresh = @($candidates | Where-Object { $_.LastWriteTimeUtc -ge $NotBeforeUtc })
+    if ($fresh.Count -gt 0) {
+      return [string](($fresh | Sort-Object LastWriteTimeUtc -Descending | Select-Object -First 1).FullName)
+    }
+  }
+
+  $latest = $candidates | Sort-Object LastWriteTimeUtc -Descending | Select-Object -First 1
+  return [string]$latest.FullName
 }
 
 function Set-OrAppendCommandArg {
@@ -238,11 +265,30 @@ try {
     . .\.venv\Scripts\Activate.ps1
   }
 
+  $trainStartedUtc = (Get-Date).ToUniversalTime().AddSeconds(-10)
   Invoke-LoggedCommand -Command $trainCommand -LogPath $trainLog
-  $latestCheckpoint = Resolve-LatestCheckpointPath -RepoRoot $repo -RunsRoot $runsRoot
-  if ([string]::IsNullOrWhiteSpace([string]$latestCheckpoint)) {
-    throw "No checkpoint found under runs root '$runsRoot' after train."
+
+  # Check if train log explicitly reported the final checkpoint
+  $latestCheckpoint = $null
+  if (Test-Path $trainLog) {
+    $match = Select-String -Path $trainLog -Pattern "final_checkpoint=(?<path>.+)" | Select-Object -Last 1
+    if ($match -and $match.Matches.Groups["path"].Value) {
+      $cand = $match.Matches.Groups["path"].Value.Trim()
+      if (-not [System.IO.Path]::IsPathRooted($cand)) {
+        $cand = Join-Path $repo $cand
+      }
+      if (Test-Path $cand) {
+        $latestCheckpoint = $cand
+      }
+    }
   }
+  if ([string]::IsNullOrWhiteSpace($latestCheckpoint)) {
+    $latestCheckpoint = Resolve-LatestCheckpointPath -RepoRoot $repo -RunsRoot $runsRoot -NotBeforeUtc $trainStartedUtc
+  }
+  if ([string]::IsNullOrWhiteSpace([string]$latestCheckpoint)) {
+    throw "No checkpoint found under runs roots after train."
+  }
+  Write-Host ("[Cycle] Evaluating checkpoint: {0}" -f $latestCheckpoint) -ForegroundColor Cyan
   $evalCommandWithCheckpoint = Set-OrAppendCommandArg -Command $evalCommand -ArgName "--checkpoint" -ArgValue ([string]$latestCheckpoint)
   Invoke-LoggedCommand -Command $evalCommandWithCheckpoint -LogPath $evalLog
   $benchPayloadPath = Resolve-BenchPayloadPath -RepoRoot $repo -RunsRoot $runsRoot

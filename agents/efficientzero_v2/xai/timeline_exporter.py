@@ -215,6 +215,12 @@ def export_muzero_episode_timeline(
                 "unit_id": str(row.get("unit_id", "")),
                 "unit_side": str(row.get("unit_side", "")),
                 "unit_label": str(row.get("unit_label", "")),
+                "unit_macro_role": str(row.get("unit_macro_role", row.get("role_assigned", ""))),
+                "role_assigned": str(row.get("role_assigned", row.get("unit_macro_role", ""))),
+                "role_is_mutated": bool(row.get("role_is_mutated", False)),
+                "role_mutation_reason": str(row.get("role_mutation_reason", "DEFAULT_PROFILE")),
+                "prior_boost_applied": _to_float(row.get("prior_boost_applied", 0.0), 0.0),
+                "badge_label": str(row.get("badge_label", "")),
                 "reward": _to_float(row.get("reward_target", 0.0), 0.0),
                 "done": bool(row.get("done", False)),
                 "damage_dealt": _to_float(row.get("damage_dealt", 0.0), 0.0),
@@ -307,7 +313,7 @@ def export_muzero_episode_timeline(
         "seed": scenario_seed,
         "transitions": transitions,
         "meta": {
-            "source": "muzero_train_events_log_only",
+            "source": "ezv2_train_events_log_only",
             "run_id": run_id,
             "iteration": it_idx,
             "episode": ep_idx,
@@ -319,6 +325,10 @@ def export_muzero_episode_timeline(
             "note": "log_only_timeline_no_resimulation",
         },
     }
+
+
+export_ezv2_episode_timeline = export_muzero_episode_timeline
+export_efficientzero_v2_episode_timeline = export_muzero_episode_timeline
 
 
 def _build_parser() -> argparse.ArgumentParser:

@@ -84,6 +84,14 @@ Métricas generadas por la exploración en el espacio latente y el planificador 
 | `macro_target_vp_id` | `str` | `macro_planner` | Identificador del hexágono VP prioritario asignado por el planner N1. | Sí | Nivel 1 doctrinal. |
 | `unit_macro_role` | `str` | `macro_planner` | Rol asignado a la escuadra (`SPEARHEAD`, `FIRE_SUPPORT`, `OBJECTIVE_DEFENDER`, `FLANK_SCREEN`). | Sí | Nivel 1 doctrinal. Cero inferencia si viene vacío. |
 | `policy_overridden_by_mcts` | `bool` | $\arg\max P_\theta \neq a^*$ | Indicador booleano de si la búsqueda MCTS corrigió la intuición inicial de la red. | No | Canónico (`policy_overridden`). |
+| `mcts_sterile_branches_pruned` | `int32` | `mcts.prune` | Número de ramas estériles de deambulación o pasividad podadas bajo postura `ASSAULT_VP` (poda del 40%). | No | Diagnóstico de búsqueda ofensiva. |
+| `prior_boost_applied` | `float32` | `macro_planner` | Factor multiplicativo de modulación de prior (+20% a +40%) aplicado sobre la acción elegida. | No | Sesgo doctrinal MCTS. |
+| `vp_potential_reward_component` | `float32` | `reward_calculator.py` | Componente de recompensa escalado de potencial radial hacia VPs (Ng et al. 1999). | Sí | Canónico de shaping. |
+| `vp_potential_delta` | `float32` | `reward_calculator.py` | Delta puro de potencial $F(s, a, s') = \gamma \Phi(s') - \Phi(s)$ garantizando invariancia telescópica. | Sí | Diagnóstico de convergencia PBRS. |
+| `turn_urgency_factor` | `float32` | `reward_calculator.py` | Presión temporal relativa $\tau = t / T_{\text{max}} \in [0.0, 1.0]$. | Sí | Diagnóstico temporal. |
+| `turn_urgency_decay` | `float32` | `reward_calculator.py` | Factor de decaimiento exponencial $\exp(-\lambda \cdot \tau)$ aplicado al potencial cuando $N_{\text{VP}} = 0$. | Sí | Andamiaje anti-retraso. |
+| `paralysis_penalty` | `float32` | `reward_calculator.py` | Penalización negativa por parálisis acumulada en unidades expuestas (`cover < 0.35`) en campo abierto. | Sí | Penalización anti-parálisis. |
+| `paralysis_units_count` | `int32` | `reward_calculator.py` | Número de unidades aliadas que incurrieron en penalización por pasividad en este paso. | Sí | Diagnóstico de parálisis. |
 | `vp_horizon_steps` | `float32` | `selfplay.py` | Distancia mínima estimada en pasos hasta el VP objetivo. | Sí | Soft-signal. |
 | `vp_horizon_component` | `float32` | `selfplay.py` | Componente de recompensa auxiliar por reducción del horizonte hacia el VP. | Sí | Soft-signal. |
 | `telemetry_coverage_status` | `str` | `trace_row_builder` | Estado formal de completitud de la fila (`COMPLETE`, `PARTIAL`, `DEGRADED`). | No | Control de calidad. |
@@ -182,6 +190,10 @@ Métricas agregadas sobre partidas completas y evaluación de checkpoints en `as
 | Métrica Canónica | Tipo de Dato | Origen Autoritativo | Definición Física / Matemática | Nullable | Redundancia / Estado |
 | :--- | :---: | :--- | :--- | :---: | :--- |
 | `duration_seconds` | `float32` | `manifest.lock.json` | Tiempo total de reloj de pared consumido por la fase o benchmark. | No | Coste computacional. |
+| `train_duration_seconds` | `float32` | `summary.json` | Tiempo total de reloj de pared invertido en entrenamiento (autojuego MCTS + optimización). | Sí | Coste de entrenamiento. |
+| `bench_duration_seconds` | `float32` | `bench_eval_*.json` | Tiempo total de reloj de pared invertido en evaluación de benchmark contra baselines. | Sí | Coste de evaluación. |
+| `selfplay_duration_seconds` | `float32` | `summary.json` | Tiempo neto consumido en la generación distribuida de trayectorias de autojuego MCTS. | Sí | Desglose de cómputo. |
+| `opt_duration_seconds` | `float32` | `summary.json` | Tiempo neto consumido en la optimización y retropropagación de gradientes en GPU/CUDA. | Sí | Desglose de cómputo. |
 | `episodes_per_second` | `float32` | `benchmark_timing` | Throughput de simulación e inferencia: $\frac{\text{Episodios}}{\text{Tiempo de Ejecución}}$. | No | Rendimiento del motor/árbol. |
 | `episode_wall_s_mean` | `float32` | `benchmark_timing` | Latencia media en segundos por episodio completo jugado. | No | Tiempo de ciclo. |
 | `total_steps` | `int32` | `train_summary.json` | Pasos totales de entrenamiento neuronal ejecutados por el optimizador. | No | Volumen de aprendizaje. |
@@ -204,6 +216,8 @@ A continuación se detalla la correspondencia exacta entre **lo que se ve en la 
 | **CatalogPage / Header** | Combat Exchange (CER) | `combat_exchange_ratio` | `quality_metrics.py` ($\frac{\text{Vic} + 0.05}{\text{Def} + 0.05}$) | **100% Real** |
 | **CatalogPage / Header** | Brecha Asimetría | `mean_asymmetry_gap` | `quality_metrics.py` ($|S_A - S_B|$) | **100% Real** |
 | **CatalogPage / Header** | Duración de Fase | `durationSeconds` | `manifest.lock.json` (`phase_finished - phase_started`) | **100% Real** |
+| **CatalogPage / Table 1** | Desglose Train / Bench | `train_duration_seconds`, `bench_duration_seconds` | `summary.json` & `bench_eval_*.json` | **100% Real** |
+| **CatalogPage / Table 1** | Autojuego y Optimización | `selfplay_duration_seconds`, `opt_duration_seconds` | `metrics/summary.json` (`timing_summary`) | **100% Real** |
 | **TrainDetailTab** | Metadatos de Checkpoint | `run_id`, `git_commit`, `phase` | Manifiesto de entrenamiento `meta/manifest.lock.json` | **100% Real** |
 | **TrainDetailTab** | Pérdidas de Entrenamiento| `loss_policy`, `loss_value`, etc. | `01_train.log` / `train_summary.json` | **100% Real** |
 | **TrainHeadDiagnosticsTab**| Gradientes y Pérdidas | `policy_grad_norm`, `explained_var`| Registro interno de `trainer.py` exportado en summary | **100% Real** |

@@ -8,12 +8,14 @@ class ActionType(Enum):
     MOVE = (ActionCategory.MOVEMENT, "MOVE")
     ADVANCE = (ActionCategory.MOVEMENT, "ADVANCE")
     FAST_MOVE = (ActionCategory.MOVEMENT, "FAST_MOVE")
+    MINE_DETECTION = (ActionCategory.MOVEMENT, "MINE_DETECTION")
 
     # Combat
     RANGED_DIRECT = (ActionCategory.COMBAT, "RANGED_DIRECT")
     RANGED_INDIRECT = (ActionCategory.COMBAT, "RANGED_INDIRECT")
     FIRE_SMOKE = (ActionCategory.COMBAT, "FIRE_SMOKE")
     CLOSE_COMBAT = (ActionCategory.COMBAT, "CLOSE_COMBAT")
+    EXPLOSIVE_CHARGE = (ActionCategory.COMBAT, "EXPLOSIVE_CHARGE")
 
     # Control / status
     WAIT = (ActionCategory.STATUS, "WAIT")
@@ -21,4 +23,4 @@ class ActionType(Enum):
 
     def __init__(self, category: ActionCategory, label: str):
         self.category = category
-        self.label = label
+        self.label = label

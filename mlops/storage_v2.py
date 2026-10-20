@@ -10,7 +10,7 @@ from mlops.contracts_v2 import SCHEMA_VERSION_V2
 
 def _write_ndjson_zst(path: Path, rows: list[dict[str, Any]]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    payload = "".join(json.dumps(r, ensure_ascii=False) + "\n" for r in rows)
+    payload = "".join(json.dumps(r, ensure_ascii=False, default=str) + "\n" for r in rows)
     try:
         import zstandard as zstd  # type: ignore
 

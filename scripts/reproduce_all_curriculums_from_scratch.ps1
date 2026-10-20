@@ -86,7 +86,7 @@ try {
     throw "Stage 3 script not found: $stage3Script"
   }
 
-  $cmd3 = "powershell -ExecutionPolicy Bypass -File `"$stage3Script`" -ContinueFromLatestCheckpoint -StopOnPhaseError"
+  $cmd3 = "powershell -ExecutionPolicy Bypass -File `"$stage3Script`" -StopOnPhaseError"
   if ($DryRun) { $cmd3 += " -DryRun" }
   Write-Host ("Executing: {0}" -f $cmd3) -ForegroundColor Gray
   Invoke-Expression $cmd3

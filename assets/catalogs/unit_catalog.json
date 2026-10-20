@@ -1,6 +1,94 @@
 {
   "_comment": "Core unit definitions (no render, derived strictly from unit cards)",
   "units": {
+    "US_COMBAT_ENGINEERS_43": {
+      "side": "US",
+      "category": "INFANTRY",
+      "subtype": "COMBAT_ENGINEERS",
+      "classification": "SPECIALIZED_INFANTRY",
+      "card_id": "S43",
+      "cost": 6,
+      "movement": 2,
+      "max_strength": 4,
+      "has_counter_flip": true,
+      "base_defense": {
+        "FRONT": [
+          "YELLOW"
+        ],
+        "FLANK_LEFT": [
+          "YELLOW"
+        ],
+        "FLANK_RIGHT": [
+          "YELLOW"
+        ],
+        "REAR": [
+          "YELLOW"
+        ]
+      },
+      "attack": {
+        "DIRECT_FIRE": {
+          "VEHICLE": {
+            "0": {
+              "dice": [
+                "YELLOW",
+                "YELLOW",
+                "GREEN"
+              ]
+            }
+          },
+          "INFANTRY": {
+            "0": {
+              "dice": [
+                "RED",
+                "RED",
+                "YELLOW"
+              ]
+            },
+            "1-3": {
+              "dice": [
+                "RED",
+                "YELLOW"
+              ]
+            },
+            "4-6": {
+              "dice": [
+                "YELLOW",
+                "YELLOW"
+              ]
+            },
+            "7-9": {
+              "dice": [
+                "GREEN",
+                "GREEN"
+              ]
+            }
+          }
+        },
+        "SMOKE": {
+          "target_hex": true,
+          "max_adjacent_hexes": 1,
+          "dice": [
+            "GREEN",
+            "GREEN",
+            "BLUE",
+            "BLUE"
+          ]
+        }
+      },
+      "traits": [
+        "EXPLOSIVE_CHARGE",
+        "MINE_DETECTION",
+        "BANGALORE_TORPEDO",
+        "SMOKE_GRENADES"
+      ],
+      "doctrine_profile": {
+        "default_role": "SPEARHEAD",
+        "optimal_engagement_range": [0, 2],
+        "cohesion_weight": 1.25,
+        "fallback_threshold_hp": 1,
+        "tactical_posture": "ASSAULT_VP"
+      }
+    },
     "GE_FJ_RIFLES_43": {
       "side": "GE",
       "category": "INFANTRY",
@@ -94,7 +182,25 @@
         "INDIRECT_FIRE",
         "RIFLE_GRENADES",
         "TOUGH"
-      ]
+      ],
+      "doctrine_profile": {
+        "default_role": "SPEARHEAD",
+        "optimal_engagement_range": [
+          0,
+          3
+        ],
+        "preferred_terrain": [
+          "BUILDING",
+          "WOODS",
+          "TRENCH"
+        ],
+        "cohesion_weight": 1.3,
+        "fallback_threshold_hp": 2,
+        "mutation_rules": {
+          "allow_spearhead_if_vp_deficit": true,
+          "allow_close_defense_on_flank": true
+        }
+      }
     },
     "GE_RIFLES_43": {
       "side": "GE",
@@ -188,7 +294,25 @@
       "traits": [
         "INDIRECT_FIRE",
         "RIFLE_GRENADES"
-      ]
+      ],
+      "doctrine_profile": {
+        "default_role": "SCREEN",
+        "optimal_engagement_range": [
+          1,
+          4
+        ],
+        "preferred_terrain": [
+          "BUILDING",
+          "WOODS",
+          "TRENCH"
+        ],
+        "cohesion_weight": 1.1,
+        "fallback_threshold_hp": 1,
+        "mutation_rules": {
+          "allow_spearhead_if_vp_deficit": true,
+          "allow_close_defense_on_flank": true
+        }
+      }
     },
     "GE_50MM_MORTAR": {
       "side": "GE",
@@ -279,7 +403,25 @@
         "CAMOUFLAGED",
         "INDIRECT_FIRE",
         "SMOKE"
-      ]
+      ],
+      "doctrine_profile": {
+        "default_role": "FIRE_SUPPORT",
+        "optimal_engagement_range": [
+          3,
+          8
+        ],
+        "preferred_terrain": [
+          "HILL",
+          "WOODS",
+          "DEFILADE"
+        ],
+        "cohesion_weight": 1.2,
+        "fallback_threshold_hp": 1,
+        "mutation_rules": {
+          "allow_spearhead_if_vp_deficit": false,
+          "allow_close_defense_on_flank": true
+        }
+      }
     },
     "GE_HEAVY_MG_42": {
       "side": "GE",
@@ -352,7 +494,25 @@
       "traits": [
         "RAPID_FIRE",
         "SLOW_UNIT"
-      ]
+      ],
+      "doctrine_profile": {
+        "default_role": "FIRE_SUPPORT",
+        "optimal_engagement_range": [
+          3,
+          8
+        ],
+        "preferred_terrain": [
+          "HILL",
+          "BUILDING",
+          "WOODS"
+        ],
+        "cohesion_weight": 1.3,
+        "fallback_threshold_hp": 2,
+        "mutation_rules": {
+          "allow_spearhead_if_vp_deficit": false,
+          "allow_close_defense_on_flank": true
+        }
+      }
     },
     "IT_RIFLES_43": {
       "side": "IT",
@@ -417,7 +577,25 @@
           }
         }
       },
-      "traits": []
+      "traits": [],
+      "doctrine_profile": {
+        "default_role": "SCREEN",
+        "optimal_engagement_range": [
+          1,
+          4
+        ],
+        "preferred_terrain": [
+          "BUILDING",
+          "WOODS",
+          "TRENCH"
+        ],
+        "cohesion_weight": 1.0,
+        "fallback_threshold_hp": 1,
+        "mutation_rules": {
+          "allow_spearhead_if_vp_deficit": true,
+          "allow_close_defense_on_flank": true
+        }
+      }
     },
     "IT_LMG_SQUAD_43": {
       "side": "IT",
@@ -484,7 +662,25 @@
           }
         }
       },
-      "traits": []
+      "traits": [],
+      "doctrine_profile": {
+        "default_role": "FIRE_SUPPORT",
+        "optimal_engagement_range": [
+          2,
+          6
+        ],
+        "preferred_terrain": [
+          "BUILDING",
+          "WOODS",
+          "HILL"
+        ],
+        "cohesion_weight": 1.1,
+        "fallback_threshold_hp": 2,
+        "mutation_rules": {
+          "allow_spearhead_if_vp_deficit": true,
+          "allow_close_defense_on_flank": true
+        }
+      }
     },
     "IT_SOLOTHURN_ATR_43": {
       "side": "IT",
@@ -563,7 +759,25 @@
         "ANTI_TANK",
         "SLOW_UNIT",
         "CAMOUFLAGED"
-      ]
+      ],
+      "doctrine_profile": {
+        "default_role": "FIRE_SUPPORT",
+        "optimal_engagement_range": [
+          3,
+          7
+        ],
+        "preferred_terrain": [
+          "HILL",
+          "BUILDING",
+          "BOCAGE"
+        ],
+        "cohesion_weight": 1.1,
+        "fallback_threshold_hp": 1,
+        "mutation_rules": {
+          "allow_spearhead_if_vp_deficit": false,
+          "allow_close_defense_on_flank": true
+        }
+      }
     },
     "IT_20MM_BREDA_AA_43": {
       "side": "IT",
@@ -646,7 +860,24 @@
         "PIVOT",
         "RAPID_FIRE",
         "SLOW_UNIT"
-      ]
+      ],
+      "doctrine_profile": {
+        "default_role": "FIRE_SUPPORT",
+        "optimal_engagement_range": [
+          3,
+          8
+        ],
+        "preferred_terrain": [
+          "HILL",
+          "BUILDING"
+        ],
+        "cohesion_weight": 1.3,
+        "fallback_threshold_hp": 2,
+        "mutation_rules": {
+          "allow_spearhead_if_vp_deficit": false,
+          "allow_close_defense_on_flank": true
+        }
+      }
     },
     "IT_BREDA_MMG": {
       "side": "IT",
@@ -709,7 +940,25 @@
       },
       "traits": [
         "SLOW_UNIT"
-      ]
+      ],
+      "doctrine_profile": {
+        "default_role": "FIRE_SUPPORT",
+        "optimal_engagement_range": [
+          3,
+          7
+        ],
+        "preferred_terrain": [
+          "HILL",
+          "BUILDING",
+          "WOODS"
+        ],
+        "cohesion_weight": 1.2,
+        "fallback_threshold_hp": 2,
+        "mutation_rules": {
+          "allow_spearhead_if_vp_deficit": false,
+          "allow_close_defense_on_flank": true
+        }
+      }
     },
     "IT_SNIPER_43": {
       "side": "IT",
@@ -775,7 +1024,25 @@
       "traits": [
         "HIDDEN",
         "SNIPER"
-      ]
+      ],
+      "doctrine_profile": {
+        "default_role": "RECON",
+        "optimal_engagement_range": [
+          4,
+          8
+        ],
+        "preferred_terrain": [
+          "BUILDING",
+          "WOODS",
+          "HILL"
+        ],
+        "cohesion_weight": 0.8,
+        "fallback_threshold_hp": 1,
+        "mutation_rules": {
+          "allow_spearhead_if_vp_deficit": false,
+          "allow_close_defense_on_flank": false
+        }
+      }
     },
     "IT_45MM_BRIXIA": {
       "side": "IT",
@@ -851,7 +1118,25 @@
         "INDIRECT_FIRE",
         "NO_LINE_OF_SIGHT",
         "CAMOUFLAGED"
-      ]
+      ],
+      "doctrine_profile": {
+        "default_role": "FIRE_SUPPORT",
+        "optimal_engagement_range": [
+          3,
+          7
+        ],
+        "preferred_terrain": [
+          "HILL",
+          "WOODS",
+          "BUILDING"
+        ],
+        "cohesion_weight": 1.1,
+        "fallback_threshold_hp": 1,
+        "mutation_rules": {
+          "allow_spearhead_if_vp_deficit": false,
+          "allow_close_defense_on_flank": true
+        }
+      }
     },
     "US_RANGERS_43": {
       "side": "US",
@@ -918,7 +1203,25 @@
       "traits": [
         "RECON_PATROL",
         "SCOUT"
-      ]
+      ],
+      "doctrine_profile": {
+        "default_role": "RECON",
+        "optimal_engagement_range": [
+          2,
+          6
+        ],
+        "preferred_terrain": [
+          "BOCAGE",
+          "WOODS",
+          "HILL"
+        ],
+        "cohesion_weight": 1.1,
+        "fallback_threshold_hp": 2,
+        "mutation_rules": {
+          "allow_spearhead_if_vp_deficit": true,
+          "allow_close_defense_on_flank": true
+        }
+      }
     },
     "US_81MM_MORTAR": {
       "side": "US",
@@ -1011,7 +1314,25 @@
         "INDIRECT_FIRE",
         "SLOW_UNIT",
         "SMOKE"
-      ]
+      ],
+      "doctrine_profile": {
+        "default_role": "FIRE_SUPPORT",
+        "optimal_engagement_range": [
+          4,
+          9
+        ],
+        "preferred_terrain": [
+          "HILL",
+          "WOODS",
+          "DEFILADE"
+        ],
+        "cohesion_weight": 1.3,
+        "fallback_threshold_hp": 1,
+        "mutation_rules": {
+          "allow_spearhead_if_vp_deficit": false,
+          "allow_close_defense_on_flank": true
+        }
+      }
     },
     "US_BAZOOKA_TEAM": {
       "side": "US",
@@ -1087,7 +1408,25 @@
       "traits": [
         "ANTI_TANK",
         "FRAGILE_UNIT"
-      ]
+      ],
+      "doctrine_profile": {
+        "default_role": "FIRE_SUPPORT",
+        "optimal_engagement_range": [
+          1,
+          5
+        ],
+        "preferred_terrain": [
+          "BUILDING",
+          "BOCAGE",
+          "WOODS"
+        ],
+        "cohesion_weight": 1.0,
+        "fallback_threshold_hp": 1,
+        "mutation_rules": {
+          "allow_spearhead_if_vp_deficit": true,
+          "allow_close_defense_on_flank": true
+        }
+      }
     },
     "US_SNIPER_43": {
       "side": "US",
@@ -1153,7 +1492,25 @@
       "traits": [
         "HIDDEN",
         "SNIPER"
-      ]
+      ],
+      "doctrine_profile": {
+        "default_role": "RECON",
+        "optimal_engagement_range": [
+          4,
+          8
+        ],
+        "preferred_terrain": [
+          "BUILDING",
+          "WOODS",
+          "HILL"
+        ],
+        "cohesion_weight": 0.8,
+        "fallback_threshold_hp": 1,
+        "mutation_rules": {
+          "allow_spearhead_if_vp_deficit": false,
+          "allow_close_defense_on_flank": false
+        }
+      }
     },
     "US_RIFLES_43": {
       "side": "US",
@@ -1244,7 +1601,25 @@
       "traits": [
         "INDIRECT_FIRE",
         "RIFLE_GRENADES"
-      ]
+      ],
+      "doctrine_profile": {
+        "default_role": "SPEARHEAD",
+        "optimal_engagement_range": [
+          1,
+          4
+        ],
+        "preferred_terrain": [
+          "BUILDING",
+          "WOODS",
+          "BOCAGE"
+        ],
+        "cohesion_weight": 1.2,
+        "fallback_threshold_hp": 2,
+        "mutation_rules": {
+          "allow_spearhead_if_vp_deficit": true,
+          "allow_close_defense_on_flank": true
+        }
+      }
     },
     "GE_GRENADIERS_43": {
       "side": "GE",
@@ -1319,7 +1694,25 @@
       },
       "traits": [
         "FAST_DISEMBARK"
-      ]
+      ],
+      "doctrine_profile": {
+        "default_role": "SPEARHEAD",
+        "optimal_engagement_range": [
+          0,
+          3
+        ],
+        "preferred_terrain": [
+          "BUILDING",
+          "WOODS",
+          "HILL"
+        ],
+        "cohesion_weight": 1.2,
+        "fallback_threshold_hp": 2,
+        "mutation_rules": {
+          "allow_spearhead_if_vp_deficit": true,
+          "allow_close_defense_on_flank": true
+        }
+      }
     },
     "US_AIRBORNE_RIFLES_43": {
       "side": "US",
@@ -1414,7 +1807,25 @@
         "PARATROOPS",
         "RIFLE_GRENADES",
         "TOUGH"
-      ]
+      ],
+      "doctrine_profile": {
+        "default_role": "SPEARHEAD",
+        "optimal_engagement_range": [
+          0,
+          3
+        ],
+        "preferred_terrain": [
+          "BUILDING",
+          "WOODS",
+          "TRENCH"
+        ],
+        "cohesion_weight": 1.3,
+        "fallback_threshold_hp": 2,
+        "mutation_rules": {
+          "allow_spearhead_if_vp_deficit": true,
+          "allow_close_defense_on_flank": true
+        }
+      }
     },
     "GE_TANK_HUNTERS_43": {
       "side": "GE",
@@ -1489,7 +1900,234 @@
         "CAMOUFLAGED",
         "SLOW_UNIT",
         "TANK_BUSTERS"
+      ],
+      "doctrine_profile": {
+        "default_role": "FIRE_SUPPORT",
+        "optimal_engagement_range": [
+          1,
+          5
+        ],
+        "preferred_terrain": [
+          "BUILDING",
+          "BOCAGE",
+          "WOODS"
+        ],
+        "cohesion_weight": 1.1,
+        "fallback_threshold_hp": 1,
+        "mutation_rules": {
+          "allow_spearhead_if_vp_deficit": true,
+          "allow_close_defense_on_flank": true
+        }
+      }
+    },
+    "UK_ROYAL_ENGINEERS": {
+      "side": "UK",
+      "category": "INFANTRY",
+      "subtype": "COMBAT_ENGINEERS",
+      "classification": "SPECIALIZED_INFANTRY",
+      "card_id": "Pr43",
+      "cost": 7,
+      "movement": 2,
+      "max_strength": 4,
+      "has_counter_flip": true,
+      "base_defense": {
+        "FRONT": [
+          "YELLOW"
+        ],
+        "FLANK_LEFT": [
+          "YELLOW"
+        ],
+        "FLANK_RIGHT": [
+          "YELLOW"
+        ],
+        "REAR": [
+          "YELLOW"
+        ]
+      },
+      "attack": {
+        "DIRECT_FIRE": {
+          "VEHICLE": {
+            "0": {
+              "dice": [
+                "RED",
+                "YELLOW",
+                "BLUE"
+              ]
+            }
+          },
+          "INFANTRY": {
+            "0": {
+              "dice": [
+                "RED",
+                "YELLOW",
+                "GREEN"
+              ]
+            },
+            "1-4": {
+              "dice": [
+                "RED",
+                "RED",
+                "GREEN"
+              ]
+            },
+            "5-7": {
+              "dice": [
+                "RED",
+                "YELLOW"
+              ]
+            },
+            "8-10": {
+              "dice": [
+                "YELLOW",
+                "GREEN"
+              ]
+            }
+          }
+        }
+      },
+      "traits": [
+        "EXPLOSIVE_CHARGE",
+        "MINE_DETECTION"
       ]
+    },
+    "UK_PARACHUTE_RIFLES": {
+      "side": "UK",
+      "category": "INFANTRY",
+      "subtype": "AIRBORNE",
+      "classification": "SPECIALIZED_INFANTRY",
+      "card_id": "Pr43",
+      "cost": 6,
+      "movement": 2,
+      "max_strength": 4,
+      "has_counter_flip": true,
+      "base_defense": {
+        "FRONT": [
+          "YELLOW"
+        ],
+        "FLANK_LEFT": [
+          "YELLOW"
+        ],
+        "FLANK_RIGHT": [
+          "YELLOW"
+        ],
+        "REAR": [
+          "YELLOW"
+        ]
+      },
+      "attack": {
+        "DIRECT_FIRE": {
+          "VEHICLE": {
+            "0": {
+              "dice": [
+                "YELLOW",
+                "GREEN"
+              ]
+            }
+          },
+          "INFANTRY": {
+            "0": {
+              "dice": [
+                "RED",
+                "YELLOW",
+                "GREEN",
+                "BLUE"
+              ]
+            },
+            "1-3": {
+              "dice": [
+                "RED",
+                "YELLOW",
+                "YELLOW"
+              ]
+            },
+            "4-6": {
+              "dice": [
+                "YELLOW",
+                "GREEN",
+                "GREEN"
+              ]
+            },
+            "7-10": {
+              "dice": [
+                "GREEN",
+                "GREEN"
+              ]
+            }
+          }
+        }
+      },
+      "traits": [
+        "PARATROOPS",
+        "TOUGH"
+      ]
+    },
+    "UK_RIFLES_43": {
+      "side": "UK",
+      "category": "INFANTRY",
+      "subtype": "STANDARD_INFANTRY",
+      "classification": "STANDARD_INFANTRY",
+      "card_id": "Pr43",
+      "cost": 5,
+      "movement": 2,
+      "max_strength": 4,
+      "has_counter_flip": true,
+      "base_defense": {
+        "FRONT": [
+          "YELLOW"
+        ],
+        "FLANK_LEFT": [
+          "YELLOW"
+        ],
+        "FLANK_RIGHT": [
+          "YELLOW"
+        ],
+        "REAR": [
+          "YELLOW"
+        ]
+      },
+      "attack": {
+        "DIRECT_FIRE": {
+          "VEHICLE": {
+            "0": {
+              "dice": [
+                "YELLOW",
+                "BLUE"
+              ]
+            }
+          },
+          "INFANTRY": {
+            "0": {
+              "dice": [
+                "RED",
+                "GREEN",
+                "GREEN",
+                "BLUE"
+              ]
+            },
+            "1-3": {
+              "dice": [
+                "RED",
+                "YELLOW",
+                "BLUE"
+              ]
+            },
+            "4-6": {
+              "dice": [
+                "YELLOW",
+                "GREEN",
+                "BLUE"
+              ]
+            },
+            "7-10": {
+              "dice": [
+                "GREEN",
+                "GREEN"
+              ]
+            }
+          }
+        }
+      },
+      "traits": []
     }
   }
 }

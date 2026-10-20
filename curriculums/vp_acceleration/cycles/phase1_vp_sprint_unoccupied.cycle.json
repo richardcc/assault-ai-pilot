@@ -1,0 +1,11 @@
+{
+  "name": "vp_acceleration_v1_phase1_vp_sprint_unoccupied",
+  "repo": "C:/repos/python/assault",
+  "runs_root": "runs_curriculum",
+  "tracked_files": [
+    "curriculums/vp_acceleration/configs/efficientzero_v2.phase1_unoccupied.yaml",
+    "assault_bench/configs/benchmark_config.vp_acceleration_phase1.yaml"
+  ],
+  "train_command": "python -m agents.efficientzero_v2.train.train_efficientzero_v2 --config curriculums/vp_acceleration/configs/efficientzero_v2.phase1_unoccupied.yaml --mlflow-experiment assault_efficientzero_v2 --mlflow-run-name vp_acceleration_phase1_unoccupied",
+  "eval_command": "python -m assault_bench.runner --config assault_bench/configs/benchmark_config.vp_acceleration_phase1.yaml"
+}

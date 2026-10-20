@@ -3,7 +3,7 @@
 Garantiza que:
 1. `docs/index.html` (`embeddedDocsData`) contenga el 100% íntegro y exacto
    de todos los archivos Markdown canónicos de `docs/`, con la Hoja de Ruta
-   (`05_ROADMAP_EVOLUTIVO.md`) siempre en la última posición (#09).
+   (`05_ROADMAP_EVOLUTIVO.md`) siempre en la última posición (#13).
 2. El sitio estático de MkDocs (`site/`) se regenere vía `mkdocs build`.
 """
 
@@ -98,11 +98,74 @@ CANONICAL_DOCS_ORDER = [
         "desc": "Taxonomía de 4 niveles, origen autoritativo, cero-invención y purgado de redundancias.",
     },
     {
+        "id": "doc-14-profiling",
+        "title": "10. Plan Estratégico Perfilado de Unidades IA",
+        "icon": "🎖️",
+        "file": "14_PLAN_PERFILADO_UNIDADES_IA.md",
+        "desc": "Arquitectura doctrinal 3 capas, mutación dinámica contextual y observabilidad MLOps.",
+    },
+    {
+        "id": "doc-15-curriculums",
+        "title": "11. Currículums y Entrenamiento Progresivo",
+        "icon": "🎯",
+        "file": "15_CURRICULUMS_Y_ENTRENAMIENTO_PROGRESSIVO.md",
+        "desc": "Currículum acelerado de VPs, currículum multi-escenario y puertas de calidad dinámicas.",
+    },
+    {
+        "id": "doc-16-informes-cabecera",
+        "title": "12. Informes de Ejecución: Cabecera y Catálogo",
+        "icon": "📋",
+        "file": "informes_ejecucion/00_CABECERA_INFORMES_EJECUCION.md",
+        "desc": "Protocolo de auditoría forense, taxonomía TQS y repositorio centralizado de informes.",
+    },
+    {
+        "id": "doc-16-informe-01",
+        "title": "12.1. Informe 01: Currículum y Auditoría Táctica Forense",
+        "icon": "📊",
+        "file": "informes_ejecucion/INFORME_01_CURRICULUM_Y_AUDITORIA_TACTICA.md",
+        "desc": "Auditoría de 31 ciclos, diagnóstico de parálisis ofensiva, bloqueo de canales 36/37 y plan de mitigación.",
+    },
+    {
+        "id": "doc-linea-1",
+        "title": "13.1. Roadmap: Línea 1 (Observabilidad y Telemetría)",
+        "icon": "🔴",
+        "file": "roadmap/01_LINEA_1_OBSERVABILIDAD_Y_TELEMETRIA.md",
+        "desc": "Conformidad de esquema, profiler de sondas zero-mock, validador E2E y depuración de redundancias.",
+    },
+    {
+        "id": "doc-linea-2",
+        "title": "13.2. Roadmap: Línea 2 (Captura de VPs y Paridad Humana)",
+        "icon": "🔴",
+        "file": "roadmap/02_LINEA_2_ACELERACION_CAPTURA_VPS.md",
+        "desc": "Potencial radial a VP, sesgo prior MCTS, urgencia temporal y currículum acelerado.",
+    },
+    {
+        "id": "doc-linea-3",
+        "title": "13.3. Roadmap: Línea 3 (Fidelidad Normativa y Wargame)",
+        "icon": "🟢",
+        "file": "roadmap/03_LINEA_3_FIDELIDAD_NORMATIVA_Y_REGLAMENTO.md",
+        "desc": "Retirada en desenfilada 6.4, Dig-in, Humo, Transporte, formaciones combinadas y mitigación 3.6.",
+    },
+    {
+        "id": "doc-linea-4",
+        "title": "13.4. Roadmap: Línea 4 (Explicabilidad XAI e IPB)",
+        "icon": "🟢",
+        "file": "roadmap/04_LINEA_4_EXPLICABILIDAD_XAI_E_IPB.md",
+        "desc": "Atribución causal IGNH/GradCAM, perfilador forense, chokepoints IPB y perfilado doctrinal.",
+    },
+    {
+        "id": "doc-linea-5",
+        "title": "13.5. Roadmap: Línea 5 (Generalización Procedural)",
+        "icon": "🔵",
+        "file": "roadmap/05_LINEA_5_GENERALIZACION_PROCEDURAL.md",
+        "desc": "Mutador procedural con clumping geográfico y validación Zero-Shot en mapas 32x32 y 64x64.",
+    },
+    {
         "id": "doc-09-roadmap",
-        "title": "10. Hoja de Ruta Evolutiva (Roadmap)",
+        "title": "13. Hoja de Ruta Evolutiva (Roadmap Maestro)",
         "icon": "🗺️",
         "file": "05_ROADMAP_EVOLUTIVO.md",
-        "desc": "Hitos completados (Fases 1-6, 6.1, 6.2, 6.5, Literatura SOTA) y Hoja de Ruta Unificada de Trabajo Pendiente.",
+        "desc": "Visión ejecutiva, matriz maestra global, orden de ejecución y changelog canónico de versiones.",
     },
 ]
 
@@ -168,16 +231,19 @@ def build_mkdocs_site() -> None:
         doc_dir_name = spec["file"].replace(".md", "")
         target_dir = ROOT_DIR / "site" / doc_dir_name
         if target_dir.exists():
+            # Handle possible nested directories
+            nest_depth = len(Path(doc_dir_name).parts)
+            prefix = "../" * nest_depth
             redirect_html = f'''<!DOCTYPE html>
 <html>
 <head>
   <meta charset="utf-8">
   <title>Redirigiendo al Hub Canónico...</title>
-  <meta http-equiv="refresh" content="0; url=../#{spec["id"]}">
-  <script>window.location.replace("../#" + "{spec["id"]}");</script>
+  <meta http-equiv="refresh" content="0; url={prefix}#{spec["id"]}">
+  <script>window.location.replace("{prefix}#" + "{spec["id"]}");</script>
 </head>
 <body>
-  Redirigiendo al portal canónico: <a href="../#{spec["id"]}">{spec["title"]}</a>
+  Redirigiendo al portal canónico: <a href="{prefix}#{spec["id"]}">{spec["title"]}</a>
 </body>
 </html>'''
             (target_dir / "index.html").write_text(redirect_html, encoding="utf-8")

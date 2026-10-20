@@ -136,7 +136,7 @@ def persist_bench_artifacts(
                 r
                 for r in list(results or [])
                 if str(r.agent_name or "").strip().lower()
-                in {"muzero_stub", "efficientzero_v2_stub"}
+                in {"ezv2_stub", "efficientzero_v2_stub", "muzero_stub"}
             ),
             results[0] if results else None,
         )

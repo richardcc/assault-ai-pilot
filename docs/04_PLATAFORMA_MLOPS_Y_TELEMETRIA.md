@@ -92,6 +92,43 @@ En el motor de evaluación de episodios ([`assault_bench/episode_runner_impl.py`
 * **Problema Previo**: La condición de victoria evaluaba el bando activo en el turno inicial (`obs.to_play`). En escenarios asimétricos donde el rival tenía la iniciativa en el turno 0, la victoria del rival era contabilizada erróneamente como victoria del agente bajo test (generando falsos 100% Win Rate).
 * **Resolución Canónica**: El evaluador identifica de manera estricta el bando asignado a la política evaluada consultando `policy_by_side` para la clave correspondiente (ej. `"mcts"` o `"efficientzero_v2"`). De este modo, la métrica de victoria refleja con precisión matemática el resultado del agente evaluado con independencia de quién posea el turno inicial.
 
+### 3.3. Comandos Canónicos de Ejecución del Currículum
+
+Existen dos niveles de ejecución para el sistema de currículum de `EfficientZero V2`:
+
+#### 1. Orquestador Automático por Fases con Puertas de Promoción (PowerShell)
+Para ejecutar la suite completa de fases de currículum de forma desatendida con reintentos `BEST-OF-3` y auto-promoción:
+
+```powershell
+# Ejecución completa del currículum multiescenario canónico (todas las fases)
+.\curriculums\self_vs_self_vs_random_2scenarios_v1\run_all_phases.ps1
+
+# Ejecutar comenzando desde una fase específica continuando desde el último checkpoint
+.\curriculums\self_vs_self_vs_random_2scenarios_v1\run_all_phases.ps1 `
+    -StartPhase "phase1_channel_adapt" `
+    -ContinueFromLatestCheckpoint
+
+# Ejecución a través del orquestador común genérico especificando manifiesto
+powershell -ExecutionPolicy Bypass -File .\curriculums\common\run_dynamic_gated_curriculum.ps1 `
+    -Repo "C:\repos\python\assault" `
+    -CurriculumYaml ".\curriculums\self_vs_self_vs_random_2scenarios_v1\curriculum.yaml"
+```
+
+#### 2. Ejecución Directa de una Fase Aislada vía CLI de Python
+Para ejecutar o depurar una fase o ciclo concreto directamente con el motor de entrenamiento sin pasar por el orquestador:
+
+```powershell
+# Entrenamiento nativo de una fase individual de currículum con registro MLflow
+python -m agents.efficientzero_v2.train.train_efficientzero_v2 `
+    --config curriculums/self_vs_self_vs_random_2scenarios_v1/configs/efficientzero_v2.phase1_channel_adapt.yaml `
+    --mlflow-experiment assault_efficientzero_v2 `
+    --mlflow-run-name curriculum_2scenarios_v1_phase1_channel_adapt
+
+# Ejecución de un ciclo unitario usando el runner de ciclo
+powershell -ExecutionPolicy Bypass -File .\scripts\run_curriculum_cycle.ps1 `
+    -ManifestPath ".\scripts\curriculum_cycle.template.json"
+```
+
 ---
 
 ## 4. Módulos y Pestañas del Visor de Reporting (`http://127.0.0.1:8778`)
@@ -114,11 +151,17 @@ En el motor de evaluación de episodios ([`assault_bench/episode_runner_impl.py`
 * Barra temporal de reproducción paso a paso con registro de combate: tiradas de dados atacantes/defensores, bajas causadas, cambios de moral (`PINNED`, `SUPPRESSED`) y disparos de reacción interceptados.
 
 ### 4.4. Explicabilidad y Toma de Decisiones XAI (`EvalDecisionsTab.tsx`)
-* Desglose de cada decisión tomada por la IA:
+* Desglose forense de cada decisión tomada por la IA:
   * Probabilidad prior asignada por la red ($P(a)$).
-  * Distribución de visitas del árbol MCTS ($N(a)$).
+  * Distribución de visitas del árbol MCTS ($N(a)$) y valor medio $Q(s_0, a)$.
   * Margen de confianza de la decisión respecto a la segunda mejor alternativa.
-  * Modulaciones aplicadas por el Planificador Macro de Nivel 1.
+  * Modulaciones aplicadas por el Planificador Macro de Nivel 1: postura (`ASSAULT_VP`, `DEFENSIVE_HOLD`, `ZONE_SUPPRESS`), rol asignado (`SPEARHEAD`, `FIRE_SUPPORT`, etc.), mutaciones dinámicas de rol y boosting de prior (+20% a +40%).
+  * Diagnóstico de poda MCTS: ramas estériles de deambulación podadas (`mcts_sterile_branches_pruned`).
+  * Andamiaje de VPs: delta de potencial $F(s, a, s')$ y componente de recompensa de avance hacia objetivos (`vp_potential_reward_component`).
+  * Dinámica de Presión Temporal y Parálisis (Tarea 2.3):
+    * `turn_urgency_factor`: avance temporal relativo del turno $\tau = t / T_{\text{max}}$.
+    * `turn_urgency_decay`: atenuación exponencial $\exp(-\lambda \tau)$ ante 0 VPs controlados.
+    * `paralysis_penalty` y `paralysis_units_count`: penalización escalada por racha de pasividad en unidades al descubierto.
 
 ---
 

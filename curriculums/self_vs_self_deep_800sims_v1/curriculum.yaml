@@ -17,7 +17,7 @@ phases:
       min_tracked_captured_avg: 2.20
       min_score: 0.85
       profile_soft_guardrail:
-        muzero_vs_random_side_b:
+        ezv2_vs_random_side_b:
           severe_min_score: 0.03
           max_score_drop_vs_prev: 0.20
 
@@ -32,7 +32,7 @@ phases:
       min_score: 0.88
       no_regression_defeat_rate: true
       profile_soft_guardrail:
-        muzero_vs_random_side_b:
+        ezv2_vs_random_side_b:
           severe_min_score: 0.03
           max_score_drop_vs_prev: 0.20
 
@@ -47,6 +47,6 @@ phases:
       min_score: 0.90
       no_regression_defeat_rate: true
       profile_soft_guardrail:
-        muzero_vs_random_side_b:
+        ezv2_vs_random_side_b:
           severe_min_score: 0.03
           max_score_drop_vs_prev: 0.20

@@ -20,7 +20,7 @@ from assault_model.core.victory_conditions import VictoryConditions
 from assault_model.core.vp_tracker import VictoryPointTracker
 from assault_model.state.turn import TurnState
 from assault_model.map.hex_coord import HexCoord
-from assault_model.map.hex_utils import hex_range, _as_qr, CoordLike
+from assault_model.map.hex_utils import hex_range, safe_hex_distance, _as_qr, CoordLike
 
 # --- COMBAT IMPORTS ---
 from assault_model.actions.combat_mode import CombatMode
@@ -31,6 +31,15 @@ from assault_model.map.hex_edge_feature import HexEdgeFeature
 # --- TYPING-ONLY ---
 if TYPE_CHECKING:
     from assault_model.combat.reaction_context import ReactionContext
+
+
+try:
+    from mlops.telemetry.probe_profiler import profile_probe
+except ImportError:
+    import contextlib
+
+    def profile_probe(name: str):
+        return contextlib.nullcontext()
 
 
 DEBUG_TRACE = os.getenv("ASSAULT_DEBUG_TRACE", "0") == "1"
@@ -375,6 +384,20 @@ class GameState:
                 (defender.position.q, defender.position.r),
             )
             ctx.crossed_obstacle = edge_feature in {HexEdgeFeature.WALL}
+
+            # Palma et al. 2025 / Task 2.4: Multi-unit combined assault support detection
+            supporting_attackers = []
+            for u in self.units:
+                if (
+                    u.unit_id != attacker.unit_id
+                    and u.side == attacker.side
+                    and bool(getattr(u, "alive", True))
+                    and not bool(getattr(u, "suppressed", False))
+                ):
+                    if u.position is not None and safe_hex_distance(u.position, defender.position) == 1:
+                        supporting_attackers.append(u)
+            ctx.supporting_attackers = supporting_attackers
+            ctx.unsuppressed_solo_frontal_penalty_enabled = True
         return ctx
 
     # =================================================

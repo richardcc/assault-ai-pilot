@@ -209,3 +209,24 @@ def cross_entropy_hl_gauss(
         return loss.sum()
     return loss
 
+
+def compute_potential_difference(
+    phi_before: float,
+    phi_after: float,
+    gamma: float = 0.997,
+    done: bool = False,
+    shaping_scale: float = 1.0,
+) -> float:
+    """
+    Computes invariant potential-based reward shaping difference (Ng et al. 1999):
+        F(s, a, s') = gamma * Phi(s') - Phi(s)   [non-terminal]
+        F(s, a, s') = -Phi(s)                     [terminal: Phi(s') = 0.0]
+
+    Theorem 1 (Ng, Harada & Russell 1999):
+        Preserves optimal policy invariance: argmax_a Q*_{M'}(s, a) = argmax_a Q*_M(s, a).
+    """
+    effective_phi_after = 0.0 if bool(done) else float(phi_after)
+    delta = (float(gamma) * effective_phi_after) - float(phi_before)
+    return float(delta * float(shaping_scale))
+
+

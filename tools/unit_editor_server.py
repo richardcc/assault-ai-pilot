@@ -749,6 +749,21 @@ HTML_TEMPLATE = """<!DOCTYPE html>
       }
     }
 
+    const TRAIT_HELP = {
+      'EXPLOSIVE_CHARGE': '💣 [Regla 12.5 / Carta]: Detonación de carga explosiva en fase de apoyo contra edificio, fortificación u obstáculo adyacente. Tira 1 dado ROJO vs defensa más fuerte del terreno (o 1 VERDE si no hay). Destruye o colapsa el objetivo.',
+      'MINE_DETECTION': '🔍 [Reglas 9.6.6.2 / 9.6.4.2]: Reconocimiento y detección de campos de minas. Otorga bonificador de +2 al dado D6 para identificar o sortear minas con seguridad.',
+      'SMOKE': '💨 [Regla 7.2]: Capacidad de disparo de proyectiles de humo en hexágono objetivo y hasta 2 adyacentes para bloquear o dificultar LOS.',
+      'ASSAULT': '⚔️ [Regla 10.10]: Bonificador / capacidad para asalto en combate cerrado contra unidades enemigas.',
+      'ANTI_TANK': '🛡️ [Regla 10.7]: Armamento antitanque con penetración optimizada contra blindajes de vehículos.',
+      'SCOUT': '🔭 [Regla 9.6.6.2]: Reconocimiento avanzado (+1 a la tirada de detección de minas y avistamiento).',
+      'TOUGH': '💪 [Regla 10.7]: Resistencia tenaz en combate cerrado (ignora el primer impacto recibido en el turno 1).',
+      'RAPID_FIRE': '🔥 [Regla 10.7]: Ráfagas sostenidas con re-roll de dado de ataque.',
+      'SNIPER': '🎯 [Regla 10.7]: Tirador de élite; anula el dado de defensa de terreno más fuerte del defensor.',
+      'CAMOUFLAGED': '🌿 [Regla 10.5]: Camuflaje pasivo que dificulta la detección del enemigo.',
+      'HIDDEN': '👁️‍🗨️ [Regla 13.1]: Unidad oculta que recibe +1 dado azul de defensa adicional hasta su activación.',
+      'PARATROOPS': '🪂 [Regla 9.8]: Despliegue paracaidista aerotransportado con equipo ligero de asalto.',
+    };
+
     // --- MANEJO DE TRAITS / PALABRAS CLAVE ---
     function renderTraitsChips() {
       const container = document.getElementById('traits-chips-container');
@@ -758,6 +773,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
         const isActive = activeTraits.has(trait);
         const chip = document.createElement('div');
         chip.className = 'trait-chip' + (isActive ? ' active' : '');
+        chip.title = TRAIT_HELP[trait] || `Habilidad / Rasgo táctico: ${trait}`;
         chip.innerHTML = `
           <span class="chip-icon">${isActive ? '✓' : '+'}</span>
           <span>${trait}</span>
@@ -766,6 +782,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
         container.appendChild(chip);
       });
     }
+
 
     function toggleTrait(trait) {
       if (activeTraits.has(trait)) {

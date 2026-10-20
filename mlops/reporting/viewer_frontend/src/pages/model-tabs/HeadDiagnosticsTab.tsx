@@ -317,7 +317,7 @@ export function HeadDiagnosticsTab({ evalRows }: { evalRows: EvalRow[] }) {
 
   return (
     <div>
-      <h3 style={{ margin: "0 0 8px 0" }}>Model Health Board</h3>
+      <h3 style={{ margin: "0 0 8px 0" }}>🔬 Diagnóstico Evaluativo de Cabezas Tácticas (XAI)</h3>
       <div className="muted" style={{ marginBottom: 10 }}>
         Sanity board for EfficientZero v2 telemetry across selected evaluations.
       </div>

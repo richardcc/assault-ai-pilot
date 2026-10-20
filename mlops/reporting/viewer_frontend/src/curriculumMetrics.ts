@@ -19,6 +19,10 @@ export interface CurriculumStepMetric {
   vpNet: number | null;
   capturedAvg: number | null;
   durationSeconds: number | null;
+  trainDurationSeconds?: number | null;
+  benchDurationSeconds?: number | null;
+  selfplayDurationSeconds?: number | null;
+  optDurationSeconds?: number | null;
   createdAt: string;
   checkpoint: string;
 }
@@ -42,7 +46,9 @@ export function computeStepAnchorElo(
   }
 
   if (scoreVsSelfplay !== null && !isNaN(scoreVsSelfplay)) {
-    const s = Math.max(0.02, Math.min(0.98, scoreVsSelfplay));
+    // In mirror selfplay between the same model, the nominal symmetric score is 0.50 (1400 anchor).
+    // Clamp within [0.15, 0.85] to prevent one-sided mirror draw/side artifacts from collapsing ELO.
+    const s = Math.max(0.15, Math.min(0.85, scoreVsSelfplay));
     const implied = 1400.0 + 400.0 * Math.log10(s / (1.0 - s));
     estimates.push([implied, 1.5]);
   }
@@ -111,11 +117,14 @@ export function extractStepTraceMetrics(trace?: Dict | null): {
 
   const elo = computeStepAnchorElo(mirrorRand, scSelf);
 
+  // Prefer resolved_non_timeout_win_rate if positive; fall back to aggregate phase score if resolved is 0 but score > 0
   const winRate =
-    typeof gm.resolved_non_timeout_win_rate === "number"
+    typeof gm.resolved_non_timeout_win_rate === "number" && gm.resolved_non_timeout_win_rate > 0
       ? gm.resolved_non_timeout_win_rate
       : typeof gm.score === "number"
       ? gm.score
+      : typeof gm.resolved_non_timeout_win_rate === "number"
+      ? gm.resolved_non_timeout_win_rate
       : null;
 
   const score = typeof gm.score === "number" ? gm.score : null;
@@ -173,6 +182,11 @@ export function buildCurriculumProgression(
       prevElo = m.elo;
     }
 
+    const trainDur = typeof trace?.train_duration_seconds === "number" ? trace.train_duration_seconds : null;
+    const benchDur = typeof trace?.bench_duration_seconds === "number" ? trace.bench_duration_seconds : null;
+    const selfplayDur = typeof trace?.selfplay_duration_seconds === "number" ? trace.selfplay_duration_seconds : null;
+    const optDur = typeof trace?.opt_duration_seconds === "number" ? trace.opt_duration_seconds : null;
+
     steps.push({
       runId: tid,
       phaseName: String(trace?.phase_name || t.curriculum_phase || `Fase ${index + 1}`),
@@ -191,6 +205,10 @@ export function buildCurriculumProgression(
       vpNet: m.vpNet,
       capturedAvg: m.capturedAvg,
       durationSeconds: dur,
+      trainDurationSeconds: trainDur,
+      benchDurationSeconds: benchDur,
+      selfplayDurationSeconds: selfplayDur,
+      optDurationSeconds: optDur,
       createdAt: String(t.created_at_utc || ""),
       checkpoint: String(t.latest_checkpoint || "-"),
     });

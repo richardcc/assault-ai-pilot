@@ -196,3 +196,29 @@ def test_trainer_aux_objective_wiring_smoke_contract() -> None:
     assert "aux_objective_loss" in md
     assert "aux_intent_loss" in md
     assert "aux_multi_vp_loss" in md
+
+
+def test_trainer_pcgrad_gradient_balance_mode() -> None:
+    model = EfficientZeroV2Network(
+        observation_dim=4,
+        hidden_dim=16,
+        action_dim=8,
+        encoder_type="mlp",
+    )
+    trainer = EfficientZeroV2Trainer(
+        model=model,
+        lr=1e-3,
+        device="cpu",
+        gradient_balance_mode="pcgrad",
+    )
+    assert trainer.gradient_balance_mode == "pcgrad"
+    sample = ReplaySample(
+        observation=torch.tensor([1.0, 0.0, 0.0, 0.0], dtype=torch.float32),
+        policy_target=[1.0] + [0.0] * 7,
+        value_target=0.5,
+        reward_target=0.1,
+        info={},
+    )
+    metrics = trainer.train_batch([sample])
+    assert metrics.loss >= 0.0
+

@@ -1,0 +1,45 @@
+schema_version: adaptive_cycles.v1
+curriculum_name: self_vs_self_vs_random_2scenarios_v1
+phase_name: phase4_mix_30_70
+generation: 2
+last_updated_utc: '2026-10-20T18:07:16.735719+00:00'
+base_config_path: curriculums/self_vs_self_vs_random_2scenarios_v1/configs/efficientzero_v2.phase4_mix_30_70.yaml
+winning_history:
+- generation: 1
+  winning_cycle: 3
+  promoted_at_utc: '2026-10-20T18:07:16.735714+00:00'
+  win_rate: 0.875
+  tactical_quality_score: 0.46711111111111114
+  promotion_decision: promote_best_of_cycles
+cycles:
+  1:
+    strategy: promoted_baseline
+    description: Generation 2 Baseline (Promoted from Cycle 3 of previous generation).
+    overlay: {}
+  2:
+    strategy: adaptive_exploitation
+    description: 'Exploitation and convergence refinement: +5% reanalysis, tighter
+      MCTS temperature, higher potential weight.'
+    overlay:
+      train:
+        reanalysis_ratio: 0.5
+        train_updates_per_iter: 13
+      selfplay:
+        mcts_temperature: 1.1
+        reward_shaping:
+          vp_potential_weight: 1.1
+  3:
+    strategy: adaptive_exploration
+    description: 'Aggressive frontier exploration: +15% VP capture bonuses, higher
+      objective loss weight, expanded exploration.'
+    overlay:
+      train:
+        objective_loss_weight: 0.27
+        train_updates_per_iter: 15
+      selfplay:
+        mcts_temperature: 1.2
+        reward_shaping:
+          vp_capture_bonus_per_hex: 3.28
+          objective_progress_bonus_per_hex: 2.5
+          capture_bonus: 1.06
+          vp_urgency_lambda: 1.3
