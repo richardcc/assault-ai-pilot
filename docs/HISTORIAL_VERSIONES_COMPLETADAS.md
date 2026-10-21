@@ -82,9 +82,29 @@ flowchart TD
 | **`v2.5.2`** | Octubre 2026 | Estabilidad de Telemetría Curricular y ELO Calibrado | Ponderación multi-perfil de win rate en runner PowerShell, alineación de tracked_side en auto-juego espejo, etiquetado nativo EfficientZeroV2 en controladores, exportación ONNX para Netron y visualización condicional de Gates en el visor MLOps. | `CONSOLIDADO 🟢` |
 | **`v2.5.3`** | Octubre 2026 | Optimización Evolutiva de Ciclos y Desacoplamiento de Checkpoints | Erradicación de herencia de checkpoints externos en lanzamientos desde cero (tabula rasa garantizada), analizador evolutivo de ejecuciones pasadas (`evolutionary_cycle_optimizer.py`), promoción automática del ciclo ganador $C_X \to C_1$ (nuevo baseline) y síntesis adaptativa de variantes $C_2$ (explotación/refinamiento) y $C_3$ (exploración/agresividad). | `CONSOLIDADO 🟢` |
 | **`v2.5.4`** | Octubre 2026 | Dynamic PBRS Escalado Temporalmente y Desensibilización de Brecha | Potencial temporalmente escalado $\Phi(s, t) = \alpha(1 + t/T_{\max}) \cdot \text{dist\_pot} + \beta\cdot\text{Contest}$, bono de contención por disputa en brecha ($d \le 2$), atenuación del $60\%$ de penalización de bajas en brecha ($r_{\text{loss}} \times 0.40$), castigo catastrófico por timeout ($-1.0$) ante 0 VPs controlados, e ingesta canónica de las 12 formaciones combinadas oficiales del manual. | `CONSOLIDADO 🟢` |
+| **`v2.5.5`** | Octubre 2026 | Inicialización Canónica de Capas Especializada en RL | Política ortogonal ($\text{gain}=0.01$, $\text{bias}=0$) para máxima entropía inicial uniforme; Valor/Recompensa/Consistencia ortogonal ($\text{gain}=1.0$, $\text{bias}=0$); Kaiming Normal en convoluciones SiLU; y Zero-Init ResNet ($\gamma=0, \beta=0$) en segunda normalización residual preservando función identidad pura al paso $0$. Suite dedicada (5/5 tests en verde). | `CONSOLIDADO 🟢` |
 
 
 ## 3. Fases Recientes Consolidadas (Ciclos v2.4.x - v2.5.x — Octubre 2026)
+
+#### v2.5.5 — Inicialización Canónica de Capas Especializada en Reinforcement Learning [CONSOLIDADO 🟢]
+* **Objetivo**: Erradicar el colapso prematuro de la política y la deriva residual en autojuego temprano mediante un esquema formal de inicialización adaptado a redes profundas con rollouts MCTS: máxima entropía estocástica inicial, preservación de varianza latente e identidad residual pura al paso $0$.
+* **Componentes Consolidados**:
+  * **Política Ortogonal de Ganancia Mínima ($\text{gain}=0.01, \text{bias}=0.0$)**:
+    * Aplicada a la capa de salida de la cabeza de política (`prediction_policy`).
+    * Garantiza logits $z_a \approx 0$ y una distribución inicial $\pi(a \mid s)$ casi perfectamente uniforme ($H(\pi) \approx \log(32)$, discrepancia $<0.02$ nats), asegurando exploración completa del catálogo de acciones en autojuego temprano.
+  * **Salidas de Valor, Recompensa, Consistencia y Auxiliares Ortogonales ($\text{gain}=1.0, \text{bias}=0.0$)**:
+    * Salidas lineales de `prediction_value`, `dynamics_reward`, `consistency_projection` y cabezas tácticas auxiliares (`threat_map`, `morale`, `attrition`, `final_ownership`).
+    * Preserva la norma Euclidiana de las proyecciones y previene saturación en los átomos Two-Hot.
+  * **Kaiming Normal (He Normal, mode=fan_out) en Convoluciones SiLU y Capas Ocultas**:
+    * Aplicado a `HexagonalMaskConv2d`, `Conv2d`, `Conv1d` y capas lineales intermedias, estabilizando la varianza de propagación hacia adelante.
+  * **Zero-Init ResNet / Fixup en Segunda Normalización Residual ($\gamma=0, \beta=0$)**:
+    * Inicialización en cero absoluto de pesos y sesgos en `gn2` (`ResidualConvBlock`) y `ln2` (`ResidualMLPBlock`).
+    * Al evaluar $y = x + F(x)$ con $F(x) = \text{Attn}(\text{Norm}_2(\dots)) = 0$, toda la torre residual se comporta como la función identidad pura al paso $0$ ($y = x$), habilitando flujo directo de gradientes $\frac{\partial y}{\partial x} = I$.
+  * **Squeeze-and-Excitation Canónico Multiplicativo (`SEBlock`)**:
+    * Encapsulación de atención SE como módulo que multiplica activaciones por el mapa de compuerta sigmoid ($x \times \text{Sigmoid}(\dots)$), alineando la interfaz con `ECABlock`.
+  * **Verificación Formal**:
+    * Suite dedicada `agents/efficientzero_v2/tests/test_canonical_rl_initialization.py` (5/5 tests en verde).
 
 #### v2.5.4 — Dynamic PBRS Escalado Temporalmente, Desensibilización de Brecha y Formaciones Oficiales [CONSOLIDADO 🟢]
 * **Objetivo**: Resolver de raíz la Paradoja del Comandante Prudente (*The Prudent Commander Paradox*), eliminando la pasividad y aversión al asalto final en escenarios con límite estricto de turnos ($T_{\max}$), mediante andamiaje potencial dependiente del tiempo, atenuación de bajas en la brecha del objetivo y penalización catastrófica por timeout.

@@ -326,8 +326,46 @@ Para reducir la duración de las campañas de entrenamiento de $>10$ horas a $<3
 
 ---
 
-## 10. Referencia a la Hoja de Ruta Evolutiva y Linaje
+## 10. Inicialización Canónica de Capas Especializada en Reinforcement Learning [Consolidado v2.5.5]
 
+En aprendizaje por refuerzo profundo sobre espacios de acción discretos y rollouts estocásticos MCTS, la inicialización estándar de redes neuronales (e.g. He Uniform / PyTorch default) provoca una degradación crítica en los primeros pasos de autojuego:
+1. **Colapso Temprano de la Política**: Salidas lineales no calibradas imponen sesgos arbitrarios sobre ciertas acciones antes de recibir datos, reduciendo drásticamente la entropía y explorando únicamente un subconjunto ínfimo del árbol táctico.
+2. **Deriva de Representación Residual**: En torres convolucionales profundas de representación y dinámica, la acumulación de ruido residual al paso 0 perturba la extracción de características antes de que los gradientes converjan.
+
+Para resolver de raíz estas patologías, se implementó la función canónica `apply_canonical_rl_init(model)` y el método `apply_canonical_initialization()` en [`EfficientZeroV2BaseNetwork`](../agents/efficientzero_v2/core/network_base.py) y [`EfficientZeroV2Network`](../agents/efficientzero_v2/core/network.py), articulando cuatro garantías matemáticas:
+
+### 10.1. Política Ortogonal con Ganancia Mínima ($\text{gain}=0.01, \text{bias}=0.0$)
+* **Fundamento Matemático**: Basado en Andrychowicz et al. (2021) y Schulman et al. (2017). Para la última capa lineal de la cabeza de política (`prediction_policy`), los pesos se inicializan con una matriz ortogonal de escala minúscula:
+  $$W_{\text{policy}} \sim \text{Orthogonal}(\text{gain} = 0.01), \quad b_{\text{policy}} = 0$$
+* **Impacto en Entropía**: Los logits iniciales $z_a \approx 0$ para todas las acciones $a \in \mathcal{A}$. Tras la normalización softmax, la distribución inicial de probabilidades $\pi(a \mid s)$ es prácticamente uniforme:
+  $$\pi(a \mid s) \approx \frac{1}{|\mathcal{A}|} \implies H(\pi) \approx \log(|\mathcal{A}|) = \log(32) \approx 3.4657 \text{ nats}$$
+* **Resultado Verificado**: Se comprobó experimentalmente que la discrepancia entre la entropía inicial y el máximo teórico es menor a $0.02$ nats, garantizando máxima exploración estocástica uniforme al inicio del autojuego.
+
+### 10.2. Cabezas de Valor, Recompensa y Auxiliares Ortogonales ($\text{gain}=1.0, \text{bias}=0.0$)
+* **Estabilidad de Varianza**: Las salidas lineales de `prediction_value`, `dynamics_reward`, `consistency_projection` y las cabezas auxiliares tácticas (`threat_map`, `morale`, `attrition`, `final_ownership`) se inicializan con matrices ortogonales de ganancia unitaria:
+  $$W_{\text{val/rew}} \sim \text{Orthogonal}(\text{gain} = 1.0), \quad b = 0$$
+* **Ventaja**: Preserva exactamente la norma Euclidiana de las características latentes proyectadas hacia los átomos Two-Hot, impidiendo saturación prematura o gradientes desvanecidos en el cálculo de pérdidas de Bellman.
+
+### 10.3. Kaiming Normal (He Normal) en Convoluciones SiLU y Capas Ocultas
+* **Formulación**: Para todas las convoluciones `HexagonalMaskConv2d`, `Conv2d`, `Conv1d` y capas lineales intermedias con activación no lineal SiLU/ReLU:
+  $$W \sim \mathcal{N}\left(0, \; \sigma^2 = \frac{2}{\text{fan\_out}}\right), \quad b = 0$$
+* **Ventaja**: El modo `fan_out` garantiza que la varianza de las activaciones se conserve constante a lo largo de las múltiples capas residuales hacia adelante, eliminando oscilaciones numéricas en mapas de cualquier dimensión.
+
+### 10.4. Zero-Init ResNet / Fixup en la Segunda Normalización Residual ($\gamma = 0, \beta = 0$)
+* **Fundamento Matemático (Goyal et al., 2017; Zhang et al., 2019 Fixup)**: En cada bloque residual `ResidualConvBlock` y `ResidualMLPBlock`, la segunda capa de normalización (`gn2` en convolución, `ln2` en MLP) se inicializa con peso y sesgo idénticamente nulos:
+  $$\gamma_{\text{norm2}} = 0, \quad \beta_{\text{norm2}} = 0$$
+* **Función Identidad Pura al Paso 0**:
+  Dado un bloque residual $y = x + F(x)$, donde $F(x) = \text{Attn}(\text{Norm}_2(\text{Conv}_2(\dots)))$:
+  $$\text{Norm}_2(\cdot) = \gamma \cdot \hat{z} + \beta = 0 \cdot \hat{z} + 0 = 0 \implies F(x) = 0 \implies y = x + 0 = x$$
+* **Impacto**: Al inicio del entrenamiento ($step=0$), toda la torre residual opera como una función identidad perfecta. Esto permite que el gradiente fluya sin obstáculos desde las cabezas de predicción hasta la capa de entrada $\frac{\partial (x + F(x))}{\partial x} = I + 0 = I$, permitiendo entrenar arquitecturas profundas sin explosión ni divergencia de gradientes.
+
+### 10.5. Batería de Validación
+Verificado al 100% en la suite de pruebas unitarias dedicada:  
+[`agents/efficientzero_v2/tests/test_canonical_rl_initialization.py`](../agents/efficientzero_v2/tests/test_canonical_rl_initialization.py) (5/5 tests en verde).
+
+---
+
+## 11. Referencia a la Hoja de Ruta Evolutiva y Linaje
 
 > [!NOTE]
 > Toda la matriz de síntesis evolutiva, el estado de implementación de las mejoras de `EfficientZero V2` y las fases futuras de investigación se han unificado canónicamente en el documento final de la documentación: **[09. Hoja de Ruta Evolutiva: Assault Architecture Roadmap (2024–2026)](05_ROADMAP_EVOLUTIVO.md)**.

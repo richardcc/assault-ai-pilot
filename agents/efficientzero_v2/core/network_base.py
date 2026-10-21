@@ -14,6 +14,89 @@ def _make_group_norm(channels: int) -> nn.GroupNorm:
     return nn.GroupNorm(num_groups, channels)
 
 
+def _get_last_linear(head: nn.Module) -> nn.Linear | None:
+    if isinstance(head, nn.Linear):
+        return head
+    if isinstance(head, nn.Sequential):
+        for m in reversed(list(head)):
+            if isinstance(m, nn.Linear):
+                return m
+    return None
+
+
+def apply_canonical_rl_init(model: nn.Module) -> None:
+    """
+    Applies formal Reinforcement Learning initialization scheme (Task 2.7):
+      1. Kaiming Normal (mode='fan_out', nonlinearity='relu') for Conv2d, Conv1d and intermediate Linear layers.
+      2. Zero-Init (Goyal et al. 2017 / Fixup): Zero out weight (gamma=0) and bias (beta=0) in the second
+         residual normalization (gn2 in ResidualConvBlock, ln2 in ResidualMLPBlock) to preserve pure identity at step 0.
+      3. Orthogonal policy head (gain=0.01, bias=0.0) for maximum initial uniform entropy.
+      4. Orthogonal value, reward, consistency, and auxiliary heads (gain=1.0, bias=0.0) for stable variance.
+    """
+    for m in model.modules():
+        if isinstance(m, (nn.Conv2d, nn.Conv1d)):
+            nn.init.kaiming_normal_(m.weight, mode="fan_out", nonlinearity="relu")
+            if m.bias is not None:
+                nn.init.constant_(m.bias, 0.0)
+        elif isinstance(m, nn.Linear):
+            nn.init.kaiming_normal_(m.weight, mode="fan_out", nonlinearity="relu")
+            if m.bias is not None:
+                nn.init.constant_(m.bias, 0.0)
+        elif isinstance(m, (nn.GroupNorm, nn.LayerNorm, nn.BatchNorm2d)):
+            if m.weight is not None:
+                nn.init.constant_(m.weight, 1.0)
+            if m.bias is not None:
+                nn.init.constant_(m.bias, 0.0)
+        elif isinstance(m, nn.Embedding):
+            nn.init.normal_(m.weight, mean=0.0, std=0.02)
+
+    # Zero-Init on second residual normalization (Goyal et al. 2017 / Fixup)
+    for m in model.modules():
+        if isinstance(m, ResidualConvBlock):
+            if hasattr(m, "gn2") and m.gn2 is not None:
+                if m.gn2.weight is not None:
+                    nn.init.constant_(m.gn2.weight, 0.0)
+                if m.gn2.bias is not None:
+                    nn.init.constant_(m.gn2.bias, 0.0)
+        elif isinstance(m, ResidualMLPBlock):
+            if hasattr(m, "ln2") and m.ln2 is not None:
+                if m.ln2.weight is not None:
+                    nn.init.constant_(m.ln2.weight, 0.0)
+                if m.ln2.bias is not None:
+                    nn.init.constant_(m.ln2.bias, 0.0)
+
+    # Orthogonal policy output: gain=0.01 for maximum initial entropy (uniform action distribution)
+    if hasattr(model, "prediction_policy") and model.prediction_policy is not None:
+        last_pol = _get_last_linear(model.prediction_policy)
+        if last_pol is not None:
+            nn.init.orthogonal_(last_pol.weight, gain=0.01)
+            if last_pol.bias is not None:
+                nn.init.constant_(last_pol.bias, 0.0)
+
+    # Orthogonal value, reward, auxiliary, and consistency outputs: gain=1.0 for stable variance
+    head_attr_names = [
+        "prediction_value",
+        "dynamics_reward",
+        "prediction_objective",
+        "prediction_intent",
+        "prediction_multi_vp",
+        "prediction_threat_map",
+        "prediction_final_ownership",
+        "prediction_attrition",
+        "prediction_morale",
+        "consistency_projection",
+    ]
+    for head_name in head_attr_names:
+        if hasattr(model, head_name):
+            head = getattr(model, head_name)
+            if head is not None:
+                last_lin = _get_last_linear(head)
+                if last_lin is not None:
+                    nn.init.orthogonal_(last_lin.weight, gain=1.0)
+                    if last_lin.bias is not None:
+                        nn.init.constant_(last_lin.bias, 0.0)
+
+
 class ResidualMLPBlock(nn.Module):
     def __init__(self, dim: int):
         super().__init__()
@@ -138,6 +221,27 @@ def _add_coords(x: torch.Tensor) -> torch.Tensor:
     return torch.cat([x, x_coords, y_coords], dim=1)
 
 
+class SEBlock(nn.Module):
+    """
+    Squeeze-and-Excitation channel attention (Hu et al., 2018):
+    Recalibrates channel-wise feature responses by adaptively multiplying
+    input features by a sigmoid gating vector.
+    """
+    def __init__(self, channels: int, reduction: int = 4):
+        super().__init__()
+        se_dim = max(4, channels // reduction)
+        self.fc = nn.Sequential(
+            nn.AdaptiveAvgPool2d(1),
+            nn.Conv2d(channels, se_dim, kernel_size=1),
+            nn.SiLU(),
+            nn.Conv2d(se_dim, channels, kernel_size=1),
+            nn.Sigmoid(),
+        )
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        return x * self.fc(x)
+
+
 class ResidualConvBlock(nn.Module):
     def __init__(self, channels: int, use_hex_mask: bool = True, attention_type: str = "se"):
         super().__init__()
@@ -153,15 +257,7 @@ class ResidualConvBlock(nn.Module):
         if self.attention_type == "eca":
             self.attn = ECABlock(channels, kernel_size=3)
         else:
-            # Squeeze-and-Excitation (SE) channel attention gating
-            se_dim = max(4, channels // 4)
-            self.attn = nn.Sequential(
-                nn.AdaptiveAvgPool2d(1),
-                nn.Conv2d(channels, se_dim, kernel_size=1),
-                nn.SiLU(),
-                nn.Conv2d(se_dim, channels, kernel_size=1),
-                nn.Sigmoid(),
-            )
+            self.attn = SEBlock(channels, reduction=4)
         self.se = self.attn
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
@@ -243,6 +339,7 @@ class EfficientZeroV2BaseNetwork(nn.Module):
         use_coord_conv: bool = False,
         dynamics_attention_type: str = "se",
         policy_head_type: str = "linear",
+        apply_rl_init: bool = True,
     ):
         super().__init__()
         self.encoder_type = str(encoder_type).lower().strip()
@@ -589,6 +686,13 @@ class EfficientZeroV2BaseNetwork(nn.Module):
                 if self.enable_morale_head
                 else None
             )
+
+        if bool(apply_rl_init):
+            self.apply_canonical_initialization()
+
+    def apply_canonical_initialization(self) -> None:
+        """Applies formal RL initialization scheme to this network (Task 2.7)."""
+        apply_canonical_rl_init(self)
     def _scale_latent(self, s: torch.Tensor) -> torch.Tensor:
         """Normalize latent state representation to prevent drift during MCTS unrolls."""
         if s.dim() == 4:

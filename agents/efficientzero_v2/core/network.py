@@ -40,6 +40,7 @@ class EfficientZeroV2Network(EfficientZeroV2BaseNetwork):
         use_coord_conv: bool = False,
         dynamics_attention_type: str = "se",
         policy_head_type: str = "linear",
+        apply_rl_init: bool = True,
     ):
         super().__init__(
             observation_dim=observation_dim,
@@ -68,6 +69,7 @@ class EfficientZeroV2Network(EfficientZeroV2BaseNetwork):
             use_coord_conv=use_coord_conv,
             dynamics_attention_type=dynamics_attention_type,
             policy_head_type=policy_head_type,
+            apply_rl_init=apply_rl_init,
         )
         self.consistency_proj_dim = int(max(16, consistency_proj_dim))
         if self.encoder_type == "cnn":
@@ -87,6 +89,9 @@ class EfficientZeroV2Network(EfficientZeroV2BaseNetwork):
                 nn.SiLU(),
                 nn.Linear(self.consistency_proj_dim, self.consistency_proj_dim),
             )
+
+        if bool(apply_rl_init):
+            self.apply_canonical_initialization()
 
     def consistency_embedding(self, hidden: torch.Tensor) -> torch.Tensor:
         if self.encoder_type != "cnn" and hidden.dim() > 2:
