@@ -692,9 +692,10 @@ res = evolve_phase_cycles(
     },
     winning_overlay_path=over_p,
 )
-print(f"   [Evolutionary Plan] Promoted winning Cycle {WinningCycle} to Generation {res.get('generation')} C1 baseline.")
+gen = res.get('generation')
+print(f'   [Evolutionary Plan] Promoted winning Cycle $WinningCycle to Generation {gen} C1 baseline.')
 "@
-  python -c $py
+  $py | python -
   if ($LASTEXITCODE -eq 0) {
     Write-Host ("   [Auto-Persist] Updated phase config and adaptive cycles for Phase '$PhaseName' from Cycle $WinningCycle" ) -ForegroundColor Magenta
   }
