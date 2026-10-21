@@ -1,0 +1,115 @@
+schema_version: adaptive_cycles.v1
+curriculum_name: vp_acceleration_v1
+phase_name: phase5_urban_assault_pure_offensive
+generation: 1
+last_updated_utc: '2026-10-21T16:00:00.000000+00:00'
+base_config_path: curriculums/vp_acceleration/configs/efficientzero_v2.phase5_urban_assault_pure_offensive.yaml
+max_independent_cycles: 10
+winning_history: []
+cycles:
+  1:
+    strategy: promoted_baseline
+    description: Initial offensive baseline in battaglia_cittadina_2_1 (T=8) with catastrophic timeout penalty.
+    overlay: {}
+  2:
+    strategy: adaptive_exploitation
+    description: 'Exploitation tier 1: +5% reanalysis, tightened MCTS temperature, increased training updates.'
+    overlay:
+      train:
+        reanalysis_ratio: 0.50
+        train_updates_per_iter: 22
+      selfplay:
+        mcts_temperature: 1.00
+        reward_shaping:
+          vp_potential_weight: 1.60
+  3:
+    strategy: adaptive_exploration
+    description: 'Exploration tier 1: +15% VP capture bonus, expanded objective loss weight.'
+    overlay:
+      train:
+        objective_loss_weight: 0.48
+        train_updates_per_iter: 24
+      selfplay:
+        mcts_temperature: 1.10
+        reward_shaping:
+          vp_capture_bonus_per_hex: 7.20
+          objective_progress_bonus_per_hex: 5.50
+          capture_bonus: 2.40
+  4:
+    strategy: adaptive_exploitation
+    description: 'Exploitation tier 2: higher potential bonus on contested breach zone (d <= 2).'
+    overlay:
+      train:
+        reanalysis_ratio: 0.52
+        train_updates_per_iter: 24
+      selfplay:
+        reward_shaping:
+          vp_contested_bonus: 1.00
+          paralysis_penalty_weight: 0.10
+  5:
+    strategy: adaptive_exploration
+    description: 'Exploration tier 2: elevated breach aggressiveness with deeper MCTS simulations.'
+    overlay:
+      selfplay:
+        mcts_simulations: 320
+        mcts_temperature: 1.15
+        reward_shaping:
+          vp_capture_bonus_per_hex: 7.80
+          objective_progress_bonus_per_hex: 6.00
+  6:
+    strategy: adaptive_exploitation
+    description: 'Exploitation tier 3: refined convergence with increased updates and breach loss attenuation.'
+    overlay:
+      train:
+        reanalysis_ratio: 0.55
+        train_updates_per_iter: 26
+      selfplay:
+        reward_shaping:
+          breach_casualty_attenuation: 0.35
+          vp_potential_weight: 1.75
+  7:
+    strategy: adaptive_exploration
+    description: 'Exploration tier 3: maximal front-line pressure and high idle penalty.'
+    overlay:
+      selfplay:
+        reward_shaping:
+          idle_penalty: -0.25
+          vp_capture_bonus_per_hex: 8.50
+          capture_bonus: 2.60
+  8:
+    strategy: hyper_assault_convergence
+    description: 'Convergence tier 1: high reanalysis (0.58), deterministic MCTS, and tight coordination.'
+    overlay:
+      train:
+        reanalysis_ratio: 0.58
+        train_updates_per_iter: 28
+      selfplay:
+        mcts_temperature: 0.90
+        reward_shaping:
+          vp_potential_weight: 1.90
+          vp_contested_bonus: 1.20
+  9:
+    strategy: hyper_assault_convergence
+    description: 'Convergence tier 2: maximum breach assault focus with 384 MCTS simulations.'
+    overlay:
+      train:
+        reanalysis_ratio: 0.60
+        train_updates_per_iter: 30
+      selfplay:
+        mcts_simulations: 384
+        mcts_temperature: 0.85
+        reward_shaping:
+          vp_potential_weight: 2.00
+  10:
+    strategy: hyper_assault_convergence
+    description: 'Final mastery cycle: full exploitation and lock-in of urban breakthrough policy.'
+    overlay:
+      train:
+        train_updates_per_iter: 32
+        reanalysis_ratio: 0.60
+      selfplay:
+        mcts_simulations: 416
+        mcts_temperature: 0.80
+        reward_shaping:
+          vp_potential_weight: 2.20
+          capture_bonus: 3.00

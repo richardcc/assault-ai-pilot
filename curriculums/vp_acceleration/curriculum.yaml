@@ -54,3 +54,15 @@ phases:
       min_doctrine_adherence_rate: 0.40
       min_recon_survival_rate: 0.40
       min_fire_support_stationarity: 0.45
+
+  - name: phase5_urban_assault_pure_offensive
+    max_reinforcement_cycles: 10
+    train_config: curriculums/vp_acceleration/configs/efficientzero_v2.phase5_urban_assault_pure_offensive.yaml
+    eval_config: assault_bench/configs/benchmark_config.vp_acceleration_phase5.yaml
+    gate:
+      no_regression_defeat_rate: true
+      min_win_rate: 0.80
+      min_tracked_captured_avg: 1.50
+      max_avg_turns: 8.0
+      min_vp_capture_take_rate: 0.12
+      min_doctrine_adherence_rate: 0.45

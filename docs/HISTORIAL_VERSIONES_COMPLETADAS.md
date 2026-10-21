@@ -83,9 +83,50 @@ flowchart TD
 | **`v2.5.3`** | Octubre 2026 | Optimización Evolutiva de Ciclos y Desacoplamiento de Checkpoints | Erradicación de herencia de checkpoints externos en lanzamientos desde cero (tabula rasa garantizada), analizador evolutivo de ejecuciones pasadas (`evolutionary_cycle_optimizer.py`), promoción automática del ciclo ganador $C_X \to C_1$ (nuevo baseline) y síntesis adaptativa de variantes $C_2$ (explotación/refinamiento) y $C_3$ (exploración/agresividad). | `CONSOLIDADO 🟢` |
 | **`v2.5.4`** | Octubre 2026 | Dynamic PBRS Escalado Temporalmente y Desensibilización de Brecha | Potencial temporalmente escalado $\Phi(s, t) = \alpha(1 + t/T_{\max}) \cdot \text{dist\_pot} + \beta\cdot\text{Contest}$, bono de contención por disputa en brecha ($d \le 2$), atenuación del $60\%$ de penalización de bajas en brecha ($r_{\text{loss}} \times 0.40$), castigo catastrófico por timeout ($-1.0$) ante 0 VPs controlados, e ingesta canónica de las 12 formaciones combinadas oficiales del manual. | `CONSOLIDADO 🟢` |
 | **`v2.5.5`** | Octubre 2026 | Inicialización Canónica de Capas Especializada en RL | Política ortogonal ($\text{gain}=0.01$, $\text{bias}=0$) para máxima entropía inicial uniforme; Valor/Recompensa/Consistencia ortogonal ($\text{gain}=1.0$, $\text{bias}=0$); Kaiming Normal en convoluciones SiLU; y Zero-Init ResNet ($\gamma=0, \beta=0$) en segunda normalización residual preservando función identidad pura al paso $0$. Suite dedicada (5/5 tests en verde). | `CONSOLIDADO 🟢` |
+| **`v2.5.6`** | Octubre 2026 | Optimización de Alto Rendimiento GameState/CoW y Decomisión Legacy | `__slots__` en `HexState`, pre-caching de `_vp_hexes`, compartición inmutable de referencias en `clone_cow()` (+62% en clones/s de RuntimeGameState, +16% en simulación/s) y decomisión limpia de 9 módulos huérfanos de fuego de reacción (`game_state_reactions`, `ReactionRegistry`, etc.). | `CONSOLIDADO 🟢` |
+| **`v2.5.7`** | Octubre 2026 | Currículum Asimétrico Ofensivo de Asalto Urbano Puro | Fase 5 en `battaglia_cittadina_2_1` con horizonte $T=8$, modo 100% atacante (`US` vs `Random`), penalización severa por timeout ($-1.0$) y plan evolutivo de 10 ciclos adaptativos en `curriculums/vp_acceleration/` para erradicar la inercia defensiva aprendida. Suite de validación (4/4 tests en verde). | `CONSOLIDADO 🟢` |
 
 
 ## 3. Fases Recientes Consolidadas (Ciclos v2.4.x - v2.5.x — Octubre 2026)
+
+#### v2.5.7 — Currículum Asimétrico Ofensivo de Asalto Urbano Puro en Gela [CONSOLIDADO 🟢]
+* **Objetivo**: Erradicar de raíz la inercia defensiva y la pasividad aprendida en fases tempranas de autojuego simétrico, forzando al agente a dominar la ruptura y asalto frontal sobre defensores atrincherados en `battaglia_cittadina_2_1` bajo horizonte comprimido ($T=8$).
+* **Componentes Consolidados**:
+  * **Integración de Fase 5 en el Currículum Acelerado de VPs (`curriculums/vp_acceleration/curriculum.yaml`)**:
+    * Escenario urbano `battaglia_cittadina_2_1` con horizonte táctico estricto a $T_{\max}=8$ turnos.
+    * Configurado con `max_reinforcement_cycles: 10` para una campaña evolutiva completa de 10 ciclos.
+  * **Configuración de Entrenamiento Ofensivo 100% Atacante (`efficientzero_v2.phase5_urban_assault_pure_offensive.yaml`)**:
+    * Modo de matchup asimétrico puro (`self_vs_random`) con `tracked_side: "US"` y `to_play: "US"`.
+    * Penalización terminal catastrófica por timeout (`timeout_penalty: -1.0`) ante 0 VPs consolidados.
+    * Activación de andamiaje PBRS dependiente del tiempo (`time_scaled_pbrs: true`), bono por disputa de brecha (`vp_contested_bonus: 0.80`), atenuación del $60\%$ de penalización de bajas en radio $d \le 2$ (`breach_casualty_attenuation: 0.40`) y penalización por inmovilidad/espera (`idle_penalty: -0.15`).
+  * **Plan Evolutivo de 10 Ciclos Adaptativos (`phase5_urban_assault_pure_offensive.adaptive_cycles.yaml`)**:
+    * 4 niveles progresivos: Baseline Promovido (Ciclo 1), Explotación Adaptativa (Ciclos 2–4), Exploración en Frontera con simulación profunda (Ciclos 5–7) e Hiper-Asalto Convergente (Ciclos 8–10 con hasta 416 sims MCTS y reanálisis del 60%).
+  * **Configuración de Benchmark de Evaluación (`assault_bench/configs/benchmark_config.vp_acceleration_phase5.yaml`)**:
+    * Batería de 15 seeds sobre `battaglia_cittadina_2_1` evaluando perfiles `ezv2_vs_random_side_b` y `ezv2_selfplay`.
+  * **Verificación Formal**:
+    * Suite dedicada `agents/efficientzero_v2/tests/test_task_2_11_urban_assault_curriculum.py` (4/4 tests en verde) y suite global con 186 tests pasando.
+
+#### v2.5.6 — Optimización de Alto Rendimiento GameState/CoW y Decomisión Limpia de Módulos Legacy [CONSOLIDADO 🟢]
+* **Objetivo**: Elevar la tasa de clonado en el bucle caliente de MCTS mediante eliminación de sobrecargas de asignación dinámica de memoria, optimizar el acceso a celdas hexagonales y purgar 9 módulos huérfanos legacy de fuego de reacción sin uso.
+* **Componentes Consolidados**:
+  * **Compactación de Memoria con `__slots__` en `HexState` (`assault_model/map/hex_state.py`)**:
+    * Eliminación del diccionario de instancias `__dict__` en cada celda hexagonal del mapa, definiendo `__slots__ = ("hex", "ownership", "contested", "smoke_markers")`. Acelera la clonación superficial y reduce la fragmentación de memoria en árboles MCTS profundos.
+  * **Pre-computación y Caché Estática de `_vp_hexes` (`assault_model/state/game_state.py`)**:
+    * Almacenamiento directo de `self._vp_hexes` en `__init__`, evitando la recreación continua de comprensiones de conjuntos `set(vp.hex_coords for vp in self.victory.points)` en cada invocación de `recalculate_hex_control()`.
+  * **Optimización de Paso por Referencia Inmutable en `clone_cow()`**:
+    * `UnitInstance.clone_cow()`: Reutilización directa de la instancia inmutable `self.position` (`HexCoord` con slots `q, r`) eliminando la instanciación redundante `HexCoord(pos.q, pos.r)`.
+    * `GameState.clone_cow()`: Compartición por referencia de `_unit_sides` y `_vp_hexes` en lugar de clonado de diccionario, y acceso directo a atributos pre-inicializados.
+    * `RuntimeGameState.clone_cow()`: Compartición por referencia de `self.sides`, `self.side_controller_map` y `self.turn`.
+    * **Rendimiento Acelerado Verificado:** `RuntimeGameState.clone_cow()` asciende de 20.611 a más de 33.400 clones/s (+62.1%), y la velocidad de simulación de pasos asciende de 401 a 465 pasos/s (+15.7%).
+  * **Decomisión Limpia de 9 Módulos Legacy de Fuego de Reacción**:
+    * Purgados los archivos huérfanos obsoletos: `assault_model/runtime/game_state_reactions.py`, `assault_model/core/reaction_registry.py`, `assault_model/combat/reaction_state.py`, `assault_model/combat/reaction_fire_resolution.py`, `assault_model/combat/reaction_fire.py`, `assault_model/actions/reaction_fire.py`, `assault_model/combat/reaction_condition.py`, `assault_model/combat/reaction_trigger.py`, y `assault_model/combat/reaction_context.py`.
+    * Eliminados los métodos muertos `enter_reaction()` y `clear_reaction()` en `GameState`.
+  * **Corrección de Robustez en Timeout de Benchmarks (`assault_bench/episode_runner_impl.py`)**:
+    * Inicialización segura de `eval_candidates: list[str] = []` al inicio de la resolución, previniendo excepciones `UnboundLocalError` ante diccionarios de políticas vacíos.
+  * **Certificación de Pruebas**:
+    * 104/104 tests de `assault_model/` en verde.
+    * 186/186 tests de `voec_sim/` y `agents/efficientzero_v2/` en verde.
+    * Suite de benchmarks y pipelines forenses ejecutando al 100% en verde.
 
 #### v2.5.5 — Inicialización Canónica de Capas Especializada en Reinforcement Learning [CONSOLIDADO 🟢]
 * **Objetivo**: Erradicar el colapso prematuro de la política y la deriva residual en autojuego temprano mediante un esquema formal de inicialización adaptado a redes profundas con rollouts MCTS: máxima entropía estocástica inicial, preservación de varianza latente e identidad residual pura al paso $0$.

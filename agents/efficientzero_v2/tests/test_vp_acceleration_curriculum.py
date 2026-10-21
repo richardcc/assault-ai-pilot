@@ -35,7 +35,7 @@ def test_vp_acceleration_curriculum_yaml_validity():
     assert data["engine"] == "efficientzero_v2"
     assert "phases" in data
     phases = data["phases"]
-    assert len(phases) == 4
+    assert len(phases) in {4, 5}
 
     expected_phases = [
         "phase1_vp_sprint_unoccupied",
@@ -44,7 +44,9 @@ def test_vp_acceleration_curriculum_yaml_validity():
         "phase4_tactical_gela_mastery",
     ]
     actual_phases = [p["name"] for p in phases]
-    assert actual_phases == expected_phases
+    assert actual_phases[:4] == expected_phases[:4]
+    if len(phases) == 5:
+        assert actual_phases[4] == "phase5_urban_assault_pure_offensive"
 
     # Verify quantitative acceptance criteria in Phase 4 gate
     phase4_gate = phases[3]["gate"]

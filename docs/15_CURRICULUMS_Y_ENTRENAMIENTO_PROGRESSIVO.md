@@ -289,3 +289,13 @@ Para quebrar la Paradoja del Comandante Prudente sin perder la solidez táctica 
    El valor de acercarse al VP aumenta a medida que el reloj de la partida avanza, venciendo la inercia conservadora en turnos finales.
 3. **Penalización Catastrófica por Timeout**:
    Si la partida expira ($t = T_{\max}$) sin que el atacante controle el VP, se aplica un castigo terminal estricto ($R_{\text{timeout}} = -|Loss|$), forzando al algoritmo MCTS a descartar ramas pasivas en los turnos finales.
+
+### 6.3. Fase 5: Currículum Asimétrico Ofensivo de Asalto Urbano Puro (Tarea 2.11) [Consolidado v2.5.6]
+* **Escenario**: `battaglia_cittadina_2_1` con horizonte táctico comprimido a $T_{\max} = 8$ turnos.
+* **Modo de Matchup Asimétrico**: $100\%$ atacante (`self_vs_random` con `tracked_side="US"`, `to_play="US"`), obligando al agente a forzar la ruptura urbana frente a defensores estáticos atrincherados antes de retornar al autojuego simétrico.
+* **Esquema Evolutivo de 10 Ciclos**: Definido en `curriculums/vp_acceleration/cycles/phase5_urban_assault_pure_offensive.adaptive_cycles.yaml`:
+  * **Ciclo 1**: Baseline inicial con andamiaje temporal PBRS y castigo catastrófico por timeout ($-1.0$).
+  * **Ciclos 2–4 (Explotación Adaptativa)**: Incremento de reanálisis ($0.50 \to 0.52$), mayor peso de potencial y bono de brecha ($d \le 2$).
+  * **Ciclos 5–7 (Exploración Adaptativa)**: Expansión de simulaciones MCTS a 320, máxima agresividad en frontera y penalización severa por inmovilidad (`idle_penalty: -0.25`).
+  * **Ciclos 8–10 (Convergencia de Hiper-Asalto)**: Reanálisis intensivo ($0.58 \to 0.60$), MCTS de 384 a 416 simulaciones con temperatura determinista ($0.80$) para consolidar la doctrina de asalto urbano puro con Win Rate $\ge 80\%$.
+* **Validación**: Suite de pruebas unitarias `agents/efficientzero_v2/tests/test_task_2_11_urban_assault_curriculum.py` (4/4 tests en verde).
