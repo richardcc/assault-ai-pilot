@@ -390,35 +390,154 @@ Completando la revisión con las obras de referencia de la biblioteca técnica d
    * **C. Umbral de Retirada del 50% vs. Desesperación en Áreas Edificadas (*BUA*, Cap. 7, pp. 387–390):** Las unidades cuya fuerza cae por debajo del $50\%$ (`strength / max_strength < 0.50`) en terreno abierto reciben el rol `ROLE_RECOVER` (priorizando `RALLY`/`DEFEND`/`OVERWATCH` y penalizando asaltos frontales), *excepto* si están fortificadas en un área edificada (`is_bua` / `bunker`) o defendiendo un VP aliado, donde resisten a ultranza.
    * **D. Guardarraíl contra la "Persecución Impetuosa" (*Scots Greys Syndrome*, Cap. 2, p. 38 y Cap. 7, p. 387):** Las unidades `ROLE_OBJECTIVE_DEFENDER` situadas sobre un VP aliado capturado reciben un factor de amortiguación (`0.65`) ante movimientos que abandonen el hexágono de victoria para perseguir enemigos en retirada.
    * **E. Llegada Estocástica Acumulativa de Refuerzos e Inteligencia en 6 Niveles (Cap. 6, p. 318 y Cap. 9, p. 440):** En [`observation.py`](file:///c:/repos/python/assault/agents/efficientzero_v2/core/observation.py), la proyección de refuerzos soporta tanto cuenta atrás determinista como probabilidad acumulada de llegada (`arrival_prob`) ponderada por el nivel de inteligencia de reconocimiento (`recon_tier` $\in \{1\dots 6\}$).
+---
 
-393: 
-394: ---
-395: 
-396: ### 6.4. Análisis de las Nuevas Investigaciones: Del Rio et al. (2025) e IGNH (Alkhatib & Boström, 2024)
-397: 
-398: La incorporación de los dos últimos tratados científicos depositados en `docs/papers/`:
-399: 
-400: #### 1. *Deep Reinforcement Learning in Wargaming* (Del Rio, Szehr, Antonucci, Pierbattista, Sommer & Rüegsegger — 2025 / JAIS & Armasuisse)
-401: * **Núcleo del Estudio:** Análisis exhaustivo sobre simuladores militares de grado profesional (*Command: Modern Operations* [CMO] y su gemelo ultrarrápido *war-sim*). Demuestran que los algoritmos *Model-Based* tipo AlphaZero producen muestras de superior calidad táctica, pero fracasan en simuladores complejos debido al **coste $10\times$ superior del clonado de estado** y la latencia del simulador.
-402: * **Validación Crítica para Assault:**
-403:   * **El problema del "Entorno Lento" resuelto:** Del Rio et al. identifican que salvar y restaurar el estado en cada nodo MCTS satura la CPU. En Assault resolvimos esto empíricamente en las **Secciones 6.1 y 6.2** mediante la **Vectorización Numba/NumPy** (`4,924 steps/s`) y el **Clonado Inmutable Copy-on-Write** (`109,626 clones/s`), eliminando el cuello de botella que ellos sufrieron en CMO.
-404:   * **MCTS en Espacio Latente (EfficientZero V2 vs. AlphaZero):** Del Rio et al. utilizan AlphaZero (que requiere simular en el motor real en cada bifurcación). Nuestro uso de **EfficientZero V2** realiza las 512 simulaciones MCTS íntegramente en la red neuronal recurrente ($g_\theta$) sin tocar el simulador, eludiendo por diseño la lentitud del motor.
-405:   * **No-Estacionariedad Multi-Agente:** El paper destaca que el autojuego en conflictos asimétricos induce no-estacionariedad si la recompensa es rígida. Respaldan el uso de nuestro **Currículum Dinámico de 6 Fases** (avanzando de forma regulada del 100% random a mix 30/70 y finalmente 90/10 self-play).
-406: 
-407: #### 2. *Interpretable Graph Neural Networks for Heterogeneous Tabular Data (IGNH)* (Alkhatib & Boström — KTH 2024 / arXiv:2408.07661v1)
-408: * **Núcleo del Estudio:** Arquitectura **IGNH** para modelar datos heterogéneos (variables continuas y categóricas) mediante grafos basados en correlaciones estadísticas (correlación biserial puntual), empleando capas de *message-passing* y una función de proyección inyectiva que garantiza **atribución de características exacta y transparente** alineada con valores de Shapley sin coste post-hoc.
-409: * **Aplicabilidad en la Plataforma Assault:**
-410:   * **Atribución de Canales Heterogéneos en MLOps:** En el módulo de observabilidad (`mlops/reporting/viewer.py`) y en la evaluación de *Promotion Gates*, las decisiones se basan en combinaciones de datos continuos (daño, distancia Manhattan) y estados discretos/categóricos (moral: `NORMAL`, `PINNED`, `SUPPRESSED`, `ROUTED`, tipo de unidad, terreno).
-411:   * **Explicabilidad Táctica para RAG Copilot:** La metodología de IGNH proporciona un marco formal para calcular la atribución de importancia local (*feature importance*) sobre las variables del SitRep antes de generar la respuesta en lenguaje natural con el LLM.
-412: 
-413: ---
-414: 
-415: ## 7. Referencia a la Hoja de Ruta Evolutiva Unificada
-416: 
-417: > [!NOTE]
-418: > La matriz consolidada de transferencias científicas (Palma et al. 2025, Del Rio et al. 2025, IGNH 2024, KataGo, Dunnigan, Sun Tzu y Henry Hyde 2015) y las fases pendientes de investigación se encuentran unificadas en el documento final de la plataforma: **[09. Hoja de Ruta Evolutiva: Assault Architecture Roadmap (2024–2026)](05_ROADMAP_EVOLUTIVO.md)**.
+### 6.4. Análisis de las Nuevas Investigaciones: Del Rio et al. (2025) e IGNH (Alkhatib & Boström, 2024)
 
+La incorporación de los dos últimos tratados científicos depositados en `docs/papers/`:
 
+#### 1. *Deep Reinforcement Learning in Wargaming* (Del Rio, Szehr, Antonucci, Pierbattista, Sommer & Rüegsegger — 2025 / JAIS & Armasuisse)
+* **Núcleo del Estudio:** Análisis exhaustivo sobre simuladores militares de grado profesional (*Command: Modern Operations* [CMO] y su gemelo ultrarrápido *war-sim*). Demuestran que los algoritmos *Model-Based* tipo AlphaZero producen muestras de superior calidad táctica, pero fracasan en simuladores complejos debido al **coste $10\times$ superior del clonado de estado** y la latencia del simulador.
+* **Validación Crítica para Assault:**
+  * **El problema del "Entorno Lento" resuelto:** Del Rio et al. identifican que salvar y restaurar el estado en cada nodo MCTS satura la CPU. En Assault resolvimos esto empíricamente en las **Secciones 6.1 y 6.2** mediante la **Vectorización Numba/NumPy** (`4,924 steps/s`) y el **Clonado Inmutable Copy-on-Write** (`109,626 clones/s`), eliminando el cuello de botella que ellos sufrieron en CMO.
+  * **MCTS en Espacio Latente (EfficientZero V2 vs. AlphaZero):** Del Rio et al. utilizan AlphaZero (que requiere simular en el motor real en cada bifurcación). Nuestro uso de **EfficientZero V2** realiza las 512 simulaciones MCTS íntegramente en la red neuronal recurrente ($g_\theta$) sin tocar el simulador, eludiendo por diseño la lentitud del motor.
+  * **No-Estacionariedad Multi-Agente:** El paper destaca que el autojuego en conflictos asimétricos induce no-estacionariedad si la recompensa es rígida. Respaldan el uso de nuestro **Currículum Dinámico de 6 Fases** (avanzando de forma regulada del 100% random a mix 30/70 y finalmente 90/10 self-play).
 
+#### 2. *Interpretable Graph Neural Networks for Heterogeneous Tabular Data (IGNH)* (Alkhatib & Boström — KTH 2024 / arXiv:2408.07661v1)
+* **Núcleo del Estudio:** Arquitectura **IGNH** para modelar datos heterogéneos (variables continuas y categóricas) mediante grafos basados en correlaciones estadísticas (correlación biserial puntual), empleando capas de *message-passing* y una función de proyección inyectiva que garantiza **atribución de características exacta y transparente** alineada con valores de Shapley sin coste post-hoc.
+* **Aplicabilidad en la Plataforma Assault:**
+  * **Atribución de Canales Heterogéneos en MLOps:** En el módulo de observabilidad (`mlops/reporting/viewer.py`) y en la evaluación de *Promotion Gates*, las decisiones se basan en combinaciones de datos continuos (daño, distancia Manhattan) y estados discretos/categóricos (moral: `NORMAL`, `PINNED`, `SUPPRESSED`, `ROUTED`, tipo de unidad, terreno).
+  * **Explicabilidad Táctica para RAG Copilot:** La metodología de IGNH proporciona un marco formal para calcular la atribución de importancia local (*feature importance*) sobre las variables del SitRep antes de generar la respuesta en lenguaje natural con el LLM.
 
+---
 
+### 6.5. La Anatomía del Problema: La Paradoja del "Comandante Prudente" (*The Prudent Commander Paradox*)
+
+#### 1. Definición y Diagnóstico del Fenómeno
+En la evaluación de partidas y replays de **EfficientZero V2**, se observa una discordancia fundamental entre la destreza táctica a nivel micro y el cumplimiento estratégico de la misión:
+* **Comportamiento Táctico Maduro:** El agente comprende y ejecuta con alta solvencia el combate a nivel de escuadra/sección: utiliza cortinas de humo para cortar líneas de visión, sincroniza fuego y movimiento, gestiona las reservas de puntos de acción para fuego de oportunidad (*overwatch*), explota coberturas pesadas y optimiza los intercambios locales de bajas.
+* **Fallo Estratégico Terminal:** A pesar de dominar los intercambios cinéticos, el agente exhibe una incapacidad recurrente para capturar y mantener Puntos de Victoria (VP) en escenarios con tiempo límite ($T$). En lugar de lanzar una ruptura ofensiva sobre los VP, adopta una postura conservadora de contención, preservando intacto a su contingente pero perdiendo la partida irremediablemente cuando se agota el reloj de turnos.
+
+A esta patología de aprendizaje por refuerzo en wargames tácticos la denominamos la **Paradoja del "Comandante Prudente"**:
+> *"El agente optimiza de forma experta la supervivencia y los ratios de bajas locales inmediatos, pero deviene incapaz de asumir pérdidas calculadas e indispensables para capturar los objetivos territoriales que determinan la victoria estratégica antes del agotamiento del horizonte temporal."*
+
+#### 2. Modelado Matemático de la Trampa de Bellman
+En un MDP con horizonte temporal finito $t \in [0, T]$, la función de acción-valor de Bellman evalúa la acción $a$ bajo la política $\pi$:
+$$Q^\pi(s, a) = \mathbb{E}_\pi \left[ \sum_{\tau=0}^{T - t} \gamma^\tau r_{t+\tau} \,\middle|\, s_t = s, a_t = a \right]$$
+
+Si la función de recompensa premia el desgaste enemigo ($r_{\text{kill}} > 0$), penaliza las bajas propias ($r_{\text{loss}} < 0$) y premia la captura final del VP ($R_{VP} \gg 0$ otorgado únicamente en el hexágono objetivo), el valor esperado de dos opciones operativas para el atacante se descompone como:
+
+1. **Opción A (Atrincherarse / Mantener Cobertura):**
+   $$Q(s, a_{\text{hold}}) \approx \sum_{\tau=0}^{T-t} \gamma^\tau (r_{\text{exchange}}^\tau) \ge 0$$
+   Dado que el agente dispone de buena cobertura y líneas de tiro favorables, la expectativa inmediata de daño recibido es mínima y el ratio de intercambio local es positivo o neutro.
+
+2. **Opción B (Asalto a la Brecha / Ruptura sobre VP):**
+   Para alcanzar el hexágono de victoria a través de $k$ hexágonos de terreno batido bajo fuego enemigo:
+   $$Q(s, a_{\text{assault}}) = \sum_{\tau=0}^{k-1} \gamma^\tau (r_{\text{fire\_received}}^\tau + r_{\text{loss}}^\tau) + \gamma^k R_{VP}$$
+
+**El colapso de la política surge por tres factores combinados:**
+1. **Descuento Temporal y Retraso de Recompensa ($\gamma^k$):** La recompensa del VP está $k$ pasos en el futuro ($k \ge 3$), fuertemente descontada por $\gamma^k$.
+2. **Barrera de Recompensa Negativa Inmediata:** Cruzar terreno abierto penaliza inmediatamente al agente en los turnos $\tau < k$ (supresión, moral degradada, pérdidas de efectivos: $r < 0$).
+3. **Incertidumbre Acumulativa de Supervivencia:** Si la probabilidad de ser destruido antes de consolidar el VP es $p_{\text{kill}}$, el valor esperado de la recompensa terminal se multiplica por $(1 - p_{\text{kill}})^k$.
+
+Como consecuencia directa:
+$$Q(s, a_{\text{hold}}) > Q(s, a_{\text{assault}})$$
+El algoritmo de optimización (MCTS + Gradient Descent) concluye racionalmente que la política de autopreservación maximiza el retorno acumulado esperado, convirtiéndose en un mínimo local del que la exploración estándar no puede escapar. El agente prefiere terminar derrotado con el $100\%$ de su ejército intacto antes que sacrificar dos unidades para ganar la partida.
+
+#### 3. Evidencia Científica y Antecedentes en la Literatura de IA y Teoría Militar
+
+##### A. Inteligencia Artificial en Juegos Complejos
+* **DeepMind AlphaStar (Vinyals et al., *Nature* 2019):**
+  * *Patología Idéntica:* En versiones intermedias de StarCraft II, los agentes entrenados mediante RL puro sufrieron el problema del *"Turtling"* (atrincheramiento pasivo en la base). Los agentes aprendieron que construir cañones y defensas estáticas en su rampa garantizaba cero pérdidas de unidades inmediatas, evitando el riesgo de salir al mapa abierto. Sin embargo, perdían invariablemente en el juego tardío debido a la asfixia económica y la falta de control territorial.
+  * *Solución DeepMind:* Introducción de la *Exploiter League* (agentes específicamente entrenados para castigar la pasividad) y métricas auxiliares de control de mapa (*map presence pseudo-rewards*).
+* **OpenAI Five (Berner et al., 2019 - Dota 2):**
+  * *Patología Idéntica:* En Dota 2, OpenAI reportó la aparición de la *"Cowardly Policy"* (política cobarde). Los héroes evitaban involucrarse en *teamfights* y no destruían las torres enemigas porque recibir daño o morir infligía penalizaciones de valor inmediatas. Preferían replegarse a la jungla aliada a recolectar oro de forma segura.
+  * *Solución OpenAI:* *Reward Annealing* dinámico a lo largo del entrenamiento, disminuyendo progresivamente la penalización por muertes propias y aumentando agresivamente la recompensa por daño a estructuras y objetivos globales del carril.
+* **Randløv & Alstrøm (ICML 1998) & Ng, Harada & Russell (ICML 1999):**
+  * *El Problema Clásico de la Bicicleta:* Randløv & Alstrøm intentaron enseñar a un agente a conducir una bicicleta hacia un destino lejano recompensando el progreso hacia la meta. El agente aprendió a dar vueltas en círculos sobre un radio pequeño cerca del punto de partida: acumulaba recompensa continua por moverse sin arriesgarse a caerse al intentar girar hacia el objetivo.
+  * *Fundamento Teórico:* Ng et al. formalizaron el teorema de *Potential-Based Reward Shaping (PBRS)*, demostrando que para no distorsionar la política óptima, cualquier recompensa intermedia debe formularse como la diferencia de una función potencial de estado:
+    $$F(s, a, s') = \gamma \Phi(s') - \Phi(s)$$
+* **Devlin & Kudenko (AAMAS 2012):**
+  * *Dynamic Potential-Based Reward Shaping en Horizontes Finitos:* Demostraron que en entornos con límite de tiempo ($T$), el PBRS estático puede seguir permitiendo dilación (*loitering*). Para forzar la consecución del objetivo antes de que expire el horizonte, el potencial debe ser estrictamente dinámico y dependiente del tiempo:
+    $$F(s, t, a, s', t') = \gamma \Phi(s', t') - \Phi(s, t)$$
+    donde $\Phi(s, t)$ crece hiperbólicamente conforme $t \to T$, induciendo una prima de urgencia matemática.
+
+##### B. Doctrina y Teoría Militar Clásica
+* **Carl von Clausewitz (*De la Guerra*, 1832, Libro VI - De la Defensa):**
+  * *El Objeto Negativo vs. Positivo:* Clausewitz formuló con precisión esta asimetría:
+    > *"La forma defensiva es en sí misma más fuerte que la ofensiva, pero tiene un objeto negativo: conservar. El ataque es una forma más débil, pero persigue un objeto positivo: conquistar. Si el atacante se limita a no perder hombres, renuncia a la victoria. La mera preservación de fuerzas sin conquista del objetivo decisivo conduce ineludiblemente a la derrota por inanición operativa."*
+* **James F. Dunnigan (*Wargames Handbook*, 2000):**
+  * *The Burden of the Attack:* En todo wargame táctico con límite de turnos, el atacante carga con el *"coste del tiempo"*. Un empate al expirar los turnos es matemáticamente una victoria del defensor. Si el atacante no asume un ratio de pérdidas de $2:1$ o $3:1$ para abrir la brecha inicial, fracasa en su misión fundamental.
+
+---
+
+### 6.6. Plan de Mitigación Estratégico en Assault (EfficientZero V2)
+
+Siguiendo el principio de **Cero Alteraciones Arquitectónicas Innecesarias** (la CNN ResNet, el número de parámetros, el encoder latente, el MCTS de 512 simulaciones y las cabezas tácticas auxiliares permanecen inalteradas), la solución se implementa exclusivamente en la **señal de aprendizaje**, el **modelado de canales de entrada** y el **currículum de entrenamiento**:
+
+```mermaid
+flowchart TD
+    subgraph Observacion["1. Canales Estratégico-Temporales (Input St)"]
+        C21["Canal 21: Turn Urgency Normalizado (t / Tmax)"]
+        C22["Canal 22: VP Differential Normalizado (ΔVP)"]
+        C23["Canal 23: VP Proximity Geodesic Field (1 / (1 + dist))"]
+    end
+
+    subgraph Shaping["2. Función de Recompensa Dinámica (PBRS)"]
+        PBRS["Devlin & Kudenko Dynamic Potential: γΦ(s', t') - Φ(s, t)"]
+        Contest["Bonus por Disputa de VP (Presencia en radio ≤ 1)"]
+        BreachLoss["Desensibilización de Bajas en Zona de Brecha (-60% dmg penalty)"]
+        TimeoutLoss["Penalización Catastrófica por Derrota por Tiempo"]
+    end
+
+    subgraph Curriculum["3. Currículum Asimétrico Ofensivo"]
+        PhaseOff["Fase Especializada: Asalto Puro (100% Attacker Role, T=8)"]
+    end
+
+    Observacion --> EZV2["EfficientZero V2 (Arquitectura Intacta)"]
+    Shaping --> EZV2
+    Curriculum --> EZV2
+    EZV2 --> Victory["Superación de la Paradoja: Ruptura Ofensiva y Captura de VPs"]
+```
+
+#### 1. Palanca 1: Canales Estratégico-Temporales Explícitos en la Observación
+La red no debe verse obligada a inferir de forma latente la premura del tiempo ni el balance de puntos. Se añaden 3 canales flotantes normalizados al tensor de entrada en [`observation.py`](file:///c:/repos/python/assault/agents/efficientzero_v2/core/observation.py):
+1. **Canal de Urgencia de Tiempo ($C_{\text{urgency}}$):**
+   $$C_{\text{urgency}}(x, y) = \frac{t_{\text{current}}}{T_{\text{max}}} \in [0.0, 1.0]$$
+   Proporciona a la red una referencia temporal directa y monótona.
+2. **Canal de Margen de Victoria ($C_{\text{vp\_diff}}$):**
+   $$C_{\text{vp\_diff}}(x, y) = \tanh\left(\frac{\text{VP}_{\text{allied}} - \text{VP}_{\text{enemy}}}{\text{VP}_{\text{target}}}\right) \in [-1.0, 1.0]$$
+   Permite al agente saber inmediatamente si se encuentra ganando o en déficit operativo.
+3. **Canal de Campo de Proximidad al VP ($C_{\text{vp\_field}}$):**
+   $$C_{\text{vp\_field}}(x, y) = \frac{1}{1 + d_{\text{hex}}((x, y), \text{VP}_{\text{closest}})}$$
+   Gradiente espacial continuo que orienta la atención espacial y la convolución hacia los hexágonos decisivos.
+
+#### 2. Palanca 2: Dynamic Potential-Based Reward Shaping (Devlin & Kudenko 2012)
+En el cálculo de la recompensa intermedia en el entorno:
+$$\Phi(s, t) = \alpha \cdot \left(1 + \frac{t}{T_{\text{max}}}\right) \cdot \left( - \min_{u \in \text{Allies}} d_{\text{hex}}(u, \text{VP}) \right) + \beta \cdot \mathbb{I}(\text{Contested}_{VP})$$
+* **Progreso de Distancia:** Cada avance de la unidad de vanguardia hacia el VP otorga una recompensa positiva que no altera la política óptima terminal.
+* **Escalado Temporal:** El valor de estar cerca del VP se multiplica por $\left(1 + \frac{t}{T_{\text{max}}}\right)$, incrementando la atracción gravitatoria hacia el objetivo a medida que el reloj expira.
+* **Disputa Activa:** Colocar una unidad en hexágonos adyacentes al VP otorga recompensa inmediata antes de la captura física completa.
+
+#### 3. Palanca 3: Desensibilización Táctica de Bajas en Zona de Brecha (*Breach Zone*)
+Para que el agente entienda que las bajas son asumibles cuando se asalta el objetivo:
+* Si una unidad aliada sufre daño encontrándose a distancia $d_{\text{hex}}(u, \text{VP}) \le 2$:
+  $$r_{\text{loss}}^{\text{breach}} = 0.40 \cdot r_{\text{loss}}^{\text{standard}}$$
+  Se reduce la penalización por bajas en un $60\%$. El MCTS deja de considerar inaceptable el fuego de reacción enemigo durante la fase final de aproximación.
+
+#### 4. Palanca 4: Penalización Catastrófica por Agotamiento de Tiempo
+Si el episodio termina por límite de turnos ($t = T_{\text{max}}$) y el agente atacante no controla los VPs necesarios:
+$$R_{\text{timeout}} = -|R_{\text{loss\_max}}|$$
+El agente recibe una penalización terminal severa, eliminando la ilusión de que *"mantenerse vivo con 0 VP es un resultado digno"*. Perder por tiempo se equipara formalmente a la destrucción total de la fuerza.
+
+#### 5. Palanca 5: Currículum Asimétrico de Asalto Ofensivo
+Dentro de las fases de currículum:
+* Dedicar una fase intensiva de entrenamiento exclusivamente a **Escenarios de Asalto Puro** (100% rol atacante, tiempo restringido a $T=8$, posiciones defensivas enemigas fijas).
+* Esto fuerza al agente a romper la simetría defensiva adquirida en el self-play temprano antes de reincorporar partidas simétricas.
+
+---
+
+## 7. Referencia a la Hoja de Ruta Evolutiva Unificada
+
+> [!NOTE]
+> La matriz consolidada de transferencias científicas (Palma et al. 2025, Del Rio et al. 2025, IGNH 2024, KataGo, Dunnigan, Sun Tzu, Clausewitz, Henry Hyde 2015, Randløv & Alstrøm 1998, Devlin & Kudenko 2012) y las fases de implementación se encuentran unificadas en el documento final de la plataforma: **[09. Hoja de Ruta Evolutiva: Assault Architecture Roadmap (2024–2026)](05_ROADMAP_EVOLUTIVO.md)**.

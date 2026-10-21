@@ -220,7 +220,62 @@ Esto garantiza matemáticamente que ninguna cabeza táctica auxiliar degrade la 
 
 ---
 
-## 7. Referencia a la Hoja de Ruta Evolutiva Unificada
+## 7. Esquema de Inicialización de Pesos y Estabilidad de Gradientes
+
+### 7.1. Estado Actual: Inicialización por Defecto de PyTorch (Kaiming Uniform)
+En la implementación de [`agents/efficientzero_v2/core/network_base.py`](file:///c:/repos/python/assault/agents/efficientzero_v2/core/network_base.py) y [`network.py`](file:///c:/repos/python/assault/agents/efficientzero_v2/core/network.py), los pesos de los módulos siguen la inicialización por defecto del framework PyTorch al no definirse un hook explícito `_init_weights()`:
+1. **Convoluciones 2D (`nn.Conv2d` y `HexagonalMaskConv2d`)**:
+   - Inicialización **Kaiming Uniform** (He et al., 2015):
+     $$\mathcal{U}(-\text{bound}, \text{bound}), \quad \text{bound} = \sqrt{\frac{6}{(1 + a^2) \cdot \text{fan\_in}}}$$
+     donde PyTorch establece $a = \sqrt{5}$ por defecto, reduciendo la cota a $\text{bound} = \frac{1}{\sqrt{\text{fan\_in}}}$.
+   - En las capas de convolución hexagonal, la máscara estática anula las esquinas tras inicializar.
+2. **Capas Lineales y Proyecciones Densas (`nn.Linear`)**:
+   - Inicialización **Kaiming Uniform** con $a=\sqrt{5}$ tanto en pesos $W$ como en sesgos $b \sim \mathcal{U}(-1/\sqrt{\text{fan\_in}}, 1/\sqrt{\text{fan\_in}})$.
+   - Aplica a todas las cabezas del modelo: `prediction_policy`, `prediction_value`, `reward_head` y cabezas auxiliares tácticas.
+3. **Normalización (`nn.GroupNorm` y `nn.LayerNorm`)**:
+   - Escala $\gamma = 1.0$, sesgo $\beta = 0.0$.
+4. **Embeddings Categóricos (`nn.Embedding`)**:
+   - Inicialización normal estándar $\mathcal{N}(0, 1)$.
+
+### 7.2. Limitaciones de Kaiming Uniform en Aprendizaje por Refuerzo (RL)
+Si bien Kaiming Uniform es idónea para tareas de visión supervisada, en arquitecturas de planificación de árbol como EfficientZero V2 introduce fricciones en el paso inicial $t=0$:
+* **Pérdida de Entropía Inicial en la Política**: Pesos aleatorios con varianza no mitigada en la última capa lineal generan logits dispares, sesgando estocásticamente la distribución prior de la política antes de acumular experiencia de autojuego.
+* **Varianza Prematura en la Estimación de Valor y Recompensa**: Provoca que la red proyecte estimaciones de retorno distantes de cero en las primeras iteraciones MCTS, desestabilizando el soporte discreto Two-Hot / HL-Gauss antes del calentamiento (*warm-up*).
+* **Degeneración del Flujo Residual Inicial**: En arquitecturas profundas (4 bloques en representación + 4 en dinámica + 2 en predicción), la acumulación de varianza a través de la rama residual dificulta que la red aprenda inicialmente la función identidad.
+
+### 7.3. Especificación Canónica Propuesta: Inicialización Optimizada para RL
+Para optimizar la estabilidad numérica y el muestreo inicial en MCTS, se formaliza la especificación canónica (*RL-Optimal Initialization Scheme*):
+
+| Componente / Módulo | Técnica de Inicialización | Parámetros Matemáticos | Justificación Táctica / RL |
+| :--- | :--- | :--- | :--- |
+| **Cabeza de Política (`prediction_policy`)** | **Ortogonal (*Orthogonal Init*)** | `gain = 0.01`, `bias = 0.0` | **Máxima entropía inicial**: Los logits iniciales arrancan prácticamente en $0$, garantizando una distribución prior uniforme $\mathcal{U}(1/32)$ en la raíz del árbol MCTS, evitando exploraciones prematuramente sesgadas. |
+| **Cabezas de Valor y Recompensa (`value`, `reward`)** | **Ortogonal (*Orthogonal Init*)** | `gain = 1.0` (o `0.1`), `bias = 0.0` | **Predicción centrada en cero**: Mitiga picos de gradiente en TD-learning y estabiliza el soporte discreto Two-Hot durante los primeros ciclos de autojuego. |
+| **Cabezas Auxiliares Tácticas (`threat`, `morale`, `attrition`, etc.)** | **Ortogonal (*Orthogonal Init*)** | `gain = 1.0`, `bias = 0.0` | Gradientes iniciales estables y balanceados sin sobrecargar el proyector ortogonal PCGrad. |
+| **Tronco Convolucional y Bloques Residuales** | **Kaiming Normal (He et al.)** | `mode='fan_in'`, `nonlinearity='silu'` | Preserva la varianza de las activaciones a través de las funciones no lineales SiLU en la cuadrícula hexagonal. |
+| **Segunda Normalización Residual (`gn2` / Fixup)** | **Zero-Init / Fixup Initialization** | $\gamma = 0.0$ (`weight = 0.0`), $\beta = 0.0$ (`bias = 0.0`) | **Mapeo de Identidad Puro**: Al inicio, $x + f(x) = x + 0 = x$. Cada bloque residual comienza como una identidad exacta, permitiendo propagación directa de gradientes sin degradación ni sobrecalentamiento. |
+| **Bloques de Atención SE / ECA** | **Pytorch Default / Cero en Salida** | $\gamma_{\text{final}} = 0.0$ | Permite que los canales arranquen con peso neutro ($1.0$ post-sigmoide o identidad) hasta que las representaciones espaciales converjan. |
+
+### 7.4. Fundamentos Científicos y Literatura Académica de Referencia
+
+Este esquema no responde a heurísticas empíricas informales, sino a conclusiones formales de la literatura reciente en Deep Reinforcement Learning y Model-Based RL:
+
+1. **Inicialización Ortogonal de Política ($\text{gain}=0.01$) y Valor ($\text{gain}=1.0$)**:
+   - **Andrychowicz et al. (Google Brain, ICLR 2021)**: *“What Matters In On-Policy Reinforcement Learning? A Large-Scale Empirical Study”*. Tras analizar más de 250.000 entrenamientos y 50+ decisiones de diseño, demuestran que la inicialización ortogonal con factor reducido ($\text{gain}=0.01$) en la capa final de la política es una de las 3 optimizaciones más determinantes para la estabilidad del entrenamiento, previniendo el colapso temprano de entropía.
+   - **Engstrom, Ilyas et al. (MIT, ICLR 2020)**: *“Implementation Matters in Deep RL: A Case Study on PPO and TRPO”*. Revelan que las diferencias prácticas de rendimiento entre implementaciones canónicas (OpenAI Baselines) y librerías estándar provienen principalmente de la inicialización ortogonal con sesgo cero frente al Kaiming Uniform por defecto.
+   - **Estándar en frameworks**: Adoptado canónicamente en las suites de referencia CleanRL, Stable-Baselines3 y OpenAI Gym.
+
+2. **Zero-Init / Fixup en Normalización Residual ($\gamma = 0.0$)**:
+   - **Goyal et al. (Facebook AI Research / FAIR, 2017)**: *“Accurate, Large Minibatch SGD: Training ImageNet in 1 Hour”*. Introducen la técnica de inicializar a cero la última capa de normalización de cada bloque residual ($\gamma = 0$), garantizando que al inicio de la optimización $y = x + F(x) = x$, haciendo que la red actúe como una identidad pura y eliminando la inestabilidad de gradiente en etapas tempranas.
+   - **Zhang, Dauphin & Ma (ICLR 2019)**: *“Fixup Initialization: Residual Learning Without Normalization”*. Formalizan la teoría de la acumulación de varianza residual $\mathcal{O}(L)$ y demuestran que amortiguar la rama residual a cero en $t=0$ elimina la necesidad de *warm-up* agresivo en optimizadores basados en AdamW.
+   - **Wu (2019–2020)**: *“Accelerating Self-Play Learning in Go”* (KataGo). Aplica Zero-Init en el tronco de bloques residuales para wargames combinatorios con MCTS, evitando que la red emita evaluaciones descalibradas durante las primeras simulaciones en árbol.
+
+3. **Logits Centrados en Cero para Distribuciones Discretas de Valor (Two-Hot / HL-Gauss)**:
+   - **Farebrother et al. (Google DeepMind, 2024)**: *“Stop Regressing: Training Value Functions via Classification for Scalable Deep RL”*. Demuestran que en parametrizaciones categóricas de valor (HL-Gauss y Two-Hot), los pesos aleatorios con dispersión estándar provocan predicciones multimodales espurias en los extremos del soporte al paso inicial. La inicialización ortogonal acotada con sesgo cero garantiza una distribución suave y simétrica en torno a cero en el inicio del autojuego.
+   - **Ye et al. (2021)**: *“Mastering Atari with Discrete World Models”* (EfficientZero) & **Hafner et al. (DeepMind, 2023)**: *“Mastering Diverse Domains through World Models”* (DreamerV3). Establecen la necesidad de estabilizar la recurrencia dinámica $g_\theta(s, a)$ mediante representaciones acotadas para evitar que el escalado min-max latente diverja en los primeros ciclos de desenrollado temporal.
+
+---
+
+## 8. Referencia a la Hoja de Ruta Evolutiva Unificada
 
 > [!NOTE]
 > Toda la matriz de síntesis evolutiva, el estado de implementación de las mejoras de `EfficientZero V2` y las fases futuras de investigación se han unificado canónicamente en el documento final de la documentación: **[09. Hoja de Ruta Evolutiva: Assault Architecture Roadmap (2024–2026)](05_ROADMAP_EVOLUTIVO.md)**.

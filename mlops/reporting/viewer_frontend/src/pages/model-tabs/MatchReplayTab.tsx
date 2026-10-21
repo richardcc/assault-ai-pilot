@@ -1042,7 +1042,15 @@ export function MatchReplayTab({
       }
     }
 
-    if (toQ === null && Number.isFinite(Number(currentStep.target_q)) && Number.isFinite(Number(currentStep.target_r))) {
+    if (
+      toQ === null &&
+      currentStep.target_q !== null &&
+      currentStep.target_q !== undefined &&
+      currentStep.target_r !== null &&
+      currentStep.target_r !== undefined &&
+      Number.isFinite(Number(currentStep.target_q)) &&
+      Number.isFinite(Number(currentStep.target_r))
+    ) {
       toQ = Number(currentStep.target_q);
       toR = Number(currentStep.target_r);
     }
@@ -1517,8 +1525,9 @@ export function MatchReplayTab({
       }
     }
 
-    // 4. Draw Target Hex Marker
+    // 4. Draw Target Hex Marker (Only for real targeting actions: fire or move)
     if (
+      (actionVector.isFire || actionVector.isMove) &&
       actionVector.toQ !== null &&
       actionVector.toR !== null &&
       Number.isFinite(actionVector.toQ) &&
@@ -1545,6 +1554,7 @@ export function MatchReplayTab({
     // 5. Draw Action Trajectory Vector (Movement Arrow or Fire Line)
     if (
       showVectors &&
+      (actionVector.isFire || actionVector.isMove) &&
       actionVector.fromQ !== null &&
       actionVector.fromR !== null &&
       actionVector.toQ !== null &&
@@ -1552,7 +1562,8 @@ export function MatchReplayTab({
       Number.isFinite(actionVector.fromQ) &&
       Number.isFinite(actionVector.fromR) &&
       Number.isFinite(actionVector.toQ) &&
-      Number.isFinite(actionVector.toR)
+      Number.isFinite(actionVector.toR) &&
+      !(actionVector.fromQ === actionVector.toQ && actionVector.fromR === actionVector.toR)
     ) {
       const pFrom = toPixel(actionVector.fromQ, actionVector.fromR);
       const pTo = toPixel(actionVector.toQ, actionVector.toR);
@@ -1575,7 +1586,7 @@ export function MatchReplayTab({
         ctx.textAlign = "center";
         ctx.textBaseline = "middle";
         ctx.fillText("💥", pTo.x, pTo.y);
-      } else {
+      } else if (actionVector.isMove) {
         // Cyan dashed arrow for movement
         ctx.beginPath();
         ctx.setLineDash([6, 4]);
@@ -2086,7 +2097,7 @@ export function MatchReplayTab({
               whiteSpace: "nowrap",
             }}
           >
-            <span>Paso {clamped}</span>
+            <span>Step {clamped}</span>
             <span style={{ color: "#64748b" }}>/</span>
             <span style={{ color: "#94a3b8" }}>{Math.max(0, steps.length - 1)}</span>
           </div>
@@ -2141,17 +2152,17 @@ export function MatchReplayTab({
           <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
             <button
               onClick={() => onStepIndexChange(0)}
-              title="Primer paso (t=0)"
+              title="First step (t=0)"
               style={{ padding: "4px 8px", fontSize: 12, background: "#1e293b", border: "1px solid #475569", borderRadius: 4, cursor: "pointer" }}
             >
-              ⏮ Inicio
+              ⏮ Start
             </button>
             <button
               onClick={() => onStepIndexChange((prev) => Math.max(0, prev - 1))}
-              title="Paso anterior"
+              title="Previous step"
               style={{ padding: "4px 8px", fontSize: 12, background: "#1e293b", border: "1px solid #475569", borderRadius: 4, cursor: "pointer" }}
             >
-              ◀ Ant
+              ◀ Prev
             </button>
             <button
               onClick={() => setIsPlaying(!isPlaying)}
@@ -2171,17 +2182,17 @@ export function MatchReplayTab({
             </button>
             <button
               onClick={() => onStepIndexChange((prev) => Math.min(steps.length - 1, prev + 1))}
-              title="Paso siguiente"
+              title="Next step"
               style={{ padding: "4px 8px", fontSize: 12, background: "#1e293b", border: "1px solid #475569", borderRadius: 4, cursor: "pointer" }}
             >
-              Sig ▶
+              Next ▶
             </button>
             <button
               onClick={() => onStepIndexChange(Math.max(0, steps.length - 1))}
-              title="Último paso"
+              title="Last step"
               style={{ padding: "4px 8px", fontSize: 12, background: "#1e293b", border: "1px solid #475569", borderRadius: 4, cursor: "pointer" }}
             >
-              Fin ⏭
+              End ⏭
             </button>
 
             {/* Playback Speed selector */}
@@ -2350,7 +2361,7 @@ export function MatchReplayTab({
             }}
           >
             <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-              <span style={{ fontSize: 11, fontWeight: 700, color: "#38bdf8" }}>Capas del Mapa:</span>
+              <span style={{ fontSize: 11, fontWeight: 700, color: "#38bdf8" }}>Map Layers:</span>
               <button
                 onClick={() => setShowVps(!showVps)}
                 style={{
@@ -2391,7 +2402,7 @@ export function MatchReplayTab({
                   cursor: "pointer",
                 }}
               >
-                🌐 Coordenadas
+                🌐 Coordinates
               </button>
               <button
                 onClick={() => setShowVectors(!showVectors)}
@@ -2405,11 +2416,11 @@ export function MatchReplayTab({
                   cursor: "pointer",
                 }}
               >
-                🎯 Vectores Acción
+                🎯 Action Vectors
               </button>
               <button
                 onClick={() => setShowForts(!showForts)}
-                title="Mostrar / Ocultar búnkers y fortificaciones del escenario"
+                title="Show / Hide scenario bunkers and fortifications"
                 style={{
                   fontSize: 10,
                   padding: "2px 6px",
@@ -2420,11 +2431,11 @@ export function MatchReplayTab({
                   cursor: "pointer",
                 }}
               >
-                🛡️ Fortificaciones ({fortifications.length})
+                🛡️ Fortifications ({fortifications.length})
               </button>
               <button
                 onClick={() => setShowTerrain(!showTerrain)}
-                title="Mostrar / Ocultar tipos de terreno del escenario"
+                title="Show / Hide scenario terrain types"
                 style={{
                   fontSize: 10,
                   padding: "2px 6px",
@@ -2435,13 +2446,13 @@ export function MatchReplayTab({
                   cursor: "pointer",
                 }}
               >
-                🏞️ Terreno
+                🏞️ Terrain
               </button>
             </div>
 
             <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
               <div style={{ display: "flex", alignItems: "center", gap: 2 }}>
-                <span style={{ fontSize: 10, color: "#94a3b8" }}>Alto:</span>
+                <span style={{ fontSize: 10, color: "#94a3b8" }}>Height:</span>
                 {[460, 520, 600, 680].map((h) => (
                   <button
                     key={h}
@@ -2569,7 +2580,7 @@ export function MatchReplayTab({
                 }}
                 title="Rueda del ratón para zoom sobre el cursor, y arrastra con el ratón para moverte por el mapa."
               >
-                <span>🖱️</span> Rueda: Zoom • Arrastrar: Pan
+                <span>🖱️</span> Wheel: Zoom • Drag: Pan
               </span>
             </div>
           </div>
@@ -2621,7 +2632,7 @@ export function MatchReplayTab({
               </div>
               <div style={{ height: 14, width: 1, background: "#475569" }} />
               <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
-                <span style={{ color: "#38bdf8", fontWeight: 700 }}>Paso {clamped}</span>
+                <span style={{ color: "#38bdf8", fontWeight: 700 }}>Step {clamped}</span>
               </div>
               <div style={{ height: 14, width: 1, background: "#475569" }} />
               <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
@@ -2629,7 +2640,7 @@ export function MatchReplayTab({
                 <span style={{ fontWeight: 800, color: currentDetails.toPlay === "US" ? "#60a5fa" : "#34d399" }}>
                   {currentDetails.toPlay}
                 </span>
-                <span style={{ color: "#94a3b8", fontSize: 10 }}>al mando</span>
+                <span style={{ color: "#94a3b8", fontSize: 10 }}>to play</span>
               </div>
             </div>
 
@@ -2728,9 +2739,9 @@ export function MatchReplayTab({
               <div>
                 <div style={{ fontSize: 11, textTransform: "uppercase", color: "#cbd5e1", fontWeight: 700, display: "flex", alignItems: "center", gap: 6 }}>
                   <span style={{ background: "#7e22ce", color: "#ffffff", padding: "1px 6px", borderRadius: 3, fontWeight: 900, fontSize: 10 }}>
-                    {currentDetails.gameTurn !== null ? `TURNO ${currentDetails.gameTurn}` : `PASO ${clamped}`}
+                    {currentDetails.gameTurn !== null ? `TURN ${currentDetails.gameTurn}` : `STEP ${clamped}`}
                   </span>
-                  <span style={{ color: "#38bdf8" }}>PASO {clamped}</span>
+                  <span style={{ color: "#38bdf8" }}>STEP {clamped}</span>
                   <span style={{ color: "#64748b" }}>•</span>
                   <span>{actionVector.isFire ? "FUEGO / ATAQUE" : actionVector.isMove ? "MOVIMIENTO" : "ACCIÓN"}</span>
                   {currentDetails.macroPosture && (
@@ -2884,7 +2895,7 @@ export function MatchReplayTab({
                 cursor: "pointer",
               }}
             >
-              👥 Tropas ({units.length})
+              👥 Troops ({units.length})
             </button>
             <button
               onClick={() => setActiveTab("telemetry")}
@@ -2921,7 +2932,7 @@ export function MatchReplayTab({
               >
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                   <span style={{ fontSize: 10, fontWeight: 900, color: "#93c5fd", textTransform: "uppercase", letterSpacing: 0.5, display: "flex", alignItems: "center", gap: 5 }}>
-                    <span>♟️ Planificador Jerárquico (Nivel 1)</span>
+                    <span>♟️ Hierarchical Planner (Level 1)</span>
                   </span>
                   <span style={{ fontSize: 9, color: "#64748b", fontFamily: "monospace" }}>
                     MacroStrategyPlanner
@@ -2931,7 +2942,7 @@ export function MatchReplayTab({
                 <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6 }}>
                   {/* Postura Macro */}
                   <div style={{ background: "#1e293b", padding: "6px 8px", borderRadius: 4, borderLeft: `3px solid ${currentDetails.macroPosture ? (currentDetails.macroPosture === "DEFENSIVE_HOLD" ? "#0284c7" : currentDetails.macroPosture === "ZONE_SUPPRESS" ? "#8b5cf6" : "#ef4444") : "#475569"}` }}>
-                    <div className="muted" style={{ fontSize: 9, textTransform: "uppercase" }}>Postura Macro Turno</div>
+                    <div className="muted" style={{ fontSize: 9, textTransform: "uppercase" }}>Turn Macro Posture</div>
                     <div style={{ fontSize: 11, fontWeight: 800, color: currentDetails.macroPosture ? (currentDetails.macroPosture === "DEFENSIVE_HOLD" ? "#38bdf8" : currentDetails.macroPosture === "ZONE_SUPPRESS" ? "#c084fc" : "#f87171") : "#94a3b8", display: "flex", alignItems: "center", gap: 4, marginTop: 1 }}>
                       {currentDetails.macroPosture ? (
                         <>
@@ -2946,10 +2957,10 @@ export function MatchReplayTab({
                       {currentDetails.macroPosture === "DEFENSIVE_HOLD"
                         ? "Liderazgo en VPs. Consolidar y atrincherar posiciones bajo control."
                         : currentDetails.macroPosture === "ZONE_SUPPRESS"
-                        ? "Todos los VPs controlados. Supresión y aniquilación de remanentes."
+                        ? "All VPs controlled. Suppression and annihilation of remnants."
                         : currentDetails.macroPosture === "ASSAULT_VP" || currentDetails.macroPosture === "ASSAULT"
                         ? "Asalto prioritario al VP más cercano."
-                        : "El paso no registró postura macro explícita."}
+                        : "No explicit macro posture recorded for this step."}
                     </div>
                   </div>
 
@@ -3000,9 +3011,9 @@ export function MatchReplayTab({
               >
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                   <span style={{ fontSize: 11, color: "#60a5fa", fontWeight: 800, textTransform: "uppercase", display: "flex", alignItems: "center", gap: 6 }}>
-                    <span>Decisión MCTS</span>
+                    <span>MCTS Decision</span>
                     <span style={{ color: "#e9d5ff", background: "rgba(168, 85, 247, 0.25)", border: "1px solid #a855f7", padding: "1px 6px", borderRadius: 3, fontSize: 10, fontWeight: 800 }}>
-                      {currentDetails.gameTurn !== null ? `Turno ${currentDetails.gameTurn} | ` : ""}Paso {clamped}
+                      {currentDetails.gameTurn !== null ? `Turn ${currentDetails.gameTurn} | ` : ""}Step {clamped}
                     </span>
                   </span>
                   {currentStep.policy_overridden_by_mcts ? (
@@ -3028,13 +3039,13 @@ export function MatchReplayTab({
 
                 <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6, marginTop: 2 }}>
                   <div style={{ background: "#1e293b", padding: "4px 8px", borderRadius: 4 }}>
-                    <div className="muted" style={{ fontSize: 9 }}>MCTS Visitas N</div>
+                    <div className="muted" style={{ fontSize: 9 }}>MCTS Visits N</div>
                     <div style={{ fontSize: 12, fontWeight: 700, color: "#38bdf8" }}>
                       {currentStep.mcts_total_visits ?? "N/A"}
                     </div>
                   </div>
                   <div style={{ background: "#1e293b", padding: "4px 8px", borderRadius: 4 }}>
-                    <div className="muted" style={{ fontSize: 9 }}>Valor Esperado Q(s,a)</div>
+                    <div className="muted" style={{ fontSize: 9 }}>Expected Value Q(s,a)</div>
                     <div style={{ fontSize: 12, fontWeight: 700, color: Number(currentStep.mcts_q_value) >= 0 ? "#22c55e" : "#ef4444" }}>
                       {Number.isFinite(Number(currentStep.mcts_q_value)) ? Number(currentStep.mcts_q_value).toFixed(3) : "-"}
                     </div>
@@ -3047,7 +3058,7 @@ export function MatchReplayTab({
                 <div>
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
                     <span style={{ fontSize: 11, fontWeight: 700, color: "#38bdf8" }}>
-                      Candidatas en la Raíz ({totalCandidatesCount})
+                      Root Candidates ({totalCandidatesCount})
                     </span>
                     <div style={{ display: "flex", gap: 4 }}>
                       <button
@@ -3074,7 +3085,7 @@ export function MatchReplayTab({
                   <div style={{ display: "flex", gap: 6, marginBottom: 6 }}>
                     <input
                       type="text"
-                      placeholder="Filtrar acción..."
+                      placeholder="Filter action..."
                       value={mctsSearch}
                       onChange={(e) => setMctsSearch(e.target.value)}
                       style={{ flex: 1, fontSize: 11, padding: "3px 6px", background: "#0f172a", border: "1px solid #334155", borderRadius: 4, color: "#fff" }}
@@ -3084,7 +3095,7 @@ export function MatchReplayTab({
                       onChange={(e) => setMctsSortBy(e.target.value as "visits" | "q_value" | "prior" | "rank")}
                       style={{ fontSize: 10, padding: "2px 4px", background: "#0f172a", border: "1px solid #334155", color: "#fff" }}
                     >
-                      <option value="visits">Por Visitas N</option>
+                      <option value="visits">By Visits N</option>
                       <option value="q_value">Por Valor Q</option>
                       <option value="prior">Por Prior Policy</option>
                       <option value="rank">Por Rango</option>
@@ -3096,7 +3107,7 @@ export function MatchReplayTab({
                       <thead>
                         <tr>
                           <th>Acción</th>
-                          <th style={{ width: 80 }}>Visitas N</th>
+                          <th style={{ width: 80 }}>Visits N</th>
                           <th style={{ width: 50 }}>Q</th>
                           <th style={{ width: 50 }}>Prior</th>
                         </tr>
@@ -3153,7 +3164,7 @@ export function MatchReplayTab({
               {/* US Troops */}
               <div>
                 <div style={{ fontSize: 11, fontWeight: 700, color: "#60a5fa", marginBottom: 4, display: "flex", alignItems: "center", gap: 4 }}>
-                  <span>🇺🇸</span> Tropas de EE.UU. ({usUnits.length} escuadras)
+                  <span>🇺🇸</span> US Troops ({usUnits.length} squads)
                 </div>
                 <div style={{ display: "flex", flexDirection: "column", gap: 4, maxHeight: 180, overflowY: "auto" }}>
                   {usUnits.map((u) => {
@@ -3249,7 +3260,7 @@ export function MatchReplayTab({
               {/* IT/Opponent Troops */}
               <div>
                 <div style={{ fontSize: 11, fontWeight: 700, color: "#34d399", marginBottom: 4, display: "flex", alignItems: "center", gap: 4 }}>
-                  <span>🇮🇹</span> Tropas del Eje ({itUnits.length} escuadras)
+                  <span>🇩🇪</span> Axis Troops ({itUnits.length} squads)
                 </div>
                 <div style={{ display: "flex", flexDirection: "column", gap: 4, maxHeight: 180, overflowY: "auto" }}>
                   {itUnits.map((u) => {

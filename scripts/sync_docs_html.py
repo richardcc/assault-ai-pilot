@@ -227,6 +227,9 @@ def build_mkdocs_site() -> None:
     # Asegurar que el portal raíz de /docs/ sea el Hub Canónico interactivo
     import shutil
     shutil.copyfile(HTML_PATH, ROOT_DIR / "site" / "index.html")
+    pdf_path = DOCS_DIR / "Assault_Documentacion_Tecnica_Completa.pdf"
+    if pdf_path.exists():
+        shutil.copyfile(pdf_path, ROOT_DIR / "site" / "Assault_Documentacion_Tecnica_Completa.pdf")
     for spec in CANONICAL_DOCS_ORDER:
         doc_dir_name = spec["file"].replace(".md", "")
         target_dir = ROOT_DIR / "site" / doc_dir_name
@@ -253,3 +256,9 @@ def build_mkdocs_site() -> None:
 if __name__ == "__main__":
     sync_index_html()
     build_mkdocs_site()
+    if "--pdf" in sys.argv:
+        try:
+            from scripts.generate_docs_pdf import main as generate_pdf_main
+        except ModuleNotFoundError:
+            from generate_docs_pdf import main as generate_pdf_main
+        generate_pdf_main()

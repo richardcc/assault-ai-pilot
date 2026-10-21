@@ -112,6 +112,8 @@ _artifacts/
 *.sqlite3
 !mlops/reporting/viewer_frontend/index.html
 !mlops/reporting/viewer_frontend/dist/**
+!docs/index.html
+!docs/Assault_Documentacion_Tecnica_Completa.pdf
 scratch/
 
 

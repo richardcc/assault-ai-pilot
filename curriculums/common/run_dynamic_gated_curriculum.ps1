@@ -976,6 +976,9 @@ try {
           $optDurationSec = $null
           if (-not [string]::IsNullOrWhiteSpace($trainRunId)) {
             $sumPath = Join-Path $Repo ("runs_curriculum\{0}\metrics\summary.json" -f $trainRunId)
+            if (-not (Test-Path $sumPath)) {
+              $sumPath = Join-Path $Repo ("runs\{0}\metrics\summary.json" -f $trainRunId)
+            }
             if (Test-Path $sumPath) {
               try {
                 $sumJson = Get-Content -Path $sumPath -Raw -Encoding UTF8 | ConvertFrom-Json

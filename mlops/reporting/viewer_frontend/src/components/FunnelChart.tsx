@@ -33,12 +33,28 @@ export function FunnelChart({
   const globalExplain = ((explainObj.global || {}) as Dict).conversion_path_counts as Dict | undefined;
   const bySideExplain = (explainObj.by_side || {}) as Record<string, Dict>;
 
-  const sideKeys = Object.keys(bySideFunnel).sort();
-  const availableScopes = ["global", ...sideKeys];
+  // Filter out invalid/empty keys or duplicates of global
+  const sideKeys = Object.keys(bySideFunnel)
+    .filter((k) => k && k.toLowerCase() !== "global")
+    .sort();
+
+  // Only surface scope tabs if there are genuinely distinct multiple sides
+  const distinctSides = sideKeys.filter((k) => {
+    const sData = bySideFunnel[k];
+    if (!sData) return false;
+    return (
+      Number(sData.opportunities || 0) !== Number(globalFunnel.opportunities || 0) ||
+      Number(sData.progress_actions || 0) !== Number(globalFunnel.progress_actions || 0)
+    );
+  });
+
+  const availableScopes = distinctSides.length >= 2 ? ["global", ...distinctSides] : [];
 
   // Resolve active data
   const activeFunnelRaw: Dict =
-    selectedSide === "global" ? globalFunnel : bySideFunnel[selectedSide] || {};
+    selectedSide === "global" || !bySideFunnel[selectedSide]
+      ? globalFunnel
+      : bySideFunnel[selectedSide] || {};
 
   const funnel: FunnelData = {
     opportunities: Number(activeFunnelRaw.opportunities || 0),
@@ -48,8 +64,8 @@ export function FunnelChart({
   };
 
   const activeExplainRaw: Dict =
-    selectedSide === "global"
-      ? (globalExplain || {})
+    selectedSide === "global" || !bySideExplain[selectedSide]
+      ? globalExplain || {}
       : ((bySideExplain[selectedSide]?.conversion_path_counts || {}) as Dict);
 
   const explain: ExplainData = {
@@ -90,10 +106,10 @@ export function FunnelChart({
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12, flexWrap: "wrap", gap: 8 }}>
         <div>
           <h3 style={{ margin: 0, fontSize: "15px", color: "#38bdf8", display: "flex", alignItems: "center", gap: 6 }}>
-            <span>🎯</span> Embudo de Conversión de Objetivos (VP Progress & Capture Funnel)
+            <span>🎯</span> VP Objective Progress & Capture Funnel
           </h3>
           <div className="muted" style={{ marginTop: 2, fontSize: "11px" }}>
-            Telemetría XAI: Transición desde la detección de hexágono objetivo hasta la captura consolidada.
+            XAI Telemetry: Stage transition from objective detection to consolidated capture.
           </div>
         </div>
 
@@ -127,7 +143,7 @@ export function FunnelChart({
         {/* Stage 1: Opportunities */}
         <div style={{ background: "#0f172a", borderRadius: "6px", padding: "10px 14px", border: "1px solid #1e293b" }}>
           <div style={{ display: "flex", justifyContent: "space-between", fontSize: "12px", marginBottom: 6 }}>
-            <span style={{ fontWeight: 600, color: "#93c5fd" }}>1. Oportunidades de Captura Detectadas</span>
+            <span style={{ fontWeight: 600, color: "#93c5fd" }}>1. Detected Capture Opportunities</span>
             <span style={{ fontWeight: 700, color: "#f8fafc" }}>
               {funnel.opportunities.toLocaleString()} <span className="muted" style={{ fontWeight: 400 }}>(100.0%)</span>
             </span>
@@ -149,9 +165,9 @@ export function FunnelChart({
         <div style={{ background: "#0f172a", borderRadius: "6px", padding: "10px 14px", border: "1px solid #1e293b" }}>
           <div style={{ display: "flex", justifyContent: "space-between", fontSize: "12px", marginBottom: 6 }}>
             <div>
-              <span style={{ fontWeight: 600, color: "#fcd34d" }}>2. Acciones de Avance / Reducción de Distancia</span>
+              <span style={{ fontWeight: 600, color: "#fcd34d" }}>2. Forward Progress / Distance Reduction Actions</span>
               <span style={{ marginLeft: 8, fontSize: "11px", color: "#fbbf24" }}>
-                ({oppToProgressRate.toFixed(1)}% de oportunidades)
+                ({oppToProgressRate.toFixed(1)}% of opportunities)
               </span>
             </div>
             <span style={{ fontWeight: 700, color: "#f8fafc" }}>
@@ -175,13 +191,13 @@ export function FunnelChart({
                 background: "rgba(244, 63, 94, 0.45)",
                 borderRadius: "0 4px 4px 0",
               }}
-              title={`Atascos / Inacción: ${funnel.stalls.toLocaleString()} (${stallRate.toFixed(1)}%)`}
+              title={`Stalls / Inaction: ${funnel.stalls.toLocaleString()} (${stallRate.toFixed(1)}%)`}
             />
           </div>
           <div style={{ display: "flex", justifyContent: "space-between", fontSize: "11px", marginTop: 4 }}>
-            <span className="muted">Avance proactivo hacia VP</span>
+            <span className="muted">Proactive advance towards VP</span>
             <span style={{ color: "#f43f5e" }}>
-              Atascos / Inacción: {funnel.stalls.toLocaleString()} ({stallRate.toFixed(1)}%)
+              Stalls / Inaction: {funnel.stalls.toLocaleString()} ({stallRate.toFixed(1)}%)
             </span>
           </div>
         </div>
@@ -190,9 +206,9 @@ export function FunnelChart({
         <div style={{ background: "#0f172a", borderRadius: "6px", padding: "10px 14px", border: "1px solid #1e293b" }}>
           <div style={{ display: "flex", justifyContent: "space-between", fontSize: "12px", marginBottom: 6 }}>
             <div>
-              <span style={{ fontWeight: 600, color: "#6ee7b7" }}>3. Conversiones Exitosas (VP Capturado)</span>
+              <span style={{ fontWeight: 600, color: "#6ee7b7" }}>3. Successful Conversions (VP Captured)</span>
               <span style={{ marginLeft: 8, fontSize: "11px", color: "#34d399" }}>
-                ({progressToConvRate.toFixed(1)}% de avances | {overallConvRate.toFixed(2)}% global)
+                ({progressToConvRate.toFixed(1)}% of advances | {overallConvRate.toFixed(2)}% of total)
               </span>
             </div>
             <span style={{ fontWeight: 700, color: "#34d399" }}>
@@ -216,29 +232,29 @@ export function FunnelChart({
       {/* Conversion Path Breakdown Cards */}
       <div style={{ marginTop: 14 }}>
         <div style={{ fontSize: "12px", fontWeight: 600, color: "#cbd5e1", marginBottom: 8 }}>
-          Rutas de Decisión Explicadas (Explainability Path Breakdown)
+          Decision & Conversion Path Breakdown
         </div>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 8 }}>
           <div style={{ background: "#0f172a", padding: "8px 12px", borderRadius: "6px", borderLeft: "3px solid #10b981" }}>
-            <div className="muted" style={{ fontSize: "11px" }}>Convertidos tras avance metódico</div>
+            <div className="muted" style={{ fontSize: "11px" }}>Converted after methodical progress</div>
             <div style={{ fontSize: "14px", fontWeight: 700, color: "#34d399", marginTop: 2 }}>
               {explain.converted_after_progress.toLocaleString()}
             </div>
           </div>
           <div style={{ background: "#0f172a", padding: "8px 12px", borderRadius: "6px", borderLeft: "3px solid #38bdf8" }}>
-            <div className="muted" style={{ fontSize: "11px" }}>Convertidos de inmediato (contacto directo)</div>
+            <div className="muted" style={{ fontSize: "11px" }}>Direct immediate capture</div>
             <div style={{ fontSize: "14px", fontWeight: 700, color: "#38bdf8", marginTop: 2 }}>
               {explain.converted_without_progress.toLocaleString()}
             </div>
           </div>
           <div style={{ background: "#0f172a", padding: "8px 12px", borderRadius: "6px", borderLeft: "3px solid #f59e0b" }}>
-            <div className="muted" style={{ fontSize: "11px" }}>Avanzaron pero disputados / interceptados</div>
+            <div className="muted" style={{ fontSize: "11px" }}>Advanced but contested / intercepted</div>
             <div style={{ fontSize: "14px", fontWeight: 700, color: "#fbbf24", marginTop: 2 }}>
               {explain.progressed_but_not_converted.toLocaleString()}
             </div>
           </div>
           <div style={{ background: "#0f172a", padding: "8px 12px", borderRadius: "6px", borderLeft: "3px solid #f43f5e" }}>
-            <div className="muted" style={{ fontSize: "11px" }}>Atascados / Parálisis táctica sin conversión</div>
+            <div className="muted" style={{ fontSize: "11px" }}>Stalled without conversion</div>
             <div style={{ fontSize: "14px", fontWeight: 700, color: "#f43f5e", marginTop: 2 }}>
               {explain.stalled_and_not_converted.toLocaleString()}
             </div>

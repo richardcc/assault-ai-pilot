@@ -110,30 +110,69 @@ def build_phase29_train_eval(train_kpis: Dict[str, float], eval_kpis: Dict[str, 
     }
 
 
-def build_eval_diagnostics_summary(eval_kpis: Dict[str, float], tracked_side: str) -> Dict[str, Dict]:
-    opportunities = float(max(0.0, float(eval_kpis.get("reaction_window_count", 0.0))))
-    progress_actions = float(max(0.0, float(eval_kpis.get("melee_attempts", 0.0))))
-    stalls = float(max(0.0, opportunities - progress_actions))
-    converted_rate_near_vp = float(eval_kpis.get("converted_rate_near_vp", 0.0))
-    conversions = float(max(0.0, min(progress_actions, progress_actions * converted_rate_near_vp)))
-    converted_after_progress = float(
-        max(
-            0.0,
-            min(
-                conversions,
-                conversions * float(eval_kpis.get("converted_from_progress_rate", 0.0)),
-            ),
+def build_eval_diagnostics_summary(
+    eval_kpis: Dict[str, float],
+    tracked_side: str = "",
+    by_side_kpis: Optional[Dict[str, Dict[str, float]]] = None,
+) -> Dict[str, Dict]:
+    def _extract_funnel(kpis: Dict[str, float]) -> Dict[str, float]:
+        opp = float(
+            max(
+                0.0,
+                float(
+                    kpis.get("vp_approach_rate_eligible_steps", 0.0)
+                    or kpis.get("xai_vp_capture_opportunity_steps", 0.0)
+                    or kpis.get("xai_decision_steps", 0.0)
+                    or kpis.get("reaction_window_count", 0.0)
+                ),
+            )
         )
-    )
+        prog = float(
+            max(
+                0.0,
+                float(
+                    kpis.get("vp_approach_rate_positive_steps", 0.0)
+                    or kpis.get("xai_vp_capture_taken_steps", 0.0)
+                    or kpis.get("melee_attempts", 0.0)
+                ),
+            )
+        )
+        conv = float(
+            max(
+                0.0,
+                float(
+                    kpis.get("vp_captures_total", 0.0)
+                    or kpis.get("spearhead_vp_captures", 0.0)
+                    or kpis.get("xai_vp_capture_taken_steps", 0.0)
+                ),
+            )
+        )
+        if conv <= 0.0 and prog > 0.0 and "converted_rate_near_vp" in kpis:
+            conv = float(max(0.0, min(prog, prog * float(kpis.get("converted_rate_near_vp", 0.0)))))
+        stalls = float(max(0.0, opp - prog))
+        return {
+            "opportunities": opp,
+            "progress_actions": prog,
+            "conversions": conv,
+            "stalls": stalls,
+        }
+
+    global_funnel = _extract_funnel(eval_kpis)
+    conversions = global_funnel["conversions"]
+    progress_actions = global_funnel["progress_actions"]
+    stalls = global_funnel["stalls"]
+
+    converted_after_progress = float(min(conversions, progress_actions))
     converted_without_progress = float(max(0.0, conversions - converted_after_progress))
     progressed_but_not_converted = float(max(0.0, progress_actions - conversions))
     stalled_and_not_converted = float(stalls)
+
     reaction_fire_count = float(max(0.0, float(eval_kpis.get("reaction_fire_count", 0.0))))
     reaction_fire_skipped_count = float(
         max(0.0, float(eval_kpis.get("reaction_fire_skipped_count", 0.0)))
     )
     non_progress_actions = float(max(0.0, stalls - reaction_fire_skipped_count))
-    global_funnel = {"opportunities": opportunities, "progress_actions": progress_actions, "conversions": conversions, "stalls": stalls}
+
     global_explain = {
         "conversion_path_counts": {
             "converted_after_progress": converted_after_progress,
@@ -148,9 +187,27 @@ def build_eval_diagnostics_summary(eval_kpis: Dict[str, float], tracked_side: st
         },
         "no_progress_reason_l2_counts": {},
     }
-    tracked_side_s = str(tracked_side or "").strip()
-    by_side_funnel = {tracked_side_s: dict(global_funnel)} if tracked_side_s else {}
-    by_side_explain = {tracked_side_s: dict(global_explain)} if tracked_side_s else {}
+
+    by_side_funnel: Dict[str, Dict[str, float]] = {}
+    by_side_explain: Dict[str, Dict] = {}
+    if by_side_kpis and isinstance(by_side_kpis, dict):
+        for side_k, side_v in by_side_kpis.items():
+            if isinstance(side_v, dict) and side_k and side_k.lower() != "global":
+                s_funnel = _extract_funnel(side_v)
+                by_side_funnel[str(side_k)] = s_funnel
+                s_conv = s_funnel["conversions"]
+                s_prog = s_funnel["progress_actions"]
+                s_stalls = s_funnel["stalls"]
+                s_conv_after = float(min(s_conv, s_prog))
+                by_side_explain[str(side_k)] = {
+                    "conversion_path_counts": {
+                        "converted_after_progress": s_conv_after,
+                        "converted_without_progress": float(max(0.0, s_conv - s_conv_after)),
+                        "progressed_but_not_converted": float(max(0.0, s_prog - s_conv)),
+                        "stalled_and_not_converted": s_stalls,
+                    },
+                }
+
     return {
         "objective_progress_funnel": {"global": global_funnel, "by_side": by_side_funnel},
         "objective_progress_explain": {"global": global_explain, "by_side": by_side_explain},
