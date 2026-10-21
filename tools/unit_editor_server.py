@@ -464,6 +464,11 @@ HTML_TEMPLATE = """<!DOCTYPE html>
   <div id="view-formations" class="layout" style="display: none;">
     <div class="sidebar">
       <input type="text" id="search-formations" class="search-box" placeholder="Search formations (e.g. Rifle, Ranger, Pionier)..." oninput="filterFormations()" />
+      <div class="status-filters">
+        <button type="button" id="filter-form-status-all" class="filter-btn active" onclick="setFormationStatusFilter('all')">All (<span id="count-form-status-all">0</span>)</button>
+        <button type="button" id="filter-form-status-mapped" class="filter-btn filter-published" onclick="setFormationStatusFilter('mapped')">🟢 Mapped (<span id="count-form-status-mapped">0</span>)</button>
+        <button type="button" id="filter-form-status-pending" class="filter-btn filter-pending" onclick="setFormationStatusFilter('pending')">⚪ Pending (<span id="count-form-status-pending">0</span>)</button>
+      </div>
       <div class="faction-filters">
         <button type="button" id="filter-form-all" class="filter-btn filter-faction active" onclick="setFormationFactionFilter('all')">All</button>
         <button type="button" id="filter-form-GE" class="filter-btn filter-faction" onclick="setFormationFactionFilter('GE')">🇩🇪 GE (<span id="count-form-GE">0</span>)</button>
@@ -472,131 +477,156 @@ HTML_TEMPLATE = """<!DOCTYPE html>
         <button type="button" id="filter-form-IT" class="filter-btn filter-faction" onclick="setFormationFactionFilter('IT')">🇮🇹 IT (<span id="count-form-IT">0</span>)</button>
       </div>
       <button type="button" style="width: 100%; margin-bottom: 0.8rem; background: #0284c7; color: #fff; padding: 0.5rem; border-radius: 6px; font-weight: 700;" onclick="createNewFormation()">
-        ➕ New Formation
+        ➕ New Custom Formation
       </button>
       <ul id="formation-list" class="unit-list"></ul>
     </div>
 
     <div class="main-editor">
       <div id="no-formation-selection" style="text-align: center; padding: 3rem; color: var(--text-muted);">
-        Select a formation from the left panel or click "+ New Formation" to map combined arms units, command ratings, and slots.
+        Select a formation from the left panel or click "+ New Custom Formation" to map combined arms units, command ratings, and slots.
       </div>
 
-      <div id="formation-editor-form" style="display: none; height: 100%; display: flex; flex-direction: column; overflow-y: auto; padding-right: 0.5rem;">
-        <!-- Formation Header -->
-        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.8rem; border-bottom: 1px solid var(--card-border); padding-bottom: 0.6rem;">
-          <div>
-            <h2 id="formation-title" style="font-size: 1.25rem; color: #fff;">-</h2>
-            <div style="font-size: 0.75rem; color: var(--text-muted); margin-top: 2px;" id="formation-subtitle">-</div>
-          </div>
-          <div style="display: flex; gap: 0.5rem; align-items: center;">
-            <span id="formation-side-badge" class="badge badge-published">US</span>
-            <span id="formation-units-count-badge" class="stat-chip">0 Units</span>
-            <span id="formation-cost-badge" class="stat-chip" style="color: #fde047;">0 pts</span>
-          </div>
-        </div>
-
-        <!-- Formation Identity Fields Grid -->
-        <div class="fields-grid" style="margin-bottom: 0.8rem;">
-          <div class="field-group">
-            <label>Canonical Formation ID</label>
-            <input type="text" id="form-field-id" placeholder="e.g. US_RANGER_ASSAULT_COMPANY" />
-          </div>
-          <div class="field-group">
-            <label>Formation Name</label>
-            <input type="text" id="form-field-name" placeholder="e.g. US Ranger Assault Company" />
-          </div>
-          <div class="field-group">
-            <label>Nation / Faction</label>
-            <select id="form-field-side" onchange="onFormationSideChange(this.value)">
-              <option value="US">US (United States)</option>
-              <option value="GE">GE (Germany)</option>
-              <option value="UK">UK (United Kingdom)</option>
-              <option value="IT">IT (Italy)</option>
-            </select>
-          </div>
-          <div class="field-group">
-            <label>Command Rating (CR)</label>
-            <input type="number" id="form-field-cr" min="1" max="12" value="8" />
-          </div>
-        </div>
-
-        <div class="field-group" style="margin-bottom: 0.8rem;">
-          <label>Tactical Doctrinal Role & Mission Description</label>
-          <input type="text" id="form-field-desc" placeholder="e.g. Specialized breach detachment tasked with urban chokepoints and VP penetration." />
-        </div>
-
-        <!-- Slots Container: Line Units, Heavy Weapons, Specialists -->
-        <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 0.8rem; margin-bottom: 0.8rem;">
-          <!-- Slot 1: Line Units -->
-          <div class="slot-section">
-            <div class="slot-header">
-              <span class="slot-title">🎖️ Line Units</span>
-              <span id="slot-count-line" style="font-size: 0.72rem; color: var(--text-muted);">0</span>
+      <div id="formation-editor-form" style="display: none; height: 100%;">
+        <div class="editor-top">
+          <!-- Left Column: Formation Card Preview -->
+          <div class="preview-box">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
+              <h3 style="font-size: 0.85rem; color: var(--text-muted); margin: 0;">Formation Card Art</h3>
+              <span id="formation-art-badge" class="badge badge-published" style="font-size: 0.65rem;">Art Available</span>
             </div>
-            <div id="slot-units-line" style="min-height: 80px; max-height: 240px; overflow-y: auto;"></div>
-            <div class="add-to-slot-bar">
-              <select id="select-add-line"></select>
-              <button type="button" onclick="addUnitToSlot('line_units')">+</button>
+            <div style="position: relative; flex: 1; display: flex; align-items: center; justify-content: center; min-height: 380px;">
+              <img id="formation-card-img" class="card-img" src="" alt="Formation Card Art" style="max-height: 480px;" />
+            </div>
+            <div style="margin-top: 0.8rem; text-align: left;">
+              <label style="font-size: 0.7rem; font-weight: 700; color: var(--text-muted); text-transform: uppercase;">Select / Reassign Card Art</label>
+              <select id="formation-card-art-select" class="search-box" style="margin-top: 0.3rem; margin-bottom: 0; padding: 0.4rem; font-size: 0.78rem;" onchange="onFormationCardArtSelect(this.value)">
+              </select>
             </div>
           </div>
 
-          <!-- Slot 2: Heavy Weapons -->
-          <div class="slot-section">
-            <div class="slot-header">
-              <span class="slot-title">💣 Heavy Support Weapons</span>
-              <span id="slot-count-heavy" style="font-size: 0.72rem; color: var(--text-muted);">0</span>
+          <!-- Right Column: Form Scroll Container & Slots -->
+          <div class="form-scroll-container">
+            <!-- Header & Identity fields -->
+            <div class="editor-top-section" style="max-height: 40%;">
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.6rem;">
+                <div>
+                  <h2 id="formation-title" style="font-size: 1.15rem; color: #fff;">-</h2>
+                  <div style="font-size: 0.75rem; color: var(--text-muted); margin-top: 2px;" id="formation-subtitle">-</div>
+                </div>
+                <div style="display: flex; gap: 0.5rem; align-items: center;">
+                  <span id="formation-side-badge" class="badge badge-published">US</span>
+                  <span id="formation-units-count-badge" class="stat-chip">0 Units</span>
+                  <span id="formation-cost-badge" class="stat-chip" style="color: #fde047;">0 pts</span>
+                </div>
+              </div>
+
+              <div class="fields-grid" style="margin-bottom: 0.5rem;">
+                <div class="field-group">
+                  <label>Canonical Formation ID</label>
+                  <input type="text" id="form-field-id" placeholder="e.g. US_RANGER_ASSAULT_COMPANY" />
+                </div>
+                <div class="field-group">
+                  <label>Formation Display Name</label>
+                  <input type="text" id="form-field-name" placeholder="e.g. US Ranger Assault Company" />
+                </div>
+                <div class="field-group">
+                  <label>Nation / Faction</label>
+                  <select id="form-field-side" onchange="onFormationSideChange(this.value)">
+                    <option value="US">US (United States)</option>
+                    <option value="GE">GE (Germany)</option>
+                    <option value="UK">UK (United Kingdom)</option>
+                    <option value="IT">IT (Italy)</option>
+                  </select>
+                </div>
+                <div class="field-group">
+                  <label>Command Rating (CR)</label>
+                  <input type="number" id="form-field-cr" min="1" max="12" value="8" />
+                </div>
+              </div>
+
+              <div class="field-group" style="margin-bottom: 0.5rem;">
+                <label>Tactical Doctrinal Role & Mission Description</label>
+                <input type="text" id="form-field-desc" placeholder="e.g. Specialized breach detachment tasked with urban chokepoints and VP penetration." />
+              </div>
             </div>
-            <div id="slot-units-heavy" style="min-height: 80px; max-height: 240px; overflow-y: auto;"></div>
-            <div class="add-to-slot-bar">
-              <select id="select-add-heavy"></select>
-              <button type="button" onclick="addUnitToSlot('heavy_weapons')">+</button>
+
+            <!-- Slots & Actions Bottom Section -->
+            <div style="flex: 1; min-height: 0; overflow-y: auto; padding-right: 0.4rem; display: flex; flex-direction: column;">
+              <!-- 3 Categorical Slots -->
+              <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 0.6rem; margin-bottom: 0.6rem;">
+                <!-- Slot 1: Line Units -->
+                <div class="slot-section">
+                  <div class="slot-header">
+                    <span class="slot-title">🎖️ Line Units</span>
+                    <span id="slot-count-line" style="font-size: 0.72rem; color: var(--text-muted);">0</span>
+                  </div>
+                  <div id="slot-units-line" style="min-height: 60px; max-height: 180px; overflow-y: auto;"></div>
+                  <div class="add-to-slot-bar">
+                    <select id="select-add-line"></select>
+                    <button type="button" onclick="addUnitToSlot('line_units')">+</button>
+                  </div>
+                </div>
+
+                <!-- Slot 2: Heavy Weapons -->
+                <div class="slot-section">
+                  <div class="slot-header">
+                    <span class="slot-title">💣 Heavy Weapons</span>
+                    <span id="slot-count-heavy" style="font-size: 0.72rem; color: var(--text-muted);">0</span>
+                  </div>
+                  <div id="slot-units-heavy" style="min-height: 60px; max-height: 180px; overflow-y: auto;"></div>
+                  <div class="add-to-slot-bar">
+                    <select id="select-add-heavy"></select>
+                    <button type="button" onclick="addUnitToSlot('heavy_weapons')">+</button>
+                  </div>
+                </div>
+
+                <!-- Slot 3: Specialists -->
+                <div class="slot-section">
+                  <div class="slot-header">
+                    <span class="slot-title">⚡ Specialists</span>
+                    <span id="slot-count-special" style="font-size: 0.72rem; color: var(--text-muted);">0</span>
+                  </div>
+                  <div id="slot-units-special" style="min-height: 60px; max-height: 180px; overflow-y: auto;"></div>
+                  <div class="add-to-slot-bar">
+                    <select id="select-add-special"></select>
+                    <button type="button" onclick="addUnitToSlot('specialists')">+</button>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Live Roster & Order of Battle Summary -->
+              <div class="roster-summary-card">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.4rem;">
+                  <span style="font-size: 0.82rem; font-weight: 700; color: #38bdf8;">📋 Combined Arms Order of Battle Summary</span>
+                  <div style="display: flex; gap: 0.4rem;">
+                    <span id="summary-line-badge" class="stat-chip">Line: 0</span>
+                    <span id="summary-heavy-badge" class="stat-chip">Heavy: 0</span>
+                    <span id="summary-special-badge" class="stat-chip">Special: 0</span>
+                    <span id="summary-total-cost" class="stat-chip" style="color: #fde047; font-weight: 700;">Total Cost: 0 pts</span>
+                  </div>
+                </div>
+                <div id="summary-flat-units" style="font-family: monospace; font-size: 0.72rem; color: #94a3b8; word-break: break-all;">
+                  units: []
+                </div>
+              </div>
+
+              <!-- Raw JSON Inspector -->
+              <div style="background: #0f172a; border: 1px solid var(--card-border); border-radius: 8px; padding: 0.6rem; margin-top: 0.6rem;">
+                <details>
+                  <summary style="font-size: 0.75rem; color: var(--accent); cursor: pointer; font-weight: 600;">🔍 View / Edit Raw Formation JSON</summary>
+                  <textarea id="formation-json-raw" class="json-preview" oninput="onFormationJsonInput()"></textarea>
+                </details>
+              </div>
+
+              <!-- Action Buttons -->
+              <div class="actions-bar" style="margin-top: auto; padding-top: 0.6rem;">
+                <button type="button" class="btn-danger" onclick="deleteCurrentFormation()">🗑️ Delete Formation</button>
+                <button type="button" class="btn-secondary" onclick="cloneCurrentFormation()">📋 Duplicate</button>
+                <button type="button" class="btn-approve" onclick="saveCurrentFormation()">💾 Save Formation</button>
+              </div>
             </div>
           </div>
-
-          <!-- Slot 3: Specialists -->
-          <div class="slot-section">
-            <div class="slot-header">
-              <span class="slot-title">⚡ Specialists & Sappers</span>
-              <span id="slot-count-special" style="font-size: 0.72rem; color: var(--text-muted);">0</span>
-            </div>
-            <div id="slot-units-special" style="min-height: 80px; max-height: 240px; overflow-y: auto;"></div>
-            <div class="add-to-slot-bar">
-              <select id="select-add-special"></select>
-              <button type="button" onclick="addUnitToSlot('specialists')">+</button>
-            </div>
-          </div>
-        </div>
-
-        <!-- Live Roster & Order of Battle Summary -->
-        <div class="roster-summary-card">
-          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.4rem;">
-            <span style="font-size: 0.82rem; font-weight: 700; color: #38bdf8;">📋 Combined Arms Order of Battle Summary</span>
-            <div style="display: flex; gap: 0.4rem;">
-              <span id="summary-line-badge" class="stat-chip">Line: 0</span>
-              <span id="summary-heavy-badge" class="stat-chip">Heavy: 0</span>
-              <span id="summary-special-badge" class="stat-chip">Special: 0</span>
-              <span id="summary-total-cost" class="stat-chip" style="color: #fde047; font-weight: 700;">Total Cost: 0 pts</span>
-            </div>
-          </div>
-          <div id="summary-flat-units" style="font-family: monospace; font-size: 0.75rem; color: #94a3b8; word-break: break-all;">
-            units: []
-          </div>
-        </div>
-
-        <!-- Raw JSON Inspector -->
-        <div style="background: #0f172a; border: 1px solid var(--card-border); border-radius: 8px; padding: 0.6rem; margin-top: 0.8rem;">
-          <details>
-            <summary style="font-size: 0.75rem; color: var(--accent); cursor: pointer; font-weight: 600;">🔍 View / Edit Raw Formation JSON</summary>
-            <textarea id="formation-json-raw" class="json-preview" oninput="onFormationJsonInput()"></textarea>
-          </details>
-        </div>
-
-        <!-- Action Buttons -->
-        <div class="actions-bar" style="margin-top: auto;">
-          <button type="button" class="btn-danger" onclick="deleteCurrentFormation()">🗑️ Delete Formation</button>
-          <button type="button" class="btn-secondary" onclick="cloneCurrentFormation()">📋 Duplicate</button>
-          <button type="button" class="btn-approve" onclick="saveCurrentFormation()">💾 Save Formation</button>
         </div>
       </div>
     </div>
@@ -622,9 +652,11 @@ HTML_TEMPLATE = """<!DOCTYPE html>
 
     // Formation State
     let formations = {};
+    let formationInventory = [];
     let currentFormationId = null;
     let currentFormationData = null;
     let formationFactionFilter = 'all';
+    let formationStatusFilter = 'all';
 
     async function loadData() {
       const res = await fetch('/api/units/state');
@@ -1542,11 +1574,25 @@ HTML_TEMPLATE = """<!DOCTYPE html>
         const res = await fetch('/api/formations');
         const data = await res.json();
         formations = data.formations || {};
+        formationInventory = data.inventory || [];
+        populateFormationCardArtDropdown();
         renderFormationSidebar();
-        document.getElementById('formation-total-badge').innerText = Object.keys(formations).length + ' Formations';
+        document.getElementById('formation-total-badge').innerText = Object.keys(formations).length + ' Formations (' + formationInventory.length + ' Cards)';
       } catch (e) {
         console.error("Failed to load formations", e);
       }
+    }
+
+    function setFormationStatusFilter(status) {
+      formationStatusFilter = status;
+      ['all', 'mapped', 'pending'].forEach(s => {
+        const btn = document.getElementById('filter-form-status-' + s);
+        if (btn) {
+          if (s === status) btn.classList.add('active');
+          else btn.classList.remove('active');
+        }
+      });
+      renderFormationSidebar();
     }
 
     function setFormationFactionFilter(faction) {
@@ -1565,25 +1611,106 @@ HTML_TEMPLATE = """<!DOCTYPE html>
       renderFormationSidebar();
     }
 
+    function populateFormationCardArtDropdown() {
+      const select = document.getElementById('formation-card-art-select');
+      if (!select) return;
+      select.innerHTML = '<option value="">(None / Custom Formation)</option>';
+      formationInventory.forEach(c => {
+        const opt = document.createElement('option');
+        opt.value = c.card_image;
+        opt.innerText = `${c.faction}: ${c.title}`;
+        select.appendChild(opt);
+      });
+    }
+
+    function onFormationCardArtSelect(imgVal) {
+      if (!currentFormationData) return;
+      currentFormationData.card_image = imgVal;
+      const imgEl = document.getElementById('formation-card-img');
+      if (imgVal) {
+        imgEl.src = '/' + imgVal;
+        imgEl.style.display = 'block';
+      } else {
+        imgEl.src = '';
+        imgEl.style.display = 'none';
+      }
+      syncFormationRosterSummary();
+    }
+
     function renderFormationSidebar() {
       const q = (document.getElementById('search-formations').value || '').toLowerCase();
       const list = document.getElementById('formation-list');
       if (!list) return;
       list.innerHTML = '';
 
-      const fKeys = ['GE', 'US', 'UK', 'IT'];
-      fKeys.forEach(f => {
-        const el = document.getElementById('count-form-' + f);
-        if (el) {
-          el.innerText = Object.values(formations).filter(fm => (fm.side || '').toUpperCase() === f).length;
-        }
+      // Count stats
+      let totalAll = 0, totalMapped = 0, totalPending = 0;
+      const fCounts = { GE: 0, US: 0, UK: 0, IT: 0 };
+
+      // Build unified list of entries (Catalog Formations + Unmapped Cards)
+      const mappedKeys = new Set(Object.keys(formations));
+      const unifiedList = [];
+
+      // 1. Mapped formations
+      Object.entries(formations).forEach(([fid, fdef]) => {
+        const side = (fdef.side || 'US').toUpperCase();
+        totalAll++;
+        totalMapped++;
+        if (fCounts[side] !== undefined) fCounts[side]++;
+
+        unifiedList.push({
+          type: 'mapped',
+          id: fid,
+          name: fdef.name || fid.replace(/_/g, ' '),
+          side: side,
+          command_rating: fdef.command_rating || 8,
+          units: fdef.units || [],
+          card_image: fdef.card_image || '',
+          data: fdef
+        });
       });
 
-      Object.entries(formations).forEach(([fid, fdef]) => {
-        const name = fdef.name || fid.replace(/_/g, ' ');
-        const side = (fdef.side || 'US').toUpperCase();
-        const units = fdef.units || [];
-        const cr = fdef.command_rating || 8;
+      // 2. Unmapped Inventory Cards
+      formationInventory.forEach(card => {
+        // Skip if already in mappedKeys
+        if (mappedKeys.has(card.id) || (card.catalog_key && mappedKeys.has(card.catalog_key))) {
+          return;
+        }
+        totalAll++;
+        totalPending++;
+        const side = (card.faction || 'US').toUpperCase();
+        if (fCounts[side] !== undefined) fCounts[side]++;
+
+        unifiedList.push({
+          type: 'pending',
+          id: card.id,
+          name: card.title,
+          side: side,
+          command_rating: 8,
+          units: [],
+          card_image: card.card_image,
+          data: null
+        });
+      });
+
+      // Update counters in UI
+      const cntAll = document.getElementById('count-form-status-all');
+      if (cntAll) cntAll.innerText = totalAll;
+      const cntMap = document.getElementById('count-form-status-mapped');
+      if (cntMap) cntMap.innerText = totalMapped;
+      const cntPen = document.getElementById('count-form-status-pending');
+      if (cntPen) cntPen.innerText = totalPending;
+
+      ['GE', 'US', 'UK', 'IT'].forEach(f => {
+        const el = document.getElementById('count-form-' + f);
+        if (el) el.innerText = fCounts[f];
+      });
+
+      // Filter and render
+      unifiedList.forEach(item => {
+        const fid = item.id;
+        const name = item.name;
+        const side = item.side;
 
         if (q && !fid.toLowerCase().includes(q) && !name.toLowerCase().includes(q) && !side.toLowerCase().includes(q)) {
           return;
@@ -1593,24 +1720,90 @@ HTML_TEMPLATE = """<!DOCTYPE html>
           return;
         }
 
+        if (formationStatusFilter === 'mapped' && item.type !== 'mapped') return;
+        if (formationStatusFilter === 'pending' && item.type !== 'pending') return;
+
         let totalCost = 0;
-        units.forEach(uid => {
+        item.units.forEach(uid => {
           const u = catalog[uid] || staging[uid];
           if (u && u.cost) totalCost += u.cost;
         });
 
+        const isCurrent = currentFormationId === fid;
         const li = document.createElement('li');
-        li.className = 'unit-item' + (currentFormationId === fid ? ' active' : '');
-        li.onclick = () => selectFormation(fid);
+        li.className = 'unit-item' + (isCurrent ? ' active' : '');
+        li.onclick = () => selectFormationItem(item);
+
+        let badgeHtml = '';
+        let metaHtml = '';
+        if (item.type === 'mapped') {
+          badgeHtml = `<span class="badge badge-published">${side} • MAPPED</span>`;
+          metaHtml = `${side} • ${item.units.length} Units • CR: ${item.command_rating} • <span style="color: #fde047;">${totalCost} pts</span>`;
+        } else {
+          badgeHtml = `<span class="badge badge-pending">${side} • CARD</span>`;
+          metaHtml = `${side} • Unmapped Card • Ready to configure OOB`;
+        }
+
         li.innerHTML = `
           <div>
             <div class="name">${name}</div>
-            <div class="meta">${side} • ${units.length} Units • CR: ${cr} • <span style="color: #fde047;">${totalCost} pts</span></div>
+            <div class="meta">${metaHtml}</div>
           </div>
-          <span class="badge badge-published">${side}</span>
+          ${badgeHtml}
         `;
         list.appendChild(li);
       });
+    }
+
+    function selectFormationItem(item) {
+      if (item.type === 'mapped') {
+        selectFormation(item.id);
+      } else {
+        // Pending card: initialize draft formation
+        currentFormationId = item.id;
+        currentFormationData = {
+          name: item.name,
+          side: item.side,
+          command_rating: 8,
+          line_units: [],
+          heavy_weapons: [],
+          specialists: [],
+          units: [],
+          card_image: item.card_image,
+          description: `Tactical formation card scanned from Assault wargame catalog: ${item.name}.`
+        };
+
+        renderFormationSidebar();
+
+        document.getElementById('no-formation-selection').style.display = 'none';
+        document.getElementById('formation-editor-form').style.display = 'flex';
+
+        document.getElementById('formation-title').innerText = item.name;
+        document.getElementById('formation-subtitle').innerText = item.id + ' (Pending Initial OOB Mapping)';
+        document.getElementById('formation-side-badge').innerText = item.side;
+
+        document.getElementById('form-field-id').value = item.id;
+        document.getElementById('form-field-name').value = item.name;
+        document.getElementById('form-field-side').value = item.side;
+        document.getElementById('form-field-cr').value = 8;
+        document.getElementById('form-field-desc').value = currentFormationData.description;
+
+        const imgEl = document.getElementById('formation-card-img');
+        if (item.card_image) {
+          imgEl.src = '/' + item.card_image;
+          imgEl.style.display = 'block';
+        } else {
+          imgEl.src = '';
+          imgEl.style.display = 'none';
+        }
+
+        const selArt = document.getElementById('formation-card-art-select');
+        if (selArt) selArt.value = item.card_image || '';
+
+        populateUnitSelectDropdowns(item.side);
+        renderFormationSlots();
+        syncFormationRosterSummary();
+      }
     }
 
     function selectFormation(fid) {
@@ -1645,6 +1838,19 @@ HTML_TEMPLATE = """<!DOCTYPE html>
       document.getElementById('form-field-side').value = (currentFormationData.side || 'US').toUpperCase();
       document.getElementById('form-field-cr').value = currentFormationData.command_rating || 8;
       document.getElementById('form-field-desc').value = currentFormationData.description || '';
+
+      const cardImg = currentFormationData.card_image || '';
+      const imgEl = document.getElementById('formation-card-img');
+      if (cardImg) {
+        imgEl.src = '/' + cardImg;
+        imgEl.style.display = 'block';
+      } else {
+        imgEl.src = '';
+        imgEl.style.display = 'none';
+      }
+
+      const selArt = document.getElementById('formation-card-art-select');
+      if (selArt) selArt.value = cardImg;
 
       populateUnitSelectDropdowns((currentFormationData.side || 'US').toUpperCase());
       renderFormationSlots();
@@ -1965,9 +2171,11 @@ class UnitEditorHandler(BaseHTTPRequestHandler):
         if path == "/api/formations":
             formations_data = load_formations()
             catalog = load_catalog()
+            inv_data = load_formation_inventory()
             payload = {
                 "formations": formations_data,
                 "units": catalog.get("units", {}),
+                "inventory": inv_data.get("cards", []),
             }
             self.send_response(200)
             self.send_header("Content-Type", "application/json; charset=utf-8")
@@ -2066,12 +2274,19 @@ class UnitEditorHandler(BaseHTTPRequestHandler):
                 "heavy_weapons": heavy_weapons,
                 "specialists": specialists,
                 "units": all_units,
+                "card_image": data.get("card_image", ""),
                 "description": data.get("description", ""),
             }
 
             formations = load_formations()
             formations[formation_id] = formation_entry
             save_formations(formations)
+
+            inv = load_formation_inventory()
+            for c in inv.get("cards", []):
+                if c.get("id") == formation_id or (formation_entry["card_image"] and c.get("card_image") == formation_entry["card_image"]):
+                    c["catalog_key"] = formation_id
+            save_formation_inventory(inv)
 
             self.send_response(200)
             self.send_header("Content-Type", "application/json")

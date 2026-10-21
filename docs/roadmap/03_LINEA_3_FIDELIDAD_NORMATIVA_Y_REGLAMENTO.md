@@ -54,12 +54,14 @@ flowchart TD
      - Exposición total en GUI del Editor de Unidades (`tools/unit_editor_server.py`, Puerto 8780) con tooltips reglamentarios detallados (`TRAIT_HELP`).
      - Suite completa de tests unitarios e integración en verde (`assault_model/tests/test_engineer_traits.py`).
 
-2. **Subtarea 3.5.2: Modelado del Catálogo Oficial de Formaciones Combinadas (P1)**:
-   - **Módulos**: `assets/catalogs/formation_catalog.json`, `assault_model/units/formation.py`.
-   - **Alcance**: Superar el catálogo provisional de 2 arquetipos modelando las 12 cartas de formación reglamentarias del manual (Sección 5.0):
-     - Aliados: `US_RANGER_ASSAULT_COMPANY`, `US_PARACHUTE_RIFLE_COMPANY`, `US_INFANTRY_COMBAT_TEAM`, `UK_COMMANDO_TROOP`, `UK_ROYAL_ENGINEERS`.
-     - Eje: `GE_FALLSCHIRMJÄGER_COMPANY`, `GE_PANZERGRENADIER_PLATOON`, `GE_PIONIER_COMPANY`, `IT_BERSAGLIERI_COMPANY`, `IT_FANTERIA_COSTIERA`, `IT_DIVISIONE_LIVORNO_ASSAULT`, `GE_SCHWERE_PANZER_KOMPANIE`.
-   - **Criterio de Aceptación**: Esquema canónico JSON con desglose de `line_units`, `heavy_weapons` y `specialists`, con validación estricta en el engine.
+2. **Subtarea 3.5.2: Modelado del Catálogo Oficial de Formaciones Combinadas (P1)** — `[COMPLETADA 🟢 v2.5.4]`:
+   - **Módulos**: `assets/catalogs/formation_catalog.json`, `assets/catalogs/formation_art_inventory.json`, `assault_model/units/formation.py`, `tools/unit_editor_server.py`, `start_assault.bat`, `start_all_environments.ps1`, `assault_model/tests/test_formation_catalog.py`, `assault_model/tests/test_unit_and_formation_editor_api.py`.
+   - **Logros Alcanzados**:
+     - Modelado e ingesta canónica de las 12 formaciones oficiales reglamentarias del manual (Sección 5.0) en `formation_catalog.json` con desglose en slots categóricos (`line_units`, `heavy_weapons`, `specialists`) y array plano de compatibilidad `units`.
+     - Ingesta y escaneo del inventario completo de 122 cartas de formación tácticas escaneadas en `assets/art/formations/` organizadas por nación (`GE`, `IT`, `UK`, `US`) en `formation_art_inventory.json`.
+     - Mapeador visual dual en el Editor de Unidades y Formaciones (`tools/unit_editor_server.py`, puerto 8780) con previsualización de la carta original de alta resolución, selectores de slots, selector rápido de unidades del catálogo y cálculo dinámico de puntos en tiempo real.
+     - Automatización en `start_assault.bat` y `start_all_environments.ps1` garantizando el levantamiento del editor en el puerto 8780 y apertura en navegador.
+     - Suite completa de tests unitarios e integración en verde (`test_formation_catalog.py`, `test_unit_and_formation_editor_api.py`).
 
 3. **Subtarea 3.5.3: Creación de Escenarios Simétricos de Entrenamiento 11.1 y 11.2 (P1)**:
    - **Módulos**: `assets/scenarios/sc_11_1_pattuglia_ricognizione.json`, `assets/scenarios/sc_11_2_primo_contatto.json`.

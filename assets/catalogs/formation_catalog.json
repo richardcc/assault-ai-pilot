@@ -1,25 +1,342 @@
 {
   "US_INF_RIFLE": {
+    "name": "US Infantry Rifle Company",
     "side": "US",
+    "command_rating": 8,
+    "line_units": [
+      "US_RIFLES_43",
+      "US_RIFLES_43",
+      "US_RIFLES_43",
+      "US_RIFLES_43",
+      "US_RIFLES_43"
+    ],
+    "heavy_weapons": [
+      "US_BAZOOKA_TEAM",
+      "US_81MM_MORTAR"
+    ],
+    "specialists": [],
     "units": [
-      "rifle_43",
-      "rifle_43",
-      "rifle_43",
-      "rifle_43",
-      "rifle_43",
-      "bazooka_team",
-      "mortar_81mm"
-    ]
+      "US_RIFLES_43",
+      "US_RIFLES_43",
+      "US_RIFLES_43",
+      "US_RIFLES_43",
+      "US_RIFLES_43",
+      "US_BAZOOKA_TEAM",
+      "US_81MM_MORTAR"
+    ],
+    "description": "Standard US Army frontline infantry company with organic mortar and anti-tank rocket support.",
+    "card_image": "assets/art/formations/US Inf 1st Inf Rifle Platoon.jpg"
   },
-
-  "GE_FJ_RIFLE_III": {
-    "side": "GE",
+  "US_RANGER_ASSAULT_COMPANY": {
+    "name": "US Ranger Assault Company",
+    "side": "US",
+    "command_rating": 9,
+    "line_units": [
+      "US_RANGERS_43",
+      "US_RANGERS_43",
+      "US_RANGERS_43",
+      "US_RANGERS_43"
+    ],
+    "heavy_weapons": [
+      "US_BAZOOKA_TEAM"
+    ],
+    "specialists": [
+      "US_COMBAT_ENGINEERS_43",
+      "US_SNIPER_43"
+    ],
     "units": [
-      "fj_rifle_43",
-      "fj_rifle_43",
-      "fj_rifle_43",
-      "mg_42",
-      "mortar_50mm"
-    ]
+      "US_RANGERS_43",
+      "US_RANGERS_43",
+      "US_RANGERS_43",
+      "US_RANGERS_43",
+      "US_BAZOOKA_TEAM",
+      "US_COMBAT_ENGINEERS_43",
+      "US_SNIPER_43"
+    ],
+    "description": "Elite assault detachment specializing in beach landings, cliff scaling, and fortification breaches.",
+    "card_image": "assets/art/formations/US Inf 1st Ranger Ranger Platoon.jpg"
+  },
+  "US_PARACHUTE_RIFLE_COMPANY": {
+    "name": "US Parachute Rifle Company",
+    "side": "US",
+    "command_rating": 9,
+    "line_units": [
+      "US_AIRBORNE_RIFLES_43",
+      "US_AIRBORNE_RIFLES_43",
+      "US_AIRBORNE_RIFLES_43",
+      "US_AIRBORNE_RIFLES_43",
+      "US_AIRBORNE_RIFLES_43"
+    ],
+    "heavy_weapons": [
+      "US_81MM_MORTAR",
+      "US_BAZOOKA_TEAM"
+    ],
+    "specialists": [],
+    "units": [
+      "US_AIRBORNE_RIFLES_43",
+      "US_AIRBORNE_RIFLES_43",
+      "US_AIRBORNE_RIFLES_43",
+      "US_AIRBORNE_RIFLES_43",
+      "US_AIRBORNE_RIFLES_43",
+      "US_81MM_MORTAR",
+      "US_BAZOOKA_TEAM"
+    ],
+    "description": "Airborne infantry force dropped behind enemy lines with high mobility and rapid shock action.",
+    "card_image": "assets/art/formations/US Inf 505 Para Rifle Platoon 2.jpg"
+  },
+  "US_INFANTRY_COMBAT_TEAM": {
+    "name": "US Regimental Combat Team",
+    "side": "US",
+    "command_rating": 8,
+    "line_units": [
+      "US_RIFLES_43",
+      "US_RIFLES_43",
+      "US_RIFLES_43",
+      "US_RIFLES_43",
+      "US_RIFLES_43",
+      "US_RIFLES_43"
+    ],
+    "heavy_weapons": [
+      "US_BAZOOKA_TEAM",
+      "US_BAZOOKA_TEAM",
+      "US_81MM_MORTAR",
+      "US_81MM_MORTAR"
+    ],
+    "specialists": [
+      "US_COMBAT_ENGINEERS_43",
+      "US_COMBAT_ENGINEERS_43",
+      "US_SNIPER_43"
+    ],
+    "units": [
+      "US_RIFLES_43",
+      "US_RIFLES_43",
+      "US_RIFLES_43",
+      "US_RIFLES_43",
+      "US_RIFLES_43",
+      "US_RIFLES_43",
+      "US_BAZOOKA_TEAM",
+      "US_BAZOOKA_TEAM",
+      "US_81MM_MORTAR",
+      "US_81MM_MORTAR",
+      "US_COMBAT_ENGINEERS_43",
+      "US_COMBAT_ENGINEERS_43",
+      "US_SNIPER_43"
+    ],
+    "description": "Heavy combined arms infantry task force equipped for sustained urban and fortified terrain assaults.",
+    "card_image": "assets/art/formations/US Inf 1st Inf Inf Sup Platoon.jpg"
+  },
+  "UK_COMMANDO_TROOP": {
+    "name": "UK Commando Troop",
+    "side": "UK",
+    "command_rating": 9,
+    "line_units": [
+      "UK_RIFLES_43",
+      "UK_RIFLES_43",
+      "UK_RIFLES_43",
+      "UK_RIFLES_43"
+    ],
+    "heavy_weapons": [],
+    "specialists": [
+      "UK_ROYAL_ENGINEERS",
+      "UK_PARACHUTE_RIFLES"
+    ],
+    "units": [
+      "UK_RIFLES_43",
+      "UK_RIFLES_43",
+      "UK_RIFLES_43",
+      "UK_RIFLES_43",
+      "UK_ROYAL_ENGINEERS",
+      "UK_PARACHUTE_RIFLES"
+    ],
+    "description": "British Commando raid unit specialized in covert beach assaults and fast flanking operations.",
+    "card_image": "assets/art/formations/UK 1st Parachute Brigade Parachute Plt.jpg"
+  },
+  "UK_ROYAL_ENGINEERS": {
+    "name": "UK Royal Engineers Detachment",
+    "side": "UK",
+    "command_rating": 8,
+    "line_units": [
+      "UK_RIFLES_43",
+      "UK_RIFLES_43"
+    ],
+    "heavy_weapons": [],
+    "specialists": [
+      "UK_ROYAL_ENGINEERS",
+      "UK_ROYAL_ENGINEERS",
+      "UK_ROYAL_ENGINEERS"
+    ],
+    "units": [
+      "UK_RIFLES_43",
+      "UK_RIFLES_43",
+      "UK_ROYAL_ENGINEERS",
+      "UK_ROYAL_ENGINEERS",
+      "UK_ROYAL_ENGINEERS"
+    ],
+    "description": "Combat sapper detachment focused on demolition, mine clearing, and overcoming fixed beach obstacles.",
+    "card_image": "assets/art/formations/UK 151st Be Durham Light Infantry Engineer Plt.jpg"
+  },
+  "GE_FJ_RIFLE_III": {
+    "name": "GE Fallschirmjäger Company",
+    "side": "GE",
+    "command_rating": 9,
+    "line_units": [
+      "GE_FJ_RIFLES_43",
+      "GE_FJ_RIFLES_43",
+      "GE_FJ_RIFLES_43",
+      "GE_FJ_RIFLES_43"
+    ],
+    "heavy_weapons": [
+      "GE_HEAVY_MG_42",
+      "GE_50MM_MORTAR"
+    ],
+    "specialists": [],
+    "units": [
+      "GE_FJ_RIFLES_43",
+      "GE_FJ_RIFLES_43",
+      "GE_FJ_RIFLES_43",
+      "GE_FJ_RIFLES_43",
+      "GE_HEAVY_MG_42",
+      "GE_50MM_MORTAR"
+    ],
+    "description": "Elite Luftwaffe paratroopers defending key crossroads and high ground in Sicily.",
+    "card_image": "assets/art/formations/GE 1st FJ Division Rifle Plt III.jpg"
+  },
+  "GE_PANZERGRENADIER_PLATOON": {
+    "name": "GE Panzergrenadier Platoon",
+    "side": "GE",
+    "command_rating": 8,
+    "line_units": [
+      "GE_GRENADIERS_43",
+      "GE_GRENADIERS_43",
+      "GE_GRENADIERS_43",
+      "GE_GRENADIERS_43"
+    ],
+    "heavy_weapons": [
+      "GE_HEAVY_MG_42",
+      "GE_TANK_HUNTERS_43"
+    ],
+    "specialists": [],
+    "units": [
+      "GE_GRENADIERS_43",
+      "GE_GRENADIERS_43",
+      "GE_GRENADIERS_43",
+      "GE_GRENADIERS_43",
+      "GE_HEAVY_MG_42",
+      "GE_TANK_HUNTERS_43"
+    ],
+    "description": "Mechanized infantry platoon with heavy sustained automatic fire and anti-tank capabilities.",
+    "card_image": "assets/art/formations/GE 15th PG Division PG Plt II.jpg"
+  },
+  "GE_PIONIER_COMPANY": {
+    "name": "GE Pionier Assault Company",
+    "side": "GE",
+    "command_rating": 8,
+    "line_units": [
+      "GE_RIFLES_43",
+      "GE_RIFLES_43",
+      "GE_RIFLES_43",
+      "GE_RIFLES_43"
+    ],
+    "heavy_weapons": [
+      "GE_50MM_MORTAR"
+    ],
+    "specialists": [
+      "GE_TANK_HUNTERS_43",
+      "GE_TANK_HUNTERS_43"
+    ],
+    "units": [
+      "GE_RIFLES_43",
+      "GE_RIFLES_43",
+      "GE_RIFLES_43",
+      "GE_RIFLES_43",
+      "GE_50MM_MORTAR",
+      "GE_TANK_HUNTERS_43",
+      "GE_TANK_HUNTERS_43"
+    ],
+    "description": "Combat engineer unit trained for stubborn fortress defense and demolition of enemy bridgeheads.",
+    "card_image": "assets/art/formations/GE Inf 15th Pz Mech Rifle Platoon.jpg"
+  },
+  "IT_BERSAGLIERI_COMPANY": {
+    "name": "IT Bersaglieri Company",
+    "side": "IT",
+    "command_rating": 8,
+    "line_units": [
+      "IT_RIFLES_43",
+      "IT_RIFLES_43",
+      "IT_RIFLES_43",
+      "IT_RIFLES_43"
+    ],
+    "heavy_weapons": [
+      "IT_LMG_SQUAD_43",
+      "IT_LMG_SQUAD_43",
+      "IT_45MM_BRIXIA"
+    ],
+    "specialists": [],
+    "units": [
+      "IT_RIFLES_43",
+      "IT_RIFLES_43",
+      "IT_RIFLES_43",
+      "IT_RIFLES_43",
+      "IT_LMG_SQUAD_43",
+      "IT_LMG_SQUAD_43",
+      "IT_45MM_BRIXIA"
+    ],
+    "description": "Highly mobile Italian light infantry known for aggressive counter-attacks and rapid deployment.",
+    "card_image": "assets/art/formations/IT Inf Livorno Bers Platoon.jpg"
+  },
+  "IT_FANTERIA_COSTIERA": {
+    "name": "IT Costiera Defence Company",
+    "side": "IT",
+    "command_rating": 7,
+    "line_units": [
+      "IT_RIFLES_43",
+      "IT_RIFLES_43",
+      "IT_RIFLES_43",
+      "IT_RIFLES_43"
+    ],
+    "heavy_weapons": [
+      "IT_BREDA_MMG",
+      "IT_SOLOTHURN_ATR_43"
+    ],
+    "specialists": [],
+    "units": [
+      "IT_RIFLES_43",
+      "IT_RIFLES_43",
+      "IT_RIFLES_43",
+      "IT_RIFLES_43",
+      "IT_BREDA_MMG",
+      "IT_SOLOTHURN_ATR_43"
+    ],
+    "description": "Coastal division garrison entrenched in bunkers and barbed wire along Gela beaches.",
+    "card_image": "assets/art/formations/IT Inf XVIII Coastal Sec Platoon.jpg"
+  },
+  "IT_DIVISIONE_LIVORNO_ASSAULT": {
+    "name": "IT Divisione Livorno Assault",
+    "side": "IT",
+    "command_rating": 8,
+    "line_units": [
+      "IT_RIFLES_43",
+      "IT_RIFLES_43",
+      "IT_RIFLES_43",
+      "IT_RIFLES_43"
+    ],
+    "heavy_weapons": [
+      "IT_20MM_BREDA_AA_43",
+      "IT_BREDA_MMG"
+    ],
+    "specialists": [
+      "IT_SNIPER_43"
+    ],
+    "units": [
+      "IT_RIFLES_43",
+      "IT_RIFLES_43",
+      "IT_RIFLES_43",
+      "IT_RIFLES_43",
+      "IT_20MM_BREDA_AA_43",
+      "IT_BREDA_MMG",
+      "IT_SNIPER_43"
+    ],
+    "description": "Italian 4th Infantry Division 'Livorno' shock force leading counter-attacks against the US beachhead.",
+    "card_image": "assets/art/formations/IT Inf Livorno Inf Sup Platoon.jpg"
   }
 }

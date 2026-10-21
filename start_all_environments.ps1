@@ -6,7 +6,7 @@
 .DESCRIPTION
     Abre una ventana de Windows Terminal con 6 pestañas organizadas:
       1. Reporting Viewer V2 (Puerto 8777) - Visor de Modelos y Currículum
-      2. SB3 Eval Viewer (Puerto 8765)     - Visor histórico de evaluaciones
+      2. Unit & Formation Editor (Puerto 8780) - Editor de Unidades y Formaciones
       3. Backend API Simulador (Puerto 8001) - FastAPI / Uvicorn
       4. Frontend Simulador (Puerto 5173)   - Vite Dev Server (assault_ai_ui)
       5. Terminal Dev 1 (venv)             - Consola interactiva con .venv activo
@@ -24,7 +24,7 @@
 param(
     [string]$RepoRoot = "C:\repos\python\assault",
     [switch]$SeparateWindows,
-    [switch]$SkipLegacySB3
+    [bool]$SkipLegacySB3 = $true
 )
 
 $ErrorActionPreference = "Stop"
@@ -50,75 +50,29 @@ if (-not (Test-Path (Join-Path $UiRoot "node_modules"))) {
     Write-Warning "No se encontro 'node_modules' en '$UiRoot'. Si el frontend falla, ejecuta 'npm install' en esa carpeta."
 }
 
-# Definir comandos de cada pestaña
-$cmdReporting = "Write-Host '========================================' -ForegroundColor Cyan; " +
-    "Write-Host ' [1/6] Visor de Modelos y Curriculum   ' -ForegroundColor Yellow; " +
-    "Write-Host ' URL: http://127.0.0.1:8777/            ' -ForegroundColor Green; " +
-    "Write-Host '========================================' -ForegroundColor Cyan; " +
-    "if (Test-Path '$VenvActivate') { . '$VenvActivate' }; " +
-    ".\scripts\run_curriculum_reporting_viewer.ps1 -Dev"
-
-$cmdSb3Viewer = "Write-Host '========================================' -ForegroundColor Cyan; " +
-    "Write-Host ' [2/6] Visor Historico SB3 Eval        ' -ForegroundColor Yellow; " +
-    "Write-Host ' URL: http://127.0.0.1:8765/            ' -ForegroundColor Green; " +
-    "Write-Host '========================================' -ForegroundColor Cyan; " +
-    "if (Test-Path '$VenvActivate') { . '$VenvActivate' }; " +
-    "python scripts/sb3_eval_viewer.py --host 127.0.0.1 --port 8765"
-
-$cmdBackend = "Write-Host '========================================' -ForegroundColor Cyan; " +
-    "Write-Host ' [3/6] Backend API Simulador (FastAPI) ' -ForegroundColor Yellow; " +
-    "Write-Host ' URL: http://127.0.0.1:8001/            ' -ForegroundColor Green; " +
-    "Write-Host ' Docs: http://127.0.0.1:8001/docs       ' -ForegroundColor Gray; " +
-    "Write-Host '========================================' -ForegroundColor Cyan; " +
-    "if (Test-Path '$VenvActivate') { . '$VenvActivate' }; " +
-    "python -m uvicorn assault_backend.main:app --host 127.0.0.1 --port 8001 --reload"
-
-$cmdUnitEditor = "Write-Host '========================================' -ForegroundColor Cyan; " +
-    "Write-Host ' Unit Catalog Editor & Approval Workflow' -ForegroundColor Yellow; " +
-    "Write-Host ' URL: http://127.0.0.1:8780/            ' -ForegroundColor Green; " +
-    "Write-Host '========================================' -ForegroundColor Cyan; " +
-    "if (Test-Path '$VenvActivate') { . '$VenvActivate' }; " +
-    "python tools/unit_editor_server.py --port 8780"
-
-$cmdFrontend = "Write-Host '========================================' -ForegroundColor Cyan; " +
-    "Write-Host ' Frontend Simulador Tactico (Vite)     ' -ForegroundColor Yellow; " +
-    "Write-Host ' URL: http://localhost:5173/            ' -ForegroundColor Green; " +
-    "Write-Host '========================================' -ForegroundColor Cyan; " +
-    "npm run dev -- --host"
-
-$cmdShell1 = "if (Test-Path '$VenvActivate') { . '$VenvActivate' }; " +
-    "Clear-Host; " +
-    "Write-Host '===================================================' -ForegroundColor Green; " +
-    "Write-Host ' Terminal Dev 1 - Entorno .venv Activo             ' -ForegroundColor Yellow; " +
-    "Write-Host ' Carpeta: $RepoRoot' -ForegroundColor Gray; " +
-    "Write-Host ' Listo para ejecutar comandos y scripts             ' -ForegroundColor Cyan; " +
-    "Write-Host '===================================================' -ForegroundColor Green; " +
-    "python --version"
-
-$cmdShell2 = "if (Test-Path '$VenvActivate') { . '$VenvActivate' }; " +
-    "Clear-Host; " +
-    "Write-Host '===================================================' -ForegroundColor Green; " +
-    "Write-Host ' Terminal Dev 2 - Entorno .venv Activo             ' -ForegroundColor Yellow; " +
-    "Write-Host ' Carpeta: $RepoRoot' -ForegroundColor Gray; " +
-    "Write-Host ' Listo para ejecutar comandos y scripts             ' -ForegroundColor Cyan; " +
-    "Write-Host '===================================================' -ForegroundColor Green; " +
-    "python --version"
+# Rutas de scripts lanzadores dedicados (sin punto y coma interno para evitar problemas con wt.exe)
+$scriptReporting  = Join-Path $RepoRoot "scripts\run_curriculum_reporting_viewer.ps1"
+$scriptUnitEditor = Join-Path $RepoRoot "scripts\run_unit_editor.ps1"
+$scriptSb3Viewer  = Join-Path $RepoRoot "scripts\run_sb3_viewer.ps1"
+$scriptBackend    = Join-Path $RepoRoot "scripts\run_backend.ps1"
+$scriptFrontend   = Join-Path $RepoRoot "scripts\run_frontend.ps1"
+$scriptDev        = Join-Path $RepoRoot "scripts\run_dev_terminal.ps1"
 
 # Lista de especificaciones de pestañas
 $tabSpecs = @(
-    @{ Title = "Reporting-8777";   Dir = $RepoRoot; Cmd = $cmdReporting },
-    @{ Title = "UnitEditor-8780";  Dir = $RepoRoot; Cmd = $cmdUnitEditor }
+    @{ Title = "Reporting-8777";   Dir = $RepoRoot; File = $scriptReporting;  Args = @("-Dev") },
+    @{ Title = "UnitEditor-8780";  Dir = $RepoRoot; File = $scriptUnitEditor; Args = @() }
 )
 
 if (-not $SkipLegacySB3) {
-    $tabSpecs += @{ Title = "SB3-Viewer-8765"; Dir = $RepoRoot; Cmd = $cmdSb3Viewer }
+    $tabSpecs += @{ Title = "SB3-Viewer-8765"; Dir = $RepoRoot; File = $scriptSb3Viewer; Args = @() }
 }
 
 $tabSpecs += @(
-    @{ Title = "Backend-8001";     Dir = $RepoRoot; Cmd = $cmdBackend },
-    @{ Title = "TacticalUI-5173";  Dir = $UiRoot;   Cmd = $cmdFrontend },
-    @{ Title = "Dev-1 (venv)";     Dir = $RepoRoot; Cmd = $cmdShell1 },
-    @{ Title = "Dev-2 (venv)";     Dir = $RepoRoot; Cmd = $cmdShell2 }
+    @{ Title = "Backend-8001";     Dir = $RepoRoot; File = $scriptBackend;    Args = @() },
+    @{ Title = "TacticalUI-5173";  Dir = $UiRoot;   File = $scriptFrontend;   Args = @() },
+    @{ Title = "Dev-1 (venv)";     Dir = $RepoRoot; File = $scriptDev;        Args = @("-Index", "1") },
+    @{ Title = "Dev-2 (venv)";     Dir = $RepoRoot; File = $scriptDev;        Args = @("-Index", "2") }
 )
 
 # Comprobar si wt.exe está disponible y no se forzó ventanas separadas
@@ -132,30 +86,38 @@ if ($hasWt -and -not $SeparateWindows) {
         $spec = $tabSpecs[$i]
         $title = $spec.Title
         $dir = $spec.Dir
-        $cmd = $spec.Cmd
+        $file = $spec.File
+        $argsStr = if ($spec.Args.Count -gt 0) { " " + ($spec.Args -join " ") } else { "" }
+
+        # Invocacion powershell limpia sin puntos y coma internos
+        $subCmd = "powershell.exe -NoExit -ExecutionPolicy Bypass -File `"$file`"$argsStr"
 
         if ($i -eq 0) {
             # Primera pestaña (abre la nueva ventana con -w new)
-            $tabCommands += "-w new --title `"$title`" -d `"$dir`" powershell.exe -NoExit -ExecutionPolicy Bypass -Command `"$cmd`""
+            $tabCommands += "-w new --title `"$title`" -d `"$dir`" $subCmd"
         } else {
             # Pestañas subsiguientes
-            $tabCommands += "new-tab --title `"$title`" -d `"$dir`" powershell.exe -NoExit -ExecutionPolicy Bypass -Command `"$cmd`""
+            $tabCommands += "new-tab --title `"$title`" -d `"$dir`" $subCmd"
         }
     }
 
     $wtFullArgs = $tabCommands -join " ; "
     Start-Process "wt.exe" -ArgumentList $wtFullArgs
     Write-Host "Ventana de Windows Terminal lanzada exitosamente con $($tabSpecs.Count) pestanas." -ForegroundColor Green
+    Start-Sleep -Seconds 1
+    Start-Process "http://127.0.0.1:8780/"
 } else {
     Write-Host "Lanzando $($tabSpecs.Count) ventanas independientes de PowerShell..." -ForegroundColor Cyan
 
     foreach ($spec in $tabSpecs) {
         $title = $spec.Title
         $dir = $spec.Dir
-        $cmd = $spec.Cmd
-        $wrapped = "`$host.UI.RawUI.WindowTitle = '$title'; Set-Location '$dir'; $cmd"
+        $file = $spec.File
+        $argsList = @("-NoExit", "-ExecutionPolicy", "Bypass", "-File", $file) + $spec.Args
 
-        Start-Process "powershell.exe" -ArgumentList "-NoExit", "-ExecutionPolicy", "Bypass", "-Command", $wrapped
+        Start-Process "powershell.exe" -ArgumentList $argsList -WorkingDirectory $dir
     }
     Write-Host "Ventanas de PowerShell lanzadas correctamente." -ForegroundColor Green
+    Start-Sleep -Seconds 1
+    Start-Process "http://127.0.0.1:8780/"
 }

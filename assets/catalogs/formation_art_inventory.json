@@ -1,0 +1,988 @@
+{
+  "title": "Assault Formation Cards Art Inventory",
+  "total_cards": 122,
+  "factions": {
+    "GE": 40,
+    "IT": 30,
+    "UK": 32,
+    "US": 20
+  },
+  "cards": [
+    {
+      "id": "GE_15TH_PG_DIVISION_ASSAULT_TANK_SEC_III",
+      "title": "GE 15th PG Division Assault Tank Sec III",
+      "faction": "GE",
+      "card_image": "assets/art/formations/GE 15th PG Division Assault Tank Sec III.jpg",
+      "filename": "GE 15th PG Division Assault Tank Sec III.jpg",
+      "catalog_key": null
+    },
+    {
+      "id": "GE_15TH_PG_DIVISION_MED_AT_GUN_SEC_III",
+      "title": "GE 15th PG Division Med AT Gun Sec III",
+      "faction": "GE",
+      "card_image": "assets/art/formations/GE 15th PG Division Med AT Gun Sec III.jpg",
+      "filename": "GE 15th PG Division Med AT Gun Sec III.jpg",
+      "catalog_key": null
+    },
+    {
+      "id": "GE_15TH_PG_DIVISION_PG_PLT_II",
+      "title": "GE 15th PG Division PG Plt II",
+      "faction": "GE",
+      "card_image": "assets/art/formations/GE 15th PG Division PG Plt II.jpg",
+      "filename": "GE 15th PG Division PG Plt II.jpg",
+      "catalog_key": null
+    },
+    {
+      "id": "GE_15TH_PG_DIVISION_PG_PLT_III",
+      "title": "GE 15th PG Division PG Plt III",
+      "faction": "GE",
+      "card_image": "assets/art/formations/GE 15th PG Division PG Plt III.jpg",
+      "filename": "GE 15th PG Division PG Plt III.jpg",
+      "catalog_key": null
+    },
+    {
+      "id": "GE_15TH_PG_DIVISION_RIFLE_PLT_V",
+      "title": "GE 15th PG Division Rifle Plt V",
+      "faction": "GE",
+      "card_image": "assets/art/formations/GE 15th PG Division Rifle Plt V.jpg",
+      "filename": "GE 15th PG Division Rifle Plt V.jpg",
+      "catalog_key": null
+    },
+    {
+      "id": "GE_15TH_PG_DIVISION_RIFLE_PLT_VI",
+      "title": "GE 15th PG Division Rifle Plt VI",
+      "faction": "GE",
+      "card_image": "assets/art/formations/GE 15th PG Division Rifle Plt VI.jpg",
+      "filename": "GE 15th PG Division Rifle Plt VI.jpg",
+      "catalog_key": null
+    },
+    {
+      "id": "GE_15TH_PG_DIVISION_STAFF_PLT_II",
+      "title": "GE 15th PG Division Staff Plt II",
+      "faction": "GE",
+      "card_image": "assets/art/formations/GE 15th PG Division Staff Plt II.jpg",
+      "filename": "GE 15th PG Division Staff Plt II.jpg",
+      "catalog_key": null
+    },
+    {
+      "id": "GE_15TH_PG_DIVISION_STAFF_PLT_III",
+      "title": "GE 15th PG Division Staff Plt III",
+      "faction": "GE",
+      "card_image": "assets/art/formations/GE 15th PG Division Staff Plt III.jpg",
+      "filename": "GE 15th PG Division Staff Plt III.jpg",
+      "catalog_key": null
+    },
+    {
+      "id": "GE_15TH_PG_DIVISION_STAFF_PLT",
+      "title": "GE 15th PG Division Staff Plt",
+      "faction": "GE",
+      "card_image": "assets/art/formations/GE 15th PG Division Staff Plt.jpg",
+      "filename": "GE 15th PG Division Staff Plt.jpg",
+      "catalog_key": null
+    },
+    {
+      "id": "GE_1ST_FJ_DIVISION_AIRLANDING_SUPPORT_SEC_II",
+      "title": "GE 1st FJ Division Airlanding Support Sec II",
+      "faction": "GE",
+      "card_image": "assets/art/formations/GE 1st FJ Division Airlanding Support Sec II.jpg",
+      "filename": "GE 1st FJ Division Airlanding Support Sec II.jpg",
+      "catalog_key": null
+    },
+    {
+      "id": "GE_1ST_FJ_DIVISION_AIRLANDING_SUPPORT_SEC",
+      "title": "GE 1st FJ Division Airlanding Support Sec",
+      "faction": "GE",
+      "card_image": "assets/art/formations/GE 1st FJ Division Airlanding Support Sec.jpg",
+      "filename": "GE 1st FJ Division Airlanding Support Sec.jpg",
+      "catalog_key": null
+    },
+    {
+      "id": "GE_1ST_FJ_DIVISION_INFANTRY_AT_PLT_II",
+      "title": "GE 1st FJ Division Infantry AT Plt II",
+      "faction": "GE",
+      "card_image": "assets/art/formations/GE 1st FJ Division Infantry AT Plt II.jpg",
+      "filename": "GE 1st FJ Division Infantry AT Plt II.jpg",
+      "catalog_key": null
+    },
+    {
+      "id": "GE_1ST_FJ_DIVISION_INFANTRY_AT_PLT_III",
+      "title": "GE 1st FJ Division Infantry AT Plt III",
+      "faction": "GE",
+      "card_image": "assets/art/formations/GE 1st FJ Division Infantry AT Plt III.jpg",
+      "filename": "GE 1st FJ Division Infantry AT Plt III.jpg",
+      "catalog_key": null
+    },
+    {
+      "id": "GE_1ST_FJ_DIVISION_INFANTRY_SUPPORT_PLT_II",
+      "title": "GE 1st FJ Division Infantry Support Plt II",
+      "faction": "GE",
+      "card_image": "assets/art/formations/GE 1st FJ Division Infantry Support Plt II.jpg",
+      "filename": "GE 1st FJ Division Infantry Support Plt II.jpg",
+      "catalog_key": null
+    },
+    {
+      "id": "GE_1ST_FJ_DIVISION_INFANTRY_SUPPORT_PLT_III",
+      "title": "GE 1st FJ Division Infantry Support Plt III",
+      "faction": "GE",
+      "card_image": "assets/art/formations/GE 1st FJ Division Infantry Support Plt III.jpg",
+      "filename": "GE 1st FJ Division Infantry Support Plt III.jpg",
+      "catalog_key": null
+    },
+    {
+      "id": "GE_1ST_FJ_DIVISION_INFANTRY_SUPPORT_PLT",
+      "title": "GE 1st FJ Division Infantry Support Plt",
+      "faction": "GE",
+      "card_image": "assets/art/formations/GE 1st FJ Division Infantry Support Plt.jpg",
+      "filename": "GE 1st FJ Division Infantry Support Plt.jpg",
+      "catalog_key": null
+    },
+    {
+      "id": "GE_1ST_FJ_DIVISION_MACHINEGUN_PLT_II",
+      "title": "GE 1st FJ Division Machinegun Plt II",
+      "faction": "GE",
+      "card_image": "assets/art/formations/GE 1st FJ Division Machinegun Plt II.jpg",
+      "filename": "GE 1st FJ Division Machinegun Plt II.jpg",
+      "catalog_key": null
+    },
+    {
+      "id": "GE_1ST_FJ_DIVISION_RIFLE_PLT_III",
+      "title": "GE 1st FJ Division Rifle Plt III",
+      "faction": "GE",
+      "card_image": "assets/art/formations/GE 1st FJ Division Rifle Plt III.jpg",
+      "filename": "GE 1st FJ Division Rifle Plt III.jpg",
+      "catalog_key": null
+    },
+    {
+      "id": "GE_1ST_FJ_DIVISION_RIFLE_PLT_IV",
+      "title": "GE 1st FJ Division Rifle Plt IV",
+      "faction": "GE",
+      "card_image": "assets/art/formations/GE 1st FJ Division Rifle Plt IV.jpg",
+      "filename": "GE 1st FJ Division Rifle Plt IV.jpg",
+      "catalog_key": null
+    },
+    {
+      "id": "GE_1ST_FJ_DIVISION_RIFLE_PLT_VII",
+      "title": "GE 1st FJ Division Rifle Plt VII",
+      "faction": "GE",
+      "card_image": "assets/art/formations/GE 1st FJ Division Rifle Plt VII.jpg",
+      "filename": "GE 1st FJ Division Rifle Plt VII.jpg",
+      "catalog_key": null
+    },
+    {
+      "id": "GE_ARTY_15TH_PZ_DEF_SUP_SEC",
+      "title": "GE Arty 15th Pz Def Sup Sec",
+      "faction": "GE",
+      "card_image": "assets/art/formations/GE Arty 15th Pz Def Sup Sec.jpg",
+      "filename": "GE Arty 15th Pz Def Sup Sec.jpg",
+      "catalog_key": null
+    },
+    {
+      "id": "GE_ARTY_15TH_PZ_HVY_AT_GUN_SEC",
+      "title": "GE Arty 15th Pz Hvy AT Gun Sec",
+      "faction": "GE",
+      "card_image": "assets/art/formations/GE Arty 15th Pz Hvy AT Gun Sec.jpg",
+      "filename": "GE Arty 15th Pz Hvy AT Gun Sec.jpg",
+      "catalog_key": null
+    },
+    {
+      "id": "GE_ARTY_15TH_PZ_INF_SUP_SEC_2",
+      "title": "GE Arty 15th Pz Inf Sup Sec 2",
+      "faction": "GE",
+      "card_image": "assets/art/formations/GE Arty 15th Pz Inf Sup Sec 2.jpg",
+      "filename": "GE Arty 15th Pz Inf Sup Sec 2.jpg",
+      "catalog_key": null
+    },
+    {
+      "id": "GE_ARTY_15TH_PZ_MED_AT_GUN_SEC",
+      "title": "GE Arty 15th Pz Med AT Gun Sec",
+      "faction": "GE",
+      "card_image": "assets/art/formations/GE Arty 15th Pz Med AT Gun Sec.jpg",
+      "filename": "GE Arty 15th Pz Med AT Gun Sec.jpg",
+      "catalog_key": null
+    },
+    {
+      "id": "GE_ARTY_15TH_PZ_MOT_AA_GUN_SEC",
+      "title": "GE Arty 15th Pz Mot AA Gun Sec",
+      "faction": "GE",
+      "card_image": "assets/art/formations/GE Arty 15th Pz Mot AA Gun Sec.jpg",
+      "filename": "GE Arty 15th Pz Mot AA Gun Sec.jpg",
+      "catalog_key": null
+    },
+    {
+      "id": "GE_ARTY_HG_PZ_HVY_AA_SEC",
+      "title": "GE Arty HG Pz Hvy AA Sec",
+      "faction": "GE",
+      "card_image": "assets/art/formations/GE Arty HG Pz Hvy AA Sec.jpg",
+      "filename": "GE Arty HG Pz Hvy AA Sec.jpg",
+      "catalog_key": null
+    },
+    {
+      "id": "GE_ARTY_HG_PZ_INF_SUP_SEC",
+      "title": "GE Arty HG Pz Inf Sup Sec",
+      "faction": "GE",
+      "card_image": "assets/art/formations/GE Arty HG Pz Inf Sup Sec.jpg",
+      "filename": "GE Arty HG Pz Inf Sup Sec.jpg",
+      "catalog_key": null
+    },
+    {
+      "id": "GE_ARTY_HG_PZ_LT_AA_SEC",
+      "title": "GE Arty HG Pz Lt AA Sec",
+      "faction": "GE",
+      "card_image": "assets/art/formations/GE Arty HG Pz Lt AA Sec.jpg",
+      "filename": "GE Arty HG Pz Lt AA Sec.jpg",
+      "catalog_key": null
+    },
+    {
+      "id": "GE_ARTY_HG_PZ_LT_AT_GUN_SEC",
+      "title": "GE Arty HG Pz Lt AT Gun Sec",
+      "faction": "GE",
+      "card_image": "assets/art/formations/GE Arty HG Pz Lt AT Gun Sec.jpg",
+      "filename": "GE Arty HG Pz Lt AT Gun Sec.jpg",
+      "catalog_key": null
+    },
+    {
+      "id": "GE_ARTY_HG_PZ_MED_AT_GUN_SEC_2",
+      "title": "GE Arty HG Pz Med AT Gun Sec 2",
+      "faction": "GE",
+      "card_image": "assets/art/formations/GE Arty HG Pz Med AT Gun Sec 2.jpg",
+      "filename": "GE Arty HG Pz Med AT Gun Sec 2.jpg",
+      "catalog_key": null
+    },
+    {
+      "id": "GE_INF_15TH_PZ_MECH_RIFLE_PLATOON",
+      "title": "GE Inf 15th Pz Mech Rifle Platoon",
+      "faction": "GE",
+      "card_image": "assets/art/formations/GE Inf 15th Pz Mech Rifle Platoon.jpg",
+      "filename": "GE Inf 15th Pz Mech Rifle Platoon.jpg",
+      "catalog_key": null
+    },
+    {
+      "id": "GE_INF_15TH_PZ_MOT_INF_SUP_PLATOON",
+      "title": "GE Inf 15th Pz Mot Inf Sup Platoon",
+      "faction": "GE",
+      "card_image": "assets/art/formations/GE Inf 15th Pz Mot Inf Sup Platoon.jpg",
+      "filename": "GE Inf 15th Pz Mot Inf Sup Platoon.jpg",
+      "catalog_key": null
+    },
+    {
+      "id": "GE_INF_15TH_PZ_PZG_PLATOON",
+      "title": "GE Inf 15th Pz PzG Platoon",
+      "faction": "GE",
+      "card_image": "assets/art/formations/GE Inf 15th Pz PzG Platoon.jpg",
+      "filename": "GE Inf 15th Pz PzG Platoon.jpg",
+      "catalog_key": null
+    },
+    {
+      "id": "GE_INF_HG_PZ_INF_AT_PLATOON",
+      "title": "GE Inf HG Pz Inf AT Platoon",
+      "faction": "GE",
+      "card_image": "assets/art/formations/GE Inf HG Pz Inf AT Platoon.jpg",
+      "filename": "GE Inf HG Pz Inf AT Platoon.jpg",
+      "catalog_key": null
+    },
+    {
+      "id": "GE_INF_HG_PZ_MG_PLATOON",
+      "title": "GE Inf HG Pz MG Platoon",
+      "faction": "GE",
+      "card_image": "assets/art/formations/GE Inf HG Pz MG Platoon.jpg",
+      "filename": "GE Inf HG Pz MG Platoon.jpg",
+      "catalog_key": null
+    },
+    {
+      "id": "GE_INF_HG_PZ_MOT_RIFLE_PLATOON_2",
+      "title": "GE Inf HG Pz Mot Rifle Platoon 2",
+      "faction": "GE",
+      "card_image": "assets/art/formations/GE Inf HG Pz Mot Rifle Platoon 2.jpg",
+      "filename": "GE Inf HG Pz Mot Rifle Platoon 2.jpg",
+      "catalog_key": null
+    },
+    {
+      "id": "GE_INF_HG_PZ_MOT_RIFLE_PLATOON",
+      "title": "GE Inf HG Pz Mot Rifle Platoon",
+      "faction": "GE",
+      "card_image": "assets/art/formations/GE Inf HG Pz Mot Rifle Platoon.jpg",
+      "filename": "GE Inf HG Pz Mot Rifle Platoon.jpg",
+      "catalog_key": null
+    },
+    {
+      "id": "GE_INF_HG_PZ_RECON_PLATOON",
+      "title": "GE Inf HG Pz Recon Platoon",
+      "faction": "GE",
+      "card_image": "assets/art/formations/GE Inf HG Pz Recon Platoon.jpg",
+      "filename": "GE Inf HG Pz Recon Platoon.jpg",
+      "catalog_key": null
+    },
+    {
+      "id": "GE_INF_HG_PZ_RIFLE_PLATOON_2",
+      "title": "GE Inf HG Pz Rifle Platoon 2",
+      "faction": "GE",
+      "card_image": "assets/art/formations/GE Inf HG Pz Rifle Platoon 2.jpg",
+      "filename": "GE Inf HG Pz Rifle Platoon 2.jpg",
+      "catalog_key": null
+    },
+    {
+      "id": "GE_INF_HG_PZ_RIFLE_PLATOON",
+      "title": "GE Inf HG Pz Rifle Platoon",
+      "faction": "GE",
+      "card_image": "assets/art/formations/GE Inf HG Pz Rifle Platoon.jpg",
+      "filename": "GE Inf HG Pz Rifle Platoon.jpg",
+      "catalog_key": null
+    },
+    {
+      "id": "IT_ARTY_LIVORNO_HVY_AA_SEC",
+      "title": "IT Arty Livorno Hvy AA Sec",
+      "faction": "IT",
+      "card_image": "assets/art/formations/IT Arty Livorno Hvy AA Sec.jpg",
+      "filename": "IT Arty Livorno Hvy AA Sec.jpg",
+      "catalog_key": null
+    },
+    {
+      "id": "IT_ARTY_LIVORNO_HVY_AT_GUN_SEC",
+      "title": "IT Arty Livorno Hvy AT Gun Sec",
+      "faction": "IT",
+      "card_image": "assets/art/formations/IT Arty Livorno Hvy AT Gun Sec.jpg",
+      "filename": "IT Arty Livorno Hvy AT Gun Sec.jpg",
+      "catalog_key": null
+    },
+    {
+      "id": "IT_ARTY_LIVORNO_INF_SUP_SEC",
+      "title": "IT Arty Livorno Inf Sup Sec",
+      "faction": "IT",
+      "card_image": "assets/art/formations/IT Arty Livorno Inf Sup Sec.jpg",
+      "filename": "IT Arty Livorno Inf Sup Sec.jpg",
+      "catalog_key": null
+    },
+    {
+      "id": "IT_ARTY_LIVORNO_LT_AA_SEC",
+      "title": "IT Arty Livorno Lt AA Sec",
+      "faction": "IT",
+      "card_image": "assets/art/formations/IT Arty Livorno Lt AA Sec.jpg",
+      "filename": "IT Arty Livorno Lt AA Sec.jpg",
+      "catalog_key": null
+    },
+    {
+      "id": "IT_ARTY_LIVORNO_MOT_AA_GUN_SEC",
+      "title": "IT Arty Livorno Mot AA Gun Sec",
+      "faction": "IT",
+      "card_image": "assets/art/formations/IT Arty Livorno Mot AA Gun Sec.jpg",
+      "filename": "IT Arty Livorno Mot AA Gun Sec.jpg",
+      "catalog_key": null
+    },
+    {
+      "id": "IT_ARTY_NAPOLI_MED_AT_GUN_SEC_2",
+      "title": "IT Arty Napoli Med AT Gun Sec 2",
+      "faction": "IT",
+      "card_image": "assets/art/formations/IT Arty Napoli Med AT Gun Sec 2.jpg",
+      "filename": "IT Arty Napoli Med AT Gun Sec 2.jpg",
+      "catalog_key": null
+    },
+    {
+      "id": "IT_ARTY_NAPOLI_MED_AT_GUN_SEC",
+      "title": "IT Arty Napoli Med AT Gun Sec",
+      "faction": "IT",
+      "card_image": "assets/art/formations/IT Arty Napoli Med AT Gun Sec.jpg",
+      "filename": "IT Arty Napoli Med AT Gun Sec.jpg",
+      "catalog_key": null
+    },
+    {
+      "id": "IT_ARTY_NAPOLI_MTN_GUN_SEC",
+      "title": "IT Arty Napoli Mtn Gun Sec",
+      "faction": "IT",
+      "card_image": "assets/art/formations/IT Arty Napoli Mtn Gun Sec.jpg",
+      "filename": "IT Arty Napoli Mtn Gun Sec.jpg",
+      "catalog_key": null
+    },
+    {
+      "id": "IT_ARTY_XVIII_COASTAL_LT_AT_GUN_SEC",
+      "title": "IT Arty XVIII Coastal Lt AT Gun Sec",
+      "faction": "IT",
+      "card_image": "assets/art/formations/IT Arty XVIII Coastal Lt AT Gun Sec.jpg",
+      "filename": "IT Arty XVIII Coastal Lt AT Gun Sec.jpg",
+      "catalog_key": null
+    },
+    {
+      "id": "IT_ARTY_XVIII_COASTAL_SEC_PLATOON_3",
+      "title": "IT Arty XVIII Coastal Sec Platoon 3",
+      "faction": "IT",
+      "card_image": "assets/art/formations/IT Arty XVIII Coastal Sec Platoon 3.jpg",
+      "filename": "IT Arty XVIII Coastal Sec Platoon 3.jpg",
+      "catalog_key": null
+    },
+    {
+      "id": "IT_INF_LIVORNO_BERS_PLATOON",
+      "title": "IT Inf Livorno Bers Platoon",
+      "faction": "IT",
+      "card_image": "assets/art/formations/IT Inf Livorno Bers Platoon.jpg",
+      "filename": "IT Inf Livorno Bers Platoon.jpg",
+      "catalog_key": null
+    },
+    {
+      "id": "IT_INF_LIVORNO_INF_SUP_PLATOON",
+      "title": "IT Inf Livorno Inf Sup Platoon",
+      "faction": "IT",
+      "card_image": "assets/art/formations/IT Inf Livorno Inf Sup Platoon.jpg",
+      "filename": "IT Inf Livorno Inf Sup Platoon.jpg",
+      "catalog_key": null
+    },
+    {
+      "id": "IT_INF_LIVORNO_MOT_RIFLE_PLATOON_2",
+      "title": "IT Inf Livorno Mot Rifle Platoon 2",
+      "faction": "IT",
+      "card_image": "assets/art/formations/IT Inf Livorno Mot Rifle Platoon 2.jpg",
+      "filename": "IT Inf Livorno Mot Rifle Platoon 2.jpg",
+      "catalog_key": null
+    },
+    {
+      "id": "IT_INF_LIVORNO_MOT_RIFLE_PLATOON",
+      "title": "IT Inf Livorno Mot Rifle Platoon",
+      "faction": "IT",
+      "card_image": "assets/art/formations/IT Inf Livorno Mot Rifle Platoon.jpg",
+      "filename": "IT Inf Livorno Mot Rifle Platoon.jpg",
+      "catalog_key": null
+    },
+    {
+      "id": "IT_INF_NAPOLI_RIFLE_PLATOON_2",
+      "title": "IT Inf Napoli Rifle Platoon 2",
+      "faction": "IT",
+      "card_image": "assets/art/formations/IT Inf Napoli Rifle Platoon 2.jpg",
+      "filename": "IT Inf Napoli Rifle Platoon 2.jpg",
+      "catalog_key": null
+    },
+    {
+      "id": "IT_INF_NAPOLI_RIFLE_PLATOON",
+      "title": "IT Inf Napoli Rifle Platoon",
+      "faction": "IT",
+      "card_image": "assets/art/formations/IT Inf Napoli Rifle Platoon.jpg",
+      "filename": "IT Inf Napoli Rifle Platoon.jpg",
+      "catalog_key": null
+    },
+    {
+      "id": "IT_INF_XVIII_COASTAL_INF_AT_PLATOON",
+      "title": "IT Inf XVIII Coastal Inf AT Platoon",
+      "faction": "IT",
+      "card_image": "assets/art/formations/IT Inf XVIII Coastal Inf AT Platoon.jpg",
+      "filename": "IT Inf XVIII Coastal Inf AT Platoon.jpg",
+      "catalog_key": null
+    },
+    {
+      "id": "IT_INF_XVIII_COASTAL_MG_PLATOON",
+      "title": "IT Inf XVIII Coastal MG Platoon",
+      "faction": "IT",
+      "card_image": "assets/art/formations/IT Inf XVIII Coastal MG Platoon.jpg",
+      "filename": "IT Inf XVIII Coastal MG Platoon.jpg",
+      "catalog_key": null
+    },
+    {
+      "id": "IT_INF_XVIII_COASTAL_SEC_PLATOON_2",
+      "title": "IT Inf XVIII Coastal Sec Platoon 2",
+      "faction": "IT",
+      "card_image": "assets/art/formations/IT Inf XVIII Coastal Sec Platoon 2.jpg",
+      "filename": "IT Inf XVIII Coastal Sec Platoon 2.jpg",
+      "catalog_key": null
+    },
+    {
+      "id": "IT_INF_XVIII_COASTAL_SEC_PLATOON",
+      "title": "IT Inf XVIII Coastal Sec Platoon",
+      "faction": "IT",
+      "card_image": "assets/art/formations/IT Inf XVIII Coastal Sec Platoon.jpg",
+      "filename": "IT Inf XVIII Coastal Sec Platoon.jpg",
+      "catalog_key": null
+    },
+    {
+      "id": "IT_VEH_LIVORNO_HVY_RECON_PLATOON",
+      "title": "IT Veh Livorno Hvy Recon Platoon",
+      "faction": "IT",
+      "card_image": "assets/art/formations/IT Veh Livorno Hvy Recon Platoon.jpg",
+      "filename": "IT Veh Livorno Hvy Recon Platoon.jpg",
+      "catalog_key": null
+    },
+    {
+      "id": "IT_VEH_LIVORNO_INF_SUP",
+      "title": "IT Veh Livorno Inf Sup",
+      "faction": "IT",
+      "card_image": "assets/art/formations/IT Veh Livorno Inf Sup.jpg",
+      "filename": "IT Veh Livorno Inf Sup.jpg",
+      "catalog_key": null
+    },
+    {
+      "id": "IT_VEH_LIVORNO_LT_TANK_PLATOON",
+      "title": "IT Veh Livorno Lt Tank Platoon",
+      "faction": "IT",
+      "card_image": "assets/art/formations/IT Veh Livorno Lt Tank Platoon.jpg",
+      "filename": "IT Veh Livorno Lt Tank Platoon.jpg",
+      "catalog_key": null
+    },
+    {
+      "id": "IT_VEH_LIVORNO_MED_TANK_PLATOON_2",
+      "title": "IT Veh Livorno Med Tank Platoon 2",
+      "faction": "IT",
+      "card_image": "assets/art/formations/IT Veh Livorno Med Tank Platoon 2.jpg",
+      "filename": "IT Veh Livorno Med Tank Platoon 2.jpg",
+      "catalog_key": null
+    },
+    {
+      "id": "IT_VEH_LIVORNO_MED_TANK_PLATOON_3",
+      "title": "IT Veh Livorno Med Tank Platoon 3",
+      "faction": "IT",
+      "card_image": "assets/art/formations/IT Veh Livorno Med Tank Platoon 3.jpg",
+      "filename": "IT Veh Livorno Med Tank Platoon 3.jpg",
+      "catalog_key": null
+    },
+    {
+      "id": "IT_VEH_LIVORNO_MED_TANK_PLATOON",
+      "title": "IT Veh Livorno Med Tank Platoon",
+      "faction": "IT",
+      "card_image": "assets/art/formations/IT Veh Livorno Med Tank Platoon.jpg",
+      "filename": "IT Veh Livorno Med Tank Platoon.jpg",
+      "catalog_key": null
+    },
+    {
+      "id": "IT_VEH_LIVORNO_MOBILE_AA_SEC",
+      "title": "IT Veh Livorno Mobile AA Sec",
+      "faction": "IT",
+      "card_image": "assets/art/formations/IT Veh Livorno Mobile AA Sec.jpg",
+      "filename": "IT Veh Livorno Mobile AA Sec.jpg",
+      "catalog_key": null
+    },
+    {
+      "id": "IT_VEH_LIVORNO_MOBILE_AT_SEC",
+      "title": "IT Veh Livorno Mobile AT Sec",
+      "faction": "IT",
+      "card_image": "assets/art/formations/IT Veh Livorno Mobile AT Sec.jpg",
+      "filename": "IT Veh Livorno Mobile AT Sec.jpg",
+      "catalog_key": null
+    },
+    {
+      "id": "IT_VEH_LIVORNO_RECON_SEC",
+      "title": "IT Veh Livorno Recon Sec",
+      "faction": "IT",
+      "card_image": "assets/art/formations/IT Veh Livorno Recon Sec.jpg",
+      "filename": "IT Veh Livorno Recon Sec.jpg",
+      "catalog_key": null
+    },
+    {
+      "id": "IT_VEH_XVIII_TANKETTE_PLATOON",
+      "title": "IT Veh XVIII Tankette Platoon",
+      "faction": "IT",
+      "card_image": "assets/art/formations/IT Veh XVIII Tankette Platoon.jpg",
+      "filename": "IT Veh XVIII Tankette Platoon.jpg",
+      "catalog_key": null
+    },
+    {
+      "id": "UK_151ST_BDE_DURHAM_LIGHT_INFANTRY_ARTILLERY_SEC",
+      "title": "UK 151st Bde Durham Light Infantry Artillery Sec",
+      "faction": "UK",
+      "card_image": "assets/art/formations/UK 151st Bde Durham Light Infantry Artillery Sec.jpg",
+      "filename": "UK 151st Bde Durham Light Infantry Artillery Sec.jpg",
+      "catalog_key": null
+    },
+    {
+      "id": "UK_151ST_BDE_DURHAM_LIGHT_INFANTRY_ASSAULT_SUPPORT_SEC",
+      "title": "UK 151st Bde Durham Light Infantry Assault Support Sec",
+      "faction": "UK",
+      "card_image": "assets/art/formations/UK 151st Bde Durham Light Infantry Assault Support Sec.jpg",
+      "filename": "UK 151st Bde Durham Light Infantry Assault Support Sec.jpg",
+      "catalog_key": null
+    },
+    {
+      "id": "UK_151ST_BDE_DURHAM_LIGHT_INFANTRY_HVY_AT_SEC",
+      "title": "UK 151st Bde Durham Light Infantry Hvy AT Sec",
+      "faction": "UK",
+      "card_image": "assets/art/formations/UK 151st Bde Durham Light Infantry Hvy AT Sec.jpg",
+      "filename": "UK 151st Bde Durham Light Infantry Hvy AT Sec.jpg",
+      "catalog_key": null
+    },
+    {
+      "id": "UK_151ST_BDE_DURHAM_LIGHT_INFANTRY_HVY_RECON_SEC_II",
+      "title": "UK 151st Bde Durham Light Infantry Hvy Recon Sec II",
+      "faction": "UK",
+      "card_image": "assets/art/formations/UK 151st Bde Durham Light Infantry Hvy Recon Sec II .jpg",
+      "filename": "UK 151st Bde Durham Light Infantry Hvy Recon Sec II .jpg",
+      "catalog_key": null
+    },
+    {
+      "id": "UK_151ST_BDE_DURHAM_LIGHT_INFANTRY_HVY_RECON_SEC",
+      "title": "UK 151st Bde Durham Light Infantry Hvy Recon Sec",
+      "faction": "UK",
+      "card_image": "assets/art/formations/UK 151st Bde Durham Light Infantry Hvy Recon Sec.jpg",
+      "filename": "UK 151st Bde Durham Light Infantry Hvy Recon Sec.jpg",
+      "catalog_key": null
+    },
+    {
+      "id": "UK_151ST_BDE_DURHAM_LIGHT_INFANTRY_INFANTRY_SUPPORT_SEC",
+      "title": "UK 151st Bde Durham Light Infantry Infantry Support Sec",
+      "faction": "UK",
+      "card_image": "assets/art/formations/UK 151st Bde Durham Light Infantry Infantry Support Sec.jpg",
+      "filename": "UK 151st Bde Durham Light Infantry Infantry Support Sec.jpg",
+      "catalog_key": null
+    },
+    {
+      "id": "UK_151ST_BDE_DURHAM_LIGHT_INFANTRY_LT_AA_SEC",
+      "title": "UK 151st Bde Durham Light Infantry Lt AA Sec",
+      "faction": "UK",
+      "card_image": "assets/art/formations/UK 151st Bde Durham Light Infantry Lt AA Sec.jpg",
+      "filename": "UK 151st Bde Durham Light Infantry Lt AA Sec.jpg",
+      "catalog_key": null
+    },
+    {
+      "id": "UK_151ST_BDE_DURHAM_LIGHT_INFANTRY_LT_AT_SUPPORT_SEC",
+      "title": "UK 151st Bde Durham Light Infantry Lt AT Support Sec",
+      "faction": "UK",
+      "card_image": "assets/art/formations/UK 151st Bde Durham Light Infantry Lt AT Support Sec.jpg",
+      "filename": "UK 151st Bde Durham Light Infantry Lt AT Support Sec.jpg",
+      "catalog_key": null
+    },
+    {
+      "id": "UK_151ST_BDE_DURHAM_LIGHT_INFANTRY_MED_AT_SEC_II",
+      "title": "UK 151st Bde Durham Light Infantry Med AT Sec II",
+      "faction": "UK",
+      "card_image": "assets/art/formations/UK 151st Bde Durham Light Infantry Med AT Sec II.jpg",
+      "filename": "UK 151st Bde Durham Light Infantry Med AT Sec II.jpg",
+      "catalog_key": null
+    },
+    {
+      "id": "UK_151ST_BDE_DURHAM_LIGHT_INFANTRY_MED_AT_SEC",
+      "title": "UK 151st Bde Durham Light Infantry Med AT Sec",
+      "faction": "UK",
+      "card_image": "assets/art/formations/UK 151st Bde Durham Light Infantry Med AT Sec.jpg",
+      "filename": "UK 151st Bde Durham Light Infantry Med AT Sec.jpg",
+      "catalog_key": null
+    },
+    {
+      "id": "UK_151ST_BDE_DURHAM_LIGHT_INFANTRY_RIFLE_PLT_III",
+      "title": "UK 151st Bde Durham Light Infantry Rifle Plt III",
+      "faction": "UK",
+      "card_image": "assets/art/formations/UK 151st Bde Durham Light Infantry Rifle Plt III.jpg",
+      "filename": "UK 151st Bde Durham Light Infantry Rifle Plt III.jpg",
+      "catalog_key": null
+    },
+    {
+      "id": "UK_151ST_BDE_DURHAM_LIGHT_INFANTRY_RIFLE_PLT",
+      "title": "UK 151st Bde Durham Light Infantry Rifle Plt",
+      "faction": "UK",
+      "card_image": "assets/art/formations/UK 151st Bde Durham Light Infantry Rifle Plt.jpg",
+      "filename": "UK 151st Bde Durham Light Infantry Rifle Plt.jpg",
+      "catalog_key": null
+    },
+    {
+      "id": "UK_151ST_BDE_DURHAM_LIGHT_INFANTRY_STAFF_PLT",
+      "title": "UK 151st Bde Durham Light Infantry Staff Plt",
+      "faction": "UK",
+      "card_image": "assets/art/formations/UK 151st Bde Durham Light Infantry Staff Plt.jpg",
+      "filename": "UK 151st Bde Durham Light Infantry Staff Plt.jpg",
+      "catalog_key": null
+    },
+    {
+      "id": "UK_151ST_BDE_DURHAM_LIGHT_INFANTRY_SUPPORT_SEC",
+      "title": "UK 151st Bde Durham Light Infantry Support Sec",
+      "faction": "UK",
+      "card_image": "assets/art/formations/UK 151st Bde Durham Light Infantry Support Sec.jpg",
+      "filename": "UK 151st Bde Durham Light Infantry Support Sec.jpg",
+      "catalog_key": null
+    },
+    {
+      "id": "UK_151ST_BE_DURHAM_LIGHT_INFANTRY_ENGINEER_PLT",
+      "title": "UK 151st Be Durham Light Infantry Engineer Plt",
+      "faction": "UK",
+      "card_image": "assets/art/formations/UK 151st Be Durham Light Infantry Engineer Plt.jpg",
+      "filename": "UK 151st Be Durham Light Infantry Engineer Plt.jpg",
+      "catalog_key": null
+    },
+    {
+      "id": "UK_151ST_BE_DURHAM_LIGHT_INFANTRY_MACHINEGUN_PLT",
+      "title": "UK 151st Be Durham Light Infantry Machinegun Plt",
+      "faction": "UK",
+      "card_image": "assets/art/formations/UK 151st Be Durham Light Infantry Machinegun Plt.jpg",
+      "filename": "UK 151st Be Durham Light Infantry Machinegun Plt.jpg",
+      "catalog_key": null
+    },
+    {
+      "id": "UK_151ST_BE_DURHAM_LIGHT_INFANTRY_RIFLE_PLT_II",
+      "title": "UK 151st Be Durham Light Infantry Rifle Plt II",
+      "faction": "UK",
+      "card_image": "assets/art/formations/UK 151st Be Durham Light Infantry Rifle Plt II.jpg",
+      "filename": "UK 151st Be Durham Light Infantry Rifle Plt II.jpg",
+      "catalog_key": null
+    },
+    {
+      "id": "UK_151ST_BE_DURHAM_LIGHT_INFANTRY_SUPPORT_PLT",
+      "title": "UK 151st Be Durham Light Infantry Support Plt",
+      "faction": "UK",
+      "card_image": "assets/art/formations/UK 151st Be Durham Light Infantry Support Plt.jpg",
+      "filename": "UK 151st Be Durham Light Infantry Support Plt.jpg",
+      "catalog_key": null
+    },
+    {
+      "id": "UK_1ST_PARACHUTE_BRIGADE_AIRLANDING_LT_AT_SEC",
+      "title": "UK 1st Parachute Brigade Airlanding Lt AT Sec",
+      "faction": "UK",
+      "card_image": "assets/art/formations/UK 1st Parachute Brigade Airlanding Lt AT Sec.jpg",
+      "filename": "UK 1st Parachute Brigade Airlanding Lt AT Sec.jpg",
+      "catalog_key": null
+    },
+    {
+      "id": "UK_1ST_PARACHUTE_BRIGADE_AIRLANDING_SUPPORT_SEC",
+      "title": "UK 1st Parachute Brigade Airlanding Support Sec",
+      "faction": "UK",
+      "card_image": "assets/art/formations/UK 1st Parachute Brigade Airlanding Support Sec.jpg",
+      "filename": "UK 1st Parachute Brigade Airlanding Support Sec.jpg",
+      "catalog_key": null
+    },
+    {
+      "id": "UK_1ST_PARACHUTE_BRIGADE_INFANTRY_INFANTRY_AT_PLT",
+      "title": "UK 1st Parachute Brigade Infantry Infantry AT Plt",
+      "faction": "UK",
+      "card_image": "assets/art/formations/UK 1st Parachute Brigade Infantry Infantry AT Plt.jpg",
+      "filename": "UK 1st Parachute Brigade Infantry Infantry AT Plt.jpg",
+      "catalog_key": null
+    },
+    {
+      "id": "UK_1ST_PARACHUTE_BRIGADE_PARACHUTE_PLT_II",
+      "title": "UK 1st Parachute Brigade Parachute Plt II",
+      "faction": "UK",
+      "card_image": "assets/art/formations/UK 1st Parachute Brigade Parachute Plt II.jpg",
+      "filename": "UK 1st Parachute Brigade Parachute Plt II.jpg",
+      "catalog_key": null
+    },
+    {
+      "id": "UK_1ST_PARACHUTE_BRIGADE_PARACHUTE_PLT",
+      "title": "UK 1st Parachute Brigade Parachute Plt",
+      "faction": "UK",
+      "card_image": "assets/art/formations/UK 1st Parachute Brigade Parachute Plt.jpg",
+      "filename": "UK 1st Parachute Brigade Parachute Plt.jpg",
+      "catalog_key": null
+    },
+    {
+      "id": "UK_4TH_ARMOURED_BDE_HVY_TANK_SEC_II",
+      "title": "UK 4th Armoured Bde Hvy Tank Sec II",
+      "faction": "UK",
+      "card_image": "assets/art/formations/UK 4th Armoured Bde Hvy Tank Sec II.jpg",
+      "filename": "UK 4th Armoured Bde Hvy Tank Sec II.jpg",
+      "catalog_key": null
+    },
+    {
+      "id": "UK_4TH_ARMOURED_BDE_HVY_TANK_SEC",
+      "title": "UK 4th Armoured Bde Hvy Tank Sec",
+      "faction": "UK",
+      "card_image": "assets/art/formations/UK 4th Armoured Bde Hvy Tank Sec.jpg",
+      "filename": "UK 4th Armoured Bde Hvy Tank Sec.jpg",
+      "catalog_key": null
+    },
+    {
+      "id": "UK_4TH_ARMOURED_BDE_INFANTRY_SUPPORT_SEC_II",
+      "title": "UK 4th Armoured Bde Infantry Support Sec II",
+      "faction": "UK",
+      "card_image": "assets/art/formations/UK 4th Armoured Bde Infantry Support Sec II.jpg",
+      "filename": "UK 4th Armoured Bde Infantry Support Sec II.jpg",
+      "catalog_key": null
+    },
+    {
+      "id": "UK_4TH_ARMOURED_BDE_MED_TANK_SEC_II",
+      "title": "UK 4th Armoured Bde Med Tank Sec II",
+      "faction": "UK",
+      "card_image": "assets/art/formations/UK 4th Armoured Bde Med Tank Sec II.jpg",
+      "filename": "UK 4th Armoured Bde Med Tank Sec II.jpg",
+      "catalog_key": null
+    },
+    {
+      "id": "UK_4TH_ARMOURED_BDE_MED_TANK_SEC_III",
+      "title": "UK 4th Armoured Bde Med Tank Sec III",
+      "faction": "UK",
+      "card_image": "assets/art/formations/UK 4th Armoured Bde Med Tank Sec III.jpg",
+      "filename": "UK 4th Armoured Bde Med Tank Sec III.jpg",
+      "catalog_key": null
+    },
+    {
+      "id": "UK_4TH_ARMOURED_BDE_MED_TANK_SEC",
+      "title": "UK 4th Armoured Bde Med Tank Sec",
+      "faction": "UK",
+      "card_image": "assets/art/formations/UK 4th Armoured Bde Med Tank Sec.jpg",
+      "filename": "UK 4th Armoured Bde Med Tank Sec.jpg",
+      "catalog_key": null
+    },
+    {
+      "id": "UK_4TH_ARMOURED_BDE_MOTORIZED_AA_SEC",
+      "title": "UK 4th Armoured Bde Motorized AA Sec",
+      "faction": "UK",
+      "card_image": "assets/art/formations/UK 4th Armoured Bde Motorized AA Sec.jpg",
+      "filename": "UK 4th Armoured Bde Motorized AA Sec.jpg",
+      "catalog_key": null
+    },
+    {
+      "id": "UK_4TH_ARMOURED_BDE_MOTORIZED_RIFLE_PLT",
+      "title": "UK 4th Armoured Bde Motorized Rifle Plt",
+      "faction": "UK",
+      "card_image": "assets/art/formations/UK 4th Armoured Bde Motorized Rifle Plt.jpg",
+      "filename": "UK 4th Armoured Bde Motorized Rifle Plt.jpg",
+      "catalog_key": null
+    },
+    {
+      "id": "UK_4TH_ARMOURED_BDE_RECON_PLT",
+      "title": "UK 4th Armoured Bde Recon Plt",
+      "faction": "UK",
+      "card_image": "assets/art/formations/UK 4th Armoured Bde Recon Plt.jpg",
+      "filename": "UK 4th Armoured Bde Recon Plt.jpg",
+      "catalog_key": null
+    },
+    {
+      "id": "US_INF_1ST_INF_COMBAT_ENG_PLATOON",
+      "title": "US Inf 1st Inf Combat Eng Platoon",
+      "faction": "US",
+      "card_image": "assets/art/formations/US Inf 1st Inf Combat Eng Platoon.jpg",
+      "filename": "US Inf 1st Inf Combat Eng Platoon.jpg",
+      "catalog_key": null
+    },
+    {
+      "id": "US_INF_1ST_INF_INF_AT_PLATOON",
+      "title": "US Inf 1st Inf Inf AT Platoon",
+      "faction": "US",
+      "card_image": "assets/art/formations/US Inf 1st Inf Inf AT Platoon.jpg",
+      "filename": "US Inf 1st Inf Inf AT Platoon.jpg",
+      "catalog_key": null
+    },
+    {
+      "id": "US_INF_1ST_INF_INF_SUP_PLATOON",
+      "title": "US Inf 1st Inf Inf Sup Platoon",
+      "faction": "US",
+      "card_image": "assets/art/formations/US Inf 1st Inf Inf Sup Platoon.jpg",
+      "filename": "US Inf 1st Inf Inf Sup Platoon.jpg",
+      "catalog_key": null
+    },
+    {
+      "id": "US_INF_1ST_INF_RIFLE_PLATOON",
+      "title": "US Inf 1st Inf Rifle Platoon",
+      "faction": "US",
+      "card_image": "assets/art/formations/US Inf 1st Inf Rifle Platoon.jpg",
+      "filename": "US Inf 1st Inf Rifle Platoon.jpg",
+      "catalog_key": null
+    },
+    {
+      "id": "US_INF_1ST_RANGER_INF_SUP_PLATOON_2",
+      "title": "US Inf 1st Ranger Inf Sup Platoon 2",
+      "faction": "US",
+      "card_image": "assets/art/formations/US Inf 1st Ranger Inf Sup Platoon 2.jpg",
+      "filename": "US Inf 1st Ranger Inf Sup Platoon 2.jpg",
+      "catalog_key": null
+    },
+    {
+      "id": "US_INF_1ST_RANGER_RANGER_PLATOON",
+      "title": "US Inf 1st Ranger Ranger Platoon",
+      "faction": "US",
+      "card_image": "assets/art/formations/US Inf 1st Ranger Ranger Platoon.jpg",
+      "filename": "US Inf 1st Ranger Ranger Platoon.jpg",
+      "catalog_key": null
+    },
+    {
+      "id": "US_INF_2ND_ARM_MECH_RIFLE_PLATOON",
+      "title": "US Inf 2nd Arm Mech Rifle Platoon",
+      "faction": "US",
+      "card_image": "assets/art/formations/US Inf 2nd Arm Mech Rifle Platoon.jpg",
+      "filename": "US Inf 2nd Arm Mech Rifle Platoon.jpg",
+      "catalog_key": null
+    },
+    {
+      "id": "US_INF_2ND_ARM_MOT_RIFLE_PLATOON_2",
+      "title": "US Inf 2nd Arm Mot Rifle Platoon 2",
+      "faction": "US",
+      "card_image": "assets/art/formations/US Inf 2nd Arm Mot Rifle Platoon 2.jpg",
+      "filename": "US Inf 2nd Arm Mot Rifle Platoon 2.jpg",
+      "catalog_key": null
+    },
+    {
+      "id": "US_INF_505_PARA_RIFLE_PLATOON_2",
+      "title": "US Inf 505 Para Rifle Platoon 2",
+      "faction": "US",
+      "card_image": "assets/art/formations/US Inf 505 Para Rifle Platoon 2.jpg",
+      "filename": "US Inf 505 Para Rifle Platoon 2.jpg",
+      "catalog_key": null
+    },
+    {
+      "id": "US_INF_505_PARA_SCOUT_PLATOON",
+      "title": "US Inf 505 Para Scout Platoon",
+      "faction": "US",
+      "card_image": "assets/art/formations/US Inf 505 Para Scout Platoon.jpg",
+      "filename": "US Inf 505 Para Scout Platoon.jpg",
+      "catalog_key": null
+    },
+    {
+      "id": "US_VEH_1ST_INF_TANK_DEST_SEC_2",
+      "title": "US Veh 1st Inf Tank Dest Sec 2",
+      "faction": "US",
+      "card_image": "assets/art/formations/US Veh 1st Inf Tank Dest Sec 2.jpg",
+      "filename": "US Veh 1st Inf Tank Dest Sec 2.jpg",
+      "catalog_key": null
+    },
+    {
+      "id": "US_VEH_1ST_INF_TANK_DEST_SEC",
+      "title": "US Veh 1st Inf Tank Dest Sec",
+      "faction": "US",
+      "card_image": "assets/art/formations/US Veh 1st Inf Tank Dest Sec.jpg",
+      "filename": "US Veh 1st Inf Tank Dest Sec.jpg",
+      "catalog_key": null
+    },
+    {
+      "id": "US_VEH_1ST_RANGER_RECON_SEC",
+      "title": "US Veh 1st Ranger Recon Sec",
+      "faction": "US",
+      "card_image": "assets/art/formations/US Veh 1st Ranger Recon Sec.jpg",
+      "filename": "US Veh 1st Ranger Recon Sec.jpg",
+      "catalog_key": null
+    },
+    {
+      "id": "US_VEH_2ND_ARM_HVY_RECON_SEC",
+      "title": "US Veh 2nd Arm Hvy Recon Sec",
+      "faction": "US",
+      "card_image": "assets/art/formations/US Veh 2nd Arm Hvy Recon Sec.jpg",
+      "filename": "US Veh 2nd Arm Hvy Recon Sec.jpg",
+      "catalog_key": null
+    },
+    {
+      "id": "US_VEH_2ND_ARM_INF_SUP_SEC",
+      "title": "US Veh 2nd Arm Inf Sup Sec",
+      "faction": "US",
+      "card_image": "assets/art/formations/US Veh 2nd Arm Inf Sup Sec.jpg",
+      "filename": "US Veh 2nd Arm Inf Sup Sec.jpg",
+      "catalog_key": null
+    },
+    {
+      "id": "US_VEH_2ND_ARM_LT_TANK_SEC_2",
+      "title": "US Veh 2nd Arm Lt Tank Sec 2",
+      "faction": "US",
+      "card_image": "assets/art/formations/US Veh 2nd Arm Lt Tank Sec 2.jpg",
+      "filename": "US Veh 2nd Arm Lt Tank Sec 2.jpg",
+      "catalog_key": null
+    },
+    {
+      "id": "US_VEH_2ND_ARM_LT_TANK_SEC",
+      "title": "US Veh 2nd Arm Lt Tank Sec",
+      "faction": "US",
+      "card_image": "assets/art/formations/US Veh 2nd Arm Lt Tank Sec.jpg",
+      "filename": "US Veh 2nd Arm Lt Tank Sec.jpg",
+      "catalog_key": null
+    },
+    {
+      "id": "US_VEH_2ND_ARM_MED_SUP_SEC",
+      "title": "US Veh 2nd Arm Med Sup Sec",
+      "faction": "US",
+      "card_image": "assets/art/formations/US Veh 2nd Arm Med Sup Sec.jpg",
+      "filename": "US Veh 2nd Arm Med Sup Sec.jpg",
+      "catalog_key": null
+    },
+    {
+      "id": "US_VEH_2ND_ARM_MED_TANK_SEC_2",
+      "title": "US Veh 2nd Arm Med Tank Sec 2",
+      "faction": "US",
+      "card_image": "assets/art/formations/US Veh 2nd Arm Med Tank Sec 2.jpg",
+      "filename": "US Veh 2nd Arm Med Tank Sec 2.jpg",
+      "catalog_key": null
+    },
+    {
+      "id": "US_VEH_2ND_ARM_MED_TANK_SEC",
+      "title": "US Veh 2nd Arm Med Tank Sec",
+      "faction": "US",
+      "card_image": "assets/art/formations/US Veh 2nd Arm Med Tank Sec.jpg",
+      "filename": "US Veh 2nd Arm Med Tank Sec.jpg",
+      "catalog_key": null
+    }
+  ]
+}
