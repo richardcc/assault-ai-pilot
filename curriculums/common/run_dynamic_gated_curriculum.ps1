@@ -573,7 +573,7 @@ phase_name = r'''$PhaseName'''
 reasons = r'''$reasonsJoined'''.lower()
 
 # Check if adaptive cycle plan exists for this phase
-plan_path = base_path.parent.parent / "cycles" / f"{phase_name}.adaptive_cycles.yaml"
+plan_path = base_path.parent.parent / 'cycles' / f'{phase_name}.adaptive_cycles.yaml'
 if plan_path.exists():
     try:
         plan_data = yaml.safe_load(plan_path.read_text(encoding='utf-8')) or {}
@@ -587,7 +587,9 @@ if plan_path.exists():
                     overlay['train'] = {}
                 overlay['train']['resume_checkpoint'] = ckpt_posix
             target_path.write_text(yaml.safe_dump(overlay, sort_keys=False), encoding='utf-8')
-            print(f"   [Adaptive Plan] Applied Generation {plan_data.get('generation', 1)} Cycle {cycle_iter} ({chosen_spec.get('strategy', 'variant')})")
+            gen = plan_data.get('generation', 1)
+            strat = chosen_spec.get('strategy', 'variant')
+            print(f'   [Adaptive Plan] Applied Generation {gen} Cycle {cycle_iter} ({strat})')
             sys.exit(0)
     except Exception as exc:
         pass
@@ -634,7 +636,13 @@ if not overlay['selfplay']:
 
 target_path.write_text(yaml.safe_dump(overlay, sort_keys=False), encoding='utf-8')
 "@
-  python -c $py
+  $tmpPy = Join-Path ([System.IO.Path]::GetTempPath()) ([System.Guid]::NewGuid().ToString() + "_overlay.py")
+  try {
+    Set-Content -Path $tmpPy -Value $py -Encoding UTF8
+    python $tmpPy
+  } finally {
+    Remove-Item -Path $tmpPy -Force -ErrorAction SilentlyContinue
+  }
   if ($LASTEXITCODE -ne 0 -or -not (Test-Path $targetPath)) {
     if (-not [string]::IsNullOrWhiteSpace($ckptPosix)) {
       $fallback = @"
