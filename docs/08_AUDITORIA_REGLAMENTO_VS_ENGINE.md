@@ -302,6 +302,11 @@ Cada carta de unidad (`assets/art/unit_cards/*.jpg`) contiene la totalidad de es
 
 ## 5. Auditoría y Especificación Canónica de Habilidades y Rasgos de Unidades (Traits)
 
+> [!NOTE] CATÁLOGO CANÓNICO Y ESPECIFICACIÓN COMPLETA DE LAS 24 HABILIDADES
+> La auditoría exhaustiva, formulación matemática y estado de implementación de las 24 habilidades estándar del Editor Táctico de Tropas (`STANDARD_TRAITS`) se encuentra formalmente documentada en:  
+> 🔗 [**Modelo del Juego y Reglas Tácticas: Sección 13 (Catálogo Exhaustivo de Habilidades de Unidades)**](02_MODELO_DEL_JUEGO_Y_REGLAS_TACTICAS.md#13-catalogo-exhaustivo-de-habilidades-de-unidades-traits-del-editor-y-estado-de-implementacion).
+
+
 Esta sección documenta la correspondencia exacta, el texto oficial impreso en el reverso de las cartas de unidad (`assets/art/unit_cards/*.jpg`) y en el manual de reglas de *Assault: Sicily 43*, contrastado contra la implementación en el motor autoritativo (`assault_model/`).
 
 ```mermaid

@@ -359,3 +359,102 @@ Para garantizar la viabilidad táctica y el equilibrio competitivo en los escena
 * **Efectividad Táctica Garantizada**: Con un perfil de asalto de 3 dados a bocajarro (`RED + RED + YELLOW`, 8 puntos de potencia de asalto) frente a defensas fijas de infantería regular (2 puntos), el ratio de asalto alcanza **4.0 $\ge 1.0$**, certificando la capacidad de ruptura y asalto coordinado.
 
 
+
+
+---
+
+## 13. Catálogo Exhaustivo de Habilidades de Unidades (Traits del Editor) y Estado de Implementación
+
+El Editor Táctico de Tropas (`tools/unit_editor_server.py`) y el catálogo maestro (`assets/catalogs/unit_catalog.json`) gestionan **24 habilidades y rasgos doctrinales (`STANDARD_TRAITS`)**. Esta sección audita su formulación matemática, mecánica autoritativa en el motor (`assault_model/`), archivos de resolución y estado exacto de desarrollo.
+
+```mermaid
+flowchart TD
+    subgraph Engine_Traits ["Arquitectura de Resolución de Traits en el Motor"]
+        direction TB
+        EDITOR["Editor de Unidades (:8780)
+STANDARD_TRAITS (24 Rasgos)"] --> CATALOG["Catálogo Canónico JSON
+unit_catalog.json"]
+        CATALOG --> UNIT_TYPE["UnitType / UnitInstance
+has_trait(trait_name)"]
+        
+        UNIT_TYPE --> SPOT["1. Detección / LOS (spotting.py)
+HIDDEN, CAMOUFLAGED"]
+        UNIT_TYPE --> RANGED["2. Fuego a Distancia (ranged_combat_resolver.py)
+SNIPER, RAPID_FIRE, INDIRECT_FIRE, NO_LOS, RIFLE_GRENADES, ANTI_TANK"]
+        UNIT_TYPE --> CLOSE["3. Combate Cercano (close_combat_resolver.py)
+TOUGH, RAPID_FIRE, ASSAULT, TANK_BUSTERS"]
+        UNIT_TYPE --> ENG["4. Zapadores y Minas (mine_resolver.py / explosive_charge_resolver.py)
+EXPLOSIVE_CHARGE, MINE_DETECTION, SCOUT, BANGALORE"]
+        UNIT_TYPE --> MOVE["5. Maniobra y Arcos (movement_rules.py / combat_geometry.py)
+SLOW_UNIT, PIVOT, FAST_DISEMBARK"]
+        UNIT_TYPE --> SPEC["6. Acciones Especiales (smoke_resolver.py)
+SMOKE, SMOKE_GRENADES"]
+    end
+```
+
+### 13.1. Matriz Canónica de las 24 Habilidades del Editor
+
+| # | Habilidad (`Trait`) | Categoría Operativa | Efecto en Reglamento Oficial (*Assault: Sicily 43*) | Mecánica en Engine (`assault_model/`) | Módulos Responsables | Estado | Unidades en Catálogo |
+| :-: | :--- | :--- | :--- | :--- | :--- | :-: | :--- |
+| **1** | **`SNIPER`** | Combate Fuego | El defensor pierde el dado de terreno más potente al ser atacado a distancia (solo infantería/artillería). | `_remove_strongest_die(terrain_bonus)` elimina el dado de mayor valor numérico del pool de defensa. | `ranged_combat_resolver.py`<br>`targeting_service.py` | 🟢 **100% Implementado** | `IT_SNIPER_43`<br>`US_SNIPER_43` |
+| **2** | **`HIDDEN`** | Detección / LOS | No puede ser avistado automáticamente por proximidad. Solo se revela al disparar o hacer acción rápida. | `can_spot()` retorna `False` salvo que `has_fired_this_turn` o `has_fast_action_this_turn` sean verdaderos. | `spotting.py`<br>`game_state_runtime.py` | 🟢 **100% Implementado** | `IT_SNIPER_43`<br>`US_SNIPER_43` |
+| **3** | **`TOUGH`** | Combate Cercano | Ignora 1 punto de daño en la primera ronda de asalto cuerpo a cuerpo. | `attacker_damage = max(0, damage - 1)` aplicado en `ctx.round_number == 1` tanto en ataque como defensa. | `close_combat_resolver.py` | 🟢 **100% Implementado** | `GE_FJ_RIFLES_43`<br>`US_AIRBORNE_RIFLES_43`<br>`UK_PARACHUTE_RIFLES` |
+| **4** | **`RAPID_FIRE`** | Combate General | Permite relanzar 1 dado de ataque que resulte fallido en fuego directo o asalto cuerpo a cuerpo. | Relanza dados blancos/amarillos desfavorables vía `_apply_cc002_outflank_reroll()` en asalto y re-roll en ranged. | `close_combat_resolver.py`<br>`ranged_combat_resolver.py` | 🟢 **100% Implementado** | `GE_HEAVY_MG_42`<br>`IT_20MM_BREDA_AA_43` |
+| **5** | **`EXPLOSIVE_CHARGE`** | Zapadores / Demolición | Detona cargas de demolición (Regla 12.5) contra edificios, búnkers o campos de minas adyacentes. | Acción rápida `ExplosiveChargeAction`. Tira 1 dado Rojo vs mejor dado de terreno; colapsa estructura y causa daño masivo interior. | `explosive_charge_resolver.py`<br>`action_catalog.py` | 🟢 **100% Implementado** | `US_COMBAT_ENGINEERS_43`<br>`UK_ROYAL_ENGINEERS` |
+| **6** | **`MINE_DETECTION`** | Zapadores / Minas | Capacidad especializada de detección y sondeo de campos de minas (Regla 9.6.6.2). | Modificador $+2$ en tirada D6 de detección (`calculate_detection_modifiers`). Si supera umbral, identifica mina o retira dummy. | `mine_resolver.py`<br>`action_catalog.py` | 🟢 **100% Implementado** | `US_COMBAT_ENGINEERS_43`<br>`UK_ROYAL_ENGINEERS` |
+| **7** | **`SCOUT`** | Reconocimiento | Reconocimiento de trampas y vanguardia en terreno inexplorado. | Modificador $+1$ en tirada D6 de detección de minas. Asigna automáticamente rol doctrinal `RECON` en MacroPlanner EZv2. | `mine_resolver.py`<br>`macro_planner.py` | 🟢 **100% Implementado** | `US_RANGERS_43` |
+| **8** | **`INDIRECT_FIRE`** | Artillería / Morteros | Fuego parabólico sobre obstáculos de terreno sin requerir trazado de LOS directa libre. | Compila tablas `INDIRECT_FIRE` en `UnitType`. Resuelve fuego ignorando penalizaciones de obstáculos intermedios de LOS. | `unit_type.py`<br>`ranged_combat_resolver.py` | 🟢 **100% Implementado** | `GE_50MM_MORTAR`<br>`IT_45MM_BRIXIA`<br>`US_81MM_MORTAR`<br>`GE_FJ_RIFLES_43` |
+| **9** | **`NO_LINE_OF_SIGHT`** | Artillería Ligera | El arma está diseñada intrínsecamente para tiro curvo sin visión directa del servidor. | `_resolve_attack_mode()` fuerza automáticamente el modo `INDIRECT_FIRE` ante objetivos en rango sobre colinas o tras bosques. | `unit_type.py` | 🟢 **100% Implementado** | `IT_45MM_BRIXIA` |
+| **10** | **`SMOKE`** | Apoyo Táctico | Despliegue de cortinas de humo balísticas (Regla 7.2) en hexágono blanco y hasta 2 adyacentes. | Genera `SmokeAction`. Coloca marcadores que degradan LOS a `HINDERED`/`BLOCKED` y otorgan dados de cobertura defensiva. | `smoke_resolver.py`<br>`action_catalog.py` | 🟢 **100% Implementado** | `GE_50MM_MORTAR`<br>`US_81MM_MORTAR` |
+| **11** | **`SMOKE_GRENADES`** | Apoyo Táctico | Granadas de humo manuales de corto alcance para asalto cubierto de infantería. | Subtipo táctico de `SMOKE` asignado a zapadores e infantería de choque (`GREEN, GREEN, BLUE, BLUE`). | `smoke_resolver.py`<br>`unit_type.py` | 🟢 **100% Implementado** | `US_COMBAT_ENGINEERS_43` |
+| **12** | **`ASSAULT`** | Choque / Melee | Unidad de choque frontal entrenada para asalto cuerpo a cuerpo agresivo a distancia 0. | Protocolo de asalto coordinado (*Base of Fire* + *Spearhead* con boost $1.40\times$). En editor actúa como etiqueta de doctrina. | `close_combat_resolver.py`<br>`macro_planner.py` | 🟢 **100% Implementado** | Todas las infanterías en rango 0 |
+| **13** | **`ANTI_TANK`** | Armas Pesadas | Armamento especializado para penetración balística contra blindados (ATR, Bazooka, Panzerschreck). | Tablas duales de ataque (`INFANTRY` vs `VEHICLE`): dados masivos (`RED + RED + YELLOW`) contra blindados en catálogo JSON. | `unit_type.py`<br>`unit_catalog.json` | 🟡 **Implementado en Tablas** | `IT_SOLOTHURN_ATR_43`<br>`US_BAZOOKA_TEAM`<br>`GE_TANK_HUNTERS_43` |
+| **14** | **`RIFLE_GRENADES`** | Infantería | Bocachas lanzagranadas de fusil para fuego curvo a media distancia (1-3 hexágonos). | Integrado en las tablas de ataque de fusileros: rango 1-3 con 2 dados verdes, relanzamiento y remoción de terreno débil. | `unit_catalog.json`<br>`unit_type.py` | 🟡 **Implementado en Tablas** | `GE_RIFLES_43`<br>`GE_FJ_RIFLES_43`<br>`US_RIFLES_43`<br>`US_AIRBORNE_RIFLES_43` |
+| **15** | **`SLOW_UNIT`** | Movilidad | Unidad pesada o de armas colectivas que no puede realizar acciones rápidas de movimiento. | Respaldado por `movement = 1` o `2` y `movement_type = "artillery"` / `"foot"`. Prohibición de doble avance. | `movement_rules.py`<br>`unit_type.py` | 🟡 **Implementado en Atributos** | `GE_HEAVY_MG_42`<br>`IT_BREDA_MMG`<br>`IT_SOLOTHURN_ATR_43`<br>`US_81MM_MORTAR` |
+| **16** | **`PIVOT`** | Encaramiento | Rotación libre de 360 grados sin penalización de puntos de movimiento. | La infantería y montajes ligeros carecen de arcos ciegos; tienen encaramiento omnidireccional nativo en `combat_geometry.py`. | `combat_geometry.py` | 🟡 **Implementado en Geometría** | `IT_20MM_BREDA_AA_43` |
+| **17** | **`FRAGILE_UNIT`** | Resistencia | Equipos reducidos de 1-2 servidores vulnerables a eliminación por fuego concentrado. | Fuerza máxima reducida (`max_strength = 2` en Bazooka team), provocando chequeos de repliegue moral más rápidos. | `unit_instance.py`<br>`unit_catalog.json` | 🟡 **Implementado en Atributos** | `US_BAZOOKA_TEAM` |
+| **18** | **`BANGALORE_TORPEDO`** | Zapadores | Cargas alargadas para volar alambradas y campos de minas en el asalto a playas. | Resuelto a través de `ExplosiveChargeAction` contra obstáculos lineales (`barbed_wire`, `minefield`) a distancia 1. | `explosive_charge_resolver.py` | 🟠 **Resuelto vía Demolición** | `US_COMBAT_ENGINEERS_43` |
+| **19** | **`TANK_BUSTERS`** | Asalto Especial | Escuadras cazacarros a pie con minas lapa magnéticas y cócteles Molotov. | En combate cuerpo a cuerpo aplican dados de penetración pesada a distancia cero contra vehículos en el catálogo. | `close_combat_resolver.py`<br>`unit_catalog.json` | 🟠 **Resuelto en Asalto** | `GE_TANK_HUNTERS_43` |
+| **20** | **`RECON_PATROL`** | Reconocimiento | Patrulla de choque en vanguardia para reconocimiento agresivo del frente. | Opera en sinergia con `SCOUT` y modula el perfil doctrinal hacia avance rápido por flancos en el MacroPlanner. | `macro_planner.py`<br>`mine_resolver.py` | 🟠 **Resuelto vía Scout/Rol** | `US_RANGERS_43` |
+| **21** | **`CAMOUFLAGED`** | Detección / Terreno | Requiere dos chequeos exitosos de avistamiento para ser detectada en cobertura vegetal. | Actúa como clasificador pasivo. La versión estricta de invisibilidad la gobierna `HIDDEN` en `spotting.py`. | `spotting.py`<br>`unit_catalog.json` | ⚪ **Declarativo en Catálogo** | `GE_50MM_MORTAR`<br>`IT_SOLOTHURN_ATR_43`<br>`IT_45MM_BRIXIA`<br>`GE_TANK_HUNTERS_43` |
+| **22** | **`CONCEALED`** | Detección / Terreno | Ocultación pasiva en matorral y zonas de sombra. | Variante doctrinal de `CAMOUFLAGED`. Disponible en el selector del editor como rasgo de ambientación. | `unit_editor_server.py` | ⚪ **Declarativo en Editor** | Ninguna actualmente |
+| **23** | **`FAST_DISEMBARK`** | Transporte Mecanizado | Desembarco rápido de vehículos semiorugas Sd.Kfz consumiendo solo 1 MP en vez del turno completo. | Programado para la fase de transporte mecanizado de la Línea 3 del Roadmap (§8.3 del reglamento). | `unit_editor_server.py`<br>`roadmap/03_LINEA_3` | ⚪ **Declarativo / Roadmap L3** | `GE_GRENADIERS_43` |
+| **24** | **`PARATROOPS`** | Despliegue Aerotransportado | Inserción aérea y alta cohesión moral en aislamiento tras las líneas defensivas. | En combate cuerpo a cuerpo cuentan con `TOUGH` y máxima cohesión (HP 4). La inserción se modela en escenarios. | `unit_catalog.json`<br>`scenarios/` | ⚪ **Declarativo / Escenario** | `US_AIRBORNE_RIFLES_43`<br>`UK_PARACHUTE_RIFLES` |
+
+---
+
+### 13.2. Mecánicas Detalladas de Resolución en los Algoritmos del Motor
+
+#### 1. Mecánica de Francotirador (`SNIPER`) en Fuego a Distancia
+Cuando una unidad con `SNIPER` (`US_SNIPER_43` o `IT_SNIPER_43`) ejecuta un disparo a distancia contra infantería o artillería:
+1. El motor calcula el dado de defensa del hexágono objetivo mediante `TerrainModifier.from_hex()`.
+2. Si el terreno otorga múltiples dados de defensa (ej. un bosque con dados `GREEN` y `BLUE`), la función `_remove_strongest_die(terrain_bonus)` identifica el dado de mayor orden jerárquico (`GREEN > BLUE > YELLOW > WHITE`) y lo suprime del pool defensivo.
+3. El defensor se ve privado de su mejor bonificación ambiental, simulando el tiro selectivo y la eliminación de tiradores protegidos.
+
+#### 2. Protocolo de Inmunidad a Detección (`HIDDEN`)
+La función determinista `can_spot()` en `assault_model/combat/spotting.py` evalúa:
+```python
+traits = getattr(getattr(target, "unit_type", None), "traits", []) or []
+if any(str(t).upper() == "HIDDEN" for t in traits):
+    has_fired = bool(getattr(target, "has_fired_this_turn", False))
+    has_fast = bool(getattr(target, "has_fast_action_this_turn", False))
+    if not (has_fired or has_fast):
+        return False  # Inmune a avistamiento automático por LOS despejada
+```
+La unidad permanece invisible en niebla de guerra para la red neuronal y para bots heurísticos hasta que ejecuta un disparo o una maniobra acelerada.
+
+#### 3. Atenuación de Choque en Asalto (`TOUGH`)
+En la resolución de asaltos cuerpo a cuerpo (`assault_model/combat/close_combat_resolver.py`):
+```python
+if ctx.round_number == 1 and _has_trait(unit, "TOUGH") and damage > 0:
+    damage = max(0, damage - 1)
+```
+Tanto si la unidad asalta como si es asaltada, absorbe el primer punto de daño físico recibido en la ronda inicial, permitiendo a unidades como los Fallschirmjäger o Rangers sobrevivir al contraataque defensivo a quemarropa.
+
+#### 4. Demolición Estructural y Despeje de Obstáculos (`EXPLOSIVE_CHARGE`)
+Resuelto por `resolve_explosive_charge()` (`assault_model/combat/explosive_charge_resolver.py`):
+* El zapador lanza **1 dado ROJO**.
+* El defensor tira el dado más fuerte de la fortificación o terreno (o Verde por defecto).
+* Tras comparar resultados con `compare_dice()`:
+  * Con 2+ impactos o crítico, la estructura colapsa físicamente: un edificio se convierte en `Terrain.RUINS`, un búnker colapsa a `trench`, y un campo de minas o alambrada se elimina del mapa.
+  * Todas las unidades guarnecidas sufren daño colateral letal o reducción a media fuerza.
