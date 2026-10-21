@@ -4,7 +4,7 @@
 > **Ámbito**: Documento final que unifica toda la evolución técnica, científica, de rendimiento y normativa de la plataforma **Assault**: Motor de IA `agents/efficientzero_v2/`, Engine Táctico `assault_model/` + `voec_sim/`, Telemetría MLOps/UI y Fidelidad al Reglamento Oficial.  
 > **Directiva Estricta**: MuZero clásico está 100% decomisionado. Todo desarrollo, autojuego, inferencia y MCTS opera exclusivamente sobre **`EfficientZeroV2`** (`agents/efficientzero_v2/`).  
 > **Política Estricta de Idiomas**: Código fuente e interfaz de usuario (UI, Dashboards, visualizadores) 100% en **Inglés**. Interacción con el usuario y documentación técnica canónica (docs/) en **Español**. Toda modificación de código/UI debe corregir y traducir al inglés cualquier texto residual en español (sin barrido masivo retroactivo).  
-> **Versión Base Consolidada Actual**: **v2.5.2** (Orquestación Unificada Multi-Etapa, Linaje E2E, Modulación Intrínseca de VPs y Reseteo Limpio).  
+> **Versión Base Consolidada Actual**: **v2.5.4** (Dynamic PBRS Time-Scaling, Contention Bonus, Breach Zone Casualty Attenuation y Modelado de Formaciones Oficiales).  
 > **Regla Sagrada de Versionado del Roadmap**: Toda nueva implementación, tarea o hito **DEBE registrar explícitamente en qué versión / subversión de la aplicación se implementó o consolidó** (ej. `[CONSOLIDADO 🟢 v2.5.2]`, `[CONSOLIDADO 🟢 v2.5.3]`). Queda formalmente prohibido marcar tareas como consolidadas sin su versión de entrega correspondiente.
 
 ---
@@ -37,18 +37,17 @@ A continuación se detalla el orden secuencial de ejecución técnica para el ci
 
 | Paso | Línea | Tarea | Prioridad | Enfoque Principal | Estado |
 | :---: | :---: | :--- | :---: | :--- | :---: |
-| **1** | [Línea 2](roadmap/02_LINEA_2_ACELERACION_CAPTURA_VPS.md) | [**2.10 Dynamic PBRS Escalado Temporalmente y Desensibilización de Bajas en Brecha**](#task-2-10) | **P0** | Potencial con urgencia temporal $\Phi(s, t) = \alpha(1 + t/T_{\max})(-d_{\min}) + \beta\cdot\text{Contest}$, reducción del $60\%$ de penalización de bajas en brecha ($d \le 2$) y castigo catastrófico por timeout. Rompe la Paradoja del Comandante Prudente. | 🎯 **Foco Crítico Inmediato** |
-| **2** | [Línea 2](roadmap/02_LINEA_2_ACELERACION_CAPTURA_VPS.md) | [**2.11 Currículum Asimétrico Ofensivo de Asalto Urbano Puro**](#task-2-11) | **P0** | Campaña de 10 ciclos en modo 100% atacante en `battaglia_cittadina_2_1` ($T=8$) para obligar a la red a asumir la ruptura urbana antes de regresar al autojuego simétrico. | 🎯 **Foco Crítico Inmediato** |
-| **3** | [Línea 2](roadmap/02_LINEA_2_ACELERACION_CAPTURA_VPS.md) | [**2.8 Estudio de Ablación A/B: Sesgo Doctrinal vs Red Pura**](#task-2-8) | **P0** | Test A/B de ELO: Red Pura (Prior Shaping = 0, Mutaciones = OFF) vs Doctrinal Shaped para verificar si el sesgo heurístico provoca "Objective Myopia". | 🚀 Preparado para Ejecución |
-| **4** | [Línea 3](roadmap/03_LINEA_3_FIDELIDAD_NORMATIVA_Y_REGLAMENTO.md) | [**3.5 Formaciones Doctrinales, Ingesta de Unidades Especializadas y Rebalanceo de Escenarios (Subtarea 3.5.5)**](#task-3-5) | **P1** | Batería de validación y certificación de victoria en `assault_bench` (100 partidas vs Random, Win Rate >= 80%) | 🚀 Preparado para Ejecución |
-| **5** | [Línea 1](roadmap/01_LINEA_1_OBSERVABILIDAD_Y_TELEMETRIA.md) | [**1.3 Validador E2E Frontend $\leftrightarrow$ DuckDB**](#task-1-3) | **P1** | Auditoría automatizada de trazabilidad en dashboard (cero datos inventados, fallback -/N/A) | 🚀 Preparado para Ejecución |
+| **1** | [Línea 2](roadmap/02_LINEA_2_ACELERACION_CAPTURA_VPS.md) | [**2.11 Currículum Asimétrico Ofensivo de Asalto Urbano Puro**](#task-2-11) | **P0** | Campaña de 10 ciclos en modo 100% atacante en `battaglia_cittadina_2_1` ($T=8$) para obligar a la red a asumir la ruptura urbana antes de regresar al autojuego simétrico. | 🎯 **Foco Crítico Inmediato** |
+| **2** | [Línea 2](roadmap/02_LINEA_2_ACELERACION_CAPTURA_VPS.md) | [**2.8 Estudio de Ablación A/B: Sesgo Doctrinal vs Red Pura**](#task-2-8) | **P0** | Test A/B de ELO: Red Pura (Prior Shaping = 0, Mutaciones = OFF) vs Doctrinal Shaped para verificar si el sesgo heurístico provoca "Objective Myopia". | 🚀 Preparado para Ejecución |
+| **3** | [Línea 3](roadmap/03_LINEA_3_FIDELIDAD_NORMATIVA_Y_REGLAMENTO.md) | [**3.5 Formaciones Doctrinales, Ingesta de Unidades Especializadas y Rebalanceo de Escenarios (Subtarea 3.5.5)**](#task-3-5) | **P1** | Batería de validación y certificación de victoria en `assault_bench` (100 partidas vs Random, Win Rate >= 80%) | 🚀 Preparado para Ejecución |
+| **4** | [Línea 1](roadmap/01_LINEA_1_OBSERVABILIDAD_Y_TELEMETRIA.md) | [**1.3 Validador E2E Frontend $\leftrightarrow$ DuckDB**](#task-1-3) | **P1** | Auditoría automatizada de trazabilidad en dashboard (cero datos inventados, fallback -/N/A) | 🚀 Preparado para Ejecución |
 
 ### 2.2 Bloque 2: En Progreso Activo 🟡
 > Módulos con desarrollos en curso e hitos parciales ya verificados.
 
 | Paso | Línea | Tarea | Prioridad | Enfoque Principal | Estado |
 | :---: | :---: | :--- | :---: | :--- | :---: |
-| **3** | [Línea 3](roadmap/03_LINEA_3_FIDELIDAD_NORMATIVA_Y_REGLAMENTO.md) | [**3.5 Formaciones Doctrinales, Ingesta de Unidades Especializadas y Rebalanceo de Escenarios**](#task-3-5) | **P1** | Ingesta de ingenieros/zapadores, catálogo de 12 formaciones combinadas oficiales y rebalanceo simétrico de OOB para Win Rate >= 80% vs Random | 🟡 En Progreso (3.5.1 y 3.5.4 ✅) |
+| **3** | [Línea 3](roadmap/03_LINEA_3_FIDELIDAD_NORMATIVA_Y_REGLAMENTO.md) | [**3.5 Formaciones Doctrinales, Ingesta de Unidades Especializadas y Rebalanceo de Escenarios**](#task-3-5) | **P1** | Ingesta de ingenieros/zapadores, catálogo de 12 formaciones combinadas oficiales y rebalanceo simétrico de OOB para Win Rate >= 80% vs Random | 🟡 En Progreso (3.5.1, 3.5.2 y 3.5.4 ✅) |
 
 ### 2.3 Bloque 3: Planificado (Ordenado por Prioridad P1 $\to$ P2) ⚪
 > Mejoras evolutivas, optimizaciones de red y expansiones reglamentarias programadas.
@@ -73,6 +72,7 @@ A continuación se detalla el orden secuencial de ejecución técnica para el ci
 
 | Paso | Línea | Tarea | Prioridad | Enfoque Principal | Estado |
 | :---: | :---: | :--- | :---: | :--- | :---: |
+| **13** | [Línea 2](roadmap/02_LINEA_2_ACELERACION_CAPTURA_VPS.md) | [**2.10 Dynamic PBRS Escalado Temporalmente y Desensibilización de Bajas en Brecha**](#task-2-10) | **P0** | Potencial temporalmente escalado $\Phi(s, t) = \alpha(1 + t/T_{\max}) \cdot \text{dist\_pot} + \beta\cdot\text{Contest}$, bono de contención por disputa en brecha ($d \le 2$), atenuación del $60\%$ de penalización de bajas ($r_{\text{loss}} \times 0.40$) en zona de brecha y castigo catastrófico por timeout ($-1.0$) si no se controlan VPs. Verificado con suite matemática y de invariancia telescópica Devlin & Kudenko (`test_task_2_10_dynamic_pbrs_breach.py`, 5/5 en verde). | 🟢 **Consolidado v2.5.4** |
 | **14** | [Línea 2](roadmap/02_LINEA_2_ACELERACION_CAPTURA_VPS.md) | [**2.9 Paquete de Aceleración de Rendimiento de Pipeline (Zero Quality Loss)**](#task-2-9) | **P0** | Optimización de pipeline integral: Caché de Firma de Terreno ($1,078\times$, $34\%$ ahorro por episodio), Precomputación Root PUCT ($16,384$ ops eliminadas/paso), Inferencia Estática (`torch.compile`) y Test Wald SPRT (ahorro $50\%-75\%$ en bench). Reducción de campaña de >10h a <3.5h sin pérdida de calidad. | 🟢 **Consolidado v2.5.3** |
 | **15** | [Línea 1](roadmap/01_LINEA_1_OBSERVABILIDAD_Y_TELEMETRIA.md) | [**1.1 Test de Conformidad de Esquema de Telemetría**](#task-1-1) | **P0** | Validador automatizado en CI del 100% de métricas formales contra docs/13_INVENTARIO_CANONICO_METRICAS.md. Cero campos no declarados y clean break MuZero. Verificado en mlops/tests/test_telemetry_schema_conformance.py (5/5 en verde). | 🟢 Completado y Verificado |
 | **16** | [Línea 3 / 2](roadmap/03_LINEA_3_FIDELIDAD_NORMATIVA_Y_REGLAMENTO.md) | [**3.6 Eliminación de la Parálisis Ofensiva y Colapso de la Brecha Asimétrica**](#task-3-6) | **P0** | Expansión sensorial a 38 canales (Ch 36 urgencia temporal, Ch 37 parálisis), PBRS dinámico Devlin-Kudenko en autojuego, MCTS VP Biasing (64 sims) y balanceo PCGrad. Criterio: Win Rate US vs Random >= 80%, Asymmetry Gap <= 0.15, ELO >= 1600. | 🟢 Completado y Consolidado |
@@ -253,12 +253,14 @@ flowchart TD
      - Suite completa de tests unitarios e integración en verde (`assault_model/tests/test_engineer_traits.py`).
 
 
-2. **Subtarea 3.5.2: Modelado del Catálogo Oficial de Formaciones Combinadas (P1)**:
-   - **Módulos**: `assets/catalogs/formation_catalog.json`, `assault_model/units/formation.py`.
-   - **Alcance**: Superar el catálogo provisional de 2 arquetipos modelando las 12 cartas de formación reglamentarias del manual (Sección 5.0):
-     - Aliados: `US_RANGER_ASSAULT_COMPANY`, `US_PARACHUTE_RIFLE_COMPANY`, `US_INFANTRY_COMBAT_TEAM`, `UK_COMMANDO_TROOP`, `UK_ROYAL_ENGINEERS`.
-     - Eje: `GE_FALLSCHIRMJÄGER_COMPANY`, `GE_PANZERGRENADIER_PLATOON`, `GE_PIONIER_COMPANY`, `IT_BERSAGLIERI_COMPANY`, `IT_FANTERIA_COSTIERA`, `IT_DIVISIONE_LIVORNO_ASSAULT`, `GE_SCHWERE_PANZER_KOMPANIE`.
-   - **Criterio de Aceptación**: Esquema canónico JSON con desglose de `line_units`, `heavy_weapons` y `specialists`, con validación estricta en el engine.
+2. **Subtarea 3.5.2: Modelado del Catálogo Oficial de Formaciones Combinadas (P1)** — `[COMPLETADA 🟢 v2.5.4]`:
+   - **Módulos**: `assets/catalogs/formation_catalog.json`, `assets/catalogs/formation_art_inventory.json`, `assault_model/units/formation.py`, `tools/unit_editor_server.py`, `start_assault.bat`, `start_all_environments.ps1`, `assault_model/tests/test_formation_catalog.py`, `assault_model/tests/test_unit_and_formation_editor_api.py`.
+   - **Logros Alcanzados**:
+     - Modelado e ingesta canónica de las 12 formaciones oficiales reglamentarias del manual (Sección 5.0) en `formation_catalog.json` con desglose en slots categóricos (`line_units`, `heavy_weapons`, `specialists`) y array plano de compatibilidad `units`.
+     - Ingesta y escaneo del inventario completo de 122 cartas de formación tácticas escaneadas en `assets/art/formations/` organizadas por nación (`GE`, `IT`, `UK`, `US`) en `formation_art_inventory.json`.
+     - Mapeador visual dual en el Editor de Unidades y Formaciones (`tools/unit_editor_server.py`, puerto 8780) con previsualización de la carta original de alta resolución, selectores de slots, selector rápido de unidades del catálogo y cálculo dinámico de puntos en tiempo real.
+     - Automatización en `start_assault.bat` y `start_all_environments.ps1` garantizando el levantamiento del editor en el puerto 8780 y apertura en navegador.
+     - Suite completa de tests unitarios e integración en verde (`test_formation_catalog.py`, `test_unit_and_formation_editor_api.py`).
 
 3. **Subtarea 3.5.3: Creación de Escenarios Simétricos de Entrenamiento 11.1 y 11.2 (P1)**:
    - **Módulos**: `assets/scenarios/sc_11_1_pattuglia_ricognizione.json`, `assets/scenarios/sc_11_2_primo_contatto.json`.
@@ -383,6 +385,7 @@ flowchart LR
 
 | Versión | Hito Principal | Tareas Consolidadas | Estado |
 | :---: | :--- | :--- | :---: |
+| **`v2.5.4`** | **Catálogo Canónico de Formaciones y Mapeador OOB**: 12 cartas combinadas oficiales, inventario de 122 cartas escaneadas en `assets/art/formations/`, visor visual dual en Editor (:8780), arranque integrado en `start_assault.bat` y suite de tests unitarios/integración. | **Subtarea 3.5.2** | 🟢 **Consolidado** |
 | **`v2.5.3`** | **Aceleración de Pipeline (Zero Quality Loss)**: Caché de terreno ($1,078\times$), Root PUCT vectorizado, inferencia estática `torch.compile` y test Wald SPRT ($lpha=0.01$). Campaña reducida de >10h a <3.5h. | **Tarea 2.9** | 🟢 **Consolidado** |
 | **`v2.5.2`** | **Orquestación Curricular Multi-Etapa y Linaje Forense**: Auto-calibración de quality gates, linaje de checkpoints E2E y evaluación asimétrica calibrada. | **Fases 1-7 Curriculum** | 🟢 **Consolidado** |
 | **`v2.5.1`** | **Urgencia Temporal y Corrección de Presupuesto**: Invarianza temporal PBRS y aceleración de captura de VPs en turnos críticos. | **Tarea 2.3** | 🟢 **Consolidado** |

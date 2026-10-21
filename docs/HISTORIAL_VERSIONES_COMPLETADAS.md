@@ -81,9 +81,27 @@ flowchart TD
 | **`v2.5.1`** | Octubre 2026 | Fidelidad Canónica a max_turns y Paso Completo de Asalto | Presupuesto temporal seguro en autojuego (`scenario_max_turns * max(units * 2, 20)`), erradicación de timeout prematuro en Turno 8, ajuste de max_steps a 120/180 en benchmarks, y elevación de vp_potential_weight / vp_urgency_lambda a 1.5. | `CONSOLIDADO 🟢` |
 | **`v2.5.2`** | Octubre 2026 | Estabilidad de Telemetría Curricular y ELO Calibrado | Ponderación multi-perfil de win rate en runner PowerShell, alineación de tracked_side en auto-juego espejo, etiquetado nativo EfficientZeroV2 en controladores, exportación ONNX para Netron y visualización condicional de Gates en el visor MLOps. | `CONSOLIDADO 🟢` |
 | **`v2.5.3`** | Octubre 2026 | Optimización Evolutiva de Ciclos y Desacoplamiento de Checkpoints | Erradicación de herencia de checkpoints externos en lanzamientos desde cero (tabula rasa garantizada), analizador evolutivo de ejecuciones pasadas (`evolutionary_cycle_optimizer.py`), promoción automática del ciclo ganador $C_X \to C_1$ (nuevo baseline) y síntesis adaptativa de variantes $C_2$ (explotación/refinamiento) y $C_3$ (exploración/agresividad). | `CONSOLIDADO 🟢` |
+| **`v2.5.4`** | Octubre 2026 | Dynamic PBRS Escalado Temporalmente y Desensibilización de Brecha | Potencial temporalmente escalado $\Phi(s, t) = \alpha(1 + t/T_{\max}) \cdot \text{dist\_pot} + \beta\cdot\text{Contest}$, bono de contención por disputa en brecha ($d \le 2$), atenuación del $60\%$ de penalización de bajas en brecha ($r_{\text{loss}} \times 0.40$), castigo catastrófico por timeout ($-1.0$) ante 0 VPs controlados, e ingesta canónica de las 12 formaciones combinadas oficiales del manual. | `CONSOLIDADO 🟢` |
 
 
 ## 3. Fases Recientes Consolidadas (Ciclos v2.4.x - v2.5.x — Octubre 2026)
+
+#### v2.5.4 — Dynamic PBRS Escalado Temporalmente, Desensibilización de Brecha y Formaciones Oficiales [CONSOLIDADO 🟢]
+* **Objetivo**: Resolver de raíz la Paradoja del Comandante Prudente (*The Prudent Commander Paradox*), eliminando la pasividad y aversión al asalto final en escenarios con límite estricto de turnos ($T_{\max}$), mediante andamiaje potencial dependiente del tiempo, atenuación de bajas en la brecha del objetivo y penalización catastrófica por timeout.
+* **Componentes Consolidados**:
+  * **Dynamic PBRS Time Scaling & Contention Bonus (`voec_sim/core/reward_calculator.py`)**:
+    * Potencial radial dinámico $\Phi(s, t) = \alpha \left(1 + \frac{t}{T_{\max}}\right) \cdot \text{dist\_pot} + \beta \cdot \text{Contest} + \text{ctrl\_pot}$.
+    * Amplificación progresiva de la aproximación hacia los VPs conforme el reloj avanza hacia el turno final ($(1 + t/T_{\max}) \in [1.0, 2.0]$).
+    * Bono de contención $\beta \cdot \text{Contest}$ activo cuando escuadras amigas penetran en el radio de asalto ($d \le 2$ hexágonos).
+    * Demostración rigurosa del Teorema 1 de Devlin & Kudenko (2012): la suma telescópica descontada $\sum_{t=0}^{H-1} \gamma^t F(s, t, a, s', t') = -\Phi(s_0, 0)$ preserva intacta la política óptima $\arg\max_a Q^*(s, a)$.
+  * **Atenuación de Bajas en Brecha (*Breach Zone Casualty Attenuation*)**:
+    * Método `compute_breach_casualty_factor` que reduce en un $60\%$ la penalización de bajas ($r_{\text{loss}} \times 0.40$) cuando la unidad opera a $d \le 2$ hexágonos de un VP objetivo, permitiendo al MCTS asumir pérdidas tácticamente necesarias para consolidar la misión.
+  * **Castigo Catastrófico por Timeout**:
+    * En `agents/efficientzero_v2/core/selfplay.py`, los episodios que agotan el presupuesto temporal (`turn_unit_budget` / `timeout`) con 0 VPs bajo control reciben la penalización máxima de derrota total ($-1.0$), erradicando la especulación estéril.
+  * **Modelado del Catálogo de 12 Formaciones Oficiales**:
+    * Modelado e ingesta de las 12 formaciones combinadas oficiales del reglamento (Sección 5.0) en `formation_catalog.json` y escaneo de las 122 cartas de arte táctico en `formation_art_inventory.json`.
+  * **Verificación Formal**:
+    * Suite dedicada `voec_sim/tests/test_task_2_10_dynamic_pbrs_breach.py` con 5/5 tests en verde y suite global con 177 tests pasando.
 
 #### v2.5.3 — Optimización Evolutiva de Ciclos y Desacoplamiento Estricto de Checkpoints [CONSOLIDADO 🟢]
 * **Objetivo**: Garantizar que los curriculums lanzados desde cero entrenen siempre sin interferencias de checkpoints externos (tabula rasa limpia), implementando simultáneamente un mecanismo evolutivo de hiperparámetros donde cada fase aprenda de ejecuciones previas: el ciclo ganador $ se convierte en el nuevo $ (baseline) y se sintetizan automáticamente las variantes adaptativas $ (explotación/refinamiento) y $ (exploración/agresividad).

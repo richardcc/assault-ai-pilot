@@ -56,6 +56,9 @@ class PotentialBreakdown:
     controlled_vps: int
     turn_urgency_factor: float = 0.0
     turn_urgency_decay: float = 1.0
+    time_scale_multiplier: float = 1.0
+    contested_vps: int = 0
+    contention_potential: float = 0.0
 
 
 class VPPotentialCalculator:
@@ -63,7 +66,8 @@ class VPPotentialCalculator:
     Computes invariant potential Phi(s) and step shaping F(s, a, s') for VP capture.
 
     Potential Formulation:
-        Phi(s, t) = ( sum_{u in FriendlyAlive} w_u / (1 + min_{vp in TargetVPs} d(u, vp)) ) * Psi_urgency(t, T)
+        Phi(s, t) = ( sum_{u in FriendlyAlive} w_u / (1 + min_{vp in TargetVPs} d(u, vp)) ) * TimeModulation(t, T)
+                    + beta_contested * N_{ContestedTargetVPs}
                     + B_ctrl * N_{ControlledVPs}
     """
 
@@ -76,6 +80,10 @@ class VPPotentialCalculator:
         urgency_decay_lambda: float = 1.2,
         paralysis_penalty_weight: float = 0.05,
         cover_threshold: float = 0.35,
+        time_scaled_pbrs: bool = False,
+        vp_contested_bonus: float = 0.0,
+        breach_distance: int = 2,
+        breach_casualty_attenuation: float = 0.40,
     ):
         self.default_unit_weight = float(default_unit_weight)
         self.controlled_vp_bonus = float(controlled_vp_bonus)
@@ -84,6 +92,28 @@ class VPPotentialCalculator:
         self.urgency_decay_lambda = float(urgency_decay_lambda)
         self.paralysis_penalty_weight = float(paralysis_penalty_weight)
         self.cover_threshold = float(cover_threshold)
+        self.time_scaled_pbrs = bool(time_scaled_pbrs)
+        self.vp_contested_bonus = float(vp_contested_bonus)
+        self.breach_distance = int(breach_distance)
+        self.breach_casualty_attenuation = float(breach_casualty_attenuation)
+
+    def compute_breach_casualty_factor(
+        self,
+        unit_coords: Tuple[int, int],
+        target_vps: Sequence[Tuple[int, int]],
+    ) -> float:
+        """
+        Computes casualty penalty attenuation factor for units in breach zone (Task 2.10).
+        If min distance to any target VP <= breach_distance, returns breach_casualty_attenuation (0.40),
+        reducing casualty penalty by 60%. Otherwise returns 1.0.
+        """
+        if not target_vps:
+            return 1.0
+        uq, ur = int(unit_coords[0]), int(unit_coords[1])
+        min_d = min(_hex_distance(uq, ur, int(vq), int(vr)) for vq, vr in target_vps)
+        if min_d <= self.breach_distance:
+            return float(self.breach_casualty_attenuation)
+        return 1.0
 
     def compute_potential(
         self,
@@ -168,22 +198,37 @@ class VPPotentialCalculator:
                 )
                 dist_pot += (0.5 * w) * best_attraction
 
-        # 4. Turn Urgency Factor & Exponential Potential Decay (Task 2.3)
+        # 4. Turn Urgency Factor & Dynamic PBRS Time Scaling (Task 2.3 & Task 2.10)
         turn_urgency_factor = 0.0
         turn_urgency_decay = 1.0
+        time_scale_multiplier = 1.0
         if turn is not None and max_turns is not None and max_turns > 0:
             turn_now = max(0, int(turn))
             max_t = max(1, int(max_turns))
             turn_urgency_factor = min(1.0, max(0.0, float(turn_now) / float(max_t)))
-            # When friendly side controls zero VPs, distance potential decays exponentially with t/T
-            if controlled_vp_count == 0:
-                turn_urgency_decay = math.exp(-self.urgency_decay_lambda * turn_urgency_factor)
-                dist_pot *= turn_urgency_decay
+            if self.time_scaled_pbrs:
+                # Task 2.10: Dynamic PBRS time scaling: alpha * (1 + t / T_max)
+                time_scale_multiplier = 1.0 + turn_urgency_factor
+                dist_pot *= time_scale_multiplier
+            else:
+                # Task 2.3: When friendly side controls zero VPs, distance potential decays exponentially with t/T
+                if controlled_vp_count == 0:
+                    turn_urgency_decay = math.exp(-self.urgency_decay_lambda * turn_urgency_factor)
+                    dist_pot *= turn_urgency_decay
 
-        # 5. Control potential weighted by intrinsic VP value
+        # 5. Contested VPs bonus (Task 2.10): beta * Contest
+        contested_vps_count = 0
+        contention_pot = 0.0
+        if target_vps and friendly_alive:
+            for vq, vr, _ in target_vps:
+                if any(_hex_distance(uq, ur, vq, vr) <= self.breach_distance for uq, ur, _ in friendly_alive):
+                    contested_vps_count += 1
+            contention_pot = float(contested_vps_count) * self.vp_contested_bonus
+
+        # 6. Control potential weighted by intrinsic VP value
         ctrl_pot = float(controlled_vp_weight) * self.controlled_vp_bonus
 
-        total_phi = dist_pot + ctrl_pot
+        total_phi = dist_pot + contention_pot + ctrl_pot
         return PotentialBreakdown(
             phi_total=float(total_phi),
             distance_potential=float(dist_pot),
@@ -193,6 +238,9 @@ class VPPotentialCalculator:
             controlled_vps=controlled_vp_count,
             turn_urgency_factor=float(turn_urgency_factor),
             turn_urgency_decay=float(turn_urgency_decay),
+            time_scale_multiplier=float(time_scale_multiplier),
+            contested_vps=int(contested_vps_count),
+            contention_potential=float(contention_pot),
         )
 
     def compute_paralysis_penalty(
@@ -390,6 +438,12 @@ class VPPotentialCalculator:
             "turn_urgency_factor_after": float(a_pot.turn_urgency_factor),
             "turn_urgency_decay_before": float(b_pot.turn_urgency_decay),
             "turn_urgency_decay_after": float(a_pot.turn_urgency_decay),
+            "time_scale_multiplier_before": float(b_pot.time_scale_multiplier),
+            "time_scale_multiplier_after": float(a_pot.time_scale_multiplier),
+            "contested_vps_before": int(b_pot.contested_vps),
+            "contested_vps_after": int(a_pot.contested_vps),
+            "contention_pot_before": float(b_pot.contention_potential),
+            "contention_pot_after": float(a_pot.contention_potential),
             "paralysis_penalty": float(paralysis_penalty),
             "paralysis_units_count": int(paralysis_count),
             "gamma": float(gamma),

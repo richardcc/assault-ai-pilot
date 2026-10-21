@@ -3011,18 +3011,26 @@ class _NativeEZV2SelfplayBackend:
             vp_capture_bonus_per_hex = float(cfg_shaping.get("vp_capture_bonus_per_hex", 0.0) or 0.0)
             idle_penalty = float(cfg_shaping.get("idle_penalty", 0.0) or 0.0)
 
-            # Progressive Radial Potential to VPs (Ng et al. 1999) - Task 2.1 & Turn Urgency / Paralysis - Task 2.3
+            # Progressive Radial Potential to VPs (Ng et al. 1999) - Task 2.1 & Turn Urgency / Paralysis - Task 2.3 & Task 2.10
             vp_potential_weight = float(cfg_shaping.get("vp_potential_weight", 0.0) or 0.0)
             vp_potential_gamma = float(cfg_shaping.get("vp_potential_gamma", 0.997) or 0.997)
             vp_potential_ctrl_bonus = float(cfg_shaping.get("vp_potential_ctrl_bonus", 2.0) or 2.0)
             vp_urgency_lambda = float(cfg_shaping.get("vp_urgency_lambda", 1.2) or 1.2)
             paralysis_weight = float(cfg_shaping.get("paralysis_penalty_weight", 0.05) or 0.05)
+            time_scaled_pbrs = bool(cfg_shaping.get("time_scaled_pbrs", False))
+            vp_contested_bonus = float(cfg_shaping.get("vp_contested_bonus", 0.0) or 0.0)
+            breach_distance = int(cfg_shaping.get("breach_distance", 2) or 2)
+            breach_casualty_attenuation = float(cfg_shaping.get("breach_casualty_attenuation", 0.40) or 0.40)
             vp_pot_calc = VPPotentialCalculator(
                 controlled_vp_bonus=vp_potential_ctrl_bonus,
                 gamma=vp_potential_gamma,
                 shaping_scale=vp_potential_weight,
                 urgency_decay_lambda=vp_urgency_lambda,
                 paralysis_penalty_weight=paralysis_weight,
+                time_scaled_pbrs=time_scaled_pbrs,
+                vp_contested_bonus=vp_contested_bonus,
+                breach_distance=breach_distance,
+                breach_casualty_attenuation=breach_casualty_attenuation,
             )
             side_passivity_tracker = unit_passivity_tracker_by_side.setdefault(str(side_norm), {})
             action_parts = str(chosen or "").split(":")
@@ -3052,6 +3060,45 @@ class _NativeEZV2SelfplayBackend:
                 else 0.0
             )
 
+            # Task 2.10: Breach Zone Casualty Attenuation
+            # When friendly units suffer damage or casualties in breach zone (d <= breach_distance of target VP),
+            # attenuation factor (default 0.40, reducing penalty by 60%) is applied to break the Prudent Commander Paradox.
+            casualty_weight = float(cfg_shaping.get("casualty_weight", 0.0) or 0.0)
+            loss_weight = float(cfg_shaping.get("loss_weight", 0.0) or 0.0)
+            casualty_penalty = 0.0
+            if (casualty_weight > 0.0 or loss_weight > 0.0) and side_norm:
+                target_vp_coords = [
+                    (int(vp.get("q", 0) or 0), int(vp.get("r", 0) or 0))
+                    for vp in (getattr(obs, "vp_hexes", []) or [])
+                    if str(before_vp.get(f"{vp.get('q', 0)},{vp.get('r', 0)}", "")).upper() != str(side_norm)
+                ]
+                for u_before in getattr(obs, "units", []) or []:
+                    u_side = str(u_before.get("side", "") if isinstance(u_before, dict) else getattr(u_before, "side", "")).strip().upper()
+                    if u_side != str(side_norm):
+                        continue
+                    uid = str(u_before.get("unit_id", "") if isinstance(u_before, dict) else getattr(u_before, "unit_id", ""))
+                    uq = int(u_before.get("q", 0) if isinstance(u_before, dict) else getattr(u_before, "q", 0))
+                    ur = int(u_before.get("r", 0) if isinstance(u_before, dict) else getattr(u_before, "r", 0))
+                    hp_b = float(u_before.get("hp", 0.0) if isinstance(u_before, dict) else getattr(u_before, "hp", 0.0))
+
+                    u_after = None
+                    for ua in getattr(post_obs, "units", []) or []:
+                        ua_id = str(ua.get("unit_id", "") if isinstance(ua, dict) else getattr(ua, "unit_id", ""))
+                        if ua_id == uid:
+                            u_after = ua
+                            break
+                    hp_a = float(u_after.get("hp", 0.0) if isinstance(u_after, dict) else getattr(u_after, "hp", 0.0)) if u_after else 0.0
+                    alive_a = bool(u_after.get("alive", False) if isinstance(u_after, dict) else getattr(u_after, "alive", False)) if u_after else False
+
+                    hp_diff = max(0.0, hp_b - hp_a)
+                    is_eliminated = (hp_b > 0.0 and (not alive_a or hp_a <= 0.0))
+                    if hp_diff > 0.0 or is_eliminated:
+                        attenuation = vp_pot_calc.compute_breach_casualty_factor((uq, ur), target_vp_coords)
+                        if hp_diff > 0.0 and casualty_weight > 0.0:
+                            casualty_penalty -= hp_diff * casualty_weight * attenuation
+                        if is_eliminated and loss_weight > 0.0:
+                            casualty_penalty -= 1.0 * loss_weight * attenuation
+
             is_wait_or_pass = "WAIT" in str(action_kind).upper() or "PASS" in str(action_kind).upper()
             idle_component = idle_penalty if (is_wait_or_pass and not done and idle_penalty != 0.0) else 0.0
 
@@ -3059,6 +3106,7 @@ class _NativeEZV2SelfplayBackend:
                 float(reward)
                 + float(combat_reward)
                 + float(capture_reward)
+                + float(casualty_penalty)
                 + float(idle_component)
                 + float(reaction_fire_soft_component)
                 + float(reaction_exposure_component)
@@ -3340,8 +3388,17 @@ class _NativeEZV2SelfplayBackend:
                 break
 
         if samples and not adapter.terminal():
-            samples[-1].reward_target = float(timeout_penalty)
-            samples[-1].value_target = float(timeout_penalty)
+            # Task 2.10: Catastrophic timeout penalty when failing to capture VPs
+            # If side controls 0 VPs at timeout, apply full catastrophic defeat (-1.0)
+            # breaking the Prudent Commander Paradox.
+            controlled_vps = int(vp_pot_meta.get("controlled_vps", 0)) if "vp_pot_meta" in locals() else 0
+            if controlled_vps == 0:
+                catastrophic_penalty = min(float(timeout_penalty), -1.0)
+                samples[-1].reward_target = float(catastrophic_penalty)
+                samples[-1].value_target = float(catastrophic_penalty)
+            else:
+                samples[-1].reward_target = float(timeout_penalty)
+                samples[-1].value_target = float(timeout_penalty)
             samples[-1].info["timeout"] = True
             samples[-1].info["terminal_reason"] = "turn_unit_budget"
         return samples

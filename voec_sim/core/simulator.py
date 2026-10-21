@@ -102,6 +102,10 @@ class VOECSimulator:
                 urgency_decay_lambda=float(cfg.get("vp_urgency_lambda", 1.2) or 1.2),
                 paralysis_penalty_weight=float(cfg.get("paralysis_penalty_weight", 0.05) or 0.05),
                 cover_threshold=float(cfg.get("cover_threshold", 0.35) or 0.35),
+                time_scaled_pbrs=bool(cfg.get("time_scaled_pbrs", False)),
+                vp_contested_bonus=float(cfg.get("vp_contested_bonus", 0.0) or 0.0),
+                breach_distance=int(cfg.get("breach_distance", 2) or 2),
+                breach_casualty_attenuation=float(cfg.get("breach_casualty_attenuation", 0.40) or 0.40),
             )
             self._passivity_tracker_by_side = {}
             self._prev_snapshot = self.snapshot()
@@ -237,6 +241,9 @@ class VOECSimulator:
             info["pbrs"] = vp_meta
             info["turn_urgency_factor"] = float(vp_meta.get("turn_urgency_factor_before", 0.0))
             info["turn_urgency_decay"] = float(vp_meta.get("turn_urgency_decay_before", 1.0))
+            info["time_scale_multiplier"] = float(vp_meta.get("time_scale_multiplier_before", 1.0))
+            info["contested_vps"] = int(vp_meta.get("contested_vps_before", 0))
+            info["contention_potential"] = float(vp_meta.get("contention_pot_before", 0.0))
             info["paralysis_penalty"] = float(vp_meta.get("paralysis_penalty", 0.0))
             info["paralysis_units_count"] = int(vp_meta.get("paralysis_units_count", 0))
 
