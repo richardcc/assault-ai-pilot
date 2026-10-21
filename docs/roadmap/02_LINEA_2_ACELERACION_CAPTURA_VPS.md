@@ -17,13 +17,15 @@ flowchart TD
     T2_4 --> T2_5["2.5 Currículum de Captura Progresiva de VPs (P1)"]
     T2_5 --> T2_6["2.6 Modernización y Eficiencia de Red: CoordConv, Policy Head y ECA (P1)"]
     T2_6 --> T2_7["2.7 Inicialización Canónica de Capas Especializada en RL (P1)"]
-| **8** | **2.8 Estudio de Ablación A/B: Evaluación de Sesgo Doctrinal vs Red Pura (*Doctrinal Shaping & Mutation Ablation*)** | **P0** | `assault_bench/`, `agents/efficientzero_v2/core/macro_planner.py`, `agents/efficientzero_v2/core/mcts.py` | Evaluación comparativa rigurosa: **Variante A (Red Pura / Búsqueda Libre)** con `prior_boost = 0.0`, `role_mutations = OFF`, `sterile_prune = OFF` vs **Variante B (Doctrinal Shaped)** con MacroPlanner N1 activo. Auditoría de Win Rate atacante/defensor, CER, ELO y TQS en 100 partidas para discernir empíricamente si el sesgo heurístico impone "Objective Myopia" y devalúa el ELO frente a la intuición espacial pura de la red. **[PREPARADO 🚀]** | Tarea 2.6 |
     T2_6 --> T2_8["2.8 Ablación A/B: Sesgo Doctrinal vs Red Pura (P0)"]
+    T2_7 --> T2_9["2.9 Paquete de Rendimiento Zero Quality Loss (>10h a <3.5h) (P0)"]
+    T2_8 --> T2_10["2.10 Dynamic PBRS y Desensibilización de Brecha (P0)"]
+    T2_10 --> T2_11["2.11 Currículum Asimétrico Ofensivo Puro (P0)"]
 ```
 
 ---
 
-## 2. Matriz de Tareas y Criterios Cuantitativos de Aceptación
+## 2. Matriz de Tareas y Criterios Cuantitativos de Aceptación (v2.5.3)
 
 | Orden | Tarea / Componente | Prioridad Interna | Módulos / Archivos Impactados | Criterio de Aceptación Cuantitativo | Prerrequisitos |
 | :---: | :--- | :---: | :--- | :--- | :--- |
@@ -34,10 +36,10 @@ flowchart TD
 | **5** | **2.5 Currículum Progresivo Acelerado de Captura de VPs (Paridad Humana)** | **P1** | `curriculums/vp_acceleration/`, `trainer.py` | 4 fases progresivas: 1) VPs desocupados a 3 hexágonos; 2) VPs defendidos por unidad estática suprimida; 3) Carrera frontal simultánea de VPs (2 vs 2 unidades); 4) Escenario táctico completo (Gela). **Hito de éxito:** Victoria $\ge 75\%$ contra bot heurístico y disputa equilibrada contra humano en $<15$ turnos. **[CONSOLIDADO 🟢]** | Tareas 2.1, 2.2, 2.3, 2.4 |
 | **6** | **2.6 Modernización y Eficiencia de la Red Neuronal (*CoordConv, Bottleneck Policy Head & ECA*)** | **P1** | `agents/efficientzero_v2/core/network_base.py`, `network.py`, `train_engine.py`, `test_advanced_architecture.py` | 1) Inyección de canales de coordenadas CoordConv ($38 \to 40$ canales); 2) Rediseño de Policy Head `Conv1x1 (48 -> 4)` $\to$ `Flatten(1024)` $\to$ `MLP(64 -> 32)` (reducción del 31% a 67% de parámetros de cabeza preservando posición espacial sin el colapso destructivo del GAP); 3) Sustitución de SE por ECA (*Efficient Channel Attention* vía Conv1D sin reducción de dimensiones) en la red dinámica $g$. Verificado con suite de tests unitarios (11/11 tests en verde). **[CONSOLIDADO 🟢]** | Tarea 2.5 |
 | **7** | **2.7 Inicialización Canónica de Capas Especializada en RL (*Orthogonal, Zero-Init ResNet & Fixup*)** | **P1** | `agents/efficientzero_v2/core/network_base.py`, `network.py`, `docs/03_RED_NEURONAL_EFFICIENTZERO_V2.md` | Esquema formal de inicialización: Política ortogonal (`gain=0.01`, sesgo $0$) para máxima entropía inicial uniforme; Valor/Recompensa ortogonal (`gain=1.0`, sesgo $0$); Kaiming Normal en convoluciones SiLU; y Zero-Init en la segunda normalización residual ($\gamma=0, \beta=0$) para preservar la función identidad pura al paso $0$. Documentado y preparado para rollout sin regresiones. **[PLANIFICADO ⚪]** | Tarea 2.6 |
-
----
-
-
+| **8** | **2.8 Estudio de Ablación A/B: Evaluación de Sesgo Doctrinal vs Red Pura (*Doctrinal Shaping & Mutation Ablation*)** | **P0** | `assault_bench/`, `agents/efficientzero_v2/core/macro_planner.py`, `agents/efficientzero_v2/core/mcts.py` | Evaluación comparativa rigurosa: **Variante A (Red Pura / Búsqueda Libre)** con `prior_boost = 0.0`, `role_mutations = OFF`, `sterile_prune = OFF` vs **Variante B (Doctrinal Shaped)** con MacroPlanner N1 activo. Auditoría de Win Rate atacante/defensor, CER, ELO y TQS en 100 partidas para discernir empíricamente si el sesgo heurístico impone "Objective Myopia" y devalúa el ELO frente a la intuición espacial pura de la red. **[PREPARADO 🚀]** | Tarea 2.6 |
+| **9** | **2.9 Paquete de Aceleración de Rendimiento de Pipeline (Zero Quality Loss / Reducción >10h a <3.5h)** | **P0** | `agents/efficientzero_v2/core/mcts.py`, `train_engine.py`, `assault_bench/`, `selfplay.py` | **Optimización integral de rendimiento sin pérdida de calidad:** 1) *Root PUCT Vectorizado NumPy/Numba* ($8\times - 12\times$ más rápido, eliminando 238M de iteraciones Python); 2) *Inferencia Estática Compilada (`torch.compile` / CUDA Graphs)* sobre grid $16\times 16$ fijo ($30\% - 45\%$ menos latencia GPU); 3) *Evaluación Secuencial Wald (SPRT)* con early-stop estadístico a $\alpha=0.01$ (recorte del $45\%$ en benchmarks); 4) *IPC Zero-Copy vía Shared Memory Tensor* en process pool de 20 workers. Reducción del tiempo total de campaña de $>10$h a $<3.5$h. **[PLANIFICADO ⚪]** | Tarea 2.6 |
+| **10** | **2.10 Dynamic PBRS Escalado Temporalmente y Desensibilización de Bajas en Brecha** | **P0** | `voec_sim/core/reward_calculator.py`, `agents/efficientzero_v2/core/observation.py`, `selfplay.py` | 1) Potencial dinámico $\Phi(s, t) = \alpha \left(1 + \frac{t}{T_{\max}}\right) \left(-\min_u d(u, \text{VP})\right) + \beta \cdot \text{Contest}$; 2) Atenuación del $60\%$ de la penalización de bajas ($r_{\text{loss}} \times 0.40$) en $d \le 2$ hexágonos de un VP disputado; 3) Penalización terminal catastrófica por timeout ($R_{\text{timeout}} = -|Loss|$). Superación de la Paradoja del Comandante Prudente. **[PLANIFICADO ⚪]** | Tarea 2.3 |
+| **11** | **2.11 Currículum Asimétrico Ofensivo de Asalto Urbano Puro** | **P0** | `curriculums/vp_acceleration/`, `trainer.py`, `adaptive_cycles.yaml` | Fase especializada de 10 ciclos en modo 100% atacante en `battaglia_cittadina_2_1` con horizonte corto ($T=8$) y penalización severa por timeout, rompiendo la inercia defensiva aprendida en selfplay temprano antes de reincorporar autojuego simétrico. **[PLANIFICADO ⚪]** | Tareas 2.9, 2.10 |
 
 ---
 
