@@ -109,9 +109,10 @@ graph TD
 * 🟢 [**17.3. Línea 3: Fidelidad Normativa y Reglamento Oficial del Wargame**](roadmap/03_LINEA_3_FIDELIDAD_NORMATIVA_Y_REGLAMENTO.md): Retirada en desenfilada 6.4, Dig-in, Humo, Transporte, formaciones combinadas y mitigación 3.6.
 * 🟢 [**17.4. Línea 4: Explicabilidad Máxima (XAI), Perfilado Causal e IPB**](roadmap/04_LINEA_4_EXPLICABILIDAD_XAI_E_IPB.md): Atribución causal IGNH/GradCAM, perfilador forense, análisis de chokepoints IPB y perfilado doctrinal.
 * 🔵 [**17.5. Línea 5: Generalización Procedural y Robustez en Terrenos Abiertos**](roadmap/05_LINEA_5_GENERALIZACION_PROCEDURAL.md): Mutación procedural con clumping geográfico y validación Zero-Shot en mapas 32x32 y 64x64.
+* 📦 [**17.6. Historial de Versiones e Hitos Consolidados**](HISTORIAL_VERSIONES_COMPLETADAS.md): Registro oficial inmutable de entregas, changelog técnico cronológico por versiones (v1.0.0 a v2.5.3) y tareas consolidadas.
 
 #### Documento Coordinador Maestro:
-* 🗺️ [**17. Hoja de Ruta Evolutiva (Roadmap Maestro y Changelog)**](05_ROADMAP_EVOLUTIVO.md): Visión ejecutiva, matriz maestra global, orden de ejecución y changelog canónico de versiones.
+* 🗺️ [**17. Hoja de Ruta Evolutiva (Roadmap Maestro)**](05_ROADMAP_EVOLUTIVO.md): Visión ejecutiva, matriz maestra global, orden de ejecución inmediato y priorización evolutiva activa.
 
 ---
 

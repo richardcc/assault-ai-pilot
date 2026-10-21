@@ -221,6 +221,15 @@ CANONICAL_DOCS_ORDER = [
         "desc": "Mutador procedural con clumping geográfico y validación Zero-Shot en mapas 32x32 y 64x64.",
     },
     {
+        "id": "doc-historial-versiones",
+        "category": "VI. Hoja de Ruta Evolutiva (Roadmap)",
+        "category_icon": "🗺️",
+        "title": "17.6. Historial de Versiones e Hitos Consolidados",
+        "icon": "📦",
+        "file": "HISTORIAL_VERSIONES_COMPLETADAS.md",
+        "desc": "Registro oficial de auditoría, changelog técnico por versiones v1.0.0 a v2.5.3 e hitos consolidados.",
+    },
+    {
         "id": "doc-09-roadmap",
         "category": "VI. Hoja de Ruta Evolutiva (Roadmap)",
         "category_icon": "🗺️",
