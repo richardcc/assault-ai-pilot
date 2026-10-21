@@ -67,28 +67,31 @@ extra_javascript:
 
 nav:
   - Inicio: index.md
-  - 0. Premisas del Proyecto y Gobernanza: 00_PREMISAS_DEL_PROYECTO.md
-  - 1. Arquitectura del Sistema: 01_ARQUITECTURA_DEL_SISTEMA.md
-  - 2. Modelo del Juego y Reglas Tácticas: 02_MODELO_DEL_JUEGO_Y_REGLAS_TACTICAS.md
-  - 3. Red Neuronal EfficientZero V2: 03_RED_NEURONAL_EFFICIENTZERO_V2.md
-  - 4. Plataforma MLOps y Telemetría: 04_PLATAFORMA_MLOPS_Y_TELEMETRIA.md
-  - 5. Auditoría Literatura Científica: 06_LITERATURE_AUDIT_CHANNELS_HEADS_TACTICS.md
-  - 6. Sistema RAG Copilot: 06_SISTEMA_RAG_COPILOT.md
-  - 7. Servicios Backend y Catálogo de APIs: 07_SERVICIOS_BACKEND_Y_CATALOGO_APIS.md
-  - 8. Auditoría Reglamento vs. Engine: 08_AUDITORIA_REGLAMENTO_VS_ENGINE.md
-  - 9. Métricas y Perfilado:
-      - Inventario Canónico de Métricas: 13_INVENTARIO_CANONICO_METRICAS.md
-      - Plan Estratégico Perfilado de Unidades: 14_PLAN_PERFILADO_UNIDADES_IA.md
-  - 10. Currículums y Entrenamiento:
-      - Currículums y Entrenamiento Progresivo: 15_CURRICULUMS_Y_ENTRENAMIENTO_PROGRESSIVO.md
-  - 11. Informes de Ejecución:
-      - Cabecera y Catálogo de Informes: informes_ejecucion/00_CABECERA_INFORMES_EJECUCION.md
-      - Informe 01 - Currículum y Auditoría Táctica Forense: informes_ejecucion/INFORME_01_CURRICULUM_Y_AUDITORIA_TACTICA.md
-      - Informe 02 - Ejecución del Currículum Multi-Fase y Auditoría Táctica Forense: informes_ejecucion/INFORME_02_CURRICULUM_Y_AUDITORIA_TACTICA.md
-  - 12. Hoja de Ruta Evolutiva (Roadmap):
-      - Línea 1 - Observabilidad y Telemetría: roadmap/01_LINEA_1_OBSERVABILIDAD_Y_TELEMETRIA.md
-      - Línea 2 - Aceleración de Captura de VPs: roadmap/02_LINEA_2_ACELERACION_CAPTURA_VPS.md
-      - Línea 3 - Fidelidad Normativa y Wargame: roadmap/03_LINEA_3_FIDELIDAD_NORMATIVA_Y_REGLAMENTO.md
-      - Línea 4 - Explicabilidad XAI e IPB: roadmap/04_LINEA_4_EXPLICABILIDAD_XAI_E_IPB.md
-      - Línea 5 - Generalización Procedural: roadmap/05_LINEA_5_GENERALIZACION_PROCEDURAL.md
-      - Hoja de Ruta Evolutiva (Roadmap Maestro): 05_ROADMAP_EVOLUTIVO.md
+  - I. Gobernanza y Arquitectura:
+      - 01. Portal Canónico (Inicio): index.md
+      - 02. Premisas del Proyecto y Gobernanza: 00_PREMISAS_DEL_PROYECTO.md
+      - 03. Arquitectura del Sistema (5-Tier): 01_ARQUITECTURA_DEL_SISTEMA.md
+  - II. Motor Wargame y Reglas:
+      - 04. Modelo de Juego y Dinámica de Combate: 02_MODELO_DEL_JUEGO_Y_REGLAS_TACTICAS.md
+      - 05. Auditoría Reglamento vs. Engine: 08_AUDITORIA_REGLAMENTO_VS_ENGINE.md
+  - III. Inteligencia Artificial (EZv2):
+      - 06. Red Neuronal EfficientZero V2: 03_RED_NEURONAL_EFFICIENTZERO_V2.md
+      - 07. Auditoría Literatura Científica y Doctrinal: 06_LITERATURE_AUDIT_CHANNELS_HEADS_TACTICS.md
+      - 08. Plan Estratégico Perfilado de Unidades IA: 14_PLAN_PERFILADO_UNIDADES_IA.md
+      - 09. Currículums y Entrenamiento Progresivo: 15_CURRICULUMS_Y_ENTRENAMIENTO_PROGRESSIVO.md
+  - IV. MLOps, Telemetría y Servicios:
+      - 10. Plataforma MLOps y Telemetría: 04_PLATAFORMA_MLOPS_Y_TELEMETRIA.md
+      - 11. Inventario Jerárquico Canónico de Métricas: 13_INVENTARIO_CANONICO_METRICAS.md
+      - 12. Servicios Backend y Catálogo de APIs: 07_SERVICIOS_BACKEND_Y_CATALOGO_APIS.md
+      - 13. Sistema RAG Copilot: 06_SISTEMA_RAG_COPILOT.md
+  - V. Informes de Ejecución:
+      - 14. Informes de Ejecución - Cabecera y Catálogo: informes_ejecucion/00_CABECERA_INFORMES_EJECUCION.md
+      - 15. Informe 01 - Currículum y Diagnóstico de Parálisis: informes_ejecucion/INFORME_01_CURRICULUM_Y_AUDITORIA_TACTICA.md
+      - 16. Informe 02 - Currículum Multi-Fase y Comandante Prudente: informes_ejecucion/INFORME_02_CURRICULUM_Y_AUDITORIA_TACTICA.md
+  - VI. Hoja de Ruta Evolutiva (Roadmap):
+      - 17.1. Línea 1 - Observabilidad y Telemetría: roadmap/01_LINEA_1_OBSERVABILIDAD_Y_TELEMETRIA.md
+      - 17.2. Línea 2 - Aceleración de Captura de VPs: roadmap/02_LINEA_2_ACELERACION_CAPTURA_VPS.md
+      - 17.3. Línea 3 - Fidelidad Normativa y Wargame: roadmap/03_LINEA_3_FIDELIDAD_NORMATIVA_Y_REGLAMENTO.md
+      - 17.4. Línea 4 - Explicabilidad XAI e IPB: roadmap/04_LINEA_4_EXPLICABILIDAD_XAI_E_IPB.md
+      - 17.5. Línea 5 - Generalización Procedural: roadmap/05_LINEA_5_GENERALIZACION_PROCEDURAL.md
+      - 17. Hoja de Ruta Evolutiva (Roadmap Maestro): 05_ROADMAP_EVOLUTIVO.md

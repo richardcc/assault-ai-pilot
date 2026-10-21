@@ -3,7 +3,7 @@
 Bienvenido al portal oficial de documentación técnica del proyecto **Assault**, plataforma integral de simulación táctica militar por turnos sobre tablero hexagonal e inteligencia artificial militar basada en **EfficientZero V2**.
 
 > [!NOTE]
-> **Arquitectura Activa:** Todo el entrenamiento, autojuego, inferencia y MCTS operan exclusivamente sobre **EfficientZero V2** (`agents/efficientzero_v2/`). El stack legacy MuZero v1 se encuentra 100% decomisionado.
+> **Arquitectura Activa:** Todo el entrenamiento, autojuego, inferencia y MCTS operan exclusivamente sobre **EfficientZero V2** (`agents/efficientzero_v2/`). El stack legacy MuZero v1 se encuentra 100% decomisionado y obsoleto.
 
 ---
 
@@ -13,156 +13,105 @@ Bienvenido al portal oficial de documentación técnica del proyecto **Assault**
 graph TD
     ROOT["Assault Wargame & AI Platform"]
     
-    subgraph Fundamentos ["1. Fundamentos y Reglas"]
-        C0["0. Premisas del Proyecto y Gobernanza"]
-        C1["1. Arquitectura del Sistema"]
-        C2["2. Reglas Tácticas y VOEC"]
+    subgraph P1 ["I. Gobernanza y Arquitectura"]
+        C01["01. Portal Canónico (Inicio)"]
+        C02["02. Premisas del Proyecto y Gobernanza"]
+        C03["03. Arquitectura del Sistema (5-Tier)"]
     end
     
-    subgraph IA ["2. Inteligencia Artificial y Modelos"]
-        C3["3. EfficientZero V2"]
-        C5["5. Auditoría Literatura Científica"]
-        C6["6. Copilot RAG y Explicabilidad"]
+    subgraph P2 ["II. Motor Wargame y Reglas"]
+        C04["04. Modelo del Juego y Reglas Tácticas"]
+        C05["05. Auditoría Reglamento vs Engine"]
     end
     
-    subgraph Plataforma ["3. Plataforma MLOps y Servicios"]
-        C4["4. MLOps y Telemetría"]
-        C7["7. Backend y APIs"]
-        C13["9. Inventario Jerárquico de Métricas"]
+    subgraph P3 ["III. Inteligencia Artificial (EfficientZero V2)"]
+        C06["06. Red Neuronal EfficientZero V2"]
+        C07["07. Auditoría Científica y Doctrinal"]
+        C08["08. Plan de Perfilado Doctrinal de Unidades"]
+        C09["09. Currículums y Entrenamiento Progresivo"]
+    end
+
+    subgraph P4 ["IV. MLOps, Telemetría y Servicios"]
+        C10["10. Plataforma MLOps y Telemetría"]
+        C11["11. Inventario Jerárquico de Métricas"]
+        C12["12. Servicios Backend y Catálogo de APIs"]
+        C13["13. Sistema RAG Copilot y Normativa"]
+    end
+
+    subgraph P5 ["V. Informes de Ejecución y Auditorías"]
+        C14["14. Cabecera y Catálogo de Informes"]
+        C15["15. Informe 01: Currículum y Parálisis Ofensiva"]
+        C16["16. Informe 02: Currículum Multi-Fase y Comandante Prudente"]
+    end
+
+    subgraph P6 ["VI. Hoja de Ruta Evolutiva (Roadmap)"]
+        L1["17.1. Línea 1: Observabilidad y Telemetría"]
+        L2["17.2. Línea 2: Captura de VPs y Paridad Humana"]
+        L3["17.3. Línea 3: Fidelidad Normativa y Wargame"]
+        L4["17.4. Línea 4: Explicabilidad XAI e IPB"]
+        L5["17.5. Línea 5: Generalización Procedural"]
+        C17["17. Hoja de Ruta Evolutiva (Roadmap Maestro)"]
     end
     
-    subgraph WargameRules ["4. Fidelidad Militar y Perfilado"]
-        C8["8. Auditoría Reglamento vs Engine"]
-        C14["10. Plan Estratégico Perfilado de Unidades"]
-    end
+    ROOT --> P1
+    ROOT --> P2
+    ROOT --> P3
+    ROOT --> P4
+    ROOT --> P5
+    ROOT --> P6
 
-    subgraph CurriculumsSection ["5. Currículums y Entrenamiento"]
-        C15["11. Currículums y Entrenamiento Progresivo"]
-    end
+    P5 --> C14
+    C14 --> C15
+    C14 --> C16
 
-    subgraph InformesSection ["6. Informes de Ejecución"]
-        INF_HEAD["12. Cabecera y Catálogo de Informes"]
-        INF_01["12.1. Informe 01: Currículum y Auditoría Táctica"]
-    end
-
-    subgraph RoadmapSection ["7. Hoja de Ruta Evolutiva (Roadmap)"]
-        L1["13.1. Línea 1: Observabilidad y Telemetría"]
-        L2["13.2. Línea 2: Captura de VPs y Paridad Humana"]
-        L3["13.3. Línea 3: Fidelidad Normativa y Wargame"]
-        L4["13.4. Línea 4: Explicabilidad XAI e IPB"]
-        L5["13.5. Línea 5: Generalización Procedural"]
-        C9["13. Hoja de Ruta Evolutiva (Roadmap Maestro)"]
-    end
-    
-    ROOT --> Fundamentos
-    ROOT --> IA
-    ROOT --> Plataforma
-    ROOT --> WargameRules
-    ROOT --> CurriculumsSection
-    ROOT --> InformesSection
-    ROOT --> RoadmapSection
-
-    InformesSection --> INF_HEAD
-    INF_HEAD --> INF_01
-
-    RoadmapSection --> L1
-    RoadmapSection --> L2
-    RoadmapSection --> L3
-    RoadmapSection --> L4
-    RoadmapSection --> L5
-    RoadmapSection --> C9
+    P6 --> L1
+    P6 --> L2
+    P6 --> L3
+    P6 --> L4
+    P6 --> L5
+    P6 --> C17
 ```
 
 ---
 
-## 📚 Módulos Canónicos de Documentación
+## 📚 Estructura Temática de Documentación Canónica
 
-### 0. [Premisas del Proyecto: Diseño, Arquitectura y Gobernanza](00_PREMISAS_DEL_PROYECTO.md)
-* **Marco Maestro de Diseño:** SSoT, decomisión estricta de MuZero, EfficientZero V2 como agente exclusivo.
-* **Economía de Hardware:** Viabilidad en GPU doméstica mediante MCTS latente, reanálisis off-policy y AMP FP16.
-* **Teoría de Palancas (Nudges):** Andamiaje conductual (*scaffolding*) sin anular la exploración ni la emergencia táctica.
-* **Nivel 0 Estratégico:** Perfilado vectorial 5D de tropas (OOB) e inteligencia topográfica de chokepoints (IPB).
-* **Instrumentación Fiel y Auditorías:** Manifiesto de cero invención en dashboards y protocolos de calidad anti-regresión.
+### I. Gobernanza y Arquitectura del Sistema
+* 🏛️ [**01. Portal Canónico (Inicio)**](index.md): Mapa de navegación del sistema, índice general de módulos y catálogo de servicios activos.
+* 📜 [**02. Premisas del Proyecto y Gobernanza**](00_PREMISAS_DEL_PROYECTO.md): Marco maestro de diseño: límites HW, economía de GPU, teoría de palancas (nudges) en RL, nivel 0 doctrinal, instrumentación y calidad.
+* 🏗️ [**03. Arquitectura del Sistema (5-Tier)**](01_ARQUITECTURA_DEL_SISTEMA.md): Visión general desacoplada por contratos entre capas (`assault_model`, `voec_sim`, `agents/efficientzero_v2` y `mlops`).
 
-### 1. [Arquitectura del Sistema](01_ARQUITECTURA_DEL_SISTEMA.md)
-* **Principios de diseño:** Desacoplamiento estricto por contratos entre capas.
-* **Subsistemas:** `assault_model` (reglas puras autoritativas), `voec_sim` (observación sensorial y simulación), `agents/efficientzero_v2` (red neuronal e inferencia MCTS) y `mlops` (telemetría y linaje).
-* **Ciclo de vida:** Flujo de autojuego (*self-play*), reincorporación a buffer de repeticiones y entrenamiento distribuido.
+### II. Motor del Wargame y Reglas Tácticas
+* 🎲 [**04. Modelo del Juego y Reglas Tácticas**](02_MODELO_DEL_JUEGO_Y_REGLAS_TACTICAS.md): Topología hexagonal, coordenadas axiales, cálculo 3D de LOS, balística, dados de batalla, moral, fuego de reacción y combate cerrado.
+* ⚖️ [**05. Auditoría del Reglamento Oficial vs. Engine**](08_AUDITORIA_REGLAMENTO_VS_ENGINE.md): Auditoría exhaustiva página a página del *Rulebook rev6* (52 páginas) y compendio oficial de 38 escenarios de combate.
 
-### 2. [Modelo del Juego y Reglas Tácticas](02_MODELO_DEL_JUEGO_Y_REGLAS_TACTICAS.md)
-* **Geometría hexagonal:** Coordenadas axiales $(q, r)$, métricas de distancia y adyacencia.
-* **Terreno y balística:** Catálogo de terrenos, cobertura, cálculo 3D de Línea de Visión (LOS) y Niebla de Guerra (*POMDP*).
-* **Mecánica de combate:** Dados de batalla (Rojo, Azul, Verde, Amarillo), tiradas de salvación y asignación de bajas.
-* **Psicología militar:** Estados de cohesión y moral (`NORMAL`, `PINNED`, `SUPPRESSED`, `ROUTED`), fuego de reacción (*Opportunity Fire*) y combate cerrado (*Close Combat*).
+### III. Inteligencia Artificial Militar (EfficientZero V2)
+* 🧠 [**06. Red Neuronal EfficientZero V2**](03_RED_NEURONAL_EFFICIENTZERO_V2.md): Modelo de mundo recurrente ($h_\theta, g_\theta, f_\theta, q_\theta$), convoluciones hexagonales, cabezas tácticas auxiliares, Two-Hot, HL-Gauss, Symlog y PCGrad.
+* 🔬 [**07. Auditoría Literatura Científica y Doctrinal**](06_LITERATURE_AUDIT_CHANNELS_HEADS_TACTICS.md): Comparativa Palma et al. (2025), literatura DeepMind (AlphaStar, AlphaZero), Clausewitz, Sun Tzu y análisis formal de la Paradoja del Comandante Prudente.
+* 🎖️ [**08. Plan Estratégico de Perfilado Doctrinal de Unidades**](14_PLAN_PERFILADO_UNIDADES_IA.md): Arquitectura doctrinal 3 capas, mutación contextual adaptativa, OOB y observabilidad en MLOps.
+* 🎯 [**09. Currículums y Entrenamiento Progresivo**](15_CURRICULUMS_Y_ENTRENAMIENTO_PROGRESSIVO.md): Currículum acelerado de VPs, currículum multi-escenario y puertas de calidad dinámicas (*Dynamic Gates*).
 
-### 3. [Red Neuronal y Algoritmo EfficientZero V2](03_RED_NEURONAL_EFFICIENTZERO_V2.md)
-* **Modelo de mundo recurrente:** Funciones de representación $h_\theta$, dinámica $g_\theta$, predicción $f_\theta$ y consistencia temporal $q_\theta$.
-* **Convoluciones hexagonales:** `HexagonalMaskConv2d` para eliminación de artefactos direccionales espurios.
-* **Cabezas auxiliares:** Mapa 2D de amenazas (`threat_map`), balance de bajas (`attrition`) y estimación de cohesión (`morale`).
-* **Representaciones de valor:** Two-Hot simétrico, **HL-Gauss** (*Histogram Loss with Gaussian Targets*, DeepMind 2024) y compresión **Symlog**.
-* **HRL y optimización:** Planificador jerárquico Macro (Nivel 1), búsqueda MCTS PUCT / Gumbel y balanceo de gradientes mediante **PCGrad**.
+### IV. MLOps, Telemetría y Servicios Backend
+* 📊 [**10. Plataforma MLOps y Telemetría**](04_PLATAFORMA_MLOPS_Y_TELEMETRIA.md): Almacenamiento columnar Parquet, base de datos analítica DuckDB, Promotion Gates y visor web interactivo en puerto 8778.
+* 📐 [**11. Inventario Jerárquico Canónico de Métricas**](13_INVENTARIO_CANONICO_METRICAS.md): Taxonomía estricta de 4 niveles, origen autoritativo, manifiesto cero-invención y plan de purgado de redundancias.
+* ⚡ [**12. Servicios Backend y Catálogo de APIs**](07_SERVICIOS_BACKEND_Y_CATALOGO_APIS.md): Endpoints REST FastAPI (:8001), streaming WebSocket binario MessagePack y documentación interactiva [Swagger UI](http://127.0.0.1:8001/docs) y [ReDoc](http://127.0.0.1:8001/redoc).
+* 🤖 [**13. Sistema RAG Copilot y Asistente Normativo**](06_SISTEMA_RAG_COPILOT.md): Base de conocimiento vectorial/BM25, SitRep en vivo, explicabilidad normativa y motor LLM local.
 
-### 4. [Plataforma MLOps, Telemetría y Reporting](04_PLATAFORMA_MLOPS_Y_TELEMETRIA.md)
-* **Almacenamiento analítico:** Registro columnar de partidas en Apache Parquet y base de datos OLAP **DuckDB**.
-* **Puertas de promoción:** Reglas automatizadas (*Promotion Gates*) para validación de checkpoints contra baselines.
-* **Visor Web MLOps (Puerto 8778):** Catálogo de modelos, simulador de unroll del espacio latente, atribución de canales y reproductor paso a paso de partidas (*Match Replay*).
+### V. Informes de Ejecución y Auditorías Forenses
+* 📋 [**14. Informes de Ejecución: Cabecera y Catálogo**](informes_ejecucion/00_CABECERA_INFORMES_EJECUCION.md): Protocolo de auditoría forense, taxonomía TQS y repositorio centralizado de informes.
+* 📑 [**15. Informe 01: Currículum y Diagnóstico de Parálisis Ofensiva**](informes_ejecucion/INFORME_01_CURRICULUM_Y_AUDITORIA_TACTICA.md): Auditoría de 31 ciclos, diagnóstico de aversión al riesgo en rol atacante, telemetría legacy y plan de mitigación.
+* 📈 [**16. Informe 02: Currículum Multi-Fase y Comandante Prudente**](informes_ejecucion/INFORME_02_CURRICULUM_Y_AUDITORIA_TACTICA.md): Evaluación de 34 ejecuciones post-estandarización, primera victoria en campo abierto y caracterización formal de la Paradoja del Comandante Prudente.
 
-### 5. [Auditoría Científica: Hex-Wargame AI (Palma et al. 2025) vs. Assault](06_LITERATURE_AUDIT_CHANNELS_HEADS_TACTICS.md)
-* **Estudio comparativo exhaustivo:** Evaluación frente al paper seminal de Palma et al. (Feb 2025 / arXiv:2502.13918v1), literatura SOTA (DeepMind, Sabatelli, Bohr, Willcox) y tratados doctrinales (*Understanding Wargames*, *Wargaming Handbook*, *The Wargaming Compendium*).
-* **Módulo de aprendizaje:** Model-Based EfficientZero V2 vs. Model-Free AlphaZero con RNNs; análisis de muestra-eficiencia y ratios de convergencia.
-* **Profundidad táctica:** Wargame militar VOEC (balística real, blindaje direccional, moral, supresión, overwatch) vs. Simple Conflict Simulation (SCS).
-
-### 6. [Sistema RAG Copilot y Explicabilidad Normativa](06_SISTEMA_RAG_COPILOT.md)
-* **Base de conocimiento unificada:** 114 fragmentos de reglamento y 24 fragmentos de catálogo técnico en `assault_rag/`.
-* **Motor de búsqueda híbrido:** BM25 balanceado con scoring por relevancia de sección y normalización bilingüe.
-* **Servicios tácticos:** Consultas normativas (`rag_query`), reporte de situación (`explain_game_situation` SitRep en vivo), recomendaciones tácticas consultivas y análisis de partidas.
-* **Motor generativo dual:** Soporte para LLM local (Ollama `qwen2.5:14b`) con fallback extractivo instantáneo de alta precisión.
-
-### 7. [Servicios Backend y Catálogo de APIs](07_SERVICIOS_BACKEND_Y_CATALOGO_APIS.md)
-* **Documentación interactiva OpenAPI:** [Swagger UI](http://127.0.0.1:8001/docs) y [ReDoc](http://127.0.0.1:8001/redoc).
-* **Servicio de Simulación Táctica (`:8001`):** Endpoints REST para ciclos de juego, combate y canal bidireccional WebSocket (`/ws/game`) con streaming binario MessagePack (`?format=msgpack`).
-* **Servicio RAG Copilot (`/api/rag/*`):** Endpoints de asistencia, consulta normativa y estado del LLM.
-* **Servicio de Telemetría MLOps (`:8778`):** DuckDB REST API, visor de métricas y servidor de documentación estática integrada.
-
-### 8. [Auditoría Exhaustiva: Reglamento Oficial vs. Engine y Escenarios](08_AUDITORIA_REGLAMENTO_VS_ENGINE.md)
-* **Auditoría página a página del Manual de Reglas:** 52 páginas del *Rulebook rev6* auditadas respecto a `assault_model/`.
-* **Auditoría del Compendio de Escenarios:** Análisis de los 38 escenarios oficiales (26 de la Campaña de Gela + 12 Standalone) frente al catálogo modelado en JSON.
-
-### 9. [Inventario Jerárquico Canónico de Métricas y Registro Experimental](13_INVENTARIO_CANONICO_METRICAS.md)
-* **Taxonomía en 4 Niveles:** Desglose estricto de métricas del Motor, Búsqueda MCTS, Red Neuronal y Benchmarks MLOps.
-* **Gobernanza Cero-Invención (Zero-Mock):** Definición matemática formal y origen unívoco para cada campo en Parquet y DuckDB.
-* **Plan de Purgado de Redundancias:** Consolidación de campos duplicados y optimización de sobrecarga de sondas.
-
-### 10. [Plan Estratégico: Perfilado Doctrinal de Unidades](14_PLAN_PERFILADO_UNIDADES_IA.md)
-* **Arquitectura Doctrinal 3 Capas:** Balística Fiel, Perfil Doctrinal y Emergencia Táctica Colectiva.
-* **Mutación y Adaptabilidad Dinámica:** Transiciones doctrinales en tiempo real ante eventos de desgaste, flanqueo y pérdida de líderes.
-* **Observabilidad MLOps:** Cuadro de mando de asignación doctrinal, dispersión de perfiles y fidelidad histórica.
-
-### 11. [Currículums y Entrenamiento Progresivo](15_CURRICULUMS_Y_ENTRENAMIENTO_PROGRESSIVO.md)
-* **Fundamentos de Aprendizaje por Currículum:** Mitigación de recompensa dispersa y colapso combinatorio en wargames tácticos hexagonales.
-* **Currículum de Aceleración de VPs (`vp_acceleration`):** 4 fases progresivas (acercamiento, supresión estática, carrera frontal 2v2 y Gela táctico completo) con puertas cuantitativas hacia paridad humana ($\ge 75\%$ win rate en $<15$ turnos).
-* **Currículum Multi-Escenario (`self_vs_self_vs_random_2scenarios_v1`):** 7 fases de consolidación competitiva con balanceo dinámico de escenarios (80/20 a 50/50), autojuego y matchmaking asimétrico.
-* **Guía Operativa y Telemetría MLOps:** Comandos de ejecución PowerShell (`run_dynamic_gated_curriculum.ps1`), benchmarking y monitorización DuckDB en puerto 8778.
-
----
-
-### 12. Repositorio Canónico de Informes de Ejecución
-* 📋 [**12. Cabecera y Catálogo de Informes de Ejecución**](informes_ejecucion/00_CABECERA_INFORMES_EJECUCION.md): Protocolo de auditoría, taxonomía de veredictos (TQS) y catálogo maestro.
-* 📊 [**12.1. Informe 01: Currículum y Auditoría Táctica Forense**](informes_ejecucion/INFORME_01_CURRICULUM_Y_AUDITORIA_TACTICA.md): Auditoría de 31 ciclos, diagnóstico de parálisis ofensiva, bloqueo de canales 36/37, interferencia multi-tarea y plan de mitigación Tarea 3.6.
-
----
-
-### 13. Hoja de Ruta Evolutiva (Roadmap 2026–2027)
-
-#### Ficheros Modulares por Línea Estratégica:
-* 🔴 [**Línea 1: Garantía de Instrumentos y Observabilidad Fiel (P0)**](roadmap/01_LINEA_1_OBSERVABILIDAD_Y_TELEMETRIA.md): Test de conformidad de esquema, profiling de sobrecarga de sondas, validador E2E Frontend-DuckDB y catálogo unificado.
-* 🔴 [**Línea 2: Aceleración de Captura de VPs y Paridad Humana (P0)**](roadmap/02_LINEA_2_ACELERACION_CAPTURA_VPS.md): Recompensa por potencial radial a VP, sesgo de prior MCTS orientado a objetivos, presión temporal y currículum acelerado.
-* 🟢 [**Línea 3: Fidelidad Normativa y Reglamento Oficial del Wargame (P1)**](roadmap/03_LINEA_3_FIDELIDAD_NORMATIVA_Y_REGLAMENTO.md): Retirada a borde amigo en desenfilada 6.4, Dig-in, Humo, Transporte, catálogo de 12 formaciones, rebalanceo OOB y Tarea 3.6 anti-parálisis.
-* 🟢 [**Línea 4: Explicabilidad Máxima (XAI), Perfilado Causal e Inteligencia Táctica (P1)**](roadmap/04_LINEA_4_EXPLICABILIDAD_XAI_E_IPB.md): Atribución causal espacial (IGNH/GradCAM), perfilador causal de partidas, análisis topográfico IPB y perfilado doctrinal dinámico.
-* 🔵 [**Línea 5: Generalización Procedural y Robustez en Terrenos Abiertos (P2)**](roadmap/05_LINEA_5_GENERALIZACION_PROCEDURAL.md): Mutación procedural con clumping geográfico y validación Zero-Shot en mapas masivos 32x32 y 64x64.
+### VI. Hoja de Ruta Evolutiva (Roadmap)
+#### Líneas Estratégicas Modulares:
+* 🔴 [**17.1. Línea 1: Garantía de Instrumentos y Observabilidad Fiel**](roadmap/01_LINEA_1_OBSERVABILIDAD_Y_TELEMETRIA.md): Conformidad de esquema, profiler de sondas zero-mock, validador E2E y depuración de redundancias.
+* 🔴 [**17.2. Línea 2: Aceleración de Captura de VPs y Paridad Humana**](roadmap/02_LINEA_2_ACELERACION_CAPTURA_VPS.md): Recompensa por potencial radial a VP, sesgo prior MCTS, urgencia temporal, paquete de aceleración y currículum ofensivo.
+* 🟢 [**17.3. Línea 3: Fidelidad Normativa y Reglamento Oficial del Wargame**](roadmap/03_LINEA_3_FIDELIDAD_NORMATIVA_Y_REGLAMENTO.md): Retirada en desenfilada 6.4, Dig-in, Humo, Transporte, formaciones combinadas y mitigación 3.6.
+* 🟢 [**17.4. Línea 4: Explicabilidad Máxima (XAI), Perfilado Causal e IPB**](roadmap/04_LINEA_4_EXPLICABILIDAD_XAI_E_IPB.md): Atribución causal IGNH/GradCAM, perfilador forense, análisis de chokepoints IPB y perfilado doctrinal.
+* 🔵 [**17.5. Línea 5: Generalización Procedural y Robustez en Terrenos Abiertos**](roadmap/05_LINEA_5_GENERALIZACION_PROCEDURAL.md): Mutación procedural con clumping geográfico y validación Zero-Shot en mapas 32x32 y 64x64.
 
 #### Documento Coordinador Maestro:
-* 🗺️ [**13. Hoja de Ruta Evolutiva (Roadmap Maestro y Changelog)**](05_ROADMAP_EVOLUTIVO.md): Visión ejecutiva, matriz maestra de seguimiento, orden de ejecución global e historial canónico de versiones (v1.0.0 a v2.5.1).
+* 🗺️ [**17. Hoja de Ruta Evolutiva (Roadmap Maestro y Changelog)**](05_ROADMAP_EVOLUTIVO.md): Visión ejecutiva, matriz maestra global, orden de ejecución y changelog canónico de versiones.
 
 ---
 
