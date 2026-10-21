@@ -1,8 +1,8 @@
 schema_version: adaptive_cycles.v1
 curriculum_name: self_vs_self_vs_random_2scenarios_v1
 phase_name: phase2_mix_70_30
-generation: 2
-last_updated_utc: '2026-10-20T18:07:16.729478+00:00'
+generation: 3
+last_updated_utc: '2026-10-21T04:52:46.537296+00:00'
 base_config_path: curriculums/self_vs_self_vs_random_2scenarios_v1/configs/efficientzero_v2.phase2_mix_70_30.yaml
 winning_history:
 - generation: 1
@@ -11,10 +11,16 @@ winning_history:
   win_rate: 0.84375
   tactical_quality_score: 0.4564444444444445
   promotion_decision: promote_best_of_cycles
+- generation: 2
+  winning_cycle: 3
+  promoted_at_utc: '2026-10-21T04:52:46.537296+00:00'
+  win_rate: 0.16666666666666666
+  tactical_quality_score: 0.37333333333333335
+  promotion_decision: promote_best_of_cycles
 cycles:
   1:
     strategy: promoted_baseline
-    description: Generation 2 Baseline (Promoted from Cycle 3 of previous generation).
+    description: Generation 3 Baseline (Promoted from Cycle 3 of previous generation).
     overlay: {}
   2:
     strategy: adaptive_exploitation

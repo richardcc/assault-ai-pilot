@@ -36,9 +36,10 @@ $$\text{TQS} = w_{\text{elo}} \cdot \text{Score}_{\text{ELO}} + w_{\text{mirror}
 
 ## 3. Catálogo Cronológico de Informes de Ejecución
 
-| N.º | Identificador del Informe | Fecha | Alcance / Campaña | Calificación | Estado | Tareas Roadmap Derivadas |
-| :---: | :--- | :---: | :--- | :---: | :---: | :--- |
-| **01** | [**INFORME 01: Ejecución del Currículum Multi-Fase y Auditoría Táctica Forense**](INFORME_01_CURRICULUM_Y_AUDITORIA_TACTICA.md) | Oct 2026 | 31 ciclos de currículum en 12 fases (`self_vs_self_vs_random_2scenarios_v1`), evaluación bilateral 100 partidas vs Random | **B (TQS: 58.5 - WARN)** | Auditado | Tarea 3.6 (Mitigación Parálisis Ofensiva y 38 Canales) |
+| N.º | Identificador del Informe | Fecha | Versión / Commit | Alcance / Campaña | Calificación | Estado | Tareas Roadmap Derivadas |
+| :---: | :--- | :---: | :---: | :--- | :---: | :---: | :--- |
+| **01** | [**INFORME 01: Ejecución del Currículum Multi-Fase y Auditoría Táctica Forense**](INFORME_01_CURRICULUM_Y_AUDITORIA_TACTICA.md) | 20 Oct 2026 | `v2.5.2-legacy` | 31 ciclos de currículum en 12 fases (`self_vs_self_vs_random_2scenarios_v1`), evaluación bilateral 100 partidas vs Random *(Legacy Telemetry)* | **B (TQS: 58.5 - WARN)** | Auditado (Disclaimer) | Tarea 3.6 (Mitigación Parálisis Ofensiva y 38 Canales) |
+| **02** | [**INFORME 02: Ejecución del Currículum Multi-Fase y Auditoría Táctica Forense**](INFORME_02_CURRICULUM_Y_AUDITORIA_TACTICA.md) | 21 Oct 2026 | `v2.5.2-forensics` (`ab71541`) | 34 ciclos de currículum y 24 evaluaciones bilaterales. Telemetría canónica estandarizada, 1.ª victoria ofensiva en campo abierto (21.4% WR) y confirmación de la Paradoja del Comandante Prudente | **B+ (TQS: 64.2 - PROGRESS)** | Consolidado | Línea 2 (Dynamic PBRS, Canales 36/37, Desensibilización Brecha - Subversión v2.5.3) |
 
 *(Los nuevos informes de ejecución generados se incorporarán secuencialmente en este catálogo).*
 

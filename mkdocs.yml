@@ -84,6 +84,7 @@ nav:
   - 11. Informes de Ejecución:
       - Cabecera y Catálogo de Informes: informes_ejecucion/00_CABECERA_INFORMES_EJECUCION.md
       - Informe 01 - Currículum y Auditoría Táctica Forense: informes_ejecucion/INFORME_01_CURRICULUM_Y_AUDITORIA_TACTICA.md
+      - Informe 02 - Ejecución del Currículum Multi-Fase y Auditoría Táctica Forense: informes_ejecucion/INFORME_02_CURRICULUM_Y_AUDITORIA_TACTICA.md
   - 12. Hoja de Ruta Evolutiva (Roadmap):
       - Línea 1 - Observabilidad y Telemetría: roadmap/01_LINEA_1_OBSERVABILIDAD_Y_TELEMETRIA.md
       - Línea 2 - Aceleración de Captura de VPs: roadmap/02_LINEA_2_ACELERACION_CAPTURA_VPS.md

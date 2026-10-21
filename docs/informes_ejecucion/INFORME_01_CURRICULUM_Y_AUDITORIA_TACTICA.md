@@ -7,6 +7,16 @@
 > **Alcance**: Evaluación global del currículum multi-fase (`runs_curriculum/`), análisis de la brecha asimétrica frente a políticas aleatorias (*Random*), auditoría profunda de topología de red, cabezas auxiliares, canales sensoriales, dinámicas MCTS y devaluación de ELO.  
 > **Veredicto General**: **Rango B (TQS: 58.5 / 100 - WARN)**. El sistema muestra alta solidez en roles defensivos (87.5% WR), pero sufre de una **parálisis ofensiva severa (0.0% WR como atacante US vs Random)** que distorsiona la competencia táctica real del modelo.
 
+> [!WARNING]
+> **DISCLAIMER METODOLÓGICO Y CONDICIÓN DE MEDIDAS HEREDADAS (LEGACY TELEMETRY DISCLAIMER)**  
+> *Este informe (Informe 01) refleja los datos registrados bajo el sistema inicial de instrumentación y evaluación (hasta el 20 de octubre de 2026).*  
+> Con posterioridad a esta emisión, se identificaron y subsanaron importantes limitaciones en la instrumentación y cálculo de KPIs:
+> 1. **Proxy del Embudo de Progreso (Funnel)**: En este informe, `opportunities` se computaba erróneamente sobre `reaction_window_count` y `progress_actions` sobre `melee_attempts`, midiendo combate cuerpo a cuerpo en lugar de aproximación real a VPs (`vp_approach_rate_eligible_steps`).
+> 2. **Desacoplamiento de Reglas por Escenario**: En el visualizador MLOps, las condiciones de victoria se presentaban agregadas o proyectadas sobre un único escenario (`battaglia_cittadina_2_1`), lo que inducía lecturas erróneas sobre la regla de muerte súbita o tiempo límite de `mettete_i_piedi_terra_1`.
+> 3. **Agregación Multi-Bando**: Se corrigió el evaluador de desenlace de coaliciones (`winner in eval_candidates` vs. comparación estricta con `IT`).
+> 
+> **Directiva de Comparación:** Cualquier comparación entre los resultados de este Informe 01 y las campañas posteriores (en particular el **[Informe 02](INFORME_02_CURRICULUM_Y_AUDITORIA_TACTICA.md)**) debe realizarse con **extrema cautela metodológica**, reconociendo que las métricas de embudo, ELO anclado y win rate desagregado no son directamente intercambiables debido al cambio en el instrumental de medición.
+
 ---
 
 ## 1. Resumen Ejecutivo y Diagnóstico Global

@@ -126,6 +126,13 @@ CANONICAL_DOCS_ORDER = [
         "desc": "Auditoría de 31 ciclos, diagnóstico de parálisis ofensiva, bloqueo de canales 36/37 y plan de mitigación.",
     },
     {
+        "id": "doc-16-informe-02",
+        "title": "12.2. Informe 02: Ejecución del Currículum Multi-Fase y Auditoría Táctica Forense (EfficientZero V2)",
+        "icon": "📈",
+        "file": "informes_ejecucion/INFORME_02_CURRICULUM_Y_AUDITORIA_TACTICA.md",
+        "desc": "Evaluación post-estandarización telemetría (34 evals), 1.ª victoria en campo abierto y confirmación de la Paradoja del Comandante Prudente.",
+    },
+    {
         "id": "doc-linea-1",
         "title": "13.1. Roadmap: Línea 1 (Observabilidad y Telemetría)",
         "icon": "🔴",
