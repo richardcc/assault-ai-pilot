@@ -293,6 +293,8 @@ def _run_benchmark_impl(
         inference_max_batch_size=int(inference_max_batch_size),
         inference_batch_wait_ms=float(inference_batch_wait_ms),
         seed_batch_size=int(max(1, seed_batch_size)),
+        enable_sprt=bool(cfg.benchmark.get("enable_sprt", False)),
+        sprt_config=dict(cfg.benchmark.get("sprt_config", {}) or {}),
     )
     ensure_benchmark_results_non_empty(
         results=list(results or []),

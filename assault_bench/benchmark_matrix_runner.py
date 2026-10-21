@@ -8,6 +8,7 @@ from typing import Any, Callable, Dict, List, Optional, Tuple
 from agents.efficientzero_v2.core.inference_service import InferenceService
 from assault_bench.benchmark_result_builder import build_benchmark_result
 from assault_bench.benchmark_types import BenchmarkResult
+from assault_bench.sprt import WaldSPRT
 from assault_bench.trace_metrics_utils import (
     build_eval_decision_steps_top as _tm_build_eval_decision_steps_top,
 )
@@ -66,6 +67,8 @@ def execute_benchmark_matrix(
     inference_max_batch_size: int = 16,
     inference_batch_wait_ms: float = 2.0,
     seed_batch_size: int = 1,
+    enable_sprt: bool = False,
+    sprt_config: Optional[Dict[str, object]] = None,
 ) -> tuple[List[BenchmarkResult], List[Dict[str, object]]]:
     def _as_dict(x):
         return x if isinstance(x, dict) else dict(x or {})
@@ -266,6 +269,29 @@ def execute_benchmark_matrix(
             or "muzero" in agent_name.lower()
         )
         mcts_simulations_eff = int(spec.get("mcts_simulations_override", mcts_simulations) or mcts_simulations)
+        spec_sprt_enabled = bool(spec.get("enable_sprt", enable_sprt))
+        sprt_engine: Optional[WaldSPRT] = None
+        if spec_sprt_enabled:
+            cfg_s = dict(spec.get("sprt_config", {}) or sprt_config or {})
+            p0 = float(cfg_s.get("p0", 0.50))
+            p1 = float(cfg_s.get("p1", 0.75))
+            alpha = float(cfg_s.get("alpha", 0.01))
+            beta = float(cfg_s.get("beta", 0.01))
+            min_games = int(cfg_s.get("min_games", 12))
+            max_games = int(cfg_s.get("max_games", len(seeds)))
+            sprt_engine = WaldSPRT(
+                p0=p0,
+                p1=p1,
+                alpha=alpha,
+                beta=beta,
+                min_games=min_games,
+                max_games=max_games,
+            )
+            print(
+                f"[Bench] [SPRT] Active for profile={profile} "
+                f"(p0={p0:.2f}, p1={p1:.2f}, alpha={alpha}, beta={beta}, min={min_games}, max={max_games})",
+                flush=True,
+            )
         print(
             f"[Bench] profile={profile} agent={agent_name} policy={policy} "
             f"policy_by_side={policy_by_side if policy_by_side else '{}'} start",
@@ -484,6 +510,20 @@ def execute_benchmark_matrix(
                                 f"elapsed_s={float(episode_elapsed_s or 0.0):.2f}",
                                 flush=True,
                             )
+                            if sprt_engine is not None:
+                                is_win = bool(win)
+                                is_loss = bool(terminal and not win)
+                                is_draw = bool(not is_win and not is_loss)
+                                sprt_dec = sprt_engine.record_result(win=is_win, loss=is_loss, draw=is_draw)
+                                if sprt_dec.should_stop:
+                                    print(
+                                        f"[Bench] [SPRT] Early stopping triggered for profile={profile}: {sprt_dec.reason}",
+                                        flush=True,
+                                    )
+                                    for fut_item in futures:
+                                        if not fut_item.done():
+                                            fut_item.cancel()
+                                    break
                 finally:
                     if inference_service is not None:
                         try:
@@ -625,6 +665,20 @@ def execute_benchmark_matrix(
                                 f"elapsed_s={float(episode_elapsed_s or 0.0):.2f}",
                                 flush=True,
                             )
+                            if sprt_engine is not None:
+                                is_win = bool(win)
+                                is_loss = bool(terminal and not win)
+                                is_draw = bool(not is_win and not is_loss)
+                                sprt_dec = sprt_engine.record_result(win=is_win, loss=is_loss, draw=is_draw)
+                                if sprt_dec.should_stop:
+                                    print(
+                                        f"[Bench] [SPRT] Early stopping triggered for profile={profile}: {sprt_dec.reason}",
+                                        flush=True,
+                                    )
+                                    for fut_item in futures:
+                                        if not fut_item.done():
+                                            fut_item.cancel()
+                                    break
         else:
             for idx, s in enumerate(seeds, start=1):
                 seed_scenario_id = _scenario_for_seed(int(s))
@@ -768,9 +822,29 @@ def execute_benchmark_matrix(
                     f"elapsed_s={float(episode_elapsed_s or 0.0):.2f}",
                     flush=True,
                 )
+                if sprt_engine is not None:
+                    is_win = bool(win)
+                    is_loss = bool(terminal and not win)
+                    is_draw = bool(not is_win and not is_loss)
+                    sprt_dec = sprt_engine.record_result(win=is_win, loss=is_loss, draw=is_draw)
+                    if sprt_dec.should_stop:
+                        print(
+                            f"[Bench] [SPRT] Early stopping triggered for profile={profile}: {sprt_dec.reason}",
+                            flush=True,
+                        )
+                        break
         eval_decision_summary, eval_decisions_top = build_eval_decision_summary_fn(
             trace_rows=decision_trace_rows_all
         )
+        if sprt_engine is not None:
+            eval_decision_summary["sprt_status"] = {
+                "active": True,
+                "llr": float(sprt_engine.llr),
+                "bound_a": float(sprt_engine.bound_a),
+                "bound_b": float(sprt_engine.bound_b),
+                "games_played": int(sprt_engine.total_games),
+                "win_rate": float(sprt_engine.win_rate),
+            }
         eval_decision_steps_top = _tm_build_eval_decision_steps_top(
             trace_rows=decision_trace_rows_all,
             limit=40,
@@ -807,7 +881,7 @@ def execute_benchmark_matrix(
                     goal=goal,
                     policy=policy,
                     policy_by_side=policy_by_side,
-                    seeds=seeds,
+                    seeds=[int(r.get("seed_used", 0)) for r in episode_records] if episode_records else seeds,
                     returns=returns,
                     steps=steps,
                     terminals=terminals,

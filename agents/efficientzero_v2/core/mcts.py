@@ -243,6 +243,23 @@ def run_mcts_puct(
 
     required_root_visits = int(min_root_k * min_root_n) if (min_root_k > 0 and min_root_n > 0) else 0
     total_simulations = max(1, int(num_simulations), int(required_root_visits))
+
+    # Precomputed caches outside simulation loop to eliminate redundant function calls and lookups (Task 2.9)
+    precomputed_success_comps = [
+        _success_components(legal_actions[i])[2] for i in range(n)
+    ]
+    priors_c_puct = [c_puct * priors[i] for i in range(n)]
+    if values_by_action:
+        base_simulated_values = [
+            float(values_by_action.get(legal_actions[i], 0.0)) for i in range(n)
+        ]
+    else:
+        # Deterministic fallback proxy in [-1, 1] when model values are absent.
+        base_simulated_values = [(2.0 * priors[i]) - 1.0 for i in range(n)]
+    if value_sign_by_action:
+        signs = [-1.0 if int(value_sign_by_action.get(legal_actions[i], 1)) < 0 else 1.0 for i in range(n)]
+        base_simulated_values = [v * s for v, s in zip(base_simulated_values, signs)]
+
     for _ in range(total_simulations):
         total_visits = sum(visits)
         best_idx = 0
@@ -277,21 +294,13 @@ def run_mcts_puct(
         if best_score != float("inf"):
             for i in range(n):
                 q_value = float(normalized_q_values[i])
-                u_value = c_puct * priors[i] * (root_sqrt / (1 + visits[i]))
-                _, success_centered, success_component = _success_components(legal_actions[i])
-                score = q_value + u_value + success_component
+                u_value = priors_c_puct[i] * (root_sqrt / (1 + visits[i]))
+                score = q_value + u_value + precomputed_success_comps[i]
                 if score > best_score:
                     best_score = score
                     best_idx = i
 
-        if values_by_action:
-            simulated_value = float(values_by_action.get(legal_actions[best_idx], 0.0))
-        else:
-            # Deterministic fallback proxy in [-1, 1] when model values are absent.
-            simulated_value = (2.0 * priors[best_idx]) - 1.0
-        if value_sign_by_action:
-            sign = int(value_sign_by_action.get(legal_actions[best_idx], 1))
-            simulated_value *= -1.0 if sign < 0 else 1.0
+        simulated_value = base_simulated_values[best_idx]
         simulated_value = _rescale_value_estimate(simulated_value)
         if chance_enabled:
             sample_sum = 0.0

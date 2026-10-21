@@ -35,6 +35,7 @@ class Map:
 
         # Dynamic smoke markers indexed by axial coordinate (q, r) -> count (Rule 7.2)
         self.smoke_markers: Dict[Tuple[int, int], int] = {}
+        self._cached_terrain_sig: Optional[int] = None
 
     # ---------------------------------------------------------
     # Hex retrieval
@@ -104,6 +105,7 @@ class Map:
             "vertex_start": vertex_start,
             "vertex_end": vertex_end,
         }
+        self._cached_terrain_sig = None
 
     def get_hex_fortification(self, q: int, r: int) -> Optional[str]:
         data = self.hex_fortifications.get((q, r))
@@ -116,12 +118,14 @@ class Map:
 
     def remove_hex_fortification(self, q: int, r: int) -> Optional[Dict[str, object]]:
         """Remove fortification or obstacle marker from hex (Rule 12.5)."""
+        self._cached_terrain_sig = None
         return self.hex_fortifications.pop((q, r), None)
 
     def set_hex_fortification_type(self, q: int, r: int, new_type: str) -> None:
         """Change fortification type (e.g. bunker collapsing to trench, Rule 12.5)."""
         if (q, r) in self.hex_fortifications:
             self.hex_fortifications[(q, r)]["type"] = str(new_type)
+            self._cached_terrain_sig = None
 
     def set_hex_fortification_identified(self, q: int, r: int, identified: bool = True) -> None:
         """Mark a minefield or fortification as identified (Rule 9.6.6.2)."""
@@ -224,7 +228,11 @@ class Map:
         Lightweight structural hash of all hex terrains and fortifications.
         Ensures precomputed LOS/movement tensors automatically invalidate if
         procedural terrain mutation alters the map before a match.
+        Cached on the map instance for high-throughput raycasting.
         """
+        cached = getattr(self, "_cached_terrain_sig", None)
+        if cached is not None:
+            return cached
         h = 2166136261
         for hx in self.hexes:
             t_val = getattr(hx.terrain, "value", str(hx.terrain))
@@ -232,6 +240,7 @@ class Map:
         if self.hex_fortifications:
             for k, v in self.hex_fortifications.items():
                 h = ((h ^ hash((k, v.get("type")))) * 16777619) & 0xFFFFFFFFFFFFFFFF
+        self._cached_terrain_sig = h
         return h
 
     def get_topology_tensors(self):

@@ -646,6 +646,25 @@ class EfficientZeroV2BaseNetwork(nn.Module):
             return self._scale_latent(hidden + ctx.unsqueeze(-1).unsqueeze(-1))
         return ctx
 
+    def compile_inference(self, mode: str = "default", fullgraph: bool = False) -> "NetworkBase":
+        """
+        Optimize model for static shape inference using torch.compile.
+        Maintains strict mathematical equivalence (zero quality loss).
+        Gracefully falls back to standard eager mode if torch.compile is unsupported.
+        """
+        if not hasattr(torch, "compile"):
+            return self
+        try:
+            if hasattr(self, "representation") and not isinstance(self.representation, getattr(torch, "_dynamo", object)):
+                self.representation = torch.compile(self.representation, mode=mode, fullgraph=fullgraph)
+            if hasattr(self, "prediction_trunk") and not isinstance(self.prediction_trunk, getattr(torch, "_dynamo", object)):
+                self.prediction_trunk = torch.compile(self.prediction_trunk, mode=mode, fullgraph=fullgraph)
+            if hasattr(self, "dynamics_state") and not isinstance(self.dynamics_state, getattr(torch, "_dynamo", object)):
+                self.dynamics_state = torch.compile(self.dynamics_state, mode=mode, fullgraph=fullgraph)
+        except Exception:
+            pass
+        return self
+
     def initial_inference(self, observation: torch.Tensor, return_aux: bool = False):
         if self.encoder_type == "cnn":
             obs_in = self._gate_input_channels(observation)

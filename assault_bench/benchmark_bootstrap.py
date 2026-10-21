@@ -205,6 +205,11 @@ def bootstrap_checkpoint_runtime(
         if bench_device == "cuda":
             model = model.to("cuda")
         model.eval()
+        if bool(cfg_benchmark.get("compile_inference", False)) and hasattr(model, "compile_inference"):
+            try:
+                model.compile_inference(mode="default")
+            except Exception:
+                pass
 
     return {
         "model": model,
