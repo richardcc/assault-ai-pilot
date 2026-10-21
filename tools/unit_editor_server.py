@@ -279,6 +279,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
       <button type="button" id="tab-nav-formations" class="btn-nav" onclick="switchView('formations')">🛡️ Formation Catalog (OOB)</button>
     </nav>
     <div id="unit-header-badges" style="display: flex; gap: 0.8rem; align-items: center;">
+      <button type="button" class="btn-nav" style="padding: 0.25rem 0.6rem; font-size: 0.75rem;" onclick="loadData(0)" title="Reload catalog data">🔄 Reload</button>
       <span id="catalog-count" class="badge badge-published" style="cursor: pointer;" onclick="setStatusFilter('published')">0 Published</span>
       <span id="staging-count" class="badge badge-staged" style="cursor: pointer;" onclick="setStatusFilter('staged')">0 Staged</span>
     </div>
@@ -328,16 +329,16 @@ HTML_TEMPLATE = """<!DOCTYPE html>
               </div>
             </div>
             <div style="position: relative;">
-              <img id="card-front-img" class="card-img" src="" alt="Card Front" />
-              <img id="card-back-img" class="card-img" src="" alt="Card Back" style="display: none;" />
+              <img id="card-front-img" class="card-img" src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg'/%3E" alt="Card Front" />
+              <img id="card-back-img" class="card-img" src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg'/%3E" alt="Card Back" style="display: none;" />
             </div>
             <div class="counter-row">
               <div>
-                <img id="counter-front-img" src="" alt="Counter Front" />
+                <img id="counter-front-img" src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg'/%3E" alt="Counter Front" />
                 <div style="font-size: 0.7rem; color: var(--text-muted); margin-top: 2px;">Counter A</div>
               </div>
               <div>
-                <img id="counter-back-img" src="" alt="Counter Back" />
+                <img id="counter-back-img" src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg'/%3E" alt="Counter Back" />
                 <div style="font-size: 0.7rem; color: var(--text-muted); margin-top: 2px;">Counter B</div>
               </div>
             </div>
@@ -496,7 +497,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
               <span id="formation-art-badge" class="badge badge-published" style="font-size: 0.65rem;">Art Available</span>
             </div>
             <div style="position: relative; flex: 1; display: flex; align-items: center; justify-content: center; min-height: 380px;">
-              <img id="formation-card-img" class="card-img" src="" alt="Formation Card Art" style="max-height: 480px;" />
+              <img id="formation-card-img" class="card-img" src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg'/%3E" alt="Formation Card Art" style="max-height: 480px;" />
             </div>
             <div style="margin-top: 0.8rem; text-align: left;">
               <label style="font-size: 0.7rem; font-weight: 700; color: var(--text-muted); text-transform: uppercase;">Select / Reassign Card Art</label>
@@ -658,48 +659,81 @@ HTML_TEMPLATE = """<!DOCTYPE html>
     let formationFactionFilter = 'all';
     let formationStatusFilter = 'all';
 
-    async function loadData() {
-      const res = await fetch('/api/units/state');
-      const data = await res.json();
-      inventory = data.inventory || [];
-      catalog = data.catalog?.units || {};
-      staging = data.staging || {};
-      availableTraits = data.traits || [];
-      
-      const pubCount = Object.keys(catalog).length;
-      const stgCount = Object.keys(staging).length;
-      const totalCount = inventory.length;
-      const penCount = inventory.filter(u => !catalog[u.id] && !staging[u.id]).length;
+    let isLoadingData = false;
+    async function loadData(retryCount = 0) {
+      if (isLoadingData && retryCount === 0) return;
+      isLoadingData = true;
+      try {
+        const res = await fetch('/api/units/state', { cache: 'no-store' });
+        if (!res.ok) {
+          throw new Error('HTTP ' + res.status + ' ' + res.statusText);
+        }
+        const data = await res.json();
+        inventory = data.inventory || [];
+        catalog = (data.catalog && data.catalog.units) ? data.catalog.units : {};
+        staging = data.staging || {};
+        availableTraits = data.traits || [];
+        
+        const pubCount = Object.keys(catalog).length;
+        const stgCount = Object.keys(staging).length;
+        const totalCount = inventory.length;
+        const penCount = inventory.filter(u => !catalog[u.id] && !staging[u.id]).length;
 
-      document.getElementById('catalog-count').innerText = pubCount + ' Published';
-      document.getElementById('staging-count').innerText = stgCount + ' Staged';
+        const elCat = document.getElementById('catalog-count');
+        if (elCat) elCat.innerText = pubCount + ' Published';
+        const elStg = document.getElementById('staging-count');
+        if (elStg) elStg.innerText = stgCount + ' Staged';
 
-      document.getElementById('count-all').innerText = totalCount;
-      document.getElementById('count-pub').innerText = pubCount;
-      document.getElementById('count-stg').innerText = stgCount;
-      document.getElementById('count-pen').innerText = penCount;
+        const elAll = document.getElementById('count-all');
+        if (elAll) elAll.innerText = totalCount;
+        const elPub = document.getElementById('count-pub');
+        if (elPub) elPub.innerText = pubCount;
+        const elStgCount = document.getElementById('count-stg');
+        if (elStgCount) elStgCount.innerText = stgCount;
+        const elPen = document.getElementById('count-pen');
+        if (elPen) elPen.innerText = penCount;
 
-      const factions = ['GE', 'US', 'UK', 'IT'];
-      factions.forEach(f => {
-        const el = document.getElementById('count-fac-' + f);
-        if (el) el.innerText = inventory.filter(u => u.faction === f).length;
-      });
-
-      const traitSelect = document.getElementById('filter-trait-select');
-      if (traitSelect) {
-        const savedVal = currentTraitFilter;
-        traitSelect.innerHTML = '<option value="all">⚡ Filter by Keyword / Trait (All)</option>';
-        availableTraits.forEach(t => {
-          const opt = document.createElement('option');
-          opt.value = t;
-          opt.innerText = t;
-          traitSelect.appendChild(opt);
+        const factions = ['GE', 'US', 'UK', 'IT'];
+        factions.forEach(f => {
+          const el = document.getElementById('count-fac-' + f);
+          if (el) el.innerText = inventory.filter(u => u.faction === f).length;
         });
-        traitSelect.value = savedVal;
-      }
 
-      renderSidebar();
-      await loadFormationsData();
+        const traitSelect = document.getElementById('filter-trait-select');
+        if (traitSelect) {
+          const savedVal = currentTraitFilter;
+          traitSelect.innerHTML = '<option value="all">⚡ Filter by Keyword / Trait (All)</option>';
+          availableTraits.forEach(t => {
+            const opt = document.createElement('option');
+            opt.value = t;
+            opt.innerText = t;
+            traitSelect.appendChild(opt);
+          });
+          traitSelect.value = savedVal;
+        }
+
+        renderSidebar();
+        await loadFormationsData();
+        isLoadingData = false;
+      } catch (err) {
+        isLoadingData = false;
+        console.error('Failed to load unit catalog data:', err);
+        if (retryCount < 6) {
+          console.log(`Retrying unit catalog load in 1s (attempt ${retryCount + 1}/6)...`);
+          setTimeout(() => loadData(retryCount + 1), 1000);
+        } else {
+          const list = document.getElementById('unit-list');
+          if (list) {
+            list.innerHTML = `
+              <li style="padding: 1.2rem; text-align: center; color: #f87171; background: #2a1215; border-radius: 6px; border: 1px solid #7f1d1d;">
+                <div style="font-weight: 700; margin-bottom: 0.4rem;">⚠️ Connection Error</div>
+                <div style="font-size: 0.78rem; margin-bottom: 0.8rem; color: #fca5a5;">Could not reach backend on port 8780.</div>
+                <button type="button" class="btn-nav" style="background: #0284c7; color: #fff;" onclick="loadData(0)">🔄 Retry</button>
+              </li>
+            `;
+          }
+        }
+      }
     }
 
     // --- NAVIGATION VIEW SWITCHER ---
@@ -1045,7 +1079,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
         const isActive = activeTraits.has(trait);
         const chip = document.createElement('div');
         chip.className = 'trait-chip' + (isActive ? ' active' : '');
-        chip.title = (TRAIT_DESCRIPTIONS[trait] || trait) + '\n(Click para alternar)';
+        chip.title = (TRAIT_DESCRIPTIONS[trait] || trait) + ' (Click to toggle)';
         chip.setAttribute('data-desc', TRAIT_DESCRIPTIONS[trait] || '');
         chip.onclick = () => toggleTrait(trait);
 
@@ -2125,7 +2159,14 @@ HTML_TEMPLATE = """<!DOCTYPE html>
       setTimeout(() => { el.style.display = 'none'; }, 3000);
     }
 
-    window.onload = loadData;
+    function initApp() {
+      loadData(0);
+    }
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', initApp);
+    } else {
+      initApp();
+    }
   </script>
 </body>
 </html>
@@ -2140,6 +2181,8 @@ class UnitEditorHandler(BaseHTTPRequestHandler):
         if path == "/" or path == "/index.html":
             self.send_response(200)
             self.send_header("Content-Type", "text/html; charset=utf-8")
+            self.send_header("Cache-Control", "no-cache, no-store, must-revalidate")
+            self.send_header("Access-Control-Allow-Origin", "*")
             self.end_headers()
             self.wfile.write(HTML_TEMPLATE.encode("utf-8"))
             return
@@ -2164,6 +2207,8 @@ class UnitEditorHandler(BaseHTTPRequestHandler):
             }
             self.send_response(200)
             self.send_header("Content-Type", "application/json; charset=utf-8")
+            self.send_header("Cache-Control", "no-cache, no-store, must-revalidate")
+            self.send_header("Access-Control-Allow-Origin", "*")
             self.end_headers()
             self.wfile.write(json.dumps(payload, ensure_ascii=False).encode("utf-8"))
             return
@@ -2179,6 +2224,8 @@ class UnitEditorHandler(BaseHTTPRequestHandler):
             }
             self.send_response(200)
             self.send_header("Content-Type", "application/json; charset=utf-8")
+            self.send_header("Cache-Control", "no-cache, no-store, must-revalidate")
+            self.send_header("Access-Control-Allow-Origin", "*")
             self.end_headers()
             self.wfile.write(json.dumps(payload, ensure_ascii=False).encode("utf-8"))
             return
@@ -2312,6 +2359,7 @@ class UnitEditorHandler(BaseHTTPRequestHandler):
 
 
 def run_server(port: int = 8780):
+    ThreadingHTTPServer.allow_reuse_address = True
     server = ThreadingHTTPServer(("0.0.0.0", port), UnitEditorHandler)
     print(f"[*] Assault Unit & Formation Catalog Editor listening at http://127.0.0.1:{port}")
     try:

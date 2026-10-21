@@ -114,3 +114,31 @@ def test_api_formations_lifecycle(running_editor_server):
 
     formations_after = load_formations()
     assert test_id not in formations_after
+
+
+def test_editor_html_javascript_syntax_valid():
+    """Verify that the embedded <script> in tools/unit_editor_server.py has zero JavaScript syntax errors."""
+    import shutil
+    import subprocess
+    import tempfile
+    from pathlib import Path
+    from tools.unit_editor_server import HTML_TEMPLATE
+
+    node_bin = shutil.which("node")
+    if not node_bin:
+        pytest.skip("node.js not available to check JavaScript syntax")
+
+    start = HTML_TEMPLATE.find("<script>") + len("<script>")
+    end = HTML_TEMPLATE.find("</script>")
+    assert start > len("<script>") and end > start, "<script> tag not found in HTML_TEMPLATE"
+    js_code = HTML_TEMPLATE[start:end]
+
+    with tempfile.NamedTemporaryFile("w", suffix=".js", delete=False, encoding="utf-8") as f:
+        f.write(js_code)
+        tmp_name = f.name
+
+    try:
+        res = subprocess.run([node_bin, "--check", tmp_name], capture_output=True, text=True)
+        assert res.returncode == 0, f"JavaScript syntax error in unit_editor_server.py:\n{res.stderr}"
+    finally:
+        Path(tmp_name).unlink(missing_ok=True)
