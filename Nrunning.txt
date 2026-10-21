@@ -1,3 +1,6 @@
+.\curriculums\vp_acceleration\run_all_phases.ps1
+
+
 .\git_publish.ps1
 
 http://localhost:6006/

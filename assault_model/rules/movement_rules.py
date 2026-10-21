@@ -6,8 +6,10 @@ from assault_model.map.hex_coord import HexCoord
 
 from assault_model.rules.movement_terrain_rules import MovementTerrainRules
 from assault_model.map.terrain_config import terrain_config
-from assault_model.map.hex_utils import neighbors as hex_neighbors
+from typing import Optional, Dict, List, Tuple, Any, Set
+from assault_model.map.hex_utils import neighbors as hex_neighbors, safe_hex_distance
 from assault_model.rules.fortification_rules import FortificationRules
+from assault_model.combat.line_of_sight import check_line_of_sight, LineOfSight
 
 
 def _is_vehicle(unit) -> bool:
@@ -251,3 +253,187 @@ class MovementRules:
 
         cache[cache_key] = tuple(paths)
         return list(paths)
+
+    # -------------------------------------------------
+    # FALLBACK RETREAT ALGORITHM (Section 6.4 / Rule 13.3)
+    # -------------------------------------------------
+    @staticmethod
+    def calculate_fallback_destination(
+        game_state,
+        unit,
+        attacker=None,
+        friendly_edge: Optional[str] = None,
+        game_map=None,
+    ) -> Tuple[Optional[HexCoord], List[Dict[str, Any]]]:
+        """
+        Calculates the tactical fallback retreat destination according to Rule 13.3 / Section 6.4:
+        1. Moves away from the direction of attack (must not decrease distance to attacker if avoidable).
+        2. Filters for legal, passable hexes (excludes enemy-occupied, out-of-bounds, impassable).
+        3. Prioritizes Defilade (LOS BLOCKED from attacker > LOS HINDERED > CLEAR).
+        4. Selects best available terrain defense cover (trenches, bunkers, woods, buildings).
+        5. Aligns retreat vector towards the friendly board edge (retaguardia amiga).
+        6. Deterministic tie-breaking by coordinates.
+        7. Returns (best_hex_coord, scored_candidates). If no legal hex exists, returns (None, []).
+        """
+        gmap = getattr(game_state, "game_map", None) or game_map
+        if gmap is None:
+            return None, []
+
+        start = getattr(unit, "position", None)
+        if start is None or not getattr(unit, "alive", True):
+            return None, []
+
+        start_coord = HexCoord.from_any(start)
+        start_t = (start_coord.q, start_coord.r)
+
+        all_units = getattr(game_state, "units", None) or []
+        if not all_units and (unit or attacker):
+            all_units = [u for u in (unit, attacker) if u is not None]
+
+        occupants: Dict[Tuple[int, int], Any] = {}
+        for u in all_units:
+            u_pos = getattr(u, "position", None)
+            if getattr(u, "alive", True) and u_pos is not None:
+                u_coord = HexCoord.from_any(u_pos)
+                if getattr(u, "unit_id", None) != getattr(unit, "unit_id", None):
+                    occupants[(u_coord.q, u_coord.r)] = u
+
+        attacker_pos = getattr(attacker, "position", None) if attacker is not None else None
+        attacker_coord = HexCoord.from_any(attacker_pos) if attacker_pos is not None else None
+        current_dist = safe_hex_distance(start_coord, attacker_coord) if attacker_coord is not None else 0
+
+        # Infer friendly edge if not explicitly provided
+        unit_side = str(getattr(unit, "side", "")).upper()
+        if not friendly_edge:
+            fe_map = getattr(game_state, "friendly_edges", {}) or {}
+            friendly_edge = fe_map.get(unit_side)
+            if not friendly_edge:
+                if unit_side in ("US", "UK"):
+                    friendly_edge = "SOUTH"
+                elif unit_side in ("IT", "GE"):
+                    friendly_edge = "NORTH"
+
+        scored_candidates: List[Dict[str, Any]] = []
+
+        for nq, nr in hex_neighbors(start_t):
+            tile = gmap.get_hex(nq, nr)
+            if tile is None:
+                continue
+            if not MovementTerrainRules.can_enter_hex(unit, tile):
+                continue
+
+            occ = occupants.get((nq, nr))
+            if occ is not None:
+                if getattr(occ, "side", None) != getattr(unit, "side", None):
+                    continue  # Enemy occupied
+                # Friendly unit stacking check
+                if _is_vehicle(occ) and not _is_vehicle(unit):
+                    pass  # Infantry mounting friendly vehicle in emergency
+                else:
+                    continue  # Friendly foot unit already occupies hex
+
+            cand_coord = HexCoord(nq, nr)
+
+            # --- 1. Defilade Evaluation (Line of Sight from Attacker) ---
+            los_result = LineOfSight.CLEAR
+            defilade_score = 0
+            if attacker is not None and attacker_coord is not None:
+                los_result = check_line_of_sight(attacker, cand_coord, gmap, terrain_config)
+                if los_result == LineOfSight.BLOCKED:
+                    defilade_score = 100
+                elif los_result == LineOfSight.HINDERED:
+                    defilade_score = 40
+                else:
+                    defilade_score = 0
+            else:
+                terrain_name_str = tile.get_terrain()
+                cfg_los = terrain_config.get(terrain_name_str, {}).get("los", "CLEAR") if hasattr(terrain_config, "get") else "CLEAR"
+                if cfg_los == "BLOCKED":
+                    defilade_score = 50
+                elif cfg_los == "HINDERED":
+                    defilade_score = 25
+
+            # --- 2. Terrain Defense Cover Evaluation ---
+            terrain_name_str = tile.get_terrain()
+            unit_cat = getattr(getattr(unit, "unit_type", None), "category", None)
+            unit_cat_name = unit_cat.name if hasattr(unit_cat, "name") else "INFANTRY"
+            dice_names = terrain_config.get_defense_dice(terrain_name_str, unit_cat_name)
+            cover_score = 0
+            for d in dice_names:
+                if d == "GREEN":
+                    cover_score += 6
+                elif d == "BLUE":
+                    cover_score += 4
+                elif d == "YELLOW":
+                    cover_score += 2
+
+            fort_type = gmap.get_hex_fortification(nq, nr)
+            if fort_type == "bunker":
+                cover_score += 15
+            elif fort_type in ("casemate", "pillbox"):
+                cover_score += 12
+            elif fort_type == "trench":
+                cover_score += 8
+            elif fort_type == "sandbag":
+                cover_score += 4
+
+            # --- 3. Distance to Attacker (Away from Attack) ---
+            dist_score = 0
+            cand_dist = 0
+            if attacker_coord is not None:
+                cand_dist = safe_hex_distance(cand_coord, attacker_coord)
+                delta_d = cand_dist - current_dist
+                if delta_d > 0:
+                    dist_score = 30 * delta_d
+                elif delta_d == 0:
+                    dist_score = 5
+                else:
+                    dist_score = -500  # Strongly penalize moving closer to the threat
+
+            # --- 4. Alignment with Friendly Board Edge ---
+            edge_score = 0
+            if friendly_edge == "NORTH":
+                edge_score = -(nr - start_coord.r) * 15
+            elif friendly_edge == "SOUTH":
+                edge_score = (nr - start_coord.r) * 15
+            elif friendly_edge == "EAST":
+                edge_score = (nq - start_coord.q) * 15
+            elif friendly_edge == "WEST":
+                edge_score = -(nq - start_coord.q) * 15
+            elif attacker_coord is not None:
+                dot = (nq - start_coord.q) * (start_coord.q - attacker_coord.q) + (nr - start_coord.r) * (start_coord.r - attacker_coord.r)
+                edge_score = 10 * dot
+
+            total_score = defilade_score + cover_score + dist_score + edge_score
+
+            scored_candidates.append({
+                "coord": cand_coord,
+                "q": nq,
+                "r": nr,
+                "total_score": total_score,
+                "defilade_score": defilade_score,
+                "defilade_status": los_result,
+                "cover_score": cover_score,
+                "dist_score": dist_score,
+                "cand_dist": cand_dist,
+                "edge_score": edge_score,
+            })
+
+        if not scored_candidates:
+            return None, []
+
+        scored_candidates.sort(
+            key=lambda c: (
+                c["total_score"],
+                c["defilade_score"],
+                c["cover_score"],
+                c["cand_dist"],
+                -c["q"],
+                -c["r"],
+            ),
+            reverse=True,
+        )
+
+        best_coord = scored_candidates[0]["coord"]
+        return best_coord, scored_candidates
+

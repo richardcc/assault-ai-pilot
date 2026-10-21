@@ -20,72 +20,43 @@ def obs_enemy_reaction_fire_risk_for_step(
     units: List[object],
     actor_side: str,
 ) -> float:
+    # OPPORTUNITY_FIRE decommissioned in VOEC; directly compute spatial proximity pressure
     side_norm = normalize_side_key(actor_side)
-    units_by_id: Dict[str, Dict[str, object]] = {}
+    actor_coords = []
+    enemy_coords = []
     for u in list(units or []):
         if isinstance(u, dict):
-            ud = dict(u or {})
+            alive = bool(u.get("alive", True))
+            side = normalize_side_key(u.get("side", ""))
+            q = u.get("q")
+            r = u.get("r")
         else:
-            ud = {
-                "unit_id": getattr(u, "unit_id", ""),
-                "side": getattr(u, "side", ""),
-                "alive": getattr(u, "alive", True),
-                "q": getattr(u, "q", None),
-                "r": getattr(u, "r", None),
-            }
-        uid = str(ud.get("unit_id", "") or "").strip()
-        if uid:
-            units_by_id[uid] = ud
-
-    reaction_actions = filter_rows(
-        [str(a or "") for a in list(legal_actions or [])],
-        lambda aid: action_kind_from_id(aid) == "OPPORTUNITY_FIRE",
-    )
-    total_reaction = int(len(reaction_actions))
-    enemy_reaction = 0
-    for action_id in reaction_actions:
-        uid = action_unit_id_from_id(str(action_id))
-        side = normalize_side_key((units_by_id.get(str(uid), {}) or {}).get("side", ""))
-        if side and side != side_norm:
-            enemy_reaction += 1
-    if total_reaction > 0:
-        return float(max(0.0, min(1.0, float(enemy_reaction) / float(total_reaction))))
-
-    actor_units = []
-    enemy_units = []
-    for ud in to_dict_rows(units_by_id.values()):
-        if not bool(ud.get("alive", True)):
-            continue
-        side = normalize_side_key(ud.get("side", ""))
-        if not side:
+            alive = bool(getattr(u, "alive", True))
+            side = normalize_side_key(getattr(u, "side", ""))
+            q = getattr(u, "q", None)
+            r = getattr(u, "r", None)
+        if not alive or not isinstance(q, int) or not isinstance(r, int) or not side:
             continue
         if side == side_norm:
-            actor_units.append(ud)
+            actor_coords.append((int(q), int(r)))
         else:
-            enemy_units.append(ud)
-    if not actor_units or not enemy_units:
+            enemy_coords.append((int(q), int(r)))
+
+    if not actor_coords or not enemy_coords:
         return 0.0
 
     radius = 6.0
-    risk = 0.0
-    for actor in actor_units:
-        aq = actor.get("q", None)
-        ar = actor.get("r", None)
-        if not isinstance(aq, int) or not isinstance(ar, int):
-            continue
-        best: Optional[float] = None
-        for enemy in enemy_units:
-            eq = enemy.get("q", None)
-            er = enemy.get("r", None)
-            if not isinstance(eq, int) or not isinstance(er, int):
-                continue
-            d = float(_axial_distance(int(aq), int(ar), int(eq), int(er)))
-            if best is None or d < best:
-                best = d
-        if best is None:
-            continue
-        risk = max(risk, max(0.0, min(1.0, (radius - float(best)) / radius)))
-    return float(max(0.0, min(1.0, risk)))
+    min_dist = 999.0
+    for aq, ar in actor_coords:
+        for eq, er in enemy_coords:
+            d = float(_axial_distance(aq, ar, eq, er))
+            if d <= 1.0:
+                return 1.0
+            if d < min_dist:
+                min_dist = d
+    if min_dist >= radius:
+        return 0.0
+    return float(max(0.0, min(1.0, (radius - min_dist) / radius)))
 
 
 def reaction_exposure_component_for_step(

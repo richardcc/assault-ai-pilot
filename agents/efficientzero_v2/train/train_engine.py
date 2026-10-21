@@ -168,6 +168,7 @@ def _process_actor_run_episode(ep_seed: int, scenario_id: str | None = None) -> 
             max_steps=int(cfg["max_steps"]),
             max_steps_override=int(cfg["max_steps_override"]),
             max_turns_override=int(cfg.get("max_turns_override", 0)),
+            steps_per_unit_turn=float(cfg.get("steps_per_unit_turn", 2.5)),
             action_dim=int(cfg["action_dim"]),
             model=state["model"],
             mcts_simulations=int(cfg["mcts_simulations"]),
@@ -786,6 +787,7 @@ def run_training(
     max_steps = int(cfg.selfplay["max_steps"])
     max_steps_override = int(cfg.selfplay.get("max_steps_override", 0))
     max_turns_override = int(cfg.selfplay.get("max_turns_override", 0))
+    steps_per_unit_turn = float(cfg.selfplay.get("steps_per_unit_turn", 2.5))
     mcts_simulations = int(cfg.selfplay["mcts_simulations"])
     mcts_c_puct = float(cfg.selfplay["mcts_c_puct"])
     mcts_unroll_steps = int(cfg.selfplay.get("mcts_unroll_steps", 1))
@@ -1033,6 +1035,10 @@ def run_training(
         sim_probe = seq_sim if seq_sim is not None else getattr(probe_adapter, "sim", None)
         if sim_probe is not None and hasattr(sim_probe, "scenario_max_turns"):
             budget_turn_limit = int(sim_probe.scenario_max_turns() or 0)
+        if sim_probe is not None and hasattr(sim_probe, "scenario_total_units"):
+            tot = int(sim_probe.scenario_total_units() or 0)
+            if tot > 0:
+                budget_unit_count = max(budget_unit_count, tot)
     except Exception:
         budget_turn_limit = -1
         budget_unit_count = -1
@@ -1043,6 +1049,7 @@ def run_training(
         max_turns_override=int(max_turns_override),
         unit_count=int(budget_unit_count),
         scenario_turn_limit=int(budget_turn_limit),
+        steps_per_unit_turn=float(steps_per_unit_turn),
     )
     if short_episode_threshold_cfg is not None:
         short_episode_threshold = int(short_episode_threshold_cfg)
@@ -1179,6 +1186,7 @@ def run_training(
             "max_steps": max_steps,
             "max_steps_override": max_steps_override,
             "max_turns_override": max_turns_override,
+            "steps_per_unit_turn": steps_per_unit_turn,
             "action_dim": action_dim,
             "mcts_simulations": mcts_simulations,
             "mcts_c_puct": mcts_c_puct,
@@ -1293,6 +1301,7 @@ def run_training(
                             max_steps=max_steps,
                             max_steps_override=max_steps_override,
                             max_turns_override=max_turns_override,
+                            steps_per_unit_turn=steps_per_unit_turn,
                             action_dim=action_dim,
                             model=model_for_episode,
                             mcts_simulations=mcts_simulations,
@@ -1989,6 +1998,7 @@ def run_training(
                     "max_steps": max_steps,
                     "max_steps_override": max_steps_override,
                     "max_turns_override": max_turns_override,
+                    "steps_per_unit_turn": steps_per_unit_turn,
                     "mcts_simulations": mcts_simulations,
                     "mcts_c_puct": mcts_c_puct,
                     "mcts_unroll_steps": mcts_unroll_steps,

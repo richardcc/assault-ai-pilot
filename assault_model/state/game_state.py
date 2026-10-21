@@ -33,14 +33,6 @@ if TYPE_CHECKING:
     from assault_model.combat.reaction_context import ReactionContext
 
 
-try:
-    from mlops.telemetry.probe_profiler import profile_probe
-except ImportError:
-    import contextlib
-
-    def profile_probe(name: str):
-        return contextlib.nullcontext()
-
 
 DEBUG_TRACE = os.getenv("ASSAULT_DEBUG_TRACE", "0") == "1"
 
@@ -196,6 +188,23 @@ class GameState:
             self._unit_last_known_state[unit.unit_id] = (pos, unit.alive, unit.suppressed)
             if pos is not None:
                 self._units_by_hex.setdefault(pos, set()).add(unit.unit_id)
+
+    def add_unit(self, unit: UnitInstance) -> None:
+        """
+        Dynamically register a reinforcement unit into the game state.
+        Maintains side mappings, spatial unit lookups, turn orders and territorial control.
+        """
+        self.units.append(unit)
+        self._unit_sides[unit.unit_id] = unit.side
+        pos = (unit.position.q, unit.position.r) if (unit.alive and unit.position) else None
+        self._unit_last_known_state[unit.unit_id] = (pos, unit.alive, unit.suppressed)
+        if pos is not None:
+            self._units_by_hex.setdefault(pos, set()).add(unit.unit_id)
+            self._dirty_control_hexes.add(pos)
+        if unit.side not in self.turn_order:
+            self.turn_order.append(unit.side)
+        self._cache_version = int(getattr(self, "_cache_version", 0)) + 1
+        self.recalculate_hex_control(affected_positions=[pos] if pos is not None else None)
 
     def recalculate_hex_control(
         self,

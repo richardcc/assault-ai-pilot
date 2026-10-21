@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import type { Dict, ReplayMetaPayload, ReplayStepRow, ReplayUnitSnapshot } from "../../types";
+import { fetchExplainStep, fetchStepTacticalHeads } from "../../api";
+import { ExplainabilityModal } from "../../components/ExplainabilityModal";
 
 function parseSuppressed(val: unknown): boolean | null {
   if (val === null || val === undefined || val === "") return null;
@@ -14,23 +16,23 @@ function parseSuppressed(val: unknown): boolean | null {
 function getFortificationLabel(type: string): string {
   switch (type.toLowerCase()) {
     case "bunker":
-      return "Búnker Reforzado";
+      return "Reinforced Bunker";
     case "casemate":
-      return "Casamata Blindada";
+      return "Armored Casemate";
     case "pillbox":
-      return "Pillbox / Nido Blindado";
+      return "Pillbox Emplacement";
     case "gun_emplacement":
-      return "Emplazamiento de Artillería";
+      return "Gun Emplacement";
     case "trench":
-      return "Trinchera";
+      return "Trench Line";
     case "barbed_wire":
-      return "Alambradas";
+      return "Barbed Wire";
     case "sandbag":
-      return "Posición Sacos de Arena";
+      return "Sandbag Position";
     case "tank_barricades":
-      return "Barricadas Anticarro";
+      return "Anti-Tank Barricades";
     case "minefield":
-      return "Campo de Minas";
+      return "Minefield";
     default:
       return type.replace(/_/g, " ");
   }
@@ -222,7 +224,7 @@ function getUnitTacticalRole(
     label: "",
     icon: "",
     color: "#64748b",
-    desc: "Sin rol táctico asignado en la traza.",
+    desc: "No tactical role assigned in trace.",
     isMutated: false,
     mutationReason: "",
     priorBoost: 0,
@@ -554,6 +556,15 @@ export function MatchReplayTab({
   });
   const [imgLoadVersion, setImgLoadVersion] = useState(0);
 
+  // Steps and clamped navigation index (declared early so all hooks have access)
+  const steps = useMemo(
+    () => (Array.isArray(replaySteps?.steps) ? (replaySteps!.steps as ReplayStepRow[]) : []),
+    [replaySteps]
+  );
+  const clamped = Math.max(0, Math.min(stepIndex, Math.max(0, steps.length - 1)));
+  const currentStep = steps[clamped] || {};
+
+
   // Cache loaded PNG assets for 2D canvas drawing
   const imageCacheRef = useRef<Map<string, HTMLImageElement>>(new Map());
   const getLoadedImage = useCallback((src: string): HTMLImageElement | null => {
@@ -576,6 +587,90 @@ export function MatchReplayTab({
 
   // Canvas hover & tooltip state
   const [hoveredHex, setHoveredHex] = useState<{ q: number; r: number; x: number; y: number } | null>(null);
+
+  // Explainability Modal (IGNH / Grad-CAM)
+  const [isExplainModalOpen, setIsExplainModalOpen] = useState(false);
+  const [explainData, setExplainData] = useState<Dict | null>(null);
+  const [isExplaining, setIsExplaining] = useState(false);
+  const [explainHeatmapLayer, setExplainHeatmapLayer] = useState<string | null>(null);
+  const [explainHeatmapHexes, setExplainHeatmapHexes] = useState<Array<{ q: number; r: number; value: number }>>([]);
+
+  const handleExplainAction = async () => {
+    const epId = String(replaySteps?.episode_id || "episode_0");
+    const stp = Number(currentStep.step ?? clamped);
+    const actId = String(currentStep.action_id || currentStep.chosen_action || "");
+    setIsExplainModalOpen(true);
+    setIsExplaining(true);
+    try {
+      const resp = await fetchExplainStep(selectedEvalSourcePath, epId, stp, actId);
+      setExplainData(resp);
+    } catch (err: any) {
+      setExplainData({ ok: false, error: String(err?.message || err) });
+    } finally {
+      setIsExplaining(false);
+    }
+  };
+
+  const explainHeatmapMap = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const item of explainHeatmapHexes) {
+      m.set(`${item.q},${item.r}`, item.value);
+    }
+    return m;
+  }, [explainHeatmapHexes]);
+
+  // Tactical Threat Head Overlay State (Auxiliary heads visualization)
+  const [showThreatHead, setShowThreatHead] = useState(false);
+  const [tacticalHeadsByStep, setTacticalHeadsByStep] = useState<Map<number, Dict>>(new Map());
+  const [isLoadingTacticalHeads, setIsLoadingTacticalHeads] = useState(false);
+
+  useEffect(() => {
+    if (!showThreatHead || !selectedEvalSourcePath) return;
+    const stepIdx = clamped;
+    if (tacticalHeadsByStep.has(stepIdx)) return;
+
+    let isMounted = true;
+    setIsLoadingTacticalHeads(true);
+    const epId = String(replaySteps?.episode_id || "episode_0");
+    fetchStepTacticalHeads(selectedEvalSourcePath, epId, stepIdx)
+      .then((data) => {
+        if (!isMounted) return;
+        if (data && data.ok) {
+          setTacticalHeadsByStep((prev) => {
+            const next = new Map(prev);
+            next.set(stepIdx, (data.tactical_heads as Dict) || {});
+            return next;
+          });
+        }
+      })
+      .catch((err) => {
+        console.warn("Could not fetch step tactical heads:", err);
+      })
+      .finally(() => {
+        if (isMounted) setIsLoadingTacticalHeads(false);
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [showThreatHead, clamped, selectedEvalSourcePath, replaySteps?.episode_id, tacticalHeadsByStep]);
+
+  const currentTacticalHeads = useMemo(() => {
+    return tacticalHeadsByStep.get(clamped) || null;
+  }, [tacticalHeadsByStep, clamped]);
+
+  const threatHeadHexMap = useMemo(() => {
+    const m = new Map<string, number>();
+    const threatList = Array.isArray(currentTacticalHeads?.threat_map)
+      ? (currentTacticalHeads!.threat_map as Array<{ q: number; r: number; value: number }>)
+      : [];
+    for (const h of threatList) {
+      if (h && Number.isFinite(h.q) && Number.isFinite(h.r)) {
+        m.set(`${h.q},${h.r}`, Number(h.value || 0));
+      }
+    }
+    return m;
+  }, [currentTacticalHeads]);
 
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
 
@@ -610,13 +705,6 @@ export function MatchReplayTab({
       canvas.removeEventListener("wheel", handleWheel);
     };
   }, []);
-
-  const steps = useMemo(
-    () => (Array.isArray(replaySteps?.steps) ? (replaySteps!.steps as ReplayStepRow[]) : []),
-    [replaySteps]
-  );
-  const clamped = Math.max(0, Math.min(stepIndex, Math.max(0, steps.length - 1)));
-  const currentStep = steps[clamped] || {};
 
   // Active Scenario Overlay (prefers per-episode overlay from replaySteps if available, falls back to replayMeta)
   const activeOverlay = useMemo(() => {
@@ -922,7 +1010,7 @@ export function MatchReplayTab({
       title = "Battaglia Cittadina";
       subtitle = "Escenario 2.1 · Combate Urbano Casa por Casa";
       idLabel = "battaglia_cittadina_2_1";
-      desc = "Intenso combate de infantería en el entramado urbano disputando puntos de control en edificios de varias plantas, casamatas y emplazamientos con apoyo de morteros y francotiradores.";
+      desc = "Intense infantry combat in urban sector contesting control points in multi-story buildings, casemates, and emplacements with mortar and sniper support.";
     }
 
     return {
@@ -967,14 +1055,14 @@ export function MatchReplayTab({
       let mission = "";
       if (scenarioBriefing.isMettete) {
         mission = isUS
-          ? "Desembarco y ruptura: Romper alambradas y minas para capturar ≥ 2 de 3 VPs en 12 turnos."
-          : "Defensa fortificada: Retener ≥ 2 de 3 VPs aprovechando búnker, casamata, MG42 y minas.";
+          ? "Landing & breakthrough: Breach wire and minefields to capture ≥ 2 of 3 VPs in 12 turns."
+          : "Fortified defense: Retain ≥ 2 of 3 VPs leveraging bunker, casemate, MG42 and mines.";
       } else if (scenarioBriefing.isCittadina) {
         mission = isUS
-          ? "Asalto urbano: Limpiar calles y casamatas para capturar ≥ 4 de los 5 VPs en 8 turnos."
-          : "Defensa sectorial: Retener al menos 3 VPs usando cobertura urbana y fuego de contención.";
+          ? "Urban assault: Clear streets and casemates to capture ≥ 4 of 5 VPs in 8 turns."
+          : "Sector defense: Retain at least 3 VPs using urban cover and suppression fire.";
       } else {
-        mission = isUS ? "Atacar y capturar hexágonos de victoria prioritarios." : "Defender posiciones y hexágonos clave.";
+        mission = isUS ? "Attack and capture priority victory hexes." : "Defend positions and key hexes.";
       }
 
       const data = scenarioBriefing.unitsBySide[side] || { total: 0, alive: 0, keys: {} };
@@ -991,7 +1079,7 @@ export function MatchReplayTab({
         mission,
         total: data.total,
         alive: data.alive,
-        keyBreakdown: keyBreakdown || `${data.total} unidades`,
+        keyBreakdown: keyBreakdown || `${data.total} units`,
         fortifications: !isUS && fortSummary ? fortSummary : null,
       };
     });
@@ -1366,6 +1454,46 @@ export function MatchReplayTab({
         isHovered ? "rgba(56, 189, 248, 0.28)" : terrainColor,
         isHovered ? 2 : 1
       );
+
+      // Spatial Explainability (IGNH / Grad-CAM) Heatmap Overlay
+      const explainVal = explainHeatmapMap.get(coordKey);
+      if (explainVal !== undefined) {
+        const absVal = Math.min(1, Math.abs(explainVal));
+        const alpha = Math.max(0.18, absVal * 0.70);
+        const overlayFill = explainVal >= 0
+          ? `rgba(34, 197, 94, ${alpha})`
+          : `rgba(239, 68, 68, ${alpha})`;
+        const overlayStroke = explainVal >= 0 ? "rgba(34, 197, 94, 0.9)" : "rgba(239, 68, 68, 0.9)";
+        drawHex(p.x, p.y, scale * 0.95, overlayStroke, overlayFill, 2);
+      }
+
+      // Tactical Threat Head Overlay (Auxiliary Head prediction)
+      if (showThreatHead) {
+        const threatVal = threatHeadHexMap.get(coordKey);
+        if (threatVal !== undefined && threatVal > 0.04) {
+          const alpha = Math.min(0.68, Math.max(0.16, threatVal * 0.72));
+          const threatColor = threatVal >= 0.70
+            ? `rgba(220, 38, 38, ${alpha})`
+            : threatVal >= 0.40
+            ? `rgba(234, 88, 12, ${alpha})`
+            : `rgba(245, 158, 11, ${alpha * 0.85})`;
+          const threatBorder = threatVal >= 0.50 ? "#ef4444" : "rgba(245, 158, 11, 0.6)";
+          drawHex(p.x, p.y, scale * 0.95, threatBorder, threatColor, threatVal >= 0.50 ? 2 : 1);
+
+          // Threat numerical percentage on higher threat hexes
+          if (threatVal >= 0.25) {
+            ctx.save();
+            ctx.fillStyle = threatVal >= 0.60 ? "#fef08a" : "#fef3c7";
+            ctx.shadowColor = "rgba(0, 0, 0, 0.95)";
+            ctx.shadowBlur = 4;
+            ctx.font = `bold ${Math.max(8, Math.floor(scale * 0.28))}px sans-serif`;
+            ctx.textAlign = "center";
+            ctx.textBaseline = "middle";
+            ctx.fillText(`${Math.round(threatVal * 100)}%`, p.x, p.y + scale * 0.36);
+            ctx.restore();
+          }
+        }
+      }
 
       // Alphanumeric Coordinate label (like A1, B2) matching assault_ai_ui
       if (showCoords) {
@@ -1922,7 +2050,7 @@ export function MatchReplayTab({
   };
 
   if (!selectedEvalSourcePath) {
-    return <div className="muted" style={{ padding: 20 }}>Selecciona una evaluación para ver el Match Replay.</div>;
+    return <div className="muted" style={{ padding: 20 }}>Select an evaluation to view Match Replay.</div>;
   }
 
   const suppressedMap = (currentStep.unit_suppressed_map || {}) as Record<string, unknown>;
@@ -2448,6 +2576,28 @@ export function MatchReplayTab({
               >
                 🏞️ Terrain
               </button>
+              <button
+                onClick={() => setShowThreatHead(!showThreatHead)}
+                title="Show / Hide Neural Auxiliary Threat Map predictions on the hex board"
+                style={{
+                  fontSize: 10,
+                  padding: "2px 6px",
+                  borderRadius: 3,
+                  background: showThreatHead ? "#991b1b" : "#0f172a",
+                  color: showThreatHead ? "#fca5a5" : "#64748b",
+                  border: `1px solid ${showThreatHead ? "#ef4444" : "#334155"}`,
+                  cursor: "pointer",
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: 4,
+                  fontWeight: showThreatHead ? 700 : 500,
+                }}
+              >
+                <span>🎯 Threat Head</span>
+                {isLoadingTacticalHeads && (
+                  <span style={{ fontSize: 9, opacity: 0.8 }}>...</span>
+                )}
+              </button>
             </div>
 
             <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
@@ -2578,7 +2728,7 @@ export function MatchReplayTab({
                   alignItems: "center",
                   gap: 3,
                 }}
-                title="Rueda del ratón para zoom sobre el cursor, y arrastra con el ratón para moverte por el mapa."
+                title="Mouse wheel to zoom anchored to cursor, click and drag to pan the map."
               >
                 <span>🖱️</span> Wheel: Zoom • Drag: Pan
               </span>
@@ -2593,6 +2743,47 @@ export function MatchReplayTab({
               maxWidth: theaterMode ? "100%" : `${optimalMapWidth}px`,
             }}
           >
+            {explainHeatmapLayer && (
+              <div
+                style={{
+                  position: "absolute",
+                  top: 10,
+                  right: 10,
+                  zIndex: 20,
+                  background: "rgba(15, 23, 42, 0.9)",
+                  border: "1px solid #38bdf8",
+                  borderRadius: 4,
+                  padding: "4px 10px",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 8,
+                  fontSize: 11,
+                  color: "#38bdf8",
+                  fontWeight: 600,
+                }}
+              >
+                <span>Heatmap: {explainHeatmapLayer.toUpperCase()}</span>
+                <button
+                  onClick={() => {
+                    setExplainHeatmapLayer(null);
+                    setExplainHeatmapHexes([]);
+                  }}
+                  style={{
+                    background: "transparent",
+                    border: "none",
+                    color: "#ef4444",
+                    cursor: "pointer",
+                    fontWeight: 800,
+                    fontSize: 12,
+                    padding: 0,
+                  }}
+                  title="Clear attribution heatmap"
+                >
+                  ✕
+                </button>
+              </div>
+            )}
+
             {/* Top-Left Floating Tactical HUD: Turn, Step, and Turn to Play */}
             <div
               style={{
@@ -2615,7 +2806,7 @@ export function MatchReplayTab({
               }}
             >
               <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                <span style={{ color: "#e9d5ff", fontSize: 11, fontWeight: 700 }}>TURNO</span>
+                <span style={{ color: "#e9d5ff", fontSize: 11, fontWeight: 700 }}>TURN</span>
                 <span
                   style={{
                     color: "#ffffff",
@@ -2683,7 +2874,7 @@ export function MatchReplayTab({
                 }}
               >
                 <div style={{ fontWeight: 700, color: "#38bdf8", marginBottom: 2 }}>
-                  Casilla Hex ({hoveredHex.q}, {hoveredHex.r})
+                  Hex Cell ({hoveredHex.q}, {hoveredHex.r})
                 </div>
                 {terrainMap.get(`${hoveredHex.q},${hoveredHex.r}`) && (
                   <div style={{ color: "#94a3b8", fontSize: 10, marginBottom: 2 }}>
@@ -2697,7 +2888,22 @@ export function MatchReplayTab({
                 ))}
                 {vpMap.find((v) => v.q === hoveredHex.q && v.r === hoveredHex.r) && (
                   <div style={{ color: "#facc15", fontSize: 10, fontWeight: 600 }}>
-                    ★ Punto de Victoria ({vpMap.find((v) => v.q === hoveredHex.q && v.r === hoveredHex.r)?.owner})
+                    ★ Victory Point ({vpMap.find((v) => v.q === hoveredHex.q && v.r === hoveredHex.r)?.owner})
+                  </div>
+                )}
+                {showThreatHead && threatHeadHexMap.has(`${hoveredHex.q},${hoveredHex.r}`) && (
+                  <div style={{ marginTop: 4, paddingTop: 3, borderTop: "1px solid #334155", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                    <span style={{ color: "#f87171", fontWeight: 700, fontSize: 10 }}>🎯 Threat Head:</span>
+                    <span
+                      style={{
+                        color: (threatHeadHexMap.get(`${hoveredHex.q},${hoveredHex.r}`) || 0) >= 0.5 ? "#f87171" : "#facc15",
+                        fontWeight: 800,
+                        fontSize: 10,
+                      }}
+                    >
+                      {Math.round((threatHeadHexMap.get(`${hoveredHex.q},${hoveredHex.r}`) || 0) * 100)}%
+                      {(threatHeadHexMap.get(`${hoveredHex.q},${hoveredHex.r}`) || 0) >= 0.70 ? " [LETHAL]" : (threatHeadHexMap.get(`${hoveredHex.q},${hoveredHex.r}`) || 0) >= 0.40 ? " [HIGH]" : ""}
+                    </span>
                   </div>
                 )}
                 {units.filter((u) => u.q === hoveredHex.q && u.r === hoveredHex.r).map((u) => (
@@ -2706,7 +2912,7 @@ export function MatchReplayTab({
                       {u.unit_id} ({u.side})
                     </span>
                     <span style={{ color: u.alive ? "#22c55e" : "#ef4444" }}>
-                      {u.alive ? `${u.hp.toFixed(1)} HP` : "Eliminada"}
+                      {u.alive ? `${u.hp.toFixed(1)} HP` : "Eliminated"}
                     </span>
                   </div>
                 ))}
@@ -2991,7 +3197,7 @@ export function MatchReplayTab({
                       {currentDetails.roleIsMutated && currentDetails.roleMutationReason
                         ? `Regla: ${currentDetails.roleMutationReason}. `
                         : ""}
-                      {currentDetails.macroTargetVpId ? `Objetivo Prioritario: VP ${currentDetails.macroTargetVpId}` : (currentDetails.unitMacroRole ? "Sin objetivo específico" : "El paso no registró rol táctico de escuadra.")}
+                      {currentDetails.macroTargetVpId ? `Priority Objective: VP ${currentDetails.macroTargetVpId}` : (currentDetails.unitMacroRole ? "No specific objective" : "Step has no recorded squad tactical role.")}
                     </div>
                   </div>
                 </div>
@@ -3018,17 +3224,38 @@ export function MatchReplayTab({
                   </span>
                   {currentStep.policy_overridden_by_mcts ? (
                     <span style={{ fontSize: 10, background: "rgba(14, 165, 233, 0.2)", color: "#38bdf8", padding: "1px 5px", borderRadius: 3, fontWeight: 700 }}>
-                      ⚡ MCTS corrigió la Policy
+                      ⚡ MCTS corrected Policy
                     </span>
                   ) : (
                     <span style={{ fontSize: 10, background: "rgba(34, 197, 94, 0.15)", color: "#22c55e", padding: "1px 5px", borderRadius: 3 }}>
-                      ✓ Policy mantenida
+                      ✓ Policy maintained
                     </span>
                   )}
                 </div>
 
-                <div style={{ fontSize: 12, fontWeight: 700, color: "#facc15" }}>
-                  <code>{currentDetails.actionId}</code>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 4 }}>
+                  <div style={{ fontSize: 12, fontWeight: 700, color: "#facc15" }}>
+                    <code>{currentDetails.actionId}</code>
+                  </div>
+                  <button
+                    onClick={handleExplainAction}
+                    style={{
+                      background: "rgba(14, 165, 233, 0.15)",
+                      border: "1px solid #0284c7",
+                      color: "#38bdf8",
+                      fontSize: 11,
+                      fontWeight: 700,
+                      padding: "2px 8px",
+                      borderRadius: 4,
+                      cursor: "pointer",
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 4,
+                    }}
+                    title="Compute Integrated Gradients (IGNH) & Grad-CAM attribution for this action"
+                  >
+                    <span>🧠 Explain (IGNH)</span>
+                  </button>
                 </div>
 
                 {Boolean(currentStep.why_action_vs_vp_text) && (
@@ -3051,6 +3278,47 @@ export function MatchReplayTab({
                     </div>
                   </div>
                 </div>
+
+                {/* Neural Auxiliary Heads Breakdown (Threat, Morale, Attrition) */}
+                <div style={{ marginTop: 8, padding: "8px 10px", background: "rgba(15, 23, 42, 0.75)", border: "1px solid #334155", borderRadius: 4 }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
+                    <span style={{ fontSize: 10, fontWeight: 800, color: "#38bdf8", textTransform: "uppercase", letterSpacing: "0.4px" }}>
+                      Tactical Heads (EfficientZero V2)
+                    </span>
+                    {isLoadingTacticalHeads ? (
+                      <span style={{ fontSize: 9, color: "#94a3b8" }}>Loading heads...</span>
+                    ) : (
+                      <span style={{ fontSize: 9, color: "#64748b" }}>
+                        {currentTacticalHeads?.threat_summary?.source || "ready"}
+                      </span>
+                    )}
+                  </div>
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6, fontSize: 10 }}>
+                    <div style={{ background: "#1e293b", padding: "5px 7px", borderRadius: 3, borderLeft: "2px solid #ef4444" }}>
+                      <span className="muted" style={{ fontSize: 9, display: "block" }}>Threat Map Head:</span>
+                      <div style={{ fontWeight: 700, color: (currentTacticalHeads?.threat_summary?.max_threat ?? 0) >= 0.5 ? "#f87171" : "#34d399", marginTop: 1 }}>
+                        Max: {Math.round((currentTacticalHeads?.threat_summary?.max_threat ?? 0) * 100)}% | Mean: {Math.round((currentTacticalHeads?.threat_summary?.mean_threat ?? 0) * 100)}%
+                      </div>
+                    </div>
+                    <div style={{ background: "#1e293b", padding: "5px 7px", borderRadius: 3, borderLeft: "2px solid #38bdf8" }}>
+                      <span className="muted" style={{ fontSize: 9, display: "block" }}>Morale Head (Risk):</span>
+                      <div style={{ fontWeight: 700, color: (currentTacticalHeads?.morale?.suppression_risk ?? 0) >= 0.5 ? "#f87171" : "#38bdf8", marginTop: 1 }}>
+                        {Math.round((currentTacticalHeads?.morale?.suppression_risk ?? 0) * 100)}% ({currentTacticalHeads?.morale?.status || "STABLE"})
+                      </div>
+                    </div>
+                    <div style={{ background: "#1e293b", padding: "5px 7px", borderRadius: 3, gridColumn: "span 2", borderLeft: "2px solid #f59e0b" }}>
+                      <span className="muted" style={{ fontSize: 9, display: "block" }}>Attrition Head (Casualties):</span>
+                      <div style={{ fontWeight: 700, color: "#cbd5e1", marginTop: 1 }}>
+                        Ally: {currentTacticalHeads?.attrition?.predicted_friendly_casualties ?? 0.0} | Enemy: {currentTacticalHeads?.attrition?.predicted_enemy_casualties ?? 0.0}
+                        {currentTacticalHeads?.attrition?.exchange_ratio !== undefined && (
+                          <span style={{ marginLeft: 6, color: "#facc15" }}>
+                            (Ratio: {currentTacticalHeads.attrition.exchange_ratio}x)
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </div>
               </div>
 
               {/* MCTS Candidates Tree Explorer */}
@@ -3065,7 +3333,7 @@ export function MatchReplayTab({
                         onClick={() => setMctsFilter("all")}
                         style={{ fontSize: 10, padding: "1px 5px", borderRadius: 3, background: mctsFilter === "all" ? "#0284c7" : "#0f172a", border: "none", color: "#fff", cursor: "pointer" }}
                       >
-                        Todas
+                        All
                       </button>
                       <button
                         onClick={() => setMctsFilter("visited")}
@@ -3096,9 +3364,9 @@ export function MatchReplayTab({
                       style={{ fontSize: 10, padding: "2px 4px", background: "#0f172a", border: "1px solid #334155", color: "#fff" }}
                     >
                       <option value="visits">By Visits N</option>
-                      <option value="q_value">Por Valor Q</option>
-                      <option value="prior">Por Prior Policy</option>
-                      <option value="rank">Por Rango</option>
+                      <option value="q_value">By Q Value</option>
+                      <option value="prior">By Policy Prior</option>
+                      <option value="rank">By Rank</option>
                     </select>
                   </div>
 
@@ -3106,7 +3374,7 @@ export function MatchReplayTab({
                     <table style={{ margin: 0, fontSize: 11 }}>
                       <thead>
                         <tr>
-                          <th>Acción</th>
+                          <th>Action</th>
                           <th style={{ width: 80 }}>Visits N</th>
                           <th style={{ width: 50 }}>Q</th>
                           <th style={{ width: 50 }}>Prior</th>
@@ -3148,17 +3416,17 @@ export function MatchReplayTab({
                 </div>
               ) : (
                 <div className="muted" style={{ fontSize: 11, textAlign: "center", padding: 20 }}>
-                  No se registraron ramas MCTS para este paso.
+                  No MCTS branches recorded for this step.
                 </div>
               )}
             </div>
           )}
 
-          {/* TAB 2: ROSTER DE UNIDADES */}
+          {/* TAB 2: UNIT ROSTER */}
           {activeTab === "units" && (
             <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
               <div style={{ fontSize: 11, color: "#94a3b8" }}>
-                Haz clic en una escuadra para enfocarla en el mapa táctico.
+                Click on a squad to focus it on the tactical map.
               </div>
 
               {/* US Troops */}
@@ -3429,7 +3697,7 @@ export function MatchReplayTab({
               </div>
 
               <div style={{ fontSize: 11, fontWeight: 700, color: "#38bdf8", marginTop: 8 }}>
-                Controladores por Bando
+                Side Controllers
               </div>
               <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
                 {Object.entries(controllerMap).map(([side, ctrl]) => (
@@ -3453,10 +3721,10 @@ export function MatchReplayTab({
               </div>
 
               <div style={{ fontSize: 11, fontWeight: 700, color: "#38bdf8", marginTop: 8 }}>
-                Estado de Telemetría MLOps
+                MLOps Telemetry Status
               </div>
               <div style={{ background: "#0f172a", border: "1px solid #334155", borderRadius: 4, padding: 8, fontSize: 11 }}>
-                <div>Estado de cobertura: <b>{String(currentStep.telemetry_coverage_status ?? "normal")}</b></div>
+                <div>Coverage Status: <b>{String(currentStep.telemetry_coverage_status ?? "normal")}</b></div>
                 <div className="muted" style={{ fontSize: 10, marginTop: 4 }}>
                   Decision Rank: <b>{String(currentStep.decision_score_selected ?? "N/A")}</b>
                 </div>
@@ -3465,6 +3733,18 @@ export function MatchReplayTab({
           )}
         </div>
       </div>
+
+      {/* Explainability Modal (IGNH / Grad-CAM) */}
+      <ExplainabilityModal
+        isOpen={isExplainModalOpen}
+        onClose={() => setIsExplainModalOpen(false)}
+        data={explainData}
+        isLoading={isExplaining}
+        onApplyHeatmapToBoard={(layerKey, hexes) => {
+          setExplainHeatmapLayer(layerKey);
+          setExplainHeatmapHexes(hexes);
+        }}
+      />
     </div>
   );
 }

@@ -15,6 +15,9 @@ from typing import Any, Dict, List, Optional
 from assault_model.paths import FORMATION_CATALOG_PATH, UNIT_CATALOG_PATH
 
 
+VALID_EXPERIENCE_LEVELS = {"RECRUIT", "REGULAR", "HARDENED", "VETERAN", "ELITE"}
+
+
 class FormationValidationError(Exception):
     """Raised when a formation configuration violates schema or unit catalog integrity."""
     pass
@@ -27,6 +30,9 @@ class Formation:
     name: str
     side: str
     command_rating: int = 8
+    command_points: int = 2
+    experience_level: str = "REGULAR"
+    experience_units_count: int = 0
     line_units: List[str] = field(default_factory=list)
     heavy_weapons: List[str] = field(default_factory=list)
     specialists: List[str] = field(default_factory=list)
@@ -37,6 +43,9 @@ class Formation:
     def __post_init__(self) -> None:
         # Standardize side to uppercase
         self.side = self.side.upper().strip()
+        self.experience_level = self.experience_level.upper().strip()
+        if self.experience_level not in VALID_EXPERIENCE_LEVELS:
+            self.experience_level = "REGULAR"
         # If units is empty, compute from the three categorical slots
         if not self.units:
             self.units = list(self.line_units) + list(self.heavy_weapons) + list(self.specialists)
@@ -53,6 +62,9 @@ class Formation:
             "name": self.name,
             "side": self.side,
             "command_rating": self.command_rating,
+            "command_points": self.command_points,
+            "experience_level": self.experience_level,
+            "experience_units_count": self.experience_units_count,
             "line_units": self.line_units,
             "heavy_weapons": self.heavy_weapons,
             "specialists": self.specialists,
@@ -66,6 +78,9 @@ class Formation:
         name = data.get("name", formation_id.replace("_", " ").title())
         side = data.get("side", "US")
         command_rating = int(data.get("command_rating", 8))
+        command_points = int(data.get("command_points", 2))
+        experience_level = str(data.get("experience_level", "REGULAR")).upper().strip()
+        experience_units_count = int(data.get("experience_units_count", 0))
         line_units = list(data.get("line_units", []))
         heavy_weapons = list(data.get("heavy_weapons", []))
         specialists = list(data.get("specialists", []))
@@ -78,6 +93,9 @@ class Formation:
             name=name,
             side=side,
             command_rating=command_rating,
+            command_points=command_points,
+            experience_level=experience_level,
+            experience_units_count=experience_units_count,
             line_units=line_units,
             heavy_weapons=heavy_weapons,
             specialists=specialists,
@@ -139,6 +157,14 @@ def validate_formation_integrity(
         raise FormationValidationError(f"Invalid formation side: {formation.side}. Must be US, GE, UK, or IT.")
     if not (1 <= formation.command_rating <= 12):
         raise FormationValidationError(f"Command rating {formation.command_rating} out of valid bounds (1-12).")
+    if not (1 <= formation.command_points <= 4):
+        raise FormationValidationError(f"Command points {formation.command_points} out of valid bounds (1-4).")
+    if formation.experience_level not in VALID_EXPERIENCE_LEVELS:
+        raise FormationValidationError(
+            f"Invalid experience level: {formation.experience_level}. Must be one of {sorted(VALID_EXPERIENCE_LEVELS)}."
+        )
+    if formation.experience_units_count < 0:
+        raise FormationValidationError(f"Experience units count cannot be negative: {formation.experience_units_count}.")
     if not formation.units:
         raise FormationValidationError(f"Formation '{formation.id}' contains no units.")
 

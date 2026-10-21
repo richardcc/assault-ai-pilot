@@ -144,4 +144,38 @@ export async function deleteModelExperiment(modelId: string, engine = ""): Promi
   return payload as Dict;
 }
 
+export function fetchExplainStep(
+  evalSourcePath: string,
+  episodeId: string,
+  stepIndex: number,
+  actionId?: string,
+  steps = 15
+): Promise<Dict> {
+  const q = new URLSearchParams({
+    eval_source_path: String(evalSourcePath || ""),
+    episode_id: String(episodeId || "episode_0"),
+    step: String(stepIndex),
+    steps: String(steps),
+  });
+  if (actionId) {
+    q.set("action_id", actionId);
+  }
+  return getJson(`/api/v2/replay/explain-step?${q.toString()}`);
+}
+
+export function fetchStepTacticalHeads(
+  evalSourcePath: string,
+  episodeId: string,
+  stepIndex: number
+): Promise<Dict> {
+  const q = new URLSearchParams({
+    eval_source_path: String(evalSourcePath || ""),
+    episode_id: String(episodeId || "episode_0"),
+    step: String(stepIndex),
+  });
+  return getJson(`/api/v2/replay/tactical-heads?${q.toString()}`);
+}
+
+
+
 

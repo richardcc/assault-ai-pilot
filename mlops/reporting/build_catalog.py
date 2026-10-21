@@ -77,8 +77,8 @@ def _infer_curriculum_phase(cfg: dict[str, Any], run_id: str) -> str:
 
 def _policy_to_controller_label(policy_name: str) -> str:
     policy = str(policy_name or "").strip().lower()
-    if policy == "mcts":
-        return "MuZero"
+    if policy in {"mcts", "efficientzero", "efficientzero_v2", "ezv2"}:
+        return "EfficientZeroV2"
     if policy == "random":
         return "Random"
     return "Unknown"
@@ -638,19 +638,19 @@ def _controller_label_for_side(result_row: dict[str, Any], side: str) -> str:
     if not pol and alt_side:
         pol = str(_side_value_from_map(result_row.get("policy_by_side", {}), alt_side) or "").strip().lower()
 
-    if pol == "mcts":
-        return "MuZero"
+    if pol in {"mcts", "efficientzero", "efficientzero_v2", "ezv2"}:
+        return "EfficientZeroV2"
     if pol == "random":
         return "Random"
 
     prof = str(result_row.get("matchup_profile", "")).strip().lower()
     if prof:
         if "selfplay" in prof:
-            return "Random" if "random" in prof else "MuZero"
+            return "Random" if "random" in prof else "EfficientZeroV2"
         if "side_a" in prof:
-            return "MuZero" if side_up in ("IT", "GE") else "Random"
+            return "EfficientZeroV2" if side_up in ("IT", "GE") else "Random"
         if "side_b" in prof:
-            return "Random" if side_up in ("IT", "GE") else "MuZero"
+            return "Random" if side_up in ("IT", "GE") else "EfficientZeroV2"
 
     return controller if controller else "Unknown"
 

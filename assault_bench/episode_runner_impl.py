@@ -174,6 +174,7 @@ def _run_episode_with_policy_impl(
     obs = adapter.initial_state(scenario_id=scenario_id, seed=seed)
     initial_vp_by_side = _vp_control_counts()
     eval_side = ""
+    eval_candidates: list[str] = []
     if policy_by_side:
         target_policy = str(policy_name or "mcts").strip().lower()
         eval_candidates = [
@@ -590,9 +591,6 @@ def _run_episode_with_policy_impl(
                     head_states["morale"] = _head_state("complete", "")
             else:
                 head_states = {h: _head_state("none", "model_not_loaded") for h in HEAD_NAMES}
-        if not acting_unit_id_probe and action:
-            _probe_parts = str(action or "").split(":")
-            acting_unit_id_probe = _probe_parts[1] if len(_probe_parts) > 1 else ""
         action_kind = _action_kind_from_id(action)
         capture_like_action_taken = _is_capture_like_action_kind(action_kind)
         objective_signal = None

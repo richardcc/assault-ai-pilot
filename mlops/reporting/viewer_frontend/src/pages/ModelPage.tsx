@@ -50,7 +50,7 @@ export function ModelPage() {
 
   // Navegación de secciones
   const [section, setSection] = useState<SectionKey>("eval");
-  const [topologyTab, setTopologyTab] = useState<"diagram" | "head-diagnostics" | "channel-attribution" | "macro-planner">("diagram");
+  const [topologyTab, setTopologyTab] = useState<"diagram" | "channel-attribution" | "macro-planner">("diagram");
   const [trainTab, setTrainTab] = useState<TrainTabKey>("train-detail");
   const [evalTab, setEvalTab] = useState<EvalTabKey>("matchups-vp");
   const [replayTab, setReplayTab] = useState<ReplayTabKey>("tactical-map");
@@ -692,35 +692,35 @@ export function ModelPage() {
               onClick={() => setSection("eval")}
               style={{ padding: "5px 12px", fontSize: 12, fontWeight: 700, color: section === "eval" ? "#38bdf8" : undefined }}
             >
-              ⚔️ Evaluación & Benchmarks
+              ⚔️ Evaluation & Benchmarks
             </button>
             <button
               className={`tabBtn ${section === "replay" ? "active" : ""}`}
               onClick={() => setSection("replay")}
               style={{ padding: "5px 12px", fontSize: 12, fontWeight: 700, color: section === "replay" ? "#38bdf8" : undefined }}
             >
-              🎬 Replay Forense
+              🎬 Forensic Replay
             </button>
             <button
               className={`tabBtn ${section === "topology" ? "active" : ""}`}
               onClick={() => setSection("topology")}
               style={{ padding: "5px 12px", fontSize: 12, fontWeight: 700, color: section === "topology" ? "#38bdf8" : undefined }}
             >
-              🧠 Topología & Red
+              🧠 Network Topology
             </button>
             <button
               className={`tabBtn ${section === "train" ? "active" : ""}`}
               onClick={() => setSection("train")}
               style={{ padding: "5px 12px", fontSize: 12, fontWeight: 700, color: section === "train" ? "#38bdf8" : undefined }}
             >
-              📈 Entrenamiento
+              📈 Training Dynamics
             </button>
             <button
               className={`tabBtn ${section === "meta" ? "active" : ""}`}
               onClick={() => setSection("meta")}
               style={{ padding: "5px 12px", fontSize: 12 }}
             >
-              ℹ️ Metadatos
+              ℹ️ Metadata
             </button>
           </div>
 
@@ -730,16 +730,16 @@ export function ModelPage() {
             {section === "eval" && (
               <>
                 <button className={`tabBtn ${evalTab === "matchups-vp" ? "active" : ""}`} onClick={() => setEvalTab("matchups-vp")}>
-                  🏆 Resumen de Enfrentamientos & VP
+                  🏆 Matchups & VP Summary
                 </button>
                 <button className={`tabBtn ${evalTab === "benchmark-matrix" ? "active" : ""}`} onClick={() => setEvalTab("benchmark-matrix")}>
-                  📋 Matriz de Benchmarks & Gates
+                  📋 Benchmark Matrix & Gates
                 </button>
                 <button className={`tabBtn ${evalTab === "tactical-decisions" ? "active" : ""}`} onClick={() => setEvalTab("tactical-decisions")}>
-                  🎯 Decisiones Tácticas & Acciones
+                  🎯 Tactical Decisions & Actions
                 </button>
                 <button className={`tabBtn ${evalTab === "xai-heads" ? "active" : ""}`} onClick={() => setEvalTab("xai-heads")}>
-                  🔬 Diagnóstico de Cabezas (XAI)
+                  🔬 Head Diagnostics (XAI)
                 </button>
               </>
             )}
@@ -747,10 +747,10 @@ export function ModelPage() {
             {section === "replay" && (
               <>
                 <button className={`tabBtn ${replayTab === "tactical-map" ? "active" : ""}`} onClick={() => setReplayTab("tactical-map")}>
-                  🗺️ Visor Táctico de Partida (2D Hex)
+                  🗺️ Tactical Match Viewer (2D Hex)
                 </button>
                 <button className={`tabBtn ${replayTab === "event-log" ? "active" : ""}`} onClick={() => setReplayTab("event-log")}>
-                  📜 Log Forense de Eventos
+                  📜 Forensic Event Log
                 </button>
               </>
             )}
@@ -758,16 +758,13 @@ export function ModelPage() {
             {section === "topology" && (
               <>
                 <button className={`tabBtn ${topologyTab === "diagram" ? "active" : ""}`} onClick={() => setTopologyTab("diagram")}>
-                  📐 Topología & Arquitectura
-                </button>
-                <button className={`tabBtn ${topologyTab === "head-diagnostics" ? "active" : ""}`} onClick={() => setTopologyTab("head-diagnostics")}>
-                  🔬 Análisis Estructural de Cabezas
+                  📐 Topology & Architecture
                 </button>
                 <button className={`tabBtn ${topologyTab === "channel-attribution" ? "active" : ""}`} onClick={() => setTopologyTab("channel-attribution")}>
-                  📊 Atribución de Canales (32C)
+                  📊 Channel Attribution (32C)
                 </button>
                 <button className={`tabBtn ${topologyTab === "macro-planner" ? "active" : ""}`} onClick={() => setTopologyTab("macro-planner")}>
-                  ♟️ Planificador Doctrinal (Macro)
+                  ♟️ Doctrinal Macro Planner
                 </button>
               </>
             )}
@@ -775,20 +772,20 @@ export function ModelPage() {
             {section === "train" && (
               <>
                 <button className={`tabBtn ${trainTab === "train-detail" ? "active" : ""}`} onClick={() => setTrainTab("train-detail")}>
-                  📉 Curvas de Pérdidas & Dinámica
+                  📉 Loss Curves & Dynamics
                 </button>
                 <button className={`tabBtn ${trainTab === "train-head-diagnostics" ? "active" : ""}`} onClick={() => setTrainTab("train-head-diagnostics")}>
-                  🩺 Pérdidas de Cabezas en Train
+                  🩺 Head Training Losses
                 </button>
                 <button className={`tabBtn ${trainTab === "objective-reward-config" ? "active" : ""}`} onClick={() => setTrainTab("objective-reward-config")}>
-                  🎯 Configuración de Recompensas & Objetivos
+                  🎯 Objective & Reward Config
                 </button>
               </>
             )}
 
             {section === "meta" && (
               <button className={`tabBtn ${metaTab === "overview" ? "active" : ""}`} onClick={() => setMetaTab("overview")}>
-                📋 Índice de Evaluaciones & Trazabilidad
+                📋 Evaluation Index & Traceability
               </button>
             )}
           </div>
@@ -1138,6 +1135,10 @@ export function ModelPage() {
                 evalRows={evalRows}
                 activeSubTab={topologyTab}
                 onSubTabChange={setTopologyTab}
+                onNavigateToHeadDiagnostics={() => {
+                  setSection("eval");
+                  setEvalTab("xai-heads");
+                }}
               />
             )}
             {section === "train" && trainTab === "train-detail" && (
@@ -1203,7 +1204,11 @@ export function ModelPage() {
               <EvalDecisionsTab selectedEval={selectedEval} mainResult={mainResult} />
             )}
             {section === "eval" && evalRows.length > 0 && evalTab === "xai-heads" && (
-              <HeadDiagnosticsTab evalRows={evalRows} />
+              <HeadDiagnosticsTab
+                evalRows={evalRows}
+                trainRow={selectedTrainRow}
+                trainSummary={trainSummary}
+              />
             )}
 
             {section === "replay" && evalRows.length > 0 && replayTab === "tactical-map" && (

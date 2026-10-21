@@ -22,6 +22,10 @@ from mlops.reporting.catalog_duckdb import load_catalog_summary_from_duckdb
 from mlops.reporting.model_api import (
     build_train_summary_payload as _build_train_summary_payload,
 )
+from mlops.reporting.explainability_api import (
+    compute_step_tactical_heads as _compute_step_tactical_heads,
+    explain_replay_step as _explain_replay_step,
+)
 from mlops.reporting.model_deletion import (
     delete_model_experiment as _delete_model_experiment,
 )
@@ -747,6 +751,38 @@ def serve(
                 )
                 self._send_json_status(payload)
                 return
+            if parsed.path in ("/api/v2/replay/explain-step", "/api/v2/explainability/attribution"):
+                qs = parse_qs(parsed.query)
+                eval_src = str(qs.get("eval_source_path", [""])[0] or qs.get("source_path", [""])[0] or "")
+                ep_id = str(qs.get("episode_id", ["episode_0"])[0] or "episode_0")
+                step_idx = int(qs.get("step", ["0"])[0] or qs.get("step_index", ["0"])[0] or 0)
+                action_id = str(qs.get("action_id", [""])[0] or "").strip() or None
+                steps_count = int(qs.get("steps", ["15"])[0] or 15)
+                payload = _explain_replay_step(
+                    repo_root=repo_root,
+                    eval_source_path=eval_src,
+                    episode_id=ep_id,
+                    step_index=step_idx,
+                    action_id=action_id,
+                    steps=steps_count,
+                    load_scenario_overlay_fn=_load_scenario_overlay,
+                )
+                self._send_json_status(payload)
+                return
+            if parsed.path in ("/api/v2/replay/tactical-heads", "/api/v2/replay/step-heads"):
+                qs = parse_qs(parsed.query)
+                eval_src = str(qs.get("eval_source_path", [""])[0] or qs.get("source_path", [""])[0] or "")
+                ep_id = str(qs.get("episode_id", ["episode_0"])[0] or "episode_0")
+                step_idx = int(qs.get("step", ["0"])[0] or qs.get("step_index", ["0"])[0] or 0)
+                payload = _compute_step_tactical_heads(
+                    repo_root=repo_root,
+                    eval_source_path=eval_src,
+                    episode_id=ep_id,
+                    step_index=step_idx,
+                    load_scenario_overlay_fn=_load_scenario_overlay,
+                )
+                self._send_json_status(payload)
+                return
             if parsed.path == "/api/replay-log":
                 qs = parse_qs(parsed.query)
                 payload = _build_replay_log_payload(
@@ -876,6 +912,54 @@ def serve(
         def do_POST(self):  # noqa: N802
             parsed = urlparse(self.path)
             norm_path = parsed.path.rstrip("/")
+            if norm_path in ("/api/v2/replay/explain-step", "/api/v2/explainability/attribution"):
+                try:
+                    content_length = int(self.headers.get("Content-Length", 0))
+                    body = self.rfile.read(content_length) if content_length > 0 else b"{}"
+                    data = json.loads(body.decode("utf-8")) if body else {}
+                    eval_src = str(data.get("eval_source_path") or data.get("source_path") or "").strip()
+                    if not eval_src:
+                        qs = parse_qs(parsed.query)
+                        eval_src = str(qs.get("eval_source_path", [""])[0] or qs.get("source_path", [""])[0] or "").strip()
+                    ep_id = str(data.get("episode_id") or "episode_0").strip()
+                    step_idx = int(data.get("step", data.get("step_index", 0)) or 0)
+                    action_id = str(data.get("action_id") or "").strip() or None
+                    steps_count = int(data.get("steps", 15) or 15)
+                    payload = _explain_replay_step(
+                        repo_root=repo_root,
+                        eval_source_path=eval_src,
+                        episode_id=ep_id,
+                        step_index=step_idx,
+                        action_id=action_id,
+                        steps=steps_count,
+                        load_scenario_overlay_fn=_load_scenario_overlay,
+                    )
+                    self._send_json_status(payload)
+                except Exception as exc:
+                    self._send_json_status({"ok": False, "error": str(exc)}, status_code=500)
+                return
+            if norm_path in ("/api/v2/replay/tactical-heads", "/api/v2/replay/step-heads"):
+                try:
+                    content_length = int(self.headers.get("Content-Length", 0))
+                    body = self.rfile.read(content_length) if content_length > 0 else b"{}"
+                    data = json.loads(body.decode("utf-8")) if body else {}
+                    eval_src = str(data.get("eval_source_path") or data.get("source_path") or "").strip()
+                    if not eval_src:
+                        qs = parse_qs(parsed.query)
+                        eval_src = str(qs.get("eval_source_path", [""])[0] or qs.get("source_path", [""])[0] or "").strip()
+                    ep_id = str(data.get("episode_id") or "episode_0").strip()
+                    step_idx = int(data.get("step", data.get("step_index", 0)) or 0)
+                    payload = _compute_step_tactical_heads(
+                        repo_root=repo_root,
+                        eval_source_path=eval_src,
+                        episode_id=ep_id,
+                        step_index=step_idx,
+                        load_scenario_overlay_fn=_load_scenario_overlay,
+                    )
+                    self._send_json_status(payload)
+                except Exception as exc:
+                    self._send_json_status({"ok": False, "error": str(exc)}, status_code=500)
+                return
             if norm_path == "/api/channel-attribution/run":
                 try:
                     content_length = int(self.headers.get("Content-Length", 0))

@@ -239,6 +239,19 @@ def build_eval_decision_summary(
             _acc_attack_group(f"cover::{cover_bucket}", dmg, kills, p_good, y_good)
             _acc_attack_bin(_bucketize_prob(p_good), p_good, y_good)
 
+    EXCLUDED_ACCUMULATOR_KEYS = {
+        "target_q_sum",
+        "target_q_n",
+        "target_r_sum",
+        "target_r_n",
+        "distance_sum",
+        "distance_n",
+        "cover_sum",
+        "cover_n",
+        "los_sum",
+        "los_n",
+    }
+
     def _enrich(v: Dict[str, float]) -> Dict[str, float]:
         c = float(v.get("count", 0.0))
         tqn = float(v.get("target_q_n", 0.0))
@@ -256,7 +269,11 @@ def build_eval_decision_summary(
                 ((str(k), float(val)) for k, val in latent_votes.items()),
                 key=lambda kv: kv[1],
             )
-        base = {k: val for k, val in v.items() if not str(k).startswith("_")}
+        base = {
+            k: val
+            for k, val in v.items()
+            if not str(k).startswith("_") and k not in EXCLUDED_ACCUMULATOR_KEYS
+        }
         return {
             **base,
             "damage_per_action": (float(v.get("damage_sum", 0.0)) / float(c)) if c > 0 else 0.0,

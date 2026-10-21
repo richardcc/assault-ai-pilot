@@ -39,7 +39,6 @@ A continuación se detalla el orden secuencial de ejecución técnica para el ci
 | :---: | :---: | :--- | :---: | :--- | :---: |
 | **1** | [Línea 2](roadmap/02_LINEA_2_ACELERACION_CAPTURA_VPS.md) | [**2.8 Estudio de Ablación A/B: Sesgo Doctrinal vs Red Pura**](#task-2-8) | **P0** | Test A/B de ELO: Red Pura (Prior Shaping = 0, Mutaciones = OFF) vs Doctrinal Shaped para verificar si el sesgo heurístico provoca "Objective Myopia". | 🚀 **Foco Crítico Inmediato** |
 | **2** | [Línea 3](roadmap/03_LINEA_3_FIDELIDAD_NORMATIVA_Y_REGLAMENTO.md) | [**3.5 Formaciones Doctrinales, Ingesta de Unidades Especializadas y Rebalanceo de Escenarios (Subtarea 3.5.5)**](#task-3-5) | **P1** | Batería de validación y certificación de victoria en `assault_bench` (100 partidas vs Random, Win Rate >= 80%) | 🚀 Preparado para Ejecución |
-| **3** | [Línea 1](roadmap/01_LINEA_1_OBSERVABILIDAD_Y_TELEMETRIA.md) | [**1.3 Validador E2E Frontend $\leftrightarrow$ DuckDB**](#task-1-3) | **P1** | Auditoría automatizada de trazabilidad en dashboard (cero datos inventados, fallback -/N/A) | 🟢 **Consolidado v2.5.8** |
 
 ### 2.2 Bloque 2: En Progreso Activo 🟡
 > Módulos con desarrollos en curso e hitos parciales ya verificados.
@@ -53,24 +52,23 @@ A continuación se detalla el orden secuencial de ejecución técnica para el ci
 
 | Paso | Línea | Tarea | Prioridad | Enfoque Principal | Estado |
 | :---: | :---: | :--- | :---: | :--- | :---: |
-| **4** | [Línea 1](roadmap/01_LINEA_1_OBSERVABILIDAD_Y_TELEMETRIA.md) | [**1.4 Catálogo Unificado y Depuración de Esquemas**](#task-1-4) | **P1** | Purgar esquemas Parquet históricos obsoletos, consolidando campos equivalentes en DuckDB | ⚪ Planificado |
-| **5** | [Línea 3](roadmap/03_LINEA_3_FIDELIDAD_NORMATIVA_Y_REGLAMENTO.md) | [**3.1 Retirada a Borde Amigo en Desenfilada (6.4)**](#task-3-1) | **P1** | Fidelidad táctica en chequeos de moral | ⚪ Planificado |
-| **6** | [Línea 3](roadmap/03_LINEA_3_FIDELIDAD_NORMATIVA_Y_REGLAMENTO.md) | [**3.2 Fase A: Cavar, Humo y Transporte**](#task-3-2) | **P1** | Mecánicas reglamentarias faltantes | ⚪ Planificado |
-| **7** | [Línea 4](roadmap/04_LINEA_4_EXPLICABILIDAD_XAI_E_IPB.md) | [**4.1 Atribución Causal Espacial Hexagonal (IGNH)**](#task-4-1) | **P1** | Explicabilidad de decisiones de asalto | ⚪ Planificado |
-| **8** | [Línea 4](roadmap/04_LINEA_4_EXPLICABILIDAD_XAI_E_IPB.md) | [**4.2 Perfilador Causal de Partidas y SitRep**](#task-4-2) | **P1** | Auditoría táctico-estratégica forense | ⚪ Planificado |
-| **9** | [Línea 1](roadmap/01_LINEA_1_OBSERVABILIDAD_Y_TELEMETRIA.md) | [**1.4 Catálogo Unificado y Depuración de Esquemas**](#task-1-4) | **P1** | Saneamiento de históricos y DuckDB | ⚪ Planificado |
-| **10** | [Línea 3](roadmap/03_LINEA_3_FIDELIDAD_NORMATIVA_Y_REGLAMENTO.md) | [**3.3 Fase B: Iniciativa Dinámica y TAS/OAS**](#task-3-3) | **P2** | Expansiones de reglamento y artillería | ⚪ Planificado |
-| **11** | [Línea 3](roadmap/03_LINEA_3_FIDELIDAD_NORMATIVA_Y_REGLAMENTO.md) | [**3.4 Fase C: Ingestor Automatizado PDF $\to$ JSON**](#task-3-4) | **P2** | Completitud de los 38 escenarios | ⚪ Planificado |
-| **12** | [Línea 4](roadmap/04_LINEA_4_EXPLICABILIDAD_XAI_E_IPB.md) | [**4.3 Perfilado 5D y Detección de Chokepoints (IPB)**](#task-4-3) | **P2** | Inteligencia del terreno previa a batalla | ⚪ Planificado |
-| **13** | [Línea 5](roadmap/05_LINEA_5_GENERALIZACION_PROCEDURAL.md) | [**5.1 Mutador Procedural con Clumping Espacial**](#task-5-1) | **P2** | Robustez y generalización en mapas nuevos | ⚪ Planificado |
-| **14** | [Línea 5](roadmap/05_LINEA_5_GENERALIZACION_PROCEDURAL.md) | [**5.2 Validación Zero-Shot en Mapas $32\times 32$ y $64\times 64$**](#task-5-2) | **P2** | Escalabilidad a teatros operacionales | ⚪ Planificado |
+| **4** | [Línea 3](roadmap/03_LINEA_3_FIDELIDAD_NORMATIVA_Y_REGLAMENTO.md) | [**3.1 Retirada a Borde Amigo en Desenfilada (6.4)**](#task-3-1) | **P1** | Algoritmo determinista en desenfilada, cobertura, vector borde amigo y Regla 13.3 | 🟢 Consolidado (v2.5.11) |
+| **5** | [Línea 3](roadmap/03_LINEA_3_FIDELIDAD_NORMATIVA_Y_REGLAMENTO.md) | [**3.2 Fase A: Cavar, Humo y Transporte**](#task-3-2) | **P1** | Mecánicas reglamentarias faltantes | ⚪ Planificado |
+| **7** | [Línea 4](roadmap/04_LINEA_4_EXPLICABILIDAD_XAI_E_IPB.md) | [**4.2 Perfilador Causal de Partidas y SitRep**](#task-4-2) | **P1** | Auditoría táctico-estratégica forense | ⚪ Planificado |
+| **8** | [Línea 3](roadmap/03_LINEA_3_FIDELIDAD_NORMATIVA_Y_REGLAMENTO.md) | [**3.3 Fase B: Iniciativa Dinámica y TAS/OAS**](#task-3-3) | **P2** | Expansiones de reglamento y artillería | ⚪ Planificado |
+| **9** | [Línea 3](roadmap/03_LINEA_3_FIDELIDAD_NORMATIVA_Y_REGLAMENTO.md) | [**3.4 Fase C: Ingestor Automatizado PDF $\to$ JSON**](#task-3-4) | **P2** | Completitud de los 38 escenarios | ⚪ Planificado |
+| **10** | [Línea 4](roadmap/04_LINEA_4_EXPLICABILIDAD_XAI_E_IPB.md) | [**4.3 Perfilado 5D y Detección de Chokepoints (IPB)**](#task-4-3) | **P2** | Inteligencia del terreno previa a batalla | ⚪ Planificado |
+| **11** | [Línea 5](roadmap/05_LINEA_5_GENERALIZACION_PROCEDURAL.md) | [**5.1 Mutador Procedural con Clumping Espacial**](#task-5-1) | **P2** | Robustez y generalización en mapas nuevos | ⚪ Planificado |
+| **12** | [Línea 5](roadmap/05_LINEA_5_GENERALIZACION_PROCEDURAL.md) | [**5.2 Validación Zero-Shot en Mapas $32\times 32$ y $64\times 64$**](#task-5-2) | **P2** | Escalabilidad a teatros operacionales | ⚪ Planificado |
 
 ### 2.4 Bloque 4: Completado y Consolidado (Ordenado por Prioridad P0 $\to$ P1) 🟢
 > Hitos y componentes plenamente operativos, verificados con tests y suites de evaluación.
 
 | Paso | Línea | Tarea | Prioridad | Enfoque Principal | Estado |
 | :---: | :---: | :--- | :---: | :--- | :---: |
-| **11** | [Línea 2](roadmap/02_LINEA_2_ACELERACION_CAPTURA_VPS.md) | [**2.11 Currículum Asimétrico Ofensivo de Asalto Urbano Puro**](#task-2-11) | **P0** | Fase especializada de 10 ciclos en modo 100% atacante (`US` vs `Random`) en `battaglia_cittadina_2_1` con horizonte táctico comprimido ($T=8$) y penalización severa por timeout ($-1.0$), rompiendo la inercia defensiva aprendida en selfplay temprano antes de reincorporar autojuego simétrico. Verificado con suite de validación curricular (`test_task_2_11_urban_assault_curriculum.py`, 4/4 en verde). | 🟢 **Consolidado v2.5.7** |
+| **1** | [Línea 1](roadmap/01_LINEA_1_OBSERVABILIDAD_Y_TELEMETRIA.md) | [**1.4 Catálogo Unificado y Depuración de Esquemas**](#task-1-4) | **P1** | Módulo `mlops/dataset_builder.py`, fijación del contrato canónico de 15 columnas en `decisions_top.parquet`, purga de acumuladores volátiles en `assault_bench/decision_metrics.py`, saneamiento del 100% de archivos Parquet (69/69 conformes) y Clean Break en `reporting.duckdb` erradicando etiquetas obsoletas hacia EfficientZeroV2. Verificado con `test_unified_catalog_and_schema_purge.py` (5/5 en verde). | 🟢 **Consolidado v2.5.11** |
+| **2** | [Línea 1](roadmap/01_LINEA_1_OBSERVABILIDAD_Y_TELEMETRIA.md) | [**1.3 Validador E2E Frontend $\leftrightarrow$ DuckDB**](#task-1-3) | **P1** | Auditoría automatizada de trazabilidad en TypeScript y Python de las 9 pestañas del dashboard MLOps y simulador web (`traceability.spec.ts`, `test_frontend_duckdb_traceability.py`), garantía de Zero-Mock (cero inferencias o heurísticas espurias como `Math.floor(idx/14)`), fallbacks forzosos a `-`/`N/A`, erradicación del shim MuZero en `replay_api.py` y suite de 15/15 tests en verde. | 🟢 **Consolidado v2.5.8** |
+| **3** | [Línea 2](roadmap/02_LINEA_2_ACELERACION_CAPTURA_VPS.md) | [**2.11 Currículum Asimétrico Ofensivo de Asalto Urbano Puro**](#task-2-11) | **P0** | Fase especializada de 10 ciclos en modo 100% atacante (`US` vs `Random`) en `battaglia_cittadina_2_1` con horizonte táctico comprimido ($T=8$) y penalización severa por timeout ($-1.0$), rompiendo la inercia defensiva aprendida en selfplay temprano antes de reincorporar autojuego simétrico. Verificado con suite de validación curricular (`test_task_2_11_urban_assault_curriculum.py`, 4/4 en verde). | 🟢 **Consolidado v2.5.7** |
 | **12** | [Línea 2 / Red](roadmap/02_LINEA_2_ACELERACION_CAPTURA_VPS.md) | [**2.7 Inicialización Canónica de Capas Especializada en RL**](roadmap/02_LINEA_2_ACELERACION_CAPTURA_VPS.md) | **P1** | Esquema formal de inicialización: Política ortogonal ($\text{gain}=0.01$, $\text{bias}=0$) para máxima entropía inicial uniforme; Valor/Recompensa ortogonal ($\text{gain}=1.0$, $\text{bias}=0$); Kaiming Normal en convoluciones SiLU; y Zero-Init ResNet en segunda normalización residual ($\gamma=0, \beta=0$) para preservar la función identidad pura al paso $0$. Verificado en `test_canonical_rl_initialization.py` (5/5 tests en verde). | 🟢 **Consolidado v2.5.5** |
 | **13** | [Línea 2](roadmap/02_LINEA_2_ACELERACION_CAPTURA_VPS.md) | [**2.10 Dynamic PBRS Escalado Temporalmente y Desensibilización de Bajas en Brecha**](#task-2-10) | **P0** | Potencial temporalmente escalado $\Phi(s, t) = \alpha(1 + t/T_{\max}) \cdot \text{dist\_pot} + \beta\cdot\text{Contest}$, bono de contención por disputa en brecha ($d \le 2$), atenuación del $60\%$ de penalización de bajas ($r_{\text{loss}} \times 0.40$) en zona de brecha y castigo catastrófico por timeout ($-1.0$) si no se controlan VPs. Verificado con suite matemática y de invariancia telescópica Devlin & Kudenko (`test_task_2_10_dynamic_pbrs_breach.py`, 5/5 en verde). | 🟢 **Consolidado v2.5.4** |
 | **14** | [Línea 2](roadmap/02_LINEA_2_ACELERACION_CAPTURA_VPS.md) | [**2.9 Paquete de Aceleración de Rendimiento de Pipeline (Zero Quality Loss)**](#task-2-9) | **P0** | Optimización de pipeline integral: Caché de Firma de Terreno ($1,078\times$, $34\%$ ahorro por episodio), Precomputación Root PUCT ($16,384$ ops eliminadas/paso), Inferencia Estática (`torch.compile`) y Test Wald SPRT (ahorro $50\%-75\%$ en bench). Reducción de campaña de >10h a <3.5h sin pérdida de calidad. | 🟢 **Consolidado v2.5.3** |
@@ -84,6 +82,8 @@ A continuación se detalla el orden secuencial de ejecución técnica para el ci
 | **22** | [Línea 2](roadmap/02_LINEA_2_ACELERACION_CAPTURA_VPS.md) | [**2.5 Currículum Acelerado de VPs (Paridad Humana)**](#task-2-5) | **P1** | Entrenamiento progresivo 4 fases | 🟢 Completado (4 Fases Progresivas + Paridad Humana) |
 | **23** | [Línea 2 / Red](roadmap/02_LINEA_2_ACELERACION_CAPTURA_VPS.md) | [**2.6 Modernización y Eficiencia Arquitectónica (CoordConv, Bottleneck Policy Head y ECA)**](#task-2-6) | **P1** | CoordConv ($38 \to 40$ canales), rediseño de Policy Head con cuello de botella `Conv1x1(48 -> 4) -> Flatten(1024) -> MLP(64 -> 32)` y bloques ECA (*Efficient Channel Attention* 1D) en red dinámica $g$. Verificado 100% en `test_advanced_architecture.py` (11/11 tests en verde). | 🟢 Completado y Verificado |
 | **24** | [Línea 4](roadmap/04_LINEA_4_EXPLICABILIDAD_XAI_E_IPB.md) | [**4.4 Perfilado Doctrinal Dinámico y Visibilidad MLOps**](#task-4-4) | **P1** | Jerarquía 3 capas, mutación contextual, badges MLOps y verificación en currículum | 🟢 Completado (Fases 1, 2, 3, 4 y 5 Consolidadas) |
+| **25** | [Línea 4](roadmap/04_LINEA_4_EXPLICABILIDAD_XAI_E_IPB.md) | [**4.1 Atribución Causal Espacial Hexagonal (IGNH / GradCAM)**](#task-4-1) | **P1** | Integrated Gradients para características heterogéneas (`mlops/reporting/explainability_api.py`), Grad-CAM sobre `representation_tower`, mapeo biyectivo a hexágonos de tablero `(q, r)`, endpoints `/api/v2/replay/explain-step` y `/api/v2/explainability/attribution`, componente `ExplainabilityModal.tsx` integrado en Match Replay (:8778) y suite de tests unitarios/integración en verde (`test_explainability_api.py`). | 🟢 **Consolidado v2.5.10** |
+| **26** | [Línea 4](roadmap/04_LINEA_4_EXPLICABILIDAD_XAI_E_IPB.md) | [**4.1.1 Capa Reactiva de Cabezas Auxiliares Tácticas en Match Replay**](#task-4-1) | **P1** | Botón reactivo 🎯 Threat Head en la barra de herramientas del canvas de Match Replay (:8778), heatmap interactivo con gradiente de calor y porcentaje de riesgo por celda hex proyectando directamente prediction_threat_map, tarjeta forense de cabezas tácticas (Threat Max/Mean, Suppression Risk Morale, Casualties Attrition) y endpoints /api/v2/replay/tactical-heads / /api/v2/replay/step-heads. Verificado con tests unitarios en verde (	est_explainability_api.py, 4/4). | 🟢 **Consolidado v2.5.11** |
 
 ---
 
@@ -142,7 +142,7 @@ flowchart LR
 <span id="task-1-3"></span>
 | **3** | **1.3 Validador E2E de Trazabilidad Frontend $\leftrightarrow$ DuckDB** | **P1** | `assault_ai_ui/src/tests/traceability.spec.ts`, `mlops/reporting/replay_api.py`, `mlops/tests/test_frontend_duckdb_traceability.py` | Test automatizado que audita cada pestaña del dashboard comprobando que ningún componente muestre datos inventados y que los valores se originen en columnas reales de Parquet/DuckDB o muestren `-`/`N/A`. **[CONSOLIDADO 🟢 v2.5.8]** | Tarea 1.1 |
 <span id="task-1-4"></span>
-| **4** | **1.4 Catálogo Unificado de Esquemas y Depuración de Redundancias** | **P1** | `docs/13_INVENTARIO_CANONICO_METRICAS.md`, `mlops/dataset_builder.py` | Purgar esquemas Parquet históricos obsoletos (`v1_legacy`), consolidando campos equivalentes bajo una única nomenclatura canónica indexada en DuckDB. | Tarea 1.2 |
+| **4** | **1.4 Catálogo Unificado de Esquemas y Depuración de Redundancias** | **P1** | `docs/13_INVENTARIO_CANONICO_METRICAS.md`, `mlops/dataset_builder.py`, `mlops/tests/test_unified_catalog_and_schema_purge.py` | Purgar esquemas Parquet históricos obsoletos (`v1_legacy`), consolidando campos equivalentes bajo una única nomenclatura canónica indexada en DuckDB. Eliminación de campos acumuladores volátiles en `decisions_top.parquet` (unificación al 100% en 15 columnas canónicas) y Clean Break total con etiquetas legacy en catálogo y DuckDB. **[CONSOLIDADO 🟢 v2.5.11]** | Tarea 1.2 |
 
 ---
 
@@ -220,7 +220,7 @@ flowchart LR
 | Orden | Tarea / Componente | Prioridad Interna | Módulos / Archivos Impactados | Criterio de Aceptación Cuantitativo | Prerrequisitos |
 | :---: | :--- | :---: | :--- | :--- | :--- |
 <span id="task-3-1"></span>
-| **1** | **3.1 Algoritmo de Retirada a Borde Amigo en Desenfilada (Sección 6.4)** | **P1** | `assault_model/combat/morale.py`, `assault_model/rules/movement_rules.py` | Sustituir la retirada contigua aleatoria por un vector dirigido al borde amigo (*Friendly Edge*), filtrando hexágonos en desenfilada (*Defilade*) fuera de la LOS del atacante y seleccionando la mayor cobertura de terreno disponible. | v2.2.0 (Vectorized LOS) |
+| **1** | **3.1 Algoritmo de Retirada a Borde Amigo en Desenfilada (Sección 6.4)** | **P1** | `assault_model/combat/morale.py`, `assault_model/rules/movement_rules.py`, `assault_model/tests/test_fallback_defilade_algorithm.py` | Algoritmo determinista priorizando desenfilada (BLOCKED > HINDERED > CLEAR), mayor cobertura de terreno/fortificación, vector a Friendly Edge y aumento de distancia al atacante. Regla 13.3 completa. **[CONSOLIDADA 🟢 v2.5.11]** | v2.2.0 (Vectorized LOS) |
 <span id="task-3-2"></span>
 | **2** | **3.2 Fase A: Cavar (*Dig-In*), Humo Táctico y Transporte de Tropas** | **P1** | `assault_model/actions/status.py`, `actions/ranged_indirect.py`, `rules/movement_rules.py` | `DigInAction` (creación de marcadores `Foxhole`), `FireSmokeAction` (bloqueo dinámico de LOS y disipación por turno), y `LoadUnitAction`/`UnloadUnitAction` con chequeo de bajas si el vehículo es destruido. | Tarea 3.1 |
 <span id="task-3-5"></span>
@@ -285,6 +285,29 @@ flowchart TD
 
 ---
 
+6. **Subtarea 3.5.6: Ingesta Fidedigna de Refuerzos, Soporte TA/OAS, Puntos de Mando y Status Moral en Escenarios Canónicos (Eliminación de la Inercia Defensiva en la Raíz Wargame)** — `[CONSOLIDADO 🟢 v2.5.13]`:
+   - **Módulos**: `assets/scenarios/battaglia_cittadina_2_1.json`, `assets/scenarios/mettete_i_piedi_terra_1.json`, `assault_model/core/scenario.py`, `assault_model/core/scenario_loader.py`, `assault_model/state/game_state.py`, `assault_model/runtime/game_state_runtime.py`, `voec_sim/core/simulator.py`, `assault_model/tests/test_scenario_reinforcements.py`.
+   - **Diagnóstico y Origen**: Auditoría exhaustiva del *Libro della Campagna* (Págs. 18-21, §3.1 en `docs/08_AUDITORIA_REGLAMENTO_VS_ENGINE.md`). Se identificó que la IA atacante adoptaba una postura hiperdefensiva por carecer de las ventajas doctrinales de asalto y la masa histórica del manual.
+   - **Logros Consolidados en v2.5.12 - v2.5.13**:
+     1. **Escenario 1.0 Canónico (`mettete_i_piedi_terra_1.json`)**:
+        - Sustitución de defensores del Eje: 429.º Batallón Costero italiano (`IT_FANTERIA_COSTIERA`: 3x `IT_RIFLES_43` en casas `[3, 3]`, `[5, 4]` y posición `[5, 5]`, 1x `IT_BREDA_MMG` en trinchera `[2, 4]`, 1x `IT_45MM_BRIXIA` en `[6, 4]` y 1x `IT_SOLOTHURN_ATR_43` en trinchera `[2, 8]`).
+        - Despliegue de asalto Darby's Rangers: 4x `US_RANGERS_43` (`[1, 12]`, `[3, 12]`, `[5, 12]`, `[8, 12]`), 1x `US_COMBAT_ENGINEERS_43` (`[4, 12]`), 1x `US_BAZOOKA_TEAM` (`[7, 12]`), 1x `US_81MM_MORTAR` (`[5, 13]`).
+        - VPs iniciales en posesión italiana (`initial_owner: IT`), horizonte de 10 turnos (reglamento oficial) y status moral inyectado (US: 3/7/9/11, IT: 2/6/7/9).
+     2. **Pipeline Dinámico de Refuerzos de la 2.ª Oleada (v2.5.13)**:
+        - Ingesta en el Turno 2 (Fase de Organización) de la segunda formación aliada (`US_INF_RIFLE`: 5x `US_RIFLES_43`, 1x `US_BAZOOKA_TEAM`, 1x `US_81MM_MORTAR`, unidades `US_8` a `US_14`).
+        - Resolución estocástica / determinista de tirada D6 de zona de desembarco (1-3: Zona A, 4-5: Zona B, 6: Elección táctica) con manejo de congestión en agua somera.
+        - Registro atómico en `GameState.add_unit()`, sincronización de orden de turnos y recálculo territorial.
+     3. **Escenario 2.1 Canónico (`battaglia_cittadina_2_1.json`)**:
+        - Restitución de la asimetría oficial 2:1 (`1/20 IT vs 2/40 US`): 14 unidades atacantes aliadas (Darby's Rangers + 1st Infantry Division) frente a 7 defensoras italianas (429.º Batallón Costero) en las coordenadas exactas de las áreas de setup del croquis oficial.
+        - Status moral (US: 4/7/9/11, IT: 3/6/8/9), horizonte de 8 turnos y VPs canónicos.
+     4. **Simulación y Compatibilidad**:
+        - Verificación exitosa en `VOECSimulator`: compatibilidad nativa dinámica con 13 a 20 unidades en Escenario 1.0 y 21 unidades en Escenario 2.1 sin bloqueos.
+        - Suite dedicada `assault_model/tests/test_scenario_reinforcements.py` (2/2) y 300/300 tests en verde.
+
+oec_sim/tests/, 112/112 en ssault_model/tests/ y 149/149 en gents/efficientzero_v2/tests/.
+   - **Próximos Pasos (v2.5.13)**: Refuerzos programados en T2, puntos de mando (CPs) y cartas TA/OAS fuera de mapa.
+
+---
 
 <span id="task-3-6"></span>
 ### Tarea 3.6: Eliminación de la Parálisis Ofensiva y Colapso de la Brecha Asimétrica (P0 - Crítica) [CONSOLIDADA 🟢 v2.4.0]
@@ -312,7 +335,7 @@ flowchart TD
 | Orden | Tarea / Componente | Prioridad Interna | Módulos / Archivos Impactados | Criterio de Aceptación Cuantitativo | Prerrequisitos |
 | :---: | :--- | :---: | :--- | :--- | :--- |
 <span id="task-4-1"></span>
-| **1** | **4.1 Atribución Causal Espacial Hexagonal (IGNH / GradCAM)** | **P1** | `mlops/reporting/explainability_api.py`, `assault_ai_ui/src/components/ExplainabilityModal.tsx` | Visualización en el visor MLOps de qué canales sensoriales (cobertura, LOS, amenaza, distancia a VP) determinaron la acción seleccionada en cada turno mediante Integrated Gradients para características heterogéneas (IGNH). | Línea 1 (Zero-Mock en UI) |
+| **1** | **4.1 Atribución Causal Espacial Hexagonal (IGNH / GradCAM)** | **P1** | `mlops/reporting/explainability_api.py`, `assault_ai_ui/src/components/ExplainabilityModal.tsx`, `mlops/reporting/viewer_frontend/src/components/ExplainabilityModal.tsx` | Visualización en el visor MLOps de qué canales sensoriales (cobertura, LOS, amenaza, distancia a VP) determinaron la acción seleccionada en cada turno mediante Integrated Gradients para características heterogéneas (IGNH) y Grad-CAM sobre `representation_tower`. Mapeo biyectivo de coordenadas de tablero y overlay hexagonal reactivo. [CONSOLIDADO 🟢 v2.5.10] | Línea 1 (Zero-Mock en UI) |
 <span id="task-4-2"></span>
 | **2** | **4.2 Perfilador Causal de Partidas y SitRep Forense** | **P1** | `mlops/reporting/causal_profiler.py`, `assault_rag/` | Correlación causal automática entre las predicciones tácticas de las cabezas (`threat_map`, `morale_pred`, `objective_intent`) y el resultado de las capturas de VPs. Generación de informe narrativo forense por partida. | Tarea 4.1 |
 <span id="task-4-3"></span>
@@ -385,6 +408,8 @@ flowchart LR
 
 | Versión | Hito Principal | Tareas Consolidadas | Estado |
 | :---: | :--- | :--- | :---: |
+| **`v2.5.14`** | **Presupuesto Dinámico de Simulación y Horizonte Gobernado por Turnos con Refuerzos**: Desacoplamiento del presupuesto estático de pasos hacia la gobernanza canónica por turnos ($T \le T_{\max}$). Ingesta del OOB total (`scenario_total_units` en `VOECSimulator` y `EZV2VOECAdapter`), headroom táctico por activación (`steps_per_unit_turn = 2.5`), watchdog de seguridad por turno (`turn_deadlock_watchdog = max(30, alive * 4)`) y eliminación de la penalización espuria de timeout (-1.0) en partidas con refuerzos que concluyen normalmente por límite de turnos. Suite `test_turn_budget_reinforcements.py` (4/4) y 153/153 en EZv2. |
+| **`v2.5.11`** | **Algoritmo Canónico de Retirada a Borde Amigo en Desenfilada (Regla 13.3 / §6.4)**: Selección determinista de hexágono de repliegue táctico priorizando desenfilada (LOS BLOCKED > HINDERED > CLEAR), mayor cobertura de terreno/fortificaciones, vector a borde amigo (*Friendly Edge*) y aumento de distancia al atacante. Eliminación inmediata de artillería e inmovilizados, penalización de 1 punto de daño si la unidad está rodeada sin hexágono legal, e integración autoritativa en `morale.py`, `movement_rules.py` y `ranged_combat_resolver.py` (112/112 tests passing). |
 | **`v2.5.4`** | **Catálogo Canónico de Formaciones y Mapeador OOB**: 12 cartas combinadas oficiales, inventario de 122 cartas escaneadas en `assets/art/formations/`, visor visual dual en Editor (:8780), arranque integrado en `start_assault.bat` y suite de tests unitarios/integración. | **Subtarea 3.5.2** | 🟢 **Consolidado** |
 | **`v2.5.3`** | **Aceleración de Pipeline (Zero Quality Loss)**: Caché de terreno ($1,078\times$), Root PUCT vectorizado, inferencia estática `torch.compile` y test Wald SPRT ($lpha=0.01$). Campaña reducida de >10h a <3.5h. | **Tarea 2.9** | 🟢 **Consolidado** |
 | **`v2.5.2`** | **Orquestación Curricular Multi-Etapa y Linaje Forense**: Auto-calibración de quality gates, linaje de checkpoints E2E y evaluación asimétrica calibrada. | **Fases 1-7 Curriculum** | 🟢 **Consolidado** |

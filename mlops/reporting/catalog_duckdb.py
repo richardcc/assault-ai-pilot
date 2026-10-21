@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import os
+import time
 from pathlib import Path
 from typing import Any
 
@@ -35,7 +37,36 @@ def build_catalog_duckdb_from_parquet(
             "error": f"duckdb import failed: {exc}",
             "duckdb_path": str(out_db),
         }
-    con = duckdb.connect(str(out_db))
+
+    # Staging path to avoid write locks on live database
+    staging_db = out_db.with_name(f"{out_db.stem}_stage_{os.getpid()}_{int(time.time() * 1000)}.duckdb")
+    target_dbs = [staging_db, out_db]
+    use_staging = True
+
+    con = None
+    active_target = staging_db
+    last_conn_exc = None
+    for db_cand in target_dbs:
+        for attempt in range(6):
+            try:
+                con = duckdb.connect(str(db_cand))
+                active_target = db_cand
+                use_staging = (db_cand == staging_db)
+                break
+            except Exception as exc:
+                last_conn_exc = exc
+                if attempt < 5:
+                    time.sleep(0.15 * (attempt + 1))
+        if con is not None:
+            break
+
+    if con is None:
+        return {
+            "ok": False,
+            "schema_version": SCHEMA_VERSION_V2,
+            "error": f"duckdb database temporarily locked by another process: {last_conn_exc}",
+            "duckdb_path": str(out_db),
+        }
     try:
         try:
             con.execute(f"CREATE OR REPLACE TABLE catalog_models AS SELECT * FROM read_parquet('{models_pq.as_posix()}')")
@@ -172,17 +203,55 @@ def build_catalog_duckdb_from_parquet(
             "SELECT ? AS schema_version, now()::VARCHAR AS generated_at_utc, ? AS parquet_dir",
             [SCHEMA_VERSION_V2, str(parquet_dir)],
         )
+        models_count = int(con.execute("SELECT COUNT(*) FROM catalog_models").fetchone()[0])
+        evals_count = int(con.execute("SELECT COUNT(*) FROM catalog_evals").fetchone()[0])
+        trains_count = int(con.execute("SELECT COUNT(*) FROM catalog_trains").fetchone()[0])
+        sides_count = int(con.execute("SELECT COUNT(*) FROM catalog_eval_result_sides").fetchone()[0])
+    except Exception as exc:
         return {
-            "ok": True,
+            "ok": False,
             "schema_version": SCHEMA_VERSION_V2,
+            "error": f"duckdb table materialization failed: {exc}",
             "duckdb_path": str(out_db),
-            "models_rows": int(con.execute("SELECT COUNT(*) FROM catalog_models").fetchone()[0]),
-            "evals_rows": int(con.execute("SELECT COUNT(*) FROM catalog_evals").fetchone()[0]),
-            "trains_rows": int(con.execute("SELECT COUNT(*) FROM catalog_trains").fetchone()[0]),
-            "eval_result_sides_rows": int(con.execute("SELECT COUNT(*) FROM catalog_eval_result_sides").fetchone()[0]),
         }
     finally:
-        con.close()
+        try:
+            con.close()
+        except Exception:
+            pass
+
+    # If staging was used, atomically replace out_db with staging_db
+    if use_staging and active_target.exists():
+        replaced = False
+        for rep_attempt in range(8):
+            try:
+                active_target.replace(out_db)
+                replaced = True
+                break
+            except Exception:
+                time.sleep(0.20 * (rep_attempt + 1))
+        if not replaced:
+            try:
+                if active_target.exists():
+                    active_target.unlink()
+            except Exception:
+                pass
+            return {
+                "ok": False,
+                "schema_version": SCHEMA_VERSION_V2,
+                "error": "duckdb live database replacement locked by another process after retries",
+                "duckdb_path": str(out_db),
+            }
+
+    return {
+        "ok": True,
+        "schema_version": SCHEMA_VERSION_V2,
+        "duckdb_path": str(out_db),
+        "models_rows": models_count,
+        "evals_rows": evals_count,
+        "trains_rows": trains_count,
+        "eval_result_sides_rows": sides_count,
+    }
 
 
 _CATALOG_SUMMARY_CACHE: dict[str, tuple[float, dict[str, Any]]] = {}

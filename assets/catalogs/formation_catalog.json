@@ -25,7 +25,10 @@
       "US_81MM_MORTAR"
     ],
     "description": "Standard US Army frontline infantry company with organic mortar and anti-tank rocket support.",
-    "card_image": "assets/art/formations/US Inf 1st Inf Rifle Platoon.jpg"
+    "card_image": "assets/art/formations/US Inf 1st Inf Rifle Platoon.jpg",
+    "command_points": 2,
+    "experience_level": "RECRUIT",
+    "experience_units_count": 5
   },
   "US_RANGER_ASSAULT_COMPANY": {
     "name": "US Ranger Assault Company",
@@ -54,7 +57,10 @@
       "US_SNIPER_43"
     ],
     "description": "Elite assault detachment specializing in beach landings, cliff scaling, and fortification breaches.",
-    "card_image": "assets/art/formations/US Inf 1st Ranger Ranger Platoon.jpg"
+    "card_image": "assets/art/formations/US Inf 1st Ranger Ranger Platoon.jpg",
+    "command_points": 2,
+    "experience_level": "HARDENED",
+    "experience_units_count": 8
   },
   "US_PARACHUTE_RIFLE_COMPANY": {
     "name": "US Parachute Rifle Company",
@@ -82,7 +88,10 @@
       "US_BAZOOKA_TEAM"
     ],
     "description": "Airborne infantry force dropped behind enemy lines with high mobility and rapid shock action.",
-    "card_image": "assets/art/formations/US Inf 505 Para Rifle Platoon 2.jpg"
+    "card_image": "assets/art/formations/US Inf 505 Para Rifle Platoon 2.jpg",
+    "command_points": 3,
+    "experience_level": "VETERAN",
+    "experience_units_count": 5
   },
   "US_INFANTRY_COMBAT_TEAM": {
     "name": "US Regimental Combat Team",
@@ -123,7 +132,10 @@
       "US_SNIPER_43"
     ],
     "description": "Heavy combined arms infantry task force equipped for sustained urban and fortified terrain assaults.",
-    "card_image": "assets/art/formations/US Inf 1st Inf Inf Sup Platoon.jpg"
+    "card_image": "assets/art/formations/US Inf 1st Inf Inf Sup Platoon.jpg",
+    "command_points": 3,
+    "experience_level": "VETERAN",
+    "experience_units_count": 5
   },
   "UK_COMMANDO_TROOP": {
     "name": "UK Commando Troop",
@@ -149,7 +161,10 @@
       "UK_PARACHUTE_RIFLES"
     ],
     "description": "British Commando raid unit specialized in covert beach assaults and fast flanking operations.",
-    "card_image": "assets/art/formations/UK 1st Parachute Brigade Parachute Plt.jpg"
+    "card_image": "assets/art/formations/UK 1st Parachute Brigade Parachute Plt.jpg",
+    "command_points": 3,
+    "experience_level": "VETERAN",
+    "experience_units_count": 5
   },
   "UK_ROYAL_ENGINEERS": {
     "name": "UK Royal Engineers Detachment",
@@ -173,7 +188,10 @@
       "UK_ROYAL_ENGINEERS"
     ],
     "description": "Combat sapper detachment focused on demolition, mine clearing, and overcoming fixed beach obstacles.",
-    "card_image": "assets/art/formations/UK 151st Be Durham Light Infantry Engineer Plt.jpg"
+    "card_image": "assets/art/formations/UK 151st Be Durham Light Infantry Engineer Plt.jpg",
+    "command_points": 2,
+    "experience_level": "HARDENED",
+    "experience_units_count": 4
   },
   "GE_FJ_RIFLE_III": {
     "name": "GE Fallschirmjäger Company",
@@ -199,7 +217,10 @@
       "GE_50MM_MORTAR"
     ],
     "description": "Elite Luftwaffe paratroopers defending key crossroads and high ground in Sicily.",
-    "card_image": "assets/art/formations/GE 1st FJ Division Rifle Plt III.jpg"
+    "card_image": "assets/art/formations/GE 1st FJ Division Rifle Plt III.jpg",
+    "command_points": 2,
+    "experience_level": "HARDENED",
+    "experience_units_count": 6
   },
   "GE_PANZERGRENADIER_PLATOON": {
     "name": "GE Panzergrenadier Platoon",
@@ -225,7 +246,10 @@
       "GE_TANK_HUNTERS_43"
     ],
     "description": "Mechanized infantry platoon with heavy sustained automatic fire and anti-tank capabilities.",
-    "card_image": "assets/art/formations/GE 15th PG Division PG Plt II.jpg"
+    "card_image": "assets/art/formations/GE 15th PG Division PG Plt II.jpg",
+    "command_points": 2,
+    "experience_level": "HARDENED",
+    "experience_units_count": 6
   },
   "GE_PIONIER_COMPANY": {
     "name": "GE Pionier Assault Company",
@@ -254,7 +278,10 @@
       "GE_TANK_HUNTERS_43"
     ],
     "description": "Combat engineer unit trained for stubborn fortress defense and demolition of enemy bridgeheads.",
-    "card_image": "assets/art/formations/GE Inf 15th Pz Mech Rifle Platoon.jpg"
+    "card_image": "assets/art/formations/GE Inf 15th Pz Mech Rifle Platoon.jpg",
+    "command_points": 2,
+    "experience_level": "HARDENED",
+    "experience_units_count": 7
   },
   "IT_BERSAGLIERI_COMPANY": {
     "name": "IT Bersaglieri Company",
@@ -282,7 +309,10 @@
       "IT_45MM_BRIXIA"
     ],
     "description": "Highly mobile Italian light infantry known for aggressive counter-attacks and rapid deployment.",
-    "card_image": "assets/art/formations/IT Inf Livorno Bers Platoon.jpg"
+    "card_image": "assets/art/formations/IT Inf Livorno Bers Platoon.jpg",
+    "command_points": 2,
+    "experience_level": "HARDENED",
+    "experience_units_count": 6
   },
   "IT_FANTERIA_COSTIERA": {
     "name": "IT Costiera Defence Company",
@@ -308,7 +338,10 @@
       "IT_SOLOTHURN_ATR_43"
     ],
     "description": "Coastal division garrison entrenched in bunkers and barbed wire along Gela beaches.",
-    "card_image": "assets/art/formations/IT Inf XVIII Coastal Sec Platoon.jpg"
+    "card_image": "assets/art/formations/IT Inf XVIII Coastal Sec Platoon.jpg",
+    "command_points": 1,
+    "experience_level": "RECRUIT",
+    "experience_units_count": 4
   },
   "IT_DIVISIONE_LIVORNO_ASSAULT": {
     "name": "IT Divisione Livorno Assault",
@@ -337,6 +370,9 @@
       "IT_SNIPER_43"
     ],
     "description": "Italian 4th Infantry Division 'Livorno' shock force leading counter-attacks against the US beachhead.",
-    "card_image": "assets/art/formations/IT Inf Livorno Inf Sup Platoon.jpg"
+    "card_image": "assets/art/formations/IT Inf Livorno Inf Sup Platoon.jpg",
+    "command_points": 2,
+    "experience_level": "HARDENED",
+    "experience_units_count": 5
   }
 }

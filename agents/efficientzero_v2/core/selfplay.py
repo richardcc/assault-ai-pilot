@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import math
 import random
 import time
 from functools import lru_cache
@@ -138,6 +139,25 @@ def _scenario_turn_limit_from_adapter(adapter) -> int:
     return 0
 
 
+def _scenario_total_units_from_adapter(adapter, default_units: int = 0) -> int:
+    try:
+        if hasattr(adapter, "scenario_total_units"):
+            val = int(adapter.scenario_total_units() or 0)
+            if val > 0:
+                return val
+    except Exception:
+        pass
+    try:
+        sim = getattr(adapter, "sim", None)
+        if sim is not None and hasattr(sim, "scenario_total_units"):
+            val = int(sim.scenario_total_units() or 0)
+            if val > 0:
+                return val
+    except Exception:
+        pass
+    return int(default_units)
+
+
 def resolve_effective_step_budget(
     *,
     max_steps: int,
@@ -145,18 +165,20 @@ def resolve_effective_step_budget(
     max_turns_override: int = 0,
     unit_count: int = 0,
     scenario_turn_limit: int = 0,
+    steps_per_unit_turn: float = 1.0,
 ) -> tuple[int, str]:
     units = int(unit_count)
     turns_override = int(max_turns_override)
     steps_override = int(max_steps_override)
     scenario_turns = int(scenario_turn_limit)
     fallback_steps = int(max_steps)
+    multiplier = float(steps_per_unit_turn) if float(steps_per_unit_turn) > 0 else 1.0
     if turns_override > 0 and units > 0:
-        return int(turns_override * units), "max_turns_override*unit_count"
+        return int(math.ceil(turns_override * units * multiplier)), "max_turns_override*unit_count"
     if steps_override > 0:
         return steps_override, "max_steps_override"
     if scenario_turns > 0 and units > 0:
-        return int(scenario_turns * units), "scenario_turn_limit*unit_count"
+        return int(math.ceil(scenario_turns * units * multiplier)), "scenario_turn_limit*unit_count"
     return fallback_steps, "max_steps_fallback"
 
 
@@ -2041,6 +2063,7 @@ class _NativeEZV2SelfplayBackend:
         procedural_terrain_mutation_prob: float = 0.0,
         procedural_unit_jitter_prob: float = 0.0,
         procedural_asymmetric_strength_jitter: float = 0.0,
+        steps_per_unit_turn: float = 1.0,
         **_: Any,
     ) -> list:
         def _normalize_mode(raw: object) -> str:
@@ -2100,12 +2123,15 @@ class _NativeEZV2SelfplayBackend:
         episode_matchup_mode, episode_policy_by_side = _resolve_policy_by_side(obs, int(seed))
         unit_count = len(getattr(obs, "units", []) or [])
         scenario_turn_limit = _scenario_turn_limit_from_adapter(adapter)
+        total_scenario_units = _scenario_total_units_from_adapter(adapter, default_units=unit_count)
+        effective_unit_count = max(unit_count, total_scenario_units)
         effective_max_steps, budget_source = resolve_effective_step_budget(
             max_steps=int(max_steps),
             max_steps_override=int(max_steps_override),
             max_turns_override=int(max_turns_override),
-            unit_count=int(unit_count),
+            unit_count=int(effective_unit_count),
             scenario_turn_limit=int(scenario_turn_limit),
+            steps_per_unit_turn=float(steps_per_unit_turn),
         )
         sustained_advantage_turns_by_side: dict[str, int] = {}
         pending_setup_strength_by_side: dict[str, float] = {}
@@ -2113,7 +2139,22 @@ class _NativeEZV2SelfplayBackend:
 
         macro_planner = MacroStrategyPlanner()
         activated_units_by_side_turn: dict[tuple[str, int], set[str]] = {}
+        current_turn_seen = int(getattr(obs, "turn", 1) or 1)
+        steps_in_current_turn = 0
+        max_steps_per_turn = max(30, int(effective_unit_count * 4))
+        turn_deadlock_watchdog_triggered = False
+
         for step_idx in range(max(1, effective_max_steps)):
+            turn_now = int(getattr(obs, "turn", 0) or 0)
+            if turn_now != current_turn_seen:
+                current_turn_seen = turn_now
+                steps_in_current_turn = 0
+                alive_now = sum(1 for u in (getattr(obs, "units", []) or []) if isinstance(u, dict) and u.get("alive", True))
+                max_steps_per_turn = max(30, int(max(alive_now, 4) * 4))
+            steps_in_current_turn += 1
+            if steps_in_current_turn > max_steps_per_turn:
+                turn_deadlock_watchdog_triggered = True
+                break
             _step_start_ns = time.perf_counter_ns()
             global_legal = list(adapter.legal_actions() or [])
             if not global_legal:
@@ -3406,7 +3447,7 @@ class _NativeEZV2SelfplayBackend:
                 samples[-1].reward_target = float(timeout_penalty)
                 samples[-1].value_target = float(timeout_penalty)
             samples[-1].info["timeout"] = True
-            samples[-1].info["terminal_reason"] = "turn_unit_budget"
+            samples[-1].info["terminal_reason"] = "turn_deadlock_watchdog" if turn_deadlock_watchdog_triggered else "turn_unit_budget"
         return samples
 
 

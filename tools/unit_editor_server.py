@@ -515,14 +515,16 @@ HTML_TEMPLATE = """<!DOCTYPE html>
                   <h2 id="formation-title" style="font-size: 1.15rem; color: #fff;">-</h2>
                   <div style="font-size: 0.75rem; color: var(--text-muted); margin-top: 2px;" id="formation-subtitle">-</div>
                 </div>
-                <div style="display: flex; gap: 0.5rem; align-items: center;">
+                <div style="display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap;">
                   <span id="formation-side-badge" class="badge badge-published">US</span>
+                  <span id="formation-cp-badge" class="stat-chip" style="color: #38bdf8;">2 CP</span>
+                  <span id="formation-exp-badge" class="stat-chip" style="color: #4ade80;">HARDENED (x5)</span>
                   <span id="formation-units-count-badge" class="stat-chip">0 Units</span>
                   <span id="formation-cost-badge" class="stat-chip" style="color: #fde047;">0 pts</span>
                 </div>
               </div>
 
-              <div class="fields-grid" style="margin-bottom: 0.5rem;">
+              <div class="fields-grid" style="margin-bottom: 0.5rem; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));">
                 <div class="field-group">
                   <label>Canonical Formation ID</label>
                   <input type="text" id="form-field-id" placeholder="e.g. US_RANGER_ASSAULT_COMPANY" />
@@ -541,8 +543,30 @@ HTML_TEMPLATE = """<!DOCTYPE html>
                   </select>
                 </div>
                 <div class="field-group">
+                  <label>Command Points (CP)</label>
+                  <select id="form-field-cp" onchange="syncFormationRosterSummary()">
+                    <option value="1">1 CP (1 Chevron v)</option>
+                    <option value="2" selected>2 CP (2 Chevrons vv)</option>
+                    <option value="3">3 CP (3 Chevrons vvv)</option>
+                  </select>
+                </div>
+                <div class="field-group">
+                  <label>Experience Level</label>
+                  <select id="form-field-exp-level" onchange="syncFormationRosterSummary()">
+                    <option value="REGULAR">Regular (No Marker)</option>
+                    <option value="RECRUIT">Recruit (🔵 Blue / Malus)</option>
+                    <option value="HARDENED" selected>Hardened (🟢 Green / +1 Def)</option>
+                    <option value="VETERAN">Veteran (🟠 Orange / +1 Atk)</option>
+                    <option value="ELITE">Elite (🔴 Red / No Supp)</option>
+                  </select>
+                </div>
+                <div class="field-group">
+                  <label>Exp. Units (xN)</label>
+                  <input type="number" id="form-field-exp-count" min="0" max="20" value="5" onchange="syncFormationRosterSummary()" />
+                </div>
+                <div class="field-group">
                   <label>Command Rating (CR)</label>
-                  <input type="number" id="form-field-cr" min="1" max="12" value="8" />
+                  <input type="number" id="form-field-cr" min="1" max="12" value="8" onchange="syncFormationRosterSummary()" />
                 </div>
               </div>
 
@@ -1698,6 +1722,9 @@ HTML_TEMPLATE = """<!DOCTYPE html>
           name: fdef.name || fid.replace(/_/g, ' '),
           side: side,
           command_rating: fdef.command_rating || 8,
+          command_points: fdef.command_points || 2,
+          experience_level: fdef.experience_level || "REGULAR",
+          experience_units_count: fdef.experience_units_count || 0,
           units: fdef.units || [],
           card_image: fdef.card_image || '',
           data: fdef
@@ -1772,7 +1799,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
         let metaHtml = '';
         if (item.type === 'mapped') {
           badgeHtml = `<span class="badge badge-published">${side} • MAPPED</span>`;
-          metaHtml = `${side} • ${item.units.length} Units • CR: ${item.command_rating} • <span style="color: #fde047;">${totalCost} pts</span>`;
+          metaHtml = `${side} • ${item.units.length} Units • ${item.command_points || 2} CP • ${item.experience_level || "REG"} (x${item.experience_units_count || 0}) • <span style="color: #fde047;">${totalCost} pts</span>`;
         } else {
           badgeHtml = `<span class="badge badge-pending">${side} • CARD</span>`;
           metaHtml = `${side} • Unmapped Card • Ready to configure OOB`;
@@ -1799,6 +1826,9 @@ HTML_TEMPLATE = """<!DOCTYPE html>
           name: item.name,
           side: item.side,
           command_rating: 8,
+          command_points: 2,
+          experience_level: "REGULAR",
+          experience_units_count: 0,
           line_units: [],
           heavy_weapons: [],
           specialists: [],
@@ -1820,6 +1850,9 @@ HTML_TEMPLATE = """<!DOCTYPE html>
         document.getElementById('form-field-name').value = item.name;
         document.getElementById('form-field-side').value = item.side;
         document.getElementById('form-field-cr').value = 8;
+        document.getElementById('form-field-cp').value = 2;
+        document.getElementById('form-field-exp-level').value = "REGULAR";
+        document.getElementById('form-field-exp-count').value = 0;
         document.getElementById('form-field-desc').value = currentFormationData.description;
 
         const imgEl = document.getElementById('formation-card-img');
@@ -1871,6 +1904,9 @@ HTML_TEMPLATE = """<!DOCTYPE html>
       document.getElementById('form-field-name').value = currentFormationData.name || '';
       document.getElementById('form-field-side').value = (currentFormationData.side || 'US').toUpperCase();
       document.getElementById('form-field-cr').value = currentFormationData.command_rating || 8;
+      document.getElementById('form-field-cp').value = currentFormationData.command_points || 2;
+      document.getElementById('form-field-exp-level').value = (currentFormationData.experience_level || "REGULAR").toUpperCase();
+      document.getElementById('form-field-exp-count').value = currentFormationData.experience_units_count !== undefined ? currentFormationData.experience_units_count : 0;
       document.getElementById('form-field-desc').value = currentFormationData.description || '';
 
       const cardImg = currentFormationData.card_image || '';
@@ -2078,7 +2114,22 @@ HTML_TEMPLATE = """<!DOCTYPE html>
       currentFormationData.name = document.getElementById('form-field-name').value;
       currentFormationData.side = document.getElementById('form-field-side').value;
       currentFormationData.command_rating = parseInt(document.getElementById('form-field-cr').value, 10) || 8;
+      currentFormationData.command_points = parseInt(document.getElementById('form-field-cp').value, 10) || 2;
+      currentFormationData.experience_level = document.getElementById('form-field-exp-level').value || "REGULAR";
+      currentFormationData.experience_units_count = parseInt(document.getElementById('form-field-exp-count').value, 10) || 0;
       currentFormationData.description = document.getElementById('form-field-desc').value;
+
+      // Update CP & Experience badges
+      const cpBadge = document.getElementById('formation-cp-badge');
+      if (cpBadge) cpBadge.innerText = (currentFormationData.command_points || 2) + ' CP';
+      const expBadge = document.getElementById('formation-exp-badge');
+      if (expBadge) {
+        const expLvl = (currentFormationData.experience_level || 'REGULAR').toUpperCase();
+        const expCnt = currentFormationData.experience_units_count || 0;
+        expBadge.innerText = `${expLvl} (x${expCnt})`;
+        const expColors = { RECRUIT: '#38bdf8', REGULAR: '#94a3b8', HARDENED: '#4ade80', VETERAN: '#fb923c', ELITE: '#f87171' };
+        expBadge.style.color = expColors[expLvl] || '#94a3b8';
+      }
 
       document.getElementById('formation-json-raw').value = JSON.stringify(currentFormationData, null, 2);
     }
@@ -2317,6 +2368,9 @@ class UnitEditorHandler(BaseHTTPRequestHandler):
                 "name": data.get("name", formation_id.replace("_", " ").title()),
                 "side": data.get("side", "US").upper(),
                 "command_rating": int(data.get("command_rating", 8)),
+                "command_points": int(data.get("command_points", 2)),
+                "experience_level": str(data.get("experience_level", "REGULAR")).upper(),
+                "experience_units_count": int(data.get("experience_units_count", 0)),
                 "line_units": line_units,
                 "heavy_weapons": heavy_weapons,
                 "specialists": specialists,

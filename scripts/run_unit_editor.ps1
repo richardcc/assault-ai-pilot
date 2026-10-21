@@ -16,6 +16,13 @@ $Repo = (Resolve-Path $Repo).Path
 
 Push-Location $Repo
 try {
+    $existing = Get-NetTCPConnection -LocalPort $Port -State Listen -ErrorAction SilentlyContinue
+    if ($existing) {
+        Write-Host "Releasing port $Port from previous process PID $($existing.OwningProcess)..." -ForegroundColor Yellow
+        Stop-Process -Id $existing.OwningProcess -Force -ErrorAction SilentlyContinue
+        Start-Sleep -Milliseconds 500
+    }
+
     Write-Host "========================================" -ForegroundColor Cyan
     Write-Host " Assault Unit & Formation Editor       " -ForegroundColor Yellow
     Write-Host " URL: http://127.0.0.1:$Port/           " -ForegroundColor Green

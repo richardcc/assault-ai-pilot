@@ -73,6 +73,9 @@ def test_api_formations_lifecycle(running_editor_server):
             "name": "Test Assault Troop",
             "side": "US",
             "command_rating": 9,
+            "command_points": 3,
+            "experience_level": "VETERAN",
+            "experience_units_count": 3,
             "line_units": ["US_RIFLES_43", "US_RIFLES_43"],
             "heavy_weapons": ["US_BAZOOKA_TEAM"],
             "specialists": ["US_COMBAT_ENGINEERS_43"],
@@ -95,6 +98,9 @@ def test_api_formations_lifecycle(running_editor_server):
     formations = load_formations()
     assert test_id in formations
     assert formations[test_id]["name"] == "Test Assault Troop"
+    assert formations[test_id]["command_points"] == 3
+    assert formations[test_id]["experience_level"] == "VETERAN"
+    assert formations[test_id]["experience_units_count"] == 3
     assert formations[test_id]["units"] == [
         "US_RIFLES_43", "US_RIFLES_43", "US_BAZOOKA_TEAM", "US_COMBAT_ENGINEERS_43"
     ]

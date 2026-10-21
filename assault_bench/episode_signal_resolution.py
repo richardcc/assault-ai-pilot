@@ -266,21 +266,18 @@ def resolve_step_signals(
                 obs_enemy_reaction_fire_risk_runtime = float(_risk_f)
     except Exception:
         obs_enemy_reaction_fire_risk_runtime = None
-    obs_enemy_reaction_fire_risk_fallback = obs_enemy_reaction_fire_risk_for_step_fn(
-        legal_actions=list(legal_actions_list_local),
-        units=list(obs_units_list),
-        actor_side=str(active_side),
-    )
-    if (
-        obs_enemy_reaction_fire_risk_runtime is None
-        or (
-            float(obs_enemy_reaction_fire_risk_runtime) <= 0.0
-            and float(obs_enemy_reaction_fire_risk_fallback) > 0.0
-        )
-    ):
-        obs_enemy_reaction_fire_risk_value = float(obs_enemy_reaction_fire_risk_fallback)
-    else:
+
+    if obs_enemy_reaction_fire_risk_runtime is not None:
         obs_enemy_reaction_fire_risk_value = float(obs_enemy_reaction_fire_risk_runtime)
+    else:
+        # Fallback probe evaluated only when transition_info lacks runtime telemetry
+        obs_enemy_reaction_fire_risk_value = float(
+            obs_enemy_reaction_fire_risk_for_step_fn(
+                legal_actions=list(legal_actions_list_local),
+                units=list(obs_units_list),
+                actor_side=str(active_side),
+            )
+        )
 
     reaction_exposure_component_value = safe_float_or_none(
         field_fn(transition_info, "reaction_exposure_component", None)

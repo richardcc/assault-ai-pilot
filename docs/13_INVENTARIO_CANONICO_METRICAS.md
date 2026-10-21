@@ -251,6 +251,11 @@ En cumplimiento estricto con las directivas de optimización y fidelidad:
    - Eliminados porcentajes falsos fijos en `NetworkTopologyTab.tsx` (ahora reflejan `N/A` si no hay partidas evaluadas).
    - Eliminada la invención de turnos (`Math.floor(idx / 14) + 1`) y posturas tácticas en `MatchReplayTab.tsx`.
    - Eliminada la deducción de controladores cruzando escenarios y la etiqueta obsoleta `"MuZero"` en `VpSummaryTab.tsx` y `CatalogPage.tsx`.
+5. **Esquema Canónico Unificado de `decisions_top.parquet` (15 Columnas Estrictas) y Exclusión de Acumuladores**:
+   - Módulo autoritativo: `mlops/dataset_builder.py`.
+   - Columnas canónicas obligatorias (15): `decision_type`, `unit_id`, `count`, `damage_dealt`, `kills_dealt`, `cover_avg`, `distance_avg`, `los_avg`, `target_q_avg`, `target_r_avg`, `mcts_overwritten`, `mcts_policy_kept`, `policy_prior_sum`, `mcts_visit_sum`, `mcts_q_sum`.
+   - Exclusión terminante de campos acumuladores volátiles en origen (`assault_bench/decision_metrics.py`): `cover_n`, `cover_sum`, `distance_n`, `distance_sum`, `los_n`, `los_sum`, `target_q_n`, `target_q_sum`, `target_r_n`, `target_r_sum`.
+   - Homogeneización del 100% de datasets Parquet (69/69 archivos consolidados a 15 columnas) y sustitución radical en DuckDB de etiquetas legacy residuales (`"MuZero"` $\to$ `"EfficientZeroV2"`). Verificado con `mlops/tests/test_unified_catalog_and_schema_purge.py`.
 
 ---
 

@@ -1,16 +1,14 @@
 base_config: agents/efficientzero_v2/configs/efficientzero_v2_config.yaml
-
 paths:
   run_root: runs_curriculum
-
 scenario:
   id: battaglia_cittadina_2_1
   max_turns: 8
-
 selfplay:
   num_workers: 10
   parallel_backend: process
-  matchup_modes: [self_vs_random]
+  matchup_modes:
+  - self_vs_random
   matchup_mode_weights:
     self_vs_random: 1
   mcts_simulations: 256
@@ -18,23 +16,22 @@ selfplay:
   timeout_penalty: -1.0
   reward_shaping:
     time_scaled_pbrs: true
-    vp_potential_weight: 1.50
+    vp_potential_weight: 1.5
     vp_potential_gamma: 0.997
-    vp_potential_ctrl_bonus: 2.50
-    vp_contested_bonus: 0.80
+    vp_potential_ctrl_bonus: 2.5
+    vp_contested_bonus: 0.8
     breach_distance: 2
-    breach_casualty_attenuation: 0.40
-    vp_capture_bonus_per_hex: 6.50
-    objective_progress_bonus_per_hex: 5.00
-    capture_bonus: 2.20
-    kill_weight: 0.50
+    breach_casualty_attenuation: 0.4
+    vp_capture_bonus_per_hex: 6.5
+    objective_progress_bonus_per_hex: 5.0
+    capture_bonus: 2.2
+    kill_weight: 0.5
     idle_penalty: -0.15
     paralysis_penalty_weight: 0.08
     cover_threshold: 0.35
-    terminal_scale: 1.50
-    terminal_loss_penalty: 1.50
+    terminal_scale: 1.5
+    terminal_loss_penalty: 1.5
     opportunity_near_vp_max_dist: 12.0
-
 train:
   iterations: 60
   episodes_per_iter: 25

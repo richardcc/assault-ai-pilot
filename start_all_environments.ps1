@@ -104,7 +104,7 @@ if ($hasWt -and -not $SeparateWindows) {
     $wtFullArgs = $tabCommands -join " ; "
     Start-Process "wt.exe" -ArgumentList $wtFullArgs
     Write-Host "Ventana de Windows Terminal lanzada exitosamente con $($tabSpecs.Count) pestanas." -ForegroundColor Green
-    Start-Sleep -Seconds 1
+    Start-Sleep -Seconds 2
     Start-Process "http://127.0.0.1:8780/"
 } else {
     Write-Host "Lanzando $($tabSpecs.Count) ventanas independientes de PowerShell..." -ForegroundColor Cyan
@@ -118,6 +118,6 @@ if ($hasWt -and -not $SeparateWindows) {
         Start-Process "powershell.exe" -ArgumentList $argsList -WorkingDirectory $dir
     }
     Write-Host "Ventanas de PowerShell lanzadas correctamente." -ForegroundColor Green
-    Start-Sleep -Seconds 1
+    Start-Sleep -Seconds 2
     Start-Process "http://127.0.0.1:8780/"
 }

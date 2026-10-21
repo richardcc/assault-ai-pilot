@@ -458,3 +458,323 @@ Resuelto por `resolve_explosive_charge()` (`assault_model/combat/explosive_charg
 * Tras comparar resultados con `compare_dice()`:
   * Con 2+ impactos o crítico, la estructura colapsa físicamente: un edificio se convierte en `Terrain.RUINS`, un búnker colapsa a `trench`, y un campo de minas o alambrada se elimina del mapa.
   * Todas las unidades guarnecidas sufren daño colateral letal o reducción a media fuerza.
+
+---
+
+## 14. Catálogo Canónico de Arte Visual, Marcadores y Overlays Tácticos (`assets/art/`)
+
+El entorno visual de *Assault* se basa en una jerarquía de activos gráficos 2D (`assets/art/`) que representan de forma biunívoca el estado del motor (`assault_model/state/`), las fichas de unidad, los modificadores de terreno, la niebla de guerra y los marcadores de mando/moral.
+
+```mermaid
+flowchart TD
+    subgraph Visual_Pipeline ["Pipeline de Renderizado Visual y Overlays Tácticos"]
+        direction TB
+        ENGINE_STATE["GameState Autoritativo
+(Unidad, Terreno, Moral, PAs)"] --> RESOLVER["Visual Asset Mapper
+(assault_ai_ui / editor / reporting)"]
+        
+        RESOLVER --> HEX_LAYER["1. Tablero y Terreno
+assets/art/terrain/ y minefield/"]
+        RESOLVER --> COUNTER_LAYER["2. Fichas de Unidad
+assets/art/counters/"]
+        RESOLVER --> EXP_LAYER["3. Capas de Veteranía/Activación
+assets/art/layer/ (Rec, Vet, Hard, Elite, Moved)"]
+        RESOLVER --> STATUS_LAYER["4. Estados Tácticos y Órdenes
+assets/art/status/ y action_markers/"]
+        RESOLVER --> FACTION_LAYER["5. Moral, Bajas y Objetivos
+assets/art/markers/ (Hit, Smoke, VP, Dead, Routed)"]
+        RESOLVER --> UI_LAYER["6. HUD y Resolución
+assets/art/dice/ y icons/"]
+    end
+```
+
+### 14.1. Marcadores de Estado de Unidad (`assets/art/status/`)
+Colección de **16 archivos PNG (176×154 px, modo RGBA con canal alfa)** diseñados como insignias con geometría de chevron que se acoplan directamente a las fichas de combate o se proyectan en el HUD táctico:
+
+| Archivo | Geometría | Estado del Motor (`UnitInstance` / `Action`) | Efecto Normativo en Reglas (*Assault: Sicily 43*) |
+| :--- | :---: | :--- | :--- |
+| `Status Normal Action.png` | 176×154 | Acción estándar consumida | Gasto nominal de puntos de activación; unidad lista para fases secundarias. |
+| `Status Fast Action.png` | 176×154 | `has_fast_action_this_turn = True` | Movimiento rápido (Fast Action / Sprint): doble avance pero penaliza el disparo en el mismo turno. |
+| `Status Fast Actionb.png` | 176×154 | Fast Action (reverso agotado) | Indica que la reserva de sprint ha sido completamente ejecutada este turno. |
+| `Status Fire and Move.png` | 176×154 | Fuego y Maniobra coordinada | Permite a la escuadra disparar y acto seguido cambiar de posición hacia cobertura. |
+| `Status Fire and Moveb.png` | 176×154 | Fuego y Maniobra (reverso) | Fase secundaria de fuego y movimiento concluida. |
+| `Status Firing.png` | 176×154 | `has_fired_this_turn = True` | Unidad empeñada en fuego directo; expone su posición y anula camuflaje. |
+| `Status Turret Fire.png` | 176×154 | Fuego de torreta acorazada | Fuego vehicular con arco específico sin modificar la orientación del chasis. |
+| `Status Hide Action.png` | 176×154 | `is_hidden = True` / Desenfilada | Ocultación voluntaria en cobertura vegetal o desenfilada (+1 nivel defensivo, inmune a LOS lejana). |
+| `Status Hide Actionb.png` | 176×154 | Ocultación (reverso confirmado) | Indica posición oculta fija verificada por el árbitro/motor. |
+| `Status Dig In.png` | 176×154 | Atrincheramiento en curso | Construcción de pozos de tirador (Foxholes) consumiendo 2 PAs defensivos. |
+| `Status Dig Inb.png` | 176×154 | Posición atrincherada consolidada | Otorga bonificación de cobertura atrincherada permanente contra metralla y HE. |
+| `Status Delayed Action.png` | 176×154 | Fuego de reacción (Overwatch) | Acción retenida para interrumpir el movimiento enemigo durante su activación. |
+| `Status Ambush.png` | 176×154 | Emboscada preparada | Fuego de reacción sorpresa a quemarropa con bonificación a la penetración/moral. |
+| `Status Fallback.png` | 176×154 | `is_falling_back = True` | Repliegue forzoso hacia la retaguardia bajo fuego concentrado enemigo. |
+| `Status Suppressed.png` | 176×154 | `is_suppressed = True` | Unidad suprimida/clavada al suelo: penalización de -1 dado de ataque y prohibición de avance. |
+| `Status Immobile.png` | 176×154 | `is_immobile = True` | Inmovilización mecánica (oruga destruida, motor averiado o dotación fija). |
+
+---
+
+### 14.2. Marcadores Generales, Control de Objetivos y Bajas por Facción (`assets/art/markers/`)
+Total: **30 archivos PNG (RGBA)** empleados en el track de turnos, puntos de victoria, logística y gestión psicológica de las fuerzas:
+
+#### A. Combate, Turnos y Control de VPs
+* **`Marker Hit.png` (161×143 px):** Marcador de impacto y daño acumulado sobre vehículos o formaciones.
+* **`Marker Smoke.png` (71×48 px):** Cortina de humo balística/táctica generada según la Regla 7.2 (degrada o bloquea la LOS).
+* **`Marker OBJ.png` (92×92 px):** Marcador neutral de Punto de Victoria (VP) en disputa sobre el hexágono.
+* **`Markers Objective Allies.png` / `Markers Objective Axis.png` (92×92 px):** Puntos de Victoria controlados y asegurados por los Aliados o el Eje.
+* **`Marker Supply.png` / `Marker Supply 2.png` (92×92 px):** Depósitos de pertrechos, munición disponible y niveles de reabastecimiento.
+* **`Marker Turn.png` / `Marker Turn End.png` (71×71 px):** Progreso del turno en curso y delimitador de fase final de turno.
+* **`Markers Command.png` / `Markers Commandb.png` (82×82 px):** Marcadores de activación de Plana Mayor / HQ (anverso activo y reverso consumido).
+
+#### B. Moral, Ruptura y Bajas por Nación (92×92 px RGBA)
+Cada ejército en combate (Alemania, Italia, Reino Unido y Estados Unidos) dispone de su repertorio formal de marcadores psicológicos y de atrición:
+
+| Facción | Ficha Activa | Bajas Mortales (`Dead`) | En Desbandada (`Routed`) | Rendición (`Surrender`) | Retirada (`Withdraw`) |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| **Alemania (GE)** | `Markers Germany.png` | `Markers Germany Dead.png` | `Markers Germany Routed.png` | `Markers Germany Surrender.png` | `Markers Germany Withdraw.png` |
+| **Italia (IT)** | `Markers Italy.png` | `Markers Italy Dead.png` | `Markers Italy Routed.png` | `Markers Italy Surrender.png` | `Markers Italy Withdraw.png` |
+| **Reino Unido (UK)** | `Markers UK.png` | `Markers UK Dead.png` | `Markers UK Routed.png` | *(N/A)* | `Markers UK Withdraw.png` |
+| **EE.UU. (USA)** | `Markers USA.png` | `Markers USA Dead.png` | `Markers USA Routed.png` | `Markers USA Surrender.png` | `Markers USA Withdraw.png` |
+
+---
+
+### 14.3. Marcadores de Acción del Tablero (`assets/art/action_markers/`)
+Total: **8 archivos PNG (~119×119 px)**. Utilizados por la interfaz táctica y los visualizadores de la IA para proyectar órdenes directas y comprobaciones de visión:
+* **`normal.png` / `fast_action.png`:** Vectores de desplazamiento normal y a la carrera.
+* **`firing.png` / `turret_firing.png`:** Designación de hexágonos objetivo de fuego directo y arcos de torreta.
+* **`fire_move.png` / `move_fire.png`:** Secuencias combinadas de maniobra y disparo.
+* **`spotted.png` / `no_spotted.png`:** Estado de reconocimiento en niebla de guerra: contacto visual confirmado vs. objetivo oculto.
+
+---
+
+### 14.4. Capas de Veteranía y Activación (`assets/art/layer/`)
+Total: **5 archivos PNG (161×143 px, RGBA con transparencia)** superpuestos dinámicamente sobre el counter base de la unidad:
+* **`Layer_Rec.png` (Recluta - Nivel 1):** Tropas noveles con mayor susceptibilidad al fuego de supresión.
+* **`Layer_Vet.png` (Veterano - Nivel 2):** Nivel regular de campaña; cohesión doctrinal estándar.
+* **`Layer_Hard.png` (Curtido - Nivel 3):** Tropas fogueadas con bono de resistencia a la desbandada.
+* **`Layer_Elite.png` (Élite - Nivel 4):** Unidades de choque (Fallschirmjäger, Rangers, Paracaidistas) con bonificación en combate cercano.
+* **`Layer_Moved.png` (Activada):** Máscara oscura semitransparente que atempera el contraste de las unidades que ya finalizaron su turno.
+
+---
+
+### 14.5. Campos de Minas y Trampas Defensivas (`assets/art/minefield/`)
+Total: **4 archivos PNG (130×112 px, RGBA)**:
+* **`Minefield AP.png`:** Campo de minas antipersonal (amenaza de fragmentación contra infantería a pie).
+* **`Minefield AT.png`:** Campo de minas anticarro (detonación balística pesada contra barcazas y trenes de rodaje).
+* **`Minefield Dummy.png`:** Falso campo minado colocado para engaño táctico y canalización del atacante.
+* **`Minefield Back.png`:** Reverso neutro e inexplorado que oculta la naturaleza del obstáculo hasta que un zapador con `MINE_DETECTION` o `SCOUT` lo sondea con éxito.
+
+---
+
+### 14.6. Fortificaciones y Modificadores de Terreno (`assets/art/terrain/`)
+Total: **11 archivos PNG (RGBA)** que modifican dinámicamente las propiedades de cobertura física del hexágono:
+* **Fortificaciones de Campaña (155×129 px):**
+  * `Terrain Trenches.png`: Red de trincheras reforzadas (+2 dados de defensa frente a fuego directo).
+  * `Terrain Sandbag Position.png`: Parapetos de sacos terreros para armas colectivas (MG42, Breda, Morteros).
+  * `Terrain Barbed Wire.png`: Alambradas de espino (coste de movimiento × 3 e impedimento de avance rápido).
+  * `Terrain Tank Barricades.png`: Erizos checos y dientes de dragón que bloquean el tránsito de vehículos acorazados.
+  * `Terrain Bunker.png`: Búnker de hormigón armado (cobertura pesada y protección antibombardeo).
+  * `Terrain Pillbox.png`: Casamata de hormigón con troneras protegidas para fuego rasante.
+  * `Terrain Gun Emplacement.png`: Emplazamiento atrincherado para piezas de artillería o cañones anticarro PaK.
+* **Cráteres de Artillería y Ruinas Urbanas (229×265 px):**
+  * `Terrain Crater Clear.png`: Embudo de proyectil en campo abierto (+1 cobertura improvisada).
+  * `Terrain Crater Trees.png`: Cráter en bosque que rompe el arbolado creando terreno difícil.
+  * `Terrain Crater Building Black.png`: Escombros oscuros de edificio de mampostería colapsado.
+  * `Terrain Crater Building Red.png`: Ruinas de ladrillo urbano destruido (impide vehículos, ofrece refugio a infantería).
+
+---
+
+### 14.7. Dados de Combate y Resolución (`assets/art/dice/`)
+Total: **24 archivos PNG** que materializan el sistema probabilístico del juego:
+* **Dados D6 Numéricos (25×25 px RGBA):** `D6_Black1.png` a `D6_Black6.png`, y `Dice Red 6.png` para chequeos de moral, eventos de escenario y detección de minas.
+* **Dados Tácticos de Fuego por Colores (92×92 px RGB):**
+  * **Azul (`blue_00.png` a `blue_02.png`):** Armamento ligero secundario y apoyo de fusilería.
+  * **Verde (`green_00.png` a `green_03.png`):** Fusiles estándar, ametralladoras ligeras y fuego regular.
+  * **Rojo (`red_00.png` a `red_04.png`):** Proyectiles de alto calibre, cargas huecas y armamento pesado anticarro.
+  * **Amarillo (`yellow_00.png` a `yellow_04.png`):** Fuego de morteros, fragmentación y metralla de área.
+
+---
+
+### 14.8. Iconografía de Interfaz y Herramientas (`assets/art/icons/`)
+Total: **31 archivos PNG (25×25 px)** integrados en la consola de mando, barra de herramientas y paneles MLOps:
+* **Control de Simulación:** `Icon_Play`, `Icon_Reset`, `Icon_Undo`, `Icon_Roll Dice`, `Icon_LOS`, `Icon_Tracks`, `Icon_Cleanup`.
+* **Herramientas de Visor y Zoom:** `Icon_Zoom-In`, `Icon_Zoom-Out`, `Icon_ZoomSelect`, `Icon_ImageCapture`.
+* **Facciones y Filtros Doctrinales:** `Icon_GE`, `Icon_GE Planning`, `Icon_IT`, `Icon_IT Planning`, `Icon_UK`, `Icon_UK Planning`, `Icon_US`, `Icon_US Planning`.
+* **Paneles de Tarjetas y Sistema:** `Icon_Command Card`, `Icon_Commmand Cards`, `Icon Tactical Cards`, `Icon_Minefield`, `Icon_Pieces`, `Icon_HidePieces`, `Icon_Server`, `Icon_User`, `Icon_Notepad`.
+
+---
+
+## 15. Catálogo Canónico de Formaciones Tácticas (Combined Arms OOB) y Anatomía de Cartas
+
+En concordancia con la **Sección 4.1, 4.9.2 y 5.0 del Reglamento Oficial de Assault: Sicily 43**, las formaciones representan las unidades militares orgánicas combinadas (compañías y pelotones) que se seleccionan y despliegan en el tablero táctico.
+
+### 15.1. Anatomía Visual y Marcadores de las Cartas de Formación (`assets/art/formations/`, 122 cartas)
+
+1. **Círculo Inferior Derecho: Puntos de Mando (*Command Points / CP*) y Nivel Cualitativo:**
+   * **Galones / Chevrons Interiores (`v`, `vv`, `vvv`):** Indican la cantidad de **Puntos de Mando (*Command Points*)** que la formación inyecta en el pool de mando de la facción al inicio de cada turno (Regla 4.9.2):
+     * **1 Galón (`v`):** 1 Command Point aportado (típico de destacamentos de apoyo menores o de segunda línea).
+     * **2 Galones (`vv`):** 2 Command Points aportados (pelotones y compañías de infantería estándar).
+     * **3 Galones (`vvv`):** 3 Command Points aportados (unidades de élite, paracaidistas, comandos y tropas de choque).
+   * **Color de Fondo del Círculo (Nivel de Experiencia, Regla 4.2.3):**
+     * 🔵 **Azul (`RECRUIT`):** Reclutas; el atacante obtiene automáticamente un símbolo de impacto `X` al disparar contra la unidad.
+     * 🟢 **Verde (`HARDENED`):** Endurecido / Curtido; añade $+1$ dado de combate azul de defensa adicional a las unidades con experiencia.
+     * 🟠 **Naranja (`VETERAN`):** Veterano; añade $+1$ dado de combate azul de ataque adicional a las unidades con experiencia.
+     * 🔴 **Rojo (`ELITE`):** Élite; ignora por completo los efectos y penalizaciones por supresión.
+
+2. **Círculo Inferior Izquierdo: Dotación de Unidades con Experiencia Inicial (`xN`):**
+   * El icono rojo con el soldado saludando y un multiplicador numérico (ej. `x4`, `x5`, `x8`) define el número exacto de escuadras de la formación que entran en despliegue con el marcador de experiencia correspondiente sobre el mapa.
+
+3. **Código de Módulo y Serie Histórica:**
+   * Ubicado bajo el círculo derecho (ej. `S43` = *Sicily 43*, `Pr43` = *Paratroopers 43*).
+
+### 15.2. Modelo de Dominio y Contratos (`assault_model/units/formation.py`)
+
+El motor modela formalmente estos atributos a través de la clase dataclass `Formation` y el catálogo canónico `assets/catalogs/formation_catalog.json`:
+
+```python
+@dataclass
+class Formation:
+    id: str
+    name: str
+    side: str
+    command_rating: int = 8
+    command_points: int = 2                       # 1, 2 o 3 según galones
+    experience_level: str = "REGULAR"            # RECRUIT, REGULAR, HARDENED, VETERAN, ELITE
+    experience_units_count: int = 0              # Cantidad de escuadras con experiencia (xN)
+    line_units: List[str] = field(default_factory=list)
+    heavy_weapons: List[str] = field(default_factory=list)
+    specialists: List[str] = field(default_factory=list)
+    units: List[str] = field(default_factory=list)
+    card_image: str = ""
+    description: str = ""
+```
+
+### 15.3. Integración en el Editor Táctico de Unidades y Formaciones (Puerto 8780)
+
+La interfaz web en `tools/unit_editor_server.py` expone:
+* Selectores dedicados de **Command Points (`1 CP`, `2 CP`, `3 CP`)**.
+* Selectores tipados de **Experience Level** con su color distintivo.
+* Contador numérico de **Exp. Units (`xN`)**.
+* Badges de cabecera con actualización reactiva en tiempo real sobre el panel de inspección de la formación.
+
+---
+
+## 16. Algoritmo Canónico de Retirada a Borde Amigo en Desenfilada (Sección 6.4 / Regla 13.3)
+
+El manual oficial (*Rulebook rev6* §6.4 y §13.3) estipula que una unidad que sufre un estado de retirada (*Fallback*) tras fuego concentrado o acumulación de impactos de supresión debe realizar un repliegue táctico:
+> *«The unit is in retreat. It performs a fast action... away from the direction of the attack. Each hex should increase the distance between it and any enemy units. If that isn't possible at any point during the fallback, the unit takes a damage point and remains in the hex it was last able to retreat into. Artillery or immobilised units are eliminated if they are ever in fallback. All units are eliminated if they ever receive a second fallback.»*
+
+Para materializar esta doctrina con fidelidad estricta y desterrar primitivas aleatorias o cableadas, el motor táctico implementa en `MovementRules.calculate_fallback_destination` un algoritmo determinista de selección de hexágono ponderado:
+
+```mermaid
+flowchart TD
+    subgraph Fallback_Selection ["Algoritmo de Retirada en Desenfilada (Regla 13.3)"]
+        direction TB
+        EVENT["Impacto de Supresión / Fallback en Combate"] --> CHECK_TYPE{"¿Artillería o Inmovilizado?"}
+        CHECK_TYPE -- SÍ --> ELIMINATED["Eliminación Inmediata de la Unidad (strength = 0, alive = False)"]
+        CHECK_TYPE -- NO --> GET_NEIGHBORS["Evaluar 6 Vecinos Adyacentes (can_enter_hex, límites del mapa, sin unidades enemigas)"]
+        
+        GET_NEIGHBORS --> EVALUATE["Cálculo de Puntuación Táctica por Hexágono (h)"]
+        
+        EVALUATE --> P1["1. Desenfilada (LOS vs Atacante)
+BLOCKED: +100 pts | HINDERED: +40 pts | CLEAR: 0 pts"]
+        EVALUATE --> P2["2. Cobertura Terreno/Fortificación
+Búnker: +15 | Casamata: +12 | Trinchera: +8 | Bosque: +6 | Sacos: +4"]
+        EVALUATE --> P3["3. Distancia al Atacante
+Δdist > 0: +30*Δdist | Δdist = 0: +5 | Δdist < 0: -500 (Penalizado)"]
+        EVALUATE --> P4["4. Orientación Borde Amigo (Friendly Edge)
+NORTH: -(Δr)*15 | SOUTH: +(Δr)*15 | EAST / WEST"]
+        
+        P1 & P2 & P3 & P4 --> DECIDE{"¿Existe Hexágono Legal?"}
+        DECIDE -- SÍ --> RETREAT["Desplazamiento al Hexágono Óptimo y Recálculo de Control Territorial"]
+        DECIDE -- NO --> DAMAGE["Regla 13.3: Sufre 1 Daño (strength -= 1) y Permanece en Posición Actual"]
+    end
+```
+
+### 16.1. Jerarquía de Evaluación y Ponderaciones
+Para cada hexágono legal adyacente $h \in \mathcal{N}(	ext{pos})$:
+$$	ext{Score}(h) = 	ext{Score}_{	ext{defilade}}(h) + 	ext{Score}_{	ext{cover}}(h) + 	ext{Score}_{	ext{dist}}(h) + 	ext{Score}_{	ext{edge}}(h)$$
+
+1. **Desenfilada (*Defilade*)**:
+   - `LineOfSight.BLOCKED` (+100 pts): Desenfilada total. El atacante pierde la línea de visión directa tras un obstáculo (edificio, colina o arbolado denso).
+   - `LineOfSight.HINDERED` (+40 pts): Desenfilada parcial a través de humo, matorral o arbolado ligero.
+   - `LineOfSight.CLEAR` (0 pts): Hexágono expuesto al fuego enemigo directo.
+2. **Cobertura Defensiva de Terreno**:
+   - Ponderación de los dados de defensa otorgados según la categoría de unidad (verde = 6, azul = 4, amarillo = 2).
+   - Bonificación de fortificaciones fijas: búnker (+15), casamata/pillbox (+12), trinchera (+8), parapeto de sacos (+4).
+3. **Distancia al Atacante (*Away from Attack*)**:
+   - Se bonifica alejarse del atacante ($\Delta 	ext{dist} > 0 \implies +30 	imes \Delta 	ext{dist}$).
+   - Se penaliza drásticamente (-500 pts) cualquier paso que reduzca la distancia hacia la amenaza que provocó el combate.
+4. **Borde Amigo (*Friendly Edge Alignment*)**:
+   - Se prioriza la retaguardia de la facción (Norte para IT/GE, Sur para US/UK en el teatro de Sicilia, o vector opuesto al atacante).
+5. **Criterio de Desempate Determinista**:
+   `key = (total_score, defilade_score, cover_score, cand_dist, -q, -r)`.
+
+### 16.2. Reglas Especiales de la Sección 13.3
+* **Artillería e Inmovilizados**: La artillería a pie y los vehículos inmovilizados no pueden ejecutar maniobras de repliegue bajo fuego; son declarados baja inmediatamente (`alive = False`, `strength = 0`).
+* **Unidad Atrapada / Rodeada**: Si la unidad se encuentra cercada por tropas enemigas o terreno intransitable sin ningún hexágono legal de retirada, sufre **1 punto de daño** (`strength -= 1`) y permanece en su posición original, simulando el castigo de ser acorralada sin opción de escape.
+
+---
+
+<span id="seccion-17-presupuesto-turnos"></span>
+## 17. Presupuesto Dinámico de Simulación y Horizonte Gobernado por Turnos con Refuerzos (Turn-Authoritative Episode Horizon) [v2.5.12]
+
+### 17.1. Diagnóstico del Problema: Desincronización entre Pasos RL y Turnos de Wargame
+En el diseño clásico de aprendizaje por refuerzo (RL), los episodios suelen truncarse mediante un número fijo de micro-pasos de decisión (`max_steps`). En versiones previas del autojuego (`selfplay.py`), el presupuesto efectivo se estimaba al inicio del episodio ($t=0$) mediante una fórmula estática:
+$$\text{effective\_max\_steps} = \text{scenario\_turns} \times \text{unit\_count}$$
+
+Esta formulación colapsaba críticamente ante dos realidades del wargame táctico:
+1. **Llegada Dinámica de Refuerzos (Fase de Organización)**: En escenarios como *Mettete i piedi per terra!* (Gela), el bando atacante inicia en Turno 1 con solo 7 unidades (Ola 1). En el Turno 2 desembarca la Ola 2 (+7 unidades), duplicando el número de activaciones por turno. Al medir `unit_count` solo en $t=0$, el presupuesto de pasos se agotaba prematuramente hacia el Turno 4 o 5 de 8.
+2. **Falsos Timeouts y Castigo Catastrófico**: Cuando el bucle de autojuego agotaba los pasos asignados sin que el motor de wargame hubiera concluido (`not adapter.terminal()`), el sistema aplicaba una penalización catastrófica de timeout (-1.0). El agente aprendía una **parálisis defensiva espuria**, concluyendo que avanzar hacia los VPs era inútil porque el reloj de pasos siempre lo ejecutaba antes de poder jugar los 8 turnos reglamentarios.
+
+### 17.2. Arquitectura de Gobernanza por Turnos (Turn-Authoritative Execution)
+Para alinear 100% la simulación con el reglamento canónico de Assault, se establece la gobernanza autoritativa por turnos:
+
+```mermaid
+flowchart TD
+    subgraph Engine["Wargame Engine (assault_model / voec_sim)"]
+        direction TB
+        T["Turno T <= T_max"] --> ACT["Fase de Acción (Alternancia de Activaciones)"]
+        ACT --> ADV{"¿Todas las unidades elegibles han actuado?"}
+        ADV -- SÍ --> NEXT_TURN["advance_turn() -> T = T + 1"]
+        NEXT_TURN --> REINF["Fase de Organización: Despliegue de Refuerzos Programados"]
+        REINF --> CHECK_TERM{"¿T > T_max o Victoria/Eliminación?"}
+        CHECK_TERM -- SÍ --> DONE["state.done = True | adapter.terminal() == True"]
+        CHECK_TERM -- NO --> ACT
+    end
+
+    subgraph SelfPlay["Autojuego y Simulación (EfficientZero V2)"]
+        direction TB
+        START["Iniciar Episodio"] --> LOOP["Bucle de Simulación: while not adapter.terminal()"]
+        LOOP --> STEP["MCTS Inferencia -> adapter.apply(action)"]
+        STEP --> WD{"Watchdog por Turno:
+steps_in_turn > max(30, alive * 4)"}
+        WD -- SÍ (Deadlock) --> DEADLOCK["Abortar por Deadlock:
+terminal_reason = turn_deadlock_watchdog
+Penalización Timeout"]
+        WD -- NO --> DONE_CHECK{"¿done / terminal?"}
+        DONE_CHECK -- SÍ --> CANONICAL_EVAL["Evaluación de Resultado Canónico
+(Puntos VP / Casualties / Score)
+Sin penalización espuria"]
+        DONE_CHECK -- NO --> LOOP
+    end
+```
+
+### 17.3. Componentes Implementados
+
+1. **Cálculo del OOB Total (`scenario_total_units`)**:
+   Tanto en `VOECSimulator` como en `EZV2VOECAdapter`, se inspecciona el catálogo del escenario para computar la totalidad de unidades iniciales más todas las oleadas de refuerzos programadas:
+   $$\text{total\_units} = N_{\text{initial}} + \sum_{\text{wave} \in \mathcal{R}} |\text{wave.units}|$$
+   El presupuesto efectivo se escala con respecto a este OOB integral:
+   $$\text{effective\_max\_steps} = \lceil T_{\text{scenario}} \times \text{total\_units} \times \text{steps\_per\_unit\_turn} \rceil$$
+
+2. **Headroom Táctico por Activación (`steps_per_unit_turn = 2.5`)**:
+   Cada unidad en Assault puede requerir múltiples micro-pasos de decisión por ciclo de activación (movimiento, ventana de fuego de reacción enemiga, disparo propio, acción rápida). Un multiplicador de $2.5\times$ garantiza suficiente margen para maniobra compleja sin ahogar al agente.
+
+3. **Watchdog de Deadlock por Turno (`turn_deadlock_watchdog`)**:
+   Para proteger la simulación de bucles patológicos infinitos (ej. dos unidades pasando turno indefinidamente en un estancamiento) sin cortar turnos legítimos:
+   - Al inicio de cada turno de wargame, se reinicia el contador de pasos: `steps_in_current_turn = 0`.
+   - Se establece un techo específico para el turno: $\text{max\_steps\_per\_turn} = \max(30, N_{\text{alive}} \times 4)$.
+   - Si se supera este techo dentro de un único turno, se marca `terminal_reason = "turn_deadlock_watchdog"` y se aborta el episodio. Partidas que fluyen con normalidad avanzan de turno en turno sin verse afectadas.
+
+4. **Preservación del Resultado Canónico al Alcanzar $T_{\max}$**:
+   Al alcanzar $T > T_{\max}$, el motor marca `adapter.terminal() == True`. En este caso, la partida concluye con su evaluación de victoria/derrota legítima por control de VPs y bajas, **sin** aplicar la penalización catastrófica de timeout (-1.0).
+

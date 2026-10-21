@@ -59,6 +59,11 @@ class EZV2VOECAdapter:
     def scenario_max_turns(self) -> int:
         return int(self.sim.scenario_max_turns() or 8)
 
+    def scenario_total_units(self) -> int:
+        if hasattr(self.sim, "scenario_total_units"):
+            return int(self.sim.scenario_total_units() or 0)
+        return len(getattr(getattr(self.sim, "_state", None), "units", []) or [])
+
     def observation(self) -> EZV2Observation:
         snapshot = self.sim.snapshot()
         spatial = self.sim.spatial_features()

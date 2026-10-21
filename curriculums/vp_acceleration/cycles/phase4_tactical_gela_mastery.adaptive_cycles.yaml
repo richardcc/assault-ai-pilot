@@ -1,8 +1,8 @@
 schema_version: adaptive_cycles.v1
 curriculum_name: vp_acceleration_v1
 phase_name: phase4_tactical_gela_mastery
-generation: 6
-last_updated_utc: '2026-10-21T08:10:41.808040+00:00'
+generation: 9
+last_updated_utc: '2026-10-21T21:34:28.724672+00:00'
 base_config_path: curriculums/vp_acceleration/configs/efficientzero_v2.phase4_gela_mastery.yaml
 winning_history:
 - generation: 1
@@ -35,10 +35,28 @@ winning_history:
   win_rate: 0.28888888888888886
   tactical_quality_score: 0.597037037037037
   promotion_decision: promote_best_of_cycles
+- generation: 6
+  winning_cycle: 3
+  promoted_at_utc: '2026-10-21T18:40:37.895609+00:00'
+  win_rate: 0.28888888888888886
+  tactical_quality_score: 0.6029629629629629
+  promotion_decision: promote_best_of_cycles
+- generation: 7
+  winning_cycle: 3
+  promoted_at_utc: '2026-10-21T18:41:08.294753+00:00'
+  win_rate: 0.28888888888888886
+  tactical_quality_score: 0.6029629629629629
+  promotion_decision: promote_best_of_cycles
+- generation: 8
+  winning_cycle: 3
+  promoted_at_utc: '2026-10-21T21:34:28.724666+00:00'
+  win_rate: 0.28888888888888886
+  tactical_quality_score: 0.6029629629629629
+  promotion_decision: promote_best_of_cycles
 cycles:
   1:
     strategy: promoted_baseline
-    description: Generation 6 Baseline (Promoted from Cycle 3 of previous generation).
+    description: Generation 9 Baseline (Promoted from Cycle 3 of previous generation).
     overlay: {}
   2:
     strategy: adaptive_exploitation

@@ -54,7 +54,7 @@ def test_reporting_catalog_groups_train_and_eval(tmp_path: Path) -> None:
     assert eval_results[0]["controller_by_side"] == {"IT": "Unknown", "US": "Unknown"}
     assert eval_results[0]["controller_unknown_label_count"] == 2
     assert eval_results[1]["policy_by_side"] == {"IT": "mcts", "US": "random"}
-    assert eval_results[1]["controller_by_side"] == {"IT": "MuZero", "US": "Random"}
+    assert eval_results[1]["controller_by_side"] == {"IT": "EfficientZeroV2", "US": "Random"}
     assert model["eval_history"][0]["controller_unknown_label_rows"] == 1
     obj_cfg = model["train_history"][0]["objective_reward_config"]
     assert obj_cfg["objective_signal"]["opportunity_near_vp_max_dist"] == 2.0

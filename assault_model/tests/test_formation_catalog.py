@@ -43,6 +43,9 @@ def test_formation_data_integrity_and_unit_catalog_parity():
         assert formation.id == fid
         assert formation.side in {"US", "GE", "UK", "IT"}
         assert 1 <= formation.command_rating <= 12
+        assert 1 <= formation.command_points <= 4
+        assert formation.experience_level in {"RECRUIT", "REGULAR", "HARDENED", "VETERAN", "ELITE"}
+        assert formation.experience_units_count >= 0
         assert formation.total_unit_count > 0
 
         # Validate formation integrity

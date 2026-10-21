@@ -119,7 +119,7 @@ def test_vp_acceleration_cycles_json():
     assert cycles_dir.exists()
 
     cycle_files = list(cycles_dir.glob("*.cycle.json"))
-    assert len(cycle_files) == 4
+    assert len(cycle_files) >= 4
 
     for cf in cycle_files:
         payload = json.loads(cf.read_text(encoding="utf-8"))

@@ -204,10 +204,17 @@ def publish_catalog_snapshot(
             index_out = merge_catalog_indexes_parquet(payload, (repo_root / str(parquet_rel_dir)).resolve())
             status_payload["phases"]["parquet_indexes_written"] = index_out
             _write_publish_status(status_path, status_payload)
-            duckdb_out = build_catalog_duckdb_from_parquet(
-                repo_root=repo_root,
-                parquet_rel_dir=parquet_rel_dir,
-            )
+            try:
+                duckdb_out = build_catalog_duckdb_from_parquet(
+                    repo_root=repo_root,
+                    parquet_rel_dir=parquet_rel_dir,
+                )
+            except Exception as exc:
+                duckdb_out = {
+                    "ok": False,
+                    "schema_version": SCHEMA_VERSION_V2,
+                    "error": f"duckdb materialization error: {exc}",
+                }
             status_payload["phases"]["duckdb_materialized"] = duckdb_out
             if bool(incremental_mode):
                 slim_payload = load_catalog_summary_from_duckdb(repo_root=repo_root)

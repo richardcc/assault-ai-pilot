@@ -283,8 +283,10 @@ def load_scenario(
             else None
         ),
         victory_outcomes=raw.get("victory_outcomes"),
+        reinforcements=raw.get("reinforcements"),
     )
     scenario.terrain_config = terrain_config
+    scenario.unit_catalog = unit_catalog
 
     # =================================================
     # ✅ GAME STATE (SIN ACTIVACIÓN)

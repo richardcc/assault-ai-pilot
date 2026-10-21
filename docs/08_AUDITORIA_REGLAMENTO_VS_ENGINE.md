@@ -108,8 +108,8 @@ El libro de campaña oficial (*ITA_Assault_Libro_Campagna_v1.0.pdf*) contiene la
 
 | Pág. PDF | ID Oficial | Nombre del Escenario | Fecha Histórica | Turnos | Bloque | Estado en Simulador | Fichero en `assault_sim/` | Requisitos para Ingesta |
 | :---: | :---: | :--- | :---: | :---: | :---: | :---: | :---: | :--- |
-| **18** | **1.0** | **Mettete i piedi per terra!** | 10 Jul 1943, 03:35 | 8 | Campaña (Día 1) | 🟢 **IMPLEMENTADO** | `mettete_i_piedi_terra_1.json` | Totalmente jugable e integrado con EZero V2. |
-| **20** | **2.1** | **Battaglia Cittadina** | 10 Jul 1943, 05:40 | 8 | Campaña (Día 1) | 🟢 **IMPLEMENTADO** | `battaglia_cittadina_2_1.json` | Totalmente jugable e integrado con EZero V2. |
+| **18** | **1.0** | **Mettete i piedi per terra!** | 10 Jul 1943, 03:35 | 10 | Campaña (Día 1) | 🟡 **PARCIAL** | `mettete_i_piedi_terra_1.json` | Jugable en combate básico, pero mutilado de la 2.ª oleada de refuerzos (T2), TA/OAS y Status moral. |
+| **20** | **2.1** | **Battaglia Cittadina** | 10 Jul 1943, 05:40 | 8 | Campaña (Día 1) | 🟡 **PARCIAL** | `battaglia_cittadina_2_1.json` | Jugable en combate básico, pero amputado de ratio 2:1, +4 CPs, 3x TA/OAS re-rolls y rendición por Status moral. |
 | **22** | **2.2** | Battaglia Cittadina (Variante B) | 10 Jul 1943, 05:40 | 8 | Campaña (Día 1) | 🔴 PENDIENTE | Ninguno | Ingesta de formación y mapa modular urbano. |
 | **24** | **2.3** | Battaglia Cittadina (Variante C) | 10 Jul 1943, 05:40 | 8 | Campaña (Día 1) | 🔴 PENDIENTE | Ninguno | Ingesta de configuración de tropas mixtas. |
 | **26** | **3.1** | Avanti Savoia! (A) | 10 Jul 1943, 09:10 | 8 | Campaña (Día 1) | 🔴 PENDIENTE | Ninguno | Mapa colinas y contrattacco italiano Div. Livorno. |
@@ -148,6 +148,82 @@ El libro de campaña oficial (*ITA_Assault_Libro_Campagna_v1.0.pdf*) contiene la
 | **94** | **11.10**| Tigre in agguato | 12 Jul 1943, 16:35 | 8 | Standalone | 🔴 PENDIENTE | Ninguno | Duelo de blindados contra el temido Tiger I en terreno cerrado. |
 | **96** | **11.11**| Buttateli fuori! | 11 Jul 1943, 17:25 | 8 | Standalone | 🔴 PENDIENTE | Ninguno | Contraataque de ingenieros militares en suburbios de Gela. |
 | **98** | **11.12**| Strane cose in Sicilia | "What If" 1945 | 8 | Standalone | 🔴 PENDIENTE | Ninguno | Escenario ucronía con unidades soviéticas invasoras. |
+
+---
+
+---
+
+### 3.1. Auditoría Forense de Escenarios Canónicos: Diagnóstico de la Inercia Defensiva y Mutilación de Palancas Ofensivas
+
+Una auditoría profunda del texto original del *Libro della Campagna* (Capítulos 3.0, 4.0, 5.0 y fichas de los escenarios 1.0 y 2.1, páginas 18 a 21) frente a los archivos JSON (`assets/scenarios/`) y el cargador (`assault_model/core/scenario_loader.py`) revela la **verdadera causa raíz del comportamiento excesivamente defensivo de la IA en autojuego**: los escenarios en el simulador fueron codificados omitiendo las palancas tácticas que el reglamento de mesa otorga expresamente al atacante para posibilitar la penetración de posiciones fortificadas.
+
+```mermaid
+flowchart TD
+    subgraph Scenario_Omissions ["Discrepancias Críticas: Reglamento Oficial vs. Implementación Engine"]
+        direction TB
+        REINF["1. Refuerzos en Turno 2 (Mettete i piedi per terra!)
+Manual: 2.ª oleada completa de infantería en turno 2.
+Engine: 0 refuerzos. Atacante opera con el 50% de efectivos."]
+        TA_OAS["2. Apoyo TA / OAS (Regla 4.3.1)
+Manual: Verde dispone de 3 cartas (Battaglia) y 1 carta (Mettete) = Re-rolls ofensivos.
+Engine: 0 soporte fuera de mapa."]
+        CP["3. Puntos de Mando de Formación (Regla 4.1)
+Manual: Formación 2/40 otorga +4 CPs a US (+2 CPs a IT).
+Engine: 0 CPs modelados en GameState."]
+        MORALE["4. Presión Psicológica y Rendición (Regla 5.1)
+Manual: 12 bajas = +1 Presión; VPs alteran presión; umbrales de Rotta y Resa.
+Engine: Defensores luchan fanáticamente hasta la muerte; cero rendición."]
+        OOB_MISMATCH["5. Asignación Faccional en Desembarco
+Manual: 429.° Batallón Costero italiano (fusileros de línea).
+Engine: Tropas alemanas con MG42 pesada y letalidad desproporcionada."]
+    end
+```
+
+#### A. Mecanismo General de Codificación de Escenarios en el Reglamento (§4.0 - §5.0)
+El compendio de Sound of Drums no modela escenarios como listas estáticas de unidades enfrentadas en una lucha a muerte. La arquitectura reglamentaria exige:
+1. **Formaciones y Puntos de Mando (`FORMAZIONI: N / Puntos`, §4.1)**:
+   - El número antes de la barra indica cuántas cartas de formación orgánica completa entran en combate.
+   - El número tras la barra indica el presupuesto en puntos para unidades de soporte o de reemplazo.
+   - **Regla §4.1.1 y §4.1.2**: Se otorga automáticamente **+1 Punto de Mando (CP) por cada 10 puntos tras la barra**. En *Battaglia Cittadina*, la asignación `2/40` otorga a las fuerzas estadounidenses **+4 CPs directos** para encadenar acciones de asalto y fuego en movimiento.
+2. **Apoyo Aéreo y Artillería Fuera de Mapa (`TA / OAS`, §4.3.1)**:
+   - Proporciona fuego de cobertura naval y aérea antes y durante el asalto.
+   - **Regla canónica sin mazo de cartas (§4.3.1)**: *«Si juegas sin la expansión de cartas TA/OAS, puedes repetir una tirada de dados de ataque a distancia por cada punto TA/OAS asignado. El jugador decide cuándo emplear el relanzamiento (re-roll)»*.
+3. **Escala Dinámica de Moral y Presión (`Tabella Status delle Truppe`, §5.1)**:
+   - **Atrición Acumulada (§5.1.1)**: Cada vez que un bando acumula **12 puntos de bajas**, su nivel de presión sube **+1**.
+   - **Efecto de los VPs (§5.1.2)**: Conquistar un VP reduce la presión propia y **aumenta la presión del adversario** en el valor de ese VP.
+   - **Umbrales Terminales (§5.1.4)**: Al alcanzar las marcas de *Ritirata*, *Rotta* o *Resa*, se realiza un chequeo D6 al final de la Fase de Organización. En *Rotta*, el enemigo gana un VP adicional inmediatamente; en *Resa*, **el enemigo captura todos los VPs del mapa y gana la partida por rendición total**.
+
+---
+
+#### B. Matriz Comparativa Pormenorizada por Escenario
+
+| Parámetro Normativo | Escenario 1.0 (*Mettete i piedi per terra!*) | Escenario 2.1 (*Battaglia Cittadina*) |
+| :--- | :--- | :--- |
+| **Referencia Oficial** | Libro de Campaña, Págs. 18-19 | Libro de Campaña, Págs. 20-21 |
+| **Horizonte Temporal** | **10 Turnos** (Turn Track oficial). *En JSON actual: 12 turnos*. | **8 Turnos** (Coincide). |
+| **Fuerzas Defensoras** | **Italianas** (XVIII Brigata Costiera, 429.° Btg. Costiero). *En JSON actual: Alemanas (`GE`) con MG42 y mortero 50mm*. | **Italianas** (XVIII Brigata Costiera, 429.° Btg. Costiero). *En JSON actual: Italianas (7 unidades)*. |
+| **Formación y Masa Atacante** | **1.ª Oleada al desembarco + 2.ª Oleada en Turno 2**. *En JSON actual: 7 unidades fijas turno 1*. | **Ratio 2/40 (US) vs 1/20 (IT)** (Superioridad 2:1). *En JSON actual: 7 vs 7 (ratio 1:1 simétrico)*. |
+| **Refuerzos Programados** | **SÍ (Turno 2, Fase de Organización)**: Segunda formación de infantería en playa. *En JSON actual: 0 refuerzos*. | Ninguno en este escenario (refuerzos se activan en variantes 2.2/2.3). |
+| **Puntos de Mando (CPs)** | Base de formación + CPs de escenario. *En JSON actual: Inexistentes (null)*. | **US: +4 CPs adicionales. IT: +2 CPs adicionales**. *En JSON actual: Inexistentes (null)*. |
+| **Soporte TA / OAS** | **US: 1 Carta TA/OAS** (1 re-roll naval). *En JSON actual: Cero*. | **US: 3 Cartas TA/OAS** (3 re-rolls de artillería/avión). **IT: 1 Carta**. *En JSON actual: Cero*. |
+| **Reserva de Humo** | **US: Máximo 3 disparos en la partida** (*Carenza di munizioni*). **IT: Infinito**. *En JSON actual: Sin límite*. | **US e IT: Infinito ($\infty$)**. *En JSON actual: Dinámico por zapadores/mortero*. |
+| **Minas Defensivas** | Hasta 3 minas AP y 3 señuelos (Dummy) en zona de playa. | **Hasta 4 minas AP** en la zona roja urbana. *En JSON actual: 0 minas en Battaglia*. |
+| **Escala Status de Moral** | **Verde (US): Inizio 3, Ritirata 7, Rotta 9, Resa 11**.<br>**Azul (IT): Inizio 2, Ritirata 6, Rotta 7, Resa 9**. | **Verde (US): Inizio 4, Ritirata 7, Rotta 9, Resa 11**.<br>**Azul (IT): Inizio 3, Ritirata 6, Rotta 8, Resa 9**. |
+
+---
+
+#### C. Diagnóstico Algorítmico: Por Qué la IA Adopta una Postura Defensiva
+En Reinforcement Learning, una red neuronal guiada por recompensas optimiza la función:
+$$J(	heta) = \mathbb{E}_{	au \sim \pi_	heta} \left[ R_{	ext{terminal}}(	au) - \lambda_{	ext{loss}} \sum_{t} 	ext{Bajas}(t) + \sum_{t} 	ext{PBRS}(s_t, s_{t+1}) ight]$$
+
+1. **La Asimetría Destructiva:**
+   Al suprimir las 3 cartas TA/OAS (re-rolls de ataque), la segunda oleada de refuerzos del Turno 2, los 4 Puntos de Mando y el colapso moral del defensor, el atacante es forzado a cruzar terreno despejado contra nidos de ametralladora intactos en una proporción 1:1.
+2. **El Miedo a las Bajas en el Gradiente:**
+   Cada escuadra que abandona la cobertura recibe fuego de interrupción letal de casamatas y francotiradores. Esto resta $-r_{	ext{loss}}$ severo al retorno acumulado. Como el enemigo nunca se rinde por estrés ni se desbanda por perder un VP, el asalto frontal resulta en una pérdida neta casi asegurada.
+3. **Convergencia a la Parálisis Local:**
+   La red neuronal aprende rápidamente que permanecer quieto en la zona de despliegue minimiza las bajas propias, de modo que:
+   $$\mathbb{E}[R(	ext{Defenderse / Quedarse Atrás})] > \mathbb{E}[R(	ext{Asaltar sin Soporte})] $$
+   La «actitud defensiva» observada no es una deficiencia cognitiva del agente, sino una **reacción matemáticamente racional ante un escenario cuyas palancas de asalto doctrinal fueron omitidas en la implementación**.
 
 ---
 

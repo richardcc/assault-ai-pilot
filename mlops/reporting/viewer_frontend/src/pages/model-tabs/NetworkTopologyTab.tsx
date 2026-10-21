@@ -133,16 +133,18 @@ export function NetworkTopologyTab({
   evalRows = [],
   activeSubTab,
   onSubTabChange,
+  onNavigateToHeadDiagnostics,
 }: {
   trainRow: TrainRow | null;
   trainSummary: Dict | null;
   evalRows?: EvalRow[];
-  activeSubTab?: "diagram" | "head-diagnostics" | "channel-attribution" | "macro-planner";
-  onSubTabChange?: (tab: "diagram" | "head-diagnostics" | "channel-attribution" | "macro-planner") => void;
+  activeSubTab?: "diagram" | "channel-attribution" | "macro-planner";
+  onSubTabChange?: (tab: "diagram" | "channel-attribution" | "macro-planner") => void;
+  onNavigateToHeadDiagnostics?: () => void;
 }) {
-  const [internalSubTab, setInternalSubTab] = useState<"diagram" | "head-diagnostics" | "channel-attribution" | "macro-planner">("diagram");
+  const [internalSubTab, setInternalSubTab] = useState<"diagram" | "channel-attribution" | "macro-planner">("diagram");
   const currentSubTab = activeSubTab ?? internalSubTab;
-  const setSubTab = (tab: "diagram" | "head-diagnostics" | "channel-attribution" | "macro-planner") => {
+  const setSubTab = (tab: "diagram" | "channel-attribution" | "macro-planner") => {
     setInternalSubTab(tab);
     onSubTabChange?.(tab);
   };
@@ -1135,26 +1137,6 @@ export function NetworkTopologyTab({
             <span>Diagram &amp; Topology</span>
           </button>
           <button
-            onClick={() => setSubTab("head-diagnostics")}
-            style={{
-              background: currentSubTab === "head-diagnostics" ? "#0284c7" : "#1e293b",
-              color: currentSubTab === "head-diagnostics" ? "#ffffff" : "#94a3b8",
-              border: currentSubTab === "head-diagnostics" ? "1px solid #38bdf8" : "1px solid #334155",
-              borderRadius: 6,
-              padding: "6px 12px",
-              fontWeight: currentSubTab === "head-diagnostics" ? 700 : 500,
-              fontSize: 12,
-              cursor: "pointer",
-              display: "flex",
-              alignItems: "center",
-              gap: 6,
-            }}
-          >
-            <span>🔬</span>
-            <span>Head Diagnostics</span>
-            <span style={{ fontSize: 9, background: "#065f46", color: "#34d399", padding: "1px 6px", borderRadius: 4, fontWeight: 700 }}>{activeHeads.length} Heads</span>
-          </button>
-          <button
             onClick={() => setSubTab("channel-attribution")}
             style={{
               background: currentSubTab === "channel-attribution" ? "#0284c7" : "#1e293b",
@@ -1936,46 +1918,48 @@ export function NetworkTopologyTab({
                 )}
                 {selectedNodeId === "threat_map" && hasThreatHead && (
                   <>
-                    <div><span className="muted">Loss Amenaza:</span> <b style={{ color: "#eab308" }}>{fmtNum(threatLoss, 4)}</b></div>
-                    <div><span className="muted">Amenaza Máxima:</span> <b style={{ color: "#fef08a" }}>{fmtPercent(threatMax)}</b></div>
-                    <div><span className="muted">Cobertura Fuego:</span> <b style={{ color: "#34d399" }}>{fmtPercent(threatCov)}</b></div>
-                    <div><span className="muted">Cuadrícula:</span> <b style={{ color: "#38bdf8" }}>{boardH}×{boardW} hex</b></div>
+                    <div><span className="muted">Threat Loss:</span> <b style={{ color: "#eab308" }}>{fmtNum(threatLoss, 4)}</b></div>
+                    <div><span className="muted">Max Threat:</span> <b style={{ color: "#fef08a" }}>{fmtPercent(threatMax)}</b></div>
+                    <div><span className="muted">Fire Coverage:</span> <b style={{ color: "#34d399" }}>{fmtPercent(threatCov)}</b></div>
+                    <div><span className="muted">Grid:</span> <b style={{ color: "#38bdf8" }}>{boardH}×{boardW} hex</b></div>
                   </>
                 )}
                 {selectedNodeId === "attrition" && hasAttritionHead && (
                   <>
-                    <div><span className="muted">Loss Desgaste:</span> <b style={{ color: "#06b6d4" }}>{fmtNum(attritionLoss, 4)}</b></div>
-                    <div><span className="muted">Ratio Bajas:</span> <b style={{ color: "#67e8f9" }}>{fmtNum(attritionExchange, 2, "x")}</b></div>
-                    <div><span className="muted">Intercambio:</span> <b style={{ color: attritionExchange !== null && attritionExchange >= 1.0 ? "#34d399" : "#f59e0b" }}>{attritionExchange !== null ? (attritionExchange >= 1.0 ? "Favorable" : "Desfavorable") : "—"}</b></div>
-                    <div><span className="muted">Vector Bajas:</span> <b style={{ color: "#38bdf8" }}>2 Dim [A, E]</b></div>
+                    <div><span className="muted">Attrition Loss:</span> <b style={{ color: "#06b6d4" }}>{fmtNum(attritionLoss, 4)}</b></div>
+                    <div><span className="muted">Casualty Ratio:</span> <b style={{ color: "#67e8f9" }}>{fmtNum(attritionExchange, 2, "x")}</b></div>
+                    <div><span className="muted">Exchange:</span> <b style={{ color: attritionExchange !== null && attritionExchange >= 1.0 ? "#34d399" : "#f59e0b" }}>{attritionExchange !== null ? (attritionExchange >= 1.0 ? "Favorable" : "Unfavorable") : "—"}</b></div>
+                    <div><span className="muted">Loss Vector:</span> <b style={{ color: "#38bdf8" }}>2 Dim [A, E]</b></div>
                   </>
                 )}
                 {selectedNodeId === "morale" && hasMoraleHead && (
                   <>
-                    <div><span className="muted">Loss Moral:</span> <b style={{ color: "#ec4899" }}>{fmtNum(moraleLoss, 4)}</b></div>
-                    <div><span className="muted">Riesgo Supresión:</span> <b style={{ color: moraleRisk !== null && moraleRisk < 0.3 ? "#34d399" : moraleRisk !== null && moraleRisk < 0.6 ? "#fbbf24" : "#f43f5e" }}>{fmtNum(moraleRisk, 2)}</b></div>
-                    <div><span className="muted">Estado Dominante:</span> <b style={{ color: "#fbcfe8" }}>{moraleRisk !== null ? (moraleRisk < 0.3 ? "NORMAL" : moraleRisk < 0.6 ? "PINNED" : "SUPPRESSED") : "—"}</b></div>
-                    <div><span className="muted">Niveles Cohesión:</span> <b style={{ color: "#38bdf8" }}>4 Clases</b></div>
+                    <div><span className="muted">Morale Loss:</span> <b style={{ color: "#ec4899" }}>{fmtNum(moraleLoss, 4)}</b></div>
+                    <div><span className="muted">Suppression Risk:</span> <b style={{ color: moraleRisk !== null && moraleRisk < 0.3 ? "#34d399" : moraleRisk !== null && moraleRisk < 0.6 ? "#fbbf24" : "#f43f5e" }}>{fmtNum(moraleRisk, 2)}</b></div>
+                    <div><span className="muted">Dominant State:</span> <b style={{ color: "#fbcfe8" }}>{moraleRisk !== null ? (moraleRisk < 0.3 ? "NORMAL" : moraleRisk < 0.6 ? "PINNED" : "SUPPRESSED") : "—"}</b></div>
+                    <div><span className="muted">Cohesion Levels:</span> <b style={{ color: "#38bdf8" }}>4 Classes</b></div>
                   </>
                 )}
               </div>
-              <button
-                onClick={() => setSubTab("head-diagnostics")}
-                style={{
-                  width: "100%",
-                  marginTop: 8,
-                  background: "#0284c7",
-                  color: "#ffffff",
-                  border: "none",
-                  borderRadius: 4,
-                  padding: "4px 8px",
-                  fontSize: 10,
-                  fontWeight: 700,
-                  cursor: "pointer",
-                }}
-              >
-                🔬 Ver Análisis de Cabezas Completo ➔
-              </button>
+              {onNavigateToHeadDiagnostics && (
+                <button
+                  onClick={onNavigateToHeadDiagnostics}
+                  style={{
+                    width: "100%",
+                    marginTop: 8,
+                    background: "#0284c7",
+                    color: "#ffffff",
+                    border: "none",
+                    borderRadius: 4,
+                    padding: "4px 8px",
+                    fontSize: 10,
+                    fontWeight: 700,
+                    cursor: "pointer",
+                  }}
+                >
+                  🔬 View Full Head Diagnostics (XAI) ➔
+                </button>
+              )}
             </div>
           )}
 
@@ -2202,611 +2186,7 @@ export function NetworkTopologyTab({
       </>
       )}
 
-      {/* SECTION 2: DEDICATED HEAD DIAGNOSTICS & PERFORMANCE ANALYSIS PANEL */}
-      {currentSubTab === "head-diagnostics" && (
-        <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-          {/* Header Banner */}
-          <div
-            style={{
-              background: "#1e293b",
-              border: "1px solid #334155",
-              borderRadius: 8,
-              padding: 16,
-              display: "flex",
-              justifyContent: "space-between",
-              alignItems: "center",
-              flexWrap: "wrap",
-              gap: 10,
-            }}
-          >
-            <div>
-              <h3 style={{ margin: 0, fontSize: 16, color: "#38bdf8", display: "flex", alignItems: "center", gap: 6 }}>
-                <span>🔬</span> Diagnóstico y Análisis Integral de Cabezas (Head Diagnostics)
-              </h3>
-              <div className="muted" style={{ fontSize: 11, marginTop: 2 }}>
-                Evaluación multi-cabezal para <b>{runId}</b>: Calibración predictiva, entropía, gradientes, captura de VPs y estabilidad temporal.
-              </div>
-            </div>
-
-            <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-              <span
-                style={{
-                  background: "#064e3b",
-                  border: "1px solid #059669",
-                  color: "#34d399",
-                  padding: "4px 10px",
-                  borderRadius: 6,
-                  fontSize: 11,
-                  fontWeight: 700,
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 5,
-                }}
-              >
-                <span>🟢</span> Estado Global: {activeHeads.length} Cabezales Activos ({hasThreatHead || hasAttritionHead || hasMoraleHead ? "Incluye Cabezas Tácticas EZv2" : "Estándar"})
-              </span>
-            </div>
-          </div>
-
-          {/* 4 Health Cards: Policy, Value, Objective, Consistency */}
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: 12 }}>
-            {/* Card 1: Policy Head */}
-            <div
-              style={{
-                background: "#0f172a",
-                border: "1px solid #0284c7",
-                borderRadius: 8,
-                padding: 14,
-                display: "flex",
-                flexDirection: "column",
-                gap: 8,
-              }}
-            >
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                <span style={{ fontSize: 13, fontWeight: 700, color: "#38bdf8", display: "flex", alignItems: "center", gap: 6 }}>
-                  <span>🎯</span> Cabezal de Política (f_p)
-                </span>
-                <span style={{ fontSize: 9, background: polLoss !== null ? "#064e3b" : "#334155", color: polLoss !== null ? "#6ee7b7" : "#94a3b8", padding: "2px 6px", borderRadius: 4, fontWeight: 700 }}>
-                  {polLoss !== null ? "SALUDABLE" : "SIN DATOS"}
-                </span>
-              </div>
-              <div style={{ fontSize: 11, color: "#94a3b8" }}>
-                Predicción de prior de acciones y distribución sobre {actionDim} maniobras tácticas.
-              </div>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginTop: 4 }}>
-                <div style={{ background: "#1e293b", padding: 8, borderRadius: 6 }}>
-                  <div className="muted" style={{ fontSize: 10 }}>Pérdida Política</div>
-                  <div style={{ fontSize: 14, fontWeight: 700, color: "#38bdf8", marginTop: 2 }}>{fmtNum(polLoss, 4)}</div>
-                  <div className="muted" style={{ fontSize: 9 }}>Cross-Entropy</div>
-                </div>
-                <div style={{ background: "#1e293b", padding: 8, borderRadius: 6 }}>
-                  <div className="muted" style={{ fontSize: 10 }}>Entropía Política</div>
-                  <div style={{ fontSize: 14, fontWeight: 700, color: "#f8fafc", marginTop: 2 }}>{fmtNum(polEntropy, 3)}</div>
-                  <div className="muted" style={{ fontSize: 9 }}>No-colapso</div>
-                </div>
-                <div style={{ background: "#1e293b", padding: 8, borderRadius: 6 }}>
-                  <div className="muted" style={{ fontSize: 10 }}>Confianza Previa</div>
-                  <div style={{ fontSize: 14, fontWeight: 700, color: "#34d399", marginTop: 2 }}>{fmtPercent(polConfidence)}</div>
-                  <div className="muted" style={{ fontSize: 9 }}>Top-1 MCTS</div>
-                </div>
-                <div style={{ background: "#1e293b", padding: 8, borderRadius: 6 }}>
-                  <div className="muted" style={{ fontSize: 10 }}>Margen de Decisión</div>
-                  <div style={{ fontSize: 14, fontWeight: 700, color: "#fbbf24", marginTop: 2 }}>{fmtNum(polMargin, 3)}</div>
-                  <div className="muted" style={{ fontSize: 9 }}>p(1st) - p(2nd)</div>
-                </div>
-              </div>
-              <div style={{ background: "rgba(56, 189, 248, 0.08)", borderRadius: 6, padding: "6px 8px", fontSize: 10, color: "#cbd5e1", marginTop: 2 }}>
-                💡 <b>Diagnóstico:</b> {polConfidence !== null ? "Política táctica orientada hacia selección de fuego y asalto." : "Métricas pendientes de registro o evaluación."}
-              </div>
-            </div>
-
-            {/* Card 2: Value Head */}
-            <div
-              style={{
-                background: "#0f172a",
-                border: "1px solid #059669",
-                borderRadius: 8,
-                padding: 14,
-                display: "flex",
-                flexDirection: "column",
-                gap: 8,
-              }}
-            >
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                <span style={{ fontSize: 13, fontWeight: 700, color: "#22c55e", display: "flex", alignItems: "center", gap: 6 }}>
-                  <span>⚖️</span> Cabezal de Valor (f_v)
-                </span>
-                <span style={{ fontSize: 9, background: valLoss !== null ? "#064e3b" : "#334155", color: valLoss !== null ? "#6ee7b7" : "#94a3b8", padding: "2px 6px", borderRadius: 4, fontWeight: 700 }}>
-                  {valLoss !== null ? "CALIBRADO" : "SIN DATOS"}
-                </span>
-              </div>
-              <div style={{ fontSize: 11, color: "#94a3b8" }}>
-                Evaluación escalar de probabilidad de victoria esperada en rango [-1.0, +1.0].
-              </div>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginTop: 4 }}>
-                <div style={{ background: "#1e293b", padding: 8, borderRadius: 6 }}>
-                  <div className="muted" style={{ fontSize: 10 }}>Pérdida de Valor</div>
-                  <div style={{ fontSize: 14, fontWeight: 700, color: "#22c55e", marginTop: 2 }}>{fmtNum(valLoss, 4)}</div>
-                  <div className="muted" style={{ fontSize: 9 }}>MSE / Huber</div>
-                </div>
-                <div style={{ background: "#1e293b", padding: 8, borderRadius: 6 }}>
-                  <div className="muted" style={{ fontSize: 10 }}>Varianza Explicada</div>
-                  <div style={{ fontSize: 14, fontWeight: 700, color: "#34d399", marginTop: 2 }}>{fmtNum(valExpVar, 3)}</div>
-                  <div className="muted" style={{ fontSize: 9 }}>R² Posicional</div>
-                </div>
-                <div style={{ background: "#1e293b", padding: 8, borderRadius: 6 }}>
-                  <div className="muted" style={{ fontSize: 10 }}>Saturación Q MCTS</div>
-                  <div style={{ fontSize: 14, fontWeight: 700, color: qSatRate !== null && qSatRate < 0.05 ? "#34d399" : "#f59e0b", marginTop: 2 }}>{fmtPercent(qSatRate)}</div>
-                  <div className="muted" style={{ fontSize: 9 }}>Umbral máx &lt;5%</div>
-                </div>
-                <div style={{ background: "#1e293b", padding: 8, borderRadius: 6 }}>
-                  <div className="muted" style={{ fontSize: 10 }}>Proxy Retorno / Win</div>
-                  <div style={{ fontSize: 14, fontWeight: 700, color: "#38bdf8", marginTop: 2 }}>{fmtNum(valWinRate, 3)}</div>
-                  <div className="muted" style={{ fontSize: 9 }}>{valWinRate !== null ? `${(valWinRate * 100).toFixed(1)}% victorias` : "Sin evaluaciones"}</div>
-                </div>
-              </div>
-              <div style={{ background: "rgba(34, 197, 94, 0.08)", borderRadius: 6, padding: "6px 8px", fontSize: 10, color: "#cbd5e1", marginTop: 2 }}>
-                💡 <b>Diagnóstico:</b> {valLoss !== null ? "Evaluación posicional de sectores bajo fuego y áreas seguras." : "Resumen de valor no disponible para este run."}
-              </div>
-            </div>
-
-            {/* Card 3: Objective Head */}
-            <div
-              style={{
-                background: "#0f172a",
-                border: "1px solid #e11d48",
-                borderRadius: 8,
-                padding: 14,
-                display: "flex",
-                flexDirection: "column",
-                gap: 8,
-              }}
-            >
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                <span style={{ fontSize: 13, fontWeight: 700, color: "#f43f5e", display: "flex", alignItems: "center", gap: 6 }}>
-                  <span>🚩</span> Cabezal de Objetivo (f_o)
-                </span>
-                <span style={{ fontSize: 9, background: objLoss !== null ? "#881337" : "#334155", color: objLoss !== null ? "#fecdd3" : "#94a3b8", padding: "2px 6px", borderRadius: 4, fontWeight: 700 }}>
-                  {objLoss !== null ? "ACTIVO & CONVERSIÓN" : "SIN DATOS"}
-                </span>
-              </div>
-              <div style={{ fontSize: 11, color: "#94a3b8" }}>
-                Guía auxiliar orientada a la toma territorial y control de Puntos de Victoria.
-              </div>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginTop: 4 }}>
-                <div style={{ background: "#1e293b", padding: 8, borderRadius: 6 }}>
-                  <div className="muted" style={{ fontSize: 10 }}>Pérdida Objetivo</div>
-                  <div style={{ fontSize: 14, fontWeight: 700, color: "#f43f5e", marginTop: 2 }}>{fmtNum(objLoss, 4)}</div>
-                  <div className="muted" style={{ fontSize: 9 }}>Cross-Entropy VP</div>
-                </div>
-                <div style={{ background: "#1e293b", padding: 8, borderRadius: 6 }}>
-                  <div className="muted" style={{ fontSize: 10 }}>Captura Oportunidad</div>
-                  <div style={{ fontSize: 14, fontWeight: 700, color: "#34d399", marginTop: 2 }}>{fmtPercent(objTakeRate)}</div>
-                  <div className="muted" style={{ fontSize: 9 }}>Tasa de toma</div>
-                </div>
-                <div style={{ background: "#1e293b", padding: 8, borderRadius: 6 }}>
-                  <div className="muted" style={{ fontSize: 10 }}>Eficiencia Conversión</div>
-                  <div style={{ fontSize: 14, fontWeight: 700, color: "#38bdf8", marginTop: 2 }}>{fmtNum(objConversionEff, 4)}</div>
-                  <div className="muted" style={{ fontSize: 9 }}>VPs / Paso MCTS</div>
-                </div>
-                <div style={{ background: "#1e293b", padding: 8, borderRadius: 6 }}>
-                  <div className="muted" style={{ fontSize: 10 }}>VPs Capturados Avg</div>
-                  <div style={{ fontSize: 14, fontWeight: 700, color: "#fbbf24", marginTop: 2 }}>{fmtNum(objCapturedAvg, 2, " VP")}</div>
-                  <div className="muted" style={{ fontSize: 9 }}>Promedio por partida</div>
-                </div>
-              </div>
-              <div style={{ background: "rgba(244, 63, 94, 0.08)", borderRadius: 6, padding: "6px 8px", fontSize: 10, color: "#cbd5e1", marginTop: 2 }}>
-                💡 <b>Diagnóstico:</b> {objTakeRate !== null ? "Incentiva la captura decisiva de hexágonos de victoria." : "Sin registros de captura de VPs."}
-              </div>
-            </div>
-
-            {/* Card 4: Consistency Head */}
-            <div
-              style={{
-                background: "#0f172a",
-                border: "1px solid #9333ea",
-                borderRadius: 8,
-                padding: 14,
-                display: "flex",
-                flexDirection: "column",
-                gap: 8,
-              }}
-            >
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                <span style={{ fontSize: 13, fontWeight: 700, color: "#c084fc", display: "flex", alignItems: "center", gap: 6 }}>
-                  <span>🔄</span> Cabezal de Consistencia (q_θ)
-                </span>
-                <span style={{ fontSize: 9, background: conLoss !== null ? "#581c87" : "#334155", color: conLoss !== null ? "#e9d5ff" : "#94a3b8", padding: "2px 6px", borderRadius: 4, fontWeight: 700 }}>
-                  {conLoss !== null ? "INVARIANTE" : "SIN DATOS"}
-                </span>
-              </div>
-              <div style={{ fontSize: 11, color: "#94a3b8" }}>
-                Preservación auto-supervisada SimSiam de la geometría semántica del espacio latente.
-              </div>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginTop: 4 }}>
-                <div style={{ background: "#1e293b", padding: 8, borderRadius: 6 }}>
-                  <div className="muted" style={{ fontSize: 10 }}>Pérdida Consistencia</div>
-                  <div style={{ fontSize: 14, fontWeight: 700, color: "#c084fc", marginTop: 2 }}>{fmtSci(conLoss)}</div>
-                  <div className="muted" style={{ fontSize: 9 }}>SimSiam Loss</div>
-                </div>
-                <div style={{ background: "#1e293b", padding: 8, borderRadius: 6 }}>
-                  <div className="muted" style={{ fontSize: 10 }}>Cobertura Reanálisis</div>
-                  <div style={{ fontSize: 14, fontWeight: 700, color: "#34d399", marginTop: 2 }}>{fmtPercent(conReanalysisCov, 0)}</div>
-                  <div className="muted" style={{ fontSize: 9 }}>Buffer activo</div>
-                </div>
-                <div style={{ background: "#1e293b", padding: 8, borderRadius: 6 }}>
-                  <div className="muted" style={{ fontSize: 10 }}>Pares Consistencia</div>
-                  <div style={{ fontSize: 14, fontWeight: 700, color: "#38bdf8", marginTop: 2 }}>{conPairs !== null ? conPairs.toLocaleString() : "—"}</div>
-                  <div className="muted" style={{ fontSize: 9 }}>Pares unrolled</div>
-                </div>
-                <div style={{ background: "#1e293b", padding: 8, borderRadius: 6 }}>
-                  <div className="muted" style={{ fontSize: 10 }}>Deriva Latente</div>
-                  <div style={{ fontSize: 14, fontWeight: 700, color: "#34d399", marginTop: 2 }}>{conLoss !== null ? "0.000" : "—"}</div>
-                  <div className="muted" style={{ fontSize: 9 }}>{conLoss !== null ? "Sin colapso" : "Sin regularización"}</div>
-                </div>
-              </div>
-              <div style={{ background: "rgba(192, 132, 252, 0.08)", borderRadius: 6, padding: "6px 8px", fontSize: 10, color: "#cbd5e1", marginTop: 2 }}>
-                💡 <b>Diagnóstico:</b> {conLoss !== null ? `Estados latentes en horizonte t=${maxUnroll} preservan coherencia geométrica.` : "Métricas SimSiam no registradas."}
-              </div>
-            </div>
-
-            {/* Card 5: Threat Map Head (Only if active for this execution) */}
-            {hasThreatHead && (
-              <div
-                style={{
-                  background: "#0f172a",
-                  border: "1px solid #ca8a04",
-                  borderRadius: 8,
-                  padding: 14,
-                  display: "flex",
-                  flexDirection: "column",
-                  gap: 8,
-                }}
-              >
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                  <span style={{ fontSize: 13, fontWeight: 700, color: "#eab308", display: "flex", alignItems: "center", gap: 6 }}>
-                    <span>🗺️</span> Mapa de Amenazas (f_threat)
-                  </span>
-                  <span style={{ fontSize: 9, background: "#713f12", color: "#fef08a", padding: "2px 6px", borderRadius: 4, fontWeight: 700 }}>
-                    TACTICAL HEAD
-                  </span>
-                </div>
-                <div style={{ fontSize: 11, color: "#94a3b8" }}>
-                  Matriz espacial 2D de cobertura de fuego directo y riesgo de supresión enemiga.
-                </div>
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginTop: 4 }}>
-                  <div style={{ background: "#1e293b", padding: 8, borderRadius: 6 }}>
-                    <div className="muted" style={{ fontSize: 10 }}>Pérdida Amenaza</div>
-                    <div style={{ fontSize: 14, fontWeight: 700, color: "#eab308", marginTop: 2 }}>{fmtNum(threatLoss, 4)}</div>
-                    <div className="muted" style={{ fontSize: 9 }}>BCE con Logits</div>
-                  </div>
-                  <div style={{ background: "#1e293b", padding: 8, borderRadius: 6 }}>
-                    <div className="muted" style={{ fontSize: 10 }}>Amenaza Máxima</div>
-                    <div style={{ fontSize: 14, fontWeight: 700, color: "#fef08a", marginTop: 2 }}>{fmtPercent(threatMax, 1)}</div>
-                    <div className="muted" style={{ fontSize: 9 }}>Pico en hexágono</div>
-                  </div>
-                  <div style={{ background: "#1e293b", padding: 8, borderRadius: 6 }}>
-                    <div className="muted" style={{ fontSize: 10 }}>Cobertura Fuego</div>
-                    <div style={{ fontSize: 14, fontWeight: 700, color: "#34d399", marginTop: 2 }}>{fmtPercent(threatCov, 1)}</div>
-                    <div className="muted" style={{ fontSize: 9 }}>Líneas de tiro</div>
-                  </div>
-                  <div style={{ background: "#1e293b", padding: 8, borderRadius: 6 }}>
-                    <div className="muted" style={{ fontSize: 10 }}>Resolución 2D</div>
-                    <div style={{ fontSize: 14, fontWeight: 700, color: "#38bdf8", marginTop: 2 }}>{boardH}×{boardW}</div>
-                    <div className="muted" style={{ fontSize: 9 }}>Hexágonos tablero</div>
-                  </div>
-                </div>
-                <div style={{ background: "rgba(234, 179, 8, 0.08)", borderRadius: 6, padding: "6px 8px", fontSize: 10, color: "#cbd5e1", marginTop: 2 }}>
-                  💡 <b>Diagnóstico:</b> Permite al agente anticipar emboscadas enemigas y moverse a través de coberturas urbanas o bosques.
-                </div>
-              </div>
-            )}
-
-            {/* Card 6: Attrition Balance Head (Only if active for this execution) */}
-            {hasAttritionHead && (
-              <div
-                style={{
-                  background: "#0f172a",
-                  border: "1px solid #0891b2",
-                  borderRadius: 8,
-                  padding: 14,
-                  display: "flex",
-                  flexDirection: "column",
-                  gap: 8,
-                }}
-              >
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                  <span style={{ fontSize: 13, fontWeight: 700, color: "#06b6d4", display: "flex", alignItems: "center", gap: 6 }}>
-                    <span>⚔️</span> Balance de Desgaste (f_attr)
-                  </span>
-                  <span style={{ fontSize: 9, background: "#164e63", color: "#67e8f9", padding: "2px 6px", borderRadius: 4, fontWeight: 700 }}>
-                    TACTICAL HEAD
-                  </span>
-                </div>
-                <div style={{ fontSize: 11, color: "#94a3b8" }}>
-                  Proyección táctica de bajas aliadas vs. enemigas en el horizonte inmediato.
-                </div>
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginTop: 4 }}>
-                  <div style={{ background: "#1e293b", padding: 8, borderRadius: 6 }}>
-                    <div className="muted" style={{ fontSize: 10 }}>Pérdida Desgaste</div>
-                    <div style={{ fontSize: 14, fontWeight: 700, color: "#06b6d4", marginTop: 2 }}>{fmtNum(attritionLoss, 4)}</div>
-                    <div className="muted" style={{ fontSize: 9 }}>Smooth L1 Loss</div>
-                  </div>
-                  <div style={{ background: "#1e293b", padding: 8, borderRadius: 6 }}>
-                    <div className="muted" style={{ fontSize: 10 }}>Ratio Intercambio</div>
-                    <div style={{ fontSize: 14, fontWeight: 700, color: "#67e8f9", marginTop: 2 }}>{fmtNum(attritionExchange, 2, "x")}</div>
-                    <div className="muted" style={{ fontSize: 9 }}>Enemigo / Aliado</div>
-                  </div>
-                  <div style={{ background: "#1e293b", padding: 8, borderRadius: 6 }}>
-                    <div className="muted" style={{ fontSize: 10 }}>Balance Combate</div>
-                    <div style={{ fontSize: 14, fontWeight: 700, color: attritionExchange !== null && attritionExchange >= 1.0 ? "#34d399" : "#f59e0b", marginTop: 2 }}>
-                      {attritionExchange !== null ? (attritionExchange >= 1.0 ? "Favorable" : "Desfavorable") : "—"}
-                    </div>
-                    <div className="muted" style={{ fontSize: 9 }}>Umbral ratio &gt;1.0</div>
-                  </div>
-                  <div style={{ background: "#1e293b", padding: 8, borderRadius: 6 }}>
-                    <div className="muted" style={{ fontSize: 10 }}>Salida Táctica</div>
-                    <div style={{ fontSize: 14, fontWeight: 700, color: "#38bdf8", marginTop: 2 }}>2 Dim</div>
-                    <div className="muted" style={{ fontSize: 9 }}>Vector de bajas</div>
-                  </div>
-                </div>
-                <div style={{ background: "rgba(6, 182, 212, 0.08)", borderRadius: 6, padding: "6px 8px", fontSize: 10, color: "#cbd5e1", marginTop: 2 }}>
-                  💡 <b>Diagnóstico:</b> Penaliza pérdidas innecesarias de escuadras y orienta el asalto hacia victorias de bajo desgaste.
-                </div>
-              </div>
-            )}
-
-            {/* Card 7: Morale State Head (Only if active for this execution) */}
-            {hasMoraleHead && (
-              <div
-                style={{
-                  background: "#0f172a",
-                  border: "1px solid #db2777",
-                  borderRadius: 8,
-                  padding: 14,
-                  display: "flex",
-                  flexDirection: "column",
-                  gap: 8,
-                }}
-              >
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                  <span style={{ fontSize: 13, fontWeight: 700, color: "#ec4899", display: "flex", alignItems: "center", gap: 6 }}>
-                    <span>🛡️</span> Estado de Moral (f_morale)
-                  </span>
-                  <span style={{ fontSize: 9, background: "#831843", color: "#fbcfe8", padding: "2px 6px", borderRadius: 4, fontWeight: 700 }}>
-                    TACTICAL HEAD
-                  </span>
-                </div>
-                <div style={{ fontSize: 11, color: "#94a3b8" }}>
-                  Distribución categórica sobre riesgo de fijación, supresión y retirada (4 clases).
-                </div>
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginTop: 4 }}>
-                  <div style={{ background: "#1e293b", padding: 8, borderRadius: 6 }}>
-                    <div className="muted" style={{ fontSize: 10 }}>Pérdida Moral</div>
-                    <div style={{ fontSize: 14, fontWeight: 700, color: "#ec4899", marginTop: 2 }}>{fmtNum(moraleLoss, 4)}</div>
-                    <div className="muted" style={{ fontSize: 9 }}>Cross-Entropy</div>
-                  </div>
-                  <div style={{ background: "#1e293b", padding: 8, borderRadius: 6 }}>
-                    <div className="muted" style={{ fontSize: 10 }}>Riesgo Supresión</div>
-                    <div style={{ fontSize: 14, fontWeight: 700, color: moraleRisk !== null ? (moraleRisk < 0.3 ? "#34d399" : moraleRisk < 0.6 ? "#fbbf24" : "#f43f5e") : "#94a3b8", marginTop: 2 }}>
-                      {fmtNum(moraleRisk, 2)}
-                    </div>
-                    <div className="muted" style={{ fontSize: 9 }}>Score ponderado</div>
-                  </div>
-                  <div style={{ background: "#1e293b", padding: 8, borderRadius: 6 }}>
-                    <div className="muted" style={{ fontSize: 10 }}>Estado Dominante</div>
-                    <div style={{ fontSize: 14, fontWeight: 700, color: "#fbcfe8", marginTop: 2 }}>
-                      {moraleRisk !== null ? (moraleRisk < 0.3 ? "NORMAL" : moraleRisk < 0.6 ? "PINNED" : "SUPPRESSED") : "—"}
-                    </div>
-                    <div className="muted" style={{ fontSize: 9 }}>Clase top</div>
-                  </div>
-                  <div style={{ background: "#1e293b", padding: 8, borderRadius: 6 }}>
-                    <div className="muted" style={{ fontSize: 10 }}>Clases Tácticas</div>
-                    <div style={{ fontSize: 14, fontWeight: 700, color: "#38bdf8", marginTop: 2 }}>4 Niveles</div>
-                    <div className="muted" style={{ fontSize: 9 }}>Normal/Pin/Supp/Rout</div>
-                  </div>
-                </div>
-                <div style={{ background: "rgba(236, 72, 153, 0.08)", borderRadius: 6, padding: "6px 8px", fontSize: 10, color: "#cbd5e1", marginTop: 2 }}>
-                  💡 <b>Diagnóstico:</b> Alerta antes de que una unidad entre en pánico o quede inmovilizada, facilitando el apoyo mutuo.
-                </div>
-              </div>
-            )}
-          </div>
-
-          {/* Full Metrics Comparison Table */}
-          <div style={{ background: "#1e293b", border: "1px solid #334155", borderRadius: 8, padding: 16 }}>
-            <h4 style={{ margin: "0 0 10px 0", fontSize: 14, color: "#38bdf8" }}>
-              📋 Matriz de Diagnósticos y Verificación por Cabezal
-            </h4>
-            <div style={{ overflowX: "auto" }}>
-              <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 11, textAlign: "left" }}>
-                <thead>
-                  <tr style={{ background: "#0f172a", borderBottom: "1px solid #334155" }}>
-                    <th style={{ padding: "8px 10px" }}>Cabezal</th>
-                    <th style={{ padding: "8px 10px" }}>Métrica Diagnóstica</th>
-                    <th style={{ padding: "8px 10px" }}>Valor Actual</th>
-                    <th style={{ padding: "8px 10px" }}>Rango Nominal / Umbral</th>
-                    <th style={{ padding: "8px 10px" }}>Estado</th>
-                    <th style={{ padding: "8px 10px" }}>Evaluación MLOps</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr style={{ borderBottom: "1px solid #283548" }}>
-                    <td style={{ padding: "8px 10px", fontWeight: 700, color: "#38bdf8" }}>Política (f_p)</td>
-                    <td style={{ padding: "8px 10px" }}>train_policy_loss</td>
-                    <td style={{ padding: "8px 10px", fontFamily: "monospace" }}><b>{fmtNum(polLoss, 4)}</b></td>
-                    <td style={{ padding: "8px 10px", color: "#94a3b8" }}>&lt; 3.000 (Convergente)</td>
-                    <td style={{ padding: "8px 10px" }}>
-                      <span style={{ color: polLoss !== null ? "#34d399" : "#94a3b8", fontWeight: 700 }}>
-                        {polLoss !== null ? "🟢 Óptimo" : "⚪ Sin datos"}
-                      </span>
-                    </td>
-                    <td style={{ padding: "8px 10px", color: "#cbd5e1" }}>
-                      {polLoss !== null ? `Convergencia sostenida de Cross-Entropy en ${dynamicsBlocks} bloques` : "Métrica no disponible"}
-                    </td>
-                  </tr>
-                  <tr style={{ borderBottom: "1px solid #283548" }}>
-                    <td style={{ padding: "8px 10px", fontWeight: 700, color: "#38bdf8" }}>Política (f_p)</td>
-                    <td style={{ padding: "8px 10px" }}>eval_confidence_mean</td>
-                    <td style={{ padding: "8px 10px", fontFamily: "monospace" }}><b>{fmtPercent(polConfidence)}</b></td>
-                    <td style={{ padding: "8px 10px", color: "#94a3b8" }}>&gt; 20.0%</td>
-                    <td style={{ padding: "8px 10px" }}>
-                      <span style={{ color: polConfidence !== null ? (polConfidence >= 0.2 ? "#34d399" : "#f59e0b") : "#94a3b8", fontWeight: 700 }}>
-                        {polConfidence !== null ? (polConfidence >= 0.2 ? "🟢 Óptimo" : "🟡 Moderado") : "⚪ Sin datos"}
-                      </span>
-                    </td>
-                    <td style={{ padding: "8px 10px", color: "#cbd5e1" }}>
-                      {polConfidence !== null ? "Confianza adecuada en la selección de acciones tácticas" : "Evaluación pendiente"}
-                    </td>
-                  </tr>
-                  <tr style={{ borderBottom: "1px solid #283548" }}>
-                    <td style={{ padding: "8px 10px", fontWeight: 700, color: "#22c55e" }}>Valor (f_v)</td>
-                    <td style={{ padding: "8px 10px" }}>train_value_loss</td>
-                    <td style={{ padding: "8px 10px", fontFamily: "monospace" }}><b>{fmtNum(valLoss, 4)}</b></td>
-                    <td style={{ padding: "8px 10px", color: "#94a3b8" }}>&lt; 0.250</td>
-                    <td style={{ padding: "8px 10px" }}>
-                      <span style={{ color: valLoss !== null ? "#34d399" : "#94a3b8", fontWeight: 700 }}>
-                        {valLoss !== null ? "🟢 Óptimo" : "⚪ Sin datos"}
-                      </span>
-                    </td>
-                    <td style={{ padding: "8px 10px", color: "#cbd5e1" }}>
-                      {valLoss !== null ? "Pérdida de valor baja, sin picos de inestabilidad" : "Métrica no disponible"}
-                    </td>
-                  </tr>
-                  <tr style={{ borderBottom: "1px solid #283548" }}>
-                    <td style={{ padding: "8px 10px", fontWeight: 700, color: "#22c55e" }}>Valor (f_v)</td>
-                    <td style={{ padding: "8px 10px" }}>mcts_q_saturation_rate</td>
-                    <td style={{ padding: "8px 10px", fontFamily: "monospace" }}><b>{fmtPercent(qSatRate)}</b></td>
-                    <td style={{ padding: "8px 10px", color: "#94a3b8" }}>&lt; 5.0%</td>
-                    <td style={{ padding: "8px 10px" }}>
-                      <span style={{ color: qSatRate !== null ? (qSatRate < 0.05 ? "#34d399" : "#f59e0b") : "#94a3b8", fontWeight: 700 }}>
-                        {qSatRate !== null ? (qSatRate < 0.05 ? "🟢 Óptimo" : "🟡 Revisar") : "⚪ Sin datos"}
-                      </span>
-                    </td>
-                    <td style={{ padding: "8px 10px", color: "#cbd5e1" }}>
-                      {qSatRate !== null ? "No se producen saturaciones artificiales en las hojas MCTS" : "Métrica no disponible"}
-                    </td>
-                  </tr>
-                  <tr style={{ borderBottom: "1px solid #283548" }}>
-                    <td style={{ padding: "8px 10px", fontWeight: 700, color: "#f43f5e" }}>Objetivo (f_o)</td>
-                    <td style={{ padding: "8px 10px" }}>eval_vp_capture_take_rate</td>
-                    <td style={{ padding: "8px 10px", fontFamily: "monospace" }}><b>{fmtPercent(objTakeRate)}</b></td>
-                    <td style={{ padding: "8px 10px", color: "#94a3b8" }}>&gt; 0.5% (Gate Phase 1)</td>
-                    <td style={{ padding: "8px 10px" }}>
-                      <span style={{ color: objTakeRate !== null ? (objTakeRate > 0.005 ? "#34d399" : "#f59e0b") : "#94a3b8", fontWeight: 700 }}>
-                        {objTakeRate !== null ? (objTakeRate > 0.005 ? "🟢 Gate Pass" : "🟡 Bajo") : "⚪ Sin datos"}
-                      </span>
-                    </td>
-                    <td style={{ padding: "8px 10px", color: "#cbd5e1" }}>
-                      {objTakeRate !== null ? "Supera el umbral de promoción con margen positivo" : "Evaluación pendiente"}
-                    </td>
-                  </tr>
-                  <tr style={{ borderBottom: "1px solid #283548" }}>
-                    <td style={{ padding: "8px 10px", fontWeight: 700, color: "#c084fc" }}>Consistencia (q_θ)</td>
-                    <td style={{ padding: "8px 10px" }}>train_consistency_loss</td>
-                    <td style={{ padding: "8px 10px", fontFamily: "monospace" }}><b>{fmtSci(conLoss)}</b></td>
-                    <td style={{ padding: "8px 10px", color: "#94a3b8" }}>&lt; 0.010</td>
-                    <td style={{ padding: "8px 10px" }}>
-                      <span style={{ color: conLoss !== null ? "#34d399" : "#94a3b8", fontWeight: 700 }}>
-                        {conLoss !== null ? "🟢 Óptimo" : "⚪ Sin datos"}
-                      </span>
-                    </td>
-                    <td style={{ padding: "8px 10px", color: "#cbd5e1" }}>
-                      {conLoss !== null ? "Invarianza temporal gracias a la regularización SimSiam" : "Métrica no disponible"}
-                    </td>
-                  </tr>
-                  {hasThreatHead && (
-                    <>
-                      <tr style={{ borderBottom: "1px solid #283548" }}>
-                        <td style={{ padding: "8px 10px", fontWeight: 700, color: "#eab308" }}>Amenaza (f_threat)</td>
-                        <td style={{ padding: "8px 10px" }}>train_threat_loss</td>
-                        <td style={{ padding: "8px 10px", fontFamily: "monospace" }}><b>{fmtNum(threatLoss, 4)}</b></td>
-                        <td style={{ padding: "8px 10px", color: "#94a3b8" }}>&lt; 0.200</td>
-                        <td style={{ padding: "8px 10px" }}>
-                          <span style={{ color: threatLoss !== null ? "#34d399" : "#94a3b8", fontWeight: 700 }}>
-                            {threatLoss !== null ? "🟢 Óptimo" : "⚪ Sin datos"}
-                          </span>
-                        </td>
-                        <td style={{ padding: "8px 10px", color: "#cbd5e1" }}>Predicción de cobertura de fuego enemigo sobre {boardH}×{boardW} casillas</td>
-                      </tr>
-                      <tr style={{ borderBottom: "1px solid #283548" }}>
-                        <td style={{ padding: "8px 10px", fontWeight: 700, color: "#eab308" }}>Amenaza (f_threat)</td>
-                        <td style={{ padding: "8px 10px" }}>threat_coverage_ratio</td>
-                        <td style={{ padding: "8px 10px", fontFamily: "monospace" }}><b>{fmtPercent(threatCov)}</b></td>
-                        <td style={{ padding: "8px 10px", color: "#94a3b8" }}>10.0% - 50.0%</td>
-                        <td style={{ padding: "8px 10px" }}>
-                          <span style={{ color: threatCov !== null ? "#34d399" : "#94a3b8", fontWeight: 700 }}>
-                            {threatCov !== null ? "🟢 Óptimo" : "⚪ Sin datos"}
-                          </span>
-                        </td>
-                        <td style={{ padding: "8px 10px", color: "#cbd5e1" }}>Detección de sectores calientes con fuego de supresión</td>
-                      </tr>
-                    </>
-                  )}
-                  {hasAttritionHead && (
-                    <>
-                      <tr style={{ borderBottom: "1px solid #283548" }}>
-                        <td style={{ padding: "8px 10px", fontWeight: 700, color: "#06b6d4" }}>Desgaste (f_attr)</td>
-                        <td style={{ padding: "8px 10px" }}>train_attrition_loss</td>
-                        <td style={{ padding: "8px 10px", fontFamily: "monospace" }}><b>{fmtNum(attritionLoss, 4)}</b></td>
-                        <td style={{ padding: "8px 10px", color: "#94a3b8" }}>&lt; 0.150</td>
-                        <td style={{ padding: "8px 10px" }}>
-                          <span style={{ color: attritionLoss !== null ? "#34d399" : "#94a3b8", fontWeight: 700 }}>
-                            {attritionLoss !== null ? "🟢 Óptimo" : "⚪ Sin datos"}
-                          </span>
-                        </td>
-                        <td style={{ padding: "8px 10px", color: "#cbd5e1" }}>Convergencia en la proyección de bajas</td>
-                      </tr>
-                      <tr style={{ borderBottom: "1px solid #283548" }}>
-                        <td style={{ padding: "8px 10px", fontWeight: 700, color: "#06b6d4" }}>Desgaste (f_attr)</td>
-                        <td style={{ padding: "8px 10px" }}>predicted_exchange_ratio</td>
-                        <td style={{ padding: "8px 10px", fontFamily: "monospace" }}><b>{fmtNum(attritionExchange, 2, "x")}</b></td>
-                        <td style={{ padding: "8px 10px", color: "#94a3b8" }}>&gt; 1.00x</td>
-                        <td style={{ padding: "8px 10px" }}>
-                          <span style={{ color: attritionExchange !== null && attritionExchange >= 1.0 ? "#34d399" : "#fbbf24", fontWeight: 700 }}>
-                            {attritionExchange !== null ? (attritionExchange >= 1.0 ? "🟢 Favorable" : "🟡 Desfavorable") : "⚪ Sin datos"}
-                          </span>
-                        </td>
-                        <td style={{ padding: "8px 10px", color: "#cbd5e1" }}>Tasa de intercambio táctico estimada en asaltos</td>
-                      </tr>
-                    </>
-                  )}
-                  {hasMoraleHead && (
-                    <>
-                      <tr style={{ borderBottom: "1px solid #283548" }}>
-                        <td style={{ padding: "8px 10px", fontWeight: 700, color: "#ec4899" }}>Moral (f_morale)</td>
-                        <td style={{ padding: "8px 10px" }}>train_morale_loss</td>
-                        <td style={{ padding: "8px 10px", fontFamily: "monospace" }}><b>{fmtNum(moraleLoss, 4)}</b></td>
-                        <td style={{ padding: "8px 10px", color: "#94a3b8" }}>&lt; 0.350</td>
-                        <td style={{ padding: "8px 10px" }}>
-                          <span style={{ color: moraleLoss !== null ? "#34d399" : "#94a3b8", fontWeight: 700 }}>
-                            {moraleLoss !== null ? "🟢 Óptimo" : "⚪ Sin datos"}
-                          </span>
-                        </td>
-                        <td style={{ padding: "8px 10px", color: "#cbd5e1" }}>Calibración multiclase de estados de supresión y pánico</td>
-                      </tr>
-                      <tr style={{ borderBottom: "1px solid #283548" }}>
-                        <td style={{ padding: "8px 10px", fontWeight: 700, color: "#ec4899" }}>Moral (f_morale)</td>
-                        <td style={{ padding: "8px 10px" }}>suppression_risk_score</td>
-                        <td style={{ padding: "8px 10px", fontFamily: "monospace" }}><b>{fmtNum(moraleRisk, 2)}</b></td>
-                        <td style={{ padding: "8px 10px", color: "#94a3b8" }}>&lt; 0.40 (Seguro)</td>
-                        <td style={{ padding: "8px 10px" }}>
-                          <span style={{ color: moraleRisk !== null && moraleRisk < 0.4 ? "#34d399" : moraleRisk !== null ? "#f43f5e" : "#94a3b8", fontWeight: 700 }}>
-                            {moraleRisk !== null ? (moraleRisk < 0.4 ? "🟢 Estable" : "🔴 Riesgo Alto") : "⚪ Sin datos"}
-                          </span>
-                        </td>
-                        <td style={{ padding: "8px 10px", color: "#cbd5e1" }}>Riesgo general de ruptura o inmovilización de unidades</td>
-                      </tr>
-                    </>
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* SECTION 3: CHANNEL EFFECTIVENESS & ATTRIBUTION ANALYZER */}
+{/* SECTION 3: CHANNEL EFFECTIVENESS & ATTRIBUTION ANALYZER */}
       {currentSubTab === "channel-attribution" && (
         <div
           style={{

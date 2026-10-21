@@ -87,6 +87,7 @@ class ExecutionContext:
         *,
         event_bus: Optional[object] = None,
         game_map: Optional[object] = None,
+        game_state: Optional[object] = None,
     ):
         """
         Initialize ExecutionContext.
@@ -107,3 +108,4 @@ class ExecutionContext:
         """
         self.event_bus = event_bus
         self.game_map = game_map
+        self.game_state = game_state

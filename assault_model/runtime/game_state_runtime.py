@@ -1,3 +1,4 @@
+import random
 """
 RuntimeGameState is the authoritative execution engine of the game.
 Pure execution engine (no activation logic).
@@ -50,9 +51,12 @@ class RuntimeGameState:
     ✅ backward compatibility (turn_has_ended still works)
     """
 
-    def __init__(self, base_state: GameState, scenario):
+    def __init__(self, base_state: GameState, scenario, seed: int = 0):
         self.base_state = base_state
         self.scenario = scenario
+        self.seed = int(seed)
+        self._rng = random.Random(self.seed)
+        self._deployed_reinforcements: set[int] = set()
         self.turn = TurnState(turn_number=base_state.turn)
         # Monotonic state version for short-lived caches (action catalog, movement paths).
         # Must be bumped every time an action mutates the authoritative state.
@@ -87,6 +91,9 @@ class RuntimeGameState:
         cloned.reaction_used_this_turn = set(self.reaction_used_this_turn)
         cloned.pending_reaction = dict(self.pending_reaction) if self.pending_reaction is not None else None
         cloned.side_controller_map = dict(self.side_controller_map)
+        cloned.seed = self.seed
+        cloned._rng = random.Random(self.seed)
+        cloned._deployed_reinforcements = set(self._deployed_reinforcements)
         return cloned
 
     def __deepcopy__(self, memo) -> "RuntimeGameState":
@@ -193,6 +200,9 @@ class RuntimeGameState:
         self.activated_units.clear()
         self.reaction_used_this_turn.clear()
         self.pending_reaction = None
+
+        # --- Organization Phase: Deploy scheduled reinforcements ---
+        self._deploy_scheduled_reinforcements()
 
         if getattr(self.base_state, "turn", 1) > 1:
             for unit in self.base_state.units:
@@ -668,3 +678,116 @@ class RuntimeGameState:
                 )
         except Exception as e:
             _trace("REACTION_FIRE_FAILED", error=type(e).__name__)
+    def _deploy_scheduled_reinforcements(self) -> None:
+        """
+        Deploy reinforcements during the Organization Phase according to scenario rules.
+        Handles landing rolls (D6 for zone A / B) and places units on the map.
+        """
+        reinforcements = getattr(self.scenario, "reinforcements", None)
+        if not reinforcements:
+            return
+
+        from assault_model.map.hex_coord import HexCoord
+        from assault_model.units.unit_instance import UnitInstance
+
+        unit_catalog = getattr(self.scenario, "unit_catalog", None) or {}
+
+        for idx, rule in enumerate(reinforcements):
+            if int(rule.get("turn", 0)) != int(self.base_state.turn):
+                continue
+            if idx in self._deployed_reinforcements:
+                continue
+
+            self._deployed_reinforcements.add(idx)
+            landing_zones = dict(rule.get("landing_zones", {}) or {})
+            selected_zone_name = None
+
+            if landing_zones:
+                roll = self._rng.randint(1, 6)
+                if 1 <= roll <= 3 and "A" in landing_zones:
+                    selected_zone_name = "A"
+                elif 4 <= roll <= 5 and "B" in landing_zones:
+                    selected_zone_name = "B"
+                else:
+                    def _free_count(z_key: str) -> int:
+                        cnt = 0
+                        for h in landing_zones.get(z_key, []):
+                            th = (int(h[0]), int(h[1]))
+                            if not self.base_state._units_by_hex.get(th):
+                                cnt += 1
+                        return cnt
+                    cnt_a = _free_count("A") if "A" in landing_zones else -1
+                    cnt_b = _free_count("B") if "B" in landing_zones else -1
+                    selected_zone_name = "A" if cnt_a >= cnt_b else "B"
+
+                zone_coords = [tuple(h) for h in landing_zones.get(selected_zone_name, [])]
+            else:
+                zone_coords = []
+
+            deployed_in_batch: set[tuple[int, int]] = set()
+
+            for u_def in rule.get("units", []):
+                uid = str(u_def["unit_id"])
+                ukey = str(u_def["unit_key"])
+                side = str(u_def.get("side", rule.get("side", "US")))
+                experience = str(u_def.get("experience", "REGULAR"))
+
+                chosen_pos = None
+
+                # 1. Search for unoccupied hex within assigned landing zone
+                for c in zone_coords:
+                    th = (int(c[0]), int(c[1]))
+                    if not self.base_state._units_by_hex.get(th) and th not in deployed_in_batch:
+                        chosen_pos = th
+                        deployed_in_batch.add(th)
+                        break
+
+                # 2. Fallback: adjacent water/beach hex
+                if chosen_pos is None and zone_coords:
+                    for base_c in zone_coords:
+                        for dq, dr in [(0, 1), (1, 0), (-1, 1), (0, -1), (-1, 0), (1, -1)]:
+                            cand = (int(base_c[0] + dq), int(base_c[1] + dr))
+                            if self.base_state.game_map.get_hex(cand[0], cand[1]) is not None:
+                                if not self.base_state._units_by_hex.get(cand) and cand not in deployed_in_batch:
+                                    chosen_pos = cand
+                                    deployed_in_batch.add(cand)
+                                    break
+                        if chosen_pos is not None:
+                            break
+
+                # 3. Ultimate fallback: first zone hex or explicit position
+                if chosen_pos is None:
+                    if zone_coords:
+                        chosen_pos = zone_coords[0]
+                    else:
+                        explicit = u_def.get("position", [0, 0])
+                        chosen_pos = (int(explicit[0]), int(explicit[1]))
+
+                pos = HexCoord(chosen_pos[0], chosen_pos[1])
+                unit_type = unit_catalog.get(ukey)
+                if unit_type is None:
+                    from assault_model.paths import UNIT_CATALOG_PATH
+                    from assault_model.units.catalog_loader import load_unit_catalog
+                    global_cat = load_unit_catalog(UNIT_CATALOG_PATH)
+                    unit_type = global_cat.get(ukey)
+
+                if unit_type is not None:
+                    inst = UnitInstance(
+                        unit_id=uid,
+                        unit_type=unit_type,
+                        side=side,
+                        position=pos,
+                        experience=experience,
+                    )
+                    self.base_state.add_unit(inst)
+                    _trace(
+                        "REINFORCEMENT_SPAWNED",
+                        turn=self.base_state.turn,
+                        unit=uid,
+                        key=ukey,
+                        zone=selected_zone_name,
+                        pos=f"({pos.q},{pos.r})",
+                    )
+
+        # Re-extract sides to include reinforcement arrivals
+        self.sides = self._extract_sides()

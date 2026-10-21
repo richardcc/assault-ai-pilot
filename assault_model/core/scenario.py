@@ -19,6 +19,7 @@ class Scenario:
         max_turns: Optional[int] = None,
         vp_conditions: Optional[Dict] = None,
         victory_outcomes: Optional[Dict[str, Any]] = None,
+        reinforcements: Optional[List[Dict[str, Any]]] = None,
     ) -> None:
         self.name = name
         self.game_map = game_map
@@ -26,3 +27,5 @@ class Scenario:
         self.max_turns = max_turns
         self.vp_conditions = vp_conditions
         self.victory_outcomes = victory_outcomes
+        self.reinforcements: List[Dict[str, Any]] = list(reinforcements or [])
+        self.unit_catalog: Optional[Dict[str, Any]] = None

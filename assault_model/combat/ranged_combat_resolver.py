@@ -383,7 +383,8 @@ def resolve_ranged_combat(
     # ---------------- SUPPRESSION ----------------
     if suppress > 0 and target.alive:
         apply_suppression_hits(target, suppress)
-        resolve_fallback(target)
+        gs = getattr(context, "game_state", None) if context else None
+        resolve_fallback(target, game_state=gs, attacker=attacker)
 
     result = CombatResolutionResult(
         attack_roll=attack_results,

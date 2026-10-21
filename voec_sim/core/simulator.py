@@ -40,6 +40,7 @@ class VOECSimulator:
         self._runtime: Optional[RuntimeGameState] = None
         self._state: Optional[GameState] = None
         self._scenario_id: Optional[str] = None
+        self._scenario: Optional[Any] = None
         self._seed: int = 0
         self._max_turns: Optional[int] = None
         self._legal_actions_cache_key: Optional[tuple] = None
@@ -80,7 +81,7 @@ class VOECSimulator:
             )
         # Keep parity with the stable simulation path used in assault_sim.
         state.game_map.terrain_config = terrain_config
-        runtime = RuntimeGameState(state, scenario)
+        runtime = RuntimeGameState(state, scenario, seed=self._seed)
         # In VOEC/EfficientZero we expose reaction windows as explicit decisions.
         runtime.side_controller_map = {str(side): "human" for side in list(state.turn_order or [])}
         runtime.start_turn()
@@ -88,6 +89,7 @@ class VOECSimulator:
         self._runtime = runtime
         self._state = runtime.base_state
         self._scenario_id = scenario_id
+        self._scenario = scenario
         self._max_turns = int(scenario.max_turns) if scenario.max_turns is not None else None
         self._legal_actions_cache_key = None
         self._legal_actions_cache_value = []
@@ -593,3 +595,22 @@ class VOECSimulator:
 
     def scenario_max_turns(self) -> Optional[int]:
         return int(self._max_turns) if self._max_turns is not None else None
+
+    def scenario_total_units(self) -> int:
+        if self._scenario is None:
+            state = self._state
+            return len(getattr(state, "units", []) or []) if state is not None else 0
+        initial_count = len(getattr(self._scenario, "units", []) or [])
+        reinf_count = 0
+        for r in getattr(self._scenario, "reinforcements", []) or []:
+            if isinstance(r, dict):
+                u_list = r.get("units")
+                if isinstance(u_list, list):
+                    reinf_count += len(u_list)
+                else:
+                    reinf_count += 1
+            else:
+                reinf_count += 1
+        current_alive_or_total = len(getattr(self._state, "units", []) or []) if self._state is not None else 0
+        return max(initial_count + reinf_count, current_alive_or_total)
+

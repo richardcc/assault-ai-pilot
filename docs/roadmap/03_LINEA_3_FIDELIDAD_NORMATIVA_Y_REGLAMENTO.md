@@ -24,7 +24,7 @@ flowchart LR
 
 | Orden | Tarea / Componente | Prioridad Interna | Módulos / Archivos Impactados | Criterio de Aceptación Cuantitativo | Prerrequisitos |
 | :---: | :--- | :---: | :--- | :--- | :--- |
-| **1** | **3.1 Algoritmo de Retirada a Borde Amigo en Desenfilada (Sección 6.4)** | **P1** | `assault_model/combat/morale.py`, `assault_model/rules/movement_rules.py` | Sustituir la retirada contigua aleatoria por un vector dirigido al borde amigo (*Friendly Edge*), filtrando hexágonos en desenfilada (*Defilade*) fuera de la LOS del atacante y seleccionando la mayor cobertura de terreno disponible. | v2.2.0 (Vectorized LOS) |
+| **1** | **3.1 Algoritmo de Retirada a Borde Amigo en Desenfilada (Sección 6.4)** | **P1** | `assault_model/combat/morale.py`, `assault_model/rules/movement_rules.py`, `assault_model/tests/test_fallback_defilade_algorithm.py` | Algoritmo determinista de selección de hexágono de retirada priorizando desenfilada (LOS BLOCKED > HINDERED > CLEAR), mayor cobertura de terreno/fortificación, vector a Friendly Edge y aumento de distancia al atacante. Destrucción de artillería/inmóviles y daño por bloqueo (Regla 13.3). **[CONSOLIDADA 🟢 v2.5.11]** | v2.2.0 (Vectorized LOS) |
 | **2** | **3.2 Fase A: Cavar (*Dig-In*), Humo Táctico y Transporte de Tropas** | **P1** | `assault_model/actions/status.py`, `actions/ranged_indirect.py`, `rules/movement_rules.py` | `DigInAction` (creación de marcadores `Foxhole`), `FireSmokeAction` (bloqueo dinámico de LOS y disipación por turno), y `LoadUnitAction`/`UnloadUnitAction` con chequeo de bajas si el vehículo es destruido. | Tarea 3.1 |
 | **3** | **3.5 Formaciones Doctrinales, Ingesta de Unidades y Rebalanceo de Escenarios** | **P1** | `assets/catalogs/formation_catalog.json`, `assets/catalogs/unit_catalog.json`, `assets/scenarios/` | Desglosado en subtareas 3.5.1 a 3.5.5: Ingesta de ingenieros, catálogo de 12 formaciones, 2 escenarios simétricos de entrenamiento, rebalanceo OOB de Gela y benchmark de victoria. **Criterio de éxito:** Win Rate $\ge 80\%$ de `EfficientZero V2` vs baseline Random en ambos bandos. | Tarea 3.2 / Línea 2 |
 | **4** | **3.3 Fase B: Iniciativa Dinámica (D6 + Command Points) y Apoyo Fuera de Mapa (TAS/OAS)** | **P2** | `assault_model/state/turn.py`, `combat/support_strike.py` | Tirada de iniciativa D6 al inicio de cada ronda, asignación de 2–5 CPs por bando para activar interrupciones tácticas y resolución de bombardeos fuera de mapa con dispersión hexagonal. | Tarea 3.5 |
@@ -33,7 +33,50 @@ flowchart LR
 
 ---
 
-## 3. Desglose Operativo y Plan de Acción de la Tarea 3.5 (Subtareas Incrementales)
+---
+
+## 3. Tarea 3.1: Algoritmo de Retirada a Borde Amigo en Desenfilada (Sección 6.4 / Regla 13.3) [CONSOLIDADA 🟢 v2.5.11]
+
+> **Módulos Involucrados**: `assault_model/rules/movement_rules.py`, `assault_model/combat/morale.py`, `assault_model/combat/ranged_combat_resolver.py`, `assault_model/runtime/execution_context.py`, `assault_model/tests/test_fallback_defilade_algorithm.py`.  
+> **Reglamento Oficial**: *Rulebook rev6* §6.4 (*Action Phase*) y §13.3 (*Morale Status Markers - Fallback*).
+
+### Especificación Operativa del Algoritmo de Retirada
+
+Sustituye la primitiva aleatoria previa (`q - 1, r`) por un cálculo táctico determinista multinivel que emula la doctrina militar de repliegue bajo fuego:
+
+```mermaid
+flowchart TD
+    FALLBACK_TRIGGER["Impacto de Supresión / Fallback en Combate (Regla 13.3)"] --> CHECK_SPEC{"¿Artillería o Inmovilizado?"}
+    CHECK_SPEC -- SÍ --> DESTROY["Eliminación Inmediata de la Unidad (unit.alive = False, strength = 0)"]
+    CHECK_SPEC -- NO --> NEIGHBORS["Filtrar 6 Vecinos Adyacentes (can_enter_hex, límites de mapa, sin enemigos, stacking)"]
+    
+    NEIGHBORS --> SCORE["Evaluación Táctica de Cada Hexágono Candidato (h)"]
+    
+    SCORE --> S1["1. Desenfilada (LOS vs Atacante)
+BLOCKED: +100 pts | HINDERED: +40 pts | CLEAR: 0 pts"]
+    SCORE --> S2["2. Cobertura Terreno
+Búnker: +15 | Casamata: +12 | Trinchera: +8 | Bosque: +6 | Sacos: +4"]
+    SCORE --> S3["3. Distancia al Atacante (Regla 13.3)
+Δdist > 0: +30*Δdist | Δdist = 0: +5 | Δdist < 0: -500 (Penalizado)"]
+    SCORE --> S4["4. Borde Amigo (Friendly Edge)
+NORTH: -(Δr)*15 | SOUTH: +(Δr)*15 | EAST/WEST"]
+    
+    S1 & S2 & S3 & S4 --> BEST{"¿Existe Hexágono Legal?"}
+    BEST -- SÍ --> MOVE["Desplazar Unidad al Mejor Hexágono en Desenfilada y Recalcular Control Territorial"]
+    BEST -- NO (Rodeada) --> DAMAGE["Regla 13.3: Sufre 1 Punto de Daño y Permanece en Posición Actual"]
+```
+
+### Formulación Matemática de Selección
+
+Para cada hexágono legal adyacente $h \in \mathcal{N}(	ext{pos})$:
+$$	ext{Score}(h) = 	ext{Score}_{	ext{defilade}}(h, 	ext{atk}) + 	ext{Score}_{	ext{cover}}(h) + 	ext{Score}_{	ext{dist}}(h, 	ext{atk}) + 	ext{Score}_{	ext{edge}}(h, 	ext{side})$$
+
+* **Criterios de Desempate Determinista**: `(total_score, defilade_score, cover_score, cand_dist, -q, -r)`.
+* **Suite de Verificación**: 7 tests específicos en `assault_model/tests/test_fallback_defilade_algorithm.py` cubriendo desenfilada, cobertura, orientación al borde amigo, penalización de avance hacia el atacante, eliminación de artillería/inmóviles y daño por bloqueo.
+
+---
+
+## 4. Desglose Operativo y Plan de Acción de la Tarea 3.5 (Subtareas Incrementales)
 
 Para implementar de forma gradual y verificable la compensación de escenarios y la paridad balística, la Tarea 3.5 se descompone en 5 subtareas ordenadas:
 
@@ -84,9 +127,20 @@ flowchart TD
    - **Alcance**: Ejecutar batería de 100 partidas automatizadas en `assault_bench` evaluando `EfficientZero V2` frente al baseline Random en los escenarios rebalanceados y de entrenamiento.
    - **Criterio de Aceptación Cuantitativo**: **Win Rate $\ge 80\%$** para el agente en ambos bandos (`Side A` y `Side B`), con `Loss Rate \le 10\%` y `Timeout Rate \le 10\%`.
 
+6. **Subtarea 3.5.6: Ingesta Fidedigna de Refuerzos, Soporte TA/OAS, Puntos de Mando y Status Moral en Escenarios Canónicos (Eliminación de la Inercia Defensiva en la Raíz Wargame)** — `[PLANIFICADA ⚪ v2.5.11]`:
+   - **Módulos**: `assets/scenarios/battaglia_cittadina_2_1.json`, `assets/scenarios/mettete_i_piedi_terra_1.json`, `assault_model/core/scenario.py`, `assault_model/core/scenario_loader.py`, `assault_model/state/game_state.py`, `assault_model/combat/ranged_combat_resolver.py`.
+   - **Diagnóstico y Origen**: Auditoría exhaustiva del *Libro della Campagna* (Págs. 18-21, §3.1 en `docs/08_AUDITORIA_REGLAMENTO_VS_ENGINE.md`). Se identificó que la IA atacante adopta una postura 100% defensiva porque los escenarios en el simulador carecen de las ventajas doctrinales de asalto que el reglamento otorga para romper posiciones fortificadas.
+   - **Alcance Operativo**:
+     1. **Refuerzos Programados (Turno 2, Fase de Organización)**: En `mettete_i_piedi_terra_1.json`, inyectar la 2.ª oleada de desembarco aliada con una formación adicional de infantería, duplicando la masa de asalto.
+     2. **Puntos de Mando de Formación**: Modelar CPs en el escenario y `GameState` (+4 CPs para US y +2 CPs para IT en Battaglia Cittadina por ratio 2/40 vs 1/20).
+     3. **Soporte Fuera de Mapa (TA / OAS)**: Asignar 3 cartas TA/OAS (3 re-rolls de ataque a distancia) para US en Battaglia Cittadina y 1 re-roll para US en Mettete.
+     4. **Escala Autoritativa de Presión y Rendición (`Status delle Truppe`, §5.1)**: Modelar los umbrales de presión moral (12 bajas = +1 presión, pérdida de VP altera presión). Resolver chequeos D6 de *Rotta* (+1 VP extra al atacante) y *Resa* (rendición total y captura del 100% de los VPs del mapa).
+     5. **Corrección Histórica de OOB en Desembarco**: Asignar defensores italianos de la XVIII Brigata Costiera en Mettete en lugar de tropas pesadas alemanas con MG42.
+   - **Criterio de Aceptación Cuantitativo**: El atacante dispone de superioridad 2:1 en masa de maniobra, 3 re-rolls de ablandamiento y victoria anticipada por colapso moral enemigo. Eliminación de la inercia defensiva aprendida en autojuego, alcanzando $\ge 80\%$ de ratio de asaltos a VPs.
+
 ---
 
-## 4. Tarea 3.6: Eliminación de la Parálisis Ofensiva y Colapso de la Brecha Asimétrica (P0 - Crítica) [CONSOLIDADA 🟢]
+## 5. Tarea 3.6: Eliminación de la Parálisis Ofensiva y Colapso de la Brecha Asimétrica (P0 - Crítica) [CONSOLIDADA 🟢]
 
 > **Módulos Involucrados**: `agents/efficientzero_v2/core/observation.py`, `voec_sim/core/reward_calculator.py`, `agents/efficientzero_v2/core/mcts.py`, `agents/efficientzero_v2/train/train_engine.py`, `agents/efficientzero_v2/configs/efficientzero_v2_config.yaml`.  
 > **Origen y Diagnóstico**: Informe de Auditoría Táctica Forense (`docs/informes_ejecucion/INFORME_01_CURRICULUM_Y_AUDITORIA_TACTICA.md`). Se detectó que el modelo alcanzó un 87.5% de victorias como defensor (IT/GE) pero un 0.0% de victorias como atacante (US) frente a agentes aleatorios (*Random*), generando una brecha asimétrica de 0.655 y degradando el ELO en -811 puntos.

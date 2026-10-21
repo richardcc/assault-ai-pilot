@@ -86,9 +86,126 @@ flowchart TD
 | **`v2.5.6`** | Octubre 2026 | Optimización de Alto Rendimiento GameState/CoW y Decomisión Legacy | `__slots__` en `HexState`, pre-caching de `_vp_hexes`, compartición inmutable de referencias en `clone_cow()` (+62% en clones/s de RuntimeGameState, +16% en simulación/s) y decomisión limpia de 9 módulos huérfanos de fuego de reacción (`game_state_reactions`, `ReactionRegistry`, etc.). | `CONSOLIDADO 🟢` |
 | **`v2.5.7`** | Octubre 2026 | Currículum Asimétrico Ofensivo de Asalto Urbano Puro | Fase 5 en `battaglia_cittadina_2_1` con horizonte $T=8$, modo 100% atacante (`US` vs `Random`), penalización severa por timeout ($-1.0$) y plan evolutivo de 10 ciclos adaptativos en `curriculums/vp_acceleration/` para erradicar la inercia defensiva aprendida. Suite de validación (4/4 tests en verde). | `CONSOLIDADO 🟢` |
 | **`v2.5.8`** | Octubre 2026 | Validador E2E de Trazabilidad Frontend $\leftrightarrow$ DuckDB (Línea 1) | Auditoría automatizada de trazabilidad en TypeScript y Python de las 9 pestañas del dashboard MLOps y simulador web (`traceability.spec.ts`, `test_frontend_duckdb_traceability.py`), garantía de Zero-Mock (cero inferencias o heurísticas espurias como `Math.floor(idx/14)`), fallbacks forzosos a `-`/`N/A`, erradicación del shim MuZero en `replay_api.py` y suite de 15/15 tests en verde. | `CONSOLIDADO 🟢` |
-
+| **`v2.5.9`** | Octubre 2026 | Catálogo Unificado y Depuración de Esquemas Parquet y DuckDB (Línea 1) | Módulo gestor canónico `mlops/dataset_builder.py`, fijación estricta de 15 columnas en `decisions_top.parquet`, erradicación de fugas de acumuladores intermedios en `decision_metrics.py`, saneamiento del 100% de ficheros Parquet (69/69) y Clean Break total erradicando etiquetas legacy MuZero en catálogo y DuckDB hacia EfficientZeroV2. Suite `test_unified_catalog_and_schema_purge.py` (5/5 en verde). | `CONSOLIDADO 🟢` |
+| **`v2.5.14`** | Octubre 2026 | Presupuesto Dinámico de Simulación y Horizonte Gobernado por Turnos con Refuerzos | Desacoplamiento del presupuesto estático de pasos hacia la gobernanza canónica por turnos ($T \le T_{\max}$). Ingesta del OOB total (`scenario_total_units` en `VOECSimulator` y `EZV2VOECAdapter`) computando unidades iniciales + todas las oleadas de refuerzos programadas; headroom táctico por activación (`steps_per_unit_turn = 2.5`); watchdog de seguridad por turno (`turn_deadlock_watchdog = max(30, alive * 4)`) para prevenir bloqueos patológicos sin asfixiar partidas en curso; y eliminación de la penalización espuria de timeout (-1.0) en partidas con refuerzos que concluyen normalmente por límite de turnos. Suite dedicada `test_turn_budget_reinforcements.py` (4/4 en verde) y 153/153 tests en EZv2. | `CONSOLIDADO 🟢` |
+| **`v2.5.13`** | Octubre 2026 | Pipeline Dinámico de Refuerzos de Desembarco en Fase de Organización (Línea 3 / Tarea 3.5.6) | Spawning dinámico estocástico de refuerzos de la 2.ª oleada en Turno 2 (Fase de Organización) según regla oficial de desembarco (Pág. 18). Tirada D6 para zona A/B con resolución de congestión y posicionamiento en agua somera, registro en `GameState.add_unit()`, sincronización de `RuntimeGameState`, emisión de telemetría `REINFORCEMENTS_ARRIVED` y ampliación de masa aliada a 14 unidades en Escenario 1.0. Suite dedicada `test_scenario_reinforcements.py` y 300/300 tests en verde. | `CONSOLIDADO 🟢` |
+| **`v2.5.12`** | Octubre 2026 | Despliegue Canónico e Ingesta Fidedigna de Escenarios 1.0 y 2.1 del *Libro della Campagna* (Línea 3) | Configuración autoritativa de OOB, colocación inicial según croquis histórico y corrección de asimetría 2:1 en escenarios oficiales de Gela. En Escenario 1.0 (`mettete_i_piedi_terra_1.json`): sustitución de defensores alemanes por la 429.ª guarnición costera italiana (`IT_FANTERIA_COSTIERA`), VPs de partida en posesión italiana (`initial_owner: IT`), ajuste del horizonte a 10 turnos e inyección de status moral (US: 3/7/9/11, IT: 2/6/7/9). En Escenario 2.1 (`battaglia_cittadina_2_1.json`): restauración del ratio de fuerzas histórico 2:1 (14 unidades US [Darby's Rangers + 1st Infantry Division] vs 7 unidades IT [429.º Costiero]) en coordenadas oficiales de setup, status moral (US: 4/7/9/11, IT: 3/6/8/9) y 8 turnos. Compatibilidad y simulación dinámica verificadas (37/37 en `voec_sim`, 112/112 en `assault_model`, 149/149 en `efficientzero_v2`). | `CONSOLIDADO 🟢` |
+| **`v2.5.11`** | Octubre 2026 | Retirada Táctica a Borde Amigo en Desenfilada (Línea 3 / Regla 13.3) | Algoritmo determinista de selección de hexágono de repliegue priorizando desenfilada (LOS BLOCKED > HINDERED > CLEAR), mayor cobertura de terreno/fortificaciones, vector a borde amigo (*Friendly Edge*) y aumento de distancia al atacante. Eliminación inmediata de artillería/inmovilizados, penalización de 1 punto de daño si la unidad está rodeada sin hexágono legal, e integración autoritativa en `morale.py`, `movement_rules.py` y `ranged_combat_resolver.py` (112/112 tests passing). | `CONSOLIDADO 🟢` |
+| **`v2.5.10`** | Octubre 2026 | Atribución Causal Espacial Hexagonal (XAI / Grad-CAM / IGNH) y Unificación de Diagnóstico de Cabezas | Endpoint `/api/v2/replay/explain-step` con Grad-CAM espacial e Integrated Gradients sobre 32 canales sensoriales heterogéneos, visualizador modal de explicabilidad con heatmap reactivo sobre tablero hexagonal en Match Replay (:8778). Unificación integral del Diagnóstico de Cabezas en `Evaluación & Benchmarks -> Diagnóstico de Cabezas (XAI)` con 7 fichas de salud sintética, matriz de verificación MLOps, behavioral telemetry sanity board y desglose de 11 métricas puras, depurando la vista de Topología hacia su rol puramente arquitectural con enlace directo. Suite `mlops/tests/test_explainability_api.py` (3/3 en verde) y frontend 100% en inglés según Regla 7. | `CONSOLIDADO 🟢` |
 
 ## 3. Fases Recientes Consolidadas (Ciclos v2.4.x - v2.5.x — Octubre 2026)
+
+#### v2.5.14 — Presupuesto Dinámico de Simulación y Horizonte Gobernado por Turnos con Refuerzos (Turn-Authoritative Horizon) [CONSOLIDADO 🟢]
+* **Objetivo**: Resolver de raíz la desincronización entre el presupuesto estático de micro-pasos (`max_steps`) y los macro-turnos del wargame ante la llegada de refuerzos dinámicos, erradicando los falsos timeouts y la penalización espuria de -1.0 que provocaba la inercia defensiva del agente.
+* **Componentes Consolidados**:
+  * **Ingesta del OOB Total en Simulación (`scenario_total_units`)**:
+    * Implementación en `VOECSimulator` y `EZV2VOECAdapter` del método `scenario_total_units()`, el cual audita el catálogo del escenario y totaliza las unidades de partida más todas las oleadas de refuerzos programadas en el bloque `"reinforcements"` ($N_{\text{initial}} + \sum |\text{units}|$).
+  * **Presupuesto Adaptativo con Headroom Táctico (`resolve_effective_step_budget`)**:
+    * Soporte del parámetro `steps_per_unit_turn` (fijado en 2.5 en autojuego y entrenamiento de `train_engine.py`, 1.0 por defecto en contratos de test).
+    * Cálculo del horizonte seguro de simulación: $\text{effective\_max\_steps} = \lceil T_{\text{scenario}} \times \text{total\_units} \times \text{steps\_per\_unit\_turn} \rceil$, garantizando que escenarios con desembarcos masivos (ej. 14-18 unidades en Turno 2) dispongan de pasos holgados para todos sus turnos.
+  * **Watchdog de Deadlock por Turno (`turn_deadlock_watchdog`)**:
+    * Seguimiento del pulso de turnos de wargame en `_NativeEZV2SelfplayBackend.play_episode`.
+    * Cada vez que el motor cambia de turno (`turn_now != current_turn_seen`), el contador de pasos del turno se reinicia a cero y se calibra un techo de seguridad local: $\text{max\_steps\_per\_turn} = \max(30, N_{\text{alive}} \times 4)$.
+    * Si ocurre un estancamiento patológico dentro de un mismo turno, se aborta con `terminal_reason = "turn_deadlock_watchdog"`, distinguiendo los deadlocks reales de los límites de partida.
+  * **Preservación de Resultados Canónicos**:
+    * Cuando la partida alcanza $T > T_{\max}$, el motor marca `adapter.terminal() == True` de forma natural. El bucle de autojuego preserva el desenlace reglamentario (evaluación de VPs y bajas) sin aplicar la penalización catastrófica de timeout (-1.0).
+  * **Verificación Automatizada**:
+    * Suite dedicada `agents/efficientzero_v2/tests/test_turn_budget_reinforcements.py` (4/4 en verde): verificación de multiplicadores de presupuesto, consulta de OOB total desde adapter, asignación dinámica en escenarios con refuerzos y disparo selectivo del watchdog ante bucles infinitos.
+    * 153/153 tests pasando en `agents/efficientzero_v2/tests/`.
+
+#### v2.5.13 — Pipeline Dinámico de Refuerzos de Desembarco en Fase de Organización (Tarea 3.5.6) [CONSOLIDADO 🟢]
+* **Objetivo**: Modelar en el motor físico y runtime la llegada dinámica de la 2.ª oleada de desembarco aliada en el Turno 2 del Escenario 1.0 (*Mettete i piedi per terra!*), emulando fielmente la Fase de Organización del *Libro della Campagna* (§3.1, pág. 18).
+* **Componentes Consolidados**:
+  * **Esquema de Refuerzos en Escenario (`mettete_i_piedi_terra_1.json`)**:
+    * Bloque `"reinforcements"` canónico con llegada en Turno 2, fase de organización, asignación a zonas de desembarco A (oeste) y B (este), y la formación completa `US_INF_RIFLE` (5x `US_RIFLES_43`, 1x `US_BAZOOKA_TEAM`, 1x `US_81MM_MORTAR`, unidades `US_8` a `US_14`).
+  * **Carga y Registro en Escenario (`assault_model/core/scenario.py` y `scenario_loader.py`)**:
+    * Soporte formal de `reinforcements` y retención del catálogo de unidades (`scenario.unit_catalog`).
+  * **Registro Dinámico en Estado (`assault_model/state/game_state.py`)**:
+    * Método `GameState.add_unit(unit)` para registrar dinámicamente nuevas unidades en tiempo de ejecución, sincronizando lookups espaciales `_units_by_hex`, seguimiento por bando `_unit_sides`, orden de turno `turn_order` y recálculo incremental de control territorial `recalculate_hex_control`.
+  * **Motor de Fase de Organización en Runtime (`assault_model/runtime/game_state_runtime.py`)**:
+    * Método `_deploy_scheduled_reinforcements()` ejecutado al inicio de cada turno.
+    * Resolución estocástica / determinista por semilla de tirada de dado D6 (1-3: Zona A, 4-5: Zona B, 6: Elección de zona menos congestionada).
+    * Colocación en hexágonos libres de la zona o agua somera adyacente según norma de saturación de desembarco.
+    * Actualización dinámica del pool de activación `self.sides = self._extract_sides()`.
+  * **Integración en `VOECSimulator` y Verificación Automatizada**:
+    * Conexión con `VOECSimulator.new_episode(..., seed=seed)` propagando la semilla al runtime.
+    * Suite dedicada de pruebas `assault_model/tests/test_scenario_reinforcements.py` (2/2 en verde).
+    * Batería integral en verde: 300/300 tests pasando (`voec_sim`, `assault_model`, `agents/efficientzero_v2`).
+
+#### v2.5.12 — Despliegue Canónico e Ingesta Fidedigna de Escenarios 1.0 y 2.1 del *Libro della Campagna* (Tarea 3.5.6) [CONSOLIDADO 🟢]
+* **Objetivo**: Configurar con fidelidad normativa absoluta al reglamento y libro de campaña oficial (`docs/pdfs/ITA_Assault_Libro_Campagna_v1.0.pdf`, págs. 18-21) las unidades, colocaciones iniciales, moral y duración de los escenarios 1.0 (*Mettete i piedi per terra!*) y 2.1 (*Battaglia Cittadina*), resolviendo la apócrifa guarnición alemana de desembarco y la simetría 1:1 artificial que causaba parálisis e inercia defensiva en la IA atacante.
+* **Componentes Consolidados**:
+  * **Escenario 1.0 Canónico (`assets/scenarios/mettete_i_piedi_terra_1.json`)**:
+    * **Defensores Históricos**: Sustituida la guarnición alemana con MG42 y mortero de 50mm por la 429.ª compañía costera italiana (`XVI Corpo, XVIII Brigata Costiera`): 3x `IT_RIFLES_43` (2 en casas obligatorias `[3, 3]`, `[5, 4]` y 1 en `[5, 5]`), 1x `IT_BREDA_MMG` en trinchera `[2, 4]`, 1x `IT_45MM_BRIXIA` en `[6, 4]` y 1x `IT_SOLOTHURN_ATR_43` en trinchera `[2, 8]`.
+    * **Fuerza de Desembarco Aliada**: Darby's Rangers: 4x `US_RANGERS_43` desplegados en primera línea de playa (`[1, 12]`, `[3, 12]`, `[5, 12]`, `[8, 12]`), 1x `US_COMBAT_ENGINEERS_43` en sector central de brecha (`[4, 12]`), 1x `US_BAZOOKA_TEAM` (`[7, 12]`) y 1x `US_81MM_MORTAR` (`[5, 13]`).
+    * **Track y VPs**: Duración ajustada a 10 turnos (reglamento oficial). VPs iniciales en posesión italiana (`initial_owner: IT`). Inyección de status moral (Verde/US: 3/7/9/11, Azul/IT: 2/6/7/9).
+  * **Escenario 2.1 Canónico (`assets/scenarios/battaglia_cittadina_2_1.json`)**:
+    * **Restitución del Ratio Asimétrico Oficial 2:1 (`1/20 IT vs 2/40 US`)**: Despliegue de 14 unidades aliadas (2 formaciones) frente a 7 defensoras italianas (1 formación), restituyendo la ventaja de masa y potencia de fuego necesaria para la ruptura urbana.
+    * **Defensores Italianos (7 unidades)**: 2x `IT_RIFLES_43` (`[4, 2]`, `[6, 2]`), 2x `IT_LMG_SQUAD_43` (`[3, 3]`, `[12, 3]`), 1x `IT_45MM_BRIXIA` (`[9, 1]`), 1x `IT_BREDA_MMG` (`[3, 4]`), 1x `IT_SNIPER_43` (`[9, 3]`).
+    * **Atacantes Aliados (14 unidades)**:
+      * Columna Oeste (Darby's Rangers, sector S3): 4x `US_RANGERS_43` (`[0, 9]`, `[1, 10]`, `[2, 10]`, `[3, 10]`), 1x `US_COMBAT_ENGINEERS_43` (`[7, 9]`), 1x `US_SNIPER_43` (`[8, 9]`), 1x `US_81MM_MORTAR` (`[9, 9]`), 1x `US_BAZOOKA_TEAM` (`[1, 9]`).
+      * Columna Este/Central (1st Infantry Division, sector S4/Z2): 5x `US_RIFLES_43` (`[14, 9]`, `[15, 8]`, `[16, 8]`, `[15, 9]`, `[16, 9]`), 1x `US_BAZOOKA_TEAM` (`[14, 8]`).
+    * **Moral y Turnos**: Duración de 8 turnos y status moral (Verde/US: 4/7/9/11, Azul/IT: 3/6/8/9).
+  * **Verificación de Invariantes del Simulador**:
+    * El simulador `VOECSimulator` opera sin restricciones de tamaño de lista de unidades (13 unidades en Escenario 1.0, 21 unidades en Escenario 2.1).
+    * Batería completa de tests unitarios e integración en verde: 37/37 en `voec_sim/tests/`, 112/112 en `assault_model/tests/` y 149/149 en `agents/efficientzero_v2/tests/`.
+
+#### v2.5.11 — Algoritmo Canónico de Retirada a Borde Amigo en Desenfilada (Tarea 3.1) [CONSOLIDADO 🟢]
+* **Objetivo**: Sustituir la primitiva aleatoria de retirada (`q - 1, r`) por un cálculo táctico determinista multinivel que emule la doctrina militar de repliegue bajo fuego del reglamento oficial (*Rulebook rev6* §6.4 y §13.3).
+* **Componentes Consolidados**:
+  * **Algoritmo Táctico de Retirada (`assault_model/rules/movement_rules.py`)**:
+    * Método `MovementRules.calculate_fallback_destination(game_state, unit, attacker, friendly_edge)` que evalúa exhaustivamente los 6 vecinos adyacentes.
+    * Priorización de **Desenfilada (*Defilade*)**: Evaluación de línea de visión desde el atacante mediante Ray-Casting vectorial (`LineOfSight.BLOCKED` otorga +100 pts, `HINDERED` +40 pts, `CLEAR` 0 pts).
+    * Priorización de **Cobertura de Terreno (*Terrain Defense*)**: Ponderación de dados de defensa del terreno (verde=6, azul=4, amarillo=2) y fortificaciones (búnker=+15, casamata=+12, trinchera=+8, sacos=+4).
+    * **Vector Dirigido al Borde Amigo (*Friendly Edge Alignment*)**: Proyección de retaguardia hacia el norte (`r` decreciente para IT/GE) o sur (`r` creciente para US/UK) o vector opuesto al atacante.
+    * **Aumento de Distancia al Atacante**: Penalización drástica (-500 pts) para movimientos que reduzcan la distancia al atacante.
+    * Criterio de desempate determinista `(total_score, defilade_score, cover_score, cand_dist, -q, -r)`.
+  * **Reglas Especiales de la Sección 13.3 (`assault_model/combat/morale.py`)**:
+    * **Eliminación Inmediata**: Las unidades de artillería o vehículos inmovilizados son destruidos de inmediato al sufrir fallback (`unit.alive = False`, `unit.strength = 0`).
+    * **Daño por Bloqueo / Rodeado**: Si la unidad no tiene ningún hexágono transitable disponible para retirarse, sufre 1 punto de daño (`unit.apply_damage(1)`) y permanece en su posición.
+    * **Sincronización de Control Espacial**: Invocación de `recalculate_hex_control` con las posiciones afectadas.
+  * **Integración en Combate a Distancia (`assault_model/combat/ranged_combat_resolver.py`)**:
+    * Paso automático de `game_state` y `attacker` a `resolve_fallback` tras acumulación de impactos de supresión.
+  * **Suite de Verificación Automatizada (`assault_model/tests/test_fallback_defilade_algorithm.py`)**:
+    * 7 tests unitarios e integración dedicados en verde, alcanzando 112/112 tests pasando en `assault_model/tests/`.
+
+#### v2.5.10 — Atribución Causal Espacial Hexagonal (Tarea 4.1) y Unificación de Diagnóstico de Cabezas [CONSOLIDADO 🟢]
+* **Objetivo**: Integrar interpretabilidad causal espacial hex a hex para cualquier decisión táctica en el visor MLOps y unificar las vistas redundantes de diagnóstico de cabezas en una consola única, coherente y canónica.
+* **Componentes Consolidados**:
+  * **API de Explicabilidad Causal (`mlops/reporting/explainability_api.py`)**:
+    * Endpoint `/api/v2/replay/explain-step` que calcula Grad-CAM e Integrated Gradients sobre los 32 canales sensoriales heterogéneos (terreno, elevación, cobertura, LOS, distancia a VPs, mapas de amenaza, desgaste y moral) procesados por la `representation_tower` de EfficientZero V2.
+    * Mapeo biyectivo axial $(q, r) \leftrightarrow (h, w)$ para renderizado exacto de contribución por hexágono.
+  * **Visualizador Modal y Heatmap de Explicabilidad en Replay**:
+    * Componente React `ExplainabilityModal.tsx` integrado tanto en `mlops/reporting/viewer_frontend` como en `assault_ai_ui`.
+    * Overlay de gradiente térmico reactivo sobre el canvas 2D del tablero hexagonal en `MatchReplayTab.tsx`, permitiendo inspeccionar qué canales determinaron la decisión en cada turno.
+  * **Unificación Integral de Diagnóstico de Cabezas (Opción A)**:
+    * Fusión completa en `Evaluación & Benchmarks -> Diagnóstico de Cabezas (XAI)` (`HeadDiagnosticsTab.tsx`) de:
+      1. Tarjetas sintéticas de salud para las 7 cabezas activas (`policy`, `value`, `objective`, `consistency`, `threat_map`, `attrition`, `morale`) con 4 KPIs por cabeza y badges de diagnóstico cualitativo.
+      2. Matriz de verificación MLOps con umbrales de referencia y estado de convergencia.
+      3. Tablero de cordura y telemetría de comportamiento (saturación Q, amplitud de exploración, cobertura de telemetría y visitas útiles).
+      4. Desglose canónico de las 11 métricas de evaluación emitidas.
+    * Desacoplamiento de la pestaña `Topología & Red` (`NetworkTopologyTab.tsx`), eliminando la subpestaña duplicada para mantenerla focalizada en arquitectura física, atribución de canales y planificador macro, e incorporando botón de salto directo al diagnóstico unificado.
+    * Cumplimiento estricto de la Regla 7: UI y código 100% en inglés.
+  * **Certificación de Pruebas**:
+    * Suite de pruebas `mlops/tests/test_explainability_api.py` (3/3 tests en verde) y compilación exitosa sin advertencias ni errores en `viewer_frontend` y `assault_ai_ui`.
+
+#### v2.5.9 — Catálogo Unificado y Depuración de Esquemas Parquet y DuckDB (Tarea 1.4) [CONSOLIDADO 🟢]
+* **Objetivo**: Establecer un esquema Parquet estrictamente canónico y unificado para decisiones tácticas, prevenir fugas de campos acumuladores volátiles, sanear todos los datasets históricos de evaluaciones y ejecutar un Clean Break total con etiquetas legacy obsoletas en el catálogo DuckDB.
+* **Componentes Consolidados**:
+  * **Módulo Gestor Canónico de Datasets (`mlops/dataset_builder.py`)**:
+    * Definición inmutable del contrato de 15 columnas canónicas: `CANONICAL_DECISIONS_TOP_COLUMNS` (`decision_type`, `unit_id`, `count`, `damage_dealt`, `kills_dealt`, `cover_avg`, `distance_avg`, `los_avg`, `target_q_avg`, `target_r_avg`, `mcts_overwritten`, `mcts_policy_kept`, `policy_prior_sum`, `mcts_visit_sum`, `mcts_q_sum`).
+    * Implementación de herramientas de migración y verificación atómica: `purge_single_decisions_top_parquet()`, `purge_all_decisions_top_parquet()`, `purge_legacy_controllers_in_catalog()` y `rebuild_unified_duckdb()`.
+  * **Prevención de Fugas de Acumuladores en Origen (`assault_bench/decision_metrics.py`)**:
+    * Filtrado explícito mediante `EXCLUDED_ACCUMULATOR_KEYS` en la función `_enrich(v)` para bloquear la propagación accidental de métricas acumuladoras intermedias (`cover_n`, `cover_sum`, `distance_n`, `distance_sum`, `los_n`, `los_sum`, `target_q_n`, `target_q_sum`, `target_r_n`, `target_r_sum`).
+  * **Saneamiento y Homogeneización del 100% de Ficheros Parquet**:
+    * Saneamiento y purga exitosa de 19 archivos desalineados que contenían las 8 columnas volátiles.
+    * 69 de 69 ficheros `decisions_top.parquet` a lo largo de `runs/` y `runs_curriculum/` se encuentran ahora 100% estandarizados en el esquema canónico de 15 columnas.
+  * **Clean Break Radical con MuZero en Catálogo y DuckDB**:
+    * Corrección de asignaciones de controlador en `mlops/reporting/build_catalog.py`, mapeando búsquedas MCTS y autojuego a `"EfficientZeroV2"`.
+    * Migración y reemplazo de 12,530 registros con etiqueta `"MuZero"` en `catalog_eval_result_sides.parquet`.
+    * Reconstrucción atómica y verificación formal de `reporting.duckdb` con cero registros legacy (`verified_zero_legacy: True`).
+  * **Certificación de Pruebas**:
+    * Nueva suite de pruebas automatizada `mlops/tests/test_unified_catalog_and_schema_purge.py` (5/5 tests en verde en 0.74s) validando esquema canónico, ausencia de fugas, idempotencia de purga, conformidad de todos los Parquets activos y pureza total en DuckDB.
 
 #### v2.5.8 — Validador E2E de Trazabilidad Frontend ↔ DuckDB (Tarea 1.3) [CONSOLIDADO 🟢]
 * **Objetivo**: Garantizar observabilidad fiel y trazabilidad del 100% en todas las pestañas del dashboard MLOps y la interfaz del simulador táctico hacia columnas reales de Parquet/DuckDB o payloads autoritativos, erradicando cualquier invención de datos o heurística de aproximación.
