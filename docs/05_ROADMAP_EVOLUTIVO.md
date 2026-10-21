@@ -4,7 +4,8 @@
 > **Ámbito**: Documento final que unifica toda la evolución técnica, científica, de rendimiento y normativa de la plataforma **Assault**: Motor de IA `agents/efficientzero_v2/`, Engine Táctico `assault_model/` + `voec_sim/`, Telemetría MLOps/UI y Fidelidad al Reglamento Oficial.  
 > **Directiva Estricta**: MuZero clásico está 100% decomisionado. Todo desarrollo, autojuego, inferencia y MCTS opera exclusivamente sobre **`EfficientZeroV2`** (`agents/efficientzero_v2/`).  
 > **Política Estricta de Idiomas**: Código fuente e interfaz de usuario (UI, Dashboards, visualizadores) 100% en **Inglés**. Interacción con el usuario y documentación técnica canónica (docs/) en **Español**. Toda modificación de código/UI debe corregir y traducir al inglés cualquier texto residual en español (sin barrido masivo retroactivo).  
-> **Versión Base Consolidada Actual**: **v2.5.2** (Orquestación Unificada Multi-Etapa, Linaje E2E, Modulación Intrínseca de VPs y Reseteo Limpio).
+> **Versión Base Consolidada Actual**: **v2.5.2** (Orquestación Unificada Multi-Etapa, Linaje E2E, Modulación Intrínseca de VPs y Reseteo Limpio).  
+> **Regla Sagrada de Versionado del Roadmap**: Toda nueva implementación, tarea o hito **DEBE registrar explícitamente en qué versión / subversión de la aplicación se implementó o consolidó** (ej. `[CONSOLIDADO 🟢 v2.5.2]`, `[CONSOLIDADO 🟢 v2.5.3]`). Queda formalmente prohibido marcar tareas como consolidadas sin su versión de entrega correspondiente.
 
 ---
 

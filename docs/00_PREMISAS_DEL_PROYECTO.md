@@ -36,6 +36,9 @@
 5. **Cero Retrocompatibilidad con MuZero (Clean Break)**:
    - **Tolerancia Cero a la Deuda Técnica**: Queda formalmente prohibido conservar capas de compatibilidad hacia atrás (*shims*, alias de transición o adaptadores tolerantes) con el stack de MuZero.
    - Toda nomenclatura, perfiles de evaluación (`ezv2_selfplay`, `ezv2_vs_random_side_a`, `ezv2_vs_random_side_b`), adaptadores (`EZV2VOECAdapter`), tensores de 32 canales y configuraciones deben ser 100% nativos y puros de EfficientZero V2.
+6. **Registro Obligatorio de Versión de Implementación en el Roadmap**:
+   - **Principio Inquebrantable de Trazabilidad Histórica**: Cada nueva funcionalidad, tarea, hito o refactorización que se dé por implementada o consolidada en el roadmap (`docs/05_ROADMAP_EVOLUTIVO.md` y documentos modulares en `docs/roadmap/`) **DEBE registrar explícitamente en qué versión / subversión de la plataforma se implementó** (ej. `[CONSOLIDADO 🟢 v2.5.2]`, `[CONSOLIDADO 🟢 v2.5.3]`), indicando el tag/commit correspondiente.
+   - Queda terminantemente prohibido marcar tareas como consolidadas sin asociarlas a una versión concreta de la plataforma.
 
 
 ---
@@ -97,6 +100,8 @@
      Este script inyecta el 100% íntegro de los `.md` en `embeddedDocsData` y recompila el sitio estático mediante `mkdocs build`.
 3. **Posición Sagrada del Roadmap**:
    - El archivo `05_ROADMAP_EVOLUTIVO.md` debe figurar siempre en la última posición del índice de documentación.
+4. **Trazabilidad de Versión de Cada Hito del Roadmap**:
+   - Ninguna tarea del roadmap puede figurar en estado consolidado sin la anotación explícita de su versión de entrega (ej. `v2.5.2`, `v2.5.3`). Esto previene la pérdida de linaje entre lo que el código ejecuta, lo que la telemetría MLOps mide y lo que la documentación canónica certifica.
 
 ---
 

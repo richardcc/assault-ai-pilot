@@ -29,6 +29,7 @@
    - **TODO cambio o mejora debe seguir estrictamente las normas del proyecto:** Arquitectura limpia desacoplada por contratos, suite de tests unitarios/integración en verde y tipado estricto.
    - **Documentación Inmediata:** Ninguna funcionalidad, cambio de modelo o refactorización se considera terminada si no queda documentada en el módulo Markdown canónico correspondiente en `docs/`.
    - **Actualización Obligatoria del Roadmap:** Cualquier cambio en el alcance, nueva funcionalidad, hito alcanzado o modificación de prioridades **DEBE registrarse y anotarse explícitamente en la Hoja de Ruta Evolutiva (`docs/05_ROADMAP_EVOLUTIVO.md`)**.
+   - **Registro de Versión Obligatorio en el Roadmap:** Toda nueva implementación, tarea o hito del roadmap **DEBE registrar explícitamente en qué versión / subversión de la aplicación se implementó o consolidó** (ej. `[CONSOLIDADO 🟢 v2.5.2]`, `[CONSOLIDADO 🟢 v2.5.3]`), indicando el tag/commit correspondiente. Queda terminantemente prohibido marcar tareas como consolidadas sin asociarlas a una versión concreta de la plataforma.
    - **Observabilidad y Monitorización en Dashboard (Puerto 8778):** Si la funcionalidad o mejora genera nuevas métricas, estados o decisiones tácticas (ej. roles de unidad, perfiles, pérdidas, gates), **DEBE quedar integrada en la telemetría DuckDB/Parquet y visualizada en el Dashboard MLOps** para su monitorización en tiempo real y replay forense.
    - **Sincronización:** Tras cualquier cambio en la documentación o roadmap, ejecutar inmediatamente `python scripts/sync_docs_html.py`.
 
