@@ -85,9 +85,27 @@ flowchart TD
 | **`v2.5.5`** | Octubre 2026 | Inicialización Canónica de Capas Especializada en RL | Política ortogonal ($\text{gain}=0.01$, $\text{bias}=0$) para máxima entropía inicial uniforme; Valor/Recompensa/Consistencia ortogonal ($\text{gain}=1.0$, $\text{bias}=0$); Kaiming Normal en convoluciones SiLU; y Zero-Init ResNet ($\gamma=0, \beta=0$) en segunda normalización residual preservando función identidad pura al paso $0$. Suite dedicada (5/5 tests en verde). | `CONSOLIDADO 🟢` |
 | **`v2.5.6`** | Octubre 2026 | Optimización de Alto Rendimiento GameState/CoW y Decomisión Legacy | `__slots__` en `HexState`, pre-caching de `_vp_hexes`, compartición inmutable de referencias en `clone_cow()` (+62% en clones/s de RuntimeGameState, +16% en simulación/s) y decomisión limpia de 9 módulos huérfanos de fuego de reacción (`game_state_reactions`, `ReactionRegistry`, etc.). | `CONSOLIDADO 🟢` |
 | **`v2.5.7`** | Octubre 2026 | Currículum Asimétrico Ofensivo de Asalto Urbano Puro | Fase 5 en `battaglia_cittadina_2_1` con horizonte $T=8$, modo 100% atacante (`US` vs `Random`), penalización severa por timeout ($-1.0$) y plan evolutivo de 10 ciclos adaptativos en `curriculums/vp_acceleration/` para erradicar la inercia defensiva aprendida. Suite de validación (4/4 tests en verde). | `CONSOLIDADO 🟢` |
+| **`v2.5.8`** | Octubre 2026 | Validador E2E de Trazabilidad Frontend $\leftrightarrow$ DuckDB (Línea 1) | Auditoría automatizada de trazabilidad en TypeScript y Python de las 9 pestañas del dashboard MLOps y simulador web (`traceability.spec.ts`, `test_frontend_duckdb_traceability.py`), garantía de Zero-Mock (cero inferencias o heurísticas espurias como `Math.floor(idx/14)`), fallbacks forzosos a `-`/`N/A`, erradicación del shim MuZero en `replay_api.py` y suite de 15/15 tests en verde. | `CONSOLIDADO 🟢` |
 
 
 ## 3. Fases Recientes Consolidadas (Ciclos v2.4.x - v2.5.x — Octubre 2026)
+
+#### v2.5.8 — Validador E2E de Trazabilidad Frontend ↔ DuckDB (Tarea 1.3) [CONSOLIDADO 🟢]
+* **Objetivo**: Garantizar observabilidad fiel y trazabilidad del 100% en todas las pestañas del dashboard MLOps y la interfaz del simulador táctico hacia columnas reales de Parquet/DuckDB o payloads autoritativos, erradicando cualquier invención de datos o heurística de aproximación.
+* **Componentes Consolidados**:
+  * **Especificación y Validador en TypeScript (`assault_ai_ui/src/tests/traceability.spec.ts` y `mlops/reporting/viewer_frontend/src/tests/traceability.spec.ts`)**:
+    * Matriz formal `CANONICAL_TRACEABILITY_MATRIX` con reglas de validación para las 9 pestañas del dashboard: `CatalogPage / Header`, `TrainDetailTab`, `TrainHeadDiagnosticsTab`, `ObjectiveRewardConfigTab`, `EvalMetricsTab`, `EvalDecisionsTab`, `MatchReplayTab`, `NetworkTopologyTab` y `VpSummaryTab`.
+    * Funciones de validación `validateFieldValue` y `auditDashboardTraceability`, verificando que los valores no sean sintéticos ni contengan patrones prohibidos (`muzero_`, `mock`, `fake`, etc.).
+  * **Test Automatizado de Trazabilidad en CI (`mlops/tests/test_frontend_duckdb_traceability.py`)**:
+    * Comprobación en `pytest` de la integridad de la matriz documental en `docs/13_INVENTARIO_CANONICO_METRICAS.md`.
+    * Auditoría estática de código fuente en componentes TSX (`viewer_frontend/src/pages/model-tabs/`) garantizando la ausencia de snippets espurios como `Math.floor(idx / 14) + 1` o roles heurísticos inventados.
+    * Validación de payloads de `replay_api.py` y conformidad de esquemas en DuckDB.
+  * **Optimización de Sondas y Purga de Shims Legacy**:
+    * Desacoplamiento y memoización de daño esperado en prefiltrado y paso principal en `agents/efficientzero_v2/core/selfplay.py`.
+    * Erradicación completa del alias shim `build_muzero_replay_payload` en `mlops/reporting/replay_api.py`.
+  * **Certificación de Pruebas**:
+    * 15/15 tests de la Línea 1 en verde (`test_telemetry_schema_conformance.py`, `test_telemetry_probe_overhead.py`, `test_frontend_duckdb_traceability.py`).
+    * Builds de producción limpios tanto en `assault_ai_ui` como en `viewer_frontend`.
 
 #### v2.5.7 — Currículum Asimétrico Ofensivo de Asalto Urbano Puro en Gela [CONSOLIDADO 🟢]
 * **Objetivo**: Erradicar de raíz la inercia defensiva y la pasividad aprendida en fases tempranas de autojuego simétrico, forzando al agente a dominar la ruptura y asalto frontal sobre defensores atrincherados en `battaglia_cittadina_2_1` bajo horizonte comprimido ($T=8$).

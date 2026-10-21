@@ -101,6 +101,7 @@ def _unit_combat_feature_table() -> dict:
     return table
 
 
+@lru_cache(maxsize=4096)
 def _expected_damage_proxy(
     attacker_key: str,
     defender_key: str,
@@ -109,8 +110,8 @@ def _expected_damage_proxy(
     los_block: float,
 ) -> float:
     table = _unit_combat_feature_table()
-    a = dict(table.get(str(attacker_key or ""), {}) or {})
-    d = dict(table.get(str(defender_key or ""), {}) or {})
+    a = table.get(str(attacker_key or ""), {}) or {}
+    d = table.get(str(defender_key or ""), {}) or {}
     atk = float(a.get("attack_power", 0.0))
     dfn = float(d.get("defense_power", 0.0))
     max_range = float(max(1.0, a.get("max_range", 1.0)))
@@ -377,6 +378,7 @@ def _unit_prefilter_ranking(
     vp_progress_weight: float,
     capture_opportunity_weight: float,
     threat_weight: float,
+    damage_cache: dict[str, float] | None = None,
 ) -> tuple[str, list[str], list[dict]]:
     actions_by_unit: dict[str, list[str]] = {}
     for action_id in list(legal_actions or []):
@@ -398,6 +400,10 @@ def _unit_prefilter_ranking(
         best_vp_id="",
     )
     ranking_rows: list[dict] = []
+    replan_damage_cache: dict[str, float] = damage_cache if damage_cache is not None else {}
+    cover_map = dict(terrain_cover_by_hex or {})
+    los_map = dict(terrain_los_block_by_hex or {})
+    vp_owner_map = dict(vp_owner_by_hex or {})
     for unit_id, unit_actions in actions_by_unit.items():
         unit = dict(units_by_id.get(str(unit_id), {}) or {})
         uq = unit.get("q")
@@ -410,7 +416,7 @@ def _unit_prefilter_ranking(
         best_threat = 0.0
         for action_id in list(unit_actions or []):
             action_kind = str(_parse_action_id(action_id)[0]).upper()
-            if "CAPTURE" in action_kind or _action_targets_enemy_or_neutral_vp(action_id, dict(vp_owner_by_hex or {}), str(side_norm)):
+            if "CAPTURE" in action_kind or _action_targets_enemy_or_neutral_vp(action_id, vp_owner_map, str(side_norm)):
                 capture_opportunity = 1.0
             tq, tr = _action_target_qr(action_id)
             if (
@@ -429,10 +435,11 @@ def _unit_prefilter_ranking(
                         _candidate_expected_damage(
                             action_id=str(action_id),
                             units=list(units or []),
-                            terrain_cover_by_hex=dict(terrain_cover_by_hex or {}),
-                            terrain_los_block_by_hex=dict(terrain_los_block_by_hex or {}),
-                            units_by_id=dict(units_idx_by_id),
-                            units_by_pos=dict(units_idx_by_pos),
+                            terrain_cover_by_hex=cover_map,
+                            terrain_los_block_by_hex=los_map,
+                            units_by_id=units_idx_by_id,
+                            units_by_pos=units_idx_by_pos,
+                            cache=replan_damage_cache,
                         )
                     ),
                 )
@@ -657,11 +664,12 @@ def _candidate_expected_damage(
             val = 0.0
         else:
             actor_id = str(parts[1] or "")
-            actor = None
-            if isinstance(units_by_id, dict):
-                actor = units_by_id.get(actor_id, None)
-            if not isinstance(actor, dict):
-                actor = next((u for u in list(units or []) if str(u.get("unit_id", "")) == actor_id), None)
+            actor = units_by_id.get(actor_id) if isinstance(units_by_id, dict) else None
+            if actor is None and units:
+                for u in units:
+                    if isinstance(u, dict) and u.get("unit_id") == actor_id:
+                        actor = u
+                        break
             if not isinstance(actor, dict):
                 val = 0.0
             else:
@@ -669,25 +677,28 @@ def _candidate_expected_damage(
                 target_id = str(parts[2] or "") if len(parts) > 2 else ""
                 if target_id:
                     if isinstance(units_by_id, dict):
-                        target = units_by_id.get(target_id, None)
-                    if not isinstance(target, dict):
-                        target = next((u for u in list(units or []) if str(u.get("unit_id", "")) == target_id), None)
+                        target = units_by_id.get(target_id)
+                    if target is None and units:
+                        for u in units:
+                            if isinstance(u, dict) and u.get("unit_id") == target_id:
+                                target = u
+                                break
                 if not isinstance(target, dict):
                     tq, tr = _action_target_qr(action_id)
                     if isinstance(tq, int) and isinstance(tr, int):
+                        actor_side = str(actor.get("side", ""))
                         if isinstance(units_by_pos, dict):
-                            same_hex = list(units_by_pos.get((int(tq), int(tr)), []) or [])
-                            target = next((u for u in same_hex if str(u.get("side", "")) != str(actor.get("side", ""))), None)
-                        if not isinstance(target, dict):
-                            target = next(
-                                (
-                                    u for u in list(units or [])
-                                    if str(u.get("side", "")) != str(actor.get("side", ""))
-                                    and int(u.get("q")) == int(tq)
-                                    and int(u.get("r")) == int(tr)
-                                ),
-                                None,
-                            )
+                            same_hex = units_by_pos.get((int(tq), int(tr)), [])
+                            if same_hex:
+                                for u in same_hex:
+                                    if isinstance(u, dict) and str(u.get("side", "")) != actor_side:
+                                        target = u
+                                        break
+                        if not isinstance(target, dict) and units:
+                            for u in units:
+                                if isinstance(u, dict) and str(u.get("side", "")) != actor_side and u.get("q") == tq and u.get("r") == tr:
+                                    target = u
+                                    break
                 if not isinstance(target, dict):
                     val = 0.0
                 else:
@@ -1224,16 +1235,15 @@ def _obs_enemy_reaction_fire_risk(
     units_by_id: dict[str, dict] | None = None,
 ) -> float:
     side_norm = _normalize_side(actor_side)
-    if units_by_id is None:
-        units_by_id = {str(u.get("unit_id", "")): dict(u or {}) for u in list(units or []) if isinstance(u, dict)}
     total_reaction = 0
     enemy_reaction = 0
-    for action_id in list(legal_actions or []):
-        kind, unit_id = _parse_action_id(str(action_id))
-        if str(kind).strip().upper() != "OPPORTUNITY_FIRE":
+    for action_id in legal_actions or []:
+        if not action_id.startswith("OPPORTUNITY_FIRE"):
             continue
+        kind, unit_id = _parse_action_id(action_id)
         total_reaction += 1
-        side = _normalize_side((units_by_id.get(str(unit_id), {}) or {}).get("side", ""))
+        u_info = units_by_id.get(str(unit_id)) if units_by_id else None
+        side = _normalize_side(u_info.get("side", "")) if u_info else ""
         if side and side != side_norm:
             enemy_reaction += 1
     if total_reaction > 0:
@@ -1241,43 +1251,38 @@ def _obs_enemy_reaction_fire_risk(
 
     # Fallback when explicit reaction options are not exposed in legal actions:
     # approximate enemy reaction pressure by nearest enemy proximity to actor units.
-    actor_units = [
-        dict(u or {})
-        for u in list(units or [])
+    actor_coords = [
+        (int(u["q"]), int(u["r"]))
+        for u in units or []
         if isinstance(u, dict)
         and bool(u.get("alive", True))
+        and isinstance(u.get("q"), int)
+        and isinstance(u.get("r"), int)
         and _normalize_side(u.get("side", "")) == side_norm
     ]
-    enemy_units = [
-        dict(u or {})
-        for u in list(units or [])
+    enemy_coords = [
+        (int(u["q"]), int(u["r"]))
+        for u in units or []
         if isinstance(u, dict)
         and bool(u.get("alive", True))
-        and _normalize_side(u.get("side", ""))
-        and _normalize_side(u.get("side", "")) != side_norm
+        and isinstance(u.get("q"), int)
+        and isinstance(u.get("r"), int)
+        and _normalize_side(u.get("side", "")) not in ("", side_norm)
     ]
-    if not actor_units or not enemy_units:
+    if not actor_coords or not enemy_coords:
         return 0.0
     radius = 6.0
-    risk = 0.0
-    for actor in actor_units:
-        aq = actor.get("q")
-        ar = actor.get("r")
-        if not isinstance(aq, int) or not isinstance(ar, int):
-            continue
-        best: float | None = None
-        for enemy in enemy_units:
-            eq = enemy.get("q")
-            er = enemy.get("r")
-            if not isinstance(eq, int) or not isinstance(er, int):
-                continue
-            d = float(hex_distance_axial(int(aq), int(ar), int(eq), int(er)))
-            if best is None or d < best:
-                best = d
-        if best is None:
-            continue
-        risk = max(risk, _clamp01((radius - float(best)) / radius))
-    return float(_clamp01(risk))
+    min_dist: float = 999.0
+    for aq, ar in actor_coords:
+        for eq, er in enemy_coords:
+            d = float(hex_distance_axial(aq, ar, eq, er))
+            if d < min_dist:
+                min_dist = d
+                if min_dist <= 1.0:
+                    break
+        if min_dist <= 1.0:
+            break
+    return float(_clamp01((radius - min_dist) / radius))
 
 
 def _obs_vp_ownership_ttl(
@@ -2169,6 +2174,7 @@ class _NativeEZV2SelfplayBackend:
                         vp_progress_weight=float(unit_prefilter_vp_progress_weight),
                         capture_opportunity_weight=float(unit_prefilter_capture_opportunity_weight),
                         threat_weight=float(unit_prefilter_threat_weight),
+                        damage_cache=step_expected_damage_cache,
                     )
                     unit_prefilter_candidate_ranking = list(ranking_rows or [])
                     actions_by_unit: dict[str, list[str]] = {}
@@ -2495,8 +2501,8 @@ class _NativeEZV2SelfplayBackend:
             )
             with profile_probe("enemy_reaction_fire_risk"):
                 obs_enemy_reaction_fire_risk = _obs_enemy_reaction_fire_risk(
-                    legal_actions=list(global_legal or []),
-                    units=list(getattr(obs, "units", []) or []),
+                    legal_actions=global_legal,
+                    units=step_units,
                     actor_side=str(side),
                     units_by_id=step_units_by_id,
                 )

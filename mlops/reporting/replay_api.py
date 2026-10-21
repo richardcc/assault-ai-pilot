@@ -87,8 +87,6 @@ def build_efficientzero_v2_replay_payload(
     return payload
 
 
-build_muzero_replay_payload = build_efficientzero_v2_replay_payload
-
 
 def build_replay_log_payload(
     *,

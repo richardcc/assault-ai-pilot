@@ -214,7 +214,7 @@ A continuación se detalla la correspondencia exacta entre **lo que se ve en la 
 | **CatalogPage / Header** | Puntuación Táctica TQS | `tactical_quality_score` | `quality_metrics.py` (cálculo determinista DuckDB) | **100% Real (Fórmula TQS)** |
 | **CatalogPage / Header** | Rango Táctico (S/A/B/C/D)| `tactical_grade` | `quality_metrics.py` (umbrales 85/70/55/40) | **100% Real** |
 | **CatalogPage / Header** | Combat Exchange (CER) | `combat_exchange_ratio` | `quality_metrics.py` ($\frac{\text{Vic} + 0.05}{\text{Def} + 0.05}$) | **100% Real** |
-| **CatalogPage / Header** | Brecha Asimetría | `mean_asymmetry_gap` | `quality_metrics.py` ($|S_A - S_B|$) | **100% Real** |
+| **CatalogPage / Header** | Brecha Asimetría | `mean_asymmetry_gap` | `quality_metrics.py` ($\vert S_A - S_B \vert$) | **100% Real** |
 | **CatalogPage / Header** | Duración de Fase | `durationSeconds` | `manifest.lock.json` (`phase_finished - phase_started`) | **100% Real** |
 | **CatalogPage / Table 1** | Desglose Train / Bench | `train_duration_seconds`, `bench_duration_seconds` | `summary.json` & `bench_eval_*.json` | **100% Real** |
 | **CatalogPage / Table 1** | Autojuego y Optimización | `selfplay_duration_seconds`, `opt_duration_seconds` | `metrics/summary.json` (`timing_summary`) | **100% Real** |
