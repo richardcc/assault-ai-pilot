@@ -150,17 +150,21 @@ def _enrich_episodes_meta(rp: Path, raw_meta: list[dict[str, Any]]) -> list[dict
         outcome = str(ep.get("outcome", "") or "")
 
         matchup = "selfplay"
-        matchup_label = "Self-Play (MCTS vs MCTS)"
+        matchup_label = "EZv2 Self-Play"
         an_lower = agent_name.lower()
-        if "random_us" in an_lower or "side_b" in an_lower:
-            matchup = "mcts_vs_random_def"
-            matchup_label = "MCTS Defensor vs Random Atacante (US)"
-        elif "random_it" in an_lower or "random_ge" in an_lower or "side_a" in an_lower:
-            matchup = "mcts_vs_random_atk"
-            matchup_label = "MCTS Atacante vs Random Defensor (Eje)"
+        # In canonical assault wargames (e.g. Battaglia Cittadina, Mettete i piedi a terra),
+        # US is the Attacker and Axis (IT/GE) is the Defender.
+        # "ezv2_vs_random_US" indicates EZv2 is assigned to US (Attacker) vs Random (Defender).
+        # "ezv2_vs_random_IT" / "ezv2_vs_random_GE" indicates EZv2 is Defender vs Random (Attacker).
+        if "random_us" in an_lower or (("side_b" in an_lower or "vs_random_b" in an_lower) and "random" in an_lower):
+            matchup = "vs_random_atk"
+            matchup_label = "EZv2 Attacker (US) vs Random Defender"
+        elif "random_it" in an_lower or "random_ge" in an_lower or (("side_a" in an_lower or "vs_random_a" in an_lower) and "random" in an_lower):
+            matchup = "vs_random_def"
+            matchup_label = "EZv2 Defender (Axis) vs Random Attacker"
         elif "random" in an_lower:
             matchup = "vs_random"
-            matchup_label = "MCTS vs Random"
+            matchup_label = "EZv2 vs Random"
 
         full_path = rp.parent / ep_path if ep_path else None
         if full_path and full_path.exists() and (not sid or not winner):

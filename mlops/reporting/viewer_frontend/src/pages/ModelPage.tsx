@@ -295,10 +295,17 @@ export function ModelPage() {
   );
 
   const getEpisodeMatchup = (ep: ReplayMetaEpisode): string => {
-    if (ep.matchup) return String(ep.matchup).toLowerCase();
+    const rawMatchup = String(ep.matchup || "").toLowerCase();
+    if (rawMatchup) {
+      if (rawMatchup === "selfplay" || rawMatchup === "ezv2_selfplay") return "selfplay";
+      if (rawMatchup === "vs_random_atk" || rawMatchup === "ezv2_vs_random_atk" || rawMatchup === "mcts_vs_random_atk") return "vs_random_atk";
+      if (rawMatchup === "vs_random_def" || rawMatchup === "ezv2_vs_random_def" || rawMatchup === "mcts_vs_random_def") return "vs_random_def";
+      if (rawMatchup.includes("random")) return "vs_random";
+    }
     const an = String(ep.agent_name || "").toLowerCase();
-    if (an.includes("random_us") || an.includes("side_b")) return "mcts_vs_random_def";
-    if (an.includes("random_it") || an.includes("random_ge") || an.includes("side_a")) return "mcts_vs_random_atk";
+    if (an.includes("stub") || an === "selfplay" || an.includes("selfplay")) return "selfplay";
+    if (an.includes("random_us") || (an.includes("side_b") && an.includes("random"))) return "vs_random_atk";
+    if (an.includes("random_it") || an.includes("random_ge") || (an.includes("side_a") && an.includes("random"))) return "vs_random_def";
     if (an.includes("random")) return "vs_random";
     return "selfplay";
   };
@@ -317,8 +324,8 @@ export function ModelPage() {
         const m = getEpisodeMatchup(ep);
         if (filterMatchup === "selfplay" && m !== "selfplay") return false;
         if (filterMatchup === "vs_random" && !m.includes("random")) return false;
-        if (filterMatchup === "vs_random_def" && m !== "mcts_vs_random_def") return false;
-        if (filterMatchup === "vs_random_atk" && m !== "mcts_vs_random_atk") return false;
+        if (filterMatchup === "vs_random_def" && m !== "vs_random_def") return false;
+        if (filterMatchup === "vs_random_atk" && m !== "vs_random_atk") return false;
       }
 
       // 3. Winner Filter
@@ -330,16 +337,16 @@ export function ModelPage() {
         if (filterWinner === "IT" && w !== "IT") return false;
         if (filterWinner === "EJE" && w !== "GE" && w !== "IT") return false;
         if (filterWinner === "EMPATE" && w !== "EMPATE" && !w.includes("DRAW")) return false;
-        if (filterWinner === "MCTS_WIN") {
+        if (filterWinner === "EZV2_WIN" || filterWinner === "MCTS_WIN") {
           if (m === "selfplay") return true;
-          if (m === "mcts_vs_random_def") return w === "GE" || w === "IT";
-          if (m === "mcts_vs_random_atk") return w === "US";
-          return w !== "" && w !== "EMPATE";
+          if (m === "vs_random_atk") return w === "US";
+          if (m === "vs_random_def") return w === "GE" || w === "IT";
+          return w !== "" && w !== "EMPATE" && !w.includes("DRAW");
         }
-        if (filterWinner === "MCTS_LOSS") {
+        if (filterWinner === "EZV2_LOSS" || filterWinner === "MCTS_LOSS") {
           if (m === "selfplay") return false;
-          if (m === "mcts_vs_random_def") return w === "US";
-          if (m === "mcts_vs_random_atk") return w === "GE" || w === "IT";
+          if (m === "vs_random_atk") return w === "GE" || w === "IT";
+          if (m === "vs_random_def") return w === "US";
           return false;
         }
       }
@@ -372,28 +379,28 @@ export function ModelPage() {
     const winner = ep.winner ? String(ep.winner).toUpperCase() : "";
     const winBadge =
       winner === "GE"
-        ? "🔴 GE Ganó"
+        ? "🇩🇪 GE Won"
         : winner === "IT"
-        ? "🟢 IT Ganó"
+        ? "🇮🇹 IT Won"
         : winner === "US"
-        ? "🔵 US Ganó"
-        : winner === "EMPATE"
-        ? "⚖️ Empate"
+        ? "🇺🇸 US Won"
+        : winner === "EMPATE" || winner.includes("DRAW")
+        ? "🤝 Draw"
         : "";
     const scenBadge = ep.scenario_id?.includes("mettete")
-      ? "🏖️ Mettete"
+      ? "🌊 Mettete"
       : ep.scenario_id?.includes("cittadina")
       ? "🏙️ Cittadina"
       : "";
     const m = getEpisodeMatchup(ep);
     const matchupBadge =
       m === "selfplay"
-        ? "⚔️ Self-Play"
-        : m === "mcts_vs_random_def"
-        ? "🛡️ vs Rand(US)"
-        : m === "mcts_vs_random_atk"
-        ? "⚔️ vs Rand(Eje)"
-        : "🎲 vs Random";
+        ? "⚔️ EZv2 Self-Play"
+        : m === "vs_random_def"
+        ? "🛡️ EZv2 Def vs Rand"
+        : m === "vs_random_atk"
+        ? "⚔️ EZv2 Atk vs Rand"
+        : "🎯 vs Random";
     const seedText = ep.seed !== undefined ? `Seed ${ep.seed}` : "";
     const stepCount = ep.rows || ep.steps_count || 0;
 
@@ -455,7 +462,7 @@ export function ModelPage() {
               Back to Catalog
             </button>
             <button
-              onClick={() => window.open("/docs", "_blank")}
+              onClick={() => window.open("/docs/", "_blank")}
               style={{
                 background: "#0284c7",
                 color: "#ffffff",
@@ -469,9 +476,47 @@ export function ModelPage() {
                 alignItems: "center",
                 gap: 4,
               }}
-              title="Abrir Centro Interactivo de Documentación Técnica"
+              title="Open Interactive Technical Documentation Hub"
             >
-              <span>📚</span> Documentación
+              <span>📚</span> Documentation
+            </button>
+            <button
+              onClick={() => window.open("http://127.0.0.1:8780", "_blank")}
+              style={{
+                background: "#065f46",
+                color: "#6ee7b7",
+                border: "1px solid #10b981",
+                borderRadius: 4,
+                padding: "4px 8px",
+                fontSize: 11,
+                fontWeight: 700,
+                cursor: "pointer",
+                display: "flex",
+                alignItems: "center",
+                gap: 4,
+              }}
+              title="Open Tactical Unit & Formation Catalog Editor (Port 8780)"
+            >
+              <span>🎖️</span> Unit Editor (8780)
+            </button>
+            <button
+              onClick={() => window.open("http://127.0.0.1:8001/docs", "_blank")}
+              style={{
+                background: "#1e293b",
+                color: "#fde047",
+                border: "1px solid #eab308",
+                borderRadius: 4,
+                padding: "4px 8px",
+                fontSize: 11,
+                fontWeight: 700,
+                cursor: "pointer",
+                display: "flex",
+                alignItems: "center",
+                gap: 4,
+              }}
+              title="Open FastAPI Swagger Interactive Docs (Port 8001)"
+            >
+              <span>⚡</span> Swagger API (8001)
             </button>
             <button
               onClick={() =>
@@ -497,9 +542,9 @@ export function ModelPage() {
                 cursor: "pointer",
                 borderRadius: 4,
               }}
-              title="Refrescar catálogo y evaluaciones"
+              title="Refresh catalog and evaluations"
             >
-              🔄 Actualizar Datos
+              🔄 Refresh Data
             </button>
             <button
               onClick={async () => {
@@ -833,7 +878,7 @@ export function ModelPage() {
             </div>
           )}
 
-          {/* Barra completa de controles y filtros de Replay Forense */}
+          {/* Full Forensic Replay Controls & Filter Bar */}
           {section === "replay" && evalRows.length > 0 && (
             <div
               style={{
@@ -848,11 +893,11 @@ export function ModelPage() {
                 gap: 8,
               }}
             >
-              {/* Fila 1: Selectores principales */}
+              {/* Row 1: Selectors (Benchmark, Scenario, Matchup, Winner, Seed) */}
               <div style={{ display: "flex", alignItems: "center", flexWrap: "wrap", gap: 10 }}>
-                {/* Selector de Benchmark Eval */}
-                <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                  <span className="muted" style={{ fontSize: 12, fontWeight: 700 }}>📊 Benchmark:</span>
+                {/* Benchmark Selector */}
+                <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
+                  <span className="muted" style={{ fontSize: 12, fontWeight: 600 }}>📊 Benchmark:</span>
                   <select
                     value={selectedEvalId}
                     onChange={(e) => setSelectedEvalId(e.target.value)}
@@ -873,9 +918,9 @@ export function ModelPage() {
                   </select>
                 </div>
 
-                {/* Filtro por Escenario */}
+                {/* Scenario Filter */}
                 <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
-                  <span className="muted" style={{ fontSize: 12, fontWeight: 600 }}>🗺️ Escenario:</span>
+                  <span className="muted" style={{ fontSize: 12, fontWeight: 600 }}>🗺️ Scenario:</span>
                   <select
                     value={filterScenario}
                     onChange={(e) => setFilterScenario(e.target.value)}
@@ -889,15 +934,15 @@ export function ModelPage() {
                       fontWeight: filterScenario !== "all" ? 700 : 400,
                     }}
                   >
-                    <option value="all">Todos los escenarios ({rawEpisodesMeta.length})</option>
-                    <option value="mettete">🏖️ Mettete i piedi a terra (Playas)</option>
-                    <option value="cittadina">🏙️ Battaglia Cittadina (Urbano)</option>
+                    <option value="all">All Scenarios ({rawEpisodesMeta.length})</option>
+                    <option value="mettete">🌊 Mettete i piedi a terra (Beaches)</option>
+                    <option value="cittadina">🏙️ Battaglia Cittadina (Urban)</option>
                   </select>
                 </div>
 
-                {/* Filtro por Matchup / Jugador */}
+                {/* Matchup / Player Filter */}
                 <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
-                  <span className="muted" style={{ fontSize: 12, fontWeight: 600 }}>🎮 Tipo Jugador:</span>
+                  <span className="muted" style={{ fontSize: 12, fontWeight: 600 }}>⚔️ Player Matchup:</span>
                   <select
                     value={filterMatchup}
                     onChange={(e) => setFilterMatchup(e.target.value)}
@@ -911,17 +956,17 @@ export function ModelPage() {
                       fontWeight: filterMatchup !== "all" ? 700 : 400,
                     }}
                   >
-                    <option value="all">Todos los matchups</option>
-                    <option value="selfplay">⚔️ Self-Play (MCTS vs MCTS)</option>
-                    <option value="vs_random">🎲 MCTS vs Random (Todos)</option>
-                    <option value="vs_random_def">🛡️ MCTS Defensor vs Random Atacante (US)</option>
-                    <option value="vs_random_atk">⚔️ MCTS Atacante vs Random Defensor (Eje)</option>
+                    <option value="all">All Matchups</option>
+                    <option value="selfplay">⚔️ EZv2 Self-Play</option>
+                    <option value="vs_random">🎯 EZv2 vs Random (All)</option>
+                    <option value="vs_random_atk">⚔️ EZv2 Attacker vs Random Defender</option>
+                    <option value="vs_random_def">🛡️ EZv2 Defender vs Random Attacker</option>
                   </select>
                 </div>
 
-                {/* Filtro por Ganador / Resultado */}
+                {/* Winner Filter */}
                 <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
-                  <span className="muted" style={{ fontSize: 12, fontWeight: 600 }}>🏆 Ganador:</span>
+                  <span className="muted" style={{ fontSize: 12, fontWeight: 600 }}>🏆 Winner:</span>
                   <select
                     value={filterWinner}
                     onChange={(e) => setFilterWinner(e.target.value)}
@@ -935,23 +980,23 @@ export function ModelPage() {
                       fontWeight: filterWinner !== "all" ? 700 : 400,
                     }}
                   >
-                    <option value="all">Todos los resultados</option>
-                    <option value="MCTS_WIN">🏆 Victorias MCTS (Modelo Gana)</option>
-                    <option value="MCTS_LOSS">⚠️ Derrotas MCTS (Random Gana)</option>
-                    <option value="US">🔵 Ganó US (Aliados)</option>
-                    <option value="GE">🔴 Ganó GE (Alemania)</option>
-                    <option value="IT">🟢 Ganó IT (Italia)</option>
-                    <option value="EJE">🛡️ Ganó Eje (GE o IT)</option>
-                    <option value="EMPATE">⚖️ Empates Tácticos</option>
+                    <option value="all">All Results</option>
+                    <option value="EZV2_WIN">🏆 EZv2 Wins (Model Victory)</option>
+                    <option value="EZV2_LOSS">❌ Random Wins (Defeats / Edge Cases)</option>
+                    <option value="US">🇺🇸 US Won (Allies)</option>
+                    <option value="GE">🇩🇪 GE Won (Germany)</option>
+                    <option value="IT">🇮🇹 IT Won (Italy)</option>
+                    <option value="EJE">🛡️ Axis Won (GE or IT)</option>
+                    <option value="EMPATE">🤝 Tactical Draws</option>
                   </select>
                 </div>
 
-                {/* Buscador de Seed o ID */}
+                {/* Seed / ID Search */}
                 <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
                   <span className="muted" style={{ fontSize: 12 }}>🔍</span>
                   <input
                     type="text"
-                    placeholder="Buscar seed o ep..."
+                    placeholder="Search seed or ep..."
                     value={searchSeedOrId}
                     onChange={(e) => setSearchSeedOrId(e.target.value)}
                     style={{
@@ -961,17 +1006,17 @@ export function ModelPage() {
                       padding: "4px 8px",
                       borderRadius: 4,
                       fontSize: 12,
-                      width: 130,
+                      width: 140,
                     }}
                   />
                 </div>
               </div>
 
-              {/* Fila 2: Chips de acceso rápido y selector de partida activa */}
+              {/* Row 2: Quick Filter Chips & Active Match Selector */}
               <div style={{ display: "flex", flexDirection: "column", gap: 6, paddingTop: 4, borderTop: "1px dashed #334155" }}>
                 <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 6 }}>
                   <div style={{ display: "flex", alignItems: "center", gap: 4, flexWrap: "wrap" }}>
-                    <span style={{ fontSize: 11, color: "#64748b", fontWeight: 700, marginRight: 2 }}>FILTROS RÁPIDOS:</span>
+                    <span style={{ fontSize: 11, color: "#64748b", fontWeight: 700, marginRight: 2 }}>QUICK FILTERS:</span>
                     <button
                       onClick={() => { setFilterScenario("all"); setFilterMatchup("all"); setFilterWinner("all"); setSearchSeedOrId(""); }}
                       style={{
@@ -980,7 +1025,7 @@ export function ModelPage() {
                         color: "#cbd5e1"
                       }}
                     >
-                      Todas
+                      All
                     </button>
                     <button
                       onClick={() => setFilterScenario((prev) => (prev === "mettete" ? "all" : "mettete"))}
@@ -991,7 +1036,7 @@ export function ModelPage() {
                         color: filterScenario === "mettete" ? "#38bdf8" : "#cbd5e1"
                       }}
                     >
-                      🏖️ Mettete
+                      🌊 Mettete
                     </button>
                     <button
                       onClick={() => setFilterScenario((prev) => (prev === "cittadina" ? "all" : "cittadina"))}
@@ -1013,7 +1058,7 @@ export function ModelPage() {
                         color: filterMatchup === "selfplay" ? "#c084fc" : "#cbd5e1"
                       }}
                     >
-                      ⚔️ Self-Play MCTS
+                      ⚔️ EZv2 Self-Play
                     </button>
                     <button
                       onClick={() => setFilterMatchup((prev) => (prev === "vs_random" ? "all" : "vs_random"))}
@@ -1024,29 +1069,29 @@ export function ModelPage() {
                         color: filterMatchup === "vs_random" ? "#c084fc" : "#cbd5e1"
                       }}
                     >
-                      🎲 vs Random
+                      🎯 vs Random
                     </button>
                     <button
-                      onClick={() => setFilterWinner((prev) => (prev === "MCTS_WIN" ? "all" : "MCTS_WIN"))}
+                      onClick={() => setFilterWinner((prev) => (prev === "EZV2_WIN" ? "all" : "EZV2_WIN"))}
                       style={{
                         padding: "2px 7px", fontSize: 11, borderRadius: 4, cursor: "pointer",
-                        border: filterWinner === "MCTS_WIN" ? "1px solid #22c55e" : "1px solid #475569",
-                        background: filterWinner === "MCTS_WIN" ? "rgba(34, 197, 94, 0.2)" : "transparent",
-                        color: filterWinner === "MCTS_WIN" ? "#4ade80" : "#cbd5e1"
+                        border: filterWinner === "EZV2_WIN" ? "1px solid #22c55e" : "1px solid #475569",
+                        background: filterWinner === "EZV2_WIN" ? "rgba(34, 197, 94, 0.2)" : "transparent",
+                        color: filterWinner === "EZV2_WIN" ? "#4ade80" : "#cbd5e1"
                       }}
                     >
-                      🏆 Victorias MCTS
+                      🏆 EZv2 Wins
                     </button>
                     <button
-                      onClick={() => setFilterWinner((prev) => (prev === "MCTS_LOSS" ? "all" : "MCTS_LOSS"))}
+                      onClick={() => setFilterWinner((prev) => (prev === "EZV2_LOSS" ? "all" : "EZV2_LOSS"))}
                       style={{
                         padding: "2px 7px", fontSize: 11, borderRadius: 4, cursor: "pointer",
-                        border: filterWinner === "MCTS_LOSS" ? "1px solid #ef4444" : "1px solid #475569",
-                        background: filterWinner === "MCTS_LOSS" ? "rgba(239, 68, 68, 0.2)" : "transparent",
-                        color: filterWinner === "MCTS_LOSS" ? "#f87171" : "#cbd5e1"
+                        border: filterWinner === "EZV2_LOSS" ? "1px solid #ef4444" : "1px solid #475569",
+                        background: filterWinner === "EZV2_LOSS" ? "rgba(239, 68, 68, 0.2)" : "transparent",
+                        color: filterWinner === "EZV2_LOSS" ? "#f87171" : "#cbd5e1"
                       }}
                     >
-                      ⚠️ Derrotas / Casos Límite
+                      ❌ Defeats / Edge Cases
                     </button>
                   </div>
 
@@ -1062,12 +1107,12 @@ export function ModelPage() {
                         border: "1px solid #334155",
                       }}
                     >
-                      {filteredEpisodes.length} de {rawEpisodesMeta.length} partidas
+                      {filteredEpisodes.length} of {rawEpisodesMeta.length} matches
                     </span>
                     {(filterScenario !== "all" || filterMatchup !== "all" || filterWinner !== "all" || Boolean(searchSeedOrId)) && (
                       <button
                         onClick={() => { setFilterScenario("all"); setFilterMatchup("all"); setFilterWinner("all"); setSearchSeedOrId(""); }}
-                        title="Restablecer todos los filtros"
+                        title="Reset all filters"
                         style={{
                           padding: "2px 6px",
                           fontSize: 11,
@@ -1079,16 +1124,16 @@ export function ModelPage() {
                           fontWeight: 600,
                         }}
                       >
-                        ✕ Limpiar
+                        🔄 Clear
                       </button>
                     )}
                   </div>
                 </div>
 
-                {/* Selector desplegable de partida */}
+                {/* Active Match Dropdown Selector */}
                 <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 2 }}>
                   <span style={{ fontSize: 12, fontWeight: 700, color: "#f8fafc", whiteSpace: "nowrap" }}>
-                    🎬 Partida Activa:
+                    🎮 Active Match:
                   </span>
                   {filteredEpisodes.length > 0 ? (
                     <select
@@ -1118,7 +1163,7 @@ export function ModelPage() {
                     </select>
                   ) : (
                     <div style={{ fontSize: 12, color: "#f87171", padding: "4px 8px", background: "rgba(239, 68, 68, 0.1)", borderRadius: 4, border: "1px solid rgba(239, 68, 68, 0.3)", flex: 1 }}>
-                      ⚠️ Ninguna partida coincide con los filtros seleccionados. Cambia los filtros o pulsa "Limpiar".
+                      ⚠️ No matches found for selected filters. Adjust filters or click "Clear".
                     </div>
                   )}
                 </div>

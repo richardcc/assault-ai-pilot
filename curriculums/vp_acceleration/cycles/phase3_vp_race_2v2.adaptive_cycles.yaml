@@ -1,8 +1,8 @@
 schema_version: adaptive_cycles.v1
 curriculum_name: vp_acceleration_v1
 phase_name: phase3_vp_race_2v2
-generation: 10
-last_updated_utc: '2026-10-21T21:34:28.716833+00:00'
+generation: 12
+last_updated_utc: '2026-10-22T06:28:26.762368+00:00'
 base_config_path: curriculums/vp_acceleration/configs/efficientzero_v2.phase3_race_2v2.yaml
 winning_history:
 - generation: 1
@@ -59,10 +59,22 @@ winning_history:
   win_rate: 0.36666666666666664
   tactical_quality_score: 0.4355555555555556
   promotion_decision: promote_best_of_cycles
+- generation: 10
+  winning_cycle: 2
+  promoted_at_utc: '2026-10-21T23:00:43.512358+00:00'
+  win_rate: 0.333333333333333
+  tactical_quality_score: 0.404444444444444
+  promotion_decision: promote
+- generation: 11
+  winning_cycle: 3
+  promoted_at_utc: '2026-10-22T06:28:26.762368+00:00'
+  win_rate: 0.23333333333333334
+  tactical_quality_score: 0.3422222222222222
+  promotion_decision: promote_best_of_cycles
 cycles:
   1:
     strategy: promoted_baseline
-    description: Generation 10 Baseline (Promoted from Cycle 3 of previous generation).
+    description: Generation 12 Baseline (Promoted from Cycle 3 of previous generation).
     overlay: {}
   2:
     strategy: adaptive_exploitation

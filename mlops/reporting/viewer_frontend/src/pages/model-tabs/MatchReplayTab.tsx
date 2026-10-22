@@ -189,7 +189,7 @@ function getUnitTacticalRole(
       label: "Recuperación",
       icon: "🩹",
       color: "#eab308",
-      desc: "Unidad bajo degradación de moral o salud replegándose en buen orden.",
+      desc: "Unit under morale degradation or damage falling back in good order.",
       isMutated,
       mutationReason,
       priorBoost,
@@ -990,28 +990,37 @@ export function MatchReplayTab({
         unitsBySide[side].alive += 1;
       }
 
-      const ukey = String(su.unit_key || su.unit_id || "Unidad")
+      const ukey = String(su.unit_key || su.unit_id || "Unit")
         .replace(/^(US_|GE_|IT_)/i, "")
         .replace(/_/g, " ");
       unitsBySide[side].keys[ukey] = (unitsBySide[side].keys[ukey] || 0) + 1;
     }
 
-    let title = "Escenario Wargame";
-    let subtitle = "Combate Táctico por Turnos";
-    let idLabel = rawId || "escenario_activo";
-    let desc = "";
+    // Dynamic Title, Subtitle, Description from activeOverlay if present, with clean fallbacks
+    const title = String(
+      activeOverlay?.name ||
+      (isMettete ? "Mettete i piedi a terra" : isCittadina ? "Battaglia Cittadina" : (rawId ? rawId.replace(/_/g, " ").toUpperCase() : "Tactical Scenario"))
+    );
+    const subtitle = String(
+      activeOverlay?.subtitle ||
+      (isMettete
+        ? "Scenario 1 – Amphibious Assault & Fortified Beachhead"
+        : isCittadina
+        ? "Scenario 2.1 – House to House Urban Combat"
+        : `Tactical Mission (${shape[0]}x${shape[1]} Hexes)`)
+    );
+    const desc = String(
+      activeOverlay?.description ||
+      (isMettete
+        ? "Allied amphibious infantry assault contesting fortified Axis positions with bunkers, casemates, minefields and wire obstacles."
+        : isCittadina
+        ? "Intense infantry combat in urban sector contesting control points in multi-story buildings, casemates, and emplacements with mortar and sniper support."
+        : "Tactical wargame simulation contesting critical objectives and victory hexes.")
+    );
+    const idLabel = String(activeOverlay?.scenario_id || rawId || "scenario");
 
-    if (isMettete) {
-      title = "Mettete i piedi a terra";
-      subtitle = "Escenario 1 · Asalto Anfibio y Desembarco Fortificado";
-      idLabel = "mettete_i_piedi_terra_1";
-      desc = "Asalto de infantería aliada desembarcando desde el agua hacia una línea fortificada en profundidad del Eje defendida con búnkeres, casamatas, trincheras, campos de minas y alambradas.";
-    } else if (isCittadina) {
-      title = "Battaglia Cittadina";
-      subtitle = "Escenario 2.1 · Combate Urbano Casa por Casa";
-      idLabel = "battaglia_cittadina_2_1";
-      desc = "Intense infantry combat in urban sector contesting control points in multi-story buildings, casemates, and emplacements with mortar and sniper support.";
-    }
+    const attackerSide = String(activeOverlay?.attacker_side || "US").toUpperCase();
+    const defenderSide = String(activeOverlay?.defender_side || (attackerSide === "US" ? (isCittadina ? "IT" : "GE") : "US")).toUpperCase();
 
     return {
       isMettete,
@@ -1020,49 +1029,73 @@ export function MatchReplayTab({
       subtitle,
       idLabel,
       desc,
+      attackerSide,
+      defenderSide,
       shapeText: `${shape[0]}×${shape[1]} hex`,
       totalVps: vpMap.length,
       unitsBySide,
+      victoryOutcomes: (activeOverlay?.victory_outcomes || {}) as Dict,
+      maxTurns: Number(activeOverlay?.max_turns || maxTurns || 8),
     };
-  }, [activeOverlay?.scenario_id, activeOverlay?.scenario_units, replaySteps?.scenario_id, replayMeta?.scenario_id, scenarioShape, units, vpMap]);
+  }, [activeOverlay, replaySteps?.scenario_id, replayMeta?.scenario_id, scenarioShape, units, vpMap, maxTurns]);
 
   const factions = useMemo(() => {
     const sides = Object.keys(scenarioBriefing.unitsBySide);
     const sideList = sides.length > 0 ? sides : (scenarioBriefing.isCittadina ? ["US", "IT"] : ["US", "GE"]);
 
+    // Dynamic Victory Requirements from victory_outcomes
+    const vo = scenarioBriefing.victoryOutcomes as Dict;
+    const voTable = Array.isArray(vo.table) ? (vo.table as Dict[]) : [];
+    const totalVps = scenarioBriefing.totalVps || 5;
+    const maxT = scenarioBriefing.maxTurns || 8;
+
+    let victoryThreshold = 0;
+    let majorVictoryThreshold = 0;
+    for (const row of voTable) {
+      const cls = String(row.outcome_class || "").toLowerCase();
+      const cap = (row.captured || {}) as Dict;
+      const minCap = Number(cap.min ?? cap.max ?? 0);
+      if (cls === "total_victory") majorVictoryThreshold = minCap;
+      if (cls === "victory" && victoryThreshold === 0) victoryThreshold = minCap;
+    }
+    if (victoryThreshold === 0) {
+      victoryThreshold = Math.ceil(totalVps * 0.6);
+    }
+    const defenderHoldThreshold = totalVps - victoryThreshold + 1;
+
     return sideList.map((side) => {
       const isUS = side === "US";
       const isGE = side === "GE";
       const isIT = side === "IT";
+      const isAttacker = side === scenarioBriefing.attackerSide;
 
-      const flag = isUS ? "🇺🇸" : isGE ? "🇩🇪" : isIT ? "🇮🇹" : "🏳️";
+      const flag = isUS ? "🇺🇸" : isGE ? "🇩🇪" : isIT ? "🇮🇹" : "🚩";
       const name = isUS
-        ? "Estados Unidos (US Army)"
+        ? "United States (US Army)"
         : isGE
-        ? "Alemania (Wehrmacht / FJ)"
+        ? "Germany (Wehrmacht / FJ)"
         : isIT
-        ? "Italia (Regio Esercito)"
-        : `Fuerza ${side}`;
-      const roleBadge = isUS ? "ATACANTE" : "DEFENSOR";
-      const roleColor = isUS ? "#38bdf8" : isGE ? "#f87171" : "#34d399";
-      const borderColor = isUS ? "rgba(56, 189, 248, 0.45)" : isGE ? "rgba(248, 113, 113, 0.45)" : "rgba(52, 211, 153, 0.45)";
-      const bgGrad = isUS
+        ? "Italy (Regio Esercito)"
+        : `Faction ${side}`;
+
+      const roleBadge = isAttacker ? "ATTACKER" : "DEFENDER";
+      const roleColor = isAttacker ? "#38bdf8" : "#34d399";
+      const borderColor = isAttacker ? "rgba(56, 189, 248, 0.45)" : "rgba(52, 211, 153, 0.45)";
+      const bgGrad = isAttacker
         ? "linear-gradient(135deg, rgba(30, 58, 138, 0.35), rgba(15, 23, 42, 0.65))"
         : isGE
         ? "linear-gradient(135deg, rgba(127, 29, 29, 0.35), rgba(15, 23, 42, 0.65))"
         : "linear-gradient(135deg, rgba(6, 78, 59, 0.35), rgba(15, 23, 42, 0.65))";
 
       let mission = "";
-      if (scenarioBriefing.isMettete) {
-        mission = isUS
-          ? "Landing & breakthrough: Breach wire and minefields to capture ≥ 2 of 3 VPs in 12 turns."
-          : "Fortified defense: Retain ≥ 2 of 3 VPs leveraging bunker, casemate, MG42 and mines.";
-      } else if (scenarioBriefing.isCittadina) {
-        mission = isUS
-          ? "Urban assault: Clear streets and casemates to capture ≥ 4 of 5 VPs in 8 turns."
-          : "Sector defense: Retain at least 3 VPs using urban cover and suppression fire.";
+      if (isAttacker) {
+        if (majorVictoryThreshold > 0 && majorVictoryThreshold !== victoryThreshold) {
+          mission = `Assault & capture: Control ≥ ${victoryThreshold} of ${totalVps} VPs within ${maxT} turns (≥ ${majorVictoryThreshold} for Total Victory).`;
+        } else {
+          mission = `Assault & capture: Control ≥ ${victoryThreshold} of ${totalVps} VPs within ${maxT} turns.`;
+        }
       } else {
-        mission = isUS ? "Attack and capture priority victory hexes." : "Defend positions and key hexes.";
+        mission = `Sector defense: Retain ≥ ${defenderHoldThreshold} of ${totalVps} VPs through turn ${maxT} to deny Allied objectives.`;
       }
 
       const data = scenarioBriefing.unitsBySide[side] || { total: 0, alive: 0, keys: {} };
@@ -1080,7 +1113,7 @@ export function MatchReplayTab({
         total: data.total,
         alive: data.alive,
         keyBreakdown: keyBreakdown || `${data.total} units`,
-        fortifications: !isUS && fortSummary ? fortSummary : null,
+        fortifications: !isAttacker && fortSummary ? fortSummary : null,
       };
     });
   }, [scenarioBriefing, fortSummary]);
@@ -2057,7 +2090,7 @@ export function MatchReplayTab({
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-      {/* 0. Tactical Scenario & Forces Briefing Banner */}
+      {/* 0. Dynamic Scenario & Tactical Forces Briefing Banner */}
       <div
         style={{
           background: "linear-gradient(180deg, #1e293b, #0f172a)",
@@ -2071,11 +2104,11 @@ export function MatchReplayTab({
         }}
       >
         {/* Top Summary Row */}
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 10 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
             <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
               <span style={{ fontSize: 18 }}>🗺️</span>
-              <span style={{ fontSize: 15, fontWeight: 800, color: "#f8fafc", letterSpacing: "0.2px" }}>
+              <span style={{ fontSize: 15, fontWeight: 800, color: "#f8fafc", letterSpacing: 0.3 }}>
                 {scenarioBriefing.title}
               </span>
             </div>
@@ -2098,13 +2131,13 @@ export function MatchReplayTab({
 
           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
             <span style={{ fontSize: 11, color: "#94a3b8", background: "rgba(15, 23, 42, 0.6)", padding: "2px 8px", borderRadius: 4, border: "1px solid #334155" }}>
-              ⏱️ {maxTurns} Turnos máx
+              ⏱️ {scenarioBriefing.maxTurns} Max Turns
             </span>
             <span style={{ fontSize: 11, color: "#94a3b8", background: "rgba(15, 23, 42, 0.6)", padding: "2px 8px", borderRadius: 4, border: "1px solid #334155" }}>
               📐 {scenarioBriefing.shapeText}
             </span>
             <span style={{ fontSize: 11, color: "#facc15", background: "rgba(250, 204, 21, 0.12)", padding: "2px 8px", borderRadius: 4, border: "1px solid rgba(250, 204, 21, 0.3)" }}>
-              🎯 {scenarioBriefing.totalVps} VPs
+              ⭐ {scenarioBriefing.totalVps} VPs
             </span>
             <button
               onClick={() => setShowBriefing(!showBriefing)}
@@ -2119,7 +2152,7 @@ export function MatchReplayTab({
                 fontWeight: 600,
               }}
             >
-              {showBriefing ? "▲ Minimizar" : "▼ Detalles de Bandos"}
+              {showBriefing ? "▲ Minimize" : "▼ Faction Details"}
             </button>
           </div>
         </div>
@@ -2166,24 +2199,24 @@ export function MatchReplayTab({
                         {f.roleBadge}
                       </span>
                       <span style={{ fontSize: 11, color: "#cbd5e1" }}>
-                        <b>{f.alive}</b>/{f.total} activas
+                        <b>{f.alive}</b>/{f.total} active
                       </span>
                     </div>
                   </div>
 
                   <div style={{ fontSize: 11, color: "#e2e8f0" }}>
-                    <span style={{ color: "#94a3b8" }}>🎯 Objetivo: </span>
+                    <span style={{ color: "#94a3b8" }}>🎯 Objective: </span>
                     {f.mission}
                   </div>
 
                   <div style={{ fontSize: 11, color: "#cbd5e1" }}>
-                    <span style={{ color: "#94a3b8" }}>🪖 Fuerzas: </span>
+                    <span style={{ color: "#94a3b8" }}>⚔️ Forces: </span>
                     <span style={{ color: "#e2e8f0" }}>{f.keyBreakdown}</span>
                   </div>
 
                   {f.fortifications && (
                     <div style={{ fontSize: 11, color: "#facc15" }}>
-                      <span style={{ color: "#ca8a04" }}>🛡️ Fortificaciones: </span>
+                      <span style={{ color: "#ca8a04" }}>🛡️ Fortifications: </span>
                       {f.fortifications}
                     </div>
                   )}
@@ -3085,7 +3118,7 @@ export function MatchReplayTab({
                 cursor: "pointer",
               }}
             >
-              🎯 MCTS & Decisión
+              🎯 EZv2 Decision & MCTS
             </button>
             <button
               onClick={() => setActiveTab("units")}
@@ -3121,10 +3154,10 @@ export function MatchReplayTab({
             </button>
           </div>
 
-          {/* TAB 1: MCTS & DECISIÓN */}
+          {/* TAB 1: EZV2 DECISION & MCTS */}
           {activeTab === "decision" && (
             <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-              {/* Nivel 1: Planificador Jerárquico Macro-Estratégico */}
+              {/* Level 1: Doctrinal Hierarchical Planner */}
               <div
                 style={{
                   background: "#0b1329",
@@ -3156,16 +3189,16 @@ export function MatchReplayTab({
                           <span>{currentDetails.macroPosture}</span>
                         </>
                       ) : (
-                        <span>- (No emitida)</span>
+                        <span>- (Not emitted)</span>
                       )}
                     </div>
                     <div style={{ fontSize: 9, color: "#94a3b8", marginTop: 2, lineHeight: 1.2 }}>
                       {currentDetails.macroPosture === "DEFENSIVE_HOLD"
-                        ? "Liderazgo en VPs. Consolidar y atrincherar posiciones bajo control."
+                        ? "VP Lead: Consolidate and entrench controlled positions."
                         : currentDetails.macroPosture === "ZONE_SUPPRESS"
                         ? "All VPs controlled. Suppression and annihilation of remnants."
                         : currentDetails.macroPosture === "ASSAULT_VP" || currentDetails.macroPosture === "ASSAULT"
-                        ? "Asalto prioritario al VP más cercano."
+                        ? "Priority assault on closest objective VP."
                         : "No explicit macro posture recorded for this step."}
                     </div>
                   </div>
@@ -3173,7 +3206,7 @@ export function MatchReplayTab({
                   {/* Rol Táctico Unidad */}
                   <div style={{ background: "#1e293b", padding: "6px 8px", borderRadius: 4, borderLeft: `3px solid ${currentDetails.unitMacroRole ? (currentDetails.unitMacroRole.includes("FIRE_SUPPORT") ? "#f97316" : currentDetails.unitMacroRole.includes("DEFENDER") ? "#38bdf8" : currentDetails.unitMacroRole.includes("CLOSE_DEFENSE") ? "#a855f7" : currentDetails.unitMacroRole.includes("RECON") ? "#06b6d4" : currentDetails.unitMacroRole.includes("RECOVER") ? "#eab308" : currentDetails.unitMacroRole.includes("SCREEN") ? "#10b981" : "#ef4444") : "#475569"}` }}>
                     <div className="muted" style={{ fontSize: 9, textTransform: "uppercase", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                      <span>Rol Táctico Escuadra</span>
+                      <span>Squad Tactical Role</span>
                       {currentDetails.roleIsMutated && (
                         <span style={{ color: "#fca5a5", fontWeight: 700, fontSize: 8, background: "rgba(239, 68, 68, 0.25)", padding: "1px 4px", borderRadius: 3 }}>⚡ MUTADA</span>
                       )}
@@ -3184,13 +3217,13 @@ export function MatchReplayTab({
                           <span>{currentDetails.unitMacroRole.includes("FIRE_SUPPORT") ? "🎯" : currentDetails.unitMacroRole.includes("DEFENDER") ? "🏰" : currentDetails.unitMacroRole.includes("CLOSE_DEFENSE") ? "🛡️" : currentDetails.unitMacroRole.includes("RECON") ? "🔭" : currentDetails.unitMacroRole.includes("RECOVER") ? "🩹" : currentDetails.unitMacroRole.includes("SCREEN") ? "👁️" : "⚡"}</span>
                           <span>{currentDetails.unitMacroRole.replace("ROLE_", "")}</span>
                           {currentDetails.priorBoostApplied > 0 && (
-                            <span style={{ fontSize: 9, background: "rgba(34, 197, 94, 0.2)", color: "#86efac", border: "1px solid #22c55e", borderRadius: 3, padding: "0 4px", fontWeight: 700 }} title="Prior boost aplicado en raíz MCTS">
+                            <span style={{ fontSize: 9, background: "rgba(34, 197, 94, 0.2)", color: "#86efac", border: "1px solid #22c55e", borderRadius: 3, padding: "0 4px", fontWeight: 700 }} title="Prior boost applied at EZv2 root">
                               +{Math.round(currentDetails.priorBoostApplied * 100)}% π
                             </span>
                           )}
                         </>
                       ) : (
-                        <span>- (No emitido)</span>
+                        <span>- (Not emitted)</span>
                       )}
                     </div>
                     <div style={{ fontSize: 9, color: "#94a3b8", marginTop: 2, lineHeight: 1.2 }}>
@@ -3637,9 +3670,9 @@ export function MatchReplayTab({
                     <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6, fontSize: 10 }}>
                       <div><b>Bando:</b> {selUnit.side}</div>
                       <div><b>Posición:</b> ({selUnit.q}, {selUnit.r})</div>
-                      <div><b>Salud:</b> {selUnit.alive ? `${selUnit.hp.toFixed(1)} HP` : "BAJA"}</div>
-                      <div><b>Moral/Supresión:</b> {selUnit.suppressed ? "SUPRIMIDA" : "OK"}</div>
-                      <div><b>Rol Asignado:</b> <code style={{ color: rInfo.color }}>{rInfo.role || "-"}</code></div>
+                      <div><b>Health:</b> {selUnit.alive ? `${selUnit.hp.toFixed(1)} HP` : "KIA"}</div>
+                      <div><b>Morale / Suppression:</b> {selUnit.suppressed ? "SUPPRESSED" : "STABLE"}</div>
+                      <div><b>Assigned Role:</b> <code style={{ color: rInfo.color }}>{rInfo.role || "-"}</code></div>
                       <div><b>Mutación:</b> {rInfo.isMutated ? <span style={{ color: "#f87171", fontWeight: 700 }}>⚡ SÍ ({rInfo.mutationReason})</span> : <span style={{ color: "#34d399" }}>NO (Perfil Base)</span>}</div>
                       {rInfo.priorBoost > 0 && (
                         <div style={{ gridColumn: "span 2", color: "#86efac", fontWeight: 700 }}>

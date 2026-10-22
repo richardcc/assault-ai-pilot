@@ -269,6 +269,8 @@ HTML_TEMPLATE = """<!DOCTYPE html>
     .add-to-slot-bar button { padding: 0.4rem 0.8rem; font-size: 0.82rem; background: #0284c7; color: #fff; border-radius: 6px; }
     .roster-summary-card { background: #0b1120; border: 1px solid #1e3a5f; border-radius: 8px; padding: 0.8rem; margin-top: 0.8rem; }
     .stat-chip { display: inline-flex; align-items: center; gap: 0.3rem; background: #1e293b; padding: 0.2rem 0.5rem; border-radius: 4px; font-size: 0.75rem; font-weight: 600; color: #e2e8f0; border: 1px solid var(--card-border); }
+    .btn-cross-nav { padding: 0.35rem 0.65rem; border-radius: 6px; font-weight: 600; font-size: 0.78rem; text-decoration: none; border: 1px solid var(--card-border); background: #131d31; color: var(--text-muted); transition: all 0.15s; display: inline-flex; align-items: center; gap: 0.35rem; }
+    .btn-cross-nav:hover { color: #fff; border-color: var(--accent); background: #1e293b; }
   </style>
 </head>
 <body>
@@ -285,6 +287,11 @@ HTML_TEMPLATE = """<!DOCTYPE html>
     </div>
     <div id="formation-header-badges" style="display: none; gap: 0.8rem; align-items: center;">
       <span id="formation-total-badge" class="badge badge-published">12 Formations</span>
+    </div>
+    <div style="display: flex; gap: 0.5rem; align-items: center; margin-left: auto;">
+      <a href="http://127.0.0.1:8778/docs/" target="_blank" class="btn-cross-nav" style="border-color: #38bdf8; color: #38bdf8;" title="Assault Canonical Documentation Hub">📚 Docs Hub</a>
+      <a href="http://127.0.0.1:8778" target="_blank" class="btn-cross-nav" style="border-color: #a855f7; color: #c084fc;" title="MLOps Dashboard & Match Replay Viewer (Port 8778)">📊 MLOps Viewer (8778)</a>
+      <a href="http://127.0.0.1:8001/docs" target="_blank" class="btn-cross-nav" style="border-color: #f59e0b; color: #fde047;" title="FastAPI Interactive Swagger Docs (Port 8001)">⚡ Swagger API (8001)</a>
     </div>
   </header>
 

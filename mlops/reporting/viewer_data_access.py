@@ -944,8 +944,12 @@ def load_scenario_overlay(repo_root: Path, scenario_id: str) -> dict:
             sid = sub_sids[0]
     scenarios_dir = (repo_root / "assault_sim" / "assets" / "scenarios").resolve()
     if not scenarios_dir.exists():
+        scenarios_dir = (repo_root / "assets" / "scenarios").resolve()
+    if not scenarios_dir.exists():
         return {}
     catalogs_dir = (repo_root / "assault_sim" / "assets" / "catalogs").resolve()
+    if not catalogs_dir.exists():
+        catalogs_dir = (repo_root / "assets" / "catalogs").resolve()
     map_piece_catalog_path = catalogs_dir / "map_piece_catalog.json"
     map_piece_catalog: dict = {}
     if map_piece_catalog_path.exists():
@@ -1059,62 +1063,66 @@ def load_scenario_overlay(repo_root: Path, scenario_id: str) -> dict:
             out_u.append(row)
         return out_u
 
-    candidates = [scenarios_dir / f"{sid}.json"]
-    for c in candidates:
-        if c.exists():
-            try:
-                raw = json.loads(c.read_text(encoding="utf-8"))
-            except Exception:
-                raw = {}
-            vp = dict(raw.get("vp", {}) or {})
-            hexes = list(vp.get("hexes", []) or [])
-            shape = list(raw.get("shape", []) or [])
-            map_cells = _build_map_cells(raw)
-            forts = list((raw.get("map", {}) or {}).get("fortifications", []) or [])
-            pieces_list = _enrich_pieces(list((raw.get("map", {}) or {}).get("pieces", []) or []))
-            return {
-                "path": str(c),
-                "scenario_id": sid,
-                "shape": shape if len(shape) >= 2 else [],
-                "max_turns": int(raw.get("max_turns", 0) or 0),
-                "map_cells": map_cells,
-                "fortifications": forts,
-                "pieces": pieces_list,
-                "scenario_units": _enrich_units(list(raw.get("units", []) or [])),
-                "vp_hexes": [
-                    {
-                        "q": int(h.get("q", 0) or 0),
-                        "r": int(h.get("r", 0) or 0),
-                        "initial_owner": str(h.get("initial_owner", "") or ""),
-                        "value": float(h.get("value", vp.get("value_per_hex", 1)) or 1),
-                    }
-                    for h in hexes
-                    if isinstance(h, dict)
-                ],
-            }
-    for p in list(scenarios_dir.glob("*.json")):
-        try:
-            raw = json.loads(p.read_text(encoding="utf-8"))
-        except Exception:
-            continue
-        internal_id = str(raw.get("id", "") or "").strip()
-        if internal_id != sid:
-            continue
+    def _build_scenario_overlay_dict(path: Path, current_sid: str, raw: dict) -> dict[str, Any]:
         vp = dict(raw.get("vp", {}) or {})
         hexes = list(vp.get("hexes", []) or [])
         shape = list(raw.get("shape", []) or [])
         map_cells = _build_map_cells(raw)
         forts = list((raw.get("map", {}) or {}).get("fortifications", []) or [])
         pieces_list = _enrich_pieces(list((raw.get("map", {}) or {}).get("pieces", []) or []))
+        units_list = _enrich_units(list(raw.get("units", []) or []))
+
+        # Dynamic metadata extraction
+        tracked_side = str((raw.get("victory_outcomes", {}) or {}).get("tracked_side", "") or "").upper()
+        all_sides = list(dict(raw.get("morale_track", {}) or {}).keys())
+        if not all_sides:
+            all_sides = list({str(u.get("side", "")).upper() for u in units_list if u.get("side")})
+
+        attacker_side = str(raw.get("attacker_side", "") or tracked_side or (all_sides[0] if all_sides else "US")).upper()
+        defender_candidates = [s for s in all_sides if s != attacker_side]
+        defender_side = str(raw.get("defender_side", "") or (defender_candidates[0] if defender_candidates else ("IT" if attacker_side == "US" else "US"))).upper()
+
+        name = str(raw.get("name", "") or raw.get("title", "") or "").strip()
+        if not name:
+            if "mettete" in current_sid.lower():
+                name = "Mettete i piedi a terra"
+            elif "cittadina" in current_sid.lower():
+                name = "Battaglia Cittadina"
+            else:
+                name = current_sid.replace("_", " ").title()
+
+        subtitle = str(raw.get("subtitle", "") or "").strip()
+        if not subtitle:
+            if "mettete" in current_sid.lower():
+                subtitle = "Scenario 1 – Amphibious Assault & Fortified Beachhead"
+            elif "cittadina" in current_sid.lower():
+                subtitle = "Scenario 2.1 – House to House Urban Combat"
+            else:
+                subtitle = f"Tactical Scenario ({shape[0]}x{shape[1]} hexes)" if len(shape) >= 2 else "Tactical Scenario"
+
+        description = str(raw.get("description", "") or "").strip()
+        if not description:
+            if "mettete" in current_sid.lower():
+                description = "Allied infantry assault landing from the surf towards deep Axis fortified lines with bunkers, casemates, trenches, minefields, and wire obstacles."
+            elif "cittadina" in current_sid.lower():
+                description = "Intense infantry combat in urban sector contesting control points in multi-story buildings, casemates, and emplacements with mortar and sniper support."
+            else:
+                description = f"Tactical combat between {attacker_side} and {defender_side} contesting objective VPs."
+
         return {
-            "path": str(p),
-            "scenario_id": sid,
+            "path": str(path),
+            "scenario_id": current_sid,
+            "name": name,
+            "subtitle": subtitle,
+            "description": description,
+            "attacker_side": attacker_side,
+            "defender_side": defender_side,
             "shape": shape if len(shape) >= 2 else [],
             "max_turns": int(raw.get("max_turns", 0) or 0),
             "map_cells": map_cells,
             "fortifications": forts,
             "pieces": pieces_list,
-            "scenario_units": _enrich_units(list(raw.get("units", []) or [])),
+            "scenario_units": units_list,
             "vp_hexes": [
                 {
                     "q": int(h.get("q", 0) or 0),
@@ -1125,7 +1133,28 @@ def load_scenario_overlay(repo_root: Path, scenario_id: str) -> dict:
                 for h in hexes
                 if isinstance(h, dict)
             ],
+            "victory_outcomes": raw.get("victory_outcomes", {}),
+            "morale_track": raw.get("morale_track", {}),
         }
+
+    candidates = [scenarios_dir / f"{sid}.json"]
+    for c in candidates:
+        if c.exists():
+            try:
+                raw = json.loads(c.read_text(encoding="utf-8"))
+            except Exception:
+                raw = {}
+            return _build_scenario_overlay_dict(c, sid, raw)
+
+    for p in list(scenarios_dir.glob("*.json")):
+        try:
+            raw = json.loads(p.read_text(encoding="utf-8"))
+        except Exception:
+            continue
+        internal_id = str(raw.get("id", "") or "").strip()
+        if internal_id != sid:
+            continue
+        return _build_scenario_overlay_dict(p, sid, raw)
     return {}
 
 
@@ -1139,6 +1168,8 @@ def load_scenario_detail(repo_root: Path, scenario_id: str) -> dict[str, Any]:
         sid = parts[0].strip() if parts else sid
 
     scenarios_dir = (repo_root / "assault_sim" / "assets" / "scenarios").resolve()
+    if not scenarios_dir.exists():
+        scenarios_dir = (repo_root / "assets" / "scenarios").resolve()
     if not scenarios_dir.exists():
         return {"ok": False, "error": "scenarios_dir_not_found"}
 

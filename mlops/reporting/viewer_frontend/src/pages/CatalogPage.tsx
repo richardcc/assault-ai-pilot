@@ -1711,41 +1711,61 @@ export function CatalogPage() {
         <div className="bar" style={{ gap: 8 }}>
 
           <button
-
-            onClick={() => window.open("/docs", "_blank")}
-
+            onClick={() => window.open("/docs/", "_blank")}
             style={{
-
               background: "#0284c7",
-
               color: "#ffffff",
-
               border: "none",
-
               borderRadius: 4,
-
               padding: "4px 10px",
-
               fontSize: 12,
-
               fontWeight: 700,
-
               cursor: "pointer",
-
               display: "flex",
-
               alignItems: "center",
-
               gap: 5,
-
             }}
-
-            title="Abrir Centro Interactivo de Documentación Técnica"
-
+            title="Open Interactive Technical Documentation Hub"
           >
-
-            <span>📚</span> Documentación
-
+            <span>📚</span> Documentation
+          </button>
+          <button
+            onClick={() => window.open("http://127.0.0.1:8780", "_blank")}
+            style={{
+              background: "#065f46",
+              color: "#6ee7b7",
+              border: "1px solid #10b981",
+              borderRadius: 4,
+              padding: "4px 10px",
+              fontSize: 12,
+              fontWeight: 700,
+              cursor: "pointer",
+              display: "flex",
+              alignItems: "center",
+              gap: 5,
+            }}
+            title="Open Tactical Unit & Formation Catalog Editor (Port 8780)"
+          >
+            <span>🎖️</span> Unit Editor (8780)
+          </button>
+          <button
+            onClick={() => window.open("http://127.0.0.1:8001/docs", "_blank")}
+            style={{
+              background: "#1e293b",
+              color: "#fde047",
+              border: "1px solid #eab308",
+              borderRadius: 4,
+              padding: "4px 10px",
+              fontSize: 12,
+              fontWeight: 700,
+              cursor: "pointer",
+              display: "flex",
+              alignItems: "center",
+              gap: 5,
+            }}
+            title="Open FastAPI Swagger Interactive Docs (Port 8001)"
+          >
+            <span>⚡</span> Swagger API (8001)
           </button>
 
           <button onClick={() => void load()}>Reload</button>
