@@ -1,15 +1,14 @@
 from __future__ import annotations
 
 import argparse
-import json
+import orjson
 from pathlib import Path
 
 from voec_sim.ui_contract.events import SCHEMA_VERSION
 
 
 def _read_json(path: Path) -> dict:
-    with path.open("r", encoding="utf-8") as f:
-        return json.load(f)
+    return orjson.loads(path.read_bytes())
 
 
 def _load_transition_rows(run_dir: Path) -> list[dict]:
@@ -23,7 +22,7 @@ def _load_transition_rows(run_dir: Path) -> list[dict]:
             if not s:
                 continue
             try:
-                evt = json.loads(s)
+                evt = orjson.loads(s)
             except Exception:
                 continue
             if str(evt.get("type", "")) != "TransitionEvent":
@@ -357,7 +356,7 @@ def main() -> None:
     default_out = repo_root / "runs" / run_id / "xai" / "muzero_timeline_latest.json"
     out_path = Path(args.out).resolve() if str(args.out).strip() else default_out.resolve()
     out_path.parent.mkdir(parents=True, exist_ok=True)
-    out_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+    out_path.write_bytes(orjson.dumps(payload, option=orjson.OPT_INDENT_2))
     print(f"[MuZero] timeline_exported={out_path}")
 
 

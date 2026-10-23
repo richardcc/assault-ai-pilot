@@ -232,6 +232,443 @@ export function CurriculumLineageFlow({
   const canonicalExecutedCount = canonicalItems.filter((item) => item.isExecuted).length;
   const canonicalPendingCount = FULL_ASSAULT_CAMPAIGN_PHASES.length - canonicalExecutedCount;
 
+  // Group canonical items by sub-curriculum (Stage 1 and Stage 2)
+  const canonicalStages = React.useMemo(() => {
+    const stageMap = new Map<number, {
+      stageNumber: number;
+      stageName: string;
+      stageDescription: string;
+      stageIcon: string;
+      accentColor: string;
+      items: typeof canonicalItems;
+    }>();
+
+    canonicalItems.forEach((item) => {
+      const sNum = item.canonicalDef.stageNumber;
+      if (!stageMap.has(sNum)) {
+        const isStage1 = sNum === 1;
+        stageMap.set(sNum, {
+          stageNumber: sNum,
+          stageName: isStage1 ? "Sub-Curriculum 1: Objective Doctrine & VP Acceleration" : "Sub-Curriculum 2: Multi-Scenario Self-Play vs Random",
+          stageDescription: isStage1
+            ? "Fundamental VP sprint, suppression, race & tactical urban assault (Phases 1–5)"
+            : "Multi-scenario generalization (Gela + Mettete), 38Ch sensory adaptation & progressive selfplay (Phases 6–13)",
+          stageIcon: isStage1 ? "🎯" : "⚔️",
+          accentColor: isStage1 ? "#f59e0b" : "#38bdf8",
+          items: [],
+        });
+      }
+      stageMap.get(sNum)!.items.push(item);
+    });
+
+    return Array.from(stageMap.values()).sort((a, b) => a.stageNumber - b.stageNumber);
+  }, [canonicalItems]);
+
+  // Helper to match a chronological step to its stage number
+  function getStepStageNumber(phaseName: string): number {
+    const cIdx = matchCanonicalPhase(phaseName);
+    if (cIdx >= 0 && cIdx < FULL_ASSAULT_CAMPAIGN_PHASES.length) {
+      return FULL_ASSAULT_CAMPAIGN_PHASES[cIdx].stageNumber;
+    }
+    if (/phase[1-5]_/i.test(phaseName)) return 1;
+    return 2;
+  }
+
+  // Group chronological execution nodes by sub-curriculum
+  const chronologicalStages = React.useMemo(() => {
+    const stage1Nodes = chronologicalDisplayNodes.filter((n) => getStepStageNumber(n.phaseName) === 1);
+    const stage2Nodes = chronologicalDisplayNodes.filter((n) => getStepStageNumber(n.phaseName) === 2);
+
+    return [
+      {
+        stageNumber: 1,
+        stageName: "Sub-Curriculum 1: Objective Doctrine & VP Acceleration",
+        stageDescription: "Executed runs in VP sprint, suppression, race & tactical urban assault (Phases 1–5)",
+        stageIcon: "🎯",
+        accentColor: "#f59e0b",
+        nodes: stage1Nodes,
+      },
+      {
+        stageNumber: 2,
+        stageName: "Sub-Curriculum 2: Multi-Scenario Self-Play vs Random",
+        stageDescription: "Executed runs in multi-scenario selfplay progression (Phases 6–13)",
+        stageIcon: "⚔️",
+        accentColor: "#38bdf8",
+        nodes: stage2Nodes,
+      },
+    ];
+  }, [chronologicalDisplayNodes]);
+
+  // Render executed active node card
+  const renderExecutedCard = (
+    item: { canonicalDef?: CanonicalPhaseDef; cyclesCount?: number },
+    node: CurriculumStepMetric,
+    keyPrefix: string,
+    phaseBadgeText: string,
+    displayTitle?: string,
+  ) => {
+    const isPeak = (node.elo ?? 0) === peakElo && peakElo > 0;
+    const isSelected = selectedRunId === node.runId;
+    const isPromoted =
+      node.gateStatus === "PASS" ||
+      node.promotionDecision === "promote" ||
+      node.promotionDecision === "promote_best_of_cycles";
+    const isHeld =
+      node.gateStatus === "FAIL" ||
+      node.promotionDecision === "hold";
+
+    const title = displayTitle || item.canonicalDef?.phaseTitle || node.phaseName.replace(/^phase\d+_/i, "").replace(/_/g, " ");
+    const cyclesCount = item.cyclesCount ?? 1;
+
+    return (
+      <div
+        key={`${keyPrefix}-${node.runId}`}
+        onClick={() => onSelectRunId?.(node.runId)}
+        style={{
+          minWidth: 210,
+          maxWidth: 245,
+          flexShrink: 0,
+          background: isPeak
+            ? "linear-gradient(145deg, #1f1604, #0b1220)"
+            : isSelected
+            ? "#13233c"
+            : "#0c1527",
+          border: isPeak
+            ? "2px solid #f59e0b"
+            : isSelected
+            ? "2px solid #38bdf8"
+            : "1px solid #1e293b",
+          borderRadius: 8,
+          padding: "10px 12px",
+          cursor: "pointer",
+          boxShadow: isPeak
+            ? "0 0 14px rgba(245, 158, 11, 0.35)"
+            : isSelected
+            ? "0 0 12px rgba(56, 189, 248, 0.3)"
+            : "none",
+          transition: "all 0.15s ease-in-out",
+          position: "relative",
+        }}
+        title={`Click to inspect run ${node.runId}`}
+      >
+        {/* Peak Badge */}
+        {isPeak && (
+          <div
+            style={{
+              position: "absolute",
+              top: -10,
+              right: 10,
+              background: "#f59e0b",
+              color: "#000000",
+              fontSize: 9,
+              fontWeight: 800,
+              padding: "1px 6px",
+              borderRadius: 3,
+              boxShadow: "0 2px 4px rgba(0,0,0,0.5)",
+              letterSpacing: "0.5px",
+            }}
+          >
+            ★ ALL-TIME PEAK
+          </div>
+        )}
+
+        {/* Node Phase & Step Index */}
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
+          <span
+            style={{
+              fontSize: 10,
+              fontWeight: 700,
+              textTransform: "uppercase",
+              color: isPeak ? "#fde047" : "#38bdf8",
+              background: isPeak ? "#78350f50" : "#0284c725",
+              padding: "1px 5px",
+              borderRadius: 3,
+            }}
+          >
+            {phaseBadgeText}
+          </span>
+          <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+            {cyclesCount > 1 && (
+              <span
+                style={{
+                  fontSize: 9,
+                  fontWeight: 700,
+                  background: "#33415550",
+                  border: "1px solid #47556950",
+                  color: "#cbd5e1",
+                  padding: "0 4px",
+                  borderRadius: 3,
+                }}
+                title={`${cyclesCount} reinforcement/eval cycles executed for this phase`}
+              >
+                🔁 {cyclesCount} Cycles
+              </span>
+            )}
+            <span style={{ fontSize: 10, color: "#64748b" }}>
+              C{node.cycleInPhase}/{node.totalCyclesInPhase}
+            </span>
+          </div>
+        </div>
+
+        {/* Stage Tag */}
+        <div style={{ fontSize: 9, fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.4px", marginBottom: 2 }}>
+          {item.canonicalDef?.stageName || (getStepStageNumber(node.phaseName) === 1 ? "Stage 1: Objective Doctrine" : "Stage 2: Multi-Scenario Self-Play")}
+        </div>
+
+        {/* Phase Name & Run ID */}
+        <div style={{ fontWeight: 700, fontSize: 12, color: "#f8fafc", marginBottom: 2, textTransform: "capitalize" }}>
+          {title}
+        </div>
+        <div
+          style={{
+            fontSize: 10,
+            fontFamily: "monospace",
+            color: isSelected ? "#38bdf8" : "#94a3b8",
+            marginBottom: 8,
+          }}
+        >
+          {node.runId.length > 20 ? node.runId.substring(0, 20) + "…" : node.runId}
+        </div>
+
+        {/* ELO & Delta Pill */}
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
+          <span className="muted" style={{ fontSize: 11 }}>Calibrated ELO:</span>
+          <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+            <span style={{ fontWeight: 800, fontSize: 13, color: isPeak ? "#fde047" : "#e2e8f0" }}>
+              {node.elo ?? "-"}
+            </span>
+            {node.deltaElo !== null && node.deltaElo !== 0 && (
+              <span
+                style={{
+                  fontSize: 10,
+                  fontWeight: 700,
+                  color: node.deltaElo > 0 ? "#34d399" : "#f87171",
+                }}
+              >
+                {node.deltaElo > 0 ? `+${node.deltaElo}` : node.deltaElo}
+              </span>
+            )}
+          </div>
+        </div>
+
+        {/* Win Rate & Target Goal */}
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 11, marginBottom: 2 }}>
+          <span className="muted">Win Rate:</span>
+          <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+            <span style={{ fontWeight: 700, color: (node.winRate ?? 0) >= (node.targetWinRate ?? 0.5) ? "#34d399" : "#f87171" }}>
+              {node.winRate !== null ? `${(node.winRate * 100).toFixed(1)}%` : "-"}
+            </span>
+            {node.targetWinRate !== null && (
+              <span style={{ fontSize: 9, color: (node.winRate ?? 0) >= node.targetWinRate ? "#10b981aa" : "#94a3b8" }}>
+                (🎯 &gt;={(node.targetWinRate * 100).toFixed(0)}%)
+              </span>
+            )}
+          </div>
+        </div>
+
+        {/* VPs Controlled vs Goal */}
+        {(node.capturedAvg !== null || node.targetCapturedAvg !== null) && (
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 11, marginBottom: 2 }}>
+            <span className="muted">VPs Avg:</span>
+            <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+              <span style={{ fontWeight: 700, color: (node.capturedAvg ?? 0) >= (node.targetCapturedAvg ?? 0) ? "#34d399" : "#f87171" }}>
+                {node.capturedAvg !== null ? node.capturedAvg.toFixed(2) : "-"}
+              </span>
+              {node.targetCapturedAvg !== null && (
+                <span style={{ fontSize: 9, color: (node.capturedAvg ?? 0) >= node.targetCapturedAvg ? "#10b981aa" : "#94a3b8" }}>
+                  (🎯 &gt;={node.targetCapturedAvg.toFixed(2)})
+                </span>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* VP Take Rate vs Goal */}
+        {(node.vpTakeRate !== null || node.targetVpTakeRate !== null) && (
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 10, marginBottom: 2 }}>
+            <span className="muted">Take Rate:</span>
+            <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+              <span style={{ fontWeight: 600, color: (node.vpTakeRate ?? 0) >= (node.targetVpTakeRate ?? 0) ? "#34d399" : "#f87171" }}>
+                {node.vpTakeRate !== null ? node.vpTakeRate.toFixed(3) : "-"}
+              </span>
+              {node.targetVpTakeRate !== null && (
+                <span style={{ fontSize: 9, color: (node.vpTakeRate ?? 0) >= node.targetVpTakeRate ? "#10b981aa" : "#94a3b8" }}>
+                  (🎯 &gt;={node.targetVpTakeRate.toFixed(3)})
+                </span>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Status indicator */}
+        <div style={{ marginTop: 6, paddingTop: 6, borderTop: "1px solid #1e293b", display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 10 }}>
+          {isPromoted ? (
+            <span style={{ color: "#10b981", fontWeight: 700 }}>
+              ★ PROMOTED
+            </span>
+          ) : isHeld ? (
+            <span style={{ color: "#f87171", fontWeight: 700 }}>
+              ⚠️ GATE FAILED (HOLD)
+            </span>
+          ) : (
+            <span style={{ color: "#94a3b8", fontWeight: 600 }}>
+              EVALUATED
+            </span>
+          )}
+          <span style={{ color: "#64748b" }}>
+            {node.checkpoint && node.checkpoint !== "-" ? "Checkpoint OK" : "In Progress"}
+          </span>
+        </div>
+      </div>
+    );
+  };
+
+  // Render ghost / upcoming pending canonical phase card
+  const renderPendingCard = (pending: CanonicalPhaseDef, keyPrefix: string) => {
+    const isStageTransition = pending.phaseNumber === 6;
+    return (
+      <div
+        key={`${keyPrefix}-${pending.phaseKey}`}
+        style={{
+          minWidth: 210,
+          maxWidth: 245,
+          flexShrink: 0,
+          background: isStageTransition ? "rgba(15, 23, 42, 0.45)" : "rgba(11, 18, 32, 0.35)",
+          border: isStageTransition ? "1px dashed rgba(56, 189, 248, 0.55)" : "1px dashed rgba(100, 116, 139, 0.45)",
+          borderRadius: 8,
+          padding: "10px 12px",
+          opacity: 0.55,
+          position: "relative",
+          filter: "grayscale(25%)",
+          transition: "all 0.2s ease-in-out",
+        }}
+        title={`Upcoming canonical phase: ${pending.phaseTitle} (Not started yet)`}
+        onMouseEnter={(e) => {
+          e.currentTarget.style.opacity = "0.90";
+          e.currentTarget.style.border = "1px dashed rgba(56, 189, 248, 0.85)";
+        }}
+        onMouseLeave={(e) => {
+          e.currentTarget.style.opacity = "0.55";
+          e.currentTarget.style.border = isStageTransition ? "1px dashed rgba(56, 189, 248, 0.55)" : "1px dashed rgba(100, 116, 139, 0.45)";
+        }}
+      >
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
+          <span
+            style={{
+              fontSize: 10,
+              fontWeight: 700,
+              textTransform: "uppercase",
+              color: isStageTransition ? "#38bdf8" : "#94a3b8",
+              background: isStageTransition ? "#0284c720" : "#1e293b60",
+              padding: "1px 5px",
+              borderRadius: 3,
+            }}
+          >
+            Phase {pending.phaseNumber}
+          </span>
+          <span
+            style={{
+              fontSize: 9,
+              fontWeight: 700,
+              color: isStageTransition ? "#38bdf8" : "#94a3b8",
+              background: "#33415540",
+              border: "1px solid #47556940",
+              padding: "1px 6px",
+              borderRadius: 3,
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 3,
+            }}
+          >
+            ⏳ PENDING
+          </span>
+        </div>
+
+        <div style={{ fontSize: 9, fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.4px", marginBottom: 2 }}>
+          {pending.stageName}
+        </div>
+
+        <div style={{ fontWeight: 700, fontSize: 12, color: "#cbd5e1", marginBottom: 3, textTransform: "capitalize" }}>
+          {pending.phaseTitle}
+        </div>
+
+        <div
+          style={{
+            fontSize: 10,
+            color: "#64748b",
+            marginBottom: 8,
+            lineHeight: "1.3",
+            minHeight: 24,
+          }}
+        >
+          {pending.description || "Awaiting previous phase completion"}
+        </div>
+
+        <div style={{ display: "flex", flexDirection: "column", gap: 3, padding: "6px 8px", background: "#060b1340", borderRadius: 4, marginBottom: 8, border: "1px solid #1e293b40" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", fontSize: 10, color: "#94a3b8" }}>
+            <span>Goal Win Rate:</span>
+            <strong style={{ color: "#38bdf8" }}>
+              {pending.targetWinRate !== undefined ? `≥${(pending.targetWinRate * 100).toFixed(0)}%` : "-"}
+            </strong>
+          </div>
+          {pending.targetCapturedAvg !== undefined && (
+            <div style={{ display: "flex", justifyContent: "space-between", fontSize: 10, color: "#94a3b8" }}>
+              <span>Goal VPs Avg:</span>
+              <strong style={{ color: "#38bdf8" }}>
+                ≥{pending.targetCapturedAvg.toFixed(2)}
+              </strong>
+            </div>
+          )}
+          {pending.targetVpTakeRate !== undefined && (
+            <div style={{ display: "flex", justifyContent: "space-between", fontSize: 10, color: "#94a3b8" }}>
+              <span>Goal Take Rate:</span>
+              <strong style={{ color: "#38bdf8" }}>
+                ≥{pending.targetVpTakeRate.toFixed(3)}
+              </strong>
+            </div>
+          )}
+        </div>
+
+        <div style={{ paddingTop: 4, borderTop: "1px dashed #1e293b", display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 9 }}>
+          <span style={{ color: "#64748b", fontWeight: 600 }}>
+            ⚪ NOT STARTED
+          </span>
+          <span style={{ color: "#475569" }}>
+            Upcoming
+          </span>
+        </div>
+      </div>
+    );
+  };
+
+  // Render arrow connector between nodes
+  const renderConnector = (key: string, label: string = "Weights", isHighlight: boolean = false) => (
+    <div
+      key={key}
+      style={{
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "center",
+        gap: 2,
+        flexShrink: 0,
+        padding: "0 2px",
+      }}
+    >
+      <span style={{ fontSize: 18, color: isHighlight ? "#38bdf8" : "#f59e0b" }}>➔</span>
+      <span
+        style={{
+          fontSize: 8,
+          color: isHighlight ? "#38bdf8" : "#64748b",
+          textTransform: "uppercase",
+          letterSpacing: "0.4px",
+          fontWeight: isHighlight ? 800 : 700,
+        }}
+      >
+        {label}
+      </span>
+    </div>
+  );
+
   return (
     <div
       style={{
@@ -249,14 +686,14 @@ export function CurriculumLineageFlow({
           display: "flex",
           justifyContent: "space-between",
           alignItems: "center",
-          marginBottom: 12,
+          marginBottom: 14,
           flexWrap: "wrap",
           gap: 10,
         }}
       >
         <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
           <span style={{ fontSize: 14, fontWeight: 700, color: "#f59e0b", display: "flex", alignItems: "center", gap: 6 }}>
-            <span>🗺️</span> Full Assault Campaign Pipeline (13 Phases)
+            <span>🗺️</span> Full Assault Campaign Pipeline (13 Phases across 2 Sub-Curriculums)
           </span>
           <span
             style={{
@@ -329,9 +766,9 @@ export function CurriculumLineageFlow({
               cursor: "pointer",
               transition: "all 0.15s",
             }}
-            title="Show the true 13-Phase Campaign Roadmap with 1-to-1 canonical mapping and pending ghost phases"
+            title="Show the true 13-Phase Campaign Roadmap organized in dedicated Sub-Curriculum rows"
           >
-            ★ 13-Phase Campaign Map ({canonicalExecutedCount}/13)
+            ★ 13-Phase Campaign Rows ({canonicalExecutedCount}/13)
           </button>
           <button
             onClick={() => setViewMode("chronological")}
@@ -346,628 +783,266 @@ export function CurriculumLineageFlow({
               cursor: "pointer",
               transition: "all 0.15s",
             }}
-            title="Show every historical phase group and re-training cycle in order of execution"
+            title="Show every historical phase group and re-training cycle organized by sub-curriculum rows"
           >
             All Execution Runs ({chronologicalDisplayNodes.length} Phases)
           </button>
         </div>
       </div>
 
-      {/* Visual Pipeline Flowchart (Horizontal Scrollable Nodes) */}
-      <div
-        style={{
-          display: "flex",
-          alignItems: "center",
-          gap: 12,
-          overflowX: "auto",
-          paddingBottom: 10,
-          paddingTop: 4,
-        }}
-      >
+      {/* Sub-Curriculum Rows Container */}
+      <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
         {/* ============================================================== */}
-        {/* VIEW MODE 1: CANONICAL 13-PHASE CAMPAIGN MAP (Default & Strict) */}
+        {/* VIEW MODE 1: CANONICAL SUB-CURRICULUM ROWS                     */}
         {/* ============================================================== */}
         {viewMode === "canonical" &&
-          canonicalItems.map((item, idx) => {
-            const isStageTransition = item.canonicalDef.phaseNumber === 6;
+          canonicalStages.map((stage, stageIdx) => {
+            const stageExecuted = stage.items.filter((it) => it.isExecuted).length;
+            const stageTotal = stage.items.length;
+            const isStageCompleted = stageExecuted === stageTotal;
+            const isStageActive = stageExecuted > 0 && !isStageCompleted;
 
-            if (item.isExecuted && item.step) {
-              const node = item.step;
-              const isPeak = (node.elo ?? 0) === peakElo && peakElo > 0;
-              const isSelected = selectedRunId === node.runId;
-              const isPromoted =
-                node.gateStatus === "PASS" ||
-                node.promotionDecision === "promote" ||
-                node.promotionDecision === "promote_best_of_cycles";
-              const isHeld =
-                node.gateStatus === "FAIL" ||
-                node.promotionDecision === "hold";
-
-              return (
-                <React.Fragment key={`canonical-${item.canonicalDef.phaseKey}`}>
-                  {/* Active Executed Node Card */}
+            return (
+              <React.Fragment key={`stage-row-${stage.stageNumber}`}>
+                {/* Inter-Stage Breakthrough Transition Bridge (Between Row 1 and Row 2) */}
+                {stageIdx > 0 && (
                   <div
-                    onClick={() => onSelectRunId?.(node.runId)}
                     style={{
-                      minWidth: 210,
-                      maxWidth: 245,
-                      flexShrink: 0,
-                      background: isPeak
-                        ? "linear-gradient(145deg, #1f1604, #0b1220)"
-                        : isSelected
-                        ? "#13233c"
-                        : "#0c1527",
-                      border: isPeak
-                        ? "2px solid #f59e0b"
-                        : isSelected
-                        ? "2px solid #38bdf8"
-                        : "1px solid #1e293b",
-                      borderRadius: 8,
-                      padding: "10px 12px",
-                      cursor: "pointer",
-                      boxShadow: isPeak
-                        ? "0 0 14px rgba(245, 158, 11, 0.35)"
-                        : isSelected
-                        ? "0 0 12px rgba(56, 189, 248, 0.3)"
-                        : "none",
-                      transition: "all 0.15s ease-in-out",
-                      position: "relative",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "space-between",
+                      gap: 12,
+                      margin: "4px 0",
+                      padding: "8px 14px",
+                      background: "linear-gradient(90deg, rgba(245, 158, 11, 0.08), rgba(56, 189, 248, 0.14), rgba(245, 158, 11, 0.08))",
+                      border: "1px dashed rgba(56, 189, 248, 0.4)",
+                      borderRadius: 6,
+                      flexWrap: "wrap",
                     }}
-                    title={`Click to inspect run ${node.runId} (${item.canonicalDef.stageName})`}
                   >
-                    {/* Peak Badge */}
-                    {isPeak && (
-                      <div
+                    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                      <span style={{ fontSize: 15 }}>⬇️</span>
+                      <span style={{ fontSize: 12, fontWeight: 800, color: "#38bdf8", letterSpacing: "0.5px" }}>
+                        STAGE TRANSITION BREAKTHROUGH:
+                      </span>
+                      <span style={{ fontSize: 11, color: "#cbd5e1" }}>
+                        Weights from Stage {stage.stageNumber - 1} Promoted Checkpoint initialize Stage {stage.stageNumber} Base Model
+                      </span>
+                    </div>
+                    <span
+                      style={{
+                        fontSize: 10,
+                        fontWeight: 700,
+                        background: "#0f172a",
+                        border: "1px solid #0284c760",
+                        color: "#7dd3fc",
+                        padding: "2px 8px",
+                        borderRadius: 4,
+                      }}
+                    >
+                      Phase 5 (Urban Assault) ➔ Phase 6 (Bootstrap Multi-Map)
+                    </span>
+                  </div>
+                )}
+
+                {/* Sub-Curriculum Card Row Container */}
+                <div
+                  style={{
+                    background: "#060b16",
+                    border: "1px solid #1e293b",
+                    borderRadius: 7,
+                    padding: "10px 12px",
+                  }}
+                >
+                  {/* Row Header Bar */}
+                  <div
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "space-between",
+                      marginBottom: 10,
+                      paddingBottom: 6,
+                      borderBottom: "1px solid #1e293b80",
+                      flexWrap: "wrap",
+                      gap: 8,
+                    }}
+                  >
+                    <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                      <span
                         style={{
-                          position: "absolute",
-                          top: -10,
-                          right: 10,
-                          background: "#f59e0b",
-                          color: "#000000",
-                          fontSize: 9,
+                          fontSize: 12,
                           fontWeight: 800,
-                          padding: "1px 6px",
-                          borderRadius: 3,
-                          boxShadow: "0 2px 4px rgba(0,0,0,0.5)",
-                          letterSpacing: "0.5px",
+                          color: stage.accentColor,
+                          display: "flex",
+                          alignItems: "center",
+                          gap: 6,
                         }}
                       >
-                        ★ ALL-TIME PEAK
-                      </div>
-                    )}
+                        <span>{stage.stageIcon}</span>
+                        {stage.stageName.toUpperCase()}
+                      </span>
+                      <span style={{ fontSize: 11, color: "#64748b" }}>
+                        • {stage.stageDescription}
+                      </span>
+                    </div>
 
-                    {/* Node Phase & Step Index */}
-                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                       <span
                         style={{
                           fontSize: 10,
                           fontWeight: 700,
-                          textTransform: "uppercase",
-                          color: isPeak ? "#fde047" : "#38bdf8",
-                          background: isPeak ? "#78350f50" : "#0284c725",
-                          padding: "1px 5px",
-                          borderRadius: 3,
+                          background: isStageCompleted ? "#065f46" : isStageActive ? "#78350f" : "#1e293b",
+                          color: isStageCompleted ? "#34d399" : isStageActive ? "#fde047" : "#94a3b8",
+                          padding: "2px 8px",
+                          borderRadius: 4,
+                          border: `1px solid ${isStageCompleted ? "#10b98150" : isStageActive ? "#f59e0b50" : "#334155"}`,
                         }}
                       >
-                        Phase {item.canonicalDef.phaseNumber}
-                      </span>
-                      <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
-                        {item.cyclesCount > 1 && (
-                          <span
-                            style={{
-                              fontSize: 9,
-                              fontWeight: 700,
-                              background: "#33415550",
-                              border: "1px solid #47556950",
-                              color: "#cbd5e1",
-                              padding: "0 4px",
-                              borderRadius: 3,
-                            }}
-                            title={`${item.cyclesCount} reinforcement/eval cycles executed for this phase`}
-                          >
-                            🔁 {item.cyclesCount} Cycles
-                          </span>
-                        )}
-                        <span style={{ fontSize: 10, color: "#64748b" }}>
-                          C{node.cycleInPhase}/{node.totalCyclesInPhase}
-                        </span>
-                      </div>
-                    </div>
-
-                    {/* Stage Tag */}
-                    <div style={{ fontSize: 9, fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.4px", marginBottom: 2 }}>
-                      {item.canonicalDef.stageName}
-                    </div>
-
-                    {/* Phase Name & Run ID */}
-                    <div style={{ fontWeight: 700, fontSize: 12, color: "#f8fafc", marginBottom: 2, textTransform: "capitalize" }}>
-                      {item.canonicalDef.phaseTitle}
-                    </div>
-                    <div
-                      style={{
-                        fontSize: 10,
-                        fontFamily: "monospace",
-                        color: isSelected ? "#38bdf8" : "#94a3b8",
-                        marginBottom: 8,
-                      }}
-                    >
-                      {node.runId.length > 20 ? node.runId.substring(0, 20) + "…" : node.runId}
-                    </div>
-
-                    {/* ELO & Delta Pill */}
-                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
-                      <span className="muted" style={{ fontSize: 11 }}>Calibrated ELO:</span>
-                      <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
-                        <span style={{ fontWeight: 800, fontSize: 13, color: isPeak ? "#fde047" : "#e2e8f0" }}>
-                          {node.elo ?? "-"}
-                        </span>
-                        {node.deltaElo !== null && node.deltaElo !== 0 && (
-                          <span
-                            style={{
-                              fontSize: 10,
-                              fontWeight: 700,
-                              color: node.deltaElo > 0 ? "#34d399" : "#f87171",
-                            }}
-                          >
-                            {node.deltaElo > 0 ? `+${node.deltaElo}` : node.deltaElo}
-                          </span>
-                        )}
-                      </div>
-                    </div>
-
-                    {/* Win Rate & Target Goal */}
-                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 11, marginBottom: 2 }}>
-                      <span className="muted">Win Rate:</span>
-                      <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
-                        <span style={{ fontWeight: 700, color: (node.winRate ?? 0) >= (node.targetWinRate ?? 0.5) ? "#34d399" : "#f87171" }}>
-                          {node.winRate !== null ? `${(node.winRate * 100).toFixed(1)}%` : "-"}
-                        </span>
-                        {node.targetWinRate !== null && (
-                          <span style={{ fontSize: 9, color: (node.winRate ?? 0) >= node.targetWinRate ? "#10b981aa" : "#94a3b8" }}>
-                            (🎯 &gt;={(node.targetWinRate * 100).toFixed(0)}%)
-                          </span>
-                        )}
-                      </div>
-                    </div>
-
-                    {/* VPs Controlled vs Goal */}
-                    {(node.capturedAvg !== null || node.targetCapturedAvg !== null) && (
-                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 11, marginBottom: 2 }}>
-                        <span className="muted">VPs Avg:</span>
-                        <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
-                          <span style={{ fontWeight: 700, color: (node.capturedAvg ?? 0) >= (node.targetCapturedAvg ?? 0) ? "#34d399" : "#f87171" }}>
-                            {node.capturedAvg !== null ? node.capturedAvg.toFixed(2) : "-"}
-                          </span>
-                          {node.targetCapturedAvg !== null && (
-                            <span style={{ fontSize: 9, color: (node.capturedAvg ?? 0) >= node.targetCapturedAvg ? "#10b981aa" : "#94a3b8" }}>
-                              (🎯 &gt;={node.targetCapturedAvg.toFixed(2)})
-                            </span>
-                          )}
-                        </div>
-                      </div>
-                    )}
-
-                    {/* VP Take Rate vs Goal */}
-                    {(node.vpTakeRate !== null || node.targetVpTakeRate !== null) && (
-                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 10, marginBottom: 2 }}>
-                        <span className="muted">Take Rate:</span>
-                        <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
-                          <span style={{ fontWeight: 600, color: (node.vpTakeRate ?? 0) >= (node.targetVpTakeRate ?? 0) ? "#34d399" : "#f87171" }}>
-                            {node.vpTakeRate !== null ? node.vpTakeRate.toFixed(3) : "-"}
-                          </span>
-                          {node.targetVpTakeRate !== null && (
-                            <span style={{ fontSize: 9, color: (node.vpTakeRate ?? 0) >= node.targetVpTakeRate ? "#10b981aa" : "#94a3b8" }}>
-                              (🎯 &gt;={node.targetVpTakeRate.toFixed(3)})
-                            </span>
-                          )}
-                        </div>
-                      </div>
-                    )}
-
-                    {/* Status indicator */}
-                    <div style={{ marginTop: 6, paddingTop: 6, borderTop: "1px solid #1e293b", display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 10 }}>
-                      {isPromoted ? (
-                        <span style={{ color: "#10b981", fontWeight: 700 }}>
-                          ★ PROMOTED
-                        </span>
-                      ) : isHeld ? (
-                        <span style={{ color: "#f87171", fontWeight: 700 }}>
-                          ⚠️ GATE FAILED (HOLD)
-                        </span>
-                      ) : (
-                        <span style={{ color: "#94a3b8", fontWeight: 600 }}>
-                          EVALUATED
-                        </span>
-                      )}
-                      <span style={{ color: "#64748b" }}>
-                        {node.checkpoint && node.checkpoint !== "-" ? "Checkpoint OK" : "In Progress"}
+                        {stageExecuted} / {stageTotal} Phases {isStageCompleted ? "Completed ✓" : isStageActive ? "In Progress" : "Pending ⏳"}
                       </span>
                     </div>
                   </div>
 
-                  {/* Connector Arrow */}
-                  {idx < canonicalItems.length - 1 && (
-                    <div
-                      style={{
-                        display: "flex",
-                        flexDirection: "column",
-                        alignItems: "center",
-                        gap: 2,
-                        flexShrink: 0,
-                        padding: "0 2px",
-                      }}
-                    >
-                      <span style={{ fontSize: 18, color: idx === 4 ? "#38bdf8" : "#f59e0b" }}>➔</span>
-                      <span
-                        style={{
-                          fontSize: 8,
-                          color: idx === 4 ? "#38bdf8" : "#64748b",
-                          textTransform: "uppercase",
-                          letterSpacing: "0.4px",
-                          fontWeight: idx === 4 ? 800 : 700,
-                        }}
-                      >
-                        {idx === 4 ? "Stage 2 Breakthrough" : "Weights"}
-                      </span>
-                    </div>
-                  )}
-                </React.Fragment>
-              );
-            }
-
-            // Upcoming / Remaining Pending Canonical Phase (Rendered in faint / ghost style)
-            const pending = item.canonicalDef;
-
-            return (
-              <React.Fragment key={`pending-canonical-${pending.phaseKey}`}>
-                <div
-                  style={{
-                    minWidth: 210,
-                    maxWidth: 245,
-                    flexShrink: 0,
-                    background: isStageTransition ? "rgba(15, 23, 42, 0.45)" : "rgba(11, 18, 32, 0.35)",
-                    border: isStageTransition ? "1px dashed rgba(56, 189, 248, 0.55)" : "1px dashed rgba(100, 116, 139, 0.45)",
-                    borderRadius: 8,
-                    padding: "10px 12px",
-                    opacity: 0.55,
-                    position: "relative",
-                    filter: "grayscale(25%)",
-                    transition: "all 0.2s ease-in-out",
-                  }}
-                  title={`Upcoming canonical phase in campaign: ${pending.phaseTitle} (Not started yet)`}
-                  onMouseEnter={(e) => {
-                    e.currentTarget.style.opacity = "0.90";
-                    e.currentTarget.style.border = "1px dashed rgba(56, 189, 248, 0.85)";
-                  }}
-                  onMouseLeave={(e) => {
-                    e.currentTarget.style.opacity = "0.55";
-                    e.currentTarget.style.border = isStageTransition ? "1px dashed rgba(56, 189, 248, 0.55)" : "1px dashed rgba(100, 116, 139, 0.45)";
-                  }}
-                >
-                  {/* Header: Phase Number & Pending Badge */}
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
-                    <span
-                      style={{
-                        fontSize: 10,
-                        fontWeight: 700,
-                        textTransform: "uppercase",
-                        color: isStageTransition ? "#38bdf8" : "#94a3b8",
-                        background: isStageTransition ? "#0284c720" : "#1e293b60",
-                        padding: "1px 5px",
-                        borderRadius: 3,
-                      }}
-                    >
-                      Phase {pending.phaseNumber}
-                    </span>
-                    <span
-                      style={{
-                        fontSize: 9,
-                        fontWeight: 700,
-                        color: isStageTransition ? "#38bdf8" : "#94a3b8",
-                        background: "#33415540",
-                        border: "1px solid #47556940",
-                        padding: "1px 6px",
-                        borderRadius: 3,
-                        display: "inline-flex",
-                        alignItems: "center",
-                        gap: 3,
-                      }}
-                    >
-                      ⏳ PENDING
-                    </span>
-                  </div>
-
-                  {/* Stage Tag */}
-                  <div style={{ fontSize: 9, fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.4px", marginBottom: 2 }}>
-                    {pending.stageName}
-                  </div>
-
-                  {/* Phase Title */}
-                  <div style={{ fontWeight: 700, fontSize: 12, color: "#cbd5e1", marginBottom: 3, textTransform: "capitalize" }}>
-                    {pending.phaseTitle}
-                  </div>
-
-                  {/* Subtitle / Description */}
-                  <div
-                    style={{
-                      fontSize: 10,
-                      color: "#64748b",
-                      marginBottom: 8,
-                      lineHeight: "1.3",
-                      minHeight: 24,
-                    }}
-                  >
-                    {pending.description || "Awaiting previous phase completion"}
-                  </div>
-
-                  {/* Target Goals Placeholder */}
-                  <div style={{ display: "flex", flexDirection: "column", gap: 3, padding: "6px 8px", background: "#060b1340", borderRadius: 4, marginBottom: 8, border: "1px solid #1e293b40" }}>
-                    <div style={{ display: "flex", justifyContent: "space-between", fontSize: 10, color: "#94a3b8" }}>
-                      <span>Goal Win Rate:</span>
-                      <strong style={{ color: "#38bdf8" }}>
-                        {pending.targetWinRate !== undefined ? `≥${(pending.targetWinRate * 100).toFixed(0)}%` : "-"}
-                      </strong>
-                    </div>
-                    {pending.targetCapturedAvg !== undefined && (
-                      <div style={{ display: "flex", justifyContent: "space-between", fontSize: 10, color: "#94a3b8" }}>
-                        <span>Goal VPs Avg:</span>
-                        <strong style={{ color: "#38bdf8" }}>
-                          ≥{pending.targetCapturedAvg.toFixed(2)}
-                        </strong>
-                      </div>
-                    )}
-                    {pending.targetVpTakeRate !== undefined && (
-                      <div style={{ display: "flex", justifyContent: "space-between", fontSize: 10, color: "#94a3b8" }}>
-                        <span>Goal Take Rate:</span>
-                        <strong style={{ color: "#38bdf8" }}>
-                          ≥{pending.targetVpTakeRate.toFixed(3)}
-                        </strong>
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Bottom Status */}
-                  <div style={{ paddingTop: 4, borderTop: "1px dashed #1e293b", display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 9 }}>
-                    <span style={{ color: "#64748b", fontWeight: 600 }}>
-                      ⚪ NOT STARTED
-                    </span>
-                    <span style={{ color: "#475569" }}>
-                      Upcoming
-                    </span>
-                  </div>
-                </div>
-
-                {/* Arrow Connector between pending nodes */}
-                {idx < canonicalItems.length - 1 && (
+                  {/* Horizontal Flow of Phases in This Sub-Curriculum Row */}
                   <div
                     style={{
                       display: "flex",
-                      flexDirection: "column",
                       alignItems: "center",
-                      gap: 2,
-                      flexShrink: 0,
-                      padding: "0 2px",
-                      opacity: 0.45,
+                      gap: 10,
+                      overflowX: "auto",
+                      paddingBottom: 4,
+                      paddingTop: 2,
                     }}
                   >
-                    <span style={{ fontSize: 18, color: "#475569" }}>➔</span>
-                    <span style={{ fontSize: 8, color: "#334155", textTransform: "uppercase", letterSpacing: "0.4px" }}>
-                      Queue
-                    </span>
+                    {stage.items.map((item, idx) => (
+                      <React.Fragment key={`canonical-${item.canonicalDef.phaseKey}`}>
+                        {item.isExecuted && item.step
+                          ? renderExecutedCard(item, item.step, "canonical", `Phase ${item.canonicalDef.phaseNumber}`)
+                          : renderPendingCard(item.canonicalDef, "canonical")}
+                        {idx < stage.items.length - 1 && renderConnector(`canonical-conn-${item.canonicalDef.phaseKey}`)}
+                      </React.Fragment>
+                    ))}
                   </div>
-                )}
+                </div>
               </React.Fragment>
             );
           })}
 
         {/* ============================================================== */}
-        {/* VIEW MODE 2: CHRONOLOGICAL EXECUTION RUNS (All historical groups) */}
+        {/* VIEW MODE 2: CHRONOLOGICAL EXECUTION RUNS BY SUB-CURRICULUM     */}
         {/* ============================================================== */}
         {viewMode === "chronological" &&
-          chronologicalDisplayNodes.map((node, idx) => {
-            const isPeak = (node.elo ?? 0) === peakElo && peakElo > 0;
-            const isSelected = selectedRunId === node.runId;
-            const cleanPhase = node.phaseName
-              .replace(/^phase\d+_/i, "")
-              .replace(/_v\d+.*$/i, "")
-              .replace(/_/g, " ");
-
-            const isPromoted =
-              node.gateStatus === "PASS" ||
-              node.promotionDecision === "promote" ||
-              node.promotionDecision === "promote_best_of_cycles";
-
-            const isHeld =
-              node.gateStatus === "FAIL" ||
-              node.promotionDecision === "hold";
+          chronologicalStages.map((stage, stageIdx) => {
+            const hasRuns = stage.nodes.length > 0;
 
             return (
-              <React.Fragment key={`chrono-${node.runId}`}>
-                <div
-                  onClick={() => onSelectRunId?.(node.runId)}
-                  style={{
-                    minWidth: 200,
-                    maxWidth: 240,
-                    flexShrink: 0,
-                    background: isPeak
-                      ? "linear-gradient(145deg, #1f1604, #0b1220)"
-                      : isSelected
-                      ? "#13233c"
-                      : "#0c1527",
-                    border: isPeak
-                      ? "2px solid #f59e0b"
-                      : isSelected
-                      ? "2px solid #38bdf8"
-                      : "1px solid #1e293b",
-                    borderRadius: 8,
-                    padding: "10px 12px",
-                    cursor: "pointer",
-                    boxShadow: isPeak
-                      ? "0 0 14px rgba(245, 158, 11, 0.35)"
-                      : isSelected
-                      ? "0 0 12px rgba(56, 189, 248, 0.3)"
-                      : "none",
-                    transition: "all 0.15s ease-in-out",
-                    position: "relative",
-                  }}
-                  title={`Click to inspect run ${node.runId}`}
-                >
-                  {isPeak && (
-                    <div
-                      style={{
-                        position: "absolute",
-                        top: -10,
-                        right: 10,
-                        background: "#f59e0b",
-                        color: "#000000",
-                        fontSize: 9,
-                        fontWeight: 800,
-                        padding: "1px 6px",
-                        borderRadius: 3,
-                        boxShadow: "0 2px 4px rgba(0,0,0,0.5)",
-                        letterSpacing: "0.5px",
-                      }}
-                    >
-                      ★ ALL-TIME PEAK
-                    </div>
-                  )}
+              <React.Fragment key={`chrono-row-${stage.stageNumber}`}>
+                {stageIdx > 0 && (
+                  <div
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      gap: 8,
+                      margin: "4px 0",
+                      padding: "6px 12px",
+                      background: "rgba(30, 41, 59, 0.3)",
+                      border: "1px dashed #334155",
+                      borderRadius: 6,
+                    }}
+                  >
+                    <span style={{ fontSize: 11, color: "#64748b", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.5px" }}>
+                      ⬇️ Sub-Curriculum Transition: Stage {stage.stageNumber - 1} ➔ Stage {stage.stageNumber} ⬇️
+                    </span>
+                  </div>
+                )}
 
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
+                <div
+                  style={{
+                    background: "#060b16",
+                    border: "1px solid #1e293b",
+                    borderRadius: 7,
+                    padding: "10px 12px",
+                  }}
+                >
+                  {/* Row Header */}
+                  <div
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "space-between",
+                      marginBottom: 10,
+                      paddingBottom: 6,
+                      borderBottom: "1px solid #1e293b80",
+                      flexWrap: "wrap",
+                      gap: 8,
+                    }}
+                  >
+                    <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                      <span
+                        style={{
+                          fontSize: 12,
+                          fontWeight: 800,
+                          color: stage.accentColor,
+                          display: "flex",
+                          alignItems: "center",
+                          gap: 6,
+                        }}
+                      >
+                        <span>{stage.stageIcon}</span>
+                        {stage.stageName.toUpperCase()}
+                      </span>
+                      <span style={{ fontSize: 11, color: "#64748b" }}>
+                        • {stage.stageDescription}
+                      </span>
+                    </div>
+
                     <span
                       style={{
                         fontSize: 10,
                         fontWeight: 700,
-                        textTransform: "uppercase",
-                        color: isPeak ? "#fde047" : "#38bdf8",
-                        background: isPeak ? "#78350f50" : "#0284c725",
-                        padding: "1px 5px",
-                        borderRadius: 3,
+                        background: hasRuns ? "#0284c725" : "#1e293b",
+                        color: hasRuns ? "#38bdf8" : "#64748b",
+                        padding: "2px 8px",
+                        borderRadius: 4,
+                        border: `1px solid ${hasRuns ? "#0284c750" : "#334155"}`,
                       }}
                     >
-                      Run {idx + 1}
-                    </span>
-                    <span style={{ fontSize: 10, color: "#64748b" }}>
-                      C{node.cycleInPhase}/{node.totalCyclesInPhase}
+                      {stage.nodes.length} Runs Recorded
                     </span>
                   </div>
 
-                  <div style={{ fontWeight: 700, fontSize: 12, color: "#f8fafc", marginBottom: 2, textTransform: "capitalize" }}>
-                    {cleanPhase}
-                  </div>
-                  <div
-                    style={{
-                      fontSize: 10,
-                      fontFamily: "monospace",
-                      color: isSelected ? "#38bdf8" : "#94a3b8",
-                      marginBottom: 8,
-                    }}
-                  >
-                    {node.runId.length > 20 ? node.runId.substring(0, 20) + "…" : node.runId}
-                  </div>
-
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
-                    <span className="muted" style={{ fontSize: 11 }}>Calibrated ELO:</span>
-                    <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
-                      <span style={{ fontWeight: 800, fontSize: 13, color: isPeak ? "#fde047" : "#e2e8f0" }}>
-                        {node.elo ?? "-"}
-                      </span>
-                      {node.deltaElo !== null && node.deltaElo !== 0 && (
-                        <span
-                          style={{
-                            fontSize: 10,
-                            fontWeight: 700,
-                            color: node.deltaElo > 0 ? "#34d399" : "#f87171",
-                          }}
-                        >
-                          {node.deltaElo > 0 ? `+${node.deltaElo}` : node.deltaElo}
-                        </span>
-                      )}
+                  {/* Horizontal Flow or Empty State */}
+                  {hasRuns ? (
+                    <div
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 10,
+                        overflowX: "auto",
+                        paddingBottom: 4,
+                        paddingTop: 2,
+                      }}
+                    >
+                      {stage.nodes.map((node, idx) => (
+                        <React.Fragment key={`chrono-${node.runId}`}>
+                          {renderExecutedCard(
+                            {},
+                            node,
+                            "chrono",
+                            `Run ${idx + 1}`,
+                            node.phaseName.replace(/^phase\d+_/i, "").replace(/_v\d+.*$/i, "").replace(/_/g, " "),
+                          )}
+                          {idx < stage.nodes.length - 1 && renderConnector(`chrono-conn-${node.runId}`)}
+                        </React.Fragment>
+                      ))}
                     </div>
-                  </div>
-
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 11, marginBottom: 2 }}>
-                    <span className="muted">Win Rate:</span>
-                    <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
-                      <span style={{ fontWeight: 700, color: (node.winRate ?? 0) >= (node.targetWinRate ?? 0.5) ? "#34d399" : "#f87171" }}>
-                        {node.winRate !== null ? `${(node.winRate * 100).toFixed(1)}%` : "-"}
-                      </span>
-                      {node.targetWinRate !== null && (
-                        <span style={{ fontSize: 9, color: (node.winRate ?? 0) >= node.targetWinRate ? "#10b981aa" : "#94a3b8" }}>
-                          (🎯 &gt;={(node.targetWinRate * 100).toFixed(0)}%)
-                        </span>
-                      )}
-                    </div>
-                  </div>
-
-                  {(node.capturedAvg !== null || node.targetCapturedAvg !== null) && (
-                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 11, marginBottom: 2 }}>
-                      <span className="muted">VPs Avg:</span>
-                      <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
-                        <span style={{ fontWeight: 700, color: (node.capturedAvg ?? 0) >= (node.targetCapturedAvg ?? 0) ? "#34d399" : "#f87171" }}>
-                          {node.capturedAvg !== null ? node.capturedAvg.toFixed(2) : "-"}
-                        </span>
-                        {node.targetCapturedAvg !== null && (
-                          <span style={{ fontSize: 9, color: (node.capturedAvg ?? 0) >= node.targetCapturedAvg ? "#10b981aa" : "#94a3b8" }}>
-                            (🎯 &gt;={node.targetCapturedAvg.toFixed(2)})
-                          </span>
-                        )}
-                      </div>
+                  ) : (
+                    <div style={{ padding: "14px 10px", textAlign: "center", color: "#64748b", fontSize: 11, fontStyle: "italic" }}>
+                      No execution runs recorded yet in this sub-curriculum.
                     </div>
                   )}
-
-                  {(node.vpTakeRate !== null || node.targetVpTakeRate !== null) && (
-                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 10, marginBottom: 2 }}>
-                      <span className="muted">Take Rate:</span>
-                      <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
-                        <span style={{ fontWeight: 600, color: (node.vpTakeRate ?? 0) >= (node.targetVpTakeRate ?? 0) ? "#34d399" : "#f87171" }}>
-                          {node.vpTakeRate !== null ? node.vpTakeRate.toFixed(3) : "-"}
-                        </span>
-                        {node.targetVpTakeRate !== null && (
-                          <span style={{ fontSize: 9, color: (node.vpTakeRate ?? 0) >= node.targetVpTakeRate ? "#10b981aa" : "#94a3b8" }}>
-                            (🎯 &gt;={node.targetVpTakeRate.toFixed(3)})
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                  )}
-
-                  <div style={{ marginTop: 6, paddingTop: 6, borderTop: "1px solid #1e293b", display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 10 }}>
-                    {isPromoted ? (
-                      <span style={{ color: "#10b981", fontWeight: 700 }}>
-                        ★ PROMOTED
-                      </span>
-                    ) : isHeld ? (
-                      <span style={{ color: "#f87171", fontWeight: 700 }}>
-                        ⚠️ GATE FAILED (HOLD)
-                      </span>
-                    ) : (
-                      <span style={{ color: "#94a3b8", fontWeight: 600 }}>
-                        EVALUATED
-                      </span>
-                    )}
-                    <span style={{ color: "#64748b" }}>
-                      {node.checkpoint && node.checkpoint !== "-" ? "Checkpoint OK" : "In Progress"}
-                    </span>
-                  </div>
                 </div>
-
-                {idx < chronologicalDisplayNodes.length - 1 && (
-                  <div
-                    style={{
-                      display: "flex",
-                      flexDirection: "column",
-                      alignItems: "center",
-                      gap: 2,
-                      flexShrink: 0,
-                      padding: "0 2px",
-                    }}
-                  >
-                    <span style={{ fontSize: 18, color: "#f59e0b" }}>➔</span>
-                    <span style={{ fontSize: 8, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.4px", fontWeight: 700 }}>
-                      Weights
-                    </span>
-                  </div>
-                )}
               </React.Fragment>
             );
           })}

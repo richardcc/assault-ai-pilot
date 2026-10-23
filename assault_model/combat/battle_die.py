@@ -1,14 +1,14 @@
 import random
-import json
-from pathlib import Path
-from typing import Tuple
+from typing import Tuple, Dict
 
+import orjson
 from assault_model.combat.dice_color import DiceColor
 from assault_model.combat.dice_face import DiceFace
 
+
 def _load_dice_face_table():
     from assault_model.paths import DICE_FACE_TABLE_PATH
-    payload = json.loads(DICE_FACE_TABLE_PATH.read_text(encoding="utf-8"))
+    payload = orjson.loads(DICE_FACE_TABLE_PATH.read_bytes())
     raw = payload.get("dice_faces", {})
     parsed = {}
     for color_name, faces in raw.items():
@@ -49,27 +49,28 @@ class DiceResult:
         return f"DiceResult(color={self.color.name}, faces={[f.name for f in self.faces]})"
 
 
+# Pre-allocated immutable results pool to eliminate per-roll allocation overhead
+PREALLOCATED_DICE_RESULTS: Dict[DiceColor, Tuple[DiceResult, ...]] = {
+    color: tuple(DiceResult(color, faces) for faces in faces_list)
+    for color, faces_list in DICE_FACE_TABLE.items()
+}
+
+
 class BattleDie:
     """
     BattleDie
 
     Represents a single physical Assault battle die.
-
-    Responsibilities:
-    - Know its color
-    - Know its face table
-    - Roll and return an exact DiceResult
-
-    BattleDie does NOT:
-    - Apply combat rules
-    - Compare dice
-    - Calculate damage
-    - Know about units or combat context
     """
+
+    __slots__ = ("color", "_results")
 
     def __init__(self, color: DiceColor):
         self.color = color
+        self._results = PREALLOCATED_DICE_RESULTS.get(color, ())
 
     def roll(self) -> DiceResult:
-        faces = random.choice(DICE_FACE_TABLE[self.color])
-        return DiceResult(self.color, faces)
+        """Roll and return a pre-allocated immutable DiceResult."""
+        if not self._results:
+            return DiceResult(self.color, ())
+        return self._results[random.randint(0, len(self._results) - 1)]

@@ -65,6 +65,8 @@ flowchart TD
 
 | Versión | Época / Ciclo | Fase Técnica / Doctrinal | Componentes Clave y Rendimiento Verificado | Estado |
 | :--- | :--- | :--- | :--- | :--- :---: |
+| **`v2.5.27`** | Octubre 2026 | Modulación Dinámica Doctrinal ($\beta_{\text{macro}}$), Auditoría de Cabezas y Robustez SimSiam (Línea 2 / Tarea 2.8) | Desacoplamiento continuo del sesgo heurístico estático ($+35\%$) mediante escala parametrizada $\beta_{\text{macro}} \in [0.0, 1.0]$ (`macro_modulation_scale`), posibilitando modo Red Neuronal Pura ($\beta = 0.0$), calentamiento progresivo y refuerzo doctrinal ($\beta = 1.0$); auditoría de localización espacial en cabezas tácticas (FCN pura $H \times W$ para `threat_map`/`final_ownership`, `SpatialAttentionBlock` $4\times 4$ para `attrition`, `morale`, `intent`, `multi_vp`, erradicando GAP $1\times 1$ espurio); confirmación de 48 canales latentes en `prediction_trunk` (8 Conv2D a 48ch); verificación del stop-gradient dual SimSiam (`torch.no_grad()` + `.detach()`) y normalización $\ell_2$. Suite dedicada `test_heads_improvements.py` (9/9 tests en verde). | `CONSOLIDADO 🟢` |
+| **`v2.5.26`** | Octubre 2026 | Visualización Curricular Multilínea por Sub-Currículum (Línea 1 / Dashboard MLOps) | Reestructuración visual de `CurriculumLineageFlow.tsx` en filas temáticas dedicadas e independientes por cada sub-currículum (Fila 1: Sub-Currículum 1 - *Objective Doctrine & VP Acceleration*, Fases 1 a 5; Fila 2: Sub-Currículum 2 - *Multi-Scenario Self-Play vs Random*, Fases 6 a 13); banner de transición y transferencia de pesos inter-etapas (*Breakthrough*); erradicación de scroll horizontal masivo; compatibilidad total tanto en modo canónico como cronológico. Build de Vite verificado en 1.72s. | `CONSOLIDADO 🟢` |
 | **`v2.5.24`** | Octubre 2026 | Resiliencia y Autorrecuperación Multiproceso (Línea 2) | Self-healing y reconstrucción automática de `ProcessPoolExecutor` ante terminaciones anómalas de SO (`BrokenProcessPool`); reciclaje periódico de procesos cada 5 iteraciones (`recycle_workers_every_iters: 5`) erradicando al 100% la fragmentación de heap y fugas de memoria en sesiones multi-hora; fallback resiliente para episodios huérfanos; ampliación del enum canónico `UnitCategory` (`ARTILLERY`, `GUN_ARTILLERY`) subsanando validaciones de catálogo de unidades. Suites 154/154 en EZv2 y 114/114 en assault_model en verde. | `CONSOLIDADO 🟢` |
 | **`v1.0.0`** | 2024-2025 | Cimentación VOEC | Coordenadas axiales $(q, r)$, balística dados de combate, LOS por elevación, simulación estocástica. | `ARCHIVADO 🗄️` |
 | **`v1.5.0`** | 2024-2025 | Representación y Geometría | Two-Hot 61 átomos con Symlog, HL-Gauss (DeepMind 2024), convolución hexagonal nativa. | `ARCHIVADO 🗄️` |
@@ -103,6 +105,37 @@ flowchart TD
 | **`v2.5.10`** | Octubre 2026 | Atribución Causal Espacial Hexagonal (XAI / Grad-CAM / IGNH) y Unificación de Diagnóstico de Cabezas | Endpoint `/api/v2/replay/explain-step` con Grad-CAM espacial e Integrated Gradients sobre 32 canales sensoriales heterogéneos, visualizador modal de explicabilidad con heatmap reactivo sobre tablero hexagonal en Match Replay (:8778). Unificación integral del Diagnóstico de Cabezas en `Evaluación & Benchmarks -> Diagnóstico de Cabezas (XAI)` con 7 fichas de salud sintética, matriz de verificación MLOps, behavioral telemetry sanity board y desglose de 11 métricas puras, depurando la vista de Topología hacia su rol puramente arquitectural con enlace directo. Suite `mlops/tests/test_explainability_api.py` (3/3 en verde) y frontend 100% en inglés según Regla 7. | `CONSOLIDADO 🟢` |
 
 ## 3. Fases Recientes Consolidadas (Ciclos v2.4.x - v2.5.x — Octubre 2026)
+
+#### v2.5.27 — Modulación Dinámica Doctrinal ($\beta_{\text{macro}}$), Auditoría de Cabezas y Robustez SimSiam (Línea 2 / Tarea 2.8) [CONSOLIDADO 🟢]
+* **Objetivo**: Abordar y resolver rigurosamente los 4 puntos de la auditoría profunda de arquitectura neuronal en `EfficientZero V2`, integrando la modulación dinámica de priors para posibilitar regímenes de Red Pura y calentamiento progresivo (Consolidación de Tarea 2.8 del Roadmap), y clarificando las garantías matemáticas de localización espacial y prevención de colapso de representación.
+* **Componentes Consolidados**:
+  * **Modulación Dinámica de Priors Doctrinales (`macro_modulation_scale` / $\beta_{\text{macro}} \ge 0.0$)**:
+    * Desacoplamiento del factor fijo $+35\%$ mediante la formulación continua $\text{boost}_{\text{eff}}(a) = 1.0 + (\text{boost}_{\text{doctrinal}}(a) - 1.0) \cdot \beta_{\text{macro}}$.
+    * Con $\beta_{\text{macro}} = 0.0$: la distribución prior emitida por la red neuronal se preserva intacta al 100% ($P_{\text{mod}}(a) = P_{\text{net}}(a)$), permitiendo estudios de ablación rigurosos de "Red Pura" sin muletas heurísticas.
+    * Con $\beta_{\text{macro}} \in (0.0, 1.0)$: permite esquemas de calentamiento progresivo (*warm-up*) o desvanecimiento (*annealing*) según madura el entrenamiento.
+    * Con $\beta_{\text{macro}} = 1.0$: aplica el refuerzo doctrinal canónico ($1.35\times$ en roles coordinados, $1.50\times$ en asalto a VPs).
+    * Integrado en `MacroStrategyPlanner.modulate_priors()`, `selfplay._play_episode()` y `train_engine.py` vía configuración `cfg.selfplay.macro_modulation_scale`.
+  * **Auditoría de Localización Espacial en Cabezas Tácticas**:
+    * Erradicación de la ambigüedad en diagramas: las cabezas espaciales no sufren colapso dimensional por Global Average Pooling puro ($1\times 1$).
+    * `threat_map` y `final_ownership` operan como FCNs nativas 2D ($H \times W$).
+    * `attrition`, `morale`, `objective_intent` y `multi_vp` utilizan `SpatialAttentionBlock(48, val_channels, (4, 4))` reteniendo $4 \times 4 = 16$ sectores espaciales con atención aprendida.
+  * **Garantía de Capacidad en el Tronco de Predicción**:
+    * Verificación de que `prediction_trunk` opera a plena capacidad latente de 48 canales (`hidden_dim = 48`, 8 capas Conv2D de 48 canales con SE/ECA), sin reducción prematura de canales.
+  * **Estabilidad Anti-Colapso SimSiam**:
+    * Verificación de la doble barrera matemática contra el colapso de representación latente: stop-gradient dual (`torch.no_grad()` en inferencia de target + `.detach()` en proyección) y normalización $\ell_2$ unitaria de embeddings.
+  * **Verificación de Pruebas**: Suite de pruebas dedicada `agents/efficientzero_v2/tests/test_heads_improvements.py` con 9/9 tests pasando al 100%.
+
+#### v2.5.26 — Visualización Curricular Multilínea por Sub-Currículum (Línea 1 / Dashboard MLOps) [CONSOLIDADO 🟢]
+* **Objetivo**: Erradicar el scroll horizontal excesivo de 13 fases en una sola línea en el Dashboard MLOps (:8778), estructurando el pipeline de campaña en filas temáticas dedicadas e independientes por cada sub-currículum con puente visual de transferencia de pesos (*Weight Transfer & Breakthrough*).
+* **Componentes Consolidados**:
+  * **Estructura Multilínea de Sub-Currículums (`CurriculumLineageFlow.tsx`)**:
+    * **Fila 1 (Sub-Currículum 1)**: *Stage 1: Objective Doctrine & VP Acceleration* (Fases 1 a 5: Sprint a VPs desocupados, Base of Fire y asalto combinado, Carrera 2v2, Maestría táctica de Gela y Asalto urbano puro). Las 5 fases son visibles simultáneamente en pantalla sin scroll horizontal.
+    * **Banner de Transición Inter-Etapas (*Breakthrough Bridge*)**: Indicador visual destacado entre filas que explicita la promoción del checkpoint ganador de la Fase 5 como modelo base inicial de la Fase 6.
+    * **Fila 2 (Sub-Currículum 2)**: *Stage 2: Multi-Scenario Self-Play vs Random* (Fases 6 a 13: Adaptación bi-escenario Gela + Mettete, expansión sensorial a 38 canales y autojuego simétrico progresivo 70/30, 50/50, 30/70, 90/10 y 100%).
+  * **Soporte Homogéneo para Modos Canónico y Cronológico**:
+    * En el modo Canónico (13 fases): agrupa las fases ejecutadas y las fases pendientes por sub-currículum.
+    * En el modo Cronológico: clasifica todas las ejecuciones históricas y ciclos de refuerzo en la fila del sub-currículum correspondiente.
+  * **Verificación**: Compilación con Vite verificada (`npm run build`, 0 errores, 1.72s). Servido en caliente en puerto 8778.
 
 #### v2.5.25 — Protocolo de Estabilidad Operativa, PCGrad Vectorizado en GPU y Reajuste Anti-Parálisis Fase 3 (Línea 1 y Línea 2) [CONSOLIDADO 🟢]
 * **Objetivo**: Erradicar de raíz las caídas e interrupciones continuas por colapso de almacenamiento y memoria virtual en ejecuciones desatendidas, optimizar el rendimiento de GPU durante la optimización de pérdidas multitarea (PCGrad) y superar la *Paradoja del Comandante Prudente* en la carrera 2v2 de la Fase 3 del currículum.

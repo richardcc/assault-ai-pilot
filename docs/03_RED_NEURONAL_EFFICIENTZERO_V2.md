@@ -35,31 +35,32 @@ flowchart TD
         LATENT_NEXT --> REW_HEAD["1. Reward Head: Conv1x1 -> AdaptiveAvgPool2d(1) -> Linear\nTwo-Hot / HL-Gauss (2K+1 atomos)"]
     end
 
-    subgraph Prediccion ["5. Tronco de Prediccion y 8 Cabezas f_theta(s) [13 Conv2D]"]
-        LATENT_0 --> P_TRUNK["prediction_trunk: 2x ResidualBlockSE (8 Conv2D)"]
+    subgraph Prediccion ["5. Tronco de Prediccion y 8 Cabezas f_theta(s) [48 Canales Latentes]"]
+        LATENT_0 --> P_TRUNK["prediction_trunk: 2x ResidualBlockSE (8 Conv2D x 48ch)"]
         LATENT_NEXT --> P_TRUNK
         P_TRUNK --> S_ATTN["SpatialAttentionBlock (Conv 7x7 -> Gate Sigmoid)"]
         S_ATTN --> ADAPT_SPATIAL["_adapt_spatial(x): Interpolacion Bilineal -> (16 x 16)\nInvarianza Espacial para Cabezas Densas"]
 
-        ADAPT_SPATIAL --> HEAD_POL["2. Politica f_p(s): Conv1x1(48->2) -> Linear(512->32)\n32 Logits Prior (Modulado +35% por Nivel 1)"]
+        ADAPT_SPATIAL --> HEAD_POL["2. Politica f_p(s): Conv1x1(48->4) -> MLP(1024->64->32)\n32 Logits Prior (Modulado Dinamico \beta_macro por Nivel 1)"]
         ADAPT_SPATIAL --> HEAD_VAL["3. Valor f_v(s): Conv1x1(48->1) -> Linear(256->128->2K+1)\nTwo-Hot / HL-Gauss con Symlog / Phi"]
-        ADAPT_SPATIAL --> HEAD_OBJ["4. Objetivo Escalar f_o(s): Conv1x1(48->1) -> Linear(256->64->1)"]
+        ADAPT_SPATIAL --> HEAD_OBJ["4. Objetivo Escalar f_o(s): SpatialAttention (4x4) -> Linear(64->1)"]
 
-        S_ATTN --> HEAD_THREAT["5. Amenaza Espacial f_threat(s): Conv1x1(48->1)\nMapa FCN [B, 1, H, W] de LOS/Fuego"]
-        S_ATTN --> POOL_1X1["AdaptiveAvgPool2d(1) -> Flatten [B, 48]"]
-        POOL_1X1 --> HEAD_ATTR["6. Desgaste f_attr(s): MLP(48->32->2)\nVector Bajas [Aliadas, Enemigas]"]
-        POOL_1X1 --> HEAD_MORALE["7. Moral f_morale(s): MLP(48->32->4)\nDistribucion [NORMAL, PINNED, SUPPRESSED, ROUTED]"]
-        POOL_1X1 --> HEAD_INTENT["8. Intencion Táctica f_intent(s): MLP(48->32->8)\n8 Clases Doctrinales"]
-        POOL_1X1 --> HEAD_MVP["9. Multi-VP f_mvp(s): MLP(48->32->4)\nProgreso Vectorial [Control, Contested, Threat, Time]"]
+        S_ATTN --> HEAD_THREAT["5. Amenaza Espacial f_threat(s): FCN Conv3x3+1x1\nMapa FCN [B, 1, H, W] de LOS/Fuego"]
+        S_ATTN --> HEAD_OWNER["6. Posesion Final f_own(s): FCN Conv3x3+1x1\nMapa FCN [B, 1, H, W] de Control (KataGo)"]
+        S_ATTN --> S_ATTN_GRID["SpatialAttentionBlock (4x4) -> Sectores Espaciales [B, 16 x val_ch]"]
+        S_ATTN_GRID --> HEAD_ATTR["7. Desgaste f_attr(s): MLP(64->32->2)\nVector Bajas [Aliadas, Enemigas]"]
+        S_ATTN_GRID --> HEAD_MORALE["8. Moral f_morale(s): MLP(64->32->4)\nDistribucion [NORMAL, PINNED, SUPPRESSED, ROUTED]"]
+        S_ATTN_GRID --> HEAD_INTENT["9. Intencion Táctica f_intent(s): MLP(64->32->8)\n8 Clases Doctrinales"]
+        S_ATTN_GRID --> HEAD_MVP["10. Multi-VP f_mvp(s): MLP(64->32->4)\nProgreso Vectorial [Control, Contested, Threat, Time]"]
     end
 
     subgraph Consistencia ["6. Proyector y Predictor SimSiam q_theta(s)"]
-        LATENT_0 --> PROJ["10. Consistency Head: AdaptiveAvgPool2d(1)\nProjector MLP (48->128->128) + Predictor MLP (128->64->128)"]
+        LATENT_0 --> PROJ["11. Consistency Head: AdaptiveAvgPool2d(1)\nProjector MLP (48->128->128) + Predictor MLP (128->64->128)"]
         LATENT_NEXT --> PROJ
-        PROJ --> Z_VEC["Vector Normalizado z_t (|z|=1)"]
+        PROJ --> Z_VEC["Vector Normalizado L2 z_t (|z|=1)\nStop-Gradient Dual en Target"]
     end
 
-    MACRO -.->|Modulacion de Priors| HEAD_POL
+    MACRO -.->|Modulacion Dinamica \beta_macro| HEAD_POL
 ```
 
 ---
@@ -83,51 +84,57 @@ flowchart TD
   $$s_{\text{norm}} = \frac{s - \min(s)}{\max(s) - \min(s) + \epsilon}$$
 * **Cabeza 1 — Recompensa Inmediata (`reward_head`)**: `Conv1x1(48 -> 16) -> AdaptiveAvgPool2d(1) -> Linear(16 -> 64 -> 2K+1)`.
 
-### 2.3. Tronco de Predicción y Adaptación Espacial ($f_\theta$ — 13 Capas Conv2D)
-* **Tronco (`prediction_trunk`)**: 2 bloques `ResidualBlockSE` (8 capas Conv2D) seguidos de un bloque `SpatialAttentionBlock` (1 capa Conv2D $7\times 7$ sobre media y máximo por canal).
-* **Adaptación Espacial (`_adapt_spatial`)**: Si el mapa de entrada tiene dimensiones distintas a $16\times 16$ (por ejemplo $32\times 32$ o $64\times 64$), aplica interpolación bilineal al tamaño canónico $16\times 16$ exclusivamente antes de las cabezas densas (`policy`, `value`, `objective`), mientras que `threat_map` conserva la resolución nativa $H \times W$ y las cabezas globales usan `AdaptiveAvgPool2d(1)`.
+### 2.3. Tronco de Predicción y Preservación de Resolución Espacial ($f_\theta$)
+* **Tronco (`prediction_trunk`)**: 2 bloques `ResidualBlockSE` operando a la **máxima capacidad latente de 48 canales** (`hidden_dim = 48`, con un total de 8 capas Conv2D de 48 canales y compuertas Squeeze-and-Excitation / ECA), seguidos de un bloque `SpatialAttentionBlock` (1 capa Conv2D $7\times 7$ sobre media y máximo por canal). No existe reducción prematura de canales a 8; la capacidad de 48 canales se mantiene estrictamente en todo el tronco.
+* **Preservación de Topología Espacial (FCN vs Sectores 4x4)**:
+  * **Cabezas Espaciales FCN Puras (`threat_map`, `final_ownership`)**: Operan directamente a resolución nativa $H \times W$ mediante convoluciones 2D locales (`Conv3x3(48 -> 16) -> GroupNorm -> SiLU -> Conv1x1(16 -> 1)`), produciendo mapas bidimensionales hexágono a hexágono sin colapso alguno.
+  * **Cabezas Tácticas con Atención Espacial Sectorizada (`attrition`, `morale`, `objective_intent`, `multi_vp`)**: En lugar de Global Average Pooling puro ($1\times 1$), procesan el estado latente mediante `SpatialAttentionBlock(48, val_channels, (4, 4))`, reteniendo una matriz de $4 \times 4 = 16$ celdas espaciales con atención aprendida. Esto conserva la granularidad espacial de frentes, flancos y concentración de tropas antes del aplanado hacia sus respectivos clasificadores y regresores MLP.
+* **Adaptación Espacial Bilineal (`_adapt_spatial`)**: Si el mapa de entrada tiene dimensiones distintas a $16\times 16$ (por ejemplo $32\times 32$ o $64\times 64$), aplica interpolación bilineal al tamaño canónico $16\times 16$ exclusivamente para las cabezas densas (`policy`, `value`), mientras que las cabezas FCN conservan la resolución $H \times W$.
 
-### 2.4. Cabeza 10 — Proyector y Predictor de Consistencia Temporal SimSiam ($q_\theta$)
-Para evitar el colapso de representación, el módulo SimSiam (`consistency_projector` + `consistency_predictor`) alinea el estado imaginado $s_{k}$ con la representación real de la observación futura $h_\theta(o_{t+k})$:
+### 2.4. Cabeza 11 — Proyector y Predictor de Consistencia Temporal SimSiam ($q_\theta$) y Estabilidad Anti-Colapso
+Para evitar el colapso de representación dimensional (evitando que la dinámica recurrente aprenda constantes triviales), el módulo SimSiam (`consistency_projector` + `consistency_predictor`) incorpora dos salvaguardas estrictas:
+1. **Stop-Gradient Dual en el Target**: Durante el entrenamiento (`EfficientZeroV2Trainer`), la representación objetivo $h_\theta(o_{t+k})$ se evalúa bajo `torch.no_grad()` y su proyección resultante se desacopla explícitamente mediante `.detach()` antes del cómputo de la pérdida de similitud del coseno. Los gradientes retropropagados por SimSiam fluyen exclusivamente a través de la predicción latente $p_\theta(q_\theta(s_k))$, sin contaminar ni desestabilizar las representaciones del tronco ni las cabezas de valor/recompensa.
+2. **Normalización $\ell_2$ Unitaria**: Ambos vectores se normalizan estrictamente sobre la esfera unitaria ($\|z\|_2 = 1, \|p\|_2 = 1$) mediante `F.normalize(..., dim=-1)` antes del producto escalar:
 $$\mathcal{L}_{\text{consistency}} = -\frac{1}{2} \left( \frac{p_\theta(q_\theta(s_k))}{\|p_\theta(q_\theta(s_k))\|_2} \cdot \text{stop\_grad}\left(\frac{q_\theta(h_\theta(o_{t+k}))}{\|q_\theta(h_\theta(o_{t+k}))\|_2}\right) \right)$$
 
 ---
 
-## 3. Catálogo Completo de las 10 Cabezas de Salida
+## 3. Catálogo Completo de las 11 Cabezas de Salida
 
-La red neuronal produce simultáneamente **10 cabezas especializadas** (1 en dinámica, 1 de consistencia temporal y 8 en el tronco de predicción):
+La red neuronal produce simultáneamente **11 cabezas especializadas** (1 en dinámica, 1 de consistencia temporal y 9 en el tronco de predicción):
 
 ```mermaid
 graph LR
     S["Estado Latente Atendido s\n[B, 48, H, W]"] --> ADAPT["_adapt_spatial\n[B, 48, 16, 16]"]
-    S --> FCN["FCN Nativa\n[B, 48, H, W]"]
-    S --> POOL["AdaptiveAvgPool2d(1)\n[B, 48]"]
+    S --> FCN["FCN 2D Nativa [B, 48, H, W]"]
+    S --> S_ATTN["SpatialAttentionBlock (4x4)\n[B, val_ch, 4, 4]"]
 
-    ADAPT --> H_POL["2. Policy Head\n[B, 32] Logits"]
+    ADAPT --> H_POL["2. Policy Head\n[B, 32] Logits Priors"]
     ADAPT --> H_VAL["3. Value Head\n[B, 2K+1] Soporte"]
-    ADAPT --> H_OBJ["4. Objective Head\n[B, 1] Escalar"]
 
-    FCN --> H_THREAT["5. Threat Map Head\n[B, 1, H, W] Mapa 2D"]
+    FCN --> H_THREAT["5. Threat Map Head\n[B, 1, H, W] FCN 2D"]
+    FCN --> H_OWNER["6. Final Ownership Head\n[B, 1, H, W] FCN 2D"]
 
-    POOL --> H_ATTR["6. Attrition Head\n[B, 2] Bajas A/E"]
-    POOL --> H_MORALE["7. Morale Head\n[B, 4] Estados Moral"]
-    POOL --> H_INTENT["8. Objective Intent Head\n[B, 8] Intencion"]
-    POOL --> H_MVP["9. Multi-VP Head\n[B, 4] Vector VPs"]
+    S_ATTN --> H_OBJ["4. Objective Head\n[B, 1] Escalar"]
+    S_ATTN --> H_ATTR["7. Attrition Head\n[B, 2] Bajas A/E"]
+    S_ATTN --> H_MORALE["8. Morale Head\n[B, 4] Estados Moral"]
+    S_ATTN --> H_INTENT["9. Objective Intent Head\n[B, 8] Intencion"]
+    S_ATTN --> H_MVP["10. Multi-VP Head\n[B, 4] Vector VPs"]
 ```
 
-| # | Nombre de Cabeza | Módulo PyTorch | Dimensión de Salida | Función Táctica / Estratégica |
+| # | Nombre de Cabeza | Módulo PyTorch | Dimensión de Salida | Topología Espacial / Función Táctica |
 | :---: | :--- | :--- | :--- | :--- |
 | **1** | **Reward (`reward_logits`)** | `reward_head` | `[B, 2K+1]` | Distribución Two-Hot / HL-Gauss de la recompensa inmediata tras ejecutar $a_t$. |
-| **2** | **Policy (`policy_logits`)** | `prediction_policy` | `[B, 32]` | Distribución prior sobre las 32 ranuras de acciones legales candidatas en MCTS. |
+| **2** | **Policy (`policy_logits`)** | `prediction_policy` | `[B, 32]` | Cuello de botella `Conv1x1(48->4)` $\to$ MLP prior sobre 32 ranuras legales en MCTS. |
 | **3** | **Value (`value_logits`)** | `prediction_value` | `[B, 2K+1]` | Distribución Two-Hot / HL-Gauss del retorno descontado esperado desde $s_t$. |
-| **4** | **Objective (`objective_logit`)** | `prediction_objective` | `[B, 1]` | Estimador escalar auxiliar de progreso global hacia la victoria por objetivos. |
-| **5** | **Threat Map (`threat_map_logits`)** | `prediction_threat_map` | `[B, 1, H, W]` | Mapa espacial 2D totalmente convolucional (FCN) de riesgo de fuego y LOS enemiga inmediata por hexágono. |
-| **6** | **Final Ownership Map (`final_ownership_pred`)** | `prediction_final_ownership` | `[B, 1, H, W]` | Mapa espacial 2D (KataGo — Wu 2020) que predice el propietario final del hexágono al término del episodio $T$. |
-| **7** | **Attrition (`attrition_pred`)** | `prediction_attrition` | `[B, 2]` | Vector de desgaste esperado `[bajas_aliadas, bajas_enemigas]` para evitar victorias pírricas. |
-| **8** | **Morale (`morale_logits`)** | `prediction_morale` | `[B, 4]` | Distribución de cohesión sobre 4 estados: `NORMAL`, `PINNED`, `SUPPRESSED`, `ROUTED`. |
-| **9** | **Objective Intent (`objective_intent_logits`)** | `prediction_intent` | `[B, 8]` | Clasificador doctrinal de intención operativa (8 clases tácticas sobre el objetivo activo). |
-| **10** | **Multi-VP (`multi_vp_pred`)** | `prediction_multi_vp` | `[B, 4]` | Predicción vectorial desagregada `[control_ratio, contested_ratio, threat_near_vp, time_pressure]`. |
-| **11** | **Consistency (`latent_proj` / `pred`)** | `consistency_projector` | `[B, 128]` | Embedding auto-supervisado SimSiam normalizado ($\ell_2$) para alineación temporal latente. |
+| **4** | **Objective (`objective_logit`)** | `prediction_objective` | `[B, 1]` | `SpatialAttentionBlock(4x4)` $\to$ Estimador de progreso hacia la victoria por objetivos. |
+| **5** | **Threat Map (`threat_map_logits`)** | `prediction_threat_map` | `[B, 1, H, W]` | **FCN 2D Nativa**: Mapa convolucional directo de riesgo de fuego y LOS enemiga inmediata. |
+| **6** | **Final Ownership Map (`final_ownership_pred`)** | `prediction_final_ownership` | `[B, 1, H, W]` | **FCN 2D Nativa**: Predicción convolucional de posesión final del hexágono a $T$ (KataGo). |
+| **7** | **Attrition (`attrition_pred`)** | `prediction_attrition` | `[B, 2]` | `SpatialAttentionBlock(4x4)` $\to$ Vector de bajas esperadas `[aliadas, enemigas]`. |
+| **8** | **Morale (`morale_logits`)** | `prediction_morale` | `[B, 4]` | `SpatialAttentionBlock(4x4)` $\to$ Distribución de cohesión: `NORMAL`, `PINNED`, `SUPPRESSED`, `ROUTED`. |
+| **9** | **Objective Intent (`objective_intent_logits`)** | `prediction_intent` | `[B, 8]` | `SpatialAttentionBlock(4x4)` $\to$ Clasificador de intención táctica (8 clases doctrinales). |
+| **10** | **Multi-VP (`multi_vp_pred`)** | `prediction_multi_vp` | `[B, 4]` | `SpatialAttentionBlock(4x4)` $\to$ Vector `[control_ratio, contested_ratio, threat, time]`. |
+| **11** | **Consistency (`latent_proj` / `pred`)** | `consistency_projector` | `[B, 128]` | Embedding SimSiam $\ell_2$-normalizado con stop-gradient dual para evitar colapso latente. |
 
 ---
 
@@ -198,9 +205,11 @@ flowchart TD
     end
 
     subgraph N2 ["Nivel 2: Búsqueda Táctica MCTS PUCT"]
-        PRIORS["Modulación de Priors:\nP_mod(a) = P(a) * (1 + 0.35 * Boost(Postura, Rol, a))"]
+        SCALE["Escala de Modulacion Dinamica:\n\beta_macro in [0.0, 1.0]"]
+        PRIORS["Modulación Dinámica de Priors:\nP_mod(a) = P(a) * [1 + \beta_macro * (Boost(Postura, Rol, a) - 1)]"]
         TREE["Árbol de Búsqueda MCTS (512 simulaciones / 6 unrolls)"]
         
+        SCALE --> PRIORS
         PRIORS --> TREE
     end
 
@@ -208,7 +217,7 @@ flowchart TD
 ```
 
 * **Desacoplamiento Operativo**: El Nivel 1 no decide cada paso físico de una unidad; define la doctrina.
-* **Modulación de Priors**: Durante el paso raíz del MCTS, las acciones tácticas que coinciden con el rol de la unidad y la postura del equipo reciben un bono del $+35\%$ en su probabilidad prior $P(a)$. Esto guía la búsqueda de Monte Carlo hacia rutas coherentes con el plan general sin eliminar la libertad del árbol para encontrar maniobras tácticas imprevistas.
+* **Modulación Dinámica de Priors ($\beta_{\text{macro}}$)**: Durante el paso raíz del MCTS, las acciones tácticas que coinciden con el rol de la unidad y la postura del equipo reciben un bono modulado por el factor dinámico $\beta_{\text{macro}} \in [0.0, 1.0]$ (`macro_modulation_scale`). Con $\beta_{\text{macro}} = 1.0$, el bono doctrinal estándar es de $+35\%$ ($1.35\times$), guiando la búsqueda de Monte Carlo hacia rutas coherentes con el plan general. Con $\beta_{\text{macro}} = 0.0$, el sesgo doctrinal se desactiva al 100%, dejando los priors puros de la red neuronal intactos para ablación libre de sesgos.
 
 ### 5.1. Sintonización del Macro-Planner y Modulación de Priors de Asalto
 
@@ -223,6 +232,22 @@ Para superar la aversión al riesgo excesiva donde las penalizaciones por fuego 
 1. **Eliminación del Corte Artificial de Distancia (`opportunity_near_vp_max_dist`)**: Anteriormente limitado a $2$ ó $4$ hexágonos, se extendió a un radio efectivo de mapa completo ($12.0$ hexágonos por defecto). Esto garantiza un gradiente continuo de recompensa de aproximación (`team_progress_delta` y `objective_progress_delta`) desde el primer turno de juego.
 2. **Atenuación del Factor de Exposición al Movimiento**: El factor de penalización preventiva por exposición a fuego de reacción durante el movimiento se redujo de $1.0$ a $0.6$, permitiendo que los beneficios proyectados de avance compensen razonablemente el riesgo táctico medido.
 3. **Penalización por Derrota Terminal (`terminal_loss_penalty` = 1.5, `terminal_scale` = 1.5)**: La derrota por llegar al límite de turnos sin controlar la mayoría de VPs acarrea un coste terminal que supera con creces cualquier daño individual acumulado en la aproximación. Esta calibración matemática fuerza al MCTS a asumir riesgos calculados para evitar la derrota por tiempo.
+
+### 5.3. Modulación Dinámica Continua y Desacoplamiento Doctrinal ($\beta_{\text{macro}}$) [Consolidado v2.5.27 / Tarea 2.8]
+
+Para solventar el riesgo de sesgo heurístico excesivo (*Objective Myopia*) que pudiese acotar la exploración en etapas tempranas de autojuego o impedir maniobras contraintuitivas pero tácticamente superiores, se implementó el parámetro canónico `macro_modulation_scale` ($\beta_{\text{macro}} \ge 0.0$):
+
+$$\text{boost}_{\text{eff}}(a) = 1.0 + (\text{boost}_{\text{doctrinal}}(a) - 1.0) \cdot \beta_{\text{macro}}$$
+$$P_{\text{mod}}(a) = \frac{P_{\text{net}}(a) \cdot \text{boost}_{\text{eff}}(a)}{\sum_{b} P_{\text{net}}(b) \cdot \text{boost}_{\text{eff}}(b)}$$
+
+Este desacoplamiento continuo habilita tres regímenes operativos gobernados desde la configuración YAML de autojuego (`cfg.selfplay.macro_modulation_scale`):
+1. **Régimen de Red Pura / Búsqueda Libre ($\beta_{\text{macro}} = 0.0$)**:
+   - $\text{boost}_{\text{eff}}(a) = 1.0 \implies P_{\text{mod}}(a) = P_{\text{net}}(a)$.
+   - Los priors evaluados por la red neuronal se transmiten con 100% de pureza matemática al árbol MCTS. Esencial para la Tarea 2.8 (estudios de ablación A/B) para auditar el rendimiento táctico sin muletas heurísticas.
+2. **Régimen de Calentamiento / Annealing Progresivo ($\beta_{\text{macro}}(t) = \beta_0 \cdot \gamma^t$ o $0.0 \to 1.0$)**:
+   - Permite arrancar el entrenamiento con exploración libre pura ($\beta = 0.0$) y reforzar la disciplina doctrinal a medida que el valor converge, o viceversa (guiar el arranque y retirar el sesgo conforme la red madura).
+3. **Régimen Doctrinal Completo ($\beta_{\text{macro}} = 1.0$)**:
+   - Aplica el $+35\%$ canónico en roles de vanguardia y fuego de apoyo y $+50\%$ en captura directa de VPs. Verificado formalmente en `agents/efficientzero_v2/tests/test_heads_improvements.py`.
 
 ---
 

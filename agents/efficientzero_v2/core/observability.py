@@ -1,9 +1,10 @@
 from __future__ import annotations
 
-import json
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any
+
+import orjson
 
 
 @dataclass
@@ -23,8 +24,8 @@ class JsonlWriter:
         self.path.parent.mkdir(parents=True, exist_ok=True)
 
     def append(self, event: dict[str, Any]) -> None:
-        with self.path.open("a", encoding="utf-8") as f:
-            f.write(json.dumps(event, ensure_ascii=True) + "\n")
+        with self.path.open("ab") as f:
+            f.write(orjson.dumps(event) + b"\n")
 
 
 @dataclass
@@ -36,5 +37,4 @@ class RunManifest:
 
     def write(self, path: Path) -> None:
         path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(json.dumps(asdict(self), indent=2), encoding="utf-8")
-
+        path.write_bytes(orjson.dumps(asdict(self), option=orjson.OPT_INDENT_2))

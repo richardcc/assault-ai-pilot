@@ -135,17 +135,14 @@ def _run_episode_with_policy_impl(
     unit_prefilter_threat_weight: float = 0.25,
     reward_shaping: Optional[Dict[str, object]] = None,
     trace_detail_level: str = "core",
+    macro_modulation_scale: float = 1.0,
 ):
     _head_state = _erh_head_state
     _compute_coverage_status = _erh_compute_coverage_status
     _to_int_or_none = _erh_to_int_or_none
     _field = _erh_field
 
-    model_kind_local = (
-        "efficientzero_v2"
-        if model is not None and str(type(model).__name__) == "EfficientZeroV2Network"
-        else "muzero"
-    )
+    model_kind_local = "efficientzero_v2"
 
     def _run_policy_mcts(**kwargs):
         return _erh_run_policy_mcts(
@@ -386,6 +383,7 @@ def _run_episode_with_policy_impl(
                     legal,
                     dict(obs_vp_owner_by_hex),
                     str(active_side),
+                    modulation_scale=float(macro_modulation_scale),
                 )
             unit_prefilter_requested = bool(unit_prefilter_enabled) or bool(unit_prefilter_replan_enabled)
             mcts_out = None
@@ -975,6 +973,7 @@ def _run_episode_with_policy_impl(
                     macro_plan,
                     dict(getattr(obs, "vp_owner_by_hex", {}) or {}),
                     str(getattr(obs, "to_play", "") or ""),
+                    modulation_scale=float(macro_modulation_scale),
                 )
                 - 1.0,
             )

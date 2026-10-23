@@ -2064,6 +2064,7 @@ class _NativeEZV2SelfplayBackend:
         procedural_unit_jitter_prob: float = 0.0,
         procedural_asymmetric_strength_jitter: float = 0.0,
         steps_per_unit_turn: float = 1.0,
+        macro_modulation_scale: float = 1.0,
         **_: Any,
     ) -> list:
         def _normalize_mode(raw: object) -> str:
@@ -2254,6 +2255,7 @@ class _NativeEZV2SelfplayBackend:
                             unit_actions,
                             dict(getattr(obs, "vp_owner_by_hex", {}) or {}),
                             str(getattr(obs, "to_play", "") or ""),
+                            modulation_scale=float(macro_modulation_scale),
                         )
                         success_prob_by_action_u: dict[str, float] = {}
                         expected_damage_by_action_u: dict[str, float] = {}
@@ -2396,6 +2398,7 @@ class _NativeEZV2SelfplayBackend:
                     legal,
                     dict(getattr(obs, "vp_owner_by_hex", {}) or {}),
                     str(getattr(obs, "to_play", "") or ""),
+                    modulation_scale=float(macro_modulation_scale),
                 )
             success_prob_by_action: dict[str, float] = {}
             expected_damage_by_action: dict[str, float] = {}
@@ -3225,6 +3228,7 @@ class _NativeEZV2SelfplayBackend:
                 macro_plan,
                 dict(getattr(obs, "vp_owner_by_hex", {}) or {}),
                 str(getattr(obs, "to_play", "") or ""),
+                modulation_scale=float(macro_modulation_scale),
             )
             prior_boost_applied = float(max(0.0, prior_raw_boost - 1.0))
 

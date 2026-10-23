@@ -355,3 +355,46 @@ def test_all_11_network_heads_topology_and_shapes():
     assert torch.allclose(emb.norm(dim=-1), torch.ones(b), atol=1e-4)
 
 
+def test_dynamic_macro_modulation_scale():
+    """Verify Task 2.8: Dynamic Prior Modulation and Pure Neural Network Ablation."""
+    from agents.efficientzero_v2.core.macro_planner import MacroStrategyPlanner, MacroPlan
+
+    planner = MacroStrategyPlanner()
+    macro_plan = MacroPlan(
+        posture="ASSAULT_VP",
+        target_vp_id="4,4",
+        target_vp_coords=(4, 4),
+        unit_roles={"US_1": "ROLE_MANEUVER"},
+        unit_cohesion={"US_1": "FORMED"},
+        unit_coords={"US_1": (4, 1)},
+    )
+    priors = {"MOVE:US_1:4:3": 0.5, "WAIT:US_1": 0.5}
+    legal = ["MOVE:US_1:4:3", "WAIT:US_1"]
+    vps = {"4,4": "NEUTRAL"}
+
+    # Full doctrinal modulation (scale = 1.0)
+    priors_full = planner.modulate_priors(
+        priors, macro_plan, legal, vps, to_play="US", modulation_scale=1.0
+    )
+    # Pure neural network (scale = 0.0) -> zero heuristic distortion
+    priors_zero = planner.modulate_priors(
+        priors, macro_plan, legal, vps, to_play="US", modulation_scale=0.0
+    )
+    # Half modulation (scale = 0.5)
+    priors_half = planner.modulate_priors(
+        priors, macro_plan, legal, vps, to_play="US", modulation_scale=0.5
+    )
+
+    # Scale 0.0 must preserve exact neural prior distribution
+    assert priors_zero["MOVE:US_1:4:3"] == pytest.approx(0.5, rel=1e-4)
+    assert priors_zero["WAIT:US_1"] == pytest.approx(0.5, rel=1e-4)
+
+    # Scale 1.0 must boost MOVE towards target VP and penalize WAIT
+    assert priors_full["MOVE:US_1:4:3"] > 0.5
+    assert priors_full["WAIT:US_1"] < 0.5
+
+    # Scale 0.5 must be strictly between scale 0.0 and scale 1.0
+    assert priors_zero["MOVE:US_1:4:3"] < priors_half["MOVE:US_1:4:3"] < priors_full["MOVE:US_1:4:3"]
+
+
+

@@ -247,20 +247,20 @@ def vectorized_kinematic_dijkstra(
         return best_cost, came_from
 
     best_cost[start_idx] = 0
-    frontier = [(0, start_idx)]
+    frontier = [(np.int64(0), np.int64(start_idx))]
 
     while frontier:
         cost, u = heapq.heappop(frontier)
         if cost > best_cost[u]:
             continue
         for d in range(6):
-            v = int(adj_indices[u, d])
+            v = np.int64(adj_indices[u, d])
             if v < 0:
                 continue
             step_cost = int(adj_enter_costs[u, d])
             if step_cost < 0:
                 continue
-            new_cost = cost + step_cost
+            new_cost = np.int64(cost + step_cost)
             if new_cost > max_mp:
                 continue
             if impassable_mask[v]:

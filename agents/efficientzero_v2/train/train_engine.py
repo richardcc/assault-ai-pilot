@@ -41,6 +41,7 @@ from agents.efficientzero_v2.core.selfplay import (
     play_episode,
     resolve_effective_step_budget,
 )
+from agents.efficientzero_v2.core.macro_planner import compute_macro_modulation_schedule
 from mlops.catalog_publisher_v2 import publish_train_run
 from voec_sim.configs.config_loader import load_voec_config
 from voec_sim.core.simulator import VOECSimulator
@@ -174,10 +175,19 @@ def _process_actor_init(
     )
 
 
-def _process_actor_run_episode(ep_seed: int, scenario_id: str | None = None) -> list:
+def _process_actor_run_episode(
+    ep_seed: int,
+    scenario_id: str | None = None,
+    macro_modulation_scale: float | None = None,
+) -> list:
     state = _PROCESS_ACTOR_STATE
     cfg = dict(state["selfplay_cfg"])
     actual_scenario = str(scenario_id or state.get("scenario_id", "") or "")
+    scale = (
+        float(macro_modulation_scale)
+        if macro_modulation_scale is not None
+        else float(cfg.get("macro_modulation_scale", 1.0))
+    )
     try:
         with torch.inference_mode():
             return play_episode(
@@ -237,6 +247,7 @@ def _process_actor_run_episode(ep_seed: int, scenario_id: str | None = None) -> 
             collect_xai=bool(cfg.get("collect_xai", False)),
             matchup_modes=list(cfg.get("matchup_modes", ["self_vs_self"]) or ["self_vs_self"]),
             matchup_mode_weights=dict(cfg.get("matchup_mode_weights", {}) or {}),
+            macro_modulation_scale=float(scale),
         )
     except Exception as exc:
         import traceback
@@ -409,6 +420,13 @@ def _atomic_torch_save(
             torch.save(state_dict, tmp_path)
             # Atomic replace once the temporary file is fully written.
             os.replace(str(tmp_path), str(target_path))
+            try:
+                from safetensors.torch import save_file as safetensors_save
+                sf_tmp = target_path.with_suffix(".safetensors.tmp")
+                safetensors_save(state_dict, str(sf_tmp))
+                os.replace(str(sf_tmp), str(target_path.with_suffix(".safetensors")))
+            except Exception:
+                pass
             return
         except Exception as exc:
             last_err = exc
@@ -850,6 +868,7 @@ def run_training(
     inference_cache_limit = int(cfg.selfplay.get("inference_cache_limit", 2048))
     timeout_penalty = float(cfg.selfplay.get("timeout_penalty", -0.1))
     reward_shaping = dict(cfg.selfplay.get("reward_shaping", {}) or {})
+    macro_modulation_scale = float(cfg.selfplay.get("macro_modulation_scale", 1.0))
     matchup_modes = [
         str(x)
         for x in list(cfg.selfplay.get("matchup_modes", ["self_vs_self"]) or ["self_vs_self"])
@@ -970,7 +989,18 @@ def run_training(
         resume_path = Path(resume_checkpoint)
         if not resume_path.is_absolute():
             resume_path = (repo_root / resume_path).resolve()
-        if resume_path.exists():
+        sf_candidate = resume_path if resume_path.suffix == ".safetensors" else resume_path.with_suffix(".safetensors")
+        resumed = False
+        if sf_candidate.exists():
+            try:
+                from safetensors.torch import load_file as safetensors_load
+                state_dict = safetensors_load(str(sf_candidate))
+                model.load_state_dict(state_dict, strict=False)
+                _log(f"[EfficientZeroV2] resumed_from_safetensors={sf_candidate}")
+                resumed = True
+            except Exception:
+                resumed = False
+        if not resumed and resume_path.exists():
             try:
                 ckpt_obj = torch.load(str(resume_path), map_location="cpu", weights_only=True)
             except Exception:
@@ -978,7 +1008,8 @@ def run_training(
             state_dict = ckpt_obj.get("state_dict", ckpt_obj) if isinstance(ckpt_obj, dict) else ckpt_obj
             model.load_state_dict(state_dict, strict=False)
             _log(f"[EfficientZeroV2] resumed_from={resume_path}")
-        else:
+            resumed = True
+        elif not resumed and not resume_path.exists():
             _log(f"[EfficientZeroV2][WARN] resume_checkpoint not found: {resume_path}")
     if str(device) == "cuda":
         try:
@@ -1255,6 +1286,7 @@ def run_training(
             "reward_shaping": reward_shaping,
             "objective_opportunity_near_vp_max_dist": objective_opportunity_near_vp_max_dist,
             "collect_xai": collect_xai,
+            "macro_modulation_scale": macro_modulation_scale,
             "matchup_modes": list(matchup_modes),
             "matchup_mode_weights": dict(matchup_mode_weights),
         }
@@ -1299,10 +1331,31 @@ def run_training(
         )
 
     t_total = time.perf_counter()
+    macro_mod_cfg = dict(cfg.train.get("macro_modulation", {}) or {})
+    macro_mod_schedule = str(
+        macro_mod_cfg.get("schedule", cfg.selfplay.get("macro_modulation_schedule", "constant"))
+    ).lower()
+    macro_mod_start_scale = float(
+        macro_mod_cfg.get("start_scale", cfg.selfplay.get("macro_modulation_scale", 1.0))
+    )
+    macro_mod_final_scale = float(macro_mod_cfg.get("final_scale", 0.0))
+    macro_mod_decay_fraction = float(macro_mod_cfg.get("decay_fraction", 1.0))
+
     try:
         with mlflow_ctx:
             for it in range(iterations):
-                _log(f"[EfficientZeroV2] iteration {it+1}/{iterations} - selfplay")
+                current_macro_scale = compute_macro_modulation_schedule(
+                    step_or_iter=it,
+                    total_steps_or_iters=iterations,
+                    schedule=macro_mod_schedule,
+                    start_scale=macro_mod_start_scale,
+                    final_scale=macro_mod_final_scale,
+                    decay_fraction=macro_mod_decay_fraction,
+                )
+                _log(
+                    f"[EfficientZeroV2] iteration {it+1}/{iterations} - selfplay "
+                    f"(macro_modulation_scale={current_macro_scale:.3f}, schedule={macro_mod_schedule})"
+                )
                 iter_t0 = time.perf_counter()
                 model.eval()
                 if use_process_actors and process_pool is not None and it > 0:
@@ -1402,6 +1455,7 @@ def run_training(
                             collect_xai=collect_xai,
                             matchup_modes=list(matchup_modes),
                             matchup_mode_weights=dict(matchup_mode_weights),
+                            macro_modulation_scale=float(current_macro_scale),
                         )
 
                 def _consume_episode(ep_idx: int, ep_seed: int, samples):
@@ -1549,7 +1603,12 @@ def run_training(
                         while pending_jobs and pool_attempt < max_pool_attempts:
                             pool_attempt += 1
                             fut_to_job = {
-                                process_pool.submit(_process_actor_run_episode, ep_seed, _ep_scen): (ep_idx, ep_seed, _ep_scen)
+                                process_pool.submit(
+                                    _process_actor_run_episode,
+                                    ep_seed,
+                                    _ep_scen,
+                                    current_macro_scale,
+                                ): (ep_idx, ep_seed, _ep_scen)
                                 for ep_idx, ep_seed, _ep_scen in pending_jobs
                             }
                             try:
@@ -1706,6 +1765,7 @@ def run_training(
                     float(max(replay_age_max_vals)) if replay_age_max_vals else 0.0
                 )
                 latest_metrics["train_updates_per_iter"] = int(train_updates_per_iter)
+                latest_metrics["macro_modulation_scale"] = float(current_macro_scale)
                 iter_rows = [r for r in short_episode_rows if int(r.get("iteration", -1)) == int(it)]
                 iter_short_diag = _episode_length_diagnostics(
                     rows=iter_rows,
@@ -2108,6 +2168,7 @@ def run_training(
                     "inference_cache_limit": inference_cache_limit,
                     "timeout_penalty": timeout_penalty,
                     "reward_shaping": dict(reward_shaping),
+                    "macro_modulation_scale": macro_modulation_scale,
                     "collect_xai": collect_xai,
                 },
                 "config_preflight_warnings": list(config_preflight_warnings),

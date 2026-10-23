@@ -10,7 +10,46 @@ Implements Level-1 Strategic Planning:
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+import math
 from typing import Any, Dict, List, Tuple
+
+
+def compute_macro_modulation_schedule(
+    step_or_iter: int,
+    total_steps_or_iters: int,
+    schedule: str = "cosine",
+    start_scale: float = 1.0,
+    final_scale: float = 0.0,
+    decay_fraction: float = 1.0,
+) -> float:
+    """
+    Computes dynamic macro modulation scale for training or evaluation (Roadmap Task 2.8).
+    
+    Schedules:
+    - 'constant': maintains start_scale indefinitely.
+    - 'linear': linear decay from start_scale to final_scale.
+    - 'cosine': half-period cosine decay from start_scale to final_scale.
+    - 'step': abrupt transition from start_scale to final_scale at 50% decay_fraction.
+    - 'off' or 'zero': returns 0.0 (Pure neural network free search).
+    """
+    mode = str(schedule or "cosine").strip().lower()
+    if mode in {"off", "zero", "none", "disabled", "pure_neural"}:
+        return 0.0
+    if mode == "constant":
+        return float(start_scale)
+    total = max(1, int(total_steps_or_iters))
+    df = max(1e-6, min(1.0, float(decay_fraction)))
+    current = max(0, int(step_or_iter))
+    progress = min(1.0, float(current) / max(1.0, float(total) * df))
+
+    if mode == "linear":
+        return float(start_scale + (final_scale - start_scale) * progress)
+    elif mode == "cosine":
+        return float(final_scale + 0.5 * (start_scale - final_scale) * (1.0 + math.cos(math.pi * progress)))
+    elif mode == "step":
+        return float(start_scale if progress < 0.5 else final_scale)
+    return float(start_scale)
+
 
 
 def _hex_distance(aq: int, ar: int, bq: int, br: int) -> int:
@@ -420,6 +459,7 @@ class MacroStrategyPlanner:
         macro_plan: MacroPlan,
         vp_owner_by_hex: Dict[str, str],
         to_play: str,
+        modulation_scale: float = 1.0,
     ) -> float:
         """
         Computes the doctrine and cohesion modulation multiplier for a single action.
@@ -613,6 +653,8 @@ class MacroStrategyPlanner:
                             # Lateral shift without closing distance
                             boost *= 0.85
 
+        if float(modulation_scale) != 1.0:
+            boost = 1.0 + (boost - 1.0) * float(max(0.0, modulation_scale))
         return float(boost)
 
     def is_sterile_action(
@@ -747,19 +789,27 @@ class MacroStrategyPlanner:
         legal_actions: List[str],
         vp_owner_by_hex: Dict[str, str],
         to_play: str,
+        modulation_scale: float = 1.0,
     ) -> Dict[str, float]:
         """
         Modulates MCTS root priors according to unit strategic roles, Hyde cohesion tiers,
         50% strength recovery, anti-impetuous pursuit guardrails, and VP race assault biasing.
         Guarantees that resulting priors remain a normalized probability distribution.
+        If modulation_scale == 0.0, priors are left unmodified (pure neural network mode).
         """
-        if not priors_by_action:
+        if not priors_by_action or float(modulation_scale) <= 0.0:
             return priors_by_action
 
         adjusted: dict[str, float] = {}
         for aid in legal_actions:
             prior = float(priors_by_action.get(aid, 1e-4))
-            boost = self.compute_action_boost(aid, macro_plan, vp_owner_by_hex, to_play)
+            boost = self.compute_action_boost(
+                aid,
+                macro_plan,
+                vp_owner_by_hex,
+                to_play,
+                modulation_scale=float(modulation_scale),
+            )
             adjusted[aid] = max(1e-6, prior * boost)
 
         # Normalize
