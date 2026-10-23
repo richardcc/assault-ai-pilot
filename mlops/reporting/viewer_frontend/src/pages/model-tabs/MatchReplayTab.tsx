@@ -4589,7 +4589,7 @@ export function MatchReplayTab({
         sitrepData={sitrepData}
         isLoading={isSitrepLoading}
         onJumpToStep={(stepIdx) => {
-          setClamped(stepIdx);
+          onStepIndexChange(Math.max(0, Math.min(stepIdx, Math.max(0, steps.length - 1))));
         }}
         onRecompute={() => handleOpenSitrep(true)}
       />
