@@ -725,7 +725,15 @@ export function MatchReplayTab({
   useEffect(() => {
     if (!showIpbTopography || !selectedEvalSourcePath) return;
     const currentScenId = String(replaySteps?.scenario_id || "");
-    if (topographyProfile && String(topographyProfile.scenario_id || "") === currentScenId && currentScenId) return;
+    if (
+      topographyProfile &&
+      String(topographyProfile.scenario_id || "") === currentScenId &&
+      currentScenId &&
+      Array.isArray(topographyProfile.hex_profiles) &&
+      topographyProfile.hex_profiles.length > 0
+    ) {
+      return;
+    }
     let isMounted = true;
     setIsLoadingTopography(true);
     const scenId = String(replaySteps?.scenario_id || "");
@@ -1848,16 +1856,48 @@ export function MatchReplayTab({
         const ipbProf = topographyMap.get(coordKey);
         if (ipbProf) {
           const cls = ipbProf.classification;
+          let stroke = "";
+          let fill = "";
+          let label = "";
+          let labelColor = "";
           if (cls === "KEY_TERRAIN") {
-            drawHex(p.x, p.y, scale * 0.95, "#f59e0b", "rgba(245, 158, 11, 0.22)", 2);
+            stroke = "#f59e0b";
+            fill = "rgba(245, 158, 11, 0.35)";
+            label = "KEY";
+            labelColor = "#fef08a";
           } else if (cls === "DEFILADE_CORRIDOR") {
-            drawHex(p.x, p.y, scale * 0.95, "#10b981", "rgba(16, 185, 129, 0.20)", 1.5);
+            stroke = "#10b981";
+            fill = "rgba(16, 185, 129, 0.35)";
+            label = "DEFILADE";
+            labelColor = "#a7f3d0";
           } else if (cls === "KILLZONE") {
-            drawHex(p.x, p.y, scale * 0.95, "#ef4444", "rgba(239, 68, 68, 0.24)", 1.5);
+            stroke = "#ef4444";
+            fill = "rgba(239, 68, 68, 0.35)";
+            label = "KILLZONE";
+            labelColor = "#fca5a5";
           } else if (cls === "CHOKEPOINT") {
-            drawHex(p.x, p.y, scale * 0.95, "#a855f7", "rgba(168, 85, 247, 0.22)", 1.5);
+            stroke = "#a855f7";
+            fill = "rgba(168, 85, 247, 0.35)";
+            label = "CHOKE";
+            labelColor = "#e9d5ff";
           } else if (cls === "BASE_OF_FIRE") {
-            drawHex(p.x, p.y, scale * 0.95, "#06b6d4", "rgba(6, 182, 212, 0.22)", 2);
+            stroke = "#06b6d4";
+            fill = "rgba(6, 182, 212, 0.35)";
+            label = "BASE FIRE";
+            labelColor = "#a5f3fc";
+          }
+          if (stroke) {
+            drawHex(p.x, p.y, scale * 0.95, stroke, fill, 2);
+            if (label) {
+              ctx.font = `bold ${Math.max(7, Math.floor(scale * 0.22))}px sans-serif`;
+              ctx.textAlign = "center";
+              ctx.textBaseline = "middle";
+              ctx.lineWidth = 2.5;
+              ctx.strokeStyle = "rgba(0, 0, 0, 0.95)";
+              ctx.strokeText(label, p.x, p.y + scale * 0.36);
+              ctx.fillStyle = labelColor;
+              ctx.fillText(label, p.x, p.y + scale * 0.36);
+            }
           }
         }
       }
@@ -3500,11 +3540,18 @@ export function MatchReplayTab({
                   </div>
                 )}
                 {showIpbTopography && topographyMap.has(`${hoveredHex.q},${hoveredHex.r}`) && (
-                  <div style={{ marginTop: 4, paddingTop: 3, borderTop: "1px solid #334155", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                    <span style={{ color: "#34d399", fontWeight: 700, fontSize: 10 }}>🛡️ IPB Sector:</span>
-                    <span style={{ color: "#ecfdf5", fontWeight: 800, fontSize: 10 }}>
-                      {topographyMap.get(`${hoveredHex.q},${hoveredHex.r}`)?.classification.replace(/_/g, " ")}
-                    </span>
+                  <div style={{ marginTop: 4, paddingTop: 3, borderTop: "1px solid #334155" }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                      <span style={{ color: "#34d399", fontWeight: 700, fontSize: 10 }}>🛡️ IPB Sector:</span>
+                      <span style={{ color: "#ecfdf5", fontWeight: 800, fontSize: 10 }}>
+                        {topographyMap.get(`${hoveredHex.q},${hoveredHex.r}`)?.classification.replace(/_/g, " ")}
+                      </span>
+                    </div>
+                    <div style={{ display: "flex", gap: 6, fontSize: 9, color: "#94a3b8", marginTop: 2 }}>
+                      <span>Cover: {Math.round((topographyMap.get(`${hoveredHex.q},${hoveredHex.r}`)?.cover_rating || 0) * 100)}%</span>
+                      <span>Elev: {Math.round((topographyMap.get(`${hoveredHex.q},${hoveredHex.r}`)?.elevation || 0) * 100)}%</span>
+                      <span>LOS Exp: {Math.round((topographyMap.get(`${hoveredHex.q},${hoveredHex.r}`)?.los_exposure || 0) * 100)}%</span>
+                    </div>
                   </div>
                 )}
                 {showThreatHead && threatHeadHexMap.has(`${hoveredHex.q},${hoveredHex.r}`) && (

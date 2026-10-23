@@ -903,7 +903,12 @@ def compute_replay_topography_profile(
             "error": f"Scenario overlay not found for '{scen_id}'",
         }
 
-    hex_data = list(scenario_overlay.get("hexes", []) or [])
+    hex_data = list(
+        scenario_overlay.get("map_cells")
+        or scenario_overlay.get("playable_hexes")
+        or scenario_overlay.get("hexes")
+        or []
+    )
     vp_hexes = list(scenario_overlay.get("vp_hexes", []) or [])
 
     profile = analyze_battlefield_topography(
