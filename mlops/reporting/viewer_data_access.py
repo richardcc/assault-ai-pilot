@@ -4,7 +4,12 @@ import json
 from pathlib import Path
 from typing import Any
 
-from mlops.reporting.catalog_duckdb import load_catalog_summary_from_duckdb
+from mlops.reporting.catalog_duckdb import (
+    _DUCKDB_READONLY_LOCK,
+    close_duckdb_readonly_connection,
+    get_duckdb_readonly_connection,
+    load_catalog_summary_from_duckdb,
+)
 from mlops.reporting.catalog_runtime import (
     load_catalog_payload as _load_catalog_payload_runtime,
 )
@@ -89,9 +94,63 @@ def _compact_eval_results(results_raw: Any) -> list[dict[str, Any]]:
 _EVAL_FILE_CACHE: dict[str, tuple[float, dict[str, Any]]] = {}
 _TRACEABILITY_CACHE: tuple[float, dict[str, dict[str, Any]]] = (0.0, {})
 _PARQUET_ROWS_CACHE: dict[str, tuple[float, list[dict[str, Any]]]] = {}
+_PARQUET_INDEX_CACHE: dict[str, tuple[float, dict[tuple[str, str], list[dict[str, Any]]]]] = {}
 _TRAIN_MANIFEST_CACHE: dict[str, tuple[float, dict[str, Any]]] = {}
 _TRAIN_PAGE_CACHE: dict[tuple[str, float, str, str, int, int], dict[str, Any]] = {}
 _SCHEMA_COLUMNS_CACHE: dict[str, set[str]] = {}
+
+_MAP_PIECE_CATALOG_CACHE: tuple[float, dict[str, Any]] = (0.0, {})
+_SCENARIOS_INDEX_CACHE: tuple[float, dict[str, Path]] = (0.0, {})
+_SCENARIO_OVERLAY_CACHE: dict[str, tuple[float, dict[str, Any]]] = {}
+_SCENARIO_DETAIL_CACHE: dict[str, tuple[float, dict[str, Any]]] = {}
+
+
+def _get_map_piece_catalog(repo_root: Path) -> dict[str, Any]:
+    global _MAP_PIECE_CATALOG_CACHE
+    catalogs_dir = (repo_root / "assault_sim" / "assets" / "catalogs").resolve()
+    if not catalogs_dir.exists():
+        catalogs_dir = (repo_root / "assets" / "catalogs").resolve()
+    map_piece_catalog_path = catalogs_dir / "map_piece_catalog.json"
+    if not map_piece_catalog_path.exists():
+        return {}
+    try:
+        mtime = map_piece_catalog_path.stat().st_mtime
+        if _MAP_PIECE_CATALOG_CACHE[0] == mtime and _MAP_PIECE_CATALOG_CACHE[1]:
+            return _MAP_PIECE_CATALOG_CACHE[1]
+        cat = json.loads(map_piece_catalog_path.read_text(encoding="utf-8"))
+        if isinstance(cat, dict):
+            _MAP_PIECE_CATALOG_CACHE = (mtime, cat)
+            return cat
+    except Exception:
+        pass
+    return {}
+
+
+def _get_scenario_file_index(scenarios_dir: Path) -> dict[str, Path]:
+    """Cache scenario ID and stem mapping to file paths using directory mtime."""
+    global _SCENARIOS_INDEX_CACHE
+    if not scenarios_dir.exists():
+        return {}
+    try:
+        dir_mtime = scenarios_dir.stat().st_mtime
+        if _SCENARIOS_INDEX_CACHE[0] == dir_mtime and _SCENARIOS_INDEX_CACHE[1]:
+            return _SCENARIOS_INDEX_CACHE[1]
+        mapping: dict[str, Path] = {}
+        for p in scenarios_dir.glob("*.json"):
+            mapping[p.stem] = p
+            mapping[p.stem.lower()] = p
+            try:
+                raw = json.loads(p.read_text(encoding="utf-8", errors="ignore"))
+                int_id = str(raw.get("id", "") or "").strip()
+                if int_id:
+                    mapping[int_id] = p
+                    mapping[int_id.lower()] = p
+            except Exception:
+                pass
+        _SCENARIOS_INDEX_CACHE = (dir_mtime, mapping)
+        return mapping
+    except Exception:
+        return {}
 
 
 def _get_traceability_index(repo_root: Path) -> dict[str, dict[str, Any]]:
@@ -179,6 +238,7 @@ def load_eval_history_page_from_parquet(
 ) -> dict[str, Any]:
     pq_path = (repo_root / str(parquet_rel_path)).resolve()
     rows: list[dict[str, Any]] = []
+    idx_map: dict[tuple[str, str], list[dict[str, Any]]] = {}
     if not pq_path.exists():
         alt_path = (repo_root / "runs_curriculum" / "experiments" / "reporting" / "catalog_evals.parquet").resolve()
         if alt_path.exists():
@@ -191,43 +251,57 @@ def load_eval_history_page_from_parquet(
             cached_pq = _PARQUET_ROWS_CACHE.get(key)
             if cached_pq and cached_pq[0] == mtime:
                 rows = cached_pq[1]
+                idx_map = _PARQUET_INDEX_CACHE.get(key, (0.0, {}))[1]
             else:
                 import pyarrow.parquet as pq  # type: ignore
 
                 table = pq.read_table(pq_path)
                 rows = [dict(r or {}) for r in (table.to_pylist() or [])]
+                idx_map = {}
+                for r in rows:
+                    eng_k = str(r.get("engine", "") or "")
+                    mod_k = str(r.get("model_id", "") or "")
+                    idx_map.setdefault((eng_k, mod_k), []).append(r)
                 _PARQUET_ROWS_CACHE[key] = (mtime, rows)
+                _PARQUET_INDEX_CACHE[key] = (mtime, idx_map)
         except Exception:
             rows = []
+            idx_map = {}
 
     if not rows:
         # Fallback to DuckDB catalog_evals if parquet is unavailable or empty
         db_path = (repo_root / "runs_curriculum" / "experiments" / "reporting" / "reporting.duckdb").resolve()
         if db_path.exists():
             try:
-                import duckdb  # type: ignore
-                con = duckdb.connect(str(db_path), read_only=True)
-                aliases = _model_id_aliases(model_id, engine)
-                m_clause = f"AND model_id IN ({', '.join(['?'] * len(aliases))})" if aliases else "AND model_id = ?"
-                m_params = [str(engine or "")] + (aliases if aliases else [str(model_id or "")])
-                t_clause = ""
-                if str(train_run_id or "").strip():
-                    t_clause = "AND train_run_id = ?"
-                    m_params.append(str(train_run_id or "").strip())
-                df = con.execute(f"SELECT * FROM catalog_evals WHERE engine = ? {m_clause} {t_clause}", m_params).df()
-                con.close()
-                rows = [dict(r or {}) for r in df.to_dict(orient="records")]
+                with _DUCKDB_READONLY_LOCK:
+                    con = get_duckdb_readonly_connection(db_path)
+                    aliases = _model_id_aliases(model_id, engine)
+                    m_clause = f"AND model_id IN ({', '.join(['?'] * len(aliases))})" if aliases else "AND model_id = ?"
+                    m_params = [str(engine or "")] + (aliases if aliases else [str(model_id or "")])
+                    t_clause = ""
+                    if str(train_run_id or "").strip():
+                        t_clause = "AND train_run_id = ?"
+                        m_params.append(str(train_run_id or "").strip())
+                    df = con.execute(f"SELECT * FROM catalog_evals WHERE engine = ? {m_clause} {t_clause}", m_params).df()
+                    rows = [dict(r or {}) for r in df.to_dict(orient="records")]
             except Exception:
                 rows = []
+            finally:
+                close_duckdb_readonly_connection(db_path)
 
     wanted_engine = str(engine or "")
     model_aliases = set(_model_id_aliases(model_id, engine))
-    filtered = [
-        r
-        for r in rows
-        if str(r.get("engine", "") or "") == wanted_engine
-        and (str(r.get("model_id", "") or "") in model_aliases if model_aliases else True)
-    ]
+    if idx_map and wanted_engine and model_aliases:
+        filtered = []
+        for alias in model_aliases:
+            filtered.extend(idx_map.get((wanted_engine, alias), []))
+    else:
+        filtered = [
+            r
+            for r in rows
+            if (not wanted_engine or str(r.get("engine", "") or "") == wanted_engine)
+            and (str(r.get("model_id", "") or "") in model_aliases if model_aliases else True)
+        ]
     wanted_train = str(train_run_id or "").strip()
     wanted_scenario = str(scenario_id or "__all__").strip() or "__all__"
     if wanted_train:
@@ -404,55 +478,83 @@ def load_train_history_page_from_duckdb(
         import duckdb  # type: ignore
     except Exception as exc:
         return {"rows": [], "total": 0, "error": f"duckdb import failed: {exc}"}
-    import time
-    con = None
-    last_exc = None
-    for attempt in range(6):
-        try:
-            con = duckdb.connect(str(db_path), read_only=True)
-            break
-        except Exception as exc:
-            last_exc = exc
-            if attempt < 5:
-                time.sleep(0.15 * (attempt + 1))
-    if con is None:
-        return {"rows": [], "total": 0, "error": f"duckdb temporarily busy: {last_exc}"}
-    try:
-        aliases = _model_id_aliases(model_id, engine)
-        if aliases:
-            placeholders = ", ".join(["?"] * len(aliases))
-            model_clause = f"AND model_id IN ({placeholders})"
-            model_params = aliases
-        else:
-            model_clause = "AND model_id = ?"
-            model_params = [str(model_id or "")]
 
-        total = int(
-            con.execute(
+    with _DUCKDB_READONLY_LOCK:
+        try:
+            con = get_duckdb_readonly_connection(db_path)
+        except Exception as exc:
+            return {"rows": [], "total": 0, "error": f"duckdb temporarily busy: {exc}"}
+        try:
+            aliases = _model_id_aliases(model_id, engine)
+            if aliases:
+                placeholders = ", ".join(["?"] * len(aliases))
+                model_clause = f"AND model_id IN ({placeholders})"
+                model_params = aliases
+            else:
+                model_clause = "AND model_id = ?"
+                model_params = [str(model_id or "")]
+            model_clause_t = model_clause.replace("model_id", "t.model_id")
+
+            total = int(
+                con.execute(
+                    f"""
+                    SELECT COUNT(*) FROM catalog_trains
+                    WHERE engine = ? {model_clause}
+                    """,
+                    [str(engine or "")] + model_params,
+                ).fetchone()[0]
+            )
+            start = max(0, min(int(offset), total))
+            rows = con.execute(
                 f"""
-                SELECT COUNT(*) FROM catalog_trains
-                WHERE engine = ? {model_clause}
+                SELECT
+                    t.run_id, t.scenario_id, t.created_at_utc, t.git_commit,
+                    t.is_retrain, t.parent_run_id, t.latest_checkpoint,
+                    COUNT(e.eval_id) AS evals_count
+                FROM catalog_trains t
+                LEFT JOIN catalog_evals e ON t.run_id = e.train_run_id
+                WHERE t.engine = ? {model_clause_t}
+                GROUP BY t.run_id, t.scenario_id, t.created_at_utc, t.git_commit, t.is_retrain, t.parent_run_id, t.latest_checkpoint
+                ORDER BY t.created_at_utc DESC
+                LIMIT ? OFFSET ?
                 """,
-                [str(engine or "")] + model_params,
-            ).fetchone()[0]
-        )
-        start = max(0, min(int(offset), total))
-        model_clause_t = model_clause.replace("model_id", "t.model_id")
-        rows = con.execute(
-            f"""
-            SELECT
-                t.run_id, t.scenario_id, t.created_at_utc, t.git_commit,
-                t.is_retrain, t.parent_run_id, t.latest_checkpoint,
-                COUNT(e.eval_id) AS evals_count
-            FROM catalog_trains t
-            LEFT JOIN catalog_evals e ON t.run_id = e.train_run_id
-            WHERE t.engine = ? {model_clause_t}
-            GROUP BY t.run_id, t.scenario_id, t.created_at_utc, t.git_commit, t.is_retrain, t.parent_run_id, t.latest_checkpoint
-            ORDER BY t.created_at_utc DESC
-            LIMIT ? OFFSET ?
-            """,
-            [str(engine or "")] + model_params + [int(limit), int(start)],
-        ).fetchall()
+                [str(engine or "")] + model_params + [int(limit), int(start)],
+            ).fetchall()
+        except Exception as exc:
+            # Refresh connection and retry once
+            try:
+                close_duckdb_readonly_connection(db_path)
+                con = get_duckdb_readonly_connection(db_path)
+                total = int(
+                    con.execute(
+                        f"""
+                        SELECT COUNT(*) FROM catalog_trains
+                        WHERE engine = ? {model_clause}
+                        """,
+                        [str(engine or "")] + model_params,
+                    ).fetchone()[0]
+                )
+                start = max(0, min(int(offset), total))
+                rows = con.execute(
+                    f"""
+                    SELECT
+                        t.run_id, t.scenario_id, t.created_at_utc, t.git_commit,
+                        t.is_retrain, t.parent_run_id, t.latest_checkpoint,
+                        COUNT(e.eval_id) AS evals_count
+                    FROM catalog_trains t
+                    LEFT JOIN catalog_evals e ON t.run_id = e.train_run_id
+                    WHERE t.engine = ? {model_clause_t}
+                    GROUP BY t.run_id, t.scenario_id, t.created_at_utc, t.git_commit, t.is_retrain, t.parent_run_id, t.latest_checkpoint
+                    ORDER BY t.created_at_utc DESC
+                    LIMIT ? OFFSET ?
+                    """,
+                    [str(engine or "")] + model_params + [int(limit), int(start)],
+                ).fetchall()
+            except Exception as exc2:
+                return {"rows": [], "total": 0, "error": f"duckdb train query failed: {exc2}"}
+        finally:
+            close_duckdb_readonly_connection(db_path)
+
         out_rows = []
         runs_roots = ["runs_curriculum", "runs"]
         trace_index = _get_traceability_index(repo_root)
@@ -505,10 +607,6 @@ def load_train_history_page_from_duckdb(
         res = {"rows": out_rows, "total": total}
         _TRAIN_PAGE_CACHE[cache_key] = res
         return res
-    except Exception as exc:
-        return {"rows": [], "total": 0, "error": f"duckdb train query failed: {exc}"}
-    finally:
-        con.close()
 
 
 def load_elo_rows_from_duckdb(
@@ -532,202 +630,193 @@ def load_elo_rows_from_duckdb(
         import duckdb  # type: ignore
     except Exception as exc:
         return {"rows": [], "total": 0, "error": f"duckdb import failed: {exc}"}
-    import time
-    con = None
-    last_exc = None
-    for attempt in range(6):
+
+    with _DUCKDB_READONLY_LOCK:
         try:
-            con = duckdb.connect(str(db_path), read_only=True)
-            break
+            con = get_duckdb_readonly_connection(db_path)
+            required_cols = {
+                "model_id",
+                "created_at_utc",
+                "eval_id",
+                "scenario_id",
+                "curriculum_phase",
+                "matchup_profile",
+                "side",
+                "controller",
+                "opponent_controller",
+                "seed",
+                "episodes",
+                "win_rate",
+                "draw_rate",
+                "loss_rate",
+                "total_victory_rate",
+                "victory_rate",
+                "defeat_rate",
+                "total_defeat_rate",
+                "avg_return",
+                "tracked_captured_avg",
+                "vp_net_avg_side",
+                "winner_rate_side",
+                "units_alive_final",
+                "units_lost",
+                "enemy_units_eliminated",
+                "damage_dealt",
+            }
+            available_cols = _SCHEMA_COLUMNS_CACHE.get("catalog_eval_result_sides")
+            if available_cols is None:
+                schema_rows = con.execute(
+                    "SELECT column_name FROM information_schema.columns "
+                    "WHERE table_name = 'catalog_eval_result_sides'"
+                ).fetchall()
+                available_cols = {str(r[0] or "").strip() for r in schema_rows}
+                _SCHEMA_COLUMNS_CACHE["catalog_eval_result_sides"] = available_cols
+            missing_cols = sorted([c for c in required_cols if c not in available_cols])
+            if missing_cols:
+                return {
+                    "rows": [],
+                    "total": 0,
+                    "error": (
+                        "duckdb schema invalid: catalog_eval_result_sides missing required columns: "
+                        + ", ".join(missing_cols)
+                        + ". Rebuild catalog/duckdb with current publisher."
+                    ),
+                }
+            where: list[str] = []
+            params: list[Any] = []
+            engine_s = str(engine or "").strip()
+            if engine_s and engine_s != "__all__":
+                where.append("engine = ?")
+                params.append(engine_s)
+            model_s = str(model_id or "").strip()
+            if model_s and model_s != "__all__":
+                aliases = _model_id_aliases(model_s, engine_s)
+                if aliases:
+                    placeholders = ", ".join(["?"] * len(aliases))
+                    where.append(f"model_id IN ({placeholders})")
+                    params.extend(aliases)
+                else:
+                    where.append("model_id = ?")
+                    params.append(model_s)
+            side_s = str(side or "").strip()
+            if side_s and side_s != "__all__":
+                where.append("side = ?")
+                params.append(side_s)
+            controller_s = str(controller or "").strip()
+            if controller_s and controller_s != "__all__":
+                where.append("controller = ?")
+                params.append(controller_s)
+            scenario_s = str(scenario_id or "").strip()
+            if scenario_s and scenario_s != "__all__":
+                where.append("scenario_id = ?")
+                params.append(scenario_s)
+            profile_s = str(matchup_profile or "").strip()
+            if profile_s and profile_s != "__all__":
+                where.append("matchup_profile = ?")
+                params.append(profile_s)
+            eval_like = str(eval_id_like or "").strip()
+            if eval_like:
+                where.append("LOWER(eval_id) LIKE ?")
+                params.append(f"%{eval_like.lower()}%")
+            created_like = str(created_at_like or "").strip()
+            if created_like:
+                where.append("LOWER(created_at_utc) LIKE ?")
+                params.append(f"%{created_like.lower()}%")
+            where_sql = " AND ".join(where) if where else "TRUE"
+
+            def _query_rows(query_where_sql: str, query_params: list[Any]):
+                total_local = int(
+                    con.execute(
+                        f"SELECT COUNT(*) FROM catalog_eval_result_sides WHERE {query_where_sql}",
+                        query_params,
+                    ).fetchone()[0]
+                )
+                rows_local = con.execute(
+                    f"""
+                    SELECT
+                        model_id, created_at_utc, eval_id, scenario_id, matchup_profile,
+                        curriculum_phase, side, controller, opponent_controller, seed, episodes, win_rate, draw_rate, loss_rate,
+                        total_victory_rate, victory_rate, defeat_rate, total_defeat_rate,
+                        avg_return, tracked_captured_avg, vp_net_avg_side, winner_rate_side,
+                        units_alive_final, units_lost, enemy_units_eliminated, damage_dealt
+                    FROM catalog_eval_result_sides
+                    WHERE {query_where_sql}
+                    ORDER BY created_at_utc DESC, eval_id DESC, model_id ASC, matchup_profile ASC, side ASC
+                    LIMIT ?
+                    """,
+                    [*query_params, int(max(1, min(int(limit), 50000)))],
+                ).fetchall()
+                return total_local, rows_local
+
+            total, rows = _query_rows(where_sql, params)
+            warning = ""
+            if total <= 0 and engine_s:
+                # Recovery path for inconsistent/legacy engine tags in index rows.
+                fallback_where = " AND ".join([w for w in where if w != "engine = ?"]) or "TRUE"
+                fallback_params = params[1:] if params else []
+                total_fb, rows_fb = _query_rows(fallback_where, fallback_params)
+                if total_fb > 0:
+                    total, rows = total_fb, rows_fb
+                    warning = f"engine filter '{engine_s}' returned no rows; used fallback without engine filter"
+            out_rows = []
+            for r in rows:
+                seed_val = None if r[9] is None else int(r[9])
+                episodes = int(r[10] or 0)
+                if episodes <= 0:
+                    episodes = 1
+                win_rate = float(r[11] or 0.0)
+                draw_rate = float(r[12] or 0.0)
+                loss_rate = float(r[13] or 0.0)
+                total_victory_rate = float(r[14] or 0.0)
+                victory_rate = float(r[15] or 0.0)
+                defeat_rate = float(r[16] or 0.0)
+                total_defeat_rate = float(r[17] or 0.0)
+                wins = int(round(win_rate * episodes))
+                draws = int(round(draw_rate * episodes))
+                losses = int(max(0, episodes - wins - draws))
+                # Keep score continuous from rates; avoid quantization drift from rounded counts.
+                score = float(win_rate + (0.5 * draw_rate))
+                row_obj = {
+                    "model_id": str(r[0] or ""),
+                    "created_at_utc": str(r[1] or ""),
+                    "eval_id": str(r[2] or ""),
+                    "scenario_id": str(r[3] or ""),
+                    "matchup_profile": str(r[4] or ""),
+                    "curriculum_phase": str(r[5] or ""),
+                    "side": str(r[6] or ""),
+                    "controller": str(r[7] or ""),
+                    "opponent_controller": str(r[8] or ""),
+                    "seed": seed_val,
+                    "episodes": int(episodes),
+                    "wins": int(wins),
+                    "draws": int(draws),
+                    "losses": int(losses),
+                    "win_rate": float(win_rate),
+                    "draw_rate": float(draw_rate),
+                    "loss_rate": float(loss_rate),
+                    "score": float(score),
+                    "total_victory_rate": float(total_victory_rate),
+                    "victory_rate": float(victory_rate),
+                    "defeat_rate": float(defeat_rate),
+                    "total_defeat_rate": float(total_defeat_rate),
+                    "avg_return": float(r[18] or 0.0),
+                    "tracked_captured_avg": float(r[19] or 0.0),
+                    "vp_net_avg_side": (None if r[20] is None else float(r[20])),
+                    "winner_rate_side": (None if r[21] is None else float(r[21])),
+                    "units_alive_final": (None if r[22] is None else float(r[22])),
+                    "units_lost": (None if r[23] is None else float(r[23])),
+                    "enemy_units_eliminated": (None if r[24] is None else float(r[24])),
+                    "damage_dealt": (None if r[25] is None else float(r[25])),
+                }
+                out_rows.append(row_obj)
+            out = {"rows": out_rows, "total": len(out_rows)}
+            if warning:
+                out["warning"] = warning
+            return out
         except Exception as exc:
-            last_exc = exc
-            if attempt < 5:
-                time.sleep(0.15 * (attempt + 1))
-    if con is None:
-        return {"rows": [], "total": 0, "error": f"duckdb temporarily busy: {last_exc}"}
-    try:
-        required_cols = {
-            "model_id",
-            "created_at_utc",
-            "eval_id",
-            "scenario_id",
-            "curriculum_phase",
-            "matchup_profile",
-            "side",
-            "controller",
-            "opponent_controller",
-            "seed",
-            "episodes",
-            "win_rate",
-            "draw_rate",
-            "loss_rate",
-            "total_victory_rate",
-            "victory_rate",
-            "defeat_rate",
-            "total_defeat_rate",
-            "avg_return",
-            "tracked_captured_avg",
-            "vp_net_avg_side",
-            "winner_rate_side",
-            "units_alive_final",
-            "units_lost",
-            "enemy_units_eliminated",
-            "damage_dealt",
-        }
-        available_cols = _SCHEMA_COLUMNS_CACHE.get("catalog_eval_result_sides")
-        if available_cols is None:
-            schema_rows = con.execute(
-                "SELECT column_name FROM information_schema.columns "
-                "WHERE table_name = 'catalog_eval_result_sides'"
-            ).fetchall()
-            available_cols = {str(r[0] or "").strip() for r in schema_rows}
-            _SCHEMA_COLUMNS_CACHE["catalog_eval_result_sides"] = available_cols
-        missing_cols = sorted([c for c in required_cols if c not in available_cols])
-        if missing_cols:
-            return {
-                "rows": [],
-                "total": 0,
-                "error": (
-                    "duckdb schema invalid: catalog_eval_result_sides missing required columns: "
-                    + ", ".join(missing_cols)
-                    + ". Rebuild catalog/duckdb with current publisher."
-                ),
-            }
-        where: list[str] = []
-        params: list[Any] = []
-        engine_s = str(engine or "").strip()
-        if engine_s and engine_s != "__all__":
-            where.append("engine = ?")
-            params.append(engine_s)
-        model_s = str(model_id or "").strip()
-        if model_s and model_s != "__all__":
-            aliases = _model_id_aliases(model_s, engine_s)
-            if aliases:
-                placeholders = ", ".join(["?"] * len(aliases))
-                where.append(f"model_id IN ({placeholders})")
-                params.extend(aliases)
-            else:
-                where.append("model_id = ?")
-                params.append(model_s)
-        side_s = str(side or "").strip()
-        if side_s and side_s != "__all__":
-            where.append("side = ?")
-            params.append(side_s)
-        controller_s = str(controller or "").strip()
-        if controller_s and controller_s != "__all__":
-            where.append("controller = ?")
-            params.append(controller_s)
-        scenario_s = str(scenario_id or "").strip()
-        if scenario_s and scenario_s != "__all__":
-            where.append("scenario_id = ?")
-            params.append(scenario_s)
-        profile_s = str(matchup_profile or "").strip()
-        if profile_s and profile_s != "__all__":
-            where.append("matchup_profile = ?")
-            params.append(profile_s)
-        eval_like = str(eval_id_like or "").strip()
-        if eval_like:
-            where.append("LOWER(eval_id) LIKE ?")
-            params.append(f"%{eval_like.lower()}%")
-        created_like = str(created_at_like or "").strip()
-        if created_like:
-            where.append("LOWER(created_at_utc) LIKE ?")
-            params.append(f"%{created_like.lower()}%")
-        where_sql = " AND ".join(where) if where else "TRUE"
+            return {"rows": [], "total": 0, "error": f"duckdb elo query failed: {exc}"}
+        finally:
+            close_duckdb_readonly_connection(db_path)
 
-        def _query_rows(query_where_sql: str, query_params: list[Any]):
-            total_local = int(
-                con.execute(
-                    f"SELECT COUNT(*) FROM catalog_eval_result_sides WHERE {query_where_sql}",
-                    query_params,
-                ).fetchone()[0]
-            )
-            rows_local = con.execute(
-                f"""
-                SELECT
-                    model_id, created_at_utc, eval_id, scenario_id, matchup_profile,
-                    curriculum_phase, side, controller, opponent_controller, seed, episodes, win_rate, draw_rate, loss_rate,
-                    total_victory_rate, victory_rate, defeat_rate, total_defeat_rate,
-                    avg_return, tracked_captured_avg, vp_net_avg_side, winner_rate_side,
-                    units_alive_final, units_lost, enemy_units_eliminated, damage_dealt
-                FROM catalog_eval_result_sides
-                WHERE {query_where_sql}
-                ORDER BY created_at_utc DESC, eval_id DESC, model_id ASC, matchup_profile ASC, side ASC
-                LIMIT ?
-                """,
-                [*query_params, int(max(1, min(int(limit), 50000)))],
-            ).fetchall()
-            return total_local, rows_local
-
-        total, rows = _query_rows(where_sql, params)
-        warning = ""
-        if total <= 0 and engine_s:
-            # Recovery path for inconsistent/legacy engine tags in index rows.
-            fallback_where = " AND ".join([w for w in where if w != "engine = ?"]) or "TRUE"
-            fallback_params = params[1:] if params else []
-            total_fb, rows_fb = _query_rows(fallback_where, fallback_params)
-            if total_fb > 0:
-                total, rows = total_fb, rows_fb
-                warning = f"engine filter '{engine_s}' returned no rows; used fallback without engine filter"
-        out_rows = []
-        for r in rows:
-            seed_val = None if r[9] is None else int(r[9])
-            episodes = int(r[10] or 0)
-            if episodes <= 0:
-                episodes = 1
-            win_rate = float(r[11] or 0.0)
-            draw_rate = float(r[12] or 0.0)
-            loss_rate = float(r[13] or 0.0)
-            total_victory_rate = float(r[14] or 0.0)
-            victory_rate = float(r[15] or 0.0)
-            defeat_rate = float(r[16] or 0.0)
-            total_defeat_rate = float(r[17] or 0.0)
-            wins = int(round(win_rate * episodes))
-            draws = int(round(draw_rate * episodes))
-            losses = int(max(0, episodes - wins - draws))
-            # Keep score continuous from rates; avoid quantization drift from rounded counts.
-            score = float(win_rate + (0.5 * draw_rate))
-            row_obj = {
-                "model_id": str(r[0] or ""),
-                "created_at_utc": str(r[1] or ""),
-                "eval_id": str(r[2] or ""),
-                "scenario_id": str(r[3] or ""),
-                "matchup_profile": str(r[4] or ""),
-                "curriculum_phase": str(r[5] or ""),
-                "side": str(r[6] or ""),
-                "controller": str(r[7] or ""),
-                "opponent_controller": str(r[8] or ""),
-                "seed": seed_val,
-                "episodes": int(episodes),
-                "wins": int(wins),
-                "draws": int(draws),
-                "losses": int(losses),
-                "win_rate": float(win_rate),
-                "draw_rate": float(draw_rate),
-                "loss_rate": float(loss_rate),
-                "score": float(score),
-                "total_victory_rate": float(total_victory_rate),
-                "victory_rate": float(victory_rate),
-                "defeat_rate": float(defeat_rate),
-                "total_defeat_rate": float(total_defeat_rate),
-                "avg_return": float(r[18] or 0.0),
-                "tracked_captured_avg": float(r[19] or 0.0),
-                "vp_net_avg_side": (None if r[20] is None else float(r[20])),
-                "winner_rate_side": (None if r[21] is None else float(r[21])),
-                "units_alive_final": (None if r[22] is None else float(r[22])),
-                "units_lost": (None if r[23] is None else float(r[23])),
-                "enemy_units_eliminated": (None if r[24] is None else float(r[24])),
-                "damage_dealt": (None if r[25] is None else float(r[25])),
-            }
-            out_rows.append(row_obj)
-        out = {"rows": out_rows, "total": len(out_rows)}
-        if warning:
-            out["warning"] = warning
-        return out
-    except Exception as exc:
-        return {"rows": [], "total": 0, "error": f"duckdb elo query failed: {exc}"}
-    finally:
-        con.close()
 
 
 def _load_train_manifest_by_run_id(
@@ -775,6 +864,29 @@ def load_model_detail_index_first(
         (m for m in list(engine_row.get("models", []) or []) if (str(m.get("model_id", "")) in aliases if aliases else str(m.get("model_id", "")) == str(model_id or ""))),
         {},
     )
+    if not isinstance(model_row, dict) or not model_row:
+        # Check if model_id is actually a train_run_id in catalog_trains
+        try:
+            db_path = (repo_root / "runs_curriculum" / "experiments" / "reporting" / "reporting.duckdb").resolve()
+            if db_path.exists():
+                with _DUCKDB_READONLY_LOCK:
+                    con = get_duckdb_readonly_connection(db_path)
+                    matched_model = con.execute(
+                        "SELECT model_id FROM catalog_trains WHERE run_id = ? OR run_id LIKE ? LIMIT 1",
+                        [model_id, f"%{model_id}%"]
+                    ).fetchone()
+                if matched_model and matched_model[0]:
+                    target_model_id = str(matched_model[0])
+                    aliases.update(_model_id_aliases(target_model_id, engine))
+                    model_row = next(
+                        (m for m in list(engine_row.get("models", []) or []) if (str(m.get("model_id", "")) in aliases)),
+                        {},
+                    )
+        except Exception:
+            pass
+        finally:
+            close_duckdb_readonly_connection(db_path)
+
     if not isinstance(model_row, dict) or not model_row:
         return {
             "schema_version": "reporting_v2_strict",
@@ -942,21 +1054,28 @@ def load_scenario_overlay(repo_root: Path, scenario_id: str) -> dict:
         sub_sids = [s.strip() for s in sid[len("multi:") :].split("|") if s.strip()]
         if sub_sids:
             sid = sub_sids[0]
-    scenarios_dir = (repo_root / "assault_sim" / "assets" / "scenarios").resolve()
+    scenarios_dir = (repo_root / "assets" / "scenarios").resolve()
     if not scenarios_dir.exists():
-        scenarios_dir = (repo_root / "assets" / "scenarios").resolve()
+        scenarios_dir = (repo_root / "assault_sim" / "assets" / "scenarios").resolve()
     if not scenarios_dir.exists():
         return {}
-    catalogs_dir = (repo_root / "assault_sim" / "assets" / "catalogs").resolve()
-    if not catalogs_dir.exists():
-        catalogs_dir = (repo_root / "assets" / "catalogs").resolve()
-    map_piece_catalog_path = catalogs_dir / "map_piece_catalog.json"
-    map_piece_catalog: dict = {}
-    if map_piece_catalog_path.exists():
-        try:
-            map_piece_catalog = json.loads(map_piece_catalog_path.read_text(encoding="utf-8"))
-        except Exception:
-            map_piece_catalog = {}
+
+    scen_index = _get_scenario_file_index(scenarios_dir)
+    target_path = scen_index.get(sid) or scen_index.get(sid.lower())
+    if not target_path or not target_path.exists():
+        cand = scenarios_dir / f"{sid}.json"
+        if cand.exists():
+            target_path = cand
+    if not target_path or not target_path.exists():
+        return {}
+
+    file_mtime = target_path.stat().st_mtime
+    cache_key = f"{target_path.resolve()}::{file_mtime}"
+    cached = _SCENARIO_OVERLAY_CACHE.get(cache_key)
+    if cached is not None and cached[0] == file_mtime:
+        return cached[1]
+
+    map_piece_catalog = _get_map_piece_catalog(repo_root)
 
     def _rot_quarters(deg: int) -> int:
         if deg % 90 != 0:
@@ -1071,6 +1190,22 @@ def load_scenario_overlay(repo_root: Path, scenario_id: str) -> dict:
         forts = list((raw.get("map", {}) or {}).get("fortifications", []) or [])
         pieces_list = _enrich_pieces(list((raw.get("map", {}) or {}).get("pieces", []) or []))
         units_list = _enrich_units(list(raw.get("units", []) or []))
+        raw_reinforcements = list(raw.get("reinforcements", []) or [])
+        reinforcements_list: list[dict[str, Any]] = []
+        for r_item in raw_reinforcements:
+            if not isinstance(r_item, dict):
+                continue
+            r_units = _enrich_units(list(r_item.get("units", []) or []))
+            reinforcements_list.append({
+                "turn": int(r_item.get("turn", 1) or 1),
+                "phase": str(r_item.get("phase", "organization") or "organization"),
+                "side": str(r_item.get("side", "") or "").upper(),
+                "formation_key": str(r_item.get("formation_key", "") or ""),
+                "roll_type": str(r_item.get("roll_type", "") or ""),
+                "landing_zones": dict(r_item.get("landing_zones", {}) or {}),
+                "units": r_units,
+                "units_count": len(r_units),
+            })
 
         # Dynamic metadata extraction
         tracked_side = str((raw.get("victory_outcomes", {}) or {}).get("tracked_side", "") or "").upper()
@@ -1135,27 +1270,16 @@ def load_scenario_overlay(repo_root: Path, scenario_id: str) -> dict:
             ],
             "victory_outcomes": raw.get("victory_outcomes", {}),
             "morale_track": raw.get("morale_track", {}),
+            "reinforcements": reinforcements_list,
         }
 
-    candidates = [scenarios_dir / f"{sid}.json"]
-    for c in candidates:
-        if c.exists():
-            try:
-                raw = json.loads(c.read_text(encoding="utf-8"))
-            except Exception:
-                raw = {}
-            return _build_scenario_overlay_dict(c, sid, raw)
-
-    for p in list(scenarios_dir.glob("*.json")):
-        try:
-            raw = json.loads(p.read_text(encoding="utf-8"))
-        except Exception:
-            continue
-        internal_id = str(raw.get("id", "") or "").strip()
-        if internal_id != sid:
-            continue
-        return _build_scenario_overlay_dict(p, sid, raw)
-    return {}
+    try:
+        raw = json.loads(target_path.read_text(encoding="utf-8"))
+    except Exception:
+        raw = {}
+    overlay_res = _build_scenario_overlay_dict(target_path, sid, raw)
+    _SCENARIO_OVERLAY_CACHE[cache_key] = (file_mtime, overlay_res)
+    return overlay_res
 
 
 def load_scenario_detail(repo_root: Path, scenario_id: str) -> dict[str, Any]:
@@ -1167,42 +1291,36 @@ def load_scenario_detail(repo_root: Path, scenario_id: str) -> dict[str, Any]:
         parts = sid[len("multi:"):].split("|")
         sid = parts[0].strip() if parts else sid
 
-    scenarios_dir = (repo_root / "assault_sim" / "assets" / "scenarios").resolve()
+    scenarios_dir = (repo_root / "assets" / "scenarios").resolve()
     if not scenarios_dir.exists():
-        scenarios_dir = (repo_root / "assets" / "scenarios").resolve()
+        scenarios_dir = (repo_root / "assault_sim" / "assets" / "scenarios").resolve()
     if not scenarios_dir.exists():
         return {"ok": False, "error": "scenarios_dir_not_found"}
 
-    target_path: Path | None = None
-    if sid:
+    scen_index = _get_scenario_file_index(scenarios_dir)
+    target_path = scen_index.get(sid) or scen_index.get(sid.lower())
+    if not target_path or not target_path.exists():
         cand = scenarios_dir / f"{sid}.json"
         if cand.exists():
             target_path = cand
         else:
-            for p in sorted(scenarios_dir.glob("*.json")):
-                if p.stem == sid:
-                    target_path = p
-                    break
-                try:
-                    raw = json.loads(p.read_text(encoding="utf-8", errors="ignore"))
-                    if str(raw.get("id", "")).strip() == sid:
+            all_scens = sorted(scenarios_dir.glob("*.json"))
+            if sid:
+                for p in all_scens:
+                    if sid in p.stem or p.stem in sid:
                         target_path = p
                         break
-                except Exception:
-                    continue
-
-    if not target_path:
-        all_scens = sorted(scenarios_dir.glob("*.json"))
-        if sid:
-            for p in all_scens:
-                if sid in p.stem or p.stem in sid:
-                    target_path = p
-                    break
-        if not target_path and all_scens:
-            target_path = all_scens[0]
+            if not target_path and all_scens:
+                target_path = all_scens[0]
 
     if not target_path or not target_path.exists():
         return {"ok": False, "error": "scenario_not_found", "scenario_id": sid}
+
+    file_mtime = target_path.stat().st_mtime
+    cache_key = f"{target_path.resolve()}::{file_mtime}"
+    cached = _SCENARIO_DETAIL_CACHE.get(cache_key)
+    if cached is not None and cached[0] == file_mtime:
+        return cached[1]
 
     try:
         data = json.loads(target_path.read_text(encoding="utf-8", errors="ignore"))
@@ -1246,7 +1364,7 @@ def load_scenario_detail(repo_root: Path, scenario_id: str) -> dict[str, Any]:
         if owner:
             initial_objectives_by_side[owner] = initial_objectives_by_side.get(owner, 0) + 1
 
-    return {
+    detail_res = {
         "ok": True,
         "scenario_id": str(data.get("id", target_path.stem)),
         "filename": target_path.name,
@@ -1268,4 +1386,6 @@ def load_scenario_detail(repo_root: Path, scenario_id: str) -> dict[str, Any]:
             "table": enriched_table,
         },
     }
+    _SCENARIO_DETAIL_CACHE[cache_key] = (file_mtime, detail_res)
+    return detail_res
 

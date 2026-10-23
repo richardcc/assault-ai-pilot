@@ -100,696 +100,623 @@ export function getModelLatestDate(m: ModelRow): string {
 
 
 
+type MetricMode = "elo" | "winRate" | "capturedAvg" | "vpTakeRate";
+
+interface MetricConfig {
+  key: MetricMode;
+  label: string;
+  shortLabel: string;
+  unit: string;
+  getValue: (s: CurriculumStepMetric) => number | null;
+  getTarget: (s: CurriculumStepMetric) => number | null;
+  formatValue: (v: number) => string;
+}
+
+const METRIC_CONFIGS: Record<MetricMode, MetricConfig> = {
+  elo: {
+    key: "elo",
+    label: "📈 ELO Curve",
+    shortLabel: "ELO",
+    unit: " pts",
+    getValue: (s) => s.elo,
+    getTarget: () => null,
+    formatValue: (v) => `${Math.round(v)}`,
+  },
+  winRate: {
+    key: "winRate",
+    label: "🎯 Win Rate vs. Goal",
+    shortLabel: "Win Rate",
+    unit: "%",
+    getValue: (s) => (s.winRate !== null ? s.winRate * 100 : null),
+    getTarget: (s) => (s.targetWinRate !== null ? s.targetWinRate * 100 : null),
+    formatValue: (v) => `${v.toFixed(1)}%`,
+  },
+  capturedAvg: {
+    key: "capturedAvg",
+    label: "🚩 Captured VPs vs. Goal",
+    shortLabel: "Captured VPs",
+    unit: "",
+    getValue: (s) => s.capturedAvg,
+    getTarget: (s) => s.targetCapturedAvg,
+    formatValue: (v) => v.toFixed(2),
+  },
+  vpTakeRate: {
+    key: "vpTakeRate",
+    label: "⚡ VP Take Rate vs. Goal",
+    shortLabel: "Take Rate",
+    unit: "%",
+    getValue: (s) => (s.vpTakeRate !== null ? s.vpTakeRate * 100 : null),
+    getTarget: (s) => (s.targetVpTakeRate !== null ? s.targetVpTakeRate * 100 : null),
+    formatValue: (v) => `${v.toFixed(1)}%`,
+  },
+};
+
 function CurriculumProgressionChart({ steps }: { steps: CurriculumStepMetric[] }) {
+  const [selectedMetric, setSelectedMetric] = useState<MetricMode>("elo");
 
-  const validSteps = steps.filter((s) => s.elo !== null);
+  const cfg = METRIC_CONFIGS[selectedMetric];
 
-  if (validSteps.length === 0) return null;
+  // Filter steps that have a value for the selected metric
+  const validSteps = steps.filter((s) => cfg.getValue(s) !== null);
 
+  if (validSteps.length === 0) {
+    if (selectedMetric !== "elo") {
+      const eloSteps = steps.filter((s) => s.elo !== null);
+      if (eloSteps.length === 0) return null;
+    } else {
+      return null;
+    }
+  }
 
+  // Calculate dynamic scale bounds based on actual values and targets
+  const allValues = validSteps.map((s) => cfg.getValue(s)!).filter((v) => !isNaN(v));
+  const allTargets = validSteps.map((s) => cfg.getTarget(s)).filter((t): t is number => t !== null && !isNaN(t));
+  const allPointsToFit = [...allValues, ...allTargets];
 
-  const minElo = Math.min(...validSteps.map((s) => s.elo!)) - 70;
+  let minY = 0;
+  let maxY = 100;
+  let rangeY = 100;
 
-  const maxElo = Math.max(...validSteps.map((s) => s.elo!)) + 75;
+  if (selectedMetric === "elo") {
+    minY = Math.min(...allValues) - 70;
+    maxY = Math.max(...allValues) + 75;
+    rangeY = Math.max(130, maxY - minY);
+  } else if (selectedMetric === "winRate" || selectedMetric === "vpTakeRate") {
+    const rawMin = allPointsToFit.length > 0 ? Math.min(...allPointsToFit) : 0;
+    const rawMax = allPointsToFit.length > 0 ? Math.max(...allPointsToFit) : 100;
+    minY = Math.max(0, Math.floor(rawMin - 10));
+    maxY = Math.min(100, Math.ceil(rawMax + 12));
+    rangeY = Math.max(25, maxY - minY);
+  } else if (selectedMetric === "capturedAvg") {
+    const rawMax = allPointsToFit.length > 0 ? Math.max(...allPointsToFit) : 3;
+    minY = 0;
+    maxY = Math.max(3, Math.ceil(rawMax + 1.0));
+    rangeY = Math.max(2, maxY - minY);
+  }
 
-  const rangeElo = Math.max(130, maxElo - minElo);
-
-
-
-  const width = Math.max(860, validSteps.length * 78);
-
-  const height = 152;
-
-  const padX = 56;
-
-  const padY = 34;
-
+  const width = Math.max(860, validSteps.length * 82);
+  const height = 300;
+  const padX = 58;
+  const padY = 46;
   const chartW = width - padX * 2;
-
-  const chartH = height - padY - 34;
-
-
+  const chartH = height - padY - 42;
 
   const points = validSteps.map((s, idx) => {
-
+    const val = cfg.getValue(s)!;
+    const tgt = cfg.getTarget(s);
     const x = padX + (validSteps.length > 1 ? (idx / (validSteps.length - 1)) * chartW : chartW / 2);
-
-    const y = padY + chartH - ((s.elo! - minElo) / rangeElo) * chartH;
-
-    return { x, y, step: s, idx };
-
+    const y = padY + chartH - ((val - minY) / rangeY) * chartH;
+    const isMet = tgt !== null ? val >= tgt : true;
+    return { x, y, val, tgt, isMet, step: s, idx };
   });
-
-
 
   const pathD = points.map((p, idx) => `${idx === 0 ? "M" : "L"} ${p.x.toFixed(1)} ${p.y.toFixed(1)}`).join(" ");
 
-
-
   const selectedPoints = points.filter((p) => p.step.isPhaseSelected);
-
   const selectedPathD = selectedPoints
-
     .map((p, idx) => `${idx === 0 ? "M" : "L"} ${p.x.toFixed(1)} ${p.y.toFixed(1)}`)
-
     .join(" ");
 
-
-
   // Compute contiguous phase groups on the chart for visual grouping bands
-
   const phaseBands: Array<{
-
     phaseName: string;
-
     groupIdx: number;
-
     startX: number;
-
     endX: number;
-
+    targetVal: number | null;
   }> = [];
 
-  points.forEach((p, i) => {
-
+  points.forEach((p) => {
     const stepSpacing = validSteps.length > 1 ? chartW / (validSteps.length - 1) : 60;
-
-    const halfStep = Math.min(36, stepSpacing * 0.44);
-
+    const halfStep = Math.min(38, stepSpacing * 0.44);
     const last = phaseBands[phaseBands.length - 1];
-
     if (!last || last.groupIdx !== p.step.phaseGroupIndex) {
-
       phaseBands.push({
-
         phaseName: p.step.phaseName,
-
         groupIdx: p.step.phaseGroupIndex,
-
         startX: p.x - halfStep,
-
         endX: p.x + halfStep,
-
+        targetVal: p.tgt,
       });
-
     } else {
-
       last.endX = p.x + halfStep;
-
+      if (last.targetVal === null && p.tgt !== null) {
+        last.targetVal = p.tgt;
+      }
     }
-
-    void i;
-
   });
 
-
-
   const latest = validSteps[validSteps.length - 1];
-
   const first = validSteps[0];
-
   const deltaTotal = (latest && first) ? latest.elo! - first.elo! : 0;
-
-  const peak = Math.max(...validSteps.map((s) => s.elo!));
-
-  const avgWinRate =
-
-    validSteps.filter((s) => s.winRate !== null).reduce((acc, s) => acc + s.winRate!, 0) /
-
-    Math.max(1, validSteps.filter((s) => s.winRate !== null).length);
-
-
+  const peakVal = Math.max(...validSteps.map((s) => cfg.getValue(s)!));
+  const avgVal = validSteps.reduce((acc, s) => acc + cfg.getValue(s)!, 0) / Math.max(1, validSteps.length);
+  const targetMetCount = points.filter((p) => p.tgt !== null && p.isMet).length;
+  const targetTotalCount = points.filter((p) => p.tgt !== null).length;
 
   return (
-
     <div
-
       style={{
-
         background: "#0b1220",
-
         border: "1px solid #1e293b",
-
         borderRadius: 8,
-
         padding: "12px 16px",
-
         marginBottom: 16,
-
       }}
-
     >
-
       <div
-
         style={{
-
           display: "flex",
-
           justifyContent: "space-between",
-
           alignItems: "center",
-
-          marginBottom: 10,
-
+          marginBottom: 12,
           flexWrap: "wrap",
-
-          gap: 10,
-
+          gap: 12,
         }}
-
       >
-
         <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-
-          <span style={{ fontSize: 13, fontWeight: 700, color: "#38bdf8" }}>
-
-            📈 ELO Progression Curve by Curriculum Phase
-
-          </span>
+          {/* Mode Switch Tabs */}
+          <div style={{ display: "flex", background: "#0f172a", padding: "2px 4px", borderRadius: 6, border: "1px solid #334155", gap: 3 }}>
+            {(["elo", "winRate", "capturedAvg", "vpTakeRate"] as MetricMode[]).map((mode) => {
+              const item = METRIC_CONFIGS[mode];
+              const isActive = selectedMetric === mode;
+              return (
+                <button
+                  key={mode}
+                  type="button"
+                  onClick={() => setSelectedMetric(mode)}
+                  style={{
+                    background: isActive ? "#0284c7" : "transparent",
+                    color: isActive ? "#ffffff" : "#94a3b8",
+                    border: "none",
+                    borderRadius: 4,
+                    padding: "3px 8px",
+                    fontSize: 11,
+                    fontWeight: isActive ? 700 : 500,
+                    cursor: "pointer",
+                    transition: "all 0.15s ease",
+                  }}
+                >
+                  {item.label}
+                </button>
+              );
+            })}
+          </div>
 
           <span
-
             style={{
-
               fontSize: 11,
-
               background: "#0284c725",
-
               border: "1px solid #0284c750",
-
               color: "#38bdf8",
-
               padding: "1px 6px",
-
               borderRadius: 4,
-
               fontWeight: 600,
-
             }}
-
           >
-
-            {validSteps.length} Ciclos ({phaseBands.length} Fases)
-
+            {validSteps.length} Cycles ({phaseBands.length} Phases)
           </span>
 
           <span
-
             style={{
-
               fontSize: 11,
-
               background: "#451a0390",
-
               border: "1px solid #f59e0b80",
-
               color: "#fde047",
-
               padding: "1px 7px",
-
               borderRadius: 4,
-
               fontWeight: 700,
-
               display: "inline-flex",
-
               alignItems: "center",
-
               gap: 4,
-
             }}
-
             title="The cycle with highest quality/ELO or passing the Gate in each phase is marked with ★ and connected by the golden line"
-
           >
-
             ★ Selected per Phase ({selectedPoints.length})
-
           </span>
-
         </div>
 
+        {/* Dynamic Summary Stats based on selected metric */}
         <div style={{ display: "flex", gap: 14, fontSize: 12, flexWrap: "wrap", alignItems: "center" }}>
-
-          <div>
-
-            <span className="muted">Initial ELO:</span>{" "}
-
-            <strong style={{ color: "#e2e8f0" }}>{first.elo}</strong>
-
-          </div>
-
-          <div>
-
-            <span className="muted">Current ELO:</span>{" "}
-
-            <strong style={{ color: "#38bdf8" }}>{latest.elo}</strong>
-
-          </div>
-
-          <div>
-
-            <span className="muted">Pico ELO:</span>{" "}
-
-            <strong style={{ color: "#fde047" }}>★ {peak}</strong>
-
-          </div>
-
-          <div>
-
-            <span className="muted">Win Rate Promedio:</span>{" "}
-
-            <strong style={{ color: "#34d399" }}>{(avgWinRate * 100).toFixed(1)}%</strong>
-
-          </div>
-
-          <div
-
-            style={{
-
-              background: deltaTotal >= 0 ? "#10b98118" : "#ef444418",
-
-              border: `1px solid ${deltaTotal >= 0 ? "#10b98140" : "#ef444440"}`,
-
-              padding: "2px 8px",
-
-              borderRadius: 4,
-
-            }}
-
-          >
-
-            <span className="muted">Δ Global:</span>{" "}
-
-            <strong style={{ color: deltaTotal >= 0 ? "#34d399" : "#f87171" }}>
-
-              {deltaTotal >= 0 ? `▲ +${deltaTotal}` : `▼ ${deltaTotal}`} pts
-
-            </strong>
-
-          </div>
-
+          {selectedMetric === "elo" ? (
+            <>
+              <div>
+                <span className="muted">Initial ELO:</span>{" "}
+                <strong style={{ color: "#e2e8f0" }}>{first.elo}</strong>
+              </div>
+              <div>
+                <span className="muted">Current ELO:</span>{" "}
+                <strong style={{ color: "#38bdf8" }}>{latest.elo}</strong>
+              </div>
+              <div>
+                <span className="muted">Peak ELO:</span>{" "}
+                <strong style={{ color: "#fde047" }}>★ {peakVal}</strong>
+              </div>
+              <div>
+                <span className="muted">Average Win Rate:</span>{" "}
+                <strong style={{ color: "#34d399" }}>
+                  {(
+                    (validSteps.filter((s) => s.winRate !== null).reduce((acc, s) => acc + s.winRate!, 0) /
+                      Math.max(1, validSteps.filter((s) => s.winRate !== null).length)) *
+                    100
+                  ).toFixed(1)}
+                  %
+                </strong>
+              </div>
+              <div
+                style={{
+                  background: deltaTotal >= 0 ? "#10b98118" : "#ef444418",
+                  border: `1px solid ${deltaTotal >= 0 ? "#10b98140" : "#ef444440"}`,
+                  padding: "2px 8px",
+                  borderRadius: 4,
+                }}
+              >
+                <span className="muted">Global Δ:</span>{" "}
+                <strong style={{ color: deltaTotal >= 0 ? "#34d399" : "#f87171" }}>
+                  {deltaTotal >= 0 ? `▲ +${deltaTotal}` : `▼ ${deltaTotal}`} pts
+                </strong>
+              </div>
+            </>
+          ) : (
+            <>
+              <div>
+                <span className="muted">Current:</span>{" "}
+                <strong style={{ color: latest && points[points.length - 1]?.isMet ? "#34d399" : "#f87171" }}>
+                  {latest ? cfg.formatValue(cfg.getValue(latest)!) : "-"}
+                </strong>
+              </div>
+              <div>
+                <span className="muted">Average:</span>{" "}
+                <strong style={{ color: "#38bdf8" }}>{cfg.formatValue(avgVal)}</strong>
+              </div>
+              <div>
+                <span className="muted">Peak:</span>{" "}
+                <strong style={{ color: "#fde047" }}>★ {cfg.formatValue(peakVal)}</strong>
+              </div>
+              {targetTotalCount > 0 && (
+                <div
+                  style={{
+                    background: targetMetCount === targetTotalCount ? "#10b98118" : "#f59e0b18",
+                    border: `1px solid ${targetMetCount === targetTotalCount ? "#10b98140" : "#f59e0b40"}`,
+                    padding: "2px 8px",
+                    borderRadius: 4,
+                  }}
+                >
+                  <span className="muted">Goal Met:</span>{" "}
+                  <strong style={{ color: targetMetCount === targetTotalCount ? "#34d399" : "#fbbf24" }}>
+                    {targetMetCount}/{targetTotalCount} ({((targetMetCount / targetTotalCount) * 100).toFixed(0)}%)
+                  </strong>
+                </div>
+              )}
+            </>
+          )}
         </div>
-
       </div>
-
-
 
       <div style={{ width: "100%", overflowX: "auto" }}>
-
         <svg
-
           viewBox={`0 0 ${width} ${height}`}
-
-          style={{ width: "100%", minWidth: 660, height: 152, display: "block" }}
-
+          style={{ width: "100%", minWidth: 660, height, display: "block" }}
         >
-
           <defs>
-
-            <linearGradient id="eloAreaGrad" x1="0" y1="0" x2="0" y2="1">
-
-              <stop offset="0%" stopColor="#38bdf8" stopOpacity={0.24} />
-
-              <stop offset="100%" stopColor="#38bdf8" stopOpacity={0.0} />
-
+            <linearGradient id="chartAreaGrad" x1="0" y1="0" x2="0" y2="1">
+              <stop
+                offset="0%"
+                stopColor={selectedMetric === "elo" ? "#38bdf8" : "#10b981"}
+                stopOpacity={0.24}
+              />
+              <stop
+                offset="100%"
+                stopColor={selectedMetric === "elo" ? "#38bdf8" : "#10b981"}
+                stopOpacity={0.0}
+              />
             </linearGradient>
-
           </defs>
 
-
-
           {/* Phase group background bands */}
-
           {phaseBands.map((band, bIdx) => (
-
             <rect
-
               key={`band-${bIdx}`}
-
               x={band.startX}
-
-              y={padY - 18}
-
+              y={padY - 24}
               width={Math.max(24, band.endX - band.startX)}
-
-              height={chartH + 38}
-
+              height={chartH + 46}
               rx={5}
-
               fill={bIdx % 2 === 0 ? "#1e293b38" : "#0f172a45"}
-
               stroke={bIdx % 2 === 0 ? "#33415555" : "#1e293b55"}
-
               strokeWidth="1"
-
             />
-
           ))}
 
-
-
           {/* Grid lines */}
-
           <line x1={padX} y1={padY} x2={width - padX} y2={padY} stroke="#1e293b" strokeDasharray="3 3" />
-
           <line
-
             x1={padX}
-
             y1={padY + chartH / 2}
-
             x2={width - padX}
-
             y2={padY + chartH / 2}
-
             stroke="#1e293b"
-
             strokeDasharray="3 3"
-
           />
-
           <line x1={padX} y1={padY + chartH} x2={width - padX} y2={padY + chartH} stroke="#1e293b" />
 
-
+          {/* Target Lines per Phase Band (When metric is not ELO) */}
+          {selectedMetric !== "elo" &&
+            phaseBands.map((band, bIdx) => {
+              if (band.targetVal === null) return null;
+              const targetY = padY + chartH - ((band.targetVal - minY) / rangeY) * chartH;
+              const clampedTargetY = Math.max(padY - 8, Math.min(padY + chartH, targetY));
+              const bandW = Math.max(24, band.endX - band.startX);
+              return (
+                <g key={`target-band-${bIdx}`}>
+                  {/* Goal dashed threshold line */}
+                  <line
+                    x1={band.startX + 2}
+                    y1={clampedTargetY}
+                    x2={band.endX - 2}
+                    y2={clampedTargetY}
+                    stroke="#f59e0b"
+                    strokeWidth="1.8"
+                    strokeDasharray="4 3"
+                    opacity={0.95}
+                  />
+                  {/* Goal label badge */}
+                  <rect
+                    x={band.startX + bandW / 2 - 34}
+                    y={clampedTargetY - 14}
+                    width={68}
+                    height={13}
+                    rx={3}
+                    fill="#451a03e6"
+                    stroke="#f59e0b80"
+                    strokeWidth="1"
+                  />
+                  <text
+                    x={band.startX + bandW / 2}
+                    y={clampedTargetY - 4}
+                    textAnchor="middle"
+                    fill="#fde047"
+                    fontSize={8.5}
+                    fontWeight={800}
+                  >
+                    🎯 ≥{cfg.formatValue(band.targetVal)}
+                  </text>
+                </g>
+              );
+            })}
 
           {/* Area fill */}
-
           {points.length > 1 && (
-
             <path
-
               d={`${pathD} L ${points[points.length - 1].x.toFixed(1)} ${(padY + chartH).toFixed(1)} L ${points[0].x.toFixed(1)} ${(padY + chartH).toFixed(1)} Z`}
-
-              fill="url(#eloAreaGrad)"
-
+              fill="url(#chartAreaGrad)"
             />
-
           )}
 
-
-
-          {/* All-cycles blue line */}
-
+          {/* All-cycles curve */}
           {points.length > 1 && (
-
             <path
-
               d={pathD}
-
               fill="none"
-
-              stroke="#38bdf8"
-
+              stroke={selectedMetric === "elo" ? "#38bdf8" : "#22c55e"}
               strokeWidth="2.2"
-
               strokeLinecap="round"
-
               strokeLinejoin="round"
-
-              opacity={0.75}
-
+              opacity={0.8}
             />
-
           )}
-
-
 
           {/* Chosen-per-phase gold trendline */}
-
           {selectedPoints.length > 1 && (
-
             <path
-
               d={selectedPathD}
-
               fill="none"
-
               stroke="#f59e0b"
-
               strokeWidth="2.2"
-
               strokeDasharray="6 4"
-
               strokeLinecap="round"
-
               strokeLinejoin="round"
-
               opacity={0.95}
-
             />
-
           )}
 
-
-
           {/* Points & Labels */}
-
           {points.map((p, idx) => {
-
             const isChosen = p.step.isPhaseSelected;
-
-            const isPeak = p.step.elo === peak;
-
+            const isPeak = p.val === peakVal;
             const cleanPhaseName = p.step.phaseName.replace(/^phase\d*_?/, "");
-
             const shortPhase = cleanPhaseName.length > 12 ? `${cleanPhaseName.slice(0, 10)}..` : cleanPhaseName;
-
             const cycleTag = p.step.totalCyclesInPhase > 1 ? ` C${p.step.cycleInPhase}` : "";
 
-            const badgeText = isChosen ? `★ ${p.step.elo}` : `${p.step.elo}`;
+            const displayValue = cfg.formatValue(p.val);
+            const badgeText = isChosen ? `★ ${displayValue}` : displayValue;
+            const badgeWidth = Math.max(34, badgeText.length * 6.5 + 8);
 
-            const badgeWidth = isChosen ? 46 : 32;
+            // Node colors based on mode and goal achievement
+            let nodeFill = "#0284c7";
+            let badgeBg = "#1e293b";
+            let badgeBorder = "#334155";
+            let badgeTextColor = "#cbd5e1";
 
-
+            if (selectedMetric === "elo") {
+              nodeFill = isChosen ? "#fbbf24" : isPeak ? "#a855f7" : "#0284c7";
+              if (isChosen) {
+                badgeBg = "#451a03";
+                badgeBorder = "#f59e0b";
+                badgeTextColor = "#fef08a";
+              }
+            } else {
+              // Target-oriented metrics
+              if (p.tgt !== null) {
+                if (p.isMet) {
+                  nodeFill = isChosen ? "#fbbf24" : "#10b981";
+                  badgeBg = "#064e3b";
+                  badgeBorder = "#10b981";
+                  badgeTextColor = "#6ee7b7";
+                } else {
+                  nodeFill = "#ef4444";
+                  badgeBg = "#450a0a";
+                  badgeBorder = "#ef4444";
+                  badgeTextColor = "#fca5a5";
+                }
+              } else {
+                nodeFill = isChosen ? "#fbbf24" : "#0284c7";
+              }
+            }
 
             return (
-
               <g key={idx}>
-
                 <title>
-
                   {`${p.step.phaseName} (Cycle ${p.step.cycleInPhase}/${p.step.totalCyclesInPhase})${
-
                     isChosen ? " — ★ PHASE SELECTED" : ""
-
-                  }\nRun: ${p.step.runId}\nELO: ${p.step.elo}\nWin Rate: ${
-
+                  }
+Run: ${p.step.runId}
+${cfg.shortLabel}: ${displayValue}${
+                    p.tgt !== null ? ` (Target: ≥${cfg.formatValue(p.tgt)})` : ""
+                  }
+Gate Status: ${p.step.gateStatus || "-"}
+ELO: ${p.step.elo ?? "-"}
+Win Rate: ${
                     p.step.winRate !== null ? (p.step.winRate * 100).toFixed(1) + "%" : "-"
-
-                  }\nGate: ${p.step.gateStatus || "-"}`}
-
+                  }`}
                 </title>
 
-
-
                 {/* Connecting vertical tick */}
-
                 <line
-
                   x1={p.x}
-
                   y1={p.y}
-
                   x2={p.x}
-
                   y2={padY + chartH}
-
-                  stroke={isChosen ? "#f59e0b" : "#334155"}
-
+                  stroke={isChosen ? "#f59e0b" : p.tgt !== null ? (p.isMet ? "#10b981" : "#ef4444") : "#334155"}
                   strokeWidth={isChosen ? "1.5" : "1"}
-
                   strokeDasharray="2 2"
-
-                  opacity={isChosen ? 0.85 : 0.5}
-
+                  opacity={isChosen ? 0.85 : 0.45}
                 />
-
-
 
                 {/* Outer glowing ring for chosen cycle of phase */}
-
                 {isChosen && (
-
                   <circle
-
                     cx={p.x}
-
                     cy={p.y}
-
                     r={9.5}
-
                     fill="#f59e0b28"
-
                     stroke="#fbbf24"
-
                     strokeWidth="1.6"
-
                   />
-
                 )}
-
-
 
                 {/* Point */}
-
                 <circle
-
                   cx={p.x}
-
                   cy={p.y}
-
                   r={isChosen ? 5.5 : 4}
-
-                  fill={isChosen ? "#fbbf24" : isPeak ? "#a855f7" : "#0284c7"}
-
+                  fill={nodeFill}
                   stroke="#0f172a"
-
                   strokeWidth="2"
-
                 />
 
+                {/* Pill background for value badge */}
+                <rect
+                  x={p.x - badgeWidth / 2}
+                  y={p.y - 24}
+                  width={badgeWidth}
+                  height={15}
+                  rx={4}
+                  fill={badgeBg}
+                  stroke={badgeBorder}
+                  strokeWidth="1"
+                />
 
-
-                {/* Pill background for chosen ELO badge */}
-
-                {isChosen && (
-
-                  <rect
-
-                    x={p.x - badgeWidth / 2}
-
-                    y={p.y - 25}
-
-                    width={badgeWidth}
-
-                    height={15}
-
-                    rx={4}
-
-                    fill="#451a03"
-
-                    stroke="#f59e0b"
-
-                    strokeWidth="1"
-
-                  />
-
-                )}
-
-
-
-                {/* ELO badge label */}
-
+                {/* Value badge label */}
                 <text
-
                   x={p.x}
-
-                  y={isChosen ? p.y - 14 : p.y - 9}
-
+                  y={p.y - 13}
                   textAnchor="middle"
-
-                  fill={isChosen ? "#fef08a" : "#cbd5e1"}
-
-                  fontSize={isChosen ? 10.5 : 10.5}
-
-                  fontWeight={isChosen ? 800 : 600}
-
+                  fill={badgeTextColor}
+                  fontSize={10}
+                  fontWeight={isChosen ? 800 : 700}
                 >
-
                   {badgeText}
-
                 </text>
 
-
-
-                {/* Win rate subtext */}
-
-                {p.step.winRate !== null && (
-
-                  <text
-
-                    x={p.x}
-
-                    y={p.y + 18}
-
-                    textAnchor="middle"
-
-                    fill={isChosen ? "#4ade80" : "#34d399"}
-
-                    fontSize={9.5}
-
-                    fontWeight={isChosen ? 700 : 600}
-
-                  >
-
-                    {(p.step.winRate * 100).toFixed(0)}%
-
-                  </text>
-
+                {/* Subtext: secondary metric (ELO when in other views, Win Rate when in ELO) */}
+                {selectedMetric === "elo" ? (
+                  p.step.winRate !== null && (
+                    <text
+                      x={p.x}
+                      y={p.y + 18}
+                      textAnchor="middle"
+                      fill={isChosen ? "#4ade80" : "#34d399"}
+                      fontSize={9.5}
+                      fontWeight={isChosen ? 700 : 600}
+                    >
+                      {(p.step.winRate * 100).toFixed(0)}%
+                    </text>
+                  )
+                ) : (
+                  p.step.elo !== null && (
+                    <text
+                      x={p.x}
+                      y={p.y + 18}
+                      textAnchor="middle"
+                      fill="#94a3b8"
+                      fontSize={9}
+                      fontWeight={600}
+                    >
+                      {p.step.elo}
+                    </text>
+                  )
                 )}
-
-
 
                 {/* Cycle & Phase bottom label */}
-
                 <text
-
                   x={p.x}
-
-                  y={height - 14}
-
+                  y={height - 15}
                   textAnchor="middle"
-
                   fill={isChosen ? "#fde047" : "#94a3b8"}
-
                   fontSize={9.5}
-
                   fontWeight={isChosen ? 700 : 500}
-
                 >
-
                   {shortPhase}
-
                 </text>
-
                 <text
-
                   x={p.x}
-
-                  y={height - 3}
-
+                  y={height - 4}
                   textAnchor="middle"
-
                   fill={isChosen ? "#fbbf24" : "#64748b"}
-
                   fontSize={8.5}
-
                   fontWeight={isChosen ? 800 : 600}
-
                 >
-
                   {isChosen ? `★${cycleTag || " Selected"}` : cycleTag.trim() || `F${p.step.stepIndex}`}
-
                 </text>
-
               </g>
-
             );
-
           })}
-
         </svg>
-
       </div>
-
     </div>
-
   );
-
 }
-
 
 
 export function CatalogPage() {
@@ -933,6 +860,7 @@ export function CatalogPage() {
   const [modelDetail, setModelDetail] = useState<ModelPayload | null>(null);
 
   const [tacticalQuality, setTacticalQuality] = useState<Dict | null>(null);
+  const [showDetailedMeta, setShowDetailedMeta] = useState(false);
 
   const [compareRows, setCompareRows] = useState<Dict[]>([]);
 
@@ -1204,7 +1132,7 @@ export function CatalogPage() {
 
     } catch (err: any) {
 
-      alert(`❌ Error al eliminar experimento: ${err.message || err}`);
+      alert(`❌ Failed to delete experiment: ${err.message || err}`);
 
     } finally {
 
@@ -2169,664 +2097,412 @@ export function CatalogPage() {
           {/* TAB 1: OVERVIEW */}
 
           {summaryTab === "overview" && (
-
             <>
-
               {catalogModel ? (
-
                 <div>
-
-                  {/* Action buttons */}
-
-                  <div className="bar" style={{ marginBottom: 12, justifyContent: "space-between", alignItems: "center" }}>
-
-                    <div className="bar">
-
-                      <button
-
-                        onClick={() => window.open(detailUrl, "_blank", "noopener,noreferrer")}
-
-                        style={{ background: "#0ea5e9", color: "#0f172a", fontWeight: "bold" }}
-
-                      >
-
-                        → Open Full Model Detail
-
-                      </button>
-
-                      <button onClick={() => window.open(eloUrl, "_blank", "noopener,noreferrer")}>
-
-                        View in ELO Leaderboard
-
-                      </button>
-
-                    </div>
-
-                    <button
-
-                      onClick={() => void handleDeleteModel(catalogModel.model_id)}
-
-                      disabled={deletingModelId === catalogModel.model_id}
-
-                      style={{
-
-                        background: "#dc2626",
-
-                        color: "#ffffff",
-
-                        border: "none",
-
-                        fontWeight: "bold",
-
-                        fontSize: 11,
-
-                        padding: "6px 12px",
-
-                        borderRadius: 4,
-
-                        cursor: "pointer",
-
-                      }}
-
-                      title="Delete this experiment and all its files on disk"
-
-                    >
-
-                      {deletingModelId === catalogModel.model_id ? "Eliminando..." : "🗑️ Eliminar Experimento"}
-
-                    </button>
-
-                  </div>
-
-
-
-                  {/* Top KPIs */}
-
-                  <div className="kpi-grid" style={{ marginBottom: 14 }}>
-
-                    <div className="kpi">
-
-                      <div className="k">model_id</div>
-
-                      <div className="v" style={{ wordBreak: "break-all", fontSize: 11 }}>
-
+                  {/* Ultra-compact Executive Header & Action Bar */}
+                  <div
+                    style={{
+                      background: "#0f172a",
+                      border: "1px solid #334155",
+                      borderRadius: 6,
+                      padding: "8px 12px",
+                      marginBottom: 10,
+                      display: "flex",
+                      justifyContent: "space-between",
+                      alignItems: "center",
+                      flexWrap: "wrap",
+                      gap: 8,
+                    }}
+                  >
+                    <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+                      <span style={{ fontSize: 13, fontWeight: 700, color: "#38bdf8" }}>
                         {catalogModel.model_id}
-
-                      </div>
-
-                    </div>
-
-                    <div className="kpi">
-
-                      <div className="k">engine / algorithm</div>
-
-                      <div className="v">{selectedEngine} / {String((modelDetail as Dict)?.algorithm || selectedEngine)}</div>
-
-                    </div>
-
-                    <div className="kpi">
-
-                      <div className="k">latest_train_run_id</div>
-
-                      <div className="v" style={{ wordBreak: "break-all", fontSize: 11 }}>
-
-                        {catalogModel.latest_train_run_id || "-"}
-
-                      </div>
-
-                    </div>
-
-                    <div className="kpi">
-
-                      <div className="k">config_fingerprint</div>
-
-                      <div className="v">{String(modelDetail?.config_fingerprint || "-")}</div>
-
-                    </div>
-
-                    <div className="kpi">
-
-                      <div className="k">train_runs_count</div>
-
-                      <div className="v">{catalogModel.train_runs_count ?? trains.length}</div>
-
-                    </div>
-
-                    <div className="kpi">
-
-                      <div className="k">eval_history_total_count</div>
-
-                      <div className="v">{catalogModel.eval_history_total_count ?? evals.length}</div>
-
-                    </div>
-
-                    <div className="kpi">
-
-                      <div className="k">latest_train_date</div>
-
-                      <div className="v" style={{ fontSize: 11 }}>
-
-                        {formatLocalDate(modelDetail?.latest_train_created_at_utc)}
-
-                      </div>
-
-                    </div>
-
-                    <div className="kpi">
-
-                      <div className="k">latest_eval_date</div>
-
-                      <div className="v" style={{ fontSize: 11 }}>
-
-                        {formatLocalDate(catalogModel.latest_eval_created_at_utc)}
-
-                      </div>
-
-                    </div>
-
-                    <div className="kpi" style={{ borderLeft: "2px solid #38bdf8" }}>
-
-                      <div className="k">⏱️ training_duration_total</div>
-
-                      <div
-
-                        className="v"
-
-                        style={{ color: "#38bdf8", fontWeight: 700, fontSize: 13 }}
-
-                        title={formatDurationDetailed(modelTrainDurationStats.totalSec)}
-
+                      </span>
+                      <span
+                        style={{
+                          background: "#1e293b",
+                          border: "1px solid #475569",
+                          borderRadius: 4,
+                          padding: "2px 6px",
+                          fontSize: 11,
+                          color: "#94a3b8",
+                        }}
                       >
-
-                        {modelTrainDurationStats.totalSec > 0
-
-                          ? formatDuration(modelTrainDurationStats.totalSec)
-
-                          : "-"}
-
-                      </div>
-
+                        {selectedEngine} / {String((modelDetail as Dict)?.algorithm || selectedEngine)}
+                      </span>
+                      <span style={{ fontSize: 11, color: "#cbd5e1" }}>
+                        <b>{catalogModel.train_runs_count ?? trains.length}</b> trains · <b>{catalogModel.eval_history_total_count ?? evals.length}</b> evals
+                      </span>
+                      {modelTrainDurationStats.totalSec > 0 && (
+                        <span
+                          style={{
+                            fontSize: 11,
+                            color: "#38bdf8",
+                            background: "#0369a120",
+                            border: "1px solid #0284c740",
+                            padding: "2px 6px",
+                            borderRadius: 4,
+                          }}
+                          title={`Training duration: ${formatDurationDetailed(modelTrainDurationStats.totalSec)}`}
+                        >
+                          ⏱️ Train: {formatDuration(modelTrainDurationStats.totalSec)}
+                        </span>
+                      )}
+                      {curriculumDurationStats.totalSec > 0 && (
+                        <span
+                          style={{
+                            fontSize: 11,
+                            color: "#c084fc",
+                            background: "#7e22ce20",
+                            border: "1px solid #9333ea40",
+                            padding: "2px 6px",
+                            borderRadius: 4,
+                          }}
+                          title={`Curriculum duration: ${formatDurationDetailed(curriculumDurationStats.totalSec)}`}
+                        >
+                          ⏱️ Curr: {formatDuration(curriculumDurationStats.totalSec)}
+                        </span>
+                      )}
                     </div>
 
-                    <div className="kpi" style={{ borderLeft: "2px solid #a78bfa" }}>
-
-                      <div className="k">⏱️ curriculum_total_time</div>
-
-                      <div
-
-                        className="v"
-
-                        style={{ color: "#c084fc", fontWeight: 700, fontSize: 13 }}
-
-                        title={formatDurationDetailed(curriculumDurationStats.totalSec)}
-
+                    <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+                      <button
+                        type="button"
+                        onClick={() => setShowDetailedMeta(!showDetailedMeta)}
+                        style={{
+                          background: showDetailedMeta ? "#334155" : "#1e293b",
+                          color: "#cbd5e1",
+                          fontSize: 11,
+                          padding: "4px 8px",
+                          borderRadius: 4,
+                          border: "1px solid #475569",
+                          cursor: "pointer",
+                        }}
+                        title="Toggle full metadata drawer"
                       >
-
-                        {curriculumDurationStats.totalSec > 0
-
-                          ? formatDuration(curriculumDurationStats.totalSec)
-
-                          : "-"}
-
-                      </div>
-
+                        {showDetailedMeta ? "Metadata ▲" : "Metadata ▼"}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => window.open(detailUrl, "_blank", "noopener,noreferrer")}
+                        style={{
+                          background: "#0ea5e9",
+                          color: "#0f172a",
+                          fontWeight: "bold",
+                          fontSize: 11,
+                          padding: "4px 10px",
+                          borderRadius: 4,
+                          border: "none",
+                          cursor: "pointer",
+                        }}
+                      >
+                        → Full Detail
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => window.open(eloUrl, "_blank", "noopener,noreferrer")}
+                        style={{
+                          fontSize: 11,
+                          padding: "4px 10px",
+                          borderRadius: 4,
+                          cursor: "pointer",
+                        }}
+                      >
+                        ELO Leaderboard
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => void handleDeleteModel(catalogModel.model_id)}
+                        disabled={deletingModelId === catalogModel.model_id}
+                        style={{
+                          background: "#dc2626",
+                          color: "#ffffff",
+                          border: "none",
+                          fontWeight: "bold",
+                          fontSize: 11,
+                          padding: "4px 10px",
+                          borderRadius: 4,
+                          cursor: "pointer",
+                        }}
+                        title="Delete this experiment and all its files on disk"
+                      >
+                        {deletingModelId === catalogModel.model_id ? "Deleting..." : "🗑️ Delete"}
+                      </button>
                     </div>
-
                   </div>
 
-
-
-                  {/* Tactical Quality & Asymmetric Balance Panel */}
-
-                  {tacticalQuality && tacticalQuality.status === "ok" && (
-
+                  {/* Collapsible Detailed Metadata */}
+                  {showDetailedMeta && (
                     <div
-
+                      className="kpi-grid"
                       style={{
-
-                        marginBottom: 16,
-
-                        background: "#0b1220",
-
+                        marginBottom: 10,
+                        background: "#0f172a",
                         border: "1px solid #334155",
-
                         borderRadius: 6,
-
-                        padding: "12px 14px",
-
+                        padding: 8,
                       }}
-
                     >
-
-                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10, flexWrap: "wrap", gap: 8 }}>
-
-                        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-
-                          <span style={{ fontSize: 14, fontWeight: 700, color: "#38bdf8" }}>
-
-                            🎯 Calidad Táctica & Resistencia Asimétrica
-
-                          </span>
-
-                          <span
-
-                            style={{
-
-                              background:
-
-                                (tacticalQuality.quality_gate as Dict)?.status === "PASS"
-
-                                  ? "#22c55e20"
-
-                                  : (tacticalQuality.quality_gate as Dict)?.status === "WARN"
-
-                                  ? "#f59e0b20"
-
-                                  : "#ef444420",
-
-                              border: `1px solid ${
-
-                                (tacticalQuality.quality_gate as Dict)?.status === "PASS"
-
-                                  ? "#22c55e"
-
-                                  : (tacticalQuality.quality_gate as Dict)?.status === "WARN"
-
-                                  ? "#f59e0b"
-
-                                  : "#ef4444"
-
-                              }`,
-
-                              color:
-
-                                (tacticalQuality.quality_gate as Dict)?.status === "PASS"
-
-                                  ? "#4ade80"
-
-                                  : (tacticalQuality.quality_gate as Dict)?.status === "WARN"
-
-                                  ? "#fbbf24"
-
-                                  : "#f87171",
-
-                              padding: "2px 8px",
-
-                              borderRadius: 4,
-
-                              fontSize: 11,
-
-                              fontWeight: 700,
-
-                            }}
-
-                          >
-
-                            {String((tacticalQuality.quality_gate as Dict)?.status || "EVAL")}
-
-                          </span>
-
+                      <div className="kpi">
+                        <div className="k">latest_train_run_id</div>
+                        <div className="v" style={{ wordBreak: "break-all", fontSize: 11 }}>
+                          {catalogModel.latest_train_run_id || "-"}
                         </div>
+                      </div>
+                      <div className="kpi">
+                        <div className="k">config_fingerprint</div>
+                        <div className="v" style={{ fontSize: 11 }}>{String(modelDetail?.config_fingerprint || "-")}</div>
+                      </div>
+                      <div className="kpi">
+                        <div className="k">latest_train_date</div>
+                        <div className="v" style={{ fontSize: 11 }}>
+                          {formatLocalDate(modelDetail?.latest_train_created_at_utc)}
+                        </div>
+                      </div>
+                      <div className="kpi">
+                        <div className="k">latest_eval_date</div>
+                        <div className="v" style={{ fontSize: 11 }}>
+                          {formatLocalDate(catalogModel.latest_eval_created_at_utc)}
+                        </div>
+                      </div>
+                    </div>
+                  )}
 
-                        <span style={{ fontSize: 12, fontWeight: 600, color: "#cbd5e1" }}>
-
-                          Rango: <strong style={{ color: "#38bdf8" }}>{String(tacticalQuality.tactical_grade || "-")}</strong>
-
+                  {/* Slim Tactical Quality & Asymmetric Balance Bar */}
+                  {tacticalQuality && tacticalQuality.status === "ok" ? (
+                    <div
+                      style={{
+                        marginBottom: 10,
+                        background: "#0b1220",
+                        border: "1px solid #334155",
+                        borderRadius: 6,
+                        padding: "6px 12px",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "space-between",
+                        flexWrap: "wrap",
+                        gap: 10,
+                      }}
+                    >
+                      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                        <span style={{ fontSize: 12, fontWeight: 700, color: "#38bdf8" }}>
+                          🎯 Tactical Quality
                         </span>
-
+                        <span
+                          style={{
+                            background:
+                              (tacticalQuality.quality_gate as Dict)?.status === "PASS"
+                                ? "#22c55e20"
+                                : (tacticalQuality.quality_gate as Dict)?.status === "WARN"
+                                ? "#f59e0b20"
+                                : "#ef444420",
+                            border: `1px solid ${
+                              (tacticalQuality.quality_gate as Dict)?.status === "PASS"
+                                ? "#22c55e"
+                                : (tacticalQuality.quality_gate as Dict)?.status === "WARN"
+                                ? "#f59e0b"
+                                : "#ef4444"
+                            }`,
+                            color:
+                              (tacticalQuality.quality_gate as Dict)?.status === "PASS"
+                                ? "#4ade80"
+                                : (tacticalQuality.quality_gate as Dict)?.status === "WARN"
+                                ? "#fbbf24"
+                                : "#f87171",
+                            padding: "1px 6px",
+                            borderRadius: 4,
+                            fontSize: 10,
+                            fontWeight: 700,
+                          }}
+                        >
+                          {String((tacticalQuality.quality_gate as Dict)?.status || "EVAL")}
+                        </span>
+                        <span style={{ fontSize: 11, color: "#94a3b8" }}>
+                          Grade: <strong style={{ color: "#38bdf8" }}>{String(tacticalQuality.tactical_grade || "-")}</strong>
+                        </span>
                       </div>
 
-
-
-                      <div className="kpi-grid" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))", marginBottom: 10 }}>
-
-                        <div className="kpi" style={{ borderLeft: "3px solid #38bdf8" }}>
-
-                          <div className="k">TQS (Tactical Quality Score)</div>
-
-                          <div className="v" style={{ color: "#38bdf8", fontWeight: 700, fontSize: 18 }}>
-
-                            {Number(tacticalQuality.tactical_quality_score || 0).toFixed(1)} / 100
-
-                          </div>
-
-                          <div className="muted" style={{ fontSize: 10 }}>Puntuación compuesta ponderada</div>
-
-                        </div>
-
-
-
-                        <div className="kpi" style={{ borderLeft: "3px solid #60a5fa" }}>
-
-                          <div className="k">Calibrated Anchor ELO</div>
-
-                          <div className="v" style={{ color: "#93c5fd", fontWeight: 700, fontSize: 18 }}>
-
-                            {Number(tacticalQuality.anchor_elo || 1200).toFixed(0)}
-
-                          </div>
-
-                          <div className="muted" style={{ fontSize: 10 }}>Bradley-Terry vs Random y MCTS</div>
-
-                        </div>
-
-
-
-                        <div className="kpi" style={{ borderLeft: "3px solid #34d399" }}>
-
-                          <div className="k">⚔️ Mirror Score vs Random</div>
-
-                          <div className="v" style={{ color: "#34d399", fontWeight: 700, fontSize: 18 }}>
-
-                            {(Number(tacticalQuality.global_mirror_score_vs_random || 0) * 100).toFixed(1)}%
-
-                          </div>
-
-                          <div className="muted" style={{ fontSize: 10 }}>Equilibrado (cancela sesgo bando)</div>
-
-                        </div>
-
-
-
-                        <div className="kpi" style={{ borderLeft: "3px solid #fbbf24" }}>
-
-                          <div className="k">⚖️ Asymmetry Gap (Brecha Bando)</div>
-
-                          <div className="v" style={{ color: "#fcd34d", fontWeight: 700, fontSize: 18 }}>
-
-                            {(Number(tacticalQuality.mean_asymmetry_gap || 0) * 100).toFixed(1)}%
-
-                          </div>
-
-                          <div className="muted" style={{ fontSize: 10 }}>Fragilidad de bando desfavorable</div>
-
-                        </div>
-
-
-
-                        <div className="kpi" style={{ borderLeft: "3px solid #f43f5e" }}>
-
-                          <div className="k">💥 Combat Exchange Ratio (CER)</div>
-
-                          <div className="v" style={{ color: "#fb7185", fontWeight: 700, fontSize: 18 }}>
-
-                            {Number(tacticalQuality.combat_exchange_ratio || 1.0).toFixed(2)}x
-
-                          </div>
-
-                          <div className="muted" style={{ fontSize: 10 }}>Bajas infligidas vs sufridas</div>
-
-                        </div>
-
-
-
-                        <div className="kpi" style={{ borderLeft: "3px solid #a855f7" }}>
-
-                          <div className="k">🚩 Net Victory Points (VP Net)</div>
-
-                          <div className="v" style={{ color: "#c084fc", fontWeight: 700, fontSize: 18 }}>
-
+                      <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap", fontSize: 11 }}>
+                        <span title="Tactical Quality Score (0-100 composite)">
+                          <span style={{ color: "#94a3b8" }}>TQS: </span>
+                          <strong style={{ color: "#38bdf8" }}>{Number(tacticalQuality.tactical_quality_score || 0).toFixed(1)}</strong>
+                        </span>
+                        <span title="Bradley-Terry Calibrated Anchor ELO">
+                          <span style={{ color: "#94a3b8" }}>Anchor ELO: </span>
+                          <strong style={{ color: "#93c5fd" }}>{Number(tacticalQuality.anchor_elo || 1200).toFixed(0)}</strong>
+                        </span>
+                        <span title="Balanced Mirror Win Rate vs Random (cancels side bias)">
+                          <span style={{ color: "#94a3b8" }}>Mirror WR: </span>
+                          <strong style={{ color: "#34d399" }}>{(Number(tacticalQuality.global_mirror_score_vs_random || 0) * 100).toFixed(1)}%</strong>
+                        </span>
+                        <span title="Mean Asymmetry Gap (disfavored side vulnerability)">
+                          <span style={{ color: "#94a3b8" }}>Asymm Gap: </span>
+                          <strong style={{ color: "#fcd34d" }}>{(Number(tacticalQuality.mean_asymmetry_gap || 0) * 100).toFixed(1)}%</strong>
+                        </span>
+                        <span title="Combat Exchange Ratio (CER: kills / losses)">
+                          <span style={{ color: "#94a3b8" }}>CER: </span>
+                          <strong style={{ color: "#fb7185" }}>{Number(tacticalQuality.combat_exchange_ratio || 1.0).toFixed(2)}x</strong>
+                        </span>
+                        <span title="Net Victory Points average">
+                          <span style={{ color: "#94a3b8" }}>VP Net: </span>
+                          <strong style={{ color: "#c084fc" }}>
                             {Number(tacticalQuality.vp_net_avg || 0) > 0 ? "+" : ""}
-
                             {Number(tacticalQuality.vp_net_avg || 0).toFixed(2)}
-
-                          </div>
-
-                          <div className="muted" style={{ fontSize: 10 }}>Media de objetivos controlados</div>
-
-                        </div>
-
+                          </strong>
+                        </span>
                       </div>
-
-
 
                       {Array.isArray((tacticalQuality.quality_gate as Dict)?.reasons) &&
-
                         ((tacticalQuality.quality_gate as Dict).reasons as string[]).length > 0 && (
-
-                          <div style={{ marginTop: 6, fontSize: 11, color: "#fca5a5", background: "#450a0a30", padding: "6px 10px", borderRadius: 4 }}>
-
-                            <b>Alertas de Puerta Táctica:</b> {((tacticalQuality.quality_gate as Dict).reasons as string[]).join(" • ")}
-
+                          <div style={{ width: "100%", marginTop: 2, fontSize: 10, color: "#fca5a5" }}>
+                            ⚠️ {((tacticalQuality.quality_gate as Dict).reasons as string[]).join(" • ")}
                           </div>
-
                         )}
-
                     </div>
-
-                  )}
-
-
-
-                  {!loadingModelDetail && (!tacticalQuality || tacticalQuality.status !== "ok") && (
-
+                  ) : !loadingModelDetail ? (
                     <div
-
                       style={{
-
-                        marginBottom: 16,
-
+                        marginBottom: 10,
                         background: "#0b1220",
-
                         border: "1px dashed #334155",
-
                         borderRadius: 6,
-
-                        padding: "10px 14px",
-
+                        padding: "6px 12px",
                         display: "flex",
-
                         alignItems: "center",
-
                         justifyContent: "space-between",
-
                         flexWrap: "wrap",
-
-                        gap: 10,
-
+                        gap: 8,
+                        fontSize: 11,
                       }}
-
                     >
-
-                      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-
-                        <span style={{ fontSize: 13, fontWeight: 700, color: "#94a3b8" }}>
-
-                          🎯 Calidad Táctica & Resistencia Asimétrica
-
-                        </span>
-
-                        <span style={{ fontSize: 10, background: "#1e293b", border: "1px solid #475569", color: "#94a3b8", padding: "1px 6px", borderRadius: 3, fontWeight: 600 }}>
-
+                      <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                        <span style={{ fontWeight: 700, color: "#94a3b8" }}>🎯 Tactical Quality</span>
+                        <span style={{ fontSize: 9, background: "#1e293b", border: "1px solid #475569", color: "#94a3b8", padding: "1px 5px", borderRadius: 3 }}>
                           EVALUATION PENDING
-
                         </span>
-
                       </div>
-
-                      <div className="muted" style={{ fontSize: 11 }}>
-
-                        Calcula TQS (0-100), Anchor ELO, Mirror Score y Brecha de Bando automáticamente al registrarse partidas de benchmark.
-
-                      </div>
-
+                      <span className="muted" style={{ fontSize: 10 }}>
+                        TQS, Anchor ELO, and Side Asymmetry Gap will calculate automatically once benchmark evaluations run.
+                      </span>
                     </div>
-
-                  )}
-
-
+                  ) : null}
 
                   {/* Loading indicator */}
-
                   {loadingModelDetail && (
-
-                    <div style={{ padding: "12px 0", color: "#38bdf8", fontSize: 13, display: "flex", alignItems: "center", gap: 8 }}>
-
-                      <span style={{ display: "inline-block", width: 14, height: 14, border: "2px solid #555", borderTopColor: "#38bdf8", borderRadius: "50%", animation: "spin 0.8s linear infinite" }} />
-
+                    <div style={{ padding: "8px 0", color: "#38bdf8", fontSize: 12, display: "flex", alignItems: "center", gap: 8 }}>
+                      <span style={{ display: "inline-block", width: 12, height: 12, border: "2px solid #555", borderTopColor: "#38bdf8", borderRadius: "50%", animation: "spin 0.8s linear infinite" }} />
                       Loading execution history and scenario details...
-
                     </div>
-
                   )}
 
+                  {/* Ultra-compact horizontal Scenarios Chip Strip */}
+                  {scenariosSeen.length > 0 && (
+                    <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 10, flexWrap: "wrap", fontSize: 11 }}>
+                      <span style={{ fontWeight: 700, color: "#94a3b8" }}>🗺️ Scenarios ({scenariosSeen.length}):</span>
+                      {scenariosSeen.map((s) => {
+                        const tc = trainCounts[s] ?? 0;
+                        const ec = evalCounts[s] ?? 0;
+                        return (
+                          <span
+                            key={s}
+                            style={{
+                              background: "#0f172a",
+                              border: "1px solid #334155",
+                              padding: "2px 8px",
+                              borderRadius: 4,
+                              display: "inline-flex",
+                              alignItems: "center",
+                              gap: 6,
+                            }}
+                            title={`Scenario: ${s} | Train runs: ${tc} | Eval runs: ${ec}`}
+                          >
+                            <code style={{ fontSize: 11, color: "#38bdf8", fontWeight: 600 }}>{s}</code>
+                            <span style={{ color: "#60a5fa", fontWeight: 700, fontSize: 10 }}>T:{tc}</span>
+                            <span style={{ color: "#475569" }}>|</span>
+                            <span style={{ color: "#34d399", fontWeight: 700, fontSize: 10 }}>E:{ec}</span>
+                          </span>
+                        );
+                      })}
+                    </div>
+                  )}
 
-
-                  {/* Scenarios Seen */}
-
+                  {/* Curriculum Progression Chart & Lineage Flow */}
                   <div style={{ marginBottom: 14 }}>
-
-                    <h3 style={{ margin: "0 0 6px 0", fontSize: 13, display: "flex", alignItems: "center", gap: 6 }}>
-
-                      <span>🗺️</span> Escenarios Entrenados y Evaluados ({scenariosSeen.length})
-
-                    </h3>
-
-                    {scenariosSeen.length > 0 ? (
-
-                      <div className="scroll-table-container" style={{ maxHeight: 220, border: "1px solid #334155", borderRadius: 6 }}>
-
-                        <table style={{ margin: 0 }}>
-
-                          <thead>
-
-                            <tr>
-
-                              <th style={{ background: "#0f172a", textAlign: "left", padding: "8px 12px" }}>scenario_id</th>
-
-                              <th style={{ background: "#0f172a", textAlign: "center", width: 140, padding: "8px 12px" }}>train_count</th>
-
-                              <th style={{ background: "#0f172a", textAlign: "center", width: 140, padding: "8px 12px" }}>eval_count</th>
-
-                            </tr>
-
-                          </thead>
-
-                          <tbody>
-
-                            {scenariosSeen.map((s) => {
-
-                              const tc = trainCounts[s] ?? 0;
-
-                              const ec = evalCounts[s] ?? 0;
-
-                              return (
-
-                                <tr key={s} style={{ lineHeight: 1.6 }}>
-
-                                  <td style={{ padding: "6px 12px" }}>
-
-                                    <code style={{ fontSize: 12, color: "#38bdf8", fontWeight: 600 }}>{s}</code>
-
-                                  </td>
-
-                                  <td style={{ textAlign: "center", padding: "6px 12px" }}>
-
-                                    <span
-
-                                      style={{
-
-                                        background: tc > 0 ? "#172554" : "#1e293b",
-
-                                        color: tc > 0 ? "#60a5fa" : "#64748b",
-
-                                        padding: "2px 8px",
-
-                                        borderRadius: 4,
-
-                                        fontWeight: 700,
-
-                                        fontSize: 12,
-
-                                        border: `1px solid ${tc > 0 ? "#1d4ed8" : "#334155"}`,
-
-                                      }}
-
-                                    >
-
-                                      {tc}
-
-                                    </span>
-
-                                  </td>
-
-                                  <td style={{ textAlign: "center", padding: "6px 12px" }}>
-
-                                    <span
-
-                                      style={{
-
-                                        background: ec > 0 ? "#064e3b" : "#1e293b",
-
-                                        color: ec > 0 ? "#34d399" : "#64748b",
-
-                                        padding: "2px 8px",
-
-                                        borderRadius: 4,
-
-                                        fontWeight: 700,
-
-                                        fontSize: 12,
-
-                                        border: `1px solid ${ec > 0 ? "#059669" : "#334155"}`,
-
-                                      }}
-
-                                    >
-
-                                      {ec}
-
-                                    </span>
-
-                                  </td>
-
-                                </tr>
-
-                              );
-
-                            })}
-
-                          </tbody>
-
-                        </table>
-
-                      </div>
-
-                    ) : (
-
-                      <div className="muted" style={{ fontSize: 12 }}>No scenarios recorded for this model yet.</div>
-
-                    )}
-
-                  </div>
-
-
-
-                  {/* Curriculum Progression Chart & Recent Training Runs */}
-
-                  <div style={{ marginBottom: 14 }}>
-
                     {curriculumProgression.length > 0 && (
-
                       <>
-
                         <CurriculumProgressionChart steps={curriculumProgression} />
 
                         <CurriculumLineageFlow
-
                           steps={curriculumProgression}
-
                           selectedRunId={selectedTrainRunId}
-
                           onSelectRunId={(runId) => setSelectedTrainRunId(runId)}
-
                         />
-
                       </>
-
                     )}
 
-
+                    {/* Detailed Scenarios Trained & Evaluated Table (positioned below progression flow) */}
+                    {scenariosSeen.length > 0 && (
+                      <div style={{ marginBottom: 14 }}>
+                        <h4 style={{ margin: "0 0 6px 0", fontSize: 12, color: "#94a3b8", display: "flex", alignItems: "center", gap: 6 }}>
+                          <span>🗺️</span> Scenarios Trained & Evaluated ({scenariosSeen.length})
+                        </h4>
+                        <div className="scroll-table-container" style={{ maxHeight: 200, border: "1px solid #334155", borderRadius: 6 }}>
+                          <table style={{ margin: 0 }}>
+                            <thead>
+                              <tr>
+                                <th style={{ background: "#0f172a", textAlign: "left", padding: "6px 12px" }}>scenario_id</th>
+                                <th style={{ background: "#0f172a", textAlign: "center", width: 140, padding: "6px 12px" }}>train_count</th>
+                                <th style={{ background: "#0f172a", textAlign: "center", width: 140, padding: "6px 12px" }}>eval_count</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {scenariosSeen.map((s) => {
+                                const tc = trainCounts[s] ?? 0;
+                                const ec = evalCounts[s] ?? 0;
+                                return (
+                                  <tr key={s} style={{ lineHeight: 1.6 }}>
+                                    <td style={{ padding: "6px 12px" }}>
+                                      <code style={{ fontSize: 12, color: "#38bdf8", fontWeight: 600 }}>{s}</code>
+                                    </td>
+                                    <td style={{ textAlign: "center", padding: "6px 12px" }}>
+                                      <span
+                                        style={{
+                                          background: tc > 0 ? "#172554" : "#1e293b",
+                                          color: tc > 0 ? "#60a5fa" : "#64748b",
+                                          padding: "2px 8px",
+                                          borderRadius: 4,
+                                          fontWeight: 700,
+                                          fontSize: 12,
+                                          border: `1px solid ${tc > 0 ? "#1d4ed8" : "#334155"}`,
+                                        }}
+                                      >
+                                        {tc}
+                                      </span>
+                                    </td>
+                                    <td style={{ textAlign: "center", padding: "6px 12px" }}>
+                                      <span
+                                        style={{
+                                          background: ec > 0 ? "#064e3b" : "#1e293b",
+                                          color: ec > 0 ? "#34d399" : "#64748b",
+                                          padding: "2px 8px",
+                                          borderRadius: 4,
+                                          fontWeight: 700,
+                                          fontSize: 12,
+                                          border: `1px solid ${ec > 0 ? "#059669" : "#334155"}`,
+                                        }}
+                                      >
+                                        {ec}
+                                      </span>
+                                    </td>
+                                  </tr>
+                                );
+                              })}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+                    )}
 
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6, flexWrap: "wrap", gap: 8 }}>
 
@@ -3291,9 +2967,9 @@ export function CatalogPage() {
 
                                         <div style={{ fontSize: 11, whiteSpace: "nowrap" }}>
 
-                                          <span style={{ color: "#38bdf8", fontWeight: 600 }} title="Bajas infligidas promedio por partida">
+                                          <span style={{ color: "#38bdf8", fontWeight: 600 }} title="Average casualties inflicted per match">
 
-                                            🎯 {sm.capturedAvg !== null ? sm.capturedAvg.toFixed(1) : "-"} bajas
+                                            🎯 {sm.capturedAvg !== null ? sm.capturedAvg.toFixed(1) : "-"} kills
 
                                           </span>
 
@@ -3687,7 +3363,7 @@ export function CatalogPage() {
 
                   >
 
-                    {deletingModelId === (catalogModel?.model_id || selectedModel) ? "Eliminando..." : "🗑️ Eliminar"}
+                    {deletingModelId === (catalogModel?.model_id || selectedModel) ? "Deleting..." : "🗑️ Delete"}
 
                   </button>
 
@@ -4234,7 +3910,7 @@ export function CatalogPage() {
 
                               <span style={{ fontSize: 11, whiteSpace: "nowrap" }}>
 
-                                {sm.capturedAvg !== null ? `${sm.capturedAvg.toFixed(1)} bajas` : ""}
+                                {sm.capturedAvg !== null ? `${sm.capturedAvg.toFixed(1)} kills` : ""}
 
                                 {sm.vpNet !== null ? ` (${sm.vpNet > 0 ? "+" : ""}${sm.vpNet.toFixed(2)} VP)` : ""}
 
@@ -4562,17 +4238,17 @@ export function CatalogPage() {
 
                   <span style={{ fontSize: 12, fontWeight: 700, color: "#38bdf8", display: "flex", alignItems: "center", gap: 4 }}>
 
-                    <span>🔍</span> Filtros:
+                    <span>🔍</span> Filters:
 
                   </span>
 
 
 
-                  {/* Bando Filter */}
+                  {/* Side Filter */}
 
                   <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
 
-                    <label style={{ fontSize: 11, color: "#94a3b8", fontWeight: 600 }}>Bando:</label>
+                    <label style={{ fontSize: 11, color: "#94a3b8", fontWeight: 600 }}>Side:</label>
 
                     <select
 

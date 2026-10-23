@@ -2,7 +2,7 @@ schema_version: adaptive_cycles.v1
 curriculum_name: vp_acceleration_v1
 phase_name: phase1_vp_sprint_unoccupied
 generation: 1
-last_updated_utc: '2026-10-22T06:28:26.730366+00:00'
+last_updated_utc: '2026-10-22T16:36:36.486086+00:00'
 base_config_path: curriculums/vp_acceleration/configs/efficientzero_v2.phase1_unoccupied.yaml
 winning_history:
 - generation: 1
@@ -56,6 +56,36 @@ winning_history:
 - generation: 1
   winning_cycle: 1
   promoted_at_utc: '2026-10-22T06:28:26.730366+00:00'
+  win_rate: 0.9
+  tactical_quality_score: 0.68
+  promotion_decision: promote
+- generation: 1
+  winning_cycle: 1
+  promoted_at_utc: '2026-10-22T06:36:24.831418+00:00'
+  win_rate: 0.9
+  tactical_quality_score: 0.68
+  promotion_decision: promote
+- generation: 1
+  winning_cycle: 1
+  promoted_at_utc: '2026-10-22T06:41:28.840662+00:00'
+  win_rate: 0.9
+  tactical_quality_score: 0.68
+  promotion_decision: promote
+- generation: 1
+  winning_cycle: 1
+  promoted_at_utc: '2026-10-22T15:05:42.001792+00:00'
+  win_rate: 0.9
+  tactical_quality_score: 0.68
+  promotion_decision: promote
+- generation: 1
+  winning_cycle: 1
+  promoted_at_utc: '2026-10-22T15:29:57.556215+00:00'
+  win_rate: 0.9
+  tactical_quality_score: 0.68
+  promotion_decision: promote
+- generation: 1
+  winning_cycle: 1
+  promoted_at_utc: '2026-10-22T16:36:36.486075+00:00'
   win_rate: 0.9
   tactical_quality_score: 0.68
   promotion_decision: promote

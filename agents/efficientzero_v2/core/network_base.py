@@ -786,25 +786,8 @@ class EfficientZeroV2BaseNetwork(nn.Module):
                 val_logits = None
             reward = torch.zeros_like(value)
             rew_logits = torch.zeros_like(val_logits) if val_logits is not None else None
-            objective_logit = self.prediction_objective(head_in)
-            objective_intent_logits = (
-                self.prediction_intent(head_in) if self.prediction_intent is not None else None
-            )
-            multi_vp_pred = (
-                self.prediction_multi_vp(head_in) if self.prediction_multi_vp is not None else None
-            )
-            threat_map_pred = (
-                self.prediction_threat_map(pred_hidden) if self.prediction_threat_map is not None else None
-            )
-            final_ownership_pred = (
-                self.prediction_final_ownership(pred_hidden) if self.prediction_final_ownership is not None else None
-            )
-            attrition_pred = (
-                self.prediction_attrition(head_in) if self.prediction_attrition is not None else None
-            )
-            morale_pred = (
-                self.prediction_morale(head_in) if self.prediction_morale is not None else None
-            )
+            aux_in = head_in
+            aux_pred_hidden = pred_hidden
         else:
             hidden = self._scale_latent(self.representation(observation))
             pred_hidden = self.prediction_trunk(hidden)
@@ -817,26 +800,29 @@ class EfficientZeroV2BaseNetwork(nn.Module):
                 val_logits = None
             reward = torch.zeros_like(value)
             rew_logits = torch.zeros_like(val_logits) if val_logits is not None else None
-            objective_logit = self.prediction_objective(pred_hidden)
+            aux_in = pred_hidden
+            aux_pred_hidden = pred_hidden
+
+        if return_aux:
+            objective_logit = self.prediction_objective(aux_in)
             objective_intent_logits = (
-                self.prediction_intent(pred_hidden) if self.prediction_intent is not None else None
+                self.prediction_intent(aux_in) if self.prediction_intent is not None else None
             )
             multi_vp_pred = (
-                self.prediction_multi_vp(pred_hidden) if self.prediction_multi_vp is not None else None
+                self.prediction_multi_vp(aux_in) if self.prediction_multi_vp is not None else None
             )
             threat_map_pred = (
-                self.prediction_threat_map(pred_hidden) if self.prediction_threat_map is not None else None
+                self.prediction_threat_map(aux_pred_hidden) if self.prediction_threat_map is not None else None
             )
             final_ownership_pred = (
-                self.prediction_final_ownership(pred_hidden) if self.prediction_final_ownership is not None else None
+                self.prediction_final_ownership(aux_pred_hidden) if self.prediction_final_ownership is not None else None
             )
             attrition_pred = (
-                self.prediction_attrition(pred_hidden) if self.prediction_attrition is not None else None
+                self.prediction_attrition(aux_in) if self.prediction_attrition is not None else None
             )
             morale_pred = (
-                self.prediction_morale(pred_hidden) if self.prediction_morale is not None else None
+                self.prediction_morale(aux_in) if self.prediction_morale is not None else None
             )
-        if return_aux:
             aux = {"objective_logit": objective_logit}
             if val_logits is not None:
                 aux["value_logits"] = val_logits
@@ -936,25 +922,8 @@ class EfficientZeroV2BaseNetwork(nn.Module):
             else:
                 value = self.prediction_value(head_in)
                 val_logits = None
-            objective_logit = self.prediction_objective(head_in)
-            objective_intent_logits = (
-                self.prediction_intent(head_in) if self.prediction_intent is not None else None
-            )
-            multi_vp_pred = (
-                self.prediction_multi_vp(head_in) if self.prediction_multi_vp is not None else None
-            )
-            threat_map_pred = (
-                self.prediction_threat_map(pred_hidden) if self.prediction_threat_map is not None else None
-            )
-            final_ownership_pred = (
-                self.prediction_final_ownership(pred_hidden) if self.prediction_final_ownership is not None else None
-            )
-            attrition_pred = (
-                self.prediction_attrition(head_in) if self.prediction_attrition is not None else None
-            )
-            morale_pred = (
-                self.prediction_morale(head_in) if self.prediction_morale is not None else None
-            )
+            aux_in = head_in
+            aux_pred_hidden = pred_hidden
         else:
             x = self.dynamics_input(torch.cat([hidden, action_onehot], dim=-1))
             z = x
@@ -982,26 +951,29 @@ class EfficientZeroV2BaseNetwork(nn.Module):
             else:
                 value = self.prediction_value(pred_hidden)
                 val_logits = None
-            objective_logit = self.prediction_objective(pred_hidden)
+            aux_in = pred_hidden
+            aux_pred_hidden = pred_hidden
+
+        if return_aux:
+            objective_logit = self.prediction_objective(aux_in)
             objective_intent_logits = (
-                self.prediction_intent(pred_hidden) if self.prediction_intent is not None else None
+                self.prediction_intent(aux_in) if self.prediction_intent is not None else None
             )
             multi_vp_pred = (
-                self.prediction_multi_vp(pred_hidden) if self.prediction_multi_vp is not None else None
+                self.prediction_multi_vp(aux_in) if self.prediction_multi_vp is not None else None
             )
             threat_map_pred = (
-                self.prediction_threat_map(pred_hidden) if self.prediction_threat_map is not None else None
+                self.prediction_threat_map(aux_pred_hidden) if self.prediction_threat_map is not None else None
             )
             final_ownership_pred = (
-                self.prediction_final_ownership(pred_hidden) if self.prediction_final_ownership is not None else None
+                self.prediction_final_ownership(aux_pred_hidden) if self.prediction_final_ownership is not None else None
             )
             attrition_pred = (
-                self.prediction_attrition(pred_hidden) if self.prediction_attrition is not None else None
+                self.prediction_attrition(aux_in) if self.prediction_attrition is not None else None
             )
             morale_pred = (
-                self.prediction_morale(pred_hidden) if self.prediction_morale is not None else None
+                self.prediction_morale(aux_in) if self.prediction_morale is not None else None
             )
-        if return_aux:
             aux = {"objective_logit": objective_logit}
             if val_logits is not None:
                 aux["value_logits"] = val_logits

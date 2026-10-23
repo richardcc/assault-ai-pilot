@@ -622,8 +622,13 @@ export function VpSummaryTab({
           }
         }
 
+        const hasOutcomeClasses = Boolean(
+          (bySide[s] && Object.keys(bySide[s]).length > 0) ||
+          (bySide[sNorm] && Object.keys(bySide[sNorm]).length > 0)
+        );
+
         const winRate = eps > 0 ? (tv + v > 0 ? (tv + v) : Number(rates[s] ?? rates[sNorm] ?? 0)) : 0;
-        const lossRate = eps > 0 ? (td + def > 0 ? (td + def) : Math.max(0, 1 - winRate)) : 0;
+        const lossRate = eps > 0 ? (hasOutcomeClasses ? (td + def) : Math.max(0, 1 - winRate)) : 0;
         const score = eps > 0 ? ((tv + v) * 1 + (td + def) * -1) : 0;
 
         // Tactical averages

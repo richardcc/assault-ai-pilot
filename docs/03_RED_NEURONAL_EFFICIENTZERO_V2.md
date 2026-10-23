@@ -163,6 +163,24 @@ $$\text{unwarp}(y) = \text{sign}(y) \cdot |y|^{1/\alpha}$$
 * **Efecto de Resolución**: Un valor pequeño de $x = 0.04$ se proyecta a $\approx 0.089$, expandiendo su representación a lo largo de los átomos discretos adyacentes sin modificar los 61 átomos totales ni romper la compatibilidad con checkpoints existentes.
 * **Inversión Exacta**: Durante la inferencia escalar en MCTS (`support_to_scalar`), el valor esperado se des-transforma simétricamente mediante $1/\alpha \approx 1.3333$, recuperando la métrica continua real.
 
+### 4.4. Régimen Dual de Inferencia y Pérdidas: Soporte Discreto vs. Modo Escalar Directo (MSE)
+
+El motor de EfficientZero V2 (`EfficientZeroV2Trainer`) soporta dos regímenes matemáticos para las cabezas de Valor y Recompensa, gobernados por el parámetro `support_size`:
+
+1. **Régimen Categórico Two-Hot (`support_size > 0`, ej. 30 $\to$ 61 átomos)**:
+   - Las cabezas proyectan logits a una distribución discreta de átomos.
+   - La función de coste es **Cross-Entropy Categórica** contra la interpolación two-hot:
+     $$\mathcal{L}_{\text{val}} = -\sum_{i=-K}^{K} p_i^* \ln(p_i)$$
+   - Los valores numéricos de pérdida se expresan en **nats** (rango típico: $0.5$ a $4.11 = \ln(61)$).
+
+2. **Régimen Escalar Continuo (`support_size == 0`)**:
+   - Las cabezas de valor y recompensa finalizan en una única neurona lineal escalar directa (`Linear(64, 1)`).
+   - La función de coste es **Mean Squared Error (MSE)** directo:
+     $$\mathcal{L}_{\text{val}} = \frac{1}{B} \sum_{b=1}^{B} (v_b - v_b^*)^2, \quad \mathcal{L}_{\text{rew}} = \frac{1}{B} \sum_{b=1}^{B} (r_b - r_b^*)^2$$
+   - **Interpretación Dimensional**: Las pérdidas reportadas son magnitudes cuadráticas de las unidades del juego. Para interpretarlas en la escala de recompensa real, se debe extraer la raíz del error cuadrático medio:
+     $$\text{RMSE}_{\text{reward}} = \sqrt{\mathcal{L}_{\text{rew}}}, \quad \text{RMSE}_{\text{value}} = \sqrt{\mathcal{L}_{\text{val}}}$$
+   - En fases con recompensas de captura elevadas (ej. $+16.14$ por VP), un $\mathcal{L}_{\text{rew}} \approx 29.7$ representa un $\text{RMSE} \approx 5.45$ puntos, perfectamente acorde a la dispersión temporal y varianza estocástica de los combates.
+
 ---
 
 ## 5. Planificador Macro Jerárquico HRL (Nivel 1)
@@ -217,6 +235,9 @@ Para resolverlo, el balanceador de pérdidas utiliza **PCGrad (*Projecting Confl
 Si dos gradientes apuntan en direcciones opuestas, el gradiente de la tarea secundaria se proyecta sobre el hiperplano ortogonal al de la tarea primaria:
 $$g_i = g_i - \frac{g_i \cdot g_j}{\|g_j\|^2} g_j$$
 Esto garantiza matemáticamente que ninguna cabeza táctica auxiliar degrade la calidad de la política o el valor del modelo.
+
+### 6.1 Implementación Vectorizada 1D en GPU (Cero Bucle Python) [Consolidado v2.5.25]
+Para eliminar la sobrecarga de lanzamiento de kernels CUDA durante las actualizaciones de red, la función `pcgrad_backward` aplana los gradientes por tarea en vectores 1D contiguos en VRAM (`task_flat_grads`). La proyección ortogonal se calcula mediante operaciones vectorizadas BLAS puras en GPU (`torch.dot`), eliminando más de 110.000 llamadas secuenciales a micro-kernels por ciclo y reduciendo sustancialmente el cuello de botella del driver en la GPU.
 
 ---
 

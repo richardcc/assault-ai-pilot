@@ -1,8 +1,8 @@
 schema_version: adaptive_cycles.v1
 curriculum_name: self_vs_self_vs_random_2scenarios_v1
 phase_name: phase1_refine_aggressive
-generation: 5
-last_updated_utc: '2026-10-21T15:42:51.099494+00:00'
+generation: 6
+last_updated_utc: '2026-10-22T16:42:13.268998+00:00'
 base_config_path: curriculums/self_vs_self_vs_random_2scenarios_v1/configs/efficientzero_v2.phase1_refine_aggressive.yaml
 winning_history:
 - generation: 1
@@ -29,10 +29,16 @@ winning_history:
   win_rate: 0.21111111111111114
   tactical_quality_score: 0.4088888888888889
   promotion_decision: promote_best_of_cycles
+- generation: 5
+  winning_cycle: 3
+  promoted_at_utc: '2026-10-22T16:42:13.268990+00:00'
+  win_rate: 0.21111111111111114
+  tactical_quality_score: 0.4088888888888889
+  promotion_decision: promote_best_of_cycles
 cycles:
   1:
     strategy: promoted_baseline
-    description: Generation 5 Baseline (Promoted from Cycle 3 of previous generation).
+    description: Generation 6 Baseline (Promoted from Cycle 3 of previous generation).
     overlay: {}
   2:
     strategy: adaptive_exploitation
@@ -40,12 +46,12 @@ cycles:
       MCTS temperature, higher potential weight.'
     overlay:
       train:
-        reanalysis_ratio: 0.47
-        train_updates_per_iter: 16
+        reanalysis_ratio: 0.55
+        train_updates_per_iter: 26
       selfplay:
         mcts_temperature: 1.2
         reward_shaping:
-          vp_potential_weight: 1.1
+          vp_potential_weight: 1.6
   3:
     strategy: adaptive_exploration
     description: 'Aggressive frontier exploration: +15% VP capture bonuses, higher
@@ -53,7 +59,7 @@ cycles:
     overlay:
       train:
         objective_loss_weight: 0.41
-        train_updates_per_iter: 18
+        train_updates_per_iter: 28
       selfplay:
         mcts_temperature: 1.3
         reward_shaping:

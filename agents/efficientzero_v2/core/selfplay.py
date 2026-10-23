@@ -2564,6 +2564,21 @@ class _NativeEZV2SelfplayBackend:
             vp_best_action_id = ""
             vp_best_progress = None
             unit_best_vp_progress_by_unit: dict[str, float] = {}
+
+            # Precomputed baseline enemy threat signals (cached for all non-capture actions)
+            base_enemy_can_capture, base_enemy_min_steps = _enemy_threat_signals(
+                actor_side=str(side),
+                units=list(getattr(obs, "units", []) or []),
+                vp_hexes=list(getattr(obs, "vp_hexes", []) or []),
+                vp_owner_by_hex=dict(before_vp),
+            )
+            base_enemy_comp, base_enemy_prox, base_enemy_src = _enemy_threat_component(
+                reward_shaping=dict(reward_shaping or {}),
+                enemy_can_capture_vp_next=base_enemy_can_capture,
+                enemy_min_steps_to_vp=base_enemy_min_steps,
+            )
+            vp_target_after_cache: dict[tuple[int | None, int | None], tuple[str, float | None, str]] = {}
+
             for aid, prob in zip(list(mcts.actions or []), list(mcts.probs or [])):
                 mcts_row = dict(mcts_breakdown_by_action.get(str(aid), {}) or {})
                 prior_raw = None
@@ -2591,14 +2606,28 @@ class _NativeEZV2SelfplayBackend:
                     fallback_progress_delta=None,
                     legal_capture_options=int(legal_capture_options),
                 )
-                vp_target_id, vp_distance_after, vp_distance_source = _candidate_vp_target_after(
-                    action_id=str(aid),
-                    side=str(side),
-                    vp_hexes=list(getattr(obs, "vp_hexes", []) or []),
-                    vp_owner_by_hex=dict(candidate_vp_owner),
-                    acting_q=acting_q,
-                    acting_r=acting_r,
-                )
+                is_capture_action = "CAPTURE" in str(_parse_action_id(str(aid))[0]).upper()
+                if is_capture_action:
+                    vp_target_id, vp_distance_after, vp_distance_source = _candidate_vp_target_after(
+                        action_id=str(aid),
+                        side=str(side),
+                        vp_hexes=list(getattr(obs, "vp_hexes", []) or []),
+                        vp_owner_by_hex=dict(candidate_vp_owner),
+                        acting_q=acting_q,
+                        acting_r=acting_r,
+                    )
+                else:
+                    target_qr = _action_target_qr(str(aid))
+                    if target_qr not in vp_target_after_cache:
+                        vp_target_after_cache[target_qr] = _candidate_vp_target_after(
+                            action_id=str(aid),
+                            side=str(side),
+                            vp_hexes=list(getattr(obs, "vp_hexes", []) or []),
+                            vp_owner_by_hex=dict(before_vp),
+                            acting_q=acting_q,
+                            acting_r=acting_r,
+                        )
+                    vp_target_id, vp_distance_after, vp_distance_source = vp_target_after_cache[target_qr]
                 row = {
                     "action_id": str(aid),
                     "policy_prior": float(policy_prior),
@@ -2687,17 +2716,24 @@ class _NativeEZV2SelfplayBackend:
                         else None
                     ),
                 }
-                enemy_can_capture_vp_next, enemy_min_steps_to_vp = _enemy_threat_signals(
-                    actor_side=str(side),
-                    units=list(getattr(obs, "units", []) or []),
-                    vp_hexes=list(getattr(obs, "vp_hexes", []) or []),
-                    vp_owner_by_hex=dict(candidate_vp_owner),
-                )
-                enemy_threat_component, enemy_threat_proximity_signal, enemy_threat_source = _enemy_threat_component(
-                    reward_shaping=dict(reward_shaping or {}),
-                    enemy_can_capture_vp_next=enemy_can_capture_vp_next,
-                    enemy_min_steps_to_vp=enemy_min_steps_to_vp,
-                )
+                if is_capture_action:
+                    enemy_can_capture_vp_next, enemy_min_steps_to_vp = _enemy_threat_signals(
+                        actor_side=str(side),
+                        units=list(getattr(obs, "units", []) or []),
+                        vp_hexes=list(getattr(obs, "vp_hexes", []) or []),
+                        vp_owner_by_hex=dict(candidate_vp_owner),
+                    )
+                    enemy_threat_component, enemy_threat_proximity_signal, enemy_threat_source = _enemy_threat_component(
+                        reward_shaping=dict(reward_shaping or {}),
+                        enemy_can_capture_vp_next=enemy_can_capture_vp_next,
+                        enemy_min_steps_to_vp=enemy_min_steps_to_vp,
+                    )
+                else:
+                    enemy_can_capture_vp_next = base_enemy_can_capture
+                    enemy_min_steps_to_vp = base_enemy_min_steps
+                    enemy_threat_component = base_enemy_comp
+                    enemy_threat_proximity_signal = base_enemy_prox
+                    enemy_threat_source = base_enemy_src
                 row["enemy_can_capture_vp_next"] = (
                     int(enemy_can_capture_vp_next)
                     if enemy_can_capture_vp_next is not None

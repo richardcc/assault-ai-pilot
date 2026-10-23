@@ -1,11 +1,84 @@
 from __future__ import annotations
 
 import os
+import threading
 import time
 from pathlib import Path
 from typing import Any
 
 from mlops.contracts_v2 import SCHEMA_VERSION_V2
+
+_CATALOG_SUMMARY_CACHE: dict[str, tuple[float, dict[str, Any]]] = {}
+_DUCKDB_READONLY_LOCK = threading.RLock()
+_DUCKDB_READONLY_CONN: dict[str, tuple[float, Any]] = {}
+
+
+def get_duckdb_readonly_connection(db_path: Path) -> Any:
+    """Return a thread-safe cached read-only DuckDB connection."""
+    import duckdb
+
+    p = Path(db_path).resolve()
+    key = str(p)
+    mtime = p.stat().st_mtime if p.exists() else 0.0
+
+    with _DUCKDB_READONLY_LOCK:
+        cached = _DUCKDB_READONLY_CONN.get(key)
+        if cached is not None:
+            c_mtime, con = cached
+            if c_mtime == mtime:
+                try:
+                    con.execute("SELECT 1")
+                    return con
+                except Exception:
+                    try:
+                        con.close()
+                    except Exception:
+                        pass
+                    _DUCKDB_READONLY_CONN.pop(key, None)
+            else:
+                try:
+                    con.close()
+                except Exception:
+                    pass
+                _DUCKDB_READONLY_CONN.pop(key, None)
+
+        last_exc = None
+        con = None
+        for attempt in range(6):
+            try:
+                con = duckdb.connect(str(p), read_only=True)
+                con.execute("SELECT 1")
+                break
+            except Exception as exc:
+                last_exc = exc
+                if attempt < 5:
+                    time.sleep(0.08 * (attempt + 1))
+
+        if con is None:
+            raise RuntimeError(f"duckdb temporarily busy/locked: {last_exc}")
+
+        _DUCKDB_READONLY_CONN[key] = (mtime, con)
+        return con
+
+
+def close_duckdb_readonly_connection(db_path: Path | None = None) -> None:
+    """Close cached connection(s) when an update or rebuild occurs."""
+    with _DUCKDB_READONLY_LOCK:
+        if db_path is None:
+            for _, (_, con) in list(_DUCKDB_READONLY_CONN.items()):
+                try:
+                    con.close()
+                except Exception:
+                    pass
+            _DUCKDB_READONLY_CONN.clear()
+        else:
+            key = str(Path(db_path).resolve())
+            cached = _DUCKDB_READONLY_CONN.pop(key, None)
+            if cached is not None:
+                try:
+                    cached[1].close()
+                except Exception:
+                    pass
 
 
 def build_catalog_duckdb_from_parquet(
@@ -222,9 +295,12 @@ def build_catalog_duckdb_from_parquet(
 
     # If staging was used, atomically replace out_db with staging_db
     if use_staging and active_target.exists():
+        close_duckdb_readonly_connection(out_db)
+        _CATALOG_SUMMARY_CACHE.pop(str(out_db), None)
         replaced = False
         for rep_attempt in range(8):
             try:
+                close_duckdb_readonly_connection(out_db)
                 active_target.replace(out_db)
                 replaced = True
                 break
@@ -275,68 +351,60 @@ def load_catalog_summary_from_duckdb(
     except Exception as exc:
         return {"error": f"duckdb import failed: {exc}", "engines": []}
 
-    import time
-    con = None
-    last_exc = None
-    for attempt in range(6):
+    with _DUCKDB_READONLY_LOCK:
         try:
-            con = duckdb.connect(str(db_path), read_only=True)
-            break
+            con = get_duckdb_readonly_connection(db_path)
         except Exception as exc:
-            last_exc = exc
-            if attempt < 5:
-                time.sleep(0.15 * (attempt + 1))
-    if con is None:
-        return {"error": f"duckdb database temporarily busy/locked: {last_exc}", "engines": []}
+            return {"error": f"duckdb database temporarily busy/locked: {exc}", "engines": []}
 
-    try:
-        model_rows = con.execute(
-            """
-            SELECT
-                engine,
-                model_id,
-                config_fingerprint,
-                COALESCE(train_runs, 0) AS train_runs,
-                COALESCE(eval_runs, 0) AS eval_runs,
-                COALESCE(latest_train_run_id, '') AS latest_train_run_id,
-                COALESCE(latest_train_created_at_utc, '') AS latest_train_created_at_utc,
-                COALESCE(latest_eval_created_at_utc, '') AS latest_eval_created_at_utc
-            FROM catalog_models
+        try:
+            model_rows = con.execute(
+                """
+                SELECT
+                    engine,
+                    model_id,
+                    config_fingerprint,
+                    COALESCE(train_runs, 0) AS train_runs,
+                    COALESCE(eval_runs, 0) AS eval_runs,
+                    COALESCE(latest_train_run_id, '') AS latest_train_run_id,
+                    COALESCE(latest_train_created_at_utc, '') AS latest_train_created_at_utc,
+                    COALESCE(latest_eval_created_at_utc, '') AS latest_eval_created_at_utc
+                FROM catalog_models
             ORDER BY engine, model_id
             """
-        ).fetchall()
-        train_counts_rows = con.execute(
-            """
-            SELECT engine, model_id, COUNT(*) AS train_runs_real
-            FROM catalog_trains
-            GROUP BY engine, model_id
-            """
-        ).fetchall()
-        latest_train_rows = con.execute(
-            """
-            SELECT engine, model_id, MAX(created_at_utc) AS latest_train_created_at_utc
-            FROM catalog_trains
-            GROUP BY engine, model_id
-            """
-        ).fetchall()
-        eval_counts_rows = con.execute(
-            """
-            SELECT engine, model_id, COUNT(*) AS eval_runs_real
-            FROM catalog_evals
-            GROUP BY engine, model_id
-            """
-        ).fetchall()
-        latest_eval_rows = con.execute(
-            """
-            SELECT engine, model_id, MAX(created_at_utc) AS latest_eval_created_at_utc
-            FROM catalog_evals
-            GROUP BY engine, model_id
-            """
-        ).fetchall()
-    except Exception as exc:
-        return {"error": f"duckdb query failed: {exc}"}
-    finally:
-        con.close()
+            ).fetchall()
+            train_counts_rows = con.execute(
+                """
+                SELECT engine, model_id, COUNT(*) AS train_runs_real
+                FROM catalog_trains
+                GROUP BY engine, model_id
+                """
+            ).fetchall()
+            latest_train_rows = con.execute(
+                """
+                SELECT engine, model_id, MAX(created_at_utc) AS latest_train_created_at_utc
+                FROM catalog_trains
+                GROUP BY engine, model_id
+                """
+            ).fetchall()
+            eval_counts_rows = con.execute(
+                """
+                SELECT engine, model_id, COUNT(*) AS eval_runs_real
+                FROM catalog_evals
+                GROUP BY engine, model_id
+                """
+            ).fetchall()
+            latest_eval_rows = con.execute(
+                """
+                SELECT engine, model_id, MAX(created_at_utc) AS latest_eval_created_at_utc
+                FROM catalog_evals
+                GROUP BY engine, model_id
+                """
+            ).fetchall()
+        except Exception as exc:
+            return {"error": f"duckdb query failed: {exc}"}
+        finally:
+            close_duckdb_readonly_connection(db_path)
 
     train_counts_by_key: dict[tuple[str, str], int] = {}
     for row in list(train_counts_rows or []):

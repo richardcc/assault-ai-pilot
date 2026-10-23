@@ -8,8 +8,11 @@ scenario:
   - 80
   - 20
 selfplay:
-  num_workers: 20
-  parallel_backend: process
+  num_workers: 16
+  parallel_backend: thread
+  inference_max_batch_size: 32
+  inference_batch_wait_ms: 1.5
+  mcts_simulations: 160
   reward_shaping:
     vp_capture_bonus_per_hex: 4.64
     objective_progress_bonus_per_hex: 3.55
@@ -24,11 +27,13 @@ selfplay:
     vp_potential_ctrl_bonus: 2.0
     vp_urgency_lambda: 1.5
     paralysis_penalty_weight: 0.05
+    idle_penalty: -0.2
   mcts_temperature: 1.2
 train:
-  episodes_per_iter: 20
+  iterations: 80
+  episodes_per_iter: 32
   objective_loss_weight: 0.34
-  train_updates_per_iter: 14
+  train_updates_per_iter: 24
   objective_signal:
     opportunity_near_vp_max_dist: 12.0
   reanalysis_ratio: 0.5

@@ -5,6 +5,8 @@ from math import copysign, log1p, sqrt, tanh
 import random
 from typing import Dict, List, Optional
 
+import numpy as np
+
 
 @dataclass
 class MCTSOutput:
@@ -115,35 +117,35 @@ def compute_adaptive_simulations(
 
 
 def run_mcts_puct(
-    legal_actions: List[str],
-    num_simulations: int = 32,
-    c_puct: float = 1.5,
-    priors_by_action: Optional[Dict[str, float]] = None,
-    values_by_action: Optional[Dict[str, float]] = None,
-    value_sign_by_action: Optional[Dict[str, int]] = None,
-    temperature: float = 1.0,
-    dirichlet_alpha: float = 0.3,
-    dirichlet_epsilon: float = 0.0,
-    q_clip_abs: Optional[float] = 10.0,
-    q_root_normalization_mode: str = "adaptive_minmax",
-    q_root_normalization_strength: float = 0.35,
-    chance_mode: str = "off",
-    chance_samples_per_expansion: int = 1,
-    chance_value_noise_std: float = 0.0,
-    success_prob_by_action: Optional[Dict[str, float]] = None,
-    success_prob_enabled: bool = False,
-    success_prob_alpha: float = 0.0,
-    success_prob_center: float = 0.5,
-    success_prob_scale: float = 0.5,
-    success_prob_centered_clip_abs: float = 1.0,
-    min_root_visits_per_action: int = 0,
-    min_root_visits_top_n: int = 0,
-    value_rescale_mode: str = "tanh",
-    value_rescale_temperature: float = 10.0,
-    vp_race_prior_biasing: bool = False,
-    vp_race_bonus_by_action: Optional[Dict[str, float]] = None,
-    sterile_action_mask: Optional[Dict[str, bool]] = None,
-    sterile_prune_penalty: float = 0.40,
+    legal_actions,
+    num_simulations=32,
+    c_puct=1.5,
+    priors_by_action=None,
+    values_by_action=None,
+    value_sign_by_action=None,
+    temperature=1.0,
+    dirichlet_alpha=0.3,
+    dirichlet_epsilon=0.0,
+    q_clip_abs=10.0,
+    q_root_normalization_mode="adaptive_minmax",
+    q_root_normalization_strength=0.35,
+    chance_mode="off",
+    chance_samples_per_expansion=1,
+    chance_value_noise_std=0.0,
+    success_prob_by_action=None,
+    success_prob_enabled=False,
+    success_prob_alpha=0.0,
+    success_prob_center=0.5,
+    success_prob_scale=0.5,
+    success_prob_centered_clip_abs=1.0,
+    min_root_visits_per_action=0,
+    min_root_visits_top_n=0,
+    value_rescale_mode="tanh",
+    value_rescale_temperature=10.0,
+    vp_race_prior_biasing=False,
+    vp_race_bonus_by_action=None,
+    sterile_action_mask=None,
+    sterile_prune_penalty=0.40,
 ) -> MCTSOutput:
     if not legal_actions:
         return MCTSOutput(actions=[], visits=[], probs=[], chosen_action="")
@@ -178,7 +180,6 @@ def run_mcts_puct(
             priors = [x / adj_sum for x in adjusted_priors]
 
     if dirichlet_epsilon > 0.0:
-
         noise = [random.gammavariate(dirichlet_alpha, 1.0) for _ in range(n)]
         noise_sum = sum(noise)
         if noise_sum > 0.0:
@@ -187,12 +188,6 @@ def run_mcts_puct(
                 ((1.0 - dirichlet_epsilon) * p) + (dirichlet_epsilon * e)
                 for p, e in zip(priors, noise)
             ]
-
-    visits = [0] * n
-    value_sums = [0.0] * n
-    q_guardrail_clipped_count = 0
-    q_root_score_spread = 0.0
-    q_root_normalization_applied = False
 
     chance_mode_key = str(chance_mode or "off").strip().lower()
     chance_k = max(1, int(chance_samples_per_expansion))
@@ -205,7 +200,6 @@ def run_mcts_puct(
     success_centered_clip = max(0.0, float(success_prob_centered_clip_abs))
     min_root_k = max(0, int(min_root_visits_per_action))
     configured_top_n = int(min_root_visits_top_n)
-    # Contract: top_n <= 0 means "apply to all legal root actions".
     min_root_n = n if configured_top_n <= 0 else max(0, min(configured_top_n, n))
     forced_root_indices: list[int] = []
     if min_root_k > 0 and min_root_n > 0:
@@ -222,7 +216,6 @@ def run_mcts_puct(
             v = float(value)
             signed_log = copysign(log1p(abs(v)), v)
             return float(tanh(signed_log / temp))
-        # Unknown mode defaults to tanh for safety.
         return float(tanh(float(value) / temp))
 
     def _success_components(action_id: str) -> tuple[float, float, float]:
@@ -244,63 +237,77 @@ def run_mcts_puct(
     required_root_visits = int(min_root_k * min_root_n) if (min_root_k > 0 and min_root_n > 0) else 0
     total_simulations = max(1, int(num_simulations), int(required_root_visits))
 
-    # Precomputed caches outside simulation loop to eliminate redundant function calls and lookups (Task 2.9)
-    precomputed_success_comps = [
-        _success_components(legal_actions[i])[2] for i in range(n)
-    ]
-    priors_c_puct = [c_puct * priors[i] for i in range(n)]
+    priors_c_puct = np.array([c_puct * p for p in priors], dtype=np.float64)
+    precomputed_success_comps = np.array([_success_components(a)[2] for a in legal_actions], dtype=np.float64)
+
     if values_by_action:
         base_simulated_values = [
             float(values_by_action.get(legal_actions[i], 0.0)) for i in range(n)
         ]
     else:
-        # Deterministic fallback proxy in [-1, 1] when model values are absent.
         base_simulated_values = [(2.0 * priors[i]) - 1.0 for i in range(n)]
     if value_sign_by_action:
         signs = [-1.0 if int(value_sign_by_action.get(legal_actions[i], 1)) < 0 else 1.0 for i in range(n)]
         base_simulated_values = [v * s for v, s in zip(base_simulated_values, signs)]
+    base_vals_arr = np.array(base_simulated_values, dtype=np.float64)
+
+    visits = np.zeros(n, dtype=np.int32)
+    value_sums = np.zeros(n, dtype=np.float64)
+    q_guardrail_clipped_count = 0
+    q_root_normalization_applied = False
+    mode_key = str(q_root_normalization_mode or "none").strip().lower()
+    norm_alpha = max(0.0, min(1.0, float(q_root_normalization_strength)))
+    norm_active = (norm_alpha > 0.0) and (mode_key not in {"", "none", "off"})
+    clip_limit = float(max(0.0, q_clip_abs)) if (q_clip_abs is not None) else None
 
     for _ in range(total_simulations):
-        total_visits = sum(visits)
-        best_idx = 0
-        best_score = float("-inf")
-        if forced_root_indices and min_root_k > 0:
-            pending = [i for i in forced_root_indices if int(visits[i]) < min_root_k]
-            if pending:
-                best_idx = max(pending, key=lambda i: float(priors[i]))
-                best_score = float("inf")
+        total_visits = int(visits.sum())
         root_sqrt = sqrt(max(1, total_visits))
-        unclipped_q_values: list[float] = []
-        clipped_q_values: list[float] = []
-        for i in range(n):
-            q_unclipped = (value_sums[i] / visits[i]) if visits[i] > 0 else 0.0
-            q_value, q_clipped = _clip_q_value(q_unclipped, q_clip_abs)
-            if q_clipped:
-                q_guardrail_clipped_count += 1
-            unclipped_q_values.append(float(q_unclipped))
-            clipped_q_values.append(float(q_value))
-        normalized_q_values, norm_applied = _normalize_root_q(
-            clipped_q=clipped_q_values,
-            unclipped_q=unclipped_q_values,
-            mode=q_root_normalization_mode,
-            strength=q_root_normalization_strength,
-        )
-        q_root_normalization_applied = bool(q_root_normalization_applied or norm_applied)
-        q_root_score_spread = (
-            float(max(normalized_q_values) - min(normalized_q_values))
-            if normalized_q_values
-            else 0.0
-        )
-        if best_score != float("inf"):
-            for i in range(n):
-                q_value = float(normalized_q_values[i])
-                u_value = priors_c_puct[i] * (root_sqrt / (1 + visits[i]))
-                score = q_value + u_value + precomputed_success_comps[i]
-                if score > best_score:
-                    best_score = score
-                    best_idx = i
 
-        simulated_value = base_simulated_values[best_idx]
+        has_visits = visits > 0
+        q_unclipped = np.where(has_visits, value_sums / np.maximum(1, visits), 0.0)
+
+        if clip_limit is not None and clip_limit > 0.0:
+            clipped_mask = (q_unclipped > clip_limit) | (q_unclipped < -clip_limit)
+            q_guardrail_clipped_count += int(np.count_nonzero(clipped_mask))
+            clipped_q = np.clip(q_unclipped, -clip_limit, clip_limit)
+        else:
+            clipped_q = q_unclipped
+
+        if norm_active:
+            lo = float(clipped_q.min())
+            hi = float(clipped_q.max())
+            spread = hi - lo
+            if spread <= 1e-12:
+                if mode_key in {"adaptive_minmax", "adaptive"}:
+                    u_lo = float(q_unclipped.min())
+                    u_hi = float(q_unclipped.max())
+                    if (u_hi - u_lo) <= 1e-12:
+                        norm_q = np.zeros(n, dtype=np.float64)
+                    else:
+                        norm_q = ((2.0 * (q_unclipped - u_lo) / (u_hi - u_lo)) - 1.0)
+                else:
+                    norm_q = np.zeros(n, dtype=np.float64)
+            else:
+                norm_q = ((2.0 * (clipped_q - lo) / spread) - 1.0)
+            normalized_q = ((1.0 - norm_alpha) * clipped_q) + (norm_alpha * norm_q)
+            q_root_normalization_applied = True
+        else:
+            normalized_q = clipped_q
+
+        u_values = priors_c_puct * (root_sqrt / (1 + visits))
+        scores = normalized_q + u_values + precomputed_success_comps
+
+        if forced_root_indices and min_root_k > 0:
+            pending = [i for i in forced_root_indices if visits[i] < min_root_k]
+            if pending:
+                best_idx = max(pending, key=lambda i: priors[i])
+            else:
+                best_idx = int(np.argmax(scores))
+        else:
+            best_idx = int(np.argmax(scores))
+
+        simulated_value = float(base_vals_arr[best_idx])
         simulated_value = _rescale_value_estimate(simulated_value)
         if chance_enabled:
             sample_sum = 0.0
@@ -310,80 +317,89 @@ def run_mcts_puct(
                     sample_v += float(random.gauss(0.0, chance_noise_std))
                 sample_sum += float(sample_v)
             simulated_value = float(sample_sum / float(max(1, chance_k)))
-        _, q_clipped = _clip_q_value(simulated_value, q_clip_abs)
-        if q_clipped:
-            q_guardrail_clipped_count += 1
+        if clip_limit is not None and clip_limit > 0.0:
+            if simulated_value > clip_limit or simulated_value < -clip_limit:
+                q_guardrail_clipped_count += 1
+
         visits[best_idx] += 1
         value_sums[best_idx] += simulated_value
 
-    visit_sum = sum(visits)
-    probs = [v / visit_sum for v in visits]
+    visit_sum = int(visits.sum())
+    probs = [float(v) / float(visit_sum) for v in visits]
     temp = max(float(temperature), 1e-6)
     if temp < 1e-3:
-        probs_temp = [1.0 if i == max(range(n), key=lambda j: visits[j]) else 0.0 for i in range(n)]
+        best_v_idx = int(np.argmax(visits))
+        probs_temp = [1.0 if i == best_v_idx else 0.0 for i in range(n)]
+        chosen_idx = best_v_idx
     else:
         powered = [pow(max(v, 1e-12), 1.0 / temp) for v in probs]
         powered_sum = sum(powered)
         probs_temp = [p / powered_sum for p in powered]
-    if temp < 1e-3:
-        chosen_idx = max(range(n), key=lambda i: probs_temp[i])
-    else:
         chosen_idx = int(random.choices(range(n), weights=probs_temp, k=1)[0])
-    total_visits = sum(visits)
+
+    total_visits = int(visits.sum())
     root_sqrt = sqrt(max(1, total_visits))
+    has_visits = visits > 0
+    q_unclipped = np.where(has_visits, value_sums / np.maximum(1, visits), 0.0)
+    if clip_limit is not None and clip_limit > 0.0:
+        clipped_q = np.clip(q_unclipped, -clip_limit, clip_limit)
+    else:
+        clipped_q = q_unclipped
+    if norm_active:
+        lo = float(clipped_q.min())
+        hi = float(clipped_q.max())
+        spread = hi - lo
+        if spread <= 1e-12:
+            if mode_key in {"adaptive_minmax", "adaptive"}:
+                u_lo = float(q_unclipped.min())
+                u_hi = float(q_unclipped.max())
+                norm_q = np.zeros(n, dtype=np.float64) if (u_hi - u_lo) <= 1e-12 else ((2.0 * (q_unclipped - u_lo) / (u_hi - u_lo)) - 1.0)
+            else:
+                norm_q = np.zeros(n, dtype=np.float64)
+        else:
+            norm_q = ((2.0 * (clipped_q - lo) / spread) - 1.0)
+        normalized_q = ((1.0 - norm_alpha) * clipped_q) + (norm_alpha * norm_q)
+    else:
+        normalized_q = clipped_q
+
+    q_root_score_spread = float(normalized_q.max() - normalized_q.min()) if n > 0 else 0.0
+    u_values = priors_c_puct * (root_sqrt / (1 + visits))
+    puct_scores = normalized_q + u_values + precomputed_success_comps
+    chosen_score = float(puct_scores[chosen_idx])
+
     root_candidate_breakdown: list[dict[str, float]] = []
-    unclipped_q_values: list[float] = []
-    clipped_q_values: list[float] = []
+    bonus_map = dict(vp_race_bonus_by_action or {})
+    sterile_map = dict(sterile_action_mask or {})
     for i in range(n):
-        q_unclipped = (value_sums[i] / visits[i]) if visits[i] > 0 else 0.0
-        q_value, _ = _clip_q_value(q_unclipped, q_clip_abs)
-        unclipped_q_values.append(float(q_unclipped))
-        clipped_q_values.append(float(q_value))
-    normalized_q_values, _ = _normalize_root_q(
-        clipped_q=clipped_q_values,
-        unclipped_q=unclipped_q_values,
-        mode=q_root_normalization_mode,
-        strength=q_root_normalization_strength,
-    )
-    chosen_score = 0.0
-    for i in range(n):
-        q_value = float(normalized_q_values[i])
-        q_unclipped = float(unclipped_q_values[i]) if i < len(unclipped_q_values) else 0.0
-        q_clipped = float(clipped_q_values[i]) if i < len(clipped_q_values) else q_value
-        u_value = c_puct * priors[i] * (root_sqrt / (1 + visits[i]))
-        success_prob, success_centered, success_component = _success_components(legal_actions[i])
-        puct_score = float(q_value + u_value + success_component)
-        if i == chosen_idx:
-            chosen_score = puct_score
+        sp, sc, sc_comp = _success_components(legal_actions[i])
         root_candidate_breakdown.append(
             {
                 "action_id": str(legal_actions[i]),
-                "q_value": float(q_value),
-                "q_unclipped": float(q_unclipped),
-                "q_clipped": float(q_clipped),
+                "q_value": float(normalized_q[i]),
+                "q_unclipped": float(q_unclipped[i]),
+                "q_clipped": float(clipped_q[i]),
                 "q_norm_applied": bool(q_root_normalization_applied),
-                "u_value": float(u_value),
-                "success_prob_proxy": float(success_prob),
-                "success_prob_centered": float(success_centered),
-                "success_component": float(success_component),
-                "puct_score": puct_score,
-                "vp_race_bonus": float((vp_race_bonus_by_action or {}).get(str(legal_actions[i]), 0.0) or 0.0),
-                "is_sterile": bool((sterile_action_mask or {}).get(str(legal_actions[i]), False)),
+                "u_value": float(u_values[i]),
+                "success_prob_proxy": float(sp),
+                "success_prob_centered": float(sc),
+                "success_component": float(sc_comp),
+                "puct_score": float(puct_scores[i]),
+                "vp_race_bonus": float(bonus_map.get(str(legal_actions[i]), 0.0) or 0.0),
+                "is_sterile": bool(sterile_map.get(str(legal_actions[i]), False)),
             }
         )
 
     return MCTSOutput(
         actions=legal_actions,
-        visits=visits,
+        visits=visits.tolist(),
         probs=probs_temp,
         chosen_action=legal_actions[chosen_idx],
         chosen_score=float(chosen_score),
         q_guardrail_clipped_count=int(q_guardrail_clipped_count),
-        q_guardrail_clip_limit=(float(q_clip_abs) if q_clip_abs is not None else None),
+        q_guardrail_clip_limit=clip_limit,
         q_root_score_spread=float(q_root_score_spread),
         q_root_normalization_applied=bool(q_root_normalization_applied),
         chance_samples_per_expansion=(int(chance_k) if chance_enabled else 1),
         sterile_branches_pruned_count=int(sterile_branches_pruned_count),
-        root_candidate_breakdown=list(root_candidate_breakdown),
+        root_candidate_breakdown=root_candidate_breakdown,
     )
-

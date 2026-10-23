@@ -62,3 +62,12 @@ flowchart LR
   - **Purga y Homogeneización del 100% de Parquets Históricos**: Purgados 19 archivos desalineados que contenían columnas acumuladoras espurias. El 100% de los 69 archivos de decisiones existentes en el repositorio (`runs/` y `runs_curriculum/`) satisfacen ahora la especificación canónica exacta de 15 columnas.
   - **Clean Break Radical con MuZero en Catálogo y DuckDB**: Erradicada la asignación residual de `"MuZero"` en `mlops/reporting/build_catalog.py`, reclasificando y migrando 12,530 registros históricos hacia `"EfficientZeroV2"` en `catalog_eval_result_sides.parquet` y reconstruyendo `reporting.duckdb` con verificación formal de cero referencias legacy (`verified_zero_legacy: True`).
   - **Certificación de Pruebas**: Suite automatizada `mlops/tests/test_unified_catalog_and_schema_purge.py` (5/5 tests en verde en 0.74s) verificando invariantes de esquema, ausencia de fugas, migración atómica y pureza de DuckDB.
+
+### Tarea 1.5 Protocolo de Estabilidad Operativa, Safety Gate de Almacenamiento y Compresión de Replays XAI Consolidado 🟢 v2.5.25
+- **Módulos**: `docs/15_CURRICULUMS_Y_ENTRENAMIENTO_PROGRESSIVO.md`, `assault_bench/bench_io.py`, `curriculums/common/run_dynamic_gated_curriculum.ps1`.
+- **Logros y Cobertura Verificada**:
+  - **Diagnóstico Forense de Causa Raíz**: Identificación de la causa exacta de las caídas intermitentes durante fases curriculares largas (acumulación descontrolada de 132.2 GB en 9.486 archivos JSON descompresionados a ~90 MB por episodio con `indent=2`), colapso del espacio libre en `C:\` a 0.00 GB y subsiguiente fallo en la expansión del archivo de intercambio de Windows (`pagefile.sys`), provocando la excepción `RuntimeError: DefaultCPUAllocator: not enough memory` en PyTorch.
+  - **Parada Segura de Procesos Residuales**: Detección y terminación completa de subprocesos zombi/huérfanos de currículum y entrenamiento en segundo plano (`train_efficientzero_v2`), reduciendo la utilización de RAM del 95% al 43.5%.
+  - **Safety Gate de Almacenamiento Pre-flight**: Formalización del umbral mínimo de 30 GB libres en `C:\` previo a cualquier ejecución para abortar limpiamente antes de provocar fallos en cascada del sistema operativo.
+  - **Directiva de Compresión y Poda**: Supresión obligatoria de `indent=2` en serialización de replays benchmark (~45% de ahorro inmediato), soporte de compresión `.zst` / `.json.gz` (reducción del 95% a <4 MB por archivo) y política de retención selectiva de episodios en fases curriculares intermedias.
+

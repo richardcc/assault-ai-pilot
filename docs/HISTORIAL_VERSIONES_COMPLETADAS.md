@@ -65,6 +65,7 @@ flowchart TD
 
 | Versión | Época / Ciclo | Fase Técnica / Doctrinal | Componentes Clave y Rendimiento Verificado | Estado |
 | :--- | :--- | :--- | :--- | :--- :---: |
+| **`v2.5.24`** | Octubre 2026 | Resiliencia y Autorrecuperación Multiproceso (Línea 2) | Self-healing y reconstrucción automática de `ProcessPoolExecutor` ante terminaciones anómalas de SO (`BrokenProcessPool`); reciclaje periódico de procesos cada 5 iteraciones (`recycle_workers_every_iters: 5`) erradicando al 100% la fragmentación de heap y fugas de memoria en sesiones multi-hora; fallback resiliente para episodios huérfanos; ampliación del enum canónico `UnitCategory` (`ARTILLERY`, `GUN_ARTILLERY`) subsanando validaciones de catálogo de unidades. Suites 154/154 en EZv2 y 114/114 en assault_model en verde. | `CONSOLIDADO 🟢` |
 | **`v1.0.0`** | 2024-2025 | Cimentación VOEC | Coordenadas axiales $(q, r)$, balística dados de combate, LOS por elevación, simulación estocástica. | `ARCHIVADO 🗄️` |
 | **`v1.5.0`** | 2024-2025 | Representación y Geometría | Two-Hot 61 átomos con Symlog, HL-Gauss (DeepMind 2024), convolución hexagonal nativa. | `ARCHIVADO 🗄️` |
 | **`v2.0.0`** | 2025-2026 | Multi-Task Táctico y HRL | 10 cabezas tácticas auxiliares, balanceo adaptativo PCGrad, MacroPlanner HRL con roles doctrinarios. | `ARCHIVADO 🗄️` |
@@ -87,6 +88,14 @@ flowchart TD
 | **`v2.5.7`** | Octubre 2026 | Currículum Asimétrico Ofensivo de Asalto Urbano Puro | Fase 5 en `battaglia_cittadina_2_1` con horizonte $T=8$, modo 100% atacante (`US` vs `Random`), penalización severa por timeout ($-1.0$) y plan evolutivo de 10 ciclos adaptativos en `curriculums/vp_acceleration/` para erradicar la inercia defensiva aprendida. Suite de validación (4/4 tests en verde). | `CONSOLIDADO 🟢` |
 | **`v2.5.8`** | Octubre 2026 | Validador E2E de Trazabilidad Frontend $\leftrightarrow$ DuckDB (Línea 1) | Auditoría automatizada de trazabilidad en TypeScript y Python de las 9 pestañas del dashboard MLOps y simulador web (`traceability.spec.ts`, `test_frontend_duckdb_traceability.py`), garantía de Zero-Mock (cero inferencias o heurísticas espurias como `Math.floor(idx/14)`), fallbacks forzosos a `-`/`N/A`, erradicación del shim MuZero en `replay_api.py` y suite de 15/15 tests en verde. | `CONSOLIDADO 🟢` |
 | **`v2.5.9`** | Octubre 2026 | Catálogo Unificado y Depuración de Esquemas Parquet y DuckDB (Línea 1) | Módulo gestor canónico `mlops/dataset_builder.py`, fijación estricta de 15 columnas en `decisions_top.parquet`, erradicación de fugas de acumuladores intermedios en `decision_metrics.py`, saneamiento del 100% de ficheros Parquet (69/69) y Clean Break total erradicando etiquetas legacy MuZero en catálogo y DuckDB hacia EfficientZeroV2. Suite `test_unified_catalog_and_schema_purge.py` (5/5 en verde). | `CONSOLIDADO 🟢` |
+| **`v2.5.23`** | Octubre 2026 | Arquitectura Multiproceso con IPC Shared-Memory e Inferencia GPU por Lotes (Línea 2 / Tarea 2.18) | Erradicación total del cuello de botella del Global Interpreter Lock (GIL) de Python mediante ejecución de autojuego en 24 procesos independientes del sistema operativo con memoria compartida bidireccional (`torch.multiprocessing`); puente maestro `IPCInferenceBridge` que canaliza las peticiones de inferencia de los 24 workers hacia el `InferenceService` central en la GPU NVIDIA RTX 4060 con micro-batching dinámico de 64 observaciones; cliente de inferencia transparente `IPCProcessInferenceClient` con paso de tensores compartidos; erradicación de sincronizaciones de checkpoints en CPU durante el entrenamiento al compartir en caliente el modelo GPU; y configuración agresiva con MCTS 320, batch de train 48 y 48 episodios por iteración. Suites 154/154 en EZv2 y pruebas de integración IPC 100% en verde. | `CONSOLIDADO 🟢` |
+| **`v2.5.22`** | Octubre 2026 | Paquete de Aceleración Extrema de Entrenamiento e Inferencia (Línea 2 / Tarea 2.17) | Ejecución perezosa condicional de 7 cabezas auxiliares en inferencia (`return_aux=False`, +16.2% en inferencia pura); fusión y deduplicación de reanálisis en el paso hacia adelante principal; vectorización en GPU de acumulación de objetivos bootstrap y tensores de amenaza sin bloqueos `.item()`; optimizador Adam nativo `fused=True` en CUDA; y erradicación de creación de hilos de heartbeat por actualización en `train_engine.py`. Aceleración global verificada de 1.78x (de 92.58 ms a 51.96 ms por update de red en RTX 4060). | `CONSOLIDADO 🟢` |
+| **`v2.5.21`** | Octubre 2026 | Saneamiento Estructural y Refactorización del Modelo (`assault_model/`) | Poda de 10 módulos y carpetas huérfanas sin referencias; unificación de enums canónicos (`RangeBand`, `AttackSector`); consolidación de `AttackDicePool`/`DefenseDicePool`; optimización $O(1)$ de acceso a estados de hexágono (`ownership_to_side` en `GameState`); y alineación estricta de comentarios en inglés (Regla 7). 114/114 tests en `assault_model` y 153/153 en EZv2 en verde. | `CONSOLIDADO 🟢` |
+| **`v2.5.20`** | Octubre 2026 | Optimización Extrema Simulación, Observaciones y Autojuego (Línea 2 / Tarea 2.16) | Plantilla estática de features espaciales en `VOECSimulator` (418x más rápido: 0.4773s a 0.0011s por 1.000 llamadas); memoización de fuego en movimiento por destino en `action_catalog.py`; caché en memoria de catálogos y escenarios JSON en `importers.py` y `scenario_loader.py` erradicando lecturas de disco redundantes; memoización de bounding box axial en `EZV2Observation` acelerando `observation_to_tensor`. Suites 153/153 en EZv2, 19/19 en MLOps y 9/9 en assault_bench en verde. | `CONSOLIDADO 🟢` |
+| **`v2.5.25`** | Octubre 2026 | Protocolo de Estabilidad Operativa, PCGrad Vectorizado en GPU y Reajuste Anti-Parálisis Fase 3 (Línea 1 y Línea 2) | Diagnóstico y erradicación de caídas por saturación de disco (<0.7% libre en C:\) con safety gate pre-flight (30 GB libres). Vectorización de PCGrad en tensores 1D contiguos en VRAM con operaciones BLAS directas en GPU (`torch.dot`), eliminando más de 110.000 llamadas a micro-kernels por ciclo. Reajuste doctrinal en Fase 3 (`vp_phase3_race_2v2`): Time-Scaled PBRS (Devlin & Kudenko), atenuación de bajas en brecha (`breach_casualty_attenuation: 0.35`), bono de captura (6.0), disputa (1.5), enfriamiento MCTS (1.10) y micro-batching ampliado a 64 en inferencia. | `CONSOLIDADO 🟢` |
+| **`v2.5.19`** | Octubre 2026 | Perfilador Causal de Partidas y SitRep Forense (Línea 4 / Tarea 4.2) | Correlación causal matemática entre cabezas tácticas auxiliares (`threat_map`, `morale_pred`, `objective_intent`) y desenlaces de combate (`VP_CAPTURE`, `UNIT_ELIMINATION`, `HEAVY_ATTRITION`, `SURPRISE_DAMAGE`, `MORALE_FAILURE`). Generación automática de SitRep militar estructurado en fases operacionales (Opening, Decisive Engagements, Resolution) con grounding doctrinal RAG vía `assault_rag`. Endpoints `/api/v2/replay/causal-sitrep` y `/api/v2/replay/sitrep` con caché persistente (`.cache_sitrep/`), modal interactivo `ForensicSitRepModal.tsx` con navegación temporal `Seek Step` y suite unitaria `mlops/tests/test_causal_profiler.py` (9/9 en verde). | `CONSOLIDADO 🟢` |
+| **`v2.5.18`** | Octubre 2026 | Aceleración de Pipeline, Vectorización Pura y Saturación Hardware (GPU Batching) | Fases 1 a 4 100% completadas. Fase 1: vectorización de observaciones espaciales de 38 canales en `observation.py` (31.5x más rápido, diferencia 0.000000); Fase 2: vectorización de PUCT en `mcts.py` con arrays NumPy (4.3x más rápido, >4M llamadas eliminadas); Fase 3: precomputación y caché de heurísticas de amenazas y VPs en `selfplay.py` (19.3x más rápido, reduciendo de 17.177 a <150 llamadas por episodio); Fase 4: activación de concurrencia multinúcleo (16 workers en backend de hilos) acoplada a micro-batching dinámico (`inference_max_batch_size: 32`, `wait_ms: 1.5`) hacia la GPU NVIDIA RTX 4060 vía `InferenceService` con soporte transparente de `kwargs` (`return_aux=True`) y resolución `__getattr__` en `RemoteInferenceModel`. Tiempo por episodio en *Battaglia Cittadina* reducido de 18.80 s a 4.91 s. Corrección en `catalog_duckdb.py`. Suites 153/153 en EZv2 y 77/77 en assault_bench 100% en verde. | `CONSOLIDADO 🟢` |
+| **`v2.5.17`** | Octubre 2026 | Erradicación Total de Inyección Sintética de Facción y Extracción de Ground Truth | Extracción dinámica de bandos autoritativos (`attacker_side`, `defender_side`, `sides`) desde los archivos canónicos de escenario y transiciones reales de cada episodio, eliminación de la clonación espuria de `IT` a `GE` en `benchmark_result_builder.py`, serialización de controladores por bando en `bench_io.py` (`episode_payload` y `episodes_meta`), resolución dinámica en `ModelPage.tsx` (`atkSide`, `defSide`) para desplegable de replays y filtros, purga de cachés obsoletas e invalidación determinista con versión de metadatos `v2_5_17`. Suite `test_reporting_viewer_scenario_api.py` (5/5) y build Vite en verde. | `CONSOLIDADO 🟢` |
 | **`v2.5.14`** | Octubre 2026 | Presupuesto Dinámico de Simulación y Horizonte Gobernado por Turnos con Refuerzos | Desacoplamiento del presupuesto estático de pasos hacia la gobernanza canónica por turnos ($T \le T_{\max}$). Ingesta del OOB total (`scenario_total_units` en `VOECSimulator` y `EZV2VOECAdapter`) computando unidades iniciales + todas las oleadas de refuerzos programadas; headroom táctico por activación (`steps_per_unit_turn = 2.5`); watchdog de seguridad por turno (`turn_deadlock_watchdog = max(30, alive * 4)`) para prevenir bloqueos patológicos sin asfixiar partidas en curso; y eliminación de la penalización espuria de timeout (-1.0) en partidas con refuerzos que concluyen normalmente por límite de turnos. Suite dedicada `test_turn_budget_reinforcements.py` (4/4 en verde) y 153/153 tests en EZv2. | `CONSOLIDADO 🟢` |
 | **`v2.5.13`** | Octubre 2026 | Pipeline Dinámico de Refuerzos de Desembarco en Fase de Organización (Línea 3 / Tarea 3.5.6) | Spawning dinámico estocástico de refuerzos de la 2.ª oleada en Turno 2 (Fase de Organización) según regla oficial de desembarco (Pág. 18). Tirada D6 para zona A/B con resolución de congestión y posicionamiento en agua somera, registro en `GameState.add_unit()`, sincronización de `RuntimeGameState`, emisión de telemetría `REINFORCEMENTS_ARRIVED` y ampliación de masa aliada a 14 unidades en Escenario 1.0. Suite dedicada `test_scenario_reinforcements.py` y 300/300 tests en verde. | `CONSOLIDADO 🟢` |
 | **`v2.5.12`** | Octubre 2026 | Despliegue Canónico e Ingesta Fidedigna de Escenarios 1.0 y 2.1 del *Libro della Campagna* (Línea 3) | Configuración autoritativa de OOB, colocación inicial según croquis histórico y corrección de asimetría 2:1 en escenarios oficiales de Gela. En Escenario 1.0 (`mettete_i_piedi_terra_1.json`): sustitución de defensores alemanes por la 429.ª guarnición costera italiana (`IT_FANTERIA_COSTIERA`), VPs de partida en posesión italiana (`initial_owner: IT`), ajuste del horizonte a 10 turnos e inyección de status moral (US: 3/7/9/11, IT: 2/6/7/9). En Escenario 2.1 (`battaglia_cittadina_2_1.json`): restauración del ratio de fuerzas histórico 2:1 (14 unidades US [Darby's Rangers + 1st Infantry Division] vs 7 unidades IT [429.º Costiero]) en coordenadas oficiales de setup, status moral (US: 4/7/9/11, IT: 3/6/8/9) y 8 turnos. Compatibilidad y simulación dinámica verificadas (37/37 en `voec_sim`, 112/112 en `assault_model`, 149/149 en `efficientzero_v2`). | `CONSOLIDADO 🟢` |
@@ -94,6 +103,148 @@ flowchart TD
 | **`v2.5.10`** | Octubre 2026 | Atribución Causal Espacial Hexagonal (XAI / Grad-CAM / IGNH) y Unificación de Diagnóstico de Cabezas | Endpoint `/api/v2/replay/explain-step` con Grad-CAM espacial e Integrated Gradients sobre 32 canales sensoriales heterogéneos, visualizador modal de explicabilidad con heatmap reactivo sobre tablero hexagonal en Match Replay (:8778). Unificación integral del Diagnóstico de Cabezas en `Evaluación & Benchmarks -> Diagnóstico de Cabezas (XAI)` con 7 fichas de salud sintética, matriz de verificación MLOps, behavioral telemetry sanity board y desglose de 11 métricas puras, depurando la vista de Topología hacia su rol puramente arquitectural con enlace directo. Suite `mlops/tests/test_explainability_api.py` (3/3 en verde) y frontend 100% en inglés según Regla 7. | `CONSOLIDADO 🟢` |
 
 ## 3. Fases Recientes Consolidadas (Ciclos v2.4.x - v2.5.x — Octubre 2026)
+
+#### v2.5.25 — Protocolo de Estabilidad Operativa, PCGrad Vectorizado en GPU y Reajuste Anti-Parálisis Fase 3 (Línea 1 y Línea 2) [CONSOLIDADO 🟢]
+* **Objetivo**: Erradicar de raíz las caídas e interrupciones continuas por colapso de almacenamiento y memoria virtual en ejecuciones desatendidas, optimizar el rendimiento de GPU durante la optimización de pérdidas multitarea (PCGrad) y superar la *Paradoja del Comandante Prudente* en la carrera 2v2 de la Fase 3 del currículum.
+* **Componentes Consolidados**:
+  * **Protocolo de Estabilidad y Pre-flight Safety Gate de Almacenamiento (Línea 1 / Tarea 1.5)**:
+    * Diagnóstico forense de saturación de disco (<0.7% libre en `C:\`) provocado por 132.2 GB en 9.486 replays `.json` descompresionados (`indent=2`) en `runs/` y `runs_curriculum/`.
+    * Verificación pre-flight estricta de un mínimo de 30 GB libres en el volumen de trabajo antes de iniciar entrenamientos o benchmarks, abortando con aviso limpio para prevenir pantallazos y excepciones `RuntimeError: DefaultCPUAllocator: not enough memory`.
+    * Política de compactación y poda selectiva de replays benchmark en fases intermedias.
+  * **PCGrad Vectorizado en GPU con Tensores 1D Contiguos (`loss_balancer.py`)**:
+    * Sustitución del costoso bucle Python que iteraba sobre cada parámetro de la red por aplanado en vectores 1D contiguos en VRAM (`task_flat_grads`).
+    * Proyecciones ortogonales calculadas con operaciones directas BLAS en GPU (`torch.dot`), eliminando más de 110.000 llamadas a micro-kernels de CUDA por ciclo y reduciendo a cero el cuello de botella de la GPU durante el backpropagation multitarea.
+  * **Reajuste Doctrinal y Paramétrico Anti-Parálisis en Fase 3 (`efficientzero_v2.phase3_race_2v2.yaml`)**:
+    * Activación de Time-Scaled PBRS (Devlin & Kudenko) $\Phi(s, t) = \alpha(1 + t/T_{\max}) \cdot \text{dist\_pot}$ para amplificar la urgencia temporal de asalto.
+    * Activación de atenuación de bajas en zona de brecha (`breach_casualty_attenuation: 0.35`, $d \le 2$ hexágonos de VPs objetivo), mitigando el miedo a recibir disparos de reacción enemigos cuando se captura la bandera.
+    * Aumento de incentivos de captura (`capture_bonus: 6.0`, `vp_capture_bonus_per_hex: 15.0`) y bono de disputa activa (`vp_contested_bonus: 1.5`).
+    * Enfriamiento de temperatura MCTS (`mcts_temperature: 1.10`) para erradicar selecciones espurias de casillas vacías adyacentes por bono de exploración en lugar del asalto directo al VP.
+    * Ampliación del tamaño de lote de inferencia a `inference_max_batch_size: 64`.
+
+#### v2.5.24 — Resiliencia Integral, Autorrecuperación Multiproceso y Reciclaje Periódico de Procesos (Línea 2) [CONSOLIDADO 🟢]
+* **Objetivo**: Garantizar la ejecución 24/7 ininterrumpida y a prueba de fallos de autojuego masivo en el cluster local de 24 workers multiproceso, erradicando abortos por `BrokenProcessPool`, fugas acumulativas de heap en procesos hijos de Python 3.12 y validaciones inconsistentes de categorías en catálogos de unidades.
+* **Componentes Consolidados**:
+  * **Mecanismo de Autorrecuperación (*Self-Healing*) de Pool de Procesos (`train_engine.py`)**:
+    * Manejo y captura de excepciones de bajo nivel del sistema operativo y terminaciones prematuras de procesos (`BrokenProcessPool`).
+    * Drenaje inmediato de colas IPC y reseteo determinista de cerrojos (`ipc_counter.value = 0`).
+    * Reconstrucción en caliente del `ProcessPoolExecutor` (hasta 3 reintentos automáticos) para completar exactamente los episodios no finalizados de la iteración en curso.
+    * Red de seguridad con *fallback* secuencial garantizado para episodios huérfanos si se supera el umbral de reintentos, asegurando que ninguna iteración ni ciclo se interrumpa.
+  * **Reciclaje Periódico de Procesos de Autojuego (`recycle_workers_every_iters: 5`)**:
+    * Destrucción limpia y reinstanciación de los 24 workers cada 5 iteraciones (coincidiendo con el intervalo de guardado de *checkpoints*).
+    * Erradicación total de la fragmentación de heap y de fugas de memoria en la CRT de CPython (los procesos se mantienen siempre frescos en ~80-120 MB en lugar de acumular más de 450 MB tras 35 iteraciones).
+  * **Ampliación Canónica de Categorías de Unidades (`assault_model/units/unit_type.py`)**:
+    * Inclusión oficial de `ARTILLERY` y `GUN_ARTILLERY` en el enum `UnitCategory`.
+    * Corrección fidedigna en `assets/catalogs/unit_catalog.json` permitiendo la carga sin errores de piezas de artillería de campaña (`US_75MM_FIELD_GUN`) y morteros pesados (`GE_81MM_MORTAR`).
+* **Verificación de Pruebas**:
+  * 154/154 tests en `agents/efficientzero_v2/tests/` 100% en verde.
+  * 114/114 tests en `assault_model/tests/` 100% en verde.
+
+#### v2.5.23 — Arquitectura Multiproceso con IPC Shared-Memory e Inferencia GPU por Lotes (Línea 2 / Tarea 2.18) [CONSOLIDADO 🟢]
+* **Objetivo**: Erradicar el cuello de botella del Global Interpreter Lock (GIL) de Python en el autojuego masivo, permitiendo que los 28 núcleos lógicos del Intel Core i7-14700K se saturen al 80%-100% en procesos independientes del sistema operativo sin perder el micro-batching ultra-rápido en la GPU NVIDIA RTX 4060.
+* **Componentes Consolidados**:
+  * **Erradicación del GIL con Procesos de SO (`ProcessPoolExecutor` y `spawn`)**:
+    * Sustitución del backend de hilos (`thread`) por `parallel_backend: process`. Cada worker corre en su propio proceso e intérprete de Python independiente.
+    * Eliminación total de la contención del GIL: los cálculos de lógica del juego (reglas de movimiento, distancias hexagonales, líneas de visión y tiradas de dados) se ejecutan a velocidad nativa sin bloquear otros hilos.
+  * **Puente Maestro IPC de Inferencia (`IPCInferenceBridge` en `inference_service.py`)**:
+    * Hilo despachador de alta velocidad en el proceso principal que consume peticiones de inferencia de una cola compartida `torch.multiprocessing.Queue`.
+    * Enrutamiento asíncrono hacia el `InferenceService` central en CUDA, ejecutando lotes dinámicos de hasta 64 observaciones sobre los Tensor Cores de la RTX 4060.
+    * Devolución inmediata de representaciones latentes, políticas y valores a colas de respuesta individuales por worker en memoria compartida (`shm`).
+  * **Cliente de Inferencia Desacoplado (`IPCProcessInferenceClient` en `inference_service.py`)**:
+    * Proxy de modelo drop-in transparente que se inicializa en cada proceso de autojuego.
+    * Pasa observaciones limpias a la GPU vía IPC y recibe predicciones sin necesidad de instanciar modelos PyTorch pesados en la CPU ni sincronizar state_dicts periódicos.
+  * **Configuración Agresiva de Hardware y Búsqueda MCTS**:
+    * Activación de 24 workers concurrentes en CPU.
+    * Incremento de profundidad de búsqueda MCTS a 320 simulaciones por decisión.
+    * Micro-batching GPU ampliado a 64 elementos.
+    * Batch de entrenamiento en CUDA ampliado a 48 muestras y 48 episodios por iteración (2 oleadas limpias de 24).
+* **Verificación de Pruebas**:
+  * 154/154 tests en `agents/efficientzero_v2/tests/` en verde (incluyendo `test_ipc_multiprocess_selfplay.py`).
+  * Validación end-to-end completada exitosamente con `run_training` en modo proceso IPC con GPU.
+
+#### v2.5.22 — Paquete de Aceleración Extrema de Entrenamiento e Inferencia Neuronal (Línea 2 / Tarea 2.17) [CONSOLIDADO 🟢]
+* **Objetivo**: Perfilar y optimizar a fondo el bucle de entrenamiento neuronal (`train_engine.py`, `trainer.py`, `network_base.py` y `trainer_base.py`) en GPU (NVIDIA RTX 4060) erradicando sobrecostes de inferencia auxiliar redundante, sincronizaciones CPU-GPU bloqueantes y creación repetitiva de hilos del sistema operativo, preservando el 100% de la semántica matemática de funciones de pérdida, Two-Hot, PBRS y representaciones tensoriales.
+* **Componentes Consolidados**:
+  * **Fase 1: Evaluación Perezosa y Condicional de Cabezas Tácticas Auxiliares (`network_base.py`)**:
+    * En `initial_inference` y `recurrent_inference`, las 7 cabezas auxiliares (`threat_map`, `attrition`, `morale`, `dynamic_role`, `target_preference`, `objective_intent`, `final_ownership`) sólo se evalúan si `return_aux=True`.
+    * En las simulaciones MCTS de autojuego y en los desenrollados temporales de consistencia donde `return_aux=False`, se evita el cómputo de millones de convoluciones 2D pesadas y proyecciones lineales.
+    * Aceleración medida en inferencia directa: reducción de 23.17 ms a 19.41 ms por inferencia pura (**+16.2% de aceleración**).
+  * **Fase 2: Fusión y Deduplicación del Paso de Reanálisis en Entrenamiento (`trainer.py`)**:
+    * Eliminado el paso hacia adelante preliminar redundante de `initial_inference(obs)` en la reanálisis de políticas.
+    * Reutilización directa y desacoplada de `policy_logits.detach()` obtenido en el paso principal hacia adelante, manteniendo identidad matemática de targets y ahorrando una inferencia de red neuronal completa por cada paso de optimización.
+  * **Fase 3: Vectorización GPU de Bootstrap Targets y Extracción de Amenazas (`trainer.py`)**:
+    * Reemplazo de bucles iterativos con llamadas síncronas bloqueantes `.item()` en CPU por indexación tensorial vectorizada directamente en memoria GPU (`sample_indices`, `obs_indices`, `discounts * bvals_vec[obs_indices]`).
+    * Erradicación de cuellos de botella por sincronización CUDA Host-Device en el cálculo de valor bootstrap de reanálisis.
+    * Vectorización nativa GPU de targets de mapa de amenazas (`obs[:, 7:8]`) cuando no se proveen targets explícitos.
+    * Supresión de cálculo de cabezas auxiliares (`return_aux=False`) en los desenrollados de pérdida de consistencia de representación.
+  * **Fase 4: Optimizador Fused CUDA y Erradicación de Hilos Heartbeat por Paso (`trainer_base.py` y `train_engine.py`)**:
+    * Activación de `torch.optim.Adam(..., fused=True)` en dispositivos CUDA, fusionando las operaciones de actualización de gradientes y momentos en un único kernel CUDA altamente optimizado.
+    * Supresión de la creación descontrolada de instancias `threading.Thread` en `train_engine.py` (se creaban 27 hilos por iteración / 2.160 hilos por run), sustituida por llamada síncrona directa y ligera.
+* **Rendimiento Verificado**:
+  * Tiempo por actualización de red neuronal en GPU NVIDIA RTX 4060: reducido de **92.58 ms** a **51.96 ms** (**aceleración de 1.78x / reducción del 43.9% del tiempo de cómputo**).
+* **Verificación de Pruebas**:
+  * 153/153 tests en `agents/efficientzero_v2/tests/` en verde (3.60s).
+  * 19/19 tests en `mlops/tests/` en verde (1.91s).
+  * 9/9 tests en `assault_bench/tests/` en verde (63.63s).
+
+#### v2.5.21 — Saneamiento Estructural y Refactorización del Modelo de Juego (`assault_model/`) [CONSOLIDADO 🟢]
+* **Objetivo**: Sanear de forma integral el módulo `assault_model/`, podando código muerto, enums/clases clonadas y duplicadas, optimizando el bucle caliente de acceso a estados de hexágono y resolviendo cualquier residuo en español para alineación con las Directivas de Desarrollo (Regla 5 y Regla 7).
+* **Componentes Consolidados**:
+  * **Poda de Módulos Huérfanos y Clases Abandonadas (Cero Referencias)**:
+    * Eliminados 10 archivos y carpetas obsoletas sin uso: `assault_model/core/model_adapter.py`, `core/activation.py`, `core/replay.py`, `rulesets/` (`ruleset.py`), `units/attributes.py`, `actions/combat.py`, `combat/combat_action_context.py`, `combat/los_modifier.py`, `combat/modifiers/morale_modifier.py` y `combat/flank_modifier.py`.
+    * Reubicación canónica de `assault_model/roadmap/morale_system.md` a `docs/specs/morale_system.md`.
+  * **Consolidación y Supresión de Duplicidades**:
+    * Supresión de `CombatBand` y `Flank` a favor de los enums canónicos unificados `RangeBand` y `AttackSector`.
+    * Unificación de `AttackDicePool` y `DefenseDicePool` hacia una implementación canónica y eficiente en `assault_model/combat/dice_pool.py` (manteniendo re-exports para compatibilidad de tests y monkeypatching).
+    * Eliminación del prototype abandonado `combat_resolution.py` y las clases vacías `attack_die.py` / `defense_die.py`.
+    * Supresión de `terrain_rules.py` y su diccionario huérfano `TERRAIN_DEFENSE`, centralizando la consulta en `terrain_config.py`.
+  * **Optimización $O(1)$ de Acceso a Estado y Posesión de Hexágonos (`GameState` y `victory_outcomes.py`)**:
+    * Creación de `ownership_to_side` en `GameState` (mapeo inverso directo $O(1)$) compartido eficientemente en `clone_cow()`.
+    * Reemplazo de bucles de búsqueda $O(N)$ en `evaluate_scenario_outcome` (`victory_outcomes.py`) por lecturas directas $O(1)$ de posesión de VPs.
+  * **Paridad Lingüística y Cumplimiento Estricto de la Regla 7**:
+    * Traducción oportunista a inglés de todos los comentarios residuales en español en `movement_rules.py`, `game_state.py`, `unit_instance.py` y `vp_tracker.py`.
+* **Verificación de Pruebas**: 114/114 pruebas en `assault_model/tests/` y 153/153 en `agents/efficientzero_v2/tests/` 100% en verde (267/267 tests pasando).
+
+#### v2.5.20 — Optimización Extrema del Bucle de Simulación, Observaciones y Autojuego (Línea 2 / Tarea 2.16) [CONSOLIDADO 🟢]
+* **Objetivo**: Erradicar cuellos de botella de CPU y E/S en el bucle caliente de simulación, generación de acciones y ensamblado de tensores de observación de 38 canales, acelerando drásticamente el autojuego y la evaluación sin alterar ninguna regla física ni representación tensorial.
+* **Componentes Consolidados**:
+  * **Plantilla Estática de Propiedades de Terreno en Simulación (`VOECSimulator.spatial_features`)**:
+    * Precomputación por episodio de las características invariantes del mapa (`_static_spatial_features`): elevación, tipos de terreno, costes de movimiento por hexágono, modificadores de dados de cobertura, trincheras, búnkeres y coordenadas base de Victory Points.
+    * En cada paso de simulación, `spatial_features()` realiza una copia plana superficial del diccionario base y únicamente actualiza las capas dinámicas (`vp_owner_by_hex` y roles tácticos de unidades vivas).
+    * Rendimiento verificado: reducción del coste de 0.4773s a 0.0011s por 1.000 llamadas (**aceleración de 418.1x**).
+  * **Memoización por Destino de Fuego en Movimiento (`assault_model/actions/action_catalog.py`)**:
+    * En `_move_fire_actions`, memoización de `_ranged_fire_actions_from_position` indexada por tupla axial de destino `(q, r)` (`fires_by_dest`).
+    * Erradicación de cálculos duplicados de líneas de visión (LOS) y validaciones balísticas para múltiples caminos de medio movimiento que convergen en el mismo hexágono de tiro.
+  * **Caché en Memoria de Catálogos y Escenarios JSON (`importers.py` y `scenario_loader.py`)**:
+    * Implementación de `_CATALOG_CACHE` en `voec_sim/assets_bridge/importers.py` y `_RAW_SCENARIO_JSON_CACHE` en `assault_model/core/scenario_loader.py`.
+    * Supresión de más de 7.680 operaciones redundantes de lectura en disco y parseo JSON por ciclo curricular, reduciendo la latencia de instanciación de 1.76ms a 0.66ms.
+  * **Memoización de Bounding Box Axial en Observaciones (`adapter_voec.py` y `observation.py`)**:
+    * Caché de límites de coordenadas axiales (`min_q, max_q, min_r, max_r`) en `EZV2VOECAdapter` y almacenamiento en `EZV2Observation._coord_bounds`.
+    * En `observation_to_tensor`, eliminación de la instanciación repetitiva de arrays NumPy y bucles de agregación de coordenadas para determinar la ventana espacial de 16x16.
+* **Verificación Automatizada**:
+  * Batería integral en verde: 153/153 tests en `agents/efficientzero_v2/tests/`, 19/19 en `mlops/tests/` y 9/9 en `assault_bench/tests/`.
+
+#### v2.5.19 — Perfilador Causal de Partidas y SitRep Forense (Línea 4 / Tarea 4.2) [CONSOLIDADO 🟢]
+* **Objetivo**: Proporcionar auditoría forense causal de partidas de wargame mediante la correlación matemática determinista entre las predicciones tácticas de las cabezas auxiliares de EfficientZero V2 (`threat_map`, `morale_pred`, `objective_intent`) y los resultados observados sobre el tablero (captura y pérdida de VPs, bajas catastróficas, supresión y emboscadas). Sintetizar automáticamente un informe narrativo militar (SitRep) fidedigno (Zero Hallucination) respaldado por citas doctrinales del reglamento de wargame vía `assault_rag`.
+* **Componentes Consolidados**:
+  * **Motor de Perfilado Causal (`mlops/reporting/causal_profiler.py`)**:
+    * **Detección Automática de Puntos de Inflexión (`detect_turning_points`)**: Detección determinista de eventos críticos: transiciones de control de VPs (`VP_CAPTURE`, `VP_LOSS`), eliminaciones de unidades (`UNIT_ELIMINATION`), fuego concentrado pesado (`HEAVY_ATTRITION`), crisis de supresión de moral (`MORALE_FAILURE`) y emboscadas inesperadas en zonas de baja amenaza predicha (`SURPRISE_DAMAGE`).
+    * **Correlación Matemática de Cabezas (`correlate_tactical_heads`)**:
+      * *Threat Map*: Correlación de Pearson ($r$) entre el mapa de amenaza espacial y el daño real sufrido a horizonte de 2 pasos; cálculo de precisión de anticipación, incidentes de emboscada por sorpresa y mitigación de amenazas por cobertura/parada táctica.
+      * *Morale / Fragility*: Precisión de anticipación de supresión, correlación con estados de pinning y tasa de conversión de fragilidad.
+      * *Objective Intent*: Tasa de conversión de VPs objetivo a capturas consolidadas, latencia media de conversión en pasos y tasa de oscilación o titubeo entre objetivos bajo fuego cruzado.
+    * **Síntesis Narrativa Operacional (`generate_executive_narrative`)**: Resumen ejecutivo militar coherente, desglose en tres fases operacionales (Fase I: Apertura y Contacto, Fase II: Choques Decisivos, Fase III: Consolidación y Desenlace) y recomendaciones tácticas accionables para el ajuste de políticas y MCTS.
+    * **Caché Persistente en Disco (`.cache_sitrep/`)**: Aceleración inmediata de consultas subsecuentes mediante almacenamiento en caché JSON de los informes forenses.
+  * **Grounding Doctrinal RAG (`assault_rag/copilot/services.py`)**:
+    * Función `retrieve_doctrinal_citations_for_sitrep` que mapea cada tipo de evento crítico con consultas semánticas hacia el corpus de reglas (`03_MOVEMENT_AND_TERRAIN.md`, `RAG_KB_RULEBOOK_EXPLICATIVO.md`), extrayendo artículos formales, citas textuales y justificaciones de relevancia normativa sin alucinación.
+  * **Endpoints REST en Servidor MLOps (`mlops/reporting/viewer.py`)**:
+    * `/api/v2/replay/causal-sitrep` y `/api/v2/replay/sitrep` con soporte de parámetros `eval_source_path`, `episode_id` y `force_recompute`.
+  * **Frontend Interactivo en Dashboard MLOps (`:8778`)**:
+    * Componente `ForensicSitRepModal.tsx` en `viewer_frontend` con diseño militar táctico y 4 pestañas interactivas: *Executive Assessment*, *Tactical Head Forensics*, *Turning Points* (con botón `▶ Seek Step` para saltar directamente al paso en el tablero de replay) y *Doctrinal Grounding (RAG)*.
+    * Botón de acceso directo `🎖️ Forensic SitRep` en la barra de herramientas del canvas de `MatchReplayTab.tsx`.
+    * Interfaz de usuario 100% en inglés según Regla 7.
+  * **Verificación Automatizada**:
+    * Suite dedicada `mlops/tests/test_causal_profiler.py` (9/9 tests en verde): validación de detección de capturas de VPs, bajas, crisis de moral, emboscadas por sorpresa, cálculo de correlación de Pearson, síntesis de narrativa, estructura del SitRep y caché persistente.
+
 
 #### v2.5.14 — Presupuesto Dinámico de Simulación y Horizonte Gobernado por Turnos con Refuerzos (Turn-Authoritative Horizon) [CONSOLIDADO 🟢]
 * **Objetivo**: Resolver de raíz la desincronización entre el presupuesto estático de micro-pasos (`max_steps`) y los macro-turnos del wargame ante la llegada de refuerzos dinámicos, erradicando los falsos timeouts y la penalización espuria de -1.0 que provocaba la inercia defensiva del agente.

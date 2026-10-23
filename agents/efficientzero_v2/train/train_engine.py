@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import gc
+
 import json
 import os
 import random
@@ -18,7 +20,11 @@ import torch
 
 from agents.efficientzero_v2.core.network import EfficientZeroV2Network
 from agents.efficientzero_v2.core.observation import DEFAULT_OBS_CHANNELS
-from agents.efficientzero_v2.core.inference_service import InferenceService
+from agents.efficientzero_v2.core.inference_service import (
+    InferenceService,
+    IPCInferenceBridge,
+    IPCProcessInferenceClient,
+)
 from agents.efficientzero_v2.xai.decision_report import build_decision_report
 from agents.efficientzero_v2.xai.episode_narrative import build_episode_narrative
 from agents.efficientzero_v2.xai.search_tree_snapshot import build_search_snapshot
@@ -105,6 +111,7 @@ def _process_actor_init(
     model_state_dict: dict,
     selfplay_cfg: dict,
     scenario_id: str,
+    ipc_queues: tuple[Any, Any, list[Any]] | None = None,
 ) -> None:
     os.environ["CUDA_VISIBLE_DEVICES"] = ""
     os.environ["OMP_NUM_THREADS"] = "1"
@@ -118,31 +125,43 @@ def _process_actor_init(
         pass
     sim = VOECSimulator(assets=voec_assets)
     adapter = EZV2VOECAdapter(sim)
-    model = EfficientZeroV2Network(
-        observation_dim=int(model_spec["observation_dim"]),
-        hidden_dim=int(model_spec["hidden_dim"]),
-        action_dim=int(model_spec["action_dim"]),
-        encoder_type=str(model_spec["encoder_type"]),
-        observation_channels=int(model_spec["observation_channels"]),
-        observation_height=int(model_spec["observation_height"]),
-        observation_width=int(model_spec["observation_width"]),
-        dynamics_blocks=int(model_spec["dynamics_blocks"]),
-        prediction_blocks=int(model_spec["prediction_blocks"]),
-        objective_intent_classes=int(model_spec.get("objective_intent_classes", 0)),
-        multi_vp_feature_dim=int(model_spec.get("multi_vp_feature_dim", 0)),
-        support_size=int(model_spec.get("support_size", 0)),
-        use_spatial_attention=bool(model_spec.get("use_spatial_attention", False)),
-        enable_threat_head=bool(model_spec.get("enable_threat_head", True)),
-        enable_attrition_head=bool(model_spec.get("enable_attrition_head", True)),
-        enable_morale_head=bool(model_spec.get("enable_morale_head", True)),
-        morale_classes=int(model_spec.get("morale_classes", 4)),
-        use_coord_conv=bool(model_spec.get("use_coord_conv", False)),
-        dynamics_attention_type=str(model_spec.get("dynamics_attention_type", "se")),
-        policy_head_type=str(model_spec.get("policy_head_type", "linear")),
-    )
-    model.to("cpu")
-    model.load_state_dict(model_state_dict, strict=False)
-    model.eval()
+    if ipc_queues is not None:
+        counter, req_q, resp_qs = ipc_queues
+        with counter.get_lock():
+            w_id = int(counter.value)
+            counter.value += 1
+        model = IPCProcessInferenceClient(
+            worker_id=w_id,
+            request_queue=req_q,
+            response_queue=resp_qs[w_id],
+            model_metadata=model_spec,
+        )
+    else:
+        model = EfficientZeroV2Network(
+            observation_dim=int(model_spec["observation_dim"]),
+            hidden_dim=int(model_spec["hidden_dim"]),
+            action_dim=int(model_spec["action_dim"]),
+            encoder_type=str(model_spec["encoder_type"]),
+            observation_channels=int(model_spec["observation_channels"]),
+            observation_height=int(model_spec["observation_height"]),
+            observation_width=int(model_spec["observation_width"]),
+            dynamics_blocks=int(model_spec["dynamics_blocks"]),
+            prediction_blocks=int(model_spec["prediction_blocks"]),
+            objective_intent_classes=int(model_spec.get("objective_intent_classes", 0)),
+            multi_vp_feature_dim=int(model_spec.get("multi_vp_feature_dim", 0)),
+            support_size=int(model_spec.get("support_size", 0)),
+            use_spatial_attention=bool(model_spec.get("use_spatial_attention", False)),
+            enable_threat_head=bool(model_spec.get("enable_threat_head", True)),
+            enable_attrition_head=bool(model_spec.get("enable_attrition_head", True)),
+            enable_morale_head=bool(model_spec.get("enable_morale_head", True)),
+            morale_classes=int(model_spec.get("morale_classes", 4)),
+            use_coord_conv=bool(model_spec.get("use_coord_conv", False)),
+            dynamics_attention_type=str(model_spec.get("dynamics_attention_type", "se")),
+            policy_head_type=str(model_spec.get("policy_head_type", "linear")),
+        )
+        model.to("cpu")
+        model.load_state_dict(model_state_dict, strict=False)
+        model.eval()
     _PROCESS_ACTOR_STATE.clear()
     _PROCESS_ACTOR_STATE.update(
         {
@@ -1134,10 +1153,12 @@ def run_training(
     if parallel_backend not in {"thread", "process"}:
         parallel_backend = "thread"
     use_process_actors = bool(parallel_selfplay_enabled and parallel_backend == "process")
+    use_ipc_gpu = bool(use_process_actors and str(device) == "cuda")
     use_inference_service = bool(
-        parallel_selfplay_enabled and str(device) == "cuda" and not use_process_actors
+        parallel_selfplay_enabled and str(device) == "cuda" and (not use_process_actors or use_ipc_gpu)
     )
     inference_service = None
+    ipc_bridge = None
     process_pool = None
     if use_inference_service:
         infer_max_batch_size = int(
@@ -1155,6 +1176,19 @@ def run_training(
             "[EfficientZeroV2] inference_service "
             f"max_batch={infer_max_batch_size} wait_ms={infer_batch_wait_ms:.2f}"
         )
+        if use_ipc_gpu:
+            ipc_req_q = mp.Queue()
+            ipc_resp_qs = [mp.Queue() for _ in range(int(num_workers))]
+            ipc_counter = mp.Value("i", 0)
+            ipc_bridge = IPCInferenceBridge(
+                service=inference_service,
+                request_queue=ipc_req_q,
+                response_queues=ipc_resp_qs,
+            )
+            ipc_bridge.start()
+            print(
+                f"[EfficientZeroV2] ipc_inference_bridge started across {int(num_workers)} process workers (zero GIL)"
+            )
     if use_process_actors:
         process_weight_sync_every_iters = int(
             cfg.selfplay.get("process_weight_sync_every_iters", 1)
@@ -1227,22 +1261,41 @@ def run_training(
         model_state_dict_cpu = {
             k: v.detach().to(device="cpu").contiguous() for k, v in model.state_dict().items()
         }
-        mp_ctx = mp.get_context("spawn")
-        process_pool = ProcessPoolExecutor(
-            max_workers=int(num_workers),
-            mp_context=mp_ctx,
-            initializer=_process_actor_init,
-            initargs=(
-                voec_cfg.assets,
-                model_spec,
-                model_state_dict_cpu,
-                selfplay_cfg,
-                scenario_id,
-            ),
+        recycle_workers_every_iters = int(
+            cfg.selfplay.get("recycle_workers_every_iters", 5)
         )
+        mp_ctx = mp.get_context("spawn")
+
+        def _build_process_pool() -> ProcessPoolExecutor:
+            if use_ipc_gpu and ipc_counter is not None:
+                with ipc_counter.get_lock():
+                    ipc_counter.value = 0
+            if use_ipc_gpu and ipc_resp_qs is not None:
+                for q in ipc_resp_qs:
+                    while not q.empty():
+                        try:
+                            q.get_nowait()
+                        except Exception:
+                            break
+            return ProcessPoolExecutor(
+                max_workers=int(num_workers),
+                mp_context=mp_ctx,
+                initializer=_process_actor_init,
+                initargs=(
+                    voec_cfg.assets,
+                    model_spec,
+                    model_state_dict_cpu,
+                    selfplay_cfg,
+                    scenario_id,
+                    (ipc_counter, ipc_req_q, ipc_resp_qs) if use_ipc_gpu else None,
+                ),
+            )
+
+        process_pool = _build_process_pool()
         print(
             "[EfficientZeroV2] process actors pool started "
-            f"workers={int(num_workers)} (persistent)"
+            f"workers={int(num_workers)} (persistent, ipc_gpu={use_ipc_gpu}, "
+            f"recycle_every={recycle_workers_every_iters} iters)"
         )
 
     t_total = time.perf_counter()
@@ -1253,6 +1306,16 @@ def run_training(
                 iter_t0 = time.perf_counter()
                 model.eval()
                 if use_process_actors and process_pool is not None and it > 0:
+                    if (it % recycle_workers_every_iters) == 0:
+                        try:
+                            process_pool.shutdown(wait=False, cancel_futures=True)
+                        except Exception:
+                            pass
+                        process_pool = _build_process_pool()
+                        print(
+                            f"[EfficientZeroV2] process actors pool refreshed at iteration {it+1} (zero memory leak)"
+                        )
+                if use_process_actors and process_pool is not None and it > 0 and not use_ipc_gpu:
                     if (it % process_weight_sync_every_iters) == 0:
                         sync_t0 = time.perf_counter()
                         model_state_dict_cpu = {
@@ -1342,6 +1405,7 @@ def run_training(
                         )
 
                 def _consume_episode(ep_idx: int, ep_seed: int, samples):
+                    nonlocal all_run_samples
                     # EfficientZero temporal consistency requires consecutive observations.
                     # Populate next_observation for each replay sample from episode rollouts.
                     def _compress_obs_for_replay(obs):
@@ -1354,6 +1418,8 @@ def run_training(
                         n = len(samples)
                         episode_action_idx = []
                         for s in samples:
+                            # Compress observation once per sample in-place to avoid multi-cloning
+                            s.observation = _compress_obs_for_replay(s.observation)
                             pol = list(getattr(s, "policy_target", []) or [])
                             if pol:
                                 aidx = int(max(range(len(pol)), key=lambda i: float(pol[i])))
@@ -1361,7 +1427,6 @@ def run_training(
                                 aidx = -1
                             episode_action_idx.append(aidx)
                         for i, s in enumerate(samples):
-                            s.observation = _compress_obs_for_replay(s.observation)
                             nxt_obs = samples[i + 1].observation if i + 1 < n else s.observation
                             fut_obs = []
                             fut_actions = []
@@ -1370,27 +1435,34 @@ def run_training(
                             rollout_horizon = max(consistency_unroll_steps, value_bootstrap_steps)
                             k_lim = min(rollout_horizon, max(0, n - i - 1))
                             for k in range(1, k_lim + 1):
-                                fut_obs.append(_compress_obs_for_replay(samples[i + k].observation))
+                                # Reuse already compressed observation tensor reference without re-allocating
+                                fut_obs.append(samples[i + k].observation)
                                 fut_actions.append(int(episode_action_idx[i + k - 1]))
                                 fut_rewards.append(float(getattr(samples[i + k - 1], "reward_target", 0.0)))
                                 fut_dones.append(bool((samples[i + k - 1].info or {}).get("done", False)))
                             info = s.info
                             if info is None:
                                 s.info = {
-                                    "next_observation": _compress_obs_for_replay(nxt_obs),
+                                    "next_observation": nxt_obs,
                                     "future_observations": fut_obs,
                                     "future_actions": fut_actions,
                                     "future_rewards": fut_rewards,
                                     "future_dones": fut_dones,
                                 }
                             else:
-                                info["next_observation"] = _compress_obs_for_replay(nxt_obs)
+                                info["next_observation"] = nxt_obs
                                 info["future_observations"] = fut_obs
                                 info["future_actions"] = fut_actions
                                 info["future_rewards"] = fut_rewards
                                 info["future_dones"] = fut_dones
                     replay.extend(samples)
-                    all_run_samples.extend(list(samples or []))
+                    # Keep lightweight sample metadata for units_sides contract to prevent unbounded RAM leakage
+                    all_run_samples.extend([
+                        {"info": dict(getattr(s, "info", {}) or {})}
+                        for s in samples
+                    ])
+                    if len(all_run_samples) > 20000:
+                        del all_run_samples[:-10000]
                     episode_rewards.append(float(sum(float(getattr(s, "reward_target", 0.0) or 0.0) for s in list(samples or []))))
                     episode_actions.append("episode_rollout")
                     _log(
@@ -1470,31 +1542,59 @@ def run_training(
                     completed: dict[int, tuple[int, list]] = {}
                     if use_process_actors:
                         if process_pool is None:
-                            raise RuntimeError("Process actors pool not initialized")
-                        fut_to_job = {
-                            process_pool.submit(_process_actor_run_episode, ep_seed, _ep_scenario): (ep_idx, ep_seed, _ep_scenario)
-                            for ep_idx, ep_seed, _ep_scenario in episode_plan
-                        }
-                        completed_count = 0
-                        for fut in as_completed(fut_to_job):
-                            ep_idx, ep_seed, ep_scen = fut_to_job[fut]
+                            process_pool = _build_process_pool()
+                        pending_jobs = list(episode_plan)
+                        max_pool_attempts = 3
+                        pool_attempt = 0
+                        while pending_jobs and pool_attempt < max_pool_attempts:
+                            pool_attempt += 1
+                            fut_to_job = {
+                                process_pool.submit(_process_actor_run_episode, ep_seed, _ep_scen): (ep_idx, ep_seed, _ep_scen)
+                                for ep_idx, ep_seed, _ep_scen in pending_jobs
+                            }
                             try:
-                                ep_res = fut.result()
-                                completed[ep_idx] = (ep_seed, ep_res)
-                                completed_count += 1
-                                ep_steps = len(ep_res) if isinstance(ep_res, list) else 0
-                                elapsed_so_far = time.perf_counter() - t_selfplay_batch_start
-                                _log(
-                                    f"[EfficientZeroV2]     progress [{completed_count:02d}/{len(episode_plan):02d}] "
-                                    f"ep #{ep_idx+1} finished in {elapsed_so_far:.2f}s (steps={ep_steps}, scenario={ep_scen})"
-                                )
-                            except Exception as exc:
+                                for fut in as_completed(fut_to_job):
+                                    ep_idx, ep_seed, ep_scen = fut_to_job[fut]
+                                    try:
+                                        ep_res = fut.result()
+                                        completed[ep_idx] = (ep_seed, ep_res)
+                                        ep_steps = len(ep_res) if isinstance(ep_res, list) else 0
+                                        elapsed_so_far = time.perf_counter() - t_selfplay_batch_start
+                                        _log(
+                                            f"[EfficientZeroV2]     progress [{len(completed):02d}/{len(episode_plan):02d}] "
+                                            f"ep #{ep_idx+1} finished in {elapsed_so_far:.2f}s (steps={ep_steps}, scenario={ep_scen})"
+                                        )
+                                    except Exception as exc:
+                                        print(
+                                            f"[EfficientZeroV2][WARN] Actor worker exception on episode #{ep_idx+1} (seed={ep_seed}): {exc}",
+                                            flush=True,
+                                        )
+                            except Exception as pool_exc:
                                 print(
-                                    f"[EfficientZeroV2][ERROR] Process actor worker failed on episode {ep_idx+1}/{len(episode_plan)} "
-                                    f"(seed={ep_seed}, scenario={ep_scen}): {exc}",
+                                    f"[EfficientZeroV2][WARN] Actor process pool exception: {pool_exc}",
                                     flush=True,
                                 )
-                                raise
+                            pending_jobs = [
+                                job for job in episode_plan if job[0] not in completed
+                            ]
+                            if pending_jobs and pool_attempt < max_pool_attempts:
+                                print(
+                                    f"[EfficientZeroV2] Self-healing: restarting process pool to recover {len(pending_jobs)} remaining episodes (attempt {pool_attempt+1}/{max_pool_attempts})...",
+                                    flush=True,
+                                )
+                                try:
+                                    process_pool.shutdown(wait=False, cancel_futures=True)
+                                except Exception:
+                                    pass
+                                process_pool = _build_process_pool()
+                        if pending_jobs:
+                            print(
+                                f"[EfficientZeroV2][WARN] Process pool could not complete {len(pending_jobs)} episodes; executing remaining via direct fallback...",
+                                flush=True,
+                            )
+                            for ep_idx, ep_seed, ep_scen in pending_jobs:
+                                ep_res = _run_episode(ep_seed, ep_scen)
+                                completed[ep_idx] = (ep_seed, ep_res)
                     else:
                         with ThreadPoolExecutor(max_workers=int(num_workers)) as ex:
                             fut_to_job = {
@@ -1553,43 +1653,20 @@ def run_training(
                     _log(
                         f"[EfficientZeroV2]   train update {upd_idx+1}/{train_updates_per_iter} train_batch...",
                     )
-                    hb_stop = threading.Event()
-                    hb_start_t = time.perf_counter()
-
-                    def _update_heartbeat() -> None:
-                        waited_s = 0.0
-                        while not hb_stop.wait(5.0):
-                            waited_s += 5.0
-                            if waited_s < 15.0:
-                                continue
-                            elapsed_s = float(time.perf_counter() - hb_start_t)
-                            _log(
-                                f"[EfficientZeroV2]   train update {upd_idx+1}/{train_updates_per_iter} "
-                                f"still running elapsed_s={elapsed_s:.1f}"
-                            )
-
-                    hb_thread = threading.Thread(
-                        target=_update_heartbeat,
-                        name="ezv2-train-update-heartbeat",
-                        daemon=True,
-                    )
-                    hb_thread.start()
                     metrics = trainer.train_batch(batch)
-                    hb_stop.set()
-                    hb_thread.join(timeout=0.2)
                     m = metrics.to_dict()
                     update_metrics.append(m)
-                    replay_age_values = []
                     current_add_idx = int(replay.add_index)
-                    for s in list(batch):
-                        add_idx = int((s.info or {}).get("replay_add_index", current_add_idx))
-                        replay_age_values.append(max(0, current_add_idx - 1 - add_idx))
-                    replay_age_mean_vals.append(
-                        float(sum(replay_age_values)) / float(max(1, len(replay_age_values)))
-                        if replay_age_values
-                        else 0.0
-                    )
-                    replay_age_max_vals.append(float(max(replay_age_values)) if replay_age_values else 0.0)
+                    replay_age_values = [
+                        max(0, current_add_idx - 1 - int((s.info or {}).get("replay_add_index", current_add_idx)))
+                        for s in batch
+                    ]
+                    if replay_age_values:
+                        replay_age_mean_vals.append(float(sum(replay_age_values)) / float(len(replay_age_values)))
+                        replay_age_max_vals.append(float(max(replay_age_values)))
+                    else:
+                        replay_age_mean_vals.append(0.0)
+                        replay_age_max_vals.append(0.0)
                     upd_elapsed_s = float(time.perf_counter() - upd_t0)
                     _log(
                         f"[EfficientZeroV2]   train update {upd_idx+1}/{train_updates_per_iter} "
@@ -1787,6 +1864,7 @@ def run_training(
                         "iter_s": float(iter_elapsed_s),
                     }
                 )
+                gc.collect()
 
         total_elapsed_s = float(time.perf_counter() - t_total)
         latest_metrics["timing_summary"] = {
@@ -2053,6 +2131,8 @@ def run_training(
         print(f"[EfficientZeroV2] completed run_dir={run_dir}")
         return {"run_id": run_id, "metrics": latest_metrics, "engine_mode": "efficient_core"}
     finally:
+        if ipc_bridge is not None:
+            ipc_bridge.stop()
         if process_pool is not None:
             process_pool.shutdown(wait=True, cancel_futures=True)
         if inference_service is not None:

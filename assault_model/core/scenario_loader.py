@@ -29,6 +29,9 @@ class ScenarioLoaderError(Exception):
     pass
 
 
+_RAW_SCENARIO_JSON_CACHE: dict[str, dict] = {}
+
+
 # -------------------------------------------------
 # Helpers
 # -------------------------------------------------
@@ -100,7 +103,11 @@ def load_scenario(
     if not scenario_path.exists():
         raise ScenarioLoaderError(f"Scenario not found: {scenario_path}")
 
-    raw = json.loads(scenario_path.read_text(encoding="utf-8"))
+    canonical_key = str(scenario_path.resolve())
+    raw = _RAW_SCENARIO_JSON_CACHE.get(canonical_key)
+    if raw is None:
+        raw = json.loads(scenario_path.read_text(encoding="utf-8"))
+        _RAW_SCENARIO_JSON_CACHE[canonical_key] = raw
 
     # =================================================
     # MAP CONSTRUCTION

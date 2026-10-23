@@ -196,7 +196,17 @@ function Evaluate-Gate {
   foreach ($r in $mctsRows) {
     $eps = [double]([math]::Max(1, [int]($r.episodes)))
     $totEpisodes += $eps
-    $sumScore += $eps * [double]($r.win_rate)
+    $rWin = [double]($r.win_rate)
+    $sumWinRate = [double]($sumWinRate + ($eps * $rWin))
+    $rDraw = [double]0.0
+    if ($r.scenario_outcome_rates -and $r.scenario_outcome_rates.Pareggio -ne $null) {
+      $rDraw = [double]($r.scenario_outcome_rates.Pareggio)
+    } elseif ($r.scenario_outcome_class_rates -and $r.scenario_outcome_class_rates.draw -ne $null) {
+      $rDraw = [double]($r.scenario_outcome_class_rates.draw)
+    }
+    # Standard zero-sum tournament score: Win = 1.0, Draw = 0.5, Loss = 0.0
+    $compScore = $rWin + (0.5 * $rDraw)
+    $sumScore += $eps * $compScore
     $rowTimeoutRate = [double]($r.timeout_rate)
     $sumTimeout += $eps * $rowTimeoutRate
     $sumLoss += $eps * [double]($r.loss_rate)
@@ -222,6 +232,7 @@ function Evaluate-Gate {
     $sumVpCapture += $eps * [double]($rowKpis.xai_vp_capture_take_rate)
   }
   $den = [double]([math]::Max(1.0, $totEpisodes))
+  $winRate = [double]($sumWinRate / $den)
   $score = $sumScore / $den
   $timeoutRate = $sumTimeout / $den
   $nonTimeoutResolutionRate = 1.0 - $timeoutRate
@@ -238,6 +249,10 @@ function Evaluate-Gate {
   if ($expectedScenarioIdsNorm.Count -gt 0) {
     if ($expectedScenarioIdsNorm -contains "battaglia_cittadina" -or $expectedScenarioIdsNorm -contains "battaglia_cittadina_2_1") {
       $scenarioVpMax = [double]5.0
+    } elseif ($expectedScenarioIdsNorm -contains "vp_phase3_race_2v2") {
+      $scenarioVpMax = [double]2.0
+    } elseif ($expectedScenarioIdsNorm -contains "vp_phase1_unoccupied_3hex" -or $expectedScenarioIdsNorm -contains "vp_phase2_defended_suppressed") {
+      $scenarioVpMax = [double]1.0
     } elseif ($expectedScenarioIdsNorm -contains "mettete_i_piedi_terra_1" -or $expectedScenarioIdsNorm -contains "mettete_i_piedi_terra_1_min") {
       $scenarioVpMax = [double]3.0
     }
@@ -288,6 +303,14 @@ function Evaluate-Gate {
     if ($score -lt $th) {
       $ok = $false
       $reasons.Add(("score {0:N3} < min_score {1:N3}" -f $score, $th))
+    }
+  }
+
+  if ($GateSpec.min_win_rate -ne $null) {
+    $th = [double]$GateSpec.min_win_rate
+    if ($winRate -lt $th -and -not $dominantWinRateOverride) {
+      $ok = $false
+      $reasons.Add(("win_rate {0:N3} < min_win_rate {1:N3}" -f $winRate, $th))
     }
   }
 
@@ -562,6 +585,10 @@ train:
   $reasonsJoined = ($LastGateFailReasons -join " | ")
   $py = @"
 import pathlib, copy, sys, yaml
+repo_root = pathlib.Path(r'''$RepoRoot''').resolve()
+if str(repo_root) not in sys.path:
+    sys.path.insert(0, str(repo_root))
+
 from agents.efficientzero_v2.core.interop import load_efficientzero_config
 
 base_path = pathlib.Path(r'''$resolvedBase''')
@@ -572,8 +599,9 @@ cycle_iter = int($CycleIteration)
 phase_name = r'''$PhaseName'''
 reasons = r'''$reasonsJoined'''.lower()
 
-# Check if adaptive cycle plan exists for this phase
-plan_path = base_path.parent.parent / 'cycles' / f'{phase_name}.adaptive_cycles.yaml'
+# Check if adaptive cycle plan exists for this phase (strip any _c\d+ suffix)
+clean_phase = phase_name.split('_c')[0]
+plan_path = base_path.parent.parent / 'cycles' / f'{clean_phase}.adaptive_cycles.yaml'
 if plan_path.exists():
     try:
         plan_data = yaml.safe_load(plan_path.read_text(encoding='utf-8')) or {}
@@ -589,7 +617,7 @@ if plan_path.exists():
             target_path.write_text(yaml.safe_dump(overlay, sort_keys=False), encoding='utf-8')
             gen = plan_data.get('generation', 1)
             strat = chosen_spec.get('strategy', 'variant')
-            print(f'   [Adaptive Plan] Applied Generation {gen} Cycle {cycle_iter} ({strat})')
+            sys.stderr.write(f'   [Adaptive Plan] Applied Generation {gen} Cycle {cycle_iter} ({strat})\n')
             sys.exit(0)
     except Exception as exc:
         pass
@@ -639,7 +667,9 @@ target_path.write_text(yaml.safe_dump(overlay, sort_keys=False), encoding='utf-8
   $tmpPy = Join-Path ([System.IO.Path]::GetTempPath()) ([System.Guid]::NewGuid().ToString() + "_overlay.py")
   try {
     Set-Content -Path $tmpPy -Value $py -Encoding UTF8
-    python $tmpPy
+    $venvPy = Join-Path $RepoRoot ".venv\Scripts\python.exe"
+    $pyExe = if (Test-Path $venvPy) { $venvPy } else { "python" }
+    $null = & $pyExe $tmpPy
   } finally {
     Remove-Item -Path $tmpPy -Force -ErrorAction SilentlyContinue
   }
@@ -920,7 +950,12 @@ try {
               Write-Host ("   Baseline: Clean start (Phase 1) with Cycle {0} tuned parameters." -f ($cycleIteration + 1)) -ForegroundColor Cyan
             }
             Write-Host ("   Best candidate in this phase so far: Cycle {0} (TQS={1:N3}, WinRate={2:N1}%)" -f $bestPhaseCycle, $bestPhaseTqs, ($bestPhaseWinRate * 100)) -ForegroundColor Gray
-            $resumeCheckpoint = $phaseBaselineCheckpoint
+            if (-not [string]::IsNullOrWhiteSpace($bestPhaseCheckpoint) -and (Test-Path $bestPhaseCheckpoint)) {
+              Write-Host ("   Accumulative Warm-Start: Continuing from best candidate Cycle {0} checkpoint: {1}" -f $bestPhaseCycle, $bestPhaseCheckpoint) -ForegroundColor Magenta
+              $resumeCheckpoint = $bestPhaseCheckpoint
+            } else {
+              $resumeCheckpoint = $phaseBaselineCheckpoint
+            }
             $cycleIteration++
             continue
           } else {
@@ -1038,6 +1073,16 @@ try {
             opt_duration_seconds = $optDurationSec
           }
           Write-CurriculumTraceRow -RepoRoot $Repo -Row $traceRow
+
+          # Auto-publish reporting catalog & DuckDB so Dashboard updates immediately
+          try {
+            $catScript = Join-Path $Repo "scripts\build_curriculum_reporting_catalog.ps1"
+            if (Test-Path $catScript) {
+              & powershell -NoProfile -ExecutionPolicy Bypass -File $catScript -Repo $Repo | Out-Null
+            }
+          } catch {
+            Write-Host ("Warning: Auto-publishing reporting catalog failed: {0}" -f $_.Exception.Message) -ForegroundColor Yellow
+          }
         }
       }
     } # end while reinforcement loop

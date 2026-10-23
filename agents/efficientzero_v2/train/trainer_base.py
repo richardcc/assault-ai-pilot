@@ -45,7 +45,13 @@ class EfficientZeroV2BaseTrainer:
     ):
         self.device = device
         self.model = model.to(self.device)
-        self.optimizer = torch.optim.Adam(self.model.parameters(), lr=lr)
+        try:
+            if "cuda" in str(self.device).lower():
+                self.optimizer = torch.optim.Adam(self.model.parameters(), lr=lr, fused=True)
+            else:
+                self.optimizer = torch.optim.Adam(self.model.parameters(), lr=lr)
+        except Exception:
+            self.optimizer = torch.optim.Adam(self.model.parameters(), lr=lr)
         self.objective_loss_weight = float(max(0.0, objective_loss_weight))
         self.objective_target_mode = str(objective_target_mode or "progress").strip().lower()
         if self.objective_target_mode not in {"progress", "conversion"}:

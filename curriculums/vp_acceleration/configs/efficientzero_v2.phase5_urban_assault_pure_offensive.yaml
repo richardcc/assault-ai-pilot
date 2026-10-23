@@ -5,36 +5,39 @@ scenario:
   id: battaglia_cittadina_2_1
   max_turns: 8
 selfplay:
-  num_workers: 10
+  num_workers: 24
   parallel_backend: process
+  inference_max_batch_size: 64
+  inference_batch_wait_ms: 1.5
   matchup_modes:
   - self_vs_random
   matchup_mode_weights:
     self_vs_random: 1
-  mcts_simulations: 256
-  mcts_temperature: 1.05
+  mcts_simulations: 320
+  mcts_temperature: 1.25
   timeout_penalty: -1.0
   reward_shaping:
     time_scaled_pbrs: true
-    vp_potential_weight: 1.5
+    vp_potential_weight: 1.8
     vp_potential_gamma: 0.997
-    vp_potential_ctrl_bonus: 2.5
-    vp_contested_bonus: 0.8
+    vp_potential_ctrl_bonus: 3.0
+    vp_contested_bonus: 1.0
     breach_distance: 2
     breach_casualty_attenuation: 0.4
-    vp_capture_bonus_per_hex: 6.5
-    objective_progress_bonus_per_hex: 5.0
-    capture_bonus: 2.2
-    kill_weight: 0.5
-    idle_penalty: -0.15
-    paralysis_penalty_weight: 0.08
+    vp_capture_bonus_per_hex: 7.5
+    objective_progress_bonus_per_hex: 6.0
+    capture_bonus: 2.8
+    kill_weight: 0.4
+    idle_penalty: -0.25
+    paralysis_penalty_weight: 0.10
     cover_threshold: 0.35
     terminal_scale: 1.5
     terminal_loss_penalty: 1.5
     opportunity_near_vp_max_dist: 12.0
 train:
-  iterations: 60
-  episodes_per_iter: 25
-  train_updates_per_iter: 20
-  objective_loss_weight: 0.45
-  reanalysis_ratio: 0.45
+  iterations: 120
+  episodes_per_iter: 48
+  batch_size: 48
+  train_updates_per_iter: 30
+  objective_loss_weight: 0.50
+  reanalysis_ratio: 0.50

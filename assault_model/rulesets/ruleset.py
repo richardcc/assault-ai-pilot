@@ -1,2 +1,0 @@
-# Ruleset interface / specification
-

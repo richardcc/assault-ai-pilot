@@ -50,6 +50,7 @@ class VOECSimulator:
         self._passivity_tracker_by_side: Dict[str, Dict[str, int]] = {}
         self._prev_snapshot: Optional[StateSnapshot] = None
         self._prev_spatial: Optional[Dict[str, Any]] = None
+        self._static_spatial_features: Optional[Dict[str, Any]] = None
 
     def new_episode(
         self,
@@ -93,6 +94,7 @@ class VOECSimulator:
         self._max_turns = int(scenario.max_turns) if scenario.max_turns is not None else None
         self._legal_actions_cache_key = None
         self._legal_actions_cache_value = []
+        self._static_spatial_features = None
 
         if self._reward_shaping_cfg:
             cfg = self._reward_shaping_cfg
@@ -199,6 +201,7 @@ class VOECSimulator:
         self._state = runtime.base_state
         self._legal_actions_cache_key = None
         self._legal_actions_cache_value = []
+        self._static_spatial_features = None
 
         done = bool(self._state.done)
         reward = self._terminal_reward(self._state)
@@ -276,6 +279,7 @@ class VOECSimulator:
             state.end_reason = end_reason
         self._legal_actions_cache_key = None
         self._legal_actions_cache_value = []
+        self._static_spatial_features = None
         reward = self._terminal_reward(state)
         return TransitionRecord(
             action_id=action_id,
@@ -381,80 +385,97 @@ class VOECSimulator:
                 return q, r
             return None, None
 
-        playable_hexes: List[Dict[str, int]] = []
-        terrain_move_cost_by_hex: Dict[str, float] = {}
-        terrain_cover_by_hex: Dict[str, float] = {}
-        terrain_los_block_by_hex: Dict[str, int] = {}
-        terrain_type_by_hex: Dict[str, str] = {}
-        fortification_type_by_hex: Dict[str, str] = {}
-        fortification_edge_by_hex: Dict[str, Dict[str, int]] = {}
-        for coord in list(getattr(state, "hex_states", {}).keys()):
-            q, r = _coord_to_qr(coord)
-            if q is None or r is None:
-                continue
-            playable_hexes.append({"q": int(q), "r": int(r)})
-            key = f"{int(q)},{int(r)}"
-            terrain_name = "clear"
-            hex_obj = None
-            try:
-                hex_obj = state.game_map.get_hex(int(q), int(r))
-            except Exception:
+        static = self._static_spatial_features
+        if static is None:
+            playable_hexes: List[Dict[str, int]] = []
+            terrain_move_cost_by_hex: Dict[str, float] = {}
+            terrain_cover_by_hex: Dict[str, float] = {}
+            terrain_los_block_by_hex: Dict[str, int] = {}
+            terrain_type_by_hex: Dict[str, str] = {}
+            fortification_type_by_hex: Dict[str, str] = {}
+            fortification_edge_by_hex: Dict[str, Dict[str, int]] = {}
+            for coord in list(getattr(state, "hex_states", {}).keys()):
+                q, r = _coord_to_qr(coord)
+                if q is None or r is None:
+                    continue
+                playable_hexes.append({"q": int(q), "r": int(r)})
+                key = f"{int(q)},{int(r)}"
+                terrain_name = "clear"
                 hex_obj = None
-            if hex_obj is not None:
                 try:
-                    terrain_name = str(hex_obj.get_terrain())
+                    hex_obj = state.game_map.get_hex(int(q), int(r))
                 except Exception:
-                    terrain_name = "clear"
-            terrain_type_by_hex[key] = str(terrain_name or "clear")
-            move_cost = terrain_config.get_move_cost(terrain_name, "foot", default=1)
-            if move_cost is None:
-                terrain_move_cost_by_hex[key] = 0.0
-            else:
-                terrain_move_cost_by_hex[key] = float(max(0, int(move_cost))) / 4.0
-            cover_dice = terrain_config.get_defense_dice(terrain_name, "INFANTRY")
-            terrain_cover_by_hex[key] = float(len(cover_dice)) / 3.0
-            los_type = str(terrain_config.get_los(terrain_name)).upper()
-            terrain_los_block_by_hex[key] = 1 if los_type == "BLOCKED" else 0
-            fort_data = None
-            if hex_obj is not None:
-                try:
-                    fort_data = state.game_map.get_hex_fortification_data(int(q), int(r))
-                except Exception:
-                    fort_data = None
-            if isinstance(fort_data, dict):
-                fort_type = str(fort_data.get("type", "") or "").strip()
-                if fort_type:
-                    fortification_type_by_hex[key] = fort_type
-                    v_start = _as_int(fort_data.get("vertex_start"))
-                    v_end = _as_int(fort_data.get("vertex_end"))
-                    if v_start is not None and v_end is not None:
-                        fortification_edge_by_hex[key] = {
-                            "vertex_start": int(v_start),
-                            "vertex_end": int(v_end),
-                        }
+                    hex_obj = None
+                if hex_obj is not None:
+                    try:
+                        terrain_name = str(hex_obj.get_terrain())
+                    except Exception:
+                        terrain_name = "clear"
+                terrain_type_by_hex[key] = str(terrain_name or "clear")
+                move_cost = terrain_config.get_move_cost(terrain_name, "foot", default=1)
+                if move_cost is None:
+                    terrain_move_cost_by_hex[key] = 0.0
+                else:
+                    terrain_move_cost_by_hex[key] = float(max(0, int(move_cost))) / 4.0
+                cover_dice = terrain_config.get_defense_dice(terrain_name, "INFANTRY")
+                terrain_cover_by_hex[key] = float(len(cover_dice)) / 3.0
+                los_type = str(terrain_config.get_los(terrain_name)).upper()
+                terrain_los_block_by_hex[key] = 1 if los_type == "BLOCKED" else 0
+                fort_data = None
+                if hex_obj is not None:
+                    try:
+                        fort_data = state.game_map.get_hex_fortification_data(int(q), int(r))
+                    except Exception:
+                        fort_data = None
+                if isinstance(fort_data, dict):
+                    fort_type = str(fort_data.get("type", "") or "").strip()
+                    if fort_type:
+                        fortification_type_by_hex[key] = fort_type
+                        v_start = _as_int(fort_data.get("vertex_start"))
+                        v_end = _as_int(fort_data.get("vertex_end"))
+                        if v_start is not None and v_end is not None:
+                            fortification_edge_by_hex[key] = {
+                                "vertex_start": int(v_start),
+                                "vertex_end": int(v_end),
+                            }
+
+            vp_hexes: List[Dict[str, Any]] = []
+            vp_base: List[Dict[str, Any]] = []
+            victory = getattr(state, "victory", None)
+            points = list(getattr(victory, "points", [])) if victory is not None else []
+            for vp in points:
+                q, r = _coord_to_qr(getattr(vp, "hex_coords", None))
+                if q is None or r is None:
+                    continue
+                val = int(getattr(vp, "per_turn", 2) or 2)
+                key = f"{int(q)},{int(r)}"
+                vp_hexes.append({"q": int(q), "r": int(r), "value": val, "per_turn": val})
+                vp_base.append({"q": int(q), "r": int(r), "key": key})
+
+            static = {
+                "playable_hexes": playable_hexes,
+                "terrain_move_cost_by_hex": terrain_move_cost_by_hex,
+                "terrain_cover_by_hex": terrain_cover_by_hex,
+                "terrain_los_block_by_hex": terrain_los_block_by_hex,
+                "terrain_type_by_hex": terrain_type_by_hex,
+                "fortification_type_by_hex": fortification_type_by_hex,
+                "fortification_edge_by_hex": fortification_edge_by_hex,
+                "vp_hexes": vp_hexes,
+                "vp_base": vp_base,
+            }
+            self._static_spatial_features = static
 
         ownership_to_side = {v: str(k) for k, v in getattr(state, "side_to_ownership", {}).items()}
-        hex_state_by_key: Dict[str, Any] = {}
-        for coord_key, hex_state in list(getattr(state, "hex_states", {}).items()):
-            q, r = _coord_to_qr(coord_key)
-            if q is None or r is None:
-                continue
-            hex_state_by_key[f"{int(q)},{int(r)}"] = hex_state
-        vp_hexes: List[Dict[str, Any]] = []
+        hex_states = getattr(state, "hex_states", {})
         vp_owner_by_hex: Dict[str, str] = {}
-        victory = getattr(state, "victory", None)
-        points = list(getattr(victory, "points", [])) if victory is not None else []
-        for vp in points:
-            q, r = _coord_to_qr(getattr(vp, "hex_coords", None))
-            if q is None or r is None:
-                continue
-            val = int(getattr(vp, "per_turn", 2) or 2)
-            vp_hexes.append({"q": int(q), "r": int(r), "value": val, "per_turn": val})
-            key = f"{int(q)},{int(r)}"
-            hex_state = hex_state_by_key.get(key)
-            owner = getattr(hex_state, "ownership", None) if hex_state is not None else None
+        for vp_info in static["vp_base"]:
+            k = vp_info["key"]
+            hex_st = hex_states.get((vp_info["q"], vp_info["r"]))
+            if hex_st is None:
+                hex_st = hex_states.get(k)
+            owner = getattr(hex_st, "ownership", None) if hex_st is not None else None
             side_owner = ownership_to_side.get(owner, "")
-            vp_owner_by_hex[key] = str(side_owner)
+            vp_owner_by_hex[k] = str(side_owner)
 
         unit_doctrine_roles: Dict[str, str] = {}
         unit_optimal_ranges: Dict[str, List[int]] = {}
@@ -468,15 +489,15 @@ class VOECSimulator:
                 unit_optimal_ranges[u.unit_id] = list(doc_prof.optimal_engagement_range)
 
         return {
-            "playable_hexes": playable_hexes,
-            "vp_hexes": vp_hexes,
+            "playable_hexes": static["playable_hexes"],
+            "vp_hexes": static["vp_hexes"],
             "vp_owner_by_hex": vp_owner_by_hex,
-            "terrain_move_cost_by_hex": terrain_move_cost_by_hex,
-            "terrain_cover_by_hex": terrain_cover_by_hex,
-            "terrain_los_block_by_hex": terrain_los_block_by_hex,
-            "terrain_type_by_hex": terrain_type_by_hex,
-            "fortification_type_by_hex": fortification_type_by_hex,
-            "fortification_edge_by_hex": fortification_edge_by_hex,
+            "terrain_move_cost_by_hex": static["terrain_move_cost_by_hex"],
+            "terrain_cover_by_hex": static["terrain_cover_by_hex"],
+            "terrain_los_block_by_hex": static["terrain_los_block_by_hex"],
+            "terrain_type_by_hex": static["terrain_type_by_hex"],
+            "fortification_type_by_hex": static["fortification_type_by_hex"],
+            "fortification_edge_by_hex": static["fortification_edge_by_hex"],
             "unit_doctrine_roles": unit_doctrine_roles,
             "unit_optimal_ranges": unit_optimal_ranges,
         }

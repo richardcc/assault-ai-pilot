@@ -211,6 +211,9 @@ def evaluate_scenario_outcome(
     if points and state is not None and hasattr(state, "hex_states") and hasattr(state, "side_to_ownership"):
         objectives_total = len(points)
         side_to_ownership = state.side_to_ownership
+        ownership_to_side = getattr(state, "ownership_to_side", None)
+        if ownership_to_side is None:
+            ownership_to_side = {own: str(s).upper() for s, own in side_to_ownership.items()}
         for vp in points:
             init_owner = str(getattr(vp, "initial_owner", "") or "").strip().upper()
             if init_owner:
@@ -219,11 +222,7 @@ def evaluate_scenario_outcome(
             hs = state.hex_states.get(vp.hex_coords)
             if hs is None:
                 continue
-            owner_side = None
-            for s, ownership in side_to_ownership.items():
-                if ownership == hs.ownership:
-                    owner_side = str(s).upper()
-                    break
+            owner_side = ownership_to_side.get(hs.ownership)
             if owner_side:
                 captured_by_side[owner_side] = captured_by_side.get(owner_side, 0) + 1
                 val = int(getattr(vp, "per_turn", 2) or 2)

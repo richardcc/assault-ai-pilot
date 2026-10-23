@@ -146,6 +146,10 @@ export interface ReplayMetaEpisode extends Dict {
   scenario_name?: string;
   matchup?: string;
   matchup_label?: string;
+  controller_by_side?: Record<string, string>;
+  attacker_side?: string;
+  defender_side?: string;
+  sides?: string[];
   winner?: string;
   outcome?: string;
 }

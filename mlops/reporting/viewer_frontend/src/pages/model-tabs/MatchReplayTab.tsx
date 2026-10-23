@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import type { Dict, ReplayMetaPayload, ReplayStepRow, ReplayUnitSnapshot } from "../../types";
-import { fetchExplainStep, fetchStepTacticalHeads } from "../../api";
+import { fetchCausalSitrep, fetchExplainStep, fetchStepTacticalHeads } from "../../api";
 import { ExplainabilityModal } from "../../components/ExplainabilityModal";
+import { ForensicSitRepModal } from "../../components/ForensicSitRepModal";
 
 function parseSuppressed(val: unknown): boolean | null {
   if (val === null || val === undefined || val === "") return null;
@@ -63,6 +64,61 @@ function getFortificationShort(type: string): string {
   }
 }
 
+const HEX_UNIT_OFFSETS = [
+  { dx: 0.8660254037844386, dy: -0.5 },
+  { dx: 0.8660254037844386, dy: 0.5 },
+  { dx: 0, dy: 1 },
+  { dx: -0.8660254037844386, dy: 0.5 },
+  { dx: -0.8660254037844386, dy: -0.5 },
+  { dx: 0, dy: -1 },
+];
+
+interface ControllerBadgeInfo {
+  label: string;
+  icon: string;
+  bg: string;
+  color: string;
+  border: string;
+}
+
+function getControllerBadgeInfo(rawCtrl: string): ControllerBadgeInfo {
+  const norm = String(rawCtrl || "").toLowerCase();
+  if (norm.includes("random")) {
+    return {
+      label: "Random Baseline",
+      icon: "🎲",
+      bg: "rgba(245, 158, 11, 0.18)",
+      color: "#fbbf24",
+      border: "rgba(245, 158, 11, 0.45)",
+    };
+  }
+  if (norm.includes("human")) {
+    return {
+      label: "Human Player",
+      icon: "👤",
+      bg: "rgba(59, 130, 246, 0.18)",
+      color: "#60a5fa",
+      border: "rgba(59, 130, 246, 0.45)",
+    };
+  }
+  if (norm.includes("selfplay") || norm.includes("self-play")) {
+    return {
+      label: "EfficientZeroV2 (Self-Play)",
+      icon: "🤖",
+      bg: "rgba(168, 85, 247, 0.2)",
+      color: "#c084fc",
+      border: "rgba(168, 85, 247, 0.5)",
+    };
+  }
+  return {
+    label: "EfficientZeroV2 (AI)",
+    icon: "🤖",
+    bg: "rgba(99, 102, 241, 0.2)",
+    color: "#a5b4fc",
+    border: "rgba(99, 102, 241, 0.5)",
+  };
+}
+
 interface UnitTacticalRoleInfo {
   role: string;
   label: string;
@@ -114,10 +170,10 @@ function getUnitTacticalRole(
   if (explicitRole.includes("FIRE_SUPPORT")) {
     return {
       role: "ROLE_FIRE_SUPPORT",
-      label: "Apoyo Fuego",
+      label: "Fire Support",
       icon: "🎯",
       color: "#f97316",
-      desc: "Armas pesadas asegurando líneas de tiro y fuego de contención.",
+      desc: "Heavy weapons securing fire lanes and suppression.",
       isMutated,
       mutationReason,
       priorBoost,
@@ -126,10 +182,10 @@ function getUnitTacticalRole(
   if (explicitRole.includes("CLOSE_DEFENSE")) {
     return {
       role: "ROLE_CLOSE_DEFENSE",
-      label: "Defensa Cercana",
+      label: "Close Defense",
       icon: "🛡️",
       color: "#a855f7",
-      desc: "Arma pesada flanqueada asumiendo autodefensa a corta distancia.",
+      desc: "Flanked heavy weapon assuming close-quarters self-defense.",
       isMutated,
       mutationReason,
       priorBoost,
@@ -138,10 +194,10 @@ function getUnitTacticalRole(
   if (explicitRole.includes("RECON")) {
     return {
       role: "ROLE_RECON",
-      label: "Reconocimiento",
+      label: "Reconnaissance",
       icon: "🔭",
       color: "#06b6d4",
-      desc: "Exploración de vanguardia, detección y vigilancia.",
+      desc: "Forward scouting, detection, and sector surveillance.",
       isMutated,
       mutationReason,
       priorBoost,
@@ -150,10 +206,10 @@ function getUnitTacticalRole(
   if (explicitRole.includes("DEFENDER") || explicitRole.includes("OBJECTIVE_DEFENDER")) {
     return {
       role: "ROLE_OBJECTIVE_DEFENDER",
-      label: "Defensor VP",
+      label: "VP Defender",
       icon: "🏰",
       color: "#38bdf8",
-      desc: "Atrincherado en perímetro asegurando el control del VP.",
+      desc: "Entrenched in perimeter securing VP control.",
       isMutated,
       mutationReason,
       priorBoost,
@@ -162,10 +218,10 @@ function getUnitTacticalRole(
   if (explicitRole.includes("SCREEN") || explicitRole.includes("FLANK")) {
     return {
       role: "ROLE_FLANK_SCREEN",
-      label: "Cortina Flanco",
+      label: "Flank Screen",
       icon: "👁️",
       color: "#10b981",
-      desc: "Vigilancia de sector y fijación de flancos.",
+      desc: "Sector surveillance and flank screening.",
       isMutated,
       mutationReason,
       priorBoost,
@@ -174,10 +230,10 @@ function getUnitTacticalRole(
   if (explicitRole.includes("TACTICAL_RESERVE") || explicitRole.includes("RESERVE")) {
     return {
       role: "ROLE_TACTICAL_RESERVE",
-      label: "Reserva Táctica",
+      label: "Tactical Reserve",
       icon: "⏱️",
       color: "#8b5cf6",
-      desc: "Escuadra de retaguardia preservando cohesión hasta compromiso decisivo.",
+      desc: "Rearguard element holding cohesion until decisive engagement.",
       isMutated,
       mutationReason,
       priorBoost,
@@ -186,7 +242,7 @@ function getUnitTacticalRole(
   if (explicitRole.includes("RECOVER")) {
     return {
       role: "ROLE_RECOVER",
-      label: "Recuperación",
+      label: "Recovery",
       icon: "🩹",
       color: "#eab308",
       desc: "Unit under morale degradation or damage falling back in good order.",
@@ -198,10 +254,10 @@ function getUnitTacticalRole(
   if (explicitRole.includes("SPEARHEAD")) {
     return {
       role: "ROLE_SPEARHEAD",
-      label: "Punta Lanza",
+      label: "Spearhead",
       icon: "⚡",
       color: "#ef4444",
-      desc: "Vanguardia de choque asignada al asalto directo del objetivo.",
+      desc: "Shock vanguard designated for direct objective assault.",
       isMutated,
       mutationReason,
       priorBoost,
@@ -213,7 +269,7 @@ function getUnitTacticalRole(
       label: explicitRole.replace("ROLE_", ""),
       icon: "🎖️",
       color: "#94a3b8",
-      desc: `Rol táctico asignado: ${explicitRole}`,
+      desc: `Tactical role assigned: ${explicitRole}`,
       isMutated,
       mutationReason,
       priorBoost,
@@ -257,15 +313,15 @@ function getMapPieceCandidates(pieceId: string): string[] {
 }
 
 const FORTIFICATION_CONFIG: Record<string, { label: string; short: string; art: string }> = {
-  trench: { label: "Trinchera", short: "TR", art: "/art/terrain/Terrain Trenches.png" },
-  bunker: { label: "Búnker Reforzado", short: "BK", art: "/art/terrain/Terrain Bunker.png" },
-  casemate: { label: "Casamata", short: "CS", art: "/art/terrain/Terrain Pillbox.png" },
-  pillbox: { label: "Pillbox Blindado", short: "PB", art: "/art/terrain/Terrain Pillbox.png" },
-  gun_emplacement: { label: "Emplazamiento de Cañón", short: "GN", art: "/art/terrain/Terrain Gun Emplacement.png" },
-  barbed_wire: { label: "Alambradas", short: "WR", art: "/art/terrain/Terrain Barbed Wire.png" },
-  sandbag: { label: "Sacos de Arena", short: "SB", art: "/art/terrain/Terrain Sandbag Position.png" },
-  tank_barricades: { label: "Barricadas Anticarro", short: "TB", art: "/art/terrain/Terrain Tank Barricades.png" },
-  minefield: { label: "Campo de Minas", short: "MN", art: "" },
+  trench: { label: "Trench Line", short: "TR", art: "/art/terrain/Terrain Trenches.png" },
+  bunker: { label: "Reinforced Bunker", short: "BK", art: "/art/terrain/Terrain Bunker.png" },
+  casemate: { label: "Armored Casemate", short: "CS", art: "/art/terrain/Terrain Pillbox.png" },
+  pillbox: { label: "Pillbox Emplacement", short: "PB", art: "/art/terrain/Terrain Pillbox.png" },
+  gun_emplacement: { label: "Gun Emplacement", short: "GN", art: "/art/terrain/Terrain Gun Emplacement.png" },
+  barbed_wire: { label: "Wire Obstacle", short: "WR", art: "/art/terrain/Terrain Barbed Wire.png" },
+  sandbag: { label: "Sandbag Position", short: "SB", art: "/art/terrain/Terrain Sandbag Position.png" },
+  tank_barricades: { label: "Anti-Tank Barricades", short: "TB", art: "/art/terrain/Terrain Tank Barricades.png" },
+  minefield: { label: "Minefield", short: "MN", art: "" },
 };
 
 function getFortificationArt(type: string): string {
@@ -543,7 +599,7 @@ export function MatchReplayTab({
   const [showTerrain, setShowTerrain] = useState(true);
   const [showBriefing, setShowBriefing] = useState(true);
   const [theaterMode, setTheaterMode] = useState(false);
-  const [mapHeight, setMapHeight] = useState(520);
+  const [mapHeight, setMapHeight] = useState(680);
   const [zoomLevel, setZoomLevel] = useState(1.0);
   const [panOffset, setPanOffset] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
   const [isDragging, setIsDragging] = useState(false);
@@ -563,6 +619,7 @@ export function MatchReplayTab({
   );
   const clamped = Math.max(0, Math.min(stepIndex, Math.max(0, steps.length - 1)));
   const currentStep = steps[clamped] || {};
+  const prevStep = clamped > 0 ? (steps[clamped - 1] || null) : null;
 
 
   // Cache loaded PNG assets for 2D canvas drawing
@@ -586,7 +643,8 @@ export function MatchReplayTab({
   }, []);
 
   // Canvas hover & tooltip state
-  const [hoveredHex, setHoveredHex] = useState<{ q: number; r: number; x: number; y: number } | null>(null);
+  const [hoveredHex, setHoveredHex] = useState<{ q: number; r: number } | null>(null);
+  const [mousePos, setMousePos] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
 
   // Explainability Modal (IGNH / Grad-CAM)
   const [isExplainModalOpen, setIsExplainModalOpen] = useState(false);
@@ -659,6 +717,26 @@ export function MatchReplayTab({
     return tacticalHeadsByStep.get(clamped) || null;
   }, [tacticalHeadsByStep, clamped]);
 
+  // Forensic SitRep and Causal Profiler Modal State
+  const [isSitrepOpen, setIsSitrepOpen] = useState(false);
+  const [sitrepData, setSitrepData] = useState<Dict | null>(null);
+  const [isSitrepLoading, setIsSitrepLoading] = useState(false);
+
+  const handleOpenSitrep = async (force = false) => {
+    setIsSitrepOpen(true);
+    if (!force && sitrepData && !sitrepData.error) return;
+    setIsSitrepLoading(true);
+    try {
+      const epId = replaySteps?.episode_id || selectedEpisodeId || "episode_0";
+      const data = await fetchCausalSitrep(selectedEvalSourcePath, epId, force);
+      setSitrepData(data);
+    } catch (err: any) {
+      setSitrepData({ ok: false, error: String(err?.message || err) });
+    } finally {
+      setIsSitrepLoading(false);
+    }
+  };
+
   const threatHeadHexMap = useMemo(() => {
     const m = new Map<string, number>();
     const threatList = Array.isArray(currentTacticalHeads?.threat_map)
@@ -687,13 +765,17 @@ export function MatchReplayTab({
 
       const zoomFactor = e.deltaY < 0 ? 1.15 : 0.87;
       setZoomLevel((prevZoom) => {
-        const nextZoom = Math.max(0.5, Math.min(3.5, Number((prevZoom * zoomFactor).toFixed(2))));
+        const nextZoom = Math.max(0.6, Math.min(4.5, Number((prevZoom * zoomFactor).toFixed(2))));
         if (nextZoom === prevZoom) return prevZoom;
 
-        const factor = nextZoom / prevZoom;
+        const ratio = nextZoom / prevZoom;
+        const centerX = rect.width / 2;
+        const centerY = rect.height / 2;
+
+        // Mathematically exact zoom anchoring to the mouse cursor position
         setPanOffset((prevPan) => ({
-          x: Math.round(mouseX - (mouseX - prevPan.x) * factor),
-          y: Math.round(mouseY - (mouseY - prevPan.y) * factor),
+          x: Math.round((mouseX - centerX) - (mouseX - centerX - prevPan.x) * ratio),
+          y: Math.round((mouseY - centerY) - (mouseY - centerY - prevPan.y) * ratio),
         }));
 
         return nextZoom;
@@ -765,10 +847,59 @@ export function MatchReplayTab({
     return [];
   }, [currentStep, scenarioUnitMap]);
 
-  // Controller mapping by side
+  // Current episode metadata from replayMeta
+  const currentEpisodeMeta = useMemo(() => {
+    const eps = Array.isArray(replayMeta?.episodes_meta) ? replayMeta.episodes_meta : [];
+    const currentEpId = String(replaySteps?.episode_id || "episode_0");
+    return (eps.find((e: Dict) => String(e.episode_id) === currentEpId) || eps[0] || null) as Dict | null;
+  }, [replayMeta, replaySteps?.episode_id]);
+
+  // Controller mapping by side (100% dynamic, multi-tier fallback ensuring never empty)
   const controllerMap = useMemo(() => {
-    return (currentStep.controller_by_side || currentStep.side_controller_map || {}) as Record<string, string>;
-  }, [currentStep]);
+    const fromStep = (currentStep.controller_by_side || currentStep.side_controller_map) as Record<string, string> | undefined;
+    if (fromStep && Object.keys(fromStep).length > 0) return fromStep;
+
+    const fromStepsPayload = (replaySteps?.controller_by_side || replaySteps?.side_controller_map) as Record<string, string> | undefined;
+    if (fromStepsPayload && Object.keys(fromStepsPayload).length > 0) return fromStepsPayload;
+
+    const fromMeta = currentEpisodeMeta?.controller_by_side as Record<string, string> | undefined;
+    if (fromMeta && Object.keys(fromMeta).length > 0) return fromMeta;
+
+    const fromOverlay = (activeOverlay?.side_controller_map || activeOverlay?.controller_by_side) as Record<string, string> | undefined;
+    if (fromOverlay && Object.keys(fromOverlay).length > 0) return fromOverlay;
+
+    // Dynamic resolution based on matchup profile and agent name
+    const matchup = String(currentEpisodeMeta?.matchup || replaySteps?.matchup || "").toLowerCase();
+    const agentName = String(currentEpisodeMeta?.agent_name || replaySteps?.agent_name || "").toLowerCase();
+    const attacker = String(activeOverlay?.attacker_side || "US").toUpperCase();
+    const defender = String(activeOverlay?.defender_side || (attacker === "US" ? "IT" : "US")).toUpperCase();
+
+    const result: Record<string, string> = {};
+    if (matchup === "vs_random_atk") {
+      result[attacker] = "EfficientZeroV2 (AI)";
+      result[defender] = "Random Baseline";
+    } else if (matchup === "vs_random_def") {
+      result[defender] = "EfficientZeroV2 (AI)";
+      result[attacker] = "Random Baseline";
+    } else if (matchup.includes("selfplay")) {
+      result[attacker] = "EfficientZeroV2 (Self-Play)";
+      result[defender] = "EfficientZeroV2 (Self-Play)";
+    } else if (agentName.includes("random_us")) {
+      result["US"] = "Random Baseline";
+      result[defender] = "EfficientZeroV2 (AI)";
+    } else if (agentName.includes("random_it") || agentName.includes("random_ge")) {
+      result["IT"] = "Random Baseline";
+      result["GE"] = "Random Baseline";
+      result["US"] = "EfficientZeroV2 (AI)";
+    } else if (agentName.includes("random")) {
+      result[attacker] = "EfficientZeroV2 (AI)";
+      result[defender] = "Random Baseline";
+    } else {
+      result[attacker] = "EfficientZeroV2 (AI)";
+      result[defender] = "EfficientZeroV2 (AI)";
+    }
+    return result;
+  }, [currentStep, replaySteps, currentEpisodeMeta, activeOverlay]);
 
   // VP Map for current step (strictly based on the active scenario definition)
   const vpMap = useMemo(() => {
@@ -941,16 +1072,16 @@ export function MatchReplayTab({
       counts[t] = (counts[t] || 0) + 1;
     }
     const parts: string[] = [];
-    if (counts["bunker"]) parts.push(`${counts["bunker"]} Búnker${counts["bunker"] > 1 ? "es" : ""}`);
-    if (counts["casemate"]) parts.push(`${counts["casemate"]} Casamata${counts["casemate"] > 1 ? "s" : ""}`);
-    if (counts["gun_emplacement"]) parts.push(`${counts["gun_emplacement"]} Emplazamiento${counts["gun_emplacement"] > 1 ? "s" : ""}`);
-    if (counts["trench"]) parts.push(`${counts["trench"]} Trinchera${counts["trench"] > 1 ? "s" : ""}`);
-    if (counts["barbed_wire"]) parts.push(`${counts["barbed_wire"]} Alambrada${counts["barbed_wire"] > 1 ? "s" : ""}`);
-    if (counts["minefield"]) parts.push(`${counts["minefield"]} Campo${counts["minefield"] > 1 ? "s" : ""} de minas`);
+    if (counts["bunker"]) parts.push(`${counts["bunker"]} Bunker${counts["bunker"] > 1 ? "s" : ""}`);
+    if (counts["casemate"]) parts.push(`${counts["casemate"]} Casemate${counts["casemate"] > 1 ? "s" : ""}`);
+    if (counts["gun_emplacement"]) parts.push(`${counts["gun_emplacement"]} Gun Emplacement${counts["gun_emplacement"] > 1 ? "s" : ""}`);
+    if (counts["trench"]) parts.push(`${counts["trench"]} Trench${counts["trench"] > 1 ? "es" : ""}`);
+    if (counts["barbed_wire"]) parts.push(`${counts["barbed_wire"]} Wire Obstacle${counts["barbed_wire"] > 1 ? "s" : ""}`);
+    if (counts["minefield"]) parts.push(`${counts["minefield"]} Minefield${counts["minefield"] > 1 ? "s" : ""}`);
     return parts.join(", ");
   }, [fortifications]);
 
-  // Scenario & Tactical Forces Briefing Data
+  // Scenario & Tactical Forces Briefing Data (100% Dynamic, strictly driven by active scenario overlay)
   const scenarioBriefing = useMemo(() => {
     const rawId = String(
       activeOverlay?.scenario_id ||
@@ -960,8 +1091,6 @@ export function MatchReplayTab({
     ).toLowerCase();
 
     const shape = scenarioShape;
-    const isMettete = rawId.includes("mettete") || (shape[0] === 9 && shape[1] === 16);
-    const isCittadina = rawId.includes("cittadina") || (shape[0] === 18 && shape[1] === 12);
 
     // Units inventory
     const rawScenarioUnits = (activeOverlay?.scenario_units as Dict[]) || [];
@@ -996,35 +1125,57 @@ export function MatchReplayTab({
       unitsBySide[side].keys[ukey] = (unitsBySide[side].keys[ukey] || 0) + 1;
     }
 
-    // Dynamic Title, Subtitle, Description from activeOverlay if present, with clean fallbacks
+    // Scheduled Reinforcements inventory
+    const rawReinforcements = (activeOverlay?.reinforcements as Dict[]) || [];
+    const reinforcementsBySide: Record<
+      string,
+      { count: number; waves: { turn: number; phase: string; count: number; keys: Record<string, number> }[] }
+    > = {};
+
+    for (const rw of rawReinforcements) {
+      const rSide = String(rw.side || "US").toUpperCase();
+      const rTurn = Number(rw.turn || 1);
+      const rPhase = String(rw.phase || "organization");
+      const rUnits = (rw.units as Dict[]) || [];
+      const waveKeys: Record<string, number> = {};
+      for (const ru of rUnits) {
+        const ukey = String(ru.unit_key || ru.unit_id || "Unit")
+          .replace(/^(US_|GE_|IT_)/i, "")
+          .replace(/_/g, " ");
+        waveKeys[ukey] = (waveKeys[ukey] || 0) + 1;
+      }
+      if (!reinforcementsBySide[rSide]) {
+        reinforcementsBySide[rSide] = { count: 0, waves: [] };
+      }
+      reinforcementsBySide[rSide].count += rUnits.length;
+      reinforcementsBySide[rSide].waves.push({
+        turn: rTurn,
+        phase: rPhase,
+        count: rUnits.length,
+        keys: waveKeys,
+      });
+    }
+
+    const attackerSide = String(activeOverlay?.attacker_side || "US").toUpperCase();
+    const defenderSide = String(activeOverlay?.defender_side || (attackerSide === "US" ? "IT" : "US")).toUpperCase();
+
+    // Purely dynamic Title, Subtitle, Description from activeOverlay
     const title = String(
       activeOverlay?.name ||
-      (isMettete ? "Mettete i piedi a terra" : isCittadina ? "Battaglia Cittadina" : (rawId ? rawId.replace(/_/g, " ").toUpperCase() : "Tactical Scenario"))
+      activeOverlay?.title ||
+      (rawId ? rawId.replace(/_/g, " ").toUpperCase() : "Tactical Scenario")
     );
     const subtitle = String(
       activeOverlay?.subtitle ||
-      (isMettete
-        ? "Scenario 1 – Amphibious Assault & Fortified Beachhead"
-        : isCittadina
-        ? "Scenario 2.1 – House to House Urban Combat"
-        : `Tactical Mission (${shape[0]}x${shape[1]} Hexes)`)
+      `Tactical Scenario (${shape[0]}×${shape[1]} Hexes)`
     );
     const desc = String(
       activeOverlay?.description ||
-      (isMettete
-        ? "Allied amphibious infantry assault contesting fortified Axis positions with bunkers, casemates, minefields and wire obstacles."
-        : isCittadina
-        ? "Intense infantry combat in urban sector contesting control points in multi-story buildings, casemates, and emplacements with mortar and sniper support."
-        : "Tactical wargame simulation contesting critical objectives and victory hexes.")
+      `Tactical combat between ${attackerSide} and ${defenderSide} contesting objective VPs.`
     );
     const idLabel = String(activeOverlay?.scenario_id || rawId || "scenario");
 
-    const attackerSide = String(activeOverlay?.attacker_side || "US").toUpperCase();
-    const defenderSide = String(activeOverlay?.defender_side || (attackerSide === "US" ? (isCittadina ? "IT" : "GE") : "US")).toUpperCase();
-
     return {
-      isMettete,
-      isCittadina,
       title,
       subtitle,
       idLabel,
@@ -1034,6 +1185,7 @@ export function MatchReplayTab({
       shapeText: `${shape[0]}×${shape[1]} hex`,
       totalVps: vpMap.length,
       unitsBySide,
+      reinforcementsBySide,
       victoryOutcomes: (activeOverlay?.victory_outcomes || {}) as Dict,
       maxTurns: Number(activeOverlay?.max_turns || maxTurns || 8),
     };
@@ -1041,7 +1193,7 @@ export function MatchReplayTab({
 
   const factions = useMemo(() => {
     const sides = Object.keys(scenarioBriefing.unitsBySide);
-    const sideList = sides.length > 0 ? sides : (scenarioBriefing.isCittadina ? ["US", "IT"] : ["US", "GE"]);
+    const sideList = sides.length > 0 ? sides : ["US", scenarioBriefing.defenderSide || "IT"];
 
     // Dynamic Victory Requirements from victory_outcomes
     const vo = scenarioBriefing.victoryOutcomes as Dict;
@@ -1087,6 +1239,9 @@ export function MatchReplayTab({
         ? "linear-gradient(135deg, rgba(127, 29, 29, 0.35), rgba(15, 23, 42, 0.65))"
         : "linear-gradient(135deg, rgba(6, 78, 59, 0.35), rgba(15, 23, 42, 0.65))";
 
+      const ctrlRaw = controllerMap[side] || controllerMap[side.toUpperCase()] || "";
+      const controller = getControllerBadgeInfo(ctrlRaw);
+
       let mission = "";
       if (isAttacker) {
         if (majorVictoryThreshold > 0 && majorVictoryThreshold !== victoryThreshold) {
@@ -1101,6 +1256,21 @@ export function MatchReplayTab({
       const data = scenarioBriefing.unitsBySide[side] || { total: 0, alive: 0, keys: {} };
       const keyBreakdown = Object.entries(data.keys).map(([k, count]) => `${count}x ${k}`).join(" · ");
 
+      const rData = (scenarioBriefing.reinforcementsBySide || {})[side];
+      const reinforcementsCount = rData ? rData.count : 0;
+      const initialTotal = data.total;
+      const totalForces = initialTotal + reinforcementsCount;
+
+      let reinforcementsInfo = "";
+      if (rData && rData.waves.length > 0) {
+        reinforcementsInfo = rData.waves
+          .map((w) => {
+            const wBreakdown = Object.entries(w.keys).map(([k, count]) => `${count}x ${k}`).join(" · ");
+            return `+${w.count} units on Turn ${w.turn} (${wBreakdown})`;
+          })
+          .join("; ");
+      }
+
       return {
         side,
         flag,
@@ -1109,16 +1279,21 @@ export function MatchReplayTab({
         roleColor,
         borderColor,
         bgGrad,
+        controller,
         mission,
         total: data.total,
         alive: data.alive,
+        initialTotal,
+        reinforcementsCount,
+        reinforcementsInfo,
+        totalForces,
         keyBreakdown: keyBreakdown || `${data.total} units`,
         fortifications: !isAttacker && fortSummary ? fortSummary : null,
       };
     });
-  }, [scenarioBriefing, fortSummary]);
+  }, [scenarioBriefing, fortSummary, controllerMap]);
 
-  // Parse Action vector and targets
+  // Parse Action vector and targets with pre/post status resolution
   const actionVector = useMemo(() => {
     const actionId = String(currentStep.action_id || "");
     const parts = actionId.split(":");
@@ -1127,8 +1302,29 @@ export function MatchReplayTab({
 
     const actorUnit = units.find((u) => u.unit_id === actorId);
 
-    let fromQ: number | null = actorUnit && Number.isFinite(actorUnit.q) ? Number(actorUnit.q) : null;
-    let fromR: number | null = actorUnit && Number.isFinite(actorUnit.r) ? Number(actorUnit.r) : null;
+    // Look up previous step units to find exact origin and pre-action health
+    const prevUnits = prevStep && Array.isArray(prevStep.units) ? (prevStep.units as Dict[]) : [];
+    const prevActor = prevUnits.find((u) => String(u.unit_id) === actorId);
+
+    // Initial scenario units fallback if step 0
+    const rawScenarioUnits = (activeOverlay?.scenario_units as Dict[]) || [];
+    const initialActor = rawScenarioUnits.find((u) => String(u.unit_id) === actorId);
+
+    // Determine fromQ, fromR (Origin position BEFORE this step action was executed)
+    let fromQ: number | null = null;
+    let fromR: number | null = null;
+
+    if (prevActor && Number.isFinite(prevActor.q) && Number.isFinite(prevActor.r)) {
+      fromQ = Number(prevActor.q);
+      fromR = Number(prevActor.r);
+    } else if (initialActor && Number.isFinite(initialActor.q) && Number.isFinite(initialActor.r)) {
+      fromQ = Number(initialActor.q);
+      fromR = Number(initialActor.r);
+    } else if (actorUnit && Number.isFinite(actorUnit.q) && Number.isFinite(actorUnit.r)) {
+      fromQ = Number(actorUnit.q);
+      fromR = Number(actorUnit.r);
+    }
+
     let toQ: number | null = null;
     let toR: number | null = null;
     let targetUnitId: string | null = null;
@@ -1136,10 +1332,10 @@ export function MatchReplayTab({
     const isMove = !isFire && (kind.includes("MOVE") || kind.includes("ASSAULT"));
 
     if (isFire) {
-      // Find target unit id across tokens (e.g. FIRE_MOVE:US_2:RANGED_DIRECT:US_2:IT_1:0:10)
+      // Find target unit id across tokens (e.g. OPPORTUNITY_FIRE:IT_6:US_8 or FIRE_MOVE:US_2:RANGED_DIRECT:US_2:IT_1:0:10)
       for (let i = 2; i < parts.length; i++) {
         const pStr = parts[i];
-        if (pStr && pStr !== actorId && units.some((u) => u.unit_id === pStr)) {
+        if (pStr && pStr !== actorId && (units.some((u) => u.unit_id === pStr) || prevUnits.some((u) => u.unit_id === pStr))) {
           targetUnitId = pStr;
           break;
         }
@@ -1148,7 +1344,7 @@ export function MatchReplayTab({
         targetUnitId = parts[2];
       }
       if (targetUnitId) {
-        const targetUnit = units.find((u) => u.unit_id === targetUnitId);
+        const targetUnit = units.find((u) => u.unit_id === targetUnitId) || prevUnits.find((u) => u.unit_id === targetUnitId);
         if (targetUnit && Number.isFinite(targetUnit.q) && Number.isFinite(targetUnit.r)) {
           toQ = Number(targetUnit.q);
           toR = Number(targetUnit.r);
@@ -1176,25 +1372,84 @@ export function MatchReplayTab({
       toR = Number(currentStep.target_r);
     }
 
-    // Strict numerical sanity check (prevent any NaN from leaking)
+    // If still no toQ/toR for Move, use unit current position (where it arrived)
+    if (isMove && (toQ === null || toR === null) && actorUnit && Number.isFinite(actorUnit.q) && Number.isFinite(actorUnit.r)) {
+      toQ = Number(actorUnit.q);
+      toR = Number(actorUnit.r);
+    }
+
+    // Strict numerical sanity check
     if (toQ !== null && !Number.isFinite(toQ)) toQ = null;
     if (toR !== null && !Number.isFinite(toR)) toR = null;
     if (fromQ !== null && !Number.isFinite(fromQ)) fromQ = null;
     if (fromR !== null && !Number.isFinite(fromR)) fromR = null;
 
+    // Acting Unit Health and Status Before and After
+    const actorHpPre = prevActor ? Number(prevActor.hp ?? 4.0) : (initialActor ? Number(initialActor.hp ?? 4.0) : (actorUnit ? Number(actorUnit.hp ?? 4.0) : 4.0));
+    const actorHpPost = actorUnit ? Number(actorUnit.hp ?? actorHpPre) : actorHpPre;
+    const actorAlivePre = prevActor ? (prevActor.alive !== false && actorHpPre > 0) : true;
+    const actorAlivePost = actorUnit ? (actorUnit.alive !== false && actorHpPost > 0) : false;
+
+    // Target Unit Health and Status Before and After (for combat actions)
+    let targetHpPre: number | null = null;
+    let targetHpPost: number | null = null;
+    let targetAlivePre: boolean | null = null;
+    let targetAlivePost: boolean | null = null;
+    let targetUnitName = "";
+    let targetUnitSide = "";
+
+    if (targetUnitId) {
+      const prevTarget = prevUnits.find((u) => String(u.unit_id) === targetUnitId);
+      const currTarget = units.find((u) => String(u.unit_id) === targetUnitId);
+      const initTarget = rawScenarioUnits.find((u) => String(u.unit_id) === targetUnitId);
+
+      targetHpPre = prevTarget ? Number(prevTarget.hp ?? 4.0) : (initTarget ? Number(initTarget.hp ?? 4.0) : (currTarget ? Number(currTarget.hp ?? 4.0) : 4.0));
+      targetHpPost = currTarget ? Number(currTarget.hp ?? targetHpPre) : targetHpPre;
+      targetAlivePre = prevTarget ? (prevTarget.alive !== false && targetHpPre > 0) : true;
+      targetAlivePost = currTarget ? (currTarget.alive !== false && targetHpPost > 0) : false;
+
+      const su = scenarioUnitMap.get(targetUnitId);
+      targetUnitName = su ? su.unit_key.replace(/^(US_|GE_|IT_)/i, "").replace(/_/g, " ") : targetUnitId;
+      targetUnitSide = su ? su.side : (targetUnitId.split("_")[0] || "");
+    }
+
+    const actorUnitName = actorUnit ? (scenarioUnitMap.get(actorId)?.unit_key || actorUnit.unit_key || actorId).replace(/^(US_|GE_|IT_)/i, "").replace(/_/g, " ") : actorId;
+    const actorSide = actorUnit ? actorUnit.side : (actorId.split("_")[0] || "");
+
+    // Compute distance in hexes between origin and destination
+    let hexDistance = 0;
+    if (fromQ !== null && fromR !== null && toQ !== null && toR !== null) {
+      const dq = toQ - fromQ;
+      const dr = toR - fromR;
+      hexDistance = Math.max(Math.abs(dq), Math.abs(dr), Math.abs(dq + dr));
+    }
+
     return {
       actionId,
       kind,
       actorId,
+      actorSide,
+      actorUnitName,
       targetUnitId,
+      targetUnitSide,
+      targetUnitName,
       fromQ,
       fromR,
       toQ,
       toR,
       isFire,
       isMove,
+      actorHpPre,
+      actorHpPost,
+      actorAlivePre,
+      actorAlivePost,
+      targetHpPre,
+      targetHpPost,
+      targetAlivePre,
+      targetAlivePost,
+      hexDistance,
     };
-  }, [currentStep, units]);
+  }, [currentStep, prevStep, units, activeOverlay, scenarioUnitMap]);
 
   const getStepDetails = useCallback((s: ReplayStepRow, idx: number) => {
     const actionParts = String(s.action_id || "").split(":");
@@ -1322,6 +1577,37 @@ export function MatchReplayTab({
   const usUnits = useMemo(() => units.filter((u) => u.side?.toUpperCase() === "US"), [units]);
   const itUnits = useMemo(() => units.filter((u) => u.side?.toUpperCase() === "IT" || u.side?.toUpperCase() === "GE"), [units]);
 
+  // Memoized Board Geometry for high-performance rendering and hover picking
+  const boardGeometry = useMemo(() => {
+    const [shapeW, shapeH] = scenarioShape;
+    const minQ = 0;
+    const maxQ = Math.max(1, (Number.isFinite(shapeW) ? shapeW : 18) - 1);
+    const minR = 0;
+    const maxR = Math.max(1, (Number.isFinite(shapeH) ? shapeH : 12) - 1);
+
+    const oddRRaw = (q: number, r: number) => ({
+      x: Math.sqrt(3) * (q + 0.5 * (r % 2)) + Math.sqrt(3) / 2,
+      y: 1.5 * r + 1.0,
+    });
+
+    const raws: Array<{ x: number; y: number; q: number; r: number }> = [];
+    for (let r = minR; r <= maxR; r += 1) {
+      for (let q = minQ; q <= maxQ; q += 1) {
+        raws.push({ ...oddRRaw(q, r), q, r });
+      }
+    }
+
+    const minX = Math.min(...raws.map((p) => p.x));
+    const maxX = Math.max(...raws.map((p) => p.x));
+    const minY = Math.min(...raws.map((p) => p.y));
+    const maxY = Math.max(...raws.map((p) => p.y));
+
+    const spanX = Math.max(1e-6, maxX - minX + Math.sqrt(3));
+    const spanY = Math.max(1e-6, maxY - minY + 2.0);
+
+    return { raws, minX, maxX, minY, maxY, spanX, spanY, oddRRaw };
+  }, [scenarioShape]);
+
   // High-DPI Hex Grid Canvas Renderer
   useEffect(() => {
     const c = canvasRef.current;
@@ -1351,33 +1637,7 @@ export function MatchReplayTab({
     ctx.fillStyle = grad;
     ctx.fillRect(0, 0, cssWidth, cssHeight);
 
-    // Compute coordinate bounding box strictly using scenario shape
-    const [shapeW, shapeH] = scenarioShape;
-    const minQ = 0;
-    const maxQ = Math.max(1, (Number.isFinite(shapeW) ? shapeW : 18) - 1);
-    const minR = 0;
-    const maxR = Math.max(1, (Number.isFinite(shapeH) ? shapeH : 12) - 1);
-
-    // Odd-r Pointy-Topped Hexagon Geometry
-    const oddRRaw = (q: number, r: number) => ({
-      x: Math.sqrt(3) * (q + 0.5 * (r % 2)) + Math.sqrt(3) / 2,
-      y: 1.5 * r + 1.0,
-    });
-
-    const raws: Array<{ x: number; y: number; q: number; r: number }> = [];
-    for (let r = minR; r <= maxR; r += 1) {
-      for (let q = minQ; q <= maxQ; q += 1) {
-        raws.push({ ...oddRRaw(q, r), q, r });
-      }
-    }
-
-    const minX = Math.min(...raws.map((p) => p.x));
-    const maxX = Math.max(...raws.map((p) => p.x));
-    const minY = Math.min(...raws.map((p) => p.y));
-    const maxY = Math.max(...raws.map((p) => p.y));
-
-    const spanX = Math.max(1e-6, maxX - minX + Math.sqrt(3));
-    const spanY = Math.max(1e-6, maxY - minY + 2.0);
+    const { raws, minX, minY, spanX, spanY, oddRRaw } = boardGeometry;
     const pad = 16;
     const baseScaleX = (cssWidth - pad * 2) / spanX;
     const baseScaleY = (cssHeight - pad * 2) / spanY;
@@ -1399,18 +1659,22 @@ export function MatchReplayTab({
     const drawHex = (x: number, y: number, size: number, stroke: string, fill: string, lineWidth = 1) => {
       ctx.beginPath();
       for (let i = 0; i < 6; i += 1) {
-        const a = (Math.PI / 180) * (60 * i - 30);
-        const xx = x + size * Math.cos(a);
-        const yy = y + size * Math.sin(a);
+        const off = HEX_UNIT_OFFSETS[i];
+        const xx = x + size * off.dx;
+        const yy = y + size * off.dy;
         if (i === 0) ctx.moveTo(xx, yy);
         else ctx.lineTo(xx, yy);
       }
       ctx.closePath();
-      ctx.fillStyle = fill;
-      ctx.fill();
-      ctx.strokeStyle = stroke;
-      ctx.lineWidth = lineWidth;
-      ctx.stroke();
+      if (fill && fill !== "transparent") {
+        ctx.fillStyle = fill;
+        ctx.fill();
+      }
+      if (stroke && stroke !== "transparent") {
+        ctx.strokeStyle = stroke;
+        ctx.lineWidth = lineWidth;
+        ctx.stroke();
+      }
     };
 
     // 0. Draw Scenario Illustrated Map Pieces (Buildings, streets, rivers, groves)
@@ -1513,35 +1777,32 @@ export function MatchReplayTab({
           const threatBorder = threatVal >= 0.50 ? "#ef4444" : "rgba(245, 158, 11, 0.6)";
           drawHex(p.x, p.y, scale * 0.95, threatBorder, threatColor, threatVal >= 0.50 ? 2 : 1);
 
-          // Threat numerical percentage on higher threat hexes
+          // Threat numerical percentage on higher threat hexes (fast crisp text outline)
           if (threatVal >= 0.25) {
-            ctx.save();
-            ctx.fillStyle = threatVal >= 0.60 ? "#fef08a" : "#fef3c7";
-            ctx.shadowColor = "rgba(0, 0, 0, 0.95)";
-            ctx.shadowBlur = 4;
+            const threatLabel = `${Math.round(threatVal * 100)}%`;
             ctx.font = `bold ${Math.max(8, Math.floor(scale * 0.28))}px sans-serif`;
             ctx.textAlign = "center";
             ctx.textBaseline = "middle";
-            ctx.fillText(`${Math.round(threatVal * 100)}%`, p.x, p.y + scale * 0.36);
-            ctx.restore();
+            ctx.lineWidth = 2.5;
+            ctx.strokeStyle = "rgba(0, 0, 0, 0.95)";
+            ctx.strokeText(threatLabel, p.x, p.y + scale * 0.36);
+            ctx.fillStyle = threatVal >= 0.60 ? "#fef08a" : "#fef3c7";
+            ctx.fillText(threatLabel, p.x, p.y + scale * 0.36);
           }
         }
       }
 
-      // Alphanumeric Coordinate label (like A1, B2) matching assault_ai_ui
+      // Alphanumeric Coordinate label (like A1, B2) with fast crisp outline
       if (showCoords) {
         const coordLabel = axialToLabel(cell.q, cell.r);
-        ctx.save();
-        ctx.shadowColor = "rgba(0, 0, 0, 0.9)";
-        ctx.shadowBlur = 3;
-        ctx.shadowOffsetX = 1;
-        ctx.shadowOffsetY = 1;
-        ctx.fillStyle = isHovered ? "#38bdf8" : hasDrawnAnyMapPiece ? "rgba(245, 245, 245, 0.9)" : "rgba(148, 163, 184, 0.75)";
         ctx.font = `bold ${Math.max(7, Math.floor(scale * 0.28))}px monospace`;
         ctx.textAlign = "center";
         ctx.textBaseline = "middle";
+        ctx.lineWidth = 2;
+        ctx.strokeStyle = "rgba(0, 0, 0, 0.9)";
+        ctx.strokeText(coordLabel, p.x, p.y - scale * 0.44);
+        ctx.fillStyle = isHovered ? "#38bdf8" : hasDrawnAnyMapPiece ? "rgba(245, 245, 245, 0.9)" : "rgba(148, 163, 184, 0.75)";
         ctx.fillText(coordLabel, p.x, p.y - scale * 0.44);
-        ctx.restore();
       }
 
       // Terrain short label if illustrated map piece is not present
@@ -1686,8 +1947,67 @@ export function MatchReplayTab({
       }
     }
 
-    // 4. Draw Target Hex Marker (Only for real targeting actions: fire or move)
+    // 4a. Draw Origin Hex Marker (Starting position before the move/attack)
     if (
+      showVectors &&
+      (actionVector.isFire || actionVector.isMove) &&
+      actionVector.fromQ !== null &&
+      actionVector.fromR !== null &&
+      actionVector.toQ !== null &&
+      actionVector.toR !== null &&
+      Number.isFinite(actionVector.fromQ) &&
+      Number.isFinite(actionVector.fromR) &&
+      !(actionVector.fromQ === actionVector.toQ && actionVector.fromR === actionVector.toR)
+    ) {
+      const op = toPixel(actionVector.fromQ, actionVector.fromR);
+      const isFire = actionVector.isFire;
+      const originStroke = isFire ? "#f59e0b" : "#0284c7";
+      const originFill = isFire ? "rgba(245, 158, 11, 0.25)" : "rgba(2, 132, 199, 0.25)";
+
+      // Origin Hex Border & Shading
+      drawHex(op.x, op.y, scale * 1.05, originStroke, originFill, 2.5);
+
+      // Origin Marker Pin Circle
+      ctx.save();
+      ctx.beginPath();
+      ctx.arc(op.x, op.y, scale * 0.22, 0, Math.PI * 2);
+      ctx.fillStyle = originStroke;
+      ctx.shadowColor = originStroke;
+      ctx.shadowBlur = 6;
+      ctx.fill();
+
+      // Inner white dot
+      ctx.beginPath();
+      ctx.arc(op.x, op.y, scale * 0.09, 0, Math.PI * 2);
+      ctx.fillStyle = "#ffffff";
+      ctx.fill();
+
+      // Tactical Badge Pill at top of hex: "📍 START" or "🎯 FIRER"
+      const labelText = isFire ? "🎯 FIRER" : "📍 START";
+      ctx.font = `bold ${Math.max(8, Math.floor(scale * 0.26))}px sans-serif`;
+      const textMetrics = ctx.measureText(labelText);
+      const pillW = textMetrics.width + 10;
+      const pillH = Math.max(13, scale * 0.32);
+      const pillY = op.y - scale * 0.65;
+
+      ctx.fillStyle = "rgba(15, 23, 42, 0.88)";
+      ctx.strokeStyle = originStroke;
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.roundRect(op.x - pillW / 2, pillY - pillH / 2, pillW, pillH, 3);
+      ctx.fill();
+      ctx.stroke();
+
+      ctx.fillStyle = "#ffffff";
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillText(labelText, op.x, pillY);
+      ctx.restore();
+    }
+
+    // 4b. Draw Target / Destination Hex Marker
+    if (
+      showVectors &&
       (actionVector.isFire || actionVector.isMove) &&
       actionVector.toQ !== null &&
       actionVector.toR !== null &&
@@ -1696,23 +2016,62 @@ export function MatchReplayTab({
     ) {
       const tp = toPixel(actionVector.toQ, actionVector.toR);
       const isFire = actionVector.isFire;
-      const targetStroke = isFire ? "#ef4444" : "#facc15";
+      const targetStroke = isFire ? "#ef4444" : "#22c55e";
+      const targetFill = isFire ? "rgba(239, 68, 68, 0.25)" : "rgba(34, 197, 94, 0.22)";
 
       // Tactical Reticle
-      drawHex(tp.x, tp.y, scale * 1.05, targetStroke, isFire ? "rgba(239, 68, 68, 0.20)" : "rgba(250, 204, 21, 0.20)", 2.5);
+      drawHex(tp.x, tp.y, scale * 1.05, targetStroke, targetFill, 2.5);
 
-      // Crosshairs
-      ctx.beginPath();
+      ctx.save();
+      if (isFire) {
+        // Crosshairs for combat target
+        ctx.beginPath();
+        ctx.strokeStyle = targetStroke;
+        ctx.lineWidth = 2.5;
+        ctx.shadowColor = "#f87171";
+        ctx.shadowBlur = 6;
+        ctx.moveTo(tp.x - scale * 0.35, tp.y);
+        ctx.lineTo(tp.x + scale * 0.35, tp.y);
+        ctx.moveTo(tp.x, tp.y - scale * 0.35);
+        ctx.lineTo(tp.x, tp.y + scale * 0.35);
+        ctx.stroke();
+
+        ctx.beginPath();
+        ctx.arc(tp.x, tp.y, scale * 0.20, 0, Math.PI * 2);
+        ctx.stroke();
+      } else {
+        // Bullseye target concentric circle for movement destination
+        ctx.beginPath();
+        ctx.strokeStyle = targetStroke;
+        ctx.lineWidth = 2;
+        ctx.arc(tp.x, tp.y, scale * 0.25, 0, Math.PI * 2);
+        ctx.stroke();
+      }
+
+      // Tactical Badge Pill at bottom of hex: "🏁 DEST" or "💥 TARGET"
+      const labelText = isFire ? "💥 TARGET" : "🏁 DEST";
+      ctx.font = `bold ${Math.max(8, Math.floor(scale * 0.26))}px sans-serif`;
+      const textMetrics = ctx.measureText(labelText);
+      const pillW = textMetrics.width + 10;
+      const pillH = Math.max(13, scale * 0.32);
+      const pillY = tp.y + scale * 0.65;
+
+      ctx.fillStyle = "rgba(15, 23, 42, 0.88)";
       ctx.strokeStyle = targetStroke;
-      ctx.lineWidth = 2;
-      ctx.moveTo(tp.x - scale * 0.3, tp.y);
-      ctx.lineTo(tp.x + scale * 0.3, tp.y);
-      ctx.moveTo(tp.x, tp.y - scale * 0.3);
-      ctx.lineTo(tp.x, tp.y + scale * 0.3);
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.roundRect(tp.x - pillW / 2, pillY - pillH / 2, pillW, pillH, 3);
+      ctx.fill();
       ctx.stroke();
+
+      ctx.fillStyle = "#ffffff";
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillText(labelText, tp.x, pillY);
+      ctx.restore();
     }
 
-    // 5. Draw Action Trajectory Vector (Movement Arrow or Fire Line)
+    // 5. Draw Action Trajectory Vector (Movement Arrow or Combat Ballistic Line)
     if (
       showVectors &&
       (actionVector.isFire || actionVector.isMove) &&
@@ -1730,45 +2089,76 @@ export function MatchReplayTab({
       const pTo = toPixel(actionVector.toQ, actionVector.toR);
 
       ctx.save();
+      const angle = Math.atan2(pTo.y - pFrom.y, pTo.x - pFrom.x);
+      const headLen = Math.max(12, scale * 0.35);
+
       if (actionVector.isFire) {
-        // Red laser/bullet line for combat
+        // Red laser trajectory for combat
         ctx.beginPath();
         ctx.moveTo(pFrom.x, pFrom.y);
         ctx.lineTo(pTo.x, pTo.y);
         ctx.strokeStyle = "#ef4444";
-        ctx.lineWidth = 3;
+        ctx.lineWidth = 3.5;
         ctx.shadowColor = "#f87171";
-        ctx.shadowBlur = 8;
+        ctx.shadowBlur = 10;
         ctx.stroke();
 
-        // Combat Impact Explosion Icon
-        ctx.fillStyle = "#facc15";
-        ctx.font = `${Math.max(12, Math.floor(scale * 0.6))}px sans-serif`;
-        ctx.textAlign = "center";
-        ctx.textBaseline = "middle";
-        ctx.fillText("💥", pTo.x, pTo.y);
-      } else if (actionVector.isMove) {
-        // Cyan dashed arrow for movement
-        ctx.beginPath();
-        ctx.setLineDash([6, 4]);
-        ctx.moveTo(pFrom.x, pFrom.y);
-        ctx.lineTo(pTo.x, pTo.y);
-        ctx.strokeStyle = "#38bdf8";
-        ctx.lineWidth = 2.5;
-        ctx.shadowColor = "#38bdf8";
-        ctx.shadowBlur = 6;
-        ctx.stroke();
-        ctx.setLineDash([]);
-
-        // Arrow head
-        const angle = Math.atan2(pTo.y - pFrom.y, pTo.x - pFrom.x);
-        const headLen = Math.max(6, scale * 0.25);
+        // Arrowhead pointing into target hex
         ctx.beginPath();
         ctx.moveTo(pTo.x, pTo.y);
         ctx.lineTo(pTo.x - headLen * Math.cos(angle - Math.PI / 6), pTo.y - headLen * Math.sin(angle - Math.PI / 6));
         ctx.lineTo(pTo.x - headLen * Math.cos(angle + Math.PI / 6), pTo.y - headLen * Math.sin(angle + Math.PI / 6));
+        ctx.closePath();
+        ctx.fillStyle = "#ef4444";
+        ctx.fill();
+
+        // Combat Impact Explosion Icon
+        ctx.fillStyle = "#facc15";
+        ctx.font = `${Math.max(14, Math.floor(scale * 0.65))}px sans-serif`;
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.fillText("💥", pTo.x, pTo.y);
+      } else if (actionVector.isMove) {
+        // Solid Glowing Cyan Vector Arrow for movement
+        ctx.beginPath();
+        ctx.moveTo(pFrom.x, pFrom.y);
+        ctx.lineTo(pTo.x, pTo.y);
+        ctx.strokeStyle = "#38bdf8";
+        ctx.lineWidth = 3.5;
+        ctx.shadowColor = "#0284c7";
+        ctx.shadowBlur = 8;
+        ctx.stroke();
+
+        // Arrowhead
+        ctx.beginPath();
+        ctx.moveTo(pTo.x, pTo.y);
+        ctx.lineTo(pTo.x - headLen * Math.cos(angle - Math.PI / 6), pTo.y - headLen * Math.sin(angle - Math.PI / 6));
+        ctx.lineTo(pTo.x - headLen * Math.cos(angle + Math.PI / 6), pTo.y - headLen * Math.sin(angle + Math.PI / 6));
+        ctx.closePath();
         ctx.fillStyle = "#38bdf8";
         ctx.fill();
+
+        // Midpoint Distance Badge Pill
+        const midX = (pFrom.x + pTo.x) / 2;
+        const midY = (pFrom.y + pTo.y) / 2;
+        const distText = `➔ ${actionVector.hexDistance} hex${actionVector.hexDistance > 1 ? "es" : ""}`;
+        ctx.font = `bold ${Math.max(8, Math.floor(scale * 0.24))}px sans-serif`;
+        const metrics = ctx.measureText(distText);
+        const mW = metrics.width + 10;
+        const mH = Math.max(12, scale * 0.28);
+
+        ctx.fillStyle = "rgba(15, 23, 42, 0.90)";
+        ctx.strokeStyle = "#38bdf8";
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.roundRect(midX - mW / 2, midY - mH / 2, mW, mH, 3);
+        ctx.fill();
+        ctx.stroke();
+
+        ctx.fillStyle = "#e0f2fe";
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.fillText(distText, midX, midY);
       }
       ctx.restore();
     }
@@ -2004,33 +2394,9 @@ export function MatchReplayTab({
     const rect = c.getBoundingClientRect();
     const x = e.clientX - rect.left;
     const y = e.clientY - rect.top;
+    setMousePos({ x, y });
 
-    // Inverse odd-r hex picking strictly using scenario bounds and panOffset
-    const [shapeW, shapeH] = scenarioShape;
-    const minQ = 0;
-    const maxQ = Math.max(1, (Number.isFinite(shapeW) ? shapeW : 18) - 1);
-    const minR = 0;
-    const maxR = Math.max(1, (Number.isFinite(shapeH) ? shapeH : 12) - 1);
-
-    const oddRRaw = (q: number, r: number) => ({
-      x: Math.sqrt(3) * (q + 0.5 * (r % 2)) + Math.sqrt(3) / 2,
-      y: 1.5 * r + 1.0,
-    });
-
-    const raws: Array<{ x: number; y: number; q: number; r: number }> = [];
-    for (let r = minR; r <= maxR; r += 1) {
-      for (let q = minQ; q <= maxQ; q += 1) {
-        raws.push({ ...oddRRaw(q, r), q, r });
-      }
-    }
-
-    const minX = Math.min(...raws.map((p) => p.x));
-    const maxX = Math.max(...raws.map((p) => p.x));
-    const minY = Math.min(...raws.map((p) => p.y));
-    const maxY = Math.max(...raws.map((p) => p.y));
-
-    const spanX = Math.max(1e-6, maxX - minX + Math.sqrt(3));
-    const spanY = Math.max(1e-6, maxY - minY + 2.0);
+    const { raws, minX, minY, spanX, spanY } = boardGeometry;
     const pad = 16;
     const baseScaleX = (rect.width - pad * 2) / spanX;
     const baseScaleY = (rect.height - pad * 2) / spanY;
@@ -2052,9 +2418,13 @@ export function MatchReplayTab({
     }
 
     if (closestCell && closestCell.dist < scale * 0.95) {
-      setHoveredHex({ q: closestCell.q, r: closestCell.r, x, y });
+      if (!hoveredHex || hoveredHex.q !== closestCell.q || hoveredHex.r !== closestCell.r) {
+        setHoveredHex({ q: closestCell.q, r: closestCell.r });
+      }
     } else {
-      setHoveredHex(null);
+      if (hoveredHex) {
+        setHoveredHex(null);
+      }
     }
   };
 
@@ -2127,6 +2497,21 @@ export function MatchReplayTab({
             <span style={{ fontSize: 12, color: "#94a3b8", fontWeight: 500 }}>
               — {scenarioBriefing.subtitle}
             </span>
+            {currentEpisodeMeta?.matchup_label && (
+              <span
+                style={{
+                  fontSize: 11,
+                  color: "#c084fc",
+                  background: "rgba(168, 85, 247, 0.15)",
+                  padding: "2px 8px",
+                  borderRadius: 4,
+                  border: "1px solid rgba(168, 85, 247, 0.35)",
+                  fontWeight: 600,
+                }}
+              >
+                ⚔️ {currentEpisodeMeta.matchup_label}
+              </span>
+            )}
           </div>
 
           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
@@ -2200,8 +2585,36 @@ export function MatchReplayTab({
                       </span>
                       <span style={{ fontSize: 11, color: "#cbd5e1" }}>
                         <b>{f.alive}</b>/{f.total} active
+                        {f.reinforcementsCount > 0 && (
+                          <span style={{ fontSize: 10, color: "#38bdf8", marginLeft: 4 }}>
+                            (+{f.reinforcementsCount} scheduled)
+                          </span>
+                        )}
                       </span>
                     </div>
+                  </div>
+
+                  {/* Dedicated Prominent Side Controller Badge */}
+                  <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 11, marginTop: 1, marginBottom: 1 }}>
+                    <span style={{ color: "#94a3b8", fontWeight: 600 }}>🎮 Controller:</span>
+                    <span
+                      style={{
+                        display: "inline-flex",
+                        alignItems: "center",
+                        gap: 5,
+                        fontSize: 11,
+                        fontWeight: 700,
+                        padding: "2px 8px",
+                        borderRadius: 4,
+                        background: f.controller.bg,
+                        color: f.controller.color,
+                        border: `1px solid ${f.controller.border}`,
+                        boxShadow: "0 1px 3px rgba(0,0,0,0.25)",
+                      }}
+                    >
+                      <span>{f.controller.icon}</span>
+                      <span>{f.controller.label}</span>
+                    </span>
                   </div>
 
                   <div style={{ fontSize: 11, color: "#e2e8f0" }}>
@@ -2210,9 +2623,23 @@ export function MatchReplayTab({
                   </div>
 
                   <div style={{ fontSize: 11, color: "#cbd5e1" }}>
-                    <span style={{ color: "#94a3b8" }}>⚔️ Forces: </span>
-                    <span style={{ color: "#e2e8f0" }}>{f.keyBreakdown}</span>
+                    <span style={{ color: "#94a3b8" }}>⚔️ Initial Force: </span>
+                    <span style={{ color: "#e2e8f0" }}>{f.keyBreakdown} ({f.initialTotal} units)</span>
                   </div>
+
+                  {f.reinforcementsInfo && (
+                    <div style={{ fontSize: 11, color: "#38bdf8" }}>
+                      <span style={{ color: "#0284c7" }}>🪂 Scheduled Reinforcements: </span>
+                      <span>{f.reinforcementsInfo}</span>
+                    </div>
+                  )}
+
+                  {f.reinforcementsCount > 0 && (
+                    <div style={{ fontSize: 11, color: "#94a3b8" }}>
+                      <span>📊 Total Strength: </span>
+                      <b style={{ color: "#f8fafc" }}>{f.totalForces} units</b> ({f.initialTotal} initial + {f.reinforcementsCount} reinforcements)
+                    </div>
+                  )}
 
                   {f.fortifications && (
                     <div style={{ fontSize: 11, color: "#facc15" }}>
@@ -2289,7 +2716,7 @@ export function MatchReplayTab({
               whiteSpace: "nowrap",
             }}
           >
-            <span>⏱️ TURNO</span>
+            <span>⏱️ TURN</span>
             <span
               style={{
                 color: "#ffffff",
@@ -2339,7 +2766,7 @@ export function MatchReplayTab({
                 minWidth: 84,
               }}
             >
-              {isPlaying ? "⏸ Pausa" : "▶ Play"}
+              {isPlaying ? "⏸ Pause" : "▶ Play"}
             </button>
             <button
               onClick={() => onStepIndexChange((prev) => Math.min(steps.length - 1, prev + 1))}
@@ -2381,7 +2808,7 @@ export function MatchReplayTab({
 
           {/* Turn Jump Dropdown */}
           <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-            <span style={{ fontSize: 11, color: "#94a3b8" }}>Ir a:</span>
+            <span style={{ fontSize: 11, color: "#94a3b8" }}>Jump to:</span>
             <select
               value={clamped}
               onChange={(e) => onStepIndexChange(Number(e.target.value || 0))}
@@ -2476,7 +2903,7 @@ export function MatchReplayTab({
                   fontSize: 11,
                 }}
               >
-                <span>⚪ Neutro:</span>
+                <span>⚪ Neutral:</span>
                 <b style={{ color: "#cbd5e1" }}>{vpTally.NEUTRAL} VPs</b>
               </div>
             )}
@@ -2631,23 +3058,49 @@ export function MatchReplayTab({
                   <span style={{ fontSize: 9, opacity: 0.8 }}>...</span>
                 )}
               </button>
+              <button
+                onClick={() => handleOpenSitrep()}
+                title="Open Autonomous Forensic Situation Report (SitRep) and Causal Profiler"
+                style={{
+                  fontSize: 10,
+                  padding: "2px 8px",
+                  borderRadius: 3,
+                  background: isSitrepOpen ? "#0369a1" : "rgba(14, 165, 233, 0.15)",
+                  color: isSitrepOpen ? "#f0f9ff" : "#38bdf8",
+                  border: `1px solid ${isSitrepOpen ? "#38bdf8" : "#0284c7"}`,
+                  cursor: "pointer",
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: 4,
+                  fontWeight: 700,
+                }}
+              >
+                <span>🎖️ Forensic SitRep</span>
+                {isSitrepLoading && (
+                  <span style={{ fontSize: 9, opacity: 0.8 }}>...</span>
+                )}
+              </button>
             </div>
 
             <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
               <div style={{ display: "flex", alignItems: "center", gap: 2 }}>
                 <span style={{ fontSize: 10, color: "#94a3b8" }}>Height:</span>
-                {[460, 520, 600, 680].map((h) => (
+                {[560, 680, 800, 920, 1050].map((h) => (
                   <button
                     key={h}
-                    onClick={() => setMapHeight(h)}
+                    onClick={() => {
+                      setMapHeight(h);
+                      if (theaterMode) setTheaterMode(false);
+                    }}
                     style={{
                       fontSize: 10,
-                      padding: "2px 5px",
+                      padding: "2px 6px",
                       borderRadius: 3,
-                      background: mapHeight === h ? "#0284c7" : "#0f172a",
-                      color: mapHeight === h ? "#ffffff" : "#94a3b8",
+                      background: !theaterMode && mapHeight === h ? "#0284c7" : "#0f172a",
+                      color: !theaterMode && mapHeight === h ? "#ffffff" : "#94a3b8",
                       border: "1px solid #334155",
                       cursor: "pointer",
+                      fontWeight: !theaterMode && mapHeight === h ? 700 : 400,
                     }}
                   >
                     {h}px
@@ -2656,19 +3109,24 @@ export function MatchReplayTab({
               </div>
               <button
                 onClick={() => setTheaterMode(!theaterMode)}
-                title={theaterMode ? "Volver a vista dividida" : "Expandir mapa a ancho completo"}
+                title={theaterMode ? "Switch to split inspector view" : "Maximize map to full screen viewport"}
                 style={{
                   fontSize: 10,
-                  fontWeight: 600,
-                  padding: "2px 8px",
+                  fontWeight: 700,
+                  padding: "2px 10px",
                   borderRadius: 3,
-                  background: theaterMode ? "#854d0e" : "#1e293b",
-                  color: theaterMode ? "#fef08a" : "#f8fafc",
-                  border: `1px solid ${theaterMode ? "#eab308" : "#475569"}`,
+                  background: theaterMode ? "#0284c7" : "#1e293b",
+                  color: theaterMode ? "#ffffff" : "#38bdf8",
+                  border: `1px solid ${theaterMode ? "#38bdf8" : "#0284c7"}`,
                   cursor: "pointer",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 4,
+                  boxShadow: theaterMode ? "0 0 10px rgba(2, 132, 199, 0.4)" : "none",
                 }}
               >
-                {theaterMode ? "🗗 Dividida" : "🖥️ Maximizar"}
+                <span>{theaterMode ? "🗗" : "🖥️"}</span>
+                <span>{theaterMode ? "Split View" : "Full Viewport"}</span>
               </button>
               {/* Zoom & Pan Toolbar Controls */}
               <div
@@ -2865,6 +3323,30 @@ export function MatchReplayTab({
                   {currentDetails.toPlay}
                 </span>
                 <span style={{ color: "#94a3b8", fontSize: 10 }}>to play</span>
+                {(() => {
+                  const activeCtrl = getControllerBadgeInfo(controllerMap[currentDetails.toPlay] || "");
+                  return (
+                    <span
+                      style={{
+                        display: "inline-flex",
+                        alignItems: "center",
+                        gap: 3,
+                        fontSize: 9,
+                        fontWeight: 700,
+                        padding: "1px 6px",
+                        borderRadius: 3,
+                        background: activeCtrl.bg,
+                        color: activeCtrl.color,
+                        border: `1px solid ${activeCtrl.border}`,
+                        marginLeft: 4,
+                      }}
+                      title={`Side Controller: ${activeCtrl.label}`}
+                    >
+                      <span>{activeCtrl.icon}</span>
+                      <span>{activeCtrl.label}</span>
+                    </span>
+                  );
+                })()}
               </div>
             </div>
 
@@ -2878,7 +3360,8 @@ export function MatchReplayTab({
               style={{
                 width: "100%",
                 maxWidth: theaterMode ? "100%" : `${optimalMapWidth}px`,
-                height: mapHeight,
+                height: theaterMode ? "calc(100vh - 200px)" : `${mapHeight}px`,
+                minHeight: theaterMode ? 760 : undefined,
                 border: "1px solid #334155",
                 borderRadius: 8,
                 display: "block",
@@ -2892,8 +3375,8 @@ export function MatchReplayTab({
               <div
                 style={{
                   position: "absolute",
-                  left: hoveredHex.x > 460 ? hoveredHex.x - 175 : hoveredHex.x + 14,
-                  top: Math.max(10, hoveredHex.y - 40),
+                  left: mousePos.x > 460 ? mousePos.x - 175 : mousePos.x + 14,
+                  top: Math.max(10, mousePos.y - 40),
                   background: "rgba(15, 23, 42, 0.95)",
                   border: "1px solid #38bdf8",
                   borderRadius: 6,
@@ -2982,7 +3465,7 @@ export function MatchReplayTab({
                   </span>
                   <span style={{ color: "#38bdf8" }}>STEP {clamped}</span>
                   <span style={{ color: "#64748b" }}>•</span>
-                  <span>{actionVector.isFire ? "FUEGO / ATAQUE" : actionVector.isMove ? "MOVIMIENTO" : "ACCIÓN"}</span>
+                  <span>{actionVector.isFire ? "FIRE / ATTACK" : actionVector.isMove ? "MOVEMENT" : "ACTION"}</span>
                   {currentDetails.macroPosture && (
                     <>
                       <span style={{ color: "#64748b" }}>•</span>
@@ -3013,7 +3496,7 @@ export function MatchReplayTab({
                           alignItems: "center",
                           gap: 4,
                         }}
-                        title="Nivel 1: Postura Estratégica Macro del Turno"
+                        title="Level 1: Macro Strategic Posture of Turn"
                       >
                         <span>{currentDetails.macroPosture === "DEFENSIVE_HOLD" ? "🛡️" : currentDetails.macroPosture === "ZONE_SUPPRESS" ? "💥" : "⚔️"}</span>
                         <span>{currentDetails.macroPosture}</span>
@@ -3025,7 +3508,51 @@ export function MatchReplayTab({
                   <span style={{ color: currentDetails.toPlay === "US" ? "#60a5fa" : "#34d399" }}>
                     {currentDetails.flag} {currentDetails.unitId}
                   </span>{" "}
+                  {(() => {
+                    const activeCtrl = getControllerBadgeInfo(controllerMap[currentDetails.toPlay] || "");
+                    return (
+                      <span
+                        style={{
+                          display: "inline-flex",
+                          alignItems: "center",
+                          gap: 3,
+                          fontSize: 10,
+                          fontWeight: 700,
+                          padding: "1px 5px",
+                          borderRadius: 3,
+                          background: activeCtrl.bg,
+                          color: activeCtrl.color,
+                          border: `1px solid ${activeCtrl.border}`,
+                        }}
+                      >
+                        <span>{activeCtrl.icon}</span>
+                        <span>{activeCtrl.label}</span>
+                      </span>
+                    );
+                  })()}{" "}
                   ➔ <code style={{ color: "#facc15" }}>{currentDetails.actionId}</code>
+                  {(actionVector.fromQ !== null || actionVector.toQ !== null) && (
+                    <span
+                      style={{
+                        background: "rgba(30, 41, 59, 0.8)",
+                        border: "1px solid #475569",
+                        padding: "1px 6px",
+                        borderRadius: 3,
+                        fontSize: 10,
+                        fontWeight: 600,
+                        color: actionVector.isFire ? "#f87171" : "#38bdf8",
+                        display: "inline-flex",
+                        alignItems: "center",
+                        gap: 3,
+                        marginLeft: 4,
+                      }}
+                      title="Hex Trajectory: Origin -> Destination"
+                    >
+                      <span>📍 ({actionVector.fromQ ?? "?"},{actionVector.fromR ?? "?"})</span>
+                      <span>➔</span>
+                      <span>{actionVector.isFire ? "🎯" : "🏁"} ({actionVector.toQ ?? "?"},{actionVector.toR ?? "?"})</span>
+                    </span>
+                  )}
                   {currentDetails.unitMacroRole && (
                     <span
                       style={{
@@ -3057,9 +3584,9 @@ export function MatchReplayTab({
                         fontWeight: 700,
                         fontSize: 10,
                       }}
-                      title={`Rol Táctico de Escuadra: ${currentDetails.unitMacroRole}`}
+                      title={`Squad Tactical Role: ${currentDetails.unitMacroRole}`}
                     >
-                      {currentDetails.unitMacroRole.includes("FIRE_SUPPORT") ? "🎯 APOYO FUEGO" : currentDetails.unitMacroRole.includes("DEFENDER") ? "🛡️ DEFENSOR VP" : currentDetails.unitMacroRole.includes("SCREEN") ? "👁️ FLANQUEO" : "⚡ PUNTA LANZA"}
+                      {currentDetails.unitMacroRole.includes("FIRE_SUPPORT") ? "🎯 FIRE SUPPORT" : currentDetails.unitMacroRole.includes("DEFENDER") ? "🛡️ VP DEFENDER" : currentDetails.unitMacroRole.includes("SCREEN") ? "👁️ FLANK SCREEN" : "⚡ SPEARHEAD"}
                     </span>
                   )}
                 </div>
@@ -3068,19 +3595,19 @@ export function MatchReplayTab({
 
             <div style={{ display: "flex", gap: 10 }}>
               <div style={{ textAlign: "right" }}>
-                <div className="muted" style={{ fontSize: 10 }}>Daño Causado</div>
+                <div className="muted" style={{ fontSize: 10 }}>Damage Dealt</div>
                 <div style={{ fontSize: 12, fontWeight: 700, color: currentDetails.damage > 0 ? "#ef4444" : "#cbd5e1" }}>
                   {currentDetails.damage.toFixed(2)} dmg
                 </div>
               </div>
               <div style={{ textAlign: "right" }}>
-                <div className="muted" style={{ fontSize: 10 }}>Bajas</div>
+                <div className="muted" style={{ fontSize: 10 }}>Kills</div>
                 <div style={{ fontSize: 12, fontWeight: 700, color: currentDetails.kills > 0 ? "#ef4444" : "#cbd5e1" }}>
                   {currentDetails.kills}
                 </div>
               </div>
               <div style={{ textAlign: "right" }}>
-                <div className="muted" style={{ fontSize: 10 }}>Recompensa</div>
+                <div className="muted" style={{ fontSize: 10 }}>Reward</div>
                 <div style={{ fontSize: 12, fontWeight: 700, color: currentDetails.reward >= 0 ? "#22c55e" : "#ef4444" }}>
                   {currentDetails.reward.toFixed(4)}
                 </div>
@@ -3150,7 +3677,7 @@ export function MatchReplayTab({
                 cursor: "pointer",
               }}
             >
-              📊 VPs & Telemetría
+              📊 VPs & Telemetry
             </button>
           </div>
 
@@ -3354,6 +3881,128 @@ export function MatchReplayTab({
                 </div>
               </div>
 
+              {/* Dedicated Action Execution & Combat Outcome Card */}
+              <div
+                style={{
+                  background: "linear-gradient(180deg, #131d31 0%, #0c1424 100%)",
+                  border: "1px solid #1e40af",
+                  borderRadius: 6,
+                  padding: "10px 12px",
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: 8,
+                  boxShadow: "0 2px 8px rgba(0,0,0,0.3)",
+                }}
+              >
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  <span style={{ fontSize: 11, fontWeight: 800, color: "#38bdf8", textTransform: "uppercase", letterSpacing: 0.5, display: "flex", alignItems: "center", gap: 5 }}>
+                    <span>⚡ Action Execution & Combat Outcome</span>
+                  </span>
+                  <span
+                    style={{
+                      fontSize: 10,
+                      fontWeight: 800,
+                      padding: "2px 6px",
+                      borderRadius: 4,
+                      background: actionVector.isFire ? "rgba(239, 68, 68, 0.2)" : actionVector.isMove ? "rgba(14, 165, 233, 0.2)" : "rgba(148, 163, 184, 0.15)",
+                      color: actionVector.isFire ? "#f87171" : actionVector.isMove ? "#38bdf8" : "#94a3b8",
+                      border: `1px solid ${actionVector.isFire ? "#ef4444" : actionVector.isMove ? "#0284c7" : "#475569"}`,
+                    }}
+                  >
+                    {actionVector.kind}
+                  </span>
+                </div>
+
+                {/* Hex Trajectory Grid: Origin -> Destination */}
+                <div style={{ display: "grid", gridTemplateColumns: "1fr auto 1fr", alignItems: "center", gap: 6, background: "#0b1220", padding: "8px 10px", borderRadius: 4, border: "1px solid #1e293b" }}>
+                  <div>
+                    <div style={{ fontSize: 9, color: "#94a3b8", textTransform: "uppercase", fontWeight: 700 }}>📍 Origin Hex</div>
+                    <div style={{ fontSize: 13, fontWeight: 800, color: "#f8fafc", fontFamily: "monospace" }}>
+                      {actionVector.fromQ !== null && actionVector.fromR !== null ? `(${actionVector.fromQ}, ${actionVector.fromR})` : "-"}
+                    </div>
+                    <div style={{ fontSize: 10, color: "#64748b" }}>
+                      {actionVector.fromQ !== null && actionVector.fromR !== null ? terrainMap.get(`${actionVector.fromQ},${actionVector.fromR}`) || "clear" : ""}
+                    </div>
+                  </div>
+
+                  <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 1 }}>
+                    <span style={{ fontSize: 14, color: actionVector.isFire ? "#ef4444" : "#38bdf8" }}>➔</span>
+                    {actionVector.hexDistance > 0 && (
+                      <span style={{ fontSize: 9, color: "#94a3b8", fontWeight: 600 }}>{actionVector.hexDistance} hex{actionVector.hexDistance > 1 ? "es" : ""}</span>
+                    )}
+                  </div>
+
+                  <div>
+                    <div style={{ fontSize: 9, color: "#94a3b8", textTransform: "uppercase", fontWeight: 700 }}>
+                      {actionVector.isFire ? "🎯 Target Hex" : "🏁 Destination Hex"}
+                    </div>
+                    <div style={{ fontSize: 13, fontWeight: 800, color: actionVector.isFire ? "#f87171" : "#34d399", fontFamily: "monospace" }}>
+                      {actionVector.toQ !== null && actionVector.toR !== null ? `(${actionVector.toQ}, ${actionVector.toR})` : "-"}
+                    </div>
+                    <div style={{ fontSize: 10, color: "#64748b" }}>
+                      {actionVector.toQ !== null && actionVector.toR !== null ? terrainMap.get(`${actionVector.toQ},${actionVector.toR}`) || "clear" : ""}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Units Status (Acting Unit & Opponent Unit) */}
+                <div style={{ display: "grid", gridTemplateColumns: actionVector.isFire || actionVector.targetUnitId ? "1fr 1fr" : "1fr", gap: 6 }}>
+                  {/* Acting Unit Box */}
+                  <div style={{ background: "#0b1220", padding: "6px 8px", borderRadius: 4, borderLeft: `3px solid ${actionVector.actorSide === "US" ? "#3b82f6" : "#10b981"}` }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                      <span style={{ fontSize: 9, color: "#94a3b8", textTransform: "uppercase", fontWeight: 700 }}>Acting Unit</span>
+                      <span style={{ fontSize: 10, fontWeight: 700, color: "#f8fafc" }}>{actionVector.actorSide === "US" ? "🇺🇸" : "🇮🇹"} {actionVector.actorId}</span>
+                    </div>
+                    <div style={{ fontSize: 11, fontWeight: 600, color: "#cbd5e1", marginTop: 1 }}>
+                      {actionVector.actorUnitName}
+                    </div>
+                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: 4 }}>
+                      <span style={{ fontSize: 10, color: "#94a3b8" }}>Health (HP):</span>
+                      <span style={{ fontSize: 11, fontWeight: 800, color: actionVector.actorHpPost < actionVector.actorHpPre ? "#ef4444" : "#22c55e" }}>
+                        {actionVector.actorHpPre.toFixed(1)} ➔ {actionVector.actorHpPost.toFixed(1)} HP
+                        {actionVector.actorHpPost < actionVector.actorHpPre && ` (-${(actionVector.actorHpPre - actionVector.actorHpPost).toFixed(1)})`}
+                      </span>
+                    </div>
+                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: 2 }}>
+                      <span style={{ fontSize: 10, color: "#94a3b8" }}>State:</span>
+                      <span style={{ fontSize: 10, fontWeight: 700, color: actionVector.actorAlivePost ? "#22c55e" : "#ef4444" }}>
+                        {actionVector.actorAlivePost ? "Active / Alive" : "Eliminated 💀"}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Opponent Target Unit Box (for attacks/fire) */}
+                  {(actionVector.isFire || actionVector.targetUnitId) && (
+                    <div style={{ background: "#0b1220", padding: "6px 8px", borderRadius: 4, borderLeft: `3px solid ${actionVector.targetUnitSide === "US" ? "#3b82f6" : "#ef4444"}` }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                        <span style={{ fontSize: 9, color: "#94a3b8", textTransform: "uppercase", fontWeight: 700 }}>Opponent Target</span>
+                        <span style={{ fontSize: 10, fontWeight: 700, color: "#f87171" }}>
+                          {actionVector.targetUnitSide === "US" ? "🇺🇸" : actionVector.targetUnitSide === "IT" ? "🇮🇹" : "🇩🇪"} {actionVector.targetUnitId || "-"}
+                        </span>
+                      </div>
+                      <div style={{ fontSize: 11, fontWeight: 600, color: "#cbd5e1", marginTop: 1 }}>
+                        {actionVector.targetUnitName || "Target"}
+                      </div>
+                      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: 4 }}>
+                        <span style={{ fontSize: 10, color: "#94a3b8" }}>Target Health:</span>
+                        <span style={{ fontSize: 11, fontWeight: 800, color: (actionVector.targetHpPost ?? 0) < (actionVector.targetHpPre ?? 0) ? "#ef4444" : "#cbd5e1" }}>
+                          {actionVector.targetHpPre !== null ? actionVector.targetHpPre.toFixed(1) : "?"} ➔ {actionVector.targetHpPost !== null ? actionVector.targetHpPost.toFixed(1) : "?"} HP
+                          {actionVector.targetHpPre !== null && actionVector.targetHpPost !== null && actionVector.targetHpPost < actionVector.targetHpPre && (
+                            ` (-${(actionVector.targetHpPre - actionVector.targetHpPost).toFixed(1)})`
+                          )}
+                        </span>
+                      </div>
+                      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: 2 }}>
+                        <span style={{ fontSize: 10, color: "#94a3b8" }}>Target State:</span>
+                        <span style={{ fontSize: 10, fontWeight: 700, color: actionVector.targetAlivePost === false ? "#ef4444" : (actionVector.targetHpPost ?? 0) < (actionVector.targetHpPre ?? 0) ? "#f59e0b" : "#22c55e" }}>
+                          {actionVector.targetAlivePost === false ? "Eliminated 💀" : (actionVector.targetHpPost ?? 0) < (actionVector.targetHpPre ?? 0) ? "Damaged 💥" : "Unscathed"}
+                        </span>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+
               {/* MCTS Candidates Tree Explorer */}
               {totalCandidatesCount > 0 ? (
                 <div>
@@ -3549,7 +4198,7 @@ export function MatchReplayTab({
                         </div>
                         <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
                           <span style={{ color: u.alive ? (u.hp >= 3.0 ? "#22c55e" : "#f59e0b") : "#ef4444", fontWeight: 700 }}>
-                            {u.alive ? `${u.hp.toFixed(1)} HP` : "BAJA"}
+                            {u.alive ? `${u.hp.toFixed(1)} HP` : "KIA"}
                           </span>
                         </div>
                       </div>
@@ -3589,7 +4238,7 @@ export function MatchReplayTab({
                         <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
                           <span style={{ fontWeight: 700, color: "#f8fafc" }}>{u.unit_id}</span>
                           <span className="muted" style={{ fontSize: 10 }}>({u.q},{u.r})</span>
-                          {isActing && <span style={{ fontSize: 9, color: "#facc15", fontWeight: 700 }}>ACTIVA</span>}
+                          {isActing && <span style={{ fontSize: 9, color: "#facc15", fontWeight: 700 }}>ACTING</span>}
                           {roleInfo.label && (
                             <span
                               style={{
@@ -3621,7 +4270,7 @@ export function MatchReplayTab({
                                 borderRadius: 3,
                                 fontWeight: 700,
                               }}
-                              title={`Rol mutado dinámicamente por regla: ${roleInfo.mutationReason}`}
+                              title={`Dynamically mutated role: ${roleInfo.mutationReason}`}
                             >
                               ⚡ {roleInfo.mutationReason ? roleInfo.mutationReason.slice(0, 10) : "MUT"}
                             </span>
@@ -3637,7 +4286,7 @@ export function MatchReplayTab({
                                 borderRadius: 3,
                                 fontWeight: 700,
                               }}
-                              title={`Prior boost doctrinal: +${Math.round(roleInfo.priorBoost * 100)}%`}
+                              title={`Doctrinal prior boost: +${Math.round(roleInfo.priorBoost * 100)}%`}
                             >
                               +{Math.round(roleInfo.priorBoost * 100)}% π
                             </span>
@@ -3645,7 +4294,7 @@ export function MatchReplayTab({
                         </div>
                         <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
                           <span style={{ color: u.alive ? (u.hp >= 3.0 ? "#22c55e" : "#f59e0b") : "#ef4444", fontWeight: 700 }}>
-                            {u.alive ? `${u.hp.toFixed(1)} HP` : "BAJA"}
+                            {u.alive ? `${u.hp.toFixed(1)} HP` : "KIA"}
                           </span>
                         </div>
                       </div>
@@ -3664,19 +4313,19 @@ export function MatchReplayTab({
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
                       <span style={{ fontWeight: 800, color: "#f8fafc", fontSize: 12 }}>{selUnit.unit_id}</span>
                       <span style={{ background: `${rInfo.color}33`, color: rInfo.color, padding: "2px 6px", borderRadius: 4, fontWeight: 700, fontSize: 10 }}>
-                        {rInfo.icon} {rInfo.label || "Sin Rol"}
+                        {rInfo.icon} {rInfo.label || "No Role"}
                       </span>
                     </div>
                     <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6, fontSize: 10 }}>
-                      <div><b>Bando:</b> {selUnit.side}</div>
-                      <div><b>Posición:</b> ({selUnit.q}, {selUnit.r})</div>
+                      <div><b>Side:</b> {selUnit.side}</div>
+                      <div><b>Position:</b> ({selUnit.q}, {selUnit.r})</div>
                       <div><b>Health:</b> {selUnit.alive ? `${selUnit.hp.toFixed(1)} HP` : "KIA"}</div>
                       <div><b>Morale / Suppression:</b> {selUnit.suppressed ? "SUPPRESSED" : "STABLE"}</div>
                       <div><b>Assigned Role:</b> <code style={{ color: rInfo.color }}>{rInfo.role || "-"}</code></div>
-                      <div><b>Mutación:</b> {rInfo.isMutated ? <span style={{ color: "#f87171", fontWeight: 700 }}>⚡ SÍ ({rInfo.mutationReason})</span> : <span style={{ color: "#34d399" }}>NO (Perfil Base)</span>}</div>
+                      <div><b>Mutation:</b> {rInfo.isMutated ? <span style={{ color: "#f87171", fontWeight: 700 }}>⚡ YES ({rInfo.mutationReason})</span> : <span style={{ color: "#34d399" }}>NO (Base Profile)</span>}</div>
                       {rInfo.priorBoost > 0 && (
                         <div style={{ gridColumn: "span 2", color: "#86efac", fontWeight: 700 }}>
-                          🚀 Modulación MCTS Prior: +{Math.round(rInfo.priorBoost * 100)}%
+                          🚀 MCTS Prior Modulation: +{Math.round(rInfo.priorBoost * 100)}%
                         </div>
                       )}
                     </div>
@@ -3686,11 +4335,11 @@ export function MatchReplayTab({
             </div>
           )}
 
-          {/* TAB 3: VPs & TELEMETRÍA */}
+          {/* TAB 3: VPs & TELEMETRY */}
           {activeTab === "telemetry" && (
             <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
               <div style={{ fontSize: 11, fontWeight: 700, color: "#38bdf8" }}>
-                Puntos de Victoria en Disputa ({vpMap.length} hexágonos)
+                Contested Victory Points ({vpMap.length} hexes)
               </div>
               <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
                 {vpMap.map((vp) => (
@@ -3709,7 +4358,7 @@ export function MatchReplayTab({
                   >
                     <div>
                       <b style={{ color: "#f8fafc" }}>Hex ({vp.q}, {vp.r})</b>
-                      <span className="muted" style={{ fontSize: 10, marginLeft: 6 }}>2 Puntos</span>
+                      <span className="muted" style={{ fontSize: 10, marginLeft: 6 }}>{vp.value || 2} VPs</span>
                     </div>
                     <div>
                       <span
@@ -3733,24 +4382,43 @@ export function MatchReplayTab({
                 Side Controllers
               </div>
               <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-                {Object.entries(controllerMap).map(([side, ctrl]) => (
-                  <div
-                    key={side}
-                    style={{
-                      background: "#0f172a",
-                      border: "1px solid #334155",
-                      borderRadius: 4,
-                      padding: "6px 10px",
-                      display: "flex",
-                      justifyContent: "space-between",
-                      alignItems: "center",
-                      fontSize: 11,
-                    }}
-                  >
-                    <b style={{ color: side === "US" ? "#60a5fa" : "#34d399" }}>{side}</b>
-                    <code style={{ fontSize: 11, color: "#cbd5e1" }}>{ctrl}</code>
-                  </div>
-                ))}
+                {Object.entries(controllerMap).map(([side, ctrl]) => {
+                  const badge = getControllerBadgeInfo(ctrl);
+                  return (
+                    <div
+                      key={side}
+                      style={{
+                        background: "#0f172a",
+                        border: "1px solid #334155",
+                        borderRadius: 4,
+                        padding: "6px 10px",
+                        display: "flex",
+                        justifyContent: "space-between",
+                        alignItems: "center",
+                        fontSize: 11,
+                      }}
+                    >
+                      <b style={{ color: side === "US" ? "#60a5fa" : "#34d399" }}>{side}</b>
+                      <span
+                        style={{
+                          display: "inline-flex",
+                          alignItems: "center",
+                          gap: 4,
+                          fontSize: 10,
+                          fontWeight: 700,
+                          padding: "2px 8px",
+                          borderRadius: 3,
+                          background: badge.bg,
+                          color: badge.color,
+                          border: `1px solid ${badge.border}`,
+                        }}
+                      >
+                        <span>{badge.icon}</span>
+                        <span>{badge.label}</span>
+                      </span>
+                    </div>
+                  );
+                })}
               </div>
 
               <div style={{ fontSize: 11, fontWeight: 700, color: "#38bdf8", marginTop: 8 }}>
@@ -3766,6 +4434,18 @@ export function MatchReplayTab({
           )}
         </div>
       </div>
+
+      {/* Forensic SitRep & Causal Profiler Modal */}
+      <ForensicSitRepModal
+        isOpen={isSitrepOpen}
+        onClose={() => setIsSitrepOpen(false)}
+        sitrepData={sitrepData}
+        isLoading={isSitrepLoading}
+        onJumpToStep={(stepIdx) => {
+          setClamped(stepIdx);
+        }}
+        onRecompute={() => handleOpenSitrep(true)}
+      />
 
       {/* Explainability Modal (IGNH / Grad-CAM) */}
       <ExplainabilityModal

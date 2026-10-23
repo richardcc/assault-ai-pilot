@@ -192,12 +192,25 @@ def accumulate_seed_episode(
         phase29_seed_rows.append(dict(phase29_summary or {}))
         phase29_seed_rows_by_side.append(dict((phase29_summary or {}).get("by_side", {}) or {}))
     decision_trace_rows_all.extend(list(trace_rows or []))
+    sides_present: list[str] = []
+    if trace_rows and isinstance(trace_rows[0], dict):
+        raw_units = trace_rows[0].get("units") or []
+        if isinstance(raw_units, list):
+            sides_present = sorted(
+                {str(u.get("side", "")).upper() for u in raw_units if isinstance(u, dict) and u.get("side")}
+            )
+    outcome_str = ""
+    if isinstance(scenario_outcome, dict):
+        outcome_str = str(scenario_outcome.get("outcome_class", "") or scenario_outcome.get("result", "") or "")
     bench_replay_episodes.append(
         {
             "agent_name": str(agent_name),
             "seed": int(seed_used),
             "episode_index": int(episode_index),
             "scenario_id": str(scenario_id),
+            "winner": str(winner_side or ""),
+            "outcome": outcome_str,
+            "sides": sides_present,
             "transitions": list(trace_rows or []),
         }
     )

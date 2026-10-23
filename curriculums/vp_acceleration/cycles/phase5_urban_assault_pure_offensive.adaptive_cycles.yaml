@@ -1,8 +1,8 @@
 schema_version: adaptive_cycles.v1
 curriculum_name: vp_acceleration_v1
 phase_name: phase5_urban_assault_pure_offensive
-generation: 2
-last_updated_utc: '2026-10-22T06:28:26.789875+00:00'
+generation: 7
+last_updated_utc: '2026-10-22T16:36:36.534188+00:00'
 base_config_path: curriculums/vp_acceleration/configs/efficientzero_v2.phase5_urban_assault_pure_offensive.yaml
 winning_history:
 - generation: 1
@@ -11,10 +11,40 @@ winning_history:
   win_rate: 0.03333333333333333
   tactical_quality_score: 0.5822222222222222
   promotion_decision: hold
+- generation: 2
+  winning_cycle: 6
+  promoted_at_utc: '2026-10-22T06:36:24.949060+00:00'
+  win_rate: 0.03333333333333333
+  tactical_quality_score: 0.5822222222222222
+  promotion_decision: hold
+- generation: 3
+  winning_cycle: 6
+  promoted_at_utc: '2026-10-22T06:41:28.889692+00:00'
+  win_rate: 0.03333333333333333
+  tactical_quality_score: 0.5822222222222222
+  promotion_decision: hold
+- generation: 4
+  winning_cycle: 2
+  promoted_at_utc: '2026-10-22T15:05:42.055861+00:00'
+  win_rate: 0.03333333333333333
+  tactical_quality_score: 0.5955555555555556
+  promotion_decision: hold
+- generation: 5
+  winning_cycle: 2
+  promoted_at_utc: '2026-10-22T15:29:57.598029+00:00'
+  win_rate: 0.03333333333333333
+  tactical_quality_score: 0.5955555555555556
+  promotion_decision: hold
+- generation: 6
+  winning_cycle: 2
+  promoted_at_utc: '2026-10-22T16:36:36.534179+00:00'
+  win_rate: 0.03333333333333333
+  tactical_quality_score: 0.5955555555555556
+  promotion_decision: hold
 cycles:
   1:
     strategy: promoted_baseline
-    description: Generation 2 Baseline (Promoted from Cycle 6 of previous generation).
+    description: Generation 7 Baseline (Promoted from Cycle 2 of previous generation).
     overlay: {}
   2:
     strategy: adaptive_exploitation
@@ -22,24 +52,24 @@ cycles:
       MCTS temperature, higher potential weight.'
     overlay:
       train:
-        reanalysis_ratio: 0.5
-        train_updates_per_iter: 22
+        reanalysis_ratio: 0.53
+        train_updates_per_iter: 24
       selfplay:
-        mcts_temperature: 1.0
+        mcts_temperature: 1.2
         reward_shaping:
-          vp_potential_weight: 1.6
+          vp_potential_weight: 1.9
   3:
     strategy: adaptive_exploration
     description: 'Aggressive frontier exploration: +15% VP capture bonuses, higher
       objective loss weight, expanded exploration.'
     overlay:
       train:
-        objective_loss_weight: 0.5
-        train_updates_per_iter: 24
+        objective_loss_weight: 0.55
+        train_updates_per_iter: 26
       selfplay:
-        mcts_temperature: 1.1
+        mcts_temperature: 1.3
         reward_shaping:
-          vp_capture_bonus_per_hex: 7.47
-          objective_progress_bonus_per_hex: 5.75
-          capture_bonus: 2.42
+          vp_capture_bonus_per_hex: 8.62
+          objective_progress_bonus_per_hex: 6.9
+          capture_bonus: 3.08
           vp_urgency_lambda: 1.3

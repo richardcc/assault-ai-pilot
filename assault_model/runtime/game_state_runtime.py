@@ -14,7 +14,7 @@ from assault_model.actions.composite_fire import MoveThenFireAction, FireThenMov
 from assault_model.actions.ranged_direct import RangedDirectAttack
 from assault_model.actions.resolution import resolve_action
 
-from assault_model.combat.combat_resolution import CombatResolutionResult
+from assault_model.combat.ranged_combat_resolver import CombatResolutionResult
 
 from assault_model.runtime.execution_context import ExecutionContext
 from assault_model.map.hex_coord import HexCoord

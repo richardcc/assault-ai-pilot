@@ -22,6 +22,7 @@ class EZV2Observation:
     fortification_type_by_hex: Dict[str, str] = field(default_factory=dict)
     fortification_edge_by_hex: Dict[str, Dict[str, int]] = field(default_factory=dict)
     max_turns: int = 8
+    _coord_bounds: tuple[int, int, int, int] | None = None
 
 
 class EZV2VOECAdapter:
@@ -29,6 +30,7 @@ class EZV2VOECAdapter:
 
     def __init__(self, simulator: VOECSimulator):
         self.sim = simulator
+        self._cached_bounds: Optional[tuple[int, int, int, int]] = None
 
     def initial_state(
         self,
@@ -38,6 +40,7 @@ class EZV2VOECAdapter:
         unit_jitter_prob: float = 0.0,
         asymmetric_strength_jitter: float = 0.0,
     ) -> EZV2Observation:
+        self._cached_bounds = None
         self.sim.new_episode(
             scenario_id=scenario_id,
             seed=seed,
@@ -67,6 +70,12 @@ class EZV2VOECAdapter:
     def observation(self) -> EZV2Observation:
         snapshot = self.sim.snapshot()
         spatial = self.sim.spatial_features()
+        playable = list(spatial.get("playable_hexes", []))
+        if self._cached_bounds is None and playable:
+            qs = [int(h["q"]) for h in playable if "q" in h]
+            rs = [int(h["r"]) for h in playable if "r" in h]
+            if qs and rs:
+                self._cached_bounds = (min(qs), max(qs), min(rs), max(rs))
         return EZV2Observation(
             turn=snapshot.turn,
             to_play=snapshot.to_play,
@@ -87,7 +96,7 @@ class EZV2VOECAdapter:
                 }
                 for u in snapshot.units
             ],
-            playable_hexes=list(spatial.get("playable_hexes", [])),
+            playable_hexes=playable,
             vp_hexes=list(spatial.get("vp_hexes", [])),
             vp_owner_by_hex=dict(spatial.get("vp_owner_by_hex", {})),
             terrain_move_cost_by_hex=dict(spatial.get("terrain_move_cost_by_hex", {})),
@@ -97,5 +106,6 @@ class EZV2VOECAdapter:
             fortification_type_by_hex=dict(spatial.get("fortification_type_by_hex", {})),
             fortification_edge_by_hex=dict(spatial.get("fortification_edge_by_hex", {})),
             max_turns=int(self.sim.scenario_max_turns() or 8),
+            _coord_bounds=self._cached_bounds,
         )
 

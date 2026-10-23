@@ -261,7 +261,7 @@ class UnitInstance:
             _trace("FALLBACK_CLEARED", unit=self.unit_id)
 
     # ==================================================
-    # ✅ 🔥 CRÍTICO: optimización Copy-on-Write / deepcopy (Roadmap 6.2)
+    # Copy-on-Write / deepcopy optimization (Roadmap 6.2)
     # ==================================================
     def clone_cow(self) -> "UnitInstance":
         """
@@ -351,7 +351,7 @@ class UnitInstance:
         my_attack = self.get_attack_power_vs(target)
         enemy_attack = target.get_attack_power_vs(self)
 
-        # 💥 caso crítico: no puede hacer daño
+        # Edge case: unit cannot inflict damage
         if my_attack == 0:
             return -2.0
 

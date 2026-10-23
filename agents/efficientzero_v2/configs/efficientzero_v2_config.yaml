@@ -22,8 +22,10 @@ model:
 
 selfplay:
   device: cpu
-  num_workers: 20
+  num_workers: 24
   parallel_backend: process
+  inference_max_batch_size: 64
+  inference_batch_wait_ms: 1.5
   matchup_modes: [self_vs_self, self_vs_random]
   matchup_mode_weights:
     self_vs_self: 1
@@ -131,7 +133,7 @@ train:
   episodes_per_iter: 20
   train_updates_per_iter: 9
   checkpoint_every: 5
-  batch_size: 24
+  batch_size: 48
   objective_loss_weight: 0.12
   consistency_loss_weight: 0.05
   consistency_unroll_steps: 3

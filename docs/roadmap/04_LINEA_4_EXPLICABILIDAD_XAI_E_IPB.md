@@ -23,7 +23,7 @@ flowchart TD
 | Orden | Tarea / Componente | Prioridad Interna | Módulos / Archivos Impactados | Criterio de Aceptación Cuantitativo | Prerrequisitos | Estado |
 | :---: | :--- | :---: | :--- | :--- | :--- | :---: |
 | **1** | **4.1 Atribución Causal Espacial Hexagonal (IGNH / GradCAM)** | **P1** | `mlops/reporting/explainability_api.py`, `assault_ai_ui/src/components/ExplainabilityModal.tsx`, `mlops/reporting/viewer_frontend/src/components/ExplainabilityModal.tsx` | Visualización en el visor MLOps de qué canales sensoriales (cobertura, LOS, amenaza, distancia a VP) determinaron la acción seleccionada en cada turno mediante Integrated Gradients para características heterogéneas (IGNH) y Grad-CAM sobre el `representation_tower`. Mapeo biyectivo de coordenadas de tablero y overlay hexagonal reactivo. | Línea 1 (Zero-Mock en UI) | 🟢 **Consolidado v2.5.10** |
-| **2** | **4.2 Perfilador Causal de Partidas y SitRep Forense** | **P1** | `mlops/reporting/causal_profiler.py`, `assault_rag/` | Correlación causal automática entre las predicciones tácticas de las cabezas (`threat_map`, `morale_pred`, `objective_intent`) y el resultado de las capturas de VPs. Generación de informe narrativo forense por partida. | Tarea 4.1 | ⚪ Planificado |
+| **2** | **4.2 Perfilador Causal de Partidas y SitRep Forense** | **P1** | `mlops/reporting/causal_profiler.py`, `assault_rag/` | Correlación causal automática entre las predicciones tácticas de las cabezas (`threat_map`, `morale_pred`, `objective_intent`) y el resultado de las capturas de VPs. Generación de informe narrativo forense por partida con grounding doctrinal RAG y visor forense en Dashboard MLOps. | Tarea 4.1 | 🟢 **Consolidado v2.5.19** |
 | **3** | **4.3 Perfilado 5D de Unidades y Detección Automática de Chokepoints (IPB)** | **P2** | `assault_model/map/topography_analyzer.py`, `agents/efficientzero_v2/core/macro_planner.py` | Análisis topográfico previo a la partida (Turno 0) que clasifica hexágonos en *Defilade Corridors*, *Killzones* y *Key Terrain* (VPs), inyectando estos priors en el `MacroStrategyPlanner`. | Tarea 4.2 |
 | **4** | **4.4 Perfilado Doctrinal Dinámico de Unidades y Visibilidad en MLOps** | **P1** | `assets/catalogs/unit_catalog.json`, `assault_model/units/unit_type.py`, `agents/efficientzero_v2/core/macro_planner.py`, `mlops/reporting/viewer_frontend/` | Jerarquía 3 capas (Balística, Roles, Emergente). Mutación dinámica contextual de roles (`SPEARHEAD`, `FIRE_SUPPORT`, `RECON`, `SCREEN`, `COMMAND`), modulación +35% de priors MCTS y badges visuales con telemetría forense de rol en Match Replay (:8778). | Tarea 4.2 / Línea 2 |
 
@@ -48,6 +48,13 @@ epresentation_tower. Mapeo biyectivo de coordenadas de tablero (q, r).
   - Tarjeta forense de cabezas tácticas (Threat Max/Mean, Riesgo de Supresión Morale, Bajas Proyectadas Attrition) sincronizada al paso actual del replay bajo la decisión de política y valor (s,a)$.
   - Endpoints MLOps /api/v2/replay/tactical-heads y /api/v2/replay/step-heads en iewer.py y función compute_step_tactical_heads en explainability_api.py.
   - Suite de tests unitarios/integración en verde: mlops/tests/test_explainability_api.py (4/4 passed).
+
+- **Tarea 4.2 Consolidada 🟢 [v2.5.19]**: Perfilador Causal de Partidas y SitRep Forense:
+  - Backend analítico: `mlops/reporting/causal_profiler.py` implementando correlación causal matemática entre predicciones de cabezas tácticas (`threat_map`, `morale_pred`, `objective_intent`) y desenlaces del combate (`VP_CAPTURE`, `UNIT_ELIMINATION`, `HEAVY_ATTRITION`, `SURPRISE_DAMAGE`, `MORALE_FAILURE`).
+  - Grounding Doctrinal RAG: `assault_rag/copilot/services.py` con `retrieve_doctrinal_citations_for_sitrep` asociando citas formales del reglamento de wargame a los puntos de inflexión operacionales.
+  - Endpoints REST MLOps: `/api/v2/replay/causal-sitrep` y `/api/v2/replay/sitrep` con persistencia en caché (`.cache_sitrep/`).
+  - Frontend: `ForensicSitRepModal.tsx` integrado en Match Replay (:8778) con pestañas de Executive Assessment, Tactical Head Forensics, Turning Points interactivos con salto temporal (`Seek Step`) y citas de reglas.
+  - Verificación: Suite `mlops/tests/test_causal_profiler.py` con 9/9 tests en verde.
 
 - **Tarea 4.4 Consolidada 🟢**: Fases 1 a 5 implementadas en v2.4.5:
   - F1: Esquema canónico en catálogo `unit_catalog.json` y contratos de tipos en `unit_type.py`.

@@ -2,24 +2,27 @@ base_config: agents/efficientzero_v2/configs/efficientzero_v2_config.yaml
 scenario:
   id: vp_phase2_defended_suppressed
 selfplay:
-  num_workers: 10
+  num_workers: 24
   parallel_backend: process
+  inference_max_batch_size: 48
+  inference_batch_wait_ms: 1.5
   reward_shaping:
-    vp_capture_bonus_per_hex: 7.84
-    objective_progress_bonus_per_hex: 6.1
-    capture_bonus: 2.39
-    kill_weight: 0.8
+    vp_capture_bonus_per_hex: 12.58
+    objective_progress_bonus_per_hex: 9.62
+    capture_bonus: 3.92
+    kill_weight: 0.6
     terminal_scale: 1.5
     terminal_loss_penalty: 1.5
     opportunity_near_vp_max_dist: 8.0
-    vp_potential_weight: 1.1
+    vp_potential_weight: 1.3
     vp_potential_gamma: 0.997
-    vp_potential_ctrl_bonus: 2.2
-    vp_urgency_lambda: 1.2
-    paralysis_penalty_weight: 0.05
-  mcts_temperature: 1.15
+    vp_potential_ctrl_bonus: 2.5
+    vp_urgency_lambda: 1.25
+    paralysis_penalty_weight: 0.06
+  mcts_temperature: 1.2
 train:
-  episodes_per_iter: 15
-  objective_loss_weight: 0.5
-  train_updates_per_iter: 17
-  reanalysis_ratio: 0.45
+  iterations: 80
+  episodes_per_iter: 32
+  objective_loss_weight: 0.62
+  train_updates_per_iter: 28
+  reanalysis_ratio: 0.48

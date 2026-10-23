@@ -61,10 +61,6 @@ def build_benchmark_result(
     tracked_values = [int(x) for x in list(tracked_captured_values or [])]
     seed_games = to_dict_rows(seed_games_rows)
     eff_policy_by_side = dict(policy_by_side or {})
-    if "GE" in eff_policy_by_side and "IT" not in eff_policy_by_side:
-        eff_policy_by_side["IT"] = eff_policy_by_side["GE"]
-    elif "IT" in eff_policy_by_side and "GE" not in eff_policy_by_side:
-        eff_policy_by_side["GE"] = eff_policy_by_side["IT"]
 
     controller_by_side = {
         str(side): _controller_label_from_policy(str(policy_name_for_side))

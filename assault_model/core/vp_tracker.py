@@ -29,7 +29,7 @@ class VictoryPointTracker:
             if owner in self.score:
                 self.score[owner] += vp.per_turn
 
-    # ✅ API PÚBLICA: TOTAL DE PUNTOS
+    # Public API: Total points
     @property
     def total_points(self) -> int:
         """
@@ -38,7 +38,7 @@ class VictoryPointTracker:
         """
         return sum(self.score.values())
 
-    # ✅ (opcional pero útil) puntos por bando
+    # Points by side
     def points_by_side(self) -> dict:
         """
         Return a copy of the VP score per side.
@@ -53,4 +53,3 @@ class VictoryPointTracker:
 
     def __deepcopy__(self, memo) -> "VictoryPointTracker":
         return self.clone_cow()
-

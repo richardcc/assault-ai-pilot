@@ -10,6 +10,14 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
 from urllib.parse import parse_qs, unquote, urlparse
+import sys
+
+_repo_dir = Path(__file__).resolve().parents[2]
+_venv_site = _repo_dir / ".venv" / "Lib" / "site-packages"
+if _venv_site.exists() and str(_venv_site) not in sys.path:
+    sys.path.insert(0, str(_venv_site))
+if str(_repo_dir) not in sys.path:
+    sys.path.insert(0, str(_repo_dir))
 
 from mlops.reporting.catalog_api import (
     build_publish_status_payload as _build_publish_status_payload,
@@ -21,6 +29,9 @@ from mlops.reporting.catalog_api import (
 from mlops.reporting.catalog_duckdb import load_catalog_summary_from_duckdb
 from mlops.reporting.model_api import (
     build_train_summary_payload as _build_train_summary_payload,
+)
+from mlops.reporting.causal_profiler import (
+    get_or_compute_causal_sitrep as _get_or_compute_causal_sitrep,
 )
 from mlops.reporting.explainability_api import (
     compute_step_tactical_heads as _compute_step_tactical_heads,
@@ -780,6 +791,20 @@ def serve(
                     episode_id=ep_id,
                     step_index=step_idx,
                     load_scenario_overlay_fn=_load_scenario_overlay,
+                )
+                self._send_json_status(payload)
+                return
+            if parsed.path in ("/api/v2/replay/causal-sitrep", "/api/v2/replay/sitrep"):
+                qs = parse_qs(parsed.query)
+                eval_src = str(qs.get("eval_source_path", [""])[0] or qs.get("source_path", [""])[0] or qs.get("replay_path", [""])[0] or "")
+                ep_id = str(qs.get("episode_id", ["episode_0"])[0] or "episode_0")
+                force_rec = str(qs.get("force_recompute", ["0"])[0] or "0").strip().lower() in {"1", "true", "yes", "on"}
+                payload = _get_or_compute_causal_sitrep(
+                    eval_source_path=eval_src,
+                    episode_id=ep_id,
+                    repo_root=repo_root,
+                    load_scenario_overlay_fn=_load_scenario_overlay,
+                    force_recompute=force_rec,
                 )
                 self._send_json_status(payload)
                 return

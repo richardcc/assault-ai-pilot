@@ -23,12 +23,13 @@ def pcgrad_backward(
     if not params or not losses:
         return 0.0
 
-    task_grads: List[List[torch.Tensor]] = []
+    task_flat_grads: List[torch.Tensor] = []
     
-    # 1. Compute per-loss gradients
+    # 1. Compute per-loss gradients and flatten into contiguous 1D tensors
     for idx, loss in enumerate(losses):
         if not loss.requires_grad or float(loss.detach().item()) == 0.0:
-            task_grads.append([torch.zeros_like(p) for p in params])
+            total_elements = sum(p.numel() for p in params)
+            task_flat_grads.append(torch.zeros(total_elements, device=params[0].device, dtype=params[0].dtype))
             continue
         grads = torch.autograd.grad(
             loss,
@@ -36,38 +37,38 @@ def pcgrad_backward(
             retain_graph=(idx < len(losses) - 1),
             allow_unused=True,
         )
-        task_grads.append(
-            [g.clone() if g is not None else torch.zeros_like(p) for g, p in zip(grads, params)]
-        )
+        flat = torch.cat([
+            (g if g is not None else torch.zeros_like(p)).reshape(-1)
+            for g, p in zip(grads, params)
+        ])
+        task_flat_grads.append(flat)
 
-    num_tasks = len(task_grads)
-    # 2. Project conflicting gradients
-    projected_grads = [[g.clone() for g in t_grads] for t_grads in task_grads]
+    num_tasks = len(task_flat_grads)
+    # 2. Project conflicting gradients in vectorized 1D tensor space
+    projected = [g.clone() for g in task_flat_grads]
     
     for i in range(num_tasks):
         for j in range(num_tasks):
             if i == j:
                 continue
-            # Compute dot product between task i and task j gradients
-            g_i = projected_grads[i]
-            g_j = task_grads[j]
-            dot_prod = sum((gi * gj).sum() for gi, gj in zip(g_i, g_j))
+            dot_prod = torch.dot(projected[i], task_flat_grads[j])
             if dot_prod < 0.0:
-                norm_sq = sum((gj * gj).sum() for gj in g_j)
+                norm_sq = torch.dot(task_flat_grads[j], task_flat_grads[j])
                 if norm_sq > 1e-12:
-                    scale = dot_prod / norm_sq
-                    for k in range(len(params)):
-                        projected_grads[i][k] = projected_grads[i][k] - scale * g_j[k]
+                    projected[i] = projected[i] - (dot_prod / norm_sq) * task_flat_grads[j]
 
-    # 3. Sum projected gradients and assign to parameter grad attributes
+    # 3. Sum projected gradients and unflatten directly to parameter grad
     optimizer.zero_grad(set_to_none=True)
-    grad_sq_sum = 0.0
-    for p_idx, p in enumerate(params):
-        combined_g = sum(projected_grads[t_idx][p_idx] for t_idx in range(num_tasks))
-        p.grad = combined_g
-        grad_sq_sum += float((combined_g * combined_g).sum().item())
+    combined_flat = torch.stack(projected, dim=0).sum(dim=0)
+    
+    offset = 0
+    for p in params:
+        numel = p.numel()
+        p.grad = combined_flat[offset : offset + numel].view_as(p).clone()
+        offset += numel
 
-    return float(grad_sq_sum**0.5)
+    grad_norm = float(torch.linalg.vector_norm(combined_flat).item())
+    return grad_norm
 
 
 class AdaptiveLossScaler:

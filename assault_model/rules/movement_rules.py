@@ -107,7 +107,7 @@ class MovementRules:
             static_adj_tuples = get_static_graph(move_type, terrain_config)[0]
 
         # -------------------------------------------------
-        # DIJKSTRA por presupuesto de puntos de movimiento
+        # Dijkstra bounded by movement point budget
         # -------------------------------------------------
         while frontier:
             cost, q, r = heapq.heappop(frontier)

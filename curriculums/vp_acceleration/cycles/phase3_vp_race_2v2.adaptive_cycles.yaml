@@ -1,8 +1,8 @@
 schema_version: adaptive_cycles.v1
 curriculum_name: vp_acceleration_v1
 phase_name: phase3_vp_race_2v2
-generation: 12
-last_updated_utc: '2026-10-22T06:28:26.762368+00:00'
+generation: 18
+last_updated_utc: '2026-10-23T09:38:42.911601+00:00'
 base_config_path: curriculums/vp_acceleration/configs/efficientzero_v2.phase3_race_2v2.yaml
 winning_history:
 - generation: 1
@@ -71,35 +71,94 @@ winning_history:
   win_rate: 0.23333333333333334
   tactical_quality_score: 0.3422222222222222
   promotion_decision: promote_best_of_cycles
+- generation: 12
+  winning_cycle: 3
+  promoted_at_utc: '2026-10-22T06:36:24.915202+00:00'
+  win_rate: 0.23333333333333334
+  tactical_quality_score: 0.3422222222222222
+  promotion_decision: promote_best_of_cycles
+- generation: 13
+  winning_cycle: 3
+  promoted_at_utc: '2026-10-22T06:41:28.865662+00:00'
+  win_rate: 0.23333333333333334
+  tactical_quality_score: 0.3422222222222222
+  promotion_decision: promote_best_of_cycles
+- generation: 14
+  winning_cycle: 3
+  promoted_at_utc: '2026-10-22T15:05:42.032852+00:00'
+  win_rate: 0.3333333333333333
+  tactical_quality_score: 0.36888888888888893
+  promotion_decision: promote_best_of_cycles
+- generation: 15
+  winning_cycle: 3
+  promoted_at_utc: '2026-10-22T15:29:57.578220+00:00'
+  win_rate: 0.3333333333333333
+  tactical_quality_score: 0.36888888888888893
+  promotion_decision: promote_best_of_cycles
+- generation: 16
+  winning_cycle: 3
+  promoted_at_utc: '2026-10-22T16:36:36.504456+00:00'
+  win_rate: 0.3333333333333333
+  tactical_quality_score: 0.36888888888888893
+  promotion_decision: promote_best_of_cycles
+- generation: 17
+  winning_cycle: 4
+  promoted_at_utc: '2026-10-23T09:38:42.911601+00:00'
+  win_rate: 0.65
+  tactical_quality_score: 0.553333333333333
+  promotion_decision: promote
 cycles:
   1:
-    strategy: promoted_baseline
-    description: Generation 12 Baseline (Promoted from Cycle 3 of previous generation).
-    overlay: {}
-  2:
-    strategy: adaptive_exploitation
-    description: 'Exploitation and convergence refinement: +5% reanalysis, tighter
-      MCTS temperature, higher potential weight.'
+    strategy: promoted_baseline_with_breach_attenuation
+    description: Baseline with Time-Scaled PBRS, Breach Casualty Attenuation (0.35)
+      and Boosted Capture Incentives.
     overlay:
-      train:
-        reanalysis_ratio: 0.5
-        train_updates_per_iter: 20
       selfplay:
         mcts_temperature: 1.1
         reward_shaping:
-          vp_potential_weight: 1.1
-  3:
-    strategy: adaptive_exploration
-    description: 'Aggressive frontier exploration: +15% VP capture bonuses, higher
-      objective loss weight, expanded exploration.'
+          time_scaled_pbrs: true
+          breach_distance: 2
+          breach_casualty_attenuation: 0.35
+          vp_contested_bonus: 1.5
+          capture_bonus: 6.0
+          vp_capture_bonus_per_hex: 15.0
+          vp_potential_weight: 2.2
+          vp_urgency_lambda: 1.8
+  2:
+    strategy: aggressive_breach_assault
+    description: 'High-urgency breach assault: deeper breach attenuation (0.25), higher
+      capture reward (7.5) and tighter MCTS (1.05).'
     overlay:
       train:
-        objective_loss_weight: 0.55
-        train_updates_per_iter: 22
+        reanalysis_ratio: 0.55
+        train_updates_per_iter: 29
       selfplay:
-        mcts_temperature: 1.2
+        mcts_temperature: 1.05
         reward_shaping:
-          vp_capture_bonus_per_hex: 9.41
-          objective_progress_bonus_per_hex: 7.18
-          capture_bonus: 2.89
-          vp_urgency_lambda: 1.3
+          time_scaled_pbrs: true
+          breach_distance: 2
+          breach_casualty_attenuation: 0.25
+          vp_contested_bonus: 2.0
+          capture_bonus: 7.5
+          vp_capture_bonus_per_hex: 16.5
+          vp_potential_weight: 2.5
+          vp_urgency_lambda: 2.0
+  3:
+    strategy: max_frontier_conversion
+    description: 'Maximum frontier conversion: high objective weight (0.70), maximum
+      VP pull and zero-hesitation assault.'
+    overlay:
+      train:
+        objective_loss_weight: 0.7
+        train_updates_per_iter: 32
+      selfplay:
+        mcts_temperature: 1.1
+        reward_shaping:
+          time_scaled_pbrs: true
+          breach_distance: 2
+          breach_casualty_attenuation: 0.3
+          vp_contested_bonus: 1.8
+          capture_bonus: 7.0
+          vp_capture_bonus_per_hex: 18.0
+          vp_potential_weight: 2.4
+          vp_urgency_lambda: 2.2

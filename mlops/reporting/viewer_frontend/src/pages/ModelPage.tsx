@@ -223,7 +223,7 @@ export function ModelPage() {
     return null;
   }, [selectedEval]);
 
-  // Cargar metadatos del Replay bajo demanda (SOLO si estamos en la pestaña de Replay)
+  // Load Replay metadata on demand (ONLY if in Replay tab)
   const isReplayActive = section === "replay";
   useEffect(() => {
     if (!isReplayActive || !selectedEvalSourcePath) return;
@@ -265,7 +265,7 @@ export function ModelPage() {
     };
   }, [isReplayActive, selectedEvalSourcePath]);
 
-  // Cargar steps y log si cambia episodio
+  // Load steps and log when episode changes
   useEffect(() => {
     async function run() {
       if (!selectedEvalSourcePath || !selectedEpisodeId) return;
@@ -295,6 +295,27 @@ export function ModelPage() {
   );
 
   const getEpisodeMatchup = (ep: ReplayMetaEpisode): string => {
+    // 1. Check controller_by_side mapping directly if available
+    const ctrl = ep.controller_by_side as Record<string, string> | undefined;
+    if (ctrl && typeof ctrl === "object") {
+      const atkSide = (ep as any).attacker_side || "US";
+      const sidesInCtrl = Object.keys(ctrl);
+      const defSide =
+        (ep as any).defender_side ||
+        sidesInCtrl.find((s) => s.toUpperCase() !== atkSide.toUpperCase()) ||
+        "IT";
+      const atkCtrl = String(ctrl[atkSide] || ctrl.US || "").toLowerCase();
+      const defCtrl = String(ctrl[defSide] || "").toLowerCase();
+      const atkIsAi = atkCtrl.includes("efficientzero") || atkCtrl.includes("ezv2") || atkCtrl.includes("mcts");
+      const defIsAi = defCtrl.includes("efficientzero") || defCtrl.includes("ezv2") || defCtrl.includes("mcts");
+      const atkIsRand = atkCtrl.includes("random");
+      const defIsRand = defCtrl.includes("random");
+      if (atkIsAi && defIsAi) return "selfplay";
+      if (atkIsAi && defIsRand) return "vs_random_atk";
+      if (defIsAi && atkIsRand) return "vs_random_def";
+    }
+
+    // 2. Check canonical matchup string
     const rawMatchup = String(ep.matchup || "").toLowerCase();
     if (rawMatchup) {
       if (rawMatchup === "selfplay" || rawMatchup === "ezv2_selfplay") return "selfplay";
@@ -302,6 +323,8 @@ export function ModelPage() {
       if (rawMatchup === "vs_random_def" || rawMatchup === "ezv2_vs_random_def" || rawMatchup === "mcts_vs_random_def") return "vs_random_def";
       if (rawMatchup.includes("random")) return "vs_random";
     }
+
+    // 3. Fallback to parsing agent_name (ezv2_vs_random_US -> Agent is US Attacker vs Random IT Defender)
     const an = String(ep.agent_name || "").toLowerCase();
     if (an.includes("stub") || an === "selfplay" || an.includes("selfplay")) return "selfplay";
     if (an.includes("random_us") || (an.includes("side_b") && an.includes("random"))) return "vs_random_atk";
@@ -392,15 +415,41 @@ export function ModelPage() {
       : ep.scenario_id?.includes("cittadina")
       ? "🏙️ Cittadina"
       : "";
-    const m = getEpisodeMatchup(ep);
-    const matchupBadge =
-      m === "selfplay"
-        ? "⚔️ EZv2 Self-Play"
-        : m === "vs_random_def"
-        ? "🛡️ EZv2 Def vs Rand"
-        : m === "vs_random_atk"
-        ? "⚔️ EZv2 Atk vs Rand"
-        : "🎯 vs Random";
+    let matchupBadge = "";
+    const ctrl = ep.controller_by_side as Record<string, string> | undefined;
+    const atkSide = (ep as any).attacker_side || "US";
+    const sidesInCtrl = ctrl && typeof ctrl === "object" ? Object.keys(ctrl) : [];
+    const defSide =
+      (ep as any).defender_side ||
+      sidesInCtrl.find((s) => s.toUpperCase() !== atkSide.toUpperCase()) ||
+      (ep.scenario_id?.includes("cittadina") || ep.scenario_id?.includes("mettete") ? "IT" : "IT");
+
+    if (ctrl && typeof ctrl === "object" && sidesInCtrl.length > 0) {
+      const atkCtrl = String(ctrl[atkSide] || ctrl.US || "").toLowerCase();
+      const defCtrl = String(ctrl[defSide] || "").toLowerCase();
+      const atkIsAi = atkCtrl.includes("efficientzero") || atkCtrl.includes("ezv2") || atkCtrl.includes("mcts");
+      const defIsAi = defCtrl.includes("efficientzero") || defCtrl.includes("ezv2") || defCtrl.includes("mcts");
+      const atkIsRand = atkCtrl.includes("random");
+      const defIsRand = defCtrl.includes("random");
+      if (atkIsAi && defIsAi) {
+        matchupBadge = `⚔️ EZv2 Self-Play (${defSide} Def vs ${atkSide} Atk)`;
+      } else if (atkIsAi && defIsRand) {
+        matchupBadge = `⚔️ EZv2 (${atkSide} Atk) vs Rand (${defSide} Def)`;
+      } else if (defIsAi && atkIsRand) {
+        matchupBadge = `🛡️ EZv2 (${defSide} Def) vs Rand (${atkSide} Atk)`;
+      }
+    }
+    if (!matchupBadge) {
+      const m = getEpisodeMatchup(ep);
+      matchupBadge =
+        m === "selfplay"
+          ? `⚔️ EZv2 Self-Play (${defSide} Def vs ${atkSide} Atk)`
+          : m === "vs_random_def"
+          ? `🛡️ EZv2 (${defSide} Def) vs Rand (${atkSide} Atk)`
+          : m === "vs_random_atk"
+          ? `⚔️ EZv2 (${atkSide} Atk) vs Rand (${defSide} Def)`
+          : "🎯 vs Random";
+    }
     const seedText = ep.seed !== undefined ? `Seed ${ep.seed}` : "";
     const stepCount = ep.rows || ep.steps_count || 0;
 
@@ -418,7 +467,7 @@ export function ModelPage() {
 
   return (
     <div className="wrap">
-      {/* Cabecera Compacta Unificada: Título, Acciones y Metadatos en espacio mínimo */}
+      {/* Unified Compact Header: Title, Actions and Metadata */}
       <header
         className="panel"
         style={{
@@ -552,17 +601,17 @@ export function ModelPage() {
                 if (!target) return;
                 if (
                   !window.confirm(
-                    `⚠️ ¿Estás seguro de que deseas ELIMINAR COMPLETAMENTE el experimento "${target}" y todos sus ficheros en disco?\nEsta acción no se puede deshacer.`
+                    `⚠️ Are you sure you want to COMPLETELY DELETE experiment "${target}" and all its files on disk?\nThis action cannot be undone.`
                   )
                 ) {
                   return;
                 }
                 try {
                   const res = await deleteModelExperiment(target, String(model?.engine || engine));
-                  alert(`✅ Experimento eliminado con éxito (${res.freed_mb ?? 0} MB liberados).`);
+                  alert(`✅ Experiment successfully deleted (${res.freed_mb ?? 0} MB freed).`);
                   window.location.href = "/";
                 } catch (err: any) {
-                  alert(`❌ Error al eliminar experimento: ${err.message || err}`);
+                  alert(`❌ Error deleting experiment: ${err.message || err}`);
                 }
               }}
               style={{
@@ -575,14 +624,14 @@ export function ModelPage() {
                 cursor: "pointer",
                 borderRadius: 4,
               }}
-              title="Eliminar este modelo y todos sus ficheros en disco"
+              title="Delete this model and all its files on disk"
             >
-              🗑️ Eliminar Experimento
+              🗑️ Delete Experiment
             </button>
           </div>
         </div>
 
-        {/* Fila 2: Metadatos Compactos en una sola línea horizontal */}
+        {/* Row 2: Compact Metadata in a single horizontal row */}
         <div
           style={{
             display: "flex",
@@ -615,7 +664,7 @@ export function ModelPage() {
           <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
             <span style={{ color: "#64748b" }}>trains / evals count:</span>
             <span style={{ color: "#e2e8f0" }}>
-              <strong style={{ color: "#a78bfa" }}>{trains.length}</strong> trains / <strong style={{ color: "#34d399" }}>{String((model as Dict)?.eval_history_total_count ?? evalRows.length)}</strong> evals
+              <strong style={{ color: "#a78bfa" }}>{(model as Dict)?.train_runs_count ?? trains.length}</strong> trains / <strong style={{ color: "#34d399" }}>{String((model as Dict)?.eval_history_total_count ?? evalRows.length)}</strong> evals
             </span>
           </div>
 
@@ -634,9 +683,13 @@ export function ModelPage() {
             <span style={{ color: "#64748b" }}>⏱️ training_duration_total:</span>
             <span
               style={{ color: "#38bdf8", fontWeight: 700 }}
-              title={formatDurationDetailed(totalModelTrainDurationSec)}
+              title={formatDurationDetailed(totalModelTrainDurationSec || Number(trainSummary?.timing_summary?.total_elapsed_s || 0))}
             >
-              {totalModelTrainDurationSec > 0 ? formatDuration(totalModelTrainDurationSec) : "-"}
+              {totalModelTrainDurationSec > 0
+                ? formatDuration(totalModelTrainDurationSec)
+                : trainSummary?.timing_summary?.total_elapsed_s
+                ? formatDuration(Number(trainSummary.timing_summary.total_elapsed_s))
+                : "-"}
             </span>
           </div>
         </div>
@@ -957,10 +1010,10 @@ export function ModelPage() {
                     }}
                   >
                     <option value="all">All Matchups</option>
-                    <option value="selfplay">⚔️ EZv2 Self-Play</option>
+                    <option value="selfplay">⚔️ EZv2 Self-Play (IT Def vs US Atk)</option>
                     <option value="vs_random">🎯 EZv2 vs Random (All)</option>
-                    <option value="vs_random_atk">⚔️ EZv2 Attacker vs Random Defender</option>
-                    <option value="vs_random_def">🛡️ EZv2 Defender vs Random Attacker</option>
+                    <option value="vs_random_atk">⚔️ EZv2 (US Atk) vs Random (IT Def)</option>
+                    <option value="vs_random_def">🛡️ EZv2 (IT Def) vs Random (US Atk)</option>
                   </select>
                 </div>
 

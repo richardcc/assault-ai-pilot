@@ -69,14 +69,15 @@ class GameState:
         self.turn_state = TurnState(turn_number=turn)
 
         # -----------------------------
-        # ✅ TURN ORDER (CRÍTICO)
+        # Turn order resolution
         # -----------------------------
         self.turn_order = self._build_turn_order(units)
 
         # -----------------------------
-        # ✅ SIDE → OWNERSHIP
+        # Side to ownership mapping
         # -----------------------------
         self.side_to_ownership = self._build_side_ownership()
+        self.ownership_to_side = {own: side for side, own in self.side_to_ownership.items()}
 
         # -----------------------------
         # MAP STATE (Copy-on-Write layered dict, Roadmap 6.2)
@@ -438,6 +439,7 @@ class GameState:
         cloned.turn_state = TurnState(turn_number=self.turn)
         cloned.turn_order = self.turn_order
         cloned.side_to_ownership = self.side_to_ownership
+        cloned.ownership_to_side = getattr(self, "ownership_to_side", None)
 
         if isinstance(self.hex_states, CoWHexStateMap):
             cloned.hex_states = self.hex_states.branch()

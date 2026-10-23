@@ -1134,3 +1134,73 @@ def explain_game_situation(state_snapshot: Dict) -> Dict:
         "citations": ev["citations"][:6],
         "limitations": ev["limitations"],
     }
+
+
+def retrieve_doctrinal_citations_for_sitrep(
+    turning_points: list[dict],
+    max_citations: int = 4,
+) -> list[dict]:
+    """
+    Retrieve grounded rulebook and doctrinal citations from assault_rag
+    corresponding to decisive tactical match events (turning points).
+    """
+    if not turning_points:
+        return []
+
+    event_query_map = {
+        "VP_CAPTURE": ("victory point control capture holding objective", "Governs objective control updates and VP hex mechanics"),
+        "VP_LOSS": ("victory point control territory capture", "Pertains to loss of objective control and territory defense"),
+        "MORALE_FAILURE": ("morale suppression recovery rally status marker", "Defines suppression effects, combat penalties, and broken status"),
+        "KEY_RALLY": ("rally recovery morale order status check", "Specifies recovery check requirements and rally actions"),
+        "SURPRISE_DAMAGE": ("line of sight cover defense modifier ambush", "Covers defensive terrain modifiers and concealment"),
+        "HEAVY_ATTRITION": ("fire combat attack dice defense casualty", "Governs ranged combat resolution and casualty infliction"),
+        "DECISIVE_ASSAULT": ("close combat assault defender advantage dice modifier", "Pertains to close assault resolution and defender bonuses"),
+        "BREAKTHROUGH_MANEUVER": ("movement terrain move cost obstacle", "Governs movement costs, terrain transit, and offensive pushes"),
+    }
+
+    seen_ids = set()
+    citations = []
+
+    for tp in turning_points:
+        if len(citations) >= max_citations:
+            break
+        etype = str(tp.get("event_type", "HEAVY_ATTRITION")).upper()
+        query_text, default_reason = event_query_map.get(
+            etype,
+            ("fire combat combat resolution rules", "Standard tactical combat resolution rules"),
+        )
+        try:
+            ev = retrieve_evidence(query=query_text, mode="hybrid", max_rules=2, max_data=1)
+            for rule in ev.get("rules", []):
+                rid = str(rule.get("rule_id", ""))
+                if not rid or rid in seen_ids:
+                    continue
+                seen_ids.add(rid)
+                
+                raw_text = str(rule.get("text", "")).strip()
+                # Clean up YAML frontmatter if present
+                clean_lines = []
+                for line in raw_text.splitlines():
+                    if line.strip().startswith("topic:"):
+                        topic_val = line.split(":", 1)[1].strip().strip('"').strip("'")
+                    elif not line.strip().startswith("```") and not line.strip().startswith("---"):
+                        clean_lines.append(line)
+                excerpt = "\n".join(clean_lines[:6]).strip()
+                if len(excerpt) > 280:
+                    excerpt = excerpt[:277] + "..."
+
+                citations.append({
+                    "rule_id": rid,
+                    "event_type": etype,
+                    "topic": str(rule.get("topic", rule.get("rule_id", "Tactical Rule"))),
+                    "text_snippet": excerpt or raw_text[:280],
+                    "source": str(rule.get("source_id", rule.get("source", "Assault Rulebook"))),
+                    "relevance_reason": default_reason,
+                })
+                if len(citations) >= max_citations:
+                    break
+        except Exception:
+            continue
+
+    return citations
+

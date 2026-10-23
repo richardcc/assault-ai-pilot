@@ -26,6 +26,8 @@ class UnitSide(Enum):
 class UnitCategory(Enum):
     INFANTRY = "INFANTRY"
     VEHICLE = "VEHICLE"
+    ARTILLERY = "ARTILLERY"
+    GUN_ARTILLERY = "GUN_ARTILLERY"
 
 
 @dataclass(frozen=True)

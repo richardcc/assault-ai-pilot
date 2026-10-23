@@ -72,6 +72,13 @@ def persist_bench_artifacts(
     run_xai_dir.mkdir(parents=True, exist_ok=True)
     replay_eps_dir = run_xai_dir / "bench_replay_episodes"
     replay_eps_dir.mkdir(parents=True, exist_ok=True)
+    res_ctrl_map: dict[str, dict[str, str]] = {}
+    for r in list(results or []):
+        r_agent = str(getattr(r, "agent_name", "") or "")
+        r_ctrl = getattr(r, "controller_by_side", {}) or {}
+        if r_agent and isinstance(r_ctrl, dict):
+            res_ctrl_map[r_agent] = {str(k): str(v) for k, v in r_ctrl.items()}
+
     episodes_meta: list[dict[str, object]] = []
     for idx, ep_row in enumerate(to_dict_rows(bench_replay_episodes)):
         episode_index = int(ep_row.get("episode_index", idx) or idx)
@@ -81,6 +88,22 @@ def persist_bench_artifacts(
         episode_file = f"episode_{episode_index:04d}.json"
         episode_rel_path = f"bench_replay_episodes/{episode_file}"
         ep_scenario_id = str(ep_row.get("scenario_id", scenario_id))
+        winner = str(ep_row.get("winner", "") or "")
+        outcome = str(ep_row.get("outcome", "") or "")
+        sides: list[str] = list(ep_row.get("sides", []) or [])
+        if not sides and transitions and isinstance(transitions[0], dict):
+            u_list = transitions[0].get("units") or []
+            if isinstance(u_list, list):
+                sides = sorted(
+                    {str(u.get("side", "")).upper() for u in u_list if isinstance(u, dict) and u.get("side")}
+                )
+
+        ep_ctrl = res_ctrl_map.get(agent_name) or ep_row.get("controller_by_side") or {}
+        if isinstance(ep_ctrl, dict) and sides:
+            ctrl_filtered = {str(k).upper(): str(v) for k, v in ep_ctrl.items() if str(k).upper() in sides}
+        else:
+            ctrl_filtered = {str(k).upper(): str(v) for k, v in dict(ep_ctrl or {}).items()}
+
         if bool(persist_replay_episode_files):
             episode_payload = {
                 "schema_version": "bench_replay_episode_v2",
@@ -90,6 +113,10 @@ def persist_bench_artifacts(
                 "episode_index": int(episode_index),
                 "seed": int(seed),
                 "agent_name": str(agent_name),
+                "winner": winner,
+                "outcome": outcome,
+                "sides": sides,
+                "controller_by_side": ctrl_filtered,
                 "transitions": transitions,
             }
             (replay_eps_dir / episode_file).write_text(
@@ -102,6 +129,10 @@ def persist_bench_artifacts(
                 "seed": int(seed),
                 "agent_name": str(agent_name),
                 "scenario_id": ep_scenario_id,
+                "winner": winner,
+                "outcome": outcome,
+                "sides": sides,
+                "controller_by_side": ctrl_filtered,
                 "transitions": int(len(transitions)),
                 "episode_path": (str(episode_rel_path) if bool(persist_replay_episode_files) else ""),
             }

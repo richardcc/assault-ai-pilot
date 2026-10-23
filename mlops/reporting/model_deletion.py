@@ -39,12 +39,22 @@ def delete_model_experiment(
     if duckdb_path.exists():
         try:
             import duckdb
-            con = duckdb.connect(str(duckdb_path))
-            rows = con.execute("SELECT DISTINCT run_id FROM catalog_trains WHERE model_id = ?", [model_id]).fetchall()
-            for r in rows:
-                if r[0]:
-                    run_ids.add(str(r[0]))
-            con.close()
+            ro_con = duckdb.connect(str(duckdb_path), read_only=True)
+            try:
+                rows = ro_con.execute("SELECT DISTINCT run_id FROM catalog_trains WHERE model_id = ?", [model_id]).fetchall()
+                for r in rows:
+                    if r[0]:
+                        run_ids.add(str(r[0]))
+                rows = ro_con.execute("SELECT DISTINCT eval_id FROM catalog_evals WHERE model_id = ?", [model_id]).fetchall()
+                for r in rows:
+                    if r[0]:
+                        run_ids.add(str(r[0]))
+                rows = ro_con.execute("SELECT DISTINCT train_run_id FROM catalog_evals WHERE model_id = ?", [model_id]).fetchall()
+                for r in rows:
+                    if r[0]:
+                        run_ids.add(str(r[0]))
+            finally:
+                ro_con.close()
         except Exception:
             pass
 
@@ -84,8 +94,15 @@ def delete_model_experiment(
         for base_dir in ["runs", "runs_curriculum"]:
             d = (repo_root / base_dir / rid).resolve()
             if d.exists() and d.is_dir():
-                size = sum(f.stat().st_size for f in d.rglob("*") if f.is_file())
-                freed_bytes += size
+                try:
+                    for root, _, files in os.walk(d):
+                        for f in files:
+                            try:
+                                freed_bytes += os.path.getsize(os.path.join(root, f))
+                            except OSError:
+                                pass
+                except Exception:
+                    pass
                 shutil.rmtree(d, onerror=_remove_readonly)
                 deleted_dirs.append(str(d))
 
@@ -121,39 +138,68 @@ def delete_model_experiment(
     pub_res = {"catalog_mode": "duckdb_in_place_fast"}
     try:
         import duckdb  # type: ignore
-        from mlops.reporting.catalog_duckdb import load_catalog_summary_from_duckdb
+        from mlops.reporting.catalog_duckdb import (
+            close_duckdb_readonly_connection,
+            load_catalog_summary_from_duckdb,
+            _DUCKDB_READONLY_LOCK,
+            _CATALOG_SUMMARY_CACHE,
+        )
         from mlops.catalog_publisher_v2 import _atomic_write_json
         from mlops.contracts_v2 import SCHEMA_VERSION_V2
 
         indexes_dir = reporting_dir / "indexes"
         if duckdb_path.exists():
-            con = duckdb.connect(str(duckdb_path))
-            try:
-                for rid in run_ids:
-                    con.execute("DELETE FROM catalog_trains WHERE run_id = ?", [rid])
-                    con.execute("DELETE FROM catalog_evals WHERE train_run_id = ?", [rid])
-                    con.execute("DELETE FROM catalog_eval_result_sides WHERE train_run_id = ?", [rid])
-                con.execute("DELETE FROM catalog_models WHERE model_id = ?", [model_id])
-                con.execute("DELETE FROM catalog_trains WHERE model_id = ?", [model_id])
-                con.execute("DELETE FROM catalog_evals WHERE model_id = ?", [model_id])
-                con.execute("DELETE FROM catalog_eval_result_sides WHERE model_id = ?", [model_id])
+            with _DUCKDB_READONLY_LOCK:
+                # Close cached read-only connection in this process to prevent lock conflicts
+                close_duckdb_readonly_connection(duckdb_path)
+                _CATALOG_SUMMARY_CACHE.pop(str(duckdb_path.resolve()), None)
 
-                if indexes_dir.exists():
-                    con.execute(f"COPY catalog_models TO '{(indexes_dir / 'catalog_models.parquet').as_posix()}' (FORMAT PARQUET)")
-                    con.execute(f"COPY catalog_trains TO '{(indexes_dir / 'catalog_trains.parquet').as_posix()}' (FORMAT PARQUET)")
-                    con.execute(f"COPY catalog_evals TO '{(indexes_dir / 'catalog_evals.parquet').as_posix()}' (FORMAT PARQUET)")
-                    con.execute(f"COPY catalog_eval_result_sides TO '{(indexes_dir / 'catalog_eval_result_sides.parquet').as_posix()}' (FORMAT PARQUET)")
-            finally:
-                con.close()
+                con = None
+                for attempt in range(6):
+                    try:
+                        con = duckdb.connect(str(duckdb_path))
+                        break
+                    except Exception as conn_err:
+                        if attempt < 5:
+                            import time
+                            time.sleep(0.06 * (attempt + 1))
+                        else:
+                            raise conn_err
+
+                try:
+                    for rid in run_ids:
+                        con.execute("DELETE FROM catalog_trains WHERE run_id = ?", [rid])
+                        con.execute("DELETE FROM catalog_evals WHERE train_run_id = ?", [rid])
+                        con.execute("DELETE FROM catalog_evals WHERE eval_id = ?", [rid])
+                        con.execute("DELETE FROM catalog_eval_result_sides WHERE train_run_id = ?", [rid])
+                        con.execute("DELETE FROM catalog_eval_result_sides WHERE eval_id = ?", [rid])
+                    con.execute("DELETE FROM catalog_models WHERE model_id = ?", [model_id])
+                    con.execute("DELETE FROM catalog_trains WHERE model_id = ?", [model_id])
+                    con.execute("DELETE FROM catalog_evals WHERE model_id = ?", [model_id])
+                    con.execute("DELETE FROM catalog_eval_result_sides WHERE model_id = ?", [model_id])
+
+                    if indexes_dir.exists():
+                        con.execute(f"COPY catalog_models TO '{(indexes_dir / 'catalog_models.parquet').as_posix()}' (FORMAT PARQUET)")
+                        con.execute(f"COPY catalog_trains TO '{(indexes_dir / 'catalog_trains.parquet').as_posix()}' (FORMAT PARQUET)")
+                        con.execute(f"COPY catalog_evals TO '{(indexes_dir / 'catalog_evals.parquet').as_posix()}' (FORMAT PARQUET)")
+                        con.execute(f"COPY catalog_eval_result_sides TO '{(indexes_dir / 'catalog_eval_result_sides.parquet').as_posix()}' (FORMAT PARQUET)")
+                finally:
+                    if con is not None:
+                        con.close()
+                    # Ensure read-only pool and summary caches are invalidated for subsequent requests
+                    close_duckdb_readonly_connection(duckdb_path)
+                    _CATALOG_SUMMARY_CACHE.pop(str(duckdb_path.resolve()), None)
 
             slim_payload = load_catalog_summary_from_duckdb(repo_root=repo_root)
             if slim_payload:
                 slim_payload["schema_version"] = SCHEMA_VERSION_V2
                 slim_payload["catalog_mode"] = "duckdb_primary_fast_delete"
+                pub_res["catalog_mode"] = "duckdb_primary_fast_delete"
                 out_catalog = reporting_dir / "model_catalog_latest.json"
                 _atomic_write_json(out_catalog, slim_payload)
-    except Exception:
-        # Safe fallback: full publish with debug full catalog disabled
+    except Exception as exc:
+        import logging
+        logging.getLogger(__name__).warning("In-place fast deletion failed (%s); falling back to publish_catalog_snapshot", exc)
         pub_res = publish_catalog_snapshot(repo_root=repo_root, include_debug_full_catalog=False)
 
     return {

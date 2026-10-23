@@ -176,6 +176,22 @@ export function fetchStepTacticalHeads(
   return getJson(`/api/v2/replay/tactical-heads?${q.toString()}`);
 }
 
+export function fetchCausalSitrep(
+  evalSourcePath: string,
+  episodeId: string,
+  forceRecompute = false
+): Promise<Dict> {
+  const q = new URLSearchParams({
+    eval_source_path: String(evalSourcePath || ""),
+    episode_id: String(episodeId || "episode_0"),
+  });
+  if (forceRecompute) {
+    q.set("force_recompute", "1");
+  }
+  return getJson(`/api/v2/replay/causal-sitrep?${q.toString()}`);
+}
+
+
 
 
 

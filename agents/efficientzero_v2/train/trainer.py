@@ -193,91 +193,88 @@ class EfficientZeroV2Trainer(EfficientZeroV2BaseTrainer):
             base = super().train_batch(batch)
             return EfficientTrainMetrics(**base.to_dict(), consistency_loss=0.0)
 
-        # Reanalysis: refine value/policy targets with latest network prediction on sampled states.
-        reanalysis_coverage = 0.0
-        reanalysis_target_drift = 0.0
-        reanalysis_policy_drift = 0.0
-        if self.reanalysis_ratio > 0.0 and (
-            self.reanalysis_value_mix > 0.0 or self.reanalysis_policy_mix > 0.0
-        ):
-            self._progress("reanalysis_start")
-            with torch.no_grad():
-                with self._autocast_ctx():
-                    _, policy_logits_rean, value_rean, _, _ = model.initial_inference(obs, return_aux=True)
-            mask = (torch.rand((len(batch), 1), device=self.device) < self.reanalysis_ratio).to(torch.float32)
-            if float(mask.sum().item()) > 0.0:
-                if self.reanalysis_value_mix > 0.0:
-                    # N-step bootstrapped value target using rollout traces.
-                    boot_targets: list[list[float]] = []
-                    bootstrap_obs: list[torch.Tensor] = []
-                    bootstrap_pos_by_sample: dict[int, int] = {}
-                    bootstrap_disc_by_sample: dict[int, float] = {}
-                    for s in batch:
-                        info = dict(s.info or {})
-                        rewards = [float(x) for x in list(info.get("future_rewards", []) or [])]
-                        fobs = list(info.get("future_observations", []) or [])
-                        done_flags = [bool(x) for x in list(info.get("future_dones", []) or [])]
-                        n = min(self.value_bootstrap_steps, len(rewards))
-                        ret = 0.0
-                        disc = 1.0
-                        for t in range(n):
-                            ret += disc * float(rewards[t])
-                            if t < len(done_flags) and bool(done_flags[t]):
-                                disc = 0.0
-                                break
-                            disc *= self.value_bootstrap_discount
-                        if disc > 0.0 and len(fobs) >= n and n > 0:
-                            bobs = fobs[n - 1]
-                            bobs_t = (
-                                bobs.detach().to(torch.float32)
-                                if isinstance(bobs, torch.Tensor)
-                                else torch.tensor(bobs, dtype=torch.float32)
-                            )
-                            bootstrap_pos_by_sample[len(boot_targets)] = len(bootstrap_obs)
-                            bootstrap_disc_by_sample[len(boot_targets)] = float(disc)
-                            bootstrap_obs.append(bobs_t)
-                        elif n == 0:
-                            ret = float(s.value_target)
-                        boot_targets.append([float(ret)])
-                    if bootstrap_obs:
-                        bobs_batch = torch.stack(bootstrap_obs, dim=0).to(
-                            self.device, non_blocking=True
-                        )
-                        with torch.no_grad():
-                            with self._autocast_ctx():
-                                _, _, bvals, _, _ = model.initial_inference(
-                                    bobs_batch, return_aux=True
-                                )
-                        bvals_cpu = bvals.detach().to(device="cpu", dtype=torch.float32).view(-1)
-                        for sample_idx, obs_idx in bootstrap_pos_by_sample.items():
-                            disc = float(bootstrap_disc_by_sample.get(sample_idx, 0.0))
-                            if disc <= 0.0:
-                                continue
-                            boot_targets[sample_idx][0] = float(boot_targets[sample_idx][0]) + (
-                                disc * float(bvals_cpu[int(obs_idx)].item())
-                            )
-                    value_boot = torch.tensor(boot_targets, dtype=torch.float32, device=self.device)
-                    blended = ((1.0 - self.reanalysis_value_mix) * value_target) + (
-                        self.reanalysis_value_mix * value_boot
-                    )
-                    drift = torch.abs(value_boot - value_target)
-                    value_target = (mask * blended) + ((1.0 - mask) * value_target)
-                    reanalysis_target_drift = float((drift * mask).sum().item() / mask.sum().item())
-
-                if self.reanalysis_policy_mix > 0.0:
-                    policy_rean = torch.softmax(policy_logits_rean.detach(), dim=-1)
-                    pol_blended = ((1.0 - self.reanalysis_policy_mix) * policy_target) + (
-                        self.reanalysis_policy_mix * policy_rean
-                    )
-                    pol_drift = torch.mean(torch.abs(policy_rean - policy_target), dim=-1, keepdim=True)
-                    policy_target = (mask * pol_blended) + ((1.0 - mask) * policy_target)
-                    reanalysis_policy_drift = float((pol_drift * mask).sum().item() / mask.sum().item())
-                reanalysis_coverage = float(mask.mean().item())
-            self._progress("reanalysis_done")
-
+        # Single primary forward pass (fused with reanalysis target generation to avoid redundant evaluation)
         self._progress("forward_start")
         with self._autocast_ctx():
             hidden, policy_logits, value_pred, reward_pred, aux = model.initial_inference(obs, return_aux=True)
+
+            # Reanalysis: refine value/policy targets with latest network prediction on sampled states.
+            reanalysis_coverage = 0.0
+            reanalysis_target_drift = 0.0
+            reanalysis_policy_drift = 0.0
+            if self.reanalysis_ratio > 0.0 and (
+                self.reanalysis_value_mix > 0.0 or self.reanalysis_policy_mix > 0.0
+            ):
+                self._progress("reanalysis_start")
+                mask = (torch.rand((len(batch), 1), device=self.device) < self.reanalysis_ratio).to(torch.float32)
+                if float(mask.sum().item()) > 0.0:
+                    if self.reanalysis_value_mix > 0.0:
+                        # N-step bootstrapped value target using rollout traces.
+                        boot_targets: list[list[float]] = []
+                        bootstrap_obs: list[torch.Tensor] = []
+                        bootstrap_pos_by_sample: dict[int, int] = {}
+                        bootstrap_disc_by_sample: dict[int, float] = {}
+                        for s in batch:
+                            info = dict(s.info or {})
+                            rewards = [float(x) for x in list(info.get("future_rewards", []) or [])]
+                            fobs = list(info.get("future_observations", []) or [])
+                            done_flags = [bool(x) for x in list(info.get("future_dones", []) or [])]
+                            n = min(self.value_bootstrap_steps, len(rewards))
+                            ret = 0.0
+                            disc = 1.0
+                            for t in range(n):
+                                ret += disc * float(rewards[t])
+                                if t < len(done_flags) and bool(done_flags[t]):
+                                    disc = 0.0
+                                    break
+                                disc *= self.value_bootstrap_discount
+                            if disc > 0.0 and len(fobs) >= n and n > 0:
+                                bobs = fobs[n - 1]
+                                bobs_t = (
+                                    bobs.detach().to(torch.float32)
+                                    if isinstance(bobs, torch.Tensor)
+                                    else torch.tensor(bobs, dtype=torch.float32)
+                                )
+                                bootstrap_pos_by_sample[len(boot_targets)] = len(bootstrap_obs)
+                                bootstrap_disc_by_sample[len(boot_targets)] = float(disc)
+                                bootstrap_obs.append(bobs_t)
+                            elif n == 0:
+                                ret = float(s.value_target)
+                            boot_targets.append([float(ret)])
+                        value_boot = torch.tensor(boot_targets, dtype=torch.float32, device=self.device)
+                        if bootstrap_obs:
+                            bobs_batch = torch.stack(bootstrap_obs, dim=0).to(
+                                self.device, non_blocking=True
+                            )
+                            with torch.no_grad():
+                                _, _, bvals, _ = model.initial_inference(
+                                    bobs_batch, return_aux=False
+                                )
+                            # Vectorized in-place GPU update without CPU round-trips
+                            bvals_vec = bvals.view(-1)
+                            sample_indices = torch.tensor(list(bootstrap_pos_by_sample.keys()), dtype=torch.long, device=self.device)
+                            obs_indices = torch.tensor(list(bootstrap_pos_by_sample.values()), dtype=torch.long, device=self.device)
+                            discounts = torch.tensor([bootstrap_disc_by_sample[k] for k in bootstrap_pos_by_sample.keys()], dtype=torch.float32, device=self.device)
+                            value_boot[sample_indices, 0] += discounts * bvals_vec[obs_indices]
+
+                        blended = ((1.0 - self.reanalysis_value_mix) * value_target) + (
+                            self.reanalysis_value_mix * value_boot
+                        )
+                        drift = torch.abs(value_boot - value_target)
+                        value_target = (mask * blended) + ((1.0 - mask) * value_target)
+                        reanalysis_target_drift = float((drift * mask).sum().item() / mask.sum().item())
+
+                    if self.reanalysis_policy_mix > 0.0:
+                        policy_rean = torch.softmax(policy_logits.detach(), dim=-1)
+                        pol_blended = ((1.0 - self.reanalysis_policy_mix) * policy_target) + (
+                            self.reanalysis_policy_mix * policy_rean
+                        )
+                        pol_drift = torch.mean(torch.abs(policy_rean - policy_target), dim=-1, keepdim=True)
+                        policy_target = (mask * pol_blended) + ((1.0 - mask) * policy_target)
+                        reanalysis_policy_drift = float((pol_drift * mask).sum().item() / mask.sum().item())
+                    reanalysis_coverage = float(mask.mean().item())
+                self._progress("reanalysis_done")
+
             # Cross-entropy / KL divergence: avoids gradient saturation of MSE on softmax
             log_policy_probs = F.log_softmax(policy_logits, dim=-1)
             policy_loss = -(policy_target * log_policy_probs).sum(dim=-1).mean()
@@ -371,18 +368,22 @@ class EfficientZeroV2Trainer(EfficientZeroV2BaseTrainer):
                 and self.aux_threat_loss_weight > 0.0
             ):
                 threat_preds = aux["threat_map_pred"]
-                target_threats = []
-                for s in batch:
-                    info_dict = dict(s.info or {})
-                    if "threat_map_target" in info_dict:
-                        t = torch.as_tensor(info_dict["threat_map_target"], dtype=torch.float32)
-                    elif isinstance(s.observation, torch.Tensor) and s.observation.dim() == 3 and s.observation.shape[0] > 7:
-                        # Extract the enemy threat map directly from observation tensor (Channel 7: reaction_fire_threat)
-                        t = s.observation[7:8].detach().to(dtype=torch.float32)
-                    else:
-                        t = torch.zeros((1, getattr(self.model, "observation_height", 16), getattr(self.model, "observation_width", 16)), dtype=torch.float32)
-                    target_threats.append(t)
-                target_threats_t = torch.stack(target_threats, dim=0).to(self.device, non_blocking=True)
+                has_custom = any("threat_map_target" in (s.info or {}) for s in batch)
+                if not has_custom and obs.dim() == 4 and obs.shape[1] > 7:
+                    target_threats_t = obs[:, 7:8].detach().to(dtype=torch.float32)
+                else:
+                    target_threats = []
+                    for s in batch:
+                        info_dict = dict(s.info or {})
+                        if "threat_map_target" in info_dict:
+                            t = torch.as_tensor(info_dict["threat_map_target"], dtype=torch.float32)
+                        elif isinstance(s.observation, torch.Tensor) and s.observation.dim() == 3 and s.observation.shape[0] > 7:
+                            # Extract the enemy threat map directly from observation tensor (Channel 7: reaction_fire_threat)
+                            t = s.observation[7:8].detach().to(dtype=torch.float32)
+                        else:
+                            t = torch.zeros((1, getattr(self.model, "observation_height", 16), getattr(self.model, "observation_width", 16)), dtype=torch.float32)
+                        target_threats.append(t)
+                    target_threats_t = torch.stack(target_threats, dim=0).to(self.device, non_blocking=True)
                 if target_threats_t.shape != threat_preds.shape:
                     try:
                         target_threats_t = target_threats_t.view_as(threat_preds)
@@ -546,8 +547,8 @@ class EfficientZeroV2Trainer(EfficientZeroV2BaseTrainer):
                         )
                         with torch.no_grad():
                             with self._autocast_ctx():
-                                tgt_hidden, _, _, _, _ = model.initial_inference(
-                                    tgt_obs_batch, return_aux=True
+                                tgt_hidden, _, _, _ = model.initial_inference(
+                                    tgt_obs_batch, return_aux=False
                                 )
                         z_pred = model.consistency_embedding(pred_hidden_next)
                         z_tgt = model.consistency_embedding(tgt_hidden).detach()

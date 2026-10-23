@@ -395,17 +395,23 @@ class ActionCatalog:
                 composites.append(FireThenMoveAction(active.unit_id, fire, move.path))
 
         # move_then_fire (half move first, then fire from destination)
+        fires_by_dest = {}
         for move in half_moves:
             end_pos = move.path[-1] if move.path else None
-            self._trace_move_then_fire_diagnostics(active, end_pos)
-            fires_after_move = self._ranged_fire_actions_from_position(active, end_pos)
+            if end_pos is None:
+                continue
+            dest_key = (int(getattr(end_pos, "q", 0)), int(getattr(end_pos, "r", 0)))
+            if dest_key not in fires_by_dest:
+                self._trace_move_then_fire_diagnostics(active, end_pos)
+                fires_by_dest[dest_key] = self._ranged_fire_actions_from_position(active, end_pos)
+            fires_after_move = fires_by_dest[dest_key]
             for fire in fires_after_move:
                 key = (
                     "move_then_fire",
                     getattr(fire, "target_id", None),
                     getattr(fire, "target_hex", None),
-                    getattr(end_pos, "q", None),
-                    getattr(end_pos, "r", None),
+                    dest_key[0],
+                    dest_key[1],
                 )
                 if key in seen:
                     continue

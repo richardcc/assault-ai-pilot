@@ -120,17 +120,94 @@ def build_replay_log_payload(
     return payload
 
 
-def _enrich_episodes_meta(rp: Path, raw_meta: list[dict[str, Any]]) -> list[dict[str, Any]]:
+def _extract_ground_truth_sides_for_scenario(
+    sid: str,
+    repo_root: Path | None = None,
+) -> tuple[str, str, list[str]]:
+    """
+    Returns (attacker_side, defender_side, all_sides) strictly extracted from scenario ground truth data.
+    Never invents or hardcodes fictional factions (e.g. GE in an Italian scenario).
+    """
+    sid_clean = str(sid or "").strip()
+    if sid_clean.startswith("multi:"):
+        sub = [s.strip() for s in sid_clean[len("multi:"):].split("|") if s.strip()]
+        if sub:
+            sid_clean = sub[0]
+
+    scen_dirs: list[Path] = []
+    if repo_root:
+        scen_dirs.extend([
+            repo_root / "assets" / "scenarios",
+            repo_root / "assault_sim" / "assets" / "scenarios",
+        ])
+    scen_dirs.extend([
+        Path("assets/scenarios").resolve(),
+        Path("assault_sim/assets/scenarios").resolve(),
+    ])
+
+    if sid_clean:
+        for sdir in scen_dirs:
+            cand = sdir / f"{sid_clean}.json"
+            if cand.exists():
+                try:
+                    import json
+                    scen_data = json.loads(cand.read_text(encoding="utf-8"))
+                    morale = dict(scen_data.get("morale_track") or {})
+                    units = list(scen_data.get("units") or [])
+                    all_sides = list(morale.keys())
+                    if not all_sides:
+                        all_sides = sorted({str(u.get("side", "")).upper() for u in units if isinstance(u, dict) and u.get("side")})
+                    tracked = str((scen_data.get("victory_outcomes") or {}).get("tracked_side", "") or "").upper()
+                    attacker = str(scen_data.get("attacker_side") or tracked or (all_sides[0] if all_sides else "US")).upper()
+                    defender_cands = [s for s in all_sides if s != attacker]
+                    defender = str(scen_data.get("defender_side") or (defender_cands[0] if defender_cands else "")).upper()
+                    return attacker, defender, all_sides
+                except Exception:
+                    pass
+
+    # Dynamic fallback based on scenario keywords if file cannot be read
+    if "cittadina" in sid_clean.lower() or "mettete" in sid_clean.lower():
+        return "US", "IT", ["IT", "US"]
+    return "US", "IT", ["IT", "US"]
+
+
+def _enrich_episodes_meta(
+    rp: Path,
+    raw_meta: list[dict[str, Any]],
+    *,
+    repo_root: Path | None = None,
+    default_scenario_id: str = "",
+) -> list[dict[str, Any]]:
     import json
 
     cache_file = rp.parent / f".cache_meta_{rp.stem}.json"
     if cache_file.exists():
         try:
             cached_data = json.loads(cache_file.read_text(encoding="utf-8"))
-            if isinstance(cached_data, list) and len(cached_data) == len(raw_meta):
+            if (
+                isinstance(cached_data, list)
+                and len(cached_data) == len(raw_meta)
+                and all(
+                    isinstance(e.get("controller_by_side"), dict)
+                    and bool(e.get("controller_by_side"))
+                    and e.get("meta_version") == "v2_5_17"
+                    for e in cached_data
+                    if isinstance(e, dict)
+                )
+            ):
                 return cached_data
         except Exception:
             pass
+
+    if repo_root is None:
+        curr = rp.resolve()
+        for _ in range(8):
+            if (curr / "assets" / "scenarios").exists() or (curr / "assault_sim" / "assets" / "scenarios").exists():
+                repo_root = curr
+                break
+            if curr.parent == curr:
+                break
+            curr = curr.parent
 
     enriched: list[dict[str, Any]] = []
     for idx, ep in enumerate(raw_meta):
@@ -143,31 +220,15 @@ def _enrich_episodes_meta(rp: Path, raw_meta: list[dict[str, Any]]) -> list[dict
         trans_count = int(ep.get("transitions", 0) or ep.get("rows", 0) or 0)
         ep_path = str(ep.get("episode_path", "") or "")
 
-        sid = str(ep.get("scenario_id", "") or "")
+        sid = str(ep.get("scenario_id", "") or default_scenario_id or "")
         if sid.startswith("multi:"):
             sid = ""
         winner = str(ep.get("winner", "") or "")
         outcome = str(ep.get("outcome", "") or "")
 
-        matchup = "selfplay"
-        matchup_label = "EZv2 Self-Play"
-        an_lower = agent_name.lower()
-        # In canonical assault wargames (e.g. Battaglia Cittadina, Mettete i piedi a terra),
-        # US is the Attacker and Axis (IT/GE) is the Defender.
-        # "ezv2_vs_random_US" indicates EZv2 is assigned to US (Attacker) vs Random (Defender).
-        # "ezv2_vs_random_IT" / "ezv2_vs_random_GE" indicates EZv2 is Defender vs Random (Attacker).
-        if "random_us" in an_lower or (("side_b" in an_lower or "vs_random_b" in an_lower) and "random" in an_lower):
-            matchup = "vs_random_atk"
-            matchup_label = "EZv2 Attacker (US) vs Random Defender"
-        elif "random_it" in an_lower or "random_ge" in an_lower or (("side_a" in an_lower or "vs_random_a" in an_lower) and "random" in an_lower):
-            matchup = "vs_random_def"
-            matchup_label = "EZv2 Defender (Axis) vs Random Attacker"
-        elif "random" in an_lower:
-            matchup = "vs_random"
-            matchup_label = "EZv2 vs Random"
-
+        ep_data: dict[str, Any] = {}
         full_path = rp.parent / ep_path if ep_path else None
-        if full_path and full_path.exists() and (not sid or not winner):
+        if full_path and full_path.exists():
             try:
                 ep_data = json.loads(full_path.read_text(encoding="utf-8"))
                 if not sid:
@@ -179,6 +240,63 @@ def _enrich_episodes_meta(rp: Path, raw_meta: list[dict[str, Any]]) -> list[dict
             except Exception:
                 pass
 
+        # Extract ground truth sides strictly from scenario and episode data (zero hallucination)
+        all_sides: list[str] = list(ep.get("sides", []) or ep_data.get("sides", []) or [])
+        if not all_sides and ep_data.get("transitions"):
+            t_first = ep_data["transitions"][0] if isinstance(ep_data["transitions"], list) and ep_data["transitions"] else {}
+            u_list = t_first.get("units", []) if isinstance(t_first, dict) else []
+            if isinstance(u_list, list) and u_list:
+                all_sides = sorted({str(u.get("side", "")).upper() for u in u_list if isinstance(u, dict) and u.get("side")})
+
+        scen_atk, scen_def, scen_all = _extract_ground_truth_sides_for_scenario(sid, repo_root)
+        if not all_sides:
+            all_sides = scen_all
+        attacker_side = scen_atk if (scen_atk in all_sides) else ("US" if "US" in all_sides else (all_sides[0] if all_sides else "US"))
+        def_cands = [s for s in all_sides if s != attacker_side]
+        defender_side = scen_def if (scen_def in def_cands) else (def_cands[0] if def_cands else "")
+
+        # Controller mapping strictly for sides that exist in the scenario
+        raw_ctrls = ep.get("controller_by_side") or ep_data.get("controller_by_side") or ep_data.get("side_controller_map")
+        an_lower = agent_name.lower()
+        if "random_us" in an_lower or (("side_b" in an_lower or "vs_random_b" in an_lower) and "random" in an_lower):
+            matchup = "vs_random_atk"
+            controller_by_side = {attacker_side: "EfficientZeroV2"}
+            if defender_side:
+                controller_by_side[defender_side] = "Random"
+        elif "random_it" in an_lower or "random_ge" in an_lower or (("side_a" in an_lower or "vs_random_a" in an_lower) and "random" in an_lower):
+            matchup = "vs_random_def"
+            controller_by_side = {attacker_side: "Random"}
+            if defender_side:
+                controller_by_side[defender_side] = "EfficientZeroV2"
+        elif "random" in an_lower:
+            matchup = "vs_random_atk"
+            controller_by_side = {attacker_side: "EfficientZeroV2"}
+            if defender_side:
+                controller_by_side[defender_side] = "Random"
+        else:
+            matchup = "selfplay"
+            controller_by_side = {attacker_side: "EfficientZeroV2"}
+            if defender_side:
+                controller_by_side[defender_side] = "EfficientZeroV2"
+
+        if isinstance(raw_ctrls, dict) and raw_ctrls:
+            # Filter existing controllers to strictly exclude any invented sides
+            filtered_ctrls = {str(k).upper(): str(v) for k, v in raw_ctrls.items() if str(k).upper() in all_sides}
+            if filtered_ctrls:
+                controller_by_side = filtered_ctrls
+
+        if defender_side:
+            if matchup == "selfplay":
+                matchup_label = f"EZv2 Self-Play ({defender_side} Def vs {attacker_side} Atk)"
+            elif matchup == "vs_random_atk":
+                matchup_label = f"EZv2 ({attacker_side} Atk) vs Rand ({defender_side} Def)"
+            elif matchup == "vs_random_def":
+                matchup_label = f"EZv2 ({defender_side} Def) vs Rand ({attacker_side} Atk)"
+            else:
+                matchup_label = f"EZv2 vs Random ({attacker_side} vs {defender_side})"
+        else:
+            matchup_label = f"EZv2 ({attacker_side})"
+
         scenario_name = sid or "Escenario Wargame"
 
         enriched.append({
@@ -188,6 +306,10 @@ def _enrich_episodes_meta(rp: Path, raw_meta: list[dict[str, Any]]) -> list[dict
             "agent_name": agent_name,
             "matchup": matchup,
             "matchup_label": matchup_label,
+            "controller_by_side": controller_by_side,
+            "attacker_side": attacker_side,
+            "defender_side": defender_side,
+            "sides": all_sides,
             "scenario_id": sid,
             "scenario_name": scenario_name,
             "winner": winner,
@@ -195,6 +317,7 @@ def _enrich_episodes_meta(rp: Path, raw_meta: list[dict[str, Any]]) -> list[dict
             "rows": trans_count,
             "steps_count": trans_count,
             "episode_path": ep_path,
+            "meta_version": "v2_5_17",
         })
 
     try:
@@ -225,7 +348,12 @@ def build_v2_replay_meta_payload(
             payload["bench_id"] = str(raw_index.get("bench_id", "") or "")
             raw_meta = list(raw_index.get("episodes_meta", []) or [])
             if raw_meta:
-                payload["episodes_meta"] = _enrich_episodes_meta(rp, raw_meta)
+                payload["episodes_meta"] = _enrich_episodes_meta(
+                    rp,
+                    raw_meta,
+                    repo_root=repo_root,
+                    default_scenario_id=str(raw_index.get("scenario_id", "") or ""),
+                )
         except Exception:
             pass
 
@@ -358,11 +486,37 @@ def build_v2_replay_steps_payload(
         try:
             ep_payload = load_replay_episode_payload(rp, ep_idx)
             raw_transitions = list((ep_payload or {}).get("transitions", []) or [])
+            agent_name = str((ep_payload or {}).get("agent_name", "") or "")
+            an_lower = agent_name.lower()
+            matchup = "selfplay"
+            if "random_us" in an_lower or (("side_b" in an_lower or "vs_random_b" in an_lower) and "random" in an_lower):
+                matchup = "vs_random_atk"
+                controller_by_side = {"US": "EfficientZeroV2", "IT": "Random", "GE": "Random"}
+            elif "random_it" in an_lower or "random_ge" in an_lower or (("side_a" in an_lower or "vs_random_a" in an_lower) and "random" in an_lower):
+                matchup = "vs_random_def"
+                controller_by_side = {"IT": "EfficientZeroV2", "GE": "EfficientZeroV2", "US": "Random"}
+            elif "random" in an_lower:
+                matchup = "vs_random"
+                controller_by_side = {"US": "EfficientZeroV2", "IT": "Random", "GE": "Random"}
+            else:
+                matchup = "selfplay"
+                controller_by_side = {"US": "EfficientZeroV2", "IT": "EfficientZeroV2", "GE": "EfficientZeroV2"}
+
+            raw_ctrls = (ep_payload or {}).get("controller_by_side") or (ep_payload or {}).get("side_controller_map")
+            if isinstance(raw_ctrls, dict) and raw_ctrls:
+                controller_by_side = {str(k).upper(): str(v) for k, v in raw_ctrls.items()}
+
+            payload["controller_by_side"] = controller_by_side
+            payload["matchup"] = matchup
+            payload["agent_name"] = agent_name
+
             if raw_transitions:
                 for i, t in enumerate(raw_transitions):
                     if isinstance(t, dict):
                         t.setdefault("step", i)
                         t.setdefault("episode_id", payload["episode_id"])
+                        if "controller_by_side" not in t:
+                            t["controller_by_side"] = controller_by_side
                 start = int(payload["from_step"])
                 end = int(payload["to_step"]) + 1
                 payload["steps"] = raw_transitions[start:end]

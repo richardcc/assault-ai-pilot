@@ -9,6 +9,7 @@ from statistics import mean
 from typing import Any
 
 import torch
+import numpy as np
 
 
 @dataclass
@@ -108,8 +109,8 @@ class InferenceService:
                 if nxt is None:
                     self._q.put(None)
                     break
-                if nxt.method != item.method:
-                    # Different method: process later to keep tensor shapes simple.
+                if nxt.method != item.method or nxt.kwargs != item.kwargs:
+                    # Different method or kwargs: process later to keep tensor shapes simple.
                     self._q.put(nxt)
                     break
                 batch.append(nxt)
@@ -192,11 +193,12 @@ class InferenceService:
         # Supports methods where first arg is batch tensor and optional second arg batch tensor.
         fn = getattr(self.model, method)
         arg0 = torch.cat([self._to_device(req.args[0]) for req in batch], dim=0)
+        common_kwargs = {k: self._to_device(v) for k, v in batch[0].kwargs.items()}
         if len(batch[0].args) > 1 and isinstance(batch[0].args[1], torch.Tensor):
             arg1 = torch.cat([self._to_device(req.args[1]) for req in batch], dim=0)
-            out = fn(arg0, arg1)
+            out = fn(arg0, arg1, **common_kwargs)
         else:
-            out = fn(arg0)
+            out = fn(arg0, **common_kwargs)
         return self._split_output(out, [req.args[0].shape[0] for req in batch])
 
     def _to_device(self, x: Any) -> Any:
@@ -255,6 +257,9 @@ class RemoteInferenceModel:
         self.observation_width = int(getattr(src, "observation_width", 16))
         self.action_dim = int(getattr(src, "action_dim", 32))
 
+    def __getattr__(self, name: str) -> Any:
+        return getattr(self._service.model, name)
+
     def parameters(self):
         # Selfplay helpers only use this to infer a device for observation tensors.
         # We return a CPU placeholder because this proxy marshals calls itself.
@@ -265,3 +270,159 @@ class RemoteInferenceModel:
 
     def recurrent_inference(self, hidden: torch.Tensor, action: torch.Tensor, **kwargs: Any):
         return self._service.infer("recurrent_inference", hidden, action, **kwargs)
+
+
+class IPCProcessInferenceClient:
+    """
+    Drop-in model proxy used by selfplay worker processes across process boundaries.
+    Communicates with the central GPU InferenceService via NumPy arrays through
+    multiprocessing queues, completely avoiding Windows PyTorch file mapping exhaustion (Error 1455).
+    """
+
+    def __init__(
+        self,
+        worker_id: int,
+        request_queue: Any,
+        response_queue: Any,
+        model_metadata: dict[str, Any] | None = None,
+    ):
+        self.worker_id = int(worker_id)
+        self._req_q = request_queue
+        self._resp_q = response_queue
+        meta = dict(model_metadata or {})
+        self.encoder_type = str(meta.get("encoder_type", "mlp"))
+        self.observation_channels = int(meta.get("observation_channels", 38))
+        self.observation_height = int(meta.get("observation_height", 16))
+        self.observation_width = int(meta.get("observation_width", 16))
+        self.action_dim = int(meta.get("action_dim", 32))
+        self.hidden_dim = int(meta.get("hidden_dim", 48))
+
+    def parameters(self):
+        yield torch.empty(1, device="cpu")
+
+    def _to_numpy_buffer(self, item: Any) -> Any:
+        if isinstance(item, torch.Tensor):
+            return item.detach().to(device="cpu").contiguous().numpy()
+        if isinstance(item, tuple):
+            return tuple(self._to_numpy_buffer(x) for x in item)
+        if isinstance(item, list):
+            return [self._to_numpy_buffer(x) for x in item]
+        if isinstance(item, dict):
+            return {k: self._to_numpy_buffer(v) for k, v in item.items()}
+        return item
+
+    def _wrap_tensors(self, res: Any) -> Any:
+        if isinstance(res, np.ndarray):
+            return torch.from_numpy(res)
+        if isinstance(res, tuple):
+            return tuple(self._wrap_tensors(x) for x in res)
+        if isinstance(res, list):
+            return [self._wrap_tensors(x) for x in res]
+        if isinstance(res, dict):
+            return {k: self._wrap_tensors(v) for k, v in res.items()}
+        return res
+
+    def initial_inference(self, observation: torch.Tensor, **kwargs: Any):
+        obs_np = self._to_numpy_buffer(observation)
+        self._req_q.put((self.worker_id, "initial_inference", (obs_np,), kwargs))
+        res = self._resp_q.get()
+        if isinstance(res, Exception):
+            raise res
+        return self._wrap_tensors(res)
+
+    def recurrent_inference(self, hidden: torch.Tensor, action: torch.Tensor, **kwargs: Any):
+        h_np = self._to_numpy_buffer(hidden)
+        a_np = self._to_numpy_buffer(action)
+        self._req_q.put((self.worker_id, "recurrent_inference", (h_np, a_np), kwargs))
+        res = self._resp_q.get()
+        if isinstance(res, Exception):
+            raise res
+        return self._wrap_tensors(res)
+
+
+class IPCInferenceBridge:
+    """
+    Main process bridge connecting multi-process selfplay workers to the central GPU InferenceService.
+    Translates NumPy IPC buffers to PyTorch GPU tensors to avoid Windows handle/pagefile limits.
+    """
+
+    def __init__(
+        self,
+        service: InferenceService,
+        request_queue: Any,
+        response_queues: list[Any],
+    ):
+        self.service = service
+        self._req_q = request_queue
+        self._resp_qs = list(response_queues)
+        self._thread: threading.Thread | None = None
+        self._running = False
+
+    def start(self) -> None:
+        if self._running:
+            return
+        self._running = True
+        self._thread = threading.Thread(
+            target=self._loop, name="ezv2-ipc-inference-bridge", daemon=True
+        )
+        self._thread.start()
+
+    def stop(self, join_timeout_s: float = 3.0) -> None:
+        if not self._running:
+            return
+        self._running = False
+        try:
+            self._req_q.put(None)
+        except Exception:
+            pass
+        if self._thread is not None:
+            self._thread.join(timeout=float(join_timeout_s))
+            self._thread = None
+
+    def _loop(self) -> None:
+        import concurrent.futures
+        max_workers = max(4, min(32, len(self._resp_qs)))
+        pool = concurrent.futures.ThreadPoolExecutor(max_workers=max_workers)
+
+        def _unwrap_tensors(item: Any) -> Any:
+            if isinstance(item, np.ndarray):
+                return torch.from_numpy(item)
+            if isinstance(item, tuple):
+                return tuple(_unwrap_tensors(x) for x in item)
+            if isinstance(item, list):
+                return [_unwrap_tensors(x) for x in item]
+            if isinstance(item, dict):
+                return {k: _unwrap_tensors(v) for k, v in item.items()}
+            return item
+
+        def _to_numpy(item: Any) -> Any:
+            if isinstance(item, torch.Tensor):
+                return item.detach().to(device="cpu").contiguous().numpy()
+            if isinstance(item, tuple):
+                return tuple(_to_numpy(x) for x in item)
+            if isinstance(item, list):
+                return [_to_numpy(x) for x in item]
+            if isinstance(item, dict):
+                return {k: _to_numpy(v) for k, v in item.items()}
+            return item
+
+        def _handle_request(worker_id: int, method: str, args: tuple, kwargs: dict) -> None:
+            try:
+                unwrapped_args = tuple(_unwrap_tensors(a) for a in args)
+                res = self.service.infer(method, *unwrapped_args, **kwargs)
+                res_np = _to_numpy(res)
+                self._resp_qs[worker_id].put(res_np)
+            except Exception as exc:
+                self._resp_qs[worker_id].put(exc)
+
+        while self._running:
+            try:
+                item = self._req_q.get(timeout=0.05)
+            except Exception:
+                continue
+            if item is None:
+                break
+            worker_id, method, args, kwargs = item
+            pool.submit(_handle_request, int(worker_id), str(method), tuple(args), dict(kwargs))
+
+        pool.shutdown(wait=False)

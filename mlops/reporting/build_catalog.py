@@ -139,8 +139,6 @@ def _filter_default_matchups(results: list[dict[str, Any]], *, include_random_se
 
 
 def _prune_result_for_catalog(result_row: dict[str, Any], *, include_eval_payload_details: bool) -> dict[str, Any]:
-    if include_eval_payload_details:
-        return dict(result_row or {})
     out = dict(result_row or {})
     # Heavy per-step/per-candidate payloads belong to replay/eval artifacts, not the catalog listing.
     out.pop("eval_decision_steps_top", None)

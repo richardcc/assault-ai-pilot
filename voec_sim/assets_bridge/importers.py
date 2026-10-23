@@ -41,12 +41,21 @@ def _resolve_repo_path(path: Path) -> Path:
     return (repo_root / path).resolve()
 
 
+_CATALOG_CACHE: dict[tuple[str, str], tuple[Dict, Dict]] = {}
+
+
 def load_catalogs(paths: AssetPaths) -> tuple[Dict, Dict]:
-    unit_catalog = load_unit_catalog(_resolve_repo_path(paths.unit_catalog_path))
-    map_piece_catalog = load_map_piece_catalog(
-        _resolve_repo_path(paths.map_piece_catalog_path)
+    key = (
+        str(_resolve_repo_path(paths.unit_catalog_path)),
+        str(_resolve_repo_path(paths.map_piece_catalog_path)),
     )
-    return unit_catalog, map_piece_catalog
+    if key not in _CATALOG_CACHE:
+        unit_catalog = load_unit_catalog(_resolve_repo_path(paths.unit_catalog_path))
+        map_piece_catalog = load_map_piece_catalog(
+            _resolve_repo_path(paths.map_piece_catalog_path)
+        )
+        _CATALOG_CACHE[key] = (unit_catalog, map_piece_catalog)
+    return _CATALOG_CACHE[key]
 
 
 def list_scenario_ids(paths: AssetPaths) -> List[str]:

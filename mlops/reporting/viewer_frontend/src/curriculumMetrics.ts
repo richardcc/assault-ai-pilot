@@ -18,6 +18,12 @@ export interface CurriculumStepMetric {
   gateFailReasons: string[];
   vpNet: number | null;
   capturedAvg: number | null;
+  targetWinRate: number | null;
+  targetCapturedAvg: number | null;
+  targetVpNet: number | null;
+  targetVpTakeRate: number | null;
+  vpTakeRate: number | null;
+  tqs: number | null;
   durationSeconds: number | null;
   trainDurationSeconds?: number | null;
   benchDurationSeconds?: number | null;
@@ -72,6 +78,12 @@ export function extractStepTraceMetrics(trace?: Dict | null): {
   gateFailReasons: string[];
   vpNet: number | null;
   capturedAvg: number | null;
+  targetWinRate: number | null;
+  targetCapturedAvg: number | null;
+  targetVpNet: number | null;
+  targetVpTakeRate: number | null;
+  vpTakeRate: number | null;
+  tqs: number | null;
 } {
   if (!trace) {
     return {
@@ -83,10 +95,17 @@ export function extractStepTraceMetrics(trace?: Dict | null): {
       gateFailReasons: [],
       vpNet: null,
       capturedAvg: null,
+      targetWinRate: null,
+      targetCapturedAvg: null,
+      targetVpNet: null,
+      targetVpTakeRate: null,
+      vpTakeRate: null,
+      tqs: null,
     };
   }
 
   const gm = (trace.gate_metrics || {}) as Dict;
+  const spec = (trace.gate_spec_snapshot || {}) as Dict;
   const prof = (gm.profile_scores || {}) as Record<string, number>;
   let scA: number | null = null;
   let scB: number | null = null;
@@ -134,6 +153,18 @@ export function extractStepTraceMetrics(trace?: Dict | null): {
   const vpNet = typeof gm.vp_net_avg_tracked_side === "number" ? gm.vp_net_avg_tracked_side : null;
   const capturedAvg = typeof gm.tracked_captured_avg === "number" ? gm.tracked_captured_avg : null;
 
+  const targetWinRate =
+    typeof spec.min_win_rate === "number"
+      ? spec.min_win_rate
+      : typeof spec.min_win_rate_vs_heuristic === "number"
+      ? spec.min_win_rate_vs_heuristic
+      : null;
+  const targetCapturedAvg = typeof spec.min_tracked_captured_avg === "number" ? spec.min_tracked_captured_avg : null;
+  const targetVpNet = typeof spec.min_vp_net_avg_tracked_side === "number" ? spec.min_vp_net_avg_tracked_side : null;
+  const targetVpTakeRate = typeof spec.min_vp_capture_take_rate === "number" ? spec.min_vp_capture_take_rate : null;
+  const vpTakeRate = typeof gm.vp_capture_take_rate === "number" ? gm.vp_capture_take_rate : null;
+  const tqs = typeof gm.tqs === "number" ? gm.tqs : typeof gm.tactical_quality_score === "number" ? gm.tactical_quality_score : null;
+
   return {
     elo,
     winRate,
@@ -143,6 +174,12 @@ export function extractStepTraceMetrics(trace?: Dict | null): {
     gateFailReasons,
     vpNet,
     capturedAvg,
+    targetWinRate,
+    targetCapturedAvg,
+    targetVpNet,
+    targetVpTakeRate,
+    vpTakeRate,
+    tqs,
   };
 }
 
@@ -204,6 +241,12 @@ export function buildCurriculumProgression(
       gateFailReasons: m.gateFailReasons,
       vpNet: m.vpNet,
       capturedAvg: m.capturedAvg,
+      targetWinRate: m.targetWinRate,
+      targetCapturedAvg: m.targetCapturedAvg,
+      targetVpNet: m.targetVpNet,
+      targetVpTakeRate: m.targetVpTakeRate,
+      vpTakeRate: m.vpTakeRate,
+      tqs: m.tqs,
       durationSeconds: dur,
       trainDurationSeconds: trainDur,
       benchDurationSeconds: benchDur,

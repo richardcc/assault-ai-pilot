@@ -2,8 +2,10 @@ base_config: agents/efficientzero_v2/configs/efficientzero_v2_config.yaml
 scenario:
   id: vp_phase1_unoccupied_3hex
 selfplay:
-  num_workers: 10
+  num_workers: 24
   parallel_backend: process
+  inference_max_batch_size: 48
+  inference_batch_wait_ms: 1.5
   reward_shaping:
     vp_capture_bonus_per_hex: 11.96
     objective_progress_bonus_per_hex: 9.58
@@ -18,7 +20,7 @@ selfplay:
     paralysis_penalty_weight: 0.05
   mcts_temperature: 1.35
 train:
-  episodes_per_iter: 15
+  episodes_per_iter: 24
   objective_loss_weight: 0.59
   train_updates_per_iter: 18
   reanalysis_ratio: 0.4
