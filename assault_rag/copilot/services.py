@@ -1,3 +1,4 @@
+from assault_model.map.topography_analyzer import analyze_battlefield_topography
 import json
 import os
 import re
@@ -289,7 +290,7 @@ def _fallback_answer_from_state(query: str, context: Dict | None) -> str | None:
         )
         more = f" (+{len(moved) - 8} más)" if len(moved) > 8 else ""
         return (
-            f"Unidades del lado activo {active_side} ya activadas/movidas en este turno: {short}{more}."
+            f"Active side {active_side} units already activated/moved this turn: {short}{more}."
         )
     if asks_unmoved_units and isinstance(snap, dict) and snap:
         active_side = str(snap.get("active_side", "") or "").upper()
@@ -322,7 +323,7 @@ def _fallback_answer_from_state(query: str, context: Dict | None) -> str | None:
         )
         more = f" (+{len(pending) - 8} más)" if len(pending) > 8 else ""
         return (
-            f"Unidades del lado activo {active_side} aún no activadas en este turno: {short}{more}."
+            f"Active side {active_side} units awaiting activation this turn: {short}{more}."
         )
     asks_last_ai_move = any(
         k in q_lower
@@ -357,10 +358,10 @@ def _fallback_answer_from_state(query: str, context: Dict | None) -> str | None:
             turn = int(d.get("turn", compact.get("turn", 0)) or 0)
             side = str(d.get("side", compact.get("active_side", "UNKNOWN")) or "UNKNOWN")
             unit_id = str(d.get("unit_id", "?") or "?")
-            action_desc = str(d.get("action_id", "") or d.get("action", "") or "acción desconocida")
+            action_desc = str(d.get("action_id", "") or d.get("action", "") or "unknown_action")
             src = str(d.get("source", "") or "unknown")
             items.append(f"T{turn} {side} {unit_id} -> {action_desc} [{src}]")
-        return "Últimas decisiones IA: " + " | ".join(items)
+        return "Recent AI Decisions: " + " | ".join(items)
     if asks_last_ai_move and recent_ai:
         last = recent_ai[-1]
         unit_id = str(last.get("unit_id", "?") or "?")
@@ -371,12 +372,12 @@ def _fallback_answer_from_state(query: str, context: Dict | None) -> str | None:
         source = str(last.get("source", "") or "EfficientZeroV2_MCTS")
         ai_status = str(last.get("ai_status", last.get("ezv2_status", "")) or "")
         corrected = bool(last.get("corrected", False))
-        correction_note = " (acción corregida por backend)" if corrected else ""
+        correction_note = " (decision corrected by backend safety)" if corrected else ""
         action_desc = action_id or action_name or "acción desconocida"
-        status_note = f", estado={ai_status}" if ai_status else ""
+        status_note = f", status={ai_status}" if ai_status else ""
         return (
-            f"Última decisión IA registrada: turno {turn}, lado {side}, unidad {unit_id}, "
-            f"acción {action_desc}, motor={source}{status_note}{correction_note}."
+            f"Last recorded AI decision: Turn {turn}, Side {side}, Unit {unit_id}, "
+            f"Action {action_desc}, Brain={source}{status_note}{correction_note}."
         )
     if compact.get("turn") is None and not compact.get("vp_score_live"):
         return None
@@ -390,19 +391,19 @@ def _fallback_answer_from_state(query: str, context: Dict | None) -> str | None:
     gap = enemy_best - own_vp
     if gap >= 3:
         tactical = (
-            "La IA parece priorizar recaptura/negación de VP bajo desventaja de puntos; "
-            "debería buscar tomar al menos 1 objetivo este turno y evitar intercambios de bajo impacto."
+            "The AI prioritizes VP recapture/denial under score deficit; "
+            "it must secure at least 1 objective this turn and avoid low-impact attrition."
         )
     elif gap > 0:
         tactical = (
-            "La IA debería mejorar presión sobre objetivos (VP) y reducir movimientos sin impacto en control."
+            "The AI should increase objective pressure on VPs and minimize moves without control value."
         )
     else:
         tactical = (
-            "Con ventaja de VP, la IA debería consolidar control, proteger unidades expuestas y evitar riesgos innecesarios."
+            "With VP advantage, the AI should consolidate control, screen exposed units, and avoid unnecessary casualties."
         )
     return (
-        f"Contexto de partida detectado (turno {compact.get('turn')}, lado activo {active}, VP {vp_live}). "
+        f"Game context detected (Turn {compact.get('turn')}, Active Side {active}, VP {vp_live}). "
         f"{tactical}"
     )
 
@@ -904,237 +905,252 @@ def analyze_training_level1(runs: List[Dict]) -> Dict:
 
 
 def explain_game_situation(state_snapshot: Dict) -> Dict:
+    """
+    Computes a comprehensive tactical situation report (SitRep) leveraging the full
+    Assault XAI intelligence stack:
+    1. Topography & Battlefield IPB (terrain breakdown, chokepoints, defilade corridors).
+    2. Order of Battle (OOB) & 5D Tactical Roles (assault squads, HMG suppression, indirect mortars, snipers).
+    3. Unit Traits Parity (smoke, camouflaged, low silhouette, heavy weight, anti-tank).
+    4. Neural Brain Telemetry (EfficientZero V2 MCTS root value, win probability, time urgency).
+    """
+    from collections import Counter
+
     units = list(state_snapshot.get("units", []) or [])
-    alive_by_side: Dict[str, int] = {}
-    for unit in units:
-        side = str(unit.get("side", "UNKNOWN")).upper()
-        hp = unit.get("hp", None)
-        alive = (hp is None) or (float(hp) > 0)
-        if alive:
-            alive_by_side[side] = alive_by_side.get(side, 0) + 1
-
-    turn = state_snapshot.get("turn", "N/A")
-    active_side = state_snapshot.get("active_side", "UNKNOWN")
+    hexes = list(state_snapshot.get("hexes", []) or [])
+    turn = state_snapshot.get("turn", 1)
+    active_side = str(state_snapshot.get("active_side", "UNKNOWN")).upper()
+    scenario_raw = str(state_snapshot.get("scenario_name", "Scenario"))
+    scenario_name = scenario_raw.replace("_", " ").title()
+    telemetry = state_snapshot.get("telemetry", {}) or {}
+    ai_obs = state_snapshot.get("ai_observability", {}) or {}
     vp_live = state_snapshot.get("vp_score_live", {}) or {}
-    vp_txt = ", ".join(f"{k}:{v}" for k, v in vp_live.items()) if vp_live else "no_vp_data"
-    units_txt = ", ".join(f"{k}:{v}" for k, v in sorted(alive_by_side.items())) if alive_by_side else "no_units"
 
-    query = (
-        f"Explain current game situation turn={turn} active_side={active_side} "
-        f"alive_units={units_txt} vp={vp_txt} and provide tactical priorities and risks"
-    )
-    ev = rag_query(query, requested_mode="hybrid")
+    # -------------------------------------------------------------
+    # 1. TOPOGRAPHY & BATTLEFIELD IPB
+    # -------------------------------------------------------------
+    total_hexes = len(hexes) or 1
+    terrain_counts = Counter(str(h.get("terrain", "clear")).lower() for h in hexes)
+    building_count = sum(v for k, v in terrain_counts.items() if "building" in k or "urban" in k)
+    woods_count = sum(v for k, v in terrain_counts.items() if any(w in k for w in ("woods", "forest", "grove", "brush")))
+    clear_count = terrain_counts.get("clear", 0)
 
+    urban_pct = round(building_count / total_hexes * 100, 1)
+    forest_pct = round(woods_count / total_hexes * 100, 1)
+    open_pct = round(clear_count / total_hexes * 100, 1)
+
+    try:
+        topo_profile = analyze_battlefield_topography(hex_data=hexes, scenario_id=scenario_raw)
+        topo_counts = topo_profile.to_dict().get("counts", {})
+        defilade_count = topo_counts.get("defilade_corridors", 0)
+    except Exception:
+        defilade_count = 0
+
+    if urban_pct >= 25.0:
+        dominant_terrain = f"Dense urban environment ({urban_pct}% structures, {defilade_count} covered defilade corridors). Favors room-to-room clearing and defensive ambushes."
+    elif forest_pct >= 25.0:
+        dominant_terrain = f"Wooded terrain ({forest_pct}% forests/groves). High concealment hindering long-range direct fire."
+    else:
+        dominant_terrain = f"Open combat zone ({open_pct}% clear ground). Broad line-of-sight favoring long-range direct overwatch."
+
+    terrain_intel = {
+        "scenario_name": scenario_name,
+        "urban_pct": urban_pct,
+        "forest_pct": forest_pct,
+        "open_pct": open_pct,
+        "defilade_corridors_count": defilade_count,
+        "dominant_terrain_desc": dominant_terrain,
+    }
+
+    # -------------------------------------------------------------
+    # 2. FORCES ORDER OF BATTLE (OOB) & ROLES
+    # -------------------------------------------------------------
+    enemy_side = "US" if active_side == "IT" else "IT"
+    for u in units:
+        s = str(u.get("side", "")).upper()
+        if s and s != active_side:
+            enemy_side = s
+            break
+
+    own_units = [u for u in units if str(u.get("side", "")).upper() == active_side]
+    enemy_units = [u for u in units if str(u.get("side", "")).upper() != active_side]
+
+    role_labels = {
+        "assault_squad": "Assault & Breach",
+        "suppression_mg": "HMG Suppression",
+        "indirect_mortar": "Indirect Mortars",
+        "infantry": "Rifle Infantry",
+        "sniper": "Snipers",
+        "combat_engineers": "Combat Engineers",
+        "at_gun": "Anti-Tank Guns",
+    }
+
+    own_roles = Counter(role_labels.get(u.get("tactical_role", "infantry"), u.get("tactical_role", "infantry").replace("_", " ").title()) for u in own_units if (u.get("hp") or 1) > 0)
+    enemy_roles = Counter(role_labels.get(u.get("tactical_role", "infantry"), u.get("tactical_role", "infantry").replace("_", " ").title()) for u in enemy_units if (u.get("hp") or 1) > 0)
+
+    own_suppressed = sum(1 for u in own_units if u.get("is_suppressed") or u.get("status") == "suppressed")
+    enemy_suppressed = sum(1 for u in enemy_units if u.get("is_suppressed") or u.get("status") == "suppressed")
+    own_crit = sum(1 for u in own_units if (u.get("hp") is not None and u.get("hp") <= 1) or (u.get("health_pct") is not None and u.get("health_pct") <= 0.35))
+    enemy_crit = sum(1 for u in enemy_units if (u.get("hp") is not None and u.get("hp") <= 1) or (u.get("health_pct") is not None and u.get("health_pct") <= 0.35))
+
+    forces_oob = {
+        "own_side": active_side,
+        "enemy_side": enemy_side,
+        "own_total": len(own_units),
+        "enemy_total": len(enemy_units),
+        "own_roles": dict(own_roles),
+        "enemy_roles": dict(enemy_roles),
+        "own_suppressed": own_suppressed,
+        "enemy_suppressed": enemy_suppressed,
+        "own_critical_hp": own_crit,
+        "enemy_critical_hp": enemy_crit,
+    }
+
+    # -------------------------------------------------------------
+    # 3. NEURAL MCTS TELEMETRY & STRATEGIC OUTLOOK
+    # -------------------------------------------------------------
+    root_val = float(telemetry.get("root_value", 0.0) or 0.0)
+    win_prob = float(telemetry.get("win_prob", 0.5) or 0.5)
+    total_decisions = int(ai_obs.get("total_decisions", 0) or 0)
+    corrected_count = int(ai_obs.get("corrected_count", 0) or 0)
+
+    if root_val >= 0.20 or win_prob >= 0.60:
+        outlook = "Tactical Initiative Held (Offensive Advantage)"
+    elif root_val <= -0.20 or win_prob <= 0.40:
+        outlook = "High Defensive Pressure (Tactical Deficit)"
+    else:
+        outlook = "Contested Positional Equilibrium"
+
+    neural_assessment = {
+        "active_brain": "EfficientZero V2 (MCTS PUCT 253x)",
+        "win_probability": round(win_prob * 100, 1),
+        "root_value": round(root_val, 3),
+        "total_decisions": total_decisions,
+        "corrections": corrected_count,
+        "strategic_outlook": outlook,
+    }
+
+    # -------------------------------------------------------------
+    # 4. TACTICAL VECTORS (PRIORITIES, RISKS, OPPORTUNITIES, ALERTS)
+    # -------------------------------------------------------------
     priorities: List[str] = []
     risks: List[str] = []
     opportunities: List[str] = []
-    key_unit_alerts: List[str] = []
+    key_alerts: List[str] = []
 
-    active_side_norm = str(active_side).upper()
-    own_units = [u for u in units if str(u.get("side", "")).upper() == active_side_norm]
-    enemy_units = [u for u in units if str(u.get("side", "")).upper() != active_side_norm]
-    vp_hexes_raw = list(state_snapshot.get("vps", []) or [])
+    # Priorities based on force composition & objectives
+    if own_roles.get("HMG Suppression", 0) > 0:
+        priorities.append(f"Anchor defensive sectors with {own_roles['HMG Suppression']}x HMG elements to interdict open approach corridors.")
+    if own_roles.get("Indirect Mortars", 0) > 0:
+        priorities.append(f"Deploy {own_roles['Indirect Mortars']}x Indirect Mortar battery from covered defilade against hostile infantry concentrations.")
+    if own_roles.get("Assault & Breach", 0) > 0:
+        priorities.append(f"Advance assault echelons through covered defilade corridors ({defilade_count} hexes) toward target objectives.")
 
-    vp_hexes: List[tuple[int, int]] = []
-    for vp in vp_hexes_raw:
-        if isinstance(vp, dict):
-            q = _to_int(vp.get("q"))
-            r = _to_int(vp.get("r"))
-            if q is not None and r is not None:
-                vp_hexes.append((q, r))
-        elif isinstance(vp, (list, tuple)) and len(vp) >= 2:
-            q = _to_int(vp[0])
-            r = _to_int(vp[1])
-            if q is not None and r is not None:
-                vp_hexes.append((q, r))
+    # Objective VP priorities
+    own_vp = float(vp_live.get(active_side, 0) or 0)
+    enemy_best_vp = max((float(v or 0) for s, v in vp_live.items() if str(s).upper() != active_side), default=0.0)
+    vp_gap = enemy_best_vp - own_vp
 
-    own_with_coords = [(u, _unit_coords(u)) for u in own_units]
-    enemy_with_coords = [(u, _unit_coords(u)) for u in enemy_units]
-    own_with_coords = [(u, c) for (u, c) in own_with_coords if c is not None]
-    enemy_with_coords = [(u, c) for (u, c) in enemy_with_coords if c is not None]
+    if vp_gap >= 2.0:
+        priorities.insert(0, f"Critical VP Deficit ({own_vp:.0f} vs {enemy_best_vp:.0f}): Force immediate breakthrough to contest closest objective hex.")
+    elif vp_gap > 0:
+        priorities.insert(0, "Increase pressure on contested VP hexes before end of turn window closes.")
+    else:
+        priorities.append("Consolidate VP advantage; screen captured objectives against counter-assault.")
 
-    # Overextension / critical HP heuristic.
-    low_hp_own = []
-    for unit in own_units:
-        hp = unit.get("hp", None)
-        if hp is None:
-            continue
-        try:
-            if float(hp) <= 1:
-                low_hp_own.append(unit)
-        except Exception:
-            continue
-    if low_hp_own:
-        risks.append("Riesgo de sobreextensión: hay unidades propias con HP crítico.")
-        for unit in low_hp_own[:2]:
-            key_unit_alerts.append(
-                f"Unidad clave en riesgo: {unit.get('id', unit.get('unit_id', 'UNKNOWN'))} (HP={unit.get('hp')})."
-            )
+    # Risks
+    if len(enemy_units) > len(own_units):
+        ratio = round(len(enemy_units) / max(1, len(own_units)), 1)
+        risks.append(f"Numerical disparity: {len(enemy_units)} hostile squads vs {len(own_units)} friendly defenders ({ratio}:1 force ratio).")
+    if own_crit > 0:
+        risks.append(f"{own_crit} friendly squad(s) operating at critical health (<=1 HP); fall back to fortified structures.")
+    if own_suppressed > 0:
+        risks.append(f"{own_suppressed} friendly squad(s) currently suppressed; rallying or cover support required.")
+    if enemy_roles.get("Combat Engineers", 0) > 0 or enemy_roles.get("Assault & Breach", 0) >= 4:
+        risks.append("Hostile vanguard comprises specialized breach squads with high close-combat lethality.")
 
-    # Map-driven tactical geometry (frontline pressure + VP races).
-    if own_with_coords and enemy_with_coords:
-        close_contacts = 0
-        isolated_own = 0
-        own_units_near_vp = 0
-        enemy_units_near_vp = 0
+    # Opportunities
+    if urban_pct >= 20.0:
+        opportunities.append(f"Dense urban cover ({urban_pct}% structures) neutralizes long-range enemy fires and forces close-quarters engagement.")
+    if defilade_count > 20:
+        opportunities.append(f"Network of {defilade_count} defilade corridors enables covered infiltration avoiding open killzones.")
+    if enemy_crit > 0:
+        opportunities.append(f"{enemy_crit} hostile squad(s) heavily attrited; focus concentrated fire to secure eliminations.")
+    if enemy_suppressed > 0:
+        opportunities.append(f"{enemy_suppressed} hostile squad(s) suppressed; advance into close combat with defensive fire disabled.")
 
-        for own_u, (oq, or_) in own_with_coords:
-            nearest_enemy = min(
-                _hex_distance(oq, or_, eq, er)
-                for _, (eq, er) in enemy_with_coords
-            )
-            if nearest_enemy <= 2:
-                close_contacts += 1
-            if nearest_enemy >= 5:
-                isolated_own += 1
+    # Unit-level alerts
+    for u in own_units:
+        uid = u.get("id")
+        uk = u.get("unit_key")
+        traits = u.get("traits", [])
+        q, r = u.get("q"), u.get("r")
+        hp = u.get("hp", 4)
+        if "INDIRECT_FIRE" in traits:
+            key_alerts.append(f"{uid} ({uk}) at Q:{q}, R:{r} [Mortar]: High-value battery; screen with infantry.")
+        elif "suppression_mg" == u.get("tactical_role"):
+            key_alerts.append(f"{uid} ({uk}) at Q:{q}, R:{r} [HMG Support]: Overwatch element; maintain defensive cone.")
+        elif hp <= 1:
+            key_alerts.append(f"{uid} ({uk}) at Q:{q}, R:{r}: Critical condition (1 HP). Vulnerable to elimination.")
+        elif "HEAVY_WEIGHT" in traits:
+            key_alerts.append(f"{uid} ({uk}) at Q:{q}, R:{r} [Heavy Weight]: Cannot traverse hills without mechanized transport.")
 
-            if vp_hexes:
-                nearest_vp = min(_hex_distance(oq, or_, vq, vr) for (vq, vr) in vp_hexes)
-                if nearest_vp <= 2:
-                    own_units_near_vp += 1
-
-        for _, (eq, er) in enemy_with_coords:
-            if vp_hexes:
-                nearest_vp = min(_hex_distance(eq, er, vq, vr) for (vq, vr) in vp_hexes)
-                if nearest_vp <= 2:
-                    enemy_units_near_vp += 1
-
-        if close_contacts >= max(1, len(own_with_coords) // 2):
-            priorities.append("Línea de contacto corta: priorizar foco de fuego sobre el mismo eje de choque.")
-        if isolated_own > 0:
-            risks.append("Hay unidades propias aisladas por geometría del mapa (enemigo lejano/apoyo débil).")
-        if own_units_near_vp > enemy_units_near_vp:
-            opportunities.append("Ventaja posicional cerca de VP: ventana para consolidar control en objetivos.")
-        elif enemy_units_near_vp > own_units_near_vp:
-            risks.append("El enemigo tiene mejor despliegue alrededor de VP; riesgo de pérdida por posición.")
-
-        for own_u, (oq, or_) in own_with_coords[:6]:
-            nearest_enemy = min(
-                _hex_distance(oq, or_, eq, er)
-                for _, (eq, er) in enemy_with_coords
-            )
-            if nearest_enemy <= 1:
-                key_unit_alerts.append(
-                    f"{own_u.get('id', own_u.get('unit_id', 'UNKNOWN'))} en contacto inmediato (dist={nearest_enemy})."
-                )
-
-    elif units:
-        # Map snapshot without usable coordinates.
-        if "MAP_COORDS_MISSING" not in key_unit_alerts:
-            key_unit_alerts.append("Faltan coordenadas q/r en snapshot; análisis geométrico parcial.")
-
-    # VP pressure / capture-window heuristic.
-    vp_gap_value = 0.0
-    side_behind_on_vp = False
-    if vp_live and active_side_norm in vp_live:
-        own_vp = float(vp_live.get(active_side_norm, 0) or 0)
-        enemy_best = max(
-            (float(v or 0) for s, v in vp_live.items() if str(s).upper() != active_side_norm),
-            default=0.0,
-        )
-        vp_gap_value = enemy_best - own_vp
-        side_behind_on_vp = own_vp <= enemy_best
-        if side_behind_on_vp:
-            if vp_gap_value >= 3.0:
-                risks.append(
-                    "Desventaja crítica de VP: el rival controla claramente los objetivos; riesgo alto de derrota por puntos."
-                )
-                priorities.append(
-                    "Recuperar al menos un VP de inmediato y evitar intercambios de bajo impacto."
-                )
-                opportunities.append(
-                    "Única ventana útil: recapturar VP este turno para frenar la bola de nieve de puntos."
-                )
-            else:
-                opportunities.append(
-                    "Ventana de captura activa: conviene priorizar entrada/retención de VP este turno."
-                )
-                priorities.append("Forzar progresión a objetivo antes de intercambios de bajo impacto.")
-        else:
-            priorities.append("Conservar ventaja de VP evitando pérdidas de control en hexes expuestos.")
-
-    # Relative pressure by alive units.
-    own_alive = len(own_units)
-    enemy_alive = len(enemy_units)
-    if own_alive > 0 and enemy_alive > 0:
-        ratio = enemy_alive / max(1, own_alive)
-        if ratio >= 1.25:
-            risks.append("Presión enemiga alta: evitar avances sin cobertura y mantener apoyo mutuo.")
-        elif ratio <= 0.8:
-            opportunities.append("Superioridad local detectada: oportunidad para maniobra agresiva de captura.")
-
-    # Endgame urgency.
-    max_turns = state_snapshot.get("max_turns", None)
-    try:
-        turn_num = int(turn)
-        max_turns_num = int(max_turns) if max_turns is not None else None
-    except Exception:
-        turn_num = None
-        max_turns_num = None
-    if turn_num is not None and max_turns_num is not None and max_turns_num > 0:
-        remaining = max_turns_num - turn_num
-        if remaining <= 2:
-            priorities.append("Fase final: priorizar acciones decisivas sobre reposicionamientos neutrales.")
-
-    if active_side_norm in alive_by_side:
-        priorities.append("Mantener iniciativa del lado activo y preservar acciones con mayor impacto en VP.")
-    if vp_live:
-        priorities.append("Priorizar control/recaptura de hexes de objetivo con mayor valor de VP.")
-    if len(units) > 0:
-        risks.append("Exposición de unidades aisladas sin cobertura o apoyo de fuego.")
-    if state_snapshot.get("done"):
-        risks.append("Partida finalizada: recomendaciones solo informativas.")
-
+    # Executive Summary
     situation_summary = (
-        f"Turno {turn}, lado activo {active_side}. "
-        f"Unidades vivas por bando: {units_txt}. "
-        f"Marcador VP: {vp_txt}."
+        f"Turn {turn} // Commander: {active_side}. "
+        f"Forces: {len(own_units)} friendly squads vs {len(enemy_units)} hostile forces. "
+        f"Terrain: {dominant_terrain} "
+        f"Tactical Outlook: {outlook} (MCTS Win Prob: {round(win_prob * 100, 1)}%, Root Value: {round(root_val, 2):+0.2f})."
     )
 
-    # LLM structured refinement: smarter wording with tactical consistency.
-    llm_refined = None
+    # Fast non-blocking LLM refinement if enabled
     if _situation_llm_enabled():
-        llm_refined = _llm_refine_situation(
-            state_snapshot=state_snapshot,
-            evidence=ev,
-            priorities=priorities,
-            risks=risks,
-            opportunities=opportunities,
-            key_unit_alerts=key_unit_alerts,
-        )
-    if llm_refined:
-        situation_summary = str(llm_refined.get("situation_summary") or situation_summary)
-        priorities = list(llm_refined.get("priorities") or priorities)
-        risks = list(llm_refined.get("risks") or risks)
-        opportunities = list(llm_refined.get("opportunities") or opportunities)
-        key_unit_alerts = list(llm_refined.get("key_unit_alerts") or key_unit_alerts)
-
-    # Guardrail: avoid optimistic output under strong VP deficit.
-    if side_behind_on_vp and vp_gap_value >= 3.0:
-        if not any("desventaja" in r.lower() or "riesgo alto" in r.lower() for r in risks):
-            risks.insert(
-                0,
-                "Desventaja crítica de VP: riesgo alto de derrota por puntos si no se recaptura un objetivo ya.",
+        try:
+            ev = rag_query(f"tactical rules {scenario_name}", requested_mode="rules")
+            llm_refined = _llm_refine_situation(
+                state_snapshot=state_snapshot,
+                evidence=ev,
+                priorities=priorities,
+                risks=risks,
+                opportunities=opportunities,
+                key_unit_alerts=key_alerts,
             )
-        if not any("recuperar" in p.lower() or "recaptur" in p.lower() for p in priorities):
-            priorities.insert(0, "Recuperar al menos un VP este turno es prioridad absoluta.")
-        opportunities = [
-            o
-            for o in opportunities
-            if "ventana de captura activa" not in o.lower()
-        ]
-        opportunities.insert(0, "Única oportunidad realista: recapturar VP inmediato para cortar la ventaja rival.")
+            if llm_refined and isinstance(llm_refined, dict):
+                situation_summary = str(llm_refined.get("situation_summary") or situation_summary)
+                if llm_refined.get("priorities"):
+                    priorities = list(llm_refined["priorities"])
+                if llm_refined.get("risks"):
+                    risks = list(llm_refined["risks"])
+                if llm_refined.get("opportunities"):
+                    opportunities = list(llm_refined["opportunities"])
+                if llm_refined.get("key_unit_alerts"):
+                    key_alerts = list(llm_refined["key_unit_alerts"])
+        except Exception:
+            pass  # Fall back directly to deterministic XAI SitRep
+
+    citations = []
+    try:
+        ev = retrieve_evidence(f"tactical rules {scenario_name}", mode="rules")
+        for item in (ev.get("rules", []) + ev.get("game_data", []))[:4]:
+            citations.append({
+                "source_type": item.get("source_type") or ("rule" if "rule_id" in item else "data"),
+                "source_id": str(item.get("source_id") or item.get("rule_id", "rules")),
+                "snippet": str(item.get("snippet") or item.get("text", ""))[:250],
+            })
+    except Exception:
+        pass
 
     return {
         "situation_summary": situation_summary,
-        "priorities": priorities[:3],
-        "risks": risks[:3],
-        "opportunities": opportunities[:3],
-        "key_unit_alerts": key_unit_alerts[:3],
-        "citations": ev["citations"][:6],
-        "limitations": ev["limitations"],
+        "terrain_intel": terrain_intel,
+        "forces_oob": forces_oob,
+        "neural_assessment": neural_assessment,
+        "priorities": priorities[:4],
+        "risks": risks[:4],
+        "opportunities": opportunities[:4],
+        "key_unit_alerts": key_alerts[:4],
+        "citations": citations,
+        "limitations": [],
     }
-
 
 def retrieve_doctrinal_citations_for_sitrep(
     turning_points: list[dict],
