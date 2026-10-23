@@ -7,9 +7,9 @@ selfplay:
   inference_max_batch_size: 48
   inference_batch_wait_ms: 1.5
   reward_shaping:
-    vp_capture_bonus_per_hex: 12.58
-    objective_progress_bonus_per_hex: 9.62
-    capture_bonus: 3.92
+    vp_capture_bonus_per_hex: 14.47
+    objective_progress_bonus_per_hex: 11.06
+    capture_bonus: 4.31
     kill_weight: 0.6
     terminal_scale: 1.5
     terminal_loss_penalty: 1.5
@@ -17,12 +17,12 @@ selfplay:
     vp_potential_weight: 1.3
     vp_potential_gamma: 0.997
     vp_potential_ctrl_bonus: 2.5
-    vp_urgency_lambda: 1.25
+    vp_urgency_lambda: 1.35
     paralysis_penalty_weight: 0.06
-  mcts_temperature: 1.2
+  mcts_temperature: 1.25
 train:
   iterations: 80
   episodes_per_iter: 32
-  objective_loss_weight: 0.62
-  train_updates_per_iter: 28
+  objective_loss_weight: 0.65
+  train_updates_per_iter: 32
   reanalysis_ratio: 0.48

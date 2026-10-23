@@ -1507,6 +1507,7 @@ export function MatchReplayTab({
     const actorHpPost = actorUnit ? Number(actorUnit.hp ?? actorHpPre) : actorHpPre;
     const actorAlivePre = prevActor ? (prevActor.alive !== false && actorHpPre > 0) : true;
     const actorAlivePost = actorUnit ? (actorUnit.alive !== false && actorHpPost > 0) : false;
+    const actorSuppressed = Boolean(actorUnit?.suppressed);
 
     // Target Unit Health and Status Before and After (for combat actions)
     let targetHpPre: number | null = null;
@@ -1561,6 +1562,7 @@ export function MatchReplayTab({
       actorHpPost,
       actorAlivePre,
       actorAlivePost,
+      actorSuppressed,
       targetHpPre,
       targetHpPost,
       targetAlivePre,
@@ -4316,7 +4318,7 @@ export function MatchReplayTab({
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                       <span style={{ fontSize: 9, color: "#94a3b8", textTransform: "uppercase", fontWeight: 700 }}>Acting Unit</span>
                       <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
-                        {actorUnit?.suppressed && (
+                        {actionVector.actorSuppressed && (
                           <img
                             src="/art/status/Status Suppressed.png"
                             alt="Suppressed"

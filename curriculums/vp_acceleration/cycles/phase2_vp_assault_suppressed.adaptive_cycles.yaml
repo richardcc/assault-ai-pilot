@@ -1,8 +1,8 @@
 schema_version: adaptive_cycles.v1
 curriculum_name: vp_acceleration_v1
 phase_name: phase2_vp_assault_suppressed
-generation: 15
-last_updated_utc: '2026-10-22T18:44:56.899743+00:00'
+generation: 16
+last_updated_utc: '2026-10-23T13:04:31.967620+00:00'
 base_config_path: curriculums/vp_acceleration/configs/efficientzero_v2.phase2_defended.yaml
 winning_history:
 - generation: 1
@@ -107,10 +107,16 @@ winning_history:
   win_rate: 0.8
   tactical_quality_score: 0.573333333333333
   promotion_decision: promote
+- generation: 15
+  winning_cycle: 3
+  promoted_at_utc: '2026-10-23T13:04:31.967620+00:00'
+  win_rate: 0.8
+  tactical_quality_score: 0.56
+  promotion_decision: promote
 cycles:
   1:
     strategy: promoted_baseline
-    description: Generation 15 Baseline (Promoted from Cycle 5 of previous generation).
+    description: Generation 16 Baseline (Promoted from Cycle 3 of previous generation).
     overlay: {}
   2:
     strategy: adaptive_exploitation
@@ -119,9 +125,9 @@ cycles:
     overlay:
       train:
         reanalysis_ratio: 0.53
-        train_updates_per_iter: 30
+        train_updates_per_iter: 34
       selfplay:
-        mcts_temperature: 1.15
+        mcts_temperature: 1.2
         reward_shaping:
           vp_potential_weight: 1.4
   3:
@@ -131,11 +137,11 @@ cycles:
     overlay:
       train:
         objective_loss_weight: 0.65
-        train_updates_per_iter: 32
+        train_updates_per_iter: 36
       selfplay:
-        mcts_temperature: 1.25
+        mcts_temperature: 1.3
         reward_shaping:
-          vp_capture_bonus_per_hex: 14.47
-          objective_progress_bonus_per_hex: 11.06
-          capture_bonus: 4.31
-          vp_urgency_lambda: 1.35
+          vp_capture_bonus_per_hex: 16.64
+          objective_progress_bonus_per_hex: 12.72
+          capture_bonus: 4.74
+          vp_urgency_lambda: 1.45
