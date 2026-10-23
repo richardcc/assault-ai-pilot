@@ -278,38 +278,48 @@ class ScenarioEditorService:
     def list_all_scenarios(self) -> List[Dict[str, Any]]:
         """
         Lists all scenarios, categorizing each as 'draft' or 'published'.
+        Deduplicates by scenario ID.
         """
         results: List[Dict[str, Any]] = []
+        seen_ids = set()
 
         # 1. Draft scenarios
         if self.drafts_dir.exists():
             for p in sorted(self.drafts_dir.glob("*.json")):
                 try:
                     meta = self._extract_summary(p, is_draft=True)
-                    results.append(meta)
+                    if meta["id"] not in seen_ids:
+                        seen_ids.add(meta["id"])
+                        results.append(meta)
                 except Exception as e:
-                    results.append({
-                        "id": p.stem,
-                        "name": p.stem,
-                        "status": "draft",
-                        "error": str(e),
-                        "file_name": p.name,
-                    })
+                    if p.stem not in seen_ids:
+                        seen_ids.add(p.stem)
+                        results.append({
+                            "id": p.stem,
+                            "name": p.stem,
+                            "status": "draft",
+                            "error": str(e),
+                            "file_name": p.name,
+                        })
 
         # 2. Published scenarios
         for p in sorted(self.scenarios_dir.glob("*.json")):
             if p.is_file():
                 try:
                     meta = self._extract_summary(p, is_draft=False)
-                    results.append(meta)
+                    if meta["id"] not in seen_ids:
+                        seen_ids.add(meta["id"])
+                        results.append(meta)
                 except Exception as e:
-                    results.append({
-                        "id": p.stem,
-                        "name": p.stem,
-                        "status": "published",
-                        "error": str(e),
-                        "file_name": p.name,
-                    })
+                    if p.stem not in seen_ids:
+                        seen_ids.add(p.stem)
+                        results.append({
+                            "id": p.stem,
+                            "name": p.stem,
+                            "status": "published",
+                            "error": str(e),
+                            "file_name": p.name,
+                        })
 
         return results
 
@@ -480,8 +490,13 @@ class ScenarioEditorService:
         pub_file = self.scenarios_dir / f"{dest_id}.json"
         pub_file.write_text(json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8")
 
-        # Keep draft synchronized with published status
-        draft_file.write_text(json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8")
+        # Remove draft file once published so it's not duplicated in drafts list
+        if draft_file.exists():
+            draft_file.unlink()
+        if dest_id != scenario_id:
+            dest_draft = self.drafts_dir / f"{dest_id}.json"
+            if dest_draft.exists():
+                dest_draft.unlink()
 
         return {
             "ok": True,

@@ -713,11 +713,6 @@
           "terrain": "light_forest"
         },
         {
-          "q": 2,
-          "r": 2,
-          "terrain": "light_forest"
-        },
-        {
           "q": 7,
           "r": 1,
           "terrain": "light_forest"
@@ -750,7 +745,7 @@
         {
           "q": 5,
           "r": 3,
-          "terrain": "building_single"
+          "terrain": "olive_vine_grove"
         },
         {
           "q": 3,
@@ -758,17 +753,61 @@
           "terrain": "building_single"
         },
         {
-          "q": 4,
-          "r": 4,
+          "q": 6,
+          "r": 6,
+          "terrain": "brush"
+        },
+        {
+          "q": 2,
+          "r": 1,
+          "terrain": "heavy_forest"
+        },
+        {
+          "q": 3,
+          "r": 1,
+          "terrain": "light_forest"
+        },
+        {
+          "q": 5,
+          "r": 1,
+          "terrain": "heavy_forest"
+        },
+        {
+          "q": 6,
+          "r": 0,
+          "terrain": "light_forest"
+        },
+        {
+          "q": 5,
+          "r": 2,
           "terrain": "building_single"
         },
         {
           "q": 6,
-          "r": 6,
+          "r": 4,
+          "terrain": "olive_vine_grove"
+        },
+        {
+          "q": 6,
+          "r": 5,
+          "terrain": "light_forest"
+        },
+        {
+          "q": 5,
+          "r": 5,
+          "terrain": "brush"
+        },
+        {
+          "q": 4,
+          "r": 4,
+          "terrain": "light_forest"
+        },
+        {
+          "q": 3,
+          "r": 2,
           "terrain": "light_forest"
         }
-      ],
-      "hex_edges": []
+      ]
     }
   }
 }

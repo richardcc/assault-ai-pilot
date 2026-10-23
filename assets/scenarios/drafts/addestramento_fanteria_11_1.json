@@ -1,5 +1,5 @@
 {
-  "id": "draft_addestramento_fanteria_11_1",
+  "id": "addestramento_fanteria_11_1",
   "name": "Addestramento Fanteria (11.1)",
   "description": "Training Scenario 11.1 from Campaign Book (p. 79). Symmetric infantry tactics sandbox (Rifles + HMG) on geomorphic map piece S6.",
   "max_turns": 6,
@@ -163,5 +163,6 @@
         "outcome_score": -1
       }
     ]
-  }
+  },
+  "status": "draft"
 }

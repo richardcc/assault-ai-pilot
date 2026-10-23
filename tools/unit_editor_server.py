@@ -774,11 +774,84 @@ HTML_TEMPLATE = """<!DOCTYPE html>
           </div>
 
           <!-- Sub-Tab 1: Canvas & Map View -->
-          <div id="scen-panel-map" class="scenario-panel" style="display: flex; flex-direction: column; flex: 1; overflow: hidden; gap: 0.8rem;">
+          <div id="scen-panel-map" class="scenario-panel" style="display: flex; flex-direction: column; flex: 1; overflow: hidden; gap: 0.6rem;">
+            <!-- Scenario Marked Hex Inspector & Visual Tool Palette -->
+            <div id="scen-marked-hex-bar" style="display: flex; gap: 0.6rem; align-items: center; justify-content: space-between; flex-wrap: wrap; background: #0f172a; padding: 0.4rem 0.8rem; border-radius: 6px; border: 1px solid var(--card-border);">
+              <div style="display: flex; align-items: center; gap: 0.8rem; flex-wrap: wrap;">
+                <span style="font-size: 0.82rem; font-weight: 700; color: #f59e0b; display: flex; align-items: center; gap: 0.3rem;">
+                  📍 Hex: <span id="scen-marked-hex-coord" style="font-family: monospace; font-size: 0.85rem; color: #e2e8f0;">(Click hex to edit)</span>
+                </span>
+
+                <!-- Fortification Selector -->
+                <div style="display: flex; align-items: center; gap: 0.3rem;">
+                  <label for="scen-hex-fort-select" style="font-size: 0.78rem; color: #cbd5e1; font-weight: 600;">🛡️ Fortification:</label>
+                  <select id="scen-hex-fort-select" class="form-control" style="width: auto; padding: 0.25rem 0.5rem; font-size: 0.8rem; background: #1e293b; color: #fff; border: 1px solid #475569; border-radius: 4px;" onchange="onScenarioHexFortChange(this.value)">
+                    <option value="none">-- None (Clear) --</option>
+                    <option value="bunker">🛡️ Bunker</option>
+                    <option value="casemate">🛡️ Casemate</option>
+                    <option value="gun_emplacement">🛡️ Gun Emplacement</option>
+                    <option value="trench">⛏️ Trench</option>
+                    <option value="barbed_wire">⛓️ Barbed Wire</option>
+                    <option value="minefield">💣 Minefield</option>
+                  </select>
+                </div>
+
+                <!-- Objective / VP Selector -->
+                <div style="display: flex; align-items: center; gap: 0.3rem;">
+                  <label for="scen-hex-vp-select" style="font-size: 0.78rem; color: #cbd5e1; font-weight: 600;">★ Objective (VP):</label>
+                  <select id="scen-hex-vp-select" class="form-control" style="width: auto; padding: 0.25rem 0.5rem; font-size: 0.8rem; background: #1e293b; color: #fff; border: 1px solid #475569; border-radius: 4px;" onchange="onScenarioHexVpChange(this.value)">
+                    <option value="0">-- No VP --</option>
+                    <option value="1">★ 1 VP</option>
+                    <option value="2">★ 2 VPs</option>
+                    <option value="3">★ 3 VPs</option>
+                    <option value="4">★ 4 VPs</option>
+                    <option value="5">★ 5 VPs</option>
+                    <option value="10">★ 10 VPs</option>
+                  </select>
+                </div>
+
+                <!-- VP Initial Owner -->
+                <div id="scen-hex-vp-owner-wrap" style="display: flex; align-items: center; gap: 0.3rem;">
+                  <label for="scen-hex-vp-owner-select" style="font-size: 0.78rem; color: #cbd5e1; font-weight: 600;">Owner:</label>
+                  <select id="scen-hex-vp-owner-select" class="form-control" style="width: auto; padding: 0.25rem 0.5rem; font-size: 0.8rem; background: #1e293b; color: #fff; border: 1px solid #475569; border-radius: 4px;" onchange="onScenarioHexVpOwnerChange(this.value)">
+                    <option value="">Neutral (None)</option>
+                    <option value="US">US (Allies)</option>
+                    <option value="IT">IT (Italy)</option>
+                    <option value="GE">GE (Germany)</option>
+                    <option value="UK">UK (Britain)</option>
+                  </select>
+                </div>
+              </div>
+
+              <!-- Quick Reset Hex Fort/VP -->
+              <div style="display: flex; align-items: center; gap: 0.4rem;">
+                <button type="button" class="btn-secondary" style="padding: 0.25rem 0.6rem; font-size: 0.75rem;" onclick="clearScenarioHexFortAndVp()" title="Remove fortification and VP from selected hex">🗑️ Clear Hex Fort/VP</button>
+              </div>
+            </div>
+
+            <!-- Quick Brush Toolbar for Fortifications & VPs -->
+            <div style="display: flex; gap: 0.4rem; align-items: center; flex-wrap: wrap; background: #0f172a; padding: 0.35rem 0.6rem; border-radius: 6px; border: 1px solid var(--card-border);">
+              <span style="font-size: 0.72rem; font-weight: 700; color: #94a3b8; margin-right: 0.3rem;">🛡️ Quick Fort:</span>
+              <button type="button" class="btn-palette" style="background:#334155;" onclick="quickSetScenarioFort('bunker')">Bunker</button>
+              <button type="button" class="btn-palette" style="background:#475569;" onclick="quickSetScenarioFort('casemate')">Casemate</button>
+              <button type="button" class="btn-palette" style="background:#1e293b;" onclick="quickSetScenarioFort('gun_emplacement')">Gun Empl</button>
+              <button type="button" class="btn-palette" style="background:#78350f;" onclick="quickSetScenarioFort('trench')">Trench</button>
+              <button type="button" class="btn-palette" style="background:#b45309;" onclick="quickSetScenarioFort('barbed_wire')">Wire</button>
+              <button type="button" class="btn-palette" style="background:#b91c1c;" onclick="quickSetScenarioFort('minefield')">Minefield</button>
+              <button type="button" class="btn-palette" style="background:#0284c7;" onclick="quickSetScenarioFort('none')">No Fort</button>
+
+              <span style="font-size: 0.72rem; font-weight: 700; color: #f59e0b; margin-left: 0.6rem; margin-right: 0.3rem;">★ Quick VP:</span>
+              <button type="button" class="btn-palette" style="background:#ca8a04;" onclick="quickSetScenarioVp(1)">1 VP</button>
+              <button type="button" class="btn-palette" style="background:#ca8a04;" onclick="quickSetScenarioVp(2)">2 VP</button>
+              <button type="button" class="btn-palette" style="background:#ca8a04;" onclick="quickSetScenarioVp(3)">3 VP</button>
+              <button type="button" class="btn-palette" style="background:#ca8a04;" onclick="quickSetScenarioVp(5)">5 VP</button>
+              <button type="button" class="btn-palette" style="background:#475569;" onclick="quickSetScenarioVp(0)">No VP</button>
+            </div>
+
             <div style="position: relative; flex: 1; min-height: 380px; background: #080d1a; border: 1px solid var(--card-border); border-radius: 8px; overflow: hidden;">
               <canvas id="hexCanvas" width="900" height="420" style="width: 100%; height: 100%; display: block; cursor: grab;"></canvas>
               <div id="canvas-info-overlay" style="position: absolute; bottom: 8px; left: 8px; background: rgba(15, 23, 42, 0.85); padding: 4px 10px; border-radius: 4px; font-size: 0.75rem; color: #94a3b8; border: 1px solid #334155;">
-                Hover over a hex to view details (Col, Row & Terrain)
+                Click any hex to select and edit its Fortification & VP. Right-click or drag to pan.
               </div>
             </div>
 
@@ -3326,6 +3399,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
       renderScenarioUnitsTable();
       renderScenarioFortsTable();
       renderScenarioVpsTable();
+      updateScenarioHexInspector();
     }
 
     function switchScenarioSubTab(tabName) {
@@ -3357,12 +3431,211 @@ HTML_TEMPLATE = """<!DOCTYPE html>
 
     function getScenarioFortifications() {
       if (!currentScenarioData) return [];
-      return currentScenarioData.map?.fortifications || currentScenarioData.fortifications || [];
+      if (currentScenarioData.map && currentScenarioData.map.fortifications) {
+        return currentScenarioData.map.fortifications;
+      }
+      if (currentScenarioData.fortifications) {
+        return currentScenarioData.fortifications;
+      }
+      if (!currentScenarioData.map) currentScenarioData.map = {};
+      currentScenarioData.map.fortifications = [];
+      return currentScenarioData.map.fortifications;
     }
 
     function getScenarioVps() {
       if (!currentScenarioData) return [];
-      return currentScenarioData.vp?.hexes || currentScenarioData.victory_points || [];
+      if (currentScenarioData.vp && currentScenarioData.vp.hexes) {
+        return currentScenarioData.vp.hexes;
+      }
+      if (currentScenarioData.victory_points) {
+        return currentScenarioData.victory_points;
+      }
+      if (!currentScenarioData.vp) currentScenarioData.vp = { value_per_hex: 2, hexes: [] };
+      if (!currentScenarioData.vp.hexes) currentScenarioData.vp.hexes = [];
+      return currentScenarioData.vp.hexes;
+    }
+
+    function ensureScenarioMapAndVpStructure() {
+      if (!currentScenarioData) return;
+      if (!currentScenarioData.map) currentScenarioData.map = {};
+      if (!currentScenarioData.map.pieces) currentScenarioData.map.pieces = [];
+      if (!currentScenarioData.map.fortifications) {
+        currentScenarioData.map.fortifications = currentScenarioData.fortifications || [];
+      }
+      if (!currentScenarioData.vp) currentScenarioData.vp = { value_per_hex: 2, hexes: [] };
+      if (!currentScenarioData.vp.hexes) {
+        currentScenarioData.vp.hexes = currentScenarioData.victory_points || [];
+      }
+    }
+
+    function selectScenarioHex(q, r) {
+      if (!currentScenarioData) return;
+      const [cols, rows] = currentScenarioData.shape || [18, 12];
+      if (q < 0 || q >= cols || r < 0 || r >= rows) {
+        selectedScenarioHex = null;
+      } else {
+        selectedScenarioHex = { q, r };
+      }
+      updateScenarioHexInspector();
+      drawScenarioCanvas();
+    }
+
+    function updateScenarioHexInspector() {
+      const coordEl = document.getElementById('scen-marked-hex-coord');
+      const fortSelect = document.getElementById('scen-hex-fort-select');
+      const vpSelect = document.getElementById('scen-hex-vp-select');
+      const vpOwnerSelect = document.getElementById('scen-hex-vp-owner-select');
+      if (!coordEl || !fortSelect || !vpSelect || !vpOwnerSelect) return;
+
+      if (!selectedScenarioHex || !currentScenarioData) {
+        coordEl.innerText = '(Click hex to edit)';
+        coordEl.style.color = '#94a3b8';
+        fortSelect.value = 'none';
+        vpSelect.value = '0';
+        vpOwnerSelect.value = '';
+        return;
+      }
+
+      const { q, r } = selectedScenarioHex;
+      coordEl.innerText = `(${q}, ${r})`;
+      coordEl.style.color = '#f59e0b';
+
+      ensureScenarioMapAndVpStructure();
+
+      // Find fortification at (q, r)
+      const forts = getScenarioFortifications();
+      const fort = forts.find(f => f.q === q && f.r === r);
+      fortSelect.value = fort ? (fort.type || 'bunker') : 'none';
+
+      // Find VP at (q, r)
+      const vps = getScenarioVps();
+      const vp = vps.find(v => v.q === q && v.r === r);
+      if (vp) {
+        vpSelect.value = String(vp.value !== undefined ? vp.value : (currentScenarioData.vp?.value_per_hex || 2));
+        vpOwnerSelect.value = vp.initial_owner || '';
+      } else {
+        vpSelect.value = '0';
+        vpOwnerSelect.value = '';
+      }
+
+      // Also update canvas-info-overlay
+      const { terrainMap, elevationMap } = buildScenarioTerrainAndElevationMap();
+      const t = terrainMap[q + ',' + r] || 'clear';
+      const el = elevationMap[q + ',' + r] || 0;
+      const fortStr = fort ? ` | 🛡️ Fort: ${fort.type.toUpperCase()}` : '';
+      const vpStr = vp ? ` | ★ VP: +${vp.value || 2} (${vp.initial_owner || 'Neutral'})` : '';
+      const overlayEl = document.getElementById('canvas-info-overlay');
+      if (overlayEl) {
+        overlayEl.innerText = `📍 Selected Hex (${q}, ${r}) | Terrain: ${t.toUpperCase()} (+${el})${fortStr}${vpStr}`;
+      }
+    }
+
+    function onScenarioHexFortChange(newType) {
+      if (!selectedScenarioHex || !currentScenarioData) return;
+      ensureScenarioMapAndVpStructure();
+      const { q, r } = selectedScenarioHex;
+      const forts = getScenarioFortifications();
+      const idx = forts.findIndex(f => f.q === q && f.r === r);
+
+      if (newType === 'none') {
+        if (idx >= 0) forts.splice(idx, 1);
+      } else {
+        if (idx >= 0) {
+          forts[idx].type = newType;
+        } else {
+          forts.push({ type: newType, q, r });
+        }
+      }
+
+      if (currentScenarioData.fortifications) {
+        currentScenarioData.fortifications = forts;
+      }
+
+      renderScenarioFortsTable();
+      drawScenarioCanvas();
+      syncScenarioJsonFromState();
+      updateScenarioHexInspector();
+    }
+
+    function onScenarioHexVpChange(newValStr) {
+      if (!selectedScenarioHex || !currentScenarioData) return;
+      ensureScenarioMapAndVpStructure();
+      const { q, r } = selectedScenarioHex;
+      const vps = getScenarioVps();
+      const idx = vps.findIndex(v => v.q === q && v.r === r);
+      const val = parseInt(newValStr, 10) || 0;
+
+      if (val <= 0) {
+        if (idx >= 0) vps.splice(idx, 1);
+      } else {
+        const owner = document.getElementById('scen-hex-vp-owner-select')?.value || '';
+        if (idx >= 0) {
+          vps[idx].value = val;
+          if (owner) vps[idx].initial_owner = owner;
+          else delete vps[idx].initial_owner;
+        } else {
+          const entry = { q, r, value: val };
+          if (owner) entry.initial_owner = owner;
+          vps.push(entry);
+        }
+      }
+
+      if (currentScenarioData.victory_points) {
+        currentScenarioData.victory_points = vps;
+      }
+
+      renderScenarioVpsTable();
+      drawScenarioCanvas();
+      syncScenarioJsonFromState();
+      updateScenarioHexInspector();
+    }
+
+    function onScenarioHexVpOwnerChange(newOwner) {
+      if (!selectedScenarioHex || !currentScenarioData) return;
+      ensureScenarioMapAndVpStructure();
+      const { q, r } = selectedScenarioHex;
+      const vps = getScenarioVps();
+      const idx = vps.findIndex(v => v.q === q && v.r === r);
+
+      if (idx >= 0) {
+        if (newOwner) vps[idx].initial_owner = newOwner;
+        else delete vps[idx].initial_owner;
+      } else if (newOwner) {
+        vps.push({ q, r, value: 2, initial_owner: newOwner });
+        const vpSel = document.getElementById('scen-hex-vp-select');
+        if (vpSel) vpSel.value = '2';
+      }
+
+      if (currentScenarioData.victory_points) {
+        currentScenarioData.victory_points = vps;
+      }
+
+      renderScenarioVpsTable();
+      drawScenarioCanvas();
+      syncScenarioJsonFromState();
+      updateScenarioHexInspector();
+    }
+
+    function quickSetScenarioFort(type) {
+      if (!selectedScenarioHex) {
+        alert("Please click a hex on the map first to select it.");
+        return;
+      }
+      onScenarioHexFortChange(type);
+    }
+
+    function quickSetScenarioVp(pts) {
+      if (!selectedScenarioHex) {
+        alert("Please click a hex on the map first to select it.");
+        return;
+      }
+      onScenarioHexVpChange(String(pts));
+    }
+
+    function clearScenarioHexFortAndVp() {
+      if (!selectedScenarioHex || !currentScenarioData) return;
+      onScenarioHexFortChange('none');
+      onScenarioHexVpChange('0');
     }
 
     function autoFitScenarioCamera() {
@@ -3544,41 +3817,85 @@ HTML_TEMPLATE = """<!DOCTYPE html>
         } catch (e) {}
       }
 
-      // 3. Draw Fortifications
+      // 3. Draw Fortifications (Distinct pills in lower hex half)
       for (const f of getScenarioFortifications()) {
         const { x, y } = hexToPixel(f.q, f.r, canvasZoom, canvasOffsetX, canvasOffsetY);
-        ctx.beginPath();
-        ctx.arc(x, y + 2, canvasZoom * 0.4, 0, Math.PI * 2);
-        ctx.fillStyle = 'rgba(15, 23, 42, 0.75)';
-        ctx.fill();
-        ctx.strokeStyle = '#38bdf8';
-        ctx.lineWidth = 1.5;
-        ctx.stroke();
+        const ftype = (f.type || 'bunker').toLowerCase();
+        
+        let badgeBg = '#1e293b';
+        let badgeStroke = '#38bdf8';
+        let badgeText = 'FORT';
+        if (ftype === 'bunker') { badgeBg = '#334155'; badgeStroke = '#38bdf8'; badgeText = 'BNK'; }
+        else if (ftype === 'casemate') { badgeBg = '#1e293b'; badgeStroke = '#60a5fa'; badgeText = 'CSM'; }
+        else if (ftype === 'gun_emplacement') { badgeBg = '#0f172a'; badgeStroke = '#93c5fd'; badgeText = 'GUN'; }
+        else if (ftype === 'trench') { badgeBg = '#78350f'; badgeStroke = '#d97706'; badgeText = 'TRN'; }
+        else if (ftype === 'barbed_wire') { badgeBg = '#451a03'; badgeStroke = '#f59e0b'; badgeText = 'WIRE'; }
+        else if (ftype === 'minefield') { badgeBg = '#7f1d1d'; badgeStroke = '#ef4444'; badgeText = 'MINE'; }
 
-        ctx.fillStyle = '#38bdf8';
+        const pillW = Math.max(28, Math.floor(canvasZoom * 1.05));
+        const pillH = Math.max(12, Math.floor(canvasZoom * 0.40));
+        const pillY = y + canvasZoom * 0.40;
+
+        ctx.fillStyle = badgeBg;
+        if (ctx.roundRect) {
+          ctx.beginPath();
+          ctx.roundRect(x - pillW / 2, pillY - pillH / 2, pillW, pillH, 3);
+          ctx.fill();
+          ctx.strokeStyle = badgeStroke;
+          ctx.lineWidth = 1.5;
+          ctx.stroke();
+        } else {
+          ctx.fillRect(x - pillW / 2, pillY - pillH / 2, pillW, pillH);
+          ctx.strokeStyle = badgeStroke;
+          ctx.lineWidth = 1.5;
+          ctx.strokeRect(x - pillW / 2, pillY - pillH / 2, pillW, pillH);
+        }
+
+        ctx.fillStyle = badgeStroke;
         ctx.font = 'bold 9px sans-serif';
         ctx.textAlign = 'center';
-        ctx.fillText(f.type ? f.type.substring(0, 4).toUpperCase() : 'FORT', x, y + 5);
+        ctx.textBaseline = 'middle';
+        ctx.fillText(badgeText, x, pillY);
       }
 
-      // 4. Draw Victory Points
+      // 4. Draw Victory Points (Golden star badges in upper hex half)
       for (const vp of getScenarioVps()) {
         const { x, y } = hexToPixel(vp.q, vp.r, canvasZoom, canvasOffsetX, canvasOffsetY);
-        ctx.beginPath();
-        ctx.arc(x, y, canvasZoom * 0.35, 0, Math.PI * 2);
-        ctx.fillStyle = '#f59e0b';
-        ctx.fill();
-        ctx.strokeStyle = '#fff';
-        ctx.lineWidth = 1.5;
-        ctx.stroke();
+        const owner = (vp.initial_owner || '').toUpperCase();
+        let ownerColor = '#854d0e'; // Neutral gold
+        if (owner === 'US') ownerColor = '#1d4ed8';
+        else if (owner === 'IT') ownerColor = '#15803d';
+        else if (owner === 'GE') ownerColor = '#475569';
+        else if (owner === 'UK') ownerColor = '#991b1b';
 
-        ctx.fillStyle = '#000';
+        const val = vp.value !== undefined ? vp.value : (currentScenarioData.vp?.value_per_hex || 2);
+        const pillW = Math.max(26, Math.floor(canvasZoom * 0.95));
+        const pillH = Math.max(12, Math.floor(canvasZoom * 0.38));
+        const pillY = y - canvasZoom * 0.42;
+
+        ctx.fillStyle = ownerColor;
+        if (ctx.roundRect) {
+          ctx.beginPath();
+          ctx.roundRect(x - pillW / 2, pillY - pillH / 2, pillW, pillH, 3);
+          ctx.fill();
+          ctx.strokeStyle = '#f59e0b';
+          ctx.lineWidth = 1.5;
+          ctx.stroke();
+        } else {
+          ctx.fillRect(x - pillW / 2, pillY - pillH / 2, pillW, pillH);
+          ctx.strokeStyle = '#f59e0b';
+          ctx.lineWidth = 1.5;
+          ctx.strokeRect(x - pillW / 2, pillY - pillH / 2, pillW, pillH);
+        }
+
+        ctx.fillStyle = '#fbbf24';
         ctx.font = 'bold 9px sans-serif';
         ctx.textAlign = 'center';
-        ctx.fillText('VP' + (vp.value || 1), x, y + 3);
+        ctx.textBaseline = 'middle';
+        ctx.fillText(`★ ${val}`, x, pillY);
       }
 
-      // 5. Draw Units
+      // 5. Draw Units (Distinct circles in center of hex)
       for (const u of getScenarioUnits()) {
         const { q, r } = getUnitCoords(u);
         const { x, y } = hexToPixel(q, r, canvasZoom, canvasOffsetX, canvasOffsetY);
@@ -3587,7 +3904,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
         const sideColor = isUS ? '#2563eb' : (isIT ? '#16a34a' : '#475569');
 
         ctx.beginPath();
-        ctx.arc(x, y, canvasZoom * 0.42, 0, Math.PI * 2);
+        ctx.arc(x, y, Math.max(9, Math.floor(canvasZoom * 0.34)), 0, Math.PI * 2);
         ctx.fillStyle = sideColor;
         ctx.fill();
         ctx.strokeStyle = '#fff';
@@ -3597,14 +3914,32 @@ HTML_TEMPLATE = """<!DOCTYPE html>
         ctx.fillStyle = '#fff';
         ctx.font = 'bold 9px sans-serif';
         ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
         const shortName = (u.unit_id || '').substring(0, 3).toUpperCase();
-        ctx.fillText(shortName, x, y + 3);
+        ctx.fillText(shortName, x, y);
       }
 
       // 5.5. Draw Marked Scenario Hex Highlight
       if (selectedScenarioHex) {
         const { x, y } = hexToPixel(selectedScenarioHex.q, selectedScenarioHex.r, canvasZoom, canvasOffsetX, canvasOffsetY);
         drawPointyHex(ctx, x, y, canvasZoom, 'rgba(245, 158, 11, 0.28)', '#f59e0b', 3.5);
+
+        ctx.beginPath();
+        ctx.arc(x, y, 4, 0, Math.PI * 2);
+        ctx.fillStyle = '#f59e0b';
+        ctx.fill();
+
+        ctx.fillStyle = '#0f172a';
+        if (ctx.fillRect) ctx.fillRect(x - 26, y - canvasZoom * 0.95 - 13, 52, 16);
+        ctx.strokeStyle = '#f59e0b';
+        ctx.lineWidth = 1.5;
+        if (ctx.strokeRect) ctx.strokeRect(x - 26, y - canvasZoom * 0.95 - 13, 52, 16);
+
+        ctx.fillStyle = '#f59e0b';
+        ctx.font = 'bold 10px monospace';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(`[${selectedScenarioHex.q}, ${selectedScenarioHex.r}]`, x, y - canvasZoom * 0.95 - 5);
       }
 
       // 6. Draw Hover Outline
@@ -3649,12 +3984,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
             if (currentScenarioData) {
               const [w, h] = currentScenarioData.shape || [9, 8];
               if (q >= 0 && q < w && r >= 0 && r < h) {
-                selectedScenarioHex = { q, r };
-                const { terrainMap, elevationMap } = buildScenarioTerrainAndElevationMap();
-                const t = terrainMap[q + ',' + r] || 'clear';
-                const el = elevationMap[q + ',' + r] || 0;
-                document.getElementById('canvas-info-overlay').innerText = `📍 Selected Hex (${q}, ${r}) | Terrain: ${t.toUpperCase()} | Elev: +${el}`;
-                drawScenarioCanvas();
+                selectScenarioHex(q, r);
               }
             }
           }
@@ -3789,17 +4119,23 @@ HTML_TEMPLATE = """<!DOCTYPE html>
     }
 
     function removeFortification(idx) {
-      currentScenarioData.fortifications.splice(idx, 1);
+      ensureScenarioMapAndVpStructure();
+      const forts = getScenarioFortifications();
+      forts.splice(idx, 1);
       renderScenarioFortsTable();
       drawScenarioCanvas();
       syncScenarioJsonFromState();
+      updateScenarioHexInspector();
     }
 
     function removeVp(idx) {
-      currentScenarioData.victory_points.splice(idx, 1);
+      ensureScenarioMapAndVpStructure();
+      const vps = getScenarioVps();
+      vps.splice(idx, 1);
       renderScenarioVpsTable();
       drawScenarioCanvas();
       syncScenarioJsonFromState();
+      updateScenarioHexInspector();
     }
 
     function addFortificationRow() {
@@ -3807,11 +4143,12 @@ HTML_TEMPLATE = """<!DOCTYPE html>
       if (q === null) return;
       const r = prompt("Enter Fortification Hex R (row):", "0");
       if (r === null) return;
-      const type = prompt("Enter Fortification Type (bunker, pillbox, trench):", "bunker");
+      const type = prompt("Enter Fortification Type (bunker, casemate, gun_emplacement, trench, barbed_wire, minefield):", "bunker");
       if (!type) return;
 
-      if (!currentScenarioData.fortifications) currentScenarioData.fortifications = [];
-      currentScenarioData.fortifications.push({
+      ensureScenarioMapAndVpStructure();
+      const forts = getScenarioFortifications();
+      forts.push({
         q: parseInt(q, 10) || 0,
         r: parseInt(r, 10) || 0,
         type: type.trim().toLowerCase()
@@ -3819,6 +4156,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
       renderScenarioFortsTable();
       drawScenarioCanvas();
       syncScenarioJsonFromState();
+      updateScenarioHexInspector();
     }
 
     function addVpRow() {
@@ -3826,18 +4164,24 @@ HTML_TEMPLATE = """<!DOCTYPE html>
       if (q === null) return;
       const r = prompt("Enter VP Hex R (row):", "0");
       if (r === null) return;
-      const val = prompt("Enter VP Value (points):", "1");
+      const val = prompt("Enter VP Value (points):", "2");
       if (!val) return;
+      const owner = prompt("Enter Initial Owner (US / IT / GE / UK or leave blank for Neutral):", "");
 
-      if (!currentScenarioData.victory_points) currentScenarioData.victory_points = [];
-      currentScenarioData.victory_points.push({
+      ensureScenarioMapAndVpStructure();
+      const vps = getScenarioVps();
+      const entry = {
         q: parseInt(q, 10) || 0,
         r: parseInt(r, 10) || 0,
-        value: parseInt(val, 10) || 1
-      });
+        value: parseInt(val, 10) || 2
+      };
+      if (owner && owner.trim()) entry.initial_owner = owner.trim().toUpperCase();
+      vps.push(entry);
+
       renderScenarioVpsTable();
       drawScenarioCanvas();
       syncScenarioJsonFromState();
+      updateScenarioHexInspector();
     }
 
     function addMapPieceToScenario() {
