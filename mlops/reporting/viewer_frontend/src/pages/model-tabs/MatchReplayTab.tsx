@@ -724,7 +724,8 @@ export function MatchReplayTab({
 
   useEffect(() => {
     if (!showIpbTopography || !selectedEvalSourcePath) return;
-    if (topographyProfile) return;
+    const currentScenId = String(replaySteps?.scenario_id || "");
+    if (topographyProfile && String(topographyProfile.scenario_id || "") === currentScenId && currentScenId) return;
     let isMounted = true;
     setIsLoadingTopography(true);
     const scenId = String(replaySteps?.scenario_id || "");
