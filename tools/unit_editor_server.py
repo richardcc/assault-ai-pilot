@@ -4704,7 +4704,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
         await loadScenariosData();
         selectScenario(currentScenarioId);
       } else {
-        alert("Publish failed: " + (data.error || 'Validation error'));
+        alert("Publish failed: " + (data.error || data.detail || 'Validation error'));
       }
     }
 
@@ -5430,7 +5430,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
         await loadMapPiecesData();
         selectMapPiece(currentPieceId);
       } else {
-        alert("Publish failed: " + (data.error || 'Validation error'));
+        alert("Publish failed: " + (data.error || data.detail || 'Validation error'));
       }
     }
 
@@ -5690,10 +5690,10 @@ class UnitEditorHandler(BaseHTTPRequestHandler):
         if path.startswith("/api/scenarios/draft/") and path.endswith("/publish"):
             draft_id = path[len("/api/scenarios/draft/"):-len("/publish")]
             try:
-                pub = scenario_editor_service.publish_scenario(draft_id)
+                pub = scenario_editor_service.publish_draft(draft_id)
                 self._send_json(200, {"ok": True, "scenario": pub})
             except Exception as e:
-                self._send_json(422, {"ok": False, "detail": str(e)})
+                self._send_json(422, {"ok": False, "error": str(e), "detail": str(e)})
             return
 
         if path.startswith("/api/scenarios/") and path.endswith("/unpublish"):
@@ -5748,7 +5748,7 @@ class UnitEditorHandler(BaseHTTPRequestHandler):
                 pub = map_piece_editor_service.publish_piece(draft_id)
                 self._send_json(200, {"ok": True, "piece": pub})
             except Exception as e:
-                self._send_json(422, {"ok": False, "detail": str(e)})
+                self._send_json(422, {"ok": False, "error": str(e), "detail": str(e)})
             return
 
         if path.startswith("/api/map_pieces/") and path.endswith("/unpublish"):

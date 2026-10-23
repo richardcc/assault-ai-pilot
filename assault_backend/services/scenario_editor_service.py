@@ -511,6 +511,12 @@ class ScenarioEditorService:
             "timestamp": _now_iso(),
         }
 
+    def publish_scenario(self, scenario_id: str, target_id: Optional[str] = None) -> Dict[str, Any]:
+        """
+        Alias for publish_draft for interface consistency with map_piece_editor_service and HTTP endpoints.
+        """
+        return self.publish_draft(scenario_id, target_id=target_id)
+
     def delete_draft(self, scenario_id: str) -> bool:
         """
         Deletes a draft scenario file.
