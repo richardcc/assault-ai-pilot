@@ -154,7 +154,20 @@ class EfficientZeroV2Service:
             )
             device = self.device
             state_dict = torch.load(ckpt_path, map_location="cpu", weights_only=False)
-            model.load_state_dict(state_dict, strict=True)
+            try:
+                model.load_state_dict(state_dict, strict=True)
+            except Exception:
+                remapped = {
+                    k.replace(".attn.1.", ".attn.fc.1.")
+                    .replace(".attn.3.", ".attn.fc.3.")
+                    .replace(".se.1.", ".se.fc.1.")
+                    .replace(".se.3.", ".se.fc.3."): v
+                    for k, v in state_dict.items()
+                }
+                try:
+                    model.load_state_dict(remapped, strict=False)
+                except Exception as load_err:
+                    print(f"[EZV2Service] Checkpoint remapped load notice: {load_err}")
             model.to(device)
             model.eval()
 

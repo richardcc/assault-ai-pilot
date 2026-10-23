@@ -310,6 +310,10 @@ def resolve_close_combat(
             _trace("TOUGH_TRAIT_DEFENDER_REDUCED_DAMAGE", unit=ctx.defender.unit_id)
 
         attacker_suppress = atk_vs_def["remaining_suppress"]
+        if _has_trait(ctx.attacker, "FLAMETHROWER"):
+            attacker_suppress += 1
+        if _has_trait(ctx.defender, "REAR_ECHELON"):
+            attacker_suppress += 1
 
         # =================================================
         # DEFENDER → ATTACKER
@@ -328,6 +332,10 @@ def resolve_close_combat(
             _trace("TOUGH_TRAIT_ATTACKER_REDUCED_DAMAGE", unit=ctx.attacker.unit_id)
 
         defender_suppress = def_vs_atk["remaining_suppress"]
+        if _has_trait(ctx.defender, "FLAMETHROWER"):
+            defender_suppress += 1
+        if _has_trait(ctx.attacker, "REAR_ECHELON"):
+            defender_suppress += 1
 
         # ---------------- EFFECTS ----------------
         rr.attacker_effects = {

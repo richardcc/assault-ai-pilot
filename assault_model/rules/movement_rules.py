@@ -5,6 +5,7 @@ from assault_model.rules.movement_outcome import MovementOutcome
 from assault_model.map.hex_coord import HexCoord
 
 from assault_model.rules.movement_terrain_rules import MovementTerrainRules
+from assault_model.map.terrain import Terrain
 from assault_model.map.terrain_config import terrain_config
 from typing import Optional, Dict, List, Tuple, Any, Set
 from assault_model.map.hex_utils import neighbors as hex_neighbors, safe_hex_distance
@@ -49,16 +50,17 @@ class MovementRules:
     def can_use_fast_action(unit) -> bool:
         """
         Check if unit can perform fast action (Rule 9.2).
-        Units with SLOW or SLOW_UNIT trait cannot use fast action.
+        Units with SLOW, SLOW_UNIT, IMMOBILE, or SET_UP_TIME cannot use fast action.
         """
         if unit is None:
             return False
+        prohibited = {"SLOW", "SLOW_UNIT", "IMMOBILE", "SET_UP_TIME", "HEAVY_WEIGHT"}
         if hasattr(unit, "has_trait"):
-            if unit.has_trait("SLOW") or unit.has_trait("SLOW_UNIT"):
+            if any(unit.has_trait(t) for t in prohibited):
                 return False
         unit_type = getattr(unit, "unit_type", None)
         if unit_type is not None and hasattr(unit_type, "has_trait"):
-            if unit_type.has_trait("SLOW") or unit_type.has_trait("SLOW_UNIT"):
+            if any(unit_type.has_trait(t) for t in prohibited):
                 return False
         return True
 
@@ -95,6 +97,13 @@ class MovementRules:
         if max_mp <= 0:
             return paths
 
+        # Rule: IMMOBILE units (e.g. 8.8cm Flak 36, 90mm AA Gun) cannot move autonomously
+        if hasattr(unit, "has_trait") and unit.has_trait("IMMOBILE"):
+            return paths
+        unit_type = getattr(unit, "unit_type", None)
+        if unit_type is not None and hasattr(unit_type, "has_trait") and unit_type.has_trait("IMMOBILE"):
+            return paths
+
         move_type = getattr(unit.unit_type, "movement_type", "foot")
 
         # -------------------------------------------------
@@ -121,7 +130,9 @@ class MovementRules:
         get_static_graph = getattr(gmap, "get_static_movement_graph", None)
         static_adj_tuples = None
         if callable(get_static_graph):
-            static_adj_tuples = get_static_graph(move_type, terrain_config)[0]
+            graph_res = get_static_graph(move_type, terrain_config)
+            if graph_res:
+                static_adj_tuples = graph_res[0]
 
         # -------------------------------------------------
         # Dijkstra bounded by movement point budget
@@ -146,10 +157,22 @@ class MovementRules:
                     if ec is not None:
                         neighbor_entries.append((nq, nr, ec))
 
+            current_tile = gmap.get_hex(q, r) if gmap else None
             for nq, nr, enter_cost in neighbor_entries:
                 new_cost = cost + enter_cost
                 if new_cost > max_mp:
                     continue
+
+                # Rule: HEAVY_WEIGHT cannot move up or down an elevation level (Hill) autonomously
+                if (hasattr(unit, "has_trait") and unit.has_trait("HEAVY_WEIGHT")) or (
+                    getattr(unit, "unit_type", None) and hasattr(unit.unit_type, "has_trait") and unit.unit_type.has_trait("HEAVY_WEIGHT")
+                ):
+                    next_tile = gmap.get_hex(nq, nr) if gmap else None
+                    if current_tile is not None and next_tile is not None:
+                        is_cur_hill = (getattr(current_tile, "terrain", None) == Terrain.HILL or getattr(current_tile, "terrain_type", None) == "hill")
+                        is_next_hill = (getattr(next_tile, "terrain", None) == Terrain.HILL or getattr(next_tile, "terrain_type", None) == "hill")
+                        if is_cur_hill != is_next_hill:
+                            continue
 
                 key = (nq, nr)
                 occ = occupants.get(key)

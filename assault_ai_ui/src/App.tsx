@@ -2,19 +2,17 @@ import { useState, useEffect, useRef, useMemo } from "react";
 import "./App.css";
 import GameCanvas from "./game/GameCanvas";
 import { gameController } from "./game/gameControllerInstance";
-import { UnitStatePanel } from "./game/ui/UnitStatePanel";
 import { CombatPanel } from "./game/ui/CombatPanel";
 import { unitImages } from "./game/config/unitImages";
 import { sides } from "./game/config/sides";
 import { formatCoords } from "./game/render/hexGridRenderer";
 import { DispatchedOrdersPanel } from "./game/ui/DispatchedOrdersPanel";
 import { RagAssistantPanel } from "./game/ui/RagAssistantPanel";
-import { DraggableWindow } from "./game/ui/DraggableWindow";
-import { logCombatEvents } from "./game/systems/combatLog";
-import { getUnitActionMarker } from "./game/state/actionMarkers";
-import { apiUrl } from "./config/backend";
-
 import { EfficientZeroV2TelemetryPanel } from "./game/ui/EfficientZeroV2TelemetryPanel";
+import { UnitCardTooltip } from "./game/ui/UnitCardTooltip";
+import { logCombatEvents } from "./game/systems/combatLog";
+import { actionMarkerImages, getUnitActionMarker } from "./game/state/actionMarkers";
+import { apiUrl } from "./config/backend";
 
 type LogEntry = {
   type: string;
@@ -39,15 +37,6 @@ type Unit = {
 };
 
 function App() {
-  const floatWindowIds = [
-    "tactical-intel",
-    "tactical-ezv2",
-    "tactical-log",
-    "tactical-rag",
-    "tactical-status",
-    "tactical-units",
-    "tactical-dice",
-  ] as const;
   const [gameData, setGameData] = useState<any>(null);
   const [deadUnits, setDeadUnits] = useState<Unit[]>([]);
   const [selectedUnitId, setSelectedUnitId] = useState<string | null>(null);
@@ -55,7 +44,7 @@ function App() {
   const [availableMoves, setAvailableMoves] = useState<any[]>([]);
   const [attackHint, setAttackHint] = useState<string | null>(null);
   const [logEvents, setLogEvents] = useState<LogEntry[]>([]);
-  const [activeMode, setActiveMode] = useState<string | null>(null);
+  const [activeMode, setActiveMode] = useState<string | null>("human");
   const [scenarioList, setScenarioList] = useState<string[]>([]);
   const [selectedScenario, setSelectedScenario] = useState<string>("");
   const [scenarioSides, setScenarioSides] = useState<string[]>([]);
@@ -65,6 +54,20 @@ function App() {
   const [autoAdvanceAfterHuman, setAutoAdvanceAfterHuman] = useState(true);
   const [waitingForManualAdvance, setWaitingForManualAdvance] = useState(false);
   const [telemetry, setTelemetry] = useState<any>(null);
+
+  // Tactical HUD & Drawer State
+  const [hudVisible, setHudVisible] = useState(true);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [activeSidebarTab, setActiveSidebarTab] = useState<"combat" | "log" | "ai" | "rag">("combat");
+  const [rosterFilterSide, setRosterFilterSide] = useState<string>("ALL");
+  const [rosterStatusFilter, setRosterStatusFilter] = useState<"ALL" | "READY" | "DONE">("ALL");
+  const [squadDrawerOpen, setSquadDrawerOpen] = useState(true);
+  const [squadSearchQuery, setSquadSearchQuery] = useState("");
+  const [cardPreview, setCardPreview] = useState<{
+    unit: Unit;
+    x: number;
+    y: number;
+  } | null>(null);
 
   const fetchTelemetry = async () => {
     try {
@@ -86,14 +89,13 @@ function App() {
   const lastReactionWindowRef = useRef<string>("");
   const prevUnitsRef = useRef<Unit[] | null>(null);
 
-  // Helper to add structured log events
   const addLog = (type: string, text: string) => {
-    const time = new Date().toLocaleTimeString([], { 
-      hour: "2-digit", 
-      minute: "2-digit", 
-      second: "2-digit" 
+    const time = new Date().toLocaleTimeString([], {
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
     });
-    setLogEvents((prev) => [{ type, text, time }, ...prev].slice(0, 50));
+    setLogEvents((prev) => [{ type, text, time }, ...prev].slice(0, 80));
   };
 
   const resetMatchUiState = () => {
@@ -106,97 +108,165 @@ function App() {
   };
 
   const buildSidesConfig = (mode: string): Record<string, string> => {
-    const sides = scenarioSides;
-    if (!sides.length) return {};
-    const chosenHumanSide = humanSide || sides[0];
+    const sidesList = scenarioSides;
+    if (!sidesList.length) return {};
+    const chosenHumanSide = humanSide || sidesList[0];
     const cfg: Record<string, string> = {};
-    for (const s of sides) {
-      cfg[s] = mode === "ai_vs_ai" ? "ai" : (s === chosenHumanSide ? "human" : "ai");
+    for (const s of sidesList) {
+      cfg[s] = mode === "ai_vs_ai" ? "ai" : s === chosenHumanSide ? "human" : "ai";
     }
     return cfg;
   };
 
-  // Subscribe to the game controller events
+  // Keyboard shortcut listener: H to toggle HUD, Escape to close drawer/unselect
   useEffect(() => {
-    (window as any).gameController = gameController;
-    const unsubscribeState = gameController.subscribe((state: any) => {
-      setGameData(state);
-    });
-    const unsubscribeTurnFlow = gameController.subscribeTurnFlow((flow) => {
-      setAutoAdvanceAfterHuman(Boolean(flow?.autoAdvanceAfterHuman));
-      setWaitingForManualAdvance(Boolean(flow?.waitingForManualAdvance));
-    });
-
-    (window as any).logSystemEvent = (type: string, text: string) => {
-      addLog(type, text);
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) {
+        return;
+      }
+      if (e.key === "h" || e.key === "H") {
+        setHudVisible((prev) => !prev);
+      } else if (e.key === "s" || e.key === "S") {
+        setSquadDrawerOpen((prev) => !prev);
+      } else if (e.key === "Escape") {
+        if (squadDrawerOpen) {
+          setSquadDrawerOpen(false);
+        } else if (sidebarOpen) {
+          setSidebarOpen(false);
+        } else if (selectedUnitId) {
+          setSelectedUnitId(null);
+          setAvailableMoves([]);
+        }
+      }
     };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [sidebarOpen, squadDrawerOpen, selectedUnitId]);
 
-    addLog("system", "🖥️ Tactical Control System initialized. Ready to launch.");
-
+  useEffect(() => {
+    (window as any).onCloseSquadDrawer = () => setSquadDrawerOpen(false);
     return () => {
-      unsubscribeState?.();
-      unsubscribeTurnFlow?.();
-      (window as any).logSystemEvent = undefined;
-      (window as any).gameController = undefined;
+      (window as any).onCloseSquadDrawer = undefined;
     };
   }, []);
 
+  // Subscribe to game controller events
   useEffect(() => {
-    const loadScenarioSides = async () => {
-      if (!selectedScenario) return;
+    const unsubscribe = gameController.subscribe((event: any) => {
+      if (event.type === "turn_change") {
+        addLog(
+          "turn",
+          `⚔️ Turn ${event.turn} // Active side: ${event.active_side || "-"} (${event.controller || "-"})`
+        );
+      } else if (event.type === "combat_result") {
+        addLog(
+          "combat",
+          `💥 Attack from ${event.attacker} to ${event.defender} - Damage: ${event.damage || 0}`
+        );
+      }
+    });
+
+    const unsubscribeTurnFlow = gameController.subscribeTurnFlow((flowState: any) => {
+      setWaitingForManualAdvance(Boolean(flowState?.waitingForManualAdvance));
+      setAutoAdvanceAfterHuman(Boolean(flowState?.autoAdvanceAfterHuman));
+    });
+
+    return () => {
+      unsubscribe();
+      unsubscribeTurnFlow();
+    };
+  }, []);
+
+  // Bridge global system logger for combat events
+  useEffect(() => {
+    (window as any).logSystemEvent = (type: string, text: string) => {
+      addLog(type, text);
+    };
+    return () => {
+      (window as any).logSystemEvent = undefined;
+    };
+  }, []);
+
+
+  // Load scenarios on mount
+  useEffect(() => {
+    const fetchScenarios = async () => {
       try {
-        const res = await fetch(apiUrl(`/api/ui/scenarios/${selectedScenario}`));
-        if (!res.ok) {
-          throw new Error(`Failed to load scenario data (${res.status})`);
-        }
+        const res = await fetch(apiUrl("/api/ui/scenarios"));
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const data = await res.json();
-        const sidesFound = Array.from(
-          new Set(
-            (data?.units || [])
-              .map((u: any) => String(u?.side || "").toUpperCase())
-              .filter((s: string) => s.length > 0)
-          )
-        ) as string[];
-        const normalizedSides = sidesFound.length ? sidesFound : ["GE", "US"];
-        setScenarioSides(normalizedSides);
-        setHumanSide((prev) => (prev && normalizedSides.includes(prev) ? prev : normalizedSides[0]));
+        const list = Array.isArray(data?.scenarios) ? data.scenarios : [];
+        setScenarioList(list);
+        if (list.length > 0) {
+          setSelectedScenario((prev) => prev || list[0]);
+        }
       } catch (err) {
-        console.error("❌ Could not load scenario sides", err);
+        console.error("❌ Failed to fetch scenario list", err);
+        addLog("system", `❌ Failed to fetch scenario list: ${String(err)}`);
+      }
+    };
+    fetchScenarios();
+  }, []);
+
+  // Fetch sides and automatically load scenario on map
+  const lastLoadedScenarioRef = useRef<string>("");
+  useEffect(() => {
+    if (!selectedScenario) return;
+    let cancelled = false;
+
+    const fetchSidesAndLoad = async () => {
+      try {
+        const res = await fetch(apiUrl(`/api/ui/scenarios/${encodeURIComponent(selectedScenario)}`));
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const data = await res.json();
+        if (cancelled) return;
+
+        const rawSides = Array.isArray(data?.sides) && data.sides.length > 0
+          ? data.sides
+          : Array.from(
+              new Set(
+                (data?.units || [])
+                  .map((u: any) => String(u?.side || "").toUpperCase())
+                  .filter((s: string) => s.length > 0)
+              )
+            );
+        const sidesFound = rawSides.length > 0 ? rawSides : ["GE", "US"];
+        setScenarioSides(sidesFound);
+        const nextHumanSide = humanSide && sidesFound.includes(humanSide) ? humanSide : sidesFound[0];
+        setHumanSide(nextHumanSide);
+
+        // Auto-load scenario on map if scenario changed or not yet loaded
+        if (lastLoadedScenarioRef.current !== selectedScenario) {
+          lastLoadedScenarioRef.current = selectedScenario;
+          const mode = activeMode || "human";
+          const cfg: Record<string, string> = {};
+          for (const s of sidesFound) {
+            cfg[s] = mode === "ai_vs_ai" ? "ai" : s === nextHumanSide ? "human" : "ai";
+          }
+          (window as any).__forceInitialCameraFit = true;
+          resetMatchUiState();
+          addLog("system", `🗺️ Loading scenario: ${selectedScenario} (${sidesFound.join(" vs ")})`);
+          await gameController.start(mode as any, selectedScenario, cfg);
+        }
+      } catch (err) {
+        if (cancelled) return;
+        console.error("❌ Failed to fetch scenario sides", err);
         setScenarioSides(["GE", "US"]);
         setHumanSide((prev) => prev || "GE");
       }
     };
-    loadScenarioSides();
+
+    fetchSidesAndLoad();
+    return () => {
+      cancelled = true;
+    };
   }, [selectedScenario]);
 
-  useEffect(() => {
-    const loadScenarios = async () => {
-      try {
-        const res = await fetch(apiUrl("/api/ui/scenarios"));
-        if (!res.ok) {
-          throw new Error(`Failed to load scenarios (${res.status})`);
-        }
-        const data = await res.json();
-        const scenarios = Array.isArray(data?.scenarios) ? data.scenarios : [];
-        setScenarioList(scenarios);
-        if (scenarios.length > 0) {
-          setSelectedScenario((prev) => prev || scenarios[0]);
-        }
-      } catch (err) {
-        console.error("❌ Could not load scenarios", err);
-        addLog("system", `❌ Could not load scenarios: ${String(err)}`);
-      }
-    };
-    loadScenarios();
-  }, []);
-
-  // Monitor game state changes to output beautiful terminal logs
+  // Keep track of active side / turn changes in battle log
   useEffect(() => {
     if (!gameData) return;
-
     const turn = gameData.turn;
     const activeSide = gameData.active_side;
-
     if (turn !== lastTurnRef.current || activeSide !== lastActiveSideRef.current) {
       lastTurnRef.current = turn;
       lastActiveSideRef.current = activeSide;
@@ -205,25 +275,25 @@ function App() {
       const controller = gameData.sides?.[activeSide] || "Unknown";
 
       addLog(
-        "turn", 
+        "turn",
         `⚔️ TURN ${turn} // Faction active: ${activeSide} (${faction}) - Controlled by: [${controller.toUpperCase()}]`
       );
     }
   }, [gameData]);
 
-  // Emit a single explicit end-of-match log when done flips false -> true.
+  // End of match detection
   useEffect(() => {
     if (!gameData) return;
     const doneNow = Boolean(gameData?.done);
     if (doneNow && !lastDoneRef.current) {
       const winner = gameData?.winner ? String(gameData.winner) : "Draw";
       const reason = String(gameData?.end_reason || "completed");
-      addLog("system", `🏁 Match ended: ${winner} (${reason})`);
+      addLog("system", `🏁 Match concluded: ${winner} (${reason})`);
     }
     lastDoneRef.current = doneNow;
   }, [gameData?.done, gameData?.winner, gameData?.end_reason]);
 
-  // If active side is not human, clear any stale human selection/orders.
+  // Clear human selection on AI turn
   useEffect(() => {
     if (!gameData) return;
     const activeSide = gameData.active_side;
@@ -237,64 +307,53 @@ function App() {
   }, [gameData?.active_side, gameData?.sides]);
 
   // Log selections automatically
+  // Auto-open left panel when unit is selected
+  useEffect(() => {
+    if (selectedUnitId) {
+      setSquadDrawerOpen(true);
+    }
+  }, [selectedUnitId]);
+
   useEffect(() => {
     if (selectedUnitId) {
       const unit = gameData?.units?.find((u: any) => u.id === selectedUnitId);
-      const label = unit ? (unitImages[unit.unit_key as keyof typeof unitImages]?.label || unit.unit_key) : "";
+      const label = unit ? unitImages[unit.unit_key as keyof typeof unitImages]?.label || unit.unit_key : "";
       addLog("select", `🟢 Target locked: ${selectedUnitId} [${label}]`);
     }
   }, [selectedUnitId, gameData]);
 
-  // Log combat results (damage + dice used) to the System Log.
-  // Logging is deduped by event id in combatLog, so it is safe even if the
-  // same events arrive through multiple state updates.
+  // Combat logging
   useEffect(() => {
     logCombatEvents(gameData?.last_events, gameData?.units || []);
   }, [gameData]);
 
-  // Keep last combat dice/result visible until a new combat action arrives.
+  // Auto-open or badge combat drawer when ACTION_EFFECT occurs
   useEffect(() => {
     const events = gameData?.last_events || [];
     const latest = events.slice().reverse().find((event: any) => event?.type === "ACTION_EFFECT");
     if (latest) {
       setStickyCombatEvent(latest);
+      setActiveSidebarTab("combat");
+      setSidebarOpen(true);
     }
   }, [gameData?.last_events]);
 
-  // Log VP ownership changes.
+  // Log VP captures
   useEffect(() => {
     const events = gameData?.last_events || [];
     for (const event of events) {
       if (event?.type !== "VP_CAPTURED") continue;
       const p = event.payload || {};
       const coords =
-        p.q != null && p.r != null
-          ? formatCoords(Number(p.q), Number(p.r))
-          : "[?]";
+        p.q != null && p.r != null ? formatCoords(Number(p.q), Number(p.r)) : "[?]";
       const newOwner = p.new_owner || "NONE";
       const prevOwner = p.previous_owner || "NONE";
       const value = Number(p.value || 0);
-      addLog(
-        "turn",
-        `🏁 VP ${coords} ${prevOwner} -> ${newOwner} (+${value})`
-      );
+      addLog("turn", `🏁 VP ${coords} ${prevOwner} -> ${newOwner} (+${value})`);
     }
   }, [gameData?.last_events]);
 
-  // Log reaction decision windows and outcomes explicitly.
-  useEffect(() => {
-    const events = gameData?.last_events || [];
-    for (const event of events) {
-      const p = event?.payload || {};
-      if (event?.type === "REACTION_WINDOW") {
-        addLog("combat", `⏸️ Reaction window: ${String(p.reactor_id || "?")} can react to ${String(p.target_id || "?")}`);
-      } else if (event?.type === "REACTION_FIRE_SKIPPED") {
-        addLog("combat", `⏭️ Reaction skipped: ${String(p.reactor_id || "?")}`);
-      }
-    }
-  }, [gameData?.last_events]);
-
-  // Keep dead units visible in the roster even if they disappear from the map state
+  // Keep dead units in roster
   useEffect(() => {
     if (!gameData?.units) return;
 
@@ -305,38 +364,35 @@ function App() {
 
     setDeadUnits((prev) => {
       const nextDeadMap = new Map<string, Unit>();
-
       for (const dead of currentDead) {
         nextDeadMap.set(dead.id, dead);
       }
-
       for (const d of prev) {
         if (!currentIds.has(d.id)) {
           nextDeadMap.set(d.id, d);
         }
       }
-
-      // Backend used to drop dead units entirely; keep last snapshot if they vanish
       for (const prevUnit of previousUnits) {
-        if (!currentIds.has(prevUnit.id)) {
-          nextDeadMap.set(prevUnit.id, { ...prevUnit, hp: 0 });
+        if (
+          !currentIds.has(prevUnit.id) &&
+          !nextDeadMap.has(prevUnit.id) &&
+          prevUnit.hp != null &&
+          prevUnit.hp <= 0
+        ) {
+          nextDeadMap.set(prevUnit.id, prevUnit);
         }
       }
-
       return Array.from(nextDeadMap.values());
     });
 
     prevUnitsRef.current = currentUnits;
-  }, [gameData]);
+  }, [gameData?.units]);
 
-  // Resolve which enemy unit an attack order is targeting, so we can
-  // highlight it in the roster on hover.
   const resolveOrderTargetId = (order: any): string | null => {
     if (!order) return null;
     const actionType = String(order.type || order.kind || "").toUpperCase();
     const isAttack =
-      order.kind === "attack" ||
-      /RANGED|ASSAULT|ATTACK|REACTION|COMBAT|FIRE/.test(actionType);
+      order.kind === "attack" || /RANGED|ASSAULT|ATTACK|REACTION|COMBAT|FIRE/.test(actionType);
     if (!isAttack) return null;
 
     if (order.target_id) return order.target_id;
@@ -345,78 +401,44 @@ function App() {
     const r = order.target_r ?? order.r;
     if (q == null || r == null) return null;
 
-    const unit = (gameData?.units || []).find(
-      (u: any) => u.q === q && u.r === r
-    );
+    const unit = (gameData?.units || []).find((u: any) => u.q === q && u.r === r);
     return unit?.id ?? null;
   };
 
-  // Action card trigger handler
-  const handleActionCardClick = (action: any) => {
-    if (typeof (window as any).onHexClick === "function") {
-      const targetQ = action.q ?? action.target_q;
-      const targetR = action.r ?? action.target_r;
-      const actionType = action.kind === "attack" 
-        ? (action.type ? action.type.toUpperCase() : "ATTACK")
-        : "MOVE";
-      const coordStr = targetQ != null && targetR != null ? formatCoords(targetQ, targetR) : "?";
-      
-      (window as any).logSystemEvent?.("move", `👤 Human Order: ${actionType} to hex ${coordStr}`);
-      addLog("move", `👉 Order dispatched: ${actionType} to hex ${coordStr}`);
-      
-      if (targetQ != null && targetR != null) {
-        (window as any).onHexClick(targetQ, targetR);
-      } else {
-        console.warn("⛔ Missing target coordinates for action", action);
-      }
-    }
-  };
-
-  // Start a game mode safely and log it
   const handleStartGame = (mode: string) => {
     if (!selectedScenario) {
       addLog("system", "❌ No scenario selected");
       return;
     }
-    if (!scenarioSides.length) {
-      addLog("system", "❌ Scenario sides are still loading. Please wait.");
-      return;
-    }
-    if (!humanSide || !scenarioSides.includes(humanSide)) {
-      addLog("system", "❌ Invalid human side for selected scenario.");
-      return;
-    }
+    const sidesList = scenarioSides.length > 0 ? scenarioSides : ["GE", "US"];
+    const chosenSide = humanSide && sidesList.includes(humanSide) ? humanSide : sidesList[0];
+    setHumanSide(chosenSide);
     setActiveMode(mode);
     addLog(
       "system",
-      `🚀 Launching match mode: [${mode.toUpperCase()}] // Scenario: ${selectedScenario} // Human: ${humanSide || "-"}`
+      `🚀 Launching match: [${mode.toUpperCase()}] // Scenario: ${selectedScenario} // Side: ${chosenSide}`
     );
-    // Force an initial camera fit for the next valid map state.
     (window as any).__forceInitialCameraFit = true;
     resetMatchUiState();
-    gameController.start(
-      mode as any,
-      selectedScenario,
-      buildSidesConfig(mode)
-    );
+    const cfg: Record<string, string> = {};
+    for (const s of sidesList) {
+      cfg[s] = mode === "ai_vs_ai" ? "ai" : s === chosenSide ? "human" : "ai";
+    }
+    lastLoadedScenarioRef.current = selectedScenario;
+    gameController.start(mode as any, selectedScenario, cfg);
   };
 
   const handleScenarioChange = (scenarioId: string) => {
+    if (!scenarioId || scenarioId === selectedScenario) return;
     setSelectedScenario(scenarioId);
-    // Avoid showing stale side options while new scenario metadata is loading.
-    setScenarioSides([]);
-    setHumanSide("");
-    if (!scenarioId) return;
-    addLog("system", `🗺️ Scenario changed: ${scenarioId}. Loading scenario metadata...`);
     resetMatchUiState();
   };
 
-  // Safe handler to stop and refresh the session
   const handleStopGame = () => {
-    addLog("system", "⛔ Terminating active session. Resetting control board...");
+    addLog("system", "⛔ Terminating active session. Resetting board...");
     setTimeout(() => {
       window.location.reload();
-    }, 800);
+    }, 600);
   };
 
   const handleStartSelectedMode = () => {
@@ -424,24 +446,19 @@ function App() {
     handleStartGame(modeToUse);
   };
 
-  const canStartGame = Boolean(
-    selectedScenario &&
-    scenarioSides.length > 0 &&
-    humanSide &&
-    scenarioSides.includes(humanSide)
-  );
+  const canStartGame = Boolean(selectedScenario);
 
   const handleExportTrace = async () => {
     try {
       const res = await fetch(apiUrl("/api/game/trace?limit=50000"));
-      if (!res.ok) {
-        throw new Error(`Trace export failed (${res.status})`);
-      }
+      if (!res.ok) throw new Error(`Trace export failed (${res.status})`);
       const payload = await res.json();
       const stamp = new Date().toISOString().replace(/[:.]/g, "-");
       const scenario = String(gameData?.scenario_name || selectedScenario || "scenario");
       const fileName = `trace_export_${scenario}_${stamp}.json`;
-      const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json;charset=utf-8" });
+      const blob = new Blob([JSON.stringify(payload, null, 2)], {
+        type: "application/json;charset=utf-8",
+      });
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
@@ -457,72 +474,27 @@ function App() {
     }
   };
 
-  const handleSaveLayout = () => {
-    try {
-      window.dispatchEvent(new Event("assault:save-layout"));
-      localStorage.setItem("assault.layout.savedAt", new Date().toISOString());
-      addLog("system", "💾 Layout guardado (ventanas + panel de unidades).");
-    } catch (err) {
-      addLog("system", `❌ No se pudo guardar layout: ${String(err)}`);
-    }
-  };
-
-  const handleResetLayout = () => {
-    try {
-      const keysToRemove: string[] = [];
-      for (let i = 0; i < localStorage.length; i++) {
-        const key = localStorage.key(i);
-        if (!key) continue;
-        if (key.startsWith("assault.window.") || key === "assault.units.layoutMode" || key === "assault.layout.savedAt") {
-          keysToRemove.push(key);
-        }
-      }
-      for (const key of keysToRemove) {
-        localStorage.removeItem(key);
-      }
-      addLog("system", "♻️ Layout reseteado. Recargando interfaz...");
-      setTimeout(() => window.location.reload(), 250);
-    } catch (err) {
-      addLog("system", `❌ No se pudo resetear layout: ${String(err)}`);
-    }
-  };
-
-  const handleMapMode = () => {
-    try {
-      window.dispatchEvent(
-        new CustomEvent("assault:set-window-state", {
-          detail: { windowId: "*", minimized: true, visible: true },
-        })
-      );
-      addLog("system", "🗺️ Modo Mapa: ventanas minimizadas.");
-    } catch (err) {
-      addLog("system", `❌ No se pudo activar Modo Mapa: ${String(err)}`);
-    }
-  };
-
   const handleToggleAutoAdvance = (enabled: boolean) => {
     gameController.setAutoAdvanceAfterHuman(enabled);
     addLog(
       "system",
       enabled
-        ? "▶ Autoavance activado: la IA continua automaticamente tras tu accion."
-        : "⏸ Autoavance desactivado: pulsa Avanzar para continuar tras tu accion."
+        ? "▶ Auto-advance enabled: AI continues automatically after player action."
+        : "⏸ Auto-advance disabled: Click Advance to proceed."
     );
   };
 
   const handleManualAdvance = () => {
     gameController.continueAfterHumanAction();
-    addLog("system", "▶ Avance manual solicitado: continuando turno de IA.");
+    addLog("system", "▶ Manual advance triggered: continuing AI turn.");
   };
 
-  // Find active specifications of the selected troop
+  // Selected unit specs
   const selectedUnit = gameData?.units?.find((u: Unit) => u.id === selectedUnitId);
-  const selectedUnitSpec = selectedUnit 
-    ? unitImages[selectedUnit.unit_key as keyof typeof unitImages] 
+  const selectedUnitSpec = selectedUnit
+    ? unitImages[selectedUnit.unit_key as keyof typeof unitImages]
     : null;
-  const selectedUnitActionMarker = selectedUnit
-    ? getUnitActionMarker(selectedUnit.id)
-    : null;
+  const selectedUnitActionMarker = selectedUnit ? getUnitActionMarker(selectedUnit.id) : null;
   const selectedWaitOrder = selectedUnit
     ? (availableMoves || []).find((m: any) => m?.kind === "wait" && m?.action_id)
     : null;
@@ -530,14 +502,10 @@ function App() {
   const executeActionById = async (actionId: string, order?: any) => {
     const activeSideNow = gameData?.active_side;
     const isHumanTurnNow = gameData?.sides?.[activeSideNow] === "human";
-    if (!isHumanTurnNow) {
-      return;
-    }
+    if (!isHumanTurnNow) return;
     try {
       const executed = await (window as any).onExecuteOrder?.(order || { action_id: actionId });
       if (executed) return;
-      // Avoid direct fallback POST here. onExecuteOrder is the single
-      // execution path to prevent stale/double-dispatched action_ids.
       console.warn("⛔ executeActionById rejected: onExecuteOrder did not execute");
     } catch (err) {
       console.error("❌ Action by id failed", err);
@@ -557,20 +525,107 @@ function App() {
     return Array.from(byId.values());
   }, [gameData?.units, deadUnits]);
 
+  // Live activation counts for active side
+  const { readyCount, doneCount } = useMemo(() => {
+    if (!panelUnits) return { readyCount: 0, doneCount: 0 };
+    const activatedSet = new Set(gameData?.activated_units || []);
+    let ready = 0;
+    let done = 0;
+    for (const u of panelUnits) {
+      if (u.alive === false || (u.hp != null && u.hp <= 0)) continue;
+      if (u.side === gameData?.active_side) {
+        if (activatedSet.has(u.id)) {
+          done++;
+        } else {
+          ready++;
+        }
+      }
+    }
+    return { readyCount: ready, doneCount: done };
+  }, [panelUnits, gameData?.activated_units, gameData?.active_side]);
+
+  // Squads filtered for Left Squad Drawer
+  const filteredSquadList = useMemo(() => {
+    let list = panelUnits;
+    if (rosterFilterSide !== "ALL") {
+      list = list.filter((u) => u.side === rosterFilterSide);
+    }
+    const activatedSet = new Set(gameData?.activated_units || []);
+    if (rosterStatusFilter === "READY") {
+      list = list.filter((u) => {
+        const dead = u.alive === false || (u.hp != null && u.hp <= 0);
+        const isOwn = u.side === gameData?.active_side;
+        return !dead && isOwn && !activatedSet.has(u.id);
+      });
+    } else if (rosterStatusFilter === "DONE") {
+      list = list.filter((u) => {
+        const dead = u.alive === false || (u.hp != null && u.hp <= 0);
+        return !dead && activatedSet.has(u.id);
+      });
+    }
+    if (squadSearchQuery.trim()) {
+      const q = squadSearchQuery.toLowerCase().trim();
+      list = list.filter((u) => {
+        const def = unitImages[u.unit_key as keyof typeof unitImages];
+        const label = (def?.label || u.unit_key || "").toLowerCase();
+        const id = u.id.toLowerCase();
+        return label.includes(q) || id.includes(q);
+      });
+    }
+    return list;
+  }, [panelUnits, rosterFilterSide, rosterStatusFilter, squadSearchQuery, gameData?.active_side, gameData?.activated_units]);
+
+  // Units filtered for bottom dock roster
+  const filteredRosterUnits = useMemo(() => {
+    let list = panelUnits;
+    if (rosterFilterSide !== "ALL") {
+      list = list.filter((u) => u.side === rosterFilterSide);
+    }
+    if (rosterStatusFilter === "READY") {
+      const activatedSet = new Set(gameData?.activated_units || []);
+      list = list.filter((u) => {
+        const dead = u.alive === false || (u.hp != null && u.hp <= 0);
+        const isOwn = u.side === gameData?.active_side;
+        return !dead && isOwn && !activatedSet.has(u.id);
+      });
+    } else if (rosterStatusFilter === "DONE") {
+      const activatedSet = new Set(gameData?.activated_units || []);
+      list = list.filter((u) => {
+        const dead = u.alive === false || (u.hp != null && u.hp <= 0);
+        return !dead && activatedSet.has(u.id);
+      });
+    }
+    return list;
+  }, [panelUnits, rosterFilterSide, rosterStatusFilter, gameData?.active_side, gameData?.activated_units]);
+
+  // Balance of Power (VP Duel bar calculation)
+  const vpScores = gameData?.vp_score_live || {};
+  const sideKeys = scenarioSides.length >= 2 ? scenarioSides : Object.keys(vpScores);
+  const sideA = sideKeys[0] || "US";
+  const sideB = sideKeys[1] || "GE";
+  const scoreA = Number(vpScores[sideA] || 0);
+  const scoreB = Number(vpScores[sideB] || 0);
+  const totalVp = scoreA + scoreB;
+  const pctA = totalVp > 0 ? Math.round((scoreA / totalVp) * 100) : 50;
+  const pctB = 100 - pctA;
+
+  // Reaction Fire
   const pendingReaction = gameData?.pending_reaction || null;
-  const pendingReactionReactor =
-    pendingReaction?.reactor_id
-      ? (gameData?.units || []).find((u: any) => String(u.id) === String(pendingReaction.reactor_id))
-      : null;
-  const pendingReactionTarget =
-    pendingReaction?.target_id
-      ? (gameData?.units || []).find((u: any) => String(u.id) === String(pendingReaction.target_id))
-      : null;
+  const pendingReactionReactor = pendingReaction?.reactor_id
+    ? (gameData?.units || []).find((u: any) => String(u.id) === String(pendingReaction.reactor_id))
+    : null;
+  const pendingReactionTarget = pendingReaction?.target_id
+    ? (gameData?.units || []).find((u: any) => String(u.id) === String(pendingReaction.target_id))
+    : null;
   const pendingReactionReactorLabel = pendingReactionReactor
-    ? (unitImages[pendingReactionReactor.unit_key as keyof typeof unitImages]?.label || pendingReactionReactor.unit_key || pendingReaction.reactor_id)
+    ? unitImages[pendingReactionReactor.unit_key as keyof typeof unitImages]?.label ||
+      pendingReactionReactor.unit_key ||
+      pendingReaction.reactor_id
     : String(pendingReaction?.reactor_id || "Unknown");
   const pendingReactionTargetLabel = pendingReactionTarget
-    ? (unitImages[pendingReactionTarget.unit_key as keyof typeof unitImages]?.label || pendingReactionTarget.unit_key || pendingReaction.target_id)
+    ? unitImages[pendingReactionTarget.unit_key as keyof typeof unitImages]?.label ||
+      pendingReactionTarget.unit_key ||
+      pendingReaction.target_id
     : String(pendingReaction?.target_id || "Unknown");
 
   useEffect(() => {
@@ -580,7 +635,7 @@ function App() {
     }
     const key = `${pendingReaction?.reactor_id || ""}->${pendingReaction?.target_id || ""}`;
     if (key && key !== lastReactionWindowRef.current) {
-      addLog("combat", `⚡ Reacción disponible: ${pendingReactionReactorLabel} -> ${pendingReactionTargetLabel}`);
+      addLog("combat", `⚡ Reaction fire available: ${pendingReactionReactorLabel} -> ${pendingReactionTargetLabel}`);
       lastReactionWindowRef.current = key;
     }
   }, [pendingReaction, pendingReactionReactorLabel, pendingReactionTargetLabel]);
@@ -616,123 +671,13 @@ function App() {
     }
   };
 
+  const isHumanTurn = gameData?.sides?.[gameData?.active_side] === "human";
+
   return (
     <div className="app">
-      {/* =========================
-          TACTICAL HEADER
-      ========================= */}
-      <div className="header">
-        <div className="header-title">
-          ⚡ ASSAULT AI <span>// COMMAND INTERFACE v1.2</span>
-        </div>
-
-        <div className="header-controls">
-          <select
-            className="btn-tactical"
-            value={selectedScenario}
-            onChange={(e) => handleScenarioChange(e.target.value)}
-            title="Scenario"
-            style={{ minWidth: 240 }}
-          >
-            {scenarioList.map((scenarioId) => (
-              <option key={scenarioId} value={scenarioId}>
-                {scenarioId}
-              </option>
-            ))}
-          </select>
-
-          <select
-            className="btn-tactical"
-            value={humanSide}
-            onChange={(e) => setHumanSide(e.target.value)}
-            title="Human side"
-            style={{ minWidth: 140 }}
-            disabled={!scenarioSides.length}
-          >
-            {!scenarioSides.length && (
-              <option value="">Loading sides...</option>
-            )}
-            {scenarioSides.map((sideId) => (
-              <option key={sideId} value={sideId}>
-                Human: {sideId}
-              </option>
-            ))}
-          </select>
-
-          <button 
-            className={`btn-tactical ${activeMode === "human" ? "active" : ""}`} 
-            onClick={() => handleStartGame("human")}
-          >
-            🎮 Human vs AI
-          </button>
-
-          <button 
-            className={`btn-tactical ${activeMode === "ai_vs_ai" ? "active" : ""}`} 
-            onClick={() => handleStartGame("ai_vs_ai")}
-          >
-            🤖 AI vs AI
-          </button>
-
-          <button 
-            className={`btn-tactical ${activeMode === "replay" ? "active" : ""}`} 
-            onClick={() => handleStartGame("replay")}
-          >
-            🔁 Replay
-          </button>
-
-          <button
-            className="btn-tactical"
-            onClick={handleExportTrace}
-            title="Download backend trace JSON"
-          >
-            💾 Export Trace
-          </button>
-
-          <button
-            className="btn-tactical"
-            onClick={handleSaveLayout}
-            title="Guardar layout de ventanas y paneles"
-          >
-            🧩 Guardar Layout
-          </button>
-
-          <button
-            className="btn-tactical"
-            onClick={handleResetLayout}
-            title="Resetear layout guardado"
-          >
-            ♻ Reset Layout
-          </button>
-
-          <button
-            className="btn-tactical"
-            onClick={handleMapMode}
-            title="Minimizar todas las ventanas para vista limpia de mapa"
-          >
-            🗺 Modo Mapa
-          </button>
-
-          <button
-            className="btn-tactical btn-tactical-start"
-            onClick={handleStartSelectedMode}
-            title="Start selected mode"
-            disabled={!canStartGame}
-          >
-            ▶ Start
-          </button>
-
-          <button 
-            className="btn-tactical btn-tactical-stop" 
-            onClick={handleStopGame}
-          >
-            ⛔ Stop
-          </button>
-        </div>
-      </div>
-
-      {/* =========================
-          MAIN GAME SCREEN GRID
-      ========================= */}
+      {/* ========================================================
+          FULL BLEED CANVAS LAYER
+      ======================================================== */}
       <div className="main">
         <div className="center">
           <GameCanvas
@@ -746,54 +691,371 @@ function App() {
           />
         </div>
       </div>
-      <DraggableWindow windowId="tactical-intel" title="Target Intel" initialX={16} initialY={92} width={360} bodyMaxHeight={640}>
+
+      {/* ========================================================
+          FLOATING HUD RESTORE BUTTON (WHEN HUD IS HIDDEN)
+      ======================================================== */}
+      {!hudVisible && (
+        <button
+          className="floating-hud-restore-btn"
+          onClick={() => setHudVisible(true)}
+          title="Restore Tactical HUD (H)"
+        >
+          👁 Show HUD [H]
+        </button>
+      )}
+
+      {/* ========================================================
+          TOP BATTLE HEADER RIBBON
+      ======================================================== */}
+      <header className={`battle-header-ribbon ${!hudVisible ? "hud-hidden" : ""}`}>
+        {/* Ribbon Left: Brand & Match Setup */}
+        <div className="ribbon-left">
+          <div className="ribbon-brand">
+            ⚡ ASSAULT <span>// EZv2</span>
+          </div>
+
+          <select
+            className="ribbon-select"
+            value={selectedScenario}
+            onChange={(e) => handleScenarioChange(e.target.value)}
+            title="Scenario"
+            style={{ maxWidth: 210 }}
+          >
+            {scenarioList.map((scenarioId) => (
+              <option key={scenarioId} value={scenarioId}>
+                {scenarioId}
+              </option>
+            ))}
+          </select>
+
+          <select
+            className="ribbon-select"
+            value={humanSide}
+            onChange={(e) => setHumanSide(e.target.value)}
+            title="Human Side"
+            style={{ maxWidth: 125 }}
+            disabled={!scenarioSides.length}
+          >
+            {!scenarioSides.length && <option value="">Sides...</option>}
+            {scenarioSides.map((sideId) => (
+              <option key={sideId} value={sideId}>
+                Side: {sideId}
+              </option>
+            ))}
+          </select>
+
+          <button
+            className={`btn-tactical ${activeMode === "human" ? "active" : ""}`}
+            onClick={() => handleStartGame("human")}
+            title="Human vs AI"
+          >
+            🎮 Human
+          </button>
+
+          <button
+            className={`btn-tactical ${activeMode === "ai_vs_ai" ? "active" : ""}`}
+            onClick={() => handleStartGame("ai_vs_ai")}
+            title="AI vs AI Self-play"
+          >
+            🤖 AI vs AI
+          </button>
+
+          <button
+            className={`btn-tactical ${activeMode === "replay" ? "active" : ""}`}
+            onClick={() => handleStartGame("replay")}
+            title="Replay Session"
+          >
+            🔁 Replay
+          </button>
+
+          <button
+            className="btn-tactical btn-tactical-start"
+            onClick={handleStartSelectedMode}
+            disabled={!canStartGame}
+            title="Start Match"
+          >
+            ▶ Start
+          </button>
+
+          <button
+            className="btn-tactical btn-tactical-stop"
+            onClick={handleStopGame}
+            title="Reset Board"
+          >
+            ⛔ Stop
+          </button>
+        </div>
+
+        {/* Ribbon Center: Turn, Phase, and Balance of Power */}
+        <div className="ribbon-center">
+          <div className="ribbon-turn-badge">
+            <span>TURN</span>
+            <span className="ribbon-turn-num">{gameData?.turn ?? "1"}</span>
+            <span style={{ opacity: 0.4 }}>/</span>
+            <div className={`ribbon-active-pill ${isHumanTurn ? "human" : "ai"}`}>
+              <span className="ribbon-active-pulse" />
+              <span>{gameData?.active_side || "-"} ({isHumanTurn ? "HUMAN" : "AI"})</span>
+            </div>
+          </div>
+
+          {/* Tug-of-war VP Dominance bar */}
+          <div
+            className="ribbon-duel-vp"
+            title={`Balance of Power: ${sideA} ${scoreA} VP (${pctA}%) vs ${sideB} ${scoreB} VP (${pctB}%)`}
+          >
+            <div className="vp-side-score side-a">
+              <span className="vp-side-name">{sideA}</span>
+              <span className="vp-side-val">{scoreA}</span>
+            </div>
+            <div className="vp-bar-track">
+              <div className="vp-bar-fill-a" style={{ width: `${pctA}%` }} />
+              <div className="vp-bar-fill-b" style={{ width: `${pctB}%` }} />
+            </div>
+            <div className="vp-side-score side-b">
+              <span className="vp-side-val">{scoreB}</span>
+              <span className="vp-side-name">{sideB}</span>
+            </div>
+          </div>
+
+          {gameData?.victory_outcome && (
+            <div style={{ fontSize: 11, color: "var(--neon-cyan)", fontFamily: "var(--font-mono)" }}>
+              🚩 OBJ: {gameData.victory_outcome.captured}/{gameData.victory_outcome.objectives_total}
+            </div>
+          )}
+        </div>
+
+        {/* Ribbon Right: Turn Advance, Trace, Drawer Tabs & HUD Eye */}
+        <div className="ribbon-right">
+          <label style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 11, cursor: "pointer" }} title="Auto-advance AI turns">
+            <input
+              type="checkbox"
+              checked={autoAdvanceAfterHuman}
+              onChange={(e) => handleToggleAutoAdvance(e.target.checked)}
+              style={{ accentColor: "var(--neon-cyan)" }}
+            />
+            <span style={{ color: "var(--text-muted)" }}>Auto</span>
+          </label>
+
+          <button
+            className="btn-tactical"
+            onClick={handleManualAdvance}
+            disabled={autoAdvanceAfterHuman || !waitingForManualAdvance}
+            title="Step next AI action"
+            style={{ padding: "4px 10px", fontSize: 11 }}
+          >
+            ▶ Step
+          </button>
+
+          <button
+            className="btn-tactical"
+            onClick={handleExportTrace}
+            title="Download backend match telemetry trace"
+            style={{ padding: "4px 8px" }}
+          >
+            💾
+          </button>
+
+          {/* Drawer trigger buttons */}
+          <button
+            className={`ribbon-drawer-btn ${sidebarOpen && activeSidebarTab === "combat" ? "active" : ""}`}
+            onClick={() => {
+              if (sidebarOpen && activeSidebarTab === "combat") setSidebarOpen(false);
+              else { setActiveSidebarTab("combat"); setSidebarOpen(true); }
+            }}
+            title="Combat & Dice Rolls"
+          >
+            🎲 Combat
+            {stickyCombatEvent && <span className="ribbon-drawer-badge">!</span>}
+          </button>
+
+          <button
+            className={`ribbon-drawer-btn ${sidebarOpen && activeSidebarTab === "log" ? "active" : ""}`}
+            onClick={() => {
+              if (sidebarOpen && activeSidebarTab === "log") setSidebarOpen(false);
+              else { setActiveSidebarTab("log"); setSidebarOpen(true); }
+            }}
+            title="Battle Log"
+          >
+            📜 Log ({logEvents.length})
+          </button>
+
+          <button
+            className={`ribbon-drawer-btn ${sidebarOpen && activeSidebarTab === "ai" ? "active" : ""}`}
+            onClick={() => {
+              if (sidebarOpen && activeSidebarTab === "ai") setSidebarOpen(false);
+              else { setActiveSidebarTab("ai"); setSidebarOpen(true); }
+            }}
+            title="EfficientZero V2 Brain"
+          >
+            🧠 AI
+          </button>
+
+          <button
+            className={`ribbon-drawer-btn ${sidebarOpen && activeSidebarTab === "rag" ? "active" : ""}`}
+            onClick={() => {
+              if (sidebarOpen && activeSidebarTab === "rag") setSidebarOpen(false);
+              else { setActiveSidebarTab("rag"); setSidebarOpen(true); }
+            }}
+            title="Rules & Tactics Advisor"
+          >
+            📚 Rules
+          </button>
+
+          {/* Immersive HUD Eye Toggle */}
+          <button
+            className="hud-eye-btn"
+            onClick={() => setHudVisible(false)}
+            title="Hide HUD for clean map view [H]"
+          >
+            👁
+          </button>
+        </div>
+      </header>
+
+
+      {/* Floating Left Squad Toggle Button */}
+      <button
+        className={`left-squad-toggle-btn ${squadDrawerOpen ? "active" : ""}`}
+        onClick={() => setSquadDrawerOpen((prev) => !prev)}
+        title="Toggle Squad Browser (Order of Battle) [S]"
+      >
+        <span style={{ fontSize: "14px" }}>📋</span>
+        <span>SQUADS</span>
+        <span className="left-squad-toggle-count">{readyCount} READY</span>
+      </button>
+
+      {/* Left Tactical Command Panel (Positioned in user's red box area) */}
+      <aside className={`left-squad-drawer ${squadDrawerOpen && hudVisible ? "drawer-open" : ""}`}>
+        {/* Header */}
+        <div className="left-squad-header">
+          {selectedUnit ? (
+            <>
+              <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                <button
+                  className="left-squad-back-btn"
+                  onClick={() => setSelectedUnitId(null)}
+                  title="Back to Squad Directory"
+                >
+                  ← SQUADS
+                </button>
+                <span className="left-squad-header-title">UNIT ORDERS</span>
+              </div>
+              <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                <span
+                  className={`trooper-card-status-badge badge-${
+                    selectedUnit.alive === false || (selectedUnit.hp != null && selectedUnit.hp <= 0)
+                      ? "dead"
+                      : selectedUnit.side !== gameData?.active_side
+                      ? "enemy"
+                      : (gameData?.activated_units || []).includes(selectedUnit.id)
+                      ? "done"
+                      : "ready"
+                  }`}
+                >
+                  {selectedUnit.alive === false || (selectedUnit.hp != null && selectedUnit.hp <= 0)
+                    ? "KIA"
+                    : selectedUnit.side !== gameData?.active_side
+                    ? "OPFOR"
+                    : (gameData?.activated_units || []).includes(selectedUnit.id)
+                    ? "✓ DONE"
+                    : "● READY"}
+                </span>
+                <button
+                  className="drawer-close-btn"
+                  onClick={() => setSquadDrawerOpen(false)}
+                  title="Close Panel [Esc]"
+                >
+                  ✕
+                </button>
+              </div>
+            </>
+          ) : (
+            <>
+              <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                <span style={{ fontSize: "16px" }}>📋</span>
+                <span className="left-squad-header-title">ORDER OF BATTLE</span>
+                <span className="roster-header-badge badge-ready">🟢 {readyCount} READY</span>
+                <span className="roster-header-badge badge-done">⚪ {doneCount} DONE</span>
+              </div>
+              <button
+                className="drawer-close-btn"
+                onClick={() => setSquadDrawerOpen(false)}
+                title="Close Panel [Esc]"
+              >
+                ✕
+              </button>
+            </>
+          )}
+        </div>
+
+        {/* Panel Body */}
         {selectedUnit ? (
-          <div>
-            <div className="spec-box">
-              <div className="spec-header">
-                {selectedUnitSpec?.full && (
-                  <img
-                    src={encodeURI(selectedUnitSpec.full)}
-                    className="spec-avatar"
-                    alt="Avatar"
-                  />
-                )}
-                <div>
-                  <div className="spec-title">{selectedUnitSpec?.label || selectedUnit.unit_key}</div>
-                  <div className="spec-subtitle">ID: {selectedUnit.id}</div>
-                  <div className="spec-inline-health-row">
-                    <span className="spec-inline-health-hearts">
-                      {selectedUnit.hp != null
-                        ? Array.from({ length: selectedUnit.hp }).map((_, i) => (
-                            <span key={i} style={{ color: "#ff3838" }}>❤️</span>
-                          ))
-                        : "-"}
-                    </span>
-                    {(selectedUnitActionMarker == null || selectedUnitActionMarker === "normal") && selectedWaitOrder && (
-                      <button
-                        className="spec-wait-btn"
-                        onClick={() => void executeActionById(selectedWaitOrder.action_id, selectedWaitOrder)}
-                        title="Wait / End activation"
-                      >
-                        WAIT
-                      </button>
-                    )}
+          /* ========================================================
+             MODE A: SELECTED UNIT INTEL & TACTICAL ACTIONS
+          ======================================================== */
+          <div className="left-unit-command-view">
+            {/* Target Intel Specs Card */}
+            <div className="left-unit-spec-card">
+              <div className="deck-unit-grid">
+                <div className="deck-unit-avatar-col">
+                  {selectedUnitSpec?.full && (
+                    <img
+                      src={encodeURI(selectedUnitSpec.full)}
+                      className="deck-unit-avatar"
+                      alt={selectedUnitSpec?.label || selectedUnit.unit_key}
+                    />
+                  )}
+                  {selectedWaitOrder && isHumanTurn && !(gameData?.activated_units || []).includes(selectedUnit.id) && (
+                    <button
+                      className="spec-wait-btn"
+                      onClick={() => {
+                        void executeActionById(selectedWaitOrder.action_id, selectedWaitOrder);
+                        setSquadDrawerOpen(false);
+                      }}
+                      title="Wait / End unit activation"
+                    >
+                      ⏸ WAIT
+                    </button>
+                  )}
+                </div>
+
+                <div className="deck-unit-info-col">
+                  <div className="deck-unit-title" title={selectedUnitSpec?.label || selectedUnit.unit_key}>
+                    {selectedUnitSpec?.label || selectedUnit.unit_key}
                   </div>
-                  {/* NORMALIZED TACTICAL HEALTH BAR */}
-                  {selectedUnit.health_pct != null && (
-                    <div style={{ marginTop: 6 }}>
-                      <div style={{ display: "flex", justifyContent: "space-between", fontSize: 10, color: "#94a3b8", marginBottom: 2 }}>
-                        <span>Salud Operativa:</span>
-                        <strong style={{ color: selectedUnit.health_pct > 0.6 ? "#4ade80" : (selectedUnit.health_pct > 0.35 ? "#fbbf24" : "#f87171") }}>
-                          {Math.round(selectedUnit.health_pct * 100)}% ({selectedUnit.hp} / {selectedUnit.max_hp ?? selectedUnit.hp} HP)
+                  <div className="deck-unit-meta">
+                    <span>ID: {selectedUnit.id}</span>
+                    <span>Coords: {formatCoords(selectedUnit.q, selectedUnit.r)}</span>
+                    <span
+                      style={{
+                        fontWeight: 700,
+                        color: selectedUnit.side === "GE" ? "var(--neon-red)" : "var(--neon-cyan)",
+                      }}
+                    >
+                      {sides[selectedUnit.side]?.label || selectedUnit.side}
+                    </span>
+                  </div>
+
+                  {/* Health Bar */}
+                  {selectedUnit.hp != null && (
+                    <div style={{ marginTop: 4 }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", fontSize: 10, color: "#94a3b8" }}>
+                        <span>
+                          {Array.from({ length: selectedUnit.hp }).map((_, i) => (
+                            <span key={i} style={{ color: "#ff3838" }}>❤️</span>
+                          ))}
+                        </span>
+                        <strong style={{ color: (selectedUnit.health_pct ?? 1) > 0.6 ? "#4ade80" : ((selectedUnit.health_pct ?? 1) > 0.35 ? "#fbbf24" : "#f87171") }}>
+                          {selectedUnit.hp} / {selectedUnit.max_hp ?? selectedUnit.hp} HP
                         </strong>
                       </div>
-                      <div style={{ width: "100%", height: 5, background: "#1e293b", borderRadius: 3, overflow: "hidden" }}>
+                      <div className="deck-unit-health-bar">
                         <div
                           style={{
-                            width: `${Math.round(selectedUnit.health_pct * 100)}%`,
+                            width: `${Math.round((selectedUnit.health_pct ?? (selectedUnit.hp / (selectedUnit.max_hp || 4))) * 100)}%`,
                             height: "100%",
-                            background: selectedUnit.health_pct > 0.6 ? "linear-gradient(90deg, #16a34a, #22c55e)" : (selectedUnit.health_pct > 0.35 ? "linear-gradient(90deg, #d97706, #f59e0b)" : "linear-gradient(90deg, #dc2626, #ef4444)"),
+                            background: (selectedUnit.health_pct ?? 1) > 0.6 ? "linear-gradient(90deg, #16a34a, #22c55e)" : ((selectedUnit.health_pct ?? 1) > 0.35 ? "linear-gradient(90deg, #d97706, #f59e0b)" : "linear-gradient(90deg, #dc2626, #ef4444)"),
                             transition: "width 0.3s ease",
                           }}
                         />
@@ -801,254 +1063,397 @@ function App() {
                     </div>
                   )}
 
-                  {/* TACTICAL SPECIALIZATION BADGES */}
-                  <div style={{ display: "flex", gap: 4, marginTop: 6, flexWrap: "wrap" }}>
+                  {/* Badges */}
+                  <div style={{ display: "flex", gap: 4, marginTop: 4, flexWrap: "wrap" }}>
                     {(selectedUnit.has_indirect_fire || selectedUnit.tactical_role === "indirect_mortar") && (
-                      <span style={{ fontSize: 10, background: "#7c2d12", color: "#fdba74", padding: "2px 6px", borderRadius: 4, fontWeight: "bold" }}>
-                        💥 Fuego Indirecto (Mortero / No-LOS)
-                      </span>
+                      <span className="deck-unit-badge mortar">💥 Mortar / No-LOS</span>
                     )}
                     {(selectedUnit.is_suppression_mg || selectedUnit.tactical_role === "suppression_mg") && (
-                      <span style={{ fontSize: 10, background: "#1e3a8a", color: "#93c5fd", padding: "2px 6px", borderRadius: 4, fontWeight: "bold" }}>
-                        🛡️ Supresión / HMG (Cono &gt; 6)
-                      </span>
+                      <span className="deck-unit-badge mg">🛡️ Suppression / HMG</span>
                     )}
                     {(selectedUnit.is_assault_squad || selectedUnit.tactical_role === "assault_squad") && (
-                      <span style={{ fontSize: 10, background: "#14532d", color: "#86efac", padding: "2px 6px", borderRadius: 4, fontWeight: "bold" }}>
-                        ⚔️ Escuadra de Asalto y Brecha
-                      </span>
+                      <span className="deck-unit-badge assault">⚔️ Assault & Breach</span>
                     )}
                   </div>
                 </div>
               </div>
-              <div className="spec-stats">
-                <div className={`spec-stat-item side-${selectedUnit.side}`}>
-                  <div className="spec-stat-label">Side</div>
-                  <div className="spec-stat-val" style={{ color: selectedUnit.side === "GE" ? "var(--neon-red)" : "var(--neon-cyan)" }}>
-                    {sides[selectedUnit.side]?.label || selectedUnit.side}
-                  </div>
-                </div>
-                <div className="spec-stat-item">
-                  <div className="spec-stat-label">Coords</div>
-                  <div className="spec-stat-val" style={{ fontFamily: "var(--font-mono)", fontSize: "11px" }}>
-                    Q:{selectedUnit.q} R:{selectedUnit.r}
-                  </div>
-                </div>
-              </div>
             </div>
-            <DispatchedOrdersPanel
-              availableMoves={availableMoves}
-              selectedUnitId={selectedUnitId}
-              isHumanTurn={gameData?.sides?.[gameData?.active_side] === "human"}
-              onHoverOrder={(order) => setHoveredTargetId(resolveOrderTargetId(order))}
-              onLeaveOrder={() => setHoveredTargetId(null)}
-            />
-            {attackHint && (
-              <div
-                style={{
-                  marginTop: 8,
-                  padding: "8px 10px",
-                  fontSize: 11,
-                  border: "1px solid rgba(255, 80, 80, 0.35)",
-                  background: "rgba(255, 60, 60, 0.12)",
-                  color: "#ffd6d6",
-                  borderRadius: 6,
-                  fontFamily: "var(--font-mono)",
-                }}
+
+            {/* Tactical Actions List */}
+            <div className="left-unit-orders-container">
+              <DispatchedOrdersPanel
+                availableMoves={availableMoves}
+                selectedUnitId={selectedUnitId}
+                isHumanTurn={isHumanTurn}
+                onHoverOrder={(order) => setHoveredTargetId(resolveOrderTargetId(order))}
+                onLeaveOrder={() => setHoveredTargetId(null)}
+                onActionExecuted={() => setSquadDrawerOpen(false)}
+              />
+              {attackHint && (
+                <div
+                  style={{
+                    marginTop: 6,
+                    padding: "6px 8px",
+                    fontSize: 10.5,
+                    border: "1px solid rgba(255, 80, 80, 0.35)",
+                    background: "rgba(255, 60, 60, 0.12)",
+                    color: "#ffd6d6",
+                    borderRadius: 4,
+                    fontFamily: "var(--font-mono)",
+                  }}
+                >
+                  {attackHint}
+                </div>
+              )}
+            </div>
+
+            {/* Bottom switcher button */}
+            <div className="left-unit-footer">
+              <button
+                className="left-squad-switch-btn"
+                onClick={() => setSelectedUnitId(null)}
               >
-                {attackHint}
-              </div>
-            )}
+                📋 Browse All Squads ({readyCount} Ready)
+              </button>
+            </div>
           </div>
         ) : (
-          <div className="awaiting-selection">
-            <div className="radar-circle"></div>
-            <div>
-              <h4 style={{ margin: "0 0 4px 0", color: "var(--text-secondary)", fontSize: "13px" }}>Awaiting Target Lock</h4>
-              <p style={{ fontSize: "11px", color: "var(--text-muted)", lineHeight: "1.4" }}>
-                Select a tactical unit on the grid or troop roster to deploy commands.
-              </p>
+          /* ========================================================
+             MODE B: SQUAD DIRECTORY (ORDER OF BATTLE)
+          ======================================================== */
+          <>
+            <div className="left-squad-toolbar">
+              <div className="left-squad-search-wrap">
+                <input
+                  type="text"
+                  placeholder="Search squad by name or ID..."
+                  value={squadSearchQuery}
+                  onChange={(e) => setSquadSearchQuery(e.target.value)}
+                  className="left-squad-search-input"
+                />
+                {squadSearchQuery && (
+                  <button
+                    className="left-squad-clear-search"
+                    onClick={() => setSquadSearchQuery("")}
+                  >
+                    ✕
+                  </button>
+                )}
+              </div>
+
+              <div className="left-squad-filter-row">
+                <button
+                  className={`deck-roster-filter-btn ${rosterStatusFilter === "ALL" ? "active" : ""}`}
+                  onClick={() => setRosterStatusFilter("ALL")}
+                >
+                  ALL ({panelUnits.length})
+                </button>
+                <button
+                  className={`deck-roster-filter-btn filter-ready ${rosterStatusFilter === "READY" ? "active" : ""}`}
+                  onClick={() => setRosterStatusFilter("READY")}
+                >
+                  READY ({readyCount})
+                </button>
+                <button
+                  className={`deck-roster-filter-btn filter-done ${rosterStatusFilter === "DONE" ? "active" : ""}`}
+                  onClick={() => setRosterStatusFilter("DONE")}
+                >
+                  DONE ({doneCount})
+                </button>
+              </div>
+
+              <div className="left-squad-filter-row">
+                <button
+                  className={`deck-roster-filter-btn ${rosterFilterSide === "ALL" ? "active" : ""}`}
+                  onClick={() => setRosterFilterSide("ALL")}
+                >
+                  ALL SIDES
+                </button>
+                {scenarioSides.map((s) => (
+                  <button
+                    key={s}
+                    className={`deck-roster-filter-btn ${rosterFilterSide === s ? "active" : ""}`}
+                    onClick={() => setRosterFilterSide(s)}
+                  >
+                    {s}
+                  </button>
+                ))}
+              </div>
             </div>
-          </div>
+
+            <div className="left-squad-list">
+              {filteredSquadList.length > 0 ? (
+                filteredSquadList.map((u) => {
+                  const def = unitImages[u.unit_key as keyof typeof unitImages];
+                  const dead = u.alive === false || (u.hp != null && u.hp <= 0);
+                  const isOwn = u.side === gameData?.active_side;
+                  const isActivated = (gameData?.activated_units || []).includes(u.id);
+                  const isSelected = u.id === selectedUnitId;
+                  const isTarget = hoveredTargetId != null && u.id === hoveredTargetId;
+                  const deadMarker = dead ? sides[u.side]?.dead_marker : undefined;
+                  const actionMarker = getUnitActionMarker(u.id);
+
+                  let cardStatusClass = "ready";
+                  let statusText = "● READY";
+                  if (dead) {
+                    cardStatusClass = "dead";
+                    statusText = "KIA";
+                  } else if (!isOwn) {
+                    cardStatusClass = "enemy";
+                    statusText = "OPFOR";
+                  } else if (isActivated) {
+                    cardStatusClass = "done";
+                    statusText = "✓ DONE";
+                  }
+
+                  return (
+                    <div
+                      key={u.id}
+                      className={`squad-row-card ${isSelected ? "selected" : ""} ${isTarget ? "target-highlight" : ""} squad-row-${cardStatusClass}`}
+                      onClick={() => {
+                        if (dead) return;
+                        setSelectedUnitId(u.id);
+                        if (typeof (window as any).focusUnit === "function") {
+                          (window as any).focusUnit(u.id);
+                        }
+                        if (typeof (window as any).onUnitClick === "function") {
+                          (window as any).onUnitClick(u);
+                        }
+                      }}
+                      onMouseEnter={() => {
+                        if (typeof (window as any).highlightUnit === "function") {
+                          (window as any).highlightUnit(u.id);
+                        }
+                      }}
+                      onMouseLeave={() => {
+                        if (typeof (window as any).highlightUnit === "function") {
+                          (window as any).highlightUnit(null);
+                        }
+                      }}
+                    >
+                      <div className="squad-row-avatar-col">
+                        {def?.full ? (
+                          <img
+                            src={encodeURI(def.full)}
+                            className={`squad-row-avatar ${dead ? "dead" : ""}`}
+                            alt={def?.label || u.unit_key}
+                          />
+                        ) : (
+                          <div className="squad-row-avatar-placeholder">⚔️</div>
+                        )}
+                        {deadMarker && (
+                          <img src={encodeURI(deadMarker)} className="trooper-card-dead-marker" alt="KIA" />
+                        )}
+                        {!dead && actionMarker && (
+                          <img
+                            src={encodeURI(actionMarkerImages[actionMarker])}
+                            className="trooper-card-action-marker"
+                            alt={actionMarker}
+                          />
+                        )}
+                      </div>
+
+                      <div className="squad-row-info">
+                        <div className="squad-row-title-bar">
+                          <span className="squad-row-name" title={def?.label || u.unit_key}>
+                            {def?.label || u.unit_key}
+                          </span>
+                          <span className={`trooper-card-status-badge badge-${cardStatusClass}`}>
+                            {statusText}
+                          </span>
+                        </div>
+
+                        <div className="squad-row-meta">
+                          <span className="squad-row-id">ID: {u.id}</span>
+                          <span className="squad-row-coords">Coords: {formatCoords(u.q, u.r)}</span>
+                          <span
+                            className="squad-row-side-tag"
+                            style={{ color: u.side === "GE" ? "var(--neon-red)" : "var(--neon-cyan)" }}
+                          >
+                            {sides[u.side]?.label || u.side}
+                          </span>
+                        </div>
+
+                        <div className="squad-row-hp-row">
+                          <div className="squad-row-hp-pips">
+                            {u.hp != null && u.hp > 0 ? (
+                              Array.from({ length: u.hp }).map((_, i) => (
+                                <span key={i} className="hp-heart">❤️</span>
+                              ))
+                            ) : (
+                              <span style={{ fontSize: 10, color: "var(--neon-red)", fontWeight: 700 }}>KIA</span>
+                            )}
+                          </div>
+                          {u.hp != null && (
+                            <span className="squad-row-hp-text">
+                              {u.hp} / {u.max_hp ?? u.hp} HP
+                            </span>
+                          )}
+                        </div>
+
+                        <div className="squad-row-traits">
+                          {(u.has_indirect_fire || u.tactical_role === "indirect_mortar") && (
+                            <span className="deck-unit-badge mortar">💥 Mortar</span>
+                          )}
+                          {(u.is_suppression_mg || u.tactical_role === "suppression_mg") && (
+                            <span className="deck-unit-badge mg">🛡️ HMG</span>
+                          )}
+                          {(u.is_assault_squad || u.tactical_role === "assault_squad") && (
+                            <span className="deck-unit-badge assault">⚔️ Assault</span>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })
+              ) : (
+                <div className="left-squad-empty">No squads matching current filter.</div>
+              )}
+            </div>
+          </>
         )}
-      </DraggableWindow>
+      </aside>
 
       {/* ========================================================
-          EFFICIENTZERO V2 TELEMETRY & TACTICAL BRAIN WINDOW
+          SIDE TACTICAL DRAWER (SLIDE-OUT)
       ======================================================== */}
-      <DraggableWindow
-        windowId="tactical-ezv2"
-        title="🧠 EfficientZero V2 Telemetry"
-        initialX={1120}
-        initialY={92}
-        width={400}
-        bodyMaxHeight={640}
-      >
-        <EfficientZeroV2TelemetryPanel
-          telemetry={telemetry || gameData?.telemetry}
-          onRefreshTelemetry={fetchTelemetry}
-        />
-      </DraggableWindow>
-      <DraggableWindow windowId="tactical-log" title="System Log" initialX={1540} initialY={92} width={360} bodyMaxHeight={640}>
-        <div className="log-container">
-          {logEvents.length > 0 ? (
-            logEvents.map((log, index) => (
-              <div key={index} className={`log-entry log-${log.type}`}>
-                <span className="log-time">[{log.time}]</span>
-                <span className="log-text">{log.text}</span>
-              </div>
-            ))
-          ) : (
-            <div style={{ fontSize: "12px", color: "var(--text-muted)", fontStyle: "italic", textAlign: "center", padding: "10px" }}>
-              Awaiting telemetry transmissions...
-            </div>
-          )}
-        </div>
-      </DraggableWindow>
-      <DraggableWindow windowId="tactical-rag" title="🧠 Asistente Táctico RAG (Reglas & Situación)" initialX={1080} initialY={95} width={430} bodyMaxHeight={660}>
-        <RagAssistantPanel gameData={gameData} />
-      </DraggableWindow>
-      <DraggableWindow windowId="tactical-status" title="Estado de Partida" initialX={360} initialY={82} width={700}>
-        <div style={{ display: "grid", gap: 8, fontSize: 12 }}>
-          <div>
-            <strong>SCENARIO:</strong>{" "}
-            <span style={{ color: "var(--neon-cyan)" }}>
-              {(gameData?.scenario_name || "Initial Contact").toUpperCase()}
-            </span>
-          </div>
-          <div>
-            <strong>TURN:</strong>{" "}
-            <span style={{ color: "var(--neon-cyan)" }}>{gameData?.turn ?? "-"}</span>
-          </div>
-          <div>
-            <strong>VPs:</strong>{" "}
-            <span style={{ color: "var(--neon-cyan)" }}>
-              {Object.entries(gameData?.vp_score_live || {})
-                .map(([sideId, score]) => `${sideId} ${score}`)
-                .join(" | ") || "-"}
-            </span>
-          </div>
-          <div>
-            <strong>ACTIVE:</strong>{" "}
-            <span
-              style={{
-                color:
-                  gameData?.sides?.[gameData?.active_side] === "human"
-                    ? "var(--neon-green)"
-                    : "var(--neon-orange)",
+      <aside className={`side-tactical-drawer ${sidebarOpen ? "drawer-open" : ""}`}>
+        <div className="drawer-header">
+          <div className="drawer-tabs">
+            <button
+              className={`drawer-tab-btn ${activeSidebarTab === "combat" ? "active" : ""}`}
+              onClick={() => setActiveSidebarTab("combat")}
+            >
+              🎲 Combat
+            </button>
+            <button
+              className={`drawer-tab-btn ${activeSidebarTab === "log" ? "active" : ""}`}
+              onClick={() => setActiveSidebarTab("log")}
+            >
+              📜 Log
+            </button>
+            <button
+              className={`drawer-tab-btn ${activeSidebarTab === "ai" ? "active" : ""}`}
+              onClick={() => {
+                setActiveSidebarTab("ai");
+                fetchTelemetry();
               }}
             >
-              {gameData?.active_side || "-"} ({gameData?.sides?.[gameData?.active_side]?.toUpperCase() || "-"})
-            </span>
-          </div>
-          <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
-            <label style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
-              <input
-                type="checkbox"
-                checked={autoAdvanceAfterHuman}
-                onChange={(e) => handleToggleAutoAdvance(e.target.checked)}
-              />
-              <strong>Autoavance</strong>
-            </label>
-            <button
-              className="btn-tactical"
-              onClick={handleManualAdvance}
-              disabled={autoAdvanceAfterHuman || !waitingForManualAdvance}
-              title="Continuar resolucion IA tras accion humana"
-            >
-              ▶ Avanzar
+              🧠 AI Brain
             </button>
-            <span style={{ color: "var(--text-muted)", fontSize: 11 }}>
-              {waitingForManualAdvance && !autoAdvanceAfterHuman
-                ? "Esperando avance manual..."
-                : "Flujo normal"}
-            </span>
+            <button
+              className={`drawer-tab-btn ${activeSidebarTab === "rag" ? "active" : ""}`}
+              onClick={() => setActiveSidebarTab("rag")}
+            >
+              📚 Advisor
+            </button>
           </div>
-          {gameData?.victory_outcome && (
+          <button
+            className="drawer-close-btn"
+            onClick={() => setSidebarOpen(false)}
+            title="Close Drawer [Esc]"
+          >
+            ✕
+          </button>
+        </div>
+
+        <div className="drawer-body">
+          {activeSidebarTab === "combat" && (
             <div>
-              <strong>OBJECTIVES:</strong>{" "}
-              <span style={{ color: "var(--neon-cyan)" }}>
-                {gameData.victory_outcome.tracked_side} {gameData.victory_outcome.captured}/
-                {gameData.victory_outcome.objectives_total}
-                {gameData.victory_outcome?.outcome?.result
-                  ? ` (${gameData.victory_outcome.outcome.result})`
-                  : ""}
-              </span>
+              {stickyCombatEvent ? (
+                <CombatPanel event={stickyCombatEvent} units={gameData?.units || []} />
+              ) : (
+                <div style={{ textAlign: "center", padding: "40px 10px", color: "var(--text-muted)", fontStyle: "italic", fontSize: 13 }}>
+                  No recent combat engagements.<br />
+                  Deploy an attack order to observe combat resolution and dice rolls.
+                </div>
+              )}
             </div>
           )}
-          {gameData?.done && (
-            <div>
-              <strong>RESULT:</strong>{" "}
-              <span style={{ color: "var(--neon-green)" }}>
-                {gameData?.winner ? `${gameData.winner} wins` : "Draw"} ({gameData?.end_reason || "completed"})
-              </span>
+
+          {activeSidebarTab === "log" && (
+            <div className="log-container">
+              {logEvents.length > 0 ? (
+                logEvents.map((log, index) => (
+                  <div key={index} className={`log-entry log-${log.type}`}>
+                    <span className="log-time">[{log.time}]</span>
+                    <span className="log-text">{log.text}</span>
+                  </div>
+                ))
+              ) : (
+                <div style={{ fontSize: "12px", color: "var(--text-muted)", fontStyle: "italic", textAlign: "center", padding: "20px" }}>
+                  Awaiting battlefield events...
+                </div>
+              )}
             </div>
+          )}
+
+          {activeSidebarTab === "ai" && (
+            <EfficientZeroV2TelemetryPanel
+              telemetry={telemetry || gameData?.telemetry}
+              onRefreshTelemetry={fetchTelemetry}
+            />
+          )}
+
+          {activeSidebarTab === "rag" && (
+            <RagAssistantPanel gameData={gameData} />
           )}
         </div>
-      </DraggableWindow>
+      </aside>
 
-      <DraggableWindow
-        windowId="tactical-units"
-        title="Unidades"
-        initialX={80}
-        initialY={520}
-        width={1450}
-        bodyMaxHeight={300}
-      >
-        <UnitStatePanel
-          units={panelUnits}
-          activeSide={gameData?.active_side}
-          activatedUnits={gameData?.activated_units || []}
-          selectedUnitId={selectedUnitId}
-          targetUnitId={hoveredTargetId}
-          onSelectUnit={(unit: Unit) => {
-            // Direct callback helper triggered from troop dock cards
-            setSelectedUnitId(unit.id);
-            if (typeof (window as any).onUnitClick === "function") {
-              (window as any).onUnitClick(unit);
-            }
-          }}
+      {/* Drawer click-away backdrop on smaller screens */}
+      {sidebarOpen && <div className="drawer-backdrop" onClick={() => setSidebarOpen(false)} />}
+
+      {/* Unit card tooltip preview on hover */}
+      {cardPreview && (
+        <UnitCardTooltip
+          key={cardPreview.unit.id}
+          unitKey={cardPreview.unit.unit_key}
+          hp={cardPreview.unit.hp}
+          anchorX={cardPreview.x}
+          anchorY={cardPreview.y}
         />
-      </DraggableWindow>
+      )}
 
-      <DraggableWindow windowId="tactical-dice" title="Combate / Tirada de Dados" initialX={1220} initialY={610} width={320}>
-        {stickyCombatEvent && (
-          <CombatPanel event={stickyCombatEvent} units={gameData?.units || []} />
-        )}
-        {!stickyCombatEvent && (
-          <div style={{ fontSize: 12, color: "var(--text-muted)" }}>
-            Sin evento de combate reciente.
-          </div>
-        )}
-      </DraggableWindow>
+      {/* ========================================================
+          REACTION FIRE MODAL
+      ======================================================== */}
       {pendingReaction && (
         <div
           style={{
             position: "fixed",
             inset: 0,
-            background: "rgba(0,0,0,0.45)",
+            background: "rgba(0,0,0,0.55)",
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
-            zIndex: 40,
+            zIndex: 100,
           }}
         >
           <div
             style={{
-              width: 460,
+              width: 480,
               maxWidth: "92vw",
-              background: "rgba(8, 10, 18, 0.95)",
-              border: "1px solid rgba(0, 240, 255, 0.35)",
-              boxShadow: "0 0 28px rgba(0, 240, 255, 0.25)",
+              background: "rgba(8, 10, 18, 0.96)",
+              border: "1px solid rgba(0, 240, 255, 0.4)",
+              boxShadow: "0 0 32px rgba(0, 240, 255, 0.3)",
               borderRadius: 8,
-              padding: 16,
+              padding: 20,
             }}
           >
-            <div style={{ fontFamily: "var(--font-tech)", fontSize: 15, letterSpacing: 1, marginBottom: 10, color: "var(--neon-cyan)" }}>
-              REACTION FIRE WINDOW
+            <div
+              style={{
+                fontFamily: "var(--font-tech)",
+                fontSize: 16,
+                letterSpacing: 1.5,
+                marginBottom: 12,
+                color: "var(--neon-cyan)",
+              }}
+            >
+              ⚡ REACTION FIRE OPPORTUNITY
             </div>
-            <div style={{ fontSize: 13, lineHeight: 1.5, color: "var(--text-primary)", marginBottom: 14 }}>
-              Enemy movement triggered a reaction opportunity.<br />
+            <div style={{ fontSize: 13, lineHeight: 1.6, color: "var(--text-primary)", marginBottom: 18 }}>
+              Enemy movement triggered a reaction fire opportunity.<br />
               Reactor: <b>{pendingReactionReactorLabel}</b><br />
               Target: <b>{pendingReactionTargetLabel}</b>
             </div>

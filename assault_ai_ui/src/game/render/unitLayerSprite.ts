@@ -222,3 +222,71 @@ export function updateUnitTacticalIndicators(container: PIXI.Container, unit: an
   roleBadge.addChild(bg);
   roleBadge.addChild(text);
 }
+
+export function updateUnitActivationBadge(
+  container: PIXI.Container,
+  isActivated: boolean,
+  isOwn: boolean
+) {
+  if (!container || (container as any).destroyed) return;
+  const badgeName = "unit-activation-badge";
+  let badge = container.getChildByName(badgeName) as PIXI.Container | null;
+
+  if (!badge) {
+    badge = new PIXI.Container();
+    badge.name = badgeName;
+    badge.zIndex = 70;
+    container.addChild(badge);
+  } else {
+    badge.removeChildren();
+  }
+
+  const badgeX = HEX_SIZE * 0.48;
+  const badgeY = -HEX_SIZE * 0.46;
+
+  if (isActivated) {
+    const bg = new PIXI.Graphics();
+    bg.roundRect(badgeX - 11, badgeY - 5, 22, 10, 2.5);
+    bg.fill({ color: 0x0f172a, alpha: 0.95 });
+    bg.stroke({ width: 1, color: 0x64748b, alpha: 0.95 });
+
+    const txt = new PIXI.Text({
+      text: "DONE",
+      style: {
+        fontSize: 5.5,
+        fontWeight: "bold",
+        fill: "#94a3b8",
+        align: "center",
+      },
+      resolution: 2,
+    });
+    txt.anchor.set(0.5);
+    txt.x = badgeX;
+    txt.y = badgeY;
+
+    badge.addChild(bg);
+    badge.addChild(txt);
+  } else if (isOwn) {
+    const bg = new PIXI.Graphics();
+    bg.roundRect(badgeX - 13, badgeY - 5, 26, 10, 2.5);
+    bg.fill({ color: 0x064e3b, alpha: 0.95 });
+    bg.stroke({ width: 1.2, color: 0x10b981, alpha: 1.0 });
+
+    const txt = new PIXI.Text({
+      text: "READY",
+      style: {
+        fontSize: 5.5,
+        fontWeight: "bold",
+        fill: "#34d399",
+        align: "center",
+      },
+      resolution: 2,
+    });
+    txt.anchor.set(0.5);
+    txt.x = badgeX;
+    txt.y = badgeY;
+
+    badge.addChild(bg);
+    badge.addChild(txt);
+  }
+}

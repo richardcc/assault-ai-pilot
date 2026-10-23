@@ -85,6 +85,22 @@ def load_ui_scenario(scenario_id: str) -> dict:
             "position": {"q": u_coord.q, "r": u_coord.r},
             "side": u.get("side"),
         })
+
+    # ---------------------------------------------
+    # SIDES & METADATA
+    # ---------------------------------------------
+    sides = list(
+        dict.fromkeys(
+            s
+            for s in [
+                scenario.get("attacker_side"),
+                scenario.get("defender_side"),
+            ]
+            + [u.get("side") for u in units]
+            if s
+        )
+    )
+
     # ---------------------------------------------
     # FINAL
     # ---------------------------------------------
@@ -92,10 +108,11 @@ def load_ui_scenario(scenario_id: str) -> dict:
         "id": scenario.get("id"),
         "maxTurns": scenario.get("max_turns"),
         "shape": scenario.get("shape"),
+        "sides": sides,
         "map": {
             "pieces": ui_pieces,
             "fortifications": scenario.get("map", {}).get("fortifications", []),
         },
         "hexes": hexes,
-        "units": units,  # ⚠️ solo placeholder (se sustituye luego)
+        "units": units,
     }

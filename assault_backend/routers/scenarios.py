@@ -22,6 +22,7 @@ from assault_model.paths import SCENARIOS_DIR as SCENARIOS_PATH
 
 
 @router.get("/api/ui/scenarios")
+@router.get("/api/game/scenarios")
 def list_ui_scenarios():
     try:
         if not SCENARIOS_PATH.exists():
@@ -37,6 +38,7 @@ def list_ui_scenarios():
 
 
 @router.get("/api/ui/scenarios/{scenario_id}")
+@router.get("/api/game/scenarios/{scenario_id}")
 async def get_scenario(scenario_id: str):
     try:
         return load_ui_scenario(scenario_id)

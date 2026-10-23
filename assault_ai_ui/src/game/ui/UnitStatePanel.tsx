@@ -115,30 +115,30 @@ export function UnitStatePanel({
       <button
         className={`btn-tactical roster-layout-btn ${layoutMode === "row1" ? "active" : ""}`}
         onClick={() => setLayoutMode("row1")}
-        title="Una fila horizontal"
+        title="Single horizontal row"
       >
-        1 fila
+        1 Row
       </button>
       <button
         className={`btn-tactical roster-layout-btn ${layoutMode === "row2" ? "active" : ""}`}
         onClick={() => setLayoutMode("row2")}
-        title="Dos filas horizontales"
+        title="Two horizontal rows"
       >
-        2 filas
+        2 Rows
       </button>
       <button
         className={`btn-tactical roster-layout-btn ${layoutMode === "v1" ? "active" : ""}`}
         onClick={() => setLayoutMode("v1")}
-        title="Vertical una columna"
+        title="Vertical 1 column"
       >
-        Vertical 1 col
+        1 Col
       </button>
       <button
         className={`btn-tactical roster-layout-btn ${layoutMode === "v2" ? "active" : ""}`}
         onClick={() => setLayoutMode("v2")}
-        title="Vertical dos columnas"
+        title="Vertical 2 columns"
       >
-        Vertical 2 col
+        2 Cols
       </button>
     </div>
     <div className={`roster-container roster-layout-${layoutMode}`}>

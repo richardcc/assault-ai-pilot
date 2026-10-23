@@ -6,6 +6,152 @@ import random
 from typing import Dict, List, Optional
 
 import numpy as np
+import math
+try:
+    from numba import njit
+    _HAS_NUMBA = True
+except ImportError:
+    _HAS_NUMBA = False
+
+def _build_mcts_puct_loop_core():
+    def _py_core(
+        total_simulations: int,
+        n: int,
+        priors_c_puct: np.ndarray,
+        precomputed_success: np.ndarray,
+        base_vals: np.ndarray,
+        norm_active: bool,
+        norm_alpha: float,
+        mode_is_adaptive: bool,
+        clip_limit: float,
+        has_forced: bool,
+        forced_indices: np.ndarray,
+        priors: np.ndarray,
+        min_root_k: int,
+    ):
+        visits = np.zeros(n, dtype=np.int32)
+        value_sums = np.zeros(n, dtype=np.float64)
+        q_guardrail_clipped_count = 0
+        q_root_normalization_applied = False
+        
+        q_unclipped = np.zeros(n, dtype=np.float64)
+        clipped_q = np.zeros(n, dtype=np.float64)
+        normalized_q = np.zeros(n, dtype=np.float64)
+        norm_q = np.zeros(n, dtype=np.float64)
+        scores = np.zeros(n, dtype=np.float64)
+        
+        total_visits = 0
+        
+        for _ in range(total_simulations):
+            root_sqrt = math.sqrt(max(1.0, float(total_visits)))
+            
+            for i in range(n):
+                v_cnt = visits[i]
+                if v_cnt > 0:
+                    qu = value_sums[i] / float(v_cnt)
+                else:
+                    qu = 0.0
+                q_unclipped[i] = qu
+                
+                if clip_limit > 0.0:
+                    if qu > clip_limit:
+                        clipped_q[i] = clip_limit
+                        q_guardrail_clipped_count += 1
+                    elif qu < -clip_limit:
+                        clipped_q[i] = -clip_limit
+                        q_guardrail_clipped_count += 1
+                    else:
+                        clipped_q[i] = qu
+                else:
+                    clipped_q[i] = qu
+                    
+            if norm_active:
+                lo = clipped_q[0]
+                hi = clipped_q[0]
+                for i in range(1, n):
+                    val = clipped_q[i]
+                    if val < lo:
+                        lo = val
+                    if val > hi:
+                        hi = val
+                spread = hi - lo
+                if spread <= 1e-12:
+                    if mode_is_adaptive:
+                        u_lo = q_unclipped[0]
+                        u_hi = q_unclipped[0]
+                        for i in range(1, n):
+                            u_v = q_unclipped[i]
+                            if u_v < u_lo:
+                                u_lo = u_v
+                            if u_v > u_hi:
+                                u_hi = u_v
+                        if (u_hi - u_lo) <= 1e-12:
+                            for i in range(n):
+                                norm_q[i] = 0.0
+                        else:
+                            inv_u = 2.0 / (u_hi - u_lo)
+                            for i in range(n):
+                                norm_q[i] = (q_unclipped[i] - u_lo) * inv_u - 1.0
+                    else:
+                        for i in range(n):
+                            norm_q[i] = 0.0
+                else:
+                    inv_s = 2.0 / spread
+                    for i in range(n):
+                        norm_q[i] = (clipped_q[i] - lo) * inv_s - 1.0
+                        
+                for i in range(n):
+                    normalized_q[i] = (1.0 - norm_alpha) * clipped_q[i] + norm_alpha * norm_q[i]
+                q_root_normalization_applied = True
+            else:
+                for i in range(n):
+                    normalized_q[i] = clipped_q[i]
+                    
+            if has_forced and min_root_k > 0:
+                forced_idx = -1
+                highest_p = -1.0
+                for idx_i in range(len(forced_indices)):
+                    fi = forced_indices[idx_i]
+                    if visits[fi] < min_root_k:
+                        if priors[fi] > highest_p:
+                            highest_p = priors[fi]
+                            forced_idx = fi
+                if forced_idx >= 0:
+                    best_idx = forced_idx
+                else:
+                    best_idx = 0
+                    best_score = -1e18
+                    for i in range(n):
+                        u_val = priors_c_puct[i] * (root_sqrt / (1.0 + float(visits[i])))
+                        sc = normalized_q[i] + u_val + precomputed_success[i]
+                        scores[i] = sc
+                        if sc > best_score:
+                            best_score = sc
+                            best_idx = i
+            else:
+                best_idx = 0
+                best_score = -1e18
+                for i in range(n):
+                    u_val = priors_c_puct[i] * (root_sqrt / (1.0 + float(visits[i])))
+                    sc = normalized_q[i] + u_val + precomputed_success[i]
+                    scores[i] = sc
+                    if sc > best_score:
+                        best_score = sc
+                        best_idx = i
+                    
+            sim_val = base_vals[best_idx]
+            visits[best_idx] += 1
+            value_sums[best_idx] += sim_val
+            total_visits += 1
+            
+        return visits, value_sums, q_guardrail_clipped_count, q_root_normalization_applied
+
+    if _HAS_NUMBA:
+        return njit(fastmath=True)(_py_core)
+    return _py_core
+
+_FAST_MCTS_PUCT_LOOP = _build_mcts_puct_loop_core()
+
 
 
 @dataclass
@@ -260,56 +406,79 @@ def run_mcts_puct(
     norm_active = (norm_alpha > 0.0) and (mode_key not in {"", "none", "off"})
     clip_limit = float(max(0.0, q_clip_abs)) if (q_clip_abs is not None) else None
 
-    for _ in range(total_simulations):
-        total_visits = int(visits.sum())
-        root_sqrt = sqrt(max(1, total_visits))
+    rescaled_base_vals = np.array([_rescale_value_estimate(v) for v in base_vals_arr], dtype=np.float64)
 
-        has_visits = visits > 0
-        q_unclipped = np.where(has_visits, value_sums / np.maximum(1, visits), 0.0)
+    if not chance_enabled:
+        has_forced = bool(forced_root_indices and min_root_k > 0)
+        forced_arr = np.array(forced_root_indices, dtype=np.int32) if has_forced else np.zeros(0, dtype=np.int32)
+        priors_arr = np.array(priors, dtype=np.float64)
+        c_limit = float(clip_limit) if clip_limit is not None else 0.0
+        mode_is_adaptive = mode_key in {"adaptive_minmax", "adaptive"}
+        
+        visits, value_sums, q_guardrail_clipped_count, q_root_normalization_applied = _FAST_MCTS_PUCT_LOOP(
+            int(total_simulations),
+            int(n),
+            priors_c_puct,
+            precomputed_success_comps,
+            rescaled_base_vals,
+            bool(norm_active),
+            float(norm_alpha),
+            bool(mode_is_adaptive),
+            c_limit,
+            has_forced,
+            forced_arr,
+            priors_arr,
+            int(min_root_k),
+        )
+    else:
+        for _ in range(total_simulations):
+            total_visits = int(visits.sum())
+            root_sqrt = sqrt(max(1, total_visits))
 
-        if clip_limit is not None and clip_limit > 0.0:
-            clipped_mask = (q_unclipped > clip_limit) | (q_unclipped < -clip_limit)
-            q_guardrail_clipped_count += int(np.count_nonzero(clipped_mask))
-            clipped_q = np.clip(q_unclipped, -clip_limit, clip_limit)
-        else:
-            clipped_q = q_unclipped
+            has_visits = visits > 0
+            q_unclipped = np.where(has_visits, value_sums / np.maximum(1, visits), 0.0)
 
-        if norm_active:
-            lo = float(clipped_q.min())
-            hi = float(clipped_q.max())
-            spread = hi - lo
-            if spread <= 1e-12:
-                if mode_key in {"adaptive_minmax", "adaptive"}:
-                    u_lo = float(q_unclipped.min())
-                    u_hi = float(q_unclipped.max())
-                    if (u_hi - u_lo) <= 1e-12:
-                        norm_q = np.zeros(n, dtype=np.float64)
-                    else:
-                        norm_q = ((2.0 * (q_unclipped - u_lo) / (u_hi - u_lo)) - 1.0)
-                else:
-                    norm_q = np.zeros(n, dtype=np.float64)
+            if clip_limit is not None and clip_limit > 0.0:
+                clipped_mask = (q_unclipped > clip_limit) | (q_unclipped < -clip_limit)
+                q_guardrail_clipped_count += int(np.count_nonzero(clipped_mask))
+                clipped_q = np.clip(q_unclipped, -clip_limit, clip_limit)
             else:
-                norm_q = ((2.0 * (clipped_q - lo) / spread) - 1.0)
-            normalized_q = ((1.0 - norm_alpha) * clipped_q) + (norm_alpha * norm_q)
-            q_root_normalization_applied = True
-        else:
-            normalized_q = clipped_q
+                clipped_q = q_unclipped
 
-        u_values = priors_c_puct * (root_sqrt / (1 + visits))
-        scores = normalized_q + u_values + precomputed_success_comps
+            if norm_active:
+                lo = float(clipped_q.min())
+                hi = float(clipped_q.max())
+                spread = hi - lo
+                if spread <= 1e-12:
+                    if mode_key in {"adaptive_minmax", "adaptive"}:
+                        u_lo = float(q_unclipped.min())
+                        u_hi = float(q_unclipped.max())
+                        if (u_hi - u_lo) <= 1e-12:
+                            norm_q = np.zeros(n, dtype=np.float64)
+                        else:
+                            norm_q = ((2.0 * (q_unclipped - u_lo) / (u_hi - u_lo)) - 1.0)
+                    else:
+                        norm_q = np.zeros(n, dtype=np.float64)
+                else:
+                    norm_q = ((2.0 * (clipped_q - lo) / spread) - 1.0)
+                normalized_q = ((1.0 - norm_alpha) * clipped_q) + (norm_alpha * norm_q)
+                q_root_normalization_applied = True
+            else:
+                normalized_q = clipped_q
 
-        if forced_root_indices and min_root_k > 0:
-            pending = [i for i in forced_root_indices if visits[i] < min_root_k]
-            if pending:
-                best_idx = max(pending, key=lambda i: priors[i])
+            u_values = priors_c_puct * (root_sqrt / (1 + visits))
+            scores = normalized_q + u_values + precomputed_success_comps
+
+            if forced_root_indices and min_root_k > 0:
+                pending = [i for i in forced_root_indices if visits[i] < min_root_k]
+                if pending:
+                    best_idx = max(pending, key=lambda i: priors[i])
+                else:
+                    best_idx = int(np.argmax(scores))
             else:
                 best_idx = int(np.argmax(scores))
-        else:
-            best_idx = int(np.argmax(scores))
 
-        simulated_value = float(base_vals_arr[best_idx])
-        simulated_value = _rescale_value_estimate(simulated_value)
-        if chance_enabled:
+            simulated_value = float(rescaled_base_vals[best_idx])
             sample_sum = 0.0
             for _sample_idx in range(chance_k):
                 sample_v = float(simulated_value)
@@ -317,12 +486,12 @@ def run_mcts_puct(
                     sample_v += float(random.gauss(0.0, chance_noise_std))
                 sample_sum += float(sample_v)
             simulated_value = float(sample_sum / float(max(1, chance_k)))
-        if clip_limit is not None and clip_limit > 0.0:
-            if simulated_value > clip_limit or simulated_value < -clip_limit:
-                q_guardrail_clipped_count += 1
+            if clip_limit is not None and clip_limit > 0.0:
+                if simulated_value > clip_limit or simulated_value < -clip_limit:
+                    q_guardrail_clipped_count += 1
 
-        visits[best_idx] += 1
-        value_sums[best_idx] += simulated_value
+            visits[best_idx] += 1
+            value_sums[best_idx] += simulated_value
 
     visit_sum = int(visits.sum())
     probs = [float(v) / float(visit_sum) for v in visits]

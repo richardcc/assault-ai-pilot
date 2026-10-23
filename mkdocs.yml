@@ -84,15 +84,16 @@ nav:
       - 11. Inventario Jerárquico Canónico de Métricas: 13_INVENTARIO_CANONICO_METRICAS.md
       - 12. Servicios Backend y Catálogo de APIs: 07_SERVICIOS_BACKEND_Y_CATALOGO_APIS.md
       - 13. Sistema RAG Copilot: 06_SISTEMA_RAG_COPILOT.md
+      - 14. Manual del Simulador Táctico y HUD: 09_MANUAL_SIMULADOR_TACTICO_HUD.md
   - V. Informes de Ejecución:
-      - 14. Informes de Ejecución - Cabecera y Catálogo: informes_ejecucion/00_CABECERA_INFORMES_EJECUCION.md
-      - 15. Informe 01 - Currículum y Diagnóstico de Parálisis: informes_ejecucion/INFORME_01_CURRICULUM_Y_AUDITORIA_TACTICA.md
-      - 16. Informe 02 - Currículum Multi-Fase y Comandante Prudente: informes_ejecucion/INFORME_02_CURRICULUM_Y_AUDITORIA_TACTICA.md
+      - 15. Informes de Ejecución - Cabecera y Catálogo: informes_ejecucion/00_CABECERA_INFORMES_EJECUCION.md
+      - 16. Informe 01 - Currículum y Diagnóstico de Parálisis: informes_ejecucion/INFORME_01_CURRICULUM_Y_AUDITORIA_TACTICA.md
+      - 17. Informe 02 - Currículum Multi-Fase y Comandante Prudente: informes_ejecucion/INFORME_02_CURRICULUM_Y_AUDITORIA_TACTICA.md
   - VI. Hoja de Ruta Evolutiva (Roadmap):
-      - 17.1. Línea 1 - Observabilidad y Telemetría: roadmap/01_LINEA_1_OBSERVABILIDAD_Y_TELEMETRIA.md
-      - 17.2. Línea 2 - Aceleración de Captura de VPs: roadmap/02_LINEA_2_ACELERACION_CAPTURA_VPS.md
-      - 17.3. Línea 3 - Fidelidad Normativa y Wargame: roadmap/03_LINEA_3_FIDELIDAD_NORMATIVA_Y_REGLAMENTO.md
-      - 17.4. Línea 4 - Explicabilidad XAI e IPB: roadmap/04_LINEA_4_EXPLICABILIDAD_XAI_E_IPB.md
-      - 17.5. Línea 5 - Generalización Procedural: roadmap/05_LINEA_5_GENERALIZACION_PROCEDURAL.md
-      - 17.6. Historial de Versiones e Hitos Consolidados: HISTORIAL_VERSIONES_COMPLETADAS.md
-      - 17. Hoja de Ruta Evolutiva (Roadmap Maestro): 05_ROADMAP_EVOLUTIVO.md
+      - 18.1. Línea 1 - Observabilidad y Telemetría: roadmap/01_LINEA_1_OBSERVABILIDAD_Y_TELEMETRIA.md
+      - 18.2. Línea 2 - Aceleración de Captura de VPs: roadmap/02_LINEA_2_ACELERACION_CAPTURA_VPS.md
+      - 18.3. Línea 3 - Fidelidad Normativa y Wargame: roadmap/03_LINEA_3_FIDELIDAD_NORMATIVA_Y_REGLAMENTO.md
+      - 18.4. Línea 4 - Explicabilidad XAI e IPB: roadmap/04_LINEA_4_EXPLICABILIDAD_XAI_E_IPB.md
+      - 18.5. Línea 5 - Generalización Procedural: roadmap/05_LINEA_5_GENERALIZACION_PROCEDURAL.md
+      - 18.6. Historial de Versiones e Hitos Consolidados: HISTORIAL_VERSIONES_COMPLETADAS.md
+      - 18. Hoja de Ruta Evolutiva (Roadmap Maestro): 05_ROADMAP_EVOLUTIVO.md

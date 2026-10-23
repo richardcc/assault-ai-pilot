@@ -73,11 +73,19 @@ def calculate_facing_towards(origin: CoordLike, target: CoordLike, default_facin
         return "S" if dr > 0 else "N"
 
 
-def is_in_arc_of_fire(origin: CoordLike, origin_facing: str, target: CoordLike, has_pivot: bool = False) -> bool:
+def is_in_arc_of_fire(
+    origin: CoordLike,
+    origin_facing: str,
+    target: CoordLike,
+    has_pivot: bool = False,
+    has_limited_pivot: bool = False,
+) -> bool:
     """
     Check if target is within origin's arc of fire.
-    If unit has PIVOT trait (360-degree arc of fire), returns True regardless of facing.
-    Otherwise, standard forward arc (dot product >= 0) is required.
+    - If unit has PIVOT trait (360-degree arc of fire), returns True regardless of facing.
+    - If unit has LIMITED_PIVOT trait (240-degree arc of fire to flank and rear, Rule S43),
+      returns True only if target is NOT in frontal arc (dot <= 0).
+    - Otherwise, standard forward arc (dot >= 0) is required.
     """
     if has_pivot:
         return True
@@ -98,6 +106,10 @@ def is_in_arc_of_fire(origin: CoordLike, origin_facing: str, target: CoordLike, 
 
     facing = facing_dirs.get(origin_facing, (0, -1))
     dot = dir_v[0] * facing[0] + dir_v[1] * facing[1]
+
+    if has_limited_pivot:
+        return dot <= 0
+
     return dot >= 0
 
 

@@ -100,6 +100,10 @@ class EfficientZeroV2Trainer(EfficientZeroV2BaseTrainer):
         self.value_bootstrap_steps = int(max(1, value_bootstrap_steps))
         self.value_bootstrap_discount = float(max(0.0, min(1.0, value_bootstrap_discount)))
         self.amp_enabled = bool(amp_enabled) and str(self.device) == "cuda"
+        if torch.cuda.is_available() and str(self.device) == "cuda":
+            torch.backends.cuda.matmul.allow_tf32 = True
+            torch.backends.cudnn.allow_tf32 = True
+            torch.backends.cudnn.benchmark = True
         amp_dtype_norm = str(amp_dtype or "auto").strip().lower()
         if amp_dtype_norm not in {"auto", "fp16", "bf16"}:
             amp_dtype_norm = "auto"
@@ -185,9 +189,14 @@ class EfficientZeroV2Trainer(EfficientZeroV2BaseTrainer):
             dim=0,
         ).to(self.device, non_blocking=True)
         self._progress("batch_tensors_ready")
-        policy_target = torch.tensor([s.policy_target for s in batch], dtype=torch.float32, device=self.device)
-        value_target = torch.tensor([[s.value_target] for s in batch], dtype=torch.float32, device=self.device)
-        reward_target = torch.tensor([[s.reward_target] for s in batch], dtype=torch.float32, device=self.device)
+        if str(self.device) == "cuda":
+            policy_target = torch.tensor([s.policy_target for s in batch], dtype=torch.float32).pin_memory().to(self.device, non_blocking=True)
+            value_target = torch.tensor([[s.value_target] for s in batch], dtype=torch.float32).pin_memory().to(self.device, non_blocking=True)
+            reward_target = torch.tensor([[s.reward_target] for s in batch], dtype=torch.float32).pin_memory().to(self.device, non_blocking=True)
+        else:
+            policy_target = torch.tensor([s.policy_target for s in batch], dtype=torch.float32, device=self.device)
+            value_target = torch.tensor([[s.value_target] for s in batch], dtype=torch.float32, device=self.device)
+            reward_target = torch.tensor([[s.reward_target] for s in batch], dtype=torch.float32, device=self.device)
         model = self._resolve_ez_model()
         if model is None:
             base = super().train_batch(batch)

@@ -1,7 +1,7 @@
 import * as PIXI from "pixi.js";
 import { axialToPixel, HEX_SIZE } from "./hexGridRenderer";
 import { initUnitLayerState, getSelectedUnitId, getHighlightedUnitId } from "./unitLayerState";
-import { createUnitSprite, updateUnitActionMarker, updateUnitTacticalIndicators } from "./unitLayerSprite";
+import { createUnitSprite, updateUnitActionMarker, updateUnitTacticalIndicators, updateUnitActivationBadge } from "./unitLayerSprite";
 import { updateHighlight } from "./unitLayerHighlight";
 import { moveUnit } from "./unitLayerMovement";
 
@@ -13,7 +13,6 @@ export class UnitLayer {
   constructor(world: PIXI.Container) {
     this.container = new PIXI.Container();
     this.container.label = "unitLayer";
-    this.container.sortableChildren = true;
     this.spritesById = new Map();
     this.pendingCreateById = new Map();
 
@@ -95,9 +94,10 @@ export class UnitLayer {
       // Update visual state
       const base = (sprite as any).__baseScale ?? 1;
       const isOwn = unit.side === activeSide;
+      const isActivated = activated.includes(id);
       const isAvailable =
         isOwn &&
-        !activated.includes(id) &&
+        !isActivated &&
         !(window as any).__hiddenHighlights?.has(id);
 
       sprite.scale.set(base);
@@ -116,17 +116,25 @@ export class UnitLayer {
       }
       sprite.visible = true;
 
-      // Keep unit readability stable; consumed-state is shown by action marker,
-      // not by fading/tinting the unit counter sprite.
-      sprite.alpha = 1;
+      // Distinct visual contrast: dimmed and desaturated for activated units, full brightness for ready
+      if (isActivated && isOwn) {
+        sprite.alpha = 0.65;
+        (sprite as any).tint = 0x94a3b8;
+      } else {
+        sprite.alpha = 1.0;
+        (sprite as any).tint = 0xffffff;
+      }
 
       await updateUnitActionMarker(sprite, id);
 
-      // Update highlight
+      // Update tactical ready ring
       updateHighlight(this.container, sprite, id, isAvailable);
 
       // Update tactical indicators and health pip bar
       updateUnitTacticalIndicators(sprite, unit);
+
+      // Update activation badge on the counter (DONE vs READY)
+      updateUnitActivationBadge(sprite, isActivated, isOwn);
 
       seen.add(id);
     }

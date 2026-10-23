@@ -1,80 +1,4 @@
 {
-  "UK_COMMANDOS": {
-    "side": "UK",
-    "category": "INFANTRY",
-    "subtype": "COMMANDOS",
-    "classification": "SPECIALIZED_INFANTRY",
-    "card_id": "Pr43",
-    "cost": 7,
-    "movement": 2,
-    "max_strength": 4,
-    "has_counter_flip": true,
-    "base_defense": {
-      "FRONT": [
-        "YELLOW"
-      ],
-      "FLANK_LEFT": [
-        "YELLOW"
-      ],
-      "FLANK_RIGHT": [
-        "YELLOW"
-      ],
-      "REAR": [
-        "YELLOW"
-      ]
-    },
-    "attack": {
-      "DIRECT_FIRE": {
-        "VEHICLE": {
-          "0": {
-            "dice": [
-              "RED",
-              "YELLOW",
-              "GREEN"
-            ]
-          }
-        },
-        "INFANTRY": {
-          "0": {
-            "dice": [
-              "RED",
-              "YELLOW",
-              "YELLOW",
-              "YELLOW"
-            ]
-          },
-          "1-2": {
-            "dice": [
-              "RED",
-              "RED",
-              "YELLOW",
-              "BLUE"
-            ]
-          },
-          "3-5": {
-            "dice": [
-              "RED",
-              "YELLOW",
-              "GREEN"
-            ]
-          },
-          "8-10": {
-            "dice": [
-              "GREEN",
-              "BLUE",
-              "BLUE"
-            ]
-          }
-        }
-      }
-    },
-    "traits": [
-      "SCOUT",
-      "CONCEALED",
-      "RECON_PATROL",
-      "TOUGH"
-    ]
-  },
   "GE_GRENADIERS_43": {
     "side": "GE",
     "category": "INFANTRY",
@@ -99,6 +23,9 @@
         "YELLOW"
       ]
     },
+    "traits": [
+      "FAST_DISEMBARK"
+    ],
     "attack": {
       "DIRECT_FIRE": {
         "VEHICLE": {
@@ -136,6 +63,1527 @@
               "GREEN",
               "BLUE"
             ]
+          }
+        }
+      }
+    },
+    "doctrine_profile": {
+      "default_role": "SPEARHEAD",
+      "optimal_engagement_range": [
+        0,
+        4
+      ],
+      "preferred_terrain": [
+        "BUILDING",
+        "WOODS",
+        "CLEAR"
+      ],
+      "cohesion_weight": 1.2,
+      "fallback_threshold_hp": 2,
+      "mutation_rules": {
+        "allow_spearhead_if_vp_deficit": true,
+        "allow_close_defense_on_flank": true
+      }
+    }
+  },
+  "GE_7_5CM_LG40": {
+    "side": "GE",
+    "category": "GUN_ARTILLERY",
+    "subtype": "SUPPORT_GUN",
+    "classification": "GUN_ARTILLERY",
+    "card_id": "Pr43",
+    "cost": 5,
+    "movement": 1,
+    "max_strength": 3,
+    "base_defense": {
+      "FRONT": [
+        "YELLOW"
+      ],
+      "FLANK_LEFT": [
+        "YELLOW"
+      ],
+      "FLANK_RIGHT": [
+        "YELLOW"
+      ],
+      "REAR": [
+        "YELLOW"
+      ]
+    },
+    "traits": [
+      "SLOW_UNIT",
+      "LOW_SILHOUETTE",
+      "BACK_BLAST"
+    ],
+    "attack": {
+      "DIRECT_FIRE": {
+        "VEHICLE": {
+          "0": {
+            "dice": [
+              "GREEN",
+              "RED"
+            ]
+          },
+          "1-3": {
+            "dice": [
+              "YELLOW",
+              "GREEN",
+              "BLUE"
+            ]
+          },
+          "4-7": {
+            "dice": [
+              "YELLOW",
+              "GREEN"
+            ]
+          },
+          "8-12": {
+            "dice": [
+              "GREEN",
+              "GREEN"
+            ]
+          }
+        },
+        "INFANTRY": {
+          "0": {
+            "dice": [
+              "YELLOW",
+              "GREEN"
+            ]
+          },
+          "4-6": {
+            "dice": [
+              "YELLOW",
+              "GREEN",
+              "BLUE",
+              "RED"
+            ]
+          },
+          "1-4": {
+            "dice": [
+              "RED",
+              "YELLOW",
+              "BLUE"
+            ]
+          }
+        }
+      }
+    }
+  },
+  "GE_75MM_ATG_40": {
+    "side": "GE",
+    "category": "GUN_ARTILLERY",
+    "subtype": "HEAVY_ATG",
+    "classification": "GUN_ARTILLERY",
+    "card_id": "S43",
+    "cost": 8,
+    "movement": 1,
+    "max_strength": 3,
+    "base_defense": {
+      "FRONT": [
+        "RED"
+      ],
+      "FLANK_LEFT": [
+        "YELLOW"
+      ],
+      "FLANK_RIGHT": [
+        "YELLOW"
+      ],
+      "REAR": [
+        "GREEN"
+      ]
+    },
+    "traits": [
+      "HEAVY_WEIGHT",
+      "SHIELD",
+      "SLOW_UNIT"
+    ],
+    "attack": {
+      "DIRECT_FIRE": {
+        "VEHICLE": {
+          "0": {
+            "dice": [
+              "RED",
+              "RED",
+              "BLUE"
+            ]
+          },
+          "1-5": {
+            "dice": [
+              "YELLOW",
+              "RED",
+              "RED"
+            ]
+          },
+          "6-10": {
+            "dice": [
+              "RED",
+              "YELLOW",
+              "RED"
+            ]
+          },
+          "11-14": {
+            "dice": [
+              "RED",
+              "GREEN",
+              "YELLOW"
+            ]
+          }
+        },
+        "INFANTRY": {
+          "0": {
+            "dice": [
+              "GREEN",
+              "RED"
+            ]
+          },
+          "1-5": {
+            "dice": [
+              "RED",
+              "YELLOW",
+              "GREEN",
+              "YELLOW"
+            ]
+          },
+          "6-9": {
+            "dice": [
+              "RED",
+              "GREEN",
+              "YELLOW"
+            ]
+          },
+          "10-12": {
+            "dice": [
+              "YELLOW",
+              "BLUE",
+              "GREEN"
+            ]
+          }
+        }
+      }
+    }
+  },
+  "GE_75MM_INFANTRY_GUN": {
+    "side": "GE",
+    "category": "GUN_ARTILLERY",
+    "subtype": "SUPPORT_GUN",
+    "classification": "GUN_ARTILLERY",
+    "card_id": "S43",
+    "cost": 6,
+    "movement": 1,
+    "movement_type": "artillery",
+    "max_strength": 3,
+    "has_counter_flip": true,
+    "base_defense": {
+      "FRONT": [
+        "RED"
+      ],
+      "FLANK_LEFT": [
+        "YELLOW"
+      ],
+      "FLANK_RIGHT": [
+        "YELLOW"
+      ],
+      "REAR": [
+        "YELLOW"
+      ]
+    },
+    "traits": [
+      "LOW_SILHOUETTE",
+      "SLOW_UNIT",
+      "INDIRECT_FIRE",
+      "SHIELD"
+    ],
+    "attack": {
+      "DIRECT_FIRE": {
+        "VEHICLE": {
+          "0": {
+            "dice": [
+              "GREEN"
+            ]
+          },
+          "1-3": {
+            "dice": [
+              "RED",
+              "GREEN"
+            ]
+          },
+          "4-6": {
+            "dice": [
+              "YELLOW",
+              "BLUE"
+            ]
+          }
+        },
+        "INFANTRY": {
+          "0": {
+            "dice": [
+              "YELLOW",
+              "GREEN"
+            ]
+          },
+          "1-4": {
+            "dice": [
+              "RED",
+              "YELLOW",
+              "GREEN"
+            ]
+          },
+          "5-7": {
+            "dice": [
+              "YELLOW",
+              "GREEN",
+              "BLUE"
+            ]
+          }
+        }
+      },
+      "INDIRECT_FIRE": {
+        "defense_loss": "WEAKEST",
+        "reroll": false,
+        "5-11": {
+          "dice": [
+            "RED",
+            "GREEN",
+            "BLUE"
+          ]
+        }
+      }
+    },
+    "doctrine_profile": {
+      "default_role": "FIRE_SUPPORT",
+      "optimal_engagement_range": [
+        2,
+        7
+      ],
+      "preferred_terrain": [
+        "HILL",
+        "WOODS",
+        "BUILDING"
+      ],
+      "cohesion_weight": 1.2,
+      "fallback_threshold_hp": 1,
+      "mutation_rules": {
+        "allow_spearhead_if_vp_deficit": false,
+        "allow_close_defense_on_flank": true
+      }
+    }
+  },
+  "GE_8_8CM_FLAK_36": {
+    "side": "GE",
+    "category": "GUN_ARTILLERY",
+    "subtype": "HEAVY_AA",
+    "classification": "GUN_ARTILLERY",
+    "card_id": "S43",
+    "cost": 12,
+    "movement": 0,
+    "max_strength": 4,
+    "base_defense": {
+      "FRONT": [
+        "RED"
+      ],
+      "FLANK_LEFT": [
+        "YELLOW"
+      ],
+      "FLANK_RIGHT": [
+        "YELLOW"
+      ],
+      "REAR": [
+        "YELLOW"
+      ]
+    },
+    "traits": [
+      "PIVOT",
+      "IMMOBILE",
+      "TALL_SILHOUETTE",
+      "SHIELD"
+    ],
+    "attack": {
+      "DIRECT_FIRE": {
+        "VEHICLE": {
+          "0": {
+            "dice": [
+              "YELLOW"
+            ]
+          },
+          "1-4": {
+            "dice": [
+              "RED",
+              "RED",
+              "RED",
+              "YELLOW"
+            ]
+          },
+          "5-8": {
+            "dice": [
+              "RED",
+              "RED",
+              "YELLOW",
+              "BLUE"
+            ]
+          },
+          "9-14": {
+            "dice": [
+              "RED",
+              "YELLOW",
+              "GREEN"
+            ]
+          }
+        },
+        "INFANTRY": {
+          "0": {
+            "dice": [
+              "GREEN",
+              "GREEN",
+              "GREEN"
+            ]
+          },
+          "5-8": {
+            "dice": [
+              "RED",
+              "YELLOW",
+              "YELLOW",
+              "BLUE"
+            ]
+          },
+          "9-14": {
+            "dice": [
+              "YELLOW",
+              "GREEN",
+              "BLUE"
+            ]
+          },
+          "1-5": {
+            "dice": [
+              "RED",
+              "RED",
+              "YELLOW",
+              "GREEN"
+            ]
+          }
+        }
+      }
+    }
+  },
+  "GE_8_8CM_RW_43": {
+    "side": "GE",
+    "category": "GUN_ARTILLERY",
+    "subtype": "SUPPORT_GUN",
+    "classification": "GUN_ARTILLERY",
+    "card_id": "Pr43",
+    "cost": 5,
+    "movement": 1,
+    "movement_type": "artillery",
+    "max_strength": 2,
+    "has_counter_flip": true,
+    "base_defense": {
+      "FRONT": [
+        "RED"
+      ],
+      "FLANK_LEFT": [
+        "YELLOW"
+      ],
+      "FLANK_RIGHT": [
+        "YELLOW"
+      ],
+      "REAR": [
+        "GREEN"
+      ]
+    },
+    "traits": [
+      "SLOW_UNIT",
+      "LOW_SILHOUETTE",
+      "BACK_BLAST",
+      "SHIELD"
+    ],
+    "attack": {
+      "DIRECT_FIRE": {
+        "VEHICLE": {
+          "0": {
+            "dice": [
+              "RED"
+            ]
+          },
+          "1-3": {
+            "dice": [
+              "RED",
+              "RED",
+              "YELLOW"
+            ]
+          },
+          "4-6": {
+            "dice": [
+              "RED",
+              "GREEN"
+            ]
+          }
+        },
+        "INFANTRY": {
+          "0": {
+            "dice": [
+              "YELLOW"
+            ]
+          },
+          "1-3": {
+            "dice": [
+              "RED",
+              "YELLOW"
+            ]
+          },
+          "4-6": {
+            "dice": [
+              "YELLOW",
+              "BLUE"
+            ]
+          }
+        }
+      }
+    },
+    "doctrine_profile": {
+      "default_role": "FIRE_SUPPORT",
+      "optimal_engagement_range": [
+        1,
+        5
+      ],
+      "preferred_terrain": [
+        "BUILDING",
+        "WOODS",
+        "HILL"
+      ],
+      "cohesion_weight": 1.1,
+      "fallback_threshold_hp": 1,
+      "mutation_rules": {
+        "allow_spearhead_if_vp_deficit": false,
+        "allow_close_defense_on_flank": true
+      }
+    }
+  },
+  "GE_SERVICE_TROOPS": {
+    "side": "GE",
+    "category": "INFANTRY",
+    "subtype": "SERVICE_TROOPS",
+    "classification": "SUPPORT_INFANTRY",
+    "card_id": "Pr43",
+    "cost": 3,
+    "movement": 2,
+    "max_strength": 2,
+    "has_counter_flip": true,
+    "base_defense": {
+      "FRONT": [
+        "YELLOW"
+      ],
+      "FLANK_LEFT": [
+        "YELLOW"
+      ],
+      "FLANK_RIGHT": [
+        "YELLOW"
+      ],
+      "REAR": [
+        "YELLOW"
+      ]
+    },
+    "traits": [
+      "REAR_ECHELON"
+    ],
+    "attack": {
+      "DIRECT_FIRE": {
+        "VEHICLE": {
+          "0": {
+            "dice": [
+              "BLUE"
+            ]
+          }
+        },
+        "INFANTRY": {
+          "0": {
+            "dice": [
+              "GREEN"
+            ]
+          },
+          "1-3": {
+            "dice": [
+              "GREEN",
+              "BLUE"
+            ]
+          }
+        }
+      }
+    },
+    "doctrine_profile": {
+      "default_role": "SCREEN",
+      "optimal_engagement_range": [
+        1,
+        3
+      ],
+      "preferred_terrain": [
+        "BUILDING",
+        "WOODS",
+        "DEFILADE"
+      ],
+      "cohesion_weight": 0.8,
+      "fallback_threshold_hp": 1,
+      "mutation_rules": {
+        "allow_spearhead_if_vp_deficit": false,
+        "allow_close_defense_on_flank": false
+      }
+    }
+  },
+  "IT_47MM_ATG": {
+    "side": "IT",
+    "category": "GUN_ARTILLERY",
+    "subtype": "SUPPORT_ATG",
+    "classification": "GUN_ARTILLERY",
+    "card_id": "S43",
+    "cost": 5,
+    "movement": 1,
+    "movement_type": "artillery",
+    "max_strength": 3,
+    "has_counter_flip": true,
+    "base_defense": {
+      "FRONT": [
+        "RED"
+      ],
+      "FLANK_LEFT": [
+        "YELLOW"
+      ],
+      "FLANK_RIGHT": [
+        "YELLOW"
+      ],
+      "REAR": [
+        "GREEN"
+      ],
+      "EXPLOSION": [
+        "BLUE"
+      ]
+    },
+    "traits": [
+      "SLOW_UNIT",
+      "LOW_SILHOUETTE",
+      "SHIELD"
+    ],
+    "attack": {
+      "DIRECT_FIRE": {
+        "VEHICLE": {
+          "0": {
+            "dice": [
+              "GREEN"
+            ]
+          },
+          "1-3": {
+            "dice": [
+              "RED",
+              "YELLOW"
+            ]
+          },
+          "4-6": {
+            "dice": [
+              "YELLOW",
+              "GREEN"
+            ]
+          },
+          "7-9": {
+            "dice": [
+              "GREEN"
+            ]
+          }
+        },
+        "INFANTRY": {
+          "0": {
+            "dice": [
+              "YELLOW"
+            ]
+          },
+          "1-3": {
+            "dice": [
+              "RED",
+              "YELLOW"
+            ]
+          },
+          "4-6": {
+            "dice": [
+              "YELLOW",
+              "BLUE"
+            ]
+          }
+        }
+      }
+    },
+    "doctrine_profile": {
+      "default_role": "FIRE_SUPPORT",
+      "optimal_engagement_range": [
+        1,
+        6
+      ],
+      "preferred_terrain": [
+        "HILL",
+        "WOODS",
+        "BUILDING"
+      ],
+      "cohesion_weight": 1.1,
+      "fallback_threshold_hp": 1,
+      "mutation_rules": {
+        "allow_spearhead_if_vp_deficit": false,
+        "allow_close_defense_on_flank": true
+      }
+    }
+  },
+  "IT_65MM_FIELD_GUN": {
+    "side": "IT",
+    "category": "GUN_ARTILLERY",
+    "subtype": "SUPPORT_GUN",
+    "classification": "GUN_ARTILLERY",
+    "card_id": "S43",
+    "cost": 5,
+    "movement": 1,
+    "movement_type": "artillery",
+    "max_strength": 3,
+    "has_counter_flip": true,
+    "base_defense": {
+      "FRONT": [
+        "RED"
+      ],
+      "FLANK_LEFT": [
+        "YELLOW"
+      ],
+      "FLANK_RIGHT": [
+        "YELLOW"
+      ],
+      "REAR": [
+        "YELLOW"
+      ]
+    },
+    "traits": [
+      "SLOW_UNIT",
+      "LOW_SILHOUETTE",
+      "SHIELD"
+    ],
+    "attack": {
+      "DIRECT_FIRE": {
+        "VEHICLE": {
+          "0": {
+            "dice": [
+              "GREEN"
+            ]
+          },
+          "1-3": {
+            "dice": [
+              "RED",
+              "GREEN"
+            ]
+          },
+          "4-6": {
+            "dice": [
+              "YELLOW",
+              "BLUE"
+            ]
+          }
+        },
+        "INFANTRY": {
+          "0": {
+            "dice": [
+              "YELLOW",
+              "GREEN"
+            ]
+          },
+          "1-4": {
+            "dice": [
+              "RED",
+              "YELLOW",
+              "BLUE"
+            ]
+          },
+          "5-7": {
+            "dice": [
+              "YELLOW",
+              "GREEN",
+              "BLUE"
+            ]
+          }
+        }
+      }
+    },
+    "doctrine_profile": {
+      "default_role": "FIRE_SUPPORT",
+      "optimal_engagement_range": [
+        1,
+        6
+      ],
+      "preferred_terrain": [
+        "HILL",
+        "WOODS",
+        "BUILDING"
+      ],
+      "cohesion_weight": 1.1,
+      "fallback_threshold_hp": 1,
+      "mutation_rules": {
+        "allow_spearhead_if_vp_deficit": false,
+        "allow_close_defense_on_flank": true
+      }
+    }
+  },
+  "IT_81MM_MORTAR": {
+    "side": "IT",
+    "category": "GUN_ARTILLERY",
+    "subtype": "SUPPORT_MORTAR",
+    "classification": "INDIRECT_FIRE_UNIT",
+    "card_id": "S43",
+    "cost": 6,
+    "movement": 2,
+    "max_strength": 3,
+    "has_counter_flip": true,
+    "base_defense": {
+      "FRONT": [
+        "YELLOW"
+      ],
+      "FLANK_LEFT": [
+        "YELLOW"
+      ],
+      "FLANK_RIGHT": [
+        "YELLOW"
+      ],
+      "REAR": [
+        "YELLOW"
+      ]
+    },
+    "traits": [
+      "SLOW_UNIT",
+      "INDIRECT_FIRE",
+      "SMOKE"
+    ],
+    "attack": {
+      "DIRECT_FIRE": {
+        "INFANTRY": {
+          "0": {
+            "dice": [
+              "YELLOW"
+            ]
+          },
+          "1-3": {
+            "dice": [
+              "GREEN",
+              "BLUE"
+            ]
+          }
+        }
+      },
+      "INDIRECT_FIRE": {
+        "defense_loss": "WEAKEST",
+        "reroll": false,
+        "3-11": {
+          "dice": [
+            "RED",
+            "YELLOW",
+            "GREEN"
+          ]
+        }
+      },
+      "SMOKE": {
+        "target_hex": true,
+        "max_adjacent_hexes": 2,
+        "dice": [
+          "GREEN",
+          "GREEN",
+          "GREEN",
+          "BLUE",
+          "BLUE",
+          "BLUE"
+        ]
+      }
+    },
+    "doctrine_profile": {
+      "default_role": "FIRE_SUPPORT",
+      "optimal_engagement_range": [
+        3,
+        9
+      ],
+      "preferred_terrain": [
+        "HILL",
+        "WOODS",
+        "DEFILADE"
+      ],
+      "cohesion_weight": 1.2,
+      "fallback_threshold_hp": 1,
+      "mutation_rules": {
+        "allow_spearhead_if_vp_deficit": false,
+        "allow_close_defense_on_flank": true
+      }
+    }
+  },
+  "IT_90MM_AA_GUN": {
+    "side": "IT",
+    "category": "GUN_ARTILLERY",
+    "subtype": "HEAVY_AA",
+    "classification": "GUN_ARTILLERY",
+    "card_id": "S43",
+    "cost": 12,
+    "movement": 0,
+    "movement_type": "artillery",
+    "max_strength": 4,
+    "has_counter_flip": true,
+    "base_defense": {
+      "FRONT": [
+        "RED"
+      ],
+      "FLANK_LEFT": [
+        "YELLOW"
+      ],
+      "FLANK_RIGHT": [
+        "YELLOW"
+      ],
+      "REAR": [
+        "YELLOW"
+      ],
+      "EXPLOSION": [
+        "BLUE"
+      ]
+    },
+    "traits": [
+      "PIVOT",
+      "IMMOBILE",
+      "TALL_SILHOUETTE",
+      "SHIELD"
+    ],
+    "attack": {
+      "DIRECT_FIRE": {
+        "VEHICLE": {
+          "0": {
+            "dice": [
+              "YELLOW"
+            ]
+          },
+          "1-4": {
+            "dice": [
+              "RED",
+              "RED",
+              "RED",
+              "YELLOW"
+            ]
+          },
+          "5-8": {
+            "dice": [
+              "RED",
+              "RED",
+              "YELLOW",
+              "BLUE"
+            ]
+          },
+          "9-14": {
+            "dice": [
+              "RED",
+              "YELLOW",
+              "GREEN"
+            ]
+          }
+        },
+        "INFANTRY": {
+          "0": {
+            "dice": [
+              "YELLOW",
+              "GREEN"
+            ]
+          },
+          "1-4": {
+            "dice": [
+              "RED",
+              "RED",
+              "YELLOW",
+              "GREEN"
+            ]
+          },
+          "5-8": {
+            "dice": [
+              "RED",
+              "YELLOW",
+              "YELLOW",
+              "BLUE"
+            ]
+          },
+          "9-14": {
+            "dice": [
+              "YELLOW",
+              "GREEN",
+              "BLUE"
+            ]
+          }
+        }
+      }
+    },
+    "doctrine_profile": {
+      "default_role": "FIRE_SUPPORT",
+      "optimal_engagement_range": [
+        3,
+        12
+      ],
+      "preferred_terrain": [
+        "HILL",
+        "CLEAR",
+        "BUILDING"
+      ],
+      "cohesion_weight": 1.4,
+      "fallback_threshold_hp": 2,
+      "mutation_rules": {
+        "allow_spearhead_if_vp_deficit": false,
+        "allow_close_defense_on_flank": true
+      }
+    }
+  },
+  "UK_17_POUNDER_ATG": {
+    "side": "UK",
+    "category": "GUN_ARTILLERY",
+    "subtype": "HEAVY_ATG",
+    "classification": "GUN_ARTILLERY",
+    "card_id": "Pr43",
+    "cost": 9,
+    "movement": 1,
+    "movement_type": "artillery",
+    "max_strength": 3,
+    "has_counter_flip": true,
+    "base_defense": {
+      "FRONT": [
+        "RED"
+      ],
+      "FLANK_LEFT": [
+        "YELLOW"
+      ],
+      "FLANK_RIGHT": [
+        "YELLOW"
+      ],
+      "REAR": [
+        "GREEN"
+      ],
+      "EXPLOSION": [
+        "BLUE"
+      ]
+    },
+    "traits": [
+      "HEAVY_WEIGHT",
+      "SHIELD",
+      "SLOW_UNIT"
+    ],
+    "attack": {
+      "DIRECT_FIRE": {
+        "VEHICLE": {
+          "0": {
+            "dice": [
+              "YELLOW"
+            ]
+          },
+          "1-4": {
+            "dice": [
+              "RED",
+              "RED",
+              "RED"
+            ]
+          },
+          "5-8": {
+            "dice": [
+              "RED",
+              "RED",
+              "YELLOW"
+            ]
+          },
+          "9-12": {
+            "dice": [
+              "RED",
+              "YELLOW",
+              "BLUE"
+            ]
+          }
+        },
+        "INFANTRY": {
+          "0": {
+            "dice": [
+              "YELLOW"
+            ]
+          },
+          "1-4": {
+            "dice": [
+              "RED",
+              "YELLOW",
+              "GREEN"
+            ]
+          },
+          "5-8": {
+            "dice": [
+              "YELLOW",
+              "YELLOW",
+              "BLUE"
+            ]
+          }
+        }
+      }
+    },
+    "doctrine_profile": {
+      "default_role": "FIRE_SUPPORT",
+      "optimal_engagement_range": [
+        2,
+        10
+      ],
+      "preferred_terrain": [
+        "HILL",
+        "WOODS",
+        "BUILDING"
+      ],
+      "cohesion_weight": 1.3,
+      "fallback_threshold_hp": 2,
+      "mutation_rules": {
+        "allow_spearhead_if_vp_deficit": false,
+        "allow_close_defense_on_flank": true
+      }
+    }
+  },
+  "UK_2_INCH_MORTAR": {
+    "side": "UK",
+    "category": "GUN_ARTILLERY",
+    "subtype": "SUPPORT_MORTAR",
+    "classification": "INDIRECT_FIRE_UNIT",
+    "card_id": "Pr43",
+    "cost": 4,
+    "movement": 2,
+    "max_strength": 2,
+    "has_counter_flip": true,
+    "base_defense": {
+      "FRONT": [
+        "YELLOW"
+      ],
+      "FLANK_LEFT": [
+        "YELLOW"
+      ],
+      "FLANK_RIGHT": [
+        "YELLOW"
+      ],
+      "REAR": [
+        "YELLOW"
+      ]
+    },
+    "traits": [
+      "INDIRECT_FIRE",
+      "SMOKE"
+    ],
+    "attack": {
+      "DIRECT_FIRE": {
+        "INFANTRY": {
+          "0": {
+            "dice": [
+              "YELLOW"
+            ]
+          },
+          "1": {
+            "dice": [
+              "YELLOW",
+              "BLUE"
+            ]
+          },
+          "2-4": {
+            "dice": [
+              "GREEN",
+              "BLUE"
+            ]
+          }
+        }
+      },
+      "INDIRECT_FIRE": {
+        "defense_loss": "NONE",
+        "reroll": false,
+        "3-8": {
+          "dice": [
+            "GREEN",
+            "GREEN",
+            "BLUE"
+          ]
+        }
+      },
+      "SMOKE": {
+        "target_hex": true,
+        "max_adjacent_hexes": 2,
+        "dice": [
+          "GREEN",
+          "GREEN",
+          "GREEN",
+          "BLUE",
+          "BLUE",
+          "BLUE"
+        ]
+      }
+    },
+    "doctrine_profile": {
+      "default_role": "FIRE_SUPPORT",
+      "optimal_engagement_range": [
+        2,
+        7
+      ],
+      "preferred_terrain": [
+        "BUILDING",
+        "WOODS",
+        "HILL"
+      ],
+      "cohesion_weight": 1.1,
+      "fallback_threshold_hp": 1,
+      "mutation_rules": {
+        "allow_spearhead_if_vp_deficit": false,
+        "allow_close_defense_on_flank": true
+      }
+    }
+  },
+  "UK_2_POUNDER_ATG": {
+    "side": "UK",
+    "category": "GUN_ARTILLERY",
+    "subtype": "SUPPORT_ATG",
+    "classification": "GUN_ARTILLERY",
+    "card_id": "Pr43",
+    "cost": 5,
+    "movement": 1,
+    "movement_type": "artillery",
+    "max_strength": 3,
+    "has_counter_flip": true,
+    "base_defense": {
+      "FRONT": [
+        "RED"
+      ],
+      "FLANK_LEFT": [
+        "YELLOW"
+      ],
+      "FLANK_RIGHT": [
+        "YELLOW"
+      ],
+      "REAR": [
+        "GREEN"
+      ]
+    },
+    "traits": [
+      "SLOW_UNIT",
+      "LOW_SILHOUETTE",
+      "SHIELD"
+    ],
+    "attack": {
+      "DIRECT_FIRE": {
+        "VEHICLE": {
+          "0": {
+            "dice": [
+              "GREEN"
+            ]
+          },
+          "1-3": {
+            "dice": [
+              "RED",
+              "YELLOW"
+            ]
+          },
+          "4-6": {
+            "dice": [
+              "YELLOW",
+              "GREEN"
+            ]
+          }
+        },
+        "INFANTRY": {
+          "0": {
+            "dice": [
+              "YELLOW"
+            ]
+          },
+          "1-3": {
+            "dice": [
+              "RED",
+              "GREEN"
+            ]
+          },
+          "4-6": {
+            "dice": [
+              "GREEN",
+              "BLUE"
+            ]
+          }
+        }
+      }
+    },
+    "doctrine_profile": {
+      "default_role": "FIRE_SUPPORT",
+      "optimal_engagement_range": [
+        1,
+        6
+      ],
+      "preferred_terrain": [
+        "HILL",
+        "WOODS",
+        "BUILDING"
+      ],
+      "cohesion_weight": 1.1,
+      "fallback_threshold_hp": 1,
+      "mutation_rules": {
+        "allow_spearhead_if_vp_deficit": false,
+        "allow_close_defense_on_flank": true
+      }
+    }
+  },
+  "UK_25_POUNDER_HOW": {
+    "side": "UK",
+    "category": "GUN_ARTILLERY",
+    "subtype": "SUPPORT_GUN",
+    "classification": "GUN_ARTILLERY",
+    "card_id": "Pr43",
+    "cost": 8,
+    "movement": 1,
+    "movement_type": "artillery",
+    "max_strength": 4,
+    "has_counter_flip": true,
+    "base_defense": {
+      "FRONT": [
+        "RED"
+      ],
+      "FLANK_LEFT": [
+        "YELLOW"
+      ],
+      "FLANK_RIGHT": [
+        "YELLOW"
+      ],
+      "REAR": [
+        "YELLOW"
+      ],
+      "EXPLOSION": [
+        "BLUE"
+      ]
+    },
+    "traits": [
+      "SLOW_UNIT",
+      "INDIRECT_FIRE",
+      "SMOKE",
+      "PIVOT",
+      "SHIELD"
+    ],
+    "attack": {
+      "DIRECT_FIRE": {
+        "VEHICLE": {
+          "0": {
+            "dice": [
+              "GREEN"
+            ]
+          },
+          "1-4": {
+            "dice": [
+              "RED",
+              "YELLOW",
+              "BLUE"
+            ]
+          },
+          "5-8": {
+            "dice": [
+              "RED",
+              "GREEN",
+              "BLUE"
+            ]
+          }
+        },
+        "INFANTRY": {
+          "0": {
+            "dice": [
+              "YELLOW",
+              "GREEN"
+            ]
+          },
+          "1-4": {
+            "dice": [
+              "RED",
+              "RED",
+              "YELLOW",
+              "GREEN"
+            ]
+          },
+          "5-8": {
+            "dice": [
+              "RED",
+              "YELLOW",
+              "GREEN",
+              "BLUE"
+            ]
+          }
+        }
+      },
+      "INDIRECT_FIRE": {
+        "defense_loss": "WEAKEST",
+        "reroll": false,
+        "5-14": {
+          "dice": [
+            "RED",
+            "RED",
+            "YELLOW",
+            "GREEN"
+          ]
+        }
+      },
+      "SMOKE": {
+        "target_hex": true,
+        "max_adjacent_hexes": 2,
+        "dice": [
+          "GREEN",
+          "GREEN",
+          "GREEN",
+          "BLUE",
+          "BLUE",
+          "BLUE"
+        ]
+      }
+    },
+    "doctrine_profile": {
+      "default_role": "FIRE_SUPPORT",
+      "optimal_engagement_range": [
+        3,
+        10
+      ],
+      "preferred_terrain": [
+        "HILL",
+        "WOODS",
+        "BUILDING"
+      ],
+      "cohesion_weight": 1.3,
+      "fallback_threshold_hp": 2,
+      "mutation_rules": {
+        "allow_spearhead_if_vp_deficit": false,
+        "allow_close_defense_on_flank": true
+      }
+    }
+  },
+  "UK_3_INCH_MORTAR": {
+    "side": "UK",
+    "category": "GUN_ARTILLERY",
+    "subtype": "SUPPORT_MORTAR",
+    "classification": "INDIRECT_FIRE_UNIT",
+    "card_id": "Pr43",
+    "cost": 6,
+    "movement": 2,
+    "max_strength": 3,
+    "has_counter_flip": true,
+    "base_defense": {
+      "FRONT": [
+        "YELLOW"
+      ],
+      "FLANK_LEFT": [
+        "YELLOW"
+      ],
+      "FLANK_RIGHT": [
+        "YELLOW"
+      ],
+      "REAR": [
+        "YELLOW"
+      ]
+    },
+    "traits": [
+      "SLOW_UNIT",
+      "INDIRECT_FIRE",
+      "SMOKE"
+    ],
+    "attack": {
+      "DIRECT_FIRE": {
+        "INFANTRY": {
+          "0": {
+            "dice": [
+              "YELLOW"
+            ]
+          },
+          "1-3": {
+            "dice": [
+              "GREEN",
+              "BLUE"
+            ]
+          }
+        }
+      },
+      "INDIRECT_FIRE": {
+        "defense_loss": "WEAKEST",
+        "reroll": false,
+        "3-12": {
+          "dice": [
+            "RED",
+            "YELLOW",
+            "GREEN"
+          ]
+        }
+      },
+      "SMOKE": {
+        "target_hex": true,
+        "max_adjacent_hexes": 2,
+        "dice": [
+          "GREEN",
+          "GREEN",
+          "GREEN",
+          "BLUE",
+          "BLUE",
+          "BLUE"
+        ]
+      }
+    },
+    "doctrine_profile": {
+      "default_role": "FIRE_SUPPORT",
+      "optimal_engagement_range": [
+        3,
+        10
+      ],
+      "preferred_terrain": [
+        "HILL",
+        "WOODS",
+        "DEFILADE"
+      ],
+      "cohesion_weight": 1.2,
+      "fallback_threshold_hp": 1,
+      "mutation_rules": {
+        "allow_spearhead_if_vp_deficit": false,
+        "allow_close_defense_on_flank": true
+      }
+    }
+  },
+  "UK_6_POUNDER_ATG": {
+    "side": "UK",
+    "category": "GUN_ARTILLERY",
+    "subtype": "SUPPORT_ATG",
+    "classification": "GUN_ARTILLERY",
+    "card_id": "Pr43",
+    "cost": 7,
+    "movement": 1,
+    "movement_type": "artillery",
+    "max_strength": 3,
+    "has_counter_flip": true,
+    "base_defense": {
+      "FRONT": [
+        "RED"
+      ],
+      "FLANK_LEFT": [
+        "YELLOW"
+      ],
+      "FLANK_RIGHT": [
+        "YELLOW"
+      ],
+      "REAR": [
+        "GREEN"
+      ],
+      "EXPLOSION": [
+        "BLUE"
+      ]
+    },
+    "traits": [
+      "SLOW_UNIT",
+      "LOW_SILHOUETTE",
+      "SHIELD"
+    ],
+    "attack": {
+      "DIRECT_FIRE": {
+        "VEHICLE": {
+          "0": {
+            "dice": [
+              "YELLOW"
+            ]
+          },
+          "1-4": {
+            "dice": [
+              "RED",
+              "RED",
+              "YELLOW"
+            ]
+          },
+          "5-7": {
+            "dice": [
+              "RED",
+              "YELLOW",
+              "GREEN"
+            ]
           },
           "8-10": {
             "dice": [
@@ -143,11 +1591,1142 @@
               "GREEN"
             ]
           }
+        },
+        "INFANTRY": {
+          "0": {
+            "dice": [
+              "YELLOW"
+            ]
+          },
+          "1-4": {
+            "dice": [
+              "RED",
+              "YELLOW",
+              "GREEN"
+            ]
+          },
+          "5-7": {
+            "dice": [
+              "YELLOW",
+              "GREEN",
+              "BLUE"
+            ]
+          }
         }
       }
     },
+    "doctrine_profile": {
+      "default_role": "FIRE_SUPPORT",
+      "optimal_engagement_range": [
+        1,
+        8
+      ],
+      "preferred_terrain": [
+        "HILL",
+        "WOODS",
+        "BUILDING"
+      ],
+      "cohesion_weight": 1.2,
+      "fallback_threshold_hp": 1,
+      "mutation_rules": {
+        "allow_spearhead_if_vp_deficit": false,
+        "allow_close_defense_on_flank": true
+      }
+    }
+  },
+  "UK_40MM_BOFORS_AA": {
+    "side": "UK",
+    "category": "GUN_ARTILLERY",
+    "subtype": "LIGHT_AA",
+    "classification": "GUN_ARTILLERY",
+    "card_id": "Pr43",
+    "cost": 8,
+    "movement": 1,
+    "movement_type": "artillery",
+    "max_strength": 4,
+    "has_counter_flip": true,
+    "base_defense": {
+      "FRONT": [
+        "YELLOW"
+      ],
+      "FLANK_LEFT": [
+        "YELLOW"
+      ],
+      "FLANK_RIGHT": [
+        "YELLOW"
+      ],
+      "REAR": [
+        "YELLOW"
+      ]
+    },
     "traits": [
-      "FAST_DISEMBARK"
-    ]
+      "RAPID_FIRE",
+      "SLOW_UNIT",
+      "PIVOT"
+    ],
+    "attack": {
+      "DIRECT_FIRE": {
+        "VEHICLE": {
+          "0": {
+            "dice": [
+              "YELLOW"
+            ]
+          },
+          "1-4": {
+            "dice": [
+              "YELLOW",
+              "BLUE"
+            ]
+          },
+          "5-7": {
+            "dice": [
+              "GREEN",
+              "BLUE"
+            ]
+          },
+          "8-10": {
+            "dice": [
+              "GREEN"
+            ]
+          }
+        },
+        "INFANTRY": {
+          "0": {
+            "dice": [
+              "YELLOW",
+              "YELLOW",
+              "BLUE"
+            ]
+          },
+          "1-4": {
+            "dice": [
+              "RED",
+              "YELLOW",
+              "BLUE",
+              "BLUE"
+            ]
+          },
+          "5-7": {
+            "dice": [
+              "RED",
+              "GREEN",
+              "BLUE"
+            ]
+          },
+          "8-10": {
+            "dice": [
+              "YELLOW",
+              "GREEN",
+              "BLUE"
+            ]
+          }
+        }
+      }
+    },
+    "doctrine_profile": {
+      "default_role": "FIRE_SUPPORT",
+      "optimal_engagement_range": [
+        1,
+        8
+      ],
+      "preferred_terrain": [
+        "HILL",
+        "BUILDING",
+        "WOODS"
+      ],
+      "cohesion_weight": 1.2,
+      "fallback_threshold_hp": 2,
+      "mutation_rules": {
+        "allow_spearhead_if_vp_deficit": false,
+        "allow_close_defense_on_flank": true
+      }
+    }
+  },
+  "UK_PIAT_TEAM": {
+    "side": "UK",
+    "category": "INFANTRY",
+    "subtype": "AT_SUPPORT",
+    "classification": "SUPPORT_INFANTRY",
+    "card_id": "Pr43",
+    "cost": 4,
+    "movement": 2,
+    "max_strength": 2,
+    "has_counter_flip": true,
+    "base_defense": {
+      "FRONT": [
+        "YELLOW"
+      ],
+      "FLANK_LEFT": [
+        "YELLOW"
+      ],
+      "FLANK_RIGHT": [
+        "YELLOW"
+      ],
+      "REAR": [
+        "YELLOW"
+      ]
+    },
+    "traits": [
+      "INDIRECT_FIRE",
+      "ANTI_TANK"
+    ],
+    "attack": {
+      "DIRECT_FIRE": {
+        "VEHICLE": {
+          "0": {
+            "dice": [
+              "RED",
+              "RED"
+            ]
+          },
+          "1": {
+            "dice": [
+              "RED",
+              "RED",
+              "YELLOW"
+            ]
+          },
+          "2": {
+            "dice": [
+              "RED",
+              "YELLOW"
+            ]
+          }
+        },
+        "INFANTRY": {
+          "0": {
+            "dice": [
+              "YELLOW",
+              "GREEN"
+            ]
+          },
+          "1": {
+            "dice": [
+              "YELLOW",
+              "BLUE"
+            ]
+          }
+        }
+      },
+      "INDIRECT_FIRE": {
+        "defense_loss": "NONE",
+        "reroll": false,
+        "1-5": {
+          "dice": [
+            "RED",
+            "YELLOW"
+          ]
+        }
+      }
+    },
+    "doctrine_profile": {
+      "default_role": "SPEARHEAD",
+      "optimal_engagement_range": [
+        0,
+        2
+      ],
+      "preferred_terrain": [
+        "BUILDING",
+        "WOODS",
+        "DEFILADE"
+      ],
+      "cohesion_weight": 0.9,
+      "fallback_threshold_hp": 1,
+      "mutation_rules": {
+        "allow_spearhead_if_vp_deficit": true,
+        "allow_close_defense_on_flank": true
+      }
+    }
+  },
+  "UK_SERVICE_TROOPS": {
+    "side": "UK",
+    "category": "INFANTRY",
+    "subtype": "SERVICE_TROOPS",
+    "classification": "SUPPORT_INFANTRY",
+    "card_id": "Pr43",
+    "cost": 3,
+    "movement": 2,
+    "max_strength": 2,
+    "has_counter_flip": true,
+    "base_defense": {
+      "FRONT": [
+        "YELLOW"
+      ],
+      "FLANK_LEFT": [
+        "YELLOW"
+      ],
+      "FLANK_RIGHT": [
+        "YELLOW"
+      ],
+      "REAR": [
+        "YELLOW"
+      ]
+    },
+    "traits": [
+      "REAR_ECHELON"
+    ],
+    "attack": {
+      "DIRECT_FIRE": {
+        "VEHICLE": {
+          "0": {
+            "dice": [
+              "BLUE"
+            ]
+          }
+        },
+        "INFANTRY": {
+          "0": {
+            "dice": [
+              "GREEN"
+            ]
+          },
+          "1-3": {
+            "dice": [
+              "GREEN",
+              "BLUE"
+            ]
+          }
+        }
+      }
+    },
+    "doctrine_profile": {
+      "default_role": "SCREEN",
+      "optimal_engagement_range": [
+        1,
+        3
+      ],
+      "preferred_terrain": [
+        "BUILDING",
+        "WOODS",
+        "DEFILADE"
+      ],
+      "cohesion_weight": 0.8,
+      "fallback_threshold_hp": 1,
+      "mutation_rules": {
+        "allow_spearhead_if_vp_deficit": false,
+        "allow_close_defense_on_flank": false
+      }
+    }
+  },
+  "UK_SNIPER_43": {
+    "side": "UK",
+    "category": "INFANTRY",
+    "subtype": "SNIPER",
+    "classification": "SUPPORT_INFANTRY",
+    "card_id": "Pr43",
+    "cost": 4,
+    "movement": 2,
+    "max_strength": 2,
+    "has_counter_flip": true,
+    "base_defense": {
+      "FRONT": [
+        "YELLOW"
+      ],
+      "FLANK_LEFT": [
+        "YELLOW"
+      ],
+      "FLANK_RIGHT": [
+        "YELLOW"
+      ],
+      "REAR": [
+        "YELLOW"
+      ]
+    },
+    "traits": [
+      "SNIPER",
+      "HIDDEN"
+    ],
+    "attack": {
+      "DIRECT_FIRE": {
+        "VEHICLE": {
+          "0": {
+            "dice": [
+              "BLUE"
+            ]
+          }
+        },
+        "INFANTRY": {
+          "0": {
+            "dice": [
+              "YELLOW",
+              "GREEN"
+            ]
+          },
+          "1-4": {
+            "dice": [
+              "YELLOW",
+              "YELLOW"
+            ]
+          },
+          "5-7": {
+            "dice": [
+              "YELLOW",
+              "BLUE"
+            ]
+          },
+          "8-10": {
+            "dice": [
+              "GREEN",
+              "BLUE"
+            ]
+          }
+        }
+      }
+    },
+    "doctrine_profile": {
+      "default_role": "RECON",
+      "optimal_engagement_range": [
+        4,
+        8
+      ],
+      "preferred_terrain": [
+        "BUILDING",
+        "WOODS",
+        "HILL"
+      ],
+      "cohesion_weight": 0.8,
+      "fallback_threshold_hp": 1,
+      "mutation_rules": {
+        "allow_spearhead_if_vp_deficit": false,
+        "allow_close_defense_on_flank": false
+      }
+    }
+  },
+  "UK_VICKERS_MG": {
+    "side": "UK",
+    "category": "INFANTRY",
+    "subtype": "SUPPORT_MG",
+    "classification": "SUPPORT_INFANTRY",
+    "card_id": "Pr43",
+    "cost": 6,
+    "movement": 2,
+    "max_strength": 3,
+    "has_counter_flip": true,
+    "base_defense": {
+      "FRONT": [
+        "YELLOW"
+      ],
+      "FLANK_LEFT": [
+        "YELLOW"
+      ],
+      "FLANK_RIGHT": [
+        "YELLOW"
+      ],
+      "REAR": [
+        "YELLOW"
+      ]
+    },
+    "traits": [
+      "SLOW_UNIT",
+      "RAPID_FIRE"
+    ],
+    "attack": {
+      "DIRECT_FIRE": {
+        "VEHICLE": {
+          "0": {
+            "dice": [
+              "BLUE"
+            ]
+          }
+        },
+        "INFANTRY": {
+          "0": {
+            "dice": [
+              "YELLOW",
+              "YELLOW",
+              "GREEN"
+            ]
+          },
+          "1-5": {
+            "dice": [
+              "RED",
+              "RED",
+              "YELLOW",
+              "BLUE"
+            ]
+          },
+          "6-7": {
+            "dice": [
+              "RED",
+              "YELLOW",
+              "GREEN",
+              "BLUE"
+            ]
+          },
+          "8-11": {
+            "dice": [
+              "YELLOW",
+              "BLUE",
+              "BLUE"
+            ]
+          }
+        }
+      }
+    },
+    "doctrine_profile": {
+      "default_role": "FIRE_SUPPORT",
+      "optimal_engagement_range": [
+        3,
+        8
+      ],
+      "preferred_terrain": [
+        "HILL",
+        "BUILDING",
+        "WOODS"
+      ],
+      "cohesion_weight": 1.3,
+      "fallback_threshold_hp": 2,
+      "mutation_rules": {
+        "allow_spearhead_if_vp_deficit": false,
+        "allow_close_defense_on_flank": true
+      }
+    }
+  },
+  "US_37MM_ATG": {
+    "side": "US",
+    "category": "GUN_ARTILLERY",
+    "subtype": "SUPPORT_ATG",
+    "classification": "GUN_ARTILLERY",
+    "card_id": "S43",
+    "cost": 5,
+    "movement": 1,
+    "movement_type": "artillery",
+    "max_strength": 3,
+    "has_counter_flip": true,
+    "base_defense": {
+      "FRONT": [
+        "RED"
+      ],
+      "FLANK_LEFT": [
+        "YELLOW"
+      ],
+      "FLANK_RIGHT": [
+        "YELLOW"
+      ],
+      "REAR": [
+        "GREEN"
+      ]
+    },
+    "traits": [
+      "SLOW_UNIT",
+      "LOW_SILHOUETTE",
+      "SHIELD"
+    ],
+    "attack": {
+      "DIRECT_FIRE": {
+        "VEHICLE": {
+          "0": {
+            "dice": [
+              "GREEN"
+            ]
+          },
+          "1-3": {
+            "dice": [
+              "RED",
+              "YELLOW"
+            ]
+          },
+          "4-6": {
+            "dice": [
+              "YELLOW",
+              "GREEN"
+            ]
+          }
+        },
+        "INFANTRY": {
+          "0": {
+            "dice": [
+              "YELLOW"
+            ]
+          },
+          "1-3": {
+            "dice": [
+              "RED",
+              "GREEN"
+            ]
+          },
+          "4-6": {
+            "dice": [
+              "GREEN",
+              "BLUE"
+            ]
+          }
+        }
+      }
+    },
+    "doctrine_profile": {
+      "default_role": "FIRE_SUPPORT",
+      "optimal_engagement_range": [
+        1,
+        6
+      ],
+      "preferred_terrain": [
+        "HILL",
+        "WOODS",
+        "BUILDING"
+      ],
+      "cohesion_weight": 1.1,
+      "fallback_threshold_hp": 1,
+      "mutation_rules": {
+        "allow_spearhead_if_vp_deficit": false,
+        "allow_close_defense_on_flank": true
+      }
+    }
+  },
+  "US_57MM_ATG": {
+    "side": "US",
+    "category": "GUN_ARTILLERY",
+    "subtype": "SUPPORT_ATG",
+    "classification": "GUN_ARTILLERY",
+    "card_id": "S43",
+    "cost": 7,
+    "movement": 1,
+    "movement_type": "artillery",
+    "max_strength": 3,
+    "has_counter_flip": true,
+    "base_defense": {
+      "FRONT": [
+        "RED"
+      ],
+      "FLANK_LEFT": [
+        "YELLOW"
+      ],
+      "FLANK_RIGHT": [
+        "YELLOW"
+      ],
+      "REAR": [
+        "GREEN"
+      ],
+      "EXPLOSION": [
+        "BLUE"
+      ]
+    },
+    "traits": [
+      "SLOW_UNIT",
+      "LOW_SILHOUETTE",
+      "SHIELD"
+    ],
+    "attack": {
+      "DIRECT_FIRE": {
+        "VEHICLE": {
+          "0": {
+            "dice": [
+              "YELLOW"
+            ]
+          },
+          "1-4": {
+            "dice": [
+              "RED",
+              "RED",
+              "YELLOW"
+            ]
+          },
+          "5-7": {
+            "dice": [
+              "RED",
+              "YELLOW",
+              "GREEN"
+            ]
+          },
+          "8-10": {
+            "dice": [
+              "RED",
+              "GREEN"
+            ]
+          }
+        },
+        "INFANTRY": {
+          "0": {
+            "dice": [
+              "YELLOW"
+            ]
+          },
+          "1-4": {
+            "dice": [
+              "RED",
+              "YELLOW",
+              "GREEN"
+            ]
+          },
+          "5-7": {
+            "dice": [
+              "YELLOW",
+              "GREEN",
+              "BLUE"
+            ]
+          }
+        }
+      }
+    },
+    "doctrine_profile": {
+      "default_role": "FIRE_SUPPORT",
+      "optimal_engagement_range": [
+        1,
+        8
+      ],
+      "preferred_terrain": [
+        "HILL",
+        "WOODS",
+        "BUILDING"
+      ],
+      "cohesion_weight": 1.2,
+      "fallback_threshold_hp": 1,
+      "mutation_rules": {
+        "allow_spearhead_if_vp_deficit": false,
+        "allow_close_defense_on_flank": true
+      }
+    }
+  },
+  "US_60MM_MORTAR": {
+    "side": "US",
+    "category": "GUN_ARTILLERY",
+    "subtype": "SUPPORT_MORTAR",
+    "classification": "INDIRECT_FIRE_UNIT",
+    "card_id": "S43",
+    "cost": 5,
+    "movement": 2,
+    "max_strength": 2,
+    "has_counter_flip": true,
+    "base_defense": {
+      "FRONT": [
+        "YELLOW"
+      ],
+      "FLANK_LEFT": [
+        "YELLOW"
+      ],
+      "FLANK_RIGHT": [
+        "YELLOW"
+      ],
+      "REAR": [
+        "YELLOW"
+      ]
+    },
+    "traits": [
+      "SLOW_UNIT",
+      "INDIRECT_FIRE",
+      "SMOKE"
+    ],
+    "attack": {
+      "DIRECT_FIRE": {
+        "INFANTRY": {
+          "0": {
+            "dice": [
+              "YELLOW"
+            ]
+          },
+          "1": {
+            "dice": [
+              "YELLOW",
+              "BLUE"
+            ]
+          },
+          "2-4": {
+            "dice": [
+              "GREEN",
+              "BLUE"
+            ]
+          }
+        }
+      },
+      "INDIRECT_FIRE": {
+        "defense_loss": "WEAKEST",
+        "reroll": false,
+        "3-11": {
+          "dice": [
+            "RED",
+            "YELLOW",
+            "BLUE"
+          ]
+        }
+      },
+      "SMOKE": {
+        "target_hex": true,
+        "max_adjacent_hexes": 2,
+        "dice": [
+          "GREEN",
+          "GREEN",
+          "GREEN",
+          "BLUE",
+          "BLUE",
+          "BLUE"
+        ]
+      }
+    },
+    "doctrine_profile": {
+      "default_role": "FIRE_SUPPORT",
+      "optimal_engagement_range": [
+        2,
+        8
+      ],
+      "preferred_terrain": [
+        "BUILDING",
+        "WOODS",
+        "HILL"
+      ],
+      "cohesion_weight": 1.1,
+      "fallback_threshold_hp": 1,
+      "mutation_rules": {
+        "allow_spearhead_if_vp_deficit": false,
+        "allow_close_defense_on_flank": true
+      }
+    }
+  },
+  "US_40MM_BOFORS_AA": {
+    "side": "US",
+    "category": "GUN_ARTILLERY",
+    "subtype": "LIGHT_AA",
+    "classification": "GUN_ARTILLERY",
+    "card_id": "S43",
+    "cost": 8,
+    "movement": 1,
+    "movement_type": "artillery",
+    "max_strength": 4,
+    "has_counter_flip": true,
+    "base_defense": {
+      "FRONT": [
+        "YELLOW"
+      ],
+      "FLANK_LEFT": [
+        "YELLOW"
+      ],
+      "FLANK_RIGHT": [
+        "YELLOW"
+      ],
+      "REAR": [
+        "YELLOW"
+      ]
+    },
+    "traits": [
+      "RAPID_FIRE",
+      "SLOW_UNIT",
+      "PIVOT"
+    ],
+    "attack": {
+      "DIRECT_FIRE": {
+        "VEHICLE": {
+          "0": {
+            "dice": [
+              "YELLOW"
+            ]
+          },
+          "1-4": {
+            "dice": [
+              "YELLOW",
+              "BLUE"
+            ]
+          },
+          "5-7": {
+            "dice": [
+              "GREEN",
+              "BLUE"
+            ]
+          },
+          "8-10": {
+            "dice": [
+              "GREEN"
+            ]
+          }
+        },
+        "INFANTRY": {
+          "0": {
+            "dice": [
+              "YELLOW",
+              "YELLOW",
+              "BLUE"
+            ]
+          },
+          "1-4": {
+            "dice": [
+              "RED",
+              "YELLOW",
+              "BLUE",
+              "BLUE"
+            ]
+          },
+          "5-7": {
+            "dice": [
+              "RED",
+              "GREEN",
+              "BLUE"
+            ]
+          },
+          "8-10": {
+            "dice": [
+              "YELLOW",
+              "GREEN",
+              "BLUE"
+            ]
+          }
+        }
+      }
+    },
+    "doctrine_profile": {
+      "default_role": "FIRE_SUPPORT",
+      "optimal_engagement_range": [
+        1,
+        8
+      ],
+      "preferred_terrain": [
+        "HILL",
+        "BUILDING",
+        "WOODS"
+      ],
+      "cohesion_weight": 1.2,
+      "fallback_threshold_hp": 2,
+      "mutation_rules": {
+        "allow_spearhead_if_vp_deficit": false,
+        "allow_close_defense_on_flank": true
+      }
+    }
+  },
+  "US_50CAL_HMG": {
+    "side": "US",
+    "category": "INFANTRY",
+    "subtype": "SUPPORT_MG",
+    "classification": "SUPPORT_INFANTRY",
+    "card_id": "S43",
+    "cost": 6,
+    "movement": 2,
+    "max_strength": 3,
+    "has_counter_flip": true,
+    "base_defense": {
+      "FRONT": [
+        "YELLOW"
+      ],
+      "FLANK_LEFT": [
+        "YELLOW"
+      ],
+      "FLANK_RIGHT": [
+        "YELLOW"
+      ],
+      "REAR": [
+        "YELLOW"
+      ]
+    },
+    "traits": [
+      "SLOW_UNIT",
+      "RAPID_FIRE"
+    ],
+    "attack": {
+      "DIRECT_FIRE": {
+        "VEHICLE": {
+          "0": {
+            "dice": [
+              "YELLOW"
+            ]
+          },
+          "1-4": {
+            "dice": [
+              "YELLOW",
+              "GREEN"
+            ]
+          },
+          "5-7": {
+            "dice": [
+              "GREEN",
+              "BLUE"
+            ]
+          }
+        },
+        "INFANTRY": {
+          "0": {
+            "dice": [
+              "YELLOW",
+              "YELLOW",
+              "GREEN"
+            ]
+          },
+          "1-5": {
+            "dice": [
+              "RED",
+              "RED",
+              "YELLOW",
+              "BLUE"
+            ]
+          },
+          "6-8": {
+            "dice": [
+              "RED",
+              "YELLOW",
+              "GREEN",
+              "BLUE"
+            ]
+          },
+          "9-12": {
+            "dice": [
+              "YELLOW",
+              "BLUE",
+              "BLUE"
+            ]
+          }
+        }
+      }
+    },
+    "doctrine_profile": {
+      "default_role": "FIRE_SUPPORT",
+      "optimal_engagement_range": [
+        3,
+        8
+      ],
+      "preferred_terrain": [
+        "HILL",
+        "BUILDING",
+        "WOODS"
+      ],
+      "cohesion_weight": 1.3,
+      "fallback_threshold_hp": 2,
+      "mutation_rules": {
+        "allow_spearhead_if_vp_deficit": false,
+        "allow_close_defense_on_flank": true
+      }
+    }
+  },
+  "US_M1919A4_30CAL_MMG": {
+    "side": "US",
+    "category": "INFANTRY",
+    "subtype": "SUPPORT_MG",
+    "classification": "SUPPORT_INFANTRY",
+    "card_id": "S43",
+    "cost": 5,
+    "movement": 2,
+    "max_strength": 3,
+    "has_counter_flip": true,
+    "base_defense": {
+      "FRONT": [
+        "YELLOW"
+      ],
+      "FLANK_LEFT": [
+        "YELLOW"
+      ],
+      "FLANK_RIGHT": [
+        "YELLOW"
+      ],
+      "REAR": [
+        "YELLOW"
+      ]
+    },
+    "traits": [
+      "SLOW_UNIT",
+      "RAPID_FIRE"
+    ],
+    "attack": {
+      "DIRECT_FIRE": {
+        "VEHICLE": {
+          "0": {
+            "dice": [
+              "BLUE"
+            ]
+          }
+        },
+        "INFANTRY": {
+          "0": {
+            "dice": [
+              "YELLOW",
+              "GREEN"
+            ]
+          },
+          "1-4": {
+            "dice": [
+              "RED",
+              "YELLOW",
+              "BLUE"
+            ]
+          },
+          "5-7": {
+            "dice": [
+              "YELLOW",
+              "GREEN",
+              "BLUE"
+            ]
+          },
+          "8-10": {
+            "dice": [
+              "GREEN",
+              "BLUE"
+            ]
+          }
+        }
+      }
+    },
+    "doctrine_profile": {
+      "default_role": "FIRE_SUPPORT",
+      "optimal_engagement_range": [
+        2,
+        7
+      ],
+      "preferred_terrain": [
+        "HILL",
+        "BUILDING",
+        "WOODS"
+      ],
+      "cohesion_weight": 1.2,
+      "fallback_threshold_hp": 2,
+      "mutation_rules": {
+        "allow_spearhead_if_vp_deficit": false,
+        "allow_close_defense_on_flank": true
+      }
+    }
+  },
+  "US_BAZOOKA_TEAM_43": {
+    "side": "US",
+    "category": "INFANTRY",
+    "subtype": "STANDARD_INFANTRY",
+    "classification": "STANDARD_INFANTRY",
+    "card_id": "S43",
+    "cost": 6,
+    "movement": 2,
+    "max_strength": 4,
+    "base_defense": {
+      "FRONT": [
+        "YELLOW"
+      ],
+      "FLANK_LEFT": [
+        "YELLOW"
+      ],
+      "FLANK_RIGHT": [
+        "YELLOW"
+      ],
+      "REAR": [
+        "YELLOW"
+      ]
+    },
+    "traits": [],
+    "attack": {
+      "DIRECT_FIRE": {
+        "VEHICLE": {
+          "0": {
+            "dice": [
+              "RED",
+              "RED"
+            ]
+          }
+        },
+        "INFANTRY": {
+          "0": {
+            "dice": [
+              "RED",
+              "RED"
+            ]
+          },
+          "1-2": {
+            "dice": [
+              "YELLOW",
+              "YELLOW"
+            ]
+          },
+          "3-6": {
+            "dice": [
+              "BLUE",
+              "BLUE"
+            ]
+          },
+          "7-9": {
+            "dice": [
+              "BLUE"
+            ]
+          }
+        }
+      }
+    }
   }
 }

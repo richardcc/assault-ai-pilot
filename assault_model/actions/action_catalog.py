@@ -14,6 +14,7 @@ from assault_model.actions.composite_fire import MoveThenFireAction, FireThenMov
 from assault_model.actions.explosive_charge import ExplosiveChargeAction
 from assault_model.actions.mine_detection import MineDetectionAction
 from assault_model.map.hex_utils import neighbors as hex_neighbors
+from assault_model.map.combat_geometry import is_in_arc_of_fire
 
 
 import os
@@ -201,6 +202,12 @@ class ActionCatalog:
                     continue
                 if not self._has_line_of_sight(active, other):
                     continue
+
+                # LIMITED_PIVOT constraint (240° to flanks and rear; frontal arc blocked by vehicle cab)
+                has_lim_pivot = getattr(active, "has_trait", lambda t: False)("LIMITED_PIVOT") or getattr(active, "has_trait", lambda t: False)("LIMITED_PIVOT_240")
+                if has_lim_pivot:
+                    if not is_in_arc_of_fire(active.position, getattr(active, "facing", "N"), other.position, has_limited_pivot=True):
+                        continue
 
                 _trace(
                     "ACTION_ADD",

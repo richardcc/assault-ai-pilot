@@ -3,9 +3,7 @@ from assault_model.combat.spotting import can_spot
 
 
 def update_spotting(state, terrain_config):
-
     for unit in state.units:
-
         if not unit.alive:
             unit.spotted_enemies = set()
             continue
@@ -13,14 +11,13 @@ def update_spotting(state, terrain_config):
         visible = []
 
         for other in state.units:
-
             if other.side == unit.side:
                 continue
 
             if not other.alive:
                 continue
 
-            # ✅ LOS correcto
+            # Check line of sight
             los = check_line_of_sight(
                 unit,
                 other,
@@ -28,7 +25,7 @@ def update_spotting(state, terrain_config):
                 terrain_config
             )
 
-            # ✅ spotting coherente
+            # Spotting resolution
             if can_spot(unit, other, los, state.game_map, terrain_config):
                 visible.append(other.unit_id)
 

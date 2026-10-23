@@ -38,6 +38,10 @@ class InferenceService:
     ):
         self.model = model
         self.device = str(device)
+        if torch.cuda.is_available() and "cuda" in self.device:
+            torch.backends.cuda.matmul.allow_tf32 = True
+            torch.backends.cudnn.allow_tf32 = True
+            torch.backends.cudnn.benchmark = True
         self.max_batch_size = int(max(1, max_batch_size))
         self.batch_wait_s = float(max(0.0, batch_wait_ms)) / 1000.0
         self._q: queue.Queue[_InferenceRequest | None] = queue.Queue()
@@ -86,19 +90,33 @@ class InferenceService:
         return req.result
 
     def _loop(self) -> None:
+        if torch.cuda.is_available() and "cuda" in self.device:
+            torch.backends.cuda.matmul.allow_tf32 = True
+            torch.backends.cudnn.allow_tf32 = True
+            torch.backends.cudnn.benchmark = True
         while self._running:
             item = self._q.get()
             if item is None:
                 break
             batch = [item]
             t0 = time.perf_counter()
+            # Fast-path: eagerly drain all already queued requests without sleeping
             while len(batch) < self.max_batch_size:
-                if self.batch_wait_s <= 0.0:
-                    try:
-                        nxt = self._q.get_nowait()
-                    except queue.Empty:
-                        break
-                else:
+                try:
+                    nxt = self._q.get_nowait()
+                except queue.Empty:
+                    break
+                if nxt is None:
+                    self._q.put(None)
+                    break
+                if nxt.method != item.method or nxt.kwargs != item.kwargs:
+                    self._q.put(nxt)
+                    break
+                batch.append(nxt)
+
+            # Only wait if batch is very small (< 4) and wait time is positive
+            if len(batch) < min(4, self.max_batch_size) and self.batch_wait_s > 0.0:
+                while len(batch) < self.max_batch_size:
                     remaining = self.batch_wait_s - (time.perf_counter() - t0)
                     if remaining <= 0.0:
                         break
@@ -106,14 +124,14 @@ class InferenceService:
                         nxt = self._q.get(timeout=remaining)
                     except queue.Empty:
                         break
-                if nxt is None:
-                    self._q.put(None)
-                    break
-                if nxt.method != item.method or nxt.kwargs != item.kwargs:
-                    # Different method or kwargs: process later to keep tensor shapes simple.
-                    self._q.put(nxt)
-                    break
-                batch.append(nxt)
+                    if nxt is None:
+                        self._q.put(None)
+                        break
+                    if nxt.method != item.method or nxt.kwargs != item.kwargs:
+                        self._q.put(nxt)
+                        break
+                    batch.append(nxt)
+
             self._run_batch(batch)
 
     def _run_batch(self, batch: list[_InferenceRequest]) -> None:

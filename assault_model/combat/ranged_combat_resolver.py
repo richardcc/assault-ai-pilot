@@ -7,7 +7,8 @@ from assault_model.combat.critical_effect import CriticalEffect
 from assault_model.combat.dice_color import DiceColor
 from assault_model.combat.dice_face import DiceFace
 from assault_model.combat.attack_sector import AttackSector
-from assault_model.map.combat_geometry import determine_attack_sector, calculate_facing_towards
+from assault_model.map.combat_geometry import determine_attack_sector, calculate_facing_towards, is_in_arc_of_fire
+from assault_model.map.hex_utils import safe_hex_distance
 from assault_model.runtime.execution_context import ExecutionContext
 from assault_model.combat.battle_die import DiceResult, BattleDie
 from assault_model.combat.dice_comparison import compare_dice
@@ -151,6 +152,20 @@ def resolve_ranged_combat(
                 los=los.name,
             )
             return CombatResolutionResult([], [], [])
+
+    # Arc of fire gate for LIMITED_PIVOT (240° to flanks and rear; forward arc blocked)
+    if not is_indirect:
+        has_pivot = _has_trait(attacker, "PIVOT")
+        has_lim_pivot = _has_trait(attacker, "LIMITED_PIVOT") or _has_trait(attacker, "LIMITED_PIVOT_240")
+        if has_lim_pivot and not has_pivot:
+            if not is_in_arc_of_fire(
+                attacker.position,
+                getattr(attacker, "facing", "N"),
+                target.position,
+                has_limited_pivot=True,
+            ):
+                _trace("RANGED_BLOCKED_LIMITED_PIVOT_ARC", attacker=attacker.unit_id, defender=target.unit_id)
+                return CombatResolutionResult([], [], [])
 
     # =================================================
     # INDIRECT RESTRICTIONS
@@ -369,6 +384,19 @@ def resolve_ranged_combat(
         fort_type = None
         fort_bonus = []
 
+    # Flamethrower strips defender's strongest defense die (Card L3/35 Flame)
+    if _has_trait(attacker, "FLAMETHROWER") and defense_colors:
+        strongest_def = max(defense_colors, key=lambda c: int(c))
+        defense_colors.remove(strongest_def)
+        _trace("FLAMETHROWER_REMOVED_STRONGEST_DEFENSE", attacker=attacker.unit_id, defender=target.unit_id, removed=strongest_def.name)
+
+    # Back Blast degrades Yellow defense die to Green when target has fired this turn (Cards S43 / Pr43)
+    if _has_trait(target, "BACK_BLAST") and bool(getattr(target, "has_fired_this_turn", False)):
+        if DiceColor.YELLOW in defense_colors:
+            y_idx = defense_colors.index(DiceColor.YELLOW)
+            defense_colors[y_idx] = DiceColor.GREEN
+            _trace("BACK_BLAST_DEGRADED_YELLOW_TO_GREEN", defender=target.unit_id)
+
     defense_results = DefenseDicePool(defense_colors).roll()
 
     # ---------------- RESOLUTION ----------------
@@ -380,6 +408,25 @@ def resolve_ranged_combat(
     dmg = comparison["remaining_damage"]
     crits = comparison["remaining_criticals"]
     suppress = comparison["remaining_suppress"]
+
+    # Rule: Flamethrower causes 1 suppression ('X') automatically
+    if _has_trait(attacker, "FLAMETHROWER") and target.alive:
+        suppress += 1
+        _trace("FLAMETHROWER_AUTO_SUPPRESSION", attacker=attacker.unit_id, defender=target.unit_id)
+
+    # Rule: Rear Echelon Troops (without adjacent friendly unit, attacker receives automatic 'X' hit)
+    if _has_trait(target, "REAR_ECHELON"):
+        gs = getattr(context, "game_state", None) if context else None
+        has_adj_friendly = False
+        if gs and hasattr(gs, "units"):
+            for u in gs.units:
+                if u.unit_id != target.unit_id and u.side == target.side and getattr(u, "alive", True):
+                    if safe_hex_distance(u.position, target.position) <= 1:
+                        has_adj_friendly = True
+                        break
+        if not has_adj_friendly:
+            suppress += 1
+            _trace("REAR_ECHELON_AUTO_HIT", attacker=attacker.unit_id, defender=target.unit_id)
 
     criticals = [
         resolve_critical(

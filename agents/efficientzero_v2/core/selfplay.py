@@ -1960,20 +1960,26 @@ def _decision_ranked_candidates(
     return rows
 
 
-def _priors_and_values(model, obs_encoded, legal_actions: list[str], action_dim: int):
-    if model is None or not legal_actions:
+def _priors_and_values(model, obs_encoded, legal_actions: list[str], action_dim: int, cached_inference: tuple | None = None):
+    if not legal_actions:
         return None, None, {}
-    model_device = next(model.parameters()).device
     with torch.inference_mode():
-        if str(getattr(model, "encoder_type", "mlp")) == "cnn":
-            obs_tensor = obs_encoded.unsqueeze(0).to(model_device)
+        if cached_inference is not None:
+            policy_logits, value_root, aux_out = cached_inference
+            model_device = policy_logits.device
         else:
-            obs_tensor = torch.tensor([obs_encoded], dtype=torch.float32, device=model_device)
-        aux_out: dict = {}
-        try:
-            _, policy_logits, value_root, _, aux_out = model.initial_inference(obs_tensor, return_aux=True)
-        except TypeError:
-            _, policy_logits, value_root, _ = model.initial_inference(obs_tensor)
+            if model is None:
+                return None, None, {}
+            model_device = next(model.parameters()).device
+            if str(getattr(model, "encoder_type", "mlp")) == "cnn":
+                obs_tensor = obs_encoded.unsqueeze(0).to(model_device)
+            else:
+                obs_tensor = torch.tensor([obs_encoded], dtype=torch.float32, device=model_device)
+            aux_out: dict = {}
+            try:
+                _, policy_logits, value_root, _, aux_out = model.initial_inference(obs_tensor, return_aux=True)
+            except TypeError:
+                _, policy_logits, value_root, _ = model.initial_inference(obs_tensor)
         logits = policy_logits[0]
         idx = [_action_id_to_index(a, action_dim) for a in legal_actions]
         idx_t = torch.tensor(idx, dtype=torch.long, device=model_device)
@@ -2238,11 +2244,31 @@ class _NativeEZV2SelfplayBackend:
                     # does not collapse to tiny per-unit trees when many units
                     # are considered.
                     per_unit_sims = max(8, int(mcts_simulations))
+                    step_inference_cache = None
+                    if model is not None and ranked_unit_ids:
+                        try:
+                            model_dev = next(model.parameters()).device
+                            with torch.inference_mode():
+                                if str(getattr(model, "encoder_type", "mlp")) == "cnn":
+                                    obs_t = obs_encoded.unsqueeze(0).to(model_dev)
+                                else:
+                                    obs_t = torch.tensor([obs_encoded], dtype=torch.float32, device=model_dev)
+                                aux_s: dict = {}
+                                try:
+                                    _, p_log_s, v_root_s, _, aux_s = model.initial_inference(obs_t, return_aux=True)
+                                except TypeError:
+                                    _, p_log_s, v_root_s, _ = model.initial_inference(obs_t)
+                                step_inference_cache = (p_log_s, v_root_s, aux_s)
+                        except Exception:
+                            step_inference_cache = None
+
                     for uid in ranked_unit_ids:
                         unit_actions = list(actions_by_unit.get(str(uid), []) or [])
                         if not unit_actions:
                             continue
-                        priors_u, values_u, xai_u = _priors_and_values(model, obs_encoded, unit_actions, int(action_dim))
+                        priors_u, values_u, xai_u = _priors_and_values(
+                            model, obs_encoded, unit_actions, int(action_dim), cached_inference=step_inference_cache
+                        )
                         if isinstance(xai_u, dict) and (xai_u.get("neural_intent_logits") or xai_u.get("neural_multi_vp_pred")):
                             macro_plan = macro_planner.compute_macro_plan(
                                 obs,

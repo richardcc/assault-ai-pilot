@@ -32,26 +32,35 @@ FORMATION_INVENTORY_PATH = REPO_ROOT / "assets" / "catalogs" / "formation_art_in
 STANDARD_TRAITS = [
     "ANTI_TANK",
     "ASSAULT",
+    "BACK_BLAST",
     "BANGALORE_TORPEDO",
     "CAMOUFLAGED",
     "CONCEALED",
     "EXPLOSIVE_CHARGE",
     "FAST_DISEMBARK",
+    "FLAMETHROWER",
     "FRAGILE_UNIT",
+    "HEAVY_WEIGHT",
     "HIDDEN",
+    "IMMOBILE",
     "INDIRECT_FIRE",
+    "LIMITED_PIVOT",
+    "LOW_SILHOUETTE",
     "MINE_DETECTION",
     "NO_LINE_OF_SIGHT",
     "PARATROOPS",
     "PIVOT",
     "RAPID_FIRE",
+    "REAR_ECHELON",
     "RECON_PATROL",
     "RIFLE_GRENADES",
     "SCOUT",
+    "SET_UP_TIME",
     "SLOW_UNIT",
     "SMOKE",
     "SMOKE_GRENADES",
     "SNIPER",
+    "TALL_SILHOUETTE",
     "TANK_BUSTERS",
     "TOUGH",
 ]
@@ -229,7 +238,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
     .die-BLUE { background: #2563eb; border: 1px solid #60a5fa; }
     .die-empty { font-size: 0.75rem; color: #64748b; font-style: italic; }
 
-    .die-picker { display: inline-flex; gap: 0.2rem; align-items: center; background: #0b1120; padding: 0.2rem 0.4rem; border-radius: 6px; border: 1px solid var(--card-border); margin-left: 0.5rem; }
+    .die-picker { display: inline-flex; gap: 0.2rem; align-items: center; background: #0b1120; padding: 0.2rem 0.4rem; border-radius: 6px; border: 1px solid var(--card-border); margin-right: 0.5rem; flex-shrink: 0; }
     .btn-add-die { width: 18px; height: 18px; border-radius: 3px; font-size: 0.65rem; font-weight: 900; display: inline-flex; align-items: center; justify-content: center; cursor: pointer; border: none; }
 
     .btn-small { padding: 0.25rem 0.5rem; font-size: 0.75rem; border-radius: 4px; cursor: pointer; border: none; font-weight: 600; }
@@ -305,12 +314,19 @@ HTML_TEMPLATE = """<!DOCTYPE html>
         <button type="button" id="filter-staged" class="filter-btn filter-staged" onclick="setStatusFilter('staged')">🟡 Staged (<span id="count-stg">0</span>)</button>
         <button type="button" id="filter-pending" class="filter-btn filter-pending" onclick="setStatusFilter('pending')">⚪ Pending (<span id="count-pen">0</span>)</button>
       </div>
-      <div class="faction-filters">
+            <div class="faction-filters">
         <button type="button" id="filter-faction-all" class="filter-btn filter-faction active" onclick="setFactionFilter('all')">All</button>
         <button type="button" id="filter-faction-GE" class="filter-btn filter-faction" onclick="setFactionFilter('GE')">🇩🇪 GE (<span id="count-fac-GE">0</span>)</button>
         <button type="button" id="filter-faction-US" class="filter-btn filter-faction" onclick="setFactionFilter('US')">🇺🇸 US (<span id="count-fac-US">0</span>)</button>
         <button type="button" id="filter-faction-UK" class="filter-btn filter-faction" onclick="setFactionFilter('UK')">🇬🇧 UK (<span id="count-fac-UK">0</span>)</button>
         <button type="button" id="filter-faction-IT" class="filter-btn filter-faction" onclick="setFactionFilter('IT')">🇮🇹 IT (<span id="count-fac-IT">0</span>)</button>
+      </div>
+      <div class="category-filters" style="display: flex; gap: 0.25rem; margin-bottom: 0.6rem; flex-wrap: wrap;">
+        <button type="button" id="filter-category-all" class="filter-btn filter-category active" onclick="setCategoryFilter('all')">All</button>
+        <button type="button" id="filter-category-INFANTRY" class="filter-btn filter-category" onclick="setCategoryFilter('INFANTRY')">🪖 Inf (<span id="count-cat-INFANTRY">0</span>)</button>
+        <button type="button" id="filter-category-GUN_ARTILLERY" class="filter-btn filter-category" onclick="setCategoryFilter('GUN_ARTILLERY')">🎯 Art (<span id="count-cat-GUN_ARTILLERY">0</span>)</button>
+        <button type="button" id="filter-category-VEHICLE" class="filter-btn filter-category" onclick="setCategoryFilter('VEHICLE')">🛡️ Veh (<span id="count-cat-VEHICLE">0</span>)</button>
+        <button type="button" id="filter-category-TRANSPORT" class="filter-btn filter-category" onclick="setCategoryFilter('TRANSPORT')">🚚 Trp (<span id="count-cat-TRANSPORT">0</span>)</button>
       </div>
       <div style="margin-bottom: 0.8rem;">
         <select id="filter-trait-select" class="search-box" style="margin-bottom: 0; padding: 0.45rem; font-size: 0.8rem;" onchange="setTraitFilter(this.value)">
@@ -678,9 +694,22 @@ HTML_TEMPLATE = """<!DOCTYPE html>
     let defenseData = {};
     let attackData = {};
 
-    let currentStatusFilter = 'all';
+        let currentStatusFilter = 'all';
     let currentFactionFilter = 'all';
+    let currentCategoryFilter = 'all';
     let currentTraitFilter = 'all';
+
+    function setCategoryFilter(category) {
+      currentCategoryFilter = category;
+      ['all', 'INFANTRY', 'GUN_ARTILLERY', 'VEHICLE', 'TRANSPORT'].forEach(c => {
+        const btn = document.getElementById('filter-category-' + c);
+        if (btn) {
+          if (c === category) btn.classList.add('active');
+          else btn.classList.remove('active');
+        }
+      });
+      renderSidebar();
+    }
 
     // Formation State
     let formations = {};
@@ -689,6 +718,19 @@ HTML_TEMPLATE = """<!DOCTYPE html>
     let currentFormationData = null;
     let formationFactionFilter = 'all';
     let formationStatusFilter = 'all';
+
+        function getUnitStatus(u) {
+      if (!u) return 'pending';
+      const id = u.id;
+      const catKey = u.catalog_key;
+      if (catalog[id] || (catKey && catalog[catKey])) {
+        return 'published';
+      }
+      if (staging[id] || (catKey && staging[catKey])) {
+        return 'staged';
+      }
+      return 'pending';
+    }
 
     let isLoadingData = false;
     async function loadData(retryCount = 0) {
@@ -705,10 +747,10 @@ HTML_TEMPLATE = """<!DOCTYPE html>
         staging = data.staging || {};
         availableTraits = data.traits || [];
         
-        const pubCount = Object.keys(catalog).length;
-        const stgCount = Object.keys(staging).length;
+                const pubCount = inventory.filter(u => getUnitStatus(u) === 'published').length;
+        const stgCount = inventory.filter(u => getUnitStatus(u) === 'staged').length;
+        const penCount = inventory.filter(u => getUnitStatus(u) === 'pending').length;
         const totalCount = inventory.length;
-        const penCount = inventory.filter(u => !catalog[u.id] && !staging[u.id]).length;
 
         const elCat = document.getElementById('catalog-count');
         if (elCat) elCat.innerText = pubCount + ' Published';
@@ -724,10 +766,16 @@ HTML_TEMPLATE = """<!DOCTYPE html>
         const elPen = document.getElementById('count-pen');
         if (elPen) elPen.innerText = penCount;
 
-        const factions = ['GE', 'US', 'UK', 'IT'];
+                const factions = ['GE', 'US', 'UK', 'IT'];
         factions.forEach(f => {
           const el = document.getElementById('count-fac-' + f);
           if (el) el.innerText = inventory.filter(u => u.faction === f).length;
+        });
+
+        const categories = ['INFANTRY', 'GUN_ARTILLERY', 'VEHICLE', 'TRANSPORT'];
+        categories.forEach(c => {
+          const el = document.getElementById('count-cat-' + c);
+          if (el) el.innerText = inventory.filter(u => u.category === c).length;
         });
 
         const traitSelect = document.getElementById('filter-trait-select');
@@ -832,7 +880,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
       inventory.forEach(u => {
         const id = u.id;
         const name = u.name;
-        if (q && !id.toLowerCase().includes(q) && !name.toLowerCase().includes(q) && !u.faction.toLowerCase().includes(q)) {
+        if (q && !id.toLowerCase().includes(q) && !name.toLowerCase().includes(q) && !u.faction.toLowerCase().includes(q) && !(u.category && u.category.toLowerCase().includes(q))) {
           return;
         }
 
@@ -840,31 +888,31 @@ HTML_TEMPLATE = """<!DOCTYPE html>
           return;
         }
 
-        const sourceData = catalog[id] || staging[id] || {};
+        if (currentCategoryFilter !== 'all' && u.category !== currentCategoryFilter) {
+          return;
+        }
+
+        const status = getUnitStatus(u);
+        if (currentStatusFilter !== 'all' && currentStatusFilter !== status) {
+          return;
+        }
+
+        const catKey = u.catalog_key;
+        const sourceData = catalog[id] || (catKey && catalog[catKey]) || staging[id] || (catKey && staging[catKey]) || {};
         const unitTraits = sourceData.traits || [];
 
         if (currentTraitFilter !== 'all' && !unitTraits.includes(currentTraitFilter)) {
           return;
         }
 
-        const isPublished = Boolean(catalog[id]);
-        const isStaged = Boolean(staging[id]);
-
         let badgeClass = 'badge-pending';
         let badgeText = 'Pending';
-        let status = 'pending';
-        if (isPublished) {
+        if (status === 'published') {
           badgeClass = 'badge-published';
           badgeText = 'Published';
-          status = 'published';
-        } else if (isStaged) {
+        } else if (status === 'staged') {
           badgeClass = 'badge-staged';
           badgeText = 'Staged';
-          status = 'staged';
-        }
-
-        if (currentStatusFilter !== 'all' && currentStatusFilter !== status) {
-          return;
         }
 
         const li = document.createElement('li');
@@ -920,13 +968,12 @@ HTML_TEMPLATE = """<!DOCTYPE html>
 
       document.getElementById('unit-title').innerText = u.name + ' (' + u.id + ')';
 
-      const isPublished = Boolean(catalog[u.id]);
-      const isStaged = Boolean(staging[u.id]);
+      const status = getUnitStatus(u);
       const badge = document.getElementById('status-badge');
-      if (isPublished) {
+      if (status === 'published') {
         badge.className = 'badge badge-published';
         badge.innerText = '🟢 Published in Catalog';
-      } else if (isStaged) {
+      } else if (status === 'staged') {
         badge.className = 'badge badge-staged';
         badge.innerText = '🟡 Staged Proposal';
       } else {
@@ -934,7 +981,8 @@ HTML_TEMPLATE = """<!DOCTYPE html>
         badge.innerText = '⚪ Pending Values';
       }
 
-      const source = catalog[u.id] || staging[u.id] || {};
+      const catKey = u.catalog_key;
+      const source = catalog[u.id] || (catKey && catalog[catKey]) || staging[u.id] || (catKey && staging[catKey]) || {};
 
       document.getElementById('field-id').value = u.id;
       document.getElementById('field-side').value = source.side || u.faction;
@@ -1044,15 +1092,15 @@ HTML_TEMPLATE = """<!DOCTYPE html>
             <span>${ARC_LABELS[arc] || arc}</span>
             <span style="font-size: 0.65rem; color: var(--text-muted);">${dice ? dice.length : 0} die(s)</span>
           </div>
-          <div class="dice-badge-container" style="min-height: 26px; margin-bottom: 0.4rem;">
-            ${diceBadges}
-          </div>
-          <div style="display: flex; gap: 0.2rem; align-items: center; background: #0b1120; padding: 0.2rem 0.35rem; border-radius: 4px; border: 1px solid var(--card-border);">
+          <div style="display: flex; gap: 0.2rem; align-items: center; background: #0b1120; padding: 0.2rem 0.35rem; border-radius: 4px; border: 1px solid var(--card-border); margin-bottom: 0.4rem;">
             <span style="font-size: 0.65rem; color: var(--text-muted); margin-right: 2px;">+</span>
             <button type="button" class="btn-add-die die-RED" title="Add Red die" onclick="addDefenseDie('${arc}', 'RED')">R</button>
             <button type="button" class="btn-add-die die-YELLOW" title="Add Yellow die" onclick="addDefenseDie('${arc}', 'YELLOW')">Y</button>
             <button type="button" class="btn-add-die die-GREEN" title="Add Green die" onclick="addDefenseDie('${arc}', 'GREEN')">G</button>
             <button type="button" class="btn-add-die die-BLUE" title="Add Blue die" onclick="addDefenseDie('${arc}', 'BLUE')">B</button>
+          </div>
+          <div class="dice-badge-container" style="min-height: 26px;">
+            ${diceBadges}
           </div>
         `;
         container.appendChild(card);
@@ -1075,30 +1123,39 @@ HTML_TEMPLATE = """<!DOCTYPE html>
     // --- TRAITS CHIPS ---
     
     const TRAIT_DESCRIPTIONS = {
-      "ANTI_TANK": "[Tablas] Armamento pesado contracarro (dados masivos vs blindados).",
-      "ASSAULT": "[Motor] Especialista en asalto a distancia 0 y combate cuerpo a cuerpo.",
-      "BANGALORE_TORPEDO": "[Demolición] Carga lineal para volar alambradas y minas adyacentes.",
-      "CAMOUFLAGED": "[Catálogo] Requiere dos chequeos exitosos para ser detectado en cobertura.",
-      "CONCEALED": "[Declarativo] Ocultación pasiva avanzada.",
-      "EXPLOSIVE_CHARGE": "[Implementado] Acción de demolición (Regla 12.5) contra edificios, búnkers y minas.",
-      "FAST_DISEMBARK": "[Roadmap L3] Desembarco rápido de vehículos semiorugas por 1 MP.",
-      "FRAGILE_UNIT": "[Atributos] Equipo reducido (2 HP) vulnerable a desgaste rápido y moral.",
-      "HIDDEN": "[Implementado] Inmune a avistamiento automático hasta disparar o correr.",
-      "INDIRECT_FIRE": "[Implementado] Fuego parabólico sin necesidad de línea de visión directa libre.",
-      "MINE_DETECTION": "[Implementado] Bono +2 en tirada D6 de detección y neutralización de minas.",
-      "NO_LINE_OF_SIGHT": "[Implementado] Prioriza tiro indirecto parabólico ante blancos cubiertos.",
-      "PARATROOPS": "[Parcial] Tropas paracaidistas con alta cohesión moral y rasgo TOUGH.",
-      "PIVOT": "[Implementado] Rotación libre de 360 grados sin penalización de puntos de movimiento.",
-      "RAPID_FIRE": "[Implementado] Relanza 1 dado de ataque desfavorables en combate o asalto.",
-      "RECON_PATROL": "[Scout] Patrulla de choque en vanguardia y exploración en niebla de guerra.",
-      "RIFLE_GRENADES": "[Tablas] Disparo de granadas de fusil a distancia 1-3 con tiro curvo.",
-      "SCOUT": "[Implementado] Bono +1 en detección de minas y rol doctrinal RECON en IA.",
-      "SLOW_UNIT": "[Implementado] No puede usar avance acelerado ni acciones dobles de movimiento.",
-      "SMOKE": "[Implementado] Despliega cortinas de humo que bloquean LOS y dan cobertura.",
-      "SMOKE_GRENADES": "[Implementado] Granadas fumígenas de infantería de corto alcance.",
-      "SNIPER": "[Implementado] Elimina el dado de terreno más fuerte del defensor contra infantería.",
-      "TANK_BUSTERS": "[Asalto] Asalto contracarro cuerpo a cuerpo con armas magnéticas o explosivas.",
-      "TOUGH": "[Implementado] Ignora 1 punto de daño en la primera ronda de combate cuerpo a cuerpo."
+      "ANTI_TANK": "[Tables] Heavy anti-tank weaponry (massive penetration dice vs vehicles).",
+      "ASSAULT": "[Engine] Assault specialist at range 0 and close-quarters combat.",
+      "BANGALORE_TORPEDO": "[Demolition] Linear explosive charge to breach adjacent barbed wire and minefields.",
+      "CAMOUFLAGED": "[Implemented] Passive tactical camouflage in vegetation and cover.",
+      "CONCEALED": "[Implemented] Passive stealth and concealment in hindered terrain.",
+      "EXPLOSIVE_CHARGE": "[Implemented] Demolition action (Rule 12.5) against buildings, bunkers, and minefields.",
+      "FAST_DISEMBARK": "[Roadmap L3] Quick disembark from halftracks consuming only 1 MP.",
+      "FRAGILE_UNIT": "[Attributes] Reduced crew (2 HP) vulnerable to rapid attrition and morale tests.",
+      "HEAVY_WEIGHT": "[Movement] This unit must be transported to move up or down an elevation level (hills/crests).",
+      "HIDDEN": "[Implemented] Immune to automatic spotting until firing or fast moving.",
+      "INDIRECT_FIRE": "[Implemented] High-angle parabolic fire without requiring direct line of sight.",
+      "LOW_SILHOUETTE": "[Implemented] When defending, applies -1 modifier to attacker's spotting rolls (§10.5, §12.3, §12.4).",
+      "MINE_DETECTION": "[Implemented] +2 bonus on D6 rolls for detecting and probing minefields.",
+      "NO_LINE_OF_SIGHT": "[Implemented] Automatically prioritizes indirect fire against covered targets.",
+      "PARATROOPS": "[Scenario] Airborne elite troops with high cohesion and TOUGH trait.",
+      "PIVOT": "[Implemented] 360-degree free turret/mount rotation without MP penalty.",
+      "RAPID_FIRE": "[Implemented] Re-rolls 1 unfavorable attack die in ranged or close combat.",
+      "RECON_PATROL": "[Doctrine] Vanguard shock patrol and exploration in fog of war.",
+      "RIFLE_GRENADES": "[Tables] Rifle grenade launcher attacks at range 1-3 with curved fire.",
+      "SCOUT": "[Implemented] +1 bonus on mine detection rolls and RECON doctrine role.",
+      "SLOW_UNIT": "[Implemented] Heavy weapon crew unable to perform fast or move-fire actions.",
+      "SMOKE": "[Implemented] Deploys ballistic smoke screens that block LOS and provide cover.",
+      "SMOKE_GRENADES": "[Implemented] Short-range tactical smoke grenades for infantry.",
+      "SNIPER": "[Implemented] Removes defender's strongest terrain defense die against infantry.",
+      "TANK_BUSTERS": "[Assault] Close-quarters tank hunter assault with magnetic charges and Molotovs.",
+      "TOUGH": "[Implemented] Ignores 1 point of damage in the first round of close combat.",
+      "BACK_BLAST": "[Artillery] Firing while marked reduces one Yellow defense die to Green.",
+      "FLAMETHROWER": "[Special Weapon] Attacks ignore strongest defense die and inflict automatic suppression.",
+      "IMMOBILE": "[Heavy Artillery] Fixed gun mount with 0 autonomous MP; requires transport towing.",
+      "LIMITED_PIVOT": "[Arc of Fire] 240-degree firing arc limited to flanks and rear; frontal arc blocked.",
+      "REAR_ECHELON": "[Support / Service] Isolated rear troops take automatic damage/suppression when attacked without adjacent allies.",
+      "SET_UP_TIME": "[Emplacement] Prolonged deployment time; prohibits MoveThenFire and FireThenMove actions.",
+      "TALL_SILHOUETTE": "[Spotting / Defense] High profile unit granting +1 modifier to attacker spotting rolls.",
     };
 
     function renderTraitsChips() {
@@ -1187,7 +1244,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
 
     function renderDirectModeContent(modeName, modeObj) {
       let targetsHtml = '';
-      const categories = ['INFANTRY', 'VEHICLE'];
+      const categories = ['VEHICLE', 'INFANTRY'];
 
       categories.forEach(targetType => {
         const rangesObj = modeObj[targetType] || null;
@@ -1220,12 +1277,14 @@ HTML_TEMPLATE = """<!DOCTYPE html>
               </td>
               <td>
                 <div class="dice-badge-container">
-                  ${diceBadges}
                   <div class="die-picker">
-                    <button type="button" class="btn-add-die die-RED" onclick="addDie('${modeName}', '${targetType}', '${rangeBand}', 'RED')">R</button>
-                    <button type="button" class="btn-add-die die-YELLOW" onclick="addDie('${modeName}', '${targetType}', '${rangeBand}', 'YELLOW')">Y</button>
-                    <button type="button" class="btn-add-die die-GREEN" onclick="addDie('${modeName}', '${targetType}', '${rangeBand}', 'GREEN')">G</button>
-                    <button type="button" class="btn-add-die die-BLUE" onclick="addDie('${modeName}', '${targetType}', '${rangeBand}', 'BLUE')">B</button>
+                    <button type="button" class="btn-add-die die-RED" title="Add Red die" onclick="addDie('${modeName}', '${targetType}', '${rangeBand}', 'RED')">R</button>
+                    <button type="button" class="btn-add-die die-YELLOW" title="Add Yellow die" onclick="addDie('${modeName}', '${targetType}', '${rangeBand}', 'YELLOW')">Y</button>
+                    <button type="button" class="btn-add-die die-GREEN" title="Add Green die" onclick="addDie('${modeName}', '${targetType}', '${rangeBand}', 'GREEN')">G</button>
+                    <button type="button" class="btn-add-die die-BLUE" title="Add Blue die" onclick="addDie('${modeName}', '${targetType}', '${rangeBand}', 'BLUE')">B</button>
+                  </div>
+                  <div class="dice-badges-list" style="display: inline-flex; gap: 0.25rem; flex-wrap: wrap; align-items: center;">
+                    ${diceBadges}
                   </div>
                 </div>
               </td>
@@ -1277,12 +1336,14 @@ HTML_TEMPLATE = """<!DOCTYPE html>
             </td>
             <td>
               <div class="dice-badge-container">
-                ${diceBadges}
                 <div class="die-picker">
-                  <button type="button" class="btn-add-die die-RED" onclick="addIndirectDie('${rangeBand}', 'RED')">R</button>
-                  <button type="button" class="btn-add-die die-YELLOW" onclick="addIndirectDie('${rangeBand}', 'YELLOW')">Y</button>
-                  <button type="button" class="btn-add-die die-GREEN" onclick="addIndirectDie('${rangeBand}', 'GREEN')">G</button>
-                  <button type="button" class="btn-add-die die-BLUE" onclick="addIndirectDie('${rangeBand}', 'BLUE')">B</button>
+                  <button type="button" class="btn-add-die die-RED" title="Add Red die" onclick="addIndirectDie('${rangeBand}', 'RED')">R</button>
+                  <button type="button" class="btn-add-die die-YELLOW" title="Add Yellow die" onclick="addIndirectDie('${rangeBand}', 'YELLOW')">Y</button>
+                  <button type="button" class="btn-add-die die-GREEN" title="Add Green die" onclick="addIndirectDie('${rangeBand}', 'GREEN')">G</button>
+                  <button type="button" class="btn-add-die die-BLUE" title="Add Blue die" onclick="addIndirectDie('${rangeBand}', 'BLUE')">B</button>
+                </div>
+                <div class="dice-badges-list" style="display: inline-flex; gap: 0.25rem; flex-wrap: wrap; align-items: center;">
+                  ${diceBadges}
                 </div>
               </div>
             </td>
@@ -1371,12 +1432,14 @@ HTML_TEMPLATE = """<!DOCTYPE html>
           <div>
             <label style="font-size: 0.68rem; font-weight: 700; color: var(--text-muted); text-transform: uppercase;">Smoke Generation Dice</label>
             <div class="dice-badge-container" style="margin-top: 0.3rem;">
-              ${diceBadges}
               <div class="die-picker">
-                <button type="button" class="btn-add-die die-RED" onclick="addSmokeDie('RED')">R</button>
-                <button type="button" class="btn-add-die die-YELLOW" onclick="addSmokeDie('YELLOW')">Y</button>
-                <button type="button" class="btn-add-die die-GREEN" onclick="addSmokeDie('GREEN')">G</button>
-                <button type="button" class="btn-add-die die-BLUE" onclick="addSmokeDie('BLUE')">B</button>
+                <button type="button" class="btn-add-die die-RED" title="Add Red die" onclick="addSmokeDie('RED')">R</button>
+                <button type="button" class="btn-add-die die-YELLOW" title="Add Yellow die" onclick="addSmokeDie('YELLOW')">Y</button>
+                <button type="button" class="btn-add-die die-GREEN" title="Add Green die" onclick="addSmokeDie('GREEN')">G</button>
+                <button type="button" class="btn-add-die die-BLUE" title="Add Blue die" onclick="addSmokeDie('BLUE')">B</button>
+              </div>
+              <div class="dice-badges-list" style="display: inline-flex; gap: 0.25rem; flex-wrap: wrap; align-items: center;">
+                ${diceBadges}
               </div>
             </div>
           </div>

@@ -1,11 +1,11 @@
 type Props = {
   showMap: boolean;
   showGrid: boolean;
-  showCoords: boolean; // ✅ NUEVO
+  showCoords: boolean;
 
   onToggleMap: (value: boolean) => void;
   onToggleGrid: (value: boolean) => void;
-  onToggleCoords: (value: boolean) => void; // ✅ NUEVO
+  onToggleCoords: (value: boolean) => void;
 };
 
 export default function LayerControls({
@@ -17,52 +17,32 @@ export default function LayerControls({
   onToggleCoords,
 }: Props) {
   return (
-    <div
-      style={{
-        position: "absolute",
-        top: 10,
-        left: 10,
-        background: "#222",
-        padding: "10px",
-        borderRadius: "6px",
-        color: "white",
-        fontSize: "14px",
-
-        display: "flex",
-        flexDirection: "column",
-        gap: "8px",
-
-        zIndex: 1000,
-      }}
-    >
-      {/* ✅ MAP */}
-      <label style={{ display: "flex", gap: "6px", alignItems: "center" }}>
+    <div className="layer-controls-bar">
+      <label className={`layer-control-chip ${showMap ? "active" : ""}`} title="Toggle background map imagery">
         <input
           type="checkbox"
           checked={showMap}
           onChange={(e) => onToggleMap(e.target.checked)}
         />
-        Map
+        <span>Map</span>
       </label>
 
-      {/* ✅ GRID */}
-      <label style={{ display: "flex", gap: "6px", alignItems: "center" }}>
+      <label className={`layer-control-chip ${showGrid ? "active" : ""}`} title="Toggle hex grid overlay">
         <input
           type="checkbox"
           checked={showGrid}
           onChange={(e) => onToggleGrid(e.target.checked)}
         />
-        Grid
+        <span>Grid</span>
       </label>
 
-      {/* ✅ 🔥 NEW: COORDS */}
-      <label style={{ display: "flex", gap: "6px", alignItems: "center" }}>
+      <label className={`layer-control-chip ${showCoords ? "active" : ""}`} title="Toggle hex axial coordinates">
         <input
           type="checkbox"
           checked={showCoords}
           onChange={(e) => onToggleCoords(e.target.checked)}
         />
-        Coords
+        <span>Coords</span>
       </label>
     </div>
   );
