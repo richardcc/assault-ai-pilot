@@ -106,12 +106,16 @@ flowchart TD
      - Automatización en `start_assault.bat` y `start_all_environments.ps1` garantizando el levantamiento del editor en el puerto 8780 y apertura en navegador.
      - Suite completa de tests unitarios e integración en verde (`test_formation_catalog.py`, `test_unit_and_formation_editor_api.py`).
 
-3. **Subtarea 3.5.3: Creación de Escenarios Simétricos de Entrenamiento 11.1 y 11.2 (P1)**:
-   - **Módulos**: `assets/scenarios/sc_11_1_pattuglia_ricognizione.json`, `assets/scenarios/sc_11_2_primo_contatto.json`.
-   - **Alcance**: Modelar los escenarios canónicos de entrenamiento del Libro de Campaña:
-     - **11.1 Pattuglia di Ricognizione**: Mapa modular 9x12 neutral, 3 escuadras por bando (simétricas), 1 VP central disputado a 4 hexágonos equidistantes, 6 turnos.
-     - **11.2 Primo Contatto**: Choque de vanguardias 5 vs 5 con 1 arma de apoyo pesado por bando y 3 VPs neutrales.
-   - **Criterio de Aceptación**: 0% de asimetría inicial en terreno ni equipamiento; escenario puro para validación algorítmica de la IA.
+3. **Subtarea 3.5.3: Escenario Individual de Entrenamiento de Infantería Pura 11.1 (Addestramento Fanteria) y 11.2 (P1)**:
+   - **Módulos**: ssets/scenarios/draft_addestramento_fanteria_11_1.json, ssets/catalogs/map_piece_catalog.json (Pieza geomórfica S6 9x8), ssets/catalogs/unit_catalog.json (US_50CAL_HMG, GE_HEAVY_MG_42, US_RIFLES_43, GE_RIFLES_43), ssault_bench/configs/benchmark_config.addestramento_fanteria.yaml, curriculums/vp_acceleration/configs/efficientzero_v2.addestramento_fanteria.yaml.
+   - **Naturaleza y Propósito Doctrinal (Sandbox Individual de Infantería)**:
+     - Escenario individual y autónomo (*standalone*) del *Libro della Campagna* (pág. 79) concebido específicamente como **entorno de aprendizaje y maestría táctica de infantería pura a nivel de escuadra**.
+     - **Cero Vehículos / Cero Artillería Pesada**: Elimina toda interferencia de blindados o cañones de campaña para aislar el aprendizaje de los fundamentos tácticos de infantería: establecimiento de base de fuego (*Base of Fire*) con ametralladoras pesadas HMG para supresión a media/larga distancia, maniobra de flanqueo y avance escalonado por saltos (*leapfrogging*) de las escuadras de fusileros bajo desenfilada rural, y asalto decisivo en combate cuerpo a cuerpo sobre el hexágono de victoria central.
+     - **Simetría y Paridad Absoluta (0% Sesgo Inicial)**: Paridad estricta 3 vs 3 (2 fusileros + 1 HMG por bando: Wehrmacht vs US Army) disputando 1 VP central equidistante en un horizonte comprimido de 6 turnos ({\\max}=6$).
+     - **Ultra Alta Velocidad de Simulación y Autojuego**: Al contar con únicamente 6 unidades en un mapa compacto de  \\times 8$ (72 hexágonos), el tiempo por episodio en self-play MCTS se reduce a **$< 0.15$ s por episodio** (más de **\\times$ más rápido que Gela**), permitiendo una convergencia de aprendizaje y calibración de hiperparámetros en minutos.
+   - **Estado y Plan de Ejecución**:
+     - [DRAFT GENERADO 🟡 v2.5.29]: Pieza geomórfica S6 ( \\times 8$) registrada en el catálogo de mapas, ametralladora US_50CAL_HMG promovida y sincronizada en catálogos de unidades, y archivo JSON canónico en borrador (ssets/scenarios/draft_addestramento_fanteria_11_1.json y ssets/scenarios/drafts/addestramento_fanteria_11_1.json) verificado con ScenarioLoader (72 hexágonos, 6 unidades, fortificaciones y VP en verde).
+     - [FASE PENDIENTE - ENTRENAMIENTO Y BENCHMARK]: Integración del perfil de evaluación en ssault_bench (batería simétrica vs Random Side A/B y Selfplay) y configuración curricular en EfficientZeroV2 como etapa de pre-entrenamiento rápido de infantería antes de escenarios complejos de armas combinadas.
 
 4. **Subtarea 3.5.4: Rebalanceo de OOB en Escenarios Canónicos de Gela (P1)** — `[COMPLETADA 🟢]`:
    - **Módulos**: `assets/scenarios/battaglia_cittadina_2_1.json`, `assets/scenarios/mettete_i_piedi_terra_1.json`, `assets/catalogs/unit_catalog.json`, `assault_model/tests/test_oob_rebalance_canonical_scenarios.py`.

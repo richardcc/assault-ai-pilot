@@ -754,19 +754,18 @@ HTML_TEMPLATE = """<!DOCTYPE html>
               <button type="button" id="scen-subtab-json" class="btn-card-tab" onclick="switchScenarioSubTab('json')">📄 Raw JSON & Live Validation</button>
             </div>
             <div style="display: flex; gap: 0.6rem; align-items: center; flex-wrap: wrap;">
-              <label style="display: flex; align-items: center; gap: 0.35rem; font-size: 0.75rem; color: #38bdf8; cursor: pointer; font-weight: 600;">
-                <input type="checkbox" id="scen-toggle-bg" checked onchange="toggleScenarioBgImage(this.checked)" />
-                🗺️ Real Scan
-              </label>
-              <div style="display: flex; align-items: center; gap: 0.3rem; font-size: 0.72rem; color: var(--text-muted);">
-                <span>Opacity:</span>
-                <input type="range" id="scen-bg-opacity" min="0" max="100" value="70" style="width: 65px; height: 14px;" oninput="setScenarioBgOpacity(this.value)" />
-                <span id="scen-bg-opacity-label">70%</span>
+              <!-- View Mode Segmented Controls -->
+              <div style="display: flex; align-items: center; background: #0f172a; padding: 2px 4px; border-radius: 6px; border: 1px solid var(--card-border); gap: 2px;">
+                <span style="font-size: 0.72rem; color: #94a3b8; font-weight: 700; margin-right: 4px;">View:</span>
+                <button type="button" id="btn-scen-view-real" class="btn-card-tab active" onclick="setScenarioViewMode('real')" title="100% Real Physical Board Scan with Crisp Wireframe Grid">🗺️ Real Scan (100%)</button>
+                <button type="button" id="btn-scen-view-colors" class="btn-card-tab" onclick="setScenarioViewMode('colors')" title="Solid Terrain Color Hexes">🎨 Color Fills</button>
+                <button type="button" id="btn-scen-view-both" class="btn-card-tab" onclick="setScenarioViewMode('both')" title="Overlay Semi-transparent Colors on Real Scan">🔀 Both</button>
               </div>
-              <label style="display: flex; align-items: center; gap: 0.35rem; font-size: 0.75rem; color: #94a3b8; cursor: pointer;">
-                <input type="checkbox" id="scen-toggle-colors" checked onchange="toggleScenarioHexColors(this.checked)" />
-                🎨 Hex Fills
-              </label>
+              <div id="scen-opacity-wrap" style="display: none; align-items: center; gap: 0.3rem; font-size: 0.72rem; color: var(--text-muted);">
+                <span>Opacity:</span>
+                <input type="range" id="scen-bg-opacity" min="0" max="100" value="75" style="width: 65px; height: 14px;" oninput="setScenarioBgOpacity(this.value)" />
+                <span id="scen-bg-opacity-label">75%</span>
+              </div>
               <button type="button" class="btn-card-tab" onclick="autoFitScenarioCamera()" title="Auto Fit & Center Board">🎯 Fit View</button>
               <button type="button" class="btn-card-tab" onclick="zoomScenarioCanvas(1.15)">➕ In</button>
               <button type="button" class="btn-card-tab" onclick="zoomScenarioCanvas(0.85)">➖ Out</button>
@@ -928,38 +927,80 @@ HTML_TEMPLATE = """<!DOCTYPE html>
 
         <div id="piece-editor-form" style="display: none; height: 100%; flex-direction: column; overflow: hidden;">
           <!-- Top Tool Palette & Controls -->
-          <div style="display: flex; flex-direction: column; gap: 0.5rem; margin-bottom: 0.8rem; border-bottom: 1px solid var(--card-border); padding-bottom: 0.6rem;">
-            <div style="display: flex; justify-content: space-between; align-items: center;">
+          <div style="display: flex; flex-direction: column; gap: 0.5rem; margin-bottom: 0.6rem; border-bottom: 1px solid var(--card-border); padding-bottom: 0.6rem;">
+            <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.5rem;">
               <div style="display: flex; gap: 0.6rem; align-items: center;">
                 <span id="piece-id-title" style="font-size: 1.1rem; font-weight: 700; color: #38bdf8;">S2</span>
                 <span id="piece-shape-pill" class="badge badge-pending">9x8</span>
                 <span id="piece-status-pill" class="badge badge-published">PUBLISHED</span>
               </div>
               <div style="display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap;">
-                <label style="display: flex; align-items: center; gap: 0.35rem; font-size: 0.75rem; color: #38bdf8; cursor: pointer; font-weight: 600;">
-                  <input type="checkbox" id="piece-toggle-bg" checked onchange="togglePieceBgImage(this.checked)" />
-                  🗺️ Real Board Scan
-                </label>
-                <div style="display: flex; align-items: center; gap: 0.3rem; font-size: 0.72rem; color: var(--text-muted);">
-                  <span>Opacity:</span>
-                  <input type="range" id="piece-bg-opacity" min="0" max="100" value="65" style="width: 65px; height: 14px;" oninput="setPieceBgOpacity(this.value)" />
-                  <span id="piece-bg-opacity-label">65%</span>
+                <!-- View Mode Segmented Controls -->
+                <div style="display: flex; align-items: center; background: #0f172a; padding: 2px 4px; border-radius: 6px; border: 1px solid var(--card-border); gap: 2px;">
+                  <span style="font-size: 0.72rem; color: #94a3b8; font-weight: 700; margin-right: 4px;">View:</span>
+                  <button type="button" id="btn-piece-view-real" class="btn-card-tab active" onclick="setPieceViewMode('real')" title="100% Real Physical Board Scan with Crisp Wireframe Grid">🗺️ Real Scan (100%)</button>
+                  <button type="button" id="btn-piece-view-colors" class="btn-card-tab" onclick="setPieceViewMode('colors')" title="Solid Terrain Color Hexes">🎨 Color Fills</button>
+                  <button type="button" id="btn-piece-view-both" class="btn-card-tab" onclick="setPieceViewMode('both')" title="Overlay Semi-transparent Colors on Real Scan">🔀 Both</button>
                 </div>
-                <label style="display: flex; align-items: center; gap: 0.35rem; font-size: 0.75rem; color: #94a3b8; cursor: pointer;">
-                  <input type="checkbox" id="piece-toggle-colors" checked onchange="togglePieceHexColors(this.checked)" />
-                  🎨 Hex Fills
-                </label>
+                <div id="piece-opacity-wrap" style="display: none; align-items: center; gap: 0.3rem; font-size: 0.72rem; color: var(--text-muted);">
+                  <span>Opacity:</span>
+                  <input type="range" id="piece-bg-opacity" min="0" max="100" value="75" style="width: 65px; height: 14px;" oninput="setPieceBgOpacity(this.value)" />
+                  <span id="piece-bg-opacity-label">75%</span>
+                </div>
+                <!-- Tool Modes -->
+                <button type="button" id="btn-piece-mode-select" class="btn-card-tab active" onclick="togglePieceMode('select', this)" title="Select & Inspect Hex (Click hex to mark and change terrain from list)">🔍 Select Hex</button>
+                <button type="button" id="btn-piece-mode-paint" class="btn-card-tab" onclick="togglePieceMode('paint', this)" title="Paint Brush (Click/Drag to paint active palette terrain)">🖌️ Paint</button>
                 <button type="button" id="btn-piece-mode-pan" class="btn-card-tab" onclick="togglePieceMode('pan', this)" title="Pan Mode (or right-click drag)">🖐️ Pan</button>
-                <button type="button" id="btn-piece-mode-paint" class="btn-card-tab active" onclick="togglePieceMode('paint', this)" title="Paint Mode">🖌️ Paint</button>
                 <button type="button" class="btn-card-tab" onclick="autoFitPieceCamera()">🎯 Fit Piece</button>
                 <button type="button" class="btn-card-tab" onclick="zoomPieceCanvas(1.15)">➕ In</button>
                 <button type="button" class="btn-card-tab" onclick="zoomPieceCanvas(0.85)">➖ Out</button>
               </div>
             </div>
 
-            <!-- Terrain Painting Palette -->
-            <div style="display: flex; gap: 0.4rem; align-items: center; flex-wrap: wrap; background: #0f172a; padding: 0.4rem 0.6rem; border-radius: 6px; border: 1px solid var(--card-border);">
-              <span style="font-size: 0.75rem; font-weight: 700; color: #94a3b8; margin-right: 0.4rem;">🖌️ Terrain:</span>
+            <!-- Marked Hex Inspector Bar (Select hex and choose terrain from list) -->
+            <div id="piece-hex-inspector" style="display: flex; align-items: center; justify-content: space-between; gap: 0.8rem; background: #1e293b; padding: 0.4rem 0.8rem; border-radius: 6px; border: 1px solid #38bdf8; flex-wrap: wrap;">
+              <div style="display: flex; align-items: center; gap: 0.8rem; flex-wrap: wrap;">
+                <div style="display: flex; align-items: center; gap: 0.4rem;">
+                  <span style="font-size: 0.8rem; color: #94a3b8; font-weight: 600;">📍 Marked Hex:</span>
+                  <span id="piece-marked-hex-label" style="font-weight: 700; color: #f59e0b; font-size: 0.95rem; font-family: monospace; background: #0f172a; padding: 1px 8px; border-radius: 4px; border: 1px solid #475569;">None (Click hex)</span>
+                </div>
+
+                <div style="display: flex; align-items: center; gap: 0.4rem;">
+                  <label for="piece-hex-terrain-select" style="font-size: 0.78rem; color: #cbd5e1; font-weight: 600;">Terrain Type:</label>
+                  <select id="piece-hex-terrain-select" class="form-control" style="width: auto; padding: 0.25rem 0.6rem; font-size: 0.82rem; background: #0f172a; color: #38bdf8; font-weight: 700; border: 1px solid #38bdf8; border-radius: 4px;" onchange="onPieceHexTerrainDropdownChange(this.value)">
+                    <option value="clear">Clear (Open Plains / Default)</option>
+                    <option value="water">Water (Sea / River / Lake)</option>
+                    <option value="light_forest">Light Forest (Sparse Woods)</option>
+                    <option value="heavy_forest">Heavy Forest (Dense Woods)</option>
+                    <option value="olive_vine_grove">Olive & Vine Grove</option>
+                    <option value="brush">Brush (Scrubland / Bushes)</option>
+                    <option value="rocky">Rocky (Broken Ground / Boulders)</option>
+                    <option value="building_single">Single Building</option>
+                    <option value="building_multi">Multi-Hex Building</option>
+                    <option value="hill">Hill (Elevated Ground)</option>
+                    <option value="ruins">Ruins (Destroyed Building / Rubble)</option>
+                  </select>
+                </div>
+
+                <div style="display: flex; align-items: center; gap: 0.4rem;">
+                  <label for="piece-hex-elevation-select" style="font-size: 0.78rem; color: #cbd5e1; font-weight: 600;">Elevation:</label>
+                  <select id="piece-hex-elevation-select" class="form-control" style="width: auto; padding: 0.25rem 0.5rem; font-size: 0.8rem; background: #0f172a; color: #fff; border: 1px solid #475569; border-radius: 4px;" onchange="onPieceHexElevationDropdownChange(this.value)">
+                    <option value="0">Level 0 (Ground)</option>
+                    <option value="1">+1 Elevation</option>
+                    <option value="2">+2 Elevation</option>
+                    <option value="3">+3 Elevation</option>
+                  </select>
+                </div>
+              </div>
+
+              <div style="display: flex; align-items: center; gap: 0.5rem;">
+                <button type="button" class="btn-secondary" style="padding: 0.25rem 0.6rem; font-size: 0.75rem;" onclick="resetMarkedPieceHex()" title="Reset marked hex to default Clear terrain and Level 0">↺ Reset Hex to Clear</button>
+              </div>
+            </div>
+
+            <!-- Terrain Painting Quick Palette -->
+            <div style="display: flex; gap: 0.4rem; align-items: center; flex-wrap: wrap; background: #0f172a; padding: 0.35rem 0.6rem; border-radius: 6px; border: 1px solid var(--card-border);">
+              <span style="font-size: 0.72rem; font-weight: 700; color: #94a3b8; margin-right: 0.3rem;">🎨 Quick Set / Brush:</span>
               <button type="button" class="btn-palette active" style="background:#334155;" onclick="selectPieceTerrain('clear', this)">Clear</button>
               <button type="button" class="btn-palette" style="background:#1d4ed8;" onclick="selectPieceTerrain('water', this)">Water</button>
               <button type="button" class="btn-palette" style="background:#15803d;" onclick="selectPieceTerrain('light_forest', this)">Lt Forest</button>
@@ -972,16 +1013,17 @@ HTML_TEMPLATE = """<!DOCTYPE html>
               <button type="button" class="btn-palette" style="background:#ca8a04;" onclick="selectPieceTerrain('hill', this)">Hill</button>
               <button type="button" class="btn-palette" style="background:#44403c;" onclick="selectPieceTerrain('ruins', this)">Ruins</button>
 
-              <span style="font-size: 0.75rem; font-weight: 700; color: #94a3b8; margin-left: 0.8rem; margin-right: 0.4rem;">🧱 Edge:</span>
+              <span style="font-size: 0.72rem; font-weight: 700; color: #94a3b8; margin-left: 0.6rem; margin-right: 0.3rem;">🧱 Edge:</span>
               <button type="button" id="btn-tool-wall" class="btn-palette" style="background:#475569;" onclick="togglePieceWallTool(this)">Wall Mode</button>
             </div>
           </div>
 
           <!-- Piece Canvas Area -->
           <div style="position: relative; flex: 1; min-height: 340px; background: #080d1a; border: 1px solid var(--card-border); border-radius: 8px; overflow: hidden;">
-            <canvas id="pieceCanvas" width="900" height="380" style="width: 100%; height: 100%; display: block; cursor: crosshair;"></canvas>
+            <canvas id="pieceCanvas" width="900" height="380" style="width: 100%; height: 100%; display: block; cursor: pointer;"></canvas>
             <div id="piece-canvas-overlay" style="position: absolute; bottom: 8px; left: 8px; background: rgba(15, 23, 42, 0.85); padding: 4px 10px; border-radius: 4px; font-size: 0.75rem; color: #94a3b8; border: 1px solid #334155;">
-              Click / Drag on hexes to paint terrain. Click on borders to toggle walls.
+              Tool: Select Hex. Click any hex to mark it and choose terrain from the list. Right-click drag to pan.
+            </div>
             </div>
           </div>
 
@@ -2788,15 +2830,20 @@ HTML_TEMPLATE = """<!DOCTYPE html>
 
     // Background Scans & Overlay State
     const pieceBgImages = {};
+    let pieceViewMode = 'real'; // 'real', 'colors', 'both'
     let pieceShowBg = true;
-    let pieceBgOpacity = 0.65;
-    let pieceShowHexColors = true;
-    let pieceMode = 'paint'; // 'paint' or 'pan'
-    let spaceBarPressed = false;
+    let pieceBgOpacity = 1.0;
+    let pieceShowHexColors = false;
 
+    let scenViewMode = 'real'; // 'real', 'colors', 'both'
     let scenShowBg = true;
-    let scenBgOpacity = 0.70;
-    let scenShowHexColors = true;
+    let scenBgOpacity = 1.0;
+    let scenShowHexColors = false;
+
+    let pieceMode = 'select'; // 'select', 'paint', 'pan'
+    let selectedPieceHex = null; // { q: number, r: number }
+    let selectedScenarioHex = null; // { q: number, r: number }
+    let spaceBarPressed = false;
 
     function getPieceBgImage(pieceId) {
       if (!pieceId || typeof Image === 'undefined') return null;
@@ -2817,8 +2864,27 @@ HTML_TEMPLATE = """<!DOCTYPE html>
       return pieceBgImages[cleanId];
     }
 
-    function togglePieceBgImage(checked) {
-      pieceShowBg = !!checked;
+    function setPieceViewMode(mode) {
+      pieceViewMode = mode;
+      ['real', 'colors', 'both'].forEach(m => {
+        document.getElementById('btn-piece-view-' + m)?.classList.toggle('active', m === mode);
+      });
+      const opWrap = document.getElementById('piece-opacity-wrap');
+      if (opWrap) opWrap.style.display = (mode === 'both' ? 'flex' : 'none');
+
+      if (mode === 'real') {
+        pieceShowBg = true;
+        pieceBgOpacity = 1.0;
+        pieceShowHexColors = false;
+      } else if (mode === 'colors') {
+        pieceShowBg = false;
+        pieceBgOpacity = 0.0;
+        pieceShowHexColors = true;
+      } else { // 'both'
+        pieceShowBg = true;
+        pieceBgOpacity = 0.75;
+        pieceShowHexColors = true;
+      }
       drawPieceCanvas();
     }
 
@@ -2829,24 +2895,27 @@ HTML_TEMPLATE = """<!DOCTYPE html>
       drawPieceCanvas();
     }
 
-    function togglePieceHexColors(checked) {
-      pieceShowHexColors = !!checked;
-      drawPieceCanvas();
-    }
+    function setScenarioViewMode(mode) {
+      scenViewMode = mode;
+      ['real', 'colors', 'both'].forEach(m => {
+        document.getElementById('btn-scen-view-' + m)?.classList.toggle('active', m === mode);
+      });
+      const opWrap = document.getElementById('scen-opacity-wrap');
+      if (opWrap) opWrap.style.display = (mode === 'both' ? 'flex' : 'none');
 
-    function togglePieceMode(mode, btnEl) {
-      pieceMode = mode;
-      document.getElementById('btn-piece-mode-pan')?.classList.toggle('active', mode === 'pan');
-      document.getElementById('btn-piece-mode-paint')?.classList.toggle('active', mode === 'paint');
-      const canvas = document.getElementById('pieceCanvas');
-      if (canvas) canvas.style.cursor = mode === 'pan' ? 'grab' : 'crosshair';
-      document.getElementById('piece-canvas-overlay').innerText = mode === 'pan' ?
-        'Tool: Pan Mode. Drag with mouse to pan board. Scroll to zoom.' :
-        `Tool: Paint Terrain [${pieceActiveTerrain.toUpperCase()}]. Click / drag on hexes. Right-click drag to pan.`;
-    }
-
-    function toggleScenarioBgImage(checked) {
-      scenShowBg = !!checked;
+      if (mode === 'real') {
+        scenShowBg = true;
+        scenBgOpacity = 1.0;
+        scenShowHexColors = false;
+      } else if (mode === 'colors') {
+        scenShowBg = false;
+        scenBgOpacity = 0.0;
+        scenShowHexColors = true;
+      } else { // 'both'
+        scenShowBg = true;
+        scenBgOpacity = 0.75;
+        scenShowHexColors = true;
+      }
       drawScenarioCanvas();
     }
 
@@ -2857,9 +2926,141 @@ HTML_TEMPLATE = """<!DOCTYPE html>
       drawScenarioCanvas();
     }
 
-    function toggleScenarioHexColors(checked) {
-      scenShowHexColors = !!checked;
-      drawScenarioCanvas();
+    function togglePieceMode(mode, btnEl) {
+      pieceMode = mode;
+      ['select', 'paint', 'pan'].forEach(m => {
+        document.getElementById('btn-piece-mode-' + m)?.classList.toggle('active', m === mode);
+      });
+      const canvas = document.getElementById('pieceCanvas');
+      if (canvas) {
+        if (mode === 'pan') canvas.style.cursor = 'grab';
+        else if (mode === 'paint') canvas.style.cursor = 'crosshair';
+        else canvas.style.cursor = 'pointer';
+      }
+      const overlay = document.getElementById('piece-canvas-overlay');
+      if (overlay) {
+        if (mode === 'select') {
+          overlay.innerText = 'Tool: Select Hex. Click any hex to mark it and choose terrain from the list. Right-click drag to pan.';
+        } else if (mode === 'paint') {
+          overlay.innerText = `Tool: Paint Brush [${pieceActiveTerrain.toUpperCase()}]. Drag on hexes to paint. Right-click drag to pan.`;
+        } else {
+          overlay.innerText = 'Tool: Pan Mode. Drag with mouse to pan board. Scroll to zoom.';
+        }
+      }
+    }
+
+    function selectPieceHex(q, r) {
+      if (!currentPieceData) return;
+      const [cols, rows] = currentPieceData.shape || [9, 8];
+      if (q < 0 || q >= cols || r < 0 || r >= rows) {
+        selectedPieceHex = null;
+        updatePieceHexInspector();
+        drawPieceCanvas();
+        return;
+      }
+
+      selectedPieceHex = { q, r };
+      updatePieceHexInspector();
+      drawPieceCanvas();
+    }
+
+    function updatePieceHexInspector() {
+      const label = document.getElementById('piece-marked-hex-label');
+      const terrainSelect = document.getElementById('piece-hex-terrain-select');
+      const elevSelect = document.getElementById('piece-hex-elevation-select');
+      if (!label || !terrainSelect || !elevSelect) return;
+
+      if (!selectedPieceHex || !currentPieceData) {
+        label.innerText = 'None (Click hex)';
+        label.style.color = '#94a3b8';
+        terrainSelect.value = 'clear';
+        elevSelect.value = '0';
+        return;
+      }
+
+      const { q, r } = selectedPieceHex;
+      label.innerText = `(${q}, ${r})`;
+      label.style.color = '#f59e0b';
+
+      const existing = (currentPieceData.hexes || []).find(hx => hx.q === q && hx.r === r);
+      const currentTerrain = existing ? (existing.terrain || 'clear') : 'clear';
+      const currentElev = existing ? (existing.elevation || 0) : 0;
+
+      terrainSelect.value = currentTerrain;
+      elevSelect.value = String(currentElev);
+
+      // Also highlight matching quick palette button
+      document.querySelectorAll('#view-pieces .btn-palette').forEach(b => {
+        const isMatch = b.getAttribute('onclick')?.includes(`'${currentTerrain}'`);
+        b.classList.toggle('active', !!isMatch);
+      });
+    }
+
+    function onPieceHexTerrainDropdownChange(newTerrain) {
+      if (!selectedPieceHex || !currentPieceData) return;
+      setPieceHexTerrain(selectedPieceHex.q, selectedPieceHex.r, newTerrain);
+    }
+
+    function onPieceHexElevationDropdownChange(newElev) {
+      if (!selectedPieceHex || !currentPieceData) return;
+      const el = parseInt(newElev, 10) || 0;
+      setPieceHexElevation(selectedPieceHex.q, selectedPieceHex.r, el);
+    }
+
+    function resetMarkedPieceHex() {
+      if (!selectedPieceHex || !currentPieceData) return;
+      setPieceHexTerrain(selectedPieceHex.q, selectedPieceHex.r, 'clear');
+      setPieceHexElevation(selectedPieceHex.q, selectedPieceHex.r, 0);
+      updatePieceHexInspector();
+    }
+
+    function setPieceHexTerrain(q, r, newTerrain) {
+      if (!currentPieceData) return;
+      if (!currentPieceData.hexes) currentPieceData.hexes = [];
+
+      const existingIdx = currentPieceData.hexes.findIndex(hx => hx.q === q && hx.r === r);
+      if (newTerrain === 'clear') {
+        if (existingIdx >= 0) {
+          if (currentPieceData.hexes[existingIdx].elevation) {
+            currentPieceData.hexes[existingIdx].terrain = 'clear';
+          } else {
+            currentPieceData.hexes.splice(existingIdx, 1);
+          }
+        }
+      } else {
+        if (existingIdx >= 0) {
+          currentPieceData.hexes[existingIdx].terrain = newTerrain;
+        } else {
+          currentPieceData.hexes.push({ q, r, terrain: newTerrain });
+        }
+      }
+
+      document.getElementById('piece-hexes-count').innerText = currentPieceData.hexes.length;
+      renderPieceHexesTable();
+      syncPieceJsonFromState();
+      updatePieceHexInspector();
+      drawPieceCanvas();
+    }
+
+    function setPieceHexElevation(q, r, el) {
+      if (!currentPieceData) return;
+      if (!currentPieceData.hexes) currentPieceData.hexes = [];
+
+      const existingIdx = currentPieceData.hexes.findIndex(hx => hx.q === q && hx.r === r);
+      if (existingIdx >= 0) {
+        if (el === 0 && (!currentPieceData.hexes[existingIdx].terrain || currentPieceData.hexes[existingIdx].terrain === 'clear')) {
+          currentPieceData.hexes.splice(existingIdx, 1);
+        } else {
+          currentPieceData.hexes[existingIdx].elevation = el;
+        }
+      } else if (el > 0) {
+        currentPieceData.hexes.push({ q, r, terrain: 'clear', elevation: el });
+      }
+
+      renderPieceHexesTable();
+      syncPieceJsonFromState();
+      updatePieceHexInspector();
+      drawPieceCanvas();
     }
 
     window.addEventListener('keydown', e => {
@@ -3242,33 +3443,43 @@ HTML_TEMPLATE = """<!DOCTYPE html>
             const baseColor = TERRAIN_COLORS[terrain] || '#334155';
             fillColor = scenShowBg ? hexToRgba(baseColor, 0.40) : baseColor;
           }
-          const strokeColor = scenShowBg ? 'rgba(255, 255, 255, 0.45)' : '#475569';
+          const strokeColor = scenShowHexColors ? '#475569' : 'rgba(56, 189, 248, 0.75)';
+          const strokeWidth = scenShowHexColors ? 1 : 1.5;
 
-          drawPointyHex(ctx, x, y, canvasZoom, fillColor, strokeColor, 1);
+          drawPointyHex(ctx, x, y, canvasZoom, fillColor, strokeColor, strokeWidth);
 
           // Elevation indicator
           if (elev > 0) {
-            ctx.fillStyle = 'rgba(255, 255, 255, 0.25)';
+            ctx.shadowColor = '#000000';
+            ctx.shadowBlur = 3;
+            ctx.fillStyle = '#f59e0b';
             ctx.font = 'bold 9px sans-serif';
             ctx.textAlign = 'right';
             ctx.fillText('+' + elev, x + canvasZoom * 0.7, y - canvasZoom * 0.4);
+            ctx.shadowBlur = 0;
           }
 
           // Subtle terrain short code in bottom
           const tShort = TERRAIN_SHORTS[terrain] || '';
           if (tShort && canvasZoom >= 18) {
-            ctx.fillStyle = 'rgba(255, 255, 255, 0.4)';
-            ctx.font = '8px sans-serif';
+            ctx.shadowColor = '#000000';
+            ctx.shadowBlur = 3;
+            ctx.fillStyle = scenShowHexColors ? '#ffffff' : '#38bdf8';
+            ctx.font = 'bold 8px sans-serif';
             ctx.textAlign = 'center';
             ctx.fillText(tShort, x, y + canvasZoom * 0.65);
+            ctx.shadowBlur = 0;
           }
 
           // Coordinate label at top
           if (canvasZoom >= 16) {
-            ctx.fillStyle = 'rgba(148, 163, 184, 0.6)';
-            ctx.font = '8px sans-serif';
+            ctx.shadowColor = '#000000';
+            ctx.shadowBlur = 3;
+            ctx.fillStyle = scenShowHexColors ? 'rgba(255, 255, 255, 0.75)' : '#ffffff';
+            ctx.font = 'bold 8px sans-serif';
             ctx.textAlign = 'center';
             ctx.fillText(`${q},${r}`, x, y - canvasZoom * 0.35);
+            ctx.shadowBlur = 0;
           }
         }
       }
@@ -3357,8 +3568,14 @@ HTML_TEMPLATE = """<!DOCTYPE html>
         ctx.fillText(shortName, x, y + 3);
       }
 
+      // 5.5. Draw Marked Scenario Hex Highlight
+      if (selectedScenarioHex) {
+        const { x, y } = hexToPixel(selectedScenarioHex.q, selectedScenarioHex.r, canvasZoom, canvasOffsetX, canvasOffsetY);
+        drawPointyHex(ctx, x, y, canvasZoom, 'rgba(245, 158, 11, 0.28)', '#f59e0b', 3.5);
+      }
+
       // 6. Draw Hover Outline
-      if (hoveredHex) {
+      if (hoveredHex && (!selectedScenarioHex || selectedScenarioHex.q !== hoveredHex.q || selectedScenarioHex.r !== hoveredHex.r)) {
         const { x, y } = hexToPixel(hoveredHex.q, hoveredHex.r, canvasZoom, canvasOffsetX, canvasOffsetY);
         drawPointyHex(ctx, x, y, canvasZoom, null, '#38bdf8', 2.5);
       }
@@ -3369,8 +3586,12 @@ HTML_TEMPLATE = """<!DOCTYPE html>
     if (scenCanvas) {
       scenCanvas.addEventListener('contextmenu', e => e.preventDefault());
 
+      let scenMouseDownX = 0;
+      let scenMouseDownY = 0;
+
       scenCanvas.addEventListener('mousedown', e => {
-        // Left, middle, or right click can pan in scenario view
+        scenMouseDownX = e.clientX;
+        scenMouseDownY = e.clientY;
         if (e.button === 0 || e.button === 1 || e.button === 2) {
           isPanning = true;
           panStartX = e.clientX - canvasOffsetX;
@@ -3379,9 +3600,30 @@ HTML_TEMPLATE = """<!DOCTYPE html>
         }
       });
 
-      window.addEventListener('mouseup', () => {
-        isPanning = false;
-        if (scenCanvas) scenCanvas.style.cursor = 'grab';
+      window.addEventListener('mouseup', e => {
+        if (isPanning) {
+          isPanning = false;
+          if (scenCanvas) scenCanvas.style.cursor = 'grab';
+
+          if (Math.hypot(e.clientX - scenMouseDownX, e.clientY - scenMouseDownY) < 5) {
+            const rect = scenCanvas.getBoundingClientRect();
+            const px = e.clientX - rect.left;
+            const py = e.clientY - rect.top;
+            const { q, r } = pixelToHex(px, py, canvasZoom, canvasOffsetX, canvasOffsetY);
+
+            if (currentScenarioData) {
+              const [w, h] = currentScenarioData.shape || [9, 8];
+              if (q >= 0 && q < w && r >= 0 && r < h) {
+                selectedScenarioHex = { q, r };
+                const { terrainMap, elevationMap } = buildScenarioTerrainAndElevationMap();
+                const t = terrainMap[q + ',' + r] || 'clear';
+                const el = elevationMap[q + ',' + r] || 0;
+                document.getElementById('canvas-info-overlay').innerText = `📍 Selected Hex (${q}, ${r}) | Terrain: ${t.toUpperCase()} | Elev: +${el}`;
+                drawScenarioCanvas();
+              }
+            }
+          }
+        }
       });
 
       scenCanvas.addEventListener('mousemove', e => {
@@ -3906,6 +4148,13 @@ HTML_TEMPLATE = """<!DOCTYPE html>
       document.getElementById('piece-edges-count').innerText = (p.hex_edges || []).length;
       document.getElementById('piece-json-raw').value = JSON.stringify(p, null, 2);
 
+      if (!selectedPieceHex && (p.hexes || []).length > 0) {
+        selectedPieceHex = { q: p.hexes[0].q, r: p.hexes[0].r };
+      } else if (!selectedPieceHex) {
+        selectedPieceHex = { q: 0, r: 0 };
+      }
+      updatePieceHexInspector();
+
       renderPieceHexesTable();
       renderPieceEdgesTable();
     }
@@ -3920,9 +4169,14 @@ HTML_TEMPLATE = """<!DOCTYPE html>
     function selectPieceTerrain(terrain, btnEl) {
       pieceActiveTerrain = terrain;
       pieceWallToolActive = false;
-      document.querySelectorAll('.btn-palette').forEach(b => b.classList.remove('active'));
+      document.querySelectorAll('#view-pieces .btn-palette').forEach(b => b.classList.remove('active'));
       if (btnEl) btnEl.classList.add('active');
-      document.getElementById('piece-canvas-overlay').innerText = `Tool: Paint Terrain [${terrain.toUpperCase()}]. Click or drag over hexes.`;
+
+      if (selectedPieceHex) {
+        setPieceHexTerrain(selectedPieceHex.q, selectedPieceHex.r, terrain);
+      } else {
+        document.getElementById('piece-canvas-overlay').innerText = `Tool: Paint Terrain [${terrain.toUpperCase()}]. Click or drag over hexes.`;
+      }
     }
 
     function togglePieceWallTool(btnEl) {
@@ -4004,35 +4258,45 @@ HTML_TEMPLATE = """<!DOCTYPE html>
           let fillColor = null;
           if (pieceShowHexColors) {
             const rawColor = TERRAIN_COLORS[t] || '#334155';
-            fillColor = (pieceShowBg && pieceBgOpacity > 0.05) ? hexToRgba(rawColor, 0.45) : rawColor;
+            fillColor = (pieceShowBg && pieceBgOpacity > 0.05) ? hexToRgba(rawColor, 0.40) : rawColor;
           }
-          const strokeColor = pieceShowHexColors ? '#475569' : 'rgba(56, 189, 248, 0.55)';
+          const strokeColor = pieceShowHexColors ? '#475569' : 'rgba(56, 189, 248, 0.75)';
+          const strokeWidth = pieceShowHexColors ? 1 : 1.5;
 
-          drawPointyHex(ctx, x, y, pieceCanvasZoom, fillColor, strokeColor, 1);
+          drawPointyHex(ctx, x, y, pieceCanvasZoom, fillColor, strokeColor, strokeWidth);
 
           // Elevation
           if (el > 0) {
-            ctx.fillStyle = '#fff';
-            ctx.font = 'bold 9px sans-serif';
+            ctx.shadowColor = '#000000';
+            ctx.shadowBlur = 3;
+            ctx.fillStyle = '#f59e0b';
+            ctx.font = 'bold 10px sans-serif';
             ctx.textAlign = 'right';
             ctx.fillText('+' + el, x + pieceCanvasZoom * 0.7, y - pieceCanvasZoom * 0.4);
+            ctx.shadowBlur = 0;
           }
 
           // Coordinate label
           if (pieceCanvasZoom >= 16) {
-            ctx.fillStyle = pieceShowBg && pieceBgOpacity > 0.5 ? '#ffffff' : 'rgba(255, 255, 255, 0.55)';
-            ctx.font = '8px sans-serif';
+            ctx.shadowColor = '#000000';
+            ctx.shadowBlur = 3;
+            ctx.fillStyle = pieceShowHexColors ? 'rgba(255, 255, 255, 0.75)' : '#ffffff';
+            ctx.font = 'bold 9px sans-serif';
             ctx.textAlign = 'center';
             ctx.fillText(`${q},${r}`, x, y - pieceCanvasZoom * 0.35);
+            ctx.shadowBlur = 0;
           }
 
           // Terrain short badge
           const tShort = TERRAIN_SHORTS[t] || '';
           if (tShort && pieceCanvasZoom >= 18) {
-            ctx.fillStyle = '#ffffff';
+            ctx.shadowColor = '#000000';
+            ctx.shadowBlur = 3;
+            ctx.fillStyle = pieceShowHexColors ? '#ffffff' : '#38bdf8';
             ctx.font = 'bold 9px sans-serif';
             ctx.textAlign = 'center';
             ctx.fillText(tShort, x, y + pieceCanvasZoom * 0.4);
+            ctx.shadowBlur = 0;
           }
         }
       }
@@ -4062,10 +4326,32 @@ HTML_TEMPLATE = """<!DOCTYPE html>
         } catch (e) {}
       }
 
-      // 3. Hover outline
-      if (hoveredPieceHex) {
+      // 3. Marked / Selected Hex Highlight
+      if (selectedPieceHex) {
+        const { x, y } = hexToPixel(selectedPieceHex.q, selectedPieceHex.r, pieceCanvasZoom, pieceOffsetX, pieceOffsetY);
+        drawPointyHex(ctx, x, y, pieceCanvasZoom, 'rgba(245, 158, 11, 0.28)', '#f59e0b', 3.5);
+
+        ctx.beginPath();
+        ctx.arc(x, y, 4, 0, Math.PI * 2);
+        ctx.fillStyle = '#f59e0b';
+        ctx.fill();
+
+        ctx.fillStyle = '#0f172a';
+        if (ctx.fillRect) ctx.fillRect(x - 28, y - pieceCanvasZoom * 0.95 - 13, 56, 16);
+        ctx.strokeStyle = '#f59e0b';
+        ctx.lineWidth = 1.5;
+        if (ctx.strokeRect) ctx.strokeRect(x - 28, y - pieceCanvasZoom * 0.95 - 13, 56, 16);
+
+        ctx.fillStyle = '#f59e0b';
+        ctx.font = 'bold 10px monospace';
+        ctx.textAlign = 'center';
+        ctx.fillText(`[${selectedPieceHex.q}, ${selectedPieceHex.r}]`, x, y - pieceCanvasZoom * 0.95);
+      }
+
+      // 4. Hover outline
+      if (hoveredPieceHex && (!selectedPieceHex || selectedPieceHex.q !== hoveredPieceHex.q || selectedPieceHex.r !== hoveredPieceHex.r)) {
         const { x, y } = hexToPixel(hoveredPieceHex.q, hoveredPieceHex.r, pieceCanvasZoom, pieceOffsetX, pieceOffsetY);
-        drawPointyHex(ctx, x, y, pieceCanvasZoom, null, '#38bdf8', 2.5);
+        drawPointyHex(ctx, x, y, pieceCanvasZoom, null, '#38bdf8', 2.0);
       }
     }
 
@@ -4074,7 +4360,13 @@ HTML_TEMPLATE = """<!DOCTYPE html>
     if (pieceCanvas) {
       pieceCanvas.addEventListener('contextmenu', e => e.preventDefault());
 
+      let pieceMouseDownX = 0;
+      let pieceMouseDownY = 0;
+
       pieceCanvas.addEventListener('mousedown', e => {
+        pieceMouseDownX = e.clientX;
+        pieceMouseDownY = e.clientY;
+
         // Pan if right-click (button 2), middle-click (button 1), spacebar held, shift held, or pieceMode === 'pan'
         if (e.button === 1 || e.button === 2 || e.shiftKey || spaceBarPressed || pieceMode === 'pan') {
           isPiecePanning = true;
@@ -4084,10 +4376,26 @@ HTML_TEMPLATE = """<!DOCTYPE html>
           return;
         }
 
-        // Left click: Paint terrain or toggle wall
+        // Left click
         if (e.button === 0) {
-          isPaintingPiece = true;
-          applyPieceToolAtPoint(e.clientX, e.clientY);
+          const rect = pieceCanvas.getBoundingClientRect();
+          const px = e.clientX - rect.left;
+          const py = e.clientY - rect.top;
+          const { q, r } = pixelToHex(px, py, pieceCanvasZoom, pieceOffsetX, pieceOffsetY);
+
+          if (currentPieceData) {
+            const [w, h] = currentPieceData.shape || [9, 8];
+            if (q >= 0 && q < w && r >= 0 && r < h) {
+              selectPieceHex(q, r);
+
+              if (pieceWallToolActive) {
+                togglePieceWallNear(px, py, q, r);
+              } else if (pieceMode === 'paint') {
+                isPaintingPiece = true;
+                applyPieceToolAtPoint(e.clientX, e.clientY);
+              }
+            }
+          }
         }
       });
 
@@ -4095,7 +4403,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
         isPiecePanning = false;
         isPaintingPiece = false;
         if (pieceCanvas) {
-          pieceCanvas.style.cursor = pieceMode === 'pan' ? 'grab' : 'crosshair';
+          pieceCanvas.style.cursor = (pieceMode === 'pan' ? 'grab' : (pieceMode === 'paint' ? 'crosshair' : 'pointer'));
         }
       });
 
@@ -4120,7 +4428,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
           hoveredPieceHex = null;
         }
 
-        if (isPaintingPiece && !pieceWallToolActive) {
+        if (isPaintingPiece && pieceMode === 'paint' && !pieceWallToolActive) {
           applyPieceToolAtPoint(e.clientX, e.clientY);
         } else {
           drawPieceCanvas();
@@ -4233,13 +4541,30 @@ HTML_TEMPLATE = """<!DOCTYPE html>
 
     function renderPieceHexesTable() {
       const tbody = document.getElementById('piece-hexes-tbody');
+      if (!tbody) return;
       tbody.innerHTML = '';
       (currentPieceData.hexes || []).forEach((hx, idx) => {
+        const isSelected = selectedPieceHex && selectedPieceHex.q === hx.q && selectedPieceHex.r === hx.r;
         const tr = document.createElement('tr');
-        tr.style = 'border-bottom: 1px solid #334155;';
+        tr.style = `border-bottom: 1px solid #334155; cursor: pointer; ${isSelected ? 'background: rgba(245, 158, 11, 0.22);' : ''}`;
+        tr.onclick = (e) => {
+          if (e.target.tagName !== 'SELECT' && e.target.tagName !== 'BUTTON') {
+            selectPieceHex(hx.q, hx.r);
+          }
+        };
+
+        const terrainOptions = Object.keys(TERRAIN_COLORS).map(t =>
+          `<option value="${t}" ${t === hx.terrain ? 'selected' : ''}>${t}</option>`
+        ).join('');
+
         tr.innerHTML = `
-          <td style="padding: 0.25rem;"><b>${hx.q}, ${hx.r}</b></td>
-          <td style="padding: 0.25rem;"><span class="badge badge-published" style="background:${TERRAIN_COLORS[hx.terrain] || '#334155'}; color:#fff;">${hx.terrain}</span></td>
+          <td style="padding: 0.25rem;"><b>${hx.q}, ${hx.r}</b> ${isSelected ? '📍' : ''}</td>
+          <td style="padding: 0.25rem;">
+            <select style="background: #0f172a; color: #38bdf8; font-weight: 600; font-size: 0.75rem; padding: 2px 5px; border: 1px solid #475569; border-radius: 4px;" onchange="setPieceHexTerrain(${hx.q}, ${hx.r}, this.value)">
+              ${terrainOptions}
+            </select>
+            ${hx.elevation ? `<span class="badge badge-published" style="margin-left: 4px; font-size: 0.65rem;">+${hx.elevation}</span>` : ''}
+          </td>
           <td style="padding: 0.25rem;">
             <button type="button" class="btn-danger" style="padding: 0.15rem 0.4rem; font-size: 0.65rem;" onclick="removePieceHex(${idx})">🗑️</button>
           </td>
