@@ -449,6 +449,290 @@ def correlate_tactical_heads(
     }
 
 
+def _categorize_unit(unit_key: str) -> str:
+    k = str(unit_key or "").upper()
+    if any(x in k for x in ("MMG", "HMG", "MACHINEGUN", "M1919", "BREDA", "MG42", "VICKERS")):
+        return "Fire Support (MMG)"
+    if any(x in k for x in ("MORTAR", "MORTAIO", "GRANATWERFER", "CANNON", "ARTILLERY", "GUN")):
+        return "Indirect Artillery / Mortar"
+    if any(x in k for x in ("TANK", "PANZER", "CARRO", "SHERMAN", "STUART", "ARMOR", "SEMOWENTE")):
+        return "Armored Fighting Vehicle"
+    if any(x in k for x in ("LEADER", "HQ", "COMMAND", "OFFICER", "TENENTE", "CAPTAIN")):
+        return "Command / HQ Element"
+    if any(x in k for x in ("ENGINEER", "GENIO", "PIONIER", "SAPPER")):
+        return "Combat Engineers"
+    if any(x in k for x in ("RANGER", "COMMANDO", "PARACADUTISTI", "ELITE")):
+        return "Elite Assault Infantry"
+    return "Line Infantry"
+
+
+def extract_battlefield_profile(
+    scenario_overlay: dict[str, Any] | None,
+    steps: list[dict[str, Any]],
+    match_meta: dict[str, Any],
+) -> dict[str, Any]:
+    """
+    Extracts comprehensive battlefield terrain intelligence, map topology, and victory objectives.
+    """
+    overlay = scenario_overlay or {}
+    shape = overlay.get("shape", [16, 16])
+    h = shape[0] if isinstance(shape, (list, tuple)) and len(shape) >= 2 else 16
+    w = shape[1] if isinstance(shape, (list, tuple)) and len(shape) >= 2 else 16
+
+    scenario_id = str(overlay.get("scenario_id") or match_meta.get("scenario_id", "") or "default_scenario")
+    scenario_name = str(overlay.get("name") or scenario_id.replace("_", " ").title())
+    subtitle = str(overlay.get("subtitle", "") or "")
+    max_turns = _safe_int(overlay.get("max_turns", 10), 10)
+
+    # VP Extraction
+    vps_raw = overlay.get("vp_hexes") or []
+    if not vps_raw and isinstance(overlay.get("vp"), dict):
+        vps_raw = overlay.get("vp", {}).get("hexes", [])
+
+    last_step = steps[-1] if steps else {}
+    final_vp_map = last_step.get("vp_map") or last_step.get("vp_map_after") or {}
+
+    vp_details = []
+    total_vp_value = 0.0
+    for vp in vps_raw:
+        q = _safe_int(vp.get("q", 0))
+        r = _safe_int(vp.get("r", 0))
+        val = _safe_float(vp.get("value", 2.0), 2.0)
+        total_vp_value += val
+        init_owner = str(vp.get("initial_owner", "") or "").upper()
+
+        fin_owner_raw = (
+            final_vp_map.get(f"{q},{r}")
+            or final_vp_map.get(f"({q}, {r})")
+            or final_vp_map.get(f"({q},{r})")
+            or init_owner
+        )
+        fin_owner = str(fin_owner_raw or "").upper()
+
+        status = "OPEN"
+        if fin_owner and init_owner and fin_owner != init_owner:
+            status = "CAPTURED"
+        elif fin_owner and fin_owner == init_owner:
+            status = "HELD"
+        elif fin_owner:
+            status = "SECURED"
+
+        vp_details.append({
+            "q": q,
+            "r": r,
+            "location": f"({q}, {r})",
+            "value": val,
+            "initial_owner": init_owner or "NEUTRAL",
+            "final_owner": fin_owner or "NEUTRAL",
+            "status": status,
+        })
+
+    # Terrain breakdown from map_cells
+    map_cells = overlay.get("map_cells") or []
+    urban_count = 0
+    rough_count = 0
+    woods_count = 0
+    water_count = 0
+    open_count = 0
+
+    for c in map_cells:
+        t = str(c.get("terrain_type") or c.get("terrain") or "clear").lower()
+        if any(k in t for k in ("building", "town", "urban", "house", "city")):
+            urban_count += 1
+        elif any(k in t for k in ("forest", "wood", "grove", "olive", "orchard")):
+            woods_count += 1
+        elif any(k in t for k in ("brush", "rough", "rocky", "hill", "bocage", "rubble")):
+            rough_count += 1
+        elif any(k in t for k in ("water", "sea", "river", "marsh", "swamp", "sand")):
+            water_count += 1
+        else:
+            open_count += 1
+
+    fort_count = len(overlay.get("fortifications") or [])
+    total_cells = len(map_cells) if map_cells else (h * w)
+
+    return {
+        "scenario_id": scenario_id,
+        "scenario_name": scenario_name,
+        "subtitle": subtitle,
+        "map_dimensions": {
+            "height": h,
+            "width": w,
+            "total_hexes": total_cells,
+        },
+        "max_turns": max_turns,
+        "total_vps": len(vp_details),
+        "total_vp_value": total_vp_value,
+        "vp_details": vp_details,
+        "terrain_breakdown": {
+            "urban_buildings": urban_count,
+            "woods_groves": woods_count,
+            "rough_brush": rough_count,
+            "water_sand": water_count,
+            "open_clear": open_count,
+            "fortifications": fort_count,
+        },
+        "victory_metric": str(overlay.get("victory_outcomes", {}).get("metric", "objectives_captured")),
+    }
+
+
+def extract_forces_oob(
+    scenario_overlay: dict[str, Any] | None,
+    steps: list[dict[str, Any]],
+    match_meta: dict[str, Any],
+) -> dict[str, Any]:
+    """
+    Extracts Order of Battle (OOB), complete unit rosters, tactical roles, and combat attrition per side.
+    """
+    overlay = scenario_overlay or {}
+    atk_side = str(match_meta.get("attacker_side", "US")).upper()
+    def_side = str(match_meta.get("defender_side", "IT")).upper()
+    controllers = match_meta.get("controller_by_side", {}) or {}
+
+    s0 = steps[0] if steps else {}
+    s_last = steps[-1] if steps else {}
+
+    s0_units = s0.get("units") or []
+    scenario_units = overlay.get("scenario_units") or overlay.get("units") or []
+
+    final_hp_map = s_last.get("unit_hp_map") or {}
+    final_alive_map = s_last.get("unit_alive_map") or {}
+    final_supp_map = s_last.get("unit_suppressed_map") or {}
+
+    # Accumulate unit roles and combat performance
+    roles_by_unit: dict[str, str] = {}
+    kills_by_unit: dict[str, int] = {}
+    damage_by_unit: dict[str, float] = {}
+
+    for st in steps:
+        uid = str(st.get("unit_id") or "")
+        r = str(st.get("role_assigned") or st.get("unit_macro_role") or st.get("badge_label") or "")
+        if uid and r and uid not in roles_by_unit:
+            roles_by_unit[uid] = r.replace("ROLE_", "").replace("_", " ").title()
+        if uid:
+            k = _safe_int(st.get("kills_dealt", 0))
+            d = _safe_float(st.get("damage_dealt", 0.0))
+            kills_by_unit[uid] = kills_by_unit.get(uid, 0) + k
+            damage_by_unit[uid] = damage_by_unit.get(uid, 0.0) + d
+
+    # Union of all known units
+    all_units_dict: dict[str, dict[str, Any]] = {}
+
+    # 1. From scenario units
+    for u in scenario_units:
+        uid = str(u.get("unit_id", "") or "")
+        if uid:
+            side = str(u.get("side", "") or ("US" if uid.startswith("US") else "IT")).upper()
+            ukey = str(u.get("unit_key", "") or uid)
+            pos = u.get("position") or {"q": u.get("q", 0), "r": u.get("r", 0)}
+            q = pos.get("q", 0) if isinstance(pos, dict) else (pos[0] if isinstance(pos, (list, tuple)) else 0)
+            r = pos.get("r", 0) if isinstance(pos, dict) else (pos[1] if isinstance(pos, (list, tuple)) else 0)
+            all_units_dict[uid] = {
+                "unit_id": uid,
+                "unit_key": ukey,
+                "side": side,
+                "init_q": q,
+                "init_r": r,
+                "init_hp": _safe_float(u.get("hp", 4.0), 4.0),
+            }
+
+    # 2. From s0
+    for u in s0_units:
+        uid = str(u.get("unit_id", "") or "")
+        if uid:
+            side = str(u.get("side", "") or ("US" if uid.startswith("US") else "IT")).upper()
+            ukey = str(u.get("unit_key", "") or u.get("unit_label", "") or uid)
+            q = _safe_int(u.get("q", 0))
+            r = _safe_int(u.get("r", 0))
+            hp = _safe_float(u.get("hp", 4.0), 4.0)
+            if uid not in all_units_dict:
+                all_units_dict[uid] = {
+                    "unit_id": uid,
+                    "unit_key": ukey,
+                    "side": side,
+                    "init_q": q,
+                    "init_r": r,
+                    "init_hp": hp,
+                }
+            else:
+                all_units_dict[uid]["init_hp"] = hp
+
+    # Build rosters by side
+    attacker_roster = []
+    defender_roster = []
+
+    for uid, uinfo in all_units_dict.items():
+        side = uinfo["side"]
+        ukey = uinfo["unit_key"]
+        init_hp = uinfo["init_hp"]
+
+        fin_hp = _safe_float(final_hp_map.get(uid, init_hp), init_hp)
+        is_alive = bool(final_alive_map.get(uid, fin_hp > 0))
+        is_supp = bool(final_supp_map.get(uid, False))
+
+        status = "ACTIVE"
+        if not is_alive or fin_hp <= 0:
+            status = "ELIMINATED"
+            fin_hp = 0.0
+        elif is_supp:
+            status = "SUPPRESSED"
+
+        role = roles_by_unit.get(uid, "Spearhead" if side == atk_side else "Defender")
+        category = _categorize_unit(ukey)
+
+        unit_item = {
+            "unit_id": uid,
+            "unit_key": ukey,
+            "category": category,
+            "role": role,
+            "start_position": f"({uinfo['init_q']}, {uinfo['init_r']})",
+            "initial_hp": init_hp,
+            "final_hp": fin_hp,
+            "hp_remaining_pct": round(100.0 * (fin_hp / max(1.0, init_hp)), 1),
+            "status": status,
+            "is_alive": is_alive and fin_hp > 0,
+            "kills": kills_by_unit.get(uid, 0),
+            "damage_dealt": round(damage_by_unit.get(uid, 0.0), 1),
+        }
+
+        if side == atk_side:
+            attacker_roster.append(unit_item)
+        else:
+            defender_roster.append(unit_item)
+
+    def _side_summary(side: str, roster: list[dict[str, Any]], ctrl_key: str) -> dict[str, Any]:
+        total_units = len(roster)
+        alive_units = sum(1 for u in roster if u["is_alive"])
+        elim_units = total_units - alive_units
+        init_hp_sum = sum(u["initial_hp"] for u in roster)
+        fin_hp_sum = sum(u["final_hp"] for u in roster)
+        hp_integrity = round(100.0 * (fin_hp_sum / max(1.0, init_hp_sum)), 1) if init_hp_sum > 0 else 0.0
+        total_kills = sum(u["kills"] for u in roster)
+        ctrl_name = str(
+            controllers.get(ctrl_key)
+            or controllers.get(side)
+            or ("EfficientZeroV2 (AI)" if side == atk_side else "Adversary / Baseline")
+        )
+
+        return {
+            "side": side,
+            "controller": ctrl_name,
+            "total_units": total_units,
+            "alive_units": alive_units,
+            "eliminated_units": elim_units,
+            "total_initial_hp": init_hp_sum,
+            "total_final_hp": fin_hp_sum,
+            "hp_integrity_pct": hp_integrity,
+            "total_kills_dealt": total_kills,
+            "roster": roster,
+        }
+
+    return {
+        "attacker": _side_summary(atk_side, attacker_roster, "attacker"),
+        "defender": _side_summary(def_side, defender_roster, "defender"),
+    }
+
+
 def generate_executive_narrative(
     match_meta: dict[str, Any],
     turning_points: list[CausalTurningPoint],
@@ -579,6 +863,10 @@ def build_forensic_sitrep(
             logger.warning("RAG citation retrieval failed: %s", exc)
             citations = []
 
+    # 5. Battlefield & Forces Intelligence
+    battlefield_profile = extract_battlefield_profile(scenario_overlay, steps, match_meta)
+    forces_oob = extract_forces_oob(scenario_overlay, steps, match_meta)
+
     sitrep = {
         "schema_version": "causal_sitrep_v1",
         "match_id": str(match_meta.get("match_id", match_meta.get("episode_id", "episode_0"))),
@@ -594,6 +882,8 @@ def build_forensic_sitrep(
         "total_turns": total_turns,
         "executive_summary": exec_summary,
         "operational_phases": phases,
+        "battlefield_profile": battlefield_profile,
+        "forces_oob": forces_oob,
         "turning_points": [tp.to_dict() for tp in turning_points],
         "head_correlations": correlations,
         "doctrinal_citations": citations,

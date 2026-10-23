@@ -18,7 +18,7 @@ export const ForensicSitRepModal: React.FC<ForensicSitRepModalProps> = ({
   onJumpToStep,
   onRecompute,
 }) => {
-  const [activeTab, setActiveTab] = useState<"executive" | "correlations" | "turning_points" | "doctrine">("executive");
+  const [activeTab, setActiveTab] = useState<"executive" | "battlefield" | "correlations" | "turning_points" | "doctrine">("executive");
 
   if (!isOpen) return null;
 
@@ -31,6 +31,16 @@ export const ForensicSitRepModal: React.FC<ForensicSitRepModalProps> = ({
   const headCorrs = (sitrep?.head_correlations as Dict) || {};
   const citations = (sitrep?.doctrinal_citations as Array<Dict>) || [];
   const recommendations = (sitrep?.tactical_recommendations as Array<string>) || [];
+
+  const battlefield = (sitrep?.battlefield_profile as Dict) || {};
+  const forces = (sitrep?.forces_oob as Dict) || {};
+  const attackerForces = (forces.attacker as Dict) || {};
+  const defenderForces = (forces.defender as Dict) || {};
+  const attackerRoster = (attackerForces.roster as Array<Dict>) || [];
+  const defenderRoster = (defenderForces.roster as Array<Dict>) || [];
+  const vpDetails = (battlefield.vp_details as Array<Dict>) || [];
+  const terrain = (battlefield.terrain_breakdown as Dict) || {};
+  const mapDims = (battlefield.map_dimensions as Dict) || {};
 
   const threat = (headCorrs.threat_map as Dict) || {};
   const morale = (headCorrs.morale as Dict) || {};
@@ -215,6 +225,21 @@ export const ForensicSitRepModal: React.FC<ForensicSitRepModalProps> = ({
             📋 Executive Assessment & Phases
           </button>
           <button
+            onClick={() => setActiveTab("battlefield")}
+            style={{
+              padding: "10px 16px",
+              background: "transparent",
+              border: "none",
+              borderBottom: activeTab === "battlefield" ? "2px solid #38bdf8" : "2px solid transparent",
+              color: activeTab === "battlefield" ? "#38bdf8" : "#94a3b8",
+              fontWeight: activeTab === "battlefield" ? 700 : 500,
+              fontSize: 12,
+              cursor: "pointer",
+            }}
+          >
+            🗺️ Battlefield & Forces (OOB)
+          </button>
+          <button
             onClick={() => setActiveTab("correlations")}
             style={{
               padding: "10px 16px",
@@ -350,7 +375,405 @@ export const ForensicSitRepModal: React.FC<ForensicSitRepModalProps> = ({
                 </div>
               )}
 
-              {/* TAB 2: TACTICAL HEAD FORENSICS */}
+              {/* TAB 2: BATTLEFIELD & FORCES (OOB) */}
+              {activeTab === "battlefield" && (
+                <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
+                  {/* Top Level 4-Card Summary Grid */}
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 12 }}>
+                    <div style={{ background: "#1e293b", border: "1px solid #334155", borderRadius: 8, padding: 12 }}>
+                      <div style={{ fontSize: 11, fontWeight: 700, color: "#94a3b8", textTransform: "uppercase" }}>Map & Environment</div>
+                      <div style={{ fontSize: 16, fontWeight: 700, color: "#38bdf8", marginTop: 4 }}>
+                        {Number(mapDims.width || 16)} × {Number(mapDims.height || 16)} Hexes
+                      </div>
+                      <div style={{ fontSize: 11, color: "#64748b", marginTop: 2 }}>
+                        Total Hexes: {Number(mapDims.total_hexes || 256)}
+                      </div>
+                    </div>
+
+                    <div style={{ background: "#1e293b", border: "1px solid #334155", borderRadius: 8, padding: 12 }}>
+                      <div style={{ fontSize: 11, fontWeight: 700, color: "#94a3b8", textTransform: "uppercase" }}>Scenario & Rules</div>
+                      <div style={{ fontSize: 16, fontWeight: 700, color: "#f8fafc", marginTop: 4 }}>
+                        {Number(battlefield.max_turns || 10)} Turns Max
+                      </div>
+                      <div style={{ fontSize: 11, color: "#64748b", marginTop: 2 }}>
+                        Metric: <code style={{ color: "#38bdf8" }}>{String(battlefield.victory_metric || "objectives_captured")}</code>
+                      </div>
+                    </div>
+
+                    <div style={{ background: "#1e293b", border: "1px solid #334155", borderRadius: 8, padding: 12 }}>
+                      <div style={{ fontSize: 11, fontWeight: 700, color: "#94a3b8", textTransform: "uppercase" }}>Strategic Objectives</div>
+                      <div style={{ fontSize: 16, fontWeight: 700, color: "#4ade80", marginTop: 4 }}>
+                        {Number(battlefield.total_vps || 0)} Victory Points
+                      </div>
+                      <div style={{ fontSize: 11, color: "#64748b", marginTop: 2 }}>
+                        Pool: {Number(battlefield.total_vp_value || 0).toFixed(1)} VP Value
+                      </div>
+                    </div>
+
+                    <div style={{ background: "#1e293b", border: "1px solid #334155", borderRadius: 8, padding: 12 }}>
+                      <div style={{ fontSize: 11, fontWeight: 700, color: "#94a3b8", textTransform: "uppercase" }}>Force Ratio & Integrity</div>
+                      <div style={{ fontSize: 15, fontWeight: 700, color: "#f8fafc", marginTop: 4 }}>
+                        {Number(attackerForces.total_units || 0)} vs {Number(defenderForces.total_units || 0)} Units
+                      </div>
+                      <div style={{ fontSize: 11, color: "#64748b", marginTop: 2 }}>
+                        Attacker {Number(attackerForces.hp_integrity_pct || 0)}% | Def {Number(defenderForces.hp_integrity_pct || 0)}% HP
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Terrain & Victory Point Breakdown Row */}
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
+                    {/* Terrain Breakdown Card */}
+                    <div style={{ background: "rgba(30, 41, 59, 0.6)", border: "1px solid #334155", borderRadius: 8, padding: 14 }}>
+                      <div style={{ fontSize: 12, fontWeight: 700, color: "#cbd5e1", marginBottom: 10, display: "flex", alignItems: "center", gap: 6 }}>
+                        <span>🌲</span>
+                        <span>Terrain Classification & Defensive Cover Density</span>
+                      </div>
+                      <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 8 }}>
+                        <div style={{ background: "#0f172a", border: "1px solid #1e293b", borderRadius: 6, padding: 8 }}>
+                          <div style={{ fontSize: 10, color: "#94a3b8" }}>Urban / Buildings</div>
+                          <div style={{ fontSize: 14, fontWeight: 700, color: "#f8fafc", marginTop: 2 }}>
+                            {Number(terrain.urban_buildings || 0)} <span style={{ fontSize: 10, color: "#64748b" }}>hexes</span>
+                          </div>
+                          <div style={{ fontSize: 10, color: "#38bdf8" }}>High Cover (+2)</div>
+                        </div>
+
+                        <div style={{ background: "#0f172a", border: "1px solid #1e293b", borderRadius: 6, padding: 8 }}>
+                          <div style={{ fontSize: 10, color: "#94a3b8" }}>Woods / Groves</div>
+                          <div style={{ fontSize: 14, fontWeight: 700, color: "#f8fafc", marginTop: 2 }}>
+                            {Number(terrain.woods_groves || 0)} <span style={{ fontSize: 10, color: "#64748b" }}>hexes</span>
+                          </div>
+                          <div style={{ fontSize: 10, color: "#4ade80" }}>Medium Cover (+1)</div>
+                        </div>
+
+                        <div style={{ background: "#0f172a", border: "1px solid #1e293b", borderRadius: 6, padding: 8 }}>
+                          <div style={{ fontSize: 10, color: "#94a3b8" }}>Rough / Rubble</div>
+                          <div style={{ fontSize: 14, fontWeight: 700, color: "#f8fafc", marginTop: 2 }}>
+                            {Number(terrain.rough_brush || 0)} <span style={{ fontSize: 10, color: "#64748b" }}>hexes</span>
+                          </div>
+                          <div style={{ fontSize: 10, color: "#fb923c" }}>Obstacle Cover (+1)</div>
+                        </div>
+
+                        <div style={{ background: "#0f172a", border: "1px solid #1e293b", borderRadius: 6, padding: 8 }}>
+                          <div style={{ fontSize: 10, color: "#94a3b8" }}>Water / Obstacles</div>
+                          <div style={{ fontSize: 14, fontWeight: 700, color: "#f8fafc", marginTop: 2 }}>
+                            {Number(terrain.water_sand || 0)} <span style={{ fontSize: 10, color: "#64748b" }}>hexes</span>
+                          </div>
+                          <div style={{ fontSize: 10, color: "#60a5fa" }}>Impassable / Slow</div>
+                        </div>
+
+                        <div style={{ background: "#0f172a", border: "1px solid #1e293b", borderRadius: 6, padding: 8 }}>
+                          <div style={{ fontSize: 10, color: "#94a3b8" }}>Open / Clear Field</div>
+                          <div style={{ fontSize: 14, fontWeight: 700, color: "#f8fafc", marginTop: 2 }}>
+                            {Number(terrain.open_clear || 0)} <span style={{ fontSize: 10, color: "#64748b" }}>hexes</span>
+                          </div>
+                          <div style={{ fontSize: 10, color: "#94a3b8" }}>Zero Cover</div>
+                        </div>
+
+                        <div style={{ background: "#0f172a", border: "1px solid #1e293b", borderRadius: 6, padding: 8 }}>
+                          <div style={{ fontSize: 10, color: "#94a3b8" }}>Fortifications</div>
+                          <div style={{ fontSize: 14, fontWeight: 700, color: "#f8fafc", marginTop: 2 }}>
+                            {Number(terrain.fortifications || 0)} <span style={{ fontSize: 10, color: "#64748b" }}>positions</span>
+                          </div>
+                          <div style={{ fontSize: 10, color: "#f43f5e" }}>Heavy Bunker (+3)</div>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Victory Points Status Table */}
+                    <div style={{ background: "rgba(30, 41, 59, 0.6)", border: "1px solid #334155", borderRadius: 8, padding: 14 }}>
+                      <div style={{ fontSize: 12, fontWeight: 700, color: "#cbd5e1", marginBottom: 10, display: "flex", alignItems: "center", gap: 6 }}>
+                        <span>🚩</span>
+                        <span>Strategic Victory Points (VPs) Ledger</span>
+                      </div>
+                      {vpDetails.length === 0 ? (
+                        <div style={{ fontSize: 11, color: "#64748b", padding: "12px 0", textAlign: "center" }}>
+                          No discrete VP hexes declared in scenario overlay.
+                        </div>
+                      ) : (
+                        <div style={{ maxHeight: 150, overflowY: "auto", border: "1px solid #334155", borderRadius: 4 }}>
+                          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 11 }}>
+                            <thead>
+                              <tr style={{ background: "#0f172a", color: "#94a3b8", textAlign: "left" }}>
+                                <th style={{ padding: "6px 8px" }}>Hex Loc</th>
+                                <th style={{ padding: "6px 8px" }}>VP Value</th>
+                                <th style={{ padding: "6px 8px" }}>Initial Owner</th>
+                                <th style={{ padding: "6px 8px" }}>Final Owner</th>
+                                <th style={{ padding: "6px 8px" }}>Outcome</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {vpDetails.map((vp, vIdx) => {
+                                const st = String(vp.status || "OPEN").toUpperCase();
+                                const isCaptured = st === "CAPTURED";
+                                const isHeld = st === "HELD" || st === "SECURED";
+                                return (
+                                  <tr key={vIdx} style={{ borderBottom: "1px solid #1e293b" }}>
+                                    <td style={{ padding: "5px 8px", fontFamily: "monospace", color: "#38bdf8" }}>
+                                      {String(vp.location || `(${vp.q}, ${vp.r})`)}
+                                    </td>
+                                    <td style={{ padding: "5px 8px", fontWeight: 700, color: "#4ade80" }}>
+                                      +{Number(vp.value || 0).toFixed(1)} pts
+                                    </td>
+                                    <td style={{ padding: "5px 8px", color: "#cbd5e1" }}>
+                                      {String(vp.initial_owner || "NEUTRAL")}
+                                    </td>
+                                    <td style={{ padding: "5px 8px", fontWeight: 600, color: "#f8fafc" }}>
+                                      {String(vp.final_owner || "NEUTRAL")}
+                                    </td>
+                                    <td style={{ padding: "5px 8px" }}>
+                                      <span
+                                        style={{
+                                          fontSize: 9,
+                                          fontWeight: 700,
+                                          padding: "2px 5px",
+                                          borderRadius: 3,
+                                          background: isCaptured ? "rgba(74, 222, 128, 0.2)" : (isHeld ? "rgba(56, 189, 248, 0.2)" : "rgba(100, 116, 139, 0.2)"),
+                                          color: isCaptured ? "#4ade80" : (isHeld ? "#38bdf8" : "#94a3b8"),
+                                          border: `1px solid ${isCaptured ? "#22c55e" : (isHeld ? "#0284c7" : "#475569")}`,
+                                        }}
+                                      >
+                                        {st}
+                                      </span>
+                                    </td>
+                                  </tr>
+                                );
+                              })}
+                            </tbody>
+                          </table>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Order of Battle (OOB) Side-by-Side Rosters */}
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
+                    {/* Attacker Force Card */}
+                    <div style={{ background: "#1e293b", border: "1px solid #334155", borderRadius: 8, padding: 14 }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+                        <div>
+                          <div style={{ fontSize: 13, fontWeight: 700, color: "#38bdf8" }}>
+                            ⚔️ Attacker Order of Battle ({String(attackerForces.side || "US")})
+                          </div>
+                          <div style={{ fontSize: 11, color: "#94a3b8" }}>
+                            Controller: <code>{String(attackerForces.controller || "AI")}</code>
+                          </div>
+                        </div>
+                        <div style={{ textAlign: "right" }}>
+                          <span style={{ fontSize: 12, fontWeight: 700, color: "#4ade80" }}>
+                            {Number(attackerForces.alive_units || 0)} / {Number(attackerForces.total_units || 0)} Active
+                          </span>
+                          <div style={{ fontSize: 10, color: "#94a3b8" }}>
+                            {Number(attackerForces.eliminated_units || 0)} KIA | {Number(attackerForces.total_kills || 0)} Kills
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Integrity Progress Bar */}
+                      <div style={{ marginBottom: 12 }}>
+                        <div style={{ display: "flex", justifyContent: "space-between", fontSize: 10, color: "#cbd5e1", marginBottom: 3 }}>
+                          <span>Force Integrity</span>
+                          <strong style={{ color: Number(attackerForces.hp_integrity_pct || 0) > 50 ? "#4ade80" : "#f87171" }}>
+                            {Number(attackerForces.hp_integrity_pct || 0)}%
+                          </strong>
+                        </div>
+                        <div style={{ width: "100%", height: 6, background: "#0f172a", borderRadius: 3, overflow: "hidden" }}>
+                          <div
+                            style={{
+                              width: `${Math.min(100, Math.max(0, Number(attackerForces.hp_integrity_pct || 0)))}%`,
+                              height: "100%",
+                              background: Number(attackerForces.hp_integrity_pct || 0) > 50 ? "#22c55e" : "#ef4444",
+                              transition: "width 0.3s ease",
+                            }}
+                          />
+                        </div>
+                      </div>
+
+                      {/* Attacker Roster Table */}
+                      <div style={{ maxHeight: 240, overflowY: "auto", border: "1px solid #334155", borderRadius: 4 }}>
+                        <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 11 }}>
+                          <thead>
+                            <tr style={{ background: "#0f172a", color: "#94a3b8", textAlign: "left" }}>
+                              <th style={{ padding: "5px 6px" }}>Unit / Type</th>
+                              <th style={{ padding: "5px 6px" }}>Role</th>
+                              <th style={{ padding: "5px 6px" }}>Start</th>
+                              <th style={{ padding: "5px 6px" }}>HP Status</th>
+                              <th style={{ padding: "5px 6px" }}>Outcome</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {attackerRoster.map((u, uIdx) => {
+                              const st = String(u.status || "ACTIVE").toUpperCase();
+                              const isAlive = Boolean(u.is_alive);
+                              const isSupp = st === "SUPPRESSED";
+                              return (
+                                <tr key={uIdx} style={{ borderBottom: "1px solid #1e293b", opacity: isAlive ? 1 : 0.65 }}>
+                                  <td style={{ padding: "5px 6px" }}>
+                                    <div style={{ fontWeight: 600, color: "#f8fafc" }}>{String(u.unit_id)}</div>
+                                    <div style={{ fontSize: 9, color: "#94a3b8" }}>{String(u.category || u.unit_key)}</div>
+                                  </td>
+                                  <td style={{ padding: "5px 6px" }}>
+                                    <span style={{ fontSize: 10, color: "#cbd5e1" }}>{String(u.role || "Assault")}</span>
+                                  </td>
+                                  <td style={{ padding: "5px 6px", fontFamily: "monospace", color: "#64748b", fontSize: 10 }}>
+                                    {String(u.start_position || "-")}
+                                  </td>
+                                  <td style={{ padding: "5px 6px" }}>
+                                    <div style={{ fontSize: 10, color: "#cbd5e1" }}>
+                                      {Number(u.final_hp || 0).toFixed(0)}/{Number(u.initial_hp || 4).toFixed(0)} HP
+                                    </div>
+                                    <div style={{ width: 45, height: 4, background: "#0f172a", borderRadius: 2, marginTop: 2, overflow: "hidden" }}>
+                                      <div
+                                        style={{
+                                          width: `${Math.min(100, Math.max(0, Number(u.hp_remaining_pct || 0)))}%`,
+                                          height: "100%",
+                                          background: isSupp ? "#f59e0b" : (Number(u.hp_remaining_pct || 0) > 40 ? "#22c55e" : "#ef4444"),
+                                        }}
+                                      />
+                                    </div>
+                                  </td>
+                                  <td style={{ padding: "5px 6px" }}>
+                                    <span
+                                      style={{
+                                        fontSize: 9,
+                                        fontWeight: 700,
+                                        padding: "2px 5px",
+                                        borderRadius: 3,
+                                        background: !isAlive
+                                          ? "rgba(239, 68, 68, 0.2)"
+                                          : isSupp
+                                          ? "rgba(245, 158, 11, 0.2)"
+                                          : "rgba(34, 197, 94, 0.2)",
+                                        color: !isAlive ? "#fca5a5" : (isSupp ? "#fcd34d" : "#86efac"),
+                                        border: `1px solid ${!isAlive ? "#ef4444" : (isSupp ? "#f59e0b" : "#22c55e")}`,
+                                      }}
+                                    >
+                                      {st}
+                                    </span>
+                                  </td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+
+                    {/* Defender Force Card */}
+                    <div style={{ background: "#1e293b", border: "1px solid #334155", borderRadius: 8, padding: 14 }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+                        <div>
+                          <div style={{ fontSize: 13, fontWeight: 700, color: "#f87171" }}>
+                            🛡️ Defender Order of Battle ({String(defenderForces.side || "IT")})
+                          </div>
+                          <div style={{ fontSize: 11, color: "#94a3b8" }}>
+                            Controller: <code>{String(defenderForces.controller || "AI")}</code>
+                          </div>
+                        </div>
+                        <div style={{ textAlign: "right" }}>
+                          <span style={{ fontSize: 12, fontWeight: 700, color: "#4ade80" }}>
+                            {Number(defenderForces.alive_units || 0)} / {Number(defenderForces.total_units || 0)} Active
+                          </span>
+                          <div style={{ fontSize: 10, color: "#94a3b8" }}>
+                            {Number(defenderForces.eliminated_units || 0)} KIA | {Number(defenderForces.total_kills || 0)} Kills
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Integrity Progress Bar */}
+                      <div style={{ marginBottom: 12 }}>
+                        <div style={{ display: "flex", justifyContent: "space-between", fontSize: 10, color: "#cbd5e1", marginBottom: 3 }}>
+                          <span>Force Integrity</span>
+                          <strong style={{ color: Number(defenderForces.hp_integrity_pct || 0) > 50 ? "#4ade80" : "#f87171" }}>
+                            {Number(defenderForces.hp_integrity_pct || 0)}%
+                          </strong>
+                        </div>
+                        <div style={{ width: "100%", height: 6, background: "#0f172a", borderRadius: 3, overflow: "hidden" }}>
+                          <div
+                            style={{
+                              width: `${Math.min(100, Math.max(0, Number(defenderForces.hp_integrity_pct || 0)))}%`,
+                              height: "100%",
+                              background: Number(defenderForces.hp_integrity_pct || 0) > 50 ? "#22c55e" : "#ef4444",
+                              transition: "width 0.3s ease",
+                            }}
+                          />
+                        </div>
+                      </div>
+
+                      {/* Defender Roster Table */}
+                      <div style={{ maxHeight: 240, overflowY: "auto", border: "1px solid #334155", borderRadius: 4 }}>
+                        <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 11 }}>
+                          <thead>
+                            <tr style={{ background: "#0f172a", color: "#94a3b8", textAlign: "left" }}>
+                              <th style={{ padding: "5px 6px" }}>Unit / Type</th>
+                              <th style={{ padding: "5px 6px" }}>Role</th>
+                              <th style={{ padding: "5px 6px" }}>Start</th>
+                              <th style={{ padding: "5px 6px" }}>HP Status</th>
+                              <th style={{ padding: "5px 6px" }}>Outcome</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {defenderRoster.map((u, uIdx) => {
+                              const st = String(u.status || "ACTIVE").toUpperCase();
+                              const isAlive = Boolean(u.is_alive);
+                              const isSupp = st === "SUPPRESSED";
+                              return (
+                                <tr key={uIdx} style={{ borderBottom: "1px solid #1e293b", opacity: isAlive ? 1 : 0.65 }}>
+                                  <td style={{ padding: "5px 6px" }}>
+                                    <div style={{ fontWeight: 600, color: "#f8fafc" }}>{String(u.unit_id)}</div>
+                                    <div style={{ fontSize: 9, color: "#94a3b8" }}>{String(u.category || u.unit_key)}</div>
+                                  </td>
+                                  <td style={{ padding: "5px 6px" }}>
+                                    <span style={{ fontSize: 10, color: "#cbd5e1" }}>{String(u.role || "Defense")}</span>
+                                  </td>
+                                  <td style={{ padding: "5px 6px", fontFamily: "monospace", color: "#64748b", fontSize: 10 }}>
+                                    {String(u.start_position || "-")}
+                                  </td>
+                                  <td style={{ padding: "5px 6px" }}>
+                                    <div style={{ fontSize: 10, color: "#cbd5e1" }}>
+                                      {Number(u.final_hp || 0).toFixed(0)}/{Number(u.initial_hp || 4).toFixed(0)} HP
+                                    </div>
+                                    <div style={{ width: 45, height: 4, background: "#0f172a", borderRadius: 2, marginTop: 2, overflow: "hidden" }}>
+                                      <div
+                                        style={{
+                                          width: `${Math.min(100, Math.max(0, Number(u.hp_remaining_pct || 0)))}%`,
+                                          height: "100%",
+                                          background: isSupp ? "#f59e0b" : (Number(u.hp_remaining_pct || 0) > 40 ? "#22c55e" : "#ef4444"),
+                                        }}
+                                      />
+                                    </div>
+                                  </td>
+                                  <td style={{ padding: "5px 6px" }}>
+                                    <span
+                                      style={{
+                                        fontSize: 9,
+                                        fontWeight: 700,
+                                        padding: "2px 5px",
+                                        borderRadius: 3,
+                                        background: !isAlive
+                                          ? "rgba(239, 68, 68, 0.2)"
+                                          : isSupp
+                                          ? "rgba(245, 158, 11, 0.2)"
+                                          : "rgba(34, 197, 94, 0.2)",
+                                        color: !isAlive ? "#fca5a5" : (isSupp ? "#fcd34d" : "#86efac"),
+                                        border: `1px solid ${!isAlive ? "#ef4444" : (isSupp ? "#f59e0b" : "#22c55e")}`,
+                                      }}
+                                    >
+                                      {st}
+                                    </span>
+                                  </td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* TAB 3: TACTICAL HEAD FORENSICS */}
               {activeTab === "correlations" && (
                 <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
                   <div style={{ fontSize: 12, color: "#94a3b8" }}>

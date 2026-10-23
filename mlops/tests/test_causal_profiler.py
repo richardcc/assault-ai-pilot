@@ -171,6 +171,11 @@ def test_build_forensic_sitrep_structure():
     assert len(sitrep["turning_points"]) >= 1
     assert "threat_map" in sitrep["head_correlations"]
     assert "objective_intent" in sitrep["head_correlations"]
+    assert "battlefield_profile" in sitrep
+    assert "forces_oob" in sitrep
+    assert "attacker" in sitrep["forces_oob"]
+    assert "defender" in sitrep["forces_oob"]
+    assert sitrep["battlefield_profile"]["map_dimensions"]["total_hexes"] > 0
 
 
 def test_get_or_compute_causal_sitrep_real_replay():
