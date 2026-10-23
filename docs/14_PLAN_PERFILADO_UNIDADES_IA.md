@@ -145,3 +145,38 @@ Conforme a la **Regla 6 de Gobernanza**, la estructura de cada fotograma de repl
 }
 ```
 Esto permitirá inspeccionar de manera visual y forense si la IA respeta la doctrina militar o si experimenta desalineación táctica.
+
+---
+
+## 6. Perfilado Topográfico 5D e Inteligencia Previa a la Batalla (IPB / Tarea 4.3 - v2.5.28)
+
+Complementando el perfilado dinámico doctrinal de las unidades (Fases 1 a 5), la **Tarea 4.3** incorpora el análisis topográfico del terreno en **Turno 0** (*Intelligence Preparation of the Battlefield - IPB*), desarrollado en `assault_model/map/topography_analyzer.py` e integrado en `agents/efficientzero_v2/core/macro_planner.py`.
+
+### 6.1 Vector 5D por Hexágono (`Hex5DProfile`)
+Para cada celda $(q, r)$ del escenario, se computa de forma estática determinista un vector de 5 dimensiones:
+1. **Cover Rating ($c \in [0.0, 1.0]$):** Resistencia balística y ocultación del hexágono (edificios $\ge 0.85$, bosques densos $\ge 0.70$, crestas $\ge 0.40$, despejado $\le 0.15$).
+2. **Elevation Dominance ($e \in [0.0, 1.0]$):** Dominancia orográfica sobre el entorno circundante (crestas y colinas $\ge 0.85$).
+3. **LOS Exposure ($l_{\text{exp}} \in [0.0, 1.0]$):** Vulnerabilidad a líneas de visión y fuego cruzado en terreno abierto circundante.
+4. **Chokepoint Bottleneck ($\text{chk} \in [0.0, 1.0]$):** Constricción de maniobra debida a hexágonos adyacentes infranqueables (agua, relieve escarpado).
+5. **VP Proximity Utility ($u_{\text{vp}} \in [0.0, 1.0]$):** Proximidad espacial euclidiana e hiperbólica hacia los Puntos de Victoria: $u_{\text{vp}} = \frac{1}{1 + \min_v d((q,r), v)}$.
+
+### 6.2 Clasificación Táctica y Sectores del Terreno
+A partir del perfil 5D, los hexágonos se clasifican deterministamente en 6 categorías operacionales:
+* **`KEY_TERRAIN`:** Hexágonos que contienen Puntos de Victoria (VPs).
+* **`BASE_OF_FIRE`:** Alturas dominantes ($e \ge 0.75$) o posiciones de cobertura pesada con campo de tiro inmediato sobre los VPs ($1 \le d \le 6$).
+* **`CHOKEPOINT`:** Pasos obligados y cuellos de botella con constricción severa ($\text{chk} \ge 0.60$).
+* **`KILLZONE`:** Terreno despejado y abierto con alta exposición ($c < 0.35, l_{\text{exp}} \ge 0.60$) a corta distancia de objetivos ($d \le 4$).
+* **`DEFILADE_CORRIDOR`:** Rutas de aproximación cubiertas por vegetación densa o relieve ($c \ge 0.65$ o $c \ge 0.50$ con baja exposición) que ocultan el avance hacia el objetivo.
+* **`MANEUVER_TRANSIT`:** Espacio estándar de maniobra táctica.
+
+### 6.3 Inyección de Priors Topográficos en `MacroStrategyPlanner`
+El planificador táctico modula los priors de acción en MCTS (`compute_action_boost`):
+* **Avance en Desenfilada:** $+25\%$ de refuerzo cuando la unidad avanza acortando distancia al VP objetivo a través de `DEFILADE_CORRIDOR`.
+* **Disuasión en Killzones:** Penalización severa ($0.55\times$ para unidades generales, $0.65\times$ para unidades `SPEARHEAD` que realizan maniobras laterales sin cerrar distancia) al internarse en `KILLZONE` abierta expuesta a fuego cruzado.
+* **Base de Fuego:** $+30\%$ de refuerzo para unidades de apoyo (`ROLE_FIRE_SUPPORT`) que alcanzan hexágonos designados como `BASE_OF_FIRE`.
+* **Fijación de Chokepoints:** $+20\%$ de refuerzo para roles de defensa y pantalla (`ROLE_FLANK_SCREEN`, `ROLE_OBJECTIVE_DEFENDER`) que aseguran embudos tácticos.
+* **Ablación Pura:** El factor continuo $\beta_{\text{macro}} = \text{modulation\_scale}$ neutraliza exactamente todos los boosts a $1.0$ cuando se evalúa en régimen de red puramente neural.
+
+### 6.4 Visibilidad en Dashboard MLOps (:8778)
+* **Endpoints:** `/api/v2/replay/topography` y `/api/v2/replay/ipb`.
+* **Capa Visual:** Botón interactivo `🛡️ IPB Topography` en el visor de Replay. Colorea de forma translúcida los hexágonos según su clasificación y provee un tooltip interactivo en tiempo real con las métricas 5D ($c, e, l_{\text{exp}}, \text{chk}, u_{\text{vp}}$) al posar el cursor sobre cada celda.

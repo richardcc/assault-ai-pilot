@@ -65,6 +65,7 @@ flowchart TD
 
 | Versión | Época / Ciclo | Fase Técnica / Doctrinal | Componentes Clave y Rendimiento Verificado | Estado |
 | :--- | :--- | :--- | :--- | :--- :---: |
+| **`v2.5.28`** | Octubre 2026 | Perfilado 5D de Unidades y Detección Automática de Chokepoints (IPB / Línea 4 - Tarea 4.3) | Análisis topográfico Turno 0 en `topography_analyzer.py` extrayendo el vector 5D por hexágono (*Cover*, *Elevation Dominance*, *LOS Exposure*, *Chokepoint Bottleneck*, *VP Proximity Utility*); clasificación determinista en *Key Terrain*, *Defilade Corridors*, *Killzones*, *Chokepoints* y *Base of Fire*; inyección de priors topográficos en `MacroStrategyPlanner` (+25% por desenfilada hacia el VP, atenuación 0.55x-0.65x en killzones, +30% Base of Fire); endpoints REST MLOps `/api/v2/replay/topography` y `/api/v2/replay/ipb`; capa visual interactiva `🛡️ IPB Topography` en Match Replay (:8778). Suite `test_topography_ipb_analyzer.py` (2/2) y EZv2 (158/158) en verde. | `CONSOLIDADO 🟢` |
 | **`v2.5.27`** | Octubre 2026 | Modulación Dinámica Doctrinal ($\beta_{\text{macro}}$), Auditoría de Cabezas y Robustez SimSiam (Línea 2 / Tarea 2.8) | Desacoplamiento continuo del sesgo heurístico estático ($+35\%$) mediante escala parametrizada $\beta_{\text{macro}} \in [0.0, 1.0]$ (`macro_modulation_scale`), posibilitando modo Red Neuronal Pura ($\beta = 0.0$), calentamiento progresivo y refuerzo doctrinal ($\beta = 1.0$); auditoría de localización espacial en cabezas tácticas (FCN pura $H \times W$ para `threat_map`/`final_ownership`, `SpatialAttentionBlock` $4\times 4$ para `attrition`, `morale`, `intent`, `multi_vp`, erradicando GAP $1\times 1$ espurio); confirmación de 48 canales latentes en `prediction_trunk` (8 Conv2D a 48ch); verificación del stop-gradient dual SimSiam (`torch.no_grad()` + `.detach()`) y normalización $\ell_2$. Suite dedicada `test_heads_improvements.py` (9/9 tests en verde). | `CONSOLIDADO 🟢` |
 | **`v2.5.26`** | Octubre 2026 | Visualización Curricular Multilínea por Sub-Currículum (Línea 1 / Dashboard MLOps) | Reestructuración visual de `CurriculumLineageFlow.tsx` en filas temáticas dedicadas e independientes por cada sub-currículum (Fila 1: Sub-Currículum 1 - *Objective Doctrine & VP Acceleration*, Fases 1 a 5; Fila 2: Sub-Currículum 2 - *Multi-Scenario Self-Play vs Random*, Fases 6 a 13); banner de transición y transferencia de pesos inter-etapas (*Breakthrough*); erradicación de scroll horizontal masivo; compatibilidad total tanto en modo canónico como cronológico. Build de Vite verificado en 1.72s. | `CONSOLIDADO 🟢` |
 | **`v2.5.24`** | Octubre 2026 | Resiliencia y Autorrecuperación Multiproceso (Línea 2) | Self-healing y reconstrucción automática de `ProcessPoolExecutor` ante terminaciones anómalas de SO (`BrokenProcessPool`); reciclaje periódico de procesos cada 5 iteraciones (`recycle_workers_every_iters: 5`) erradicando al 100% la fragmentación de heap y fugas de memoria en sesiones multi-hora; fallback resiliente para episodios huérfanos; ampliación del enum canónico `UnitCategory` (`ARTILLERY`, `GUN_ARTILLERY`) subsanando validaciones de catálogo de unidades. Suites 154/154 en EZv2 y 114/114 en assault_model en verde. | `CONSOLIDADO 🟢` |
@@ -105,6 +106,36 @@ flowchart TD
 | **`v2.5.10`** | Octubre 2026 | Atribución Causal Espacial Hexagonal (XAI / Grad-CAM / IGNH) y Unificación de Diagnóstico de Cabezas | Endpoint `/api/v2/replay/explain-step` con Grad-CAM espacial e Integrated Gradients sobre 32 canales sensoriales heterogéneos, visualizador modal de explicabilidad con heatmap reactivo sobre tablero hexagonal en Match Replay (:8778). Unificación integral del Diagnóstico de Cabezas en `Evaluación & Benchmarks -> Diagnóstico de Cabezas (XAI)` con 7 fichas de salud sintética, matriz de verificación MLOps, behavioral telemetry sanity board y desglose de 11 métricas puras, depurando la vista de Topología hacia su rol puramente arquitectural con enlace directo. Suite `mlops/tests/test_explainability_api.py` (3/3 en verde) y frontend 100% en inglés según Regla 7. | `CONSOLIDADO 🟢` |
 
 ## 3. Fases Recientes Consolidadas (Ciclos v2.4.x - v2.5.x — Octubre 2026)
+
+#### v2.5.28 — Perfilado 5D de Unidades y Detección Automática de Chokepoints (IPB / Línea 4 - Tarea 4.3) [CONSOLIDADO 🟢]
+* **Objetivo**: Desarrollar el análisis topográfico formal Turno 0 (*Intelligence Preparation of the Battlefield - IPB*), calculando el perfil 5D por hexágono (*Cover*, *Elevation Dominance*, *LOS Exposure*, *Chokepoint Bottleneck*, *VP Proximity Utility*), clasificando el tablero en sectores tácticos (*Key Terrain*, *Defilade Corridors*, *Killzones*, *Chokepoints*, *Base of Fire*), inyectando estos priors espaciales en el `MacroStrategyPlanner` y ofreciendo visibilidad interactiva en el Dashboard MLOps Replay (:8778).
+* **Componentes Consolidados**:
+  * **Analizador Topográfico IPB (`assault_model/map/topography_analyzer.py`)**:
+    * Implementación de `Hex5DProfile` con las 5 dimensiones clave del terreno: cobertura balística $c \in [0, 1]$, dominancia de elevación $e \in [0, 1]$, exposición a líneas de visión $l_{\text{exp}} \in [0, 1]$, constricción de paso / chokepoint $\text{chk} \in [0, 1]$ y utilidad de proximidad a VPs $u_{\text{vp}} \in [0, 1]$.
+    * Clasificación táctica autoritativa de hexágonos:
+      * **Key Terrain**: Hexágonos que contienen Puntos de Victoria (VPs).
+      * **Base of Fire**: Posiciones elevadas dominantes ($e \ge 0.75$) o con alta cobertura adyacentes a VPs con excelente campo de tiro.
+      * **Chokepoint**: Embudo táctico flanqueado por obstáculos o hexágonos infranqueables ($\text{chk} \ge 0.60$).
+      * **Killzone**: Terreno abierto expuesto a fuego cruzado ($c < 0.35, l_{\text{exp}} \ge 0.60$) en proximidad a objetivos ($d \le 4$).
+      * **Defilade Corridor**: Vías de avance protegidas por cobertura o relieve ($c \ge 0.65$ o $c \ge 0.50$ con baja exposición) que minimizan la vulnerabilidad al fuego enemigo.
+      * **Maneuver Transit**: Terreno estándar de transición operacional.
+    * Caché estática Turno 0 (`_topography_cache`) por escenario para eliminar cómputos redundantes en autojuego y evaluación.
+  * **Integración en `MacroStrategyPlanner` (`agents/efficientzero_v2/core/macro_planner.py`)**:
+    * Campo `topography` en el contrato canónico `MacroPlan` con serialización JSON completa en `to_dict()`.
+    * Modulación de priors de acción (`compute_action_boost`):
+      * $+25\%$ de refuerzo al avanzar por corredores en desenfilada hacia el VP objetivo.
+      * Atenuación de $0.55\times$ (no spearhead) y $0.65\times$ (spearhead en maniobra lateral/retirada) al ingresar en killzones expuestas.
+      * $+30\%$ de refuerzo para unidades de apoyo de fuego (`ROLE_FIRE_SUPPORT`) que ocupan posiciones de Base of Fire.
+      * $+20\%$ de refuerzo para roles de pantalla y contención (`ROLE_FLANK_SCREEN`, `ROLE_OBJECTIVE_DEFENDER`) en chokepoints.
+    * Respeto estricto del parámetro de ablación `modulation_scale` ($\beta_{\text{macro}} = 0.0$ neutraliza 100% de la modulación a $1.0$).
+  * **Endpoints MLOps y Capa Reactiva en Dashboard (:8778)**:
+    * Endpoints REST `/api/v2/replay/topography` y `/api/v2/replay/ipb` en `mlops/reporting/viewer.py` y `mlops/reporting/explainability_api.py`.
+    * Botón `🛡️ IPB Topography` en la barra de herramientas del mapa en `MatchReplayTab.tsx`.
+    * Renderizado visual en canvas con polígonos diferenciados por color (dorado para Key Terrain, azul para Defilade, rojo translúcido con rayado diagonal para Killzones, morado para Chokepoints, naranja para Base of Fire) y tooltip con desglose numérico 5D al posar el ratón.
+  * **Suite de Pruebas y Verificación Cuantitativa**:
+    * Suite unitaria dedicada `assault_model/tests/test_topography_ipb_analyzer.py` (2/2 tests en verde).
+    * Suites generales `assault_model/tests/` (116/116 en verde) y `agents/efficientzero_v2/tests/` (158/158 en verde).
+    * Compilación frontend de Vite limpia en 1.84s sin advertencias ni errores.
 
 #### v2.5.27 — Modulación Dinámica Doctrinal ($\beta_{\text{macro}}$), Auditoría de Cabezas y Robustez SimSiam (Línea 2 / Tarea 2.8) [CONSOLIDADO 🟢]
 * **Objetivo**: Abordar y resolver rigurosamente los 4 puntos de la auditoría profunda de arquitectura neuronal en `EfficientZero V2`, integrando la modulación dinámica de priors para posibilitar regímenes de Red Pura y calentamiento progresivo (Consolidación de Tarea 2.8 del Roadmap), y clarificando las garantías matemáticas de localización espacial y prevención de colapso de representación.

@@ -82,6 +82,7 @@ class MacroPlan:
     neural_intent_class: int | None = None
     enemy_coords: Dict[str, Tuple[int, int]] = field(default_factory=dict)
     enemy_suppressed: Dict[str, bool] = field(default_factory=dict)
+    topography: Any = None
 
     def get_role(self, unit_id: str) -> str:
         return self.unit_roles.get(str(unit_id), "ROLE_MANEUVER")
@@ -114,6 +115,7 @@ class MacroPlan:
             "neural_intent_class": self.neural_intent_class,
             "enemy_coords": {k: list(v) for k, v in self.enemy_coords.items()},
             "enemy_suppressed": dict(self.enemy_suppressed),
+            "topography": self.topography.to_dict() if self.topography and hasattr(self.topography, "to_dict") else None,
         }
 
 
@@ -137,6 +139,53 @@ class MacroStrategyPlanner:
         self.assault_boost = float(assault_boost)
         self.support_boost = float(support_boost)
         self.defense_boost = float(defense_boost)
+        self._topography_cache: Dict[str, Any] = {}
+
+    def get_topography_profile(self, obs: Any) -> Any:
+        """
+        Retrieves or computes the Turn-0 IPB TopographyProfile for the given observation/scenario.
+        """
+        try:
+            from assault_model.map.topography_analyzer import analyze_battlefield_topography
+        except ImportError:
+            return None
+
+        scen_id = str(getattr(obs, "scenario_id", "") or "")
+        vp_hexes = list(getattr(obs, "vp_hexes", []) or getattr(obs, "vp_cells", []) or [])
+        playable = list(getattr(obs, "playable_hexes", []) or [])
+        terrain_by_hex = dict(getattr(obs, "terrain_type_by_hex", {}) or {})
+
+        if not playable and not terrain_by_hex:
+            return None
+
+        sig = scen_id or f"grid_{len(playable) or len(terrain_by_hex)}_vps_{len(vp_hexes)}"
+        if sig in self._topography_cache:
+            return self._topography_cache[sig]
+
+        hex_data: list[dict] = []
+        if playable:
+            for h in playable:
+                if isinstance(h, dict):
+                    q = int(h.get("q", 0))
+                    r = int(h.get("r", 0))
+                    t = str(h.get("terrain", terrain_by_hex.get(f"{q},{r}", "clear")) or "clear")
+                    hex_data.append({"q": q, "r": r, "terrain": t})
+        else:
+            for k, t in terrain_by_hex.items():
+                parts = k.split(",")
+                if len(parts) >= 2:
+                    try:
+                        hex_data.append({"q": int(parts[0]), "r": int(parts[1]), "terrain": str(t)})
+                    except ValueError:
+                        continue
+
+        prof = analyze_battlefield_topography(
+            hex_data=hex_data,
+            vp_hexes=vp_hexes,
+            scenario_id=sig,
+        )
+        self._topography_cache[sig] = prof
+        return prof
 
     def compute_macro_plan(
         self,
@@ -144,6 +193,7 @@ class MacroStrategyPlanner:
         intent_logits: List[float] | None = None,
         multi_vp_pred: List[float] | None = None,
     ) -> MacroPlan:
+        topography = self.get_topography_profile(obs)
         to_play = str(getattr(obs, "to_play", "") or "")
         units = list(getattr(obs, "units", []) or [])
         if not units:
@@ -451,6 +501,7 @@ class MacroStrategyPlanner:
             neural_intent_class=neural_intent_class,
             enemy_coords=enemy_coords,
             enemy_suppressed=enemy_suppressed,
+            topography=topography,
         )
 
     def compute_action_boost(
@@ -652,6 +703,45 @@ class MacroStrategyPlanner:
                         else:
                             # Lateral shift without closing distance
                             boost *= 0.85
+
+        # IPB Topographical Priors (Roadmap Task 4.3):
+        topography = getattr(macro_plan, "topography", None)
+        if topography is not None and dest_coords is not None and ("MOVE" in kind_upper or "ASSAULT" in kind_upper):
+            # 1. Defilade Corridor: Protected advance towards Key Terrain
+            if topography.is_defilade(dest_coords[0], dest_coords[1]):
+                if macro_plan.target_vp_coords is not None:
+                    actor_pos = all_coords.get(actor)
+                    if actor_pos is not None:
+                        d_b = _hex_distance(actor_pos[0], actor_pos[1], macro_plan.target_vp_coords[0], macro_plan.target_vp_coords[1])
+                        d_a = _hex_distance(dest_coords[0], dest_coords[1], macro_plan.target_vp_coords[0], macro_plan.target_vp_coords[1])
+                        if d_a < d_b:
+                            boost *= 1.25  # +25% reward for advancing through covered defilade corridor
+                else:
+                    boost *= 1.10
+
+            # 2. Killzone: Open, crossfire-exposed ground
+            if topography.is_killzone(dest_coords[0], dest_coords[1]):
+                # Crossing a killzone without friendly support or smoke is heavily penalized
+                if role not in {"ROLE_SPEARHEAD", "ROLE_COMMAND"}:
+                    boost *= 0.55  # -45% penalty for uncoordinated dash into crossfire killzone
+                else:
+                    actor_pos = all_coords.get(actor)
+                    d_b = _hex_distance(actor_pos[0], actor_pos[1], macro_plan.target_vp_coords[0], macro_plan.target_vp_coords[1]) if actor_pos and macro_plan.target_vp_coords else 0
+                    d_a = _hex_distance(dest_coords[0], dest_coords[1], macro_plan.target_vp_coords[0], macro_plan.target_vp_coords[1]) if macro_plan.target_vp_coords else 0
+                    if d_a >= d_b:
+                        # Lateral shift or moving away inside killzone is strongly discouraged
+                        boost *= 0.65
+                    else:
+                        # Advancing spearhead across killzone has moderate hazard friction
+                        boost *= 0.85
+
+            # 3. Base of Fire: Commanding elevation / heavy cover overlooking VPs
+            if role == "ROLE_FIRE_SUPPORT" and topography.is_base_of_fire(dest_coords[0], dest_coords[1]):
+                boost *= 1.30  # +30% boost for establishing commanding overwatch at Base of Fire
+
+            # 4. Chokepoint: Funnel / bottleneck holding
+            if role in {"ROLE_FLANK_SCREEN", "ROLE_DEFENDER", "ROLE_OBJECTIVE_DEFENDER"} and topography.is_chokepoint(dest_coords[0], dest_coords[1]):
+                boost *= 1.20  # +20% boost for screening and locking down chokepoints
 
         if float(modulation_scale) != 1.0:
             boost = 1.0 + (boost - 1.0) * float(max(0.0, modulation_scale))

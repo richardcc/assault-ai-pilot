@@ -860,3 +860,63 @@ def compute_step_tactical_heads(
         "tactical_heads": tactical_heads,
         "execution_time_ms": round(elapsed_ms, 2),
     }
+
+
+def compute_replay_topography_profile(
+    repo_root: Path,
+    scenario_id: str = "",
+    eval_source_path: str = "",
+    episode_id: str = "episode_0",
+    load_scenario_overlay_fn: Optional[Callable[[Path, str], dict[str, Any]]] = None,
+) -> dict[str, Any]:
+    """
+    Computes or retrieves Turn-0 IPB Topography Profile for replay visualization (Roadmap Task 4.3).
+    """
+    t0 = time.perf_counter()
+    from assault_model.map.topography_analyzer import analyze_battlefield_topography
+
+    scen_id = str(scenario_id or "").strip()
+    scenario_overlay = None
+
+    if not scen_id and eval_source_path:
+        from mlops.reporting.replay_api import build_v2_replay_steps_payload
+        try:
+            steps_payload = build_v2_replay_steps_payload(
+                eval_source_path=eval_source_path,
+                episode_id=episode_id,
+                from_step=0,
+                to_step=0,
+                repo_root=repo_root,
+                load_scenario_overlay=load_scenario_overlay_fn,
+            )
+            scen_id = str(steps_payload.get("scenario_id", "") or "")
+            scenario_overlay = steps_payload.get("scenario_overlay")
+        except Exception:
+            pass
+
+    if not scenario_overlay and load_scenario_overlay_fn is not None and scen_id:
+        scenario_overlay = load_scenario_overlay_fn(repo_root, scen_id)
+
+    if not scenario_overlay:
+        return {
+            "ok": False,
+            "error": f"Scenario overlay not found for '{scen_id}'",
+        }
+
+    hex_data = list(scenario_overlay.get("hexes", []) or [])
+    vp_hexes = list(scenario_overlay.get("vp_hexes", []) or [])
+
+    profile = analyze_battlefield_topography(
+        hex_data=hex_data,
+        vp_hexes=vp_hexes,
+        scenario_id=scen_id,
+    )
+
+    elapsed_ms = (time.perf_counter() - t0) * 1000.0
+    return {
+        "ok": True,
+        "scenario_id": scen_id,
+        "elapsed_ms": round(elapsed_ms, 2),
+        "topography": profile.to_dict(),
+    }
+

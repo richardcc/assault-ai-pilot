@@ -717,6 +717,56 @@ export function MatchReplayTab({
     return tacticalHeadsByStep.get(clamped) || null;
   }, [tacticalHeadsByStep, clamped]);
 
+  // IPB Topography Overlay State (Roadmap Task 4.3)
+  const [showIpbTopography, setShowIpbTopography] = useState(false);
+  const [topographyProfile, setTopographyProfile] = useState<Dict | null>(null);
+  const [isLoadingTopography, setIsLoadingTopography] = useState(false);
+
+  useEffect(() => {
+    if (!showIpbTopography || !selectedEvalSourcePath) return;
+    if (topographyProfile) return;
+    let isMounted = true;
+    setIsLoadingTopography(true);
+    const scenId = String(replaySteps?.scenario_id || "");
+    const epId = String(replaySteps?.episode_id || "episode_0");
+    const params = new URLSearchParams({
+      scenario_id: scenId,
+      eval_source_path: selectedEvalSourcePath,
+      episode_id: epId,
+    });
+    fetch(`/api/v2/replay/topography?${params.toString()}`)
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (!isMounted) return;
+        if (data && data.ok && data.topography) {
+          setTopographyProfile(data.topography as Dict);
+        }
+      })
+      .catch((err) => console.warn("Failed to fetch IPB topography:", err))
+      .finally(() => {
+        if (isMounted) setIsLoadingTopography(false);
+      });
+    return () => {
+      isMounted = false;
+    };
+  }, [showIpbTopography, selectedEvalSourcePath, replaySteps?.scenario_id, replaySteps?.episode_id, topographyProfile]);
+
+  const topographyMap = useMemo(() => {
+    const map = new Map<string, { classification: string; cover_rating: number; los_exposure: number; elevation: number; chokepoint: number }>();
+    if (!topographyProfile || !Array.isArray(topographyProfile.hex_profiles)) return map;
+    for (const hp of topographyProfile.hex_profiles) {
+      if (!hp) continue;
+      map.set(`${hp.q},${hp.r}`, {
+        classification: String(hp.classification || ""),
+        cover_rating: Number(hp.cover_rating || 0),
+        los_exposure: Number(hp.los_exposure || 0),
+        elevation: Number(hp.elevation_dominance || 0),
+        chokepoint: Number(hp.chokepoint_bottleneck || 0),
+      });
+    }
+    return map;
+  }, [topographyProfile]);
+
   // Forensic SitRep and Causal Profiler Modal State
   const [isSitrepOpen, setIsSitrepOpen] = useState(false);
   const [sitrepData, setSitrepData] = useState<Dict | null>(null);
@@ -1788,6 +1838,25 @@ export function MatchReplayTab({
             ctx.strokeText(threatLabel, p.x, p.y + scale * 0.36);
             ctx.fillStyle = threatVal >= 0.60 ? "#fef08a" : "#fef3c7";
             ctx.fillText(threatLabel, p.x, p.y + scale * 0.36);
+          }
+        }
+      }
+
+      // IPB Topography Overlay (Roadmap Task 4.3: Defilade Corridors, Killzones, Base of Fire, Chokepoints)
+      if (showIpbTopography && topographyMap.size > 0) {
+        const ipbProf = topographyMap.get(coordKey);
+        if (ipbProf) {
+          const cls = ipbProf.classification;
+          if (cls === "KEY_TERRAIN") {
+            drawHex(p.x, p.y, scale * 0.95, "#f59e0b", "rgba(245, 158, 11, 0.22)", 2);
+          } else if (cls === "DEFILADE_CORRIDOR") {
+            drawHex(p.x, p.y, scale * 0.95, "#10b981", "rgba(16, 185, 129, 0.20)", 1.5);
+          } else if (cls === "KILLZONE") {
+            drawHex(p.x, p.y, scale * 0.95, "#ef4444", "rgba(239, 68, 68, 0.24)", 1.5);
+          } else if (cls === "CHOKEPOINT") {
+            drawHex(p.x, p.y, scale * 0.95, "#a855f7", "rgba(168, 85, 247, 0.22)", 1.5);
+          } else if (cls === "BASE_OF_FIRE") {
+            drawHex(p.x, p.y, scale * 0.95, "#06b6d4", "rgba(6, 182, 212, 0.22)", 2);
           }
         }
       }
@@ -3059,6 +3128,28 @@ export function MatchReplayTab({
                 )}
               </button>
               <button
+                onClick={() => setShowIpbTopography(!showIpbTopography)}
+                title="Toggle Turn-0 IPB Topography Overlay (Defilade Corridors, Killzones, Base of Fire, Chokepoints)"
+                style={{
+                  fontSize: 10,
+                  padding: "2px 8px",
+                  borderRadius: 3,
+                  background: showIpbTopography ? "#047857" : "rgba(16, 185, 129, 0.15)",
+                  color: showIpbTopography ? "#ecfdf5" : "#34d399",
+                  border: `1px solid ${showIpbTopography ? "#10b981" : "#059669"}`,
+                  cursor: "pointer",
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: 4,
+                  fontWeight: showIpbTopography ? 700 : 500,
+                }}
+              >
+                <span>🛡️ IPB Topography</span>
+                {isLoadingTopography && (
+                  <span style={{ fontSize: 9, opacity: 0.8 }}>...</span>
+                )}
+              </button>
+              <button
                 onClick={() => handleOpenSitrep()}
                 title="Open Autonomous Forensic Situation Report (SitRep) and Causal Profiler"
                 style={{
@@ -3405,6 +3496,14 @@ export function MatchReplayTab({
                 {vpMap.find((v) => v.q === hoveredHex.q && v.r === hoveredHex.r) && (
                   <div style={{ color: "#facc15", fontSize: 10, fontWeight: 600 }}>
                     ★ Victory Point ({vpMap.find((v) => v.q === hoveredHex.q && v.r === hoveredHex.r)?.owner})
+                  </div>
+                )}
+                {showIpbTopography && topographyMap.has(`${hoveredHex.q},${hoveredHex.r}`) && (
+                  <div style={{ marginTop: 4, paddingTop: 3, borderTop: "1px solid #334155", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                    <span style={{ color: "#34d399", fontWeight: 700, fontSize: 10 }}>🛡️ IPB Sector:</span>
+                    <span style={{ color: "#ecfdf5", fontWeight: 800, fontSize: 10 }}>
+                      {topographyMap.get(`${hoveredHex.q},${hoveredHex.r}`)?.classification.replace(/_/g, " ")}
+                    </span>
                   </div>
                 )}
                 {showThreatHead && threatHeadHexMap.has(`${hoveredHex.q},${hoveredHex.r}`) && (

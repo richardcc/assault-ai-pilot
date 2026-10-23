@@ -56,7 +56,14 @@ epresentation_tower. Mapeo biyectivo de coordenadas de tablero (q, r).
   - Frontend: `ForensicSitRepModal.tsx` integrado en Match Replay (:8778) con pestañas de Executive Assessment, Tactical Head Forensics, Turning Points interactivos con salto temporal (`Seek Step`) y citas de reglas.
   - Verificación: Suite `mlops/tests/test_causal_profiler.py` con 9/9 tests en verde.
 
-- **Tarea 4.4 Consolidada 🟢**: Fases 1 a 5 implementadas en v2.4.5:
+- **Tarea 4.3 Consolidada 🟢 [v2.5.28]**: Perfilado 5D de Unidades y Detección Automática de Chokepoints (IPB / Intelligence Preparation of the Battlefield):
+  - Backend analítico topográfico Turno 0: `assault_model/map/topography_analyzer.py` con `TopographyAnalyzer`, vector `Hex5DProfile` (*Cover*, *Elevation Dominance*, *LOS Exposure*, *Chokepoint Bottleneck*, *VP Proximity Utility*) y clasificaciones topográficas autoritativas: `KEY_TERRAIN`, `DEFILADE_CORRIDOR`, `KILLZONE`, `CHOKEPOINT`, `BASE_OF_FIRE`, `MANEUVER_TRANSIT`.
+  - Inyección de Priors en Planificador Macro: `agents/efficientzero_v2/core/macro_planner.py` integrando `TopographyProfile` con Turn-0 caching, modulación de priors de movimiento y asalto (+25% por avance en desenfilada hacia el objetivo, atenuación 0.55x-0.65x en killzones abiertas expuestas a fuego cruzado, +30% para establecimiento de base de fuego por unidades de apoyo, +20% para fijación y screening de chokepoints). Soporte completo del factor continuo de ablación `modulation_scale`.
+  - API REST MLOps: Endpoints `/api/v2/replay/topography` y `/api/v2/replay/ipb` en `mlops/reporting/viewer.py` y `mlops/reporting/explainability_api.py`.
+  - Frontend Replay Interactivo (:8778): Capa de visualización `🛡️ IPB Topography` en `MatchReplayTab.tsx` con polígonos coloreados por clasificación táctica, patrones de sombreado y tooltip de inspección sectorial con desglose métrico 5D.
+  - Verificación Cuantitativa: Suite `assault_model/tests/test_topography_ipb_analyzer.py` (2/2 tests en verde) y suite general EZv2 (158/158 tests en verde).
+
+- **Tarea 4.4 Consolidada 🟢 [v2.4.5]**: Fases 1 a 5 implementadas en v2.4.5:
   - F1: Esquema canónico en catálogo `unit_catalog.json` y contratos de tipos en `unit_type.py`.
   - F2: Expansión sensorial y canales doctrinales (32..35).
   - F3: Mutación dinámica de roles en `macro_planner.py` y modulación de priors MCTS.

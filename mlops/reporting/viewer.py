@@ -35,6 +35,7 @@ from mlops.reporting.causal_profiler import (
 )
 from mlops.reporting.explainability_api import (
     compute_step_tactical_heads as _compute_step_tactical_heads,
+    compute_replay_topography_profile as _compute_replay_topography_profile,
     explain_replay_step as _explain_replay_step,
 )
 from mlops.reporting.model_deletion import (
@@ -808,6 +809,20 @@ def serve(
                 )
                 self._send_json_status(payload)
                 return
+            if parsed.path in ("/api/v2/replay/topography", "/api/v2/replay/ipb"):
+                qs = parse_qs(parsed.query)
+                scen_id = str(qs.get("scenario_id", [""])[0] or "").strip()
+                eval_src = str(qs.get("eval_source_path", [""])[0] or qs.get("source_path", [""])[0] or "")
+                ep_id = str(qs.get("episode_id", ["episode_0"])[0] or "episode_0")
+                payload = _compute_replay_topography_profile(
+                    repo_root=repo_root,
+                    scenario_id=scen_id,
+                    eval_source_path=eval_src,
+                    episode_id=ep_id,
+                    load_scenario_overlay_fn=_load_scenario_overlay,
+                )
+                self._send_json_status(payload)
+                return
             if parsed.path == "/api/replay-log":
                 qs = parse_qs(parsed.query)
                 payload = _build_replay_log_payload(
@@ -825,6 +840,31 @@ def serve(
                 run_id = str(qs.get("run_id", [""])[0] or "").strip()
                 payload = _read_channel_attribution_report(repo_root=repo_root, run_id=run_id)
                 self._send_bytes(_json_bytes(payload), "application/json; charset=utf-8")
+                return
+            if norm_path in ("/api/v2/replay/topography", "/api/v2/replay/ipb"):
+                try:
+                    content_length = int(self.headers.get("Content-Length", 0))
+                    body = self.rfile.read(content_length) if content_length > 0 else b"{}"
+                    data = json.loads(body.decode("utf-8")) if body else {}
+                    scen_id = str(data.get("scenario_id") or "").strip()
+                    eval_src = str(data.get("eval_source_path") or data.get("source_path") or "").strip()
+                    if not eval_src or not scen_id:
+                        qs = parse_qs(parsed.query)
+                        if not scen_id:
+                            scen_id = str(qs.get("scenario_id", [""])[0] or "").strip()
+                        if not eval_src:
+                            eval_src = str(qs.get("eval_source_path", [""])[0] or qs.get("source_path", [""])[0] or "").strip()
+                    ep_id = str(data.get("episode_id") or "episode_0").strip()
+                    payload = _compute_replay_topography_profile(
+                        repo_root=repo_root,
+                        scenario_id=scen_id,
+                        eval_source_path=eval_src,
+                        episode_id=ep_id,
+                        load_scenario_overlay_fn=_load_scenario_overlay,
+                    )
+                    self._send_json_status(payload)
+                except Exception as exc:
+                    self._send_json_status({"ok": False, "error": str(exc)}, status_code=500)
                 return
             if norm_path == "/api/channel-attribution/run":
                 qs = parse_qs(parsed.query)
