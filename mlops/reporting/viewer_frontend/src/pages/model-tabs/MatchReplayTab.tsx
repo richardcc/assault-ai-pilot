@@ -491,6 +491,64 @@ function getUnitCounterArt(unitKey: string, hp?: number): string {
   return def.full;
 }
 
+export interface ActionMarkerInfo {
+  src: string;
+  label: string;
+}
+
+export function getActionMarkerArt(actionId: string, actionKind?: string): ActionMarkerInfo | null {
+  const text = `${actionId || ""} ${actionKind || ""}`.toUpperCase();
+  if (text.includes("TURRET")) {
+    return { src: "/art/action_markers/turret_firing.png", label: "Turret Fire" };
+  }
+  if (text.includes("FIRE_MOVE") || text.includes("FIRE_AND_MOVE")) {
+    return { src: "/art/action_markers/fire_move.png", label: "Fire & Move" };
+  }
+  if (text.includes("MOVE_FIRE") || text.includes("MOVE_AND_FIRE")) {
+    return { src: "/art/action_markers/move_fire.png", label: "Move & Fire" };
+  }
+  if (text.includes("FAST") || text.includes("SPRINT") || text.includes("RUSH")) {
+    return { src: "/art/action_markers/fast_action.png", label: "Fast Action" };
+  }
+  if (
+    text.includes("FIRE") ||
+    text.includes("ATTACK") ||
+    text.includes("SHOOT") ||
+    text.includes("BARRAGE") ||
+    text.includes("OPPORTUNITY")
+  ) {
+    return { src: "/art/action_markers/firing.png", label: "Firing" };
+  }
+  if (text.includes("FALLBACK") || text.includes("RETREAT") || text.includes("WITHDRAW")) {
+    return { src: "/art/status/Status Fallback.png", label: "Fallback" };
+  }
+  if (text.includes("DIG_IN") || text.includes("ENTRENCH") || text.includes("FORTIFY")) {
+    return { src: "/art/status/Status Dig In.png", label: "Dig In" };
+  }
+  if (text.includes("AMBUSH")) {
+    return { src: "/art/status/Status Ambush.png", label: "Ambush" };
+  }
+  if (text.includes("HIDE") || text.includes("CONCEAL")) {
+    return { src: "/art/status/Status Hide Action.png", label: "Hide" };
+  }
+  if (text.includes("DELAY") || text.includes("WAIT") || text.includes("HOLD")) {
+    return { src: "/art/status/Status Delayed Action.png", label: "Delayed Action" };
+  }
+  if (text.includes("MOVE") || text.includes("ADVANCE")) {
+    return { src: "/art/action_markers/normal.png", label: "Normal Action" };
+  }
+  return null;
+}
+
+export function getDeadMarkerArt(side: string): string {
+  const s = String(side || "").toUpperCase();
+  if (s === "US") return "/art/markers/Markers USA Dead.png";
+  if (s === "IT") return "/art/markers/Markers Italy Dead.png";
+  if (s === "GE") return "/art/markers/Markers Germany Dead.png";
+  if (s === "UK") return "/art/markers/Markers UK Dead.png";
+  return "/art/markers/Markers USA Dead.png";
+}
+
 function axialToLabel(q: number, r: number): string {
   return `${String.fromCharCode(65 + q)}${r + 1}`;
 }
@@ -593,6 +651,7 @@ export function MatchReplayTab({
   // Map display layer toggles
   const [showVps, setShowVps] = useState(true);
   const [showHpBars, setShowHpBars] = useState(true);
+  const [showStatusMarkers, setShowStatusMarkers] = useState(true);
   const [showCoords, setShowCoords] = useState(true);
   const [showVectors, setShowVectors] = useState(true);
   const [showForts, setShowForts] = useState(true);
@@ -2222,12 +2281,27 @@ export function MatchReplayTab({
         ctx.fillStyle = "#ef4444";
         ctx.fill();
 
-        // Combat Impact Explosion Icon
-        ctx.fillStyle = "#facc15";
-        ctx.font = `${Math.max(14, Math.floor(scale * 0.65))}px sans-serif`;
-        ctx.textAlign = "center";
-        ctx.textBaseline = "middle";
-        ctx.fillText("💥", pTo.x, pTo.y);
+        // Combat Impact Explosion Marker / Icon
+        let hasDrawnHitArt = false;
+        if (showStatusMarkers) {
+          const hitMarker = getLoadedImage("/art/markers/Marker Hit.png");
+          if (hitMarker) {
+            const hitSize = Math.max(22, scale * 0.75);
+            ctx.save();
+            ctx.shadowColor = "rgba(239, 68, 68, 0.9)";
+            ctx.shadowBlur = 8;
+            ctx.drawImage(hitMarker, pTo.x - hitSize / 2, pTo.y - hitSize / 2, hitSize, hitSize);
+            ctx.restore();
+            hasDrawnHitArt = true;
+          }
+        }
+        if (!hasDrawnHitArt) {
+          ctx.fillStyle = "#facc15";
+          ctx.font = `${Math.max(14, Math.floor(scale * 0.65))}px sans-serif`;
+          ctx.textAlign = "center";
+          ctx.textBaseline = "middle";
+          ctx.fillText("💥", pTo.x, pTo.y);
+        }
       } else if (actionVector.isMove) {
         // Solid Glowing Cyan Vector Arrow for movement
         ctx.beginPath();
@@ -2331,11 +2405,26 @@ export function MatchReplayTab({
         ctx.restore();
 
         if (isEliminated) {
-          ctx.fillStyle = "#ef4444";
-          ctx.font = `bold ${Math.max(12, Math.floor(counterSize * 0.55))}px sans-serif`;
-          ctx.textAlign = "center";
-          ctx.textBaseline = "middle";
-          ctx.fillText("☠️", p.x, p.y);
+          let hasDrawnDeadArt = false;
+          if (showStatusMarkers) {
+            const deadArt = getDeadMarkerArt(u.side);
+            const deadImg = getLoadedImage(deadArt);
+            if (deadImg) {
+              ctx.save();
+              ctx.shadowColor = "rgba(0, 0, 0, 0.85)";
+              ctx.shadowBlur = 6;
+              ctx.drawImage(deadImg, p.x - counterHalf, p.y - counterHalf, counterSize, counterSize);
+              ctx.restore();
+              hasDrawnDeadArt = true;
+            }
+          }
+          if (!hasDrawnDeadArt) {
+            ctx.fillStyle = "#ef4444";
+            ctx.font = `bold ${Math.max(12, Math.floor(counterSize * 0.55))}px sans-serif`;
+            ctx.textAlign = "center";
+            ctx.textBaseline = "middle";
+            ctx.fillText("☠️", p.x, p.y);
+          }
         }
       } else {
         // Fallback token circle
@@ -2367,11 +2456,22 @@ export function MatchReplayTab({
         ctx.lineWidth = isActing ? 2.5 : 1.5;
         ctx.stroke();
 
-        ctx.fillStyle = isEliminated ? "#94a3b8" : "#ffffff";
-        ctx.font = `bold ${Math.max(7, Math.floor(scale * 0.28))}px sans-serif`;
-        ctx.textAlign = "center";
-        ctx.textBaseline = "middle";
-        ctx.fillText(isEliminated ? "☠️" : "🪖", p.x, p.y - 2);
+        let hasDrawnDeadArt = false;
+        if (isEliminated && showStatusMarkers) {
+          const deadArt = getDeadMarkerArt(u.side);
+          const deadImg = getLoadedImage(deadArt);
+          if (deadImg) {
+            ctx.drawImage(deadImg, p.x - counterHalf, p.y - counterHalf, counterSize, counterSize);
+            hasDrawnDeadArt = true;
+          }
+        }
+        if (!hasDrawnDeadArt) {
+          ctx.fillStyle = isEliminated ? "#94a3b8" : "#ffffff";
+          ctx.font = `bold ${Math.max(7, Math.floor(scale * 0.28))}px sans-serif`;
+          ctx.textAlign = "center";
+          ctx.textBaseline = "middle";
+          ctx.fillText(isEliminated ? "☠️" : "🪖", p.x, p.y - 2);
+        }
       }
 
       // Unit ID Pill Underneath (matching assault_ai_ui addUnitLabel)
@@ -2426,19 +2526,100 @@ export function MatchReplayTab({
         ctx.strokeRect(barX, barY, barW, barH);
       }
 
-      // Suppressed / Pinned Badge
+      // 1. Suppressed / Pinned Badge (Official Status Marker)
       if (u.suppressed && !isEliminated) {
-        ctx.save();
-        ctx.fillStyle = "#ea580c";
-        ctx.beginPath();
-        ctx.roundRect(p.x + counterHalf * 0.3, p.y - counterHalf - 4, 22, 11, 2);
-        ctx.fill();
-        ctx.fillStyle = "#ffffff";
-        ctx.font = `bold 7px sans-serif`;
-        ctx.textAlign = "center";
-        ctx.textBaseline = "middle";
-        ctx.fillText("PIN", p.x + counterHalf * 0.3 + 11, p.y - counterHalf + 1.5);
-        ctx.restore();
+        let hasDrawnSuppArt = false;
+        if (showStatusMarkers) {
+          const suppImg = getLoadedImage("/art/status/Status Suppressed.png");
+          if (suppImg) {
+            const markerSize = Math.max(16, counterSize * 0.52);
+            const markerX = p.x + counterHalf * 0.45;
+            const markerY = p.y - counterHalf * 0.50;
+            ctx.save();
+            ctx.shadowColor = "rgba(0, 0, 0, 0.85)";
+            ctx.shadowBlur = 5;
+            ctx.drawImage(suppImg, markerX - markerSize / 2, markerY - markerSize / 2, markerSize, markerSize);
+            ctx.restore();
+            hasDrawnSuppArt = true;
+          }
+        }
+        if (!hasDrawnSuppArt) {
+          ctx.save();
+          ctx.fillStyle = "#ea580c";
+          ctx.beginPath();
+          ctx.roundRect(p.x + counterHalf * 0.3, p.y - counterHalf - 4, 22, 11, 2);
+          ctx.fill();
+          ctx.fillStyle = "#ffffff";
+          ctx.font = `bold 7px sans-serif`;
+          ctx.textAlign = "center";
+          ctx.textBaseline = "middle";
+          ctx.fillText("PIN", p.x + counterHalf * 0.3 + 11, p.y - counterHalf + 1.5);
+          ctx.restore();
+        }
+      }
+
+      // 2. Action Marker for Active Unit (Top-Left of Counter)
+      if (showStatusMarkers && isActing && !isEliminated) {
+        const actMarker = getActionMarkerArt(actionVector.actionId || "", actionVector.kind);
+        if (actMarker) {
+          const actImg = getLoadedImage(actMarker.src);
+          if (actImg) {
+            const markerSize = Math.max(16, counterSize * 0.52);
+            const markerX = p.x - counterHalf * 0.45;
+            const markerY = p.y - counterHalf * 0.50;
+            ctx.save();
+            ctx.shadowColor = "rgba(0, 0, 0, 0.85)";
+            ctx.shadowBlur = 6;
+            ctx.drawImage(actImg, markerX - markerSize / 2, markerY - markerSize / 2, markerSize, markerSize);
+            ctx.restore();
+          }
+        }
+      }
+
+      // 3. Hit / Damaged Combat Marker on Target Unit
+      if (
+        showStatusMarkers &&
+        !isEliminated &&
+        actionVector.targetUnitId === u.unit_id &&
+        actionVector.targetHpPre !== null &&
+        actionVector.targetHpPost !== null &&
+        actionVector.targetHpPost < actionVector.targetHpPre
+      ) {
+        const hitImg = getLoadedImage("/art/markers/Marker Hit.png");
+        if (hitImg) {
+          const hitSize = Math.max(18, counterSize * 0.60);
+          ctx.save();
+          ctx.shadowColor = "rgba(239, 68, 68, 0.9)";
+          ctx.shadowBlur = 8;
+          ctx.drawImage(hitImg, p.x - hitSize / 2, p.y - counterHalf * 0.2 - hitSize / 2, hitSize, hitSize);
+          ctx.restore();
+        }
+      }
+
+      // 4. Secondary Tactical State Markers (Immobile, Dug In, Fallback)
+      if (showStatusMarkers && !isEliminated) {
+        const uRec = u as Record<string, unknown>;
+        let secondarySrc: string | null = null;
+        if (Boolean(uRec.immobile || uRec.is_immobile)) {
+          secondarySrc = "/art/status/Status Immobile.png";
+        } else if (Boolean(uRec.dug_in || uRec.entrenched || uRec.is_dug_in)) {
+          secondarySrc = "/art/status/Status Dig In.png";
+        } else if (Boolean(uRec.fallback || uRec.is_fallback)) {
+          secondarySrc = "/art/status/Status Fallback.png";
+        }
+        if (secondarySrc) {
+          const secImg = getLoadedImage(secondarySrc);
+          if (secImg) {
+            const mSize = Math.max(14, counterSize * 0.44);
+            const mX = p.x + counterHalf * 0.45;
+            const mY = p.y + counterHalf * 0.45;
+            ctx.save();
+            ctx.shadowColor = "rgba(0, 0, 0, 0.8)";
+            ctx.shadowBlur = 4;
+            ctx.drawImage(secImg, mX - mSize / 2, mY - mSize / 2, mSize, mSize);
+            ctx.restore();
+          }
+        }
       }
     }
 
@@ -2453,6 +2634,7 @@ export function MatchReplayTab({
     hoveredHex,
     showVps,
     showHpBars,
+    showStatusMarkers,
     showCoords,
     showVectors,
     showForts,
@@ -3086,7 +3268,22 @@ export function MatchReplayTab({
                   cursor: "pointer",
                 }}
               >
-                ❤️ Barras HP
+                ❤️ HP Bars
+              </button>
+              <button
+                onClick={() => setShowStatusMarkers(!showStatusMarkers)}
+                title="Toggle tactical action, combat hit and suppression status markers"
+                style={{
+                  fontSize: 10,
+                  padding: "2px 6px",
+                  borderRadius: 3,
+                  background: showStatusMarkers ? "#581c87" : "#0f172a",
+                  color: showStatusMarkers ? "#d8b4fe" : "#64748b",
+                  border: `1px solid ${showStatusMarkers ? "#a855f7" : "#334155"}`,
+                  cursor: "pointer",
+                }}
+              >
+                🏷️ Status Markers
               </button>
               <button
                 onClick={() => setShowCoords(!showCoords)}
@@ -4045,19 +4242,39 @@ export function MatchReplayTab({
                   <span style={{ fontSize: 11, fontWeight: 800, color: "#38bdf8", textTransform: "uppercase", letterSpacing: 0.5, display: "flex", alignItems: "center", gap: 5 }}>
                     <span>⚡ Action Execution & Combat Outcome</span>
                   </span>
-                  <span
-                    style={{
-                      fontSize: 10,
-                      fontWeight: 800,
-                      padding: "2px 6px",
-                      borderRadius: 4,
-                      background: actionVector.isFire ? "rgba(239, 68, 68, 0.2)" : actionVector.isMove ? "rgba(14, 165, 233, 0.2)" : "rgba(148, 163, 184, 0.15)",
-                      color: actionVector.isFire ? "#f87171" : actionVector.isMove ? "#38bdf8" : "#94a3b8",
-                      border: `1px solid ${actionVector.isFire ? "#ef4444" : actionVector.isMove ? "#0284c7" : "#475569"}`,
-                    }}
-                  >
-                    {actionVector.kind}
-                  </span>
+                  <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                    {(() => {
+                      const actMarker = getActionMarkerArt(actionVector.actionId || "", actionVector.kind);
+                      return actMarker ? (
+                        <img
+                          src={actMarker.src}
+                          alt={actMarker.label}
+                          title={`Action Marker: ${actMarker.label}`}
+                          style={{
+                            width: 20,
+                            height: 20,
+                            borderRadius: 3,
+                            border: "1px solid #334155",
+                            objectFit: "contain",
+                            background: "#0f172a",
+                          }}
+                        />
+                      ) : null;
+                    })()}
+                    <span
+                      style={{
+                        fontSize: 10,
+                        fontWeight: 800,
+                        padding: "2px 6px",
+                        borderRadius: 4,
+                        background: actionVector.isFire ? "rgba(239, 68, 68, 0.2)" : actionVector.isMove ? "rgba(14, 165, 233, 0.2)" : "rgba(148, 163, 184, 0.15)",
+                        color: actionVector.isFire ? "#f87171" : actionVector.isMove ? "#38bdf8" : "#94a3b8",
+                        border: `1px solid ${actionVector.isFire ? "#ef4444" : actionVector.isMove ? "#0284c7" : "#475569"}`,
+                      }}
+                    >
+                      {actionVector.kind}
+                    </span>
+                  </div>
                 </div>
 
                 {/* Hex Trajectory Grid: Origin -> Destination */}
@@ -4098,7 +4315,17 @@ export function MatchReplayTab({
                   <div style={{ background: "#0b1220", padding: "6px 8px", borderRadius: 4, borderLeft: `3px solid ${actionVector.actorSide === "US" ? "#3b82f6" : "#10b981"}` }}>
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                       <span style={{ fontSize: 9, color: "#94a3b8", textTransform: "uppercase", fontWeight: 700 }}>Acting Unit</span>
-                      <span style={{ fontSize: 10, fontWeight: 700, color: "#f8fafc" }}>{actionVector.actorSide === "US" ? "🇺🇸" : "🇮🇹"} {actionVector.actorId}</span>
+                      <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                        {actorUnit?.suppressed && (
+                          <img
+                            src="/art/status/Status Suppressed.png"
+                            alt="Suppressed"
+                            title="Unit is Suppressed"
+                            style={{ width: 14, height: 14, objectFit: "contain" }}
+                          />
+                        )}
+                        <span style={{ fontSize: 10, fontWeight: 700, color: "#f8fafc" }}>{actionVector.actorSide === "US" ? "🇺🇸" : "🇮🇹"} {actionVector.actorId}</span>
+                      </div>
                     </div>
                     <div style={{ fontSize: 11, fontWeight: 600, color: "#cbd5e1", marginTop: 1 }}>
                       {actionVector.actorUnitName}
@@ -4112,9 +4339,19 @@ export function MatchReplayTab({
                     </div>
                     <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: 2 }}>
                       <span style={{ fontSize: 10, color: "#94a3b8" }}>State:</span>
-                      <span style={{ fontSize: 10, fontWeight: 700, color: actionVector.actorAlivePost ? "#22c55e" : "#ef4444" }}>
-                        {actionVector.actorAlivePost ? "Active / Alive" : "Eliminated 💀"}
-                      </span>
+                      <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                        {!actionVector.actorAlivePost && (
+                          <img
+                            src={getDeadMarkerArt(actionVector.actorSide)}
+                            alt="Eliminated"
+                            title="Unit Eliminated (K.I.A.)"
+                            style={{ width: 14, height: 14, objectFit: "contain" }}
+                          />
+                        )}
+                        <span style={{ fontSize: 10, fontWeight: 700, color: actionVector.actorAlivePost ? "#22c55e" : "#ef4444" }}>
+                          {actionVector.actorAlivePost ? "Active / Alive" : "Eliminated 💀"}
+                        </span>
+                      </div>
                     </div>
                   </div>
 
@@ -4123,9 +4360,26 @@ export function MatchReplayTab({
                     <div style={{ background: "#0b1220", padding: "6px 8px", borderRadius: 4, borderLeft: `3px solid ${actionVector.targetUnitSide === "US" ? "#3b82f6" : "#ef4444"}` }}>
                       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                         <span style={{ fontSize: 9, color: "#94a3b8", textTransform: "uppercase", fontWeight: 700 }}>Opponent Target</span>
-                        <span style={{ fontSize: 10, fontWeight: 700, color: "#f87171" }}>
-                          {actionVector.targetUnitSide === "US" ? "🇺🇸" : actionVector.targetUnitSide === "IT" ? "🇮🇹" : "🇩🇪"} {actionVector.targetUnitId || "-"}
-                        </span>
+                        <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                          {actionVector.targetAlivePost === false ? (
+                            <img
+                              src={getDeadMarkerArt(actionVector.targetUnitSide)}
+                              alt="Eliminated"
+                              title="Unit Eliminated (K.I.A.)"
+                              style={{ width: 14, height: 14, objectFit: "contain" }}
+                            />
+                          ) : (actionVector.targetHpPost ?? 0) < (actionVector.targetHpPre ?? 0) ? (
+                            <img
+                              src="/art/markers/Marker Hit.png"
+                              alt="Hit"
+                              title="Hit Damage"
+                              style={{ width: 14, height: 14, objectFit: "contain" }}
+                            />
+                          ) : null}
+                          <span style={{ fontSize: 10, fontWeight: 700, color: "#f87171" }}>
+                            {actionVector.targetUnitSide === "US" ? "🇺🇸" : actionVector.targetUnitSide === "IT" ? "🇮🇹" : "🇩🇪"} {actionVector.targetUnitId || "-"}
+                          </span>
+                        </div>
                       </div>
                       <div style={{ fontSize: 11, fontWeight: 600, color: "#cbd5e1", marginTop: 1 }}>
                         {actionVector.targetUnitName || "Target"}
@@ -4289,7 +4543,38 @@ export function MatchReplayTab({
                         <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
                           <span style={{ fontWeight: 700, color: "#f8fafc" }}>{u.unit_id}</span>
                           <span className="muted" style={{ fontSize: 10 }}>({u.q},{u.r})</span>
-                          {isActing && <span style={{ fontSize: 9, color: "#facc15", fontWeight: 700 }}>ACTIVA</span>}
+                          {u.suppressed && (
+                            <img
+                              src="/art/status/Status Suppressed.png"
+                              alt="Suppressed"
+                              title="Unit is Suppressed"
+                              style={{ width: 14, height: 14, objectFit: "contain" }}
+                            />
+                          )}
+                          {!u.alive && (
+                            <img
+                              src="/art/markers/Markers USA Dead.png"
+                              alt="KIA"
+                              title="Unit Eliminated (K.I.A.)"
+                              style={{ width: 14, height: 14, objectFit: "contain" }}
+                            />
+                          )}
+                          {isActing && (
+                            <span style={{ fontSize: 9, color: "#facc15", fontWeight: 700, display: "inline-flex", alignItems: "center", gap: 3 }}>
+                              {(() => {
+                                const actMarker = getActionMarkerArt(actionVector.actionId || "", actionVector.kind);
+                                return actMarker ? (
+                                  <img
+                                    src={actMarker.src}
+                                    alt={actMarker.label}
+                                    title={actMarker.label}
+                                    style={{ width: 12, height: 12, objectFit: "contain" }}
+                                  />
+                                ) : null;
+                              })()}
+                              ACTING
+                            </span>
+                          )}
                           {roleInfo.label && (
                             <span
                               style={{
@@ -4321,7 +4606,7 @@ export function MatchReplayTab({
                                 borderRadius: 3,
                                 fontWeight: 700,
                               }}
-                              title={`Rol mutado dinámicamente por regla: ${roleInfo.mutationReason}`}
+                              title={`Dynamically mutated role: ${roleInfo.mutationReason}`}
                             >
                               ⚡ {roleInfo.mutationReason ? roleInfo.mutationReason.slice(0, 10) : "MUT"}
                             </span>
@@ -4337,7 +4622,7 @@ export function MatchReplayTab({
                                 borderRadius: 3,
                                 fontWeight: 700,
                               }}
-                              title={`Prior boost doctrinal: +${Math.round(roleInfo.priorBoost * 100)}%`}
+                              title={`Doctrinal prior boost: +${Math.round(roleInfo.priorBoost * 100)}%`}
                             >
                               +{Math.round(roleInfo.priorBoost * 100)}% π
                             </span>
@@ -4357,7 +4642,7 @@ export function MatchReplayTab({
               {/* IT/Opponent Troops */}
               <div>
                 <div style={{ fontSize: 11, fontWeight: 700, color: "#34d399", marginBottom: 4, display: "flex", alignItems: "center", gap: 4 }}>
-                  <span>🇩🇪</span> Axis Troops ({itUnits.length} squads)
+                  <span>{itUnits[0]?.side === "GE" ? "🇩🇪" : "🇮🇹"}</span> {itUnits[0]?.side === "GE" ? "German" : "Italian / Axis"} Troops ({itUnits.length} squads)
                 </div>
                 <div style={{ display: "flex", flexDirection: "column", gap: 4, maxHeight: 180, overflowY: "auto" }}>
                   {itUnits.map((u) => {
@@ -4385,7 +4670,38 @@ export function MatchReplayTab({
                         <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
                           <span style={{ fontWeight: 700, color: "#f8fafc" }}>{u.unit_id}</span>
                           <span className="muted" style={{ fontSize: 10 }}>({u.q},{u.r})</span>
-                          {isActing && <span style={{ fontSize: 9, color: "#facc15", fontWeight: 700 }}>ACTING</span>}
+                          {u.suppressed && (
+                            <img
+                              src="/art/status/Status Suppressed.png"
+                              alt="Suppressed"
+                              title="Unit is Suppressed"
+                              style={{ width: 14, height: 14, objectFit: "contain" }}
+                            />
+                          )}
+                          {!u.alive && (
+                            <img
+                              src={getDeadMarkerArt(u.side || "IT")}
+                              alt="KIA"
+                              title="Unit Eliminated (K.I.A.)"
+                              style={{ width: 14, height: 14, objectFit: "contain" }}
+                            />
+                          )}
+                          {isActing && (
+                            <span style={{ fontSize: 9, color: "#facc15", fontWeight: 700, display: "inline-flex", alignItems: "center", gap: 3 }}>
+                              {(() => {
+                                const actMarker = getActionMarkerArt(actionVector.actionId || "", actionVector.kind);
+                                return actMarker ? (
+                                  <img
+                                    src={actMarker.src}
+                                    alt={actMarker.label}
+                                    title={actMarker.label}
+                                    style={{ width: 12, height: 12, objectFit: "contain" }}
+                                  />
+                                ) : null;
+                              })()}
+                              ACTING
+                            </span>
+                          )}
                           {roleInfo.label && (
                             <span
                               style={{
@@ -4455,10 +4771,40 @@ export function MatchReplayTab({
                 const selUnit = usUnits.concat(itUnits).find((u) => u.unit_id === selectedUnitId);
                 if (!selUnit) return null;
                 const rInfo = getUnitTacticalRole(selUnit, currentStep, currentDetails.macroPosture, currentDetails.macroTargetVpId);
+                const isUnitActing = String(currentStep.unit_id) === selUnit.unit_id;
                 return (
                   <div style={{ marginTop: 8, background: "#0f172a", border: `1px solid ${rInfo.color || "#334155"}`, borderRadius: 6, padding: 10 }}>
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
-                      <span style={{ fontWeight: 800, color: "#f8fafc", fontSize: 12 }}>{selUnit.unit_id}</span>
+                      <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                        <span style={{ fontWeight: 800, color: "#f8fafc", fontSize: 12 }}>{selUnit.unit_id}</span>
+                        {selUnit.suppressed && (
+                          <img
+                            src="/art/status/Status Suppressed.png"
+                            alt="Suppressed"
+                            title="Suppressed"
+                            style={{ width: 16, height: 16, objectFit: "contain" }}
+                          />
+                        )}
+                        {!selUnit.alive && (
+                          <img
+                            src={getDeadMarkerArt(selUnit.side || "US")}
+                            alt="KIA"
+                            title="Eliminated (K.I.A.)"
+                            style={{ width: 16, height: 16, objectFit: "contain" }}
+                          />
+                        )}
+                        {isUnitActing && (() => {
+                          const actArt = getActionMarkerArt(actionVector.actionId || "", actionVector.kind);
+                          return actArt ? (
+                            <img
+                              src={actArt.src}
+                              alt={actArt.label}
+                              title={`Executing: ${actArt.label}`}
+                              style={{ width: 16, height: 16, objectFit: "contain" }}
+                            />
+                          ) : null;
+                        })()}
+                      </div>
                       <span style={{ background: `${rInfo.color}33`, color: rInfo.color, padding: "2px 6px", borderRadius: 4, fontWeight: 700, fontSize: 10 }}>
                         {rInfo.icon} {rInfo.label || "No Role"}
                       </span>

@@ -2389,6 +2389,116 @@
           }
         }
       }
+    },
+    "GE_3_7CM_FLAK_37": {
+      "side": "GE",
+      "category": "GUN_ARTILLERY",
+      "subtype": "LIGHT_AA",
+      "classification": "LIGHT_AA",
+      "card_id": "S43",
+      "cost": 8,
+      "movement": 1,
+      "movement_type": "artillery",
+      "max_strength": 4,
+      "base_defense": {
+        "FRONT": [
+          "YELLOW"
+        ],
+        "FLANK_LEFT": [
+          "YELLOW"
+        ],
+        "FLANK_RIGHT": [
+          "RED"
+        ],
+        "REAR": [
+          "YELLOW"
+        ],
+        "EXPLOSION": [
+          "BLUE"
+        ]
+      },
+      "traits": [
+        "SLOW_UNIT",
+        "PIVOT",
+        "SHIELD"
+      ],
+      "attack": {
+        "DIRECT_FIRE": {
+          "VEHICLE": {
+            "0": {
+              "dice": [
+                "YELLOW"
+              ]
+            },
+            "1-4": {
+              "dice": [
+                "YELLOW",
+                "BLUE"
+              ]
+            },
+            "5-7": {
+              "dice": [
+                "GREEN",
+                "BLUE"
+              ]
+            },
+            "8-11": {
+              "dice": [
+                "GREEN"
+              ]
+            }
+          },
+          "INFANTRY": {
+            "0": {
+              "dice": [
+                "YELLOW",
+                "YELLOW",
+                "BLUE"
+              ]
+            },
+            "1-4": {
+              "dice": [
+                "RED",
+                "YELLOW",
+                "BLUE",
+                "BLUE"
+              ]
+            },
+            "5-7": {
+              "dice": [
+                "RED",
+                "GREEN",
+                "BLUE"
+              ]
+            },
+            "8-11": {
+              "dice": [
+                "YELLOW",
+                "GREEN",
+                "BLUE"
+              ]
+            }
+          }
+        }
+      },
+      "doctrine_profile": {
+        "default_role": "FIRE_SUPPORT",
+        "optimal_engagement_range": [
+          1,
+          7
+        ],
+        "preferred_terrain": [
+          "HILL",
+          "BUILDING",
+          "WOODS"
+        ],
+        "cohesion_weight": 1.2,
+        "fallback_threshold_hp": 2,
+        "mutation_rules": {
+          "allow_spearhead_if_vp_deficit": false,
+          "allow_close_defense_on_flank": true
+        }
+      }
     }
   }
 }

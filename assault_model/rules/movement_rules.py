@@ -46,6 +46,23 @@ class MovementRules:
     """
 
     @staticmethod
+    def can_use_fast_action(unit) -> bool:
+        """
+        Check if unit can perform fast action (Rule 9.2).
+        Units with SLOW or SLOW_UNIT trait cannot use fast action.
+        """
+        if unit is None:
+            return False
+        if hasattr(unit, "has_trait"):
+            if unit.has_trait("SLOW") or unit.has_trait("SLOW_UNIT"):
+                return False
+        unit_type = getattr(unit, "unit_type", None)
+        if unit_type is not None and hasattr(unit_type, "has_trait"):
+            if unit_type.has_trait("SLOW") or unit_type.has_trait("SLOW_UNIT"):
+                return False
+        return True
+
+    @staticmethod
     def get_legal_paths(game_state, unit):
         # Short-lived cache keyed by authoritative state version.
         state_version = int(getattr(game_state, "_cache_version", 0))

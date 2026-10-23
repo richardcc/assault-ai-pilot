@@ -371,6 +371,10 @@ class ActionCatalog:
             return []
         if self._is_artillery_like(active):
             return []
+        if getattr(active, "has_trait", lambda t: False)("SLOW") or getattr(active, "has_trait", lambda t: False)("SLOW_UNIT"):
+            return []
+        if not MovementRules.can_use_fast_action(active):
+            return []
         half_moves = self._half_move_actions(movement_paths, active)
         if not half_moves:
             return []

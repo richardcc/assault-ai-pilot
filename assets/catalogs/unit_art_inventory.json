@@ -1,14 +1,14 @@
 {
   "title": "Inventario Canónico de Unidades, Counters y Unit Cards de Assault",
   "total_units": 95,
-  "implemented_count": 16,
-  "pending_count": 79,
+  "implemented_count": 17,
+  "pending_count": 78,
   "factions": {
     "GE": {
       "name": "Alemania (Wehrmacht / Luftwaffe)",
       "total": 27,
-      "implemented": 4,
-      "pending": 23
+      "implemented": 5,
+      "pending": 22
     },
     "IT": {
       "name": "Italia (Regio Esercito)",
@@ -49,8 +49,8 @@
       "faction": "GE",
       "faction_full": "Alemania (Wehrmacht / Luftwaffe)",
       "category": "GUN_ARTILLERY",
-      "status": "PENDIENTE",
-      "catalog_key": null,
+      "status": "IMPLEMENTADO",
+      "catalog_key": "GE_3_7CM_FLAK_37",
       "counter_front": "assets/art/counters/GE 3-7cm Flak 37.png",
       "counter_back": "assets/art/counters/GE 3-7cm Flak 37b.png",
       "card_front": "assets/art/unit_cards/GE Unit 3-7cm Flak 37.jpg",

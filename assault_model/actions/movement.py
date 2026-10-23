@@ -64,3 +64,7 @@ class FastMoveAction(MovementAction):
     @property
     def destination(self) -> HexCoord | None:
         return self.path[-1] if self.path else None
+
+    def is_valid_for_unit(self, unit) -> bool:
+        from assault_model.rules.movement_rules import MovementRules
+        return MovementRules.can_use_fast_action(unit)

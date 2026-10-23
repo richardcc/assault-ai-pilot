@@ -124,8 +124,10 @@ class UnitType:
         """Check if this unit type possesses a specific trait or keyword."""
         if not self.traits:
             return False
-        target = str(trait_name).upper()
-        return any(str(t).upper() == target for t in self.traits)
+        target = str(trait_name).strip().upper()
+        if target in ("SLOW", "SLOW_UNIT"):
+            return any(str(t).strip().upper() in ("SLOW", "SLOW_UNIT") for t in self.traits)
+        return any(str(t).strip().upper() == target for t in self.traits)
 
     def _compile_attack_tables(self) -> None:
 

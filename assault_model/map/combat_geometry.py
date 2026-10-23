@@ -53,6 +53,54 @@ def _hex_direction(dq: int, dr: int) -> Tuple[int, int]:
 # -------------------------------------------------
 # MAIN API
 # -------------------------------------------------
+def calculate_facing_towards(origin: CoordLike, target: CoordLike, default_facing: str = "N") -> str:
+    """
+    Calculate the dominant hex cardinal facing direction ('N', 'S', 'E', 'W')
+    from origin to target.
+    """
+    oq, or_ = _as_axial(origin)
+    tq, tr = _as_axial(target)
+
+    dq = tq - oq
+    dr = tr - or_
+
+    if dq == 0 and dr == 0:
+        return default_facing
+
+    if abs(dq) >= abs(dr):
+        return "E" if dq > 0 else "W"
+    else:
+        return "S" if dr > 0 else "N"
+
+
+def is_in_arc_of_fire(origin: CoordLike, origin_facing: str, target: CoordLike, has_pivot: bool = False) -> bool:
+    """
+    Check if target is within origin's arc of fire.
+    If unit has PIVOT trait (360-degree arc of fire), returns True regardless of facing.
+    Otherwise, standard forward arc (dot product >= 0) is required.
+    """
+    if has_pivot:
+        return True
+
+    oq, or_ = _as_axial(origin)
+    tq, tr = _as_axial(target)
+
+    vq = tq - oq
+    vr = tr - or_
+    dir_v = _hex_direction(vq, vr)
+
+    facing_dirs = {
+        "N": (0, -1),
+        "S": (0, 1),
+        "E": (1, 0),
+        "W": (-1, 0),
+    }
+
+    facing = facing_dirs.get(origin_facing, (0, -1))
+    dot = dir_v[0] * facing[0] + dir_v[1] * facing[1]
+    return dot >= 0
+
+
 def determine_attack_sector(
     attacker_pos: CoordLike,
     defender_pos: CoordLike,

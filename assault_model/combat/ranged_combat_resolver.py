@@ -7,7 +7,7 @@ from assault_model.combat.critical_effect import CriticalEffect
 from assault_model.combat.dice_color import DiceColor
 from assault_model.combat.dice_face import DiceFace
 from assault_model.combat.attack_sector import AttackSector
-from assault_model.map.combat_geometry import determine_attack_sector
+from assault_model.map.combat_geometry import determine_attack_sector, calculate_facing_towards
 from assault_model.runtime.execution_context import ExecutionContext
 from assault_model.combat.battle_die import DiceResult, BattleDie
 from assault_model.combat.dice_comparison import compare_dice
@@ -40,8 +40,13 @@ def _trace(tag: str, **data):
 
 
 def _has_trait(unit, trait_name: str) -> bool:
+    if hasattr(unit, "has_trait"):
+        return unit.has_trait(trait_name)
     traits = getattr(getattr(unit, "unit_type", None), "traits", []) or []
-    return str(trait_name).upper() in {str(t).upper() for t in traits}
+    target = str(trait_name).strip().upper()
+    if target in ("SLOW", "SLOW_UNIT"):
+        return any(str(t).strip().upper() in ("SLOW", "SLOW_UNIT") for t in traits)
+    return target in {str(t).strip().upper() for t in traits}
 
 
 def _remove_weakest_die(dice: list):
@@ -169,6 +174,19 @@ def resolve_ranged_combat(
             if terrain_entry.get("no_indirect_from", False):
                 _trace("INDIRECT_BLOCKED_FROM_TERRAIN", terrain=terrain_name)
                 return CombatResolutionResult([], [], [])
+
+    # ---------------- AUTOMATIC SHIELD ORIENTATION (Rule S43) ----------------
+    if _has_trait(attacker, "SHIELD"):
+        attacker_pos = getattr(attacker, "position", None)
+        target_pos = getattr(target, "position", None)
+        if attacker_pos is not None and target_pos is not None:
+            new_facing = calculate_facing_towards(
+                attacker_pos,
+                target_pos,
+                default_facing=getattr(attacker, "facing", "N"),
+            )
+            attacker.facing = new_facing
+            _trace("SHIELD_ORIENTATED", attacker=getattr(attacker, "unit_id", "UNKNOWN"), facing=new_facing, target=getattr(target, "unit_id", "UNKNOWN"))
 
     # ---------------- ATTACK ----------------
     try:
