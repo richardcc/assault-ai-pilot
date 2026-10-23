@@ -2851,6 +2851,98 @@
           }
         }
       }
+    },
+    "GE_75MM_ATG_40": {
+      "side": "GE",
+      "category": "GUN_ARTILLERY",
+      "subtype": "HEAVY_ATG",
+      "classification": "GUN_ARTILLERY",
+      "card_id": "S43",
+      "cost": 8,
+      "movement": 1,
+      "max_strength": 3,
+      "base_defense": {
+        "FRONT": [
+          "RED"
+        ],
+        "FLANK_LEFT": [
+          "YELLOW"
+        ],
+        "FLANK_RIGHT": [
+          "YELLOW"
+        ],
+        "REAR": [
+          "GREEN"
+        ]
+      },
+      "traits": [
+        "HEAVY_WEIGHT",
+        "SLOW_UNIT"
+      ],
+      "attack": {
+        "DIRECT_FIRE": {
+          "VEHICLE": {
+            "0": {
+              "dice": [
+                "RED",
+                "RED",
+                "BLUE"
+              ]
+            },
+            "1-5": {
+              "dice": [
+                "YELLOW",
+                "RED",
+                "RED"
+              ]
+            },
+            "6-10": {
+              "dice": [
+                "RED",
+                "YELLOW",
+                "YELLOW"
+              ]
+            },
+            "11-14": {
+              "dice": [
+                "RED",
+                "GREEN",
+                "YELLOW"
+              ]
+            }
+          },
+          "INFANTRY": {
+            "0": {
+              "dice": [
+                "GREEN",
+                "RED"
+              ]
+            },
+            "1-5": {
+              "dice": [
+                "RED",
+                "YELLOW",
+                "GREEN",
+                "YELLOW"
+              ]
+            },
+            "6-9": {
+              "dice": [
+                "RED",
+                "GREEN",
+                "YELLOW"
+              ]
+            },
+            "10-12": {
+              "dice": [
+                "YELLOW",
+                "BLUE",
+                "GREEN"
+              ]
+            }
+          }
+        }
+      }
     }
   }
 }

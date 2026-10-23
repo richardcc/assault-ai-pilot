@@ -86,99 +86,6 @@
       }
     }
   },
-  "GE_75MM_ATG_40": {
-    "side": "GE",
-    "category": "GUN_ARTILLERY",
-    "subtype": "HEAVY_ATG",
-    "classification": "GUN_ARTILLERY",
-    "card_id": "S43",
-    "cost": 8,
-    "movement": 1,
-    "max_strength": 3,
-    "base_defense": {
-      "FRONT": [
-        "RED"
-      ],
-      "FLANK_LEFT": [
-        "YELLOW"
-      ],
-      "FLANK_RIGHT": [
-        "YELLOW"
-      ],
-      "REAR": [
-        "GREEN"
-      ]
-    },
-    "traits": [
-      "HEAVY_WEIGHT",
-      "SHIELD",
-      "SLOW_UNIT"
-    ],
-    "attack": {
-      "DIRECT_FIRE": {
-        "VEHICLE": {
-          "0": {
-            "dice": [
-              "RED",
-              "RED",
-              "BLUE"
-            ]
-          },
-          "1-5": {
-            "dice": [
-              "YELLOW",
-              "RED",
-              "RED"
-            ]
-          },
-          "6-10": {
-            "dice": [
-              "RED",
-              "YELLOW",
-              "RED"
-            ]
-          },
-          "11-14": {
-            "dice": [
-              "RED",
-              "GREEN",
-              "YELLOW"
-            ]
-          }
-        },
-        "INFANTRY": {
-          "0": {
-            "dice": [
-              "GREEN",
-              "RED"
-            ]
-          },
-          "1-5": {
-            "dice": [
-              "RED",
-              "YELLOW",
-              "GREEN",
-              "YELLOW"
-            ]
-          },
-          "6-9": {
-            "dice": [
-              "RED",
-              "GREEN",
-              "YELLOW"
-            ]
-          },
-          "10-12": {
-            "dice": [
-              "YELLOW",
-              "BLUE",
-              "GREEN"
-            ]
-          }
-        }
-      }
-    }
-  },
   "GE_75MM_INFANTRY_GUN": {
     "side": "GE",
     "category": "GUN_ARTILLERY",
@@ -483,7 +390,6 @@
     "cost": 3,
     "movement": 2,
     "max_strength": 2,
-    "has_counter_flip": true,
     "base_defense": {
       "FRONT": [
         "YELLOW"
@@ -513,34 +419,31 @@
         "INFANTRY": {
           "0": {
             "dice": [
+              "GREEN",
+              "GREEN",
+              "BLUE"
+            ]
+          },
+          "1-2": {
+            "dice": [
+              "YELLOW",
+              "YELLOW"
+            ]
+          },
+          "3-5": {
+            "dice": [
+              "YELLOW",
               "GREEN"
             ]
           },
-          "1-3": {
+          "6-8": {
             "dice": [
               "GREEN",
+              "BLUE",
               "BLUE"
             ]
           }
         }
-      }
-    },
-    "doctrine_profile": {
-      "default_role": "SCREEN",
-      "optimal_engagement_range": [
-        1,
-        3
-      ],
-      "preferred_terrain": [
-        "BUILDING",
-        "WOODS",
-        "DEFILADE"
-      ],
-      "cohesion_weight": 0.8,
-      "fallback_threshold_hp": 1,
-      "mutation_rules": {
-        "allow_spearhead_if_vp_deficit": false,
-        "allow_close_defense_on_flank": false
       }
     }
   },

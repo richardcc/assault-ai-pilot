@@ -345,6 +345,8 @@ class ScenarioEditorService:
             "is_draft": is_draft,
         }
 
+    list_scenarios = list_all_scenarios
+
     def get_scenario(self, scenario_id: str, prefer_draft: bool = True) -> Dict[str, Any]:
         """
         Loads the complete scenario JSON, searching drafts first if prefer_draft=True.
@@ -365,6 +367,20 @@ class ScenarioEditorService:
         elif draft_file.exists():
             target_file = draft_file
             is_draft = True
+        else:
+            # Fallback scan by scenario id inside JSON or stem
+            if prefer_draft and self.drafts_dir.exists():
+                for p in self.drafts_dir.glob("*.json"):
+                    if p.stem == scenario_id or p.stem.startswith(scenario_id):
+                        target_file = p
+                        is_draft = True
+                        break
+            if not target_file and self.scenarios_dir.exists():
+                for p in self.scenarios_dir.glob("*.json"):
+                    if p.stem == scenario_id or p.stem.startswith(scenario_id):
+                        target_file = p
+                        is_draft = False
+                        break
 
         if not target_file or not target_file.exists():
             raise FileNotFoundError(f"Scenario '{scenario_id}' not found in drafts or published scenarios.")

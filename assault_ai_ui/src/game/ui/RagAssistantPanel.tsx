@@ -8,6 +8,37 @@ type Citation = {
   snippet: string;
 };
 
+type TerrainIntel = {
+  scenario_name: string;
+  urban_pct: number;
+  forest_pct: number;
+  open_pct: number;
+  defilade_corridors_count: number;
+  dominant_terrain_desc: string;
+};
+
+type ForcesOob = {
+  own_side: string;
+  enemy_side: string;
+  own_total: number;
+  enemy_total: number;
+  own_roles: Record<string, number>;
+  enemy_roles: Record<string, number>;
+  own_suppressed: number;
+  enemy_suppressed: number;
+  own_critical_hp: number;
+  enemy_critical_hp: number;
+};
+
+type NeuralAssessment = {
+  active_brain: string;
+  win_probability: number;
+  root_value: number;
+  total_decisions: number;
+  corrections: number;
+  strategic_outlook: string;
+};
+
 type SituationResult = {
   situation_summary: string;
   priorities: string[];
@@ -16,6 +47,9 @@ type SituationResult = {
   key_unit_alerts?: string[];
   citations: Citation[];
   limitations: string[];
+  terrain_intel?: TerrainIntel;
+  forces_oob?: ForcesOob;
+  neural_assessment?: NeuralAssessment;
 };
 
 type QueryResult = {
@@ -107,11 +141,9 @@ export function RagAssistantPanel({ gameData }: { gameData?: any }) {
   );
 
   const fallbackModels = [
-    "qwen2.5:7b",
     "qwen2.5:14b",
     "qwen2.5-coder:14b",
     "llama3.1:8b",
-    "mistral:7b",
     "deepseek-r1:14b",
   ];
   const modelOptions = useMemo(
@@ -143,13 +175,17 @@ export function RagAssistantPanel({ gameData }: { gameData?: any }) {
   }, []);
 
   const statusColor =
-    ollamaReachable == null ? "#f6c945" : ollamaReachable ? "#22c55e" : "#ef4444";
+    ollamaReachable == null ? "#f6c945" : ollamaReachable ? "#22c55e" : "#38bdf8";
   const statusText =
-    ollamaReachable == null ? "Comprobando LLM..." : ollamaReachable ? "Ollama Activo" : "Modo Determinista";
+    ollamaReachable == null
+      ? "Checking LLM..."
+      : ollamaReachable
+      ? "Ollama Active"
+      : "Deterministic XAI Engine";
 
   const counterPreview = useMemo(() => findCounterPreview(rulesResult, query), [rulesResult, query]);
 
-  // Explain situation action
+  // Explain situation action leveraging complete XAI stack
   const explainSituation = async () => {
     if (!gameData) return;
     setSituationLoading(true);
@@ -166,7 +202,7 @@ export function RagAssistantPanel({ gameData }: { gameData?: any }) {
       const json = (await res.json()) as SituationResult;
       setSituationResult(json);
     } catch (e) {
-      setSituationError(`Error al analizar situación: ${String(e)}`);
+      setSituationError(`SitRep analysis error: ${String(e)}`);
       setSituationResult(null);
     } finally {
       setSituationLoading(false);
@@ -178,301 +214,439 @@ export function RagAssistantPanel({ gameData }: { gameData?: any }) {
     const q = (customQuery ?? query).trim();
     if (!q) return;
     if (customQuery) setQuery(customQuery);
-
     setRulesLoading(true);
     setRulesError(null);
     try {
+      const payload: Record<string, unknown> = {
+        query: q,
+        conversation_id: conversationIdRef.current,
+        llm_model: model,
+      };
+      if (retrievalMode !== "auto") {
+        payload.mode = retrievalMode;
+      }
       const res = await fetch(apiUrl("/api/rag/query"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          query: q,
-          mode: retrievalMode === "auto" ? null : retrievalMode,
-          context: {
-            llm_model: model,
-            conversation_id: conversationIdRef.current,
-            assistant_scope: "manual",
-            state_snapshot: gameData || null,
-            ai_observability: gameData?.ai_observability || null,
-          },
-        }),
+        body: JSON.stringify(payload),
       });
       if (!res.ok) {
         throw new Error(`HTTP ${res.status}`);
       }
-      const json = (await res.json()) as QueryResult;
-      setRulesResult(json);
+      const data = (await res.json()) as QueryResult;
+      setRulesResult(data);
     } catch (e) {
+      setRulesError(`Doctrinal search error: ${String(e)}`);
       setRulesResult(null);
-      setRulesError(`Error al consultar manual: ${String(e)}`);
     } finally {
       setRulesLoading(false);
     }
   }
 
-  const quickChips = [
-    { label: "🏰 Búnker / Casamata", q: "¿Qué reglas aplican para cruzar, ocupar y atacar un búnker o pillbox?" },
-    { label: "💥 Morteros e Indirecto", q: "¿Cómo funciona el fuego indirecto de morteros y qué requisitos de LOS tiene?" },
-    { label: "👁️ Línea de Visión (LOS)", q: "¿Cómo se calcula la línea de visión y qué obstáculos bloquean la visión?" },
-    { label: "⚔️ Asalto y Brecha", q: "¿Cuáles son las condiciones y modificadores para un asalto cuerpo a cuerpo?" },
-    { label: "🛡️ Supresión / HMG", q: "¿Qué alcance tiene la ametralladora pesada y qué efectos tiene el fuego de apoyo?" },
-  ];
+  // Auto-generate SitRep when first opened or when gameData becomes available
+  useEffect(() => {
+    if (gameData && !situationResult && !situationLoading) {
+      void explainSituation();
+    }
+  }, [gameData?.turn, gameData?.active_side]);
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 10, fontSize: 11 }}>
+    <div style={{ display: "flex", flexDirection: "column", gap: 10, fontSize: 11, padding: "2px 0" }}>
       {/* Top Header with Tab Switch and LLM Status */}
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", borderBottom: "1px solid rgba(255,255,255,0.12)", paddingBottom: 8 }}>
-        <div style={{ display: "flex", gap: 4 }}>
+        <div style={{ display: "flex", gap: 6 }}>
           <button
             onClick={() => setActiveTab("situation")}
             style={{
-              padding: "4px 10px",
+              padding: "5px 12px",
               fontSize: 11,
-              fontWeight: activeTab === "situation" ? "bold" : "normal",
-              background: activeTab === "situation" ? "rgba(59, 130, 246, 0.25)" : "rgba(255,255,255,0.05)",
-              color: activeTab === "situation" ? "#60a5fa" : "var(--text-secondary)",
-              border: activeTab === "situation" ? "1px solid #3b82f6" : "1px solid rgba(255,255,255,0.1)",
-              borderRadius: 4,
+              fontWeight: activeTab === "situation" ? 700 : 500,
+              background: activeTab === "situation" ? "rgba(0, 240, 255, 0.18)" : "rgba(255,255,255,0.04)",
+              color: activeTab === "situation" ? "var(--neon-cyan)" : "var(--text-secondary)",
+              border: activeTab === "situation" ? "1px solid rgba(0, 240, 255, 0.4)" : "1px solid rgba(255,255,255,0.08)",
+              borderRadius: 5,
               cursor: "pointer",
+              transition: "all 0.2s ease",
             }}
           >
-            📋 Situación Táctica
+            📋 Tactical Situation
           </button>
           <button
             onClick={() => setActiveTab("rules")}
             style={{
-              padding: "4px 10px",
+              padding: "5px 12px",
               fontSize: 11,
-              fontWeight: activeTab === "rules" ? "bold" : "normal",
-              background: activeTab === "rules" ? "rgba(59, 130, 246, 0.25)" : "rgba(255,255,255,0.05)",
-              color: activeTab === "rules" ? "#60a5fa" : "var(--text-secondary)",
-              border: activeTab === "rules" ? "1px solid #3b82f6" : "1px solid rgba(255,255,255,0.1)",
-              borderRadius: 4,
+              fontWeight: activeTab === "rules" ? 700 : 500,
+              background: activeTab === "rules" ? "rgba(0, 240, 255, 0.18)" : "rgba(255,255,255,0.04)",
+              color: activeTab === "rules" ? "var(--neon-cyan)" : "var(--text-secondary)",
+              border: activeTab === "rules" ? "1px solid rgba(0, 240, 255, 0.4)" : "1px solid rgba(255,255,255,0.08)",
+              borderRadius: 5,
               cursor: "pointer",
+              transition: "all 0.2s ease",
             }}
           >
-            📖 Manual & Reglas
+            📖 Rules & Doctrine
           </button>
         </div>
 
-        <div style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 10, color: "var(--text-secondary)" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 10, color: "var(--text-secondary)" }}>
           <span
             style={{
               width: 7,
               height: 7,
               borderRadius: "50%",
               background: statusColor,
-              boxShadow: `0 0 5px ${statusColor}`,
+              boxShadow: `0 0 6px ${statusColor}`,
               display: "inline-block",
             }}
           />
-          <span>{statusText}</span>
+          <span style={{ fontFamily: "var(--font-mono)", fontSize: 10 }}>{statusText}</span>
         </div>
       </div>
 
-      {/* TAB 1: SITUATION */}
+      {/* TAB 1: SITUATION (TACTICAL SITREP WITH FULL XAI) */}
       {activeTab === "situation" && (
-        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+          {/* Action Ribbon */}
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-            <span style={{ color: "var(--text-secondary)" }}>Diagnóstico táctico del turno actual:</span>
+            <span style={{ color: "var(--text-muted)", fontSize: 10.5, fontWeight: 600 }}>
+              Live Battlefield SitRep & IPB Intel:
+            </span>
             <button
               className="btn-tactical"
               onClick={explainSituation}
               disabled={situationLoading || !gameData}
-              style={{ fontSize: 11, padding: "3px 8px" }}
+              style={{ fontSize: 10.5, padding: "4px 10px", fontWeight: 700 }}
             >
-              {situationLoading ? "Analizando posición..." : "⚡ Explicar situación"}
+              {situationLoading ? "Analyzing Battlefield Intel..." : "⚡ Generate SitRep"}
             </button>
           </div>
 
           {situationError && (
-            <div style={{ padding: 6, background: "rgba(239, 68, 68, 0.15)", border: "1px solid #ef4444", borderRadius: 4, color: "#fca5a5" }}>
+            <div style={{ padding: "8px 10px", background: "rgba(239, 68, 68, 0.15)", border: "1px solid #ef4444", borderRadius: 6, color: "#fca5a5" }}>
               {situationError}
             </div>
           )}
 
+          {/* 1. NEURAL ASSESSMENT CARD */}
+          <div style={{ background: "rgba(10, 14, 26, 0.8)", border: "1px solid rgba(0, 240, 255, 0.22)", borderRadius: 7, padding: 10 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                <span style={{ fontSize: 13 }}>🧠</span>
+                <span style={{ fontFamily: "var(--font-tech)", fontWeight: 700, fontSize: 11, color: "var(--neon-cyan)", letterSpacing: 0.5 }}>
+                  Active AI Brain: {situationResult?.neural_assessment?.active_brain || "EfficientZero V2 (MCTS PUCT 253x)"}
+                </span>
+              </div>
+              <span style={{ fontSize: 9.5, color: "var(--text-muted)", fontFamily: "var(--font-mono)" }}>
+                CUDA / Tensor Cores
+              </span>
+            </div>
+
+            {situationResult?.neural_assessment && (
+              <div style={{ display: "flex", flexDirection: "column", gap: 6, marginTop: 4 }}>
+                {/* Win Prob Bar */}
+                <div>
+                  <div style={{ display: "flex", justifyContent: "space-between", fontSize: 10, color: "var(--text-muted)", marginBottom: 2 }}>
+                    <span>Projected Win Probability:</span>
+                    <strong style={{ color: situationResult.neural_assessment.win_probability >= 50 ? "#4ade80" : "#f87171", fontFamily: "var(--font-mono)" }}>
+                      {situationResult.neural_assessment.win_probability}%
+                    </strong>
+                  </div>
+                  <div style={{ width: "100%", height: 5, background: "#1e293b", borderRadius: 3, overflow: "hidden" }}>
+                    <div
+                      style={{
+                        width: `${Math.max(5, Math.min(95, situationResult.neural_assessment.win_probability))}%`,
+                        height: "100%",
+                        background: situationResult.neural_assessment.win_probability >= 50
+                          ? "linear-gradient(90deg, #16a34a, #22c55e)"
+                          : "linear-gradient(90deg, #dc2626, #ef4444)",
+                        transition: "width 0.3s ease",
+                      }}
+                    />
+                  </div>
+                </div>
+
+                {/* Metrics Row */}
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 6, fontSize: 10, marginTop: 4 }}>
+                  <div style={{ background: "rgba(0,0,0,0.3)", padding: "4px 6px", borderRadius: 4, border: "1px solid rgba(255,255,255,0.06)" }}>
+                    <span style={{ color: "var(--text-muted)", display: "block", fontSize: 9 }}>Root Value V(s):</span>
+                    <strong style={{ color: situationResult.neural_assessment.root_value >= 0 ? "#4ade80" : "#f87171", fontFamily: "var(--font-mono)" }}>
+                      {situationResult.neural_assessment.root_value >= 0 ? `+${situationResult.neural_assessment.root_value.toFixed(2)}` : situationResult.neural_assessment.root_value.toFixed(2)}
+                    </strong>
+                  </div>
+                  <div style={{ background: "rgba(0,0,0,0.3)", padding: "4px 6px", borderRadius: 4, border: "1px solid rgba(255,255,255,0.06)" }}>
+                    <span style={{ color: "var(--text-muted)", display: "block", fontSize: 9 }}>MCTS Decisions:</span>
+                    <strong style={{ color: "var(--text-primary)", fontFamily: "var(--font-mono)" }}>
+                      {situationResult.neural_assessment.total_decisions || Number(gameData?.ai_observability?.total_decisions || 0)}
+                    </strong>
+                  </div>
+                  <div style={{ background: "rgba(0,0,0,0.3)", padding: "4px 6px", borderRadius: 4, border: "1px solid rgba(255,255,255,0.06)" }}>
+                    <span style={{ color: "var(--text-muted)", display: "block", fontSize: 9 }}>Outlook:</span>
+                    <strong style={{ color: "#38bdf8", fontSize: 9.5 }}>
+                      {situationResult.neural_assessment.strategic_outlook.split(" ")[0]}
+                    </strong>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* 2. TOPOGRAPHY & BATTLEFIELD IPB INTEL */}
+          {situationResult?.terrain_intel && (
+            <div style={{ background: "rgba(10, 14, 26, 0.75)", border: "1px solid rgba(255, 255, 255, 0.08)", borderRadius: 7, padding: 10 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
+                <span style={{ fontFamily: "var(--font-tech)", fontWeight: 700, fontSize: 10.5, color: "#38bdf8", letterSpacing: 0.5 }}>
+                  🗺️ Topographical Terrain Intel (IPB)
+                </span>
+                <span style={{ fontSize: 9.5, color: "var(--text-muted)", fontFamily: "var(--font-mono)" }}>
+                  {situationResult.terrain_intel.scenario_name}
+                </span>
+              </div>
+
+              {/* Terrain Chips Grid */}
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6, marginBottom: 6 }}>
+                <div style={{ background: "rgba(255, 255, 255, 0.03)", padding: "4px 6px", borderRadius: 4, border: "1px solid rgba(255, 255, 255, 0.05)", fontSize: 10 }}>
+                  <span style={{ color: "var(--text-muted)" }}>🏛️ Urban Structures:</span>{" "}
+                  <strong style={{ color: "#f59e0b" }}>{situationResult.terrain_intel.urban_pct}%</strong>
+                </div>
+                <div style={{ background: "rgba(255, 255, 255, 0.03)", padding: "4px 6px", borderRadius: 4, border: "1px solid rgba(255, 255, 255, 0.05)", fontSize: 10 }}>
+                  <span style={{ color: "var(--text-muted)" }}>🌲 Forest & Cover:</span>{" "}
+                  <strong style={{ color: "#10b981" }}>{situationResult.terrain_intel.forest_pct}%</strong>
+                </div>
+                <div style={{ background: "rgba(255, 255, 255, 0.03)", padding: "4px 6px", borderRadius: 4, border: "1px solid rgba(255, 255, 255, 0.05)", fontSize: 10 }}>
+                  <span style={{ color: "var(--text-muted)" }}>🌾 Open Ground:</span>{" "}
+                  <strong style={{ color: "#94a3b8" }}>{situationResult.terrain_intel.open_pct}%</strong>
+                </div>
+                <div style={{ background: "rgba(255, 255, 255, 0.03)", padding: "4px 6px", borderRadius: 4, border: "1px solid rgba(255, 255, 255, 0.05)", fontSize: 10 }}>
+                  <span style={{ color: "var(--text-muted)" }}>🛡️ Defilade Corridors:</span>{" "}
+                  <strong style={{ color: "var(--neon-cyan)" }}>{situationResult.terrain_intel.defilade_corridors_count}</strong>
+                </div>
+              </div>
+
+              <div style={{ fontSize: 10.5, lineHeight: 1.4, color: "var(--text-secondary)", fontStyle: "italic", borderTop: "1px solid rgba(255,255,255,0.06)", paddingTop: 5 }}>
+                {situationResult.terrain_intel.dominant_terrain_desc}
+              </div>
+            </div>
+          )}
+
+          {/* 3. FORCES ORDER OF BATTLE (OOB) BY ROLE */}
+          {situationResult?.forces_oob && (
+            <div style={{ background: "rgba(10, 14, 26, 0.75)", border: "1px solid rgba(255, 255, 255, 0.08)", borderRadius: 7, padding: 10 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
+                <span style={{ fontFamily: "var(--font-tech)", fontWeight: 700, fontSize: 10.5, color: "#818cf8", letterSpacing: 0.5 }}>
+                  ⚔️ Order of Battle (OOB) & Tactical Roles
+                </span>
+                <span style={{ fontSize: 9.5, color: "var(--text-muted)", fontFamily: "var(--font-mono)" }}>
+                  {situationResult.forces_oob.own_total} Friendly vs {situationResult.forces_oob.enemy_total} Hostile
+                </span>
+              </div>
+
+              {/* Roles Breakdown */}
+              <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
+                <div>
+                  <span style={{ fontSize: 9.5, color: "var(--text-muted)", display: "block", marginBottom: 3 }}>
+                    Friendly Force Composition ({situationResult.forces_oob.own_side}):
+                  </span>
+                  <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
+                    {Object.entries(situationResult.forces_oob.own_roles).map(([role, cnt]) => (
+                      <span key={role} style={{ fontSize: 9.5, background: "rgba(99, 102, 241, 0.15)", color: "#a5b4fc", border: "1px solid rgba(99, 102, 241, 0.3)", padding: "1px 6px", borderRadius: 3 }}>
+                        {role}: <strong>{cnt}</strong>
+                      </span>
+                    ))}
+                  </div>
+                </div>
+
+                <div>
+                  <span style={{ fontSize: 9.5, color: "var(--text-muted)", display: "block", marginBottom: 3 }}>
+                    Hostile Force Composition ({situationResult.forces_oob.enemy_side}):
+                  </span>
+                  <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
+                    {Object.entries(situationResult.forces_oob.enemy_roles).map(([role, cnt]) => (
+                      <span key={role} style={{ fontSize: 9.5, background: "rgba(239, 68, 68, 0.12)", color: "#fca5a5", border: "1px solid rgba(239, 68, 68, 0.25)", padding: "1px 6px", borderRadius: 3 }}>
+                        {role}: <strong>{cnt}</strong>
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* 4. EXECUTIVE SUMMARY & TACTICAL VECTORS */}
           {situationResult && (
-            <div style={{ display: "flex", flexDirection: "column", gap: 6, background: "rgba(0,0,0,0.3)", padding: 8, borderRadius: 6, border: "1px solid rgba(255,255,255,0.08)" }}>
-              <div>
-                <strong style={{ color: "#60a5fa" }}>Resumen:</strong> {situationResult.situation_summary}
+            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+              {/* Executive Summary */}
+              <div style={{ background: "rgba(15, 23, 42, 0.9)", borderLeft: "3px solid var(--neon-cyan)", padding: "8px 12px", borderRadius: "0 6px 6px 0", fontSize: 11, lineHeight: 1.5, color: "var(--text-bright)" }}>
+                <strong style={{ color: "var(--neon-cyan)", display: "block", fontSize: 10, letterSpacing: 0.8, textTransform: "uppercase", marginBottom: 2 }}>
+                  Executive SitRep Summary
+                </strong>
+                {situationResult.situation_summary}
               </div>
-              <div>
-                <strong style={{ color: "#34d399" }}>Prioridades:</strong>{" "}
-                {situationResult.priorities.length ? situationResult.priorities.join(" | ") : "Mantener posición"}
-              </div>
+
+              {/* Tactical Priorities */}
+              {situationResult.priorities && situationResult.priorities.length > 0 && (
+                <div style={{ background: "rgba(16, 185, 129, 0.06)", border: "1px solid rgba(16, 185, 129, 0.25)", borderRadius: 6, padding: "8px 10px" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 5, color: "#34d399", fontWeight: 700, fontSize: 10.5, marginBottom: 5 }}>
+                    <span>🎯</span>
+                    <span>Tactical Priorities</span>
+                  </div>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                    {situationResult.priorities.map((p, idx) => (
+                      <div key={idx} style={{ display: "flex", gap: 6, fontSize: 10.5, color: "var(--text-primary)", lineHeight: 1.4 }}>
+                        <span style={{ color: "#34d399", fontWeight: 700 }}>•</span>
+                        <span>{p}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Operational Opportunities */}
               {situationResult.opportunities && situationResult.opportunities.length > 0 && (
-                <div>
-                  <strong style={{ color: "#fbbf24" }}>Oportunidades:</strong>{" "}
-                  {situationResult.opportunities.join(" | ")}
+                <div style={{ background: "rgba(0, 240, 255, 0.06)", border: "1px solid rgba(0, 240, 255, 0.25)", borderRadius: 6, padding: "8px 10px" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 5, color: "var(--neon-cyan)", fontWeight: 700, fontSize: 10.5, marginBottom: 5 }}>
+                    <span>💡</span>
+                    <span>Operational Opportunities</span>
+                  </div>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                    {situationResult.opportunities.map((o, idx) => (
+                      <div key={idx} style={{ display: "flex", gap: 6, fontSize: 10.5, color: "var(--text-primary)", lineHeight: 1.4 }}>
+                        <span style={{ color: "var(--neon-cyan)", fontWeight: 700 }}>•</span>
+                        <span>{o}</span>
+                      </div>
+                    ))}
+                  </div>
                 </div>
               )}
-              {situationResult.risks.length > 0 && (
-                <div>
-                  <strong style={{ color: "#f87171" }}>Riesgos:</strong>{" "}
-                  {situationResult.risks.join(" | ")}
+
+              {/* Identified Risks */}
+              {situationResult.risks && situationResult.risks.length > 0 && (
+                <div style={{ background: "rgba(239, 68, 68, 0.06)", border: "1px solid rgba(239, 68, 68, 0.25)", borderRadius: 6, padding: "8px 10px" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 5, color: "#f87171", fontWeight: 700, fontSize: 10.5, marginBottom: 5 }}>
+                    <span>⚠️</span>
+                    <span>Identified Tactical Risks</span>
+                  </div>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                    {situationResult.risks.map((r, idx) => (
+                      <div key={idx} style={{ display: "flex", gap: 6, fontSize: 10.5, color: "var(--text-primary)", lineHeight: 1.4 }}>
+                        <span style={{ color: "#f87171", fontWeight: 700 }}>•</span>
+                        <span>{r}</span>
+                      </div>
+                    ))}
+                  </div>
                 </div>
               )}
+
+              {/* Key Unit Alerts */}
               {situationResult.key_unit_alerts && situationResult.key_unit_alerts.length > 0 && (
-                <div>
-                  <strong style={{ color: "#c084fc" }}>Alertas unidad:</strong>{" "}
-                  {situationResult.key_unit_alerts.join(" | ")}
+                <div style={{ background: "rgba(192, 132, 252, 0.06)", border: "1px solid rgba(192, 132, 252, 0.25)", borderRadius: 6, padding: "8px 10px" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 5, color: "#c084fc", fontWeight: 700, fontSize: 10.5, marginBottom: 5 }}>
+                    <span>🚨</span>
+                    <span>Key Squad Alerts</span>
+                  </div>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                    {situationResult.key_unit_alerts.map((a, idx) => (
+                      <div key={idx} style={{ display: "flex", gap: 6, fontSize: 10.5, color: "var(--text-primary)", lineHeight: 1.4 }}>
+                        <span style={{ color: "#c084fc", fontWeight: 700 }}>•</span>
+                        <span>{a}</span>
+                      </div>
+                    ))}
+                  </div>
                 </div>
               )}
-              {situationResult.citations.length > 0 && (
-                <div style={{ marginTop: 4, paddingTop: 4, borderTop: "1px solid rgba(255,255,255,0.06)", fontSize: 10, color: "var(--text-secondary)" }}>
-                  <strong>Citas de Reglas:</strong>{" "}
-                  {situationResult.citations.slice(0, 3).map((c) => `[${c.source_type}:${c.source_id}]`).join(" ")}
+
+              {/* Regulatory Citations */}
+              {situationResult.citations && situationResult.citations.length > 0 && (
+                <div style={{ marginTop: 4 }}>
+                  <span style={{ color: "var(--text-muted)", fontSize: 10, display: "block", marginBottom: 4 }}>
+                    Doctrinal & Regulatory Citations:
+                  </span>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
+                    {situationResult.citations.slice(0, 3).map((c, i) => (
+                      <div key={i} style={{ fontSize: 9.5, color: "var(--text-muted)", background: "rgba(0,0,0,0.25)", padding: "3px 6px", borderRadius: 4 }}>
+                        <span style={{ color: "var(--neon-cyan)", fontWeight: 600 }}>[{c.source_id}]</span> {c.snippet}
+                      </div>
+                    ))}
+                  </div>
                 </div>
               )}
             </div>
           )}
-
-          {/* AI OBSERVABILITY (EFFICIENTZERO V2 - NO SB3) */}
-          <div style={{ background: "rgba(0,0,0,0.25)", padding: 8, borderRadius: 6, border: "1px solid rgba(255,255,255,0.06)" }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
-              <strong style={{ color: "#38bdf8" }}>🧠 Motor IA Activo: EfficientZero V2 (MCTS)</strong>
-              <span style={{ fontSize: 10, color: "var(--text-secondary)" }}>CUDA / GPU</span>
-            </div>
-
-            {gameData?.ai_observability ? (
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 4, fontSize: 10 }}>
-                <div>
-                  <span style={{ color: "var(--text-secondary)" }}>Decisiones MCTS:</span>{" "}
-                  <strong>{Number(gameData.ai_observability.total_decisions || 0)}</strong>
-                </div>
-                <div>
-                  <span style={{ color: "var(--text-secondary)" }}>Correcciones:</span>{" "}
-                  <strong>{Number(gameData.ai_observability.corrected_count || 0)}</strong>
-                </div>
-                <div style={{ gridColumn: "span 2" }}>
-                  <span style={{ color: "var(--text-secondary)" }}>Fuentes:</span>{" "}
-                  {Object.entries(gameData.ai_observability.by_source || {})
-                    .map(([k, v]) => `${k}:${v}`)
-                    .join(" | ") || "Inferencia activa"}
-                </div>
-                {Array.isArray(gameData.ai_observability.recent_decisions) &&
-                  gameData.ai_observability.recent_decisions.length > 0 && (
-                    <div style={{ gridColumn: "span 2", marginTop: 2, paddingTop: 4, borderTop: "1px solid rgba(255,255,255,0.06)", color: "#a5b4fc" }}>
-                      <strong>Última jugada IA:</strong>{" "}
-                      {(() => {
-                        const d = gameData.ai_observability.recent_decisions[
-                          gameData.ai_observability.recent_decisions.length - 1
-                        ];
-                        return `${d?.side || "?"} T${d?.turn ?? "?"} ${d?.unit_id || "?"} -> ${
-                          d?.action_id || d?.action || "?"
-                        } [${d?.source || "EZV2"}]`;
-                      })()}
-                    </div>
-                  )}
-              </div>
-            ) : (
-              <div style={{ color: "var(--text-secondary)", fontSize: 10 }}>Esperando primer movimiento de IA...</div>
-            )}
-          </div>
         </div>
       )}
 
-      {/* TAB 2: RULES */}
+      {/* TAB 2: RULES & DOCTRINE */}
       {activeTab === "rules" && (
         <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-          {/* Quick chip suggestions */}
-          <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
-            {quickChips.map((chip, idx) => (
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+            <span style={{ color: "var(--text-secondary)", fontSize: 10 }}>
+              Query Official Rules & Unit Dossiers:
+            </span>
+            <div style={{ display: "flex", gap: 4, alignItems: "center" }}>
+              <select
+                value={retrievalMode}
+                onChange={(e) => setRetrievalMode(e.target.value as any)}
+                style={{ fontSize: 10, background: "rgba(0,0,0,0.4)", color: "var(--text-primary)", border: "1px solid rgba(255,255,255,0.15)", borderRadius: 3, padding: "2px 4px" }}
+              >
+                <option value="rules">Rules Only</option>
+                <option value="data">Unit Catalog</option>
+                <option value="hybrid">Hybrid (Rules + Data)</option>
+              </select>
+            </div>
+          </div>
+
+          {/* Search Input */}
+          <div style={{ display: "flex", gap: 6 }}>
+            <input
+              type="text"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && runQuery()}
+              placeholder="Ask a tactical or doctrinal question..."
+              style={{
+                flex: 1,
+                padding: "6px 10px",
+                fontSize: 11,
+                background: "rgba(0, 0, 0, 0.4)",
+                border: "1px solid rgba(255, 255, 255, 0.15)",
+                borderRadius: 4,
+                color: "var(--text-primary)",
+              }}
+            />
+            <button
+              className="btn-tactical"
+              onClick={() => runQuery()}
+              disabled={rulesLoading || !query.trim()}
+              style={{ fontSize: 11, padding: "4px 10px" }}
+            >
+              {rulesLoading ? "Searching..." : "Submit"}
+            </button>
+          </div>
+
+          {/* Quick doctrinal prompts */}
+          <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
+            {[
+              "Bunker & fortification defense rules",
+              "How does HEAVY_WEIGHT work?",
+              "Mortar indirect fire & smoke rules",
+              "Low silhouette spotting modifier",
+            ].map((prompt, i) => (
               <button
-                key={idx}
-                onClick={() => runQuery(chip.q)}
+                key={i}
+                onClick={() => runQuery(prompt)}
                 style={{
-                  fontSize: 10,
+                  fontSize: 9.5,
                   padding: "2px 6px",
-                  background: "rgba(255,255,255,0.06)",
-                  border: "1px solid rgba(255,255,255,0.12)",
-                  borderRadius: 12,
-                  color: "#cbd5e1",
+                  background: "rgba(255, 255, 255, 0.04)",
+                  border: "1px solid rgba(255, 255, 255, 0.08)",
+                  borderRadius: 3,
+                  color: "var(--text-secondary)",
                   cursor: "pointer",
                 }}
               >
-                {chip.label}
+                {prompt}
               </button>
             ))}
-          </div>
-
-          {/* Query input */}
-          <textarea
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" && !e.shiftKey) {
-                e.preventDefault();
-                runQuery();
-              }
-            }}
-            placeholder="Pregunta por el manual (reglas, excepciones, alcance, modificadores)..."
-            rows={2}
-            style={{
-              width: "100%",
-              resize: "vertical",
-              background: "rgba(0,0,0,0.35)",
-              color: "var(--text-primary)",
-              border: "1px solid rgba(255,255,255,0.14)",
-              borderRadius: 6,
-              padding: 6,
-              fontSize: 11,
-              boxSizing: "border-box",
-            }}
-          />
-
-          {/* Controls: Mode & Model */}
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 6 }}>
-            <div style={{ display: "flex", gap: 4, alignItems: "center" }}>
-              <span style={{ color: "var(--text-secondary)", fontSize: 10 }}>Modo:</span>
-              {(["rules", "hybrid", "data"] as const).map((m) => (
-                <button
-                  key={m}
-                  onClick={() => setRetrievalMode(m)}
-                  style={{
-                    fontSize: 9,
-                    padding: "2px 6px",
-                    borderRadius: 3,
-                    background: retrievalMode === m ? "#3b82f6" : "rgba(255,255,255,0.06)",
-                    color: retrievalMode === m ? "#fff" : "var(--text-secondary)",
-                    border: "none",
-                    cursor: "pointer",
-                  }}
-                >
-                  {m.toUpperCase()}
-                </button>
-              ))}
-            </div>
-
-            <div style={{ display: "flex", gap: 4, alignItems: "center" }}>
-              <select
-                value={model}
-                onChange={(e) => setModel(e.target.value)}
-                style={{
-                  fontSize: 10,
-                  background: "rgba(0,0,0,0.5)",
-                  color: "var(--text-primary)",
-                  border: "1px solid rgba(255,255,255,0.15)",
-                  borderRadius: 4,
-                  padding: "2px 4px",
-                }}
-              >
-                {modelOptions.map((opt) => (
-                  <option key={opt} value={opt}>
-                    {opt}
-                  </option>
-                ))}
-              </select>
-
-              <button
-                className="btn-tactical"
-                onClick={() => runQuery()}
-                disabled={rulesLoading || !query.trim()}
-                style={{ fontSize: 10, padding: "3px 8px" }}
-              >
-                {rulesLoading ? "Buscando..." : "Consultar"}
-              </button>
-            </div>
           </div>
 
           {rulesError && (
@@ -481,38 +655,44 @@ export function RagAssistantPanel({ gameData }: { gameData?: any }) {
             </div>
           )}
 
-          {/* Rules Result Card */}
+          {/* Unit counter preview if identified */}
+          {counterPreview && (
+            <div style={{ display: "flex", alignItems: "center", gap: 8, background: "rgba(0, 240, 255, 0.06)", border: "1px solid rgba(0, 240, 255, 0.2)", borderRadius: 6, padding: "6px 10px" }}>
+              <img
+                src={encodeURI(counterPreview.imagePath)}
+                alt={counterPreview.label}
+                style={{ width: 42, height: 42, objectFit: "contain", borderRadius: 4, background: "rgba(0,0,0,0.3)" }}
+              />
+              <div>
+                <span style={{ fontSize: 9.5, color: "var(--neon-cyan)", textTransform: "uppercase", letterSpacing: 0.5, display: "block" }}>
+                  Identified Unit Dossier
+                </span>
+                <strong style={{ fontSize: 11, color: "var(--text-bright)" }}>{counterPreview.label}</strong>
+              </div>
+            </div>
+          )}
+
+          {/* Query Result */}
           {rulesResult && (
-            <div style={{ background: "rgba(0,0,0,0.35)", padding: 8, borderRadius: 6, border: "1px solid rgba(255,255,255,0.08)", display: "flex", flexDirection: "column", gap: 6 }}>
-              <div style={{ color: "#f1f5f9", lineHeight: 1.4 }}>
-                {rulesResult.answer}
+            <div style={{ display: "flex", flexDirection: "column", gap: 8, background: "rgba(0, 0, 0, 0.35)", padding: 10, borderRadius: 6, border: "1px solid rgba(255, 255, 255, 0.08)" }}>
+              <div>
+                <strong style={{ color: "var(--neon-cyan)", display: "block", marginBottom: 4, fontSize: 10.5, letterSpacing: 0.5 }}>
+                  Doctrinal Advisory Briefing:
+                </strong>
+                <div style={{ fontSize: 11, lineHeight: 1.5, color: "var(--text-primary)", whiteSpace: "pre-wrap" }}>
+                  {rulesResult.answer}
+                </div>
               </div>
 
-              {/* Counter Preview if unit referenced */}
-              {counterPreview && (
-                <div style={{ display: "flex", alignItems: "center", gap: 8, padding: 6, background: "rgba(255,255,255,0.05)", borderRadius: 4 }}>
-                  <img
-                    src={counterPreview.imagePath}
-                    alt={counterPreview.label}
-                    style={{ width: 36, height: 36, objectFit: "contain" }}
-                  />
-                  <div>
-                    <strong style={{ color: "#fbbf24" }}>{counterPreview.label}</strong>
-                    <div style={{ fontSize: 9, color: "var(--text-secondary)" }}>{counterPreview.unitKey}</div>
-                  </div>
-                </div>
-              )}
-
-              {/* Citations */}
               {rulesResult.citations && rulesResult.citations.length > 0 && (
-                <div style={{ marginTop: 4, paddingTop: 4, borderTop: "1px solid rgba(255,255,255,0.06)" }}>
-                  <div style={{ color: "var(--text-secondary)", fontSize: 10, marginBottom: 2 }}>
-                    Citas y Evidencia Oficial:
-                  </div>
+                <div style={{ borderTop: "1px solid rgba(255,255,255,0.06)", paddingTop: 6 }}>
+                  <strong style={{ color: "var(--text-muted)", fontSize: 9.5, display: "block", marginBottom: 3 }}>
+                    Regulatory Citations ({rulesResult.citations.length}):
+                  </strong>
                   <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
-                    {rulesResult.citations.slice(0, 3).map((c, i) => (
-                      <div key={i} style={{ fontSize: 9, color: "#94a3b8", background: "rgba(0,0,0,0.2)", padding: 4, borderRadius: 3 }}>
-                        <span style={{ color: "#60a5fa" }}>[{c.source_type.toUpperCase()}] {c.source_id}:</span> {c.snippet.slice(0, 160)}...
+                    {rulesResult.citations.map((c, idx) => (
+                      <div key={idx} style={{ fontSize: 9.5, color: "var(--text-muted)", background: "rgba(0,0,0,0.25)", padding: "3px 6px", borderRadius: 3 }}>
+                        <span style={{ color: "#38bdf8", fontWeight: 600 }}>[{c.source_id}]</span> {c.snippet}
                       </div>
                     ))}
                   </div>

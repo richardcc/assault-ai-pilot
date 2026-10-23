@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
@@ -9,6 +9,7 @@ from assault_backend.routers.game import router as game_router
 from assault_backend.routers.rag import router as rag_router
 from assault_backend.routers.scenarios import router as scenarios_router
 from assault_backend.routers.scenario_editor import router as scenario_editor_router
+from assault_backend.routers.map_piece_editor import router as map_piece_editor_router
 from assault_backend.session_state import ezv2_service, game_session
 from assault_rag.copilot.index_builder import (
     ensure_game_data_chunks,
@@ -125,6 +126,7 @@ app.include_router(scenarios_router)
 app.include_router(explain_router)
 app.include_router(rag_router)
 app.include_router(scenario_editor_router)
+app.include_router(map_piece_editor_router)
 
 # Mount Static Art Assets
 from fastapi.staticfiles import StaticFiles

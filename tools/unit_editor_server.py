@@ -34,6 +34,11 @@ from assault_backend.services.scenario_editor_service import (
     VALID_EXPERIENCES,
     VALID_SIDES,
 )
+from assault_backend.services.map_piece_editor_service import (
+    map_piece_editor_service,
+    VALID_TERRAINS,
+    VALID_EDGE_FEATURES,
+)
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 CATALOG_PATH = REPO_ROOT / "assets" / "catalogs" / "unit_catalog.json"
@@ -174,6 +179,9 @@ HTML_TEMPLATE = """<!DOCTYPE html>
     .badge-published { background: #065f46; color: #6ee7b7; border: 1px solid #10b981; }
     .badge-staged { background: #854d0e; color: #fde047; border: 1px solid #f59e0b; }
     .badge-pending { background: #374151; color: #d1d5db; border: 1px solid #6b7280; }
+    .btn-palette { padding: 0.25rem 0.55rem; font-size: 0.72rem; font-weight: 700; border-radius: 4px; border: 1px solid var(--card-border); color: #fff; cursor: pointer; transition: all 0.15s; }
+    .btn-palette:hover { filter: brightness(1.2); border-color: #38bdf8; }
+    .btn-palette.active { outline: 2px solid #38bdf8; box-shadow: 0 0 8px rgba(56, 189, 248, 0.6); }
     
     .layout { display: grid; grid-template-columns: 360px 1fr; gap: 1.5rem; }
     .sidebar { background: var(--card-bg); border: 1px solid var(--card-border); border-radius: 8px; padding: 1rem; max-height: calc(100vh - 120px); overflow-y: auto; }
@@ -302,6 +310,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
       <button type="button" id="tab-nav-units" class="btn-nav active" onclick="switchView('units')">🎖️ Unit Catalog & Staging</button>
       <button type="button" id="tab-nav-formations" class="btn-nav" onclick="switchView('formations')">🛡️ Formation Catalog (OOB)</button>
       <button type="button" id="tab-nav-scenarios" class="btn-nav" onclick="switchView('scenarios')">🗺️ Scenario Editor (Drafts & Publish)</button>
+      <button type="button" id="tab-nav-pieces" class="btn-nav" onclick="switchView('pieces')">🧩 Map Piece Editor (Drafts & Publish)</button>
     </nav>
     <div id="unit-header-badges" style="display: flex; gap: 0.8rem; align-items: center;">
       <button type="button" class="btn-nav" style="padding: 0.25rem 0.6rem; font-size: 0.75rem;" onclick="loadData(0)" title="Reload catalog data">🔄 Reload</button>
@@ -316,6 +325,12 @@ HTML_TEMPLATE = """<!DOCTYPE html>
       <span id="scenario-draft-badge" class="badge badge-staged">0 Drafts</span>
       <button type="button" class="btn-nav" style="padding: 0.25rem 0.6rem; font-size: 0.75rem; background: #0284c7; color: #fff;" onclick="openNewScenarioModal()">➕ New Draft</button>
       <button type="button" class="btn-nav" style="padding: 0.25rem 0.6rem; font-size: 0.75rem; background: #059669; color: #fff;" onclick="publishCurrentScenario()">🚀 Publish to Engine</button>
+    </div>
+    <div id="piece-header-badges" style="display: none; gap: 0.8rem; align-items: center;">
+      <span id="piece-pub-badge" class="badge badge-published">0 Published</span>
+      <span id="piece-draft-badge" class="badge badge-staged">0 Drafts</span>
+      <button type="button" class="btn-nav" style="padding: 0.25rem 0.6rem; font-size: 0.75rem; background: #0284c7; color: #fff;" onclick="openNewPieceModal()">➕ New Piece Draft</button>
+      <button type="button" class="btn-nav" style="padding: 0.25rem 0.6rem; font-size: 0.75rem; background: #059669; color: #fff;" onclick="publishCurrentPiece()">🚀 Publish Piece</button>
     </div>
     <div style="display: flex; gap: 0.5rem; align-items: center; margin-left: auto;">
       <a href="http://127.0.0.1:8778/docs/" target="_blank" class="btn-cross-nav" style="border-color: #38bdf8; color: #38bdf8;" title="Assault Canonical Documentation Hub">📚 Docs Hub</a>
@@ -700,236 +715,355 @@ HTML_TEMPLATE = """<!DOCTYPE html>
     </div>
   </div>
 
-  <!-- VIEW 3: SCENARIO EDITOR (DRAFTS & PUBLISH) -->
-  <div id="view-scenarios" class="layout" style="display: none;">
-    <!-- Sidebar -->
-    <div class="sidebar">
-      <input type="text" id="search-scenarios" class="search-box" placeholder="Search scenarios (e.g. Mettete, Battaglia)..." oninput="filterScenarios()" />
-      <div class="status-filters">
-        <button type="button" id="filter-scen-all" class="filter-btn active" onclick="setScenarioStatusFilter('all')">All (<span id="count-scen-all">0</span>)</button>
-        <button type="button" id="filter-scen-draft" class="filter-btn filter-staged" onclick="setScenarioStatusFilter('draft')">⚡ Drafts (<span id="count-scen-draft">0</span>)</button>
-        <button type="button" id="filter-scen-published" class="filter-btn filter-published" onclick="setScenarioStatusFilter('published')">✓ Published (<span id="count-scen-published">0</span>)</button>
-      </div>
-      <button type="button" style="width: 100%; margin-bottom: 0.8rem; background: #0284c7; color: #fff; padding: 0.5rem; border-radius: 6px; font-weight: 700; border: none; cursor: pointer;" onclick="openNewScenarioModal()">
-        ➕ Create New Draft Scenario
-      </button>
-      <ul class="unit-list" id="scenarios-list"></ul>
-    </div>
-
-    <!-- Main Editor -->
-    <div class="main-editor">
-      <div id="scenario-banner" style="display: none; padding: 0.6rem 1rem; border-radius: 6px; margin-bottom: 0.6rem; font-size: 0.85rem;"></div>
-
-      <div class="card-tabs" style="margin-bottom: 0.6rem; border-bottom: 1px solid var(--card-border); padding-bottom: 0.4rem;">
-        <button type="button" class="btn-card-tab active" id="subtab-scen-map" onclick="switchScenarioSubTab('map')">🗺️ Map & Canvas</button>
-        <button type="button" class="btn-card-tab" id="subtab-scen-units" onclick="switchScenarioSubTab('units')">⚔️ Order of Battle (Units)</button>
-        <button type="button" class="btn-card-tab" id="subtab-scen-forts" onclick="switchScenarioSubTab('forts')">🛡️ Fortifications & VPs</button>
-        <button type="button" class="btn-card-tab" id="subtab-scen-rules" onclick="switchScenarioSubTab('rules')">⚙️ Rules & Morale</button>
-        <button type="button" class="btn-card-tab" id="subtab-scen-json" onclick="switchScenarioSubTab('json')">📄 Raw JSON & Live Validation</button>
-      </div>
-
-      <div style="flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 0.8rem;">
-        <!-- Subtab 1: Map Canvas -->
-        <div id="panel-scen-map" style="display: flex; flex-direction: column; gap: 0.8rem;">
-          <div style="position: relative; background: #080d1a; border: 1px solid var(--card-border); border-radius: 8px; overflow: hidden; height: 380px; display: flex; justify-content: center; align-items: center;">
-            <canvas id="hexCanvas" width="860" height="380" style="cursor: crosshair;"></canvas>
-            <div style="position: absolute; top: 10px; right: 10px; display: flex; gap: 0.4rem; background: rgba(15, 23, 42, 0.85); padding: 0.4rem; border-radius: 6px; border: 1px solid var(--card-border);">
-              <button type="button" class="btn-nav" style="padding: 0.2rem 0.5rem; font-size: 0.72rem;" onclick="zoomCanvas(1.15)">🔍+</button>
-              <button type="button" class="btn-nav" style="padding: 0.2rem 0.5rem; font-size: 0.72rem;" onclick="zoomCanvas(0.85)">🔍-</button>
-              <button type="button" class="btn-nav" style="padding: 0.2rem 0.5rem; font-size: 0.72rem;" onclick="resetCanvas()">↺ Reset</button>
-            </div>
-            <div id="hexTooltip" style="position: absolute; bottom: 10px; left: 10px; background: rgba(15, 23, 42, 0.9); border: 1px solid var(--card-border); padding: 0.4rem 0.7rem; border-radius: 6px; font-size: 0.78rem;">Hover over a hex to view details</div>
-          </div>
-
-          <div style="background: #0f172a; padding: 0.8rem; border-radius: 6px; border: 1px solid var(--card-border);">
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.6rem;">
-              <span style="font-size: 0.85rem; font-weight: 700; color: #fff;">Map Pieces Layout</span>
-            </div>
-            <div style="display: flex; gap: 0.6rem; align-items: flex-end; margin-bottom: 0.6rem;">
-              <div style="flex: 2;" class="field-group">
-                <label>Select Piece</label>
-                <select id="selectMapPiece"></select>
-              </div>
-              <div style="flex: 1;" class="field-group">
-                <label>Origin Q</label>
-                <input type="number" id="pieceOriginQ" value="0">
-              </div>
-              <div style="flex: 1;" class="field-group">
-                <label>Origin R</label>
-                <input type="number" id="pieceOriginR" value="0">
-              </div>
-              <button type="button" class="btn-approve" style="padding: 0.4rem 0.8rem; font-size: 0.8rem;" onclick="addMapPiece()">Add Piece</button>
-            </div>
-            <table style="width: 100%; border-collapse: collapse; font-size: 0.8rem;">
-              <thead>
-                <tr style="background: #1e293b; color: #94a3b8;"><th style="padding: 0.4rem;">Piece ID</th><th style="padding: 0.4rem;">Origin [Q, R]</th><th style="padding: 0.4rem;">Actions</th></tr>
-              </thead>
-              <tbody id="mapPiecesTableBody"></tbody>
-            </table>
-          </div>
+  <!-- VIEW 3: SCENARIO EDITOR -->
+  <div id="view-scenarios" style="display: none;">
+    <div class="layout">
+      <!-- Sidebar -->
+      <div class="sidebar">
+        <input type="text" id="scenario-search" class="search-box" placeholder="Search scenarios (e.g. Mettete, Battaglia)..." oninput="filterScenarios()" />
+        
+        <div class="status-filters">
+          <button type="button" id="scenario-filter-all" class="filter-btn active" onclick="setScenarioFilter('all')">All (<span id="count-scenarios-all">0</span>)</button>
+          <button type="button" id="scenario-filter-drafts" class="filter-btn filter-staged" onclick="setScenarioFilter('drafts')">⚡ Drafts (<span id="count-scenarios-drafts">0</span>)</button>
+          <button type="button" id="scenario-filter-published" class="filter-btn filter-published" onclick="setScenarioFilter('published')">✓ Published (<span id="count-scenarios-published">0</span>)</button>
         </div>
 
-        <!-- Subtab 2: Units OOB -->
-        <div id="panel-scen-units" style="display: none; flex-direction: column; gap: 0.8rem;">
-          <div style="background: #0f172a; padding: 0.8rem; border-radius: 6px; border: 1px solid var(--card-border);">
-            <div style="font-size: 0.85rem; font-weight: 700; color: #fff; margin-bottom: 0.6rem;">Deploy Unit</div>
-            <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 0.6rem; margin-bottom: 0.6rem;">
-              <div class="field-group">
-                <label>Side</label>
-                <select id="newUnitSide" onchange="filterUnitCatalogOptions()">
-                  <option value="US">US Army</option>
-                  <option value="IT">Regio Esercito (IT)</option>
-                  <option value="GE">Wehrmacht (GE)</option>
-                  <option value="UK">British Army (UK)</option>
-                </select>
-              </div>
-              <div class="field-group">
-                <label>Unit Key</label>
-                <select id="newUnitKey"></select>
-              </div>
-              <div class="field-group">
-                <label>Unit ID</label>
-                <input type="text" id="newUnitId" placeholder="e.g. US_1">
-              </div>
-              <div class="field-group">
-                <label>Experience</label>
-                <select id="newUnitExp">
-                  <option value="REGULAR">REGULAR</option>
-                  <option value="HARDENED">HARDENED</option>
-                  <option value="VETERAN">VETERAN</option>
-                  <option value="RECRUIT">RECRUIT</option>
-                </select>
-              </div>
-            </div>
-            <div style="display: flex; gap: 0.6rem; align-items: flex-end;">
-              <div class="field-group" style="width: 110px;"><label>Hex Q</label><input type="number" id="newUnitQ" value="0"></div>
-              <div class="field-group" style="width: 110px;"><label>Hex R</label><input type="number" id="newUnitR" value="0"></div>
-              <button type="button" class="btn-approve" style="padding: 0.4rem 0.9rem; font-size: 0.8rem;" onclick="addScenarioUnit()">Deploy Unit</button>
-            </div>
-          </div>
+        <button type="button" class="btn-nav" style="width: 100%; margin-bottom: 0.8rem; background: #0284c7; color: #fff; padding: 0.5rem;" onclick="openNewScenarioModal()">➕ Create New Draft Scenario</button>
 
-          <div style="background: #0f172a; padding: 0.8rem; border-radius: 6px; border: 1px solid var(--card-border);">
-            <div style="font-size: 0.85rem; font-weight: 700; color: #fff; margin-bottom: 0.6rem;">Deployed Units (<span id="unitCountLabel">0</span>)</div>
-            <table style="width: 100%; border-collapse: collapse; font-size: 0.8rem;">
-              <thead>
-                <tr style="background: #1e293b; color: #94a3b8;"><th style="padding: 0.4rem;">Side</th><th style="padding: 0.4rem;">ID</th><th style="padding: 0.4rem;">Unit Key</th><th style="padding: 0.4rem;">[Q, R]</th><th style="padding: 0.4rem;">Exp</th><th style="padding: 0.4rem;">Actions</th></tr>
-              </thead>
-              <tbody id="unitsTableBody"></tbody>
-            </table>
-          </div>
+        <ul id="scenario-list" class="unit-list">
+          <li style="color: var(--text-muted); font-size: 0.85rem; padding: 1rem; text-align: center;">Loading scenarios...</li>
+        </ul>
+      </div>
+
+      <!-- Main Scenario Editor Area -->
+      <div class="main-editor">
+        <div id="no-scenario-selection" style="display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; color: var(--text-muted);">
+          <div style="font-size: 3rem; margin-bottom: 1rem;">🗺️</div>
+          <h2>Select a scenario to view or edit</h2>
+          <p style="margin-top: 0.5rem; font-size: 0.9rem;">Choose from published scenarios or drafts, or create a new draft.</p>
         </div>
 
-        <!-- Subtab 3: Fortifications & VPs -->
-        <div id="panel-scen-forts" style="display: none; flex-direction: column; gap: 0.8rem;">
-          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.8rem;">
-            <!-- Forts -->
-            <div style="background: #0f172a; padding: 0.8rem; border-radius: 6px; border: 1px solid var(--card-border);">
-              <div style="font-size: 0.85rem; font-weight: 700; color: #fff; margin-bottom: 0.6rem;">Place Fortification</div>
-              <div class="field-group" style="margin-bottom: 0.4rem;"><label>Type</label><select id="fortType"></select></div>
-              <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.4rem; margin-bottom: 0.4rem;">
-                <div class="field-group"><label>Q</label><input type="number" id="fortQ" value="0"></div>
-                <div class="field-group"><label>R</label><input type="number" id="fortR" value="0"></div>
-                <div class="field-group"><label>Orient</label><input type="number" id="fortOrient" value="4" min="1" max="6"></div>
+        <div id="scenario-editor-form" style="display: none; height: 100%; flex-direction: column; overflow: hidden;">
+          <!-- Scenario Sub-Tabs -->
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.8rem; border-bottom: 1px solid var(--card-border); padding-bottom: 0.5rem;">
+            <div style="display: flex; gap: 0.5rem;">
+              <button type="button" id="scen-subtab-map" class="btn-card-tab active" onclick="switchScenarioSubTab('map')">🗺️ Map & Canvas</button>
+              <button type="button" id="scen-subtab-units" class="btn-card-tab" onclick="switchScenarioSubTab('units')">⚔️ Order of Battle (Units)</button>
+              <button type="button" id="scen-subtab-forts" class="btn-card-tab" onclick="switchScenarioSubTab('forts')">🛡️ Fortifications & VPs</button>
+              <button type="button" id="scen-subtab-rules" class="btn-card-tab" onclick="switchScenarioSubTab('rules')">⚙️ Rules & Morale</button>
+              <button type="button" id="scen-subtab-json" class="btn-card-tab" onclick="switchScenarioSubTab('json')">📄 Raw JSON & Live Validation</button>
+            </div>
+            <div style="display: flex; gap: 0.6rem; align-items: center;">
+              <button type="button" class="btn-card-tab" onclick="autoFitScenarioCamera()" title="Auto Fit & Center Board">🎯 Fit View</button>
+              <button type="button" class="btn-card-tab" onclick="zoomScenarioCanvas(1.15)">➕ Zoom In</button>
+              <button type="button" class="btn-card-tab" onclick="zoomScenarioCanvas(0.85)">➖ Zoom Out</button>
+              <span id="scenario-status-pill" class="badge badge-published">PUBLISHED</span>
+            </div>
+          </div>
+
+          <!-- Sub-Tab 1: Canvas & Map View -->
+          <div id="scen-panel-map" class="scenario-panel" style="display: flex; flex-direction: column; flex: 1; overflow: hidden; gap: 0.8rem;">
+            <div style="position: relative; flex: 1; min-height: 380px; background: #080d1a; border: 1px solid var(--card-border); border-radius: 8px; overflow: hidden;">
+              <canvas id="hexCanvas" width="900" height="420" style="width: 100%; height: 100%; display: block; cursor: grab;"></canvas>
+              <div id="canvas-info-overlay" style="position: absolute; bottom: 8px; left: 8px; background: rgba(15, 23, 42, 0.85); padding: 4px 10px; border-radius: 4px; font-size: 0.75rem; color: #94a3b8; border: 1px solid #334155;">
+                Hover over a hex to view details (Col, Row & Terrain)
               </div>
-              <button type="button" class="btn-approve" style="padding: 0.4rem 0.8rem; font-size: 0.8rem;" onclick="addScenarioFort()">Place Fortification</button>
-              <table style="width: 100%; border-collapse: collapse; font-size: 0.78rem; margin-top: 0.6rem;">
-                <thead><tr style="background: #1e293b; color: #94a3b8;"><th style="padding: 0.3rem;">Type</th><th style="padding: 0.3rem;">[Q, R]</th><th style="padding: 0.3rem;">Actions</th></tr></thead>
-                <tbody id="fortsTableBody"></tbody>
+            </div>
+
+            <!-- Map Pieces Section -->
+            <div style="background: #0f172a; border: 1px solid var(--card-border); border-radius: 6px; padding: 0.6rem 0.8rem;">
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.4rem;">
+                <span style="font-size: 0.82rem; font-weight: 700; color: #e2e8f0;">Map Pieces Layout</span>
+                <button type="button" class="btn-nav" style="padding: 0.2rem 0.5rem; font-size: 0.72rem;" onclick="addMapPieceToScenario()">➕ Add Map Piece</button>
+              </div>
+              <div id="scenario-map-pieces-list" style="display: flex; gap: 0.6rem; flex-wrap: wrap;"></div>
+            </div>
+          </div>
+
+          <!-- Sub-Tab 2: Units / OOB -->
+          <div id="scen-panel-units" class="scenario-panel" style="display: none; flex-direction: column; flex: 1; overflow-y: auto; gap: 0.8rem;">
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+              <h3 style="font-size: 0.95rem; color: #e2e8f0;">Scenario Units (Order of Battle)</h3>
+              <button type="button" class="btn-approve" style="padding: 0.3rem 0.8rem; font-size: 0.78rem;" onclick="openAddUnitModal()">➕ Deploy Unit</button>
+            </div>
+            <table class="table-dark" style="width: 100%; border-collapse: collapse; font-size: 0.82rem;">
+              <thead>
+                <tr style="background: #0f172a; text-align: left; border-bottom: 1px solid var(--card-border);">
+                  <th style="padding: 0.5rem;">Unit ID</th>
+                  <th style="padding: 0.5rem;">Side</th>
+                  <th style="padding: 0.5rem;">Hex (Q, R)</th>
+                  <th style="padding: 0.5rem;">Facing</th>
+                  <th style="padding: 0.5rem;">Experience</th>
+                  <th style="padding: 0.5rem;">Turn</th>
+                  <th style="padding: 0.5rem;">Actions</th>
+                </tr>
+              </thead>
+              <tbody id="scenario-units-tbody"></tbody>
+            </table>
+          </div>
+
+          <!-- Sub-Tab 3: Fortifications & VPs -->
+          <div id="scen-panel-forts" class="scenario-panel" style="display: none; flex-direction: column; flex: 1; overflow-y: auto; gap: 1rem;">
+            <div>
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.4rem;">
+                <h3 style="font-size: 0.92rem; color: #e2e8f0;">Fortifications</h3>
+                <button type="button" class="btn-nav" style="padding: 0.25rem 0.6rem; font-size: 0.75rem;" onclick="addFortificationRow()">➕ Add Fortification</button>
+              </div>
+              <table class="table-dark" style="width: 100%; border-collapse: collapse; font-size: 0.82rem;">
+                <thead>
+                  <tr style="background: #0f172a; text-align: left; border-bottom: 1px solid var(--card-border);">
+                    <th style="padding: 0.4rem;">Hex (Q, R)</th>
+                    <th style="padding: 0.4rem;">Type</th>
+                    <th style="padding: 0.4rem;">Action</th>
+                  </tr>
+                </thead>
+                <tbody id="scenario-forts-tbody"></tbody>
               </table>
             </div>
-            <!-- VPs -->
-            <div style="background: #0f172a; padding: 0.8rem; border-radius: 6px; border: 1px solid var(--card-border);">
-              <div style="font-size: 0.85rem; font-weight: 700; color: #fff; margin-bottom: 0.6rem;">Victory Points</div>
-              <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 0.4rem; margin-bottom: 0.4rem;">
-                <div class="field-group"><label>Q</label><input type="number" id="newVpQ" value="0"></div>
-                <div class="field-group"><label>R</label><input type="number" id="newVpR" value="0"></div>
-                <div class="field-group"><label>Owner</label><select id="newVpOwner"><option value="IT">IT</option><option value="US">US</option><option value="GE">GE</option><option value="UK">UK</option></select></div>
-                <div class="field-group"><label>Value</label><input type="number" id="newVpValue" value="2"></div>
+
+            <div>
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.4rem;">
+                <h3 style="font-size: 0.92rem; color: #e2e8f0;">Victory Points (VPs)</h3>
+                <button type="button" class="btn-nav" style="padding: 0.25rem 0.6rem; font-size: 0.75rem;" onclick="addVpRow()">➕ Add VP</button>
               </div>
-              <button type="button" class="btn-approve" style="padding: 0.4rem 0.8rem; font-size: 0.8rem;" onclick="addScenarioVp()">Place VP Hex</button>
-              <table style="width: 100%; border-collapse: collapse; font-size: 0.78rem; margin-top: 0.6rem;">
-                <thead><tr style="background: #1e293b; color: #94a3b8;"><th style="padding: 0.3rem;">[Q, R]</th><th style="padding: 0.3rem;">Owner</th><th style="padding: 0.3rem;">VP</th><th style="padding: 0.3rem;">Actions</th></tr></thead>
-                <tbody id="vpsTableBody"></tbody>
+              <table class="table-dark" style="width: 100%; border-collapse: collapse; font-size: 0.82rem;">
+                <thead>
+                  <tr style="background: #0f172a; text-align: left; border-bottom: 1px solid var(--card-border);">
+                    <th style="padding: 0.4rem;">Hex (Q, R)</th>
+                    <th style="padding: 0.4rem;">Value</th>
+                    <th style="padding: 0.4rem;">Action</th>
+                  </tr>
+                </thead>
+                <tbody id="scenario-vps-tbody"></tbody>
               </table>
             </div>
           </div>
-        </div>
 
-        <!-- Subtab 4: Rules & Morale -->
-        <div id="panel-scen-rules" style="display: none; flex-direction: column; gap: 0.8rem;">
-          <div style="background: #0f172a; padding: 0.8rem; border-radius: 6px; border: 1px solid var(--card-border); display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.6rem;">
-            <div class="field-group"><label>Scenario ID</label><input type="text" id="metaId" disabled></div>
-            <div class="field-group"><label>Title / Name</label><input type="text" id="metaName"></div>
-            <div class="field-group"><label>Max Turns</label><input type="number" id="metaMaxTurns" value="8" min="1" max="30"></div>
-          </div>
-          <div class="field-group"><label>Description</label><textarea id="metaDescription" rows="2" style="padding: 0.4rem; background: #0f172a; border: 1px solid var(--card-border); color: #fff; border-radius: 6px;"></textarea></div>
-          <div style="background: #0f172a; padding: 0.8rem; border-radius: 6px; border: 1px solid var(--card-border); display: grid; grid-template-columns: 1fr 1fr; gap: 0.8rem;">
-            <div style="border: 1px solid var(--card-border); padding: 0.6rem; border-radius: 6px;">
-              <span style="font-size: 0.8rem; font-weight: 700; color: #86efac;">Allied Morale (US / UK)</span>
-              <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 0.4rem; margin-top: 0.4rem;">
-                <div class="field-group"><label>Start</label><input type="number" id="morUsStart" value="3"></div>
-                <div class="field-group"><label>Retreat</label><input type="number" id="morUsRetreat" value="7"></div>
-                <div class="field-group"><label>Rout</label><input type="number" id="morUsRout" value="9"></div>
-                <div class="field-group"><label>Surrender</label><input type="number" id="morUsSurrender" value="11"></div>
+          <!-- Sub-Tab 4: Rules & Morale -->
+          <div id="scen-panel-rules" class="scenario-panel" style="display: none; flex-direction: column; flex: 1; overflow-y: auto; gap: 0.8rem;">
+            <div class="form-grid" style="grid-template-columns: 1fr 1fr; gap: 1rem;">
+              <div class="form-group">
+                <label>Scenario Name</label>
+                <input type="text" id="scen-field-name" class="form-control" oninput="syncScenarioDataFromInputs()" />
+              </div>
+              <div class="form-group">
+                <label>Max Turns (Duration)</label>
+                <input type="number" id="scen-field-max-turns" class="form-control" min="1" max="50" oninput="syncScenarioDataFromInputs()" />
+              </div>
+              <div class="form-group">
+                <label>Attacker Morale Threshold</label>
+                <input type="number" id="scen-field-atk-morale" class="form-control" min="1" max="100" oninput="syncScenarioDataFromInputs()" />
+              </div>
+              <div class="form-group">
+                <label>Defender Morale Threshold</label>
+                <input type="number" id="scen-field-def-morale" class="form-control" min="1" max="100" oninput="syncScenarioDataFromInputs()" />
               </div>
             </div>
-            <div style="border: 1px solid var(--card-border); padding: 0.6rem; border-radius: 6px;">
-              <span style="font-size: 0.8rem; font-weight: 700; color: #7dd3fc;">Axis Morale (IT / GE)</span>
-              <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 0.4rem; margin-top: 0.4rem;">
-                <div class="field-group"><label>Start</label><input type="number" id="morItStart" value="2"></div>
-                <div class="field-group"><label>Retreat</label><input type="number" id="morItRetreat" value="6"></div>
-                <div class="field-group"><label>Rout</label><input type="number" id="morItRout" value="7"></div>
-                <div class="field-group"><label>Surrender</label><input type="number" id="morItSurrender" value="9"></div>
-              </div>
+            <div class="form-group">
+              <label>Description & Mission Briefing</label>
+              <textarea id="scen-field-desc" class="form-control" rows="4" oninput="syncScenarioDataFromInputs()"></textarea>
             </div>
           </div>
-        </div>
 
-        <!-- Subtab 5: Raw JSON -->
-        <div id="panel-scen-json" style="display: none; flex-direction: column; gap: 0.6rem;">
-          <div style="display: flex; gap: 0.5rem; justify-content: flex-end;">
-            <button type="button" class="btn-secondary" onclick="formatScenarioJson()">Format JSON</button>
-            <button type="button" class="btn-approve" onclick="applyScenarioJson()">Apply to Form</button>
+          <!-- Sub-Tab 5: Raw JSON & Live Validation -->
+          <div id="scen-panel-json" class="scenario-panel" style="display: none; flex-direction: column; flex: 1; overflow: hidden; gap: 0.5rem;">
+            <div id="scen-validation-box" style="padding: 0.4rem 0.8rem; border-radius: 4px; font-size: 0.8rem; background: #064e3b; color: #6ee7b7; border: 1px solid #10b981;">
+              ✓ Schema Validated
+            </div>
+            <textarea id="scenario-json-raw" style="flex: 1; width: 100%; background: #0b1120; color: #38bdf8; font-family: monospace; font-size: 0.82rem; padding: 0.8rem; border: 1px solid var(--card-border); border-radius: 6px; resize: none;" oninput="onScenarioJsonInput()"></textarea>
           </div>
-          <textarea id="rawScenarioJson" style="height: 380px; font-family: monospace; font-size: 0.82rem; background: #0f172a; border: 1px solid var(--card-border); border-radius: 6px; color: #fff; padding: 0.6rem;" spellcheck="false"></textarea>
-        </div>
-      </div>
 
-      <!-- Action Buttons Bar -->
-      <div class="actions-bar" style="margin-top: 0.6rem; padding-top: 0.6rem; border-top: 1px solid var(--card-border); display: flex; gap: 0.6rem; justify-content: flex-end;">
-        <button type="button" class="btn-secondary" onclick="cloneCurrentScenario()">📋 Duplicate as Draft</button>
-        <button type="button" class="btn-danger" id="btn-delete-scenario" onclick="deleteCurrentScenarioDraft()" style="display: none;">🗑️ Delete Draft</button>
-        <button type="button" class="btn-secondary" style="border-color: #f59e0b; color: #fde047;" onclick="validateScenarioDraft()">✔️ Validate</button>
-        <button type="button" class="btn-approve" onclick="saveCurrentScenarioDraft()">💾 Save Draft (Ctrl+S)</button>
-        <button type="button" class="btn-approve" style="background: #059669; border-color: #34d399;" onclick="publishCurrentScenario()">🚀 Publish to Engine</button>
+          <!-- Bottom Action Buttons -->
+          <div class="actions-bar" style="margin-top: 0.8rem; padding-top: 0.6rem; border-top: 1px solid var(--card-border); display: flex; justify-content: flex-end; gap: 0.6rem;">
+            <button type="button" class="btn-danger" id="btn-delete-scenario" onclick="deleteCurrentScenario()">🗑️ Delete Draft</button>
+            <button type="button" class="btn-secondary" onclick="cloneCurrentScenario()">📋 Duplicate as Draft</button>
+            <button type="button" class="btn-approve" onclick="saveCurrentScenarioDraft()">💾 Save Draft</button>
+            <button type="button" class="btn-nav" style="background: #059669; color: #fff;" onclick="publishCurrentScenario()">🚀 Publish to Engine</button>
+          </div>
+        </div>
       </div>
     </div>
   </div>
 
-  <!-- Modal: Create New Draft Scenario -->
-  <div class="modal-overlay" id="newScenarioModal" style="display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.7); backdrop-filter: blur(3px); z-index: 100; justify-content: center; align-items: center;">
-    <div style="background: #1e293b; border: 1px solid var(--card-border); border-radius: 8px; padding: 1.2rem; width: 480px; max-width: 90vw; display: flex; flex-direction: column; gap: 0.8rem;">
-      <div style="display: flex; justify-content: space-between; align-items: center;">
-        <h3 style="color: #fff; font-size: 1rem;">Create New Scenario Draft</h3>
-        <button type="button" class="btn-secondary" style="padding: 0.2rem 0.5rem;" onclick="closeNewScenarioModal()">✕</button>
+  <!-- VIEW 4: MAP PIECE EDITOR -->
+  <div id="view-pieces" style="display: none;">
+    <div class="layout">
+      <!-- Sidebar -->
+      <div class="sidebar">
+        <input type="text" id="piece-search" class="search-box" placeholder="Search map pieces (e.g. S2, S3)..." oninput="filterPieces()" />
+        
+        <div class="status-filters">
+          <button type="button" id="piece-filter-all" class="filter-btn active" onclick="setPieceFilter('all')">All (<span id="count-pieces-all">0</span>)</button>
+          <button type="button" id="piece-filter-drafts" class="filter-btn filter-staged" onclick="setPieceFilter('drafts')">⚡ Drafts (<span id="count-pieces-drafts">0</span>)</button>
+          <button type="button" id="piece-filter-published" class="filter-btn filter-published" onclick="setPieceFilter('published')">✓ Published (<span id="count-pieces-published">0</span>)</button>
+        </div>
+
+        <button type="button" class="btn-nav" style="width: 100%; margin-bottom: 0.8rem; background: #0284c7; color: #fff; padding: 0.5rem;" onclick="openNewPieceModal()">➕ Create New Map Piece Draft</button>
+
+        <ul id="piece-list" class="unit-list">
+          <li style="color: var(--text-muted); font-size: 0.85rem; padding: 1rem; text-align: center;">Loading map pieces...</li>
+        </ul>
       </div>
-      <div class="field-group">
-        <label>New Scenario ID</label>
-        <input type="text" id="modalScenarioId" placeholder="e.g. draft_beach_assault_01">
+
+      <!-- Main Map Piece Editor Area -->
+      <div class="main-editor">
+        <div id="no-piece-selection" style="display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; color: var(--text-muted);">
+          <div style="font-size: 3rem; margin-bottom: 1rem;">🧩</div>
+          <h2>Select a map piece to view or edit</h2>
+          <p style="margin-top: 0.5rem; font-size: 0.9rem;">Choose from standard pieces (S2, S3, S4) or custom drafts, or create a new section.</p>
+        </div>
+
+        <div id="piece-editor-form" style="display: none; height: 100%; flex-direction: column; overflow: hidden;">
+          <!-- Top Tool Palette & Controls -->
+          <div style="display: flex; flex-direction: column; gap: 0.5rem; margin-bottom: 0.8rem; border-bottom: 1px solid var(--card-border); padding-bottom: 0.6rem;">
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+              <div style="display: flex; gap: 0.6rem; align-items: center;">
+                <span id="piece-id-title" style="font-size: 1.1rem; font-weight: 700; color: #38bdf8;">S2</span>
+                <span id="piece-shape-pill" class="badge badge-pending">9x8</span>
+                <span id="piece-status-pill" class="badge badge-published">PUBLISHED</span>
+              </div>
+              <div style="display: flex; gap: 0.5rem; align-items: center;">
+                <button type="button" class="btn-card-tab" onclick="autoFitPieceCamera()">🎯 Fit Piece</button>
+                <button type="button" class="btn-card-tab" onclick="zoomPieceCanvas(1.15)">➕ Zoom In</button>
+                <button type="button" class="btn-card-tab" onclick="zoomPieceCanvas(0.85)">➖ Zoom Out</button>
+              </div>
+            </div>
+
+            <!-- Terrain Painting Palette -->
+            <div style="display: flex; gap: 0.4rem; align-items: center; flex-wrap: wrap; background: #0f172a; padding: 0.4rem 0.6rem; border-radius: 6px; border: 1px solid var(--card-border);">
+              <span style="font-size: 0.75rem; font-weight: 700; color: #94a3b8; margin-right: 0.4rem;">🖌️ Terrain:</span>
+              <button type="button" class="btn-palette active" style="background:#334155;" onclick="selectPieceTerrain('clear', this)">Clear</button>
+              <button type="button" class="btn-palette" style="background:#1d4ed8;" onclick="selectPieceTerrain('water', this)">Water</button>
+              <button type="button" class="btn-palette" style="background:#15803d;" onclick="selectPieceTerrain('light_forest', this)">Lt Forest</button>
+              <button type="button" class="btn-palette" style="background:#14532d;" onclick="selectPieceTerrain('heavy_forest', this)">Hvy Forest</button>
+              <button type="button" class="btn-palette" style="background:#4d7c0f;" onclick="selectPieceTerrain('olive_vine_grove', this)">Olive</button>
+              <button type="button" class="btn-palette" style="background:#a16207;" onclick="selectPieceTerrain('brush', this)">Brush</button>
+              <button type="button" class="btn-palette" style="background:#64748b;" onclick="selectPieceTerrain('rocky', this)">Rocky</button>
+              <button type="button" class="btn-palette" style="background:#b45309;" onclick="selectPieceTerrain('building_single', this)">Bldg</button>
+              <button type="button" class="btn-palette" style="background:#78350f;" onclick="selectPieceTerrain('building_multi', this)">Bldg+</button>
+              <button type="button" class="btn-palette" style="background:#ca8a04;" onclick="selectPieceTerrain('hill', this)">Hill</button>
+              <button type="button" class="btn-palette" style="background:#44403c;" onclick="selectPieceTerrain('ruins', this)">Ruins</button>
+
+              <span style="font-size: 0.75rem; font-weight: 700; color: #94a3b8; margin-left: 0.8rem; margin-right: 0.4rem;">🧱 Edge:</span>
+              <button type="button" id="btn-tool-wall" class="btn-palette" style="background:#475569;" onclick="togglePieceWallTool(this)">Wall Mode</button>
+            </div>
+          </div>
+
+          <!-- Piece Canvas Area -->
+          <div style="position: relative; flex: 1; min-height: 340px; background: #080d1a; border: 1px solid var(--card-border); border-radius: 8px; overflow: hidden;">
+            <canvas id="pieceCanvas" width="900" height="380" style="width: 100%; height: 100%; display: block; cursor: crosshair;"></canvas>
+            <div id="piece-canvas-overlay" style="position: absolute; bottom: 8px; left: 8px; background: rgba(15, 23, 42, 0.85); padding: 4px 10px; border-radius: 4px; font-size: 0.75rem; color: #94a3b8; border: 1px solid #334155;">
+              Click / Drag on hexes to paint terrain. Click on borders to toggle walls.
+            </div>
+          </div>
+
+          <!-- Bottom Tabs for Piece Details -->
+          <div style="display: flex; gap: 0.5rem; margin-top: 0.6rem; border-bottom: 1px solid var(--card-border); padding-bottom: 0.4rem;">
+            <button type="button" id="piece-subtab-hexes" class="btn-card-tab active" onclick="switchPieceSubTab('hexes')">📋 Sparse Hexes (<span id="piece-hexes-count">0</span>)</button>
+            <button type="button" id="piece-subtab-edges" class="btn-card-tab" onclick="switchPieceSubTab('edges')">🧱 Edge Features (<span id="piece-edges-count">0</span>)</button>
+            <button type="button" id="piece-subtab-json" class="btn-card-tab" onclick="switchPieceSubTab('json')">📄 Raw JSON</button>
+          </div>
+
+          <!-- Piece Panels -->
+          <div id="piece-panel-hexes" style="display: flex; flex-direction: column; max-height: 140px; overflow-y: auto; margin-top: 0.4rem;">
+            <table class="table-dark" style="width: 100%; border-collapse: collapse; font-size: 0.78rem;">
+              <thead>
+                <tr style="background: #0f172a; text-align: left;">
+                  <th style="padding: 0.3rem;">Hex (Q, R)</th>
+                  <th style="padding: 0.3rem;">Terrain</th>
+                  <th style="padding: 0.3rem;">Actions</th>
+                </tr>
+              </thead>
+              <tbody id="piece-hexes-tbody"></tbody>
+            </table>
+          </div>
+
+          <div id="piece-panel-edges" style="display: none; flex-direction: column; max-height: 140px; overflow-y: auto; margin-top: 0.4rem;">
+            <table class="table-dark" style="width: 100%; border-collapse: collapse; font-size: 0.78rem;">
+              <thead>
+                <tr style="background: #0f172a; text-align: left;">
+                  <th style="padding: 0.3rem;">From (Q, R)</th>
+                  <th style="padding: 0.3rem;">To (Q, R)</th>
+                  <th style="padding: 0.3rem;">Feature</th>
+                  <th style="padding: 0.3rem;">Action</th>
+                </tr>
+              </thead>
+              <tbody id="piece-edges-tbody"></tbody>
+            </table>
+          </div>
+
+          <div id="piece-panel-json" style="display: none; flex-direction: column; max-height: 140px; overflow: hidden; margin-top: 0.4rem;">
+            <textarea id="piece-json-raw" style="width: 100%; height: 130px; background: #0b1120; color: #38bdf8; font-family: monospace; font-size: 0.78rem; padding: 0.5rem; border: 1px solid var(--card-border); border-radius: 4px; resize: none;" oninput="onPieceJsonInput()"></textarea>
+          </div>
+
+          <!-- Bottom Action Buttons -->
+          <div class="actions-bar" style="margin-top: auto; padding-top: 0.5rem; border-top: 1px solid var(--card-border); display: flex; justify-content: flex-end; gap: 0.6rem;">
+            <button type="button" class="btn-danger" id="btn-delete-piece" onclick="deleteCurrentPiece()">🗑️ Delete Draft</button>
+            <button type="button" class="btn-secondary" onclick="cloneCurrentPiece()">📋 Duplicate as Draft</button>
+            <button type="button" class="btn-approve" onclick="saveCurrentPieceDraft()">💾 Save Draft</button>
+            <button type="button" class="btn-nav" style="background: #059669; color: #fff;" onclick="publishCurrentPiece()">🚀 Publish to Catalog</button>
+          </div>
+        </div>
       </div>
-      <div class="field-group">
-        <label>Scenario Title</label>
-        <input type="text" id="modalScenarioName" placeholder="e.g. Beach Assault on Gela Sector">
+    </div>
+  </div>
+
+  <!-- MODAL: NEW SCENARIO -->
+  <div id="modal-new-scenario" class="modal-backdrop" style="display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.7); z-index: 1000; align-items: center; justify-content: center;">
+    <div style="background: #1e293b; border: 1px solid #334155; border-radius: 8px; width: 440px; padding: 1.2rem;">
+      <h3 style="margin-bottom: 0.8rem; color: #fff;">Create New Draft Scenario</h3>
+      <div class="form-group" style="margin-bottom: 0.8rem;">
+        <label>Scenario ID (filename slug)</label>
+        <input type="text" id="new-scen-id" class="form-control" placeholder="e.g. gela_beachhead_1" />
       </div>
-      <div class="field-group">
-        <label>Base Template / Clone</label>
-        <select id="modalScenarioBase">
-          <option value="">Empty Standard Template (1 Map Piece, 2 Units)</option>
+      <div class="form-group" style="margin-bottom: 0.8rem;">
+        <label>Scenario Name</label>
+        <input type="text" id="new-scen-name" class="form-control" placeholder="e.g. Gela Beachhead Attack" />
+      </div>
+      <div class="form-group" style="margin-bottom: 0.8rem;">
+        <label>Clone from Existing Template (Optional)</label>
+        <select id="new-scen-template" class="form-control">
+          <option value="">-- Blank Scenario --</option>
         </select>
       </div>
-      <div style="display: flex; justify-content: flex-end; gap: 0.6rem; margin-top: 0.4rem;">
+      <div style="display: flex; justify-content: flex-end; gap: 0.6rem; margin-top: 1rem;">
         <button type="button" class="btn-secondary" onclick="closeNewScenarioModal()">Cancel</button>
-        <button type="button" class="btn-approve" onclick="submitCreateScenarioDraft()">Create Draft</button>
+        <button type="button" class="btn-approve" onclick="submitCreateScenario()">Create Draft</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL: NEW MAP PIECE -->
+  <div id="modal-new-piece" class="modal-backdrop" style="display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.7); z-index: 1000; align-items: center; justify-content: center;">
+    <div style="background: #1e293b; border: 1px solid #334155; border-radius: 8px; width: 440px; padding: 1.2rem;">
+      <h3 style="margin-bottom: 0.8rem; color: #fff;">Create New Map Piece Draft</h3>
+      <div class="form-group" style="margin-bottom: 0.8rem;">
+        <label>Piece ID (e.g. S5, RIDGE_1)</label>
+        <input type="text" id="new-piece-id" class="form-control" placeholder="e.g. S5" />
+      </div>
+      <div class="form-grid" style="grid-template-columns: 1fr 1fr; gap: 0.6rem; margin-bottom: 0.8rem;">
+        <div class="form-group">
+          <label>Width (Cols Q)</label>
+          <input type="number" id="new-piece-w" class="form-control" value="9" min="1" max="50" />
+        </div>
+        <div class="form-group">
+          <label>Height (Rows R)</label>
+          <input type="number" id="new-piece-h" class="form-control" value="8" min="1" max="50" />
+        </div>
+      </div>
+      <div class="form-group" style="margin-bottom: 0.8rem;">
+        <label>Description</label>
+        <input type="text" id="new-piece-desc" class="form-control" placeholder="e.g. Coastal ridge section 9x8" />
+      </div>
+      <div class="form-group" style="margin-bottom: 0.8rem;">
+        <label>Clone from Existing Template (Optional)</label>
+        <select id="new-piece-template" class="form-control">
+          <option value="">-- Blank Piece (Clear Terrain) --</option>
+        </select>
+      </div>
+      <div style="display: flex; justify-content: flex-end; gap: 0.6rem; margin-top: 1rem;">
+        <button type="button" class="btn-secondary" onclick="closeNewPieceModal()">Cancel</button>
+        <button type="button" class="btn-approve" onclick="submitCreatePiece()">Create Piece Draft</button>
       </div>
     </div>
   </div>
@@ -1070,20 +1204,55 @@ HTML_TEMPLATE = """<!DOCTYPE html>
     }
 
     // --- NAVIGATION VIEW SWITCHER ---
+    // Terrain color definitions according to canonical assault wargame rules
+    const TERRAIN_COLORS = {
+      clear: "#334155",
+      water: "#1d4ed8",
+      light_forest: "#15803d",
+      heavy_forest: "#14532d",
+      olive_vine_grove: "#4d7c0f",
+      brush: "#a16207",
+      rocky: "#64748b",
+      building_single: "#b45309",
+      building_multi: "#78350f",
+      hill: "#ca8a04",
+      ruins: "#44403c"
+    };
+
+    const TERRAIN_SHORTS = {
+      clear: "C",
+      water: "W",
+      light_forest: "LF",
+      heavy_forest: "HF",
+      olive_vine_grove: "OG",
+      brush: "BR",
+      rocky: "R",
+      building_single: "B",
+      building_multi: "B+",
+      hill: "H",
+      ruins: "RN"
+    };
+
     function switchView(viewName) {
+      currentView = viewName;
       const tabUnits = document.getElementById('tab-nav-units');
       const tabFormations = document.getElementById('tab-nav-formations');
       const tabScenarios = document.getElementById('tab-nav-scenarios');
+      const tabPieces = document.getElementById('tab-nav-pieces');
+
       const viewUnits = document.getElementById('view-units');
       const viewFormations = document.getElementById('view-formations');
       const viewScenarios = document.getElementById('view-scenarios');
-      const unitBadges = document.getElementById('unit-header-badges');
-      const formBadges = document.getElementById('formation-header-badges');
-      const scenarioBadges = document.getElementById('scenario-header-badges');
+      const viewPieces = document.getElementById('view-pieces');
 
-      [tabUnits, tabFormations, tabScenarios].forEach(t => t && t.classList.remove('active'));
-      [viewUnits, viewFormations, viewScenarios].forEach(v => { if (v) v.style.display = 'none'; });
-      [unitBadges, formBadges, scenarioBadges].forEach(b => { if (b) b.style.display = 'none'; });
+      const unitBadges = document.getElementById('unit-header-badges');
+      const formationBadges = document.getElementById('formation-header-badges');
+      const scenarioBadges = document.getElementById('scenario-header-badges');
+      const pieceBadges = document.getElementById('piece-header-badges');
+
+      [tabUnits, tabFormations, tabScenarios, tabPieces].forEach(t => t.classList.remove('active'));
+      [viewUnits, viewFormations, viewScenarios, viewPieces].forEach(v => v.style.display = 'none');
+      [unitBadges, formationBadges, scenarioBadges, pieceBadges].forEach(b => b.style.display = 'none');
 
       if (viewName === 'units') {
         tabUnits.classList.add('active');
@@ -1092,634 +1261,19 @@ HTML_TEMPLATE = """<!DOCTYPE html>
       } else if (viewName === 'formations') {
         tabFormations.classList.add('active');
         viewFormations.style.display = 'grid';
-        formBadges.style.display = 'flex';
+        formationBadges.style.display = 'flex';
         renderFormationSidebar();
       } else if (viewName === 'scenarios') {
         tabScenarios.classList.add('active');
-        viewScenarios.style.display = 'grid';
+        viewScenarios.style.display = 'block';
         scenarioBadges.style.display = 'flex';
         loadScenariosData();
+      } else if (viewName === 'pieces') {
+        tabPieces.classList.add('active');
+        viewPieces.style.display = 'block';
+        pieceBadges.style.display = 'flex';
+        loadMapPiecesData();
       }
-    }
-
-    // --- SCENARIO EDITOR STATE & FUNCTIONS ---
-    let scenariosList = [];
-    let currentScenarioData = null;
-    let scenarioStatusFilter = 'all';
-    let canvasZoom = 20;
-    let canvasOffsetX = 60;
-    let canvasOffsetY = 50;
-    let isCanvasDragging = false;
-    let canvasDragStartX = 0;
-    let canvasDragStartY = 0;
-
-    async function loadScenariosData() {
-      try {
-        const res = await fetch('/api/scenarios');
-        const data = await res.json();
-        scenariosList = data.scenarios || [];
-        renderScenarioSidebar();
-        updateScenarioBadges();
-
-        const modalBase = document.getElementById('modalScenarioBase');
-        if (modalBase) {
-          modalBase.innerHTML = '<option value="">Empty Standard Template (1 Map Piece, 2 Units)</option>' +
-            scenariosList.map(s => `<option value="${s.id}">Clone: [${s.status.toUpperCase()}] ${s.name} (${s.id})</option>`).join('');
-        }
-
-        loadScenarioCatalogs();
-        setupScenarioCanvas();
-
-        if (!currentScenarioData && scenariosList.length > 0) {
-          selectScenarioById(scenariosList[0].id);
-        }
-      } catch (err) {
-        console.error('Failed to load scenarios:', err);
-      }
-    }
-
-    async function loadScenarioCatalogs() {
-      try {
-        const res = await fetch('/api/catalogs');
-        const cat = await res.json();
-        const pieceSel = document.getElementById('selectMapPiece');
-        if (pieceSel && cat.map_pieces) {
-          pieceSel.innerHTML = cat.map_pieces.map(p => `<option value="${p.id}">${p.id} - ${p.name}</option>`).join('');
-        }
-        const fortSel = document.getElementById('fortType');
-        if (fortSel && cat.fortifications) {
-          fortSel.innerHTML = cat.fortifications.map(f => `<option value="${f}">${f.replace('_', ' ').toUpperCase()}</option>`).join('');
-        }
-        filterUnitCatalogOptions();
-      } catch (e) {
-        console.error('Error loading scenario catalogs:', e);
-      }
-    }
-
-    function updateScenarioBadges() {
-      const pubCount = scenariosList.filter(s => s.status === 'published').length;
-      const draftCount = scenariosList.filter(s => s.status === 'draft').length;
-      const countAll = document.getElementById('count-scen-all');
-      const countPub = document.getElementById('count-scen-published');
-      const countDraft = document.getElementById('count-scen-draft');
-      const badgePub = document.getElementById('scenario-pub-badge');
-      const badgeDraft = document.getElementById('scenario-draft-badge');
-      if (countAll) countAll.textContent = scenariosList.length;
-      if (countPub) countPub.textContent = pubCount;
-      if (countDraft) countDraft.textContent = draftCount;
-      if (badgePub) badgePub.textContent = `${pubCount} Published`;
-      if (badgeDraft) badgeDraft.textContent = `${draftCount} Drafts`;
-    }
-
-    function setScenarioStatusFilter(status) {
-      scenarioStatusFilter = status;
-      ['all', 'draft', 'published'].forEach(s => {
-        const btn = document.getElementById('filter-scen-' + s);
-        if (btn) btn.classList.toggle('active', s === status);
-      });
-      renderScenarioSidebar();
-    }
-
-    function filterScenarios() {
-      renderScenarioSidebar();
-    }
-
-    function renderScenarioSidebar() {
-      const container = document.getElementById('scenarios-list');
-      if (!container) return;
-      const search = (document.getElementById('search-scenarios')?.value || '').toLowerCase();
-
-      const filtered = scenariosList.filter(s => {
-        if (scenarioStatusFilter === 'draft' && s.status !== 'draft') return false;
-        if (scenarioStatusFilter === 'published' && s.status !== 'published') return false;
-        if (search && !s.name.toLowerCase().includes(search) && !s.id.toLowerCase().includes(search)) return false;
-        return true;
-      });
-
-      container.innerHTML = filtered.map(s => {
-        const isActive = currentScenarioData && currentScenarioData.id === s.id;
-        const badgeCls = s.status === 'published' ? 'badge-published' : 'badge-staged';
-        return `
-          <li class="unit-item ${isActive ? 'active' : ''}" onclick="selectScenarioById('${s.id}')">
-            <div>
-              <div class="name">${s.name}</div>
-              <div class="meta">${s.id} &bull; ${s.max_turns} turns &bull; ${s.unit_count} units &bull; ${s.vp_count} VPs</div>
-            </div>
-            <span class="badge ${badgeCls}">${s.status}</span>
-          </li>
-        `;
-      }).join('');
-    }
-
-    async function selectScenarioById(scenId) {
-      try {
-        const res = await fetch('/api/scenarios/' + scenId);
-        const data = await res.json();
-        currentScenarioData = data.scenario;
-        populateScenarioForm();
-        renderScenarioSidebar();
-        drawScenarioCanvas();
-      } catch (e) {
-        console.error('Failed to load scenario:', e);
-      }
-    }
-
-    function populateScenarioForm() {
-      if (!currentScenarioData) return;
-
-      const btnDel = document.getElementById('btn-delete-scenario');
-      if (btnDel) btnDel.style.display = currentScenarioData.status === 'draft' ? 'inline-flex' : 'none';
-
-      document.getElementById('metaId').value = currentScenarioData.id || '';
-      document.getElementById('metaName').value = currentScenarioData.name || currentScenarioData.id || '';
-      document.getElementById('metaMaxTurns').value = currentScenarioData.max_turns || 8;
-      document.getElementById('metaDescription').value = currentScenarioData.description || '';
-
-      const mor = currentScenarioData.morale_track || {};
-      const usMor = mor.US || { start: 3, retreat: 7, rout: 9, surrender: 11 };
-      const itMor = mor.IT || { start: 2, retreat: 6, rout: 7, surrender: 9 };
-      document.getElementById('morUsStart').value = usMor.start || 3;
-      document.getElementById('morUsRetreat').value = usMor.retreat || 7;
-      document.getElementById('morUsRout').value = usMor.rout || 9;
-      document.getElementById('morUsSurrender').value = usMor.surrender || 11;
-      document.getElementById('morItStart').value = itMor.start || 2;
-      document.getElementById('morItRetreat').value = itMor.retreat || 6;
-      document.getElementById('morItRout').value = itMor.rout || 7;
-      document.getElementById('morItSurrender').value = itMor.surrender || 9;
-
-      renderScenarioMapPieces();
-      renderScenarioUnits();
-      renderScenarioFortsAndVps();
-      document.getElementById('rawScenarioJson').value = JSON.stringify(currentScenarioData, null, 2);
-    }
-
-    function switchScenarioSubTab(tab) {
-      ['map', 'units', 'forts', 'rules', 'json'].forEach(t => {
-        const btn = document.getElementById('subtab-scen-' + t);
-        const panel = document.getElementById('panel-scen-' + t);
-        if (btn) btn.classList.toggle('active', t === tab);
-        if (panel) panel.style.display = t === tab ? 'flex' : 'none';
-      });
-      if (tab === 'map') drawScenarioCanvas();
-      if (tab === 'json') {
-        syncScenarioFormToState();
-        document.getElementById('rawScenarioJson').value = JSON.stringify(currentScenarioData, null, 2);
-      }
-    }
-
-    function syncScenarioFormToState() {
-      if (!currentScenarioData) return;
-      currentScenarioData.name = document.getElementById('metaName').value;
-      currentScenarioData.max_turns = parseInt(document.getElementById('metaMaxTurns').value, 10) || 8;
-      currentScenarioData.description = document.getElementById('metaDescription').value;
-      currentScenarioData.morale_track = {
-        US: {
-          start: parseInt(document.getElementById('morUsStart').value, 10) || 3,
-          retreat: parseInt(document.getElementById('morUsRetreat').value, 10) || 7,
-          rout: parseInt(document.getElementById('morUsRout').value, 10) || 9,
-          surrender: parseInt(document.getElementById('morUsSurrender').value, 10) || 11,
-        },
-        IT: {
-          start: parseInt(document.getElementById('morItStart').value, 10) || 2,
-          retreat: parseInt(document.getElementById('morItRetreat').value, 10) || 6,
-          rout: parseInt(document.getElementById('morItRout').value, 10) || 7,
-          surrender: parseInt(document.getElementById('morItSurrender').value, 10) || 9,
-        }
-      };
-    }
-
-    function renderScenarioMapPieces() {
-      const tbody = document.getElementById('mapPiecesTableBody');
-      if (!tbody) return;
-      const pieces = currentScenarioData.map?.pieces || [];
-      tbody.innerHTML = pieces.map((p, idx) => `
-        <tr style="border-bottom: 1px solid var(--card-border);">
-          <td style="padding: 0.35rem;"><strong>${p.id}</strong></td>
-          <td style="padding: 0.35rem;">[${p.origin ? p.origin[0] : 0}, ${p.origin ? p.origin[1] : 0}]</td>
-          <td style="padding: 0.35rem;"><button type="button" class="btn-danger" style="padding: 0.2rem 0.5rem; font-size: 0.72rem;" onclick="removeScenarioMapPiece(${idx})">✕</button></td>
-        </tr>
-      `).join('');
-    }
-
-    function addMapPiece() {
-      const pid = document.getElementById('selectMapPiece').value;
-      const q = parseInt(document.getElementById('pieceOriginQ').value, 10) || 0;
-      const r = parseInt(document.getElementById('pieceOriginR').value, 10) || 0;
-      if (!currentScenarioData.map) currentScenarioData.map = { pieces: [], fortifications: [] };
-      if (!currentScenarioData.map.pieces) currentScenarioData.map.pieces = [];
-      currentScenarioData.map.pieces.push({ id: pid, origin: [q, r] });
-      renderScenarioMapPieces();
-      drawScenarioCanvas();
-    }
-
-    function removeScenarioMapPiece(idx) {
-      currentScenarioData.map.pieces.splice(idx, 1);
-      renderScenarioMapPieces();
-      drawScenarioCanvas();
-    }
-
-    function filterUnitCatalogOptions() {
-      const side = document.getElementById('newUnitSide')?.value || 'US';
-      const sel = document.getElementById('newUnitKey');
-      if (!sel) return;
-      const keys = Object.keys(catalog).length > 0 ? Object.keys(catalog) : [];
-      const opts = keys.filter(k => k.startsWith(side + '_') || !k.includes('_'));
-      sel.innerHTML = opts.map(k => `<option value="${k}">${k}</option>`).join('');
-    }
-
-    function renderScenarioUnits() {
-      const tbody = document.getElementById('unitsTableBody');
-      if (!tbody) return;
-      const units = currentScenarioData.units || [];
-      document.getElementById('unitCountLabel').textContent = units.length;
-      tbody.innerHTML = units.map((u, idx) => `
-        <tr style="border-bottom: 1px solid var(--card-border);">
-          <td style="padding: 0.35rem;"><span class="badge" style="background: #1e293b; color: #fff;">${u.side}</span></td>
-          <td style="padding: 0.35rem;"><strong>${u.unit_id}</strong></td>
-          <td style="padding: 0.35rem;">${u.unit_key}</td>
-          <td style="padding: 0.35rem;">[${u.position[0]}, ${u.position[1]}]</td>
-          <td style="padding: 0.35rem;">${u.experience}</td>
-          <td style="padding: 0.35rem;"><button type="button" class="btn-danger" style="padding: 0.2rem 0.5rem; font-size: 0.72rem;" onclick="removeScenarioUnit(${idx})">✕</button></td>
-        </tr>
-      `).join('');
-    }
-
-    function addScenarioUnit() {
-      const side = document.getElementById('newUnitSide').value;
-      const key = document.getElementById('newUnitKey').value;
-      let uid = document.getElementById('newUnitId').value.trim();
-      const exp = document.getElementById('newUnitExp').value;
-      const q = parseInt(document.getElementById('newUnitQ').value, 10) || 0;
-      const r = parseInt(document.getElementById('newUnitR').value, 10) || 0;
-      if (!uid) {
-        const count = (currentScenarioData.units || []).filter(u => u.side === side).length + 1;
-        uid = `${side}_${count}`;
-      }
-      if (!currentScenarioData.units) currentScenarioData.units = [];
-      currentScenarioData.units.push({ unit_id: uid, side: side, unit_key: key, position: [q, r], experience: exp });
-      renderScenarioUnits();
-      drawScenarioCanvas();
-      showNotif(`Unit ${uid} deployed at [${q}, ${r}]`);
-    }
-
-    function removeScenarioUnit(idx) {
-      currentScenarioData.units.splice(idx, 1);
-      renderScenarioUnits();
-      drawScenarioCanvas();
-    }
-
-    function renderScenarioFortsAndVps() {
-      const fortBody = document.getElementById('fortsTableBody');
-      const forts = currentScenarioData.map?.fortifications || [];
-      if (fortBody) {
-        fortBody.innerHTML = forts.map((f, idx) => `
-          <tr style="border-bottom: 1px solid var(--card-border);"><td style="padding: 0.3rem;">${f.type}</td><td style="padding: 0.3rem;">[${f.q}, ${f.r}]</td><td style="padding: 0.3rem;"><button type="button" class="btn-danger" style="padding: 0.15rem 0.4rem; font-size: 0.7rem;" onclick="removeScenarioFort(${idx})">✕</button></td></tr>
-        `).join('');
-      }
-
-      const vpBody = document.getElementById('vpsTableBody');
-      const vps = currentScenarioData.vp?.hexes || [];
-      if (vpBody) {
-        vpBody.innerHTML = vps.map((v, idx) => `
-          <tr style="border-bottom: 1px solid var(--card-border);"><td style="padding: 0.3rem;">[${v.q}, ${v.r}]</td><td style="padding: 0.3rem;">${v.initial_owner}</td><td style="padding: 0.3rem;">${v.value || 2}</td><td style="padding: 0.3rem;"><button type="button" class="btn-danger" style="padding: 0.15rem 0.4rem; font-size: 0.7rem;" onclick="removeScenarioVp(${idx})">✕</button></td></tr>
-        `).join('');
-      }
-    }
-
-    function addScenarioFort() {
-      const type = document.getElementById('fortType').value;
-      const q = parseInt(document.getElementById('fortQ').value, 10) || 0;
-      const r = parseInt(document.getElementById('fortR').value, 10) || 0;
-      const orient = parseInt(document.getElementById('fortOrient').value, 10) || 4;
-      if (!currentScenarioData.map) currentScenarioData.map = { pieces: [], fortifications: [] };
-      if (!currentScenarioData.map.fortifications) currentScenarioData.map.fortifications = [];
-      currentScenarioData.map.fortifications.push({ type: type, q: q, r: r, orientation: orient, vertex_start: 1, vertex_end: 2 });
-      renderScenarioFortsAndVps();
-      drawScenarioCanvas();
-    }
-
-    function removeScenarioFort(idx) {
-      currentScenarioData.map.fortifications.splice(idx, 1);
-      renderScenarioFortsAndVps();
-      drawScenarioCanvas();
-    }
-
-    function addScenarioVp() {
-      const q = parseInt(document.getElementById('newVpQ').value, 10) || 0;
-      const r = parseInt(document.getElementById('newVpR').value, 10) || 0;
-      const owner = document.getElementById('newVpOwner').value;
-      const val = parseInt(document.getElementById('newVpValue').value, 10) || 2;
-      if (!currentScenarioData.vp) currentScenarioData.vp = { value_per_hex: 2, hexes: [] };
-      if (!currentScenarioData.vp.hexes) currentScenarioData.vp.hexes = [];
-      currentScenarioData.vp.hexes.push({ q: q, r: r, initial_owner: owner, value: val });
-      renderScenarioFortsAndVps();
-      drawScenarioCanvas();
-    }
-
-    function removeScenarioVp(idx) {
-      currentScenarioData.vp.hexes.splice(idx, 1);
-      renderScenarioFortsAndVps();
-      drawScenarioCanvas();
-    }
-
-    async function saveCurrentScenarioDraft() {
-      if (!currentScenarioData) return;
-      syncScenarioFormToState();
-      try {
-        const res = await fetch('/api/scenarios/draft/' + currentScenarioData.id, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ data: currentScenarioData })
-        });
-        const resData = await res.json();
-        if (!res.ok) throw new Error(resData.detail || 'Save failed');
-        currentScenarioData = resData.scenario;
-        populateScenarioForm();
-        await loadScenariosData();
-        showNotif(`Draft '${currentScenarioData.id}' saved successfully.`);
-      } catch (err) {
-        alert('Error saving draft: ' + err.message);
-      }
-    }
-
-    async function validateScenarioDraft() {
-      syncScenarioFormToState();
-      try {
-        const res = await fetch('/api/scenarios/validate', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ data: currentScenarioData })
-        });
-        const resData = await res.json();
-        if (resData.valid) {
-          alert('Scenario is 100% valid! Ready to publish to engine.');
-        } else {
-          alert('Validation failed: ' + resData.errors.join('; '));
-        }
-      } catch (e) {
-        alert('Validation error: ' + e.message);
-      }
-    }
-
-    async function publishCurrentScenario() {
-      if (!currentScenarioData) return;
-      syncScenarioFormToState();
-      await saveCurrentScenarioDraft();
-      if (!confirm(`Publish draft '${currentScenarioData.id}' to canonical assets/scenarios/ ?`)) return;
-
-      try {
-        const res = await fetch(`/api/scenarios/draft/${currentScenarioData.id}/publish`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' }
-        });
-        const resData = await res.json();
-        if (!res.ok) throw new Error(resData.detail || 'Publish failed');
-        await loadScenariosData();
-        selectScenarioById(resData.id);
-        showNotif(`🚀 Scenario '${resData.id}' published successfully!`);
-      } catch (err) {
-        alert('Failed to publish: ' + err.message);
-      }
-    }
-
-    async function deleteCurrentScenarioDraft() {
-      if (!currentScenarioData || currentScenarioData.status !== 'draft') return;
-      if (!confirm(`Delete draft '${currentScenarioData.id}' permanently?`)) return;
-      try {
-        const res = await fetch(`/api/scenarios/draft/${currentScenarioData.id}`, { method: 'DELETE' });
-        if (!res.ok) throw new Error('Delete failed');
-        currentScenarioData = null;
-        await loadScenariosData();
-        showNotif('Draft scenario deleted.');
-      } catch (err) {
-        alert('Error: ' + err.message);
-      }
-    }
-
-    function cloneCurrentScenario() {
-      if (!currentScenarioData) return;
-      const cloneId = prompt(`New scenario ID to clone '${currentScenarioData.id}':`, `${currentScenarioData.id}_clone`);
-      if (!cloneId) return;
-      openNewScenarioModal(cloneId, `Clone of ${currentScenarioData.name || currentScenarioData.id}`, currentScenarioData.id);
-    }
-
-    function openNewScenarioModal(defId = '', defName = '', defBase = '') {
-      document.getElementById('modalScenarioId').value = defId || `draft_scenario_${Date.now().toString().slice(-4)}`;
-      document.getElementById('modalScenarioName').value = defName || 'New Tactical Scenario';
-      if (defBase) document.getElementById('modalScenarioBase').value = defBase;
-      document.getElementById('newScenarioModal').style.display = 'flex';
-    }
-
-    function closeNewScenarioModal() {
-      document.getElementById('newScenarioModal').style.display = 'none';
-    }
-
-    async function submitCreateScenarioDraft() {
-      const id = document.getElementById('modalScenarioId').value.trim();
-      const name = document.getElementById('modalScenarioName').value.trim();
-      const base = document.getElementById('modalScenarioBase').value;
-      if (!id) return alert('Enter a scenario ID');
-      try {
-        const res = await fetch('/api/scenarios/draft', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ id: id, name: name, clone_from_id: base || null })
-        });
-        const resData = await res.json();
-        if (!res.ok) throw new Error(resData.detail || 'Creation failed');
-        closeNewScenarioModal();
-        await loadScenariosData();
-        selectScenarioById(id);
-        showNotif(`Draft '${id}' created!`);
-      } catch (err) {
-        alert('Failed to create draft: ' + err.message);
-      }
-    }
-
-    function formatScenarioJson() {
-      try {
-        const ta = document.getElementById('rawScenarioJson');
-        ta.value = JSON.stringify(JSON.parse(ta.value), null, 2);
-      } catch (e) { alert('Invalid JSON: ' + e.message); }
-    }
-
-    function applyScenarioJson() {
-      try {
-        const ta = document.getElementById('rawScenarioJson');
-        currentScenarioData = JSON.parse(ta.value);
-        populateScenarioForm();
-        drawScenarioCanvas();
-        showNotif('JSON applied to editor forms.');
-      } catch (e) { alert('Invalid JSON: ' + e.message); }
-    }
-
-    // Hex Canvas
-    function setupScenarioCanvas() {
-      const canvas = document.getElementById('hexCanvas');
-      if (!canvas || canvas._setupDone) return;
-      canvas._setupDone = true;
-
-      canvas.addEventListener('mousedown', (e) => {
-        isCanvasDragging = true;
-        canvasDragStartX = e.clientX - canvasOffsetX;
-        canvasDragStartY = e.clientY - canvasOffsetY;
-      });
-      window.addEventListener('mouseup', () => { isCanvasDragging = false; });
-      canvas.addEventListener('mousemove', (e) => {
-        if (isCanvasDragging) {
-          canvasOffsetX = e.clientX - canvasDragStartX;
-          canvasOffsetY = e.clientY - canvasDragStartY;
-          drawScenarioCanvas();
-        } else {
-          handleScenarioCanvasHover(e);
-        }
-      });
-      canvas.addEventListener('wheel', (e) => {
-        e.preventDefault();
-        zoomCanvas(e.deltaY < 0 ? 1.15 : 0.85);
-      });
-      canvas.addEventListener('click', (e) => {
-        const rect = e.target.getBoundingClientRect();
-        const hex = pixelToHex(e.clientX - rect.left, e.clientY - rect.top);
-        document.getElementById('newUnitQ').value = hex.q;
-        document.getElementById('newUnitR').value = hex.r;
-        document.getElementById('fortQ').value = hex.q;
-        document.getElementById('fortR').value = hex.r;
-        document.getElementById('newVpQ').value = hex.q;
-        document.getElementById('newVpR').value = hex.r;
-      });
-    }
-
-    function zoomCanvas(factor) {
-      canvasZoom = Math.max(12, Math.min(60, canvasZoom * factor));
-      drawScenarioCanvas();
-    }
-
-    function resetCanvas() {
-      canvasZoom = 20;
-      canvasOffsetX = 60;
-      canvasOffsetY = 50;
-      drawScenarioCanvas();
-    }
-
-    function hexToPixel(q, r) {
-      const size = canvasZoom;
-      const x = size * (Math.sqrt(3) * q + Math.sqrt(3)/2 * r) + canvasOffsetX;
-      const y = size * (3/2 * r) + canvasOffsetY;
-      return { x, y };
-    }
-
-    function pixelToHex(x, y) {
-      const size = canvasZoom;
-      const px = x - canvasOffsetX;
-      const py = y - canvasOffsetY;
-      const q = (Math.sqrt(3)/3 * px - 1/3 * py) / size;
-      const r = (2/3 * py) / size;
-      let xg = Math.round(q);
-      let yg = Math.round(r);
-      const q_rem = q - xg;
-      const r_rem = r - yg;
-      const dx = Math.round(q_rem + 0.5 * r_rem) * (q_rem*q_rem >= r_rem*r_rem ? 1 : 0);
-      const dy = Math.round(r_rem + 0.5 * q_rem) * (q_rem*q_rem < r_rem*r_rem ? 1 : 0);
-      return { q: xg + dx, r: yg + dy };
-    }
-
-    function drawScenarioCanvas() {
-      const canvas = document.getElementById('hexCanvas');
-      if (!canvas) return;
-      const ctx = canvas.getContext('2d');
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
-      if (!currentScenarioData) return;
-
-      const shape = currentScenarioData.shape || [18, 12];
-      const maxQ = shape[0] || 18;
-      const maxR = shape[1] || 12;
-
-      for (let r = 0; r < maxR; r++) {
-        for (let q = 0; q < maxQ; q++) {
-          drawHexCell(ctx, q, r, '#1e293b', '#0f172a');
-        }
-      }
-
-      (currentScenarioData.map?.fortifications || []).forEach(f => {
-        const pt = hexToPixel(f.q, f.r);
-        ctx.fillStyle = '#f59e0b';
-        ctx.beginPath();
-        ctx.arc(pt.x, pt.y - canvasZoom*0.35, canvasZoom*0.2, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.fillStyle = '#000';
-        ctx.font = '8px sans-serif';
-        ctx.textAlign = 'center';
-        ctx.fillText('🛡️', pt.x, pt.y - canvasZoom*0.25);
-      });
-
-      (currentScenarioData.vp?.hexes || []).forEach(v => {
-        const pt = hexToPixel(v.q, v.r);
-        ctx.fillStyle = v.initial_owner === 'US' ? '#22c55e' : (v.initial_owner === 'IT' ? '#38bdf8' : '#eab308');
-        ctx.beginPath();
-        ctx.arc(pt.x, pt.y + canvasZoom*0.35, canvasZoom*0.22, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.fillStyle = '#000';
-        ctx.font = 'bold 9px sans-serif';
-        ctx.textAlign = 'center';
-        ctx.fillText(`★${v.value || 2}`, pt.x, pt.y + canvasZoom*0.42);
-      });
-
-      (currentScenarioData.units || []).forEach(u => {
-        const pt = hexToPixel(u.position[0], u.position[1]);
-        const sideColor = u.side === 'US' ? '#15803d' : (u.side === 'IT' ? '#0284c7' : (u.side === 'GE' ? '#475569' : '#b45309'));
-        ctx.fillStyle = sideColor;
-        ctx.beginPath();
-        ctx.arc(pt.x, pt.y, canvasZoom * 0.42, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.strokeStyle = '#fff';
-        ctx.lineWidth = 1.2;
-        ctx.stroke();
-
-        ctx.fillStyle = '#fff';
-        ctx.font = 'bold 8px sans-serif';
-        ctx.textAlign = 'center';
-        ctx.fillText(u.unit_id, pt.x, pt.y + 3);
-      });
-    }
-
-    function drawHexCell(ctx, q, r, stroke, fill) {
-      const size = canvasZoom;
-      const pt = hexToPixel(q, r);
-      ctx.beginPath();
-      for (let i = 0; i < 6; i++) {
-        const angle = (Math.PI / 3) * i - Math.PI / 6;
-        const hx = pt.x + size * Math.cos(angle);
-        const hy = pt.y + size * Math.sin(angle);
-        if (i === 0) ctx.moveTo(hx, hy);
-        else ctx.lineTo(hx, hy);
-      }
-      ctx.closePath();
-      ctx.fillStyle = fill;
-      ctx.fill();
-      ctx.strokeStyle = stroke;
-      ctx.lineWidth = 1;
-      ctx.stroke();
-
-      ctx.fillStyle = '#475569';
-      ctx.font = '7px sans-serif';
-      ctx.textAlign = 'center';
-      ctx.fillText(`${q},${r}`, pt.x, pt.y + size * 0.65);
-    }
-
-    function handleScenarioCanvasHover(e) {
-      const rect = e.target.getBoundingClientRect();
-      const hex = pixelToHex(e.clientX - rect.left, e.clientY - rect.top);
-      const tip = document.getElementById('hexTooltip');
-      if (!currentScenarioData || !tip) return;
-      const uHere = (currentScenarioData.units || []).filter(u => u.position[0] === hex.q && u.position[1] === hex.r);
-      const fHere = (currentScenarioData.map?.fortifications || []).filter(f => f.q === hex.q && f.r === hex.r);
-      const vHere = (currentScenarioData.vp?.hexes || []).filter(v => v.q === hex.q && v.r === hex.r);
-      let t = `Hex [${hex.q}, ${hex.r}]`;
-      if (uHere.length) t += ` | Units: ${uHere.map(u => u.unit_id).join(', ')}`;
-      if (fHere.length) t += ` | Fort: ${fHere.map(f => f.type).join(', ')}`;
-      if (vHere.length) t += ` | ⭐ VP: ${vHere.map(v => `${v.value || 2}pts`).join(', ')}`;
-      tip.textContent = t;
     }
 
     // --- UNIT CATALOG VIEW FUNCTIONS ---
@@ -3160,6 +2714,1513 @@ HTML_TEMPLATE = """<!DOCTYPE html>
       setTimeout(() => { el.style.display = 'none'; }, 3000);
     }
 
+    // ==========================================
+    // SCENARIO & MAP PIECE FRONTEND BUNDLE
+    // ==========================================
+
+    let scenarios = [];
+    let currentScenarioId = null;
+    let currentScenarioData = null;
+    let scenarioFilter = 'all';
+
+    let mapPieces = [];
+    let currentPieceId = null;
+    let currentPieceData = null;
+    let pieceFilter = 'all';
+
+    let catalogsCache = {
+      units: [],
+      map_pieces: [],
+      fortifications: [],
+      experiences: [],
+      sides: []
+    };
+
+    let mapPieceDefinitions = {}; // piece_id -> raw piece object
+
+    // Canvas Transform State for Scenarios
+    let canvasZoom = 24;
+    let canvasOffsetX = 60;
+    let canvasOffsetY = 50;
+    let isPanning = false;
+    let panStartX = 0;
+    let panStartY = 0;
+    let hoveredHex = null;
+
+    // Canvas Transform State for Map Pieces
+    let pieceCanvasZoom = 26;
+    let pieceOffsetX = 60;
+    let pieceOffsetY = 50;
+    let isPiecePanning = false;
+    let piecePanStartX = 0;
+    let piecePanStartY = 0;
+    let isPaintingPiece = false;
+    let pieceActiveTerrain = 'clear';
+    let pieceWallToolActive = false;
+    let hoveredPieceHex = null;
+
+    // --- Math & Hex Helpers (Pointy-topped Odd-R Staggered) ---
+    function hexToPixel(q, r, zoom, offX, offY) {
+      const hexWidth = zoom * Math.sqrt(3);
+      const hexHeight = zoom * 1.5;
+      const x = hexWidth * (q + 0.5 * (r % 2)) + offX;
+      const y = hexHeight * r + offY;
+      return { x, y };
+    }
+
+    function pixelToHex(px, py, zoom, offX, offY) {
+      const hexWidth = zoom * Math.sqrt(3);
+      const hexHeight = zoom * 1.5;
+      const relY = py - offY;
+      const r = Math.round(relY / hexHeight);
+      const relX = (px - offX) - hexWidth * 0.5 * (Math.abs(r) % 2);
+      const q = Math.round(relX / hexWidth);
+      return { q, r };
+    }
+
+    function drawPointyHex(ctx, cx, cy, size, fillColor, strokeColor, lineWidth = 1) {
+      ctx.beginPath();
+      for (let i = 0; i < 6; i++) {
+        const angle = (Math.PI / 6) + (i * Math.PI / 3);
+        const hx = cx + size * Math.cos(angle);
+        const hy = cy + size * Math.sin(angle);
+        if (i === 0) ctx.moveTo(hx, hy);
+        else ctx.lineTo(hx, hy);
+      }
+      ctx.closePath();
+      if (fillColor) {
+        ctx.fillStyle = fillColor;
+        ctx.fill();
+      }
+      if (strokeColor) {
+        ctx.strokeStyle = strokeColor;
+        ctx.lineWidth = lineWidth;
+        ctx.stroke();
+      }
+    }
+
+    // --- Load Global Catalogs ---
+    async function loadGlobalCatalogs() {
+      try {
+        const res = await fetch('/api/catalogs');
+        const data = await res.json();
+        if (data.ok) {
+          catalogsCache = data;
+          populateScenarioCatalogs();
+        }
+      } catch (e) {
+        console.error('Failed to load catalogs', e);
+      }
+    }
+
+    // --- SCENARIO EDITOR LOGIC ---
+    async function loadScenariosData() {
+      await loadGlobalCatalogs();
+      await loadAllMapPieceDefinitions();
+      try {
+        const res = await fetch('/api/scenarios');
+        const data = await res.json();
+        if (data.ok) {
+          scenarios = data.scenarios;
+          updateScenarioHeaderBadges();
+          renderScenarioSidebar();
+          if (currentScenarioId) {
+            selectScenario(currentScenarioId);
+          } else if (scenarios.length > 0) {
+            selectScenario(scenarios[0].id);
+          }
+        }
+      } catch (e) {
+        console.error('Failed to load scenarios', e);
+      }
+    }
+
+    async function loadAllMapPieceDefinitions() {
+      try {
+        const res = await fetch('/api/map_pieces');
+        const data = await res.json();
+        if (data.ok) {
+          for (const p of data.pieces) {
+            try {
+              const pres = await fetch('/api/map_pieces/' + p.id);
+              const pdata = await pres.json();
+              if (pdata.ok) {
+                mapPieceDefinitions[p.id] = pdata.piece;
+              }
+            } catch (err) {}
+          }
+        }
+      } catch (e) {
+        console.error('Failed to load piece definitions', e);
+      }
+    }
+
+    function updateScenarioHeaderBadges() {
+      const pubCount = scenarios.filter(s => !s.is_draft).length;
+      const draftCount = scenarios.filter(s => s.is_draft).length;
+      document.getElementById('scenario-pub-badge').innerText = pubCount + ' Published';
+      document.getElementById('scenario-draft-badge').innerText = draftCount + ' Drafts';
+      document.getElementById('count-scenarios-all').innerText = scenarios.length;
+      document.getElementById('count-scenarios-drafts').innerText = draftCount;
+      document.getElementById('count-scenarios-published').innerText = pubCount;
+    }
+
+    function setScenarioFilter(filt) {
+      scenarioFilter = filt;
+      ['all', 'drafts', 'published'].forEach(f => {
+        const btn = document.getElementById('scenario-filter-' + f);
+        if (btn) btn.classList.toggle('active', f === filt);
+      });
+      renderScenarioSidebar();
+    }
+
+    function filterScenarios() {
+      renderScenarioSidebar();
+    }
+
+    function renderScenarioSidebar() {
+      const query = (document.getElementById('scenario-search')?.value || '').toLowerCase().trim();
+      const listEl = document.getElementById('scenario-list');
+      listEl.innerHTML = '';
+
+      const filtered = scenarios.filter(s => {
+        if (scenarioFilter === 'drafts' && !s.is_draft) return false;
+        if (scenarioFilter === 'published' && s.is_draft) return false;
+        if (query && !s.id.toLowerCase().includes(query) && !s.name.toLowerCase().includes(query)) return false;
+        return true;
+      });
+
+      if (filtered.length === 0) {
+        listEl.innerHTML = '<li style="color: var(--text-muted); font-size: 0.85rem; padding: 1rem; text-align: center;">No scenarios match filter</li>';
+        return;
+      }
+
+      filtered.forEach(s => {
+        const li = document.createElement('li');
+        li.className = 'unit-item' + (s.id === currentScenarioId ? ' active' : '');
+        li.onclick = () => selectScenario(s.id);
+
+        const badgeClass = s.is_draft ? 'badge-staged' : 'badge-published';
+        const badgeText = s.is_draft ? 'DRAFT' : 'PUBLISHED';
+
+        li.innerHTML = `
+          <div>
+            <div class="name">${escapeHtml(s.name || s.id)}</div>
+            <div class="meta">${s.id} &bull; ${s.max_turns} turns &bull; ${s.unit_count} units &bull; ${s.vp_count} VPs</div>
+          </div>
+          <span class="badge ${badgeClass}">${badgeText}</span>
+        `;
+        listEl.appendChild(li);
+      });
+    }
+
+    async function selectScenario(scenId) {
+      currentScenarioId = scenId;
+      renderScenarioSidebar();
+
+      try {
+        const res = await fetch('/api/scenarios/' + scenId);
+        const data = await res.json();
+        if (data.ok) {
+          currentScenarioData = data.scenario;
+          displayScenarioForm();
+          autoFitScenarioCamera();
+          drawScenarioCanvas();
+        }
+      } catch (e) {
+        console.error('Failed to load scenario details', e);
+      }
+    }
+
+    function displayScenarioForm() {
+      document.getElementById('no-scenario-selection').style.display = 'none';
+      const form = document.getElementById('scenario-editor-form');
+      form.style.display = 'flex';
+
+      const s = currentScenarioData;
+      const isDraft = !!s.is_draft;
+
+      // Status pill & Delete button
+      const pill = document.getElementById('scenario-status-pill');
+      pill.innerText = isDraft ? 'DRAFT' : 'PUBLISHED';
+      pill.className = 'badge ' + (isDraft ? 'badge-staged' : 'badge-published');
+
+      document.getElementById('btn-delete-scenario').style.display = isDraft ? 'inline-block' : 'none';
+
+      // Rules tab fields
+      document.getElementById('scen-field-name').value = s.name || s.id || '';
+      document.getElementById('scen-field-max-turns').value = s.max_turns || 8;
+      document.getElementById('scen-field-atk-morale').value = s.rules?.attacker_morale_threshold || 10;
+      document.getElementById('scen-field-def-morale').value = s.rules?.defender_morale_threshold || 10;
+      document.getElementById('scen-field-desc').value = s.description || '';
+
+      // JSON Raw
+      document.getElementById('scenario-json-raw').value = JSON.stringify(s, null, 2);
+
+      renderScenarioMapPieces();
+      renderScenarioUnitsTable();
+      renderScenarioFortsTable();
+      renderScenarioVpsTable();
+    }
+
+    function switchScenarioSubTab(tabName) {
+      ['map', 'units', 'forts', 'rules', 'json'].forEach(t => {
+        document.getElementById('scen-subtab-' + t).classList.toggle('active', t === tabName);
+        document.getElementById('scen-panel-' + t).style.display = (t === tabName ? 'flex' : 'none');
+      });
+      if (tabName === 'map') {
+        setTimeout(() => { drawScenarioCanvas(); }, 50);
+      }
+    }
+
+    function getScenarioMapPieces() {
+      if (!currentScenarioData) return [];
+      return currentScenarioData.map?.pieces || currentScenarioData.map_pieces || [];
+    }
+
+    function getScenarioUnits() {
+      if (!currentScenarioData) return [];
+      return currentScenarioData.units || [];
+    }
+
+    function getUnitCoords(u) {
+      if (Array.isArray(u.position) && u.position.length >= 2) {
+        return { q: u.position[0], r: u.position[1] };
+      }
+      return { q: u.q !== undefined ? u.q : 0, r: u.r !== undefined ? u.r : 0 };
+    }
+
+    function getScenarioFortifications() {
+      if (!currentScenarioData) return [];
+      return currentScenarioData.map?.fortifications || currentScenarioData.fortifications || [];
+    }
+
+    function getScenarioVps() {
+      if (!currentScenarioData) return [];
+      return currentScenarioData.vp?.hexes || currentScenarioData.victory_points || [];
+    }
+
+    function autoFitScenarioCamera() {
+      if (!currentScenarioData) return;
+      const canvas = document.getElementById('hexCanvas');
+      if (!canvas) return;
+
+      const [w, h] = currentScenarioData.shape || [9, 8];
+      const availW = canvas.width - 60;
+      const availH = canvas.height - 60;
+
+      const approxHexW = availW / (w + 0.5);
+      const approxHexH = availH / (h * 1.5 + 0.5);
+      const sizeFromW = approxHexW / Math.sqrt(3);
+      const sizeFromH = approxHexH;
+
+      canvasZoom = Math.max(10, Math.min(36, Math.floor(Math.min(sizeFromW, sizeFromH))));
+      canvasOffsetX = Math.max(20, Math.floor((canvas.width - (w + 0.5) * canvasZoom * Math.sqrt(3)) / 2));
+      canvasOffsetY = Math.max(20, Math.floor((canvas.height - h * canvasZoom * 1.5) / 2));
+      drawScenarioCanvas();
+    }
+
+    function zoomScenarioCanvas(factor) {
+      canvasZoom = Math.max(10, Math.min(60, Math.round(canvasZoom * factor)));
+      drawScenarioCanvas();
+    }
+
+    function buildScenarioTerrainAndElevationMap() {
+      const terrainMap = {};
+      const elevationMap = {};
+      const wallsList = [];
+
+      if (!currentScenarioData) return { terrainMap, elevationMap, wallsList };
+
+      const pieces = getScenarioMapPieces();
+      for (const pEntry of pieces) {
+        const pid = pEntry.id || pEntry.piece_id;
+        const origin = pEntry.origin || [0, 0];
+        const pDef = mapPieceDefinitions[pid];
+        if (pDef) {
+          for (const hx of pDef.hexes || []) {
+            const gq = origin[0] + hx.q;
+            const gr = origin[1] + hx.r;
+            terrainMap[gq + ',' + gr] = hx.terrain || 'clear';
+            if (hx.elevation) elevationMap[gq + ',' + gr] = hx.elevation;
+          }
+          for (const ed of pDef.hex_edges || []) {
+            try {
+              const [q1, r1] = ed.from.split(',').map(Number);
+              const [q2, r2] = ed.to.split(',').map(Number);
+              wallsList.push({
+                from: `${origin[0] + q1},${origin[1] + r1}`,
+                to: `${origin[0] + q2},${origin[1] + r2}`,
+                feature: ed.feature || 'wall'
+              });
+            } catch (e) {}
+          }
+        }
+      }
+      return { terrainMap, elevationMap, wallsList };
+    }
+
+    function drawScenarioCanvas() {
+      const canvas = document.getElementById('hexCanvas');
+      if (!canvas || !currentScenarioData) return;
+      const ctx = canvas.getContext('2d');
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      const [cols, rows] = currentScenarioData.shape || [9, 8];
+      const { terrainMap, elevationMap, wallsList } = buildScenarioTerrainAndElevationMap();
+
+      // 1. Draw Hex Grid with Real Terrain Colors
+      for (let r = 0; r < rows; r++) {
+        for (let q = 0; q < cols; q++) {
+          const { x, y } = hexToPixel(q, r, canvasZoom, canvasOffsetX, canvasOffsetY);
+          const tKey = q + ',' + r;
+          const terrain = terrainMap[tKey] || 'clear';
+          const elev = elevationMap[tKey] || 0;
+
+          const fillColor = TERRAIN_COLORS[terrain] || '#334155';
+          const strokeColor = '#475569';
+
+          drawPointyHex(ctx, x, y, canvasZoom, fillColor, strokeColor, 1);
+
+          // Elevation indicator
+          if (elev > 0) {
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.25)';
+            ctx.font = 'bold 9px sans-serif';
+            ctx.textAlign = 'right';
+            ctx.fillText('+' + elev, x + canvasZoom * 0.7, y - canvasZoom * 0.4);
+          }
+
+          // Subtle terrain short code in bottom
+          const tShort = TERRAIN_SHORTS[terrain] || '';
+          if (tShort && canvasZoom >= 18) {
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.4)';
+            ctx.font = '8px sans-serif';
+            ctx.textAlign = 'center';
+            ctx.fillText(tShort, x, y + canvasZoom * 0.65);
+          }
+
+          // Coordinate label at top
+          if (canvasZoom >= 16) {
+            ctx.fillStyle = 'rgba(148, 163, 184, 0.6)';
+            ctx.font = '8px sans-serif';
+            ctx.textAlign = 'center';
+            ctx.fillText(`${q},${r}`, x, y - canvasZoom * 0.35);
+          }
+        }
+      }
+
+      // 2. Draw Walls / Hex Edges
+      for (const w of wallsList) {
+        try {
+          const [q1, r1] = w.from.split(',').map(Number);
+          const [q2, r2] = w.to.split(',').map(Number);
+          const p1 = hexToPixel(q1, r1, canvasZoom, canvasOffsetX, canvasOffsetY);
+          const p2 = hexToPixel(q2, r2, canvasZoom, canvasOffsetX, canvasOffsetY);
+
+          // Midpoint between hex centers is where edge lies
+          const mx = (p1.x + p2.x) / 2;
+          const my = (p1.y + p2.y) / 2;
+          // Normal perpendicular
+          const dx = p2.x - p1.x;
+          const dy = p2.y - p1.y;
+          const len = Math.hypot(dx, dy) || 1;
+          const nx = -dy / len * (canvasZoom * 0.5);
+          const ny = dx / len * (canvasZoom * 0.5);
+
+          ctx.beginPath();
+          ctx.moveTo(mx - nx, my - ny);
+          ctx.lineTo(mx + nx, my + ny);
+          ctx.strokeStyle = '#f59e0b'; // Gold wall
+          ctx.lineWidth = 3.5;
+          ctx.stroke();
+        } catch (e) {}
+      }
+
+      // 3. Draw Fortifications
+      for (const f of getScenarioFortifications()) {
+        const { x, y } = hexToPixel(f.q, f.r, canvasZoom, canvasOffsetX, canvasOffsetY);
+        ctx.beginPath();
+        ctx.arc(x, y + 2, canvasZoom * 0.4, 0, Math.PI * 2);
+        ctx.fillStyle = 'rgba(15, 23, 42, 0.75)';
+        ctx.fill();
+        ctx.strokeStyle = '#38bdf8';
+        ctx.lineWidth = 1.5;
+        ctx.stroke();
+
+        ctx.fillStyle = '#38bdf8';
+        ctx.font = 'bold 9px sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText(f.type ? f.type.substring(0, 4).toUpperCase() : 'FORT', x, y + 5);
+      }
+
+      // 4. Draw Victory Points
+      for (const vp of getScenarioVps()) {
+        const { x, y } = hexToPixel(vp.q, vp.r, canvasZoom, canvasOffsetX, canvasOffsetY);
+        ctx.beginPath();
+        ctx.arc(x, y, canvasZoom * 0.35, 0, Math.PI * 2);
+        ctx.fillStyle = '#f59e0b';
+        ctx.fill();
+        ctx.strokeStyle = '#fff';
+        ctx.lineWidth = 1.5;
+        ctx.stroke();
+
+        ctx.fillStyle = '#000';
+        ctx.font = 'bold 9px sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText('VP' + (vp.value || 1), x, y + 3);
+      }
+
+      // 5. Draw Units
+      for (const u of getScenarioUnits()) {
+        const { q, r } = getUnitCoords(u);
+        const { x, y } = hexToPixel(q, r, canvasZoom, canvasOffsetX, canvasOffsetY);
+        const isUS = (u.side || '').toUpperCase() === 'US';
+        const isIT = (u.side || '').toUpperCase() === 'IT';
+        const sideColor = isUS ? '#2563eb' : (isIT ? '#16a34a' : '#475569');
+
+        ctx.beginPath();
+        ctx.arc(x, y, canvasZoom * 0.42, 0, Math.PI * 2);
+        ctx.fillStyle = sideColor;
+        ctx.fill();
+        ctx.strokeStyle = '#fff';
+        ctx.lineWidth = 1.5;
+        ctx.stroke();
+
+        ctx.fillStyle = '#fff';
+        ctx.font = 'bold 9px sans-serif';
+        ctx.textAlign = 'center';
+        const shortName = (u.unit_id || '').substring(0, 3).toUpperCase();
+        ctx.fillText(shortName, x, y + 3);
+      }
+
+      // 6. Draw Hover Outline
+      if (hoveredHex) {
+        const { x, y } = hexToPixel(hoveredHex.q, hoveredHex.r, canvasZoom, canvasOffsetX, canvasOffsetY);
+        drawPointyHex(ctx, x, y, canvasZoom, null, '#38bdf8', 2.5);
+      }
+    }
+
+    // Canvas Mouse Event Handlers
+    const scenCanvas = document.getElementById('hexCanvas');
+    if (scenCanvas) {
+      scenCanvas.addEventListener('mousedown', e => {
+        isPanning = true;
+        panStartX = e.clientX - canvasOffsetX;
+        panStartY = e.clientY - canvasOffsetY;
+        scenCanvas.style.cursor = 'grabbing';
+      });
+
+      window.addEventListener('mouseup', () => {
+        isPanning = false;
+        if (scenCanvas) scenCanvas.style.cursor = 'grab';
+      });
+
+      scenCanvas.addEventListener('mousemove', e => {
+        if (isPanning) {
+          canvasOffsetX = e.clientX - panStartX;
+          canvasOffsetY = e.clientY - panStartY;
+          drawScenarioCanvas();
+          return;
+        }
+
+        const rect = scenCanvas.getBoundingClientRect();
+        const px = e.clientX - rect.left;
+        const py = e.clientY - rect.top;
+        const { q, r } = pixelToHex(px, py, canvasZoom, canvasOffsetX, canvasOffsetY);
+
+        if (!currentScenarioData) return;
+        const [w, h] = currentScenarioData.shape || [9, 8];
+        if (q >= 0 && q < w && r >= 0 && r < h) {
+          hoveredHex = { q, r };
+          const { terrainMap, elevationMap } = buildScenarioTerrainAndElevationMap();
+          const t = terrainMap[q + ',' + r] || 'clear';
+          const el = elevationMap[q + ',' + r] || 0;
+          document.getElementById('canvas-info-overlay').innerText = `Hex (${q}, ${r}) | Terrain: ${t} | Elev: +${el}`;
+        } else {
+          hoveredHex = null;
+        }
+        drawScenarioCanvas();
+      });
+
+      scenCanvas.addEventListener('wheel', e => {
+        e.preventDefault();
+        const factor = e.deltaY < 0 ? 1.1 : 0.9;
+        canvasZoom = Math.max(12, Math.min(60, Math.round(canvasZoom * factor)));
+        drawScenarioCanvas();
+      });
+    }
+
+    // --- Scenario Tables Rendering ---
+    function renderScenarioMapPieces() {
+      const container = document.getElementById('scenario-map-pieces-list');
+      container.innerHTML = '';
+      getScenarioMapPieces().forEach((mp, idx) => {
+        const div = document.createElement('div');
+        div.style = 'background: #1e293b; border: 1px solid #334155; border-radius: 4px; padding: 4px 8px; font-size: 0.78rem; display: flex; align-items: center; gap: 0.5rem; color: #fff;';
+        const pid = mp.id || mp.piece_id;
+        const origin = mp.origin || [0, 0];
+        div.innerHTML = `
+          <span><b>${pid}</b> @ [${origin.join(',')}]</span>
+          <button type="button" class="btn-danger" style="padding: 1px 4px; font-size: 0.65rem;" onclick="removeMapPieceFromScenario(${idx})">×</button>
+        `;
+        container.appendChild(div);
+      });
+    }
+
+    function renderScenarioUnitsTable() {
+      const tbody = document.getElementById('scenario-units-tbody');
+      tbody.innerHTML = '';
+      getScenarioUnits().forEach((u, idx) => {
+        const { q, r } = getUnitCoords(u);
+        const tr = document.createElement('tr');
+        tr.style = 'border-bottom: 1px solid #334155;';
+        tr.innerHTML = `
+          <td style="padding: 0.4rem;"><b>${u.unit_id || u.unit_key}</b></td>
+          <td style="padding: 0.4rem;"><span class="badge ${u.side === 'US' ? 'badge-published' : 'badge-staged'}">${u.side}</span></td>
+          <td style="padding: 0.4rem;">${q}, ${r}</td>
+          <td style="padding: 0.4rem;">${u.facing || 0}°</td>
+          <td style="padding: 0.4rem;">${u.experience || 'REGULAR'}</td>
+          <td style="padding: 0.4rem;">Turn ${u.entry_turn || 1}</td>
+          <td style="padding: 0.4rem;">
+            <button type="button" class="btn-danger" style="padding: 0.2rem 0.5rem; font-size: 0.72rem;" onclick="removeScenarioUnit(${idx})">🗑️ Remove</button>
+          </td>
+        `;
+        tbody.appendChild(tr);
+      });
+    }
+
+    function renderScenarioFortsTable() {
+      const tbody = document.getElementById('scenario-forts-tbody');
+      tbody.innerHTML = '';
+      getScenarioFortifications().forEach((f, idx) => {
+        const tr = document.createElement('tr');
+        tr.style = 'border-bottom: 1px solid #334155;';
+        tr.innerHTML = `
+          <td style="padding: 0.4rem;">${f.q}, ${f.r}</td>
+          <td style="padding: 0.4rem;"><span class="badge badge-published">${f.type}</span></td>
+          <td style="padding: 0.4rem;">
+            <button type="button" class="btn-danger" style="padding: 0.2rem 0.5rem; font-size: 0.72rem;" onclick="removeFortification(${idx})">🗑️</button>
+          </td>
+        `;
+        tbody.appendChild(tr);
+      });
+    }
+
+    function renderScenarioVpsTable() {
+      const tbody = document.getElementById('scenario-vps-tbody');
+      tbody.innerHTML = '';
+      getScenarioVps().forEach((vp, idx) => {
+        const tr = document.createElement('tr');
+        tr.style = 'border-bottom: 1px solid #334155;';
+        tr.innerHTML = `
+          <td style="padding: 0.4rem;">${vp.q}, ${vp.r}</td>
+          <td style="padding: 0.4rem;"><b>${vp.value || 1} pts</b></td>
+          <td style="padding: 0.4rem;">
+            <button type="button" class="btn-danger" style="padding: 0.2rem 0.5rem; font-size: 0.72rem;" onclick="removeVp(${idx})">🗑️</button>
+          </td>
+        `;
+        tbody.appendChild(tr);
+      });
+    }
+
+    function removeScenarioUnit(idx) {
+      currentScenarioData.units.splice(idx, 1);
+      renderScenarioUnitsTable();
+      drawScenarioCanvas();
+      syncScenarioJsonFromState();
+    }
+
+    function removeFortification(idx) {
+      currentScenarioData.fortifications.splice(idx, 1);
+      renderScenarioFortsTable();
+      drawScenarioCanvas();
+      syncScenarioJsonFromState();
+    }
+
+    function removeVp(idx) {
+      currentScenarioData.victory_points.splice(idx, 1);
+      renderScenarioVpsTable();
+      drawScenarioCanvas();
+      syncScenarioJsonFromState();
+    }
+
+    function addFortificationRow() {
+      const q = prompt("Enter Fortification Hex Q (column):", "0");
+      if (q === null) return;
+      const r = prompt("Enter Fortification Hex R (row):", "0");
+      if (r === null) return;
+      const type = prompt("Enter Fortification Type (bunker, pillbox, trench):", "bunker");
+      if (!type) return;
+
+      if (!currentScenarioData.fortifications) currentScenarioData.fortifications = [];
+      currentScenarioData.fortifications.push({
+        q: parseInt(q, 10) || 0,
+        r: parseInt(r, 10) || 0,
+        type: type.trim().toLowerCase()
+      });
+      renderScenarioFortsTable();
+      drawScenarioCanvas();
+      syncScenarioJsonFromState();
+    }
+
+    function addVpRow() {
+      const q = prompt("Enter VP Hex Q (column):", "0");
+      if (q === null) return;
+      const r = prompt("Enter VP Hex R (row):", "0");
+      if (r === null) return;
+      const val = prompt("Enter VP Value (points):", "1");
+      if (!val) return;
+
+      if (!currentScenarioData.victory_points) currentScenarioData.victory_points = [];
+      currentScenarioData.victory_points.push({
+        q: parseInt(q, 10) || 0,
+        r: parseInt(r, 10) || 0,
+        value: parseInt(val, 10) || 1
+      });
+      renderScenarioVpsTable();
+      drawScenarioCanvas();
+      syncScenarioJsonFromState();
+    }
+
+    function addMapPieceToScenario() {
+      const pid = prompt("Enter Map Piece ID (e.g. S2, S3, S4):", "S2");
+      if (!pid) return;
+      const oq = prompt("Origin Q (column offset):", "0");
+      if (oq === null) return;
+      const or_ = prompt("Origin R (row offset):", "0");
+      if (or_ === null) return;
+
+      if (!currentScenarioData.map_pieces) currentScenarioData.map_pieces = [];
+      currentScenarioData.map_pieces.push({
+        piece_id: pid.trim(),
+        origin: [parseInt(oq, 10) || 0, parseInt(or_, 10) || 0]
+      });
+      renderScenarioMapPieces();
+      drawScenarioCanvas();
+      syncScenarioJsonFromState();
+    }
+
+    function removeMapPieceFromScenario(idx) {
+      currentScenarioData.map_pieces.splice(idx, 1);
+      renderScenarioMapPieces();
+      drawScenarioCanvas();
+      syncScenarioJsonFromState();
+    }
+
+    function openAddUnitModal() {
+      const uid = prompt("Enter Unit ID (e.g. INF_RIFLE_SQUAD):", "INF_RIFLE_SQUAD");
+      if (!uid) return;
+      const side = prompt("Enter Side (US / IT / GE):", "US");
+      if (!side) return;
+      const q = prompt("Enter Hex Q (column):", "0");
+      if (q === null) return;
+      const r = prompt("Enter Hex R (row):", "0");
+      if (r === null) return;
+
+      if (!currentScenarioData.units) currentScenarioData.units = [];
+      currentScenarioData.units.push({
+        unit_id: uid.trim(),
+        side: side.trim().toUpperCase(),
+        q: parseInt(q, 10) || 0,
+        r: parseInt(r, 10) || 0,
+        facing: 0,
+        experience: "REGULAR",
+        entry_turn: 1
+      });
+      renderScenarioUnitsTable();
+      drawScenarioCanvas();
+      syncScenarioJsonFromState();
+    }
+
+    function syncScenarioDataFromInputs() {
+      if (!currentScenarioData) return;
+      currentScenarioData.name = document.getElementById('scen-field-name').value;
+      currentScenarioData.max_turns = parseInt(document.getElementById('scen-field-max-turns').value, 10) || 8;
+      currentScenarioData.description = document.getElementById('scen-field-desc').value;
+      if (!currentScenarioData.rules) currentScenarioData.rules = {};
+      currentScenarioData.rules.attacker_morale_threshold = parseInt(document.getElementById('scen-field-atk-morale').value, 10) || 10;
+      currentScenarioData.rules.defender_morale_threshold = parseInt(document.getElementById('scen-field-def-morale').value, 10) || 10;
+      syncScenarioJsonFromState();
+    }
+
+    function syncScenarioJsonFromState() {
+      document.getElementById('scenario-json-raw').value = JSON.stringify(currentScenarioData, null, 2);
+    }
+
+    function onScenarioJsonInput() {
+      try {
+        const parsed = JSON.parse(document.getElementById('scenario-json-raw').value);
+        currentScenarioData = parsed;
+        drawScenarioCanvas();
+        renderScenarioUnitsTable();
+        renderScenarioFortsTable();
+        renderScenarioVpsTable();
+        renderScenarioMapPieces();
+        document.getElementById('scen-validation-box').innerText = '✓ JSON Syntax Valid';
+        document.getElementById('scen-validation-box').style.background = '#064e3b';
+        document.getElementById('scen-validation-box').style.color = '#6ee7b7';
+      } catch (e) {
+        document.getElementById('scen-validation-box').innerText = '⚠ Invalid JSON: ' + e.message;
+        document.getElementById('scen-validation-box').style.background = '#7f1d1d';
+        document.getElementById('scen-validation-box').style.color = '#fca5a5';
+      }
+    }
+
+    // Modal Create Scenario
+    function openNewScenarioModal() {
+      document.getElementById('modal-new-scenario').style.display = 'flex';
+      const sel = document.getElementById('new-scen-template');
+      sel.innerHTML = '<option value="">-- Blank Scenario --</option>';
+      scenarios.forEach(s => {
+        const opt = document.createElement('option');
+        opt.value = s.id;
+        opt.innerText = `${s.name || s.id} (${s.is_draft ? 'Draft' : 'Published'})`;
+        sel.appendChild(opt);
+      });
+    }
+
+    function closeNewScenarioModal() {
+      document.getElementById('modal-new-scenario').style.display = 'none';
+    }
+
+    async function submitCreateScenario() {
+      const id = document.getElementById('new-scen-id').value.trim();
+      const name = document.getElementById('new-scen-name').value.trim() || id;
+      const templateId = document.getElementById('new-scen-template').value;
+
+      if (!id) {
+        alert("Please enter a Scenario ID.");
+        return;
+      }
+
+      let payload = {
+        id,
+        name,
+        shape: [9, 8],
+        max_turns: 8,
+        description: "",
+        map_pieces: [{ piece_id: "S2", origin: [0, 0] }],
+        units: [],
+        fortifications: [],
+        victory_points: []
+      };
+
+      if (templateId) {
+        const tRes = await fetch('/api/scenarios/' + templateId);
+        const tData = await tRes.json();
+        if (tData.ok) {
+          payload = JSON.parse(JSON.stringify(tData.scenario));
+          payload.id = id;
+          payload.name = name;
+        }
+      }
+
+      const res = await fetch('/api/scenarios/draft', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      const data = await res.json();
+      if (data.ok) {
+        closeNewScenarioModal();
+        showNotif("New draft scenario created.");
+        currentScenarioId = id;
+        await loadScenariosData();
+        selectScenario(id);
+      } else {
+        alert("Error creating scenario: " + (data.error || 'Unknown'));
+      }
+    }
+
+    async function saveCurrentScenarioDraft() {
+      if (!currentScenarioData) return;
+      syncScenarioDataFromInputs();
+
+      const res = await fetch('/api/scenarios/draft/' + currentScenarioId, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ data: currentScenarioData })
+      });
+      const data = await res.json();
+      if (data.ok) {
+        showNotif("Scenario draft successfully saved.");
+        await loadScenariosData();
+      } else {
+        alert("Failed to save draft.");
+      }
+    }
+
+    async function deleteCurrentScenario() {
+      if (!currentScenarioId || !confirm(`Delete draft scenario '${currentScenarioId}'?`)) return;
+      const res = await fetch('/api/scenarios/draft/' + currentScenarioId, { method: 'DELETE' });
+      if (res.ok) {
+        showNotif("Draft scenario deleted.");
+        currentScenarioId = null;
+        currentScenarioData = null;
+        document.getElementById('no-scenario-selection').style.display = 'flex';
+        document.getElementById('scenario-editor-form').style.display = 'none';
+        await loadScenariosData();
+      }
+    }
+
+    async function cloneCurrentScenario() {
+      if (!currentScenarioId) return;
+      const newId = prompt("Enter cloned Scenario ID:", currentScenarioId + "_draft");
+      if (!newId) return;
+
+      const endpoint = currentScenarioData.is_draft ?
+        `/api/scenarios/draft/${currentScenarioId}/clone` :
+        `/api/scenarios/${currentScenarioId}/clone`;
+
+      const res = await fetch(endpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ new_id: newId })
+      });
+      const data = await res.json();
+      if (data.ok) {
+        showNotif("Scenario cloned as draft.");
+        currentScenarioId = newId;
+        await loadScenariosData();
+        selectScenario(newId);
+      }
+    }
+
+    async function publishCurrentScenario() {
+      if (!currentScenarioId) return;
+      if (!currentScenarioData.is_draft) {
+        alert("Scenario is already published.");
+        return;
+      }
+      syncScenarioDataFromInputs();
+      await saveCurrentScenarioDraft();
+
+      const res = await fetch(`/api/scenarios/draft/${currentScenarioId}/publish`, { method: 'POST' });
+      const data = await res.json();
+      if (data.ok) {
+        showNotif("Scenario successfully published to engine!");
+        await loadScenariosData();
+        selectScenario(currentScenarioId);
+      } else {
+        alert("Publish failed: " + (data.error || 'Validation error'));
+      }
+    }
+
+    function populateScenarioCatalogs() {
+      // Available for dropdowns
+    }
+
+    // ==========================================
+    // MAP PIECE EDITOR LOGIC
+    // ==========================================
+    async function loadMapPiecesData() {
+      try {
+        const res = await fetch('/api/map_pieces');
+        const data = await res.json();
+        if (data.ok) {
+          mapPieces = data.pieces;
+          updatePieceHeaderBadges();
+          renderPieceSidebar();
+          if (currentPieceId) {
+            selectMapPiece(currentPieceId);
+          } else if (mapPieces.length > 0) {
+            selectMapPiece(mapPieces[0].id);
+          }
+        }
+      } catch (e) {
+        console.error('Failed to load map pieces', e);
+      }
+    }
+
+    function updatePieceHeaderBadges() {
+      const pubCount = mapPieces.filter(p => !p.is_draft).length;
+      const draftCount = mapPieces.filter(p => p.is_draft).length;
+      document.getElementById('piece-pub-badge').innerText = pubCount + ' Published';
+      document.getElementById('piece-draft-badge').innerText = draftCount + ' Drafts';
+      document.getElementById('count-pieces-all').innerText = mapPieces.length;
+      document.getElementById('count-pieces-drafts').innerText = draftCount;
+      document.getElementById('count-pieces-published').innerText = pubCount;
+    }
+
+    function setPieceFilter(filt) {
+      pieceFilter = filt;
+      ['all', 'drafts', 'published'].forEach(f => {
+        const btn = document.getElementById('piece-filter-' + f);
+        if (btn) btn.classList.toggle('active', f === filt);
+      });
+      renderPieceSidebar();
+    }
+
+    function filterPieces() {
+      renderPieceSidebar();
+    }
+
+    function renderPieceSidebar() {
+      const query = (document.getElementById('piece-search')?.value || '').toLowerCase().trim();
+      const listEl = document.getElementById('piece-list');
+      listEl.innerHTML = '';
+
+      const filtered = mapPieces.filter(p => {
+        if (pieceFilter === 'drafts' && !p.is_draft) return false;
+        if (pieceFilter === 'published' && p.is_draft) return false;
+        if (query && !p.id.toLowerCase().includes(query) && !p.description.toLowerCase().includes(query)) return false;
+        return true;
+      });
+
+      if (filtered.length === 0) {
+        listEl.innerHTML = '<li style="color: var(--text-muted); font-size: 0.85rem; padding: 1rem; text-align: center;">No pieces match filter</li>';
+        return;
+      }
+
+      filtered.forEach(p => {
+        const li = document.createElement('li');
+        li.className = 'unit-item' + (p.id === currentPieceId ? ' active' : '');
+        li.onclick = () => selectMapPiece(p.id);
+
+        const badgeClass = p.is_draft ? 'badge-staged' : 'badge-published';
+        const badgeText = p.is_draft ? 'DRAFT' : 'PUBLISHED';
+
+        li.innerHTML = `
+          <div>
+            <div class="name">Piece <b>${escapeHtml(p.id)}</b></div>
+            <div class="meta">${p.shape[0]}x${p.shape[1]} &bull; ${p.hex_count} custom hexes &bull; ${p.edge_count} walls</div>
+          </div>
+          <span class="badge ${badgeClass}">${badgeText}</span>
+        `;
+        listEl.appendChild(li);
+      });
+    }
+
+    async function selectMapPiece(pieceId) {
+      currentPieceId = pieceId;
+      renderPieceSidebar();
+
+      try {
+        const res = await fetch('/api/map_pieces/' + pieceId);
+        const data = await res.json();
+        if (data.ok) {
+          currentPieceData = data.piece;
+          displayPieceForm();
+          autoFitPieceCamera();
+          drawPieceCanvas();
+        }
+      } catch (e) {
+        console.error('Failed to load piece detail', e);
+      }
+    }
+
+    function displayPieceForm() {
+      document.getElementById('no-piece-selection').style.display = 'none';
+      const form = document.getElementById('piece-editor-form');
+      form.style.display = 'flex';
+
+      const p = currentPieceData;
+      const isDraft = !!p.is_draft;
+
+      document.getElementById('piece-id-title').innerText = p.id;
+      document.getElementById('piece-shape-pill').innerText = `${p.shape[0]}x${p.shape[1]}`;
+      const pill = document.getElementById('piece-status-pill');
+      pill.innerText = isDraft ? 'DRAFT' : 'PUBLISHED';
+      pill.className = 'badge ' + (isDraft ? 'badge-staged' : 'badge-published');
+
+      document.getElementById('btn-delete-piece').style.display = isDraft ? 'inline-block' : 'none';
+
+      document.getElementById('piece-hexes-count').innerText = (p.hexes || []).length;
+      document.getElementById('piece-edges-count').innerText = (p.hex_edges || []).length;
+      document.getElementById('piece-json-raw').value = JSON.stringify(p, null, 2);
+
+      renderPieceHexesTable();
+      renderPieceEdgesTable();
+    }
+
+    function switchPieceSubTab(tabName) {
+      ['hexes', 'edges', 'json'].forEach(t => {
+        document.getElementById('piece-subtab-' + t).classList.toggle('active', t === tabName);
+        document.getElementById('piece-panel-' + t).style.display = (t === tabName ? 'flex' : 'none');
+      });
+    }
+
+    function selectPieceTerrain(terrain, btnEl) {
+      pieceActiveTerrain = terrain;
+      pieceWallToolActive = false;
+      document.querySelectorAll('.btn-palette').forEach(b => b.classList.remove('active'));
+      if (btnEl) btnEl.classList.add('active');
+      document.getElementById('piece-canvas-overlay').innerText = `Tool: Paint Terrain [${terrain.toUpperCase()}]. Click or drag over hexes.`;
+    }
+
+    function togglePieceWallTool(btnEl) {
+      pieceWallToolActive = !pieceWallToolActive;
+      document.querySelectorAll('.btn-palette').forEach(b => b.classList.remove('active'));
+      if (pieceWallToolActive && btnEl) {
+        btnEl.classList.add('active');
+        document.getElementById('piece-canvas-overlay').innerText = 'Tool: Wall Edge Mode. Click near borders between two adjacent hexes to toggle walls.';
+      } else {
+        selectPieceTerrain(pieceActiveTerrain, document.querySelector(`.btn-palette[style*="${TERRAIN_COLORS[pieceActiveTerrain]}"]`));
+      }
+    }
+
+    function autoFitPieceCamera() {
+      if (!currentPieceData) return;
+      const canvas = document.getElementById('pieceCanvas');
+      if (!canvas) return;
+
+      const [w, h] = currentPieceData.shape || [9, 8];
+      const availW = canvas.width - 120;
+      const availH = canvas.height - 80;
+
+      const approxHexW = availW / (w + 0.5);
+      const approxHexH = availH / (h * 1.5 + 0.5);
+      const sizeFromW = approxHexW / Math.sqrt(3);
+      const sizeFromH = approxHexH;
+
+      pieceCanvasZoom = Math.max(16, Math.min(42, Math.floor(Math.min(sizeFromW, sizeFromH))));
+      pieceOffsetX = Math.floor((canvas.width - (w + 0.5) * pieceCanvasZoom * Math.sqrt(3)) / 2) + 20;
+      pieceOffsetY = 35;
+      drawPieceCanvas();
+    }
+
+    function zoomPieceCanvas(factor) {
+      pieceCanvasZoom = Math.max(14, Math.min(65, Math.round(pieceCanvasZoom * factor)));
+      drawPieceCanvas();
+    }
+
+    function drawPieceCanvas() {
+      const canvas = document.getElementById('pieceCanvas');
+      if (!canvas || !currentPieceData) return;
+      const ctx = canvas.getContext('2d');
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      const [cols, rows] = currentPieceData.shape || [9, 8];
+
+      // Build sparse lookup
+      const terrainLookup = {};
+      const elevLookup = {};
+      for (const hx of currentPieceData.hexes || []) {
+        terrainLookup[hx.q + ',' + hx.r] = hx.terrain || 'clear';
+        if (hx.elevation) elevLookup[hx.q + ',' + hx.r] = hx.elevation;
+      }
+
+      // 1. Draw Hexes
+      for (let r = 0; r < rows; r++) {
+        for (let q = 0; q < cols; q++) {
+          const { x, y } = hexToPixel(q, r, pieceCanvasZoom, pieceOffsetX, pieceOffsetY);
+          const t = terrainLookup[q + ',' + r] || 'clear';
+          const el = elevLookup[q + ',' + r] || 0;
+
+          const fillColor = TERRAIN_COLORS[t] || '#334155';
+          const strokeColor = '#475569';
+
+          drawPointyHex(ctx, x, y, pieceCanvasZoom, fillColor, strokeColor, 1);
+
+          // Elevation
+          if (el > 0) {
+            ctx.fillStyle = '#fff';
+            ctx.font = 'bold 9px sans-serif';
+            ctx.textAlign = 'right';
+            ctx.fillText('+' + el, x + pieceCanvasZoom * 0.7, y - pieceCanvasZoom * 0.4);
+          }
+
+          // Coordinate label
+          if (pieceCanvasZoom >= 16) {
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.45)';
+            ctx.font = '8px sans-serif';
+            ctx.textAlign = 'center';
+            ctx.fillText(`${q},${r}`, x, y - pieceCanvasZoom * 0.35);
+          }
+
+          // Terrain short badge
+          const tShort = TERRAIN_SHORTS[t] || '';
+          if (tShort && pieceCanvasZoom >= 18) {
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
+            ctx.font = 'bold 9px sans-serif';
+            ctx.textAlign = 'center';
+            ctx.fillText(tShort, x, y + pieceCanvasZoom * 0.4);
+          }
+        }
+      }
+
+      // 2. Draw Hex Edges (Walls)
+      for (const ed of currentPieceData.hex_edges || []) {
+        try {
+          const [q1, r1] = ed.from.split(',').map(Number);
+          const [q2, r2] = ed.to.split(',').map(Number);
+          const p1 = hexToPixel(q1, r1, pieceCanvasZoom, pieceOffsetX, pieceOffsetY);
+          const p2 = hexToPixel(q2, r2, pieceCanvasZoom, pieceOffsetX, pieceOffsetY);
+
+          const mx = (p1.x + p2.x) / 2;
+          const my = (p1.y + p2.y) / 2;
+          const dx = p2.x - p1.x;
+          const dy = p2.y - p1.y;
+          const len = Math.hypot(dx, dy) || 1;
+          const nx = -dy / len * (pieceCanvasZoom * 0.5);
+          const ny = dx / len * (pieceCanvasZoom * 0.5);
+
+          ctx.beginPath();
+          ctx.moveTo(mx - nx, my - ny);
+          ctx.lineTo(mx + nx, my + ny);
+          ctx.strokeStyle = '#f59e0b';
+          ctx.lineWidth = 4;
+          ctx.stroke();
+        } catch (e) {}
+      }
+
+      // 3. Hover outline
+      if (hoveredPieceHex) {
+        const { x, y } = hexToPixel(hoveredPieceHex.q, hoveredPieceHex.r, pieceCanvasZoom, pieceOffsetX, pieceOffsetY);
+        drawPointyHex(ctx, x, y, pieceCanvasZoom, null, '#38bdf8', 2.5);
+      }
+    }
+
+    // Piece Canvas Mouse Events
+    const pieceCanvas = document.getElementById('pieceCanvas');
+    if (pieceCanvas) {
+      pieceCanvas.addEventListener('mousedown', e => {
+        if (e.button === 1 || e.shiftKey) { // Pan with middle click or Shift
+          isPiecePanning = true;
+          piecePanStartX = e.clientX - pieceOffsetX;
+          piecePanStartY = e.clientY - pieceOffsetY;
+          pieceCanvas.style.cursor = 'grabbing';
+          return;
+        }
+
+        // Left click: Paint terrain or toggle wall
+        if (e.button === 0) {
+          isPaintingPiece = true;
+          applyPieceToolAtPoint(e.clientX, e.clientY);
+        }
+      });
+
+      window.addEventListener('mouseup', () => {
+        isPiecePanning = false;
+        isPaintingPiece = false;
+        if (pieceCanvas) pieceCanvas.style.cursor = 'crosshair';
+      });
+
+      pieceCanvas.addEventListener('mousemove', e => {
+        if (isPiecePanning) {
+          pieceOffsetX = e.clientX - piecePanStartX;
+          pieceOffsetY = e.clientY - piecePanStartY;
+          drawPieceCanvas();
+          return;
+        }
+
+        const rect = pieceCanvas.getBoundingClientRect();
+        const px = e.clientX - rect.left;
+        const py = e.clientY - rect.top;
+        const { q, r } = pixelToHex(px, py, pieceCanvasZoom, pieceOffsetX, pieceOffsetY);
+
+        if (!currentPieceData) return;
+        const [w, h] = currentPieceData.shape || [9, 8];
+        if (q >= 0 && q < w && r >= 0 && r < h) {
+          hoveredPieceHex = { q, r };
+        } else {
+          hoveredPieceHex = null;
+        }
+
+        if (isPaintingPiece && !pieceWallToolActive) {
+          applyPieceToolAtPoint(e.clientX, e.clientY);
+        } else {
+          drawPieceCanvas();
+        }
+      });
+
+      pieceCanvas.addEventListener('wheel', e => {
+        e.preventDefault();
+        const factor = e.deltaY < 0 ? 1.1 : 0.9;
+        pieceCanvasZoom = Math.max(14, Math.min(65, Math.round(pieceCanvasZoom * factor)));
+        drawPieceCanvas();
+      });
+    }
+
+    function applyPieceToolAtPoint(clientX, clientY) {
+      if (!currentPieceData) return;
+      const rect = pieceCanvas.getBoundingClientRect();
+      const px = clientX - rect.left;
+      const py = clientY - rect.top;
+      const { q, r } = pixelToHex(px, py, pieceCanvasZoom, pieceOffsetX, pieceOffsetY);
+      const [w, h] = currentPieceData.shape || [9, 8];
+
+      if (q < 0 || q >= w || r < 0 || r >= h) return;
+
+      if (pieceWallToolActive) {
+        // Toggle wall with adjacent neighbor
+        togglePieceWallNear(px, py, q, r);
+        return;
+      }
+
+      // Paint terrain
+      if (!currentPieceData.hexes) currentPieceData.hexes = [];
+      const existingIdx = currentPieceData.hexes.findIndex(hx => hx.q === q && hx.r === r);
+
+      if (pieceActiveTerrain === 'clear') {
+        if (existingIdx >= 0) {
+          currentPieceData.hexes.splice(existingIdx, 1);
+        }
+      } else {
+        if (existingIdx >= 0) {
+          currentPieceData.hexes[existingIdx].terrain = pieceActiveTerrain;
+        } else {
+          currentPieceData.hexes.push({ q, r, terrain: pieceActiveTerrain });
+        }
+      }
+
+      document.getElementById('piece-hexes-count').innerText = currentPieceData.hexes.length;
+      renderPieceHexesTable();
+      syncPieceJsonFromState();
+      drawPieceCanvas();
+    }
+
+    function togglePieceWallNear(px, py, q, r) {
+      // Find closest neighbor
+      const neighbors = [
+        { q: q + 1, r: r },
+        { q: q - 1, r: r },
+        { q: (r % 2 === 0 ? q : q + 1), r: r - 1 },
+        { q: (r % 2 === 0 ? q - 1 : q), r: r - 1 },
+        { q: (r % 2 === 0 ? q : q + 1), r: r + 1 },
+        { q: (r % 2 === 0 ? q - 1 : q), r: r + 1 }
+      ];
+
+      const centerP = hexToPixel(q, r, pieceCanvasZoom, pieceOffsetX, pieceOffsetY);
+      let closestN = null;
+      let minDist = 9999;
+
+      for (const n of neighbors) {
+        const [w, h] = currentPieceData.shape;
+        if (n.q < 0 || n.q >= w || n.r < 0 || n.r >= h) continue;
+        const np = hexToPixel(n.q, n.r, pieceCanvasZoom, pieceOffsetX, pieceOffsetY);
+        const edgeMidX = (centerP.x + np.x) / 2;
+        const edgeMidY = (centerP.y + np.y) / 2;
+        const dist = Math.hypot(px - edgeMidX, py - edgeMidY);
+        if (dist < minDist) {
+          minDist = dist;
+          closestN = n;
+        }
+      }
+
+      if (closestN && minDist < pieceCanvasZoom * 0.75) {
+        const k1 = `${q},${r}`;
+        const k2 = `${closestN.q},${closestN.r}`;
+        if (!currentPieceData.hex_edges) currentPieceData.hex_edges = [];
+
+        const idx = currentPieceData.hex_edges.findIndex(e =>
+          (e.from === k1 && e.to === k2) || (e.from === k2 && e.to === k1)
+        );
+
+        if (idx >= 0) {
+          currentPieceData.hex_edges.splice(idx, 1);
+        } else {
+          currentPieceData.hex_edges.push({ from: k1, to: k2, feature: 'wall' });
+        }
+
+        document.getElementById('piece-edges-count').innerText = currentPieceData.hex_edges.length;
+        renderPieceEdgesTable();
+        syncPieceJsonFromState();
+        drawPieceCanvas();
+      }
+    }
+
+    function renderPieceHexesTable() {
+      const tbody = document.getElementById('piece-hexes-tbody');
+      tbody.innerHTML = '';
+      (currentPieceData.hexes || []).forEach((hx, idx) => {
+        const tr = document.createElement('tr');
+        tr.style = 'border-bottom: 1px solid #334155;';
+        tr.innerHTML = `
+          <td style="padding: 0.25rem;"><b>${hx.q}, ${hx.r}</b></td>
+          <td style="padding: 0.25rem;"><span class="badge badge-published" style="background:${TERRAIN_COLORS[hx.terrain] || '#334155'}; color:#fff;">${hx.terrain}</span></td>
+          <td style="padding: 0.25rem;">
+            <button type="button" class="btn-danger" style="padding: 0.15rem 0.4rem; font-size: 0.65rem;" onclick="removePieceHex(${idx})">🗑️</button>
+          </td>
+        `;
+        tbody.appendChild(tr);
+      });
+    }
+
+    function renderPieceEdgesTable() {
+      const tbody = document.getElementById('piece-edges-tbody');
+      tbody.innerHTML = '';
+      (currentPieceData.hex_edges || []).forEach((ed, idx) => {
+        const tr = document.createElement('tr');
+        tr.style = 'border-bottom: 1px solid #334155;';
+        tr.innerHTML = `
+          <td style="padding: 0.25rem;">${ed.from}</td>
+          <td style="padding: 0.25rem;">${ed.to}</td>
+          <td style="padding: 0.25rem;"><span class="badge badge-staged">${ed.feature}</span></td>
+          <td style="padding: 0.25rem;">
+            <button type="button" class="btn-danger" style="padding: 0.15rem 0.4rem; font-size: 0.65rem;" onclick="removePieceEdge(${idx})">🗑️</button>
+          </td>
+        `;
+        tbody.appendChild(tr);
+      });
+    }
+
+    function removePieceHex(idx) {
+      currentPieceData.hexes.splice(idx, 1);
+      document.getElementById('piece-hexes-count').innerText = currentPieceData.hexes.length;
+      renderPieceHexesTable();
+      syncPieceJsonFromState();
+      drawPieceCanvas();
+    }
+
+    function removePieceEdge(idx) {
+      currentPieceData.hex_edges.splice(idx, 1);
+      document.getElementById('piece-edges-count').innerText = currentPieceData.hex_edges.length;
+      renderPieceEdgesTable();
+      syncPieceJsonFromState();
+      drawPieceCanvas();
+    }
+
+    function syncPieceJsonFromState() {
+      document.getElementById('piece-json-raw').value = JSON.stringify(currentPieceData, null, 2);
+    }
+
+    function onPieceJsonInput() {
+      try {
+        const parsed = JSON.parse(document.getElementById('piece-json-raw').value);
+        currentPieceData = parsed;
+        drawPieceCanvas();
+        renderPieceHexesTable();
+        renderPieceEdgesTable();
+      } catch (e) {}
+    }
+
+    // Modal Create Piece
+    function openNewPieceModal() {
+      document.getElementById('modal-new-piece').style.display = 'flex';
+      const sel = document.getElementById('new-piece-template');
+      sel.innerHTML = '<option value="">-- Blank Piece (Clear Terrain) --</option>';
+      mapPieces.forEach(p => {
+        const opt = document.createElement('option');
+        opt.value = p.id;
+        opt.innerText = `Piece ${p.id} (${p.shape[0]}x${p.shape[1]}) - ${p.is_draft ? 'Draft' : 'Published'}`;
+        sel.appendChild(opt);
+      });
+    }
+
+    function closeNewPieceModal() {
+      document.getElementById('modal-new-piece').style.display = 'none';
+    }
+
+    async function submitCreatePiece() {
+      const id = document.getElementById('new-piece-id').value.trim();
+      const w = parseInt(document.getElementById('new-piece-w').value, 10) || 9;
+      const h = parseInt(document.getElementById('new-piece-h').value, 10) || 8;
+      const desc = document.getElementById('new-piece-desc').value.trim() || `Map section ${w}x${h}`;
+      const templateId = document.getElementById('new-piece-template').value;
+
+      if (!id) {
+        alert("Please enter a Map Piece ID.");
+        return;
+      }
+
+      let payload = {
+        id,
+        description: desc,
+        shape: [w, h],
+        hexes: [],
+        hex_edges: []
+      };
+
+      if (templateId) {
+        const tRes = await fetch('/api/map_pieces/' + templateId);
+        const tData = await tRes.json();
+        if (tData.ok) {
+          payload = JSON.parse(JSON.stringify(tData.piece));
+          payload.id = id;
+          payload.description = desc;
+        }
+      }
+
+      const res = await fetch('/api/map_pieces/draft', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      const data = await res.json();
+      if (data.ok) {
+        closeNewPieceModal();
+        showNotif("Map piece draft created.");
+        currentPieceId = id;
+        await loadMapPiecesData();
+        selectMapPiece(id);
+      } else {
+        alert("Error creating piece draft: " + (data.error || 'Unknown'));
+      }
+    }
+
+    async function saveCurrentPieceDraft() {
+      if (!currentPieceData) return;
+      const res = await fetch('/api/map_pieces/draft/' + currentPieceId, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ data: currentPieceData })
+      });
+      const data = await res.json();
+      if (data.ok) {
+        showNotif("Map piece draft saved.");
+        await loadMapPiecesData();
+      } else {
+        alert("Failed to save piece draft.");
+      }
+    }
+
+    async function deleteCurrentPiece() {
+      if (!currentPieceId || !confirm(`Delete draft map piece '${currentPieceId}'?`)) return;
+      const res = await fetch('/api/map_pieces/draft/' + currentPieceId, { method: 'DELETE' });
+      if (res.ok) {
+        showNotif("Draft piece deleted.");
+        currentPieceId = null;
+        currentPieceData = null;
+        document.getElementById('no-piece-selection').style.display = 'flex';
+        document.getElementById('piece-editor-form').style.display = 'none';
+        await loadMapPiecesData();
+      }
+    }
+
+    async function cloneCurrentPiece() {
+      if (!currentPieceId) return;
+      const newId = prompt("Enter cloned Map Piece ID:", currentPieceId + "_draft");
+      if (!newId) return;
+
+      const endpoint = currentPieceData.is_draft ?
+        `/api/map_pieces/draft/${currentPieceId}/clone` :
+        `/api/map_pieces/${currentPieceId}/clone`;
+
+      const res = await fetch(endpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ new_id: newId })
+      });
+      const data = await res.json();
+      if (data.ok) {
+        showNotif("Map piece cloned as draft.");
+        currentPieceId = newId;
+        await loadMapPiecesData();
+        selectMapPiece(newId);
+      }
+    }
+
+    async function publishCurrentPiece() {
+      if (!currentPieceId) return;
+      if (!currentPieceData.is_draft) {
+        alert("Map piece is already published.");
+        return;
+      }
+      await saveCurrentPieceDraft();
+
+      const res = await fetch(`/api/map_pieces/draft/${currentPieceId}/publish`, { method: 'POST' });
+      const data = await res.json();
+      if (data.ok) {
+        showNotif("Map piece published to catalog!");
+        await loadMapPiecesData();
+        selectMapPiece(currentPieceId);
+      } else {
+        alert("Publish failed: " + (data.error || 'Validation error'));
+      }
+    }
+
+
     function initApp() {
       loadData(0);
     }
@@ -3201,10 +4262,19 @@ class UnitEditorHandler(BaseHTTPRequestHandler):
         if path.startswith("/api/scenarios/draft/"):
             scen_id = path[len("/api/scenarios/draft/"):]
             try:
-                res = scenario_editor_service.update_draft(scen_id, body.get("data", {}))
+                res = scenario_editor_service.update_draft(scen_id, body.get("data", body))
                 self._send_json(200, {"ok": True, "scenario": res})
             except Exception as e:
-                self._send_json(500, {"ok": False, "detail": str(e)})
+                self._send_json(400, {"ok": False, "detail": str(e)})
+            return
+
+        if path.startswith("/api/map_pieces/draft/"):
+            pid = path[len("/api/map_pieces/draft/"):]
+            try:
+                res = map_piece_editor_service.update_draft(pid, body.get("data", body))
+                self._send_json(200, {"ok": True, "piece": res})
+            except Exception as e:
+                self._send_json(400, {"ok": False, "detail": str(e)})
             return
 
         self._send_json(404, {"ok": False, "detail": "Not found"})
@@ -3215,14 +4285,20 @@ class UnitEditorHandler(BaseHTTPRequestHandler):
 
         if path.startswith("/api/scenarios/draft/"):
             scen_id = path[len("/api/scenarios/draft/"):]
-            try:
-                deleted = scenario_editor_service.delete_draft(scen_id)
-                if not deleted:
-                    self._send_json(404, {"ok": False, "detail": "Draft not found"})
-                else:
-                    self._send_json(200, {"ok": True, "message": "Draft deleted successfully."})
-            except Exception as e:
-                self._send_json(500, {"ok": False, "detail": str(e)})
+            ok = scenario_editor_service.delete_draft(scen_id)
+            if ok:
+                self._send_json(200, {"ok": True, "message": f"Draft scenario {scen_id} deleted"})
+            else:
+                self._send_json(404, {"ok": False, "detail": f"Draft scenario {scen_id} not found"})
+            return
+
+        if path.startswith("/api/map_pieces/draft/"):
+            pid = path[len("/api/map_pieces/draft/"):]
+            ok = map_piece_editor_service.delete_draft(pid)
+            if ok:
+                self._send_json(200, {"ok": True, "message": f"Draft map piece {pid} deleted"})
+            else:
+                self._send_json(404, {"ok": False, "detail": f"Draft map piece {pid} not found"})
             return
 
         self._send_json(404, {"ok": False, "detail": "Not found"})
@@ -3267,36 +4343,48 @@ class UnitEditorHandler(BaseHTTPRequestHandler):
 
         if path == "/api/catalogs":
             unit_cat = load_unit_catalog_dict()
-            piece_cat = load_map_piece_catalog_dict()
-            data = {
+            mp_cat = load_map_piece_catalog_dict()
+            self._send_json(200, {
                 "ok": True,
-                "units": [
-                    {"key": k, "name": v.get("name", k), "side": v.get("side", ""), "default_role": v.get("doctrine_profile", {}).get("default_role", "SCREEN")}
-                    for k, v in sorted(unit_cat.items())
-                ],
-                "map_pieces": [
-                    {"id": k, "name": v.get("name", k), "shape": v.get("shape", [9, 8])}
-                    for k, v in sorted(piece_cat.items())
-                ],
+                "units": sorted(list(unit_cat.keys())),
+                "map_pieces": sorted(list(mp_cat.keys())),
                 "fortifications": sorted(list(VALID_FORTIFICATIONS)),
                 "experiences": sorted(list(VALID_EXPERIENCES)),
                 "sides": sorted(list(VALID_SIDES)),
-            }
-            self._send_json(200, data)
+                "terrains": sorted(list(VALID_TERRAINS)),
+            })
             return
 
         if path == "/api/scenarios":
-            scenarios = scenario_editor_service.list_all_scenarios()
+            scenarios = scenario_editor_service.list_scenarios()
             self._send_json(200, {"ok": True, "count": len(scenarios), "scenarios": scenarios})
             return
 
         if path.startswith("/api/scenarios/"):
             scen_id = path[len("/api/scenarios/"):]
             try:
-                scenario = scenario_editor_service.get_scenario(scen_id, prefer_draft=True)
-                self._send_json(200, {"ok": True, "scenario": scenario})
-            except FileNotFoundError as e:
-                self._send_json(404, {"ok": False, "detail": str(e)})
+                scen = scenario_editor_service.get_scenario(scen_id)
+                if scen:
+                    self._send_json(200, {"ok": True, "scenario": scen})
+                else:
+                    self._send_json(404, {"ok": False, "detail": f"Scenario {scen_id} not found"})
+            except Exception as e:
+                self._send_json(500, {"ok": False, "detail": str(e)})
+            return
+
+        if path == "/api/map_pieces":
+            pieces = map_piece_editor_service.list_pieces()
+            self._send_json(200, {"ok": True, "count": len(pieces), "pieces": pieces})
+            return
+
+        if path.startswith("/api/map_pieces/"):
+            pid = path[len("/api/map_pieces/"):]
+            try:
+                p = map_piece_editor_service.get_piece(pid)
+                if p:
+                    self._send_json(200, {"ok": True, "piece": p})
+                else:
+                    self._send_json(404, {"ok": False, "detail": f"Map piece {pid} not found"})
             except Exception as e:
                 self._send_json(500, {"ok": False, "detail": str(e)})
             return
@@ -3343,6 +4431,116 @@ class UnitEditorHandler(BaseHTTPRequestHandler):
         length = int(self.headers.get("Content-Length", 0))
         raw_body = self.rfile.read(length).decode("utf-8")
         body = json.loads(raw_body) if raw_body else {}
+
+        # Scenario Editor POST Routes
+        if path == "/api/scenarios/draft":
+            try:
+                data = body.get("data", body)
+                scen_id = data.get("id") or body.get("id")
+                created = scenario_editor_service.create_draft(scen_id, data)
+                self._send_json(200, {"ok": True, "scenario": created})
+            except Exception as e:
+                self._send_json(400, {"ok": False, "detail": str(e)})
+            return
+
+        if path.startswith("/api/scenarios/draft/") and path.endswith("/clone"):
+            source_id = path[len("/api/scenarios/draft/"):-len("/clone")]
+            try:
+                cloned = scenario_editor_service.clone_scenario(source_id, body.get("new_id"), from_draft=True)
+                self._send_json(200, {"ok": True, "scenario": cloned})
+            except Exception as e:
+                self._send_json(400, {"ok": False, "detail": str(e)})
+            return
+
+        if path.startswith("/api/scenarios/") and path.endswith("/clone"):
+            source_id = path[len("/api/scenarios/"):-len("/clone")]
+            try:
+                cloned = scenario_editor_service.clone_scenario(source_id, body.get("new_id"), from_draft=False)
+                self._send_json(200, {"ok": True, "scenario": cloned})
+            except Exception as e:
+                self._send_json(400, {"ok": False, "detail": str(e)})
+            return
+
+        if path.startswith("/api/scenarios/draft/") and path.endswith("/publish"):
+            draft_id = path[len("/api/scenarios/draft/"):-len("/publish")]
+            try:
+                pub = scenario_editor_service.publish_scenario(draft_id)
+                self._send_json(200, {"ok": True, "scenario": pub})
+            except Exception as e:
+                self._send_json(422, {"ok": False, "detail": str(e)})
+            return
+
+        if path.startswith("/api/scenarios/") and path.endswith("/unpublish"):
+            scen_id = path[len("/api/scenarios/"):-len("/unpublish")]
+            try:
+                draft = scenario_editor_service.unpublish_scenario(scen_id)
+                self._send_json(200, {"ok": True, "scenario": draft})
+            except Exception as e:
+                self._send_json(404, {"ok": False, "detail": str(e)})
+            return
+
+        if path == "/api/scenarios/validate":
+            try:
+                valid, errors = scenario_editor_service.validate_scenario(body.get("data", body))
+                self._send_json(200, {"ok": True, "valid": valid, "errors": errors})
+            except Exception as e:
+                self._send_json(500, {"ok": False, "detail": str(e)})
+            return
+
+        # Map Piece Editor POST Routes
+        if path == "/api/map_pieces/draft":
+            try:
+                data = body.get("data", body)
+                pid = data.get("id") or body.get("id")
+                created = map_piece_editor_service.create_draft(pid, data)
+                self._send_json(200, {"ok": True, "piece": created})
+            except Exception as e:
+                self._send_json(400, {"ok": False, "detail": str(e)})
+            return
+
+        if path.startswith("/api/map_pieces/draft/") and path.endswith("/clone"):
+            source_id = path[len("/api/map_pieces/draft/"):-len("/clone")]
+            try:
+                cloned = map_piece_editor_service.clone_piece(source_id, body.get("new_id"), from_draft=True)
+                self._send_json(200, {"ok": True, "piece": cloned})
+            except Exception as e:
+                self._send_json(400, {"ok": False, "detail": str(e)})
+            return
+
+        if path.startswith("/api/map_pieces/") and path.endswith("/clone"):
+            source_id = path[len("/api/map_pieces/"):-len("/clone")]
+            try:
+                cloned = map_piece_editor_service.clone_piece(source_id, body.get("new_id"), from_draft=False)
+                self._send_json(200, {"ok": True, "piece": cloned})
+            except Exception as e:
+                self._send_json(400, {"ok": False, "detail": str(e)})
+            return
+
+        if path.startswith("/api/map_pieces/draft/") and path.endswith("/publish"):
+            draft_id = path[len("/api/map_pieces/draft/"):-len("/publish")]
+            try:
+                pub = map_piece_editor_service.publish_piece(draft_id)
+                self._send_json(200, {"ok": True, "piece": pub})
+            except Exception as e:
+                self._send_json(422, {"ok": False, "detail": str(e)})
+            return
+
+        if path.startswith("/api/map_pieces/") and path.endswith("/unpublish"):
+            pid = path[len("/api/map_pieces/"):-len("/unpublish")]
+            try:
+                draft = map_piece_editor_service.unpublish_piece(pid)
+                self._send_json(200, {"ok": True, "piece": draft})
+            except Exception as e:
+                self._send_json(404, {"ok": False, "detail": str(e)})
+            return
+
+        if path == "/api/map_pieces/validate":
+            try:
+                valid, errors = map_piece_editor_service.validate_piece(body.get("data", body))
+                self._send_json(200, {"ok": True, "valid": valid, "errors": errors})
+            except Exception as e:
+                self._send_json(500, {"ok": False, "detail": str(e)})
+            return
 
         if path == "/api/units/stage":
             unit_id = body.get("id")
@@ -3430,47 +4628,6 @@ class UnitEditorHandler(BaseHTTPRequestHandler):
             self.send_header("Content-Type", "application/json")
             self.end_headers()
             self.wfile.write(b'{"ok": true}')
-            return
-
-        if path == "/api/scenarios/draft":
-            try:
-                res = scenario_editor_service.create_draft(
-                    scenario_id=body.get("id"),
-                    data=body.get("data"),
-                    clone_from_id=body.get("clone_from_id"),
-                )
-                if body.get("name") and not body.get("clone_from_id"):
-                    res["name"] = body.get("name")
-                    res = scenario_editor_service.update_draft(body.get("id"), res)
-                self._send_json(200, {"ok": True, "scenario": res})
-            except Exception as e:
-                self._send_json(400, {"ok": False, "detail": str(e)})
-            return
-
-        if path.startswith("/api/scenarios/draft/") and path.endswith("/publish"):
-            scen_id = path[len("/api/scenarios/draft/"):-len("/publish")]
-            try:
-                res = scenario_editor_service.publish_draft(scen_id, target_id=body.get("target_id"))
-                self._send_json(200, res)
-            except Exception as e:
-                self._send_json(400, {"ok": False, "detail": str(e)})
-            return
-
-        if path.startswith("/api/scenarios/unpublish/"):
-            scen_id = path[len("/api/scenarios/unpublish/"):]
-            try:
-                res = scenario_editor_service.unpublish_scenario(scen_id)
-                self._send_json(200, res)
-            except Exception as e:
-                self._send_json(400, {"ok": False, "detail": str(e)})
-            return
-
-        if path == "/api/scenarios/validate":
-            try:
-                res = scenario_editor_service.validate_scenario(body.get("data", {}))
-                self._send_json(200, res)
-            except Exception as e:
-                self._send_json(500, {"ok": False, "detail": str(e)})
             return
 
         if path == "/api/formations/delete":
