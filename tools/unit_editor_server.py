@@ -1024,7 +1024,6 @@ HTML_TEMPLATE = """<!DOCTYPE html>
             <div id="piece-canvas-overlay" style="position: absolute; bottom: 8px; left: 8px; background: rgba(15, 23, 42, 0.85); padding: 4px 10px; border-radius: 4px; font-size: 0.75rem; color: #94a3b8; border: 1px solid #334155;">
               Tool: Select Hex. Click any hex to mark it and choose terrain from the list. Right-click drag to pan.
             </div>
-            </div>
           </div>
 
           <!-- Bottom Tabs for Piece Details -->
@@ -3097,6 +3096,17 @@ HTML_TEMPLATE = """<!DOCTYPE html>
     let hoveredPieceHex = null;
 
     // --- Math & Hex Helpers (Pointy-topped Odd-R Staggered) ---
+    function syncCanvasSize(canvas) {
+      if (!canvas) return;
+      const rect = canvas.getBoundingClientRect();
+      const w = Math.floor(rect.width);
+      const h = Math.floor(rect.height);
+      if (w > 0 && h > 0 && (canvas.width !== w || canvas.height !== h)) {
+        canvas.width = w;
+        canvas.height = h;
+      }
+    }
+
     function hexToPixel(q, r, zoom, offX, offY) {
       const hexWidth = zoom * Math.sqrt(3);
       const hexHeight = zoom * 1.5;
@@ -3109,10 +3119,28 @@ HTML_TEMPLATE = """<!DOCTYPE html>
       const hexWidth = zoom * Math.sqrt(3);
       const hexHeight = zoom * 1.5;
       const relY = py - offY;
-      const r = Math.round(relY / hexHeight);
-      const relX = (px - offX) - hexWidth * 0.5 * (Math.abs(r) % 2);
-      const q = Math.round(relX / hexWidth);
-      return { q, r };
+      const rEst = Math.round(relY / hexHeight);
+      const relX = (px - offX) - hexWidth * 0.5 * (Math.abs(rEst) % 2);
+      const qEst = Math.round(relX / hexWidth);
+
+      // Search 3x3 candidate neighborhood for the exact closest hex center
+      let bestQ = qEst;
+      let bestR = rEst;
+      let bestDist = Infinity;
+      for (let dr = -1; dr <= 1; dr++) {
+        for (let dq = -1; dq <= 1; dq++) {
+          const candQ = qEst + dq;
+          const candR = rEst + dr;
+          const center = hexToPixel(candQ, candR, zoom, offX, offY);
+          const dist = Math.hypot(px - center.x, py - center.y);
+          if (dist < bestDist) {
+            bestDist = dist;
+            bestQ = candQ;
+            bestR = candR;
+          }
+        }
+      }
+      return { q: bestQ, r: bestR };
     }
 
     function drawPointyHex(ctx, cx, cy, size, fillColor, strokeColor, lineWidth = 1) {
@@ -3341,6 +3369,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
       if (!currentScenarioData) return;
       const canvas = document.getElementById('hexCanvas');
       if (!canvas) return;
+      syncCanvasSize(canvas);
 
       const [w, h] = currentScenarioData.shape || [9, 8];
       const availW = canvas.width - 60;
@@ -3352,8 +3381,11 @@ HTML_TEMPLATE = """<!DOCTYPE html>
       const sizeFromH = approxHexH;
 
       canvasZoom = Math.max(10, Math.min(36, Math.floor(Math.min(sizeFromW, sizeFromH))));
-      canvasOffsetX = Math.max(20, Math.floor((canvas.width - (w + 0.5) * canvasZoom * Math.sqrt(3)) / 2));
-      canvasOffsetY = Math.max(20, Math.floor((canvas.height - h * canvasZoom * 1.5) / 2));
+      const hexW = canvasZoom * Math.sqrt(3);
+      const totalGridW = (w + 0.5) * hexW;
+      const totalGridH = (h * 1.5 + 0.5) * canvasZoom;
+      canvasOffsetX = Math.floor((canvas.width - totalGridW) / 2) + Math.floor(hexW * 0.5);
+      canvasOffsetY = Math.floor((canvas.height - totalGridH) / 2) + canvasZoom;
       drawScenarioCanvas();
     }
 
@@ -3400,6 +3432,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
     function drawScenarioCanvas() {
       const canvas = document.getElementById('hexCanvas');
       if (!canvas || !currentScenarioData) return;
+      syncCanvasSize(canvas);
       const ctx = canvas.getContext('2d');
       ctx.clearRect(0, 0, canvas.width, canvas.height);
 
@@ -3607,8 +3640,10 @@ HTML_TEMPLATE = """<!DOCTYPE html>
 
           if (Math.hypot(e.clientX - scenMouseDownX, e.clientY - scenMouseDownY) < 5) {
             const rect = scenCanvas.getBoundingClientRect();
-            const px = e.clientX - rect.left;
-            const py = e.clientY - rect.top;
+            const scaleX = scenCanvas.width / (rect.width || 1);
+            const scaleY = scenCanvas.height / (rect.height || 1);
+            const px = (e.clientX - rect.left) * scaleX;
+            const py = (e.clientY - rect.top) * scaleY;
             const { q, r } = pixelToHex(px, py, canvasZoom, canvasOffsetX, canvasOffsetY);
 
             if (currentScenarioData) {
@@ -3635,8 +3670,10 @@ HTML_TEMPLATE = """<!DOCTYPE html>
         }
 
         const rect = scenCanvas.getBoundingClientRect();
-        const px = e.clientX - rect.left;
-        const py = e.clientY - rect.top;
+        const scaleX = scenCanvas.width / (rect.width || 1);
+        const scaleY = scenCanvas.height / (rect.height || 1);
+        const px = (e.clientX - rect.left) * scaleX;
+        const py = (e.clientY - rect.top) * scaleY;
         const { q, r } = pixelToHex(px, py, canvasZoom, canvasOffsetX, canvasOffsetY);
 
         if (!currentScenarioData) return;
@@ -3656,8 +3693,10 @@ HTML_TEMPLATE = """<!DOCTYPE html>
       scenCanvas.addEventListener('wheel', e => {
         e.preventDefault();
         const rect = scenCanvas.getBoundingClientRect();
-        const mouseX = e.clientX - rect.left;
-        const mouseY = e.clientY - rect.top;
+        const scaleX = scenCanvas.width / (rect.width || 1);
+        const scaleY = scenCanvas.height / (rect.height || 1);
+        const mouseX = (e.clientX - rect.left) * scaleX;
+        const mouseY = (e.clientY - rect.top) * scaleY;
         const factor = e.deltaY < 0 ? 1.12 : 0.89;
         const newZoom = Math.max(10, Math.min(65, Math.round(canvasZoom * factor)));
         if (newZoom !== canvasZoom) {
@@ -4194,19 +4233,23 @@ HTML_TEMPLATE = """<!DOCTYPE html>
       if (!currentPieceData) return;
       const canvas = document.getElementById('pieceCanvas');
       if (!canvas) return;
+      syncCanvasSize(canvas);
 
       const [w, h] = currentPieceData.shape || [9, 8];
-      const availW = canvas.width - 120;
-      const availH = canvas.height - 80;
+      const availW = canvas.width - 60;
+      const availH = canvas.height - 60;
 
       const approxHexW = availW / (w + 0.5);
       const approxHexH = availH / (h * 1.5 + 0.5);
       const sizeFromW = approxHexW / Math.sqrt(3);
       const sizeFromH = approxHexH;
 
-      pieceCanvasZoom = Math.max(16, Math.min(42, Math.floor(Math.min(sizeFromW, sizeFromH))));
-      pieceOffsetX = Math.floor((canvas.width - (w + 0.5) * pieceCanvasZoom * Math.sqrt(3)) / 2) + 20;
-      pieceOffsetY = 35;
+      pieceCanvasZoom = Math.max(16, Math.min(48, Math.floor(Math.min(sizeFromW, sizeFromH))));
+      const hexW = pieceCanvasZoom * Math.sqrt(3);
+      const totalGridW = (w + 0.5) * hexW;
+      const totalGridH = (h * 1.5 + 0.5) * pieceCanvasZoom;
+      pieceOffsetX = Math.floor((canvas.width - totalGridW) / 2) + Math.floor(hexW * 0.5);
+      pieceOffsetY = Math.floor((canvas.height - totalGridH) / 2) + pieceCanvasZoom;
       drawPieceCanvas();
     }
 
@@ -4218,6 +4261,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
     function drawPieceCanvas() {
       const canvas = document.getElementById('pieceCanvas');
       if (!canvas || !currentPieceData) return;
+      syncCanvasSize(canvas);
       const ctx = canvas.getContext('2d');
       ctx.clearRect(0, 0, canvas.width, canvas.height);
 
@@ -4379,8 +4423,10 @@ HTML_TEMPLATE = """<!DOCTYPE html>
         // Left click
         if (e.button === 0) {
           const rect = pieceCanvas.getBoundingClientRect();
-          const px = e.clientX - rect.left;
-          const py = e.clientY - rect.top;
+          const scaleX = pieceCanvas.width / (rect.width || 1);
+          const scaleY = pieceCanvas.height / (rect.height || 1);
+          const px = (e.clientX - rect.left) * scaleX;
+          const py = (e.clientY - rect.top) * scaleY;
           const { q, r } = pixelToHex(px, py, pieceCanvasZoom, pieceOffsetX, pieceOffsetY);
 
           if (currentPieceData) {
@@ -4416,8 +4462,10 @@ HTML_TEMPLATE = """<!DOCTYPE html>
         }
 
         const rect = pieceCanvas.getBoundingClientRect();
-        const px = e.clientX - rect.left;
-        const py = e.clientY - rect.top;
+        const scaleX = pieceCanvas.width / (rect.width || 1);
+        const scaleY = pieceCanvas.height / (rect.height || 1);
+        const px = (e.clientX - rect.left) * scaleX;
+        const py = (e.clientY - rect.top) * scaleY;
         const { q, r } = pixelToHex(px, py, pieceCanvasZoom, pieceOffsetX, pieceOffsetY);
 
         if (!currentPieceData) return;
@@ -4438,8 +4486,10 @@ HTML_TEMPLATE = """<!DOCTYPE html>
       pieceCanvas.addEventListener('wheel', e => {
         e.preventDefault();
         const rect = pieceCanvas.getBoundingClientRect();
-        const mouseX = e.clientX - rect.left;
-        const mouseY = e.clientY - rect.top;
+        const scaleX = pieceCanvas.width / (rect.width || 1);
+        const scaleY = pieceCanvas.height / (rect.height || 1);
+        const mouseX = (e.clientX - rect.left) * scaleX;
+        const mouseY = (e.clientY - rect.top) * scaleY;
         const factor = e.deltaY < 0 ? 1.12 : 0.89;
         const newZoom = Math.max(12, Math.min(65, Math.round(pieceCanvasZoom * factor)));
         if (newZoom !== pieceCanvasZoom) {
@@ -4454,8 +4504,10 @@ HTML_TEMPLATE = """<!DOCTYPE html>
     function applyPieceToolAtPoint(clientX, clientY) {
       if (!currentPieceData) return;
       const rect = pieceCanvas.getBoundingClientRect();
-      const px = clientX - rect.left;
-      const py = clientY - rect.top;
+      const scaleX = pieceCanvas.width / (rect.width || 1);
+      const scaleY = pieceCanvas.height / (rect.height || 1);
+      const px = (clientX - rect.left) * scaleX;
+      const py = (clientY - rect.top) * scaleY;
       const { q, r } = pixelToHex(px, py, pieceCanvasZoom, pieceOffsetX, pieceOffsetY);
       const [w, h] = currentPieceData.shape || [9, 8];
 
@@ -4468,25 +4520,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
       }
 
       // Paint terrain
-      if (!currentPieceData.hexes) currentPieceData.hexes = [];
-      const existingIdx = currentPieceData.hexes.findIndex(hx => hx.q === q && hx.r === r);
-
-      if (pieceActiveTerrain === 'clear') {
-        if (existingIdx >= 0) {
-          currentPieceData.hexes.splice(existingIdx, 1);
-        }
-      } else {
-        if (existingIdx >= 0) {
-          currentPieceData.hexes[existingIdx].terrain = pieceActiveTerrain;
-        } else {
-          currentPieceData.hexes.push({ q, r, terrain: pieceActiveTerrain });
-        }
-      }
-
-      document.getElementById('piece-hexes-count').innerText = currentPieceData.hexes.length;
-      renderPieceHexesTable();
-      syncPieceJsonFromState();
-      drawPieceCanvas();
+      setPieceHexTerrain(q, r, pieceActiveTerrain);
     }
 
     function togglePieceWallNear(px, py, q, r) {
@@ -4755,6 +4789,18 @@ HTML_TEMPLATE = """<!DOCTYPE html>
         alert("Publish failed: " + (data.error || 'Validation error'));
       }
     }
+
+    // Responsive Canvas Resize Handler
+    window.addEventListener('resize', () => {
+      const scenView = document.getElementById('view-scenarios');
+      if (scenView && scenView.style.display !== 'none') {
+        drawScenarioCanvas();
+      }
+      const pieceView = document.getElementById('view-pieces');
+      if (pieceView && pieceView.style.display !== 'none') {
+        drawPieceCanvas();
+      }
+    });
 
 
     function initApp() {

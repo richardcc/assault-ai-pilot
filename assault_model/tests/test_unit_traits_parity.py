@@ -328,7 +328,7 @@ def test_phase_a_infantry_and_artillery_traits(catalog):
         traits=["REAR_ECHELON"],
     )
     service_unit = UnitInstance(unit_id="UK_SVC", unit_type=ut_rear, side="UK", position=HexCoord(2, 0))
-    service_unit.strength = 4
+    service_unit.strength = 10
 
     enemy_attacker = UnitInstance(unit_id="GE_ATK", unit_type=catalog["GE_RIFLES_43"], side="GE", position=HexCoord(0, 0))
     gs_isolated = MockGameState([service_unit, enemy_attacker])
