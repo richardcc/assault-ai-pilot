@@ -214,7 +214,8 @@ El compendio de Sound of Drums no modela escenarios como listas estáticas de un
 
 #### C. Diagnóstico Algorítmico: Por Qué la IA Adopta una Postura Defensiva
 En Reinforcement Learning, una red neuronal guiada por recompensas optimiza la función:
-$$J(	heta) = \mathbb{E}_{	au \sim \pi_	heta} \left[ R_{	ext{terminal}}(	au) - \lambda_{	ext{loss}} \sum_{t} 	ext{Bajas}(t) + \sum_{t} 	ext{PBRS}(s_t, s_{t+1}) ight]$$
+$$J(	heta) = \mathbb{E}_{	au \sim \pi_	heta} \left[ R_{	ext{terminal}}(	au) - \lambda_{	ext{loss}} \sum_{t} 	ext{Bajas}(t) + \sum_{t} 	ext{PBRS}(s_t, s_{t+1}) 
+ight]$$
 
 1. **La Asimetría Destructiva:**
    Al suprimir las 3 cartas TA/OAS (re-rolls de ataque), la segunda oleada de refuerzos del Turno 2, los 4 Puntos de Mando y el colapso moral del defensor, el atacante es forzado a cruzar terreno despejado contra nidos de ametralladora intactos en una proporción 1:1.
@@ -254,7 +255,7 @@ pie title Estado de Implementación de Tropas (95 Unidades Únicas)
 | ID Canónico | Nombre Unidad | Tipo / Rol | Estado | Ficha (Full / Half) | Carta (Anverso / Reverso) |
 | :--- | :--- | :---: | :---: | :--- | :--- |
 | `GE_2_8CM_SPZB_41` | **2-8cm sPzB 41** | `GUN_ARTILLERY` | 🟡 `PENDIENTE` | `GE 2-8cm sPzB 41.png`<br>`GE 2-8cm sPzB 41b.png` | `GE Unit 2-8cm sPzB41.jpg`<br>`GE Unit 2-8cm sPzB41b.jpg` |
-| `GE_3_7CM_FLAK_37` | **3-7cm Flak 37** | `GUN_ARTILLERY` | 🟡 `PENDIENTE` | `GE 3-7cm Flak 37.png`<br>`GE 3-7cm Flak 37b.png` | `GE Unit 3-7cm Flak 37.jpg`<br>`GE Unit 3-7cm Flak 37b.jpg` |
+| `GE_3_7CM_FLAK_37` | **3-7cm Flak 37** | `GUN_ARTILLERY` | 🟢 `IMPLEMENTADO` | `GE 3-7cm Flak 37.png`<br>`GE 3-7cm Flak 37b.png` | `GE Unit 3-7cm Flak 37.jpg`<br>`GE Unit 3-7cm Flak 37b.jpg` |
 | `GE_50MM_ATG_38` | **50mm ATG 38** | `GUN_ARTILLERY` | 🟡 `PENDIENTE` | `GE 50mm ATG 38.png`<br>`GE 50mm ATG 38b.png` | `GE Unit 50mm Flak 38.jpg`<br>`GE Unit 50mm Flak 38b.jpg` |
 | `GE_50MM_MORTAR` | **50mm Mortar** | `GUN_ARTILLERY` | 🟢 `IMPLEMENTADO` | `GE 50mm Mortar.png`<br>`GE 50mm Mortarb.png` | `GE Unit 50mm Mortar.jpg`<br>`GE Unit 50mm Mortarb.jpg` |
 | `GE_7_5CM_LG40` | **7-5cm LG40** | `GUN_ARTILLERY` | 🟡 `PENDIENTE` | `GE 7-5cm LG40.png`<br>`GE 7-5cm LG40b.png` | `GE Unit 7-5cm LG 40.jpg`<br>`GE Unit 7-5cm LG 40b.jpg` |
