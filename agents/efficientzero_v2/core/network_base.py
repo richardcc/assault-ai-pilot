@@ -769,6 +769,20 @@ class EfficientZeroV2BaseNetwork(nn.Module):
             pass
         return self
 
+    def representation_encode(self, observation: torch.Tensor) -> torch.Tensor:
+        """
+        Encodes observation tensor into latent representation state without computing
+        unused prediction trunk, policy head, value head, reward head, or auxiliary heads.
+        Mathematically identical to the representation step of initial_inference.
+        """
+        if self.encoder_type == "cnn":
+            obs_in = self._gate_input_channels(observation)
+            if self.use_coord_conv and obs_in.dim() == 4:
+                obs_in = _add_coords(obs_in)
+            return self._scale_latent(self.representation_tower(self.representation_input(obs_in)))
+        else:
+            return self._scale_latent(self.representation(observation))
+
     def initial_inference(self, observation: torch.Tensor, return_aux: bool = False):
         if self.encoder_type == "cnn":
             obs_in = self._gate_input_channels(observation)

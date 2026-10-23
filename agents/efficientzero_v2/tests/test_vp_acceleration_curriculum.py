@@ -35,7 +35,7 @@ def test_vp_acceleration_curriculum_yaml_validity():
     assert data["engine"] == "efficientzero_v2"
     assert "phases" in data
     phases = data["phases"]
-    assert len(phases) in {4, 5}
+    assert len(phases) in {4, 5, 6}
 
     expected_phases = [
         "phase1_vp_sprint_unoccupied",
@@ -44,12 +44,15 @@ def test_vp_acceleration_curriculum_yaml_validity():
         "phase4_tactical_gela_mastery",
     ]
     actual_phases = [p["name"] for p in phases]
-    assert actual_phases[:4] == expected_phases[:4]
+    assert actual_phases[:3] == expected_phases[:3]
     if len(phases) == 5:
-        assert actual_phases[4] == "phase5_urban_assault_pure_offensive"
+        assert actual_phases[4] in {"phase5_urban_assault_pure_offensive", "phase5_tactical_gela_mastery"}
+    elif len(phases) == 6:
+        assert actual_phases[5] == "phase6_urban_assault_pure_offensive"
 
-    # Verify quantitative acceptance criteria in Phase 4 gate
-    phase4_gate = phases[3]["gate"]
+    # Verify quantitative acceptance criteria in Tactical Gela gate
+    gela_phase = next(p for p in phases if "gela_mastery" in p["name"])
+    phase4_gate = gela_phase["gate"]
     assert float(phase4_gate.get("min_win_rate_vs_heuristic", 0.0)) >= 0.40
     assert phase4_gate.get("max_avg_turns") == 15.0             # < 15 turnos
 

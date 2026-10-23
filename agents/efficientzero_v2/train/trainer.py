@@ -179,15 +179,19 @@ class EfficientZeroV2Trainer(EfficientZeroV2BaseTrainer):
                 aux_multi_vp_loss=0.0,
             )
 
-        obs = torch.stack(
-            [
-                s.observation.detach().to(torch.float32)
-                if isinstance(s.observation, torch.Tensor)
-                else torch.tensor(s.observation, dtype=torch.float32)
-                for s in batch
-            ],
-            dim=0,
-        ).to(self.device, non_blocking=True)
+        first_obs = batch[0].observation
+        if str(self.device) == "cuda" and isinstance(first_obs, torch.Tensor) and first_obs.dtype == torch.float16:
+            obs = torch.stack([s.observation for s in batch], dim=0).pin_memory().to(self.device, non_blocking=True).to(torch.float32)
+        else:
+            obs = torch.stack(
+                [
+                    s.observation.detach().to(torch.float32)
+                    if isinstance(s.observation, torch.Tensor)
+                    else torch.tensor(s.observation, dtype=torch.float32)
+                    for s in batch
+                ],
+                dim=0,
+            ).to(self.device, non_blocking=True)
         self._progress("batch_tensors_ready")
         if str(self.device) == "cuda":
             policy_target = torch.tensor([s.policy_target for s in batch], dtype=torch.float32).pin_memory().to(self.device, non_blocking=True)
@@ -415,13 +419,13 @@ class EfficientZeroV2Trainer(EfficientZeroV2BaseTrainer):
                 for s in batch:
                     info_dict = dict(s.info or {})
                     if "final_ownership_target" in info_dict and isinstance(info_dict["final_ownership_target"], torch.Tensor):
-                        target_ownerships.append(info_dict["final_ownership_target"].to(self.device))
+                        target_ownerships.append(info_dict["final_ownership_target"].detach().to(torch.float32).cpu())
                     elif "final_ownership_target" in info_dict and isinstance(info_dict["final_ownership_target"], (list, tuple)):
-                        target_ownerships.append(torch.tensor(info_dict["final_ownership_target"], dtype=torch.float32, device=self.device))
+                        target_ownerships.append(torch.tensor(info_dict["final_ownership_target"], dtype=torch.float32))
                     else:
                         h = int(getattr(model, "observation_height", 16))
                         w = int(getattr(model, "observation_width", 16))
-                        target_ownerships.append(torch.zeros(1, h, w, dtype=torch.float32, device=self.device))
+                        target_ownerships.append(torch.zeros(1, h, w, dtype=torch.float32))
                 target_ownerships_t = torch.stack(target_ownerships, dim=0).to(self.device, non_blocking=True)
                 if target_ownerships_t.shape != fo_preds.shape:
                     try:
@@ -511,56 +515,71 @@ class EfficientZeroV2Trainer(EfficientZeroV2BaseTrainer):
                     if k_lim > 0:
                         active_indices.append(i)
                 if active_indices:
-                    pred_hidden_by_index: dict[int, torch.Tensor] = {
-                        i: hidden[i : i + 1] for i in active_indices
-                    }
                     max_k = max(sample_k_lims) if sample_k_lims else 0
+
+                    # 1. Pre-stack all target observations across all k and batch-encode in a single forward pass
+                    all_tgt_obs: list[torch.Tensor] = []
+                    k_slices: list[tuple[int, int, list[int], list[int]]] = []
                     for k in range(int(max_k)):
-                        step_indices: list[int] = []
-                        step_actions: list[int] = []
-                        step_obs_tensors: list[torch.Tensor] = []
+                        step_indices = []
+                        step_actions = []
+                        step_obs = []
                         for i in list(active_indices):
                             if k >= int(sample_k_lims[i]):
                                 continue
                             act_idx = int(sample_future_actions[i][k])
                             if act_idx < 0 or act_idx >= action_dim:
                                 continue
-                            tgt_obs = sample_future_obs[i][k]
-                            tgt_obs_t = (
-                                tgt_obs.detach().to(torch.float32)
-                                if isinstance(tgt_obs, torch.Tensor)
-                                else torch.tensor(tgt_obs, dtype=torch.float32)
-                            )
                             step_indices.append(i)
                             step_actions.append(act_idx)
-                            step_obs_tensors.append(tgt_obs_t)
+                            step_obs.append(sample_future_obs[i][k])
+                        if step_indices:
+                            s_start = len(all_tgt_obs)
+                            all_tgt_obs.extend(step_obs)
+                            k_slices.append((s_start, len(all_tgt_obs), step_indices, step_actions))
+                        else:
+                            k_slices.append((0, 0, [], []))
+
+                    if all_tgt_obs:
+                        first_tgt = all_tgt_obs[0]
+                        if str(self.device) == "cuda" and isinstance(first_tgt, torch.Tensor) and first_tgt.dtype == torch.float16:
+                            all_tgt_batch = torch.stack(all_tgt_obs, dim=0).pin_memory().to(self.device, non_blocking=True).to(torch.float32)
+                        else:
+                            all_tgt_batch = torch.stack(
+                                [
+                                    t.detach().to(torch.float32) if isinstance(t, torch.Tensor) else torch.tensor(t, dtype=torch.float32)
+                                    for t in all_tgt_obs
+                                ],
+                                dim=0,
+                            ).to(self.device, non_blocking=True)
+                        with torch.no_grad():
+                            with self._autocast_ctx():
+                                if hasattr(model, "representation_encode"):
+                                    all_tgt_hidden = model.representation_encode(all_tgt_batch)
+                                else:
+                                    all_tgt_hidden, _, _, _ = model.initial_inference(all_tgt_batch, return_aux=False)
+                                all_z_tgt = model.consistency_embedding(all_tgt_hidden).detach()
+
+                    pred_hidden_by_index: dict[int, torch.Tensor] = {
+                        i: hidden[i : i + 1] for i in active_indices
+                    }
+                    for k in range(int(max_k)):
+                        s_start, s_end, step_indices, step_actions = k_slices[k]
                         if not step_indices:
                             continue
                         pred_hidden_in = torch.cat(
                             [pred_hidden_by_index[i] for i in step_indices], dim=0
                         )
-                        a = torch.zeros(
-                            (len(step_indices), action_dim),
-                            dtype=torch.float32,
-                            device=self.device,
-                        )
-                        for row_i, act_idx in enumerate(step_actions):
-                            a[row_i, int(act_idx)] = 1.0
+                        act_tensor = torch.tensor(step_actions, dtype=torch.long, device=self.device)
+                        a = F.one_hot(act_tensor, num_classes=action_dim).float()
                         pred_hidden_next, _, _, _ = model.recurrent_inference(
                             pred_hidden_in, a, return_aux=False
                         )
                         for row_i, i in enumerate(step_indices):
                             pred_hidden_by_index[i] = pred_hidden_next[row_i : row_i + 1]
-                        tgt_obs_batch = torch.stack(step_obs_tensors, dim=0).to(
-                            self.device, non_blocking=True
-                        )
-                        with torch.no_grad():
-                            with self._autocast_ctx():
-                                tgt_hidden, _, _, _ = model.initial_inference(
-                                    tgt_obs_batch, return_aux=False
-                                )
+
                         z_pred = model.consistency_embedding(pred_hidden_next)
-                        z_tgt = model.consistency_embedding(tgt_hidden).detach()
+                        z_tgt = all_z_tgt[s_start:s_end]
                         pair_mse = F.mse_loss(z_pred, z_tgt, reduction="none")
                         pair_mse = pair_mse.view(pair_mse.shape[0], -1).mean(dim=1)
                         rec_steps_max = int(getattr(model, "dynamics_recurrent_steps", 1))

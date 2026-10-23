@@ -1,8 +1,9 @@
 from __future__ import annotations
 
+from collections import deque
 import random
 from dataclasses import dataclass
-from typing import Any, Dict, List
+from typing import Any, Deque, Dict, List
 
 
 @dataclass
@@ -21,8 +22,8 @@ class ReplayBuffer:
         recent_fraction: float = 0.0,
         recent_window_ratio: float = 0.0,
     ):
-        self.capacity = capacity
-        self._items: List[ReplaySample] = []
+        self.capacity = int(capacity)
+        self._items: Deque[ReplaySample] = deque(maxlen=self.capacity)
         self._add_index: int = 0
         self.recent_fraction = float(max(0.0, min(1.0, recent_fraction)))
         self.recent_window_ratio = float(max(0.0, min(1.0, recent_window_ratio)))
@@ -33,8 +34,6 @@ class ReplayBuffer:
         sample.info["replay_add_index"] = int(self._add_index)
         self._add_index += 1
         self._items.append(sample)
-        if len(self._items) > self.capacity:
-            self._items.pop(0)
 
     def extend(self, samples: List[ReplaySample]) -> None:
         for sample in samples:
@@ -53,16 +52,21 @@ class ReplayBuffer:
         k_recent = int(round(size * self.recent_fraction))
         k_recent = min(max(0, k_recent), size, recent_window)
 
-        recent_indices = list(range(recent_start, total))
         sampled_indices: List[int] = []
         if k_recent > 0:
-            sampled_indices.extend(random.sample(recent_indices, k_recent))
+            sampled_indices.extend(random.sample(range(recent_start, total), k_recent))
 
         remaining = size - len(sampled_indices)
         if remaining > 0:
             taken = set(sampled_indices)
-            pool = [i for i in range(total) if i not in taken]
-            sampled_indices.extend(random.sample(pool, remaining))
+            extra: List[int] = []
+            while len(extra) < remaining:
+                cand = random.sample(range(total), min(total - len(taken), remaining - len(extra)))
+                for c in cand:
+                    if c not in taken:
+                        taken.add(c)
+                        extra.append(c)
+            sampled_indices.extend(extra)
         return [self._items[i] for i in sampled_indices]
 
     def __len__(self) -> int:
