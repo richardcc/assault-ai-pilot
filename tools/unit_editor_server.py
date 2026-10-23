@@ -753,10 +753,23 @@ HTML_TEMPLATE = """<!DOCTYPE html>
               <button type="button" id="scen-subtab-rules" class="btn-card-tab" onclick="switchScenarioSubTab('rules')">⚙️ Rules & Morale</button>
               <button type="button" id="scen-subtab-json" class="btn-card-tab" onclick="switchScenarioSubTab('json')">📄 Raw JSON & Live Validation</button>
             </div>
-            <div style="display: flex; gap: 0.6rem; align-items: center;">
+            <div style="display: flex; gap: 0.6rem; align-items: center; flex-wrap: wrap;">
+              <label style="display: flex; align-items: center; gap: 0.35rem; font-size: 0.75rem; color: #38bdf8; cursor: pointer; font-weight: 600;">
+                <input type="checkbox" id="scen-toggle-bg" checked onchange="toggleScenarioBgImage(this.checked)" />
+                🗺️ Real Scan
+              </label>
+              <div style="display: flex; align-items: center; gap: 0.3rem; font-size: 0.72rem; color: var(--text-muted);">
+                <span>Opacity:</span>
+                <input type="range" id="scen-bg-opacity" min="0" max="100" value="70" style="width: 65px; height: 14px;" oninput="setScenarioBgOpacity(this.value)" />
+                <span id="scen-bg-opacity-label">70%</span>
+              </div>
+              <label style="display: flex; align-items: center; gap: 0.35rem; font-size: 0.75rem; color: #94a3b8; cursor: pointer;">
+                <input type="checkbox" id="scen-toggle-colors" checked onchange="toggleScenarioHexColors(this.checked)" />
+                🎨 Hex Fills
+              </label>
               <button type="button" class="btn-card-tab" onclick="autoFitScenarioCamera()" title="Auto Fit & Center Board">🎯 Fit View</button>
-              <button type="button" class="btn-card-tab" onclick="zoomScenarioCanvas(1.15)">➕ Zoom In</button>
-              <button type="button" class="btn-card-tab" onclick="zoomScenarioCanvas(0.85)">➖ Zoom Out</button>
+              <button type="button" class="btn-card-tab" onclick="zoomScenarioCanvas(1.15)">➕ In</button>
+              <button type="button" class="btn-card-tab" onclick="zoomScenarioCanvas(0.85)">➖ Out</button>
               <span id="scenario-status-pill" class="badge badge-published">PUBLISHED</span>
             </div>
           </div>
@@ -922,10 +935,25 @@ HTML_TEMPLATE = """<!DOCTYPE html>
                 <span id="piece-shape-pill" class="badge badge-pending">9x8</span>
                 <span id="piece-status-pill" class="badge badge-published">PUBLISHED</span>
               </div>
-              <div style="display: flex; gap: 0.5rem; align-items: center;">
+              <div style="display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap;">
+                <label style="display: flex; align-items: center; gap: 0.35rem; font-size: 0.75rem; color: #38bdf8; cursor: pointer; font-weight: 600;">
+                  <input type="checkbox" id="piece-toggle-bg" checked onchange="togglePieceBgImage(this.checked)" />
+                  🗺️ Real Board Scan
+                </label>
+                <div style="display: flex; align-items: center; gap: 0.3rem; font-size: 0.72rem; color: var(--text-muted);">
+                  <span>Opacity:</span>
+                  <input type="range" id="piece-bg-opacity" min="0" max="100" value="65" style="width: 65px; height: 14px;" oninput="setPieceBgOpacity(this.value)" />
+                  <span id="piece-bg-opacity-label">65%</span>
+                </div>
+                <label style="display: flex; align-items: center; gap: 0.35rem; font-size: 0.75rem; color: #94a3b8; cursor: pointer;">
+                  <input type="checkbox" id="piece-toggle-colors" checked onchange="togglePieceHexColors(this.checked)" />
+                  🎨 Hex Fills
+                </label>
+                <button type="button" id="btn-piece-mode-pan" class="btn-card-tab" onclick="togglePieceMode('pan', this)" title="Pan Mode (or right-click drag)">🖐️ Pan</button>
+                <button type="button" id="btn-piece-mode-paint" class="btn-card-tab active" onclick="togglePieceMode('paint', this)" title="Paint Mode">🖌️ Paint</button>
                 <button type="button" class="btn-card-tab" onclick="autoFitPieceCamera()">🎯 Fit Piece</button>
-                <button type="button" class="btn-card-tab" onclick="zoomPieceCanvas(1.15)">➕ Zoom In</button>
-                <button type="button" class="btn-card-tab" onclick="zoomPieceCanvas(0.85)">➖ Zoom Out</button>
+                <button type="button" class="btn-card-tab" onclick="zoomPieceCanvas(1.15)">➕ In</button>
+                <button type="button" class="btn-card-tab" onclick="zoomPieceCanvas(0.85)">➖ Out</button>
               </div>
             </div>
 
@@ -2728,6 +2756,16 @@ HTML_TEMPLATE = """<!DOCTYPE html>
         .replace(/'/g, '&#39;');
     }
 
+    function hexToRgba(hex, alpha) {
+      hex = String(hex).replace('#', '');
+      if (hex.length === 3) hex = hex.split('').map(c => c + c).join('');
+      const num = parseInt(hex, 16) || 0;
+      const r = (num >> 16) & 255;
+      const g = (num >> 8) & 255;
+      const b = num & 255;
+      return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+    }
+
     let scenarios = [];
     let currentScenarioId = null;
     let currentScenarioData = null;
@@ -2747,6 +2785,94 @@ HTML_TEMPLATE = """<!DOCTYPE html>
     };
 
     let mapPieceDefinitions = {}; // piece_id -> raw piece object
+
+    // Background Scans & Overlay State
+    const pieceBgImages = {};
+    let pieceShowBg = true;
+    let pieceBgOpacity = 0.65;
+    let pieceShowHexColors = true;
+    let pieceMode = 'paint'; // 'paint' or 'pan'
+    let spaceBarPressed = false;
+
+    let scenShowBg = true;
+    let scenBgOpacity = 0.70;
+    let scenShowHexColors = true;
+
+    function getPieceBgImage(pieceId) {
+      if (!pieceId || typeof Image === 'undefined') return null;
+      const cleanId = String(pieceId).trim().toUpperCase();
+      if (pieceBgImages[cleanId] === undefined) {
+        const img = new Image();
+        img.src = `/assets/art/maps/Map%20${encodeURIComponent(cleanId)}.png`;
+        img.onload = () => {
+          pieceBgImages[cleanId] = img;
+          drawPieceCanvas();
+          drawScenarioCanvas();
+        };
+        img.onerror = () => {
+          pieceBgImages[cleanId] = null;
+        };
+        pieceBgImages[cleanId] = img;
+      }
+      return pieceBgImages[cleanId];
+    }
+
+    function togglePieceBgImage(checked) {
+      pieceShowBg = !!checked;
+      drawPieceCanvas();
+    }
+
+    function setPieceBgOpacity(val) {
+      pieceBgOpacity = (parseInt(val, 10) || 50) / 100;
+      const label = document.getElementById('piece-bg-opacity-label');
+      if (label) label.innerText = Math.round(pieceBgOpacity * 100) + '%';
+      drawPieceCanvas();
+    }
+
+    function togglePieceHexColors(checked) {
+      pieceShowHexColors = !!checked;
+      drawPieceCanvas();
+    }
+
+    function togglePieceMode(mode, btnEl) {
+      pieceMode = mode;
+      document.getElementById('btn-piece-mode-pan')?.classList.toggle('active', mode === 'pan');
+      document.getElementById('btn-piece-mode-paint')?.classList.toggle('active', mode === 'paint');
+      const canvas = document.getElementById('pieceCanvas');
+      if (canvas) canvas.style.cursor = mode === 'pan' ? 'grab' : 'crosshair';
+      document.getElementById('piece-canvas-overlay').innerText = mode === 'pan' ?
+        'Tool: Pan Mode. Drag with mouse to pan board. Scroll to zoom.' :
+        `Tool: Paint Terrain [${pieceActiveTerrain.toUpperCase()}]. Click / drag on hexes. Right-click drag to pan.`;
+    }
+
+    function toggleScenarioBgImage(checked) {
+      scenShowBg = !!checked;
+      drawScenarioCanvas();
+    }
+
+    function setScenarioBgOpacity(val) {
+      scenBgOpacity = (parseInt(val, 10) || 50) / 100;
+      const label = document.getElementById('scen-bg-opacity-label');
+      if (label) label.innerText = Math.round(scenBgOpacity * 100) + '%';
+      drawScenarioCanvas();
+    }
+
+    function toggleScenarioHexColors(checked) {
+      scenShowHexColors = !!checked;
+      drawScenarioCanvas();
+    }
+
+    window.addEventListener('keydown', e => {
+      if (e.code === 'Space' && e.target.tagName !== 'INPUT' && e.target.tagName !== 'TEXTAREA') {
+        spaceBarPressed = true;
+      }
+    });
+
+    window.addEventListener('keyup', e => {
+      if (e.code === 'Space') {
+        spaceBarPressed = false;
+      }
+    });
 
     // Canvas Transform State for Scenarios
     let canvasZoom = 24;
@@ -3079,7 +3205,31 @@ HTML_TEMPLATE = """<!DOCTYPE html>
       const [cols, rows] = currentScenarioData.shape || [9, 8];
       const { terrainMap, elevationMap, wallsList } = buildScenarioTerrainAndElevationMap();
 
-      // 1. Draw Hex Grid with Real Terrain Colors
+      // 0. Draw Background Scans for all scenario map pieces
+      if (scenShowBg) {
+        for (const mp of getScenarioMapPieces()) {
+          const pid = mp.id || mp.piece_id;
+          const origin = mp.origin || [0, 0];
+          const pDef = mapPieceDefinitions[pid];
+          const [pw, ph] = (pDef && pDef.shape) ? pDef.shape : [9, 8];
+          const img = getPieceBgImage(pid);
+          if (img && img.complete && img.naturalWidth > 0) {
+            const hexW = canvasZoom * Math.sqrt(3);
+            const pStart = hexToPixel(origin[0], origin[1], canvasZoom, canvasOffsetX, canvasOffsetY);
+            const startX = pStart.x - hexW * 0.5;
+            const startY = pStart.y - canvasZoom;
+            const bgW = (pw + 0.5) * hexW;
+            const bgH = (ph * 1.5 + 0.5) * canvasZoom;
+
+            ctx.save();
+            ctx.globalAlpha = scenBgOpacity;
+            ctx.drawImage(img, startX, startY, bgW, bgH);
+            ctx.restore();
+          }
+        }
+      }
+
+      // 1. Draw Hex Grid with Real Terrain Colors or Wireframe
       for (let r = 0; r < rows; r++) {
         for (let q = 0; q < cols; q++) {
           const { x, y } = hexToPixel(q, r, canvasZoom, canvasOffsetX, canvasOffsetY);
@@ -3087,8 +3237,12 @@ HTML_TEMPLATE = """<!DOCTYPE html>
           const terrain = terrainMap[tKey] || 'clear';
           const elev = elevationMap[tKey] || 0;
 
-          const fillColor = TERRAIN_COLORS[terrain] || '#334155';
-          const strokeColor = '#475569';
+          let fillColor = null;
+          if (scenShowHexColors) {
+            const baseColor = TERRAIN_COLORS[terrain] || '#334155';
+            fillColor = scenShowBg ? hexToRgba(baseColor, 0.40) : baseColor;
+          }
+          const strokeColor = scenShowBg ? 'rgba(255, 255, 255, 0.45)' : '#475569';
 
           drawPointyHex(ctx, x, y, canvasZoom, fillColor, strokeColor, 1);
 
@@ -3213,11 +3367,16 @@ HTML_TEMPLATE = """<!DOCTYPE html>
     // Canvas Mouse Event Handlers
     const scenCanvas = document.getElementById('hexCanvas');
     if (scenCanvas) {
+      scenCanvas.addEventListener('contextmenu', e => e.preventDefault());
+
       scenCanvas.addEventListener('mousedown', e => {
-        isPanning = true;
-        panStartX = e.clientX - canvasOffsetX;
-        panStartY = e.clientY - canvasOffsetY;
-        scenCanvas.style.cursor = 'grabbing';
+        // Left, middle, or right click can pan in scenario view
+        if (e.button === 0 || e.button === 1 || e.button === 2) {
+          isPanning = true;
+          panStartX = e.clientX - canvasOffsetX;
+          panStartY = e.clientY - canvasOffsetY;
+          scenCanvas.style.cursor = 'grabbing';
+        }
       });
 
       window.addEventListener('mouseup', () => {
@@ -3254,9 +3413,17 @@ HTML_TEMPLATE = """<!DOCTYPE html>
 
       scenCanvas.addEventListener('wheel', e => {
         e.preventDefault();
-        const factor = e.deltaY < 0 ? 1.1 : 0.9;
-        canvasZoom = Math.max(12, Math.min(60, Math.round(canvasZoom * factor)));
-        drawScenarioCanvas();
+        const rect = scenCanvas.getBoundingClientRect();
+        const mouseX = e.clientX - rect.left;
+        const mouseY = e.clientY - rect.top;
+        const factor = e.deltaY < 0 ? 1.12 : 0.89;
+        const newZoom = Math.max(10, Math.min(65, Math.round(canvasZoom * factor)));
+        if (newZoom !== canvasZoom) {
+          canvasOffsetX = mouseX - (mouseX - canvasOffsetX) * (newZoom / canvasZoom);
+          canvasOffsetY = mouseY - (mouseY - canvasOffsetY) * (newZoom / canvasZoom);
+          canvasZoom = newZoom;
+          drawScenarioCanvas();
+        }
       });
     }
 
@@ -3810,6 +3977,23 @@ HTML_TEMPLATE = """<!DOCTYPE html>
         if (hx.elevation) elevLookup[hx.q + ',' + hx.r] = hx.elevation;
       }
 
+      // 0. Draw Background Scan (if enabled)
+      if (pieceShowBg && currentPieceData.id) {
+        const img = getPieceBgImage(currentPieceData.id);
+        if (img && img.complete && img.naturalWidth > 0) {
+          const hexW = pieceCanvasZoom * Math.sqrt(3);
+          const startX = pieceOffsetX - hexW * 0.5;
+          const startY = pieceOffsetY - pieceCanvasZoom;
+          const bgW = (cols + 0.5) * hexW;
+          const bgH = (rows * 1.5 + 0.5) * pieceCanvasZoom;
+
+          ctx.save();
+          ctx.globalAlpha = pieceBgOpacity;
+          ctx.drawImage(img, startX, startY, bgW, bgH);
+          ctx.restore();
+        }
+      }
+
       // 1. Draw Hexes
       for (let r = 0; r < rows; r++) {
         for (let q = 0; q < cols; q++) {
@@ -3817,8 +4001,12 @@ HTML_TEMPLATE = """<!DOCTYPE html>
           const t = terrainLookup[q + ',' + r] || 'clear';
           const el = elevLookup[q + ',' + r] || 0;
 
-          const fillColor = TERRAIN_COLORS[t] || '#334155';
-          const strokeColor = '#475569';
+          let fillColor = null;
+          if (pieceShowHexColors) {
+            const rawColor = TERRAIN_COLORS[t] || '#334155';
+            fillColor = (pieceShowBg && pieceBgOpacity > 0.05) ? hexToRgba(rawColor, 0.45) : rawColor;
+          }
+          const strokeColor = pieceShowHexColors ? '#475569' : 'rgba(56, 189, 248, 0.55)';
 
           drawPointyHex(ctx, x, y, pieceCanvasZoom, fillColor, strokeColor, 1);
 
@@ -3832,7 +4020,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
 
           // Coordinate label
           if (pieceCanvasZoom >= 16) {
-            ctx.fillStyle = 'rgba(255, 255, 255, 0.45)';
+            ctx.fillStyle = pieceShowBg && pieceBgOpacity > 0.5 ? '#ffffff' : 'rgba(255, 255, 255, 0.55)';
             ctx.font = '8px sans-serif';
             ctx.textAlign = 'center';
             ctx.fillText(`${q},${r}`, x, y - pieceCanvasZoom * 0.35);
@@ -3841,7 +4029,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
           // Terrain short badge
           const tShort = TERRAIN_SHORTS[t] || '';
           if (tShort && pieceCanvasZoom >= 18) {
-            ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
+            ctx.fillStyle = '#ffffff';
             ctx.font = 'bold 9px sans-serif';
             ctx.textAlign = 'center';
             ctx.fillText(tShort, x, y + pieceCanvasZoom * 0.4);
@@ -3884,8 +4072,11 @@ HTML_TEMPLATE = """<!DOCTYPE html>
     // Piece Canvas Mouse Events
     const pieceCanvas = document.getElementById('pieceCanvas');
     if (pieceCanvas) {
+      pieceCanvas.addEventListener('contextmenu', e => e.preventDefault());
+
       pieceCanvas.addEventListener('mousedown', e => {
-        if (e.button === 1 || e.shiftKey) { // Pan with middle click or Shift
+        // Pan if right-click (button 2), middle-click (button 1), spacebar held, shift held, or pieceMode === 'pan'
+        if (e.button === 1 || e.button === 2 || e.shiftKey || spaceBarPressed || pieceMode === 'pan') {
           isPiecePanning = true;
           piecePanStartX = e.clientX - pieceOffsetX;
           piecePanStartY = e.clientY - pieceOffsetY;
@@ -3903,7 +4094,9 @@ HTML_TEMPLATE = """<!DOCTYPE html>
       window.addEventListener('mouseup', () => {
         isPiecePanning = false;
         isPaintingPiece = false;
-        if (pieceCanvas) pieceCanvas.style.cursor = 'crosshair';
+        if (pieceCanvas) {
+          pieceCanvas.style.cursor = pieceMode === 'pan' ? 'grab' : 'crosshair';
+        }
       });
 
       pieceCanvas.addEventListener('mousemove', e => {
@@ -3936,9 +4129,17 @@ HTML_TEMPLATE = """<!DOCTYPE html>
 
       pieceCanvas.addEventListener('wheel', e => {
         e.preventDefault();
-        const factor = e.deltaY < 0 ? 1.1 : 0.9;
-        pieceCanvasZoom = Math.max(14, Math.min(65, Math.round(pieceCanvasZoom * factor)));
-        drawPieceCanvas();
+        const rect = pieceCanvas.getBoundingClientRect();
+        const mouseX = e.clientX - rect.left;
+        const mouseY = e.clientY - rect.top;
+        const factor = e.deltaY < 0 ? 1.12 : 0.89;
+        const newZoom = Math.max(12, Math.min(65, Math.round(pieceCanvasZoom * factor)));
+        if (newZoom !== pieceCanvasZoom) {
+          pieceOffsetX = mouseX - (mouseX - pieceOffsetX) * (newZoom / pieceCanvasZoom);
+          pieceOffsetY = mouseY - (mouseY - pieceOffsetY) * (newZoom / pieceCanvasZoom);
+          pieceCanvasZoom = newZoom;
+          drawPieceCanvas();
+        }
       });
     }
 
