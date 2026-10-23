@@ -97,6 +97,21 @@ Para evitar el colapso de representación dimensional (evitando que la dinámica
 2. **Normalización $\ell_2$ Unitaria**: Ambos vectores se normalizan estrictamente sobre la esfera unitaria ($\|z\|_2 = 1, \|p\|_2 = 1$) mediante `F.normalize(..., dim=-1)` antes del producto escalar:
 $$\mathcal{L}_{\text{consistency}} = -\frac{1}{2} \left( \frac{p_\theta(q_\theta(s_k))}{\|p_\theta(q_\theta(s_k))\|_2} \cdot \text{stop\_grad}\left(\frac{q_\theta(h_\theta(o_{t+k}))}{\|q_\theta(h_\theta(o_{t+k}))\|_2}\right) \right)$$
 
+### 2.5. Modulación Dinámica de Priors y Decaimiento Anti-Miopía (Tarea 2.8 [v2.5.26])
+Para resolver el dilema identificado en la auditoría arquitectónica (donde un sesgo doctrinal estático del $+35\%$ acota artificialmente la exploración en el árbol de búsqueda MCTS e induce *"Objective Myopia"*), se introduce la modulación temporal gobernada por programa de decaimiento:
+
+$$\beta_{\text{eff}}(a) = 1.0 + (\beta_{\text{raw}}(a) - 1.0) \cdot w_{\text{macro}}(t)$$
+
+Donde la escala de modulación $w_{\text{macro}}(t)$ puede configurarse bajo tres regímenes:
+1. **Decaimiento Cosinoidal Progresivo (Recomendado)**:
+   $$w_{\text{macro}}(t) = w_{\min} + \frac{1}{2}(w_{\max} - w_{\min})\left(1 + \cos\left(\pi \frac{t}{T_{\text{decay}}}\right)\right)$$
+   Proporciona guía heurística robusta ($w_{\max} = 1.0$) en fases iniciales cuando la política no conoce los objetivos, y decae suavemente hacia cero ($w_{\min} = 0.0$) permitiendo que la red neuronal descubra tácticas puras y sacrificios posicionales no convencionales.
+2. **Decaimiento Lineal**:
+   $$w_{\text{macro}}(t) = w_{\max} + (w_{\min} - w_{\max}) \cdot \min\left(1.0, \frac{t}{T_{\text{decay}}}\right)$$
+3. **Ablación Científica A/B**:
+   * **Variante A (Red Pura / Búsqueda Libre)**: $w_{\text{macro}} = 0.0$, donde los priors de la red alimentan MCTS al 100% sin sesgos heurísticos.
+   * **Variante B (Doctrinal Shaped)**: $w_{\text{macro}} = 1.0$ estático para evaluar la ganancia o pérdida neta de ELO.
+
 ---
 
 ## 3. Catálogo Completo de las 11 Cabezas de Salida
