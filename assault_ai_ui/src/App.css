@@ -2673,3 +2673,294 @@
 .bottom-command-deck {
   display: none !important;
 }
+
+
+
+/* ==========================================================================
+   LEFT TACTICAL ACTION SELECTOR (CLEAN UNIFIED PANEL)
+   ========================================================================== */
+.left-squad-drawer {
+  position: fixed;
+  top: 112px;
+  left: 14px;
+  bottom: 16px;
+  width: 380px;
+  max-width: calc(100vw - 28px);
+  z-index: 55;
+  background: rgba(8, 11, 20, 0.95);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid rgba(0, 240, 255, 0.35);
+  border-radius: 8px;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.8), 0 0 20px rgba(0, 240, 255, 0.15);
+  display: flex;
+  flex-direction: column;
+  transform: translateX(-420px);
+  transition: transform 0.28s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.25s ease;
+  opacity: 0;
+  pointer-events: none;
+  overflow: hidden;
+}
+
+.left-squad-drawer.drawer-open {
+  transform: translateX(0);
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.left-unit-command-view {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  overflow: hidden;
+  height: 100%;
+}
+
+/* Clean Unit Intel Card */
+.left-unit-intel-card {
+  padding: 12px 14px;
+  background: rgba(0, 0, 0, 0.45);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  flex-shrink: 0;
+}
+
+.left-unit-intel-row {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+}
+
+.left-unit-avatar-box {
+  width: 68px;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+}
+
+.left-unit-avatar-img {
+  width: 68px;
+  height: 68px;
+  object-fit: contain;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(0, 240, 255, 0.3);
+  border-radius: 6px;
+  padding: 3px;
+  box-shadow: 0 0 10px rgba(0, 240, 255, 0.15);
+}
+
+.left-unit-details {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.left-unit-name {
+  font-family: var(--font-tech);
+  font-size: 13.5px;
+  font-weight: 700;
+  color: var(--text-bright);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.left-unit-meta-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  font-size: 10.5px;
+  font-family: var(--font-mono);
+  color: var(--text-muted);
+}
+
+.left-unit-health-wrap {
+  margin-top: 2px;
+}
+
+.health-labels {
+  display: flex;
+  justify-content: space-between;
+  font-size: 9.5px;
+  color: #94a3b8;
+  margin-bottom: 2px;
+}
+
+.left-unit-traits-row {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+  margin-top: 3px;
+}
+
+/* Orders list container */
+.left-unit-orders-container {
+  flex: 1;
+  overflow-y: auto;
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.left-unit-orders-container .panel-title {
+  font-size: 11.5px;
+  font-family: var(--font-tech);
+  letter-spacing: 1px;
+  padding-bottom: 4px;
+  margin-bottom: 6px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.left-unit-orders-container .actions-category-tabs {
+  margin-bottom: 8px;
+  padding-bottom: 4px;
+}
+
+.left-unit-orders-container .actions-list {
+  max-height: unset;
+  overflow-y: auto;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.left-unit-orders-container .action-card {
+  padding: 6px 10px;
+}
+
+.left-unit-footer {
+  padding: 8px 12px;
+  background: rgba(0, 0, 0, 0.45);
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  flex-shrink: 0;
+}
+
+.left-squad-switch-btn {
+  width: 100%;
+  padding: 7px 12px;
+  text-align: center;
+  background: rgba(0, 240, 255, 0.1);
+  border: 1px solid rgba(0, 240, 255, 0.3);
+  color: var(--neon-cyan);
+  font-family: var(--font-tech);
+  font-size: 11px;
+  font-weight: 700;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.left-squad-switch-btn:hover {
+  background: rgba(0, 240, 255, 0.22);
+  border-color: var(--neon-cyan);
+  box-shadow: 0 0 10px rgba(0, 240, 255, 0.3);
+}
+
+/* Awaiting View */
+.left-action-awaiting {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 32px 24px;
+  text-align: center;
+  color: var(--text-muted);
+}
+
+.left-action-awaiting .radar-circle {
+  width: 68px;
+  height: 68px;
+  border-radius: 50%;
+  border: 1.5px dashed rgba(0, 240, 255, 0.35);
+  margin-bottom: 20px;
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  animation: radarRotate 10s linear infinite;
+}
+
+.left-action-awaiting .radar-circle::before {
+  content: "";
+  position: absolute;
+  width: 10px;
+  height: 10px;
+  background: var(--neon-cyan);
+  border-radius: 50%;
+  box-shadow: 0 0 12px var(--neon-cyan);
+}
+
+.awaiting-title {
+  font-family: var(--font-tech);
+  font-size: 14px;
+  font-weight: 800;
+  letter-spacing: 1.5px;
+  color: var(--neon-cyan);
+  margin-bottom: 6px;
+}
+
+.awaiting-subtitle {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 12px;
+}
+
+.awaiting-text {
+  font-size: 11.5px;
+  line-height: 1.6;
+  color: var(--text-muted);
+  max-width: 290px;
+  margin-bottom: 20px;
+}
+
+.awaiting-status-box {
+  width: 100%;
+  background: rgba(0, 0, 0, 0.35);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 6px;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.awaiting-status-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 11px;
+}
+
+.awaiting-status-label {
+  color: var(--text-muted);
+}
+
+.awaiting-status-val {
+  font-family: var(--font-mono);
+  font-weight: 700;
+}
+
+.awaiting-status-val.ready {
+  color: #4ade80;
+}
+
+.awaiting-status-val.done {
+  color: #94a3b8;
+}
+
+.awaiting-hint-tip {
+  font-size: 10.5px;
+  line-height: 1.5;
+  color: #64748b;
+  padding: 8px 12px;
+  background: rgba(100, 116, 139, 0.08);
+  border-radius: 6px;
+}

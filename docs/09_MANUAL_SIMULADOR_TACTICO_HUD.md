@@ -141,27 +141,29 @@ La barra superior flotante (`.battle-header-ribbon`) centraliza el control de se
 
 ## 5. Módulo 3: Columna Táctica Izquierda Unificada (`Left Command & Squad Panel`)
 
-Para maximizar la visibilidad vertical del mapa y evitar que los paneles obstaculicen la base de la pantalla, la versión **`v2.5.37`** unifica la inspección de tropas y la paleta de órdenes en una **columna táctica lateral izquierda** (`.left-squad-drawer`, ancho de $380\text{ px}$, `top: 112px`, `bottom: 16px`, `left: 14px`). Esta columna se sitúa inmediatamente debajo de la barra de capas (`Map / Grid / Coords`) y erradica por completo la barra inferior (`bottom-command-deck`), concediendo el 100% de la altura de pantalla al mapa táctico PixiJS.
+Para maximizar la visibilidad vertical del mapa y evitar que los paneles obstaculicen la base de la pantalla o colisionen entre sí, la versión **`v2.5.37`** unifica la inspección de tropas y la paleta de órdenes en una **columna táctica lateral izquierda limpia y desacoplada** (`.left-squad-drawer`, ancho de $380\text{ px}$, `top: 112px`, `bottom: 16px`, `left: 14px`). Esta columna se sitúa inmediatamente debajo de la barra de capas (`Map / Grid / Coords`) y erradica por completo la barra inferior (`bottom-command-deck` y `footer-squad-dock`), suprimiendo cualquier solapamiento visual y concediendo el 100% de la altura de pantalla al mapa táctico PixiJS.
 
 ```
 +-------------------------------------------------------------+
-| [← SQUADS]  UNIT ORDERS                          [● READY] ✕|
+| ⚡ UNIT ORDERS                                    [● READY] ✕|
 +-------------------------------------------------------------+
-| [Avatar]  US Ranger Assault Company                         |
-|           ID: US_RNG_1  Coords: (5, 3)  Side: US            |
-|           ❤️❤️❤️❤️  4/4 HP                                  |
-| [⏸ WAIT]  [💥 Mortar] [⚔️ Assault]                           |
+| [Avatar]  IT Breda MMG                                      |
+|           ID: IT_6  Coords: [C6]  Italy                     |
+|           Health: 100% (2 / 2 HP)                           |
+| [⏸ WAIT]  [🛡️ HMG]                                          |
 +-------------------------------------------------------------+
-| ⚡ AVAILABLE ACTIONS                                         |
-| [ALL (8)]  [🏃 MOVE (6)]  [🎯 FIRE (1)]  [💥 ASSAULT (1)]    |
+| ⚡ AVAILABLE ACTIONS                               Unit IT_6 |
+| [ALL (21)]  [🏃 MOVE (15)]  [🎯 FIRE (4)]  [💥 ASSAULT (1)]  |
 | +---------------------------------------------------------+ |
-| | 🎯 1. FIRE: Attack IT Bersaglieri at (6, 4)             | |
+| | 💥 ASSAULT                                         [C8] | |
 | +---------------------------------------------------------+ |
-| | 🏃 2. MOVE: Advance squad to (5, 4)                     | |
+| | 🎯 RANGED                                          [A8] | |
 | +---------------------------------------------------------+ |
-| | 💥 3. ASSAULT: Close combat with IT Squad at (5, 3)     | |
+| | 🏃 MOVE                                            [F5] | |
 | +---------------------------------------------------------+ |
-| [📋 Browse All Squads (7 Ready)                         ] |
+| | ⏸ WAIT                                        END TURN | |
+| +---------------------------------------------------------+ |
+| [✕ Deselect Unit [Esc]                                   ] |
 +-------------------------------------------------------------+
 ```
 

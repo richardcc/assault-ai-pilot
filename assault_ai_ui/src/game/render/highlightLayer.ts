@@ -9,6 +9,8 @@ export class HighlightLayer {
   constructor(world: PIXI.Container) {
     this.container = new PIXI.Container();
     this.container.zIndex = 1000;
+    this.container.eventMode = "none";
+    (this.container as any).interactiveChildren = false;
 
     world.addChild(this.container);
     world.sortableChildren = true;

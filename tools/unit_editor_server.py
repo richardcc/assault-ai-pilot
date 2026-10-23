@@ -22,6 +22,15 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, unquote, urlparse
 
+from assault_backend.services.scenario_editor_service import (
+    scenario_editor_service,
+    load_unit_catalog_dict,
+    load_map_piece_catalog_dict,
+    VALID_FORTIFICATIONS,
+    VALID_EXPERIENCES,
+    VALID_SIDES,
+)
+
 REPO_ROOT = Path(__file__).resolve().parent.parent
 CATALOG_PATH = REPO_ROOT / "assets" / "catalogs" / "unit_catalog.json"
 INVENTORY_PATH = REPO_ROOT / "assets" / "catalogs" / "unit_art_inventory.json"
@@ -129,7 +138,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>Assault - Tactical Unit & Formation Catalog Editor</title>
+  <title>Assault - Tactical Unit & Formation Catalog Editor | Assault - Tactical Scenario Editor</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <style>
     :root {
@@ -288,6 +297,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
     <nav class="nav-tabs">
       <button type="button" id="tab-nav-units" class="btn-nav active" onclick="switchView('units')">🎖️ Unit Catalog & Staging</button>
       <button type="button" id="tab-nav-formations" class="btn-nav" onclick="switchView('formations')">🛡️ Formation Catalog (OOB)</button>
+      <button type="button" id="tab-nav-scenarios" class="btn-nav" onclick="switchView('scenarios')">🗺️ Scenario Editor (Drafts & Publish)</button>
     </nav>
     <div id="unit-header-badges" style="display: flex; gap: 0.8rem; align-items: center;">
       <button type="button" class="btn-nav" style="padding: 0.25rem 0.6rem; font-size: 0.75rem;" onclick="loadData(0)" title="Reload catalog data">🔄 Reload</button>
@@ -296,6 +306,12 @@ HTML_TEMPLATE = """<!DOCTYPE html>
     </div>
     <div id="formation-header-badges" style="display: none; gap: 0.8rem; align-items: center;">
       <span id="formation-total-badge" class="badge badge-published">12 Formations</span>
+    </div>
+    <div id="scenario-header-badges" style="display: none; gap: 0.8rem; align-items: center;">
+      <span id="scenario-pub-badge" class="badge badge-published">0 Published</span>
+      <span id="scenario-draft-badge" class="badge badge-staged">0 Drafts</span>
+      <button type="button" class="btn-nav" style="padding: 0.25rem 0.6rem; font-size: 0.75rem; background: #0284c7; color: #fff;" onclick="openNewScenarioModal()">➕ New Draft</button>
+      <button type="button" class="btn-nav" style="padding: 0.25rem 0.6rem; font-size: 0.75rem; background: #059669; color: #fff;" onclick="publishCurrentScenario()">🚀 Publish to Engine</button>
     </div>
     <div style="display: flex; gap: 0.5rem; align-items: center; margin-left: auto;">
       <a href="http://127.0.0.1:8778/docs/" target="_blank" class="btn-cross-nav" style="border-color: #38bdf8; color: #38bdf8;" title="Assault Canonical Documentation Hub">📚 Docs Hub</a>
@@ -680,6 +696,240 @@ HTML_TEMPLATE = """<!DOCTYPE html>
     </div>
   </div>
 
+  <!-- VIEW 3: SCENARIO EDITOR (DRAFTS & PUBLISH) -->
+  <div id="view-scenarios" class="layout" style="display: none;">
+    <!-- Sidebar -->
+    <div class="sidebar">
+      <input type="text" id="search-scenarios" class="search-box" placeholder="Search scenarios (e.g. Mettete, Battaglia)..." oninput="filterScenarios()" />
+      <div class="status-filters">
+        <button type="button" id="filter-scen-all" class="filter-btn active" onclick="setScenarioStatusFilter('all')">All (<span id="count-scen-all">0</span>)</button>
+        <button type="button" id="filter-scen-draft" class="filter-btn filter-staged" onclick="setScenarioStatusFilter('draft')">⚡ Drafts (<span id="count-scen-draft">0</span>)</button>
+        <button type="button" id="filter-scen-published" class="filter-btn filter-published" onclick="setScenarioStatusFilter('published')">✓ Published (<span id="count-scen-published">0</span>)</button>
+      </div>
+      <button type="button" style="width: 100%; margin-bottom: 0.8rem; background: #0284c7; color: #fff; padding: 0.5rem; border-radius: 6px; font-weight: 700; border: none; cursor: pointer;" onclick="openNewScenarioModal()">
+        ➕ Create New Draft Scenario
+      </button>
+      <ul class="unit-list" id="scenarios-list"></ul>
+    </div>
+
+    <!-- Main Editor -->
+    <div class="main-editor">
+      <div id="scenario-banner" style="display: none; padding: 0.6rem 1rem; border-radius: 6px; margin-bottom: 0.6rem; font-size: 0.85rem;"></div>
+
+      <div class="card-tabs" style="margin-bottom: 0.6rem; border-bottom: 1px solid var(--card-border); padding-bottom: 0.4rem;">
+        <button type="button" class="btn-card-tab active" id="subtab-scen-map" onclick="switchScenarioSubTab('map')">🗺️ Map & Canvas</button>
+        <button type="button" class="btn-card-tab" id="subtab-scen-units" onclick="switchScenarioSubTab('units')">⚔️ Order of Battle (Units)</button>
+        <button type="button" class="btn-card-tab" id="subtab-scen-forts" onclick="switchScenarioSubTab('forts')">🛡️ Fortifications & VPs</button>
+        <button type="button" class="btn-card-tab" id="subtab-scen-rules" onclick="switchScenarioSubTab('rules')">⚙️ Rules & Morale</button>
+        <button type="button" class="btn-card-tab" id="subtab-scen-json" onclick="switchScenarioSubTab('json')">📄 Raw JSON & Live Validation</button>
+      </div>
+
+      <div style="flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 0.8rem;">
+        <!-- Subtab 1: Map Canvas -->
+        <div id="panel-scen-map" style="display: flex; flex-direction: column; gap: 0.8rem;">
+          <div style="position: relative; background: #080d1a; border: 1px solid var(--card-border); border-radius: 8px; overflow: hidden; height: 380px; display: flex; justify-content: center; align-items: center;">
+            <canvas id="hexCanvas" width="860" height="380" style="cursor: crosshair;"></canvas>
+            <div style="position: absolute; top: 10px; right: 10px; display: flex; gap: 0.4rem; background: rgba(15, 23, 42, 0.85); padding: 0.4rem; border-radius: 6px; border: 1px solid var(--card-border);">
+              <button type="button" class="btn-nav" style="padding: 0.2rem 0.5rem; font-size: 0.72rem;" onclick="zoomCanvas(1.15)">🔍+</button>
+              <button type="button" class="btn-nav" style="padding: 0.2rem 0.5rem; font-size: 0.72rem;" onclick="zoomCanvas(0.85)">🔍-</button>
+              <button type="button" class="btn-nav" style="padding: 0.2rem 0.5rem; font-size: 0.72rem;" onclick="resetCanvas()">↺ Reset</button>
+            </div>
+            <div id="hexTooltip" style="position: absolute; bottom: 10px; left: 10px; background: rgba(15, 23, 42, 0.9); border: 1px solid var(--card-border); padding: 0.4rem 0.7rem; border-radius: 6px; font-size: 0.78rem;">Hover over a hex to view details</div>
+          </div>
+
+          <div style="background: #0f172a; padding: 0.8rem; border-radius: 6px; border: 1px solid var(--card-border);">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.6rem;">
+              <span style="font-size: 0.85rem; font-weight: 700; color: #fff;">Map Pieces Layout</span>
+            </div>
+            <div style="display: flex; gap: 0.6rem; align-items: flex-end; margin-bottom: 0.6rem;">
+              <div style="flex: 2;" class="field-group">
+                <label>Select Piece</label>
+                <select id="selectMapPiece"></select>
+              </div>
+              <div style="flex: 1;" class="field-group">
+                <label>Origin Q</label>
+                <input type="number" id="pieceOriginQ" value="0">
+              </div>
+              <div style="flex: 1;" class="field-group">
+                <label>Origin R</label>
+                <input type="number" id="pieceOriginR" value="0">
+              </div>
+              <button type="button" class="btn-approve" style="padding: 0.4rem 0.8rem; font-size: 0.8rem;" onclick="addMapPiece()">Add Piece</button>
+            </div>
+            <table style="width: 100%; border-collapse: collapse; font-size: 0.8rem;">
+              <thead>
+                <tr style="background: #1e293b; color: #94a3b8;"><th style="padding: 0.4rem;">Piece ID</th><th style="padding: 0.4rem;">Origin [Q, R]</th><th style="padding: 0.4rem;">Actions</th></tr>
+              </thead>
+              <tbody id="mapPiecesTableBody"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Subtab 2: Units OOB -->
+        <div id="panel-scen-units" style="display: none; flex-direction: column; gap: 0.8rem;">
+          <div style="background: #0f172a; padding: 0.8rem; border-radius: 6px; border: 1px solid var(--card-border);">
+            <div style="font-size: 0.85rem; font-weight: 700; color: #fff; margin-bottom: 0.6rem;">Deploy Unit</div>
+            <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 0.6rem; margin-bottom: 0.6rem;">
+              <div class="field-group">
+                <label>Side</label>
+                <select id="newUnitSide" onchange="filterUnitCatalogOptions()">
+                  <option value="US">US Army</option>
+                  <option value="IT">Regio Esercito (IT)</option>
+                  <option value="GE">Wehrmacht (GE)</option>
+                  <option value="UK">British Army (UK)</option>
+                </select>
+              </div>
+              <div class="field-group">
+                <label>Unit Key</label>
+                <select id="newUnitKey"></select>
+              </div>
+              <div class="field-group">
+                <label>Unit ID</label>
+                <input type="text" id="newUnitId" placeholder="e.g. US_1">
+              </div>
+              <div class="field-group">
+                <label>Experience</label>
+                <select id="newUnitExp">
+                  <option value="REGULAR">REGULAR</option>
+                  <option value="HARDENED">HARDENED</option>
+                  <option value="VETERAN">VETERAN</option>
+                  <option value="RECRUIT">RECRUIT</option>
+                </select>
+              </div>
+            </div>
+            <div style="display: flex; gap: 0.6rem; align-items: flex-end;">
+              <div class="field-group" style="width: 110px;"><label>Hex Q</label><input type="number" id="newUnitQ" value="0"></div>
+              <div class="field-group" style="width: 110px;"><label>Hex R</label><input type="number" id="newUnitR" value="0"></div>
+              <button type="button" class="btn-approve" style="padding: 0.4rem 0.9rem; font-size: 0.8rem;" onclick="addScenarioUnit()">Deploy Unit</button>
+            </div>
+          </div>
+
+          <div style="background: #0f172a; padding: 0.8rem; border-radius: 6px; border: 1px solid var(--card-border);">
+            <div style="font-size: 0.85rem; font-weight: 700; color: #fff; margin-bottom: 0.6rem;">Deployed Units (<span id="unitCountLabel">0</span>)</div>
+            <table style="width: 100%; border-collapse: collapse; font-size: 0.8rem;">
+              <thead>
+                <tr style="background: #1e293b; color: #94a3b8;"><th style="padding: 0.4rem;">Side</th><th style="padding: 0.4rem;">ID</th><th style="padding: 0.4rem;">Unit Key</th><th style="padding: 0.4rem;">[Q, R]</th><th style="padding: 0.4rem;">Exp</th><th style="padding: 0.4rem;">Actions</th></tr>
+              </thead>
+              <tbody id="unitsTableBody"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Subtab 3: Fortifications & VPs -->
+        <div id="panel-scen-forts" style="display: none; flex-direction: column; gap: 0.8rem;">
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.8rem;">
+            <!-- Forts -->
+            <div style="background: #0f172a; padding: 0.8rem; border-radius: 6px; border: 1px solid var(--card-border);">
+              <div style="font-size: 0.85rem; font-weight: 700; color: #fff; margin-bottom: 0.6rem;">Place Fortification</div>
+              <div class="field-group" style="margin-bottom: 0.4rem;"><label>Type</label><select id="fortType"></select></div>
+              <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.4rem; margin-bottom: 0.4rem;">
+                <div class="field-group"><label>Q</label><input type="number" id="fortQ" value="0"></div>
+                <div class="field-group"><label>R</label><input type="number" id="fortR" value="0"></div>
+                <div class="field-group"><label>Orient</label><input type="number" id="fortOrient" value="4" min="1" max="6"></div>
+              </div>
+              <button type="button" class="btn-approve" style="padding: 0.4rem 0.8rem; font-size: 0.8rem;" onclick="addScenarioFort()">Place Fortification</button>
+              <table style="width: 100%; border-collapse: collapse; font-size: 0.78rem; margin-top: 0.6rem;">
+                <thead><tr style="background: #1e293b; color: #94a3b8;"><th style="padding: 0.3rem;">Type</th><th style="padding: 0.3rem;">[Q, R]</th><th style="padding: 0.3rem;">Actions</th></tr></thead>
+                <tbody id="fortsTableBody"></tbody>
+              </table>
+            </div>
+            <!-- VPs -->
+            <div style="background: #0f172a; padding: 0.8rem; border-radius: 6px; border: 1px solid var(--card-border);">
+              <div style="font-size: 0.85rem; font-weight: 700; color: #fff; margin-bottom: 0.6rem;">Victory Points</div>
+              <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 0.4rem; margin-bottom: 0.4rem;">
+                <div class="field-group"><label>Q</label><input type="number" id="newVpQ" value="0"></div>
+                <div class="field-group"><label>R</label><input type="number" id="newVpR" value="0"></div>
+                <div class="field-group"><label>Owner</label><select id="newVpOwner"><option value="IT">IT</option><option value="US">US</option><option value="GE">GE</option><option value="UK">UK</option></select></div>
+                <div class="field-group"><label>Value</label><input type="number" id="newVpValue" value="2"></div>
+              </div>
+              <button type="button" class="btn-approve" style="padding: 0.4rem 0.8rem; font-size: 0.8rem;" onclick="addScenarioVp()">Place VP Hex</button>
+              <table style="width: 100%; border-collapse: collapse; font-size: 0.78rem; margin-top: 0.6rem;">
+                <thead><tr style="background: #1e293b; color: #94a3b8;"><th style="padding: 0.3rem;">[Q, R]</th><th style="padding: 0.3rem;">Owner</th><th style="padding: 0.3rem;">VP</th><th style="padding: 0.3rem;">Actions</th></tr></thead>
+                <tbody id="vpsTableBody"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <!-- Subtab 4: Rules & Morale -->
+        <div id="panel-scen-rules" style="display: none; flex-direction: column; gap: 0.8rem;">
+          <div style="background: #0f172a; padding: 0.8rem; border-radius: 6px; border: 1px solid var(--card-border); display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.6rem;">
+            <div class="field-group"><label>Scenario ID</label><input type="text" id="metaId" disabled></div>
+            <div class="field-group"><label>Title / Name</label><input type="text" id="metaName"></div>
+            <div class="field-group"><label>Max Turns</label><input type="number" id="metaMaxTurns" value="8" min="1" max="30"></div>
+          </div>
+          <div class="field-group"><label>Description</label><textarea id="metaDescription" rows="2" style="padding: 0.4rem; background: #0f172a; border: 1px solid var(--card-border); color: #fff; border-radius: 6px;"></textarea></div>
+          <div style="background: #0f172a; padding: 0.8rem; border-radius: 6px; border: 1px solid var(--card-border); display: grid; grid-template-columns: 1fr 1fr; gap: 0.8rem;">
+            <div style="border: 1px solid var(--card-border); padding: 0.6rem; border-radius: 6px;">
+              <span style="font-size: 0.8rem; font-weight: 700; color: #86efac;">Allied Morale (US / UK)</span>
+              <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 0.4rem; margin-top: 0.4rem;">
+                <div class="field-group"><label>Start</label><input type="number" id="morUsStart" value="3"></div>
+                <div class="field-group"><label>Retreat</label><input type="number" id="morUsRetreat" value="7"></div>
+                <div class="field-group"><label>Rout</label><input type="number" id="morUsRout" value="9"></div>
+                <div class="field-group"><label>Surrender</label><input type="number" id="morUsSurrender" value="11"></div>
+              </div>
+            </div>
+            <div style="border: 1px solid var(--card-border); padding: 0.6rem; border-radius: 6px;">
+              <span style="font-size: 0.8rem; font-weight: 700; color: #7dd3fc;">Axis Morale (IT / GE)</span>
+              <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 0.4rem; margin-top: 0.4rem;">
+                <div class="field-group"><label>Start</label><input type="number" id="morItStart" value="2"></div>
+                <div class="field-group"><label>Retreat</label><input type="number" id="morItRetreat" value="6"></div>
+                <div class="field-group"><label>Rout</label><input type="number" id="morItRout" value="7"></div>
+                <div class="field-group"><label>Surrender</label><input type="number" id="morItSurrender" value="9"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Subtab 5: Raw JSON -->
+        <div id="panel-scen-json" style="display: none; flex-direction: column; gap: 0.6rem;">
+          <div style="display: flex; gap: 0.5rem; justify-content: flex-end;">
+            <button type="button" class="btn-secondary" onclick="formatScenarioJson()">Format JSON</button>
+            <button type="button" class="btn-approve" onclick="applyScenarioJson()">Apply to Form</button>
+          </div>
+          <textarea id="rawScenarioJson" style="height: 380px; font-family: monospace; font-size: 0.82rem; background: #0f172a; border: 1px solid var(--card-border); border-radius: 6px; color: #fff; padding: 0.6rem;" spellcheck="false"></textarea>
+        </div>
+      </div>
+
+      <!-- Action Buttons Bar -->
+      <div class="actions-bar" style="margin-top: 0.6rem; padding-top: 0.6rem; border-top: 1px solid var(--card-border); display: flex; gap: 0.6rem; justify-content: flex-end;">
+        <button type="button" class="btn-secondary" onclick="cloneCurrentScenario()">📋 Duplicate as Draft</button>
+        <button type="button" class="btn-danger" id="btn-delete-scenario" onclick="deleteCurrentScenarioDraft()" style="display: none;">🗑️ Delete Draft</button>
+        <button type="button" class="btn-secondary" style="border-color: #f59e0b; color: #fde047;" onclick="validateScenarioDraft()">✔️ Validate</button>
+        <button type="button" class="btn-approve" onclick="saveCurrentScenarioDraft()">💾 Save Draft (Ctrl+S)</button>
+        <button type="button" class="btn-approve" style="background: #059669; border-color: #34d399;" onclick="publishCurrentScenario()">🚀 Publish to Engine</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal: Create New Draft Scenario -->
+  <div class="modal-overlay" id="newScenarioModal" style="display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.7); backdrop-filter: blur(3px); z-index: 100; justify-content: center; align-items: center;">
+    <div style="background: #1e293b; border: 1px solid var(--card-border); border-radius: 8px; padding: 1.2rem; width: 480px; max-width: 90vw; display: flex; flex-direction: column; gap: 0.8rem;">
+      <div style="display: flex; justify-content: space-between; align-items: center;">
+        <h3 style="color: #fff; font-size: 1rem;">Create New Scenario Draft</h3>
+        <button type="button" class="btn-secondary" style="padding: 0.2rem 0.5rem;" onclick="closeNewScenarioModal()">✕</button>
+      </div>
+      <div class="field-group">
+        <label>New Scenario ID</label>
+        <input type="text" id="modalScenarioId" placeholder="e.g. draft_beach_assault_01">
+      </div>
+      <div class="field-group">
+        <label>Scenario Title</label>
+        <input type="text" id="modalScenarioName" placeholder="e.g. Beach Assault on Gela Sector">
+      </div>
+      <div class="field-group">
+        <label>Base Template / Clone</label>
+        <select id="modalScenarioBase">
+          <option value="">Empty Standard Template (1 Map Piece, 2 Units)</option>
+        </select>
+      </div>
+      <div style="display: flex; justify-content: flex-end; gap: 0.6rem; margin-top: 0.4rem;">
+        <button type="button" class="btn-secondary" onclick="closeNewScenarioModal()">Cancel</button>
+        <button type="button" class="btn-approve" onclick="submitCreateScenarioDraft()">Create Draft</button>
+      </div>
+    </div>
+  </div>
+
   <div id="notif" class="notification">Action completed successfully.</div>
 
   <script>
@@ -819,27 +1069,653 @@ HTML_TEMPLATE = """<!DOCTYPE html>
     function switchView(viewName) {
       const tabUnits = document.getElementById('tab-nav-units');
       const tabFormations = document.getElementById('tab-nav-formations');
+      const tabScenarios = document.getElementById('tab-nav-scenarios');
       const viewUnits = document.getElementById('view-units');
       const viewFormations = document.getElementById('view-formations');
+      const viewScenarios = document.getElementById('view-scenarios');
       const unitBadges = document.getElementById('unit-header-badges');
       const formBadges = document.getElementById('formation-header-badges');
+      const scenarioBadges = document.getElementById('scenario-header-badges');
+
+      [tabUnits, tabFormations, tabScenarios].forEach(t => t && t.classList.remove('active'));
+      [viewUnits, viewFormations, viewScenarios].forEach(v => { if (v) v.style.display = 'none'; });
+      [unitBadges, formBadges, scenarioBadges].forEach(b => { if (b) b.style.display = 'none'; });
 
       if (viewName === 'units') {
         tabUnits.classList.add('active');
-        tabFormations.classList.remove('active');
         viewUnits.style.display = 'grid';
-        viewFormations.style.display = 'none';
         unitBadges.style.display = 'flex';
-        formBadges.style.display = 'none';
-      } else {
-        tabUnits.classList.remove('active');
+      } else if (viewName === 'formations') {
         tabFormations.classList.add('active');
-        viewUnits.style.display = 'none';
         viewFormations.style.display = 'grid';
-        unitBadges.style.display = 'none';
         formBadges.style.display = 'flex';
         renderFormationSidebar();
+      } else if (viewName === 'scenarios') {
+        tabScenarios.classList.add('active');
+        viewScenarios.style.display = 'grid';
+        scenarioBadges.style.display = 'flex';
+        loadScenariosData();
       }
+    }
+
+    // --- SCENARIO EDITOR STATE & FUNCTIONS ---
+    let scenariosList = [];
+    let currentScenarioData = null;
+    let scenarioStatusFilter = 'all';
+    let canvasZoom = 20;
+    let canvasOffsetX = 60;
+    let canvasOffsetY = 50;
+    let isCanvasDragging = false;
+    let canvasDragStartX = 0;
+    let canvasDragStartY = 0;
+
+    async function loadScenariosData() {
+      try {
+        const res = await fetch('/api/scenarios');
+        const data = await res.json();
+        scenariosList = data.scenarios || [];
+        renderScenarioSidebar();
+        updateScenarioBadges();
+
+        const modalBase = document.getElementById('modalScenarioBase');
+        if (modalBase) {
+          modalBase.innerHTML = '<option value="">Empty Standard Template (1 Map Piece, 2 Units)</option>' +
+            scenariosList.map(s => `<option value="${s.id}">Clone: [${s.status.toUpperCase()}] ${s.name} (${s.id})</option>`).join('');
+        }
+
+        loadScenarioCatalogs();
+        setupScenarioCanvas();
+
+        if (!currentScenarioData && scenariosList.length > 0) {
+          selectScenarioById(scenariosList[0].id);
+        }
+      } catch (err) {
+        console.error('Failed to load scenarios:', err);
+      }
+    }
+
+    async function loadScenarioCatalogs() {
+      try {
+        const res = await fetch('/api/catalogs');
+        const cat = await res.json();
+        const pieceSel = document.getElementById('selectMapPiece');
+        if (pieceSel && cat.map_pieces) {
+          pieceSel.innerHTML = cat.map_pieces.map(p => `<option value="${p.id}">${p.id} - ${p.name}</option>`).join('');
+        }
+        const fortSel = document.getElementById('fortType');
+        if (fortSel && cat.fortifications) {
+          fortSel.innerHTML = cat.fortifications.map(f => `<option value="${f}">${f.replace('_', ' ').toUpperCase()}</option>`).join('');
+        }
+        filterUnitCatalogOptions();
+      } catch (e) {
+        console.error('Error loading scenario catalogs:', e);
+      }
+    }
+
+    function updateScenarioBadges() {
+      const pubCount = scenariosList.filter(s => s.status === 'published').length;
+      const draftCount = scenariosList.filter(s => s.status === 'draft').length;
+      const countAll = document.getElementById('count-scen-all');
+      const countPub = document.getElementById('count-scen-published');
+      const countDraft = document.getElementById('count-scen-draft');
+      const badgePub = document.getElementById('scenario-pub-badge');
+      const badgeDraft = document.getElementById('scenario-draft-badge');
+      if (countAll) countAll.textContent = scenariosList.length;
+      if (countPub) countPub.textContent = pubCount;
+      if (countDraft) countDraft.textContent = draftCount;
+      if (badgePub) badgePub.textContent = `${pubCount} Published`;
+      if (badgeDraft) badgeDraft.textContent = `${draftCount} Drafts`;
+    }
+
+    function setScenarioStatusFilter(status) {
+      scenarioStatusFilter = status;
+      ['all', 'draft', 'published'].forEach(s => {
+        const btn = document.getElementById('filter-scen-' + s);
+        if (btn) btn.classList.toggle('active', s === status);
+      });
+      renderScenarioSidebar();
+    }
+
+    function filterScenarios() {
+      renderScenarioSidebar();
+    }
+
+    function renderScenarioSidebar() {
+      const container = document.getElementById('scenarios-list');
+      if (!container) return;
+      const search = (document.getElementById('search-scenarios')?.value || '').toLowerCase();
+
+      const filtered = scenariosList.filter(s => {
+        if (scenarioStatusFilter === 'draft' && s.status !== 'draft') return false;
+        if (scenarioStatusFilter === 'published' && s.status !== 'published') return false;
+        if (search && !s.name.toLowerCase().includes(search) && !s.id.toLowerCase().includes(search)) return false;
+        return true;
+      });
+
+      container.innerHTML = filtered.map(s => {
+        const isActive = currentScenarioData && currentScenarioData.id === s.id;
+        const badgeCls = s.status === 'published' ? 'badge-published' : 'badge-staged';
+        return `
+          <li class="unit-item ${isActive ? 'active' : ''}" onclick="selectScenarioById('${s.id}')">
+            <div>
+              <div class="name">${s.name}</div>
+              <div class="meta">${s.id} &bull; ${s.max_turns} turns &bull; ${s.unit_count} units &bull; ${s.vp_count} VPs</div>
+            </div>
+            <span class="badge ${badgeCls}">${s.status}</span>
+          </li>
+        `;
+      }).join('');
+    }
+
+    async function selectScenarioById(scenId) {
+      try {
+        const res = await fetch('/api/scenarios/' + scenId);
+        const data = await res.json();
+        currentScenarioData = data.scenario;
+        populateScenarioForm();
+        renderScenarioSidebar();
+        drawScenarioCanvas();
+      } catch (e) {
+        console.error('Failed to load scenario:', e);
+      }
+    }
+
+    function populateScenarioForm() {
+      if (!currentScenarioData) return;
+
+      const btnDel = document.getElementById('btn-delete-scenario');
+      if (btnDel) btnDel.style.display = currentScenarioData.status === 'draft' ? 'inline-flex' : 'none';
+
+      document.getElementById('metaId').value = currentScenarioData.id || '';
+      document.getElementById('metaName').value = currentScenarioData.name || currentScenarioData.id || '';
+      document.getElementById('metaMaxTurns').value = currentScenarioData.max_turns || 8;
+      document.getElementById('metaDescription').value = currentScenarioData.description || '';
+
+      const mor = currentScenarioData.morale_track || {};
+      const usMor = mor.US || { start: 3, retreat: 7, rout: 9, surrender: 11 };
+      const itMor = mor.IT || { start: 2, retreat: 6, rout: 7, surrender: 9 };
+      document.getElementById('morUsStart').value = usMor.start || 3;
+      document.getElementById('morUsRetreat').value = usMor.retreat || 7;
+      document.getElementById('morUsRout').value = usMor.rout || 9;
+      document.getElementById('morUsSurrender').value = usMor.surrender || 11;
+      document.getElementById('morItStart').value = itMor.start || 2;
+      document.getElementById('morItRetreat').value = itMor.retreat || 6;
+      document.getElementById('morItRout').value = itMor.rout || 7;
+      document.getElementById('morItSurrender').value = itMor.surrender || 9;
+
+      renderScenarioMapPieces();
+      renderScenarioUnits();
+      renderScenarioFortsAndVps();
+      document.getElementById('rawScenarioJson').value = JSON.stringify(currentScenarioData, null, 2);
+    }
+
+    function switchScenarioSubTab(tab) {
+      ['map', 'units', 'forts', 'rules', 'json'].forEach(t => {
+        const btn = document.getElementById('subtab-scen-' + t);
+        const panel = document.getElementById('panel-scen-' + t);
+        if (btn) btn.classList.toggle('active', t === tab);
+        if (panel) panel.style.display = t === tab ? 'flex' : 'none';
+      });
+      if (tab === 'map') drawScenarioCanvas();
+      if (tab === 'json') {
+        syncScenarioFormToState();
+        document.getElementById('rawScenarioJson').value = JSON.stringify(currentScenarioData, null, 2);
+      }
+    }
+
+    function syncScenarioFormToState() {
+      if (!currentScenarioData) return;
+      currentScenarioData.name = document.getElementById('metaName').value;
+      currentScenarioData.max_turns = parseInt(document.getElementById('metaMaxTurns').value, 10) || 8;
+      currentScenarioData.description = document.getElementById('metaDescription').value;
+      currentScenarioData.morale_track = {
+        US: {
+          start: parseInt(document.getElementById('morUsStart').value, 10) || 3,
+          retreat: parseInt(document.getElementById('morUsRetreat').value, 10) || 7,
+          rout: parseInt(document.getElementById('morUsRout').value, 10) || 9,
+          surrender: parseInt(document.getElementById('morUsSurrender').value, 10) || 11,
+        },
+        IT: {
+          start: parseInt(document.getElementById('morItStart').value, 10) || 2,
+          retreat: parseInt(document.getElementById('morItRetreat').value, 10) || 6,
+          rout: parseInt(document.getElementById('morItRout').value, 10) || 7,
+          surrender: parseInt(document.getElementById('morItSurrender').value, 10) || 9,
+        }
+      };
+    }
+
+    function renderScenarioMapPieces() {
+      const tbody = document.getElementById('mapPiecesTableBody');
+      if (!tbody) return;
+      const pieces = currentScenarioData.map?.pieces || [];
+      tbody.innerHTML = pieces.map((p, idx) => `
+        <tr style="border-bottom: 1px solid var(--card-border);">
+          <td style="padding: 0.35rem;"><strong>${p.id}</strong></td>
+          <td style="padding: 0.35rem;">[${p.origin ? p.origin[0] : 0}, ${p.origin ? p.origin[1] : 0}]</td>
+          <td style="padding: 0.35rem;"><button type="button" class="btn-danger" style="padding: 0.2rem 0.5rem; font-size: 0.72rem;" onclick="removeScenarioMapPiece(${idx})">✕</button></td>
+        </tr>
+      `).join('');
+    }
+
+    function addMapPiece() {
+      const pid = document.getElementById('selectMapPiece').value;
+      const q = parseInt(document.getElementById('pieceOriginQ').value, 10) || 0;
+      const r = parseInt(document.getElementById('pieceOriginR').value, 10) || 0;
+      if (!currentScenarioData.map) currentScenarioData.map = { pieces: [], fortifications: [] };
+      if (!currentScenarioData.map.pieces) currentScenarioData.map.pieces = [];
+      currentScenarioData.map.pieces.push({ id: pid, origin: [q, r] });
+      renderScenarioMapPieces();
+      drawScenarioCanvas();
+    }
+
+    function removeScenarioMapPiece(idx) {
+      currentScenarioData.map.pieces.splice(idx, 1);
+      renderScenarioMapPieces();
+      drawScenarioCanvas();
+    }
+
+    function filterUnitCatalogOptions() {
+      const side = document.getElementById('newUnitSide')?.value || 'US';
+      const sel = document.getElementById('newUnitKey');
+      if (!sel) return;
+      const keys = Object.keys(catalog).length > 0 ? Object.keys(catalog) : [];
+      const opts = keys.filter(k => k.startsWith(side + '_') || !k.includes('_'));
+      sel.innerHTML = opts.map(k => `<option value="${k}">${k}</option>`).join('');
+    }
+
+    function renderScenarioUnits() {
+      const tbody = document.getElementById('unitsTableBody');
+      if (!tbody) return;
+      const units = currentScenarioData.units || [];
+      document.getElementById('unitCountLabel').textContent = units.length;
+      tbody.innerHTML = units.map((u, idx) => `
+        <tr style="border-bottom: 1px solid var(--card-border);">
+          <td style="padding: 0.35rem;"><span class="badge" style="background: #1e293b; color: #fff;">${u.side}</span></td>
+          <td style="padding: 0.35rem;"><strong>${u.unit_id}</strong></td>
+          <td style="padding: 0.35rem;">${u.unit_key}</td>
+          <td style="padding: 0.35rem;">[${u.position[0]}, ${u.position[1]}]</td>
+          <td style="padding: 0.35rem;">${u.experience}</td>
+          <td style="padding: 0.35rem;"><button type="button" class="btn-danger" style="padding: 0.2rem 0.5rem; font-size: 0.72rem;" onclick="removeScenarioUnit(${idx})">✕</button></td>
+        </tr>
+      `).join('');
+    }
+
+    function addScenarioUnit() {
+      const side = document.getElementById('newUnitSide').value;
+      const key = document.getElementById('newUnitKey').value;
+      let uid = document.getElementById('newUnitId').value.trim();
+      const exp = document.getElementById('newUnitExp').value;
+      const q = parseInt(document.getElementById('newUnitQ').value, 10) || 0;
+      const r = parseInt(document.getElementById('newUnitR').value, 10) || 0;
+      if (!uid) {
+        const count = (currentScenarioData.units || []).filter(u => u.side === side).length + 1;
+        uid = `${side}_${count}`;
+      }
+      if (!currentScenarioData.units) currentScenarioData.units = [];
+      currentScenarioData.units.push({ unit_id: uid, side: side, unit_key: key, position: [q, r], experience: exp });
+      renderScenarioUnits();
+      drawScenarioCanvas();
+      showNotif(`Unit ${uid} deployed at [${q}, ${r}]`);
+    }
+
+    function removeScenarioUnit(idx) {
+      currentScenarioData.units.splice(idx, 1);
+      renderScenarioUnits();
+      drawScenarioCanvas();
+    }
+
+    function renderScenarioFortsAndVps() {
+      const fortBody = document.getElementById('fortsTableBody');
+      const forts = currentScenarioData.map?.fortifications || [];
+      if (fortBody) {
+        fortBody.innerHTML = forts.map((f, idx) => `
+          <tr style="border-bottom: 1px solid var(--card-border);"><td style="padding: 0.3rem;">${f.type}</td><td style="padding: 0.3rem;">[${f.q}, ${f.r}]</td><td style="padding: 0.3rem;"><button type="button" class="btn-danger" style="padding: 0.15rem 0.4rem; font-size: 0.7rem;" onclick="removeScenarioFort(${idx})">✕</button></td></tr>
+        `).join('');
+      }
+
+      const vpBody = document.getElementById('vpsTableBody');
+      const vps = currentScenarioData.vp?.hexes || [];
+      if (vpBody) {
+        vpBody.innerHTML = vps.map((v, idx) => `
+          <tr style="border-bottom: 1px solid var(--card-border);"><td style="padding: 0.3rem;">[${v.q}, ${v.r}]</td><td style="padding: 0.3rem;">${v.initial_owner}</td><td style="padding: 0.3rem;">${v.value || 2}</td><td style="padding: 0.3rem;"><button type="button" class="btn-danger" style="padding: 0.15rem 0.4rem; font-size: 0.7rem;" onclick="removeScenarioVp(${idx})">✕</button></td></tr>
+        `).join('');
+      }
+    }
+
+    function addScenarioFort() {
+      const type = document.getElementById('fortType').value;
+      const q = parseInt(document.getElementById('fortQ').value, 10) || 0;
+      const r = parseInt(document.getElementById('fortR').value, 10) || 0;
+      const orient = parseInt(document.getElementById('fortOrient').value, 10) || 4;
+      if (!currentScenarioData.map) currentScenarioData.map = { pieces: [], fortifications: [] };
+      if (!currentScenarioData.map.fortifications) currentScenarioData.map.fortifications = [];
+      currentScenarioData.map.fortifications.push({ type: type, q: q, r: r, orientation: orient, vertex_start: 1, vertex_end: 2 });
+      renderScenarioFortsAndVps();
+      drawScenarioCanvas();
+    }
+
+    function removeScenarioFort(idx) {
+      currentScenarioData.map.fortifications.splice(idx, 1);
+      renderScenarioFortsAndVps();
+      drawScenarioCanvas();
+    }
+
+    function addScenarioVp() {
+      const q = parseInt(document.getElementById('newVpQ').value, 10) || 0;
+      const r = parseInt(document.getElementById('newVpR').value, 10) || 0;
+      const owner = document.getElementById('newVpOwner').value;
+      const val = parseInt(document.getElementById('newVpValue').value, 10) || 2;
+      if (!currentScenarioData.vp) currentScenarioData.vp = { value_per_hex: 2, hexes: [] };
+      if (!currentScenarioData.vp.hexes) currentScenarioData.vp.hexes = [];
+      currentScenarioData.vp.hexes.push({ q: q, r: r, initial_owner: owner, value: val });
+      renderScenarioFortsAndVps();
+      drawScenarioCanvas();
+    }
+
+    function removeScenarioVp(idx) {
+      currentScenarioData.vp.hexes.splice(idx, 1);
+      renderScenarioFortsAndVps();
+      drawScenarioCanvas();
+    }
+
+    async function saveCurrentScenarioDraft() {
+      if (!currentScenarioData) return;
+      syncScenarioFormToState();
+      try {
+        const res = await fetch('/api/scenarios/draft/' + currentScenarioData.id, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ data: currentScenarioData })
+        });
+        const resData = await res.json();
+        if (!res.ok) throw new Error(resData.detail || 'Save failed');
+        currentScenarioData = resData.scenario;
+        populateScenarioForm();
+        await loadScenariosData();
+        showNotif(`Draft '${currentScenarioData.id}' saved successfully.`);
+      } catch (err) {
+        alert('Error saving draft: ' + err.message);
+      }
+    }
+
+    async function validateScenarioDraft() {
+      syncScenarioFormToState();
+      try {
+        const res = await fetch('/api/scenarios/validate', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ data: currentScenarioData })
+        });
+        const resData = await res.json();
+        if (resData.valid) {
+          alert('Scenario is 100% valid! Ready to publish to engine.');
+        } else {
+          alert('Validation failed: ' + resData.errors.join('; '));
+        }
+      } catch (e) {
+        alert('Validation error: ' + e.message);
+      }
+    }
+
+    async function publishCurrentScenario() {
+      if (!currentScenarioData) return;
+      syncScenarioFormToState();
+      await saveCurrentScenarioDraft();
+      if (!confirm(`Publish draft '${currentScenarioData.id}' to canonical assets/scenarios/ ?`)) return;
+
+      try {
+        const res = await fetch(`/api/scenarios/draft/${currentScenarioData.id}/publish`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' }
+        });
+        const resData = await res.json();
+        if (!res.ok) throw new Error(resData.detail || 'Publish failed');
+        await loadScenariosData();
+        selectScenarioById(resData.id);
+        showNotif(`🚀 Scenario '${resData.id}' published successfully!`);
+      } catch (err) {
+        alert('Failed to publish: ' + err.message);
+      }
+    }
+
+    async function deleteCurrentScenarioDraft() {
+      if (!currentScenarioData || currentScenarioData.status !== 'draft') return;
+      if (!confirm(`Delete draft '${currentScenarioData.id}' permanently?`)) return;
+      try {
+        const res = await fetch(`/api/scenarios/draft/${currentScenarioData.id}`, { method: 'DELETE' });
+        if (!res.ok) throw new Error('Delete failed');
+        currentScenarioData = null;
+        await loadScenariosData();
+        showNotif('Draft scenario deleted.');
+      } catch (err) {
+        alert('Error: ' + err.message);
+      }
+    }
+
+    function cloneCurrentScenario() {
+      if (!currentScenarioData) return;
+      const cloneId = prompt(`New scenario ID to clone '${currentScenarioData.id}':`, `${currentScenarioData.id}_clone`);
+      if (!cloneId) return;
+      openNewScenarioModal(cloneId, `Clone of ${currentScenarioData.name || currentScenarioData.id}`, currentScenarioData.id);
+    }
+
+    function openNewScenarioModal(defId = '', defName = '', defBase = '') {
+      document.getElementById('modalScenarioId').value = defId || `draft_scenario_${Date.now().toString().slice(-4)}`;
+      document.getElementById('modalScenarioName').value = defName || 'New Tactical Scenario';
+      if (defBase) document.getElementById('modalScenarioBase').value = defBase;
+      document.getElementById('newScenarioModal').style.display = 'flex';
+    }
+
+    function closeNewScenarioModal() {
+      document.getElementById('newScenarioModal').style.display = 'none';
+    }
+
+    async function submitCreateScenarioDraft() {
+      const id = document.getElementById('modalScenarioId').value.trim();
+      const name = document.getElementById('modalScenarioName').value.trim();
+      const base = document.getElementById('modalScenarioBase').value;
+      if (!id) return alert('Enter a scenario ID');
+      try {
+        const res = await fetch('/api/scenarios/draft', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ id: id, name: name, clone_from_id: base || null })
+        });
+        const resData = await res.json();
+        if (!res.ok) throw new Error(resData.detail || 'Creation failed');
+        closeNewScenarioModal();
+        await loadScenariosData();
+        selectScenarioById(id);
+        showNotif(`Draft '${id}' created!`);
+      } catch (err) {
+        alert('Failed to create draft: ' + err.message);
+      }
+    }
+
+    function formatScenarioJson() {
+      try {
+        const ta = document.getElementById('rawScenarioJson');
+        ta.value = JSON.stringify(JSON.parse(ta.value), null, 2);
+      } catch (e) { alert('Invalid JSON: ' + e.message); }
+    }
+
+    function applyScenarioJson() {
+      try {
+        const ta = document.getElementById('rawScenarioJson');
+        currentScenarioData = JSON.parse(ta.value);
+        populateScenarioForm();
+        drawScenarioCanvas();
+        showNotif('JSON applied to editor forms.');
+      } catch (e) { alert('Invalid JSON: ' + e.message); }
+    }
+
+    // Hex Canvas
+    function setupScenarioCanvas() {
+      const canvas = document.getElementById('hexCanvas');
+      if (!canvas || canvas._setupDone) return;
+      canvas._setupDone = true;
+
+      canvas.addEventListener('mousedown', (e) => {
+        isCanvasDragging = true;
+        canvasDragStartX = e.clientX - canvasOffsetX;
+        canvasDragStartY = e.clientY - canvasOffsetY;
+      });
+      window.addEventListener('mouseup', () => { isCanvasDragging = false; });
+      canvas.addEventListener('mousemove', (e) => {
+        if (isCanvasDragging) {
+          canvasOffsetX = e.clientX - canvasDragStartX;
+          canvasOffsetY = e.clientY - canvasDragStartY;
+          drawScenarioCanvas();
+        } else {
+          handleScenarioCanvasHover(e);
+        }
+      });
+      canvas.addEventListener('wheel', (e) => {
+        e.preventDefault();
+        zoomCanvas(e.deltaY < 0 ? 1.15 : 0.85);
+      });
+      canvas.addEventListener('click', (e) => {
+        const rect = e.target.getBoundingClientRect();
+        const hex = pixelToHex(e.clientX - rect.left, e.clientY - rect.top);
+        document.getElementById('newUnitQ').value = hex.q;
+        document.getElementById('newUnitR').value = hex.r;
+        document.getElementById('fortQ').value = hex.q;
+        document.getElementById('fortR').value = hex.r;
+        document.getElementById('newVpQ').value = hex.q;
+        document.getElementById('newVpR').value = hex.r;
+      });
+    }
+
+    function zoomCanvas(factor) {
+      canvasZoom = Math.max(12, Math.min(60, canvasZoom * factor));
+      drawScenarioCanvas();
+    }
+
+    function resetCanvas() {
+      canvasZoom = 20;
+      canvasOffsetX = 60;
+      canvasOffsetY = 50;
+      drawScenarioCanvas();
+    }
+
+    function hexToPixel(q, r) {
+      const size = canvasZoom;
+      const x = size * (Math.sqrt(3) * q + Math.sqrt(3)/2 * r) + canvasOffsetX;
+      const y = size * (3/2 * r) + canvasOffsetY;
+      return { x, y };
+    }
+
+    function pixelToHex(x, y) {
+      const size = canvasZoom;
+      const px = x - canvasOffsetX;
+      const py = y - canvasOffsetY;
+      const q = (Math.sqrt(3)/3 * px - 1/3 * py) / size;
+      const r = (2/3 * py) / size;
+      let xg = Math.round(q);
+      let yg = Math.round(r);
+      const q_rem = q - xg;
+      const r_rem = r - yg;
+      const dx = Math.round(q_rem + 0.5 * r_rem) * (q_rem*q_rem >= r_rem*r_rem ? 1 : 0);
+      const dy = Math.round(r_rem + 0.5 * q_rem) * (q_rem*q_rem < r_rem*r_rem ? 1 : 0);
+      return { q: xg + dx, r: yg + dy };
+    }
+
+    function drawScenarioCanvas() {
+      const canvas = document.getElementById('hexCanvas');
+      if (!canvas) return;
+      const ctx = canvas.getContext('2d');
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      if (!currentScenarioData) return;
+
+      const shape = currentScenarioData.shape || [18, 12];
+      const maxQ = shape[0] || 18;
+      const maxR = shape[1] || 12;
+
+      for (let r = 0; r < maxR; r++) {
+        for (let q = 0; q < maxQ; q++) {
+          drawHexCell(ctx, q, r, '#1e293b', '#0f172a');
+        }
+      }
+
+      (currentScenarioData.map?.fortifications || []).forEach(f => {
+        const pt = hexToPixel(f.q, f.r);
+        ctx.fillStyle = '#f59e0b';
+        ctx.beginPath();
+        ctx.arc(pt.x, pt.y - canvasZoom*0.35, canvasZoom*0.2, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = '#000';
+        ctx.font = '8px sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText('🛡️', pt.x, pt.y - canvasZoom*0.25);
+      });
+
+      (currentScenarioData.vp?.hexes || []).forEach(v => {
+        const pt = hexToPixel(v.q, v.r);
+        ctx.fillStyle = v.initial_owner === 'US' ? '#22c55e' : (v.initial_owner === 'IT' ? '#38bdf8' : '#eab308');
+        ctx.beginPath();
+        ctx.arc(pt.x, pt.y + canvasZoom*0.35, canvasZoom*0.22, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = '#000';
+        ctx.font = 'bold 9px sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText(`★${v.value || 2}`, pt.x, pt.y + canvasZoom*0.42);
+      });
+
+      (currentScenarioData.units || []).forEach(u => {
+        const pt = hexToPixel(u.position[0], u.position[1]);
+        const sideColor = u.side === 'US' ? '#15803d' : (u.side === 'IT' ? '#0284c7' : (u.side === 'GE' ? '#475569' : '#b45309'));
+        ctx.fillStyle = sideColor;
+        ctx.beginPath();
+        ctx.arc(pt.x, pt.y, canvasZoom * 0.42, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.strokeStyle = '#fff';
+        ctx.lineWidth = 1.2;
+        ctx.stroke();
+
+        ctx.fillStyle = '#fff';
+        ctx.font = 'bold 8px sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText(u.unit_id, pt.x, pt.y + 3);
+      });
+    }
+
+    function drawHexCell(ctx, q, r, stroke, fill) {
+      const size = canvasZoom;
+      const pt = hexToPixel(q, r);
+      ctx.beginPath();
+      for (let i = 0; i < 6; i++) {
+        const angle = (Math.PI / 3) * i - Math.PI / 6;
+        const hx = pt.x + size * Math.cos(angle);
+        const hy = pt.y + size * Math.sin(angle);
+        if (i === 0) ctx.moveTo(hx, hy);
+        else ctx.lineTo(hx, hy);
+      }
+      ctx.closePath();
+      ctx.fillStyle = fill;
+      ctx.fill();
+      ctx.strokeStyle = stroke;
+      ctx.lineWidth = 1;
+      ctx.stroke();
+
+      ctx.fillStyle = '#475569';
+      ctx.font = '7px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText(`${q},${r}`, pt.x, pt.y + size * 0.65);
+    }
+
+    function handleScenarioCanvasHover(e) {
+      const rect = e.target.getBoundingClientRect();
+      const hex = pixelToHex(e.clientX - rect.left, e.clientY - rect.top);
+      const tip = document.getElementById('hexTooltip');
+      if (!currentScenarioData || !tip) return;
+      const uHere = (currentScenarioData.units || []).filter(u => u.position[0] === hex.q && u.position[1] === hex.r);
+      const fHere = (currentScenarioData.map?.fortifications || []).filter(f => f.q === hex.q && f.r === hex.r);
+      const vHere = (currentScenarioData.vp?.hexes || []).filter(v => v.q === hex.q && v.r === hex.r);
+      let t = `Hex [${hex.q}, ${hex.r}]`;
+      if (uHere.length) t += ` | Units: ${uHere.map(u => u.unit_id).join(', ')}`;
+      if (fHere.length) t += ` | Fort: ${fHere.map(f => f.type).join(', ')}`;
+      if (vHere.length) t += ` | ⭐ VP: ${vHere.map(v => `${v.value || 2}pts`).join(', ')}`;
+      tip.textContent = t;
     }
 
     // --- UNIT CATALOG VIEW FUNCTIONS ---
@@ -2295,6 +3171,57 @@ HTML_TEMPLATE = """<!DOCTYPE html>
 
 
 class UnitEditorHandler(BaseHTTPRequestHandler):
+    def _send_json(self, status_code: int, data: dict):
+        self.send_response(status_code)
+        self.send_header("Content-Type", "application/json; charset=utf-8")
+        self.send_header("Access-Control-Allow-Origin", "*")
+        self.send_header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
+        self.send_header("Access-Control-Allow-Headers", "Content-Type")
+        self.end_headers()
+        self.wfile.write(json.dumps(data, ensure_ascii=False).encode("utf-8"))
+
+    def do_OPTIONS(self):
+        self.send_response(200)
+        self.send_header("Access-Control-Allow-Origin", "*")
+        self.send_header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
+        self.send_header("Access-Control-Allow-Headers", "Content-Type")
+        self.end_headers()
+
+    def do_PUT(self):
+        parsed = urlparse(self.path)
+        path = unquote(parsed.path)
+        length = int(self.headers.get("Content-Length", 0))
+        raw_body = self.rfile.read(length).decode("utf-8") if length > 0 else "{}"
+        body = json.loads(raw_body) if raw_body else {}
+
+        if path.startswith("/api/scenarios/draft/"):
+            scen_id = path[len("/api/scenarios/draft/"):]
+            try:
+                res = scenario_editor_service.update_draft(scen_id, body.get("data", {}))
+                self._send_json(200, {"ok": True, "scenario": res})
+            except Exception as e:
+                self._send_json(500, {"ok": False, "detail": str(e)})
+            return
+
+        self._send_json(404, {"ok": False, "detail": "Not found"})
+
+    def do_DELETE(self):
+        parsed = urlparse(self.path)
+        path = unquote(parsed.path)
+
+        if path.startswith("/api/scenarios/draft/"):
+            scen_id = path[len("/api/scenarios/draft/"):]
+            try:
+                deleted = scenario_editor_service.delete_draft(scen_id)
+                if not deleted:
+                    self._send_json(404, {"ok": False, "detail": "Draft not found"})
+                else:
+                    self._send_json(200, {"ok": True, "message": "Draft deleted successfully."})
+            except Exception as e:
+                self._send_json(500, {"ok": False, "detail": str(e)})
+            return
+
+        self._send_json(404, {"ok": False, "detail": "Not found"})
     def do_GET(self):
         parsed = urlparse(self.path)
         path = unquote(parsed.path)
@@ -2332,6 +3259,42 @@ class UnitEditorHandler(BaseHTTPRequestHandler):
             self.send_header("Access-Control-Allow-Origin", "*")
             self.end_headers()
             self.wfile.write(json.dumps(payload, ensure_ascii=False).encode("utf-8"))
+            return
+
+        if path == "/api/catalogs":
+            unit_cat = load_unit_catalog_dict()
+            piece_cat = load_map_piece_catalog_dict()
+            data = {
+                "ok": True,
+                "units": [
+                    {"key": k, "name": v.get("name", k), "side": v.get("side", ""), "default_role": v.get("doctrine_profile", {}).get("default_role", "SCREEN")}
+                    for k, v in sorted(unit_cat.items())
+                ],
+                "map_pieces": [
+                    {"id": k, "name": v.get("name", k), "shape": v.get("shape", [9, 8])}
+                    for k, v in sorted(piece_cat.items())
+                ],
+                "fortifications": sorted(list(VALID_FORTIFICATIONS)),
+                "experiences": sorted(list(VALID_EXPERIENCES)),
+                "sides": sorted(list(VALID_SIDES)),
+            }
+            self._send_json(200, data)
+            return
+
+        if path == "/api/scenarios":
+            scenarios = scenario_editor_service.list_all_scenarios()
+            self._send_json(200, {"ok": True, "count": len(scenarios), "scenarios": scenarios})
+            return
+
+        if path.startswith("/api/scenarios/"):
+            scen_id = path[len("/api/scenarios/"):]
+            try:
+                scenario = scenario_editor_service.get_scenario(scen_id, prefer_draft=True)
+                self._send_json(200, {"ok": True, "scenario": scenario})
+            except FileNotFoundError as e:
+                self._send_json(404, {"ok": False, "detail": str(e)})
+            except Exception as e:
+                self._send_json(500, {"ok": False, "detail": str(e)})
             return
 
         if path == "/api/formations":
@@ -2463,6 +3426,47 @@ class UnitEditorHandler(BaseHTTPRequestHandler):
             self.send_header("Content-Type", "application/json")
             self.end_headers()
             self.wfile.write(b'{"ok": true}')
+            return
+
+        if path == "/api/scenarios/draft":
+            try:
+                res = scenario_editor_service.create_draft(
+                    scenario_id=body.get("id"),
+                    data=body.get("data"),
+                    clone_from_id=body.get("clone_from_id"),
+                )
+                if body.get("name") and not body.get("clone_from_id"):
+                    res["name"] = body.get("name")
+                    res = scenario_editor_service.update_draft(body.get("id"), res)
+                self._send_json(200, {"ok": True, "scenario": res})
+            except Exception as e:
+                self._send_json(400, {"ok": False, "detail": str(e)})
+            return
+
+        if path.startswith("/api/scenarios/draft/") and path.endswith("/publish"):
+            scen_id = path[len("/api/scenarios/draft/"):-len("/publish")]
+            try:
+                res = scenario_editor_service.publish_draft(scen_id, target_id=body.get("target_id"))
+                self._send_json(200, res)
+            except Exception as e:
+                self._send_json(400, {"ok": False, "detail": str(e)})
+            return
+
+        if path.startswith("/api/scenarios/unpublish/"):
+            scen_id = path[len("/api/scenarios/unpublish/"):]
+            try:
+                res = scenario_editor_service.unpublish_scenario(scen_id)
+                self._send_json(200, res)
+            except Exception as e:
+                self._send_json(400, {"ok": False, "detail": str(e)})
+            return
+
+        if path == "/api/scenarios/validate":
+            try:
+                res = scenario_editor_service.validate_scenario(body.get("data", {}))
+                self._send_json(200, res)
+            except Exception as e:
+                self._send_json(500, {"ok": False, "detail": str(e)})
             return
 
         if path == "/api/formations/delete":

@@ -391,11 +391,18 @@ export default function GameCanvas({
       // LAYERS
       // ---------------------------------------------
       const fxLayer = new PIXI.Container();
+      fxLayer.eventMode = "none";
+      (fxLayer as any).interactiveChildren = false;
       app.stage.addChild(fxLayer);
       fxLayerRef.current = fxLayer;
 
       const background = new PIXI.Container();
+      background.eventMode = "none";
+      (background as any).interactiveChildren = false;
+
       const grid = new PIXI.Container();
+      grid.eventMode = "none";
+      (grid as any).interactiveChildren = false;
 
       world.addChild(background);
       world.addChild(grid);
@@ -404,6 +411,7 @@ export default function GameCanvas({
       gridRef.current = grid;
 
       const unitLayer = new UnitLayer(world);
+      unitLayer.container.zIndex = 500;
       unitLayerRef.current = unitLayer;
 
       const highlightLayer = new HighlightLayer(world);

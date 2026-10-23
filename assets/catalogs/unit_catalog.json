@@ -2674,6 +2674,183 @@
           }
         }
       }
+    },
+    "GE_7_5CM_LG40": {
+      "side": "GE",
+      "category": "GUN_ARTILLERY",
+      "subtype": "SUPPORT_GUN",
+      "classification": "GUN_ARTILLERY",
+      "card_id": "Pr43",
+      "cost": 5,
+      "movement": 1,
+      "max_strength": 3,
+      "base_defense": {
+        "FRONT": [
+          "YELLOW"
+        ],
+        "FLANK_LEFT": [
+          "YELLOW"
+        ],
+        "FLANK_RIGHT": [
+          "YELLOW"
+        ],
+        "REAR": [
+          "YELLOW"
+        ]
+      },
+      "traits": [
+        "SLOW_UNIT",
+        "LOW_SILHOUETTE",
+        "BACK_BLAST"
+      ],
+      "attack": {
+        "DIRECT_FIRE": {
+          "VEHICLE": {
+            "0": {
+              "dice": [
+                "GREEN",
+                "RED"
+              ]
+            },
+            "1-3": {
+              "dice": [
+                "YELLOW",
+                "GREEN",
+                "BLUE"
+              ]
+            },
+            "4-7": {
+              "dice": [
+                "YELLOW",
+                "GREEN"
+              ]
+            },
+            "8-12": {
+              "dice": [
+                "GREEN",
+                "GREEN"
+              ]
+            }
+          },
+          "INFANTRY": {
+            "0": {
+              "dice": [
+                "YELLOW",
+                "GREEN"
+              ]
+            },
+            "5-8": {
+              "dice": [
+                "YELLOW",
+                "BLUE",
+                "GREEN",
+                "GREEN"
+              ]
+            },
+            "1-4": {
+              "dice": [
+                "YELLOW",
+                "GREEN",
+                "BLUE",
+                "RED"
+              ]
+            },
+            "9-12": {
+              "dice": [
+                "GREEN",
+                "GREEN",
+                "BLUE"
+              ]
+            }
+          }
+        }
+      }
+    },
+    "US_50CAL_HMG": {
+      "side": "US",
+      "category": "INFANTRY",
+      "subtype": "SUPPORT_MG",
+      "classification": "SUPPORT_INFANTRY",
+      "card_id": "S43",
+      "cost": 6,
+      "movement": 2,
+      "max_strength": 3,
+      "base_defense": {
+        "FRONT": [
+          "YELLOW"
+        ],
+        "FLANK_LEFT": [
+          "YELLOW"
+        ],
+        "FLANK_RIGHT": [
+          "YELLOW"
+        ],
+        "REAR": [
+          "YELLOW"
+        ]
+      },
+      "traits": [
+        "SLOW_UNIT"
+      ],
+      "attack": {
+        "DIRECT_FIRE": {
+          "VEHICLE": {
+            "0": {
+              "dice": [
+                "GREEN",
+                "GREEN"
+              ]
+            },
+            "1": {
+              "dice": [
+                "YELLOW"
+              ]
+            },
+            "2": {
+              "dice": [
+                "GREEN",
+                "BLUE"
+              ]
+            },
+            "3": {
+              "dice": [
+                "GREEN"
+              ]
+            }
+          },
+          "INFANTRY": {
+            "0": {
+              "dice": [
+                "YELLOW",
+                "GREEN",
+                "GREEN"
+              ]
+            },
+            "1-4": {
+              "dice": [
+                "RED",
+                "RED",
+                "YELLOW"
+              ]
+            },
+            "5-8": {
+              "dice": [
+                "RED",
+                "YELLOW",
+                "GREEN"
+              ]
+            },
+            "9-11": {
+              "dice": [
+                "BLUE",
+                "BLUE",
+                "GREEN",
+                "RED"
+              ]
+            }
+          }
+        }
+      }
     }
   }
 }

@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useMemo } from "react";
 import "./App.css";
 import GameCanvas from "./game/GameCanvas";
 import { gameController } from "./game/gameControllerInstance";
+import { UnitStatePanel } from "./game/ui/UnitStatePanel";
 import { CombatPanel } from "./game/ui/CombatPanel";
 import { unitImages } from "./game/config/unitImages";
 import { sides } from "./game/config/sides";
@@ -62,7 +63,7 @@ function App() {
   const [rosterFilterSide, setRosterFilterSide] = useState<string>("ALL");
   const [rosterStatusFilter, setRosterStatusFilter] = useState<"ALL" | "READY" | "DONE">("ALL");
   const [squadDrawerOpen, setSquadDrawerOpen] = useState(true);
-  const [squadSearchQuery, setSquadSearchQuery] = useState("");
+    const [squadSearchQuery, setSquadSearchQuery] = useState("");
   const [cardPreview, setCardPreview] = useState<{
     unit: Unit;
     x: number;
@@ -126,8 +127,9 @@ function App() {
       }
       if (e.key === "h" || e.key === "H") {
         setHudVisible((prev) => !prev);
-      } else if (e.key === "s" || e.key === "S") {
+      } else if (e.key === "s" || e.key === "S" || e.key === "a" || e.key === "A") {
         setSquadDrawerOpen((prev) => !prev);
+      
       } else if (e.key === "Escape") {
         if (squadDrawerOpen) {
           setSquadDrawerOpen(false);
@@ -914,15 +916,19 @@ function App() {
       </header>
 
 
-      {/* Floating Left Squad Toggle Button */}
+      {/* Floating Left Action Selector Toggle Button */}
       <button
         className={`left-squad-toggle-btn ${squadDrawerOpen ? "active" : ""}`}
         onClick={() => setSquadDrawerOpen((prev) => !prev)}
-        title="Toggle Squad Browser (Order of Battle) [S]"
+        title="Toggle Tactical Action Selector [A / S]"
       >
-        <span style={{ fontSize: "14px" }}>📋</span>
-        <span>SQUADS</span>
-        <span className="left-squad-toggle-count">{readyCount} READY</span>
+        <span style={{ fontSize: "14px" }}>⚡</span>
+        <span>ACTIONS</span>
+        {selectedUnit ? (
+          <span className="left-squad-toggle-count">{availableMoves.length} ORDERS</span>
+        ) : (
+          <span className="left-squad-toggle-count">{readyCount} READY</span>
+        )}
       </button>
 
       {/* Left Tactical Command Panel (Positioned in user's red box area) */}
@@ -932,13 +938,7 @@ function App() {
           {selectedUnit ? (
             <>
               <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                <button
-                  className="left-squad-back-btn"
-                  onClick={() => setSelectedUnitId(null)}
-                  title="Back to Squad Directory"
-                >
-                  ← SQUADS
-                </button>
+                <span style={{ fontSize: "15px" }}>⚡</span>
                 <span className="left-squad-header-title">UNIT ORDERS</span>
               </div>
               <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
@@ -964,7 +964,7 @@ function App() {
                 <button
                   className="drawer-close-btn"
                   onClick={() => setSquadDrawerOpen(false)}
-                  title="Close Panel [Esc]"
+                  title="Close Orders Panel [Esc]"
                 >
                   ✕
                 </button>
@@ -973,15 +973,14 @@ function App() {
           ) : (
             <>
               <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                <span style={{ fontSize: "16px" }}>📋</span>
-                <span className="left-squad-header-title">ORDER OF BATTLE</span>
+                <span style={{ fontSize: "16px" }}>⚡</span>
+                <span className="left-squad-header-title">ACTION SELECTOR</span>
                 <span className="roster-header-badge badge-ready">🟢 {readyCount} READY</span>
-                <span className="roster-header-badge badge-done">⚪ {doneCount} DONE</span>
               </div>
               <button
                 className="drawer-close-btn"
                 onClick={() => setSquadDrawerOpen(false)}
-                title="Close Panel [Esc]"
+                title="Close Action Selector [Esc]"
               >
                 ✕
               </button>
@@ -992,17 +991,17 @@ function App() {
         {/* Panel Body */}
         {selectedUnit ? (
           /* ========================================================
-             MODE A: SELECTED UNIT INTEL & TACTICAL ACTIONS
+             TACTICAL ACTION SELECTOR FOR ACTIVE SELECTED SQUAD
           ======================================================== */
           <div className="left-unit-command-view">
-            {/* Target Intel Specs Card */}
-            <div className="left-unit-spec-card">
-              <div className="deck-unit-grid">
-                <div className="deck-unit-avatar-col">
+            {/* Clean Unit Intel Card (No overlapping spec-stats) */}
+            <div className="left-unit-intel-card">
+              <div className="left-unit-intel-row">
+                <div className="left-unit-avatar-box">
                   {selectedUnitSpec?.full && (
                     <img
                       src={encodeURI(selectedUnitSpec.full)}
-                      className="deck-unit-avatar"
+                      className="left-unit-avatar-img"
                       alt={selectedUnitSpec?.label || selectedUnit.unit_key}
                     />
                   )}
@@ -1011,7 +1010,6 @@ function App() {
                       className="spec-wait-btn"
                       onClick={() => {
                         void executeActionById(selectedWaitOrder.action_id, selectedWaitOrder);
-                        setSquadDrawerOpen(false);
                       }}
                       title="Wait / End unit activation"
                     >
@@ -1020,11 +1018,11 @@ function App() {
                   )}
                 </div>
 
-                <div className="deck-unit-info-col">
-                  <div className="deck-unit-title" title={selectedUnitSpec?.label || selectedUnit.unit_key}>
+                <div className="left-unit-details">
+                  <div className="left-unit-name" title={selectedUnitSpec?.label || selectedUnit.unit_key}>
                     {selectedUnitSpec?.label || selectedUnit.unit_key}
                   </div>
-                  <div className="deck-unit-meta">
+                  <div className="left-unit-meta-row">
                     <span>ID: {selectedUnit.id}</span>
                     <span>Coords: {formatCoords(selectedUnit.q, selectedUnit.r)}</span>
                     <span
@@ -1037,42 +1035,52 @@ function App() {
                     </span>
                   </div>
 
-                  {/* Health Bar */}
-                  {selectedUnit.hp != null && (
-                    <div style={{ marginTop: 4 }}>
-                      <div style={{ display: "flex", justifyContent: "space-between", fontSize: 10, color: "#94a3b8" }}>
-                        <span>
-                          {Array.from({ length: selectedUnit.hp }).map((_, i) => (
-                            <span key={i} style={{ color: "#ff3838" }}>❤️</span>
-                          ))}
-                        </span>
-                        <strong style={{ color: (selectedUnit.health_pct ?? 1) > 0.6 ? "#4ade80" : ((selectedUnit.health_pct ?? 1) > 0.35 ? "#fbbf24" : "#f87171") }}>
-                          {selectedUnit.hp} / {selectedUnit.max_hp ?? selectedUnit.hp} HP
+                  {/* Operational Health Bar */}
+                  {selectedUnit.health_pct != null && (
+                    <div className="left-unit-health-wrap">
+                      <div className="health-labels">
+                        <span>Health:</span>
+                        <strong
+                          style={{
+                            color:
+                              selectedUnit.health_pct > 0.6
+                                ? "#4ade80"
+                                : selectedUnit.health_pct > 0.35
+                                ? "#fbbf24"
+                                : "#f87171",
+                          }}
+                        >
+                          {Math.round(selectedUnit.health_pct * 100)}% ({selectedUnit.hp} /{" "}
+                          {selectedUnit.max_hp ?? selectedUnit.hp} HP)
                         </strong>
                       </div>
                       <div className="deck-unit-health-bar">
                         <div
+                          className="deck-unit-health-fill"
                           style={{
-                            width: `${Math.round((selectedUnit.health_pct ?? (selectedUnit.hp / (selectedUnit.max_hp || 4))) * 100)}%`,
-                            height: "100%",
-                            background: (selectedUnit.health_pct ?? 1) > 0.6 ? "linear-gradient(90deg, #16a34a, #22c55e)" : ((selectedUnit.health_pct ?? 1) > 0.35 ? "linear-gradient(90deg, #d97706, #f59e0b)" : "linear-gradient(90deg, #dc2626, #ef4444)"),
-                            transition: "width 0.3s ease",
+                            width: `${Math.round(selectedUnit.health_pct * 100)}%`,
+                            background:
+                              selectedUnit.health_pct > 0.6
+                                ? "linear-gradient(90deg, #16a34a, #22c55e)"
+                                : selectedUnit.health_pct > 0.35
+                                ? "linear-gradient(90deg, #d97706, #f59e0b)"
+                                : "linear-gradient(90deg, #dc2626, #ef4444)",
                           }}
                         />
                       </div>
                     </div>
                   )}
 
-                  {/* Badges */}
-                  <div style={{ display: "flex", gap: 4, marginTop: 4, flexWrap: "wrap" }}>
+                  {/* Trait Badges */}
+                  <div className="left-unit-traits-row">
                     {(selectedUnit.has_indirect_fire || selectedUnit.tactical_role === "indirect_mortar") && (
-                      <span className="deck-unit-badge mortar">💥 Mortar / No-LOS</span>
+                      <span className="deck-unit-badge mortar">💥 Mortar</span>
                     )}
                     {(selectedUnit.is_suppression_mg || selectedUnit.tactical_role === "suppression_mg") && (
-                      <span className="deck-unit-badge mg">🛡️ Suppression / HMG</span>
+                      <span className="deck-unit-badge mg">🛡️ HMG</span>
                     )}
                     {(selectedUnit.is_assault_squad || selectedUnit.tactical_role === "assault_squad") && (
-                      <span className="deck-unit-badge assault">⚔️ Assault & Breach</span>
+                      <span className="deck-unit-badge assault">⚔️ Assault</span>
                     )}
                   </div>
                 </div>
@@ -1087,7 +1095,6 @@ function App() {
                 isHumanTurn={isHumanTurn}
                 onHoverOrder={(order) => setHoveredTargetId(resolveOrderTargetId(order))}
                 onLeaveOrder={() => setHoveredTargetId(null)}
-                onActionExecuted={() => setSquadDrawerOpen(false)}
               />
               {attackHint && (
                 <div
@@ -1107,210 +1114,52 @@ function App() {
               )}
             </div>
 
-            {/* Bottom switcher button */}
             <div className="left-unit-footer">
               <button
                 className="left-squad-switch-btn"
-                onClick={() => setSelectedUnitId(null)}
+                onClick={() => {
+                  setSelectedUnitId(null);
+                  setAvailableMoves([]);
+                }}
               >
-                📋 Browse All Squads ({readyCount} Ready)
+                ✕ Deselect Unit [Esc]
               </button>
             </div>
           </div>
         ) : (
           /* ========================================================
-             MODE B: SQUAD DIRECTORY (ORDER OF BATTLE)
+             WHEN NO UNIT IS SELECTED: CLEAN TACTICAL AWAITING VIEW
           ======================================================== */
-          <>
-            <div className="left-squad-toolbar">
-              <div className="left-squad-search-wrap">
-                <input
-                  type="text"
-                  placeholder="Search squad by name or ID..."
-                  value={squadSearchQuery}
-                  onChange={(e) => setSquadSearchQuery(e.target.value)}
-                  className="left-squad-search-input"
-                />
-                {squadSearchQuery && (
-                  <button
-                    className="left-squad-clear-search"
-                    onClick={() => setSquadSearchQuery("")}
-                  >
-                    ✕
-                  </button>
-                )}
+          <div className="left-action-awaiting">
+            <div className="radar-circle"></div>
+            <div className="awaiting-title">⚡ ACTION SELECTOR</div>
+            <div className="awaiting-subtitle">Awaiting Squad Selection</div>
+            <p className="awaiting-text">
+              Select any tactical unit on the battlefield map to inspect its profile and deploy tactical orders.
+            </p>
+            <div className="awaiting-status-box">
+              <div className="awaiting-status-row">
+                <span className="awaiting-status-label">Active Turn Side:</span>
+                <span
+                  className="awaiting-status-val"
+                  style={{ color: gameData?.active_side === "GE" ? "var(--neon-red)" : "var(--neon-cyan)" }}
+                >
+                  {sides[gameData?.active_side]?.label || gameData?.active_side || "—"}
+                </span>
               </div>
-
-              <div className="left-squad-filter-row">
-                <button
-                  className={`deck-roster-filter-btn ${rosterStatusFilter === "ALL" ? "active" : ""}`}
-                  onClick={() => setRosterStatusFilter("ALL")}
-                >
-                  ALL ({panelUnits.length})
-                </button>
-                <button
-                  className={`deck-roster-filter-btn filter-ready ${rosterStatusFilter === "READY" ? "active" : ""}`}
-                  onClick={() => setRosterStatusFilter("READY")}
-                >
-                  READY ({readyCount})
-                </button>
-                <button
-                  className={`deck-roster-filter-btn filter-done ${rosterStatusFilter === "DONE" ? "active" : ""}`}
-                  onClick={() => setRosterStatusFilter("DONE")}
-                >
-                  DONE ({doneCount})
-                </button>
+              <div className="awaiting-status-row">
+                <span className="awaiting-status-label">Ready to Act:</span>
+                <span className="awaiting-status-val ready">🟢 {readyCount} Squads</span>
               </div>
-
-              <div className="left-squad-filter-row">
-                <button
-                  className={`deck-roster-filter-btn ${rosterFilterSide === "ALL" ? "active" : ""}`}
-                  onClick={() => setRosterFilterSide("ALL")}
-                >
-                  ALL SIDES
-                </button>
-                {scenarioSides.map((s) => (
-                  <button
-                    key={s}
-                    className={`deck-roster-filter-btn ${rosterFilterSide === s ? "active" : ""}`}
-                    onClick={() => setRosterFilterSide(s)}
-                  >
-                    {s}
-                  </button>
-                ))}
+              <div className="awaiting-status-row">
+                <span className="awaiting-status-label">Turn Completed:</span>
+                <span className="awaiting-status-val done">⚪ {doneCount} Squads</span>
               </div>
             </div>
-
-            <div className="left-squad-list">
-              {filteredSquadList.length > 0 ? (
-                filteredSquadList.map((u) => {
-                  const def = unitImages[u.unit_key as keyof typeof unitImages];
-                  const dead = u.alive === false || (u.hp != null && u.hp <= 0);
-                  const isOwn = u.side === gameData?.active_side;
-                  const isActivated = (gameData?.activated_units || []).includes(u.id);
-                  const isSelected = u.id === selectedUnitId;
-                  const isTarget = hoveredTargetId != null && u.id === hoveredTargetId;
-                  const deadMarker = dead ? sides[u.side]?.dead_marker : undefined;
-                  const actionMarker = getUnitActionMarker(u.id);
-
-                  let cardStatusClass = "ready";
-                  let statusText = "● READY";
-                  if (dead) {
-                    cardStatusClass = "dead";
-                    statusText = "KIA";
-                  } else if (!isOwn) {
-                    cardStatusClass = "enemy";
-                    statusText = "OPFOR";
-                  } else if (isActivated) {
-                    cardStatusClass = "done";
-                    statusText = "✓ DONE";
-                  }
-
-                  return (
-                    <div
-                      key={u.id}
-                      className={`squad-row-card ${isSelected ? "selected" : ""} ${isTarget ? "target-highlight" : ""} squad-row-${cardStatusClass}`}
-                      onClick={() => {
-                        if (dead) return;
-                        setSelectedUnitId(u.id);
-                        if (typeof (window as any).focusUnit === "function") {
-                          (window as any).focusUnit(u.id);
-                        }
-                        if (typeof (window as any).onUnitClick === "function") {
-                          (window as any).onUnitClick(u);
-                        }
-                      }}
-                      onMouseEnter={() => {
-                        if (typeof (window as any).highlightUnit === "function") {
-                          (window as any).highlightUnit(u.id);
-                        }
-                      }}
-                      onMouseLeave={() => {
-                        if (typeof (window as any).highlightUnit === "function") {
-                          (window as any).highlightUnit(null);
-                        }
-                      }}
-                    >
-                      <div className="squad-row-avatar-col">
-                        {def?.full ? (
-                          <img
-                            src={encodeURI(def.full)}
-                            className={`squad-row-avatar ${dead ? "dead" : ""}`}
-                            alt={def?.label || u.unit_key}
-                          />
-                        ) : (
-                          <div className="squad-row-avatar-placeholder">⚔️</div>
-                        )}
-                        {deadMarker && (
-                          <img src={encodeURI(deadMarker)} className="trooper-card-dead-marker" alt="KIA" />
-                        )}
-                        {!dead && actionMarker && (
-                          <img
-                            src={encodeURI(actionMarkerImages[actionMarker])}
-                            className="trooper-card-action-marker"
-                            alt={actionMarker}
-                          />
-                        )}
-                      </div>
-
-                      <div className="squad-row-info">
-                        <div className="squad-row-title-bar">
-                          <span className="squad-row-name" title={def?.label || u.unit_key}>
-                            {def?.label || u.unit_key}
-                          </span>
-                          <span className={`trooper-card-status-badge badge-${cardStatusClass}`}>
-                            {statusText}
-                          </span>
-                        </div>
-
-                        <div className="squad-row-meta">
-                          <span className="squad-row-id">ID: {u.id}</span>
-                          <span className="squad-row-coords">Coords: {formatCoords(u.q, u.r)}</span>
-                          <span
-                            className="squad-row-side-tag"
-                            style={{ color: u.side === "GE" ? "var(--neon-red)" : "var(--neon-cyan)" }}
-                          >
-                            {sides[u.side]?.label || u.side}
-                          </span>
-                        </div>
-
-                        <div className="squad-row-hp-row">
-                          <div className="squad-row-hp-pips">
-                            {u.hp != null && u.hp > 0 ? (
-                              Array.from({ length: u.hp }).map((_, i) => (
-                                <span key={i} className="hp-heart">❤️</span>
-                              ))
-                            ) : (
-                              <span style={{ fontSize: 10, color: "var(--neon-red)", fontWeight: 700 }}>KIA</span>
-                            )}
-                          </div>
-                          {u.hp != null && (
-                            <span className="squad-row-hp-text">
-                              {u.hp} / {u.max_hp ?? u.hp} HP
-                            </span>
-                          )}
-                        </div>
-
-                        <div className="squad-row-traits">
-                          {(u.has_indirect_fire || u.tactical_role === "indirect_mortar") && (
-                            <span className="deck-unit-badge mortar">💥 Mortar</span>
-                          )}
-                          {(u.is_suppression_mg || u.tactical_role === "suppression_mg") && (
-                            <span className="deck-unit-badge mg">🛡️ HMG</span>
-                          )}
-                          {(u.is_assault_squad || u.tactical_role === "assault_squad") && (
-                            <span className="deck-unit-badge assault">⚔️ Assault</span>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })
-              ) : (
-                <div className="left-squad-empty">No squads matching current filter.</div>
-              )}
+            <div className="awaiting-hint-tip">
+              💡 Tip: Click any unit directly on the hexagonal map to immediately focus and open its orders.
             </div>
-          </>
+          </div>
         )}
       </aside>
 
@@ -1476,6 +1325,11 @@ function App() {
           </div>
         </div>
       )}
+      {/* ========================================================
+          BOTTOM HORIZONTAL SQUAD DOCK (ORDER OF BATTLE)
+      ======================================================== */}
+      
+
     </div>
   );
 }
