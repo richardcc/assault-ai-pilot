@@ -767,6 +767,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
                 <span id="scen-bg-opacity-label">75%</span>
               </div>
               <button type="button" class="btn-card-tab" onclick="autoFitScenarioCamera()" title="Auto Fit & Center Board">🎯 Fit View</button>
+              <button type="button" id="btn-scen-fort-art" class="btn-card-tab active" onclick="toggleScenarioFortArt()" title="Toggle Real Physical Counters vs Vector Badges">🛡️ Real Counters: ON</button>
               <button type="button" class="btn-card-tab" onclick="zoomScenarioCanvas(1.15)">➕ In</button>
               <button type="button" class="btn-card-tab" onclick="zoomScenarioCanvas(0.85)">➖ Out</button>
               <span id="scenario-status-pill" class="badge badge-published">PUBLISHED</span>
@@ -777,7 +778,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
           <div id="scen-panel-map" class="scenario-panel" style="display: flex; flex-direction: column; flex: 1; overflow: hidden; gap: 0.6rem;">
             <!-- Scenario Marked Hex Inspector & Visual Tool Palette -->
             <div id="scen-marked-hex-bar" style="display: flex; gap: 0.6rem; align-items: center; justify-content: space-between; flex-wrap: wrap; background: #0f172a; padding: 0.4rem 0.8rem; border-radius: 6px; border: 1px solid var(--card-border);">
-              <div style="display: flex; align-items: center; gap: 0.8rem; flex-wrap: wrap;">
+              <div style="display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap;">
                 <span style="font-size: 0.82rem; font-weight: 700; color: #f59e0b; display: flex; align-items: center; gap: 0.3rem;">
                   📍 Hex: <span id="scen-marked-hex-coord" style="font-family: monospace; font-size: 0.85rem; color: #e2e8f0;">(Click hex to edit)</span>
                 </span>
@@ -796,8 +797,24 @@ HTML_TEMPLATE = """<!DOCTYPE html>
                   </select>
                 </div>
 
+                <!-- Fortification Angle / Facing -->
+                <div id="scen-hex-fort-angle-wrap" style="display: flex; align-items: center; gap: 0.25rem;">
+                  <label for="scen-hex-fort-angle" style="font-size: 0.78rem; color: #cbd5e1; font-weight: 600;">Facing:</label>
+                  <select id="scen-hex-fort-angle" class="form-control" style="width: auto; padding: 0.25rem 0.4rem; font-size: 0.8rem; background: #1e293b; color: #fff; border: 1px solid #475569; border-radius: 4px;" onchange="onScenarioHexFortAngleChange(this.value)">
+                    <option value="0">0° (N / Top)</option>
+                    <option value="60">60° (NE)</option>
+                    <option value="120">120° (SE)</option>
+                    <option value="180">180° (S / Down)</option>
+                    <option value="240">240° (SW)</option>
+                    <option value="300">300° (NW)</option>
+                  </select>
+                  <button type="button" class="btn-secondary" style="padding: 0.2rem 0.4rem; font-size: 0.75rem;" onclick="rotateScenarioHexFort(60)" title="Rotate 60° clockwise">↻ +60°</button>
+                  <button type="button" class="btn-secondary" style="padding: 0.2rem 0.4rem; font-size: 0.75rem;" onclick="rotateScenarioHexFort(-60)" title="Rotate 60° counter-clockwise">↺ -60°</button>
+                  <button type="button" class="btn-danger" style="padding: 0.2rem 0.45rem; font-size: 0.75rem;" onclick="onScenarioHexFortChange('none')" title="Remove fortification from this hex">🗑️ Remove Fort</button>
+                </div>
+
                 <!-- Objective / VP Selector -->
-                <div style="display: flex; align-items: center; gap: 0.3rem;">
+                <div style="display: flex; align-items: center; gap: 0.3rem; border-left: 1px solid #334155; padding-left: 0.5rem;">
                   <label for="scen-hex-vp-select" style="font-size: 0.78rem; color: #cbd5e1; font-weight: 600;">★ Objective (VP):</label>
                   <select id="scen-hex-vp-select" class="form-control" style="width: auto; padding: 0.25rem 0.5rem; font-size: 0.8rem; background: #1e293b; color: #fff; border: 1px solid #475569; border-radius: 4px;" onchange="onScenarioHexVpChange(this.value)">
                     <option value="0">-- No VP --</option>
@@ -820,12 +837,13 @@ HTML_TEMPLATE = """<!DOCTYPE html>
                     <option value="GE">GE (Germany)</option>
                     <option value="UK">UK (Britain)</option>
                   </select>
+                  <button type="button" class="btn-danger" style="padding: 0.2rem 0.45rem; font-size: 0.75rem;" onclick="onScenarioHexVpChange('0')" title="Remove VP objective from this hex">🗑️ Remove VP</button>
                 </div>
               </div>
 
               <!-- Quick Reset Hex Fort/VP -->
               <div style="display: flex; align-items: center; gap: 0.4rem;">
-                <button type="button" class="btn-secondary" style="padding: 0.25rem 0.6rem; font-size: 0.75rem;" onclick="clearScenarioHexFortAndVp()" title="Remove fortification and VP from selected hex">🗑️ Clear Hex Fort/VP</button>
+                <button type="button" class="btn-secondary" style="padding: 0.25rem 0.6rem; font-size: 0.75rem;" onclick="clearScenarioHexFortAndVp()" title="Remove fortification and VP from selected hex">🗑️ Clear All on Hex</button>
               </div>
             </div>
 
@@ -838,20 +856,20 @@ HTML_TEMPLATE = """<!DOCTYPE html>
               <button type="button" class="btn-palette" style="background:#78350f;" onclick="quickSetScenarioFort('trench')">Trench</button>
               <button type="button" class="btn-palette" style="background:#b45309;" onclick="quickSetScenarioFort('barbed_wire')">Wire</button>
               <button type="button" class="btn-palette" style="background:#b91c1c;" onclick="quickSetScenarioFort('minefield')">Minefield</button>
-              <button type="button" class="btn-palette" style="background:#0284c7;" onclick="quickSetScenarioFort('none')">No Fort</button>
+              <button type="button" class="btn-palette" style="background:#dc2626; font-weight: 700;" onclick="quickSetScenarioFort('none')">✕ No Fort</button>
 
               <span style="font-size: 0.72rem; font-weight: 700; color: #f59e0b; margin-left: 0.6rem; margin-right: 0.3rem;">★ Quick VP:</span>
               <button type="button" class="btn-palette" style="background:#ca8a04;" onclick="quickSetScenarioVp(1)">1 VP</button>
               <button type="button" class="btn-palette" style="background:#ca8a04;" onclick="quickSetScenarioVp(2)">2 VP</button>
               <button type="button" class="btn-palette" style="background:#ca8a04;" onclick="quickSetScenarioVp(3)">3 VP</button>
               <button type="button" class="btn-palette" style="background:#ca8a04;" onclick="quickSetScenarioVp(5)">5 VP</button>
-              <button type="button" class="btn-palette" style="background:#475569;" onclick="quickSetScenarioVp(0)">No VP</button>
+              <button type="button" class="btn-palette" style="background:#dc2626; font-weight: 700;" onclick="quickSetScenarioVp(0)">✕ No VP</button>
             </div>
 
             <div style="position: relative; flex: 1; min-height: 380px; background: #080d1a; border: 1px solid var(--card-border); border-radius: 8px; overflow: hidden;">
               <canvas id="hexCanvas" width="900" height="420" style="width: 100%; height: 100%; display: block; cursor: grab;"></canvas>
               <div id="canvas-info-overlay" style="position: absolute; bottom: 8px; left: 8px; background: rgba(15, 23, 42, 0.85); padding: 4px 10px; border-radius: 4px; font-size: 0.75rem; color: #94a3b8; border: 1px solid #334155;">
-                Click any hex to select and edit its Fortification & VP. Right-click or drag to pan.
+                Click any hex to select and edit its Fortification & VP. Drag & drop deployed units to relocate. Right-click drag to pan.
               </div>
             </div>
 
@@ -3468,6 +3486,54 @@ HTML_TEMPLATE = """<!DOCTYPE html>
       }
     }
 
+    // Fortification Counter Art & Orientation State
+    let scenShowFortArt = true;
+    const fortArtImages = {};
+    const FORT_ART_PATHS = {
+      'bunker': '/assets/art/terrain/Terrain%20Bunker.png',
+      'casemate': '/assets/art/terrain/Terrain%20Pillbox.png',
+      'pillbox': '/assets/art/terrain/Terrain%20Pillbox.png',
+      'gun_emplacement': '/assets/art/terrain/Terrain%20Gun%20Emplacement.png',
+      'trench': '/assets/art/terrain/Terrain%20Trenches.png',
+      'barbed_wire': '/assets/art/terrain/Terrain%20Barbed%20Wire.png',
+      'minefield': '/assets/art/minefield/Minefield%20AP.png'
+    };
+
+    function getFortArtImage(type) {
+      const cleanType = (type || 'bunker').toLowerCase();
+      if (fortArtImages[cleanType]) return fortArtImages[cleanType];
+      const p = FORT_ART_PATHS[cleanType];
+      if (!p) return null;
+      const img = new Image();
+      img.src = p;
+      img.onload = () => {
+        fortArtImages[cleanType] = img;
+        drawScenarioCanvas();
+      };
+      img.onerror = () => {
+        fortArtImages[cleanType] = null;
+      };
+      fortArtImages[cleanType] = img;
+      return img;
+    }
+
+    function toggleScenarioFortArt() {
+      scenShowFortArt = !scenShowFortArt;
+      const btn = document.getElementById('btn-scen-fort-art');
+      if (btn) {
+        btn.innerText = scenShowFortArt ? '🛡️ Real Counters: ON' : '🛡️ Real Counters: OFF';
+        btn.classList.toggle('active', scenShowFortArt);
+      }
+      drawScenarioCanvas();
+    }
+
+    // Unit Drag and Drop State
+    let isDraggingUnit = false;
+    let draggedUnitIdx = -1;
+    let dragSourceHex = null;
+    let dragTargetHex = null;
+    let dragMousePos = { px: 0, py: 0 };
+
     function selectScenarioHex(q, r) {
       if (!currentScenarioData) return;
       const [cols, rows] = currentScenarioData.shape || [18, 12];
@@ -3483,6 +3549,8 @@ HTML_TEMPLATE = """<!DOCTYPE html>
     function updateScenarioHexInspector() {
       const coordEl = document.getElementById('scen-marked-hex-coord');
       const fortSelect = document.getElementById('scen-hex-fort-select');
+      const angleSelect = document.getElementById('scen-hex-fort-angle');
+      const angleWrap = document.getElementById('scen-hex-fort-angle-wrap');
       const vpSelect = document.getElementById('scen-hex-vp-select');
       const vpOwnerSelect = document.getElementById('scen-hex-vp-owner-select');
       if (!coordEl || !fortSelect || !vpSelect || !vpOwnerSelect) return;
@@ -3491,6 +3559,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
         coordEl.innerText = '(Click hex to edit)';
         coordEl.style.color = '#94a3b8';
         fortSelect.value = 'none';
+        if (angleWrap) angleWrap.style.display = 'none';
         vpSelect.value = '0';
         vpOwnerSelect.value = '';
         return;
@@ -3507,6 +3576,17 @@ HTML_TEMPLATE = """<!DOCTYPE html>
       const fort = forts.find(f => f.q === q && f.r === r);
       fortSelect.value = fort ? (fort.type || 'bunker') : 'none';
 
+      // Angle / Facing
+      if (angleWrap && angleSelect) {
+        if (fort) {
+          angleWrap.style.display = 'flex';
+          const angle = fort.angle !== undefined ? fort.angle : (fort.orientation !== undefined ? fort.orientation * 60 : 0);
+          angleSelect.value = String(angle);
+        } else {
+          angleWrap.style.display = 'none';
+        }
+      }
+
       // Find VP at (q, r)
       const vps = getScenarioVps();
       const vp = vps.find(v => v.q === q && v.r === r);
@@ -3522,7 +3602,8 @@ HTML_TEMPLATE = """<!DOCTYPE html>
       const { terrainMap, elevationMap } = buildScenarioTerrainAndElevationMap();
       const t = terrainMap[q + ',' + r] || 'clear';
       const el = elevationMap[q + ',' + r] || 0;
-      const fortStr = fort ? ` | 🛡️ Fort: ${fort.type.toUpperCase()}` : '';
+      const angleStr = fort && fort.angle !== undefined ? ` (${fort.angle}°)` : '';
+      const fortStr = fort ? ` | 🛡️ Fort: ${fort.type.toUpperCase()}${angleStr}` : '';
       const vpStr = vp ? ` | ★ VP: +${vp.value || 2} (${vp.initial_owner || 'Neutral'})` : '';
       const overlayEl = document.getElementById('canvas-info-overlay');
       if (overlayEl) {
@@ -3534,27 +3615,62 @@ HTML_TEMPLATE = """<!DOCTYPE html>
       if (!selectedScenarioHex || !currentScenarioData) return;
       ensureScenarioMapAndVpStructure();
       const { q, r } = selectedScenarioHex;
-      const forts = getScenarioFortifications();
-      const idx = forts.findIndex(f => f.q === q && f.r === r);
 
       if (newType === 'none') {
-        if (idx >= 0) forts.splice(idx, 1);
-      } else {
-        if (idx >= 0) {
-          forts[idx].type = newType;
-        } else {
-          forts.push({ type: newType, q, r });
+        if (currentScenarioData.map && currentScenarioData.map.fortifications) {
+          currentScenarioData.map.fortifications = currentScenarioData.map.fortifications.filter(f => !(f.q === q && f.r === r));
         }
-      }
-
-      if (currentScenarioData.fortifications) {
-        currentScenarioData.fortifications = forts;
+        if (currentScenarioData.fortifications) {
+          currentScenarioData.fortifications = currentScenarioData.fortifications.filter(f => !(f.q === q && f.r === r));
+        }
+      } else {
+        const forts = getScenarioFortifications();
+        const existing = forts.find(f => f.q === q && f.r === r);
+        if (existing) {
+          existing.type = newType;
+        } else {
+          forts.push({ type: newType, q, r, orientation: 0, angle: 0 });
+        }
+        if (currentScenarioData.fortifications) {
+          currentScenarioData.fortifications = forts;
+        }
       }
 
       renderScenarioFortsTable();
       drawScenarioCanvas();
       syncScenarioJsonFromState();
       updateScenarioHexInspector();
+    }
+
+    function rotateScenarioHexFort(delta) {
+      if (!selectedScenarioHex || !currentScenarioData) return;
+      const { q, r } = selectedScenarioHex;
+      const forts = getScenarioFortifications();
+      const fort = forts.find(f => f.q === q && f.r === r);
+      if (!fort) return;
+      let cur = fort.angle !== undefined ? fort.angle : (fort.orientation !== undefined ? fort.orientation * 60 : 0);
+      let next = (cur + delta + 360) % 360;
+      fort.angle = next;
+      fort.facing = next;
+      fort.orientation = Math.round(next / 60) % 6;
+      updateScenarioHexInspector();
+      drawScenarioCanvas();
+      syncScenarioJsonFromState();
+    }
+
+    function onScenarioHexFortAngleChange(newAngleStr) {
+      if (!selectedScenarioHex || !currentScenarioData) return;
+      const { q, r } = selectedScenarioHex;
+      const forts = getScenarioFortifications();
+      const fort = forts.find(f => f.q === q && f.r === r);
+      if (!fort) return;
+      const angle = (parseInt(newAngleStr, 10) || 0) % 360;
+      fort.angle = angle;
+      fort.facing = angle;
+      fort.orientation = Math.round(angle / 60) % 6;
+      updateScenarioHexInspector();
+      drawScenarioCanvas();
+      syncScenarioJsonFromState();
     }
 
     function onScenarioHexVpChange(newValStr) {
@@ -3817,45 +3933,74 @@ HTML_TEMPLATE = """<!DOCTYPE html>
         } catch (e) {}
       }
 
-      // 3. Draw Fortifications (Distinct pills in lower hex half)
+      // 3. Draw Fortifications (with Real Physical Counter Art & Rotation)
       for (const f of getScenarioFortifications()) {
         const { x, y } = hexToPixel(f.q, f.r, canvasZoom, canvasOffsetX, canvasOffsetY);
         const ftype = (f.type || 'bunker').toLowerCase();
-        
-        let badgeBg = '#1e293b';
-        let badgeStroke = '#38bdf8';
-        let badgeText = 'FORT';
-        if (ftype === 'bunker') { badgeBg = '#334155'; badgeStroke = '#38bdf8'; badgeText = 'BNK'; }
-        else if (ftype === 'casemate') { badgeBg = '#1e293b'; badgeStroke = '#60a5fa'; badgeText = 'CSM'; }
-        else if (ftype === 'gun_emplacement') { badgeBg = '#0f172a'; badgeStroke = '#93c5fd'; badgeText = 'GUN'; }
-        else if (ftype === 'trench') { badgeBg = '#78350f'; badgeStroke = '#d97706'; badgeText = 'TRN'; }
-        else if (ftype === 'barbed_wire') { badgeBg = '#451a03'; badgeStroke = '#f59e0b'; badgeText = 'WIRE'; }
-        else if (ftype === 'minefield') { badgeBg = '#7f1d1d'; badgeStroke = '#ef4444'; badgeText = 'MINE'; }
+        const orientation = f.orientation !== undefined ? f.orientation : (f.facing ? Math.round(f.facing / 60) % 6 : 0);
+        const angleDeg = f.angle !== undefined ? f.angle : orientation * 60;
+        const angleRad = (angleDeg * Math.PI) / 180;
 
-        const pillW = Math.max(28, Math.floor(canvasZoom * 1.05));
-        const pillH = Math.max(12, Math.floor(canvasZoom * 0.40));
-        const pillY = y + canvasZoom * 0.40;
+        ctx.save();
+        ctx.translate(x, y);
+        ctx.rotate(angleRad);
 
-        ctx.fillStyle = badgeBg;
-        if (ctx.roundRect) {
-          ctx.beginPath();
-          ctx.roundRect(x - pillW / 2, pillY - pillH / 2, pillW, pillH, 3);
-          ctx.fill();
-          ctx.strokeStyle = badgeStroke;
-          ctx.lineWidth = 1.5;
-          ctx.stroke();
-        } else {
-          ctx.fillRect(x - pillW / 2, pillY - pillH / 2, pillW, pillH);
-          ctx.strokeStyle = badgeStroke;
-          ctx.lineWidth = 1.5;
-          ctx.strokeRect(x - pillW / 2, pillY - pillH / 2, pillW, pillH);
+        let drewArt = false;
+        if (scenShowFortArt) {
+          const img = getFortArtImage(ftype);
+          if (img && img.complete && img.naturalWidth > 0) {
+            const tokenSize = Math.max(22, Math.floor(canvasZoom * 1.25));
+            ctx.drawImage(img, -tokenSize / 2, -tokenSize / 2, tokenSize, tokenSize);
+            drewArt = true;
+          }
         }
 
-        ctx.fillStyle = badgeStroke;
-        ctx.font = 'bold 9px sans-serif';
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
-        ctx.fillText(badgeText, x, pillY);
+        if (!drewArt) {
+          let badgeBg = '#1e293b';
+          let badgeStroke = '#38bdf8';
+          let badgeText = 'FORT';
+          if (ftype === 'bunker') { badgeBg = '#334155'; badgeStroke = '#38bdf8'; badgeText = 'BNK'; }
+          else if (ftype === 'casemate') { badgeBg = '#1e293b'; badgeStroke = '#60a5fa'; badgeText = 'CSM'; }
+          else if (ftype === 'gun_emplacement') { badgeBg = '#0f172a'; badgeStroke = '#93c5fd'; badgeText = 'GUN'; }
+          else if (ftype === 'trench') { badgeBg = '#78350f'; badgeStroke = '#d97706'; badgeText = 'TRN'; }
+          else if (ftype === 'barbed_wire') { badgeBg = '#451a03'; badgeStroke = '#f59e0b'; badgeText = 'WIRE'; }
+          else if (ftype === 'minefield') { badgeBg = '#7f1d1d'; badgeStroke = '#ef4444'; badgeText = 'MINE'; }
+
+          const pillW = Math.max(28, Math.floor(canvasZoom * 1.05));
+          const pillH = Math.max(12, Math.floor(canvasZoom * 0.40));
+
+          ctx.fillStyle = badgeBg;
+          if (ctx.roundRect) {
+            ctx.beginPath();
+            ctx.roundRect(-pillW / 2, -pillH / 2, pillW, pillH, 3);
+            ctx.fill();
+            ctx.strokeStyle = badgeStroke;
+            ctx.lineWidth = 1.5;
+            ctx.stroke();
+          } else {
+            ctx.fillRect(-pillW / 2, -pillH / 2, pillW, pillH);
+            ctx.strokeStyle = badgeStroke;
+            ctx.lineWidth = 1.5;
+            ctx.strokeRect(-pillW / 2, -pillH / 2, pillW, pillH);
+          }
+
+          ctx.fillStyle = badgeStroke;
+          ctx.font = 'bold 9px sans-serif';
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          ctx.fillText(badgeText, 0, 0);
+
+          // Directional arrow on badge
+          ctx.fillStyle = '#f59e0b';
+          ctx.beginPath();
+          ctx.moveTo(0, -pillH / 2 - 4);
+          ctx.lineTo(-4, -pillH / 2 - 1);
+          ctx.lineTo(4, -pillH / 2 - 1);
+          ctx.closePath();
+          ctx.fill();
+        }
+
+        ctx.restore();
       }
 
       // 4. Draw Victory Points (Golden star badges in upper hex half)
@@ -3896,7 +4041,10 @@ HTML_TEMPLATE = """<!DOCTYPE html>
       }
 
       // 5. Draw Units (Distinct circles in center of hex)
-      for (const u of getScenarioUnits()) {
+      const scenarioUnits = getScenarioUnits();
+      for (let idx = 0; idx < scenarioUnits.length; idx++) {
+        if (isDraggingUnit && idx === draggedUnitIdx) continue; // Draw hovering under mouse
+        const u = scenarioUnits[idx];
         const { q, r } = getUnitCoords(u);
         const { x, y } = hexToPixel(q, r, canvasZoom, canvasOffsetX, canvasOffsetY);
         const isUS = (u.side || '').toUpperCase() === 'US';
@@ -3915,8 +4063,63 @@ HTML_TEMPLATE = """<!DOCTYPE html>
         ctx.font = 'bold 9px sans-serif';
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
-        const shortName = (u.unit_id || '').substring(0, 3).toUpperCase();
+        const shortName = (u.unit_id || u.unit_key || '').substring(0, 3).toUpperCase();
         ctx.fillText(shortName, x, y);
+      }
+
+      // 5.1. Drag & Drop Visual Feedback
+      if (isDraggingUnit && draggedUnitIdx >= 0 && currentScenarioData.units && currentScenarioData.units[draggedUnitIdx]) {
+        const u = currentScenarioData.units[draggedUnitIdx];
+        const isUS = (u.side || '').toUpperCase() === 'US';
+        const isIT = (u.side || '').toUpperCase() === 'IT';
+        const sideColor = isUS ? '#2563eb' : (isIT ? '#16a34a' : '#475569');
+
+        // Highlight drop target hex
+        if (dragTargetHex) {
+          const tPos = hexToPixel(dragTargetHex.q, dragTargetHex.r, canvasZoom, canvasOffsetX, canvasOffsetY);
+          drawPointyHex(ctx, tPos.x, tPos.y, canvasZoom, 'rgba(56, 189, 248, 0.28)', '#38bdf8', 3);
+
+          // Connecting guide line
+          if (dragSourceHex) {
+            const sPos = hexToPixel(dragSourceHex.q, dragSourceHex.r, canvasZoom, canvasOffsetX, canvasOffsetY);
+            ctx.save();
+            ctx.setLineDash([5, 4]);
+            ctx.strokeStyle = '#38bdf8';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.moveTo(sPos.x, sPos.y);
+            ctx.lineTo(dragMousePos.px, dragMousePos.py);
+            ctx.stroke();
+            ctx.restore();
+          }
+        }
+
+        // Draw dragged unit token hovering under cursor with shadow
+        const hx = dragMousePos.px;
+        const hy = dragMousePos.py;
+        const rad = Math.max(12, Math.floor(canvasZoom * 0.42));
+
+        ctx.save();
+        ctx.shadowColor = 'rgba(0, 0, 0, 0.6)';
+        ctx.shadowBlur = 10;
+        ctx.shadowOffsetX = 3;
+        ctx.shadowOffsetY = 5;
+
+        ctx.beginPath();
+        ctx.arc(hx, hy, rad, 0, Math.PI * 2);
+        ctx.fillStyle = sideColor;
+        ctx.fill();
+        ctx.strokeStyle = '#38bdf8';
+        ctx.lineWidth = 2.5;
+        ctx.stroke();
+
+        ctx.fillStyle = '#fff';
+        ctx.font = 'bold 11px sans-serif';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        const shortName = (u.unit_id || u.unit_key || '').substring(0, 4).toUpperCase();
+        ctx.fillText(shortName, hx, hy);
+        ctx.restore();
       }
 
       // 5.5. Draw Marked Scenario Hex Highlight
@@ -3960,6 +4163,39 @@ HTML_TEMPLATE = """<!DOCTYPE html>
       scenCanvas.addEventListener('mousedown', e => {
         scenMouseDownX = e.clientX;
         scenMouseDownY = e.clientY;
+
+        const rect = scenCanvas.getBoundingClientRect();
+        const scaleX = scenCanvas.width / (rect.width || 1);
+        const scaleY = scenCanvas.height / (rect.height || 1);
+        const px = (e.clientX - rect.left) * scaleX;
+        const py = (e.clientY - rect.top) * scaleY;
+        dragMousePos = { px, py };
+
+        // 1. Check if left-click clicked on an existing unit to start Drag-and-Drop
+        if (e.button === 0 && currentScenarioData && currentScenarioData.units) {
+          const clickedHex = pixelToHex(px, py, canvasZoom, canvasOffsetX, canvasOffsetY);
+          const uIdx = currentScenarioData.units.findIndex(u => {
+            const coords = getUnitCoords(u);
+            return coords.q === clickedHex.q && coords.r === clickedHex.r;
+          });
+
+          if (uIdx >= 0) {
+            const unit = currentScenarioData.units[uIdx];
+            const coords = getUnitCoords(unit);
+            const center = hexToPixel(coords.q, coords.r, canvasZoom, canvasOffsetX, canvasOffsetY);
+            if (Math.hypot(px - center.x, py - center.y) <= Math.max(16, canvasZoom * 0.45)) {
+              isDraggingUnit = true;
+              draggedUnitIdx = uIdx;
+              dragSourceHex = { q: coords.q, r: coords.r };
+              dragTargetHex = { q: coords.q, r: coords.r };
+              scenCanvas.style.cursor = 'grabbing';
+              drawScenarioCanvas();
+              return;
+            }
+          }
+        }
+
+        // 2. Otherwise handle canvas panning
         if (e.button === 0 || e.button === 1 || e.button === 2) {
           isPanning = true;
           panStartX = e.clientX - canvasOffsetX;
@@ -3969,6 +4205,43 @@ HTML_TEMPLATE = """<!DOCTYPE html>
       });
 
       window.addEventListener('mouseup', e => {
+        // Handle Unit Drag Drop
+        if (isDraggingUnit) {
+          isDraggingUnit = false;
+          scenCanvas.style.cursor = 'grab';
+
+          const rect = scenCanvas.getBoundingClientRect();
+          const scaleX = scenCanvas.width / (rect.width || 1);
+          const scaleY = scenCanvas.height / (rect.height || 1);
+          const px = (e.clientX - rect.left) * scaleX;
+          const py = (e.clientY - rect.top) * scaleY;
+          const target = pixelToHex(px, py, canvasZoom, canvasOffsetX, canvasOffsetY);
+
+          if (currentScenarioData && draggedUnitIdx >= 0 && currentScenarioData.units) {
+            const [w, h] = currentScenarioData.shape || [9, 8];
+            if (target.q >= 0 && target.q < w && target.r >= 0 && target.r < h) {
+              const unit = currentScenarioData.units[draggedUnitIdx];
+              if (unit) {
+                if (Array.isArray(unit.position)) {
+                  unit.position = [target.q, target.r];
+                }
+                unit.q = target.q;
+                unit.r = target.r;
+
+                selectScenarioHex(target.q, target.r);
+                renderScenarioUnitsTable();
+                syncScenarioJsonFromState();
+                showNotif(`Moved ${unit.unit_id || unit.unit_key || 'Unit'} to (${target.q}, ${target.r})`);
+              }
+            }
+          }
+          draggedUnitIdx = -1;
+          dragSourceHex = null;
+          dragTargetHex = null;
+          drawScenarioCanvas();
+          return;
+        }
+
         if (isPanning) {
           isPanning = false;
           if (scenCanvas) scenCanvas.style.cursor = 'grab';
@@ -3992,6 +4265,20 @@ HTML_TEMPLATE = """<!DOCTYPE html>
       });
 
       scenCanvas.addEventListener('mousemove', e => {
+        const rect = scenCanvas.getBoundingClientRect();
+        const scaleX = scenCanvas.width / (rect.width || 1);
+        const scaleY = scenCanvas.height / (rect.height || 1);
+        const px = (e.clientX - rect.left) * scaleX;
+        const py = (e.clientY - rect.top) * scaleY;
+
+        // If dragging unit:
+        if (isDraggingUnit && currentScenarioData && draggedUnitIdx >= 0) {
+          dragMousePos = { px, py };
+          dragTargetHex = pixelToHex(px, py, canvasZoom, canvasOffsetX, canvasOffsetY);
+          drawScenarioCanvas();
+          return;
+        }
+
         if (isPanning) {
           canvasOffsetX = e.clientX - panStartX;
           canvasOffsetY = e.clientY - panStartY;
@@ -3999,11 +4286,6 @@ HTML_TEMPLATE = """<!DOCTYPE html>
           return;
         }
 
-        const rect = scenCanvas.getBoundingClientRect();
-        const scaleX = scenCanvas.width / (rect.width || 1);
-        const scaleY = scenCanvas.height / (rect.height || 1);
-        const px = (e.clientX - rect.left) * scaleX;
-        const py = (e.clientY - rect.top) * scaleY;
         const { q, r } = pixelToHex(px, py, canvasZoom, canvasOffsetX, canvasOffsetY);
 
         if (!currentScenarioData) return;
@@ -4014,8 +4296,16 @@ HTML_TEMPLATE = """<!DOCTYPE html>
           const t = terrainMap[q + ',' + r] || 'clear';
           const el = elevationMap[q + ',' + r] || 0;
           document.getElementById('canvas-info-overlay').innerText = `Hex (${q}, ${r}) | Terrain: ${t} | Elev: +${el}`;
+
+          // Cursor feedback if hovering over a draggable unit
+          const hasUnit = currentScenarioData.units && currentScenarioData.units.some(u => {
+            const c = getUnitCoords(u);
+            return c.q === q && c.r === r;
+          });
+          scenCanvas.style.cursor = hasUnit ? 'grab' : 'pointer';
         } else {
           hoveredHex = null;
+          scenCanvas.style.cursor = 'default';
         }
         drawScenarioCanvas();
       });

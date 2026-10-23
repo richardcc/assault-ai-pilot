@@ -20,35 +20,28 @@
     "fortifications": [
       {
         "type": "trench",
-        "q": 3,
-        "r": 2,
-        "orientation": 4,
-        "vertex_start": 1,
-        "vertex_end": 2
+        "q": 7,
+        "r": 6
       },
       {
         "type": "casemate",
         "q": 5,
-        "r": 2,
-        "orientation": 4,
-        "vertex_start": 1,
-        "vertex_end": 2
+        "r": 0
       },
       {
         "type": "gun_emplacement",
-        "q": 4,
-        "r": 2,
-        "orientation": 4,
-        "vertex_start": 1,
-        "vertex_end": 2
+        "q": 2,
+        "r": 4
       },
       {
-        "type": "gun_emplacement",
-        "q": 4,
-        "r": 5,
-        "orientation": 4,
-        "vertex_start": 1,
-        "vertex_end": 2
+        "type": "casemate",
+        "q": 1,
+        "r": 2
+      },
+      {
+        "type": "trench",
+        "q": 2,
+        "r": 6
       }
     ]
   },
@@ -133,9 +126,8 @@
     "hexes": [
       {
         "q": 4,
-        "r": 3,
-        "initial_owner": null,
-        "value": 2
+        "r": 4,
+        "value": 1
       }
     ]
   },
@@ -164,5 +156,11 @@
       }
     ]
   },
-  "status": "draft"
+  "status": "draft",
+  "is_draft": true,
+  "rules": {
+    "attacker_morale_threshold": 10,
+    "defender_morale_threshold": 10
+  },
+  "updated_at": "2026-10-23T22:03:21.854817+00:00"
 }
