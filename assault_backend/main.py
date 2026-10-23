@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
@@ -8,6 +8,7 @@ from assault_backend.routers.explain import router as explain_router
 from assault_backend.routers.game import router as game_router
 from assault_backend.routers.rag import router as rag_router
 from assault_backend.routers.scenarios import router as scenarios_router
+from assault_backend.routers.scenario_editor import router as scenario_editor_router
 from assault_backend.session_state import ezv2_service, game_session
 from assault_rag.copilot.index_builder import (
     ensure_game_data_chunks,
@@ -75,7 +76,7 @@ async def app_lifespan(_app: FastAPI):
 
 app = FastAPI(
     title="Assault Backend & AI Platform",
-    description="Motor autoritativo de reglas tácticas por turnos, inferencia MCTS con EfficientZero V2 y Copiloto RAG.",
+    description="Motor autoritativo de reglas tÃ¡cticas por turnos, inferencia MCTS con EfficientZero V2 y Copiloto RAG.",
     version="2.0.0",
     lifespan=app_lifespan,
 )
@@ -123,6 +124,7 @@ app.include_router(game_router)
 app.include_router(scenarios_router)
 app.include_router(explain_router)
 app.include_router(rag_router)
+app.include_router(scenario_editor_router)
 
 # Mount Static Art Assets
 from fastapi.staticfiles import StaticFiles
