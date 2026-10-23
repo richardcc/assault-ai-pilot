@@ -5,69 +5,142 @@
 
 ---
 
-## 1. Topología General de la Red Neuronal
+## 1. Topología General de la Red Neuronal (EfficientZero V2)
 
-La red de **EfficientZero V2** implementa un modelo de mundo diferenciable capaz de planificar en un espacio latente continuo sin requerir llamadas al simulador físico durante la búsqueda en árbol.
+La arquitectura desacoplada de **EfficientZero V2** implementa un modelo de mundo diferenciable de 4 componentes:
+1. **Representación ($h_0$)**: Encoder espacial convolucional que proyecta la observación sensorial $o_t$ en un espacio latente continuo $s_0$.
+2. **Dinámica Recurrente ($g$)**: Simula transiciones hacia adelante $s_{t+1} = g(s_t, a_t)$ y emite la recompensa inmediata $r_{t+1}$ sin consultar el motor de reglas físicas.
+3. **Cabezas de Predicción ($f_	heta$)**: Evalúan la política prior $\pi(a)$, el valor $v(s)$, el objetivo auxiliar de VPs y las cabezas tácticas auxiliares (amenaza, desgaste, moral).
+4. **Consistencia Auto-supervisada ($q_{\text{proj}}$)**: Estabiliza el espacio latente mediante proyección SimSiam, stop-gradient y norma $\ell_2$ unitaria.
 
 ```mermaid
 flowchart TD
-    subgraph Entrada ["1. Entrada Sensorial Agnostica (H x W)"]
-        OBS["Observacion o_t\n(32 canales x H x W: 16x16 / 32x32 / 64x64)"]
+    subgraph Entrada ["1. ENTRADA SENSORIAL AGNOSTICA (Simulador VOEC)"]
+        OBS["Observación o_t\n(Tensor 38 canales x 16 x 16)"]
     end
 
-    subgraph Jerarquia_N1 ["2. Nivel 1: Planificador Macro Jerarquico"]
-        MACRO["MacroStrategyPlanner\nPostura Global + Roles Doctrinales"]
+    subgraph Jerarquia_N1 ["2. NIVEL 1 - DOCTRINA (Planificador Macro HRL)"]
+        MACRO["MacroStrategyPlanner\n• 5 Roles Doctrinales Dinámicos\n• Análisis Topográfico IPB Turno 0\n• Modulación Priors MCTS beta_macro"]
         OBS --> MACRO
     end
 
-    subgraph Representacion ["3. Red de Representacion h_theta(o) [19 Conv2D]"]
-        OBS --> REP_IN["HexagonalMaskConv2d (32 -> 48) + GroupNorm + SiLU"]
-        REP_IN --> REP_TOWER["4x ResidualBlockSE (48ch)\n16 Conv2D + Mascara Hexagonal + SE"]
-        REP_TOWER --> LATENT_0["Estado Latente Raiz s_0\n(48 canales x H x W)"]
+    subgraph Representacion ["3. ENCODER CNN: h_0(o) Representación (~400.128 params)"]
+        OBS --> REP_IN["HexagonalMaskConv2d (38 -> 48) + GroupNorm + SiLU"]
+        REP_IN --> REP_TOWER["3x ResidualBlockSE (48ch)\n6 Conv2D + Máscara Hexagonal + SE (ratio 4)"]
+        REP_TOWER --> LATENT_0["ESTADO LATENTE s_0\n(48 canales x 16 x 16, Min-Max [-1, +1])"]
     end
 
-    subgraph Dinamica ["4. Red de Dinamica Recurrente g_theta(s, a) [17 Conv2D x k iteraciones]"]
+    subgraph Dinamica ["4. RED DE DINÁMICA: g(s, a) -> s_1 (Unroll 5 pasos)"]
         LATENT_0 --> DYN_CONCAT
-        ACTION["Accion Candidata a_t\n(Broadcast Dinamico 1 x H x W)"] --> DYN_CONCAT["Concatenacion (48 + 1 = 49ch)"]
-        DYN_CONCAT --> DYN_TOWER["dynamics_state: Conv3x3 + 4x ResidualBlockSE (48ch)"]
-        DYN_TOWER -->|"Bucle Recurrente Weight-Tied (pasos 2..k)\nConcatenado con Canal Cero (48 + 1 = 49ch)"| DYN_TOWER
-        DYN_TOWER --> LATENT_NEXT["Siguiente Estado Latente s_{t+1} (Min-Max Norm)\n(48 canales x H x W)"]
-        LATENT_NEXT --> REW_HEAD["1. Reward Head: Conv1x1 -> AdaptiveAvgPool2d(1) -> Linear\nTwo-Hot / HL-Gauss (2K+1 atomos)"]
+        ACTION["Acción MCTS a_0 (0..31)\n(Broadcast 1 x 16 x 16)"] --> DYN_CONCAT["Concatenación (48 + 1 = 49ch)"]
+        DYN_CONCAT --> DYN_TOWER["dynamics_state: Conv3x3 + 3 ResBlocks + 2 Bottlenecks (48ch)"]
+        DYN_TOWER -->|"Bucle Recurrente Weight-Tied (pasos 2..5)\nConcatenado con Plano Neutro (48 + 1 = 49ch)"| DYN_TOWER
+        DYN_TOWER --> LATENT_NEXT["Siguiente Estado Latente s_1 (Min-Max Norm)\n(48 canales x 16 x 16)"]
+        LATENT_NEXT --> REW_HEAD["Recompensa Inmediata r_1: Conv1x1 -> Pool -> Linear\nTwo-Hot / HL-Gauss (61 átomos)"]
     end
 
-    subgraph Prediccion ["5. Tronco de Prediccion y 8 Cabezas f_theta(s) [48 Canales Latentes]"]
-        LATENT_0 --> P_TRUNK["prediction_trunk: 2x ResidualBlockSE (8 Conv2D x 48ch)"]
+    subgraph Prediccion ["5. TRONCO DE PREDICCIÓN Y CABEZAS f_theta(s) (915.568 params totales)"]
+        LATENT_0 --> P_TRUNK["prediction_trunk: 2x ResidualBlockSE (48ch)"]
         LATENT_NEXT --> P_TRUNK
         P_TRUNK --> S_ATTN["SpatialAttentionBlock (Conv 7x7 -> Gate Sigmoid)"]
-        S_ATTN --> ADAPT_SPATIAL["_adapt_spatial(x): Interpolacion Bilineal -> (16 x 16)\nInvarianza Espacial para Cabezas Densas"]
 
-        ADAPT_SPATIAL --> HEAD_POL["2. Politica f_p(s): Conv1x1(48->4) -> MLP(1024->64->32)\n32 Logits Prior (Modulado Dinamico \beta_macro por Nivel 1)"]
-        ADAPT_SPATIAL --> HEAD_VAL["3. Valor f_v(s): Conv1x1(48->1) -> Linear(256->128->2K+1)\nTwo-Hot / HL-Gauss con Symlog / Phi"]
-        ADAPT_SPATIAL --> HEAD_OBJ["4. Objetivo Escalar f_o(s): SpatialAttention (4x4) -> Linear(64->1)"]
-
-        S_ATTN --> HEAD_THREAT["5. Amenaza Espacial f_threat(s): FCN Conv3x3+1x1\nMapa FCN [B, 1, H, W] de LOS/Fuego"]
-        S_ATTN --> HEAD_OWNER["6. Posesion Final f_own(s): FCN Conv3x3+1x1\nMapa FCN [B, 1, H, W] de Control (KataGo)"]
-        S_ATTN --> S_ATTN_GRID["SpatialAttentionBlock (4x4) -> Sectores Espaciales [B, 16 x val_ch]"]
-        S_ATTN_GRID --> HEAD_ATTR["7. Desgaste f_attr(s): MLP(64->32->2)\nVector Bajas [Aliadas, Enemigas]"]
-        S_ATTN_GRID --> HEAD_MORALE["8. Moral f_morale(s): MLP(64->32->4)\nDistribucion [NORMAL, PINNED, SUPPRESSED, ROUTED]"]
-        S_ATTN_GRID --> HEAD_INTENT["9. Intencion Táctica f_intent(s): MLP(64->32->8)\n8 Clases Doctrinales"]
-        S_ATTN_GRID --> HEAD_MVP["10. Multi-VP f_mvp(s): MLP(64->32->4)\nProgreso Vectorial [Control, Contested, Threat, Time]"]
+        S_ATTN --> HEAD_POL["POLÍTICA f_pi\n32 Logits (Conv 1x1)\nLoss: ~2.10 | Coef: 77.5%"]
+        S_ATTN --> HEAD_VAL["VALOR f_v\n1 Escalar [-1.0, +1.0] (Pool 2x2)\nLoss: ~0.12 | Coef: 10.0%"]
+        S_ATTN --> HEAD_OBJ["OBJETIVO AUXILIAR f_aux\nProgreso VP (Pool 2x2)\nLoss: ~0.04 | Coef: 4.5%"]
+        S_ATTN --> HEAD_CONS["CONSISTENCIA q_proj\nSimSiam (Pool 4x4, Stop-Grad)\nLoss: ~0.08 | Coef: 3.5%"]
+        S_ATTN --> HEAD_THREAT["AMENAZA / GUARNICIÓN f_threat [TACTICAL]\nHeatmap 16x16 (FCN Conv / no-shrink)\nLoss: ~0.13 | Coef: 3.0%"]
+        S_ATTN --> HEAD_ATTR["DESGASTE / DAÑO f_attr [TACTICAL]\nVector [Aliado / Enemigo] (Spatial Attention)\nLoss: ~0.02 | Coef: 2.0%"]
+        S_ATTN --> HEAD_MORALE["ESTADO DE MORAL f_morale [TACTICAL]\n4 Clases (Normal / Pin / Supp / Rout)\nLoss: ~0.30 | Coef: 1.5%"]
     end
 
-    subgraph Consistencia ["6. Proyector y Predictor SimSiam q_theta(s)"]
-        LATENT_0 --> PROJ["11. Consistency Head: AdaptiveAvgPool2d(1)\nProjector MLP (48->128->128) + Predictor MLP (128->64->128)"]
-        LATENT_NEXT --> PROJ
-        PROJ --> Z_VEC["Vector Normalizado L2 z_t (|z|=1)\nStop-Gradient Dual en Target"]
-    end
-
-    MACRO -.->|Modulacion Dinamica \beta_macro| HEAD_POL
+    MACRO -.->|Modulación Dinámica de Priors beta_macro (+35% / IPB)| HEAD_POL
 ```
+
+### 1.1 Ficha Técnica de la Arquitectura (Telemetría MLOps Live Snapshot)
+
+Conforme al panel de **Topología Dinámica de la Red Neuronal** en el Dashboard MLOps (`Puerto 8778 -> Network Topology -> Topology & Architecture`):
+
+| Parámetro / Dimensión | Especificación Canónica | Detalle de Implementación |
+| :--- | :---: | :--- |
+| **Parámetros Totales del Modelo** | **915.568 parámetros** | Arquitectura v2: GroupNorm + Squeeze-and-Excitation + Convoluciones Bottleneck (-15% parámetros vs baseline legacy). |
+| **Parámetros de Representación $h_0$** | **~400.128 parámetros** | Encoder espacial convolucional de entrada. |
+| **Dimensiones de Entrada Sensorial** | **$B 	imes 38 	imes 16 	imes 16$** | 38 canales espaciales proyectados sobre coordenadas axiales $(q, r)$. |
+| **Dimensiones de Estado Latente** | **$B 	imes 48 	imes 16 	imes 16$** | 48 canales latentes continuos con normalización Min-Max $s_{\text{norm}} = \frac{s - \min(s)}{\max(s) - \min(s) + \epsilon}$. |
+| **Campo Receptivo de Representación** | **~15 $\times$ 15 hexágonos** | 3 bloques convolucionales $3\times 3$ con máscara hexagonal y compuertas SE. |
+| **Espacio de Acciones** | **32 Logits** | Espacio discreto de maniobra táctica y combate. |
+| **Desenrollado Recurrente (Unroll RQs)** | **5 Pasos ($k=5$)** | Profundidad de simulación latente weight-tied por cada paso MCTS. |
+| **Bloques Convolucionales** | **3D + 2P** | 3 bloques en Dinámica + 2 bloques en Predicción + 3 en Representación. |
+| **Precisión de Inferencia y Train** | **Auto (FP32 / AMP)** | Precisión adaptativa automática con optimizador AdamW fusionado en CUDA. |
+
+### 1.2 Estructura y Ponderación Multitarea de las Cabezas Activas
+
+Durante el entrenamiento en `trainer.py`, los gradientes de las 7 cabezas activas se balancean mediante **PCGrad** ponderados por los siguientes coeficientes relativos:
+
+| Cabeza de Salida | Tipo de Arquitectura | Tensor de Salida | Coeficiente Relativo | Función Táctica Principal |
+| :--- | :--- | :--- | :---: | :--- |
+| **`POLÍTICA` ($f_\pi$)** | `Conv1x1(48 -> 4) -> MLP(1024 -> 64 -> 32)` | 32 Logits Prior | **77.5%** | Probabilidades prior $\pi(a \mid s)$ para guiar la búsqueda MCTS. |
+| **`VALOR` ($f_v$)** | `AdaptiveAvgPool2d(2x2) -> Linear(128 -> 61)` | Escalar $[-1.0, +1.0]$ | **10.0%** | Retorno acumulado esperado modelado con Two-Hot / HL-Gauss. |
+| **`OBJETIVO AUXILIAR` ($f_{\text{aux}}$)** | `AdaptiveAvgPool2d(2x2) -> Linear(128 -> 1)` | Escalar $[0.0, 1.0]$ | **4.5%** | Predicción del progreso diferencial de captura de VPs. |
+| **`CONSISTENCIA` ($q_{\text{proj}}$)** | `SimSiam (Pool 4x4) -> Projector + Predictor` | Vector $\ell_2$ unitario | **3.5%** | Pérdida autosupervisada con stop-gradient que previene el colapso latente. |
+| **`AMENAZA` ($f_{\text{threat}}$)** | `FCN Conv3x3 -> Conv1x1 (no-shrink)` | Heatmap $16\times 16$ | **3.0%** | Mapa espacial directo de líneas de tiro y amenaza de fuego de reacción. |
+| **`DESGASTE` ($f_{\text{attr}}$)** | `SpatialAttentionBlock -> MLP` | Vector $[Aliado, Enemigo]$ | **2.0%** | Estimación de bajas esperadas en personal y potencia de fuego. |
+| **`ESTADO DE MORAL` ($f_{\text{morale}}$)** | `SpatialAttentionBlock -> MLP` | 4 Clases | **1.5%** | Distribución categórica [Normal, Pinned, Suppressed, Routed]. |
 
 ---
 
 ## 2. Los 5 Componentes del Modelo de Mundo y Desglose de 49 Capas Conv2D
 
 ### 2.1. Red de Representación ($h_\theta$ — 19 Capas Conv2D)
+* **Entrada**: Tensor espacial sensorial $o_t \in \mathbb{R}^{B \times 38 \times H \times W}$ construido por `voec_sim` y adaptado por `agents/efficientzero_v2/core/observation.py` ($16\times 16$, $32\times 32$, $64\times 64$).
+* **Capas Internas**:
+  * `Conv2d(38, 48, kernel_size=3, padding=1)` con máscara hexagonal.
+  * `GroupNorm(num_groups=4, num_channels=48) + SiLU`.
+  * 3x `ResidualBlockSE(48ch)`: cada uno con 2 convoluciones espaciales $3\times 3$ con GroupNorm y activación SiLU, complementadas con compuertas Squeeze-and-Excitation (SE ratio: 4).
+* **Escalado Min-Max Latente**: $s_{\text{norm}} = \frac{s - \min(s)}{\max(s) - \min(s) + \epsilon}$.
+* **Salida**: Estado latente abstracto $s_0 \in \mathbb{R}^{B \times 48 \times 16 \times 16}$.
+
+### 2.1.1 Catálogo Canónico de los 38 Canales Espaciales de Entrada (Tensor $38 \times 16 \times 16$)
+
+| Canal | Nombre Canónico | Categoría | Rango | Descripción Funcional |
+| :---: | :--- | :---: | :---: | :--- |
+| **Ch 00** | `ally_presence` | `UNITS` | $[0, 1]$ | $1.0$ en hexágonos ocupados por unidades aliadas activas. |
+| **Ch 01** | `enemy_presence` | `UNITS` | $[0, 1]$ | $1.0$ en hexágonos con unidades enemigas detectadas. |
+| **Ch 02** | `ally_hp_norm` | `UNITS` | $[0.0, 1.0]$ | Puntos de vida normalizados de las escuadras aliadas según `max_strength`. |
+| **Ch 03** | `enemy_hp_norm` | `UNITS` | $[0.0, 1.0]$ | Puntos de vida normalizados de las escuadras enemigas según `max_strength`. |
+| **Ch 04** | `ally_crossfire_risk` | `UNITS` | $[0.0, 1.0]$ | Riesgo de fuego cruzado enemigo sobre unidades aliadas / estado de supresión aliada. |
+| **Ch 05** | `enemy_target_engagement` | `UNITS` | $[0.0, 1.0]$ | Hexágonos enemigos con objetivos aliados a su alcance de tiro / supresión enemiga. |
+| **Ch 06** | `vp_contest_race` | `VP` | $[-1.0, +1.0]$ | Ventaja diferencial en carrera hacia el VP: $>0$ si el aliado llega antes, $<0$ si el enemigo lidera. |
+| **Ch 07** | `reaction_fire_threat` | `UNITS` | $[0.0, 1.0]$ | Mapa de calor continuo de amenaza y fuego de reacción enemigo (*overwatch/opportunity fire*). |
+| **Ch 08** | `ally_heavy_mg_support` | `UNITS` | $[0, 1]$ | $1.0$ para ametralladoras pesadas y medianas aliadas (HMG, MMG, MG42). |
+| **Ch 09** | `enemy_heavy_mg_support` | `UNITS` | $[0, 1]$ | $1.0$ para ametralladoras pesadas y medianas enemigas (HMG, MMG, MG42). |
+| **Ch 10** | `ally_indirect_mortar` | `UNITS` | $[0, 1]$ | $1.0$ para armas de tiro indirecto / morteros aliados (50mm, 60mm, 81mm). |
+| **Ch 11** | `local_firepower_balance` | `UNITS` | $[-1.0, +1.0]$ | Balance local de potencia de fuego [$+1$ aliado dominante, $0$ disputado, $-1$ enemigo dominante]. |
+| **Ch 12** | `map_playable` | `TERRAIN` | $[0, 1]$ | $1.0$ en hexágonos válidos del mapa; $0.0$ en los bordes fuera de tablero. |
+| **Ch 13** | `vp_mask` | `VP` | $[0, 1]$ | $1.0$ en hexágonos que son Puntos de Victoria (VPs). |
+| **Ch 14** | `vp_owner_relative` | `VP` | $[-1.0, +1.0]$ | $+1.0$ controlado por aliado, $-1.0$ por enemigo, $0.0$ disputado/neutral. |
+| **Ch 15** | `terrain_move_cost_norm` | `TERRAIN` | $[0.0, 1.0]$ | Coste en puntos de movimiento (carretera = bajo, bosque/colina = alto). |
+| **Ch 16** | `terrain_cover_norm` | `TERRAIN` | $[0.0, 1.0]$ | Bonificación defensiva de cobertura (edificios urbanos $= 0.5+$). |
+| **Ch 17** | `terrain_los_block` | `TERRAIN` | $[0, 1]$ | Bloqueo de línea de visión por elevación o construcciones densas. |
+| **Ch 18** | `vp_distance_field` | `VP` | $[0.0, 1.0]$ | Campo radial continuo de proximidad al VP más cercano ($1 / (1 + 	ext{dist})$). |
+| **Ch 19** | `q_coord_norm` | `HEX` | $[-1.0, +1.0]$ | Coordenada axial Q del hexágono normalizada $[-1, 1]$. |
+| **Ch 20** | `r_coord_norm` | `HEX` | $[-1.0, +1.0]$ | Coordenada axial R del hexágono normalizada $[-1, 1]$. |
+| **Ch 21** | `frontline_control` | `HEX` | $[-1.0, +1.0]$ | Campo de potencial territorial $[-1, +1]$ (difusión y control de línea de frente). |
+| **Ch 22** | `ally_mobility_norm` | `UNITS` | $[0.0, 1.0]$ | Puntos de movimiento disponibles restantes de la escuadra activa. |
+| **Ch 23** | `enemy_indirect_mortar` | `UNITS` | $[0, 1]$ | $1.0$ para armas de tiro indirecto / morteros enemigos (50mm, 8cm). |
+| **Ch 24** | `ally_direct_range_norm` | `UNITS` | $[0.0, 1.0]$ | Alcance de fuego directo y proyección 2D de alcance óptimo de combate aliado. |
+| **Ch 25** | `enemy_direct_range_norm` | `UNITS` | $[0.0, 1.0]$ | Alcance de fuego directo y proyección 2D de alcance óptimo de combate enemigo. |
+| **Ch 26** | `ally_fire_coverage` | `UNITS` | $[0.0, 1.0]$ | Heatmap de cobertura de fuego directo aliado sobre cada casilla del mapa. |
+| **Ch 27** | `heavy_fortifications` | `TERRAIN` | $[0.0, 1.0]$ | Fortificaciones pesadas: $+1.0$ búnker/casamata, $+0.70$ trinchera, $+0.40$ urbano de piedra defensivo. |
+| **Ch 28** | `ally_attack_power_norm` | `UNITS` | $[0.0, 1.0]$ | Poder de fuego ofensivo aliado (dados de combate normalizados). |
+| **Ch 29** | `hazard_mines_and_wire` | `TERRAIN` | $[0.0, 1.0]$ | Peligros y obstáculos del terreno: $+1.0$ campos de minas, $+0.60$ alambradas de espino. |
+| **Ch 30** | `ally_defense_power_norm` | `UNITS` | $[0.0, 1.0]$ | Capacidad defensiva de las escuadras aliadas (dados de defensa normalizados). |
+| **Ch 31** | `enemy_defense_power_norm` | `UNITS` | $[0.0, 1.0]$ | Capacidad defensiva de las escuadras enemigas (dados de defensa normalizados). |
+| **Ch 32** | `ally_doctrine_role` | `UNITS` | $[0.0, 1.0]$ | Codificación continua de rol aliado (`SPEARHEAD`=1.0, `FIRE_SUPPORT`=0.75, `RECON`=0.50, `SCREEN`=0.25). |
+| **Ch 33** | `enemy_doctrine_role` | `UNITS` | $[0.0, 1.0]$ | Codificación continua de rol enemigo deducido (`SPEARHEAD`=1.0, `FIRE_SUPPORT`=0.75, `RECON`=0.50, `SCREEN`=0.25). |
+| **Ch 34** | `ally_optimal_range_2d` | `UNITS` | $[0.0, 1.0]$ | Footprint 2D de alcance óptimo de combate aliado proyectado sobre el tablero. |
+| **Ch 35** | `enemy_optimal_range_2d` | `UNITS` | $[0.0, 1.0]$ | Footprint 2D de alcance óptimo de combate enemigo proyectado sobre el tablero. |
+| **Ch 36** | `turn_urgency_pressure` | `GLOBAL` | $[0.0, 1.5]$ | Presión temporal continua ($t/T$) y campo de urgencia radial amplificado hacia VPs no capturados. |
+| **Ch 37** | `paralysis_exposure_risk` | `UNITS` | $[0.0, 1.0]$ | Mapa de calor de riesgo de parálisis: escuadras aliadas expuestas fuera de cobertura sin maniobra ni fuego. |
 * **Entrada**: Tensor espacial sensorial $o_t \in \mathbb{R}^{B \times C \times H \times W}$ construido por `voec_sim` y adaptado por `agents/efficientzero_v2/core/observation.py` ($C \in \{32, 36, 37, 38\}$, agnóstico a la resolución espacial: $16\times 16$, $32\times 32$, $64\times 64$).
   * **Canales 13 y 14 (`vp_mask` y `vp_owner_relative`)**: Codificación de la ubicación y control de los Puntos de Victoria modulada por su valor intrínseco relativo ($v_{\text{rel}} = v_{\text{vp}} / 2.0$, asignando $1.0$ para 2 VP y $1.5$ para 3 VP clave; en el Canal 14, $+v_{\text{rel}}$ para control aliado y $-v_{\text{rel}}$ para enemigo).
   * **Canal 18 (`vp_distance_field`)**: Campo continuo euclidiano radial ponderado por el valor relativo de cada VP ($\max_{vp} \frac{v_{\text{rel}}}{1 + d_{\text{vp}}}$). Modulado dinámicamente por la presión temporal de la Tarea 2.3: si el bando no controla el VP, la pendiente se intensifica con $(1.0 + 0.5 \cdot \frac{t}{T})$, forzando convergencia espacial rápida hacia los objetivos decisivos antes de que transcurran los turnos.
@@ -263,6 +336,43 @@ Este desacoplamiento continuo habilita tres regímenes operativos gobernados des
    - Permite arrancar el entrenamiento con exploración libre pura ($\beta = 0.0$) y reforzar la disciplina doctrinal a medida que el valor converge, o viceversa (guiar el arranque y retirar el sesgo conforme la red madura).
 3. **Régimen Doctrinal Completo ($\beta_{\text{macro}} = 1.0$)**:
    - Aplica el $+35\%$ canónico en roles de vanguardia y fuego de apoyo y $+50\%$ en captura directa de VPs. Verificado formalmente en `agents/efficientzero_v2/tests/test_heads_improvements.py`.
+
+---
+
+### 5.4. Perfilado Topográfico 5D e Inyección de Priors IPB Turno 0 (Tarea 4.3 - v2.5.28)
+
+Complementando los roles doctrinales y la modulación $\beta_{\text{macro}}$, el **Nivel 1 (Planificador Macro)** incorpora el análisis topográfico del terreno en **Turno 0** (*Intelligence Preparation of the Battlefield - IPB*), desarrollado en `assault_model/map/topography_analyzer.py` e integrado en `agents/efficientzero_v2/core/macro_planner.py`.
+
+#### 5.4.1 Vector 5D por Hexágono (`Hex5DProfile`)
+Para cada celda $(q, r)$ del escenario, se computa de forma estática determinista un vector de 5 dimensiones:
+1. **Cover Rating ($c \in [0.0, 1.0]$)**: Resistencia balística y ocultación del hexágono (edificios $\ge 0.85$, bosques densos $\ge 0.70$, crestas $\ge 0.40$, despejado $\le 0.15$).
+2. **Elevation Dominance ($e \in [0.0, 1.0]$)**: Dominancia orográfica sobre el entorno circundante (crestas y colinas $\ge 0.85$).
+3. **LOS Exposure ($l_{\text{exp}} \in [0.0, 1.0]$)**: Vulnerabilidad a líneas de visión y fuego cruzado en terreno abierto circundante.
+4. **Chokepoint Bottleneck ($\text{chk} \in [0.0, 1.0]$)**: Constricción de maniobra debida a hexágonos adyacentes infranqueables (agua, relieve escarpado).
+5. **VP Proximity Utility ($u_{\text{vp}} \in [0.0, 1.0]$)**: Proximidad hiperbólica hacia los Puntos de Victoria: $u_{\text{vp}} = \frac{1}{1 + \min_v d((q,r), v)}$.
+
+#### 5.4.2 Clasificación Táctica y Sectores del Terreno
+A partir del perfil 5D, los hexágonos se clasifican deterministamente en 6 categorías operacionales:
+* **`KEY_TERRAIN`**: Hexágonos que contienen Puntos de Victoria (VPs).
+* **`BASE_OF_FIRE`**: Alturas dominantes ($e \ge 0.75$) o posiciones de cobertura pesada con campo de tiro inmediato sobre los VPs ($1 \le d \le 6$).
+* **`CHOKEPOINT`**: Pasos obligados y cuellos de botella con constricción severa ($\text{chk} \ge 0.60$).
+* **`KILLZONE`**: Terreno despejado y abierto con alta exposición ($c < 0.35, l_{\text{exp}} \ge 0.60$) a corta distancia de objetivos ($d \le 4$).
+* **`DEFILADE_CORRIDOR`**: Rutas de aproximación cubiertas por vegetación densa o relieve ($c \ge 0.65$ o $c \ge 0.50$ con baja exposición) que ocultan el avance hacia el objetivo.
+* **`MANEUVER_TRANSIT`**: Espacio estándar de maniobra táctica.
+
+#### 5.4.3 Reglas de Modulación de Priors en MCTS
+En el cálculo de `compute_action_boost` del Macro Planner:
+* **Avance en Desenfilada**: $+25\%$ de refuerzo cuando la unidad avanza acortando distancia al VP objetivo a través de `DEFILADE_CORRIDOR`.
+* **Disuasión en Killzones**: Penalización severa ($0.55\times$ para roles generales, $0.65\times$ para unidades `SPEARHEAD` que realizan maniobras laterales sin cerrar distancia) al internarse en `KILLZONE` abierta expuesta a fuego cruzado.
+* **Base de Fuego**: $+30\%$ de refuerzo para unidades de apoyo (`ROLE_FIRE_SUPPORT`) que alcanzan hexágonos designados como `BASE_OF_FIRE`.
+* **Fijación de Chokepoints**: $+20\%$ de refuerzo para roles de defensa y pantalla (`ROLE_FLANK_SCREEN`, `ROLE_OBJECTIVE_DEFENDER`) que aseguran embudos tácticos.
+* **Ablación Pura**: El factor continuo $\beta_{\text{macro}} = \text{modulation\_scale}$ neutraliza exactamente todos los boosts a $1.0$ cuando se evalúa en régimen de red puramente neural.
+
+#### 5.4.4 Eficiencia en Entrenamiento y Telemetría MLOps
+1. **Coste Turno 0 Nulo (0 ms en pasos posteriores)**: El análisis se ejecuta una única vez al inicio del episodio y se conserva en caché estática en memoria (`_topography_cache`), con cero sobrecarga en los rollouts subsiguientes.
+2. **Poda de Ramas Suicidas**: Al penalizar la exploración en killzones abiertas, el árbol MCTS no desperdicia simulaciones en movimientos estériles o aniquilaciones tempranas, concentrando los rollouts en maniobras tácticas viables.
+3. **Visibilidad en Replay (:8778)**: Capa interactiva `🛡️ IPB Topography` con polígonos coloreados, etiquetas tácticas vectoriales en cada hexágono y tooltip de inspección sectorial con desglose 5D.
+
 
 ---
 
