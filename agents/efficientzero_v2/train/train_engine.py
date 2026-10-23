@@ -1612,7 +1612,7 @@ def run_training(
                                 for ep_idx, ep_seed, _ep_scen in pending_jobs
                             }
                             try:
-                                for fut in as_completed(fut_to_job):
+                                for fut in as_completed(fut_to_job, timeout=120.0):
                                     ep_idx, ep_seed, ep_scen = fut_to_job[fut]
                                     try:
                                         ep_res = fut.result()
@@ -1642,6 +1642,11 @@ def run_training(
                                     flush=True,
                                 )
                                 try:
+                                    for p in list(getattr(process_pool, "_processes", {}).values()):
+                                        try:
+                                            p.terminate()
+                                        except Exception:
+                                            pass
                                     process_pool.shutdown(wait=False, cancel_futures=True)
                                 except Exception:
                                     pass

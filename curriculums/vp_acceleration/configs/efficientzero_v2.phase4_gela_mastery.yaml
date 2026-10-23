@@ -2,7 +2,7 @@ base_config: agents/efficientzero_v2/configs/efficientzero_v2_config.yaml
 scenario:
   id: battaglia_cittadina_2_1
 selfplay:
-  num_workers: 24
+  num_workers: 16
   parallel_backend: process
   inference_max_batch_size: 64
   inference_batch_wait_ms: 1.5

@@ -325,7 +325,10 @@ class IPCProcessInferenceClient:
     def initial_inference(self, observation: torch.Tensor, **kwargs: Any):
         obs_np = self._to_numpy_buffer(observation)
         self._req_q.put((self.worker_id, "initial_inference", (obs_np,), kwargs))
-        res = self._resp_q.get()
+        try:
+            res = self._resp_q.get(timeout=60.0)
+        except Exception as exc:
+            raise TimeoutError(f"IPC worker {self.worker_id} timed out waiting for initial_inference response") from exc
         if isinstance(res, Exception):
             raise res
         return self._wrap_tensors(res)
@@ -334,7 +337,10 @@ class IPCProcessInferenceClient:
         h_np = self._to_numpy_buffer(hidden)
         a_np = self._to_numpy_buffer(action)
         self._req_q.put((self.worker_id, "recurrent_inference", (h_np, a_np), kwargs))
-        res = self._resp_q.get()
+        try:
+            res = self._resp_q.get(timeout=60.0)
+        except Exception as exc:
+            raise TimeoutError(f"IPC worker {self.worker_id} timed out waiting for recurrent_inference response") from exc
         if isinstance(res, Exception):
             raise res
         return self._wrap_tensors(res)
