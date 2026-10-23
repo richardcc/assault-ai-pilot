@@ -186,6 +186,186 @@
         "wheeled": 1,
         "track": 1
       }
+    },
+    "sandbag_position": {
+      "defense_bonus": {
+        "INFANTRY": {
+          "FRONT": [
+            "YELLOW"
+          ],
+          "FLANK_LEFT": [
+            "GREEN"
+          ],
+          "FLANK_RIGHT": [
+            "GREEN"
+          ],
+          "REAR": [],
+          "ABOVE": []
+        },
+        "ARTILLERY": {
+          "FRONT": [
+            "YELLOW"
+          ],
+          "FLANK_LEFT": [
+            "GREEN"
+          ],
+          "FLANK_RIGHT": [
+            "GREEN"
+          ],
+          "REAR": [],
+          "ABOVE": []
+        },
+        "VEHICLE": {
+          "FRONT": [],
+          "FLANK_LEFT": [],
+          "FLANK_RIGHT": [],
+          "REAR": [],
+          "ABOVE": []
+        }
+      },
+      "movement_delta": {
+        "foot": 0,
+        "artillery": 0,
+        "wheeled": 1,
+        "track": 0
+      }
+    },
+    "sandbag": {
+      "defense_bonus": {
+        "INFANTRY": {
+          "FRONT": [
+            "YELLOW"
+          ],
+          "FLANK_LEFT": [
+            "GREEN"
+          ],
+          "FLANK_RIGHT": [
+            "GREEN"
+          ],
+          "REAR": [],
+          "ABOVE": []
+        },
+        "ARTILLERY": {
+          "FRONT": [
+            "YELLOW"
+          ],
+          "FLANK_LEFT": [
+            "GREEN"
+          ],
+          "FLANK_RIGHT": [
+            "GREEN"
+          ],
+          "REAR": [],
+          "ABOVE": []
+        },
+        "VEHICLE": {
+          "FRONT": [],
+          "FLANK_LEFT": [],
+          "FLANK_RIGHT": [],
+          "REAR": [],
+          "ABOVE": []
+        }
+      },
+      "movement_delta": {
+        "foot": 0,
+        "artillery": 0,
+        "wheeled": 1,
+        "track": 0
+      }
+    },
+    "pillbox": {
+      "defense_bonus": {
+        "INFANTRY": {
+          "FRONT": [
+            "RED",
+            "YELLOW"
+          ],
+          "FLANK_LEFT": [
+            "RED",
+            "YELLOW"
+          ],
+          "FLANK_RIGHT": [
+            "RED",
+            "YELLOW"
+          ],
+          "REAR": [
+            "RED",
+            "YELLOW"
+          ],
+          "ABOVE": [
+            "RED",
+            "YELLOW"
+          ]
+        },
+        "ARTILLERY": {
+          "FRONT": [
+            "RED",
+            "YELLOW"
+          ],
+          "FLANK_LEFT": [
+            "RED",
+            "YELLOW"
+          ],
+          "FLANK_RIGHT": [
+            "RED",
+            "YELLOW"
+          ],
+          "REAR": [
+            "RED",
+            "YELLOW"
+          ],
+          "ABOVE": [
+            "RED",
+            "YELLOW"
+          ]
+        },
+        "VEHICLE": {
+          "FRONT": [],
+          "FLANK_LEFT": [],
+          "FLANK_RIGHT": [],
+          "REAR": [],
+          "ABOVE": []
+        }
+      },
+      "movement_delta": {
+        "foot": 1,
+        "artillery": 1,
+        "wheeled": 1,
+        "track": 1
+      }
+    },
+    "tank_barricade": {
+      "defense_bonus": {
+        "INFANTRY": {
+          "FRONT": [
+            "YELLOW"
+          ],
+          "FLANK_LEFT": [],
+          "FLANK_RIGHT": [],
+          "REAR": [],
+          "ABOVE": []
+        },
+        "ARTILLERY": {
+          "FRONT": [],
+          "FLANK_LEFT": [],
+          "FLANK_RIGHT": [],
+          "REAR": [],
+          "ABOVE": []
+        },
+        "VEHICLE": {
+          "FRONT": [],
+          "FLANK_LEFT": [],
+          "FLANK_RIGHT": [],
+          "REAR": [],
+          "ABOVE": []
+        }
+      },
+      "movement_delta": {
+        "foot": 1,
+        "artillery": 1,
+        "wheeled": null,
+        "track": null
+      }
     }
   }
 }

@@ -27,6 +27,8 @@ _TERRAIN_COVER_WEIGHTS: Dict[str, float] = {
     "pillbox": 1.00,
     "fortification": 0.95,
     "trench": 0.85,
+    "sandbag": 0.70,
+    "sandbag_position": 0.70,
     "heavy_building": 0.90,
     "stone_building": 0.90,
     "building": 0.85,

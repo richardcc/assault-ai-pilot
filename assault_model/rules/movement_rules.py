@@ -414,7 +414,7 @@ class MovementRules:
                 cover_score += 12
             elif fort_type == "trench":
                 cover_score += 8
-            elif fort_type == "sandbag":
+            elif fort_type in ("sandbag", "sandbag_position"):
                 cover_score += 4
 
             # --- 3. Distance to Attacker (Away from Attack) ---

@@ -30,10 +30,14 @@ DRAFTS_DIR = SCENARIOS_DIR / "drafts"
 VALID_FORTIFICATIONS = {
     "gun_emplacement",
     "casemate",
+    "pillbox",
     "bunker",
     "trench",
+    "sandbag_position",
+    "sandbag",
     "barbed_wire",
     "minefield",
+    "tank_barricade",
 }
 
 VALID_EXPERIENCES = {"RECRUIT", "REGULAR", "VETERAN", "HARDENED"}

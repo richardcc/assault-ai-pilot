@@ -790,10 +790,13 @@ HTML_TEMPLATE = """<!DOCTYPE html>
                     <option value="none">-- None (Clear) --</option>
                     <option value="bunker">🛡️ Bunker</option>
                     <option value="casemate">🛡️ Casemate</option>
+                    <option value="pillbox">🛡️ Pillbox</option>
                     <option value="gun_emplacement">🛡️ Gun Emplacement</option>
                     <option value="trench">⛏️ Trench</option>
+                    <option value="sandbag_position">🧱 Sandbag Position</option>
                     <option value="barbed_wire">⛓️ Barbed Wire</option>
                     <option value="minefield">💣 Minefield</option>
+                    <option value="tank_barricade">🚧 Tank Barricade</option>
                   </select>
                 </div>
 
@@ -854,8 +857,10 @@ HTML_TEMPLATE = """<!DOCTYPE html>
               <button type="button" class="btn-palette" style="background:#475569;" onclick="quickSetScenarioFort('casemate')">Casemate</button>
               <button type="button" class="btn-palette" style="background:#1e293b;" onclick="quickSetScenarioFort('gun_emplacement')">Gun Empl</button>
               <button type="button" class="btn-palette" style="background:#78350f;" onclick="quickSetScenarioFort('trench')">Trench</button>
+              <button type="button" class="btn-palette" style="background:#854d0e;" onclick="quickSetScenarioFort('sandbag_position')">Sandbag</button>
               <button type="button" class="btn-palette" style="background:#b45309;" onclick="quickSetScenarioFort('barbed_wire')">Wire</button>
               <button type="button" class="btn-palette" style="background:#b91c1c;" onclick="quickSetScenarioFort('minefield')">Minefield</button>
+              <button type="button" class="btn-palette" style="background:#57534e;" onclick="quickSetScenarioFort('tank_barricade')">Barricade</button>
               <button type="button" class="btn-palette" style="background:#dc2626; font-weight: 700;" onclick="quickSetScenarioFort('none')">✕ No Fort</button>
 
               <span style="font-size: 0.72rem; font-weight: 700; color: #f59e0b; margin-left: 0.6rem; margin-right: 0.3rem;">★ Quick VP:</span>
@@ -3495,8 +3500,11 @@ HTML_TEMPLATE = """<!DOCTYPE html>
       'pillbox': '/assets/art/terrain/Terrain%20Pillbox.png',
       'gun_emplacement': '/assets/art/terrain/Terrain%20Gun%20Emplacement.png',
       'trench': '/assets/art/terrain/Terrain%20Trenches.png',
+      'sandbag': '/assets/art/terrain/Terrain%20Sandbag%20Position.png',
+      'sandbag_position': '/assets/art/terrain/Terrain%20Sandbag%20Position.png',
       'barbed_wire': '/assets/art/terrain/Terrain%20Barbed%20Wire.png',
-      'minefield': '/assets/art/minefield/Minefield%20AP.png'
+      'minefield': '/assets/art/minefield/Minefield%20AP.png',
+      'tank_barricade': '/assets/art/terrain/Terrain%20Tank%20Barricades.png'
     };
 
     function getFortArtImage(type) {
@@ -3960,11 +3968,13 @@ HTML_TEMPLATE = """<!DOCTYPE html>
           let badgeStroke = '#38bdf8';
           let badgeText = 'FORT';
           if (ftype === 'bunker') { badgeBg = '#334155'; badgeStroke = '#38bdf8'; badgeText = 'BNK'; }
-          else if (ftype === 'casemate') { badgeBg = '#1e293b'; badgeStroke = '#60a5fa'; badgeText = 'CSM'; }
+          else if (ftype === 'casemate' || ftype === 'pillbox') { badgeBg = '#1e293b'; badgeStroke = '#60a5fa'; badgeText = 'CSM'; }
           else if (ftype === 'gun_emplacement') { badgeBg = '#0f172a'; badgeStroke = '#93c5fd'; badgeText = 'GUN'; }
           else if (ftype === 'trench') { badgeBg = '#78350f'; badgeStroke = '#d97706'; badgeText = 'TRN'; }
+          else if (ftype === 'sandbag' || ftype === 'sandbag_position') { badgeBg = '#713f12'; badgeStroke = '#eab308'; badgeText = 'SND'; }
           else if (ftype === 'barbed_wire') { badgeBg = '#451a03'; badgeStroke = '#f59e0b'; badgeText = 'WIRE'; }
           else if (ftype === 'minefield') { badgeBg = '#7f1d1d'; badgeStroke = '#ef4444'; badgeText = 'MINE'; }
+          else if (ftype === 'tank_barricade') { badgeBg = '#292524'; badgeStroke = '#a8a29e'; badgeText = 'BARR'; }
 
           const pillW = Math.max(28, Math.floor(canvasZoom * 1.05));
           const pillH = Math.max(12, Math.floor(canvasZoom * 0.40));

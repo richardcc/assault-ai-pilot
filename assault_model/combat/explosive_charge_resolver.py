@@ -168,7 +168,7 @@ def resolve_explosive_charge(
 
     is_obstacle = fort_type in ("barbed_wire", "minefield", "tank_barricade")
     is_hard_fort = fort_type in ("bunker", "casemate", "pillbox", "gun_emplacement")
-    is_soft_fort = fort_type in ("trench", "sandbag")
+    is_soft_fort = fort_type in ("trench", "sandbag", "sandbag_position")
 
     structure_collapsed = False
     obstacle_destroyed = False

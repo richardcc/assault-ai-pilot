@@ -21,27 +21,42 @@
       {
         "type": "trench",
         "q": 7,
-        "r": 6
+        "r": 6,
+        "angle": 300,
+        "facing": 300,
+        "orientation": 5
       },
       {
         "type": "casemate",
         "q": 5,
-        "r": 0
+        "r": 0,
+        "angle": 240,
+        "facing": 240,
+        "orientation": 4
       },
       {
-        "type": "gun_emplacement",
+        "type": "sandbag_position",
         "q": 2,
-        "r": 4
+        "r": 4,
+        "angle": 60,
+        "facing": 60,
+        "orientation": 1
       },
       {
         "type": "casemate",
         "q": 1,
-        "r": 2
+        "r": 2,
+        "angle": 120,
+        "facing": 120,
+        "orientation": 2
       },
       {
         "type": "trench",
         "q": 2,
-        "r": 6
+        "r": 6,
+        "angle": 60,
+        "facing": 60,
+        "orientation": 1
       }
     ]
   },
@@ -65,60 +80,72 @@
       "side": "GE",
       "unit_key": "GE_RIFLES_43",
       "position": [
-        3,
-        1
+        0,
+        2
       ],
-      "experience": "REGULAR"
+      "experience": "REGULAR",
+      "q": 0,
+      "r": 2
     },
     {
       "unit_id": "GE_2",
       "side": "GE",
       "unit_key": "GE_HEAVY_MG_42",
       "position": [
-        4,
-        1
+        0,
+        4
       ],
-      "experience": "REGULAR"
+      "experience": "REGULAR",
+      "q": 0,
+      "r": 4
     },
     {
       "unit_id": "GE_3",
       "side": "GE",
       "unit_key": "GE_RIFLES_43",
       "position": [
-        5,
-        1
+        0,
+        6
       ],
-      "experience": "REGULAR"
+      "experience": "REGULAR",
+      "q": 0,
+      "r": 6
     },
     {
       "unit_id": "US_1",
       "side": "US",
       "unit_key": "US_RIFLES_43",
       "position": [
-        3,
-        6
+        8,
+        1
       ],
-      "experience": "REGULAR"
+      "experience": "REGULAR",
+      "q": 8,
+      "r": 1
     },
     {
       "unit_id": "US_2",
       "side": "US",
       "unit_key": "US_50CAL_HMG",
       "position": [
-        4,
-        6
+        8,
+        3
       ],
-      "experience": "REGULAR"
+      "experience": "REGULAR",
+      "q": 8,
+      "r": 3
     },
     {
       "unit_id": "US_3",
       "side": "US",
       "unit_key": "US_RIFLES_43",
       "position": [
-        5,
-        6
+        8,
+        5
       ],
-      "experience": "REGULAR"
+      "experience": "REGULAR",
+      "q": 8,
+      "r": 5
     }
   ],
   "vp": {
@@ -162,5 +189,5 @@
     "attacker_morale_threshold": 10,
     "defender_morale_threshold": 10
   },
-  "updated_at": "2026-10-23T22:03:21.854817+00:00"
+  "updated_at": "2026-10-23T22:16:11.239310+00:00"
 }
