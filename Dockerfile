@@ -28,8 +28,8 @@ COPY assets/ /app/assets/
 COPY curriculums/ /app/curriculums/
 COPY docs/ /app/docs/
 COPY site/ /app/site/
-COPY runs/ /app/runs/
-COPY runs_curriculum/ /app/runs_curriculum/
+# Ensure runtime directories exist (not tracked in git due to large checkpoints)
+RUN mkdir -p /app/runs /app/runs_curriculum /app/runs_curriculum/experiments/reporting
 
 # Create non-root user (UID 1000) for Hugging Face Spaces compatibility
 RUN useradd -m -u 1000 user && \
