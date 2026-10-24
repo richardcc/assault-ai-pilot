@@ -74,6 +74,13 @@ async def app_lifespan(_app: FastAPI):
 
     yield
 
+    # Graceful shutdown: close all long-lived WebSockets to unblock uvicorn StatReload
+    try:
+        from assault_backend.routers.game import close_all_game_websockets
+        await close_all_game_websockets()
+    except Exception as e:
+        print(f"[SHUTDOWN] WebSocket cleanup warning: {e}")
+
 
 app = FastAPI(
     title="Assault Backend & AI Platform",

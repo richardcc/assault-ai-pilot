@@ -262,20 +262,37 @@ def game_resolve_reaction(req: ResolveReactionRequest):
     return {"state": game_session.get_state(), "reaction": result}
 
 
+ACTIVE_GAME_WEBSOCKETS: set[WebSocket] = set()
+
+
+async def close_all_game_websockets() -> None:
+    """Gracefully close all active game WebSockets so reload/shutdown does not hang."""
+    sockets = list(ACTIVE_GAME_WEBSOCKETS)
+    ACTIVE_GAME_WEBSOCKETS.clear()
+    for ws in sockets:
+        try:
+            await ws.close(code=1001, reason="Server shutting down or reloading")
+        except Exception:
+            pass
+
+
 @router.websocket("/ws/game")
 async def websocket_game(ws: WebSocket):
     await ws.accept()
+    ACTIVE_GAME_WEBSOCKETS.add(ws)
     use_binary = str(ws.query_params.get("format", "") or "").lower() in {"msgpack", "binary", "mp", "1"} or (
         str(ws.query_params.get("binary", "") or "") == "1"
     )
+    env = None
+    handler = None
     try:
         while game_session.env is None:
-            await asyncio.sleep(0.1)
+            await asyncio.sleep(0.2)
         env = game_session.env
         loop = asyncio.get_running_loop()
 
         def handler(event):
-            if event["type"] in {"MAP_STATE", "REACTION_WINDOW", "REACTION_FIRE", "REACTION_FIRE_SKIPPED"}:
+            if event.get("type") in {"MAP_STATE", "REACTION_WINDOW", "REACTION_FIRE", "REACTION_FIRE_SKIPPED"}:
                 async def safe_send():
                     try:
                         frame = {"type": event["type"], "payload": event.get("payload", {})}
@@ -290,14 +307,22 @@ async def websocket_game(ws: WebSocket):
                 except Exception:
                     pass
 
-        if env.event_bus:
+        if env and env.event_bus:
             env.event_bus.subscribe(handler)
         while True:
-            await asyncio.sleep(1)
-    except WebSocketDisconnect:
+            # Listening for incoming text or heartbeat promptly detects client disconnection
+            await ws.receive_text()
+    except (WebSocketDisconnect, RuntimeError, asyncio.CancelledError):
         pass
     except Exception:
         pass
+    finally:
+        ACTIVE_GAME_WEBSOCKETS.discard(ws)
+        if env and env.event_bus and handler:
+            try:
+                env.event_bus.unsubscribe(handler)
+            except Exception:
+                pass
 
 
 @router.post("/api/game/actions")
