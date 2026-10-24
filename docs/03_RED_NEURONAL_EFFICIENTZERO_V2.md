@@ -16,44 +16,69 @@ La arquitectura desacoplada de **EfficientZero V2** implementa un modelo de mund
 ```mermaid
 flowchart TD
     subgraph Entrada ["1. ENTRADA SENSORIAL AGNOSTICA (Simulador VOEC)"]
-        OBS["Observación o_t\n(Tensor 38 canales x 16 x 16)"]
+        OBS["Observación o_t
+(Tensor 38 canales x 16 x 16)"]
     end
 
     subgraph Jerarquia_N1 ["2. NIVEL 1 - DOCTRINA (Planificador Macro HRL)"]
-        MACRO["MacroStrategyPlanner\n• 5 Roles Doctrinales Dinámicos\n• Análisis Topográfico IPB Turno 0\n• Modulación Priors MCTS beta_macro"]
+        MACRO["MacroStrategyPlanner
+- 5 Roles Doctrinales Dinámicos
+- Análisis Topográfico IPB Turno 0
+- Modulación Priors MCTS beta_macro"]
         OBS --> MACRO
     end
 
-    subgraph Representacion ["3. ENCODER CNN: h_0(o) Representación (~400.128 params)"]
-        OBS --> REP_IN["HexagonalMaskConv2d (38 -> 48) + GroupNorm + SiLU"]
-        REP_IN --> REP_TOWER["3x ResidualBlockSE (48ch)\n6 Conv2D + Máscara Hexagonal + SE (ratio 4)"]
-        REP_TOWER --> LATENT_0["ESTADO LATENTE s_0\n(48 canales x 16 x 16, Min-Max [-1, +1])"]
+    subgraph Representacion ["3. ENCODER CNN: h_0(o) Representación (400.128 params)"]
+        OBS --> REP_IN["HexagonalMaskConv2d (38 a 48) + GroupNorm + SiLU"]
+        REP_IN --> REP_TOWER["3x ResidualBlockSE (48ch)
+6 Conv2D + Máscara Hexagonal + SE (ratio 4)"]
+        REP_TOWER --> LATENT_0["ESTADO LATENTE s_0
+(48 canales x 16 x 16, Min-Max -1 a +1)"]
     end
 
-    subgraph Dinamica ["4. RED DE DINÁMICA: g(s, a) -> s_1 (Unroll 5 pasos)"]
+    subgraph Dinamica ["4. RED DE DINÁMICA: g(s, a) a s_1 (Unroll 5 pasos)"]
         LATENT_0 --> DYN_CONCAT
-        ACTION["Acción MCTS a_0 (0..31)\n(Broadcast 1 x 16 x 16)"] --> DYN_CONCAT["Concatenación (48 + 1 = 49ch)"]
+        ACTION["Acción MCTS a_0 (0..31)
+(Broadcast 1 x 16 x 16)"] --> DYN_CONCAT["Concatenación (48 + 1 = 49ch)"]
         DYN_CONCAT --> DYN_TOWER["dynamics_state: Conv3x3 + 3 ResBlocks + 2 Bottlenecks (48ch)"]
-        DYN_TOWER -->|"Bucle Recurrente Weight-Tied (pasos 2..5)\nConcatenado con Plano Neutro (48 + 1 = 49ch)"| DYN_TOWER
-        DYN_TOWER --> LATENT_NEXT["Siguiente Estado Latente s_1 (Min-Max Norm)\n(48 canales x 16 x 16)"]
-        LATENT_NEXT --> REW_HEAD["Recompensa Inmediata r_1: Conv1x1 -> Pool -> Linear\nTwo-Hot / HL-Gauss (61 átomos)"]
+        DYN_TOWER --> DYN_LOOP["Bucle Recurrente Weight-Tied (pasos 2..5)
+Concatenado con Plano Neutro (49ch)"]
+        DYN_LOOP --> DYN_TOWER
+        DYN_TOWER --> LATENT_NEXT["Siguiente Estado Latente s_1 (Min-Max Norm)
+(48 canales x 16 x 16)"]
+        LATENT_NEXT --> REW_HEAD["Recompensa Inmediata r_1: Conv1x1 / Pool / Linear
+Two-Hot / HL-Gauss (61 átomos)"]
     end
 
     subgraph Prediccion ["5. TRONCO DE PREDICCIÓN Y CABEZAS f_theta(s) (915.568 params totales)"]
         LATENT_0 --> P_TRUNK["prediction_trunk: 2x ResidualBlockSE (48ch)"]
         LATENT_NEXT --> P_TRUNK
-        P_TRUNK --> S_ATTN["SpatialAttentionBlock (Conv 7x7 -> Gate Sigmoid)"]
+        P_TRUNK --> S_ATTN["SpatialAttentionBlock (Conv 7x7 / Gate Sigmoid)"]
 
-        S_ATTN --> HEAD_POL["POLÍTICA f_pi\n32 Logits (Conv 1x1)\nLoss: ~2.10 | Coef: 77.5%"]
-        S_ATTN --> HEAD_VAL["VALOR f_v\n1 Escalar [-1.0, +1.0] (Pool 2x2)\nLoss: ~0.12 | Coef: 10.0%"]
-        S_ATTN --> HEAD_OBJ["OBJETIVO AUXILIAR f_aux\nProgreso VP (Pool 2x2)\nLoss: ~0.04 | Coef: 4.5%"]
-        S_ATTN --> HEAD_CONS["CONSISTENCIA q_proj\nSimSiam (Pool 4x4, Stop-Grad)\nLoss: ~0.08 | Coef: 3.5%"]
-        S_ATTN --> HEAD_THREAT["AMENAZA / GUARNICIÓN f_threat [TACTICAL]\nHeatmap 16x16 (FCN Conv / no-shrink)\nLoss: ~0.13 | Coef: 3.0%"]
-        S_ATTN --> HEAD_ATTR["DESGASTE / DAÑO f_attr [TACTICAL]\nVector [Aliado / Enemigo] (Spatial Attention)\nLoss: ~0.02 | Coef: 2.0%"]
-        S_ATTN --> HEAD_MORALE["ESTADO DE MORAL f_morale [TACTICAL]\n4 Clases (Normal / Pin / Supp / Rout)\nLoss: ~0.30 | Coef: 1.5%"]
+        S_ATTN --> HEAD_POL["POLÍTICA f_pi
+32 Logits (Conv 1x1)
+Loss: ~2.10 | Coef: 77.5%"]
+        S_ATTN --> HEAD_VAL["VALOR f_v
+1 Escalar (-1.0 a +1.0) Pool 2x2
+Loss: ~0.12 | Coef: 10.0%"]
+        S_ATTN --> HEAD_OBJ["OBJETIVO AUXILIAR f_aux
+Progreso VP (Pool 2x2)
+Loss: ~0.04 | Coef: 4.5%"]
+        S_ATTN --> HEAD_CONS["CONSISTENCIA q_proj
+SimSiam (Pool 4x4, Stop-Grad)
+Loss: ~0.08 | Coef: 3.5%"]
+        S_ATTN --> HEAD_THREAT["AMENAZA / GUARNICIÓN f_threat (TACTICAL)
+Heatmap 16x16 (FCN Conv / no-shrink)
+Loss: ~0.13 | Coef: 3.0%"]
+        S_ATTN --> HEAD_ATTR["DESGASTE / DAÑO f_attr (TACTICAL)
+Vector (Aliado / Enemigo) Spatial Attention
+Loss: ~0.02 | Coef: 2.0%"]
+        S_ATTN --> HEAD_MORALE["ESTADO DE MORAL f_morale (TACTICAL)
+4 Clases (Normal / Pin / Supp / Rout)
+Loss: ~0.30 | Coef: 1.5%"]
     end
 
-    MACRO -.->|Modulación Dinámica de Priors beta_macro (+35% / IPB)| HEAD_POL
+    MACRO -.->|Modulacion Dinamica Priors IPB| HEAD_POL
 ```
 
 ### 1.1 Ficha Técnica de la Arquitectura (Telemetría MLOps Live Snapshot)
@@ -192,22 +217,34 @@ Donde la escala de modulación $w_{\text{macro}}(t)$ puede configurarse bajo tre
 La red neuronal produce simultáneamente **11 cabezas especializadas** (1 en dinámica, 1 de consistencia temporal y 9 en el tronco de predicción):
 
 ```mermaid
-graph LR
-    S["Estado Latente Atendido s\n[B, 48, H, W]"] --> ADAPT["_adapt_spatial\n[B, 48, 16, 16]"]
-    S --> FCN["FCN 2D Nativa [B, 48, H, W]"]
-    S --> S_ATTN["SpatialAttentionBlock (4x4)\n[B, val_ch, 4, 4]"]
+flowchart LR
+    S["Estado Latente Atendido s
+(B, 48, H, W)"] --> ADAPT["_adapt_spatial
+(B, 48, 16, 16)"]
+    S --> FCN["FCN 2D Nativa (B, 48, H, W)"]
+    S --> S_ATTN["SpatialAttentionBlock (4x4)
+(B, val_ch, 4, 4)"]
 
-    ADAPT --> H_POL["2. Policy Head\n[B, 32] Logits Priors"]
-    ADAPT --> H_VAL["3. Value Head\n[B, 2K+1] Soporte"]
+    ADAPT --> H_POL["2. Policy Head
+(B, 32) Logits Priors"]
+    ADAPT --> H_VAL["3. Value Head
+(B, 2K+1) Soporte"]
 
-    FCN --> H_THREAT["5. Threat Map Head\n[B, 1, H, W] FCN 2D"]
-    FCN --> H_OWNER["6. Final Ownership Head\n[B, 1, H, W] FCN 2D"]
+    FCN --> H_THREAT["5. Threat Map Head
+(B, 1, H, W) FCN 2D"]
+    FCN --> H_OWNER["6. Final Ownership Head
+(B, 1, H, W) FCN 2D"]
 
-    S_ATTN --> H_OBJ["4. Objective Head\n[B, 1] Escalar"]
-    S_ATTN --> H_ATTR["7. Attrition Head\n[B, 2] Bajas A/E"]
-    S_ATTN --> H_MORALE["8. Morale Head\n[B, 4] Estados Moral"]
-    S_ATTN --> H_INTENT["9. Objective Intent Head\n[B, 8] Intencion"]
-    S_ATTN --> H_MVP["10. Multi-VP Head\n[B, 4] Vector VPs"]
+    S_ATTN --> H_OBJ["4. Objective Head
+(B, 1) Escalar"]
+    S_ATTN --> H_ATTR["7. Attrition Head
+(B, 2) Bajas A/E"]
+    S_ATTN --> H_MORALE["8. Morale Head
+(B, 4) Estados Moral"]
+    S_ATTN --> H_INTENT["9. Objective Intent Head
+(B, 8) Intencion"]
+    S_ATTN --> H_MVP["10. Multi-VP Head
+(B, 4) Vector VPs"]
 ```
 
 | # | Nombre de Cabeza | Módulo PyTorch | Dimensión de Salida | Topología Espacial / Función Táctica |
@@ -285,16 +322,26 @@ El mayor desafío en wargames tácticos es la coordinación simultánea de múlt
 ```mermaid
 flowchart TD
     subgraph N1 ["Nivel 1: Planificador Macro Estratégico"]
-        EVAL["Evaluación de Estado de Partida\n(Control de VPs, balance de bajas y amenaza global)"]
-        POSTURE["Selección de Postura Macro:\n1. ASSAULT_VP (Ofensiva agresiva)\n2. DEFENSIVE_HOLD (Consolidar ventaja)\n3. ZONE_SUPPRESS (Dominar con fuego)"]
-        ROLES["Asignación Doctrinal de Roles por Escuadra:\n- SPEARHEAD (Vanguardia de asalto)\n- FIRE_SUPPORT (Ametralladoras / Morteros)\n- OBJECTIVE_DEFENDER (Guarnición de VP)\n- FLANK_SCREEN (Pantalla de seguridad)"]
+        EVAL["Evaluación de Estado de Partida
+(Control de VPs, balance de bajas y amenaza global)"]
+        POSTURE["Selección de Postura Macro:
+1. ASSAULT_VP (Ofensiva agresiva)
+2. DEFENSIVE_HOLD (Consolidar ventaja)
+3. ZONE_SUPPRESS (Dominar con fuego)"]
+        ROLES["Asignación Doctrinal de Roles por Escuadra:
+- SPEARHEAD (Vanguardia de asalto)
+- FIRE_SUPPORT (Ametralladoras / Morteros)
+- OBJECTIVE_DEFENDER (Guarnición de VP)
+- FLANK_SCREEN (Pantalla de seguridad)"]
         
         EVAL --> POSTURE --> ROLES
     end
 
     subgraph N2 ["Nivel 2: Búsqueda Táctica MCTS PUCT"]
-        SCALE["Escala de Modulacion Dinamica:\n\beta_macro in [0.0, 1.0]"]
-        PRIORS["Modulación Dinámica de Priors:\nP_mod(a) = P(a) * [1 + \beta_macro * (Boost(Postura, Rol, a) - 1)]"]
+        SCALE["Escala de Modulacion Dinamica:
+beta_macro en (0.0 a 1.0)"]
+        PRIORS["Modulación Dinámica de Priors:
+P_mod(a) = P(a) * (1 + beta_macro * (Boost - 1))"]
         TREE["Árbol de Búsqueda MCTS (512 simulaciones / 6 unrolls)"]
         
         SCALE --> PRIORS
@@ -372,6 +419,47 @@ En el cálculo de `compute_action_boost` del Macro Planner:
 1. **Coste Turno 0 Nulo (0 ms en pasos posteriores)**: El análisis se ejecuta una única vez al inicio del episodio y se conserva en caché estática en memoria (`_topography_cache`), con cero sobrecarga en los rollouts subsiguientes.
 2. **Poda de Ramas Suicidas**: Al penalizar la exploración en killzones abiertas, el árbol MCTS no desperdicia simulaciones en movimientos estériles o aniquilaciones tempranas, concentrando los rollouts en maniobras tácticas viables.
 3. **Visibilidad en Replay (:8778)**: Capa interactiva `🛡️ IPB Topography` con polígonos coloreados, etiquetas tácticas vectoriales en cada hexágono y tooltip de inspección sectorial con desglose 5D.
+
+---
+
+### 5.5 Especificación Prospectiva: Arquitecturas Híbridas LLM + RL para Wargames Abiertos (TemplateRL) [Planificado v2.6.0]
+
+El campo de los wargames basados en IA ha evolucionado hacia entornos abiertos y modelos híbridos (*Shall We Play a Game? Language Models for Open-ended Wargames*, arXiv:2509.17192v3; y *Vox Deorum: A Hybrid LLM Architecture for 4X / Grand Strategy Game AI*). En lugar de confinar los LLMs a tareas pasivas de RAG documental, esta arquitectura prospectiva los posiciona como **Planificadores Estratégicos de Alto Nivel (Nivel 1)** gobernados por **Template-Guided Reinforcement Learning (TemplateRL)**.
+
+```mermaid
+flowchart TD
+    subgraph Nivel_1 ["NIVEL 1: Directiva Estratégica / Gran Táctica (Por Turno T - Asíncrono)"]
+        SITREP["SitRep Forense Turno T (JSON)
+(IPB 5D, OOB, VPs, Daños, Moral)"] --> SLM["SLM Local Cuantizado (3B Params)
+(Qwen-2.5-3B / Llama-3.2-3B)"]
+        SLM --> TEMPLATE["TemplateRL Action Schema
+(Gramática Formal JSON Inmune a Alucinación)"]
+        TEMPLATE --> DIRECTIVE["Vector Directivo Operacional
+(Roles, Envolvimiento, Eje de Avance)"]
+    end
+
+    subgraph Nivel_2 ["NIVEL 2: Validación Micro-Táctica (Por Paso t - Subsegundo)"]
+        DIRECTIVE --> PRIOR_BOOST["Modulación de Priors beta_macro
+P_mod(a) = P(a) * (1 + beta_macro * (Boost - 1))"]
+        PRIOR_BOOST --> MCTS_CORE["EfficientZero V2 MCTS
+(Búsqueda Simétrica, Two-Hot Value, Rollout)"]
+        MCTS_CORE --> VOEC["Motor Físico Autoritativo VOEC
+(Validación Balística y Cinemática Inquebrantable)"]
+    end
+```
+
+#### 5.5.1 Principios de Diseño
+1. **Separación Estricta de Frecuencias (Turn vs. Step):**
+   - El SLM **nunca** se evalúa por paso táctico o micro-acción (lo que arruinaría el rendimiento). Se ejecuta **únicamente una vez al inicio del Turno ($T$)** en un hilo en segundo plano, emitiendo una directiva de ~80 tokens en ~0.4–0.6s.
+   - El árbol MCTS de EfficientZero V2 opera a nivel de paso ($t$) en microsegundos, usando la directiva activa para modular $\beta_{\text{macro}}$.
+2. **Cero Alucinación mediante TemplateRL:**
+   - El modelo de lenguaje tiene prohibido generar texto libre o inventar acciones. Solo puede rellenar un esquema formal tipado (`OperationalDirectiveTemplate`): postura general (`ASSAULT_VP`, `PIN_AND_ENVELOP`, `DEFENSIVE_FALLBACK`), vector objetivo, asignación de roles por unidad y condiciones de repliegue.
+   - Si una sugerencia es físicamente inviable, el motor [`VOECSimulator`](file:///c:/repos/python/assault/voec_sim/core/simulator.py) y las simulaciones de dados de MCTS la podan matemáticamente.
+3. **Aislamiento Hardware y Rendimiento Local (Zero-Interference):**
+   - **En GPU NVIDIA RTX 4060 (8 GB VRAM):** Un SLM cuantizado en 4-bit (GGUF `Q4_K_M`, ~2.0 GB VRAM) coexiste de forma segura con EfficientZero V2 (~1.2 GB VRAM), dejando más de 4.8 GB de VRAM libres sin riesgo de OOM.
+   - **En CPU (Alternativa de Aislamiento Total):** El SLM puede ejecutarse al 100% en la CPU mediante `llama.cpp` (AVX2 / AVX-512) a ~40 tokens/s, consumiendo 0 MB de VRAM y garantizando que la GPU esté al 100% dedicada a la red neuronal.
+   - **Caché Doctrinal Turno 0:** Para configuraciones iniciales idénticas, las directivas se recuperan de una caché determinista en $<1\text{ ms}$, eliminando la inferencia del modelo.
+4. **Modo de Operación:** Durante autojuego masivo, se preserva el planificador heurístico/neuronal ultrarrápido; el modo LLM se activa en torneos de evaluación, interacción humano-en-el-bucle (comandante natural) y Match Replay forense.
 
 
 ---
