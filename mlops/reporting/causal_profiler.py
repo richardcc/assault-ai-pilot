@@ -17,7 +17,11 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
-from assault_rag.copilot.services import retrieve_doctrinal_citations_for_sitrep
+try:
+    from assault_rag.copilot.services import retrieve_doctrinal_citations_for_sitrep
+except Exception:
+    def retrieve_doctrinal_citations_for_sitrep(*args: Any, **kwargs: Any) -> list[dict[str, Any]]:
+        return []
 
 logger = logging.getLogger("assault.causal_profiler")
 
