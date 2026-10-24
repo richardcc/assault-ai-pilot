@@ -56,11 +56,11 @@ assault-web/data/
 # 🚨 GAME ART (PROTECTED / VASSAL)
 # 🚨 CRÍTICO PARA NO ROMPER LICENCIA
 # ===============================
-assets/art/
+# assets/art/
 assets/media/
-public/art/
-public/assets/
-**/art/
+# public/art/
+# public/assets/
+# **/art/
 
 # ===============================
 # Personal / private material

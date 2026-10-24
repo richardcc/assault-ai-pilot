@@ -21,6 +21,10 @@ class EventBus:
     def subscribe(self, fn):
         self.subscribers.append(fn)
 
+    def unsubscribe(self, fn):
+        if fn in self.subscribers:
+            self.subscribers.remove(fn)
+
     def emit(self, event: dict):
         # PASSTHROUGH:
         # Always emit events to subscribers.

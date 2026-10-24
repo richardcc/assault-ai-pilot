@@ -20,29 +20,84 @@ function hexToPixelCenter(q: number, r: number) {
   };
 }
 
-function getDieTexture(dieName: any): string {
-  const name = String(dieName || "").toUpperCase();
-  if (name.includes("CRITICAL")) {
-    return "/assets/dice/red_03.png"; // Red die representing Critical
-  } else if (name.includes("DAMAGE") || name.includes("HIT")) {
-    return "/assets/dice/yellow_02.png"; // Yellow die representing Hit
-  } else if (name.includes("DEFENSE") || name.includes("SHIELD")) {
-    return "/assets/dice/blue_01.png"; // Blue die representing defense
-  } else {
-    return "/assets/dice/green_01.png"; // Green or default/miss die
+const DICE_SPRITE_MAP: Record<string, Record<string, string>> = {
+  BLUE: {
+    "": "/assets/dice/blue_01.png",
+    DAMAGE: "/assets/dice/blue_02.png",
+    DEFENSE: "/assets/dice/blue_01.png",
+    SHIELD: "/assets/dice/blue_01.png",
+  },
+  GREEN: {
+    "": "/assets/dice/green_01.png",
+    DAMAGE: "/assets/dice/green_02.png",
+    "CRITICAL+DAMAGE": "/assets/dice/green_03.png",
+    DEFENSE: "/assets/dice/green_01.png",
+    SHIELD: "/assets/dice/green_01.png",
+  },
+  RED: {
+    "": "/assets/dice/red_02.png",
+    DAMAGE: "/assets/dice/red_01.png",
+    "DAMAGE+DAMAGE": "/assets/dice/red_03.png",
+    "CRITICAL+DAMAGE": "/assets/dice/red_04.png",
+    CRITICAL: "/assets/dice/red_04.png",
+  },
+  YELLOW: {
+    "": "/assets/dice/yellow_01.png",
+    DAMAGE: "/assets/dice/yellow_02.png",
+    "DAMAGE+DAMAGE": "/assets/dice/yellow_03.png",
+    "CRITICAL+DAMAGE": "/assets/dice/yellow_04.png",
+    CRITICAL: "/assets/dice/yellow_04.png",
+  },
+};
+
+function parseDieInfo(dieInput: any): { color: string; face: string } {
+  if (!dieInput) return { color: "RED", face: "DAMAGE" };
+  if (typeof dieInput === "string") {
+    const s = dieInput.toUpperCase();
+    if (s.includes("BLUE") || s.includes("DEFENSE") || s.includes("SHIELD")) {
+      return { color: "BLUE", face: s.includes("DAMAGE") ? "DAMAGE" : "SHIELD" };
+    }
+    if (s.includes("YELLOW")) {
+      return { color: "YELLOW", face: s.includes("CRITICAL") ? "CRITICAL+DAMAGE" : "DAMAGE" };
+    }
+    if (s.includes("GREEN")) {
+      return { color: "GREEN", face: s.includes("CRITICAL") ? "CRITICAL+DAMAGE" : "DAMAGE" };
+    }
+    if (s.includes("CRITICAL")) {
+      return { color: "RED", face: "CRITICAL+DAMAGE" };
+    }
+    return { color: "RED", face: "DAMAGE" };
   }
+  const color = String(dieInput?.color || "RED").toUpperCase();
+  const faces = Array.isArray(dieInput?.faces)
+    ? dieInput.faces.join("+").toUpperCase()
+    : String(dieInput?.face || dieInput?.name || "").toUpperCase();
+  return { color, face: faces };
 }
 
-function getDieRollTexture(dieName: any): string {
-  const name = String(dieName || "").toUpperCase();
-  if (name.includes("CRITICAL")) {
-    return "/assets/dice/red_00.png";
-  } else if (name.includes("DAMAGE") || name.includes("HIT")) {
-    return "/assets/dice/yellow_00.png";
-  } else if (name.includes("DEFENSE") || name.includes("SHIELD")) {
-    return "/assets/dice/blue_00.png";
-  } else {
-    return "/assets/dice/green_00.png";
+function getDieTexture(dieInput: any): string {
+  const { color, face } = parseDieInfo(dieInput);
+  const colorMap = DICE_SPRITE_MAP[color] || DICE_SPRITE_MAP["RED"];
+  if (colorMap[face]) return colorMap[face];
+  if (face.includes("CRITICAL") && colorMap["CRITICAL+DAMAGE"]) return colorMap["CRITICAL+DAMAGE"];
+  if (face.includes("DAMAGE") && colorMap["DAMAGE"]) return colorMap["DAMAGE"];
+  if (face.includes("SHIELD") && colorMap["SHIELD"]) return colorMap["SHIELD"];
+  if (face.includes("DEFENSE") && colorMap["DEFENSE"]) return colorMap["DEFENSE"];
+  return colorMap[""] || "/assets/dice/red_01.png";
+}
+
+function getDieRollTexture(dieInput: any): string {
+  const { color } = parseDieInfo(dieInput);
+  switch (color) {
+    case "BLUE":
+      return "/assets/dice/blue_00.png";
+    case "YELLOW":
+      return "/assets/dice/yellow_00.png";
+    case "GREEN":
+      return "/assets/dice/green_00.png";
+    case "RED":
+    default:
+      return "/assets/dice/red_00.png";
   }
 }
 

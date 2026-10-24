@@ -15,6 +15,18 @@ import { logCombatEvents } from "./game/systems/combatLog";
 import { actionMarkerImages, getUnitActionMarker } from "./game/state/actionMarkers";
 import { apiUrl } from "./config/backend";
 
+const SCENARIO_LABELS: Record<string, string> = {
+  addestramento_fanteria_11_1: "🎯 11.1 Addestramento Fanteria",
+  battaglia_cittadina_2_1: "🏙️ 2.1 Battaglia Cittadina (Gela)",
+  mettete_i_piedi_terra_1: "🌊 1.1 Mettete i piedi a terra!",
+  bunker_hill_singolo: "⛰️ Bunker Hill",
+  elemento_sorpresa_singolo: "⚡ Elemento Sorpresa",
+  vp_phase1_unoccupied_3hex: "🏁 VP Phase 1 (Sprint)",
+  vp_phase2_defended_suppressed: "🛡️ VP Phase 2 (Suppressed)",
+  vp_phase3_race_2v2: "⚔️ VP Phase 3 (Race 2v2)",
+};
+
+
 type LogEntry = {
   type: string;
   text: string;
@@ -648,6 +660,8 @@ function App() {
   const handleResolveReaction = async (useReaction: boolean) => {
     if (!pendingReaction || reactionDecisionBusy) return;
     setReactionDecisionBusy(true);
+    // Dismiss pending reaction immediately in local state so the grey backdrop modal disappears instantly on click
+    setGameData((prev: any) => (prev ? { ...prev, pending_reaction: null } : prev));
     try {
       const res = await fetch(apiUrl("/api/game/reaction/resolve"), {
         method: "POST",
@@ -658,8 +672,11 @@ function App() {
       if (!res.ok) {
         throw new Error(String(data?.detail || `HTTP ${res.status}`));
       }
-      if (data?.state && typeof (window as any).__setGameState === "function") {
-        (window as any).__setGameState(data.state);
+      if (data?.state) {
+        setGameData(data.state);
+        if (typeof (window as any).__setGameState === "function") {
+          (window as any).__setGameState(data.state);
+        }
         gameController.updateState(data.state);
       }
       addLog(
@@ -729,7 +746,7 @@ function App() {
           >
             {scenarioList.map((scenarioId) => (
               <option key={scenarioId} value={scenarioId}>
-                {scenarioId}
+                {SCENARIO_LABELS[scenarioId] || scenarioId}
               </option>
             ))}
           </select>
@@ -1277,7 +1294,7 @@ function App() {
       {/* ========================================================
           REACTION FIRE MODAL
       ======================================================== */}
-      {pendingReaction && (
+      {pendingReaction && !reactionDecisionBusy && (
         <div
           style={{
             position: "fixed",

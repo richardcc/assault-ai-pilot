@@ -414,10 +414,14 @@ export class GameController {
     const controller = this.getControllerForSide(newState, activeSide);
     if (controller === "ai" && !newState.done && !this.waitingForManualAdvance) {
       this.aiTurnInFlight = false;
+      const prevSide = prevState?.active_side;
+      const prevController = prevSide ? this.getControllerForSide(prevState, prevSide) : null;
+      const transitionFromHuman = prevController === "human";
+      const delay = transitionFromHuman ? 1800 : 250;
       if (!this.loopFn) {
         this.startLoop();
       } else {
-        this.scheduleLoop(this.loopFn, 200);
+        this.scheduleLoop(this.loopFn, delay);
       }
     }
   }

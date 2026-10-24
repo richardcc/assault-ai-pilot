@@ -573,6 +573,16 @@ def serve(
                     if site_target.exists() and site_target.is_file():
                         self._send_static_file(site_target, site_root)
                         return
+                    repo_target = (repo_root / rel_doc).resolve()
+                    if repo_target.exists() and repo_target.is_file():
+                        self._send_static_file(repo_target, repo_root)
+                        return
+                    if rel_doc.startswith("assets/"):
+                        art_sub = rel_doc[len("assets/") :]
+                        repo_art_target = (repo_root / "assets" / art_sub).resolve()
+                        if repo_art_target.exists() and repo_art_target.is_file():
+                            self._send_static_file(repo_art_target, repo_root)
+                            return
 
                 # All other routes under /docs/ redirect to canonical Hub
                 self.send_response(301)

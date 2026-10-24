@@ -36,24 +36,37 @@ function isCombatOrder(order: any): boolean {
 
 function resolveAttackTargetHex(order: any, state: any): { q: number; r: number } | null {
   if (!order) return null;
-  const q = order?.target_q ?? order?.q ?? order?.target_hex?.q ?? (Array.isArray(order?.target_hex) ? order?.target_hex[0] : null);
-  const r = order?.target_r ?? order?.r ?? order?.target_hex?.r ?? (Array.isArray(order?.target_hex) ? order?.target_hex[1] : null);
-  if (q != null && r != null) {
-    return { q: Number(q), r: Number(r) };
+
+  // 1. Explicit target unit lookup from state
+  const targetId = order?.target_id || order?.target?.id || order?.defender_id;
+  if (targetId && Array.isArray(state?.units)) {
+    const target = state.units.find((u: any) => String(u?.id || u?.unit_id || "") === String(targetId));
+    if (target) {
+      const tq = target.q ?? target.position?.q;
+      const tr = target.r ?? target.position?.r;
+      if (tq != null && tr != null) {
+        return { q: Number(tq), r: Number(tr) };
+      }
+    }
   }
-  const targetId = order?.target_id;
-  if (!targetId || !Array.isArray(state?.units)) return null;
-  const target = state.units.find((u: any) => u.id === targetId || u.unit_id === targetId);
-  if (!target) return null;
-  const tq = target.q ?? target.position?.q;
-  const tr = target.r ?? target.position?.r;
+
+  // 2. Explicit target hex coordinates
+  const tq = order?.target_q ?? order?.target_hex?.q ?? (Array.isArray(order?.target_hex) ? order?.target_hex[0] : null);
+  const tr = order?.target_r ?? order?.target_hex?.r ?? (Array.isArray(order?.target_hex) ? order?.target_hex[1] : null);
   if (tq != null && tr != null) {
     return { q: Number(tq), r: Number(tr) };
+  }
+
+  // 3. Fallback only if action is pure attack and coordinates do not belong to movement
+  const isMoveType = String(order?.type || order?.kind || "").toUpperCase().includes("MOVE");
+  if (!isMoveType && order?.q != null && order?.r != null) {
+    return { q: Number(order.q), r: Number(order.r) };
   }
   return null;
 }
 
 export default function GameCanvas({
+  gameData,
   setGameData,
   selectedUnitId,
   setSelectedUnitId,
@@ -216,13 +229,25 @@ export default function GameCanvas({
           setUnitActionMarker(reactorId, "firing");
         }
         const units = Array.isArray(state?.units) ? state.units : [];
-        const reactor = units.find((u: any) => String(u?.id || u?.unit_id || "") === reactorId);
-        const target = units.find((u: any) => String(u?.id || u?.unit_id || "") === targetId);
+        const preUnits = Array.isArray(lastStateRef.current?.units) ? lastStateRef.current.units : [];
+        const reactor = units.find((u: any) => String(u?.id || u?.unit_id || "") === reactorId) ||
+          preUnits.find((u: any) => String(u?.id || u?.unit_id || "") === reactorId);
+        const target = units.find((u: any) => String(u?.id || u?.unit_id || "") === targetId) ||
+          preUnits.find((u: any) => String(u?.id || u?.unit_id || "") === targetId);
         const fxLayer =
           fxLayerRef.current ||
           unitLayerRef.current?.container?.parent?.children?.find((c: any) => c.label === "fxLayer") ||
           unitLayerRef.current?.container?.parent;
         if (!reactor || !target || !fxLayer) continue;
+
+        const effectEv = events.find((e: any) => e?.type === "ACTION_EFFECT" && String(e?.payload?.attacker || "") === reactorId);
+        const ep = effectEv?.payload || {};
+        const rfAttackDice = (Array.isArray(ep.attacker_attack_dice) && ep.attacker_attack_dice.length > 0)
+          ? ep.attacker_attack_dice
+          : [{ color: "RED", faces: ["DAMAGE"] }];
+        const rfDefenseDice = (Array.isArray(ep.defender_defense_dice) && ep.defender_defense_dice.length > 0)
+          ? ep.defender_defense_dice
+          : [];
 
         void (async () => {
           try {
@@ -231,8 +256,8 @@ export default function GameCanvas({
               fxLayer,
               { q: Number(reactor.q), r: Number(reactor.r) },
               { q: Number(target.q), r: Number(target.r) },
-              ["DAMAGE"],
-              []
+              rfAttackDice,
+              rfDefenseDice
             );
           } catch {
             // Fallback to a simple indicator if full FX loading fails.
@@ -391,9 +416,11 @@ export default function GameCanvas({
       // LAYERS
       // ---------------------------------------------
       const fxLayer = new PIXI.Container();
+      fxLayer.label = "fxLayer";
       fxLayer.eventMode = "none";
       (fxLayer as any).interactiveChildren = false;
-      app.stage.addChild(fxLayer);
+      fxLayer.zIndex = 600;
+      world.addChild(fxLayer);
       fxLayerRef.current = fxLayer;
 
       const background = new PIXI.Container();
@@ -623,23 +650,47 @@ export default function GameCanvas({
           const fxLayer = unitLayerRef.current.container?.parent?.children.find(
             (c: any) => c.label === "fxLayer"
           ) || unitLayerRef.current.container?.parent;
-          const attackerUnit = stateAfter.units?.find(
-            (u: any) => u.id === unitId || u.unit_id === unitId
-          );
-          const targetId = order?.target_id;
-          const defenderUnit = targetId
-            ? stateAfter.units?.find((u: any) => u.id === targetId || u.unit_id === targetId)
-            : null;
 
-          if (combatEvent && fxLayer && attackerUnit && defenderUnit) {
+          const preUnits = Array.isArray(lastStateRef.current?.units) ? lastStateRef.current.units : [];
+          const postUnits = Array.isArray(stateAfter.units) ? stateAfter.units : [];
+          const attackerUnit =
+            postUnits.find((u: any) => u.id === unitId || u.unit_id === unitId) ||
+            preUnits.find((u: any) => u.id === unitId || u.unit_id === unitId);
+
+          const targetId = order?.target_id || combatEvent?.payload?.defender;
+          const defenderUnit = targetId
+            ? (postUnits.find((u: any) => u.id === targetId || u.unit_id === targetId) ||
+               preUnits.find((u: any) => u.id === targetId || u.unit_id === targetId))
+            : null;
+          const targetHex = resolveAttackTargetHex(order, lastStateRef.current);
+          const defenderQ = defenderUnit?.q ?? targetHex?.q;
+          const defenderR = defenderUnit?.r ?? targetHex?.r;
+
+          const p = combatEvent?.payload || {};
+          const attackDice = (Array.isArray(p.attacker_attack_dice) && p.attacker_attack_dice.length > 0)
+            ? p.attacker_attack_dice
+            : (Array.isArray(p.attack_dice) && p.attack_dice.length > 0)
+              ? p.attack_dice
+              : (Array.isArray(p.rounds) && p.rounds[0]?.attacker_attack_dice) || [{ color: "RED", faces: ["DAMAGE"] }];
+
+          const defenseDice = (Array.isArray(p.defender_defense_dice) && p.defender_defense_dice.length > 0)
+            ? p.defender_defense_dice
+            : (Array.isArray(p.defense_dice) && p.defense_dice.length > 0)
+              ? p.defense_dice
+              : (Array.isArray(p.rounds) && (p.rounds[0]?.attacker_defense_dice || p.rounds[0]?.defender_defense_dice)) || [];
+
+          if (combatEvent && fxLayer && attackerUnit && defenderQ != null && defenderR != null) {
             const { playCombatFX } = await import("./animation/combatFx");
             await playCombatFX(
               fxLayer,
               { q: attackerUnit.q, r: attackerUnit.r },
-              { q: defenderUnit.q, r: defenderUnit.r },
-              combatEvent.payload?.attack_dice || ["DAMAGE"],
-              combatEvent.payload?.defense_dice || []
+              { q: defenderQ, r: defenderR },
+              attackDice,
+              defenseDice
             );
+            // Intentional observation pause so the human player can see the dice outcome,
+            // casualties, and combat log before advancing.
+            await new Promise((r) => setTimeout(r, 1400));
           }
         }
 
@@ -711,7 +762,7 @@ export default function GameCanvas({
       lastStateRef.current?.pending_reaction ?? null
     );
 
-  }, [availableMoves, selectedUnitId, hoverHex, orderHoverTarget]);
+  }, [availableMoves, selectedUnitId, hoverHex, orderHoverTarget, (gameData as any)?.pending_reaction]);
 
   return (
     <div style={{ flex: 1, width: "100%", height: "100%", minHeight: 0, position: "relative", display: "flex", flexDirection: "column" }}>
